@@ -1,0 +1,13 @@
+/* TopNav — Styles that cannot be configured via Ant Design theme tokens */
+
+/* Ink bar height: 2px (UX spec) — no token available */
+.ant-tabs-ink-bar {
+  height: 2px !important;
+}
+
+/* Focus visible: green outline for keyboard navigation (WCAG 2.1 AA) */
+.ant-tabs-tab:focus-visible {
+  outline: 2px solid #00874E;
+  outline-offset: 2px;
+  border-radius: 4px;
+}

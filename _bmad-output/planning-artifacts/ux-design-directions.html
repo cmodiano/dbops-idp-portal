@@ -1,0 +1,1154 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DB Actions Portal — Design Direction Showcase</title>
+<style>
+  /* === DESIGN TOKENS === */
+  :root {
+    --bg: #FAFBFC;
+    --surface: #FFFFFF;
+    --primary: #00874E;
+    --primary-hover: #047857;
+    --primary-light: #ECFDF5;
+    --text-primary: #1A1A2E;
+    --text-secondary: #6B7280;
+    --border: #E5E7EB;
+    --success: #10B981;
+    --warning: #F59E0B;
+    --error: #EF4444;
+    --info: #3B82F6;
+    --neutral: #9CA3AF;
+    --radius: 8px;
+    --radius-sm: 6px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08);
+    --shadow-lg: 0 4px 12px rgba(0,0,0,0.12);
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--font); background: var(--bg); color: var(--text-primary); font-size: 14px; line-height: 1.5; }
+
+  /* === SHOWCASE NAVIGATION === */
+  .showcase-nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+    background: var(--text-primary); color: white; padding: 12px 32px;
+    display: flex; align-items: center; gap: 24px;
+    font-size: 13px;
+  }
+  .showcase-nav .title { font-weight: 600; font-size: 15px; margin-right: 16px; color: #10B981; }
+  .showcase-nav button {
+    background: none; border: 1px solid rgba(255,255,255,0.3); color: white;
+    padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 13px;
+    transition: all 0.2s;
+  }
+  .showcase-nav button:hover, .showcase-nav button.active {
+    background: var(--primary); border-color: var(--primary);
+  }
+
+  /* === SCREENS === */
+  .screen { display: none; margin-top: 52px; min-height: calc(100vh - 52px); }
+  .screen.active { display: block; }
+
+  /* === APP SHELL === */
+  .app-topbar {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    height: 56px; display: flex; align-items: center; padding: 0 48px;
+    position: sticky; top: 52px; z-index: 100;
+  }
+  .app-logo { font-weight: 700; font-size: 18px; color: var(--primary); margin-right: 40px; }
+  .app-nav { display: flex; gap: 0; height: 56px; }
+  .app-nav a {
+    padding: 0 20px; display: flex; align-items: center; text-decoration: none;
+    color: var(--text-secondary); font-size: 14px; font-weight: 500;
+    border-bottom: 2px solid transparent; transition: all 0.2s;
+  }
+  .app-nav a:hover { color: var(--text-primary); }
+  .app-nav a.active { color: var(--primary); border-bottom-color: var(--primary); }
+  .app-user { margin-left: auto; display: flex; align-items: center; gap: 8px; color: var(--text-secondary); }
+  .app-user .avatar {
+    width: 32px; height: 32px; border-radius: 50%; background: var(--primary-light);
+    color: var(--primary); display: flex; align-items: center; justify-content: center;
+    font-weight: 600; font-size: 13px;
+  }
+
+  /* === PAGE LAYOUT === */
+  .page { padding: 48px; }
+  .page-header { margin-bottom: 32px; }
+  .page-header h1 { font-size: 24px; font-weight: 600; color: var(--text-primary); }
+  .page-header p { font-size: 14px; color: var(--text-secondary); margin-top: 4px; }
+
+  /* === CATALOG === */
+  .catalog-layout { display: flex; gap: 32px; }
+  .catalog-filters { width: 240px; flex-shrink: 0; }
+  .catalog-content { flex: 1; }
+
+  .filter-group { margin-bottom: 24px; }
+  .filter-group label { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 8px; }
+  .filter-option {
+    padding: 6px 12px; font-size: 13px; color: var(--text-secondary);
+    border-radius: 4px; cursor: pointer; transition: all 0.15s;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .filter-option:hover { background: var(--primary-light); color: var(--primary); }
+  .filter-option.active { background: var(--primary-light); color: var(--primary); font-weight: 500; }
+  .filter-count { margin-left: auto; font-size: 11px; background: var(--border); padding: 1px 6px; border-radius: 10px; }
+
+  /* Category tabs */
+  .category-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
+  .category-tab {
+    padding: 10px 20px; font-size: 14px; font-weight: 500; color: var(--text-secondary);
+    border-bottom: 2px solid transparent; cursor: pointer; transition: all 0.2s;
+  }
+  .category-tab:hover { color: var(--text-primary); }
+  .category-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+  .category-tab .count { font-size: 11px; background: var(--border); padding: 1px 6px; border-radius: 10px; margin-left: 6px; }
+  .category-tab.active .count { background: var(--primary-light); color: var(--primary); }
+
+  /* Cards grid */
+  .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+  .action-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 24px; cursor: pointer; transition: all 0.2s; position: relative;
+  }
+  .action-card:hover { box-shadow: var(--shadow-lg); border-color: var(--primary); }
+  .card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 12px; }
+  .card-title { font-size: 16px; font-weight: 500; color: var(--text-primary); }
+  .card-engine { font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 4px; background: #FEF3C7; color: #92400E; }
+  .card-description { font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.5; }
+  .card-footer { display: flex; align-items: center; gap: 12px; }
+  .impact-badge {
+    display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500;
+    padding: 3px 10px; border-radius: 12px;
+  }
+  .impact-low { background: #ECFDF5; color: #065F46; }
+  .impact-medium { background: #FEF3C7; color: #92400E; }
+  .impact-high { background: #FEE2E2; color: #991B1B; }
+  .card-meta { font-size: 12px; color: var(--neutral); }
+
+  /* === DRAWER === */
+  .drawer-overlay {
+    position: fixed; top: 52px; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.3); z-index: 200; display: none;
+  }
+  .drawer-overlay.open { display: block; }
+  .drawer {
+    position: fixed; top: 52px; right: -480px; bottom: 0; width: 480px;
+    background: var(--surface); box-shadow: -4px 0 24px rgba(0,0,0,0.12);
+    z-index: 300; transition: right 0.3s ease; overflow-y: auto;
+  }
+  .drawer.open { right: 0; }
+  .drawer-header {
+    padding: 24px 32px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: flex-start; justify-content: space-between;
+  }
+  .drawer-title { font-size: 18px; font-weight: 600; }
+  .drawer-close { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text-secondary); padding: 4px; }
+  .drawer-body { padding: 32px; }
+  .drawer-section { margin-bottom: 24px; }
+  .drawer-section-title { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+  .drawer-text { font-size: 14px; color: var(--text-primary); line-height: 1.6; }
+  .drawer-footer { padding: 24px 32px; border-top: 1px solid var(--border); }
+  .btn-primary {
+    background: var(--primary); color: white; border: none; padding: 10px 24px;
+    border-radius: var(--radius-sm); font-size: 14px; font-weight: 500; cursor: pointer;
+    width: 100%; transition: background 0.2s;
+  }
+  .btn-primary:hover { background: var(--primary-hover); }
+  .btn-secondary {
+    background: var(--surface); color: var(--primary); border: 1px solid var(--primary);
+    padding: 10px 24px; border-radius: var(--radius-sm); font-size: 14px; font-weight: 500;
+    cursor: pointer; transition: all 0.2s;
+  }
+
+  /* === WIZARD === */
+  .wizard-container { max-width: 640px; margin: 0 auto; }
+  .wizard-stepper { display: flex; align-items: center; margin-bottom: 40px; }
+  .wizard-step {
+    display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500;
+    color: var(--neutral);
+  }
+  .wizard-step.active { color: var(--primary); }
+  .wizard-step.done { color: var(--success); }
+  .wizard-step-number {
+    width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; font-size: 12px; font-weight: 600;
+    border: 2px solid var(--neutral); color: var(--neutral);
+  }
+  .wizard-step.active .wizard-step-number { border-color: var(--primary); background: var(--primary); color: white; }
+  .wizard-step.done .wizard-step-number { border-color: var(--success); background: var(--success); color: white; }
+  .wizard-connector { flex: 1; height: 2px; background: var(--border); margin: 0 12px; }
+  .wizard-connector.done { background: var(--success); }
+
+  .wizard-content { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 32px; }
+  .wizard-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+  .wizard-subtitle { font-size: 14px; color: var(--text-secondary); margin-bottom: 24px; }
+
+  .form-group { margin-bottom: 20px; }
+  .form-label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: var(--text-primary); }
+  .form-select, .form-input {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    font-size: 14px; color: var(--text-primary); background: var(--surface); outline: none;
+    transition: border-color 0.2s;
+  }
+  .form-select:focus, .form-input:focus { border-color: var(--primary); }
+  .form-hint { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+  .env-warning {
+    display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+    background: #FEF3C7; border-radius: var(--radius-sm); font-size: 13px;
+    color: #92400E; margin-top: 8px;
+  }
+
+  .wizard-actions { display: flex; justify-content: space-between; margin-top: 32px; }
+
+  /* === CONFIRMATION === */
+  .confirm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  .confirm-item { }
+  .confirm-label { font-size: 12px; color: var(--text-secondary); font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px; }
+  .confirm-value { font-size: 14px; color: var(--text-primary); font-weight: 500; margin-top: 2px; }
+  .confirm-impact {
+    grid-column: 1 / -1; padding: 16px; border-radius: var(--radius-sm);
+    display: flex; align-items: center; gap: 12px;
+  }
+  .confirm-impact.medium { background: #FEF3C7; }
+  .confirm-impact-icon { font-size: 24px; }
+  .confirm-impact-text { font-size: 14px; font-weight: 500; color: #92400E; }
+  .confirm-impact-detail { font-size: 12px; color: #A16207; margin-top: 2px; }
+  .confirm-change {
+    grid-column: 1 / -1; padding: 12px 16px; background: var(--primary-light);
+    border-radius: var(--radius-sm); font-size: 13px; color: var(--primary);
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  /* === TIMELINE === */
+  .timeline-container { max-width: 720px; margin: 0 auto; }
+  .timeline-header {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 24px 32px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between;
+  }
+  .timeline-action-name { font-size: 18px; font-weight: 600; }
+  .timeline-status {
+    display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500;
+    padding: 4px 12px; border-radius: 12px;
+  }
+  .status-running { background: #DBEAFE; color: #1E40AF; }
+  .status-success { background: #ECFDF5; color: #065F46; }
+  .status-error { background: #FEE2E2; color: #991B1B; }
+
+  .timeline {
+    position: relative; padding-left: 40px;
+  }
+  .timeline::before {
+    content: ''; position: absolute; left: 15px; top: 0; bottom: 0;
+    width: 2px; background: var(--border);
+  }
+  .timeline-node { position: relative; margin-bottom: 32px; }
+  .timeline-node:last-child { margin-bottom: 0; }
+  .timeline-dot {
+    position: absolute; left: -40px; top: 4px; width: 32px; height: 32px;
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 14px; z-index: 1;
+  }
+  .dot-done { background: var(--success); color: white; }
+  .dot-running { background: var(--info); color: white; animation: pulse 1.5s infinite; }
+  .dot-pending { background: var(--border); color: var(--neutral); }
+  .dot-error { background: var(--error); color: white; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+  .timeline-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 20px; transition: all 0.2s;
+  }
+  .timeline-card:hover { box-shadow: var(--shadow); }
+  .timeline-card.expanded { box-shadow: var(--shadow); }
+  .timeline-step-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+  .timeline-step-name { font-size: 14px; font-weight: 500; }
+  .timeline-step-meta { display: flex; align-items: center; gap: 12px; }
+  .timeline-step-duration { font-size: 12px; color: var(--text-secondary); }
+  .timeline-step-status { font-size: 12px; font-weight: 500; }
+  .step-done { color: var(--success); }
+  .step-running { color: var(--info); }
+  .step-pending { color: var(--neutral); }
+  .timeline-step-detail {
+    margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);
+    font-size: 13px; color: var(--text-secondary); display: none;
+  }
+  .timeline-card.expanded .timeline-step-detail { display: block; }
+  .log-output {
+    background: #1E1E2E; color: #A6E3A1; padding: 12px 16px; border-radius: 4px;
+    font-family: 'Fira Code', 'Consolas', monospace; font-size: 12px; line-height: 1.6;
+    margin-top: 8px; overflow-x: auto;
+  }
+
+  /* === ERROR STATE === */
+  .error-card {
+    background: #FEF2F2; border: 1px solid #FECACA; border-radius: var(--radius);
+    padding: 20px 24px; margin-top: 12px;
+  }
+  .error-title { font-size: 14px; font-weight: 600; color: #991B1B; margin-bottom: 8px; }
+  .error-detail { font-size: 13px; color: #7F1D1D; margin-bottom: 12px; line-height: 1.5; }
+  .error-actions { display: flex; gap: 8px; }
+  .btn-error {
+    padding: 6px 14px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500;
+    cursor: pointer; border: none;
+  }
+  .btn-error-primary { background: #991B1B; color: white; }
+  .btn-error-secondary { background: white; color: #991B1B; border: 1px solid #FECACA; }
+
+  /* === DASHBOARD === */
+  .dashboard-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 32px; }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 20px 24px;
+  }
+  .stat-label { font-size: 12px; color: var(--text-secondary); font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px; }
+  .stat-value { font-size: 28px; font-weight: 600; margin-top: 4px; color: var(--text-primary); }
+  .stat-trend { font-size: 12px; margin-top: 4px; font-weight: 500; }
+  .trend-up { color: var(--success); }
+  .trend-neutral { color: var(--text-secondary); }
+
+  .recent-executions { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+  .recent-header { padding: 16px 24px; border-bottom: 1px solid var(--border); font-size: 16px; font-weight: 600; }
+  .recent-table { width: 100%; border-collapse: collapse; }
+  .recent-table th {
+    text-align: left; padding: 10px 24px; font-size: 12px; font-weight: 600;
+    color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.3px;
+    border-bottom: 1px solid var(--border);
+  }
+  .recent-table td { padding: 12px 24px; font-size: 14px; border-bottom: 1px solid var(--border); }
+  .recent-table tr:last-child td { border-bottom: none; }
+  .recent-table tr:hover { background: var(--bg); }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+
+  /* === ADMIN === */
+  .admin-card-form { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 32px; max-width: 800px; }
+  .admin-card-form h2 { font-size: 18px; font-weight: 600; margin-bottom: 24px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .form-row-full { margin-bottom: 20px; }
+  .form-textarea {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    font-size: 14px; color: var(--text-primary); resize: vertical; min-height: 80px;
+    font-family: var(--font); outline: none;
+  }
+  .form-textarea:focus { border-color: var(--primary); }
+
+  .impact-selector { display: flex; gap: 12px; }
+  .impact-option {
+    flex: 1; padding: 12px 16px; border: 2px solid var(--border); border-radius: var(--radius);
+    text-align: center; cursor: pointer; transition: all 0.2s;
+  }
+  .impact-option:hover { border-color: var(--neutral); }
+  .impact-option.selected { border-color: var(--primary); background: var(--primary-light); }
+  .impact-option .impact-icon { font-size: 20px; margin-bottom: 4px; }
+  .impact-option .impact-label { font-size: 12px; font-weight: 500; }
+
+  /* === SEARCH BAR === */
+  .search-bar {
+    display: flex; align-items: center; gap: 8px; padding: 10px 16px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    margin-bottom: 24px; max-width: 480px;
+  }
+  .search-bar input {
+    border: none; outline: none; font-size: 14px; color: var(--text-primary);
+    flex: 1; background: transparent;
+  }
+  .search-icon { color: var(--neutral); }
+</style>
+</head>
+<body>
+
+<!-- SHOWCASE NAVIGATION -->
+<div class="showcase-nav">
+  <span class="title">DB Actions Portal</span>
+  <button class="active" onclick="showScreen('catalog')">Catalogue</button>
+  <button onclick="showScreen('wizard')">Wizard Execution</button>
+  <button onclick="showScreen('confirm')">Confirmation</button>
+  <button onclick="showScreen('timeline')">Timeline</button>
+  <button onclick="showScreen('timeline-error')">Timeline (Erreur)</button>
+  <button onclick="showScreen('dashboard')">Dashboard</button>
+  <button onclick="showScreen('admin')">Admin</button>
+</div>
+
+<!-- ==================== SCREEN 1: CATALOG ==================== -->
+<div class="screen active" id="screen-catalog">
+  <div class="app-topbar">
+    <div class="app-logo">DB Actions Portal</div>
+    <div class="app-nav">
+      <a class="active" href="#">Catalogue</a>
+      <a href="#">Mes Executions</a>
+      <a href="#">Dashboard</a>
+      <a href="#">Admin</a>
+    </div>
+    <div class="app-user">
+      <span>Marc D.</span>
+      <div class="avatar">MD</div>
+    </div>
+  </div>
+
+  <div class="page">
+    <div class="page-header">
+      <h1>Catalogue d'actions</h1>
+      <p>Decouvrez et executez des actions d'automatisation base de donnees</p>
+    </div>
+
+    <div class="catalog-layout">
+      <div class="catalog-filters">
+        <div class="search-bar" style="max-width:100%; margin-bottom:24px;">
+          <span class="search-icon">&#128269;</span>
+          <input type="text" placeholder="Rechercher une action...">
+        </div>
+
+        <div class="filter-group">
+          <label>Moteur</label>
+          <div class="filter-option active">Tous <span class="filter-count">15</span></div>
+          <div class="filter-option">Oracle <span class="filter-count">9</span></div>
+          <div class="filter-option">SQL Server <span class="filter-count">4</span></div>
+          <div class="filter-option">DB2 <span class="filter-count">2</span></div>
+        </div>
+        <div class="filter-group">
+          <label>Environnement</label>
+          <div class="filter-option">Dev</div>
+          <div class="filter-option">Staging</div>
+          <div class="filter-option">Production</div>
+        </div>
+        <div class="filter-group">
+          <label>Impact</label>
+          <div class="filter-option"><span style="color:var(--success)">&#9679;</span> Faible</div>
+          <div class="filter-option"><span style="color:var(--warning)">&#9679;</span> Moyen</div>
+          <div class="filter-option"><span style="color:var(--error)">&#9679;</span> Eleve</div>
+        </div>
+      </div>
+
+      <div class="catalog-content">
+        <div class="category-tabs">
+          <div class="category-tab active">Toutes <span class="count">15</span></div>
+          <div class="category-tab">Provisioning <span class="count">4</span></div>
+          <div class="category-tab">Patching <span class="count">3</span></div>
+          <div class="category-tab">Administration <span class="count">5</span></div>
+          <div class="category-tab">Monitoring <span class="count">3</span></div>
+        </div>
+
+        <div class="cards-grid">
+          <div class="action-card" onclick="openDrawer()">
+            <div class="card-header">
+              <div class="card-title">Creer une BD / PDB</div>
+              <div class="card-engine">Oracle</div>
+            </div>
+            <div class="card-description">Provisionne une nouvelle base de donnees ou un Pluggable Database sur l'infrastructure cible avec les parametres standards.</div>
+            <div class="card-footer">
+              <div class="impact-badge impact-medium">&#9888; Impact moyen</div>
+              <div class="card-meta">12 executions ce mois</div>
+            </div>
+          </div>
+
+          <div class="action-card">
+            <div class="card-header">
+              <div class="card-title">Installer Oracle</div>
+              <div class="card-engine">Oracle</div>
+            </div>
+            <div class="card-description">Installe le logiciel Oracle Database sur un serveur cible selon la version et la configuration specifiees.</div>
+            <div class="card-footer">
+              <div class="impact-badge impact-high">&#9888; Impact eleve</div>
+              <div class="card-meta">3 executions ce mois</div>
+            </div>
+          </div>
+
+          <div class="action-card">
+            <div class="card-header">
+              <div class="card-title">Patcher une BD</div>
+              <div class="card-engine">Oracle</div>
+            </div>
+            <div class="card-description">Applique le patch de securite ou le PSU recommande sur une base de donnees Oracle existante.</div>
+            <div class="card-footer">
+              <div class="impact-badge impact-high">&#9888; Impact eleve</div>
+              <div class="card-meta">8 executions ce mois</div>
+            </div>
+          </div>
+
+          <div class="action-card">
+            <div class="card-header">
+              <div class="card-title">Creer un schema</div>
+              <div class="card-engine">Oracle</div>
+            </div>
+            <div class="card-description">Cree un nouveau schema utilisateur avec les privileges standards sur une base existante.</div>
+            <div class="card-footer">
+              <div class="impact-badge impact-low">&#10003; Impact faible</div>
+              <div class="card-meta">25 executions ce mois</div>
+            </div>
+          </div>
+
+          <div class="action-card">
+            <div class="card-header">
+              <div class="card-title">Rafraichir une BD</div>
+              <div class="card-engine">Oracle</div>
+            </div>
+            <div class="card-description">Rafraichit une base de donnees de dev/staging a partir d'un snapshot de production avec masquage des donnees.</div>
+            <div class="card-footer">
+              <div class="impact-badge impact-medium">&#9888; Impact moyen</div>
+              <div class="card-meta">5 executions ce mois</div>
+            </div>
+          </div>
+
+          <div class="action-card">
+            <div class="card-header">
+              <div class="card-title">Verifier l'espace disque</div>
+              <div class="card-engine">Oracle</div>
+            </div>
+            <div class="card-description">Verifie l'espace disponible sur les tablespaces et les filesystems associes a une base de donnees.</div>
+            <div class="card-footer">
+              <div class="impact-badge impact-low">&#10003; Impact faible</div>
+              <div class="card-meta">42 executions ce mois</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DRAWER -->
+  <div class="drawer-overlay" id="drawer-overlay" onclick="closeDrawer()"></div>
+  <div class="drawer" id="drawer">
+    <div class="drawer-header">
+      <div>
+        <div class="drawer-title">Creer une BD / PDB</div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">Oracle &middot; Provisioning</div>
+      </div>
+      <button class="drawer-close" onclick="closeDrawer()">&times;</button>
+    </div>
+    <div class="drawer-body">
+      <div class="drawer-section">
+        <div class="drawer-section-title">Description</div>
+        <div class="drawer-text">Provisionne une nouvelle base de donnees Oracle ou un Pluggable Database (PDB) sur l'infrastructure cible. Configure automatiquement les tablespaces, les parametres d'initialisation et les privileges de base selon les standards de l'organisation.</div>
+      </div>
+      <div class="drawer-section">
+        <div class="drawer-section-title">Impact</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div class="impact-badge impact-medium">&#9888; Impact moyen</div>
+          <span style="font-size:13px;color:var(--text-secondary);">Cree de nouvelles ressources sur l'infrastructure. Changement pre-approuve en dev/staging, CAB requis en production.</span>
+        </div>
+      </div>
+      <div class="drawer-section">
+        <div class="drawer-section-title">Parametres requis</div>
+        <div style="font-size:13px;color:var(--text-secondary);line-height:1.8;">
+          &bull; Nom de la PDB<br>
+          &bull; Environnement cible (dev / staging / prod)<br>
+          &bull; Version Oracle (19c, 21c, 23ai)<br>
+          &bull; Taille initiale du tablespace<br>
+          &bull; Character set
+        </div>
+      </div>
+      <div class="drawer-section">
+        <div class="drawer-section-title">Statistiques</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div style="font-size:13px;"><span style="color:var(--text-secondary);">Taux de succes</span><br><strong>94%</strong></div>
+          <div style="font-size:13px;"><span style="color:var(--text-secondary);">Temps moyen</span><br><strong>4 min 30s</strong></div>
+          <div style="font-size:13px;"><span style="color:var(--text-secondary);">Executions ce mois</span><br><strong>12</strong></div>
+          <div style="font-size:13px;"><span style="color:var(--text-secondary);">Derniere execution</span><br><strong>il y a 2h</strong></div>
+        </div>
+      </div>
+    </div>
+    <div class="drawer-footer">
+      <button class="btn-primary" onclick="showScreen('wizard')">Executer cette action</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SCREEN 2: WIZARD ==================== -->
+<div class="screen" id="screen-wizard">
+  <div class="app-topbar">
+    <div class="app-logo">DB Actions Portal</div>
+    <div class="app-nav">
+      <a href="#" onclick="showScreen('catalog');return false;">Catalogue</a>
+      <a href="#">Mes Executions</a>
+      <a href="#">Dashboard</a>
+      <a href="#">Admin</a>
+    </div>
+    <div class="app-user"><span>Marc D.</span><div class="avatar">MD</div></div>
+  </div>
+
+  <div class="page">
+    <div class="wizard-container">
+      <div class="wizard-stepper">
+        <div class="wizard-step done">
+          <div class="wizard-step-number">&#10003;</div>
+          Environnement
+        </div>
+        <div class="wizard-connector done"></div>
+        <div class="wizard-step active">
+          <div class="wizard-step-number">2</div>
+          Parametres
+        </div>
+        <div class="wizard-connector"></div>
+        <div class="wizard-step">
+          <div class="wizard-step-number">3</div>
+          Confirmation
+        </div>
+      </div>
+
+      <div class="wizard-content">
+        <div class="wizard-title">Parametres de l'action</div>
+        <div class="wizard-subtitle">Creer une BD / PDB &middot; Oracle</div>
+
+        <div class="form-group">
+          <label class="form-label">Nom de la PDB</label>
+          <input class="form-input" type="text" value="APP_SALES_DEV01" placeholder="Nom de la PDB">
+          <div class="form-hint">Format : APP_[NOM]_[ENV][NN]</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Version Oracle</label>
+          <select class="form-select">
+            <option>Oracle 19c (19.21.0) — Recommande</option>
+            <option>Oracle 21c (21.12.0)</option>
+            <option>Oracle 23ai (23.4.0)</option>
+          </select>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Taille initiale</label>
+            <select class="form-select">
+              <option>Small (5 GB)</option>
+              <option selected>Medium (20 GB)</option>
+              <option>Large (100 GB)</option>
+              <option>Custom</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Character Set</label>
+            <select class="form-select">
+              <option selected>AL32UTF8</option>
+              <option>WE8ISO8859P1</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="wizard-actions">
+          <button class="btn-secondary" onclick="showScreen('catalog')">&#8592; Retour</button>
+          <button class="btn-primary" onclick="showScreen('confirm')">Continuer &#8594;</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SCREEN 3: CONFIRMATION ==================== -->
+<div class="screen" id="screen-confirm">
+  <div class="app-topbar">
+    <div class="app-logo">DB Actions Portal</div>
+    <div class="app-nav">
+      <a href="#" onclick="showScreen('catalog');return false;">Catalogue</a>
+      <a href="#">Mes Executions</a>
+      <a href="#">Dashboard</a>
+      <a href="#">Admin</a>
+    </div>
+    <div class="app-user"><span>Marc D.</span><div class="avatar">MD</div></div>
+  </div>
+
+  <div class="page">
+    <div class="wizard-container">
+      <div class="wizard-stepper">
+        <div class="wizard-step done"><div class="wizard-step-number">&#10003;</div> Environnement</div>
+        <div class="wizard-connector done"></div>
+        <div class="wizard-step done"><div class="wizard-step-number">&#10003;</div> Parametres</div>
+        <div class="wizard-connector done"></div>
+        <div class="wizard-step active"><div class="wizard-step-number">3</div> Confirmation</div>
+      </div>
+
+      <div class="wizard-content">
+        <div class="wizard-title">Confirmer l'execution</div>
+        <div class="wizard-subtitle">Verifiez les parametres avant de lancer l'action</div>
+
+        <div class="confirm-grid">
+          <div class="confirm-item">
+            <div class="confirm-label">Action</div>
+            <div class="confirm-value">Creer une BD / PDB</div>
+          </div>
+          <div class="confirm-item">
+            <div class="confirm-label">Environnement</div>
+            <div class="confirm-value">DEV</div>
+          </div>
+          <div class="confirm-item">
+            <div class="confirm-label">Nom PDB</div>
+            <div class="confirm-value">APP_SALES_DEV01</div>
+          </div>
+          <div class="confirm-item">
+            <div class="confirm-label">Version</div>
+            <div class="confirm-value">Oracle 19c (19.21.0)</div>
+          </div>
+          <div class="confirm-item">
+            <div class="confirm-label">Taille</div>
+            <div class="confirm-value">Medium (20 GB)</div>
+          </div>
+          <div class="confirm-item">
+            <div class="confirm-label">Character Set</div>
+            <div class="confirm-value">AL32UTF8</div>
+          </div>
+
+          <div class="confirm-impact medium">
+            <div class="confirm-impact-icon">&#9888;</div>
+            <div>
+              <div class="confirm-impact-text">Impact moyen — Creation de ressources</div>
+              <div class="confirm-impact-detail">Nouvelles ressources sur l'infrastructure DEV. Aucun service existant affecte.</div>
+            </div>
+          </div>
+
+          <div class="confirm-change">
+            &#10003; Changement pre-approuve — execution immediate sans CAB
+          </div>
+        </div>
+
+        <div class="wizard-actions">
+          <button class="btn-secondary" onclick="showScreen('wizard')">&#8592; Modifier</button>
+          <button class="btn-primary" onclick="showScreen('timeline')">Confirmer l'execution</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SCREEN 4: TIMELINE (SUCCESS) ==================== -->
+<div class="screen" id="screen-timeline">
+  <div class="app-topbar">
+    <div class="app-logo">DB Actions Portal</div>
+    <div class="app-nav">
+      <a href="#" onclick="showScreen('catalog');return false;">Catalogue</a>
+      <a class="active" href="#">Mes Executions</a>
+      <a href="#">Dashboard</a>
+      <a href="#">Admin</a>
+    </div>
+    <div class="app-user"><span>Marc D.</span><div class="avatar">MD</div></div>
+  </div>
+
+  <div class="page">
+    <div class="timeline-container">
+      <div class="timeline-header">
+        <div>
+          <div class="timeline-action-name">Creer une BD / PDB</div>
+          <div style="font-size:13px;color:var(--text-secondary);margin-top:2px;">APP_SALES_DEV01 &middot; DEV &middot; Oracle 19c</div>
+        </div>
+        <div class="timeline-status status-running">&#9679; En cours &middot; Etape 3/5</div>
+      </div>
+
+      <div class="timeline">
+        <div class="timeline-node">
+          <div class="timeline-dot dot-done">&#10003;</div>
+          <div class="timeline-card expanded" onclick="this.classList.toggle('expanded')">
+            <div class="timeline-step-header">
+              <div class="timeline-step-name">Ouverture du changement ServiceNow</div>
+              <div class="timeline-step-meta">
+                <div class="timeline-step-duration">12s</div>
+                <div class="timeline-step-status step-done">&#10003; Termine</div>
+              </div>
+            </div>
+            <div class="timeline-step-detail">
+              Changement CHG0042891 ouvert automatiquement (pre-approuve DEV)
+            </div>
+          </div>
+        </div>
+
+        <div class="timeline-node">
+          <div class="timeline-dot dot-done">&#10003;</div>
+          <div class="timeline-card" onclick="this.classList.toggle('expanded')">
+            <div class="timeline-step-header">
+              <div class="timeline-step-name">Recuperation des secrets (Vault)</div>
+              <div class="timeline-step-meta">
+                <div class="timeline-step-duration">3s</div>
+                <div class="timeline-step-status step-done">&#10003; Termine</div>
+              </div>
+            </div>
+            <div class="timeline-step-detail">
+              Credentials dynamiques generes pour le serveur cible ORADEV-SRV04
+            </div>
+          </div>
+        </div>
+
+        <div class="timeline-node">
+          <div class="timeline-dot dot-running">&#9654;</div>
+          <div class="timeline-card" onclick="this.classList.toggle('expanded')">
+            <div class="timeline-step-header">
+              <div class="timeline-step-name">Creation de la PDB</div>
+              <div class="timeline-step-meta">
+                <div class="timeline-step-duration">2 min 15s...</div>
+                <div class="timeline-step-status step-running">&#9679; En cours</div>
+              </div>
+            </div>
+            <div class="timeline-step-detail">
+              Plateforme : Ansible Automation Platform<br>
+              Job #4891 en cours d'execution sur ORADEV-SRV04
+              <div class="log-output">
+TASK [oracle_pdb : Create PDB] ************
+ok: [ORADEV-SRV04] => {
+    "pdb_name": "APP_SALES_DEV01",
+    "status": "creating",
+    "progress": "tablespace allocation..."
+}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="timeline-node">
+          <div class="timeline-dot dot-pending">4</div>
+          <div class="timeline-card">
+            <div class="timeline-step-header">
+              <div class="timeline-step-name">Configuration des privileges</div>
+              <div class="timeline-step-meta">
+                <div class="timeline-step-status step-pending">En attente</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="timeline-node">
+          <div class="timeline-dot dot-pending">5</div>
+          <div class="timeline-card">
+            <div class="timeline-step-header">
+              <div class="timeline-step-name">Fermeture du changement</div>
+              <div class="timeline-step-meta">
+                <div class="timeline-step-status step-pending">En attente</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SCREEN 5: TIMELINE (ERROR) ==================== -->
+<div class="screen" id="screen-timeline-error">
+  <div class="app-topbar">
+    <div class="app-logo">DB Actions Portal</div>
+    <div class="app-nav">
+      <a href="#" onclick="showScreen('catalog');return false;">Catalogue</a>
+      <a class="active" href="#">Mes Executions</a>
+      <a href="#">Dashboard</a>
+      <a href="#">Admin</a>
+    </div>
+    <div class="app-user"><span>Sophie L.</span><div class="avatar">SL</div></div>
+  </div>
+
+  <div class="page">
+    <div class="timeline-container">
+      <div class="timeline-header">
+        <div>
+          <div class="timeline-action-name">Patcher une BD</div>
+          <div style="font-size:13px;color:var(--text-secondary);margin-top:2px;">PROD_CORE_01 &middot; PRODUCTION &middot; Oracle 19c PSU Jan 2026</div>
+        </div>
+        <div class="timeline-status status-error">&#9679; Echec &middot; Etape 3/5</div>
+      </div>
+
+      <div class="timeline">
+        <div class="timeline-node">
+          <div class="timeline-dot dot-done">&#10003;</div>
+          <div class="timeline-card">
+            <div class="timeline-step-header">
+              <div class="timeline-step-name">Ouverture du changement ServiceNow</div>
+              <div class="timeline-step-meta">
+                <div class="timeline-step-duration">15s</div>
+                <div class="timeline-step-status step-done">&#10003; Termine</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="timeline-node">
+          <div class="timeline-dot dot-done">&#10003;</div>
+          <div class="timeline-card">
+            <div class="timeline-step-header">
+              <div class="timeline-step-name">Verification pre-patch</div>
+              <div class="timeline-step-meta">
+                <div class="timeline-step-duration">45s</div>
+                <div class="timeline-step-status step-done">&#10003; Termine</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="timeline-node">
+          <div class="timeline-dot dot-error">&#10005;</div>
+          <div class="timeline-card expanded">
+            <div class="timeline-step-header">
+              <div class="timeline-step-name">Application du patch PSU</div>
+              <div class="timeline-step-meta">
+                <div class="timeline-step-duration">3 min 42s</div>
+                <div class="timeline-step-status" style="color:var(--error);">&#10005; Echec</div>
+              </div>
+            </div>
+            <div class="timeline-step-detail" style="display:block;">
+              <div class="error-card">
+                <div class="error-title">Echec : Espace disque insuffisant sur /u01/app/oracle</div>
+                <div class="error-detail">
+                  <strong>Ce qui s'est passe :</strong> Le patch PSU necessite 2.4 GB d'espace temporaire sur /u01/app/oracle. Espace disponible : 1.1 GB.<br><br>
+                  <strong>Pourquoi :</strong> Le filesystem /u01 est a 94% de capacite. Les logs d'audit precedents n'ont pas ete archives.<br><br>
+                  <strong>Options :</strong>
+                </div>
+                <div class="error-actions">
+                  <button class="btn-error btn-error-primary">Lancer le nettoyage des logs</button>
+                  <button class="btn-error btn-error-secondary">Voir les logs complets</button>
+                  <button class="btn-error btn-error-secondary">Contacter un DBA</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="timeline-node">
+          <div class="timeline-dot dot-pending">4</div>
+          <div class="timeline-card" style="opacity:0.5;">
+            <div class="timeline-step-header">
+              <div class="timeline-step-name">Verification post-patch</div>
+              <div class="timeline-step-meta">
+                <div class="timeline-step-status step-pending">Non execute</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="timeline-node">
+          <div class="timeline-dot dot-pending">5</div>
+          <div class="timeline-card" style="opacity:0.5;">
+            <div class="timeline-step-header">
+              <div class="timeline-step-name">Fermeture du changement</div>
+              <div class="timeline-step-meta">
+                <div class="timeline-step-status step-pending">Non execute</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SCREEN 6: DASHBOARD ==================== -->
+<div class="screen" id="screen-dashboard">
+  <div class="app-topbar">
+    <div class="app-logo">DB Actions Portal</div>
+    <div class="app-nav">
+      <a href="#" onclick="showScreen('catalog');return false;">Catalogue</a>
+      <a href="#">Mes Executions</a>
+      <a class="active" href="#">Dashboard</a>
+      <a href="#">Admin</a>
+    </div>
+    <div class="app-user"><span>Marc D.</span><div class="avatar">MD</div></div>
+  </div>
+
+  <div class="page">
+    <div class="page-header">
+      <h1>Dashboard</h1>
+      <p>Vue d'ensemble des operations — 30 derniers jours</p>
+    </div>
+
+    <div class="dashboard-grid">
+      <div class="stat-card">
+        <div class="stat-label">Executions totales</div>
+        <div class="stat-value">147</div>
+        <div class="stat-trend trend-up">&#9650; +23% vs mois precedent</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Taux de succes</div>
+        <div class="stat-value">94.2%</div>
+        <div class="stat-trend trend-up">&#9650; +2.1%</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Temps moyen</div>
+        <div class="stat-value">4m 12s</div>
+        <div class="stat-trend trend-neutral">&#8594; Stable</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Self-service (sans DBA)</div>
+        <div class="stat-value">68%</div>
+        <div class="stat-trend trend-up">&#9650; +12%</div>
+      </div>
+    </div>
+
+    <div class="recent-executions">
+      <div class="recent-header">Executions recentes</div>
+      <table class="recent-table">
+        <thead>
+          <tr>
+            <th>Action</th>
+            <th>Environnement</th>
+            <th>Utilisateur</th>
+            <th>Statut</th>
+            <th>Duree</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Creer une BD / PDB</strong></td>
+            <td>DEV</td>
+            <td>Marc D.</td>
+            <td><span class="status-dot" style="background:var(--success);"></span>Succes</td>
+            <td>4m 30s</td>
+            <td>il y a 2h</td>
+          </tr>
+          <tr>
+            <td><strong>Patcher une BD</strong></td>
+            <td>PRODUCTION</td>
+            <td>Sophie L.</td>
+            <td><span class="status-dot" style="background:var(--error);"></span>Echec</td>
+            <td>3m 42s</td>
+            <td>il y a 5h</td>
+          </tr>
+          <tr>
+            <td><strong>Creer un schema</strong></td>
+            <td>STAGING</td>
+            <td>Fatima R.</td>
+            <td><span class="status-dot" style="background:var(--success);"></span>Succes</td>
+            <td>45s</td>
+            <td>il y a 8h</td>
+          </tr>
+          <tr>
+            <td><strong>Verifier l'espace disque</strong></td>
+            <td>PRODUCTION</td>
+            <td>Marc D.</td>
+            <td><span class="status-dot" style="background:var(--success);"></span>Succes</td>
+            <td>12s</td>
+            <td>hier</td>
+          </tr>
+          <tr>
+            <td><strong>Rafraichir une BD</strong></td>
+            <td>DEV</td>
+            <td>Fatima R.</td>
+            <td><span class="status-dot" style="background:var(--success);"></span>Succes</td>
+            <td>12m 08s</td>
+            <td>hier</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SCREEN 7: ADMIN ==================== -->
+<div class="screen" id="screen-admin">
+  <div class="app-topbar">
+    <div class="app-logo">DB Actions Portal</div>
+    <div class="app-nav">
+      <a href="#" onclick="showScreen('catalog');return false;">Catalogue</a>
+      <a href="#">Mes Executions</a>
+      <a href="#">Dashboard</a>
+      <a class="active" href="#">Admin</a>
+    </div>
+    <div class="app-user"><span>Karim B.</span><div class="avatar">KB</div></div>
+  </div>
+
+  <div class="page">
+    <div class="page-header">
+      <h1>Creer une nouvelle action</h1>
+      <p>Configurez et publiez une action dans le catalogue</p>
+    </div>
+
+    <div class="admin-card-form">
+      <h2>Informations generales</h2>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Nom de l'action</label>
+          <input class="form-input" type="text" placeholder="Ex: Creer une BD / PDB">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Categorie</label>
+          <select class="form-select">
+            <option>Provisioning</option>
+            <option>Patching</option>
+            <option>Administration</option>
+            <option>Monitoring</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Moteur</label>
+          <select class="form-select">
+            <option>Oracle</option>
+            <option>SQL Server</option>
+            <option>DB2</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Plateforme d'execution</label>
+          <select class="form-select">
+            <option>Ansible Automation Platform</option>
+            <option>GitHub Actions</option>
+            <option>Azure DevOps</option>
+            <option>Terraform</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row-full">
+        <label class="form-label">Description</label>
+        <textarea class="form-textarea" placeholder="Decrivez ce que fait cette action..."></textarea>
+      </div>
+
+      <div class="form-row-full">
+        <label class="form-label">Niveau d'impact</label>
+        <div class="impact-selector">
+          <div class="impact-option">
+            <div class="impact-icon" style="color:var(--success);">&#10003;</div>
+            <div class="impact-label">Faible</div>
+          </div>
+          <div class="impact-option selected">
+            <div class="impact-icon" style="color:var(--warning);">&#9888;</div>
+            <div class="impact-label">Moyen</div>
+          </div>
+          <div class="impact-option">
+            <div class="impact-icon" style="color:var(--error);">&#9888;</div>
+            <div class="impact-label">Eleve</div>
+          </div>
+        </div>
+      </div>
+
+      <h2 style="margin-top:32px;">Gestion du changement</h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Type de changement (Dev / Staging)</label>
+          <select class="form-select">
+            <option>Pre-approuve (execution immediate)</option>
+            <option>CAB requis</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Type de changement (Production)</label>
+          <select class="form-select">
+            <option>Pre-approuve (execution immediate)</option>
+            <option selected>CAB requis</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-top:32px;justify-content:flex-end;">
+        <button class="btn-secondary">Sauvegarder en brouillon</button>
+        <button class="btn-primary">Publier dans le catalogue</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + name).classList.add('active');
+  document.querySelectorAll('.showcase-nav button').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  closeDrawer();
+  window.scrollTo(0,0);
+}
+function openDrawer() {
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawer-overlay').classList.add('open');
+}
+function closeDrawer() {
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('drawer-overlay').classList.remove('open');
+}
+</script>
+</body>
+</html>

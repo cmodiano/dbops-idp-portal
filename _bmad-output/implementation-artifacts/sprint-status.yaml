@@ -1,0 +1,120 @@
+# generated: 2026-01-27
+# project: test
+# project_key: test
+# tracking_system: file-system
+# story_location: implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Implementation complete, ready for review
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - SM typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+
+generated: 2026-01-27
+project: test
+project_key: test
+tracking_system: file-system
+story_location: implementation-artifacts
+
+development_status:
+  # === Epic 1: Bootstrap Projet & Authentification (MVP) ===
+  epic-1: in-progress
+  1-1-initialisation-monorepo-et-environnement-de-developpement: review
+  1-2-authentification-saml-2-0-et-session-jwt: review
+  1-3-profil-rbac-et-navigation-du-portail: done
+  1-4-observabilite-health-check-et-ci-cd: ready-for-dev
+  epic-1-retrospective: optional
+
+  # === Epic 2: Administration du Catalogue - Karim (MVP) ===
+  epic-2: backlog
+  2-1-creer-une-action-avec-ses-metadonnees: backlog
+  2-2-definir-les-etapes-execution-et-changement-servicenow: backlog
+  2-3-configurer-le-rbac-par-action: backlog
+  2-4-publier-et-gerer-le-cycle-de-vie: backlog
+  2-5-preview-temps-reel-de-laction: backlog
+  epic-2-retrospective: optional
+
+  # === Epic 3: Decouverte du Catalogue - Marc (MVP) ===
+  epic-3: backlog
+  3-1-catalogue-actions-en-grille-de-cartes: backlog
+  3-2-fiche-descriptive-en-drawer-lateral: backlog
+  3-3-recherche-et-filtrage-du-catalogue: backlog
+  3-4-documentation-contextuelle-dune-action: backlog
+  epic-3-retrospective: optional
+
+  # === Epic 4: Execution & Suivi Temps Reel (MVP) ===
+  epic-4: backlog
+  4-1-wizard-execution-en-3-etapes: backlog
+  4-2-donnees-inventaire-pour-formulaires-dynamiques: backlog
+  4-3-moteur-execution-et-facade-api: backlog
+  4-4-adapter-plateforme-aap: backlog
+  4-5-integration-servicenow-ouverture-automatique-changement: backlog
+  4-6-timeline-execution-temps-reel: backlog
+  4-7-resultat-execution-logs-et-gestion-erreur: backlog
+  4-8-historique-des-executions: backlog
+  epic-4-retrospective: optional
+
+  # === Epic 5: Dashboard & Activite (Phase 2) ===
+  epic-5: backlog
+  5-1-dashboard-avec-statistiques-et-activite-recente: backlog
+  5-2-statuts-temps-reel-et-notifications-sur-le-dashboard: backlog
+  epic-5-retrospective: optional
+
+  # === Epic 6: Audit & Conformite SOC1 - Nadia (Phase 2) ===
+  epic-6: backlog
+  6-1-traces-audit-immutables-pour-chaque-execution: backlog
+  6-2-evidence-specifique-patching-et-comptes-a-privileges: backlog
+  6-3-consultation-historique-audit-filtre: backlog
+  6-4-export-rapports-audit: backlog
+  epic-6-retrospective: optional
+
+  # === Epic 7: Self-Service Business & RBAC Granulaire - Fatima (Phase 2) ===
+  epic-7: backlog
+  7-1-vue-catalogue-simplifiee-pour-client-business: backlog
+  7-2-golden-path-guide-pour-client-business: backlog
+  7-3-rbac-granulaire-par-action-profil-et-environnement: backlog
+  7-4-workflow-approbation-pour-la-production: backlog
+  epic-7-retrospective: optional
+
+  # === Epic 8: Analytics & Scorecards (Phase 2) ===
+  epic-8: backlog
+  8-1-scorecards-par-action: backlog
+  8-2-dashboards-globaux-dbops: backlog
+  epic-8-retrospective: optional
+
+  # === Epic 9: Autoremediation (Phase 2) ===
+  epic-9: backlog
+  9-1-detection-echec-et-proposition-actions-correctives: backlog
+  9-2-declenchement-manuel-action-corrective-par-dba: backlog
+  9-3-execution-automatique-corrective-pour-faible-risque: backlog
+  epic-9-retrospective: optional
+
+  # === Epic 10: Documentation IA, Communication & Interface Conversationnelle (Phase 3) ===
+  epic-10: backlog
+  10-1-auto-generation-de-documentation-via-ia: backlog
+  10-2-demande-de-consultation-expert-dba: backlog
+  10-3-interface-ia-conversationnelle-pour-decouverte-dactions: backlog
+  epic-10-retrospective: optional
