@@ -89,16 +89,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => { cancelled = true; };
   }, [refreshTokenFn, fetchCurrentUserFn]);
 
-  // Handle auth callback: extract access_token from URL fragment
+  // Handle auth callback: extract access_token from URL fragment (AC #4)
+  // Token is passed via URL fragment (not query param) for security - fragments
+  // are not sent to server, only accessible via JavaScript
   useEffect(() => {
     const hash = window.location.hash;
     if (hash.includes('access_token=')) {
-      const token = hash.split('access_token=')[1]?.split('&')[0];
+      // Parse URL fragment: #access_token=TOKEN&other=params
+      const tokenMatch = hash.match(/access_token=([^&]+)/);
+      const token = tokenMatch ? tokenMatch[1] : null;
       if (token) {
         setAccessToken(token);
-        // Clean URL fragment
+        // Clean URL fragment immediately after extraction
         window.history.replaceState(null, '', window.location.pathname);
-        // Fetch user profile
+        // Fetch user profile with the extracted token
         fetchCurrentUserFn(token).then(setUser);
       }
     }

@@ -1,6 +1,6 @@
 # Story 1.1 : Initialisation du monorepo et environnement de developpement
 
-Status: review
+Status: done
 
 ## Story
 
@@ -423,6 +423,12 @@ Claude Opus 4.5 (claude-opus-4-5-20251101)
 ### Change Log
 
 - 2026-01-28: Implementation initiale — Story 1.1 complete, 9 tasks / 30 subtasks
+- 2026-01-28: Code review fixes applied:
+  - Fixed oracledb.create_pool_async() → create_pool() (API correction)
+  - Added docstrings to database.py functions
+  - Completed Desjardins theme with spacing and border tokens
+  - Improved migration script error handling and SQL parsing
+  - Updated File List to reflect tests/unit/ structure
 
 ### File List
 
@@ -473,14 +479,15 @@ Claude Opus 4.5 (claude-opus-4-5-20251101)
 - backend/app/adapters/__init__.py
 - backend/app/websocket/__init__.py
 - backend/tests/__init__.py
-- backend/tests/test_project_structure.py
-- backend/tests/test_config.py
-- backend/tests/test_exceptions.py
-- backend/tests/test_api.py
-- backend/tests/test_logging.py
-- backend/tests/test_migration.py
-- backend/tests/test_models.py
-- backend/tests/test_user_repository.py
+- backend/tests/unit/__init__.py
+- backend/tests/unit/test_project_structure.py
+- backend/tests/unit/test_config.py
+- backend/tests/unit/test_exceptions.py
+- backend/tests/unit/test_api.py
+- backend/tests/unit/test_logging.py
+- backend/tests/unit/test_migration.py
+- backend/tests/unit/test_models.py
+- backend/tests/unit/test_user_repository.py
 
 **Database (nouveau):**
 - database/migrations/V001_create_users.sql

@@ -1,0 +1,37 @@
+[Unit]
+Description=IDP Portal API Service
+Documentation=https://github.com/your-org/idp-portal
+After=network.target oracle.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=idp-portal
+Group=idp-portal
+WorkingDirectory=/opt/idp-portal/backend
+EnvironmentFile=/opt/idp-portal/.env
+
+# Uvicorn command (AC #6)
+# NOTE: This assumes a Python virtual environment at /opt/idp-portal/venv
+# If using a different deployment method (pip install --user, container, etc.),
+# update this path accordingly
+ExecStart=/opt/idp-portal/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 2
+
+# Restart policy (AC #6)
+Restart=always
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/log/idp-portal
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=idp-portal
+
+[Install]
+WantedBy=multi-user.target

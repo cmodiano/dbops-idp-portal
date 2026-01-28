@@ -41,18 +41,18 @@ story_location: implementation-artifacts
 
 development_status:
   # === Epic 1: Bootstrap Projet & Authentification (MVP) ===
-  epic-1: in-progress
-  1-1-initialisation-monorepo-et-environnement-de-developpement: review
-  1-2-authentification-saml-2-0-et-session-jwt: review
+  epic-1: done
+  1-1-initialisation-monorepo-et-environnement-de-developpement: done
+  1-2-authentification-saml-2-0-et-session-jwt: done
   1-3-profil-rbac-et-navigation-du-portail: done
-  1-4-observabilite-health-check-et-ci-cd: ready-for-dev
+  1-4-observabilite-health-check-et-ci-cd: done
   epic-1-retrospective: optional
 
   # === Epic 2: Administration du Catalogue - Karim (MVP) ===
-  epic-2: backlog
-  2-1-creer-une-action-avec-ses-metadonnees: backlog
-  2-2-definir-les-etapes-execution-et-changement-servicenow: backlog
-  2-3-configurer-le-rbac-par-action: backlog
+  epic-2: in-progress
+  2-1-creer-une-action-avec-ses-metadonnees: done
+  2-2-definir-les-etapes-execution-et-changement-servicenow: done
+  2-3-configurer-le-rbac-par-action: done
   2-4-publier-et-gerer-le-cycle-de-vie: backlog
   2-5-preview-temps-reel-de-laction: backlog
   epic-2-retrospective: optional

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import Request
+import structlog
 
 from app.core.config import settings
 from app.core.exceptions import UnauthorizedError
@@ -15,8 +16,12 @@ _DEV_USER = UserProfile(id=0, username="dev-user", display_name="Dev User", prof
 
 
 async def get_current_user(request: Request) -> UserProfile:
-    """Extract Bearer token, verify JWT, return UserProfile. Raises 401 if invalid."""
+    """Extract Bearer token, verify JWT, return UserProfile. Raises 401 if invalid.
+
+    Also binds user_id to structlog contextvars for request logging (AC #3).
+    """
     if settings.auth_dev_bypass:
+        structlog.contextvars.bind_contextvars(user_id=str(_DEV_USER.id))
         return _DEV_USER
 
     auth_header = request.headers.get("Authorization")
@@ -30,7 +35,10 @@ async def get_current_user(request: Request) -> UserProfile:
     if not user:
         raise UnauthorizedError(code="USER_NOT_FOUND", message="Utilisateur introuvable")
 
-    return UserProfile(**user)
+    user_profile = UserProfile(**user)
+    # Bind user_id to structlog for request logging (AC #3)
+    structlog.contextvars.bind_contextvars(user_id=str(user_profile.id))
+    return user_profile
 
 
 async def get_optional_user(request: Request) -> UserProfile | None:

@@ -1,6 +1,6 @@
 # Story 1.2 : Authentification SAML 2.0 et session JWT
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -376,6 +376,10 @@ Claude Opus 4.5 (claude-opus-4-5-20251101)
 
 - 2026-01-27: Story 1.2 implementee — authentification SAML 2.0 + session JWT. 9 tasks, 108 tests.
 - 2026-01-27: Code review adversariale — 10 issues trouvees (3C/5M/2L), 8 corrigees. Ajout UnauthorizedError(401), validation token type, AuthCallbackPage, DI pour /auth/me, auth_service integre, tests restructures, apiFetch unwrap, dev bypass.
+- 2026-01-28: Code review follow-up — 2 issues additionnelles corrigees:
+  - Added FileNotFoundError handling in _read_cert_file() for dev environments
+  - Improved token extraction from URL fragment with regex (more robust than split)
+  - Added error handling in logoutApi() for network failures
 
 ### File List
 

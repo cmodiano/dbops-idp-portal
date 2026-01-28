@@ -11,10 +11,18 @@ from app.core.config import settings
 
 
 def _read_cert_file(path: str) -> str:
-    """Read a certificate or key file, return empty string if path is empty."""
+    """Read a certificate or key file, return empty string if path is empty.
+    
+    Handles FileNotFoundError gracefully - if cert file doesn't exist,
+    returns empty string (for dev environments without certs).
+    """
     if not path:
         return ""
-    return Path(path).read_text().strip()
+    try:
+        return Path(path).read_text().strip()
+    except FileNotFoundError:
+        # Cert file not found - return empty string (dev mode without certs)
+        return ""
 
 
 def get_saml_settings() -> dict:

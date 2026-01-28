@@ -1,6 +1,20 @@
 """Application settings loaded from environment variables."""
 
+from enum import Enum
+from typing import Literal
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
+
+
+class LogLevel(str, Enum):
+    """Valid log levels following architecture convention (AC #8)."""
+
+    DEBUG = "DEBUG"
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    CRITICAL = "CRITICAL"
 
 
 class Settings(BaseSettings):
@@ -35,6 +49,23 @@ class Settings(BaseSettings):
 
     # Dev bypass (for local development without IdP)
     auth_dev_bypass: bool = False
+
+    # Logging configuration (AC #8)
+    log_level: LogLevel = LogLevel.INFO
+
+    @field_validator("log_level", mode="before")
+    @classmethod
+    def validate_log_level(cls, v: str | LogLevel) -> LogLevel:
+        """Validate log_level is one of the allowed values."""
+        if isinstance(v, LogLevel):
+            return v
+        try:
+            return LogLevel(v.upper())
+        except ValueError:
+            raise ValueError(
+                f"Invalid log_level '{v}'. Must be one of: "
+                f"{', '.join(level.value for level in LogLevel)}"
+            )
 
 
 settings = Settings()

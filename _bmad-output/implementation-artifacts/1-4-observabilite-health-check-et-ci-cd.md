@@ -1,6 +1,6 @@
 # Story 1.4: Observabilite, Health Check et CI/CD
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -30,25 +30,25 @@ so that le portail est monitorable, deployable et pret pour la production.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Enrichir le logging structure avec contexte requete (AC: 2, 3, 8)
-  - [ ] 1.1: Ajouter un middleware de request logging dans `backend/app/core/middleware.py` qui logue chaque requete avec : method, path, status_code, duration_ms, user_id (si authentifie), correlation_id. Utiliser structlog.get_logger(). Log level: info pour succes, warning pour 4xx, error pour 5xx
-  - [ ] 1.2: Binder `user_id` dans structlog contextvars apres authentication (enrichir `get_current_user()` dans `backend/app/core/security.py` pour ajouter `structlog.contextvars.bind_contextvars(user_id=user.id)`)
-  - [ ] 1.3: Ajouter le setting `log_level` dans `backend/app/core/config.py` (defaut: "INFO", configurable via env var `LOG_LEVEL`). Appliquer le level dans `configure_logging()` de `backend/app/core/logging.py`
-  - [ ] 1.4: Ajouter les processeurs structlog manquants : `structlog.processors.StackInfoRenderer()`, `structlog.processors.format_exc_info` pour les traces d'erreur
-  - [ ] 1.5: Ecrire les tests unitaires pour le request logging middleware (succes 200, erreur 4xx/5xx, duration logged, user_id present quand authentifie, absent quand anonyme), la configuration du log level, et les processeurs structlog
+- [x] Task 1: Enrichir le logging structure avec contexte requete (AC: 2, 3, 8)
+  - [x] 1.1: Ajouter un middleware de request logging dans `backend/app/core/middleware.py` qui logue chaque requete avec : method, path, status_code, duration_ms, user_id (si authentifie), correlation_id. Utiliser structlog.get_logger(). Log level: info pour succes, warning pour 4xx, error pour 5xx
+  - [x] 1.2: Binder `user_id` dans structlog contextvars apres authentication (enrichir `get_current_user()` dans `backend/app/core/security.py` pour ajouter `structlog.contextvars.bind_contextvars(user_id=user.id)`)
+  - [x] 1.3: Ajouter le setting `log_level` dans `backend/app/core/config.py` (defaut: "INFO", configurable via env var `LOG_LEVEL`). Appliquer le level dans `configure_logging()` de `backend/app/core/logging.py`
+  - [x] 1.4: Ajouter les processeurs structlog manquants : `structlog.processors.StackInfoRenderer()`, `structlog.processors.format_exc_info` pour les traces d'erreur
+  - [x] 1.5: Ecrire les tests unitaires pour le request logging middleware (succes 200, erreur 4xx/5xx, duration logged, user_id present quand authentifie, absent quand anonyme), la configuration du log level, et les processeurs structlog
 
-- [ ] Task 2: Frontend — script test et configuration vitest (AC: 4)
-  - [ ] 2.1: Ajouter le script `"test": "vitest run"` et `"test:watch": "vitest"` dans `frontend/package.json`
-  - [ ] 2.2: Verifier que `npx vitest run` execute tous les tests frontend existants avec succes (37 tests attendus)
+- [x] Task 2: Frontend — script test et configuration vitest (AC: 4)
+  - [x] 2.1: Ajouter le script `"test": "vitest run"` et `"test:watch": "vitest"` dans `frontend/package.json`
+  - [x] 2.2: Verifier que `npx vitest run` execute tous les tests frontend existants avec succes (37 tests attendus)
 
-- [ ] Task 3: Backend — configuration mypy pour type checking (AC: 4)
-  - [ ] 3.1: Ajouter `mypy>=1.10` aux dev dependencies dans `backend/pyproject.toml`
-  - [ ] 3.2: Configurer `[tool.mypy]` dans `backend/pyproject.toml` : python_version = "3.11", strict = false, warn_return_any = true, warn_unused_configs = true, ignore_missing_imports = true (pour les libs sans stubs)
-  - [ ] 3.3: Executer `mypy app/` et corriger les erreurs de type critiques (ne pas forcer strict mode — trop de refactoring pour une story observabilite)
-  - [ ] 3.4: Ecrire un test de validation qui verifie que mypy est installe et configurable (test_project_structure ou equivalent)
+- [x] Task 3: Backend — configuration mypy pour type checking (AC: 4)
+  - [x] 3.1: Ajouter `mypy>=1.10` aux dev dependencies dans `backend/pyproject.toml`
+  - [x] 3.2: Configurer `[tool.mypy]` dans `backend/pyproject.toml` : python_version = "3.11", strict = false, warn_return_any = true, warn_unused_configs = true, ignore_missing_imports = true (pour les libs sans stubs)
+  - [x] 3.3: Executer `mypy app/` et corriger les erreurs de type critiques (ne pas forcer strict mode — trop de refactoring pour une story observabilite)
+  - [x] 3.4: Ecrire un test de validation qui verifie que mypy est installe et configurable (test_project_structure ou equivalent)
 
-- [ ] Task 4: CI/CD Pipeline — GitHub Actions (AC: 4)
-  - [ ] 4.1: Creer `.github/workflows/ci.yml` declenche sur push/PR vers main avec les jobs :
+- [x] Task 4: CI/CD Pipeline — GitHub Actions (AC: 4)
+  - [x] 4.1: Creer `.github/workflows/ci.yml` declenche sur push/PR vers main avec les jobs :
     - **lint-backend** : `ruff check app/ tests/`
     - **lint-frontend** : `cd frontend && npm ci && npm run lint`
     - **typecheck-backend** : `mypy app/`
@@ -56,15 +56,15 @@ so that le portail est monitorable, deployable et pret pour la production.
     - **test-backend** : `pytest tests/ -v` (avec setup Python 3.11, sans Oracle — tests unitaires uniquement)
     - **test-frontend** : `cd frontend && npm ci && npm test`
     - **build-frontend** : `cd frontend && npm ci && npm run build`
-  - [ ] 4.2: Creer `.github/workflows/deploy.yml` declenche manuellement (workflow_dispatch) ou sur push vers main (apres CI success) avec les etapes :
+  - [x] 4.2: Creer `.github/workflows/deploy.yml` declenche manuellement (workflow_dispatch) ou sur push vers main (apres CI success) avec les etapes :
     - Build frontend (`vite build`)
     - Package backend
     - Deploy via SSH + rsync vers la VM cible (variables secrets : `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_KEY`, `DEPLOY_PATH`)
     - Restart systemd service (`sudo systemctl restart idp-portal`)
-  - [ ] 4.3: Ecrire un test de validation des fichiers YAML workflow (syntaxe valide, jobs attendus presents)
+  - [x] 4.3: Ecrire un test de validation des fichiers YAML workflow (syntaxe valide, jobs attendus presents)
 
-- [ ] Task 5: Configuration Nginx (AC: 5)
-  - [ ] 5.1: Creer `nginx/idp-portal.conf` avec :
+- [x] Task 5: Configuration Nginx (AC: 5)
+  - [x] 5.1: Creer `nginx/idp-portal.conf` avec :
     - Listener HTTPS 443 avec TLS 1.2+ (ssl_protocols TLSv1.2 TLSv1.3)
     - Certificats SSL (chemins parametrables)
     - Location `/` : servir les fichiers statiques frontend depuis `/var/www/idp-portal/frontend/dist/`
@@ -73,10 +73,10 @@ so that le portail est monitorable, deployable et pret pour la production.
     - Headers securite : X-Content-Type-Options, X-Frame-Options, Strict-Transport-Security
     - try_files $uri /index.html pour le SPA routing
     - Redirect HTTP 80 → HTTPS 443
-  - [ ] 5.2: Ecrire un test de validation de la syntaxe du fichier conf Nginx (structure attendue presente)
+  - [x] 5.2: Ecrire un test de validation de la syntaxe du fichier conf Nginx (structure attendue presente)
 
-- [ ] Task 6: Service systemd (AC: 6)
-  - [ ] 6.1: Creer `nginx/idp-portal.service` avec :
+- [x] Task 6: Service systemd (AC: 6)
+  - [x] 6.1: Creer `nginx/idp-portal.service` avec :
     - Type=simple
     - ExecStart : uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 2
     - Restart=always, RestartSec=5
@@ -84,27 +84,27 @@ so that le portail est monitorable, deployable et pret pour la production.
     - User=idp-portal (user systeme dedie)
     - EnvironmentFile pour charger les variables d'environnement
     - After=network.target oracle.service
-  - [ ] 6.2: Ecrire un test de validation du fichier service (sections [Unit], [Service], [Install] presentes, directives clefs presentes)
+  - [x] 6.2: Ecrire un test de validation du fichier service (sections [Unit], [Service], [Install] presentes, directives clefs presentes)
 
-- [ ] Task 7: Script de deploiement (AC: 4)
-  - [ ] 7.1: Creer `scripts/deploy.sh` avec :
+- [x] Task 7: Script de deploiement (AC: 4)
+  - [x] 7.1: Creer `scripts/deploy.sh` avec :
     - Verification des arguments (host, user, path)
     - rsync frontend/dist/ vers le serveur (repertoire Nginx static)
     - rsync backend/ vers le serveur (repertoire application)
     - Commande SSH pour restart systemd (`systemctl restart idp-portal`)
     - Gestion d'erreur (set -euo pipefail, messages explicites)
-  - [ ] 7.2: Ecrire un test de validation du script (fichier executable, shebang present, options de securite set -e)
+  - [x] 7.2: Ecrire un test de validation du script (fichier executable, shebang present, options de securite set -e)
 
-- [ ] Task 8: Validation end-to-end et regression (AC: tous)
-  - [ ] 8.1: Verifier AC1 — health check retourne 200/503 avec statut Oracle (deja implemente, confirmer via tests existants)
-  - [ ] 8.2: Verifier AC2 — correlation ID present dans les reponses et les logs (deja implemente, confirmer via tests existants)
-  - [ ] 8.3: Verifier AC3 — request logging avec timestamp, level, event, correlation_id, user_id (nouveau)
-  - [ ] 8.4: Verifier AC4 — CI/CD workflows valides et complets
-  - [ ] 8.5: Verifier AC5 — Nginx conf syntaxiquement correcte
-  - [ ] 8.6: Verifier AC6 — systemd service syntaxiquement correct
-  - [ ] 8.7: Verifier AC7 — CORS deja configure dans main.py (confirmer)
-  - [ ] 8.8: Verifier AC8 — log level configurable et conventions respectees
-  - [ ] 8.9: Regression check — tous les tests existants passent (118 backend + 37 frontend = 155 attendus minimum)
+- [x] Task 8: Validation end-to-end et regression (AC: tous)
+  - [x] 8.1: Verifier AC1 — health check retourne 200/503 avec statut Oracle (deja implemente, confirmer via tests existants)
+  - [x] 8.2: Verifier AC2 — correlation ID present dans les reponses et les logs (deja implemente, confirmer via tests existants)
+  - [x] 8.3: Verifier AC3 — request logging avec timestamp, level, event, correlation_id, user_id (nouveau)
+  - [x] 8.4: Verifier AC4 — CI/CD workflows valides et complets
+  - [x] 8.5: Verifier AC5 — Nginx conf syntaxiquement correcte
+  - [x] 8.6: Verifier AC6 — systemd service syntaxiquement correct
+  - [x] 8.7: Verifier AC7 — CORS deja configure dans main.py (confirmer)
+  - [x] 8.8: Verifier AC8 — log level configurable et conventions respectees
+  - [x] 8.9: Regression check — tous les tests existants passent (118 backend + 37 frontend = 155 attendus minimum)
 
 ## Dev Notes
 
@@ -277,10 +277,54 @@ Les elements suivants sont deja implementes dans les stories 1.1 et 1.2. Le dev 
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+Claude Opus 4.5 (claude-opus-4-5-20251101)
 
 ### Debug Log References
 
+- mypy runs with 18 known warnings due to incomplete third-party stubs (oracledb, cachetools, jose) - documented and expected per story requirements (strict=false)
+
 ### Completion Notes List
 
+- **Task 1**: Implemented RequestLoggingMiddleware with method, path, status_code, duration_ms logging. Log levels: info (2xx), warning (4xx), error (5xx). Added user_id binding in get_current_user(). Added log_level setting (LOG_LEVEL env var). Added StackInfoRenderer and format_exc_info processors. 12 new tests in test_logging.py.
+- **Task 2**: Added "test" and "test:watch" scripts to frontend/package.json. 37 frontend tests pass.
+- **Task 3**: Added mypy>=1.10 to dev dependencies. Configured [tool.mypy] with python_version=3.11, strict=false, warn_return_any=true, ignore_missing_imports=true. Fixed health.py return type. 3 new tests for mypy config.
+- **Task 4**: Created ci.yml with 7 jobs (lint-backend, lint-frontend, typecheck-backend, typecheck-frontend, test-backend, test-frontend, build-frontend). Created deploy.yml with workflow_dispatch and push triggers, rsync deployment, health check. 6 new tests for workflows.
+- **Task 5**: Created nginx/idp-portal.conf with HTTPS 443 + TLS 1.2+, API proxy, WebSocket proxy, security headers, HTTP→HTTPS redirect, SPA routing. 8 new tests.
+- **Task 6**: Created nginx/idp-portal.service with Type=simple, Restart=always, User=idp-portal, EnvironmentFile. 7 new tests.
+- **Task 7**: Created scripts/deploy.sh with argument validation, rsync deployment, systemctl restart, error handling (set -euo pipefail). 7 new tests.
+- **Task 8**: All ACs verified. 162 backend + 37 frontend = 199 tests passing (baseline was 155).
+
 ### File List
+
+**New Files:**
+- `.github/workflows/ci.yml` — CI pipeline (lint, typecheck, test, build)
+- `.github/workflows/deploy.yml` — Deploy pipeline (SSH + rsync)
+- `nginx/idp-portal.conf` — Nginx reverse proxy config
+- `nginx/idp-portal.service` — systemd service unit
+
+**Modified Files:**
+- `backend/app/core/middleware.py` — Added RequestLoggingMiddleware
+- `backend/app/core/logging.py` — Added log_level, stdlib integration, StackInfoRenderer, format_exc_info
+- `backend/app/core/config.py` — Added log_level setting
+- `backend/app/api/deps.py` — Added user_id binding to structlog contextvars
+- `backend/app/api/v1/health.py` — Fixed return type annotation
+- `backend/app/main.py` — Added RequestLoggingMiddleware
+- `backend/pyproject.toml` — Added mypy, pytest-mock to dev deps; added [tool.mypy] config
+- `backend/tests/unit/test_logging.py` — Added 12 tests for request logging, log level, processors
+- `backend/tests/unit/test_auth_api.py` — Added 2 tests for user_id binding
+- `backend/tests/unit/test_project_structure.py` — Added 28 tests for mypy, workflows, nginx, systemd, deploy script
+- `frontend/package.json` — Added test and test:watch scripts
+- `scripts/deploy.sh` — New deploy script
+
+### Change Log
+
+- 2026-01-28: Story 1.4 implementation complete. All 8 tasks done. 199 tests passing (162 backend + 37 frontend). Ready for code review.
+- 2026-01-28: Code review fixes applied:
+  - Fixed deploy.yml workflow syntax (removed invalid `uses:` reference)
+  - Added LOG_LEVEL validation with Enum (prevents invalid values)
+  - Added correlation_id propagation in health check response
+  - Explicitly documented user_id in RequestLoggingMiddleware
+  - Improved error handling in deploy.sh (SSH failures, build verification)
+  - Added Oracle error logging in health check
+  - Improved mypy CI workflow error handling
+  - Added documentation comments in nginx config and systemd service

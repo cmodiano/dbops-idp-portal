@@ -30,8 +30,13 @@ export async function fetchCurrentUser(token: string): Promise<User | null> {
 }
 
 export async function logoutApi(): Promise<void> {
-  await fetch(`${API_BASE}/auth/logout`, {
-    method: 'POST',
-    credentials: 'include',
-  });
+  // Best effort logout - don't throw if network fails
+  try {
+    await fetch(`${API_BASE}/auth/logout`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+  } catch {
+    // Network error - continue with logout anyway (clear local state)
+  }
 }
