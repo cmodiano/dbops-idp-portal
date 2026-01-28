@@ -17,6 +17,8 @@ from app.models.catalog import (
     ExecutionStep,
     ExecutionStepType,
     ChangeType,
+    StatusTransition,
+    InvalidTransitionError,
 )
 from app.repositories import catalog_repository
 from app.repositories.catalog_repository import InvalidStateError
@@ -964,3 +966,383 @@ class TestListAllWithRbacFilter:
             result = await catalog_repository.list_all(user_profile=UserProfile.DBA_APPLICATIF)
 
         assert len(result) == 2
+
+
+# === Story 2.4: Status Transition and Lifecycle Tests ===
+
+
+class TestUpdateStatus:
+    """Tests for update_status() function (Story 2.4, AC #1, #4, #5)."""
+
+    @pytest.fixture
+    def mock_db_row_draft(self):
+        """Sample database row for draft action."""
+        return (
+            1,  # ID
+            "Draft Action",  # NAME
+            "A draft action",  # DESCRIPTION
+            "Provisioning",  # CATEGORY
+            "Oracle",  # ENGINE
+            "AAP",  # PLATFORM
+            None,  # PARAMETERS_SCHEMA
+            None,  # IMPACT_RULES
+            "draft",  # STATUS
+            42,  # CREATED_BY
+            datetime(2026, 1, 28, 10, 0, 0),  # CREATED_AT
+            None,  # UPDATED_AT
+            None,  # RBAC_POLICIES
+            None,  # EXECUTION_STEPS
+            None,  # CHANGE_TYPE_CONFIG
+        )
+
+    @pytest.fixture
+    def mock_db_row_published(self):
+        """Sample database row for published action."""
+        return (
+            1,  # ID
+            "Published Action",  # NAME
+            "A published action",  # DESCRIPTION
+            "Provisioning",  # CATEGORY
+            "Oracle",  # ENGINE
+            "AAP",  # PLATFORM
+            None,  # PARAMETERS_SCHEMA
+            None,  # IMPACT_RULES
+            "published",  # STATUS
+            42,  # CREATED_BY
+            datetime(2026, 1, 28, 10, 0, 0),  # CREATED_AT
+            datetime(2026, 1, 28, 11, 0, 0),  # UPDATED_AT
+            None,  # RBAC_POLICIES
+            None,  # EXECUTION_STEPS
+            None,  # CHANGE_TYPE_CONFIG
+        )
+
+    @pytest.fixture
+    def mock_db_row_disabled(self):
+        """Sample database row for disabled action."""
+        return (
+            1,  # ID
+            "Disabled Action",  # NAME
+            "A disabled action",  # DESCRIPTION
+            "Provisioning",  # CATEGORY
+            "Oracle",  # ENGINE
+            "AAP",  # PLATFORM
+            None,  # PARAMETERS_SCHEMA
+            None,  # IMPACT_RULES
+            "disabled",  # STATUS
+            42,  # CREATED_BY
+            datetime(2026, 1, 28, 10, 0, 0),  # CREATED_AT
+            datetime(2026, 1, 28, 12, 0, 0),  # UPDATED_AT
+            None,  # RBAC_POLICIES
+            None,  # EXECUTION_STEPS
+            None,  # CHANGE_TYPE_CONFIG
+        )
+
+    @pytest.mark.asyncio
+    async def test_update_status_publish_success(self, mock_db_row_published):
+        """Test publishing a draft action successfully."""
+        from app.models.catalog import StatusTransition
+
+        mock_cursor_check = AsyncMock()
+        mock_cursor_check.fetchone = AsyncMock(return_value=("draft",))
+        mock_cursor_check.close = AsyncMock()
+
+        mock_cursor_update = AsyncMock()
+        mock_cursor_update.rowcount = 1
+        mock_cursor_update.close = AsyncMock()
+
+        mock_cursor_get = AsyncMock()
+        mock_cursor_get.fetchone = AsyncMock(return_value=mock_db_row_published)
+        mock_cursor_get.close = AsyncMock()
+
+        mock_conn = AsyncMock()
+        mock_conn.commit = AsyncMock()
+
+        call_count = 0
+
+        async def mock_execute(query, params):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return mock_cursor_check
+            elif call_count == 2:
+                return mock_cursor_update
+            return mock_cursor_get
+
+        mock_conn.execute = mock_execute
+
+        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            result = await catalog_repository.update_status(1, StatusTransition.PUBLISH, user_id="user123")
+
+        assert result is not None
+        assert result.id == 1
+        assert result.status == ActionStatus.PUBLISHED
+
+    @pytest.mark.asyncio
+    async def test_update_status_disable_success(self, mock_db_row_disabled):
+        """Test disabling a published action successfully."""
+        from app.models.catalog import StatusTransition
+
+        mock_cursor_check = AsyncMock()
+        mock_cursor_check.fetchone = AsyncMock(return_value=("published",))
+        mock_cursor_check.close = AsyncMock()
+
+        mock_cursor_update = AsyncMock()
+        mock_cursor_update.rowcount = 1
+        mock_cursor_update.close = AsyncMock()
+
+        mock_cursor_get = AsyncMock()
+        mock_cursor_get.fetchone = AsyncMock(return_value=mock_db_row_disabled)
+        mock_cursor_get.close = AsyncMock()
+
+        mock_conn = AsyncMock()
+        mock_conn.commit = AsyncMock()
+
+        call_count = 0
+
+        async def mock_execute(query, params):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return mock_cursor_check
+            elif call_count == 2:
+                return mock_cursor_update
+            return mock_cursor_get
+
+        mock_conn.execute = mock_execute
+
+        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            result = await catalog_repository.update_status(1, StatusTransition.DISABLE, user_id="user123")
+
+        assert result is not None
+        assert result.status == ActionStatus.DISABLED
+
+    @pytest.mark.asyncio
+    async def test_update_status_enable_success(self, mock_db_row_published):
+        """Test enabling a disabled action successfully."""
+        from app.models.catalog import StatusTransition
+
+        mock_cursor_check = AsyncMock()
+        mock_cursor_check.fetchone = AsyncMock(return_value=("disabled",))
+        mock_cursor_check.close = AsyncMock()
+
+        mock_cursor_update = AsyncMock()
+        mock_cursor_update.rowcount = 1
+        mock_cursor_update.close = AsyncMock()
+
+        mock_cursor_get = AsyncMock()
+        mock_cursor_get.fetchone = AsyncMock(return_value=mock_db_row_published)
+        mock_cursor_get.close = AsyncMock()
+
+        mock_conn = AsyncMock()
+        mock_conn.commit = AsyncMock()
+
+        call_count = 0
+
+        async def mock_execute(query, params):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return mock_cursor_check
+            elif call_count == 2:
+                return mock_cursor_update
+            return mock_cursor_get
+
+        mock_conn.execute = mock_execute
+
+        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            result = await catalog_repository.update_status(1, StatusTransition.ENABLE, user_id="user123")
+
+        assert result is not None
+        assert result.status == ActionStatus.PUBLISHED
+
+    @pytest.mark.asyncio
+    async def test_update_status_not_found(self):
+        """Test updating status when action not found."""
+        from app.models.catalog import StatusTransition
+
+        mock_cursor = AsyncMock()
+        mock_cursor.fetchone = AsyncMock(return_value=None)
+        mock_cursor.close = AsyncMock()
+
+        mock_conn = AsyncMock()
+        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+
+        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            result = await catalog_repository.update_status(999, StatusTransition.PUBLISH, user_id="user123")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_update_status_invalid_transition_draft_disable(self):
+        """Test invalid transition draft -> disable raises InvalidTransitionError."""
+        from app.models.catalog import StatusTransition, InvalidTransitionError
+
+        mock_cursor = AsyncMock()
+        mock_cursor.fetchone = AsyncMock(return_value=("draft",))
+        mock_cursor.close = AsyncMock()
+
+        mock_conn = AsyncMock()
+        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+
+        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            with pytest.raises(InvalidTransitionError) as exc_info:
+                await catalog_repository.update_status(1, StatusTransition.DISABLE, user_id="user123")
+
+            assert "draft" in exc_info.value.current_status
+
+
+class TestListAllAdmin:
+    """Tests for list_all_admin() function (Story 2.4, AC #2)."""
+
+    @pytest.fixture
+    def mock_db_rows_admin(self):
+        """Sample database rows for admin dashboard."""
+        return [
+            (
+                1,  # ID
+                "Draft Action",  # NAME
+                "draft",  # STATUS
+                "Provisioning",  # CATEGORY
+                "Oracle",  # ENGINE
+                datetime(2026, 1, 28, 10, 0, 0),  # CREATED_AT
+                0,  # EXECUTION_COUNT
+            ),
+            (
+                2,  # ID
+                "Published Action",  # NAME
+                "published",  # STATUS
+                "Administration",  # CATEGORY
+                "SQL Server",  # ENGINE
+                datetime(2026, 1, 27, 10, 0, 0),  # CREATED_AT
+                42,  # EXECUTION_COUNT
+            ),
+            (
+                3,  # ID
+                "Disabled Action",  # NAME
+                "disabled",  # STATUS
+                "Patching",  # CATEGORY
+                "Oracle",  # ENGINE
+                datetime(2026, 1, 26, 10, 0, 0),  # CREATED_AT
+                15,  # EXECUTION_COUNT
+            ),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_list_all_admin_returns_all_statuses(self, mock_db_rows_admin):
+        """Test list_all_admin returns actions of all statuses."""
+        mock_cursor_count = AsyncMock()
+        mock_cursor_count.fetchone = AsyncMock(return_value=(3,))
+        mock_cursor_count.close = AsyncMock()
+
+        mock_cursor_data = AsyncMock()
+        mock_cursor_data.fetchall = AsyncMock(return_value=mock_db_rows_admin)
+        mock_cursor_data.close = AsyncMock()
+
+        mock_conn = AsyncMock()
+        call_count = 0
+
+        async def mock_execute(query, params):
+            nonlocal call_count
+            call_count += 1
+            if "COUNT" in query:
+                return mock_cursor_count
+            return mock_cursor_data
+
+        mock_conn.execute = mock_execute
+
+        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            actions, pagination = await catalog_repository.list_all_admin()
+
+        assert len(actions) == 3
+        statuses = [r.status for r in actions]
+        assert ActionStatus.DRAFT in statuses
+        assert ActionStatus.PUBLISHED in statuses
+        assert ActionStatus.DISABLED in statuses
+        assert pagination.total_count == 3
+
+    @pytest.mark.asyncio
+    async def test_list_all_admin_includes_execution_count(self, mock_db_rows_admin):
+        """Test list_all_admin includes execution_count."""
+        mock_cursor_count = AsyncMock()
+        mock_cursor_count.fetchone = AsyncMock(return_value=(3,))
+        mock_cursor_count.close = AsyncMock()
+
+        mock_cursor_data = AsyncMock()
+        mock_cursor_data.fetchall = AsyncMock(return_value=mock_db_rows_admin)
+        mock_cursor_data.close = AsyncMock()
+
+        mock_conn = AsyncMock()
+        call_count = 0
+
+        async def mock_execute(query, params):
+            nonlocal call_count
+            call_count += 1
+            if "COUNT" in query:
+                return mock_cursor_count
+            return mock_cursor_data
+
+        mock_conn.execute = mock_execute
+
+        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            actions, pagination = await catalog_repository.list_all_admin()
+
+        # Find the published action (id=2)
+        published = next(r for r in actions if r.id == 2)
+        assert published.execution_count == 42
+
+    @pytest.mark.asyncio
+    async def test_list_all_admin_with_status_filter(self, mock_db_rows_admin):
+        """Test list_all_admin with status filter."""
+        # Only return published actions
+        mock_db_rows_filtered = [r for r in mock_db_rows_admin if r[2] == "published"]
+
+        mock_cursor_count = AsyncMock()
+        mock_cursor_count.fetchone = AsyncMock(return_value=(1,))
+        mock_cursor_count.close = AsyncMock()
+
+        mock_cursor_data = AsyncMock()
+        mock_cursor_data.fetchall = AsyncMock(return_value=mock_db_rows_filtered)
+        mock_cursor_data.close = AsyncMock()
+
+        mock_conn = AsyncMock()
+        call_count = 0
+
+        async def mock_execute(query, params):
+            nonlocal call_count
+            call_count += 1
+            if "COUNT" in query:
+                return mock_cursor_count
+            return mock_cursor_data
+
+        mock_conn.execute = mock_execute
+
+        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            actions, pagination = await catalog_repository.list_all_admin(status=ActionStatus.PUBLISHED)
+
+        assert len(actions) == 1
+        assert actions[0].status == ActionStatus.PUBLISHED
+        assert pagination.total_count == 1

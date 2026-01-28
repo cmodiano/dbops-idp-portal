@@ -189,10 +189,9 @@ Le contexte bancaire impose des exigences specifiques en matiere de conformite, 
 
 ### Gestion du Changement
 
-- **Deux rails integres dans la definition de l'action :**
-  - **Changement pre-approuve** : les actions encadrees et maitrisees (Golden Paths matures) portent un statut pre-approuve dans leur definition. L'ouverture de changement est automatique et integree a l'execution
-  - **Changement CAB** : les actions non encadrees ou a haut risque declenchent une soumission manuelle au CAB. Le portail ne permet pas l'execution tant que l'approbation CAB n'est pas obtenue
-- **L'ouverture de changement fait partie integrante de la definition de l'action** dans le Software Catalog — ce n'est pas un processus separe
+- **Changements pre-approuves uniquement** : toutes les actions du catalogue portent un statut pre-approuve. L'ouverture de changement ServiceNow est automatique, integree a l'execution, et non-bloquante (pas d'attente d'approbation)
+- **Conditionnel par environnement** : chaque action definit si un changement est requis selon l'environnement cible (ex: pas de changement en dev/cert, changement en prod)
+- **ServiceNow comme connecteur generique** : l'ouverture de changement est un step d'execution parmi d'autres, au meme titre que les appels vers AAP, Azure DevOps, Jira ou tout autre systeme integre
 
 ### Securite & Credentials
 
@@ -215,7 +214,7 @@ Le contexte bancaire impose des exigences specifiques en matiere de conformite, 
 | Perte de tracabilite d'une action production | Echec d'audit SOC1 | Generation automatique d'evidence, logs immutables, pas d'acces direct |
 | Indisponibilite du portail | Blocage des operations DB | Haute disponibilite + break-the-glass pour urgences |
 | Secrets exposes | Compromission des plateformes | Integration Vault, zero secret stocke, communication sortante uniquement |
-| Action pre-approuvee executee hors cadre | Non-conformite au processus de changement | Guardrails dans la definition de l'action, parametres valides, environnements restreints |
+| Action executee sans changement requis | Non-conformite au processus de changement | Configuration obligatoire du changement par environnement dans la definition de l'action, validation a l'execution |
 
 ## Platform-Specific Requirements
 
@@ -234,8 +233,10 @@ Plateforme interne B2B (Internal Developer Platform) specialisee operations base
 
 **Authentification :**
 - SSO d'entreprise (protocole a confirmer — SAML, OIDC, ou autre selon le standard interne)
-- Profils derives du SSO : DBA Applicatif, DBA Infrastructure, Client Business, DBOPS, Specialiste Securite
-- RBAC granulaire applique par action, profil et environnement cible
+- Groupe AD global pour l'acces au portail (ex: GRP-IDP-PORTAL)
+- Profiles dynamiques mappes sur des groupes AD (ex: GRP-IDP-ASSURANCE → Profile Assurance)
+- Un utilisateur peut appartenir a plusieurs groupes AD → permissions cumulees (union)
+- RBAC granulaire : profile → actions (liste ou pattern/tags) + targets (liste ou pattern) + environnements
 
 ### Integration Architecture
 
@@ -248,7 +249,7 @@ Toutes les integrations sont en **API REST**.
 | **Azure DevOps** | Sortante (API) | Execution d'actions (pipelines) |
 | **Terraform** | Sortante (API) | Execution d'actions (infrastructure as code) |
 | **HashiCorp Vault** | Sortante (API) | Recuperation dynamique des secrets au moment de l'execution |
-| **ServiceNow** | Sortante (API) | Ouverture automatique de changements (pre-approuves ou CAB) comme etape d'une action |
+| **ServiceNow** | Sortante (API) | Connecteur generique pour ouverture automatique de changements pre-approuves (etape d'une action, conditionnel par environnement) |
 | **Inventaire interne** | Entrante (API) | Source de verite pour les metadonnees des bases de donnees (plus riche que la CMDB ServiceNow) |
 | **ServiceNow CMDB** | A evaluer | Source secondaire d'inventaire — determiner si le portail doit lire et/ou mettre a jour la CMDB apres certaines actions |
 | **SSO d'entreprise** | Entrante | Authentification et identification des profils utilisateurs |
@@ -258,21 +259,39 @@ Toutes les integrations sont en **API REST**.
 - Callback asynchrone des plateformes vers le portail pour la remontee de statut
 - Lecture de l'inventaire interne pour alimenter le Software Catalog et les formulaires dynamiques (ex: liste des bases disponibles, environnements)
 
-### RBAC Matrix
+### RBAC Model
 
-| Profil | Catalogue | Execution (non-prod) | Execution (prod) | Administration catalogue | Audit & rapports |
-|--------|-----------|---------------------|-------------------|--------------------------|------------------|
-| **DBA Applicatif** | Lecture complete | Execution directe | Selon action (pre-approuve ou approbation) | Non | Lecture propres executions |
-| **DBA Infrastructure** | Lecture complete | Execution directe | Selon action (pre-approuve ou approbation) | Non | Lecture propres executions |
-| **Client Business** | Lecture vue simplifiee | Execution actions deleguees | Non | Non | Lecture propres executions |
-| **DBOPS** | Lecture complete | Execution directe | Execution directe | CRUD complet (actions, RBAC, Golden Paths) | Lecture complete |
-| **Specialiste Securite** | Lecture complete | Non | Non | Non | Lecture complete + export rapports |
+**Architecture RBAC dynamique basee sur les groupes AD:**
+
+```
+User (SAML) → Groupes AD → Profile(s) → Permissions
+                              │
+                              ├── Actions: liste explicite OU pattern (tags)
+                              ├── Targets: liste explicite OU pattern (valide contre inventaire)
+                              └── Environments: [DEV, STAGING, PROD] ou [*]
+```
+
+**Profiles geres dynamiquement par DBOPS** (pas de liste fixe). Exemples:
+
+| Profile | Groupe AD | Actions | Targets | Envs | Admin | Audit |
+|---------|-----------|---------|---------|------|-------|-------|
+| **DBOPS** | GRP-IDP-DBOPS | `*` | `*` | `*` | Oui | Complet |
+| **DBA Applicatif** | GRP-IDP-DBA-APP | `tag:*` | `*` | `*` | Non | Propres exec |
+| **DBA Infrastructure** | GRP-IDP-DBA-INFRA | `tag:*` | `*` | `*` | Non | Propres exec |
+| **Specialiste Securite** | GRP-IDP-SECURITE | aucune | aucun | - | Non | Complet + export |
+| **Assurance** | GRP-IDP-ASSURANCE | `tag:oracle`, `tag:provisioning` | `assurance-*` | DEV, STAGING | Non | Propres exec |
+| **Finance** | GRP-IDP-FINANCE | Action #5, #12 | `finance-*`, `shared-*` | DEV | Non | Propres exec |
+
+**Multi-profiles:** Un utilisateur dans plusieurs groupes AD cumule les permissions (union).
+
+**Gestion:** Interface admin du portail + import/export YAML (as code).
 
 ### Implementation Considerations
 
 - **Inventaire interne comme source de verite** : le Software Catalog du portail s'alimente depuis l'inventaire interne (API) pour les metadonnees des bases de donnees. L'inventaire interne est plus riche que la CMDB ServiceNow
 - **ServiceNow CMDB** : a evaluer si le portail doit mettre a jour la CMDB apres certaines actions (ex: creation de BD) pour maintenir la coherence avec l'ecosysteme ITSM
-- **ServiceNow Change Management** : l'ouverture de changement est une etape d'execution au sein d'une action, potentiellement conditionnelle a l'environnement cible (ex: obligatoire en prod, optionnelle en dev)
+- **Connecteurs generiques** : toutes les integrations (AAP, ServiceNow, Azure DevOps, Jira, GitHub Actions, Terraform) sont des connecteurs standardises appelables depuis les steps d'une action. ServiceNow n'a pas de traitement special — c'est un connecteur comme les autres
+- **ServiceNow Change Management** : l'ouverture de changement pre-approuve est un step d'execution conditionnel par environnement (ex: requis en prod, pas requis en dev/cert). Pas de changement CAB bloquant
 - **Scalabilite** : le portail production gere tous les environnements DB — le volume d'actions augmentera significativement avec l'ouverture aux clients business
 
 ## Project Scoping & Phased Development
@@ -359,9 +378,9 @@ Les 45 exigences fonctionnelles ci-dessous decoulent des user journeys, des exig
 ### 1. Gestion du Software Catalog
 
 - **FR1:** DBOPS peut creer une action dans le Software Catalog avec ses metadonnees (nom, description, moteur, plateforme d'execution, parametres, niveau d'impact)
-- **FR2:** DBOPS peut definir les etapes d'execution d'une action, incluant des etapes conditionnelles selon l'environnement cible (ex: ouverture de changement en production)
-- **FR3:** DBOPS peut configurer les regles RBAC par action (qui peut executer, qui doit approuver, par profil et par environnement)
-- **FR4:** DBOPS peut definir le type de changement associe a une action (pre-approuve ou CAB)
+- **FR2:** DBOPS peut definir les etapes d'execution d'une action, chaque etape pouvant appeler un connecteur generique (AAP, ServiceNow, Azure DevOps, Jira, GitHub Actions, Terraform, etc.) avec des conditions selon l'environnement cible
+- **FR3:** [DEPLACE vers FR25a-d] Les regles RBAC sont gerees au niveau des profiles, pas des actions individuelles
+- **FR4:** DBOPS peut configurer si un changement ServiceNow (pre-approuve) est requis pour chaque environnement cible
 - **FR5:** DBOPS peut publier une action pour la rendre disponible dans le catalogue
 - **FR6:** DBOPS peut modifier ou desactiver une action existante
 - **FR7:** Le systeme peut auto-generer la documentation d'une action a partir du readme de l'automatisation via IA
@@ -371,7 +390,10 @@ Les 45 exigences fonctionnelles ci-dessous decoulent des user journeys, des exig
 - **FR8:** DBA peut parcourir l'integralite du catalogue d'actions disponibles
 - **FR9:** DBA peut consulter la fiche descriptive d'une action (nom, description, indicateur d'impact, moteur, parametres attendus)
 - **FR10:** Client Business peut parcourir une vue simplifiee des actions deleguees a son profil
-- **FR11:** Tout utilisateur peut rechercher et filtrer les actions par moteur, environnement, niveau d'impact ou mot-cle
+- **FR11:** Tout utilisateur peut rechercher et filtrer les actions par tags, moteur, environnement, niveau d'impact ou mot-cle
+- **FR11a:** Tout utilisateur peut basculer entre une vue en cartes (cards) et une vue en liste pour le catalogue
+- **FR11b:** Tout utilisateur peut marquer des actions en favoris et les retrouver dans une section "Mes actions"
+- **FR11c:** DBOPS peut assigner plusieurs tags flexibles a une action (ex: RAC, DATAGUARD, Provisioning) — les tags sont geres dynamiquement, pas des categories fixes
 - **FR12:** Tout utilisateur peut acceder a la documentation contextuelle d'une action
 
 ### 3. Execution d'Actions
@@ -379,7 +401,7 @@ Les 45 exigences fonctionnelles ci-dessous decoulent des user journeys, des exig
 - **FR13:** DBA peut executer une action via un formulaire dynamique adapte aux parametres de l'action selectionnee
 - **FR14:** Client Business peut executer les actions deleguees via un Golden Path guide
 - **FR15:** Le systeme valide les parametres saisis avant de declencher l'execution
-- **FR16:** Le systeme ouvre automatiquement un changement ServiceNow lorsqu'une etape de l'action le requiert selon la definition et l'environnement cible
+- **FR16:** Le systeme ouvre automatiquement un changement ServiceNow pre-approuve (non-bloquant) lorsqu'un step de type ServiceNow est configure et que l'environnement cible le requiert
 - **FR17:** Le systeme recupere les secrets necessaires depuis HashiCorp Vault au moment de l'execution
 - **FR18:** Le systeme route l'execution vers la bonne plateforme (AAP, GitHub Actions, Azure DevOps, Terraform) via une facade API event-driven
 
@@ -393,9 +415,14 @@ Les 45 exigences fonctionnelles ci-dessous decoulent des user journeys, des exig
 
 ### 5. Controle d'Acces et Securite
 
-- **FR24:** Les utilisateurs s'authentifient via le SSO d'entreprise
-- **FR25:** Le systeme attribue un profil RBAC base sur l'identite SSO (DBA Applicatif, DBA Infrastructure, Client Business, DBOPS, Specialiste Securite)
-- **FR26:** Le systeme applique les regles RBAC par action, profil et environnement cible
+- **FR24:** Les utilisateurs s'authentifient via le SSO d'entreprise et doivent appartenir au groupe AD global du portail
+- **FR25:** Le systeme resout les profiles de l'utilisateur a partir de ses groupes AD (un groupe AD = un profile, multi-profiles supportes)
+- **FR25a:** DBOPS peut creer et gerer des profiles dynamiques avec mapping vers un groupe AD
+- **FR25b:** DBOPS peut definir les permissions d'un profile : actions (liste explicite ou pattern/tags), targets (liste explicite ou pattern), environnements autorises
+- **FR25c:** Les permissions d'un utilisateur multi-profiles sont cumulees (union des permissions de chaque profile)
+- **FR25d:** DBOPS peut importer/exporter la configuration des profiles en YAML (as code)
+- **FR26:** Le systeme applique les regles RBAC : l'utilisateur ne voit que les actions autorisees par ses profiles, et ne peut executer que sur les targets et environnements autorises
+- **FR26a:** Les targets autorises sont valides contre l'inventaire interne au moment de l'execution
 - **FR27:** Le systeme impose un workflow d'approbation pour les actions qui le requierent (approbation DBA pour la production)
 - **FR28:** DBOPS peut configurer les regles d'approbation par action et par environnement
 - **FR29:** Le systeme ne stocke aucun credential — tous les secrets sont recuperes depuis Vault a l'execution
@@ -407,7 +434,7 @@ Les 45 exigences fonctionnelles ci-dessous decoulent des user journeys, des exig
 - **FR32:** Le systeme trace toute creation de compte a privileges avec justification et approbateur
 - **FR33:** Specialiste Securite peut consulter l'historique d'execution filtre par environnement, periode et type d'action
 - **FR34:** Specialiste Securite peut exporter des rapports d'audit
-- **FR35:** Le systeme enregistre l'evidence de gestion du changement (ID changement ServiceNow, type, approbation)
+- **FR35:** Le systeme enregistre l'evidence de gestion du changement (ID changement ServiceNow, timestamp, environnement cible)
 
 ### 7. Autoremediation
 
@@ -471,6 +498,6 @@ Les 25 NFR couvrent performance, securite, fiabilite, integration et scalabilite
 ### Scalabilite
 
 - **NFR22:** L'architecture supporte l'ajout de nouvelles plateformes d'execution sans modification du coeur du portail (pattern plugin/adapter)
-- **NFR23:** Le catalogue supporte un minimum de 100 actions sans degradation de performance de navigation ou recherche
+- **NFR23:** Le catalogue supporte un minimum de 100 actions sans degradation de performance de navigation, recherche ou filtrage par tags
 - **NFR24:** L'historique d'execution supporte un volume de 10 000+ executions par an sans degradation des requetes d'audit
 - **NFR25:** L'ajout de nouveaux moteurs de base de donnees (SQL Server, DB2, CosmosDB) ne necessite pas de refonte architecturale

@@ -93,3 +93,41 @@ export interface RbacPolicies {
 export interface RbacPoliciesUpdate {
   policies: RbacPolicies;
 }
+
+// === Status Transition Types (Story 2.4) ===
+
+export type StatusTransition = 'publish' | 'disable' | 'enable';
+
+export interface StatusUpdateRequest {
+  transition: StatusTransition;
+}
+
+export interface ActionListItem {
+  id: number;
+  name: string;
+  status: ActionStatus;
+  category: ActionCategory;
+  engine: ActionEngine;
+  created_at: string;
+  execution_count: number;
+}
+
+export interface AdminActionsFilters {
+  status?: ActionStatus;
+  category?: ActionCategory;
+  engine?: ActionEngine;
+  page?: number;
+  page_size?: number;
+}
+
+export interface PaginationInfo {
+  page: number;
+  page_size: number;
+  total_count: number;
+  total_pages: number;
+}
+
+export interface ActionListResponse {
+  data: ActionListItem[];
+  pagination: PaginationInfo | null;
+}

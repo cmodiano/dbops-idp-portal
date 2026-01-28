@@ -310,3 +310,103 @@ class RbacPoliciesUpdate(BaseModel):
         policies: The RBAC policies configuration
     """
     policies: RbacPolicies
+
+
+# === Story 2.4: Status Transition and Lifecycle Models ===
+
+
+class StatusTransition(str, Enum):
+    """Valid status transitions for action lifecycle (Story 2.4, AC #1, #4, #5).
+
+    State machine:
+        draft -> published (publish)
+        published -> disabled (disable)
+        disabled -> published (enable)
+    """
+    PUBLISH = "publish"
+    DISABLE = "disable"
+    ENABLE = "enable"
+
+
+class InvalidTransitionError(Exception):
+    """Raised when an invalid status transition is attempted."""
+
+    def __init__(self, current_status: str, transition: str, message: str | None = None):
+        self.current_status = current_status
+        self.transition = transition
+        if message is None:
+            message = f"Transition de statut invalide: {current_status} avec {transition}"
+        super().__init__(message)
+
+
+# Valid transitions mapping: {current_status: {allowed_transition: new_status}}
+_VALID_TRANSITIONS: dict[ActionStatus, dict[StatusTransition, ActionStatus]] = {
+    ActionStatus.DRAFT: {
+        StatusTransition.PUBLISH: ActionStatus.PUBLISHED,
+    },
+    ActionStatus.PUBLISHED: {
+        StatusTransition.DISABLE: ActionStatus.DISABLED,
+    },
+    ActionStatus.DISABLED: {
+        StatusTransition.ENABLE: ActionStatus.PUBLISHED,
+    },
+}
+
+
+def validate_transition(current_status: ActionStatus, transition: StatusTransition) -> ActionStatus:
+    """Validate and return the new status for a given transition.
+
+    Args:
+        current_status: Current action status
+        transition: Requested transition
+
+    Returns:
+        The new ActionStatus after the transition
+
+    Raises:
+        InvalidTransitionError: If the transition is not valid for the current status
+    """
+    allowed = _VALID_TRANSITIONS.get(current_status, {})
+    if transition not in allowed:
+        raise InvalidTransitionError(
+            current_status=current_status.value,
+            transition=transition.value,
+        )
+    return allowed[transition]
+
+
+class StatusUpdateRequest(BaseModel):
+    """Input model for updating action status (Story 2.4, AC #5).
+
+    Attributes:
+        transition: The status transition to apply (publish, disable, enable)
+    """
+    transition: StatusTransition
+
+
+class ActionListItem(BaseModel):
+    """Output model for action in admin dashboard list (Story 2.4, AC #2).
+
+    Lightweight model for listing actions with execution stats.
+    """
+    id: int
+    name: str
+    status: ActionStatus
+    category: ActionCategory
+    engine: ActionEngine
+    created_at: datetime
+    execution_count: int = 0
+
+
+class PaginationInfo(BaseModel):
+    """Pagination metadata for list responses."""
+    page: int
+    page_size: int
+    total_count: int
+    total_pages: int
+
+
+class ActionListResponse(BaseModel):
+    """Response model for paginated action list (Story 2.4, AC #2)."""
+    data: list[ActionListItem]
+    pagination: PaginationInfo | None = None

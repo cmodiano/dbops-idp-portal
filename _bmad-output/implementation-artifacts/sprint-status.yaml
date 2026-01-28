@@ -52,16 +52,25 @@ development_status:
   epic-2: in-progress
   2-1-creer-une-action-avec-ses-metadonnees: done
   2-2-definir-les-etapes-execution-et-changement-servicenow: done
-  2-3-configurer-le-rbac-par-action: done
-  2-4-publier-et-gerer-le-cycle-de-vie: backlog
+  2-3-configurer-le-rbac-par-action: done  # OBSOLETE - remplace par 2-9 a 2-14
+  2-4-publier-et-gerer-le-cycle-de-vie: done
   2-5-preview-temps-reel-de-laction: backlog
+  2-6-systeme-de-tags-flexibles-pour-les-actions: backlog
+  2-7-refactorisation-des-connecteurs-generiques: backlog
+  2-8-suppression-du-rail-cab-et-simplification-servicenow: backlog
+  2-9-gestion-des-profiles-dynamiques: backlog
+  2-10-permissions-actions-par-profile: backlog
+  2-11-permissions-targets-par-profile: backlog
+  2-12-cumul-des-permissions-multi-profiles: backlog
+  2-13-import-export-profiles-as-code-yaml: backlog
+  2-14-refactoring-supprimer-ancien-rbac-par-action: backlog
   epic-2-retrospective: optional
 
   # === Epic 3: Decouverte du Catalogue - Marc (MVP) ===
   epic-3: backlog
-  3-1-catalogue-actions-en-grille-de-cartes: backlog
+  3-1-catalogue-actions-avec-modes-affichage-et-favoris: backlog
   3-2-fiche-descriptive-en-drawer-lateral: backlog
-  3-3-recherche-et-filtrage-du-catalogue: backlog
+  3-3-recherche-et-filtrage-du-catalogue-par-tags: backlog
   3-4-documentation-contextuelle-dune-action: backlog
   epic-3-retrospective: optional
 

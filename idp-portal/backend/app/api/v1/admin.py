@@ -10,7 +10,19 @@ from fastapi import APIRouter, Depends, status
 from app.core.exceptions import NotFoundError, InvalidStateError
 from app.core.security import require_profile
 from app.models.auth import UserProfile
-from app.models.catalog import ActionCreate, ActionResponse, ActionDetail, ActionStatus, ExecutionStepsUpdate, RbacPoliciesUpdate
+from app.models.catalog import (
+    ActionCreate,
+    ActionResponse,
+    ActionDetail,
+    ActionStatus,
+    ActionCategory,
+    ActionEngine,
+    ExecutionStepsUpdate,
+    RbacPoliciesUpdate,
+    StatusUpdateRequest,
+    InvalidTransitionError,
+    ActionListResponse,
+)
 from app.repositories import catalog_repository
 from app.repositories.catalog_repository import InvalidStateError as RepoInvalidStateError
 
@@ -37,21 +49,41 @@ async def create_action(
     return {"data": result.model_dump(mode="json")}
 
 
-@router.get("/actions")
+@router.get("/actions", response_model=ActionListResponse)
 async def list_actions(
-    status_filter: ActionStatus | None = None,
+    status: ActionStatus | None = None,
+    category: ActionCategory | None = None,
+    engine: ActionEngine | None = None,
+    page: int = 1,
+    page_size: int = 25,
     user: UserProfile = Depends(require_profile("dbops")),
 ) -> dict:
-    """List all actions in the catalog (AC #5).
+    """List all actions for admin dashboard (Story 2.4, AC #2).
+
+    Returns all actions (all statuses) with execution counts.
+    No RBAC filtering - DBOPS sees everything.
 
     Args:
-        status_filter: Optional filter by status (draft, published, disabled)
+        status: Optional filter by status (draft, published, disabled)
+        category: Optional filter by category
+        engine: Optional filter by engine
+        page: Page number (1-based, default 1)
+        page_size: Items per page (default 25)
 
     Returns:
-        { "data": list[ActionResponse] }
+        { "data": list[ActionListItem], "pagination": PaginationInfo }
     """
-    actions = await catalog_repository.list_all(status=status_filter)
-    return {"data": [a.model_dump(mode="json") for a in actions]}
+    actions, pagination = await catalog_repository.list_all_admin(
+        status=status,
+        category=category,
+        engine=engine,
+        page=page,
+        page_size=page_size,
+    )
+    return {
+        "data": [a.model_dump(mode="json") for a in actions],
+        "pagination": pagination.model_dump(mode="json"),
+    }
 
 
 @router.get("/actions/{action_id}")
@@ -113,6 +145,38 @@ async def update_action_steps(
     return {"data": action.model_dump(mode="json")}
 
 
+@router.put("/actions/{action_id}")
+async def update_action_metadata(
+    action_id: int,
+    data: ActionCreate,
+    user: UserProfile = Depends(require_profile("dbops")),
+) -> dict:
+    """Update action metadata (Story 2.4, AC #3).
+
+    Allowed for all statuses (published actions can have metadata updated).
+    Execution steps and RBAC can only be changed in draft status.
+
+    Returns:
+        HTTP 200 with { "data": ActionDetail } on success
+        HTTP 404 if action not found
+        HTTP 422 if validation fails
+    """
+    action = await catalog_repository.update_action(
+        action_id,
+        action_update=data,
+        user_id=str(user.id),
+    )
+
+    if action is None:
+        raise NotFoundError(
+            code="NOT_FOUND",
+            message=f"Action {action_id} introuvable",
+            details={"action_id": action_id},
+        )
+
+    return {"data": action.model_dump(mode="json")}
+
+
 @router.put("/actions/{action_id}/rbac")
 async def update_action_rbac(
     action_id: int,
@@ -139,6 +203,47 @@ async def update_action_rbac(
             code="INVALID_STATE",
             message=str(e),
             details={"status": e.current_status},
+        )
+
+    if action is None:
+        raise NotFoundError(
+            code="NOT_FOUND",
+            message=f"Action {action_id} introuvable",
+            details={"action_id": action_id},
+        )
+
+    return {"data": action.model_dump(mode="json")}
+
+
+@router.patch("/actions/{action_id}/status")
+async def update_action_status(
+    action_id: int,
+    data: StatusUpdateRequest,
+    user: UserProfile = Depends(require_profile("dbops")),
+) -> dict:
+    """Update action status via a valid transition (Story 2.4, AC #1, #4, #5).
+
+    Valid transitions:
+    - draft -> published (publish)
+    - published -> disabled (disable)
+    - disabled -> published (enable)
+
+    Returns:
+        HTTP 200 with { "data": ActionDetail } on success
+        HTTP 404 if action not found
+        HTTP 400 if transition is invalid for current status
+    """
+    try:
+        action = await catalog_repository.update_status(
+            action_id,
+            transition=data.transition,
+            user_id=str(user.id),
+        )
+    except InvalidTransitionError as e:
+        raise InvalidStateError(
+            code="INVALID_STATE",
+            message=str(e),
+            details={"current_status": e.current_status, "transition": e.transition},
         )
 
     if action is None:

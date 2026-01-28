@@ -1,37 +1,28 @@
 /**
- * AdminPage - Administration du Catalogue (Story 2.1, AC #1).
+ * AdminPage - Administration du Catalogue (Story 2.1, AC #1; Story 2.4, AC #2).
  *
  * Features:
- * - List of existing actions (table)
+ * - List of existing actions (table) with execution count
  * - "Nouvelle action" button to open creation modal
  * - Success/error notifications
+ * - Status badge with visual indicators
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Typography, Button, Table, Space, Tag, notification } from 'antd';
+import { Typography, Button, Table, Space, notification } from 'antd';
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { ActionForm } from '../components/admin/ActionForm';
-import { createAction, getAction, listActions } from '../services/admin_service';
-import type { ActionCreate, ActionResponse, ActionDetail, ActionStatus } from '../types/api';
+import { ActionStatusBadge } from '../components/admin/ActionStatusBadge';
+import { createAction, getAction, getAdminActions, updateActionStatus } from '../services/admin_service';
+import type { ActionCreate, ActionListItem, ActionDetail, ActionStatus, StatusTransition, AdminActionsFilters } from '../types/api';
 
 const { Title } = Typography;
 
-const STATUS_COLORS: Record<ActionStatus, string> = {
-  draft: 'default',
-  published: 'success',
-  disabled: 'error',
-};
-
-const STATUS_LABELS: Record<ActionStatus, string> = {
-  draft: 'Brouillon',
-  published: 'Publie',
-  disabled: 'Desactive',
-};
-
 const getColumns = (
-  onEdit: (record: ActionResponse) => void,
-): ColumnsType<ActionResponse> => [
+  onEdit: (record: ActionListItem) => void,
+  onStatusChange: (record: ActionListItem, transition: StatusTransition) => void,
+): ColumnsType<ActionListItem> => [
   {
     title: 'Nom',
     dataIndex: 'name',
@@ -56,23 +47,23 @@ const getColumns = (
     key: 'engine',
   },
   {
-    title: 'Plateforme',
-    dataIndex: 'platform',
-    key: 'platform',
-  },
-  {
     title: 'Statut',
     dataIndex: 'status',
     key: 'status',
-    render: (status: ActionStatus) => (
-      <Tag color={STATUS_COLORS[status]}>{STATUS_LABELS[status]}</Tag>
-    ),
+    render: (status: ActionStatus) => <ActionStatusBadge status={status} />,
     filters: [
       { text: 'Brouillon', value: 'draft' },
-      { text: 'Publie', value: 'published' },
-      { text: 'Desactive', value: 'disabled' },
+      { text: 'Publiee', value: 'published' },
+      { text: 'Desactivee', value: 'disabled' },
     ],
     onFilter: (value, record) => record.status === value,
+  },
+  {
+    title: 'Executions',
+    dataIndex: 'execution_count',
+    key: 'execution_count',
+    sorter: (a, b) => a.execution_count - b.execution_count,
+    width: 100,
   },
   {
     title: 'Date de creation',
@@ -85,29 +76,57 @@ const getColumns = (
   {
     title: '',
     key: 'actions',
-    width: 100,
-    render: (_: unknown, record: ActionResponse) =>
-      record.status === 'draft' ? (
-        <Button type="link" size="small" onClick={() => onEdit(record)}>
-          Modifier
-        </Button>
-      ) : null,
+    width: 200,
+    render: (_: unknown, record: ActionListItem) => (
+      <Space size="small">
+        {record.status === 'draft' && (
+          <>
+            <Button type="link" size="small" onClick={() => onEdit(record)}>
+              Modifier
+            </Button>
+            <Button type="link" size="small" onClick={() => onStatusChange(record, 'publish')}>
+              Publier
+            </Button>
+          </>
+        )}
+        {record.status === 'published' && (
+          <>
+            <Button type="link" size="small" onClick={() => onEdit(record)}>
+              Voir
+            </Button>
+            <Button type="link" size="small" danger onClick={() => onStatusChange(record, 'disable')}>
+              Desactiver
+            </Button>
+          </>
+        )}
+        {record.status === 'disabled' && (
+          <>
+            <Button type="link" size="small" onClick={() => onEdit(record)}>
+              Voir
+            </Button>
+            <Button type="link" size="small" onClick={() => onStatusChange(record, 'enable')}>
+              Reactiver
+            </Button>
+          </>
+        )}
+      </Space>
+    ),
   },
 ];
 
 export default function AdminPage() {
-  const [actions, setActions] = useState<ActionResponse[]>([]);
+  const [actions, setActions] = useState<ActionListItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [editAction, setEditAction] = useState<ActionDetail | null>(null);
 
-  const fetchActions = useCallback(async () => {
+  const fetchActions = useCallback(async (filters?: AdminActionsFilters) => {
     setLoading(true);
     try {
-      const data = await listActions();
-      setActions(data);
+      const response = await getAdminActions(filters);
+      setActions(response.data);
     } catch (err) {
       notification.error({
         message: 'Erreur',
@@ -129,7 +148,7 @@ export default function AdminPage() {
       const created = await createAction(action);
       return created;
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : 'Erreur de création');
+      setSubmitError(err instanceof Error ? err.message : 'Erreur de creation');
       setSubmitting(false);
       throw err;
     }
@@ -140,7 +159,7 @@ export default function AdminPage() {
     return editAction;
   };
 
-  const handleEdit = async (record: ActionResponse) => {
+  const handleEdit = async (record: ActionListItem) => {
     setSubmitError(null);
     try {
       const detail = await getAction(record.id);
@@ -154,7 +173,28 @@ export default function AdminPage() {
     }
   };
 
-  const handleSuccess = (action: ActionDetail | ActionResponse) => {
+  const handleStatusChange = async (record: ActionListItem, transition: StatusTransition) => {
+    try {
+      await updateActionStatus(record.id, transition);
+      const statusLabels: Record<StatusTransition, string> = {
+        publish: 'publiee',
+        disable: 'desactivee',
+        enable: 'reactivee',
+      };
+      notification.success({
+        message: 'Succes',
+        description: `Action "${record.name}" ${statusLabels[transition]}`,
+      });
+      fetchActions();
+    } catch (err) {
+      notification.error({
+        message: 'Erreur',
+        description: err instanceof Error ? err.message : 'Impossible de changer le statut',
+      });
+    }
+  };
+
+  const handleSuccess = (action: ActionDetail | ActionListItem) => {
     const wasEdit = !!editAction;
     setSubmitting(false);
     setModalOpen(false);
@@ -162,8 +202,8 @@ export default function AdminPage() {
     setSubmitError(null);
     const name = 'name' in action ? action.name : '';
     notification.success({
-      message: 'Succès',
-      description: wasEdit ? `Action "${name}" mise à jour` : `Action "${name}" créée avec succès`,
+      message: 'Succes',
+      description: wasEdit ? `Action "${name}" mise a jour` : `Action "${name}" creee avec succes`,
     });
     fetchActions();
   };
@@ -198,7 +238,7 @@ export default function AdminPage() {
       </Space>
 
       <Table
-        columns={getColumns(handleEdit)}
+        columns={getColumns(handleEdit, handleStatusChange)}
         dataSource={actions}
         rowKey="id"
         loading={loading}

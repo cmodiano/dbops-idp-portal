@@ -743,3 +743,136 @@ class TestRbacPoliciesUpdateValidation:
         )
         assert update.policies is not None
         assert "DEV" in update.policies.environments
+
+
+# === Story 2.4: Status Transition and Lifecycle Models Tests ===
+
+
+class TestStatusTransitionEnum:
+    """Tests for StatusTransition enum (Story 2.4, AC #1, #4, #5)."""
+
+    def test_status_transition_values(self):
+        """Test StatusTransition enum values."""
+        from app.models.catalog import StatusTransition
+
+        assert StatusTransition.PUBLISH.value == "publish"
+        assert StatusTransition.DISABLE.value == "disable"
+        assert StatusTransition.ENABLE.value == "enable"
+
+
+class TestStatusUpdateRequestValidation:
+    """Tests for StatusUpdateRequest model validation (Story 2.4, AC #5)."""
+
+    def test_valid_status_update_publish(self):
+        """Test valid StatusUpdateRequest with publish transition."""
+        from app.models.catalog import StatusUpdateRequest, StatusTransition
+
+        request = StatusUpdateRequest(transition=StatusTransition.PUBLISH)
+        assert request.transition == StatusTransition.PUBLISH
+
+    def test_valid_status_update_disable(self):
+        """Test valid StatusUpdateRequest with disable transition."""
+        from app.models.catalog import StatusUpdateRequest, StatusTransition
+
+        request = StatusUpdateRequest(transition=StatusTransition.DISABLE)
+        assert request.transition == StatusTransition.DISABLE
+
+    def test_valid_status_update_enable(self):
+        """Test valid StatusUpdateRequest with enable transition."""
+        from app.models.catalog import StatusUpdateRequest, StatusTransition
+
+        request = StatusUpdateRequest(transition=StatusTransition.ENABLE)
+        assert request.transition == StatusTransition.ENABLE
+
+
+class TestStatusTransitionValidation:
+    """Tests for validate_transition function (Story 2.4, AC #1, #4)."""
+
+    def test_valid_transition_draft_to_published(self):
+        """Test valid transition: draft -> published (publish)."""
+        from app.models.catalog import ActionStatus, StatusTransition, validate_transition
+
+        # Should not raise
+        validate_transition(ActionStatus.DRAFT, StatusTransition.PUBLISH)
+
+    def test_valid_transition_published_to_disabled(self):
+        """Test valid transition: published -> disabled (disable)."""
+        from app.models.catalog import ActionStatus, StatusTransition, validate_transition
+
+        # Should not raise
+        validate_transition(ActionStatus.PUBLISHED, StatusTransition.DISABLE)
+
+    def test_valid_transition_disabled_to_published(self):
+        """Test valid transition: disabled -> published (enable)."""
+        from app.models.catalog import ActionStatus, StatusTransition, validate_transition
+
+        # Should not raise
+        validate_transition(ActionStatus.DISABLED, StatusTransition.ENABLE)
+
+    def test_invalid_transition_draft_to_disabled(self):
+        """Test invalid transition: draft -> disabled (FORBIDDEN)."""
+        from app.models.catalog import ActionStatus, StatusTransition, validate_transition, InvalidTransitionError
+
+        with pytest.raises(InvalidTransitionError) as exc_info:
+            validate_transition(ActionStatus.DRAFT, StatusTransition.DISABLE)
+        assert "draft" in str(exc_info.value).lower()
+        assert "disable" in str(exc_info.value).lower()
+
+    def test_invalid_transition_published_to_draft(self):
+        """Test invalid transition: published -> draft (FORBIDDEN, no unpublish)."""
+        from app.models.catalog import ActionStatus, StatusTransition, validate_transition, InvalidTransitionError
+
+        # publish on already published is invalid
+        with pytest.raises(InvalidTransitionError):
+            validate_transition(ActionStatus.PUBLISHED, StatusTransition.PUBLISH)
+
+    def test_invalid_transition_disabled_to_draft(self):
+        """Test invalid transition: disabled with publish is valid (enable), but disable again is invalid."""
+        from app.models.catalog import ActionStatus, StatusTransition, validate_transition, InvalidTransitionError
+
+        # disable on disabled is invalid
+        with pytest.raises(InvalidTransitionError):
+            validate_transition(ActionStatus.DISABLED, StatusTransition.DISABLE)
+
+    def test_invalid_transition_draft_with_enable(self):
+        """Test invalid transition: draft with enable (FORBIDDEN)."""
+        from app.models.catalog import ActionStatus, StatusTransition, validate_transition, InvalidTransitionError
+
+        with pytest.raises(InvalidTransitionError):
+            validate_transition(ActionStatus.DRAFT, StatusTransition.ENABLE)
+
+
+class TestActionListItemModel:
+    """Tests for ActionListItem model (Story 2.4, AC #2)."""
+
+    def test_action_list_item_creation(self):
+        """Test ActionListItem model creation with all fields."""
+        from app.models.catalog import ActionListItem, ActionStatus, ActionCategory, ActionEngine
+
+        item = ActionListItem(
+            id=1,
+            name="Creer PDB Oracle",
+            status=ActionStatus.PUBLISHED,
+            category=ActionCategory.PROVISIONING,
+            engine=ActionEngine.ORACLE,
+            created_at=datetime(2026, 1, 28, 10, 0, 0),
+            execution_count=42,
+        )
+        assert item.id == 1
+        assert item.name == "Creer PDB Oracle"
+        assert item.status == ActionStatus.PUBLISHED
+        assert item.execution_count == 42
+
+    def test_action_list_item_default_execution_count(self):
+        """Test ActionListItem with default execution_count of 0."""
+        from app.models.catalog import ActionListItem, ActionStatus, ActionCategory, ActionEngine
+
+        item = ActionListItem(
+            id=1,
+            name="Test",
+            status=ActionStatus.DRAFT,
+            category=ActionCategory.ADMINISTRATION,
+            engine=ActionEngine.SQL_SERVER,
+            created_at=datetime(2026, 1, 28),
+        )
+        assert item.execution_count == 0

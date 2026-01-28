@@ -29,9 +29,9 @@ This document provides the complete epic and story breakdown for test, decomposi
 
 **1. Gestion du Software Catalog (FR1-FR7)**
 - FR1: DBOPS peut creer une action dans le Software Catalog avec ses metadonnees (nom, description, moteur, plateforme d'execution, parametres, niveau d'impact)
-- FR2: DBOPS peut definir les etapes d'execution d'une action, incluant des etapes conditionnelles selon l'environnement cible
-- FR3: DBOPS peut configurer les regles RBAC par action (qui peut executer, qui doit approuver, par profil et par environnement)
-- FR4: DBOPS peut definir le type de changement associe a une action (pre-approuve ou CAB)
+- FR2: DBOPS peut definir les etapes d'execution d'une action, chaque etape pouvant appeler un connecteur generique (AAP, ServiceNow, Azure DevOps, Jira, etc.) avec des conditions selon l'environnement cible
+- FR3: [OBSOLETE - voir FR25a-d] Les regles RBAC sont gerees au niveau des profiles, pas des actions
+- FR4: DBOPS peut configurer si un changement ServiceNow (pre-approuve) est requis pour chaque environnement cible
 - FR5: DBOPS peut publier une action pour la rendre disponible dans le catalogue
 - FR6: DBOPS peut modifier ou desactiver une action existante
 - FR7: Le systeme peut auto-generer la documentation d'une action a partir du readme de l'automatisation via IA
@@ -40,7 +40,10 @@ This document provides the complete epic and story breakdown for test, decomposi
 - FR8: DBA peut parcourir l'integralite du catalogue d'actions disponibles
 - FR9: DBA peut consulter la fiche descriptive d'une action (nom, description, indicateur d'impact, moteur, parametres attendus)
 - FR10: Client Business peut parcourir une vue simplifiee des actions deleguees a son profil
-- FR11: Tout utilisateur peut rechercher et filtrer les actions par moteur, environnement, niveau d'impact ou mot-cle
+- FR11: Tout utilisateur peut rechercher et filtrer les actions par tags, moteur, environnement, niveau d'impact ou mot-cle
+- FR11a: Tout utilisateur peut basculer entre une vue en cartes (cards) et une vue en liste pour le catalogue
+- FR11b: Tout utilisateur peut marquer des actions en favoris et les retrouver dans une section "Mes actions"
+- FR11c: DBOPS peut assigner plusieurs tags flexibles a une action (ex: RAC, DATAGUARD, Provisioning)
 - FR12: Tout utilisateur peut acceder a la documentation contextuelle d'une action
 
 **3. Execution d'Actions (FR13-FR18)**
@@ -59,9 +62,14 @@ This document provides the complete epic and story breakdown for test, decomposi
 - FR23: Le systeme recoit les callbacks de statut asynchrones des plateformes d'execution
 
 **5. Controle d'Acces et Securite (FR24-FR29)**
-- FR24: Les utilisateurs s'authentifient via le SSO d'entreprise
-- FR25: Le systeme attribue un profil RBAC base sur l'identite SSO (DBA Applicatif, DBA Infrastructure, Client Business, DBOPS, Specialiste Securite)
-- FR26: Le systeme applique les regles RBAC par action, profil et environnement cible
+- FR24: Les utilisateurs s'authentifient via le SSO d'entreprise et doivent appartenir au groupe AD global du portail
+- FR25: Le systeme resout les profiles de l'utilisateur a partir de ses groupes AD
+- FR25a: DBOPS peut creer et gerer des profiles dynamiques avec mapping vers un groupe AD
+- FR25b: DBOPS peut definir les permissions d'un profile: actions (liste ou pattern/tags), targets (liste ou pattern), environnements
+- FR25c: Les permissions d'un utilisateur multi-profiles sont cumulees (union)
+- FR25d: DBOPS peut importer/exporter la configuration des profiles en YAML (as code)
+- FR26: Le systeme applique les regles RBAC: actions + targets + environnements par profile
+- FR26a: Les targets autorises sont valides contre l'inventaire interne au moment de l'execution
 - FR27: Le systeme impose un workflow d'approbation pour les actions qui le requierent (approbation DBA pour la production)
 - FR28: DBOPS peut configurer les regles d'approbation par action et par environnement
 - FR29: Le systeme ne stocke aucun credential — tous les secrets sont recuperes depuis Vault a l'execution
@@ -163,16 +171,19 @@ This document provides the complete epic and story breakdown for test, decomposi
 | FR | Epic | Description |
 |---|---|---|
 | FR1 | Epic 2 | DBOPS cree une action dans le Software Catalog |
-| FR2 | Epic 2 | DBOPS definit les etapes d'execution d'une action |
-| FR3 | Epic 2 | DBOPS configure les regles RBAC par action |
-| FR4 | Epic 2 | DBOPS definit le type de changement (pre-approuve/CAB) |
+| FR2 | Epic 2 | DBOPS definit les etapes d'execution avec connecteurs generiques |
+| FR3 | Epic 2 | [OBSOLETE] RBAC deplace vers profiles (FR25a-d) |
+| FR4 | Epic 2 | DBOPS configure si changement ServiceNow requis par environnement |
 | FR5 | Epic 2 | DBOPS publie une action dans le catalogue |
 | FR6 | Epic 2 | DBOPS modifie ou desactive une action |
 | FR7 | Epic 10 | Auto-generation documentation IA |
 | FR8 | Epic 3 | DBA parcourt le catalogue d'actions |
 | FR9 | Epic 3 | DBA consulte la fiche descriptive d'une action |
 | FR10 | Epic 7 | Client Business parcourt une vue simplifiee |
-| FR11 | Epic 3 | Recherche et filtrage actions |
+| FR11 | Epic 3 | Recherche et filtrage actions par tags |
+| FR11a | Epic 3 | Toggle cartes/liste pour le catalogue |
+| FR11b | Epic 3 | Favoris et section "Mes actions" |
+| FR11c | Epic 2 | Tags flexibles multi-valeurs (DBOPS) |
 | FR12 | Epic 3 | Documentation contextuelle d'une action |
 | FR13 | Epic 4 | DBA execute via formulaire dynamique |
 | FR14 | Epic 7 | Client Business execute via Golden Path |
@@ -187,7 +198,12 @@ This document provides the complete epic and story breakdown for test, decomposi
 | FR23 | Epic 4 | Reception callbacks asynchrones |
 | FR24 | Epic 1 | Authentification SSO entreprise |
 | FR25 | Epic 1 | Attribution profil RBAC depuis SSO |
-| FR26 | Epic 7 | Application RBAC granulaire (action x profil x env) |
+| FR25a | Epic 2 | DBOPS cree et gere des profiles dynamiques avec mapping AD |
+| FR25b | Epic 2 | DBOPS definit permissions profile: actions + targets + envs |
+| FR25c | Epic 2 | Permissions cumulees pour multi-profiles |
+| FR25d | Epic 2 | Import/export profiles en YAML (as code) |
+| FR26 | Epic 2 | Application RBAC: actions + targets + envs par profile |
+| FR26a | Epic 2 | Targets valides contre inventaire |
 | FR27 | Epic 7 | Workflow d'approbation production |
 | FR28 | Epic 7 | Configuration regles d'approbation |
 | FR29 | Epic 4 | Zero credential — secrets depuis Vault |
@@ -208,7 +224,7 @@ This document provides the complete epic and story breakdown for test, decomposi
 | FR44 | Epic 10 | Consultation expert DBA depuis portail |
 | FR45 | Epic 10 | Interface IA conversationnelle |
 
-**Couverture : 45/45 FR mappees.**
+**Couverture : 53/53 FR mappees (incluant FR11a-c, FR25a-d, FR26a).**
 
 ## Epic List
 
@@ -218,13 +234,13 @@ L'equipe peut se connecter via SSO et acceder au portail avec son role. Le monor
 **Phase :** MVP (POC)
 
 ### Epic 2 : Administration du Catalogue (Karim)
-DBOPS peut creer, configurer et publier des actions dans le Software Catalog. L'interface admin est de premiere classe avec preview temps reel.
-**FRs couvertes :** FR1, FR2, FR3, FR4, FR5, FR6
+DBOPS peut creer, configurer et publier des actions dans le Software Catalog. L'interface admin est de premiere classe avec preview temps reel. Inclut le systeme de tags flexibles et les connecteurs generiques.
+**FRs couvertes :** FR1, FR2, FR3, FR4, FR5, FR6, FR11c
 **Phase :** MVP (POC)
 
 ### Epic 3 : Decouverte du Catalogue (Marc)
-DBA decouvre et comprend les actions disponibles a travers le catalogue filtrable avec cartes, categories, recherche et fiches detaillees.
-**FRs couvertes :** FR8, FR9, FR11, FR12
+DBA decouvre et comprend les actions disponibles a travers le catalogue avec modes d'affichage (cartes/liste), tags, favoris, recherche et fiches detaillees.
+**FRs couvertes :** FR8, FR9, FR11, FR11a, FR11b, FR12
 **Phase :** MVP (POC)
 
 ### Epic 4 : Execution & Suivi Temps Reel
@@ -364,7 +380,7 @@ So that le portail est monitorable, deployable et pret pour la production.
 
 ## Epic 2 : Administration du Catalogue (Karim)
 
-DBOPS peut creer, configurer et publier des actions dans le Software Catalog. L'interface admin est de premiere classe avec preview temps reel.
+DBOPS peut creer, configurer et publier des actions dans le Software Catalog. L'interface admin est de premiere classe avec preview temps reel. Inclut le systeme de tags flexibles et les connecteurs generiques.
 
 ### Story 2.1 : Creer une action avec ses metadonnees
 
@@ -392,7 +408,7 @@ So that je definisse les actions disponibles pour les DBA et les clients busines
 ### Story 2.2 : Definir les etapes d'execution et le changement ServiceNow
 
 As a DBOPS,
-I want configurer les etapes d'execution d'une action et le type de changement ServiceNow associe,
+I want configurer les etapes d'execution d'une action et indiquer si un changement ServiceNow est requis par environnement,
 So that chaque action suit le bon processus d'execution selon l'environnement cible.
 
 **Acceptance Criteria:**
@@ -405,36 +421,28 @@ So that chaque action suit le bon processus d'execution selon l'environnement ci
 **When** il specifie "ouverture changement ServiceNow" pour l'environnement Production
 **Then** l'etape est marquee comme conditionnelle a l'environnement cible
 
-**Given** le DBOPS definit le type de changement
-**When** il choisit "pre-approuve" ou "CAB"
-**Then** le systeme enregistre ce type dans la definition de l'action, par environnement si necessaire
+**Given** le DBOPS configure les changements par environnement
+**When** il definit "changement requis" pour Production
+**Then** le systeme enregistre cette configuration (tous les changements sont pre-approuves, non-bloquants)
 
 **And** la colonne execution_steps (CLOB JSON) est ajoutee a ACTIONS_CATALOG si absente
 **And** l'API PUT /api/v1/admin/actions/{id}/steps enregistre les etapes
 **And** FR2 et FR4 sont satisfaites
 
-### Story 2.3 : Configurer le RBAC par action
+**Note:** Cette story a ete implementee avec l'ancien modele (is_servicenow_change + CAB). La story 2.7 et 2.8 refactorisent vers le nouveau modele (connecteurs generiques, pre-approuve uniquement).
 
-As a DBOPS,
-I want definir les regles d'acces par action (qui peut executer, qui doit approuver, par profil et par environnement),
-So that chaque action respecte les politiques de securite de l'entreprise.
+### Story 2.3 : Configurer le RBAC par action [OBSOLETE - REFACTORING REQUIS]
 
-**Acceptance Criteria:**
+**⚠️ CETTE STORY A ETE IMPLEMENTEE AVEC L'ANCIEN MODELE ET DOIT ETRE REFACTOREE**
 
-**Given** un DBOPS edite une action en brouillon
-**When** il accede a la section "Controle d'acces"
-**Then** il peut selectionner les profils autorises (DBA Applicatif, DBA Infrastructure, Client Business) par environnement
+L'ancien modele stockait les permissions RBAC dans chaque action (ACTIONS_CATALOG.rbac_policies).
+Le nouveau modele gere les permissions au niveau des PROFILES (voir stories 2-9 a 2-13).
 
-**Given** le DBOPS configure l'approbation
-**When** il definit "approbation DBA requise pour Production"
-**Then** la regle est enregistree dans rbac_policies (CLOB JSON) de l'action
-
-**Given** un profil n'est pas autorise pour un environnement
-**When** un utilisateur de ce profil consulte le catalogue
-**Then** l'action n'apparait pas pour cet environnement (filtrage RBAC invisible)
-
-**And** l'API PUT /api/v1/admin/actions/{id}/rbac enregistre les politiques
-**And** FR3 est satisfaite
+**Migration requise:**
+- Supprimer la colonne rbac_policies de ACTIONS_CATALOG
+- Supprimer le composant RbacEditor.tsx de l'admin action
+- Supprimer l'endpoint PUT /api/v1/admin/actions/{id}/rbac
+- Les permissions sont maintenant gerees via les profiles (stories 2-9 a 2-13)
 
 ### Story 2.4 : Publier et gerer le cycle de vie d'une action
 
@@ -485,38 +493,321 @@ So that je valide l'experience utilisateur avant de publier.
 **And** le layout est en split view : formulaire a gauche, preview a droite
 **And** `aria-live="polite"` annonce les changements de preview pour l'accessibilite
 
+### Story 2.6 : Systeme de tags flexibles pour les actions
+
+As a DBOPS,
+I want assigner plusieurs tags flexibles a une action (ex: RAC, DATAGUARD, Provisioning),
+So that les utilisateurs peuvent filtrer le catalogue de maniere dynamique sans categories fixes.
+
+**Acceptance Criteria:**
+
+**Given** un DBOPS edite une action
+**When** il accede a la section "Tags"
+**Then** il voit un champ multi-select avec auto-completion sur les tags existants
+
+**Given** le DBOPS saisit un nouveau tag qui n'existe pas
+**When** il tape "RAC" et appuie sur Entree
+**Then** le tag est cree automatiquement et assigne a l'action
+
+**Given** le DBOPS consulte la liste des actions dans l'admin
+**When** il voit le tableau
+**Then** les tags de chaque action sont affiches sous forme de chips
+
+**Given** le catalogue contient 100+ actions
+**When** un utilisateur filtre par tag
+**Then** les resultats se chargent en < 1 seconde (NFR4)
+
+**And** la table TAGS (id, name, created_at) est creee via migration SQL V004
+**And** la table ACTION_TAGS (action_id, tag_id) gere la relation many-to-many
+**And** l'API GET /api/v1/tags retourne tous les tags existants
+**And** l'API PUT /api/v1/admin/actions/{id}/tags assigne les tags a une action
+**And** les tags sont en lowercase, sans espaces (normalisation automatique)
+**And** FR11c est satisfaite
+
+### Story 2.7 : Refactorisation des connecteurs generiques
+
+As a developpeur,
+I want refactoriser les etapes d'execution pour utiliser un connector_type generique au lieu du flag is_servicenow_change,
+So that tous les systemes externes (AAP, ServiceNow, Azure DevOps, Jira, GitHub Actions) sont traites de maniere uniforme.
+
+**Acceptance Criteria:**
+
+**Given** une action existante avec des etapes
+**When** le modele ExecutionStep est mis a jour
+**Then** le champ is_servicenow_change est remplace par connector_type (enum: aap, servicenow, azuredevops, jira, github_actions, terraform, none)
+**And** le champ connector_config (JSON) stocke la configuration specifique au connecteur
+
+**Given** une action a une etape ServiceNow conditionnelle en production
+**When** le DBOPS consulte la configuration
+**Then** l'etape affiche connector_type: "servicenow" avec conditional_environments: ["PROD"]
+
+**Given** une migration de donnees est executee
+**When** les anciennes donnees sont converties
+**Then** is_servicenow_change: true devient connector_type: "servicenow"
+**And** is_servicenow_change: false devient connector_type: "none" ou conserve le type d'origine
+
+**And** la migration SQL V005 ajoute les colonnes connector_type et connector_config
+**And** le frontend StepsEditor est mis a jour pour afficher un dropdown de connecteurs
+**And** les modeles Pydantic backend sont mis a jour
+**And** la retro-compatibilite avec les donnees existantes est assuree
+**And** FR2 (PRD mis a jour) est satisfaite
+
+### Story 2.8 : Suppression du rail CAB et simplification ServiceNow
+
+As a developpeur,
+I want supprimer la logique de changement CAB bloquant et ne garder que les changements pre-approuves,
+So that l'execution ne soit jamais bloquee en attente d'approbation ServiceNow.
+
+**Acceptance Criteria:**
+
+**Given** une action configure un changement ServiceNow
+**When** l'execution atteint l'etape ServiceNow
+**Then** le changement est cree comme pre-approuve et l'execution continue immediatement (non-bloquant)
+
+**Given** le modele ChangeType contenait "pre_approved" et "cab"
+**When** le modele est mis a jour
+**Then** seul "pre_approved" existe (ou le champ est supprime car implicite)
+
+**Given** l'interface admin permettait de choisir "CAB"
+**When** le composant ChangeTypeConfig est mis a jour
+**Then** l'option CAB est supprimee, seule la configuration par environnement reste (changement requis oui/non)
+
+**And** la migration de donnees convertit tous les "cab" existants en "pre_approved"
+**And** les stories 4-5 (ServiceNow) et les tests sont mis a jour
+**And** FR4 et FR16 (PRD mis a jour) sont satisfaites
+
+### Story 2.9 : Gestion des profiles dynamiques
+
+As a DBOPS,
+I want creer et gerer des profiles dynamiques avec leur mapping vers un groupe AD,
+So that je peux definir des permissions granulaires pour chaque equipe ou role.
+
+**Acceptance Criteria:**
+
+**Given** un DBOPS accede a la section "Profiles" dans l'admin
+**When** il clique sur "Nouveau profile"
+**Then** un formulaire s'affiche avec : nom, description, groupe AD associe, flags (is_admin, is_auditor)
+
+**Given** le DBOPS cree un profile "Assurance" avec groupe AD "GRP-IDP-ASSURANCE"
+**When** il sauvegarde
+**Then** le profile est cree et le mapping AD est enregistre
+
+**Given** le DBOPS consulte la liste des profiles
+**When** la page se charge
+**Then** tous les profiles sont affiches avec : nom, groupe AD, nombre de permissions, date de creation
+
+**Given** le DBOPS edite un profile existant
+**When** il modifie le groupe AD
+**Then** le nouveau mapping s'applique immediatement (cache invalide)
+
+**And** la table PROFILES est creee via migration SQL
+**And** l'API CRUD /api/v1/admin/profiles est implementee
+**And** FR25a est satisfaite
+
+### Story 2.10 : Permissions actions par profile
+
+As a DBOPS,
+I want definir les actions autorisees pour un profile (liste explicite ou pattern/tags),
+So that chaque profile a acces uniquement aux actions necessaires.
+
+**Acceptance Criteria:**
+
+**Given** un DBOPS edite un profile
+**When** il accede a la section "Actions autorisees"
+**Then** il peut choisir entre : liste d'actions specifiques, pattern par tags, ou "*" (toutes)
+
+**Given** le DBOPS choisit "Pattern par tags"
+**When** il saisit "tag:oracle, tag:provisioning"
+**Then** le profile aura acces a toutes les actions ayant ces tags
+
+**Given** le DBOPS choisit "Liste d'actions"
+**When** il selectionne des actions specifiques dans un multi-select
+**Then** seules ces actions seront accessibles
+
+**Given** le DBOPS definit les environnements autorises
+**When** il selectionne [DEV, STAGING]
+**Then** le profile ne pourra executer que sur ces environnements
+
+**And** la table PROFILE_ACTION_PERMISSIONS est creee via migration SQL
+**And** l'API PUT /api/v1/admin/profiles/{id}/actions enregistre les permissions
+**And** FR25b est partiellement satisfaite (actions)
+
+### Story 2.11 : Permissions targets par profile
+
+As a DBOPS,
+I want definir les targets (serveurs/bases) autorises pour un profile (liste explicite ou pattern),
+So that chaque equipe ne puisse executer que sur ses propres ressources.
+
+**Acceptance Criteria:**
+
+**Given** un DBOPS edite un profile
+**When** il accede a la section "Targets autorises"
+**Then** il peut choisir entre : liste de targets explicites, pattern (ex: assurance-*), ou "*" (tous)
+
+**Given** le DBOPS choisit "Pattern"
+**When** il saisit "assurance-*"
+**Then** le profile aura acces aux targets dont le nom commence par "assurance-"
+
+**Given** le DBOPS choisit "Liste explicite"
+**When** il selectionne des targets depuis l'inventaire (autocomplete)
+**Then** seuls ces targets seront accessibles
+
+**Given** un utilisateur execute une action
+**When** le wizard charge les targets disponibles
+**Then** seuls les targets autorises par ses profiles (cumules) ET presents dans l'inventaire sont affiches
+
+**And** la table PROFILE_TARGET_PERMISSIONS est creee via migration SQL
+**And** les targets sont valides contre l'inventaire interne au moment de l'execution
+**And** FR25b est completement satisfaite (actions + targets)
+**And** FR26a est satisfaite
+
+### Story 2.12 : Cumul des permissions multi-profiles
+
+As a systeme,
+I want cumuler les permissions quand un utilisateur a plusieurs profiles,
+So that les utilisateurs avec plusieurs roles aient l'union de leurs permissions.
+
+**Acceptance Criteria:**
+
+**Given** un utilisateur appartient aux groupes AD [GRP-IDP-ASSURANCE, GRP-IDP-DBA-APP]
+**When** il se connecte au portail
+**Then** ses permissions sont l'union des profiles Assurance et DBA Applicatif
+
+**Given** Assurance autorise actions "tag:oracle" sur targets "assurance-*"
+**And** DBA Applicatif autorise actions "tag:*" sur targets "*"
+**When** les permissions sont cumulees
+**Then** l'utilisateur a acces a actions "tag:*" sur targets "*" (union)
+
+**Given** un utilisateur n'appartient a aucun groupe AD reconnu (hors groupe global portail)
+**When** il se connecte
+**Then** l'acces est refuse avec message "Aucun profile associe a votre compte"
+
+**And** le service RBAC calcule les permissions cumulees au login et les stocke en session/JWT
+**And** le cache des permissions est invalide quand un profile est modifie
+**And** FR25c est satisfaite
+
+### Story 2.13 : Import/Export profiles as code (YAML)
+
+As a DBOPS,
+I want importer et exporter la configuration des profiles en YAML,
+So that je puisse gerer les profiles en GitOps et versionner les changements.
+
+**Acceptance Criteria:**
+
+**Given** un DBOPS consulte la liste des profiles
+**When** il clique sur "Exporter YAML"
+**Then** un fichier profiles.yaml est telecharge avec tous les profiles et leurs permissions
+
+**Given** un DBOPS a un fichier profiles.yaml
+**When** il clique sur "Importer YAML" et uploade le fichier
+**Then** les profiles sont crees/mis a jour selon le contenu du fichier
+
+**Given** le fichier YAML contient un profile existant avec des modifications
+**When** l'import est execute
+**Then** le profile est mis a jour (upsert par nom)
+
+**Given** le fichier YAML contient une erreur de syntaxe
+**When** l'import est execute
+**Then** une erreur claire est affichee et aucun changement n'est applique
+
+**Format YAML:**
+```yaml
+profiles:
+  - name: Assurance
+    description: Equipe assurance
+    ad_group: GRP-IDP-ASSURANCE
+    is_admin: false
+    is_auditor: false
+    actions:
+      type: pattern  # ou "list"
+      patterns: ["tag:oracle", "tag:provisioning"]
+      # ou: list: [5, 12, 23]  # IDs d'actions
+    targets:
+      type: pattern  # ou "list"
+      patterns: ["assurance-*"]
+      # ou: list: ["assurance-srv-01", "assurance-srv-02"]
+    environments: [DEV, STAGING]
+```
+
+**And** l'API GET/POST /api/v1/admin/profiles/export et /import sont implementees
+**And** la validation du YAML est stricte (schema JSON)
+**And** FR25d est satisfaite
+
+### Story 2.14 : Refactoring - Supprimer l'ancien RBAC par action
+
+As a developpeur,
+I want supprimer l'ancien systeme RBAC stocke dans ACTIONS_CATALOG.rbac_policies,
+So that le code soit coherent avec le nouveau modele base sur les profiles.
+
+**Acceptance Criteria:**
+
+**Given** l'ancien modele stockait rbac_policies dans ACTIONS_CATALOG
+**When** la migration est executee
+**Then** la colonne rbac_policies est supprimee de ACTIONS_CATALOG
+
+**Given** le frontend avait un composant RbacEditor dans ActionForm
+**When** le refactoring est complete
+**Then** le composant RbacEditor est supprime et l'onglet "Controle d'acces" pointe vers la gestion des profiles
+
+**Given** l'API avait un endpoint PUT /api/v1/admin/actions/{id}/rbac
+**When** le refactoring est complete
+**Then** l'endpoint est supprime et retourne 410 Gone avec redirection vers /admin/profiles
+
+**Given** des tests existants testaient l'ancien RBAC
+**When** le refactoring est complete
+**Then** les tests sont mis a jour pour utiliser le nouveau modele
+
+**And** les modeles Pydantic backend sont nettoyes (supprimer RbacPolicies, EnvironmentPermission)
+**And** la story 2-3 est marquee comme remplacee par 2-9 a 2-13
+
 ---
 
 ## Epic 3 : Decouverte du Catalogue (Marc)
 
-DBA decouvre et comprend les actions disponibles a travers le catalogue filtrable avec cartes, categories, recherche et fiches detaillees.
+DBA decouvre et comprend les actions disponibles a travers le catalogue avec modes d'affichage (cartes/liste), tags, favoris, recherche et fiches detaillees.
 
-### Story 3.1 : Catalogue d'actions en grille de cartes
+### Story 3.1 : Catalogue d'actions avec modes d'affichage et favoris
 
 As a DBA,
-I want parcourir l'ensemble des actions disponibles dans un catalogue visuel en grille de cartes,
-So that je decouvre rapidement les actions qui existent et ce qu'elles font.
+I want parcourir le catalogue avec differents modes d'affichage (cartes ou liste) et acceder rapidement a mes actions favorites,
+So that je navigue efficacement dans un catalogue de 100+ actions.
 
 **Acceptance Criteria:**
 
 **Given** un DBA authentifie accede a l'onglet Catalogue
 **When** la page se charge
-**Then** les actions publiees s'affichent en grille de cartes (3 colonnes sur 1280px, 4 colonnes sur 1600px+)
+**Then** les actions publiees s'affichent en grille de cartes par defaut (3 colonnes sur 1280px, 4 colonnes sur 1600px+)
+
+**Given** le DBA veut changer de mode d'affichage
+**When** il clique sur le toggle "Cartes / Liste"
+**Then** l'affichage bascule entre grille de cartes et vue liste (tableau avec colonnes : nom, tags, moteur, impact, executions)
+**And** le mode choisi est persiste en localStorage
 
 **Given** le catalogue affiche des actions
 **When** le DBA regarde une ActionCard
-**Then** chaque carte affiche : icone moteur, nom de l'action, description (2 lignes max), ImpactIndicator (couleur + icone + texte), badge categorie, nombre d'executions
+**Then** chaque carte affiche : icone moteur, nom de l'action, description (2 lignes max), ImpactIndicator (couleur + icone + texte), tags (chips), nombre d'executions
+
+**Given** le DBA veut marquer une action en favori
+**When** il clique sur l'icone etoile sur une carte ou dans le drawer
+**Then** l'action est ajoutee a ses favoris (stockes en base, lie au user_id)
+
+**Given** le DBA consulte le catalogue
+**When** il a des favoris
+**Then** une section "Mes actions" s'affiche en haut avec ses favoris et ses actions recemment executees
 
 **Given** le catalogue a des categories
 **When** le DBA clique sur un onglet (Tout, Provisioning, Patching, Administration, Monitoring)
-**Then** la grille se filtre par la categorie selectionnee et le compteur se met a jour ("12 actions")
+**Then** la grille/liste se filtre par la categorie selectionnee et le compteur se met a jour ("12 actions")
 
 **And** le composant ActionCard est accessible (role="article", aria-label, focusable au clavier, Enter ouvre le drawer)
 **And** le composant ImpactIndicator affiche triple codage (couleur + icone + texte) avec aria-label="Impact: [niveau]"
-**And** le chargement affiche des skeleton cards (shimmer) — pas de spinner seul
+**And** le chargement affiche des skeleton cards/rows (shimmer) — pas de spinner seul
 **And** le cache in-memory (TTL 5min) est utilise pour le catalogue cote backend
 **And** l'API GET /api/v1/catalog/actions retourne les actions filtrees par le RBAC de l'utilisateur
-**And** FR8 est satisfaite
+**And** l'API GET /api/v1/users/me/favorites retourne les favoris de l'utilisateur
+**And** l'API POST/DELETE /api/v1/users/me/favorites/{action_id} gere les favoris
+**And** la table USER_FAVORITES (user_id, action_id, created_at) est creee via migration SQL
+**And** FR8, FR11a et FR11b sont satisfaites
 
 ### Story 3.2 : Fiche descriptive en drawer lateral
 
@@ -543,36 +834,42 @@ So that je comprenne ce que fait l'action, son impact et ses parametres avant de
 **And** l'API GET /api/v1/catalog/actions/{id} retourne la fiche complete
 **And** FR9 est satisfaite
 
-### Story 3.3 : Recherche et filtrage du catalogue
+### Story 3.3 : Recherche et filtrage du catalogue par tags
 
 As a DBA,
-I want rechercher et filtrer les actions par moteur, environnement, niveau d'impact ou mot-cle,
-So that je trouve rapidement l'action dont j'ai besoin.
+I want rechercher et filtrer les actions par tags, moteur, environnement, niveau d'impact ou mot-cle,
+So that je trouve rapidement l'action dont j'ai besoin parmi 100+ actions.
 
 **Acceptance Criteria:**
 
 **Given** le DBA est sur le catalogue
 **When** il tape dans la barre de recherche
-**Then** les resultats se filtrent en temps reel (debounce 300ms) sur le nom et la description
+**Then** les resultats se filtrent en temps reel (debounce 300ms) sur le nom, la description et les tags
 
 **Given** le panneau de filtres lateraux (240px) est visible
-**When** le DBA selectionne un moteur (Oracle), un environnement (Production), et un impact (Eleve)
-**Then** les filtres se cumulent (intersection) et la grille se met a jour
+**When** le DBA selectionne des tags (RAC, DATAGUARD), un moteur (Oracle), un environnement (Production), et un impact (Eleve)
+**Then** les filtres se cumulent (intersection) et la grille/liste se met a jour
+
+**Given** le DBA veut filtrer par tags
+**When** il clique sur le filtre "Tags"
+**Then** une liste multi-select affiche tous les tags disponibles avec le nombre d'actions par tag
+**And** les tags selectionnes s'affichent comme chips sous la barre de recherche
 
 **Given** des filtres sont actifs
 **When** le DBA voit les chips sous la barre de recherche
-**Then** chaque filtre actif est represente par un chip avec bouton "X" pour le supprimer
+**Then** chaque filtre actif (tag, moteur, env, impact) est represente par un chip avec bouton "X" pour le supprimer
 **And** un bouton "Reinitialiser les filtres" est disponible
 
 **Given** les filtres ne retournent aucun resultat
-**When** la grille est vide
+**When** la grille/liste est vide
 **Then** un etat vide s'affiche : "Aucune action ne correspond a vos filtres" + bouton "Reinitialiser les filtres"
 
 **And** le compteur dynamique ("12 actions") se met a jour avec aria-live="polite"
 **And** la recherche et les filtres sont combines avec la categorie selectionnee (onglet)
 **And** les filtres lateraux passent en panneau depliable sous 1280px
-**And** l'API GET /api/v1/catalog/actions accepte les query params : q, category, engine, environment, impact
-**And** les resultats se chargent en < 1 seconde (NFR4)
+**And** l'API GET /api/v1/catalog/actions accepte les query params : q, tags (comma-separated), category, engine, environment, impact
+**And** l'API GET /api/v1/tags retourne tous les tags avec leur count d'actions
+**And** les resultats se chargent en < 1 seconde (NFR4, NFR23)
 **And** FR11 est satisfaite
 
 ### Story 3.4 : Documentation contextuelle d'une action

@@ -30,7 +30,14 @@ from app.models.catalog import (
     UserProfile,
     EnvironmentPermission,
     RbacPolicies,
+    StatusTransition,
+    InvalidTransitionError,
+    validate_transition,
+    ActionListItem,
+    PaginationInfo,
 )
+from app.repositories import audit_repository
+from app.repositories.audit_repository import AuditActionType, AuditEntityType
 
 logger = structlog.get_logger()
 
@@ -647,3 +654,333 @@ async def update_rbac_policies(
 
     # Fetch and return updated action
     return await get_by_id(action_id)
+
+
+# === Story 2.4: Status Transition and Lifecycle ===
+
+
+async def update_action(
+    action_id: int,
+    action_update: ActionCreate,
+    user_id: str,
+) -> ActionDetail | None:
+    """Update action metadata (name, description, category, etc.) (Story 2.4, AC #3).
+
+    Allowed for published actions (metadata only).
+    Execution steps and RBAC can only be changed in draft status.
+
+    Args:
+        action_id: The action ID to update
+        action_update: ActionCreate model with updated metadata
+        user_id: ID of the user performing the update (for audit)
+
+    Returns:
+        ActionDetail if found and updated, None if not found
+    """
+    start_time = time.perf_counter()
+
+    # First check if action exists
+    check_query = """
+        SELECT STATUS FROM ACTIONS_CATALOG WHERE ID = :action_id
+    """
+    async with get_connection() as conn:
+        cursor = await conn.execute(check_query, {"action_id": action_id})
+        row = await cursor.fetchone()
+        await cursor.close()
+
+    if row is None:
+        duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+        logger.debug(
+            "catalog_repository_update_action",
+            query=check_query.strip(),
+            params={"action_id": action_id},
+            duration_ms=duration_ms,
+            action_id=action_id,
+            found=False,
+        )
+        return None
+
+    # Update the action metadata (allowed for all statuses)
+    update_query = """
+        UPDATE ACTIONS_CATALOG
+        SET NAME = :name,
+            DESCRIPTION = :description,
+            CATEGORY = :category,
+            ENGINE = :engine,
+            PLATFORM = :platform,
+            PARAMETERS_SCHEMA = :parameters_schema,
+            IMPACT_RULES = :impact_rules,
+            UPDATED_AT = SYSTIMESTAMP
+        WHERE ID = :action_id
+    """
+    params = {
+        "action_id": action_id,
+        "name": action_update.name,
+        "description": action_update.description,
+        "category": action_update.category.value,
+        "engine": action_update.engine.value,
+        "platform": action_update.platform.value,
+        "parameters_schema": _json_to_str(action_update.parameters_schema),
+        "impact_rules": _json_to_str(action_update.impact_rules),
+    }
+
+    async with get_connection() as conn:
+        cursor = await conn.execute(update_query, params)
+        rowcount = cursor.rowcount
+        await cursor.close()
+
+        if rowcount == 0:
+            duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+            logger.debug(
+                "catalog_repository_update_action",
+                query=update_query.strip(),
+                params=params,
+                duration_ms=duration_ms,
+                action_id=action_id,
+                found=False,
+            )
+            return None
+
+        await conn.commit()
+
+    # Create audit entry for metadata update
+    await audit_repository.create_entry(
+        user_id=user_id,
+        action_type=AuditActionType.ACTION_UPDATED,
+        entity_type=AuditEntityType.ACTION,
+        entity_id=action_id,
+        details={
+            "action_name": action_update.name,
+            "updated_fields": ["name", "description", "category", "engine", "platform", "parameters_schema", "impact_rules"],
+        },
+    )
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.debug(
+        "catalog_repository_update_action",
+        query=update_query.strip(),
+        params={k: v for k, v in params.items() if k != "parameters_schema" and k != "impact_rules"},
+        duration_ms=duration_ms,
+        action_id=action_id,
+        action_name=action_update.name,
+    )
+
+    # Fetch and return updated action
+    return await get_by_id(action_id)
+
+
+async def update_status(
+    action_id: int,
+    transition: StatusTransition,
+    user_id: str,
+) -> ActionDetail | None:
+    """Update action status via a valid transition (Story 2.4, AC #1, #4, #5).
+
+    Args:
+        action_id: The action ID to update
+        transition: The status transition to apply (publish, disable, enable)
+        user_id: ID of the user performing the transition (for audit)
+
+    Returns:
+        ActionDetail if found and updated, None if not found
+
+    Raises:
+        InvalidTransitionError: If the transition is not valid for the current status
+    """
+    start_time = time.perf_counter()
+
+    # First check if action exists and get its status
+    check_query = """
+        SELECT STATUS FROM ACTIONS_CATALOG WHERE ID = :action_id
+    """
+    async with get_connection() as conn:
+        cursor = await conn.execute(check_query, {"action_id": action_id})
+        row = await cursor.fetchone()
+        await cursor.close()
+
+    if row is None:
+        duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+        logger.debug(
+            "catalog_repository_update_status",
+            query=check_query.strip(),
+            params={"action_id": action_id},
+            duration_ms=duration_ms,
+            action_id=action_id,
+            found=False,
+        )
+        return None
+
+    current_status = ActionStatus(row[0])
+
+    # Validate and get new status (raises InvalidTransitionError if invalid)
+    new_status = validate_transition(current_status, transition)
+
+    # Update the action status
+    update_query = """
+        UPDATE ACTIONS_CATALOG
+        SET STATUS = :new_status,
+            UPDATED_AT = SYSTIMESTAMP
+        WHERE ID = :action_id AND STATUS = :current_status
+    """
+    params = {
+        "action_id": action_id,
+        "new_status": new_status.value,
+        "current_status": current_status.value,
+    }
+
+    async with get_connection() as conn:
+        cursor = await conn.execute(update_query, params)
+        rowcount = cursor.rowcount
+        await cursor.close()
+
+        if rowcount == 0:
+            # Race condition: status changed between check and update
+            status_cursor = await conn.execute(
+                "SELECT STATUS FROM ACTIONS_CATALOG WHERE ID = :action_id",
+                {"action_id": action_id},
+            )
+            status_row = await status_cursor.fetchone()
+            await status_cursor.close()
+            actual_status = status_row[0] if status_row else "unknown"
+            raise InvalidTransitionError(
+                current_status=actual_status,
+                transition=transition.value,
+                message="Le statut a change entre-temps, transition invalide",
+            )
+
+        await conn.commit()
+
+    # Create audit entry for status change
+    action_type_map = {
+        StatusTransition.PUBLISH: AuditActionType.ACTION_PUBLISHED,
+        StatusTransition.DISABLE: AuditActionType.ACTION_DISABLED,
+        StatusTransition.ENABLE: AuditActionType.ACTION_ENABLED,
+    }
+    await audit_repository.create_entry(
+        user_id=user_id,
+        action_type=action_type_map[transition],
+        entity_type=AuditEntityType.ACTION,
+        entity_id=action_id,
+        details={
+            "previous_status": current_status.value,
+            "new_status": new_status.value,
+            "transition": transition.value,
+        },
+    )
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.debug(
+        "catalog_repository_update_status",
+        query=update_query.strip(),
+        params={"action_id": action_id, "transition": transition.value},
+        duration_ms=duration_ms,
+        action_id=action_id,
+        previous_status=current_status.value,
+        new_status=new_status.value,
+    )
+
+    # Fetch and return updated action
+    return await get_by_id(action_id)
+
+
+def _row_to_action_list_item(row: tuple) -> ActionListItem:
+    """Convert database row to ActionListItem model for admin dashboard."""
+    return ActionListItem(
+        id=row[0],
+        name=row[1],
+        status=ActionStatus(row[2]),
+        category=ActionCategory(row[3]),
+        engine=ActionEngine(row[4]),
+        created_at=row[5],
+        execution_count=row[6] or 0,
+    )
+
+
+async def list_all_admin(
+    status: ActionStatus | None = None,
+    category: ActionCategory | None = None,
+    engine: ActionEngine | None = None,
+    page: int = 1,
+    page_size: int = 25,
+) -> tuple[list[ActionListItem], PaginationInfo]:
+    """List all actions for admin dashboard with execution counts (Story 2.4, AC #2).
+
+    DBOPS only - no RBAC filtering. Returns all actions regardless of status.
+
+    Args:
+        status: Optional status filter
+        category: Optional category filter
+        engine: Optional engine filter
+        page: Page number (1-based)
+        page_size: Number of items per page
+
+    Returns:
+        Tuple of (list of ActionListItem, PaginationInfo) ordered by created_at DESC
+    """
+    start_time = time.perf_counter()
+
+    # Build WHERE conditions
+    conditions = []
+    params: dict[str, Any] = {}
+
+    if status is not None:
+        conditions.append("STATUS = :status")
+        params["status"] = status.value
+
+    if category is not None:
+        conditions.append("CATEGORY = :category")
+        params["category"] = category.value
+
+    if engine is not None:
+        conditions.append("ENGINE = :engine")
+        params["engine"] = engine.value
+
+    where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
+
+    # Count total matching records
+    count_query = f"SELECT COUNT(*) FROM ACTIONS_CATALOG AC{where_clause}"
+    async with get_connection() as conn:
+        cursor = await conn.execute(count_query, params)
+        count_row = await cursor.fetchone()
+        total_count = count_row[0] if count_row else 0
+        await cursor.close()
+
+    # Calculate pagination
+    total_pages = (total_count + page_size - 1) // page_size if total_count > 0 else 0
+    offset = (page - 1) * page_size
+
+    # Fetch paginated results
+    base_query = """
+        SELECT ID, NAME, STATUS, CATEGORY, ENGINE, CREATED_AT,
+               COALESCE((SELECT COUNT(*) FROM EXECUTION_LOG EL WHERE EL.ACTION_ID = AC.ID), 0) AS EXECUTION_COUNT
+        FROM ACTIONS_CATALOG AC
+    """
+    query = base_query + where_clause + " ORDER BY CREATED_AT DESC OFFSET :offset ROWS FETCH NEXT :page_size ROWS ONLY"
+    params["offset"] = offset
+    params["page_size"] = page_size
+
+    async with get_connection() as conn:
+        cursor = await conn.execute(query, params)
+        rows = await cursor.fetchall()
+        await cursor.close()
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.debug(
+        "catalog_repository_list_all_admin",
+        query=query.strip(),
+        params={k: v for k, v in params.items() if k not in ["offset", "page_size"]},
+        duration_ms=duration_ms,
+        count=len(rows),
+        total_count=total_count,
+        page=page,
+        page_size=page_size,
+    )
+
+    pagination = PaginationInfo(
+        page=page,
+        page_size=page_size,
+        total_count=total_count,
+        total_pages=total_pages,
+    )
+
+    return [_row_to_action_list_item(row) for row in rows], pagination

@@ -21,9 +21,12 @@ from app.models.catalog import (
     ActionStatus,
     ActionResponse,
     ActionDetail,
+    ActionListItem,
     ExecutionStep,
     ExecutionStepType,
     ChangeType,
+    StatusTransition,
+    ActionListResponse,
 )
 from app.repositories.catalog_repository import InvalidStateError as RepoInvalidStateError
 
@@ -233,16 +236,43 @@ class TestCreateAction:
 
 
 class TestListActions:
-    """Tests for GET /api/v1/admin/actions."""
+    """Tests for GET /api/v1/admin/actions (Story 2.4, AC #2)."""
 
-    async def test_list_actions_success(self, client, dbops_token, sample_action_response):
-        """Test listing actions returns list."""
+    @pytest.fixture
+    def sample_action_list_items(self):
+        """Sample ActionListItem list for admin dashboard."""
+        return [
+            ActionListItem(
+                id=1,
+                name="Draft Action",
+                status=ActionStatus.DRAFT,
+                category=ActionCategory.PROVISIONING,
+                engine=ActionEngine.ORACLE,
+                created_at=datetime(2026, 1, 28, 10, 0, 0),
+                execution_count=0,
+            ),
+            ActionListItem(
+                id=2,
+                name="Published Action",
+                status=ActionStatus.PUBLISHED,
+                category=ActionCategory.ADMINISTRATION,
+                engine=ActionEngine.SQL_SERVER,
+                created_at=datetime(2026, 1, 27, 10, 0, 0),
+                execution_count=42,
+            ),
+        ]
+
+    async def test_list_actions_success(self, client, dbops_token, sample_action_list_items):
+        """Test listing actions returns list with execution counts and pagination."""
+        from app.models.catalog import PaginationInfo
+
+        pagination = PaginationInfo(page=1, page_size=25, total_count=2, total_pages=1)
         with patch("app.api.deps.user_repository") as mock_repo, \
-             patch("app.repositories.catalog_repository.list_all", new_callable=AsyncMock) as mock_list:
+             patch("app.repositories.catalog_repository.list_all_admin", new_callable=AsyncMock) as mock_list:
             mock_repo.get_by_username = AsyncMock(return_value={
                 "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
             })
-            mock_list.return_value = [sample_action_response, sample_action_response]
+            mock_list.return_value = (sample_action_list_items, pagination)
 
             response = await client.get(
                 "/api/v1/admin/actions",
@@ -252,33 +282,42 @@ class TestListActions:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert "data" in data
+        assert "pagination" in data
         assert len(data["data"]) == 2
+        assert data["data"][1]["execution_count"] == 42
+        assert data["pagination"]["total_count"] == 2
 
-    async def test_list_actions_with_status_filter(self, client, dbops_token, sample_action_response):
+    async def test_list_actions_with_status_filter(self, client, dbops_token, sample_action_list_items):
         """Test listing actions with status filter."""
+        from app.models.catalog import PaginationInfo
+
+        pagination = PaginationInfo(page=1, page_size=25, total_count=1, total_pages=1)
         with patch("app.api.deps.user_repository") as mock_repo, \
-             patch("app.repositories.catalog_repository.list_all", new_callable=AsyncMock) as mock_list:
+             patch("app.repositories.catalog_repository.list_all_admin", new_callable=AsyncMock) as mock_list:
             mock_repo.get_by_username = AsyncMock(return_value={
                 "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
             })
-            mock_list.return_value = [sample_action_response]
+            mock_list.return_value = ([sample_action_list_items[0]], pagination)  # Only draft
 
             response = await client.get(
-                "/api/v1/admin/actions?status_filter=draft",
+                "/api/v1/admin/actions?status=draft",
                 headers={"Authorization": f"Bearer {dbops_token}"},
             )
 
         assert response.status_code == status.HTTP_200_OK
-        mock_list.assert_called_once_with(status=ActionStatus.DRAFT)
+        mock_list.assert_called_once_with(status=ActionStatus.DRAFT, category=None, engine=None, page=1, page_size=25)
 
     async def test_list_actions_empty(self, client, dbops_token):
         """Test listing actions when none exist."""
+        from app.models.catalog import PaginationInfo
+
+        pagination = PaginationInfo(page=1, page_size=25, total_count=0, total_pages=0)
         with patch("app.api.deps.user_repository") as mock_repo, \
-             patch("app.repositories.catalog_repository.list_all", new_callable=AsyncMock) as mock_list:
+             patch("app.repositories.catalog_repository.list_all_admin", new_callable=AsyncMock) as mock_list:
             mock_repo.get_by_username = AsyncMock(return_value={
                 "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
             })
-            mock_list.return_value = []
+            mock_list.return_value = ([], pagination)
 
             response = await client.get(
                 "/api/v1/admin/actions",
@@ -634,6 +673,175 @@ class TestUpdateActionRbac:
                         }
                     }
                 },
+                headers={"Authorization": f"Bearer {dba_token}"},
+            )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+# === Story 2.4: PATCH /admin/actions/{id}/status Tests ===
+
+
+class TestUpdateActionStatus:
+    """Tests for PATCH /api/v1/admin/actions/{id}/status (Story 2.4, AC #1, #4, #5)."""
+
+    @pytest.fixture
+    def sample_action_detail_published(self):
+        """Sample ActionDetail with published status."""
+        return ActionDetail(
+            id=1,
+            name="Published Action",
+            description="A published action",
+            category=ActionCategory.PROVISIONING,
+            engine=ActionEngine.ORACLE,
+            platform=ActionPlatform.AAP,
+            status=ActionStatus.PUBLISHED,
+            created_by=1,
+            created_at=datetime(2026, 1, 28, 10, 0, 0),
+            updated_at=datetime(2026, 1, 28, 11, 0, 0),
+        )
+
+    @pytest.fixture
+    def sample_action_detail_disabled(self):
+        """Sample ActionDetail with disabled status."""
+        return ActionDetail(
+            id=1,
+            name="Disabled Action",
+            description="A disabled action",
+            category=ActionCategory.PROVISIONING,
+            engine=ActionEngine.ORACLE,
+            platform=ActionPlatform.AAP,
+            status=ActionStatus.DISABLED,
+            created_by=1,
+            created_at=datetime(2026, 1, 28, 10, 0, 0),
+            updated_at=datetime(2026, 1, 28, 12, 0, 0),
+        )
+
+    async def test_patch_status_publish_success(self, client, dbops_token, sample_action_detail_published):
+        """Test publishing action returns 200."""
+        with patch("app.api.deps.user_repository") as mock_repo, \
+             patch("app.repositories.catalog_repository.update_status", new_callable=AsyncMock) as mock_update:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+            mock_update.return_value = sample_action_detail_published
+
+            response = await client.patch(
+                "/api/v1/admin/actions/1/status",
+                json={"transition": "publish"},
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert "data" in data
+        assert data["data"]["id"] == 1
+        assert data["data"]["status"] == "published"
+        # Verify user_id was passed
+        mock_update.assert_called_once_with(1, StatusTransition.PUBLISH, user_id="1")
+
+    async def test_patch_status_disable_success(self, client, dbops_token, sample_action_detail_disabled):
+        """Test disabling action returns 200."""
+        with patch("app.api.deps.user_repository") as mock_repo, \
+             patch("app.repositories.catalog_repository.update_status", new_callable=AsyncMock) as mock_update:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+            mock_update.return_value = sample_action_detail_disabled
+
+            response = await client.patch(
+                "/api/v1/admin/actions/1/status",
+                json={"transition": "disable"},
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["data"]["status"] == "disabled"
+
+    async def test_patch_status_enable_success(self, client, dbops_token, sample_action_detail_published):
+        """Test enabling action returns 200."""
+        with patch("app.api.deps.user_repository") as mock_repo, \
+             patch("app.repositories.catalog_repository.update_status", new_callable=AsyncMock) as mock_update:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+            mock_update.return_value = sample_action_detail_published
+
+            response = await client.patch(
+                "/api/v1/admin/actions/1/status",
+                json={"transition": "enable"},
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["data"]["status"] == "published"
+
+    async def test_patch_status_not_found(self, client, dbops_token):
+        """Test updating status for non-existent action returns 404."""
+        with patch("app.api.deps.user_repository") as mock_repo, \
+             patch("app.repositories.catalog_repository.update_status", new_callable=AsyncMock) as mock_update:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+            mock_update.return_value = None
+
+            response = await client.patch(
+                "/api/v1/admin/actions/999/status",
+                json={"transition": "publish"},
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        data = response.json()
+        assert "error" in data
+        assert data["error"]["code"] == "NOT_FOUND"
+
+    async def test_patch_status_invalid_transition_returns_400(self, client, dbops_token):
+        """Test invalid transition returns 400."""
+        from app.models.catalog import InvalidTransitionError
+
+        with patch("app.api.deps.user_repository") as mock_repo, \
+             patch("app.repositories.catalog_repository.update_status", new_callable=AsyncMock) as mock_update:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+            mock_update.side_effect = InvalidTransitionError(
+                current_status="draft",
+                transition="disable",
+            )
+            # Verify user_id is passed
+            mock_update.assert_called_once()
+            call_args = mock_update.call_args
+            assert call_args[0][2] == "1"  # user_id
+
+            response = await client.patch(
+                "/api/v1/admin/actions/1/status",
+                json={"transition": "disable"},
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        data = response.json()
+        assert "error" in data
+        assert data["error"]["code"] == "INVALID_STATE"
+        assert "draft" in data["error"]["details"]["current_status"]
+        # Verify user_id was passed
+        mock_update.assert_called_once()
+        call_args = mock_update.call_args
+        assert call_args[0][2] == "1"  # user_id
+
+    async def test_patch_status_forbidden_non_dbops(self, client, dba_token):
+        """Test updating status with non-DBOPS profile returns 403."""
+        with patch("app.api.deps.user_repository") as mock_repo:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 2, "username": "dba-user", "display_name": "DBA", "profile": "dba_app"
+            })
+
+            response = await client.patch(
+                "/api/v1/admin/actions/1/status",
+                json={"transition": "publish"},
                 headers={"Authorization": f"Bearer {dba_token}"},
             )
 
