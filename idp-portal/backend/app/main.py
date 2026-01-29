@@ -12,7 +12,7 @@ from app.core.database import create_pool, close_pool
 from app.core.exceptions import IdpError
 from app.core.logging import configure_logging
 from app.core.middleware import CorrelationIdMiddleware, RequestLoggingMiddleware
-from app.api.v1 import admin, auth, catalog, health
+from app.api.v1 import admin, auth, catalog, health, tags
 
 import structlog
 
@@ -69,5 +69,6 @@ async def idp_error_handler(request: Request, exc: IdpError) -> JSONResponse:
 # Mount API v1 routers
 app.include_router(health.router, prefix="/api/v1", tags=["health"])
 app.include_router(auth.router, prefix="/api/v1", tags=["auth"])
+app.include_router(tags.router, prefix="/api/v1", tags=["tags"])
 app.include_router(admin.router, prefix="/api/v1", tags=["admin"])
 app.include_router(catalog.router, prefix="/api/v1", tags=["catalog"])

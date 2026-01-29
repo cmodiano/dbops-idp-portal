@@ -54,16 +54,22 @@ development_status:
   2-2-definir-les-etapes-execution-et-changement-servicenow: done
   2-3-configurer-le-rbac-par-action: done  # OBSOLETE - remplace par 2-9 a 2-14
   2-4-publier-et-gerer-le-cycle-de-vie: done
-  2-5-preview-temps-reel-de-laction: backlog
-  2-6-systeme-de-tags-flexibles-pour-les-actions: backlog
-  2-7-refactorisation-des-connecteurs-generiques: backlog
-  2-8-suppression-du-rail-cab-et-simplification-servicenow: backlog
-  2-9-gestion-des-profiles-dynamiques: backlog
+  2-5-preview-temps-reel-de-laction: done
+  2-6-systeme-de-tags-flexibles-pour-les-actions: done
+  2-7-refactorisation-des-connecteurs-generiques: done  # code-review 2026-01-28
+  2-8-suppression-du-rail-cab-et-simplification-servicenow: done  # code-review 2026-01-28
+  2-9-gestion-des-profiles-dynamiques: review
   2-10-permissions-actions-par-profile: backlog
   2-11-permissions-targets-par-profile: backlog
   2-12-cumul-des-permissions-multi-profiles: backlog
   2-13-import-export-profiles-as-code-yaml: backlog
   2-14-refactoring-supprimer-ancien-rbac-par-action: backlog
+  2-15-dark-mode-toggle: done  # Quick win UX - stakeholder request; code-review 2026-01-28
+  2-16-branding-portail-dbops: done  # Quick win - logo + naming
+  2-17-editeur-visuel-de-parametres-daction: backlog  # FR1 - Remplace input JSON par editeur visuel
+  2-18-editeur-visuel-des-regles-dimpact: backlog  # FR1 - Regles d'impact par environnement
+  2-19-setup-environnement-oracle-dev-avec-docker: backlog  # Tech debt - Docker Compose Oracle pour dev
+  2-20-refactoring-migrations-flyway-et-identity-columns: backlog  # Tech debt - Flyway natif + identity columns
   epic-2-retrospective: optional
 
   # === Epic 3: Decouverte du Catalogue - Marc (MVP) ===

@@ -1,16 +1,18 @@
 /**
- * ActionForm component for creating/editing catalog actions (Story 2.1, AC #1, #6; Story 2.2, AC #1, #2, #3).
+ * ActionForm component for creating/editing catalog actions (Story 2.1, AC #1, #6; Story 2.2, AC #1, #2, #3; Story 2.5).
  *
  * Features:
  * - Inline validation (AC #6)
  * - JSON validation for schema and impact_rules
  * - Execution steps editor (Story 2.2, AC #1, #2)
  * - Change type config (Story 2.2, AC #3)
- * - Accessibility: aria-labels, focus management
+ * - Real-time preview with split view layout (Story 2.5, AC #1, #3)
+ * - Accessibility: aria-labels, focus management, aria-live preview
  */
 
-import { useEffect, useRef, useState } from 'react';
-import { Form, Input, Select, Modal, Alert, Collapse, Typography } from 'antd';
+import { useEffect, useRef, useState, useMemo } from 'react';
+import { Form, Input, Select, Modal, Alert, Collapse, Typography, Row, Col } from 'antd';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
 import type {
   ActionCreate,
   ActionCategory,
@@ -21,11 +23,14 @@ import type {
   ExecutionStep,
   ChangeType,
   RbacPolicies,
+  ActionPreviewData,
+  ImpactLevel,
 } from '../../types/api';
 import { StepsEditor } from './StepsEditor';
 import { ChangeTypeConfig } from './ChangeTypeConfig';
 import { RbacEditor } from './RbacEditor';
-import { updateActionSteps, updateActionRbac } from '../../services/admin_service';
+import { AdminPreview } from './AdminPreview';
+import { updateActionSteps, updateActionRbac, getTags, updateActionTags } from '../../services/admin_service';
 
 const { Text } = Typography;
 
@@ -77,8 +82,69 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
   const [executionSteps, setExecutionSteps] = useState<ExecutionStep[]>([]);
   const [changeTypeConfig, setChangeTypeConfig] = useState<Record<string, ChangeType>>({});
   const [rbacPolicies, setRbacPolicies] = useState<RbacPolicies | null>(null);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [tagsOptions, setTagsOptions] = useState<{ value: string; label: string }[]>([]);
 
   const isEditMode = !!editAction;
+  const isMin1280 = useMediaQuery(1280);
+
+  // Story 2.5: Real-time preview using Form.useWatch
+  const watchedName = Form.useWatch('name', form);
+  const watchedDescription = Form.useWatch('description', form);
+  const watchedCategory = Form.useWatch('category', form);
+  const watchedEngine = Form.useWatch('engine', form);
+  const watchedPlatform = Form.useWatch('platform', form);
+  const watchedParametersSchema = Form.useWatch('parameters_schema', form);
+  const watchedImpactRules = Form.useWatch('impact_rules', form);
+
+  // Load tags for autocomplete when modal opens (Story 2.6, AC #1)
+  useEffect(() => {
+    if (!open) return;
+    getTags()
+      .then((list) => setTagsOptions(list.map((t) => ({ value: t.name, label: t.name }))))
+      .catch(() => setTagsOptions([]));
+  }, [open]);
+
+  // Transform form values to ActionPreviewData for preview
+  const previewData: ActionPreviewData = useMemo(() => {
+    // Parse parameters_schema JSON if valid
+    let parsedSchema: Record<string, unknown> | null = null;
+    if (watchedParametersSchema) {
+      try {
+        parsedSchema = JSON.parse(watchedParametersSchema as unknown as string);
+      } catch {
+        // Invalid JSON, leave as null
+      }
+    }
+
+    // Extract impact_level from impact_rules (use first environment or default)
+    let impactLevel: ImpactLevel | null = null;
+    if (watchedImpactRules) {
+      try {
+        const parsedRules = JSON.parse(watchedImpactRules as unknown as string) as Record<string, { level: string }>;
+        const firstEnv = Object.keys(parsedRules)[0];
+        if (firstEnv && parsedRules[firstEnv]?.level) {
+          const level = parsedRules[firstEnv].level;
+          if (['low', 'medium', 'high', 'critical'].includes(level)) {
+            impactLevel = level as ImpactLevel;
+          }
+        }
+      } catch {
+        // Invalid JSON, leave as null
+      }
+    }
+
+    return {
+      name: (watchedName as string) || '',
+      description: (watchedDescription as string) || null,
+      category: (watchedCategory as ActionCategory) || null,
+      engine: (watchedEngine as ActionEngine) || null,
+      platform: (watchedPlatform as ActionPlatform) || null,
+      impact_level: impactLevel,
+      parameters_schema: parsedSchema,
+      tags: selectedTags,
+    };
+  }, [watchedName, watchedDescription, watchedCategory, watchedEngine, watchedPlatform, watchedParametersSchema, watchedImpactRules, selectedTags]);
 
   // Focus on name input when modal opens (AC #7 accessibility)
   useEffect(() => {
@@ -108,6 +174,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
       } as unknown as ActionFormValues);
       setExecutionSteps(editAction.execution_steps || []);
       setChangeTypeConfig(editAction.change_type_config || {});
+      setSelectedTags(editAction.tags ?? []);
       // Parse rbac_policies if present (it's stored as Record<string, unknown>)
       if (editAction.rbac_policies && typeof editAction.rbac_policies === 'object' && 'environments' in editAction.rbac_policies) {
         setRbacPolicies(editAction.rbac_policies as unknown as RbacPolicies);
@@ -119,6 +186,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
       setExecutionSteps([]);
       setChangeTypeConfig({});
       setRbacPolicies(null);
+      setSelectedTags([]);
       setStepsError(null);
       setRbacError(null);
     }
@@ -142,8 +210,22 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
             setStepsError(`L'étape ${i + 1} doit avoir un nom.`);
             return;
           }
-          if (s.is_servicenow_change && (!s.conditional_environments || s.conditional_environments.length === 0)) {
+          if (s.connector_type === 'servicenow' && (!s.conditional_environments || s.conditional_environments.length === 0)) {
             setStepsError(`L'étape "${s.name}" (ServiceNow) requiert au moins un environnement conditionné.`);
+            return;
+          }
+        }
+      }
+
+      // Validate RBAC before any persist (Story 2.3; code-review: avoid persisting then failing)
+      if (rbacPolicies) {
+        for (const [env, perm] of Object.entries(rbacPolicies.environments)) {
+          if (!perm.profiles || perm.profiles.length === 0) {
+            setRbacError(`L'environnement ${env} doit avoir au moins un profil autorise.`);
+            return;
+          }
+          if (perm.requires_approval && (!perm.approver_profiles || perm.approver_profiles.length === 0)) {
+            setRbacError(`L'environnement ${env} requiert des profils approbateurs si l'approbation est activee.`);
             return;
           }
         }
@@ -173,20 +255,12 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
         });
       }
 
-      // Update RBAC policies if defined (Story 2.3)
       if (rbacPolicies && actionId) {
-        // Validate RBAC before sending (Story 2.3, AC #1, #2 — inline validation)
-        for (const [env, perm] of Object.entries(rbacPolicies.environments)) {
-          if (!perm.profiles || perm.profiles.length === 0) {
-            setRbacError(`L'environnement ${env} doit avoir au moins un profil autorise.`);
-            return;
-          }
-          if (perm.requires_approval && (!perm.approver_profiles || perm.approver_profiles.length === 0)) {
-            setRbacError(`L'environnement ${env} requiert des profils approbateurs si l'approbation est activee.`);
-            return;
-          }
-        }
         await updateActionRbac(actionId, { policies: rbacPolicies });
+      }
+
+      if (actionId) {
+        await updateActionTags(actionId, { tag_names: selectedTags });
       }
 
       const done = (result as ActionDetail | ActionResponse) ?? editAction;
@@ -219,8 +293,11 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
       okText={isEditMode ? 'Enregistrer' : 'Creer'}
       cancelText="Annuler"
       confirmLoading={!!(loading || saving)}
-      width={720}
-      destroyOnClose
+      width={1200}
+      destroyOnHidden
+      styles={{
+        body: { maxHeight: 'calc(100vh - 200px)', overflowY: 'auto' },
+      }}
     >
       {error && (
         <Alert
@@ -252,165 +329,194 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
         />
       )}
 
-      <Form
-        form={form}
-        layout="vertical"
-        onFinish={handleFinish}
-        validateTrigger={['onChange', 'onBlur']}
-      >
-        <Form.Item
-          name="name"
-          label="Nom de l'action"
-          rules={[
-            { required: true, message: 'Le nom est requis' },
-            { min: 1, max: 255, message: 'Le nom doit faire entre 1 et 255 caracteres' },
-          ]}
-        >
-          <Input
-            ref={nameInputRef as never}
-            placeholder="Ex: Creer PDB Oracle"
-            aria-label="Nom de l'action"
-          />
-        </Form.Item>
+      {/* Story 2.5: Split view layout - Form left (60%), Preview right (40%); stack below 1280px (AC3, Task 4.4). */}
+      {/* Col 14/10 ≈ 58%/42% (closest to 60/40 on 24-grid). */}
+      <Row gutter={32}>
+        {/* Left column: Form */}
+        <Col span={isMin1280 ? 14 : 24}>
+          <Form
+            form={form}
+            layout="vertical"
+            onFinish={handleFinish}
+            validateTrigger={['onChange', 'onBlur']}
+          >
+            <Form.Item
+              name="name"
+              label="Nom de l'action"
+              rules={[
+                { required: true, message: 'Le nom est requis' },
+                { min: 1, max: 255, message: 'Le nom doit faire entre 1 et 255 caracteres' },
+              ]}
+            >
+              <Input
+                ref={nameInputRef as never}
+                placeholder="Ex: Creer PDB Oracle"
+                aria-label="Nom de l'action"
+              />
+            </Form.Item>
 
-        <Form.Item
-          name="description"
-          label="Description"
-          rules={[{ max: 4000, message: 'La description ne peut pas depasser 4000 caracteres' }]}
-        >
-          <TextArea
-            rows={3}
-            placeholder="Description de l'action..."
-            aria-label="Description de l'action"
-            showCount
-            maxLength={4000}
-          />
-        </Form.Item>
+            <Form.Item
+              name="description"
+              label="Description"
+              rules={[{ max: 4000, message: 'La description ne peut pas depasser 4000 caracteres' }]}
+            >
+              <TextArea
+                rows={3}
+                placeholder="Description de l'action..."
+                aria-label="Description de l'action"
+                showCount
+                maxLength={4000}
+              />
+            </Form.Item>
 
-        <Form.Item
-          name="category"
-          label="Categorie"
-          rules={[{ required: true, message: 'La categorie est requise' }]}
-        >
-          <Select
-            options={CATEGORY_OPTIONS}
-            placeholder="Selectionnez une categorie"
-            aria-label="Categorie de l'action"
-          />
-        </Form.Item>
+            <Form.Item
+              name="category"
+              label="Categorie"
+              rules={[{ required: true, message: 'La categorie est requise' }]}
+            >
+              <Select
+                options={CATEGORY_OPTIONS}
+                placeholder="Selectionnez une categorie"
+                aria-label="Categorie de l'action"
+              />
+            </Form.Item>
 
-        <Form.Item
-          name="engine"
-          label="Moteur de base de donnees"
-          rules={[{ required: true, message: 'Le moteur est requis' }]}
-        >
-          <Select
-            options={ENGINE_OPTIONS}
-            placeholder="Selectionnez un moteur"
-            aria-label="Moteur de base de donnees"
-          />
-        </Form.Item>
+            <Form.Item
+              name="engine"
+              label="Moteur de base de donnees"
+              rules={[{ required: true, message: 'Le moteur est requis' }]}
+            >
+              <Select
+                options={ENGINE_OPTIONS}
+                placeholder="Selectionnez un moteur"
+                aria-label="Moteur de base de donnees"
+              />
+            </Form.Item>
 
-        <Form.Item
-          name="platform"
-          label="Plateforme d'execution"
-          rules={[{ required: true, message: 'La plateforme est requise' }]}
-        >
-          <Select
-            options={PLATFORM_OPTIONS}
-            placeholder="Selectionnez une plateforme"
-            aria-label="Plateforme d'execution"
-          />
-        </Form.Item>
+            <Form.Item
+              name="platform"
+              label="Plateforme d'execution"
+              rules={[{ required: true, message: 'La plateforme est requise' }]}
+            >
+              <Select
+                options={PLATFORM_OPTIONS}
+                placeholder="Selectionnez une plateforme"
+                aria-label="Plateforme d'execution"
+              />
+            </Form.Item>
 
-        <Form.Item
-          name="parameters_schema"
-          label="Schema des parametres (JSON Schema)"
-          rules={[{ validator: validateJson }]}
-          tooltip="Schema JSON Schema draft-07 definissant les parametres de l'action"
-        >
-          <TextArea
-            rows={4}
-            placeholder='{"type": "object", "properties": {...}}'
-            aria-label="Schema des parametres au format JSON"
-            style={{ fontFamily: 'monospace' }}
-          />
-        </Form.Item>
+            <Form.Item
+              name="parameters_schema"
+              label="Schema des parametres (JSON Schema)"
+              rules={[{ validator: validateJson }]}
+              tooltip="Schema JSON Schema draft-07 definissant les parametres de l'action"
+            >
+              <TextArea
+                rows={4}
+                placeholder='{"type": "object", "properties": {...}}'
+                aria-label="Schema des parametres au format JSON"
+                style={{ fontFamily: 'monospace' }}
+              />
+            </Form.Item>
 
-        <Form.Item
-          name="impact_rules"
-          label="Regles d'impact (JSON)"
-          rules={[{ validator: validateJson }]}
-          tooltip='Ex: {"DEV": {"level": "low"}, "PROD": {"level": "high"}}'
-        >
-          <TextArea
-            rows={3}
-            placeholder='{"DEV": {"level": "low"}, "PROD": {"level": "high"}}'
-            aria-label="Regles d'impact au format JSON"
-            style={{ fontFamily: 'monospace' }}
-          />
-        </Form.Item>
+            <Form.Item
+              name="impact_rules"
+              label="Regles d'impact (JSON)"
+              rules={[{ validator: validateJson }]}
+              tooltip='Ex: {"DEV": {"level": "low"}, "PROD": {"level": "high"}}'
+            >
+              <TextArea
+                rows={3}
+                placeholder='{"DEV": {"level": "low"}, "PROD": {"level": "high"}}'
+                aria-label="Regles d'impact au format JSON"
+                style={{ fontFamily: 'monospace' }}
+              />
+            </Form.Item>
 
-        {/* Execution Steps Section (Story 2.2, AC #1, #2, #3) */}
-        <Collapse
-          ghost
-          items={[
-            {
-              key: 'execution-steps',
-              label: (
-                <Text strong>
-                  Etapes d'execution et changement ServiceNow
-                  {executionSteps.length > 0 && (
-                    <Text type="secondary" style={{ marginLeft: 8 }}>
-                      ({executionSteps.length} etape{executionSteps.length > 1 ? 's' : ''})
+            {/* Story 2.6, AC #1, #2: Section Tags — multi-select + auto-completion, create on Enter */}
+            <Form.Item
+              label="Tags"
+              tooltip="Tags existants ou saisie libre + Entree pour en creer un nouveau. Lowercase, sans espaces."
+            >
+              <Select
+                mode="tags"
+                value={selectedTags}
+                onChange={(v) => setSelectedTags((Array.isArray(v) ? v : [v]).filter(Boolean) as string[])}
+                options={tagsOptions}
+                placeholder="Ex: RAC, dataguard, provisioning"
+                aria-label="Tags de l'action"
+                style={{ width: '100%' }}
+                tokenSeparators={[',']}
+              />
+            </Form.Item>
+
+            {/* Execution Steps Section (Story 2.2, AC #1, #2, #3) */}
+            <Collapse
+              ghost
+              items={[
+                {
+                  key: 'execution-steps',
+                  label: (
+                    <Text strong>
+                      Etapes d'execution et changement ServiceNow
+                      {executionSteps.length > 0 && (
+                        <Text type="secondary" style={{ marginLeft: 8 }}>
+                          ({executionSteps.length} etape{executionSteps.length > 1 ? 's' : ''})
+                        </Text>
+                      )}
                     </Text>
-                  )}
-                </Text>
-              ),
-              children: (
-                <>
-                  <Form.Item
-                    label="Etapes d'execution"
-                    tooltip="Definissez les etapes d'execution de l'action (AC #1, #2)"
-                    style={{ marginBottom: 16 }}
-                  >
-                    <StepsEditor value={executionSteps} onChange={setExecutionSteps} />
-                  </Form.Item>
+                  ),
+                  children: (
+                    <>
+                      <Form.Item
+                        label="Etapes d'execution"
+                        tooltip="Definissez les etapes d'execution de l'action (AC #1, #2)"
+                        style={{ marginBottom: 16 }}
+                      >
+                        <StepsEditor value={executionSteps} onChange={setExecutionSteps} />
+                      </Form.Item>
 
-                  <Form.Item
-                    label="Type de changement ServiceNow par environnement"
-                    tooltip="Definissez le type de changement (pre-approuve ou CAB) par environnement (AC #3)"
-                  >
-                    <ChangeTypeConfig value={changeTypeConfig} onChange={setChangeTypeConfig} />
-                  </Form.Item>
-                </>
-              ),
-            },
-            {
-              key: 'rbac-policies',
-              label: (
-                <Text strong>
-                  Controle d'acces (RBAC)
-                  {rbacPolicies && (
-                    <Text type="secondary" style={{ marginLeft: 8 }}>
-                      (configure)
+                      <Form.Item
+                        label="Type de changement ServiceNow par environnement"
+                        tooltip="Definissez le type de changement (pre-approuve) par environnement (AC #3). Story 2.8: CAB supprime."
+                      >
+                        <ChangeTypeConfig value={changeTypeConfig} onChange={setChangeTypeConfig} />
+                      </Form.Item>
+                    </>
+                  ),
+                },
+                {
+                  key: 'rbac-policies',
+                  label: (
+                    <Text strong>
+                      Controle d'acces (RBAC)
+                      {rbacPolicies && (
+                        <Text type="secondary" style={{ marginLeft: 8 }}>
+                          (configure)
+                        </Text>
+                      )}
                     </Text>
-                  )}
-                </Text>
-              ),
-              children: (
-                <Form.Item
-                  label="Politiques RBAC par environnement"
-                  tooltip="Definissez les profils autorises et les regles d'approbation par environnement (Story 2.3, AC #1, #2)"
-                >
-                  <RbacEditor value={rbacPolicies ?? undefined} onChange={setRbacPolicies} />
-                </Form.Item>
-              ),
-            },
-          ]}
-          style={{ marginTop: 16 }}
-        />
-      </Form>
+                  ),
+                  children: (
+                    <Form.Item
+                      label="Politiques RBAC par environnement"
+                      tooltip="Definissez les profils autorises et les regles d'approbation par environnement (Story 2.3, AC #1, #2)"
+                    >
+                      <RbacEditor value={rbacPolicies ?? undefined} onChange={setRbacPolicies} />
+                    </Form.Item>
+                  ),
+                },
+              ]}
+              style={{ marginTop: 16 }}
+            />
+          </Form>
+        </Col>
+
+        {/* Right column: Real-time Preview (Story 2.5, AC #1, #3, #5) */}
+        <Col span={isMin1280 ? 10 : 24}>
+          <AdminPreview formData={previewData} />
+        </Col>
+      </Row>
     </Modal>
   );
 }

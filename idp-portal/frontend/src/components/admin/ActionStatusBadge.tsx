@@ -1,13 +1,14 @@
 /**
  * ActionStatusBadge - Visual badge for action lifecycle status (Story 2.4, AC #2).
+ * Story 2-15: uses theme token for draft so badge is visible in dark mode (AC #4, #5).
  *
  * Displays action status with appropriate color coding:
- * - draft: gray
+ * - draft: theme secondary text (works in light/dark)
  * - published: green
  * - disabled: red
  */
 
-import { Tag } from 'antd';
+import { Tag, theme } from 'antd';
 import { EditOutlined, CheckCircleOutlined, StopOutlined } from '@ant-design/icons';
 import type { ActionStatus } from '../../types/api';
 
@@ -15,32 +16,36 @@ interface ActionStatusBadgeProps {
   status: ActionStatus;
 }
 
-const STATUS_CONFIG: Record<ActionStatus, { color: string; label: string; icon: React.ReactNode }> = {
-  draft: {
-    color: '#9CA3AF',
+export function ActionStatusBadge({ status }: ActionStatusBadgeProps) {
+  const { token } = theme.useToken();
+
+  const draftConfig = {
+    color: token.colorTextSecondary,
     label: 'Brouillon',
     icon: <EditOutlined />,
-  },
-  published: {
-    color: '#10B981',
+  };
+  const publishedConfig = {
+    color: token.colorSuccess,
     label: 'Publiee',
     icon: <CheckCircleOutlined />,
-  },
-  disabled: {
-    color: '#EF4444',
+  };
+  const disabledConfig = {
+    color: token.colorError,
     label: 'Desactivee',
     icon: <StopOutlined />,
-  },
-};
+  };
 
-export function ActionStatusBadge({ status }: ActionStatusBadgeProps) {
-  const config = STATUS_CONFIG[status];
+  const config =
+    status === 'draft' ? draftConfig
+    : status === 'published' ? publishedConfig
+    : disabledConfig;
 
   return (
     <Tag
-      color={config.color}
+      color={status === 'draft' ? undefined : config.color}
       icon={config.icon}
       aria-label={`Statut: ${config.label}`}
+      style={status === 'draft' ? { color: token.colorTextSecondary, borderColor: token.colorBorder } : undefined}
     >
       {config.label}
     </Tag>

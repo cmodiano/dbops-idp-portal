@@ -22,11 +22,13 @@ from app.models.catalog import (
     ActionResponse,
     ActionDetail,
     ActionListItem,
+    ConnectorType,
     ExecutionStep,
     ExecutionStepType,
     ChangeType,
     StatusTransition,
     ActionListResponse,
+    TagResponse,
 )
 from app.repositories.catalog_repository import InvalidStateError as RepoInvalidStateError
 
@@ -115,9 +117,9 @@ def sample_action_detail_with_steps():
             }
         },
         execution_steps=[
-            ExecutionStep(order=1, name="Verification", type=ExecutionStepType.PREREQUISITE),
+            ExecutionStep(order=1, name="Verification", type=ExecutionStepType.PREREQUISITE, connector_type=ConnectorType.NONE),
         ],
-        change_type_config={"DEV": ChangeType.PRE_APPROVED, "PROD": ChangeType.CAB},
+        change_type_config={"DEV": ChangeType.PRE_APPROVED, "PROD": ChangeType.PRE_APPROVED},
     )
 
 
@@ -421,9 +423,9 @@ class TestUpdateActionSteps:
                 "/api/v1/admin/actions/1/steps",
                 json={
                     "steps": [
-                        {"order": 1, "name": "Verification", "type": "prerequisite", "is_servicenow_change": False}
+                        {"order": 1, "name": "Verification", "type": "prerequisite", "connector_type": "none"}
                     ],
-                    "change_type_config": {"DEV": "pre_approved", "PROD": "cab"},
+                    "change_type_config": {"DEV": "pre_approved", "PROD": "pre_approved"},
                 },
                 headers={"Authorization": f"Bearer {dbops_token}"},
             )
@@ -434,6 +436,95 @@ class TestUpdateActionSteps:
         assert data["data"]["id"] == 1
         assert data["data"]["execution_steps"] is not None
         assert data["data"]["change_type_config"] is not None
+
+    async def test_update_steps_with_servicenow_and_environments_success(
+        self, client, dbops_token, sample_action_detail_with_steps
+    ):
+        """Story 2.7, AC2/AC4: PUT steps with connector_type servicenow and conditional_environments returns 200."""
+        step_sn = ExecutionStep(
+            order=1,
+            name="Ouverture changement",
+            type=ExecutionStepType.EXECUTION,
+            connector_type=ConnectorType.SERVICENOW,
+            connector_config={},
+            conditional_environments=["PROD"],
+        )
+        detail_with_sn = sample_action_detail_with_steps.model_copy(update={"execution_steps": [step_sn]})
+        with patch("app.api.deps.user_repository") as mock_repo, \
+             patch("app.repositories.catalog_repository.update_execution_steps", new_callable=AsyncMock) as mock_update:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+            mock_update.return_value = detail_with_sn
+
+            response = await client.put(
+                "/api/v1/admin/actions/1/steps",
+                json={
+                    "steps": [
+                        {
+                            "order": 1,
+                            "name": "Ouverture changement",
+                            "type": "execution",
+                            "connector_type": "servicenow",
+                            "connector_config": {},
+                            "conditional_environments": ["PROD"],
+                        }
+                    ],
+                    "change_type_config": {"PROD": "pre_approved"},
+                },
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["data"]["execution_steps"][0]["connector_type"] == "servicenow"
+        assert data["data"]["execution_steps"][0]["conditional_environments"] == ["PROD"]
+
+    async def test_update_steps_servicenow_without_conditional_environments_returns_422(
+        self, client, dbops_token
+    ):
+        """Story 2.7, AC2: PUT steps with connector_type servicenow and no conditional_environments returns 422."""
+        with patch("app.api.deps.user_repository") as mock_repo:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+
+            response = await client.put(
+                "/api/v1/admin/actions/1/steps",
+                json={
+                    "steps": [
+                        {
+                            "order": 1,
+                            "name": "Ouverture changement",
+                            "type": "execution",
+                            "connector_type": "servicenow",
+                            "connector_config": None,
+                            "conditional_environments": None,
+                        }
+                    ],
+                },
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    async def test_update_steps_change_type_config_cab_rejected_422(self, client, dbops_token):
+        """Story 2.8, AC4: PUT steps with change_type_config \"cab\" returns 422 (CAB removed)."""
+        with patch("app.api.deps.user_repository") as mock_repo:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+
+            response = await client.put(
+                "/api/v1/admin/actions/1/steps",
+                json={
+                    "steps": [{"order": 1, "name": "Step", "type": "prerequisite", "connector_type": "none"}],
+                    "change_type_config": {"DEV": "pre_approved", "PROD": "cab"},
+                },
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
     async def test_update_steps_not_found(self, client, dbops_token):
         """Test updating steps for non-existent action returns 404."""
@@ -448,7 +539,7 @@ class TestUpdateActionSteps:
                 "/api/v1/admin/actions/999/steps",
                 json={
                     "steps": [
-                        {"order": 1, "name": "Step", "type": "prerequisite", "is_servicenow_change": False}
+                        {"order": 1, "name": "Step", "type": "prerequisite", "connector_type": "none"}
                     ],
                 },
                 headers={"Authorization": f"Bearer {dbops_token}"},
@@ -475,7 +566,7 @@ class TestUpdateActionSteps:
                 "/api/v1/admin/actions/1/steps",
                 json={
                     "steps": [
-                        {"order": 1, "name": "Step", "type": "prerequisite", "is_servicenow_change": False}
+                        {"order": 1, "name": "Step", "type": "prerequisite", "connector_type": "none"}
                     ],
                 },
                 headers={"Authorization": f"Bearer {dbops_token}"},
@@ -515,7 +606,7 @@ class TestUpdateActionSteps:
                 "/api/v1/admin/actions/1/steps",
                 json={
                     "steps": [
-                        {"order": 1, "name": "Step", "type": "prerequisite", "is_servicenow_change": False}
+                        {"order": 1, "name": "Step", "type": "prerequisite", "connector_type": "none"}
                     ],
                 },
                 headers={"Authorization": f"Bearer {dba_token}"},
@@ -737,8 +828,8 @@ class TestUpdateActionStatus:
         assert "data" in data
         assert data["data"]["id"] == 1
         assert data["data"]["status"] == "published"
-        # Verify user_id was passed
-        mock_update.assert_called_once_with(1, StatusTransition.PUBLISH, user_id="1")
+        # Verify user_id and transition were passed (API uses keyword args)
+        mock_update.assert_called_once_with(1, transition=StatusTransition.PUBLISH, user_id="1")
 
     async def test_patch_status_disable_success(self, client, dbops_token, sample_action_detail_disabled):
         """Test disabling action returns 200."""
@@ -811,10 +902,6 @@ class TestUpdateActionStatus:
                 current_status="draft",
                 transition="disable",
             )
-            # Verify user_id is passed
-            mock_update.assert_called_once()
-            call_args = mock_update.call_args
-            assert call_args[0][2] == "1"  # user_id
 
             response = await client.patch(
                 "/api/v1/admin/actions/1/status",
@@ -827,10 +914,10 @@ class TestUpdateActionStatus:
         assert "error" in data
         assert data["error"]["code"] == "INVALID_STATE"
         assert "draft" in data["error"]["details"]["current_status"]
-        # Verify user_id was passed
         mock_update.assert_called_once()
         call_args = mock_update.call_args
-        assert call_args[0][2] == "1"  # user_id
+        assert call_args[1]["user_id"] == "1"
+        assert call_args[1]["transition"] == StatusTransition.DISABLE
 
     async def test_patch_status_forbidden_non_dbops(self, client, dba_token):
         """Test updating status with non-DBOPS profile returns 403."""
@@ -842,6 +929,158 @@ class TestUpdateActionStatus:
             response = await client.patch(
                 "/api/v1/admin/actions/1/status",
                 json={"transition": "publish"},
+                headers={"Authorization": f"Bearer {dba_token}"},
+            )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+class TestGetTags:
+    """Tests for GET /api/v1/tags (Story 2.6, AC #5)."""
+
+    @pytest.mark.asyncio
+    async def test_get_tags_returns_list(self, client):
+        """GET /tags returns { data: list[TagResponse] }."""
+        tags = [
+            TagResponse(id=1, name="rac", created_at=datetime(2026, 1, 28, 10, 0, 0)),
+            TagResponse(id=2, name="dataguard", created_at=datetime(2026, 1, 28, 10, 1, 0)),
+        ]
+        with patch("app.api.v1.tags.catalog_repository.get_all_tags", new_callable=AsyncMock) as m:
+            m.return_value = tags
+            response = await client.get("/api/v1/tags")
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert "data" in data
+        assert len(data["data"]) == 2
+        assert data["data"][0]["name"] == "rac"
+        assert data["data"][1]["name"] == "dataguard"
+
+    @pytest.mark.asyncio
+    async def test_get_tags_empty(self, client):
+        """GET /tags returns empty list when no tags."""
+        with patch("app.api.v1.tags.catalog_repository.get_all_tags", new_callable=AsyncMock) as m:
+            m.return_value = []
+            response = await client.get("/api/v1/tags")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["data"] == []
+
+
+class TestUpdateActionTags:
+    """Tests for PUT /api/v1/admin/actions/{id}/tags (Story 2.6, AC #5)."""
+
+    @pytest.fixture
+    def sample_action_with_tags(self):
+        """ActionDetail with tags."""
+        return ActionDetail(
+            id=1,
+            name="Create PDB",
+            description="",
+            category=ActionCategory.PROVISIONING,
+            engine=ActionEngine.ORACLE,
+            platform=ActionPlatform.AAP,
+            parameters_schema=None,
+            impact_rules=None,
+            status=ActionStatus.DRAFT,
+            created_by=1,
+            created_at=datetime(2026, 1, 28, 10, 0, 0),
+            updated_at=None,
+            rbac_policies=None,
+            execution_steps=None,
+            change_type_config=None,
+            tags=["rac", "dataguard"],
+        )
+
+    @pytest.mark.asyncio
+    async def test_put_tags_tag_names_creates_and_sets(self, client, dbops_token, sample_action_with_tags):
+        """PUT with tag_names creates missing tags and sets them."""
+        with patch("app.api.deps.user_repository") as mock_repo, \
+             patch("app.repositories.catalog_repository.get_by_id", new_callable=AsyncMock) as mock_get, \
+             patch("app.repositories.catalog_repository.create_tag_if_not_exists", new_callable=AsyncMock) as mock_create, \
+             patch("app.repositories.catalog_repository.set_action_tags", new_callable=AsyncMock) as mock_set:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+            mock_get.return_value = sample_action_with_tags
+            mock_create.side_effect = [10, 20]  # ids for "rac", "dataguard"
+
+            response = await client.put(
+                "/api/v1/admin/actions/1/tags",
+                json={"tag_names": ["rac", "dataguard"]},
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert mock_create.call_count == 2
+        mock_set.assert_called_once_with(1, [10, 20])
+        data = response.json()
+        assert "data" in data
+        assert data["data"]["id"] == 1
+
+    @pytest.mark.asyncio
+    async def test_put_tags_tag_ids(self, client, dbops_token, sample_action_with_tags):
+        """PUT with tag_ids sets tags directly."""
+        with patch("app.api.deps.user_repository") as mock_repo, \
+             patch("app.repositories.catalog_repository.get_by_id", new_callable=AsyncMock) as mock_get, \
+             patch("app.repositories.catalog_repository.set_action_tags", new_callable=AsyncMock) as mock_set:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+            mock_get.return_value = sample_action_with_tags
+
+            response = await client.put(
+                "/api/v1/admin/actions/1/tags",
+                json={"tag_ids": [10, 20]},
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        mock_set.assert_called_once_with(1, [10, 20])
+
+    @pytest.mark.asyncio
+    async def test_put_tags_404(self, client, dbops_token):
+        """PUT tags for non-existent action returns 404."""
+        with patch("app.api.deps.user_repository") as mock_repo, \
+             patch("app.repositories.catalog_repository.get_by_id", new_callable=AsyncMock) as mock_get:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+            mock_get.return_value = None
+
+            response = await client.put(
+                "/api/v1/admin/actions/999/tags",
+                json={"tag_ids": [1, 2]},
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_put_tags_422_no_ids_or_names(self, client, dbops_token):
+        """PUT tags without tag_ids or tag_names returns 422."""
+        with patch("app.api.deps.user_repository") as mock_repo:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+
+            response = await client.put(
+                "/api/v1/admin/actions/1/tags",
+                json={},
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    @pytest.mark.asyncio
+    async def test_put_tags_forbidden_non_dbops(self, client, dba_token):
+        """PUT tags with non-DBOPS returns 403."""
+        with patch("app.api.deps.user_repository") as mock_repo:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 2, "username": "dba-user", "display_name": "DBA", "profile": "dba_app"
+            })
+
+            response = await client.put(
+                "/api/v1/admin/actions/1/tags",
+                json={"tag_ids": [1, 2]},
                 headers={"Authorization": f"Bearer {dba_token}"},
             )
 

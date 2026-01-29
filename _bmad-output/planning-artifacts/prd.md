@@ -29,6 +29,10 @@ classification:
   secondaryUsers: internal_business_clients
   buildTeam: db_automation_team
 workflowType: 'prd'
+lastEdited: '2026-01-28'
+editHistory:
+  - date: '2026-01-28'
+    changes: 'Ajout editeurs visuels dynamiques pour parametres et regles impact (FR1, Journey 4)'
 ---
 
 # Product Requirements Document - test
@@ -140,7 +144,7 @@ Les cinq journeys suivants illustrent comment chaque profil utilisateur interagi
 
 **Scene d'ouverture :** Karim est responsable de l'ajout d'une nouvelle action au catalogue : "Migration de schema Oracle". Il a le playbook Ansible fonctionnel, les parametres sont valides, les tests sont passes.
 
-**Action montante :** Karim accede a l'interface d'administration du Software Catalog. Il cree une nouvelle entite action : nom, description, moteur (Oracle), plateforme d'execution (AAP), parametres JSON, niveau d'impact (orange — modification structurelle), et regles RBAC (DBA uniquement pour la production, self-service pour les environnements non-prod).
+**Action montante :** Karim accede a l'interface d'administration du Software Catalog. Il cree une nouvelle entite action : nom, description, moteur (Oracle), plateforme d'execution (AAP), parametres via l'editeur visuel dynamique (ajouter/supprimer avec nom, type, requis, defaut, description), regles d'impact via l'editeur visuel (criteres par environnement), et regles RBAC (DBA uniquement pour la production, self-service pour les environnements non-prod).
 
 **Climax :** La documentation est auto-generee par IA a partir du readme du playbook. Karim la revise, ajuste l'indicateur d'impact, et publie l'action. Elle apparait instantanement dans le catalogue pour les DBA autorises.
 
@@ -377,7 +381,9 @@ Les 45 exigences fonctionnelles ci-dessous decoulent des user journeys, des exig
 
 ### 1. Gestion du Software Catalog
 
-- **FR1:** DBOPS peut creer une action dans le Software Catalog avec ses metadonnees (nom, description, moteur, plateforme d'execution, parametres, niveau d'impact)
+- **FR1:** DBOPS peut creer une action dans le Software Catalog avec ses metadonnees (nom, description, moteur, plateforme d'execution, niveau d'impact) et configurer via des editeurs visuels dynamiques (ajouter/supprimer):
+  - **Parametres**: nom, type (string, number, boolean, etc.), requis (oui/non), valeur par defaut, description
+  - **Regles d'impact**: criteres d'evaluation du niveau de risque par environnement
 - **FR2:** DBOPS peut definir les etapes d'execution d'une action, chaque etape pouvant appeler un connecteur generique (AAP, ServiceNow, Azure DevOps, Jira, GitHub Actions, Terraform, etc.) avec des conditions selon l'environnement cible
 - **FR3:** [DEPLACE vers FR25a-d] Les regles RBAC sont gerees au niveau des profiles, pas des actions individuelles
 - **FR4:** DBOPS peut configurer si un changement ServiceNow (pre-approuve) est requis pour chaque environnement cible

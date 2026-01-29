@@ -20,13 +20,17 @@ from app.models.catalog import (
     ExecutionStepsUpdate,
     RbacPoliciesUpdate,
     StatusUpdateRequest,
+    ActionTagsUpdateRequest,
     InvalidTransitionError,
     ActionListResponse,
 )
 from app.repositories import catalog_repository
 from app.repositories.catalog_repository import InvalidStateError as RepoInvalidStateError
 
+from app.api.v1 import profiles
+
 router = APIRouter(prefix="/admin", tags=["admin"])
+router.include_router(profiles.router)
 
 
 @router.get("/status")
@@ -112,15 +116,17 @@ async def update_action_steps(
     data: ExecutionStepsUpdate,
     user: UserProfile = Depends(require_profile("dbops")),
 ) -> dict:
-    """Update execution steps and change type config for an action (Story 2.2, AC #5).
+    """Update execution steps and change type config for an action (Story 2.2, AC #5; Story 2.7 connector_type).
 
+    Body: steps with connector_type (aap, servicenow, azuredevops, jira, github_actions, terraform, none)
+    and connector_config; conditional_environments required when connector_type is servicenow.
     Only allowed for actions in 'draft' status.
 
     Returns:
         HTTP 200 with { "data": ActionDetail } on success
         HTTP 404 if action not found
         HTTP 400 if action is not in draft status
-        HTTP 422 if validation fails
+        HTTP 422 if validation fails (e.g. servicenow without conditional_environments)
     """
     try:
         action = await catalog_repository.update_execution_steps(
@@ -213,6 +219,48 @@ async def update_action_rbac(
         )
 
     return {"data": action.model_dump(mode="json")}
+
+
+@router.put("/actions/{action_id}/tags")
+async def update_action_tags(
+    action_id: int,
+    data: ActionTagsUpdateRequest,
+    user: UserProfile = Depends(require_profile("dbops")),
+) -> dict:
+    """Update tags for an action (Story 2.6, AC #5).
+
+    Body: { "tag_ids": [1, 2, 3] } or { "tag_names": ["rac", "dataguard"] }.
+    tag_names creates missing tags on the fly (create_tag_if_not_exists).
+    Replaces all tags for the action.
+
+    Returns:
+        { "data": ActionDetail } or 404 if action not found
+    """
+    action = await catalog_repository.get_by_id(action_id)
+    if action is None:
+        raise NotFoundError(
+            code="NOT_FOUND",
+            message=f"Action {action_id} introuvable",
+            details={"action_id": action_id},
+        )
+    if data.tag_names is not None:
+        seen: set[str] = set()
+        tag_ids = []
+        for n in data.tag_names:
+            if n not in seen:
+                seen.add(n)
+                tag_ids.append(await catalog_repository.create_tag_if_not_exists(n))
+    else:
+        tag_ids = data.tag_ids or []
+    await catalog_repository.set_action_tags(action_id, tag_ids)
+    updated = await catalog_repository.get_by_id(action_id)
+    if updated is None:
+        raise NotFoundError(
+            code="NOT_FOUND",
+            message=f"Action {action_id} introuvable",
+            details={"action_id": action_id},
+        )
+    return {"data": updated.model_dump(mode="json")}
 
 
 @router.patch("/actions/{action_id}/status")

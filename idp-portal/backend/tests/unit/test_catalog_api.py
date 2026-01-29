@@ -66,7 +66,9 @@ class TestListCatalogActions:
         assert "data" in data
         assert len(data["data"]) == 1
         assert data["data"][0]["status"] == "published"
-        mock_list.assert_called_once_with(status=ActionStatus.PUBLISHED, user_profile=None)
+        mock_list.assert_called_once_with(
+            status=ActionStatus.PUBLISHED, user_profile=None, tags_filter=None
+        )
 
     @pytest.mark.asyncio
     async def test_list_catalog_actions_dbops_sees_all(self, client, sample_published_action):
@@ -87,7 +89,9 @@ class TestListCatalogActions:
         assert response.status_code == status.HTTP_200_OK
         assert len(response.json()["data"]) == 1
         # DBOPS: catalog_profile is set to None so no filter
-        mock_list.assert_called_once_with(status=ActionStatus.PUBLISHED, user_profile=None)
+        mock_list.assert_called_once_with(
+            status=ActionStatus.PUBLISHED, user_profile=None, tags_filter=None
+        )
 
     @pytest.mark.asyncio
     async def test_list_catalog_actions_client_business_filtered(self, client, sample_published_action):
@@ -106,7 +110,11 @@ class TestListCatalogActions:
             )
 
         assert response.status_code == status.HTTP_200_OK
-        mock_list.assert_called_once_with(status=ActionStatus.PUBLISHED, user_profile=UserProfile.CLIENT_BUSINESS)
+        mock_list.assert_called_once_with(
+            status=ActionStatus.PUBLISHED,
+            user_profile=UserProfile.CLIENT_BUSINESS,
+            tags_filter=None,
+        )
 
     @pytest.mark.asyncio
     async def test_list_catalog_actions_dba_applicatif_filtered(self, client, sample_published_action):
@@ -125,4 +133,23 @@ class TestListCatalogActions:
             )
 
         assert response.status_code == status.HTTP_200_OK
-        mock_list.assert_called_once_with(status=ActionStatus.PUBLISHED, user_profile=UserProfile.DBA_APPLICATIF)
+        mock_list.assert_called_once_with(
+            status=ActionStatus.PUBLISHED,
+            user_profile=UserProfile.DBA_APPLICATIF,
+            tags_filter=None,
+        )
+
+    @pytest.mark.asyncio
+    async def test_list_catalog_actions_filter_by_tags(self, client, sample_published_action):
+        """GET /catalog/actions?tags=rac,dataguard passes tags_filter (Story 2.6, AC4)."""
+        with patch("app.repositories.catalog_repository.list_all", new_callable=AsyncMock) as mock_list:
+            mock_list.return_value = [sample_published_action]
+
+            response = await client.get("/api/v1/catalog/actions?tags=rac,dataguard")
+
+        assert response.status_code == status.HTTP_200_OK
+        mock_list.assert_called_once_with(
+            status=ActionStatus.PUBLISHED,
+            user_profile=None,
+            tags_filter=["rac", "dataguard"],
+        )

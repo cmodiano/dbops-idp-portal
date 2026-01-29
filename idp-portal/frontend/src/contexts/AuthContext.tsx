@@ -3,6 +3,21 @@ import type { NavigationTabKey, User } from '../types/common';
 import { setAuthAccessors } from '../services/api_client';
 import { refreshAccessToken, fetchCurrentUser as fetchUser, logoutApi } from '../services/auth_service';
 
+// DEV MODE: Skip SAML authentication and use a mock DBOPS user
+// Enable by setting VITE_DEV_AUTH=true in .env.local or environment
+// Disabled in test mode to allow proper auth testing
+const DEV_AUTH_ENABLED = import.meta.env.VITE_DEV_AUTH === 'true' && import.meta.env.MODE !== 'test';
+
+const DEV_MOCK_USER: User = {
+  id: 1,
+  username: 'dev.dbops',
+  display_name: 'Dev DBOPS User',
+  profile: 'dbops',
+  navigation_tabs: ['catalog', 'executions', 'dashboard', 'admin'],
+};
+
+const DEV_MOCK_TOKEN = 'dev-mock-token-for-testing';
+
 interface AuthContextValue {
   user: User | null;
   accessToken: string | null;
@@ -67,10 +82,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refreshTokenFn]);
 
   // Silent refresh on mount to restore session from httpOnly cookie
+  // In DEV_AUTH mode, skip API calls and use mock user
   useEffect(() => {
     let cancelled = false;
 
     async function tryRestore() {
+      // DEV MODE: Use mock user without API calls
+      if (DEV_AUTH_ENABLED) {
+        if (!cancelled) {
+          console.log('[DEV AUTH] Using mock DBOPS user - SAML bypassed');
+          setAccessToken(DEV_MOCK_TOKEN);
+          setUser(DEV_MOCK_USER);
+          setIsLoading(false);
+        }
+        return;
+      }
+
       const token = await refreshTokenFn();
       if (cancelled) return;
 

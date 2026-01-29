@@ -1,13 +1,96 @@
-/* TopNav — Styles that cannot be configured via Ant Design theme tokens */
+/* TopNav — Modern Navigation Styles */
 
-/* Ink bar height: 2px (UX spec) — no token available */
-.ant-tabs-ink-bar {
-  height: 2px !important;
+/* Logo hover */
+.nav-logo:hover {
+  opacity: 0.8;
 }
 
-/* Focus visible: green outline for keyboard navigation (WCAG 2.1 AA) */
-.ant-tabs-tab:focus-visible {
-  outline: 2px solid #00874E;
+/* Navigation Pills */
+.nav-pill {
+  position: relative;
+  overflow: hidden;
+}
+
+.nav-pill:hover {
+  background: rgba(0, 135, 78, 0.08) !important;
+  color: var(--ant-color-primary) !important;
+}
+
+.nav-pill-active {
+  font-weight: 600 !important;
+}
+
+.nav-pill-active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 3px;
+  background: var(--ant-color-primary);
+  border-radius: 3px 3px 0 0;
+}
+
+/* Focus states */
+.nav-pill:focus-visible,
+.theme-toggle:focus-visible,
+.nav-profile:focus-visible {
+  outline: 2px solid var(--ant-color-primary);
   outline-offset: 2px;
-  border-radius: 4px;
+}
+
+/* Theme toggle hover */
+.theme-toggle:hover {
+  background: rgba(0, 135, 78, 0.1) !important;
+  transform: scale(1.05);
+}
+
+html.dark .theme-toggle:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+
+/* Profile hover */
+.nav-profile:hover {
+  background: rgba(0, 135, 78, 0.08) !important;
+}
+
+html.dark .nav-profile:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Dark mode pill adjustments */
+html.dark .nav-pill:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Smooth transitions for all interactive elements */
+.nav-pill,
+.theme-toggle,
+.nav-profile {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* Icon animations */
+.theme-toggle svg {
+  transition: transform 0.3s ease;
+}
+
+.theme-toggle:hover svg {
+  transform: rotate(15deg);
+}
+
+/* Mobile responsive - hide labels on small screens */
+@media (max-width: 768px) {
+  .nav-pill span:last-child {
+    display: none;
+  }
+
+  .nav-pill {
+    padding: 8px 12px !important;
+  }
+
+  .nav-profile > div:last-child {
+    display: none;
+  }
 }

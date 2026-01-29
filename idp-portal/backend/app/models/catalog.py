@@ -1,17 +1,18 @@
-"""Catalog models for Software Catalog actions (Story 2.1, FR1).
+"""Catalog models for Software Catalog actions (Story 2.1, FR1; Story 2.6 tags).
 
 Defines Pydantic models for:
 - ActionCategory, ActionEngine, ActionPlatform, ActionStatus enums
 - ActionCreate: input model for creating actions
 - ActionResponse: output model for action list
 - ActionDetail: output model with full details including rbac_policies
+- TagCreate, TagResponse: tag models (Story 2.6, FR11c)
 """
 
 from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class ActionCategory(str, Enum):
@@ -50,6 +51,64 @@ class ImpactLevel(str, Enum):
     MEDIUM = "medium"
     HIGH = "high"
     CRITICAL = "critical"
+
+
+# === Story 2.6: Tag models (FR11c) ===
+
+
+def normalize_tag_name(name: str) -> str:
+    """Normalize tag name: lowercase, strip, replace spaces with nothing."""
+    if not name or not isinstance(name, str):
+        return ""
+    return name.strip().lower().replace(" ", "")
+
+
+class TagCreate(BaseModel):
+    """Input model for creating a tag (Story 2.6, AC #5).
+
+    Attributes:
+        name: Tag name (normalized: lowercase, no spaces)
+    """
+    name: str = Field(..., min_length=1, max_length=255)
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, v: str) -> str:
+        """Normalize tag name: lowercase, strip, no spaces."""
+        normalized = normalize_tag_name(v)
+        if not normalized:
+            raise ValueError("tag name cannot be empty or whitespace only")
+        return normalized
+
+
+class TagResponse(BaseModel):
+    """Output model for tag (Story 2.6, AC #5)."""
+    id: int
+    name: str
+    created_at: datetime
+
+
+class ActionTagsUpdateRequest(BaseModel):
+    """Input for PUT /admin/actions/{id}/tags (Story 2.6, AC #5).
+
+    Provide either tag_ids or tag_names. tag_names creates missing tags on the fly.
+    """
+    tag_ids: list[int] | None = None
+    tag_names: list[str] | None = None
+
+    @field_validator("tag_names")
+    @classmethod
+    def normalize_tag_names(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return None
+        out = [normalize_tag_name(s) for s in v if normalize_tag_name(s)]
+        return out  # keep [] to allow "clear all tags"
+
+    @model_validator(mode="after")
+    def require_tag_ids_or_tag_names(self) -> "ActionTagsUpdateRequest":
+        if self.tag_ids is None and self.tag_names is None:
+            raise ValueError("provide either tag_ids or tag_names")
+        return self
 
 
 class ActionCreate(BaseModel):
@@ -132,6 +191,7 @@ class ActionResponse(BaseModel):
     """Output model for action in list views (AC #5).
 
     Excludes rbac_policies for list performance.
+    Story 2.6: includes tags (tag names) for display.
     """
     id: int
     name: str
@@ -145,6 +205,7 @@ class ActionResponse(BaseModel):
     created_by: int | None = None
     created_at: datetime
     updated_at: datetime | None = None
+    tags: list[str] = Field(default_factory=list)
 
 
 class ActionDetail(ActionResponse):
@@ -158,6 +219,22 @@ class ActionDetail(ActionResponse):
 
 
 # === Story 2.2: Execution Steps and Change Type Models ===
+# === Story 2.7: ConnectorType generic connector (AC1, AC4) ===
+
+
+class ConnectorType(str, Enum):
+    """Generic connector types for execution steps (Story 2.7, AC1).
+
+    Replaces is_servicenow_change flag. connector_config holds connector-specific params
+    (e.g. ServiceNow change template). conditional_environments applies when step is conditional.
+    """
+    AAP = "aap"
+    SERVICENOW = "servicenow"
+    AZUREDEVOPS = "azuredevops"
+    JIRA = "jira"
+    GITHUB_ACTIONS = "github_actions"
+    TERRAFORM = "terraform"
+    NONE = "none"
 
 
 class ExecutionStepType(str, Enum):
@@ -168,25 +245,30 @@ class ExecutionStepType(str, Enum):
 
 
 class ChangeType(str, Enum):
-    """ServiceNow change types (FR4)."""
+    """ServiceNow change types (FR4). Story 2.8: CAB removed; only pre-approved supported.
+
+    change_type_config means « changement requis (pre-approuvé) » per environment.
+    Stored values are exclusively "pre_approved". Legacy "cab" is converted on read (repository).
+    """
     PRE_APPROVED = "pre_approved"
-    CAB = "cab"
 
 
 class ExecutionStep(BaseModel):
-    """Single execution step configuration (AC #1, #2).
+    """Single execution step configuration (AC #1, #2; Story 2.7: connector_type).
 
     Attributes:
         order: Step order (1-based, sequential)
         name: Step name (1-255 chars)
         type: Step type (prerequisite, execution, verification)
-        is_servicenow_change: Whether this step opens a ServiceNow change
-        conditional_environments: Environments where this step applies (if conditional)
+        connector_type: Generic connector (aap, servicenow, azuredevops, jira, github_actions, terraform, none).
+        connector_config: Connector-specific config (e.g. ServiceNow change template). Optional.
+        conditional_environments: Required when connector_type is servicenow (environments where step applies).
     """
     order: int = Field(..., ge=1)
     name: str = Field(..., min_length=1, max_length=255)
     type: ExecutionStepType
-    is_servicenow_change: bool = False
+    connector_type: ConnectorType = ConnectorType.NONE
+    connector_config: dict[str, Any] | None = None
     conditional_environments: list[str] | None = None
 
     @field_validator("name")
@@ -203,12 +285,11 @@ class ExecutionStep(BaseModel):
     def validate_conditional_environments(
         cls, v: list[str] | None, info
     ) -> list[str] | None:
-        """Validate conditional_environments is provided when is_servicenow_change is True."""
-        # Access other field values via info.data
-        is_sn_change = info.data.get("is_servicenow_change", False)
-        if is_sn_change and (v is None or len(v) == 0):
+        """Validate conditional_environments is required when connector_type is servicenow (Story 2.7)."""
+        connector_type = info.data.get("connector_type", ConnectorType.NONE)
+        if connector_type == ConnectorType.SERVICENOW and (v is None or len(v) == 0):
             raise ValueError(
-                "conditional_environments is required when is_servicenow_change is True"
+                "conditional_environments is required when connector_type is servicenow"
             )
         return v
 
@@ -385,9 +466,9 @@ class StatusUpdateRequest(BaseModel):
 
 
 class ActionListItem(BaseModel):
-    """Output model for action in admin dashboard list (Story 2.4, AC #2).
+    """Output model for action in admin dashboard list (Story 2.4, AC #2; Story 2.6 tags).
 
-    Lightweight model for listing actions with execution stats.
+    Lightweight model for listing actions with execution stats and tags.
     """
     id: int
     name: str
@@ -396,6 +477,7 @@ class ActionListItem(BaseModel):
     engine: ActionEngine
     created_at: datetime
     execution_count: int = 0
+    tags: list[str] = Field(default_factory=list)
 
 
 class PaginationInfo(BaseModel):

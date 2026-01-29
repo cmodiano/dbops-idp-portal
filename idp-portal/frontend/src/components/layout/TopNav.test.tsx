@@ -5,7 +5,8 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { ConfigProvider } from 'antd';
 import { TopNav } from './TopNav';
 import { AuthProvider } from '../../contexts/AuthContext';
-import { desjardinsTheme } from '../../theme/desjardins';
+import { ThemeProvider } from '../../contexts/ThemeContext';
+import { lightTheme } from '../../theme/desjardins';
 
 function mockAuthSession(profile: string, navigationTabs: string[]) {
   global.fetch = vi.fn()
@@ -44,11 +45,13 @@ function renderTopNav(initialPath = '/catalog') {
   );
 
   return render(
-    <ConfigProvider theme={desjardinsTheme}>
-      <AuthProvider>
-        <RouterProvider router={router} />
-      </AuthProvider>
-    </ConfigProvider>,
+    <ThemeProvider>
+      <ConfigProvider theme={lightTheme}>
+        <AuthProvider>
+          <RouterProvider router={router} />
+        </AuthProvider>
+      </ConfigProvider>
+    </ThemeProvider>,
   );
 }
 
@@ -65,7 +68,7 @@ describe('TopNav', () => {
       await waitFor(() => {
         expect(screen.getByText('Catalogue')).toBeInTheDocument();
       });
-      expect(screen.getByText('Executions')).toBeInTheDocument();
+      expect(screen.getByText('Exécutions')).toBeInTheDocument();
       expect(screen.getByText('Dashboard')).toBeInTheDocument();
       expect(screen.getByText('Admin')).toBeInTheDocument();
     });
@@ -79,7 +82,7 @@ describe('TopNav', () => {
       await waitFor(() => {
         expect(screen.getByText('Catalogue')).toBeInTheDocument();
       });
-      expect(screen.getByText('Executions')).toBeInTheDocument();
+      expect(screen.getByText('Exécutions')).toBeInTheDocument();
       expect(screen.getByText('Dashboard')).toBeInTheDocument();
       expect(screen.queryByText('Admin')).not.toBeInTheDocument();
     });
@@ -117,9 +120,10 @@ describe('TopNav', () => {
       await user.click(screen.getByLabelText('Menu profil utilisateur'));
 
       await waitFor(() => {
+        // Full name appears in dropdown
         expect(screen.getByText('Test User')).toBeInTheDocument();
-        expect(screen.getByText('dbops')).toBeInTheDocument();
-        expect(screen.getByText('Deconnexion')).toBeInTheDocument();
+        // Logout button with accent
+        expect(screen.getByText('Déconnexion')).toBeInTheDocument();
       });
     });
   });
@@ -136,19 +140,70 @@ describe('TopNav', () => {
       });
     });
 
-    it('renders IDP Portal brand', async () => {
+    it('renders Portail DBOPS brand', async () => {
       mockAuthSession('dbops', ['catalog', 'executions', 'dashboard', 'admin']);
       renderTopNav();
 
       await waitFor(() => {
-        expect(screen.getByText('IDP Portal')).toBeInTheDocument();
+        expect(screen.getByText('DBOPS')).toBeInTheDocument();
       });
     });
 
-    it('no user shows no avatar', () => {
+    it('no user shows no avatar', async () => {
       global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 401 });
       renderTopNav();
-      expect(screen.queryByLabelText('Menu profil utilisateur')).not.toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.queryByLabelText('Menu profil utilisateur')).not.toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Theme Toggle (AC #1 Story 2.15)', () => {
+    beforeEach(() => {
+      localStorage.clear();
+      // Mock matchMedia for light system preference
+      window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+        matches: query.includes('dark') ? false : true,
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }));
+    });
+
+    it('renders theme toggle button', async () => {
+      mockAuthSession('dbops', ['catalog', 'executions', 'dashboard', 'admin']);
+      renderTopNav();
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('Activer le theme sombre')).toBeInTheDocument();
+      });
+    });
+
+    it('toggle button has role="switch" for accessibility (AC #3)', async () => {
+      mockAuthSession('dbops', ['catalog', 'executions', 'dashboard', 'admin']);
+      renderTopNav();
+
+      await waitFor(() => {
+        const toggle = screen.getByRole('switch');
+        expect(toggle).toBeInTheDocument();
+      });
+    });
+
+    it('toggle button changes theme on click (AC #1)', async () => {
+      const user = userEvent.setup();
+      mockAuthSession('dbops', ['catalog', 'executions', 'dashboard', 'admin']);
+      renderTopNav();
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('Activer le theme sombre')).toBeInTheDocument();
+      });
+
+      // Click to switch to dark mode
+      await user.click(screen.getByRole('switch'));
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('Activer le theme clair')).toBeInTheDocument();
+      });
     });
   });
 });

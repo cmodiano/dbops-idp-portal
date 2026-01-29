@@ -25,6 +25,14 @@ function mockAuthSession(profile: string, navigationTabs: string[]) {
 describe('App routing', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    localStorage.clear();
+    // Mock matchMedia for theme context
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes('dark') ? false : true,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
     // Default: no session
     global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 401 });
   });

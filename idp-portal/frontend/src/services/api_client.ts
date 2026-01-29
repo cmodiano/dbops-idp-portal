@@ -37,6 +37,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     const body = await response.json().catch(() => ({ error: { message: 'Unknown error' } }));
     throw new Error(body.error?.message ?? 'Unknown error');
   }
+  if (response.status === 204) return undefined as T;
   const body = await response.json();
   return body.data as T;
 }

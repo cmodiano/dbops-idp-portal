@@ -1,21 +1,23 @@
 /**
- * AdminPage - Administration du Catalogue (Story 2.1, AC #1; Story 2.4, AC #2).
+ * AdminPage - Administration du Catalogue (Story 2.1, AC #1; Story 2.4, AC #2; Story 2.9 Profiles).
  *
  * Features:
- * - List of existing actions (table) with execution count
- * - "Nouvelle action" button to open creation modal
- * - Success/error notifications
- * - Status badge with visual indicators
+ * - Tabs: Actions | Profiles
+ * - Actions: list, "Nouvelle action", status badge, notifications
+ * - Profiles: list, "Nouveau profil", create/edit/delete (Story 2.9, AC #1–#4)
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Typography, Button, Table, Space, notification } from 'antd';
+import { Typography, Button, Table, Space, notification, Card, Tag, Tabs } from 'antd';
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { ActionForm } from '../components/admin/ActionForm';
 import { ActionStatusBadge } from '../components/admin/ActionStatusBadge';
+import { ProfileForm } from '../components/admin/ProfileForm';
+import { ProfilesTable } from '../components/admin/ProfilesTable';
 import { createAction, getAction, getAdminActions, updateActionStatus } from '../services/admin_service';
-import type { ActionCreate, ActionListItem, ActionDetail, ActionStatus, StatusTransition, AdminActionsFilters } from '../types/api';
+import { getProfiles, getProfile, createProfile, updateProfile, deleteProfile } from '../services/profiles_service';
+import type { ActionCreate, ActionListItem, ActionDetail, ActionResponse, ActionStatus, StatusTransition, AdminActionsFilters, ProfileCreate, ProfileUpdate, ProfileResponse, ProfileListItem } from '../types/api';
 
 const { Title } = Typography;
 
@@ -64,6 +66,21 @@ const getColumns = (
     key: 'execution_count',
     sorter: (a, b) => a.execution_count - b.execution_count,
     width: 100,
+  },
+  {
+    title: 'Tags',
+    dataIndex: 'tags',
+    key: 'tags',
+    render: (tags: string[] | undefined) =>
+      (tags?.length ? (
+        <Space size={4} wrap>
+          {tags.map((t) => (
+            <Tag key={t}>{t}</Tag>
+          ))}
+        </Space>
+      ) : (
+        <Typography.Text type="secondary">—</Typography.Text>
+      )),
   },
   {
     title: 'Date de creation',
@@ -122,6 +139,13 @@ export default function AdminPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [editAction, setEditAction] = useState<ActionDetail | null>(null);
 
+  const [profiles, setProfiles] = useState<ProfileListItem[]>([]);
+  const [profilesLoading, setProfilesLoading] = useState(false);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [profileSubmitting, setProfileSubmitting] = useState(false);
+  const [profileSubmitError, setProfileSubmitError] = useState<string | null>(null);
+  const [editProfile, setEditProfile] = useState<ProfileResponse | null>(null);
+
   const fetchActions = useCallback(async (filters?: AdminActionsFilters) => {
     setLoading(true);
     try {
@@ -140,6 +164,21 @@ export default function AdminPage() {
   useEffect(() => {
     fetchActions();
   }, [fetchActions]);
+
+  const fetchProfiles = useCallback(async () => {
+    setProfilesLoading(true);
+    try {
+      const list = await getProfiles();
+      setProfiles(list);
+    } catch (err) {
+      notification.error({
+        message: 'Erreur',
+        description: err instanceof Error ? err.message : 'Erreur de chargement des profils',
+      });
+    } finally {
+      setProfilesLoading(false);
+    }
+  }, []);
 
   const handleCreate = async (action: ActionCreate) => {
     setSubmitting(true);
@@ -194,7 +233,7 @@ export default function AdminPage() {
     }
   };
 
-  const handleSuccess = (action: ActionDetail | ActionListItem) => {
+  const handleSuccess = (action: ActionDetail | ActionResponse | ActionListItem) => {
     const wasEdit = !!editAction;
     setSubmitting(false);
     setModalOpen(false);
@@ -214,36 +253,159 @@ export default function AdminPage() {
     setSubmitError(null);
   };
 
+  const handleProfileCreate = async (payload: ProfileCreate) => {
+    setProfileSubmitting(true);
+    setProfileSubmitError(null);
+    try {
+      const created = await createProfile(payload);
+      return created;
+    } catch (err) {
+      setProfileSubmitError(err instanceof Error ? err.message : 'Erreur de creation');
+      setProfileSubmitting(false);
+      throw err;
+    }
+  };
+
+  const handleProfileUpdate = async (payload: ProfileUpdate) => {
+    if (!editProfile) throw new Error('editProfile manquant');
+    setProfileSubmitting(true);
+    setProfileSubmitError(null);
+    try {
+      const updated = await updateProfile(editProfile.id, payload);
+      return updated;
+    } catch (err) {
+      setProfileSubmitError(err instanceof Error ? err.message : 'Erreur de mise a jour');
+      setProfileSubmitting(false);
+      throw err;
+    }
+  };
+
+  const handleProfileEdit = async (record: ProfileListItem) => {
+    setProfileSubmitError(null);
+    try {
+      const detail = await getProfile(record.id);
+      setEditProfile(detail);
+      setProfileModalOpen(true);
+    } catch (err) {
+      notification.error({
+        message: 'Erreur',
+        description: err instanceof Error ? err.message : 'Impossible de charger le profil',
+      });
+    }
+  };
+
+  const handleProfileDelete = async (record: ProfileListItem) => {
+    try {
+      await deleteProfile(record.id);
+      notification.success({ message: 'Succes', description: `Profil "${record.name}" supprime` });
+      fetchProfiles();
+    } catch (err) {
+      notification.error({
+        message: 'Erreur',
+        description: err instanceof Error ? err.message : 'Impossible de supprimer le profil',
+      });
+    }
+  };
+
+  const handleProfileSuccess = (profile: ProfileResponse) => {
+    setProfileSubmitting(false);
+    setProfileModalOpen(false);
+    setEditProfile(null);
+    setProfileSubmitError(null);
+    notification.success({
+      message: 'Succes',
+      description: editProfile ? `Profil "${profile.name}" mis a jour` : `Profil "${profile.name}" cree`,
+    });
+    fetchProfiles();
+  };
+
+  const handleProfileCancel = () => {
+    setProfileModalOpen(false);
+    setEditProfile(null);
+    setProfileSubmitError(null);
+  };
+
+  const handleProfileSubmit = async (values: ProfileCreate | ProfileUpdate) => {
+    if (editProfile) return handleProfileUpdate(values as ProfileUpdate);
+    return handleProfileCreate(values as ProfileCreate);
+  };
+
   return (
-    <div>
-      <Space style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 24 }}>
-        <Title level={2} style={{ margin: 0 }}>
+    <div style={{ maxWidth: 1400, margin: '0 auto' }}>
+      {/* Page Header */}
+      <div style={{ marginBottom: 32 }}>
+        <Title level={2} style={{ margin: 0, marginBottom: 8 }}>
           Administration du Catalogue
         </Title>
-        <Space>
-          <Button icon={<ReloadOutlined />} onClick={fetchActions} loading={loading}>
-            Actualiser
-          </Button>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => {
-              setEditAction(null);
-              setModalOpen(true);
-            }}
-          >
-            Nouvelle action
-          </Button>
-        </Space>
-      </Space>
+        <Typography.Text type="secondary">
+          Gerez vos actions et profils
+        </Typography.Text>
+      </div>
 
-      <Table
-        columns={getColumns(handleEdit, handleStatusChange)}
-        dataSource={actions}
-        rowKey="id"
-        loading={loading}
-        pagination={{ pageSize: 10, showSizeChanger: true }}
-        locale={{ emptyText: 'Aucune action dans le catalogue' }}
+      <Tabs
+        defaultActiveKey="actions"
+        onChange={(key) => { if (key === 'profiles') fetchProfiles(); }}
+        items={[
+          {
+            key: 'actions',
+            label: 'Actions',
+            children: (
+              <Card
+                title={
+                  <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+                    <span>Actions ({actions.length})</span>
+                    <Space>
+                      <Button icon={<ReloadOutlined />} onClick={() => fetchActions()} loading={loading}>
+                        Actualiser
+                      </Button>
+                      <Button
+                        type="primary"
+                        icon={<PlusOutlined />}
+                        onClick={() => {
+                          setEditAction(null);
+                          setModalOpen(true);
+                        }}
+                      >
+                        Nouvelle action
+                      </Button>
+                    </Space>
+                  </Space>
+                }
+                styles={{
+                  header: { borderBottom: 'none', paddingBottom: 0 },
+                  body: { paddingTop: 16 },
+                }}
+              >
+                <Table
+                  columns={getColumns(handleEdit, handleStatusChange)}
+                  dataSource={actions}
+                  rowKey="id"
+                  loading={loading}
+                  pagination={{ pageSize: 10, showSizeChanger: true }}
+                  locale={{ emptyText: 'Aucune action dans le catalogue' }}
+                />
+              </Card>
+            ),
+          },
+          {
+            key: 'profiles',
+            label: 'Profiles',
+            children: (
+              <Card styles={{ header: { borderBottom: 'none', paddingBottom: 0 }, body: { paddingTop: 16 } }}>
+                <ProfilesTable
+                  dataSource={profiles}
+                  loading={profilesLoading}
+                  onEdit={handleProfileEdit}
+                  onDelete={handleProfileDelete}
+                  onNew={() => {
+                    setEditProfile(null);
+                    setProfileModalOpen(true);
+                  }}
+                />
+              </Card>
+            ),
+          },
+        ]}
       />
 
       <ActionForm
@@ -254,6 +416,16 @@ export default function AdminPage() {
         error={submitError}
         editAction={editAction}
         onSuccess={handleSuccess}
+      />
+
+      <ProfileForm
+        open={profileModalOpen}
+        onCancel={handleProfileCancel}
+        onSubmit={handleProfileSubmit}
+        loading={profileSubmitting}
+        error={profileSubmitError}
+        editProfile={editProfile}
+        onSuccess={handleProfileSuccess}
       />
     </div>
   );

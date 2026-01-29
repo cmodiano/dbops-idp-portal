@@ -18,10 +18,15 @@ from app.models.catalog import (
     ActionCreate,
     ActionResponse,
     ActionDetail,
+    ConnectorType,
     ExecutionStepType,
     ExecutionStep,
     ChangeType,
     ExecutionStepsUpdate,
+    TagCreate,
+    TagResponse,
+    ActionTagsUpdateRequest,
+    normalize_tag_name,
 )
 
 
@@ -379,12 +384,12 @@ class TestActionDetail:
         assert hasattr(detail, "rbac_policies")
 
     def test_action_detail_includes_execution_steps(self):
-        """AC #1: ActionDetail includes execution_steps field (Story 2.2)."""
+        """AC #1: ActionDetail includes execution_steps field (Story 2.2; Story 2.7 connector_type)."""
         step = ExecutionStep(
             order=1,
             name="Verification",
             type=ExecutionStepType.PREREQUISITE,
-            is_servicenow_change=False,
+            connector_type=ConnectorType.NONE,
         )
         detail = ActionDetail(
             id=1,
@@ -395,11 +400,11 @@ class TestActionDetail:
             status=ActionStatus.DRAFT,
             created_at=datetime(2026, 1, 28),
             execution_steps=[step],
-            change_type_config={"PROD": ChangeType.CAB},
+            change_type_config={"PROD": ChangeType.PRE_APPROVED},
         )
         assert detail.execution_steps is not None
         assert len(detail.execution_steps) == 1
-        assert detail.change_type_config == {"PROD": ChangeType.CAB}
+        assert detail.change_type_config == {"PROD": ChangeType.PRE_APPROVED}
 
 
 # === Story 2.2: Execution Steps and Change Type Models Tests ===
@@ -416,19 +421,33 @@ class TestExecutionStepTypeEnum:
 
 
 class TestChangeTypeEnum:
-    """Tests for ChangeType enum (AC #3)."""
+    """Tests for ChangeType enum (AC #3). Story 2.8: CAB removed, only pre_approved."""
 
     def test_change_type_values(self):
         """Test ChangeType enum values."""
         assert ChangeType.PRE_APPROVED.value == "pre_approved"
-        assert ChangeType.CAB.value == "cab"
+        assert len(ChangeType) == 1
+
+
+class TestConnectorTypeEnum:
+    """Tests for ConnectorType enum (Story 2.7, AC1)."""
+
+    def test_connector_type_values(self):
+        """Test ConnectorType enum values."""
+        assert ConnectorType.AAP.value == "aap"
+        assert ConnectorType.SERVICENOW.value == "servicenow"
+        assert ConnectorType.AZUREDEVOPS.value == "azuredevops"
+        assert ConnectorType.JIRA.value == "jira"
+        assert ConnectorType.GITHUB_ACTIONS.value == "github_actions"
+        assert ConnectorType.TERRAFORM.value == "terraform"
+        assert ConnectorType.NONE.value == "none"
 
 
 class TestExecutionStepValidation:
     """Tests for ExecutionStep model validation (AC #1, #2)."""
 
     def test_valid_execution_step_minimal(self):
-        """Test creating step with minimal required fields."""
+        """Test creating step with minimal required fields (Story 2.7: connector_type default)."""
         step = ExecutionStep(
             order=1,
             name="Verification pre-requis",
@@ -437,19 +456,22 @@ class TestExecutionStepValidation:
         assert step.order == 1
         assert step.name == "Verification pre-requis"
         assert step.type == ExecutionStepType.PREREQUISITE
-        assert step.is_servicenow_change is False
+        assert step.connector_type == ConnectorType.NONE
+        assert step.connector_config is None
         assert step.conditional_environments is None
 
     def test_valid_execution_step_with_servicenow(self):
-        """AC #2: Test step with ServiceNow change and conditional environments."""
+        """AC #2: Test step with connector_type servicenow and conditional environments (Story 2.7)."""
         step = ExecutionStep(
             order=2,
             name="Ouverture changement ServiceNow",
             type=ExecutionStepType.EXECUTION,
-            is_servicenow_change=True,
+            connector_type=ConnectorType.SERVICENOW,
+            connector_config={},
             conditional_environments=["STAGING", "PROD"],
         )
-        assert step.is_servicenow_change is True
+        assert step.connector_type == ConnectorType.SERVICENOW
+        assert step.connector_config == {}
         assert step.conditional_environments == ["STAGING", "PROD"]
 
     def test_step_name_strip_whitespace(self):
@@ -497,25 +519,25 @@ class TestExecutionStepValidation:
                 type=ExecutionStepType.PREREQUISITE,
             )
 
-    def test_servicenow_change_requires_environments(self):
-        """AC #2: Test that is_servicenow_change=True requires conditional_environments."""
+    def test_servicenow_connector_requires_environments(self):
+        """AC #2 / Story 2.7: connector_type=servicenow requires conditional_environments."""
         with pytest.raises(ValueError, match="conditional_environments is required"):
             ExecutionStep(
                 order=1,
                 name="Ouverture changement",
                 type=ExecutionStepType.EXECUTION,
-                is_servicenow_change=True,
+                connector_type=ConnectorType.SERVICENOW,
                 conditional_environments=None,
             )
 
-    def test_servicenow_change_empty_environments_raises_error(self):
-        """AC #2: Test that empty conditional_environments raises error when servicenow_change=True."""
+    def test_servicenow_connector_empty_environments_raises_error(self):
+        """AC #2 / Story 2.7: empty conditional_environments raises error when connector_type=servicenow."""
         with pytest.raises(ValueError, match="conditional_environments is required"):
             ExecutionStep(
                 order=1,
                 name="Ouverture changement",
                 type=ExecutionStepType.EXECUTION,
-                is_servicenow_change=True,
+                connector_type=ConnectorType.SERVICENOW,
                 conditional_environments=[],
             )
 
@@ -524,21 +546,21 @@ class TestExecutionStepsUpdateValidation:
     """Tests for ExecutionStepsUpdate model validation (AC #5)."""
 
     def test_valid_execution_steps_update(self):
-        """Test valid ExecutionStepsUpdate with sequential order."""
+        """Test valid ExecutionStepsUpdate with sequential order (Story 2.7: connector_type)."""
         update = ExecutionStepsUpdate(
             steps=[
-                ExecutionStep(order=1, name="Step 1", type=ExecutionStepType.PREREQUISITE),
-                ExecutionStep(order=2, name="Step 2", type=ExecutionStepType.EXECUTION),
-                ExecutionStep(order=3, name="Step 3", type=ExecutionStepType.VERIFICATION),
+                ExecutionStep(order=1, name="Step 1", type=ExecutionStepType.PREREQUISITE, connector_type=ConnectorType.NONE),
+                ExecutionStep(order=2, name="Step 2", type=ExecutionStepType.EXECUTION, connector_type=ConnectorType.NONE),
+                ExecutionStep(order=3, name="Step 3", type=ExecutionStepType.VERIFICATION, connector_type=ConnectorType.NONE),
             ],
             change_type_config={
                 "DEV": ChangeType.PRE_APPROVED,
                 "STAGING": ChangeType.PRE_APPROVED,
-                "PROD": ChangeType.CAB,
+                "PROD": ChangeType.PRE_APPROVED,
             },
         )
         assert len(update.steps) == 3
-        assert update.change_type_config["PROD"] == ChangeType.CAB
+        assert update.change_type_config["PROD"] == ChangeType.PRE_APPROVED
 
     def test_empty_steps_raises_error(self):
         """Test that empty steps list raises validation error."""
@@ -550,8 +572,8 @@ class TestExecutionStepsUpdateValidation:
         with pytest.raises(ValueError, match="step order must be sequential"):
             ExecutionStepsUpdate(
                 steps=[
-                    ExecutionStep(order=1, name="Step 1", type=ExecutionStepType.PREREQUISITE),
-                    ExecutionStep(order=3, name="Step 3", type=ExecutionStepType.VERIFICATION),
+                    ExecutionStep(order=1, name="Step 1", type=ExecutionStepType.PREREQUISITE, connector_type=ConnectorType.NONE),
+                    ExecutionStep(order=3, name="Step 3", type=ExecutionStepType.VERIFICATION, connector_type=ConnectorType.NONE),
                 ]
             )
 
@@ -560,8 +582,8 @@ class TestExecutionStepsUpdateValidation:
         with pytest.raises(ValueError, match="order values must be unique"):
             ExecutionStepsUpdate(
                 steps=[
-                    ExecutionStep(order=1, name="Step 1", type=ExecutionStepType.PREREQUISITE),
-                    ExecutionStep(order=1, name="Step 2", type=ExecutionStepType.EXECUTION),
+                    ExecutionStep(order=1, name="Step 1", type=ExecutionStepType.PREREQUISITE, connector_type=ConnectorType.NONE),
+                    ExecutionStep(order=1, name="Step 2", type=ExecutionStepType.EXECUTION, connector_type=ConnectorType.NONE),
                 ]
             )
 
@@ -570,8 +592,8 @@ class TestExecutionStepsUpdateValidation:
         with pytest.raises(ValueError, match="step order must be sequential starting from 1"):
             ExecutionStepsUpdate(
                 steps=[
-                    ExecutionStep(order=2, name="Step 2", type=ExecutionStepType.PREREQUISITE),
-                    ExecutionStep(order=3, name="Step 3", type=ExecutionStepType.EXECUTION),
+                    ExecutionStep(order=2, name="Step 2", type=ExecutionStepType.PREREQUISITE, connector_type=ConnectorType.NONE),
+                    ExecutionStep(order=3, name="Step 3", type=ExecutionStepType.EXECUTION, connector_type=ConnectorType.NONE),
                 ]
             )
 
@@ -579,7 +601,7 @@ class TestExecutionStepsUpdateValidation:
         """AC #3: Test that change_type_config is optional."""
         update = ExecutionStepsUpdate(
             steps=[
-                ExecutionStep(order=1, name="Step 1", type=ExecutionStepType.PREREQUISITE),
+                ExecutionStep(order=1, name="Step 1", type=ExecutionStepType.PREREQUISITE, connector_type=ConnectorType.NONE),
             ],
             change_type_config=None,
         )
@@ -589,7 +611,7 @@ class TestExecutionStepsUpdateValidation:
         """Test that single step is valid."""
         update = ExecutionStepsUpdate(
             steps=[
-                ExecutionStep(order=1, name="Only Step", type=ExecutionStepType.EXECUTION),
+                ExecutionStep(order=1, name="Only Step", type=ExecutionStepType.EXECUTION, connector_type=ConnectorType.NONE),
             ],
         )
         assert len(update.steps) == 1
@@ -876,3 +898,87 @@ class TestActionListItemModel:
             created_at=datetime(2026, 1, 28),
         )
         assert item.execution_count == 0
+
+    def test_action_list_item_default_tags(self):
+        """Test ActionListItem with default tags (Story 2.6)."""
+        from app.models.catalog import ActionListItem, ActionStatus, ActionCategory, ActionEngine
+
+        item = ActionListItem(
+            id=1,
+            name="Test",
+            status=ActionStatus.DRAFT,
+            category=ActionCategory.ADMINISTRATION,
+            engine=ActionEngine.SQL_SERVER,
+            created_at=datetime(2026, 1, 28),
+        )
+        assert item.tags == []
+
+
+class TestTagModels:
+    """Tests for Tag models (Story 2.6, FR11c)."""
+
+    def test_normalize_tag_name(self):
+        """Test normalize_tag_name: lowercase, strip, no spaces."""
+        assert normalize_tag_name("RAC") == "rac"
+        assert normalize_tag_name("  Data Guard  ") == "dataguard"
+        assert normalize_tag_name("provisioning") == "provisioning"
+        assert normalize_tag_name("") == ""
+        assert normalize_tag_name("   ") == ""
+
+    def test_tag_create_normalizes_name(self):
+        """Test TagCreate normalizes name to lowercase, no spaces."""
+        tag = TagCreate(name="  RAC  ")
+        assert tag.name == "rac"
+        tag2 = TagCreate(name="Data Guard")
+        assert tag2.name == "dataguard"
+
+    def test_tag_create_empty_raises(self):
+        """Test TagCreate with empty or whitespace-only name raises (Pydantic or validator)."""
+        import pydantic
+        with pytest.raises((ValueError, pydantic.ValidationError)):
+            TagCreate(name="")
+        with pytest.raises(ValueError, match="cannot be empty"):
+            TagCreate(name="   ")
+
+    def test_tag_response(self):
+        """Test TagResponse model."""
+        tag = TagResponse(
+            id=1,
+            name="rac",
+            created_at=datetime(2026, 1, 28, 12, 0, 0),
+        )
+        assert tag.id == 1
+        assert tag.name == "rac"
+        assert tag.created_at.year == 2026
+
+
+class TestActionTagsUpdateRequest:
+    """Tests for ActionTagsUpdateRequest (Story 2.6, AC #5)."""
+
+    def test_tag_ids_only(self):
+        """Provide tag_ids only."""
+        r = ActionTagsUpdateRequest(tag_ids=[1, 2, 3])
+        assert r.tag_ids == [1, 2, 3]
+        assert r.tag_names is None
+
+    def test_tag_names_only(self):
+        """Provide tag_names only; normalizes to lowercase, no spaces."""
+        r = ActionTagsUpdateRequest(tag_names=["RAC", "Data Guard"])
+        assert r.tag_names == ["rac", "dataguard"]
+        assert r.tag_ids is None
+
+    def test_tag_ids_empty_allowed(self):
+        """tag_ids=[] allowed (clear all tags)."""
+        r = ActionTagsUpdateRequest(tag_ids=[])
+        assert r.tag_ids == []
+
+    def test_tag_names_empty_allowed(self):
+        """tag_names=[] allowed (clear all tags)."""
+        r = ActionTagsUpdateRequest(tag_names=[])
+        assert r.tag_names == []
+
+    def test_both_none_raises(self):
+        """Both tag_ids and tag_names None raises."""
+        import pydantic
+        with pytest.raises((ValueError, pydantic.ValidationError)):
+            ActionTagsUpdateRequest()

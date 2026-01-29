@@ -14,6 +14,7 @@ from app.models.catalog import (
     ActionEngine,
     ActionPlatform,
     ActionStatus,
+    ConnectorType,
     ExecutionStep,
     ExecutionStepType,
     ChangeType,
@@ -226,12 +227,13 @@ class TestCreate:
         with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
             mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            result = await catalog_repository.create(sample_action_create, user_id=42)
+            with patch("app.repositories.catalog_repository.get_tags_for_action", new_callable=AsyncMock, return_value=[]):
+                result = await catalog_repository.create(sample_action_create, user_id=42)
 
         assert result.id == 1
         assert result.name == "Create PDB Oracle"
         assert result.status == ActionStatus.DRAFT
+        assert result.tags == []
 
     @pytest.mark.asyncio
     async def test_create_action_with_json_fields(self, sample_action_create, mock_db_row_with_rbac):
@@ -266,8 +268,8 @@ class TestCreate:
         with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
             mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            await catalog_repository.create(sample_action_create, user_id=42)
+            with patch("app.repositories.catalog_repository.get_tags_for_action", new_callable=AsyncMock, return_value=[]):
+                await catalog_repository.create(sample_action_create, user_id=42)
 
         # Verify JSON serialization
         assert captured_params["parameters_schema"] is not None
@@ -283,7 +285,7 @@ class TestGetById:
 
     @pytest.mark.asyncio
     async def test_get_by_id_found(self, mock_db_row_with_rbac):
-        """Test getting action by ID when found."""
+        """Test getting action by ID when found (Story 2.6: tags mocked)."""
         mock_cursor = AsyncMock()
         mock_cursor.fetchone = AsyncMock(return_value=mock_db_row_with_rbac)
         mock_cursor.close = AsyncMock()
@@ -294,13 +296,14 @@ class TestGetById:
         with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
             mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            result = await catalog_repository.get_by_id(1)
+            with patch("app.repositories.catalog_repository.get_tags_for_action", new_callable=AsyncMock, return_value=[]):
+                result = await catalog_repository.get_by_id(1)
 
         assert result is not None
         assert result.id == 1
         assert result.name == "Create PDB Oracle"
         assert result.rbac_policies is not None
+        assert result.tags == []
 
     @pytest.mark.asyncio
     async def test_get_by_id_not_found(self):
@@ -326,7 +329,7 @@ class TestListAll:
 
     @pytest.mark.asyncio
     async def test_list_all_no_filter(self, mock_db_row):
-        """Test listing all actions without filter."""
+        """Test listing all actions without filter (Story 2.6: tags via get_tags_for_actions)."""
         mock_cursor = AsyncMock()
         mock_cursor.fetchall = AsyncMock(return_value=[mock_db_row, mock_db_row])
         mock_cursor.close = AsyncMock()
@@ -337,11 +340,12 @@ class TestListAll:
         with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
             mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            result = await catalog_repository.list_all()
+            with patch("app.repositories.catalog_repository.get_tags_for_actions", new_callable=AsyncMock, return_value={1: []}):
+                result = await catalog_repository.list_all()
 
         assert len(result) == 2
         assert all(r.name == "Create PDB Oracle" for r in result)
+        assert all(r.tags == [] for r in result)
 
     @pytest.mark.asyncio
     async def test_list_all_with_status_filter(self, mock_db_row):
@@ -363,15 +367,16 @@ class TestListAll:
         with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
             mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            result = await catalog_repository.list_all(status=ActionStatus.DRAFT)
+            with patch("app.repositories.catalog_repository.get_tags_for_actions", new_callable=AsyncMock, return_value={1: []}):
+                result = await catalog_repository.list_all(status=ActionStatus.DRAFT)
 
         assert len(result) == 1
         assert captured_params["status"] == "draft"
+        assert result[0].tags == []
 
     @pytest.mark.asyncio
     async def test_list_all_empty(self):
-        """Test listing actions when none exist."""
+        """Test listing actions when none exist (Story 2.6: get_tags_for_actions returns {})."""
         mock_cursor = AsyncMock()
         mock_cursor.fetchall = AsyncMock(return_value=[])
         mock_cursor.close = AsyncMock()
@@ -387,6 +392,37 @@ class TestListAll:
 
         assert result == []
 
+    @pytest.mark.asyncio
+    async def test_list_all_with_tags_filter(self, mock_db_row):
+        """Test listing actions filtered by tags (Story 2.6, AC4)."""
+        mock_cursor = AsyncMock()
+        mock_cursor.fetchall = AsyncMock(return_value=[mock_db_row])
+        mock_cursor.close = AsyncMock()
+
+        mock_conn = AsyncMock()
+        captured_params = {}
+
+        async def capture_execute(query, params):
+            captured_params.update(params)
+            return mock_cursor
+
+        mock_conn.execute = capture_execute
+
+        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+            with patch("app.repositories.catalog_repository.get_tags_for_actions", new_callable=AsyncMock, return_value={1: ["rac"]}):
+                result = await catalog_repository.list_all(
+                    status=ActionStatus.PUBLISHED,
+                    tags_filter=["rac", "dataguard"],
+                )
+
+        assert len(result) == 1
+        assert result[0].tags == ["rac"]
+        assert captured_params.get("tag0") == "rac"
+        assert captured_params.get("tag1") == "dataguard"
+        assert captured_params.get("status") == "published"
+
 
 # === Story 2.2: Execution Steps Tests ===
 
@@ -395,20 +431,31 @@ class TestExecutionStepsConversions:
     """Tests for execution steps JSON conversion helpers."""
 
     def test_parse_execution_steps(self):
-        """Test parsing execution steps from JSON string."""
-        json_str = '[{"order": 1, "name": "Step 1", "type": "prerequisite", "is_servicenow_change": false, "conditional_environments": null}]'
+        """Test parsing execution steps from JSON string (Story 2.7: new format connector_type)."""
+        json_str = '[{"order": 1, "name": "Step 1", "type": "prerequisite", "connector_type": "none", "connector_config": null, "conditional_environments": null}]'
         result = catalog_repository._parse_execution_steps(json_str)
         assert result is not None
         assert len(result) == 1
         assert result[0].order == 1
         assert result[0].name == "Step 1"
         assert result[0].type == ExecutionStepType.PREREQUISITE
+        assert result[0].connector_type == ConnectorType.NONE
+
+    def test_parse_execution_steps_legacy_is_servicenow_change(self):
+        """AC3: Parse legacy format is_servicenow_change → connector_type (Story 2.7)."""
+        json_str = '[{"order": 1, "name": "Step 1", "type": "prerequisite", "is_servicenow_change": false, "conditional_environments": null}]'
+        result = catalog_repository._parse_execution_steps(json_str)
+        assert result[0].connector_type == ConnectorType.NONE
+        json_str_sn = '[{"order": 1, "name": "Change", "type": "execution", "is_servicenow_change": true, "conditional_environments": ["PROD"]}]'
+        result_sn = catalog_repository._parse_execution_steps(json_str_sn)
+        assert result_sn[0].connector_type == ConnectorType.SERVICENOW
+        assert result_sn[0].conditional_environments == ["PROD"]
 
     def test_parse_execution_steps_with_servicenow(self):
-        """Test parsing steps with ServiceNow change."""
-        json_str = '[{"order": 1, "name": "Change", "type": "execution", "is_servicenow_change": true, "conditional_environments": ["PROD"]}]'
+        """Test parsing steps with connector_type servicenow (new format)."""
+        json_str = '[{"order": 1, "name": "Change", "type": "execution", "connector_type": "servicenow", "connector_config": {}, "conditional_environments": ["PROD"]}]'
         result = catalog_repository._parse_execution_steps(json_str)
-        assert result[0].is_servicenow_change is True
+        assert result[0].connector_type == ConnectorType.SERVICENOW
         assert result[0].conditional_environments == ["PROD"]
 
     def test_parse_execution_steps_none(self):
@@ -417,12 +464,12 @@ class TestExecutionStepsConversions:
         assert result is None
 
     def test_parse_change_type_config(self):
-        """Test parsing change type config from JSON string."""
+        """Test parsing change type config from JSON string (Story 2.8: "cab" → pre_approved)."""
         json_str = '{"DEV": "pre_approved", "PROD": "cab"}'
         result = catalog_repository._parse_change_type_config(json_str)
         assert result is not None
         assert result["DEV"] == ChangeType.PRE_APPROVED
-        assert result["PROD"] == ChangeType.CAB
+        assert result["PROD"] == ChangeType.PRE_APPROVED
 
     def test_parse_change_type_config_none(self):
         """Test parsing None returns None."""
@@ -430,17 +477,21 @@ class TestExecutionStepsConversions:
         assert result is None
 
     def test_execution_steps_to_json(self):
-        """Test converting execution steps to JSON string."""
+        """Test converting execution steps to JSON string (Story 2.7: connector_type only, no is_servicenow_change)."""
         steps = [
-            ExecutionStep(order=1, name="Step 1", type=ExecutionStepType.PREREQUISITE),
-            ExecutionStep(order=2, name="Step 2", type=ExecutionStepType.EXECUTION),
+            ExecutionStep(order=1, name="Step 1", type=ExecutionStepType.PREREQUISITE, connector_type=ConnectorType.NONE),
+            ExecutionStep(order=2, name="Step 2", type=ExecutionStepType.EXECUTION, connector_type=ConnectorType.SERVICENOW, connector_config={}, conditional_environments=["PROD"]),
         ]
         result = catalog_repository._execution_steps_to_json(steps)
         assert result is not None
         parsed = json.loads(result)
         assert len(parsed) == 2
         assert parsed[0]["name"] == "Step 1"
+        assert parsed[0]["connector_type"] == "none"
+        assert "is_servicenow_change" not in parsed[0]
         assert parsed[1]["type"] == "execution"
+        assert parsed[1]["connector_type"] == "servicenow"
+        assert parsed[1]["conditional_environments"] == ["PROD"]
 
     def test_execution_steps_to_json_none(self):
         """Test converting None returns None."""
@@ -448,13 +499,14 @@ class TestExecutionStepsConversions:
         assert result is None
 
     def test_change_type_config_to_json(self):
-        """Test converting change type config to JSON string."""
-        config = {"DEV": ChangeType.PRE_APPROVED, "PROD": ChangeType.CAB}
+        """Test converting change type config to JSON string (Story 2.8: only "pre_approved", never "cab")."""
+        config = {"DEV": ChangeType.PRE_APPROVED, "PROD": ChangeType.PRE_APPROVED}
         result = catalog_repository._change_type_config_to_json(config)
         assert result is not None
         parsed = json.loads(result)
         assert parsed["DEV"] == "pre_approved"
-        assert parsed["PROD"] == "cab"
+        assert parsed["PROD"] == "pre_approved"
+        assert "cab" not in result
 
     def test_change_type_config_to_json_none(self):
         """Test converting None returns None."""
@@ -504,9 +556,9 @@ class TestUpdateExecutionSteps:
             mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
 
             steps = [
-                ExecutionStep(order=1, name="Verification", type=ExecutionStepType.PREREQUISITE),
+                ExecutionStep(order=1, name="Verification", type=ExecutionStepType.PREREQUISITE, connector_type=ConnectorType.NONE),
             ]
-            change_config = {"DEV": ChangeType.PRE_APPROVED, "PROD": ChangeType.CAB}
+            change_config = {"DEV": ChangeType.PRE_APPROVED, "PROD": ChangeType.PRE_APPROVED}
 
             result = await catalog_repository.update_execution_steps(1, steps, change_config)
 
@@ -528,7 +580,7 @@ class TestUpdateExecutionSteps:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
             mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
 
-            steps = [ExecutionStep(order=1, name="Step", type=ExecutionStepType.PREREQUISITE)]
+            steps = [ExecutionStep(order=1, name="Step", type=ExecutionStepType.PREREQUISITE, connector_type=ConnectorType.NONE)]
             result = await catalog_repository.update_execution_steps(999, steps, None)
 
         assert result is None
@@ -547,7 +599,7 @@ class TestUpdateExecutionSteps:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
             mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
 
-            steps = [ExecutionStep(order=1, name="Step", type=ExecutionStepType.PREREQUISITE)]
+            steps = [ExecutionStep(order=1, name="Step", type=ExecutionStepType.PREREQUISITE, connector_type=ConnectorType.NONE)]
 
             with pytest.raises(InvalidStateError) as exc_info:
                 await catalog_repository.update_execution_steps(1, steps, None)
@@ -590,7 +642,7 @@ class TestUpdateExecutionSteps:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
             mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
 
-            steps = [ExecutionStep(order=1, name="Step", type=ExecutionStepType.PREREQUISITE)]
+            steps = [ExecutionStep(order=1, name="Step", type=ExecutionStepType.PREREQUISITE, connector_type=ConnectorType.NONE)]
 
             with pytest.raises(InvalidStateError) as exc_info:
                 await catalog_repository.update_execution_steps(1, steps, None)
@@ -603,15 +655,16 @@ class TestRowToActionDetailWithExecutionSteps:
     """Tests for _row_to_action_detail with execution_steps."""
 
     def test_row_to_action_detail_with_execution_steps(self, mock_db_row_with_execution_steps):
-        """Test converting row to ActionDetail with execution_steps."""
+        """Test converting row to ActionDetail with execution_steps (legacy format → connector_type)."""
         result = catalog_repository._row_to_action_detail(mock_db_row_with_execution_steps)
         assert result.id == 1
         assert result.execution_steps is not None
         assert len(result.execution_steps) == 1
         assert result.execution_steps[0].name == "Verification"
+        assert result.execution_steps[0].connector_type == ConnectorType.NONE  # legacy is_servicenow_change: false
         assert result.change_type_config is not None
         assert result.change_type_config["DEV"] == ChangeType.PRE_APPROVED
-        assert result.change_type_config["PROD"] == ChangeType.CAB
+        assert result.change_type_config["PROD"] == ChangeType.PRE_APPROVED  # "cab" converted on read (Story 2.8)
 
 
 # === Story 2.3: RBAC Policies Tests ===
@@ -898,7 +951,7 @@ class TestListAllWithRbacFilter:
 
     @pytest.mark.asyncio
     async def test_list_all_no_filter_returns_all(self, mock_db_row_with_rbac_full, mock_db_row_dba_only):
-        """Test list_all without user_profile returns all actions."""
+        """Test list_all without user_profile returns all actions (Story 2.6: get_tags_for_actions mocked)."""
         mock_cursor = AsyncMock()
         mock_cursor.fetchall = AsyncMock(return_value=[mock_db_row_with_rbac_full, mock_db_row_dba_only])
         mock_cursor.close = AsyncMock()
@@ -909,10 +962,11 @@ class TestListAllWithRbacFilter:
         with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
             mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            result = await catalog_repository.list_all(user_profile=None)
+            with patch("app.repositories.catalog_repository.get_tags_for_actions", new_callable=AsyncMock, return_value={1: [], 2: []}):
+                result = await catalog_repository.list_all(user_profile=None)
 
         assert len(result) == 2
+        assert all(r.tags == [] for r in result)
 
     @pytest.mark.asyncio
     async def test_list_all_client_business_sees_allowed_only(
@@ -933,9 +987,9 @@ class TestListAllWithRbacFilter:
         with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
             mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            from app.models.catalog import UserProfile
-            result = await catalog_repository.list_all(user_profile=UserProfile.CLIENT_BUSINESS)
+            with patch("app.repositories.catalog_repository.get_tags_for_actions", new_callable=AsyncMock, return_value={1: [], 2: [], 3: []}):
+                from app.models.catalog import UserProfile
+                result = await catalog_repository.list_all(user_profile=UserProfile.CLIENT_BUSINESS)
 
         assert len(result) == 2
         names = [r.name for r in result]
@@ -961,9 +1015,9 @@ class TestListAllWithRbacFilter:
         with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
             mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            from app.models.catalog import UserProfile
-            result = await catalog_repository.list_all(user_profile=UserProfile.DBA_APPLICATIF)
+            with patch("app.repositories.catalog_repository.get_tags_for_actions", new_callable=AsyncMock, return_value={1: [], 2: []}):
+                from app.models.catalog import UserProfile
+                result = await catalog_repository.list_all(user_profile=UserProfile.DBA_APPLICATIF)
 
         assert len(result) == 2
 
@@ -1073,12 +1127,14 @@ class TestUpdateStatus:
         with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
             mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            result = await catalog_repository.update_status(1, StatusTransition.PUBLISH, user_id="user123")
+            with patch("app.repositories.catalog_repository.get_tags_for_action", new_callable=AsyncMock, return_value=[]):
+                with patch("app.repositories.audit_repository.create_entry", new_callable=AsyncMock, return_value=1):
+                    result = await catalog_repository.update_status(1, StatusTransition.PUBLISH, user_id="user123")
 
         assert result is not None
         assert result.id == 1
         assert result.status == ActionStatus.PUBLISHED
+        assert result.tags == []
 
     @pytest.mark.asyncio
     async def test_update_status_disable_success(self, mock_db_row_disabled):
@@ -1116,11 +1172,13 @@ class TestUpdateStatus:
         with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
             mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            result = await catalog_repository.update_status(1, StatusTransition.DISABLE, user_id="user123")
+            with patch("app.repositories.catalog_repository.get_tags_for_action", new_callable=AsyncMock, return_value=[]):
+                with patch("app.repositories.audit_repository.create_entry", new_callable=AsyncMock, return_value=1):
+                    result = await catalog_repository.update_status(1, StatusTransition.DISABLE, user_id="user123")
 
         assert result is not None
         assert result.status == ActionStatus.DISABLED
+        assert result.tags == []
 
     @pytest.mark.asyncio
     async def test_update_status_enable_success(self, mock_db_row_published):
@@ -1158,11 +1216,13 @@ class TestUpdateStatus:
         with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
             mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            result = await catalog_repository.update_status(1, StatusTransition.ENABLE, user_id="user123")
+            with patch("app.repositories.catalog_repository.get_tags_for_action", new_callable=AsyncMock, return_value=[]):
+                with patch("app.repositories.audit_repository.create_entry", new_callable=AsyncMock, return_value=1):
+                    result = await catalog_repository.update_status(1, StatusTransition.ENABLE, user_id="user123")
 
         assert result is not None
         assert result.status == ActionStatus.PUBLISHED
+        assert result.tags == []
 
     @pytest.mark.asyncio
     async def test_update_status_not_found(self):
@@ -1253,14 +1313,22 @@ class TestListAllAdmin:
         mock_cursor_data.fetchall = AsyncMock(return_value=mock_db_rows_admin)
         mock_cursor_data.close = AsyncMock()
 
+        mock_cursor_tags = AsyncMock()
+        mock_cursor_tags.fetchall = AsyncMock(return_value=[])  # no tags (Story 2.6)
+        mock_cursor_tags.close = AsyncMock()
+
         mock_conn = AsyncMock()
         call_count = 0
 
         async def mock_execute(query, params):
             nonlocal call_count
             call_count += 1
-            if "COUNT" in query:
+            # Dedicated count query only (main query has COUNT in EXECUTION_LOG subquery)
+            if query.strip().startswith("SELECT COUNT(*)"):
                 return mock_cursor_count
+            # Tags query joins ACTION_TAGS and TAGS tables (Story 2.6)
+            if "FROM ACTION_TAGS" in query or "FROM TAGS" in query or "JOIN TAGS" in query:
+                return mock_cursor_tags
             return mock_cursor_data
 
         mock_conn.execute = mock_execute
@@ -1277,6 +1345,7 @@ class TestListAllAdmin:
         assert ActionStatus.PUBLISHED in statuses
         assert ActionStatus.DISABLED in statuses
         assert pagination.total_count == 3
+        assert all(r.tags == [] for r in actions)
 
     @pytest.mark.asyncio
     async def test_list_all_admin_includes_execution_count(self, mock_db_rows_admin):
@@ -1289,14 +1358,20 @@ class TestListAllAdmin:
         mock_cursor_data.fetchall = AsyncMock(return_value=mock_db_rows_admin)
         mock_cursor_data.close = AsyncMock()
 
+        mock_cursor_tags = AsyncMock()
+        mock_cursor_tags.fetchall = AsyncMock(return_value=[])
+        mock_cursor_tags.close = AsyncMock()
+
         mock_conn = AsyncMock()
         call_count = 0
 
         async def mock_execute(query, params):
             nonlocal call_count
             call_count += 1
-            if "COUNT" in query:
+            if query.strip().startswith("SELECT COUNT(*)"):
                 return mock_cursor_count
+            if "ACTION_TAGS" in query or "TAGS" in query:
+                return mock_cursor_tags
             return mock_cursor_data
 
         mock_conn.execute = mock_execute
@@ -1310,6 +1385,7 @@ class TestListAllAdmin:
         # Find the published action (id=2)
         published = next(r for r in actions if r.id == 2)
         assert published.execution_count == 42
+        assert published.tags == []
 
     @pytest.mark.asyncio
     async def test_list_all_admin_with_status_filter(self, mock_db_rows_admin):
@@ -1325,14 +1401,20 @@ class TestListAllAdmin:
         mock_cursor_data.fetchall = AsyncMock(return_value=mock_db_rows_filtered)
         mock_cursor_data.close = AsyncMock()
 
+        mock_cursor_tags = AsyncMock()
+        mock_cursor_tags.fetchall = AsyncMock(return_value=[])
+        mock_cursor_tags.close = AsyncMock()
+
         mock_conn = AsyncMock()
         call_count = 0
 
         async def mock_execute(query, params):
             nonlocal call_count
             call_count += 1
-            if "COUNT" in query:
+            if query.strip().startswith("SELECT COUNT(*)"):
                 return mock_cursor_count
+            if "ACTION_TAGS" in query or "TAGS" in query:
+                return mock_cursor_tags
             return mock_cursor_data
 
         mock_conn.execute = mock_execute
@@ -1345,4 +1427,139 @@ class TestListAllAdmin:
 
         assert len(actions) == 1
         assert actions[0].status == ActionStatus.PUBLISHED
+        assert actions[0].tags == []
         assert pagination.total_count == 1
+
+
+class TestTagsRepository:
+    """Tests for tags repository functions (Story 2.6, FR11c)."""
+
+    @pytest.mark.asyncio
+    async def test_get_all_tags_empty(self):
+        """Test get_all_tags when no tags exist."""
+        mock_cursor = AsyncMock()
+        mock_cursor.fetchall = AsyncMock(return_value=[])
+        mock_cursor.close = AsyncMock()
+        mock_conn = AsyncMock()
+        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+
+        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            result = await catalog_repository.get_all_tags()
+
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_get_all_tags_returns_tag_responses(self):
+        """Test get_all_tags returns list of TagResponse."""
+        from datetime import datetime
+        from app.models.catalog import TagResponse
+
+        mock_row = (1, "rac", datetime(2026, 1, 28, 12, 0, 0))
+        mock_cursor = AsyncMock()
+        mock_cursor.fetchall = AsyncMock(return_value=[mock_row])
+        mock_cursor.close = AsyncMock()
+        mock_conn = AsyncMock()
+        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+
+        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            result = await catalog_repository.get_all_tags()
+
+        assert len(result) == 1
+        assert result[0].id == 1
+        assert result[0].name == "rac"
+
+    @pytest.mark.asyncio
+    async def test_get_tags_for_action_returns_names(self):
+        """Test get_tags_for_action returns tag names for action."""
+        mock_cursor = AsyncMock()
+        mock_cursor.fetchall = AsyncMock(return_value=[("rac",), ("dataguard",)])
+        mock_cursor.close = AsyncMock()
+        mock_conn = AsyncMock()
+        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+
+        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            result = await catalog_repository.get_tags_for_action(1)
+
+        assert result == ["rac", "dataguard"]
+
+    @pytest.mark.asyncio
+    async def test_create_tag_if_not_exists_inserts_new(self):
+        """Test create_tag_if_not_exists inserts and returns id when tag does not exist."""
+        mock_cursor_select = AsyncMock()
+        mock_cursor_select.fetchone = AsyncMock(return_value=None)
+        mock_cursor_select.close = AsyncMock()
+
+        mock_out_id = MagicMock()
+        mock_out_id.getvalue.return_value = [5]
+        mock_conn = AsyncMock()
+        mock_conn.var = MagicMock(return_value=mock_out_id)
+        mock_conn.commit = AsyncMock()
+        call_count = 0
+
+        async def mock_execute(query, params):
+            nonlocal call_count
+            call_count += 1
+            if "SELECT" in query:
+                return mock_cursor_select
+            return AsyncMock(close=AsyncMock())
+
+        mock_conn.execute = mock_execute
+
+        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            result = await catalog_repository.create_tag_if_not_exists("RAC")
+
+        assert result == 5
+        assert call_count >= 2  # SELECT then INSERT
+
+    @pytest.mark.asyncio
+    async def test_create_tag_if_not_exists_returns_existing(self):
+        """Test create_tag_if_not_exists returns existing id when tag exists."""
+        mock_cursor = AsyncMock()
+        mock_cursor.fetchone = AsyncMock(return_value=(3,))
+        mock_cursor.close = AsyncMock()
+        mock_conn = AsyncMock()
+        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+
+        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            result = await catalog_repository.create_tag_if_not_exists("rac")
+
+        assert result == 3
+
+    @pytest.mark.asyncio
+    async def test_set_action_tags_deletes_and_inserts(self):
+        """Test set_action_tags deletes existing and inserts new links."""
+        mock_conn = AsyncMock()
+        mock_conn.execute = AsyncMock(return_value=AsyncMock(close=AsyncMock()))
+        mock_conn.commit = AsyncMock()
+        call_count = 0
+
+        async def mock_execute(query, params):
+            nonlocal call_count
+            call_count += 1
+            return AsyncMock(close=AsyncMock())
+
+        mock_conn.execute = mock_execute
+
+        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            await catalog_repository.set_action_tags(1, [10, 20])
+
+        assert call_count == 3  # DELETE + 2 INSERTs
+        mock_conn.commit.assert_called_once()

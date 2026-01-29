@@ -28,7 +28,7 @@ This document provides the complete epic and story breakdown for test, decomposi
 ### Functional Requirements
 
 **1. Gestion du Software Catalog (FR1-FR7)**
-- FR1: DBOPS peut creer une action dans le Software Catalog avec ses metadonnees (nom, description, moteur, plateforme d'execution, parametres, niveau d'impact)
+- FR1: DBOPS peut creer une action dans le Software Catalog avec ses metadonnees (nom, description, moteur, plateforme d'execution, niveau d'impact) et configurer via des editeurs visuels dynamiques (ajouter/supprimer): Parametres (nom, type, requis, defaut, description) et Regles d'impact (criteres par environnement)
 - FR2: DBOPS peut definir les etapes d'execution d'une action, chaque etape pouvant appeler un connecteur generique (AAP, ServiceNow, Azure DevOps, Jira, etc.) avec des conditions selon l'environnement cible
 - FR3: [OBSOLETE - voir FR25a-d] Les regles RBAC sont gerees au niveau des profiles, pas des actions
 - FR4: DBOPS peut configurer si un changement ServiceNow (pre-approuve) est requis pour chaque environnement cible
@@ -170,7 +170,7 @@ This document provides the complete epic and story breakdown for test, decomposi
 
 | FR | Epic | Description |
 |---|---|---|
-| FR1 | Epic 2 | DBOPS cree une action dans le Software Catalog |
+| FR1 | Epic 2 | DBOPS cree une action dans le Software Catalog (Stories 2.1, 2.17, 2.18: editeurs visuels parametres et regles d'impact) |
 | FR2 | Epic 2 | DBOPS definit les etapes d'execution avec connecteurs generiques |
 | FR3 | Epic 2 | [OBSOLETE] RBAC deplace vers profiles (FR25a-d) |
 | FR4 | Epic 2 | DBOPS configure si changement ServiceNow requis par environnement |
@@ -395,8 +395,8 @@ So that je definisse les actions disponibles pour les DBA et les clients busines
 **Then** un formulaire admin s'affiche avec les sections : nom, description, categorie (Provisioning/Patching/Administration/Monitoring), moteur (Oracle/SQL Server/DB2), plateforme d'execution (AAP/GitHub Actions/Azure DevOps/Terraform)
 
 **Given** le DBOPS remplit les champs de base
-**When** il definit le schema de parametres (JSON schema) et les regles d'impact par environnement
-**Then** le systeme valide le schema JSON et enregistre l'action en statut "brouillon"
+**When** il configure les parametres via l'editeur visuel (voir Story 2.17) et les regles d'impact (voir Story 2.18)
+**Then** le systeme valide les donnees et enregistre l'action en statut "brouillon"
 
 **And** la table ACTIONS_CATALOG (V002) est creee via le script de migration SQL
 **And** les colonnes CLOB (parameters_schema, impact_rules, rbac_policies) stockent du JSON interrogeable via JSON_VALUE Oracle
@@ -759,6 +759,135 @@ So that le code soit coherent avec le nouveau modele base sur les profiles.
 
 **And** les modeles Pydantic backend sont nettoyes (supprimer RbacPolicies, EnvironmentPermission)
 **And** la story 2-3 est marquee comme remplacee par 2-9 a 2-13
+
+### Story 2.17 : Editeur visuel de parametres d'action
+
+As a DBOPS,
+I want definir les parametres d'une action via un editeur visuel dynamique (ajouter/supprimer) au lieu d'un input JSON,
+So that je configure les parametres de maniere intuitive sans risque d'erreur de syntaxe JSON.
+
+**Acceptance Criteria:**
+
+**Given** un DBOPS edite une action dans l'admin
+**When** il accede a la section "Parametres"
+**Then** il voit un editeur visuel avec une liste de parametres et un bouton "Ajouter un parametre"
+
+**Given** le DBOPS clique sur "Ajouter un parametre"
+**When** un nouveau parametre est ajoute
+**Then** un formulaire inline s'affiche avec les champs : nom (texte), type (dropdown: string, number, boolean, date, select, etc.), requis (toggle oui/non), valeur par defaut (texte), description (texte)
+
+**Given** le DBOPS a plusieurs parametres
+**When** il veut reordonner ou supprimer un parametre
+**Then** il peut drag-and-drop pour reordonner et cliquer sur l'icone X pour supprimer un parametre
+
+**Given** le DBOPS sauvegarde l'action
+**When** les parametres sont valides
+**Then** le systeme genere automatiquement le JSON schema en backend et le stocke dans parameters_schema
+
+**Given** une action existante a des parametres en JSON schema
+**When** le DBOPS ouvre le formulaire d'edition
+**Then** les parametres existants sont affiches dans l'editeur visuel (migration de l'affichage)
+
+**And** la validation inline s'execute sur chaque champ (nom requis, nom unique, type requis)
+**And** le composant ParametersEditor utilise le meme pattern que StepsEditor (UX coherente)
+**And** FR1 (PRD mis a jour) est satisfaite pour les parametres visuels
+**And** Cette story remplace l'input JSON schema de la Story 2.1
+
+### Story 2.18 : Editeur visuel des regles d'impact
+
+As a DBOPS,
+I want definir les regles d'impact d'une action via un editeur visuel dynamique (ajouter/supprimer),
+So that je configure les criteres d'evaluation du niveau de risque par environnement de maniere intuitive.
+
+**Acceptance Criteria:**
+
+**Given** un DBOPS edite une action dans l'admin
+**When** il accede a la section "Regles d'impact"
+**Then** il voit un editeur visuel avec une liste de regles par environnement et un bouton "Ajouter une regle"
+
+**Given** le DBOPS clique sur "Ajouter une regle"
+**When** une nouvelle regle est ajoutee
+**Then** un formulaire inline s'affiche avec les champs : environnement (dropdown: DEV, STAGING, PROD, etc.), niveau d'impact (dropdown: faible/vert, moyen/orange, eleve/rouge), critere/justification (texte)
+
+**Given** le DBOPS definit plusieurs regles
+**When** il configure des niveaux differents par environnement
+**Then** l'ImpactIndicator de la preview se met a jour dynamiquement selon l'environnement selectionne
+
+**Given** le DBOPS veut supprimer une regle
+**When** il clique sur l'icone X
+**Then** la regle est supprimee de la liste
+
+**Given** aucune regle n'est definie pour un environnement
+**When** l'action est executee dans cet environnement
+**Then** le niveau d'impact par defaut (configure dans l'action) s'applique
+
+**And** la validation inline s'execute (environnement unique par regle, niveau requis)
+**And** le composant ImpactRulesEditor utilise le meme pattern que ParametersEditor et StepsEditor
+**And** les regles sont stockees dans impact_rules (CLOB JSON) de ACTIONS_CATALOG
+**And** FR1 (PRD mis a jour) est satisfaite pour les regles d'impact visuelles
+**And** Cette story remplace l'input JSON des regles d'impact de la Story 2.1
+
+### Story 2.19 : Setup environnement Oracle dev avec Docker
+
+As a developpeur,
+I want un environnement Oracle local via Docker Compose,
+So that je peux tester les operations CRUD et valider le comportement de la base de donnees en developpement.
+
+**Acceptance Criteria:**
+
+**Given** un developpeur clone le repo
+**When** il execute `docker-compose up -d oracle`
+**Then** un container Oracle Free (ou XE) demarre sur le port 1521
+**And** les migrations Flyway s'appliquent automatiquement au demarrage
+
+**Given** le container Oracle est demarre
+**When** le developpeur execute les tests d'integration
+**Then** les tests peuvent inserer, modifier et supprimer des donnees dans toutes les tables
+
+**Given** le container Oracle est arrete
+**When** le developpeur relance `docker-compose up -d oracle`
+**Then** les donnees persistees sont restaurees (volume Docker)
+
+**And** le fichier docker-compose.yml inclut le service Oracle avec volume persistant
+**And** un script init.sql ou entrypoint applique les migrations
+**And** le README documente le setup dev avec les commandes essentielles
+**And** les variables d'environnement (user, password, SID) sont configurables via .env
+
+### Story 2.20 : Refactoring migrations Flyway et Identity Columns
+
+As a developpeur,
+I want des migrations conformes aux standards Flyway et utilisant les identity columns Oracle,
+So that la gestion de schema est robuste et les patterns sont modernes.
+
+**Acceptance Criteria:**
+
+**Given** les fichiers de migration existants
+**When** ils sont renommes selon la convention Flyway
+**Then** le format est `V001__description_snake_case.sql` (double underscore)
+
+**Given** la table schema_version custom existe
+**When** le refactoring est complete
+**Then** la table schema_version est supprimee et Flyway utilise sa table native `flyway_schema_history`
+
+**Given** les tables utilisent des sequences pour les IDs
+**When** les migrations sont refactorees
+**Then** toutes les colonnes ID utilisent `GENERATED ALWAYS AS IDENTITY` au lieu de sequences
+**And** les sequences existantes sont supprimees
+
+**Tables impactees:**
+- USERS
+- ACTIONS_CATALOG
+- EXECUTIONS
+- EXECUTION_STEPS
+- AUDIT_LOG
+- USER_PERMISSIONS
+- TAGS
+- ACTION_TAGS
+- USER_FAVORITES
+
+**And** le code backend (repositories) est mis a jour pour ne plus referencer les sequences
+**And** les tests unitaires passent avec les nouvelles migrations
+**And** un script de migration de donnees est fourni si necessaire
 
 ---
 

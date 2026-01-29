@@ -13,11 +13,11 @@ import {
   Button,
   Input,
   Select,
-  Switch,
   Space,
   Card,
   Typography,
   Form,
+  theme,
 } from 'antd';
 import { PlusOutlined, DeleteOutlined, HolderOutlined } from '@ant-design/icons';
 import {
@@ -37,7 +37,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { ExecutionStep, ExecutionStepType } from '../../types/api';
+import type { ExecutionStep, ExecutionStepType, ConnectorType } from '../../types/api';
 
 const { Text } = Typography;
 
@@ -50,6 +50,17 @@ const STEP_TYPE_OPTIONS: { value: ExecutionStepType; label: string }[] = [
   { value: 'prerequisite', label: 'Pre-requis' },
   { value: 'execution', label: 'Execution' },
   { value: 'verification', label: 'Verification' },
+];
+
+/** Connector options for execution steps (Story 2.7). Aligned with backend. */
+const CONNECTOR_OPTIONS: { value: ConnectorType; label: string }[] = [
+  { value: 'none', label: 'Aucun' },
+  { value: 'servicenow', label: 'ServiceNow' },
+  { value: 'aap', label: 'AAP' },
+  { value: 'azuredevops', label: 'Azure DevOps' },
+  { value: 'jira', label: 'Jira' },
+  { value: 'github_actions', label: 'GitHub Actions' },
+  { value: 'terraform', label: 'Terraform' },
 ];
 
 const ENVIRONMENT_OPTIONS = ['DEV', 'STAGING', 'PROD'];
@@ -72,6 +83,7 @@ const SortableStepCard: React.FC<SortableStepCardProps> = ({
   onRemoveStep,
   canRemove,
 }) => {
+  const { token } = theme.useToken();
   const {
     attributes,
     listeners,
@@ -97,13 +109,13 @@ const SortableStepCard: React.FC<SortableStepCardProps> = ({
         body: { padding: '12px' },
       }}
     >
-      <Space direction="vertical" style={{ width: '100%' }}>
+      <Space orientation="vertical" style={{ width: '100%' }}>
         <Space align="center" style={{ width: '100%', justifyContent: 'space-between' }}>
           <Space>
             <HolderOutlined
               {...attributes}
               {...listeners}
-              style={{ cursor: isDragging ? 'grabbing' : 'grab', color: '#999', touchAction: 'none' }}
+              style={{ cursor: isDragging ? 'grabbing' : 'grab', color: token.colorTextTertiary, touchAction: 'none' }}
               aria-label={`Glisser pour reordonner etape ${step.order}`}
             />
             <Text strong>Etape {step.order}</Text>
@@ -144,25 +156,27 @@ const SortableStepCard: React.FC<SortableStepCardProps> = ({
             />
           </Form.Item>
 
-          <Form.Item label="Changement ServiceNow" style={{ marginBottom: 0 }}>
-            <Switch
-              checked={step.is_servicenow_change}
-              onChange={(checked) => onStepChange(index, 'is_servicenow_change', checked)}
-              aria-label={`Changement ServiceNow etape ${step.order}`}
+          <Form.Item label="Connecteur" style={{ marginBottom: 0 }}>
+            <Select
+              value={step.connector_type ?? 'none'}
+              onChange={(val) => onStepChange(index, 'connector_type', val)}
+              options={CONNECTOR_OPTIONS}
+              style={{ width: 160 }}
+              aria-label={`Connecteur etape ${step.order}`}
             />
           </Form.Item>
 
-          {step.is_servicenow_change && (
+          {step.connector_type === 'servicenow' && (
             <Form.Item
               label="Environnements"
               validateStatus={
-                step.is_servicenow_change &&
+                step.connector_type === 'servicenow' &&
                 (!step.conditional_environments || step.conditional_environments.length === 0)
                   ? 'error'
                   : ''
               }
               help={
-                step.is_servicenow_change &&
+                step.connector_type === 'servicenow' &&
                 (!step.conditional_environments || step.conditional_environments.length === 0)
                   ? 'Selectionnez au moins un environnement'
                   : ''
@@ -200,7 +214,8 @@ export const StepsEditor: React.FC<StepsEditorProps> = ({ value = [], onChange }
       order: value.length + 1,
       name: '',
       type: 'execution',
-      is_servicenow_change: false,
+      connector_type: 'none',
+      connector_config: null,
       conditional_environments: null,
     };
     onChange?.([...value, newStep]);
@@ -218,8 +233,8 @@ export const StepsEditor: React.FC<StepsEditorProps> = ({ value = [], onChange }
     const newSteps = [...value];
     newSteps[index] = { ...newSteps[index], [field]: fieldValue };
 
-    // If ServiceNow is unchecked, clear conditional_environments
-    if (field === 'is_servicenow_change' && !fieldValue) {
+    // If connector is no longer servicenow, clear conditional_environments (Story 2.7)
+    if (field === 'connector_type' && fieldValue !== 'servicenow') {
       newSteps[index].conditional_environments = null;
     }
 
@@ -247,7 +262,7 @@ export const StepsEditor: React.FC<StepsEditorProps> = ({ value = [], onChange }
 
   return (
     <div>
-      <Space direction="vertical" style={{ width: '100%' }}>
+      <Space orientation="vertical" style={{ width: '100%' }}>
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}

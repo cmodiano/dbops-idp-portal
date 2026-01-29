@@ -50,6 +50,7 @@ export interface ActionResponse {
   created_by: number | null;
   created_at: string;
   updated_at: string | null;
+  tags?: string[];
 }
 
 export interface ActionDetail extends ActionResponse {
@@ -58,16 +59,28 @@ export interface ActionDetail extends ActionResponse {
   change_type_config: Record<string, ChangeType> | null;
 }
 
-// === Execution Steps Types (Story 2.2) ===
+// === Execution Steps Types (Story 2.2; Story 2.7 connector_type) ===
 
 export type ExecutionStepType = 'prerequisite' | 'execution' | 'verification';
-export type ChangeType = 'pre_approved' | 'cab';
+/** Story 2.8: CAB removed; only pre-approved supported. */
+export type ChangeType = 'pre_approved';
+
+/** Connector type for execution steps (Story 2.7). Aligned with backend ConnectorType. */
+export type ConnectorType =
+  | 'aap'
+  | 'servicenow'
+  | 'azuredevops'
+  | 'jira'
+  | 'github_actions'
+  | 'terraform'
+  | 'none';
 
 export interface ExecutionStep {
   order: number;
   name: string;
   type: ExecutionStepType;
-  is_servicenow_change: boolean;
+  connector_type: ConnectorType;
+  connector_config?: Record<string, unknown> | null;
   conditional_environments: string[] | null;
 }
 
@@ -110,6 +123,7 @@ export interface ActionListItem {
   engine: ActionEngine;
   created_at: string;
   execution_count: number;
+  tags?: string[];
 }
 
 export interface AdminActionsFilters {
@@ -130,4 +144,62 @@ export interface PaginationInfo {
 export interface ActionListResponse {
   data: ActionListItem[];
   pagination: PaginationInfo | null;
+}
+
+// === Preview Types (Story 2.5) ===
+
+export type ImpactLevel = 'low' | 'medium' | 'high' | 'critical';
+
+// === Profile Types (Story 2.9, FR25a) ===
+
+export interface ProfileCreate {
+  name: string;
+  description?: string | null;
+  ad_group: string;
+  is_admin?: boolean;
+  is_auditor?: boolean;
+}
+
+export interface ProfileUpdate {
+  name?: string | null;
+  description?: string | null;
+  ad_group?: string | null;
+  is_admin?: boolean | null;
+  is_auditor?: boolean | null;
+}
+
+export interface ProfileResponse {
+  id: number;
+  name: string;
+  description: string | null;
+  ad_group: string;
+  is_admin: boolean;
+  is_auditor: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProfileListItem {
+  id: number;
+  name: string;
+  ad_group: string;
+  permission_count: number;
+  created_at: string;
+}
+
+/**
+ * Subset of ActionDetail used for real-time preview in admin form.
+ * Contains all fields needed to render ActionCard and ActionDrawerPreview.
+ */
+export interface ActionPreviewData {
+  name: string;
+  description: string | null;
+  category: ActionCategory | null;
+  engine: ActionEngine | null;
+  platform: ActionPlatform | null;
+  impact_level: ImpactLevel | null;
+  parameters_schema: Record<string, unknown> | null;
+  tags?: string[];
+  /** Nombre d'exécutions (affiché si disponible, Task 1.1). */
+  execution_count?: number | null;
 }

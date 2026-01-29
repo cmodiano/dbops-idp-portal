@@ -1,14 +1,10 @@
 /**
  * ChangeTypeConfig component for configuring ServiceNow change types per environment (Story 2.2, AC #3).
- *
- * Features:
- * - Table of environments with change type selection
- * - Badge display for change type (green=pre-approved, orange=CAB)
- * - Accessibility support
+ * Story 2.8: CAB removed; only Pre-approuvé (Story 2-15: theme tokens for dark mode).
  */
 
 import React from 'react';
-import { Select, Tag, Space, Typography } from 'antd';
+import { Select, Tag, Space, Typography, theme } from 'antd';
 import type { ChangeType } from '../../types/api';
 
 const { Text } = Typography;
@@ -21,21 +17,19 @@ interface ChangeTypeConfigProps {
 const ENVIRONMENTS = ['DEV', 'STAGING', 'PROD'];
 
 const CHANGE_TYPE_OPTIONS: { value: ChangeType; label: string }[] = [
-  { value: 'pre_approved', label: 'Pre-approuve' },
-  { value: 'cab', label: 'CAB' },
+  { value: 'pre_approved', label: 'Pre-approuvé' },
 ];
 
-const ChangeTypeBadge: React.FC<{ type: ChangeType }> = ({ type }) => {
-  if (type === 'pre_approved') {
-    return <Tag color="green">Pre-approuve</Tag>;
-  }
-  return <Tag color="orange">CAB</Tag>;
-};
+const ChangeTypeBadge: React.FC<{ type: ChangeType }> = () => (
+  <Tag color="green">Pre-approuvé</Tag>
+);
 
 export const ChangeTypeConfig: React.FC<ChangeTypeConfigProps> = ({
   value = {},
   onChange,
 }) => {
+  const { token } = theme.useToken();
+
   const handleChange = (env: string, changeType: ChangeType) => {
     const newConfig = { ...value, [env]: changeType };
     onChange?.(newConfig);
@@ -43,15 +37,15 @@ export const ChangeTypeConfig: React.FC<ChangeTypeConfigProps> = ({
 
   return (
     <div role="table" aria-label="Configuration type de changement par environnement">
-      <Space direction="vertical" style={{ width: '100%' }}>
+      <Space orientation="vertical" style={{ width: '100%' }}>
         <div
           style={{
             display: 'grid',
             gridTemplateColumns: '1fr 1fr 1fr',
             gap: '8px',
             padding: '8px',
-            background: '#fafafa',
-            borderRadius: '4px',
+            background: token.colorFillTertiary,
+            borderRadius: token.borderRadius,
           }}
           role="row"
         >
@@ -69,7 +63,7 @@ export const ChangeTypeConfig: React.FC<ChangeTypeConfigProps> = ({
               gap: '8px',
               padding: '8px',
               alignItems: 'center',
-              borderBottom: '1px solid #f0f0f0',
+              borderBottom: `1px solid ${token.colorBorderSecondary}`,
             }}
             role="row"
           >
@@ -83,7 +77,7 @@ export const ChangeTypeConfig: React.FC<ChangeTypeConfigProps> = ({
               role="cell"
             />
             <div role="cell">
-              <ChangeTypeBadge type={value[env] || 'pre_approved'} />
+              <ChangeTypeBadge type={(value[env] || 'pre_approved') as ChangeType} />
             </div>
           </div>
         ))}

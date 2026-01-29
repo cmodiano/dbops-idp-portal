@@ -1,15 +1,16 @@
 """Catalog routes: public catalog access with RBAC filtering (Story 2.3, AC #3).
 
 Provides read-only access to published actions with RBAC-based invisible filtering.
+Story 2.6, AC4: optional tag filter for catalogue.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import get_optional_user
 from app.models.auth import UserProfile
-from app.models.catalog import ActionStatus, UserProfile as CatalogUserProfile
+from app.models.catalog import ActionStatus, UserProfile as CatalogUserProfile, normalize_tag_name
 from app.repositories import catalog_repository
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
@@ -42,6 +43,7 @@ def _map_auth_profile_to_catalog_profile(auth_profile: str | None) -> CatalogUse
 @router.get("/actions")
 async def list_catalog_actions(
     user: UserProfile | None = Depends(get_optional_user),
+    tags: str | None = Query(None, description="Comma-separated tag names to filter by (AC4, NFR4)"),
 ) -> dict:
     """List published actions in the catalog with RBAC filtering (AC #3).
 
@@ -52,6 +54,7 @@ async def list_catalog_actions(
     - DBOPS: all published actions (no filter).
     - Recognized profile (dba_applicatif, dba_infrastructure, client_business):
       actions are filtered invisibly based on RBAC policies.
+    - tags: optional filter by tag names (e.g. ?tags=rac,dataguard). Normalized lowercase, no spaces.
 
     Returns:
         { "data": list[ActionResponse] }
@@ -65,8 +68,13 @@ async def list_catalog_actions(
     if catalog_profile == CatalogUserProfile.DBOPS:
         catalog_profile = None
 
+    tags_filter: list[str] | None = None
+    if tags:
+        tags_filter = [n for s in tags.split(",") if (n := normalize_tag_name(s.strip()))]
+
     actions = await catalog_repository.list_all(
         status=ActionStatus.PUBLISHED,
         user_profile=catalog_profile,
+        tags_filter=tags_filter or None,
     )
     return {"data": [a.model_dump(mode="json") for a in actions]}

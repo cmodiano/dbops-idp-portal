@@ -49,7 +49,7 @@ export async function getAdminActions(filters?: AdminActionsFilters): Promise<Ac
  * @deprecated Use getAdminActions() instead
  */
 export async function listActions(status?: string): Promise<ActionListItem[]> {
-  const filters: AdminActionsFilters = status ? { status: status as ActionStatus } : undefined;
+  const filters: AdminActionsFilters | undefined = status ? { status: status as ActionStatus } : undefined;
   const response = await getAdminActions(filters);
   return response.data;
 }
@@ -109,5 +109,34 @@ export async function updateActionStatus(
   return apiFetch<ActionDetail>(`/admin/actions/${actionId}/status`, {
     method: 'PATCH',
     body: JSON.stringify({ transition }),
+  });
+}
+
+/** Tag from GET /api/v1/tags (Story 2.6, AC #5). */
+export interface TagResponse {
+  id: number;
+  name: string;
+  created_at: string;
+}
+
+/**
+ * Fetch all tags for autocomplete (admin Tags section, catalogue).
+ * Story 2.6, AC #5.
+ */
+export async function getTags(): Promise<TagResponse[]> {
+  return apiFetch<TagResponse[]>('/tags');
+}
+
+/**
+ * Update tags for an action. Create-on-the-fly when using tag_names.
+ * Requires DBOPS profile. Story 2.6, AC #5.
+ */
+export async function updateActionTags(
+  actionId: number,
+  payload: { tag_ids?: number[]; tag_names?: string[] }
+): Promise<ActionDetail> {
+  return apiFetch<ActionDetail>(`/admin/actions/${actionId}/tags`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
   });
 }

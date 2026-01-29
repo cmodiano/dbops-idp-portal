@@ -4,7 +4,8 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { ConfigProvider } from 'antd';
 import { AppLayout } from './AppLayout';
 import { AuthProvider } from '../../contexts/AuthContext';
-import { desjardinsTheme } from '../../theme/desjardins';
+import { ThemeProvider } from '../../contexts/ThemeContext';
+import { lightTheme } from '../../theme/desjardins';
 
 function renderLayout(initialPath = '/test') {
   // Mock fetch: refresh fails → no session → renders unauthenticated
@@ -26,17 +27,27 @@ function renderLayout(initialPath = '/test') {
   );
 
   return render(
-    <ConfigProvider theme={desjardinsTheme}>
-      <AuthProvider>
-        <RouterProvider router={router} />
-      </AuthProvider>
-    </ConfigProvider>,
+    <ThemeProvider>
+      <ConfigProvider theme={lightTheme}>
+        <AuthProvider>
+          <RouterProvider router={router} />
+        </AuthProvider>
+      </ConfigProvider>
+    </ThemeProvider>,
   );
 }
 
 describe('AppLayout', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    localStorage.clear();
+    // Mock matchMedia for theme context
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes('dark') ? false : true,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
   });
 
   it('renders child route content via Outlet (AC #4)', async () => {
@@ -44,9 +55,9 @@ describe('AppLayout', () => {
     expect(screen.getByText('test content')).toBeInTheDocument();
   });
 
-  it('renders the IDP Portal brand (AC #4)', () => {
+  it('renders the Portail DBOPS brand (AC #4)', () => {
     renderLayout();
-    expect(screen.getByText('IDP Portal')).toBeInTheDocument();
+    expect(screen.getByText('DBOPS')).toBeInTheDocument();
   });
 
   it('renders semantic nav element with aria-label', () => {
