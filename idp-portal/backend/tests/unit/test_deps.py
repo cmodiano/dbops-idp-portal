@@ -5,8 +5,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.api.deps import get_current_user, get_optional_user
-from app.core.exceptions import UnauthorizedError
+from app.core.exceptions import UnauthorizedError, ForbiddenError
 from app.core.security import create_access_token, create_refresh_token
+from app.models.profile import CumulativePermissionsResponse
 
 
 def _make_request(auth_header: str | None = None):
@@ -21,18 +22,34 @@ def _make_request(auth_header: str | None = None):
 
 @patch("app.api.deps.settings")
 async def test_get_current_user_valid_token(mock_settings):
-    """Valid Bearer token returns UserProfile."""
+    """Valid Bearer token returns UserProfile with profile_ids and cumulative_permissions (2.12)."""
     mock_settings.auth_dev_bypass = False
-    token = create_access_token({"sub": "1", "username": "marc", "profile": "dbops"})
+    token = create_access_token({"sub": "1", "username": "marc", "profile": "dbops", "ad_groups": ["dbops"]})
     request = _make_request(f"Bearer {token}")
 
-    with patch("app.api.deps.user_repository") as mock_repo:
+    from app.models.profile import ProfileResponse
+    from datetime import datetime
+    mock_profile = ProfileResponse(
+        id=1, name="DBOPS", description="", ad_group="dbops",
+        is_admin=True, is_auditor=False,
+        created_at=datetime(2026, 1, 28), updated_at=datetime(2026, 1, 28),
+    )
+    with (
+        patch("app.api.deps.user_repository") as mock_repo,
+        patch("app.api.deps.profile_repository") as mock_profile_repo,
+        patch("app.api.deps.rbac_service") as mock_rbac,
+    ):
         mock_repo.get_by_username = AsyncMock(return_value={
             "id": 1, "username": "marc", "display_name": "Marc D.", "profile": "dbops",
         })
+        mock_profile_repo.find_by_ad_groups = AsyncMock(return_value=[mock_profile])
+        mock_rbac.get_cumulative_permissions_cached = AsyncMock(
+            return_value=CumulativePermissionsResponse(actions_type="all", targets_type="all")
+        )
         user = await get_current_user(request)
         assert user.username == "marc"
         assert user.profile == "dbops"
+        assert user.profile_ids == [1]
         mock_repo.get_by_username.assert_awaited_once_with("marc")
 
 
@@ -81,6 +98,27 @@ async def test_get_current_user_unknown_user(mock_settings):
 
 
 @patch("app.api.deps.settings")
+async def test_get_current_user_no_profile_returns_403(mock_settings):
+    """AC3: User with no matching profile raises ForbiddenError NO_PROFILE (2.12)."""
+    mock_settings.auth_dev_bypass = False
+    token = create_access_token({"sub": "1", "username": "marc", "profile": "dbops", "ad_groups": ["GRP-UNKNOWN"]})
+    request = _make_request(f"Bearer {token}")
+
+    with (
+        patch("app.api.deps.user_repository") as mock_repo,
+        patch("app.api.deps.profile_repository") as mock_profile_repo,
+    ):
+        mock_repo.get_by_username = AsyncMock(return_value={
+            "id": 1, "username": "marc", "display_name": "Marc D.", "profile": "dbops",
+        })
+        mock_profile_repo.find_by_ad_groups = AsyncMock(return_value=[])
+        with pytest.raises(ForbiddenError) as exc_info:
+            await get_current_user(request)
+        assert exc_info.value.code == "NO_PROFILE"
+        assert "Aucun profil associé" in exc_info.value.message
+
+
+@patch("app.api.deps.settings")
 async def test_get_current_user_rejects_refresh_token(mock_settings):
     """Refresh token used as access token is rejected."""
     mock_settings.auth_dev_bypass = False
@@ -104,18 +142,34 @@ async def test_get_current_user_dev_bypass(mock_settings):
 
 @patch("app.api.deps.settings")
 async def test_get_optional_user_valid_token(mock_settings):
-    """Valid token returns UserProfile."""
+    """Valid token returns UserProfile with profile resolution (2.12)."""
     mock_settings.auth_dev_bypass = False
-    token = create_access_token({"sub": "1", "username": "marc", "profile": "dbops"})
+    token = create_access_token({"sub": "1", "username": "marc", "profile": "dbops", "ad_groups": ["dbops"]})
     request = _make_request(f"Bearer {token}")
 
-    with patch("app.api.deps.user_repository") as mock_repo:
+    from app.models.profile import ProfileResponse
+    from datetime import datetime
+    mock_profile = ProfileResponse(
+        id=1, name="DBOPS", description="", ad_group="dbops",
+        is_admin=True, is_auditor=False,
+        created_at=datetime(2026, 1, 28), updated_at=datetime(2026, 1, 28),
+    )
+    with (
+        patch("app.api.deps.user_repository") as mock_repo,
+        patch("app.api.deps.profile_repository") as mock_profile_repo,
+        patch("app.api.deps.rbac_service") as mock_rbac,
+    ):
         mock_repo.get_by_username = AsyncMock(return_value={
             "id": 1, "username": "marc", "display_name": "Marc D.", "profile": "dbops",
         })
+        mock_profile_repo.find_by_ad_groups = AsyncMock(return_value=[mock_profile])
+        mock_rbac.get_cumulative_permissions_cached = AsyncMock(
+            return_value=CumulativePermissionsResponse(actions_type="all", targets_type="all")
+        )
         user = await get_optional_user(request)
         assert user is not None
         assert user.username == "marc"
+        assert user.profile_ids == [1]
 
 
 @patch("app.api.deps.settings")
@@ -147,3 +201,26 @@ async def test_get_optional_user_unknown_user(mock_settings):
         mock_repo.get_by_username = AsyncMock(return_value=None)
         user = await get_optional_user(request)
         assert user is None
+
+
+@patch("app.api.deps.settings")
+async def test_get_optional_user_no_profile_returns_none(mock_settings):
+    """AC3 fix: Valid token, user in DB, but no matching profile returns None (not 403).
+
+    Unlike get_current_user which raises ForbiddenError, get_optional_user
+    should gracefully return None when the user has no recognized profile.
+    """
+    mock_settings.auth_dev_bypass = False
+    token = create_access_token({"sub": "1", "username": "marc", "profile": "dbops", "ad_groups": ["GRP-UNKNOWN"]})
+    request = _make_request(f"Bearer {token}")
+
+    with (
+        patch("app.api.deps.user_repository") as mock_repo,
+        patch("app.api.deps.profile_repository") as mock_profile_repo,
+    ):
+        mock_repo.get_by_username = AsyncMock(return_value={
+            "id": 1, "username": "marc", "display_name": "Marc D.", "profile": "dbops",
+        })
+        mock_profile_repo.find_by_ad_groups = AsyncMock(return_value=[])
+        user = await get_optional_user(request)
+        assert user is None  # Should NOT raise ForbiddenError

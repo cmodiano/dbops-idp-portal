@@ -1,6 +1,6 @@
 # Story 2.9 : Gestion des profils dynamiques
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -165,6 +165,7 @@ So that je peux définir des permissions granulaires pour chaque équipe ou rôl
 ### Change Log
 
 - 2026-01-28: Story 2.9 implémentée (migration V010, backend profiles CRUD, frontend section Profiles, tests backend + frontend).
+- 2026-01-28: Code review — fixes appliqués: ProfileForm permet renommer profil (M1), pyproject.toml asyncio_default_fixture_loop_scope (L3), File List mise à jour (M2).
 
 ### File List
 
@@ -172,7 +173,8 @@ So that je peux définir des permissions granulaires pour chaque équipe ou rôl
 - idp-portal/backend/app/models/profile.py
 - idp-portal/backend/app/repositories/profile_repository.py
 - idp-portal/backend/app/api/v1/profiles.py
-- idp-portal/backend/app/api/v1/admin.py
+- idp-portal/backend/app/api/v1/admin.py (import + include_router profiles)
+- idp-portal/backend/pyproject.toml (asyncio_default_fixture_loop_scope)
 - idp-portal/backend/tests/unit/test_profile_repository.py
 - idp-portal/backend/tests/unit/test_profiles_api.py
 - idp-portal/frontend/src/types/api.ts

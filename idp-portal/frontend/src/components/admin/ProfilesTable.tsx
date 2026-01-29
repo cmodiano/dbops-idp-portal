@@ -13,9 +13,13 @@ export interface ProfilesTableProps {
   onEdit: (record: ProfileListItem) => void;
   onDelete: (record: ProfileListItem) => Promise<void>;
   onNew: () => void;
+  /** Story 2.13: Export YAML (AC1). */
+  onExportYaml?: () => void | Promise<void>;
+  /** Story 2.13: Import YAML (AC2). */
+  onImportYaml?: () => void;
 }
 
-export function ProfilesTable({ dataSource, loading, onEdit, onDelete, onNew }: ProfilesTableProps) {
+export function ProfilesTable({ dataSource, loading, onEdit, onDelete, onNew, onExportYaml, onImportYaml }: ProfilesTableProps) {
   const handleDeleteClick = (record: ProfileListItem) => {
     Modal.confirm({
       title: 'Supprimer le profil',
@@ -74,9 +78,17 @@ export function ProfilesTable({ dataSource, loading, onEdit, onDelete, onNew }: 
       title={() => (
         <Space style={{ width: '100%', justifyContent: 'space-between' }}>
           <span>Profils ({dataSource.length})</span>
-          <Button type="primary" onClick={onNew}>
-            Nouveau profil
-          </Button>
+          <Space>
+            {onExportYaml != null && (
+              <Button onClick={onExportYaml}>Exporter YAML</Button>
+            )}
+            {onImportYaml != null && (
+              <Button onClick={onImportYaml}>Importer YAML</Button>
+            )}
+            <Button type="primary" onClick={onNew}>
+              Nouveau profil
+            </Button>
+          </Space>
         </Space>
       )}
     />

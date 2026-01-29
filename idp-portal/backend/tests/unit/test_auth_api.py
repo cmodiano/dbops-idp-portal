@@ -29,9 +29,13 @@ async def test_saml_login_redirects(client):
 
 async def test_saml_callback_success(client):
     """POST /auth/saml/callback with valid assertion creates user and sets tokens."""
+    from app.models.profile import ProfileResponse
+    from datetime import datetime
+
     with (
         patch("app.api.v1.auth.create_saml_auth") as mock_auth_fn,
         patch("app.api.v1.auth.user_repository") as mock_repo,
+        patch("app.api.v1.auth.profile_repository") as mock_profile_repo,
     ):
         mock_saml = MagicMock()
         mock_saml.process_response.return_value = None
@@ -44,6 +48,20 @@ async def test_saml_callback_success(client):
             "profile": ["dbops"],
         }
         mock_auth_fn.return_value = mock_saml
+        mock_profile_repo.find_by_ad_groups = AsyncMock(
+            return_value=[
+                ProfileResponse(
+                    id=1,
+                    name="DBOPS",
+                    description="",
+                    ad_group="dbops",
+                    is_admin=True,
+                    is_auditor=False,
+                    created_at=datetime(2026, 1, 28),
+                    updated_at=datetime(2026, 1, 28),
+                ),
+            ]
+        )
 
         mock_repo.create_or_update = AsyncMock(return_value={
             "id": 1,
@@ -108,6 +126,94 @@ async def test_saml_callback_not_authenticated(client):
         assert response.status_code == 403
 
 
+async def test_saml_callback_no_profile_returns_403(client):
+    """AC3: POST /auth/saml/callback when user has no matching profile returns 403 NO_PROFILE."""
+    with (
+        patch("app.api.v1.auth.create_saml_auth") as mock_auth_fn,
+        patch("app.api.v1.auth.profile_repository") as mock_profile_repo,
+        patch("app.api.v1.auth.user_repository") as mock_user_repo,
+    ):
+        mock_saml = MagicMock()
+        mock_saml.process_response.return_value = None
+        mock_saml.get_errors.return_value = []
+        mock_saml.is_authenticated.return_value = True
+        mock_saml.get_nameid.return_value = "user@example.com"
+        mock_saml.get_attributes.return_value = {
+            "username": ["user"],
+            "groups": ["GRP-UNKNOWN"],
+        }
+        mock_auth_fn.return_value = mock_saml
+        mock_profile_repo.find_by_ad_groups = AsyncMock(return_value=[])
+
+        response = await client.post(
+            "/api/v1/auth/saml/callback",
+            data={"SAMLResponse": "base64-assertion"},
+            follow_redirects=False,
+        )
+        assert response.status_code == 403
+        body = response.json()
+        assert body["error"]["code"] == "NO_PROFILE"
+        assert "Aucun profil associé" in body["error"]["message"]
+        mock_user_repo.create_or_update.assert_not_called()
+
+
+async def test_saml_callback_multi_groups_resolves_profiles(client):
+    """AC1: Callback with groups matching profiles creates session and includes ad_groups in token."""
+    from app.models.profile import ProfileResponse
+    from datetime import datetime
+
+    with (
+        patch("app.api.v1.auth.create_saml_auth") as mock_auth_fn,
+        patch("app.api.v1.auth.profile_repository") as mock_profile_repo,
+        patch("app.api.v1.auth.user_repository") as mock_user_repo,
+    ):
+        mock_saml = MagicMock()
+        mock_saml.process_response.return_value = None
+        mock_saml.get_errors.return_value = []
+        mock_saml.is_authenticated.return_value = True
+        mock_saml.get_nameid.return_value = "marc@example.com"
+        mock_saml.get_attributes.return_value = {
+            "username": ["marc"],
+            "displayName": ["Marc"],
+            "groups": ["GRP-IDP-ASSURANCE", "GRP-IDP-DBA-APP"],
+        }
+        mock_auth_fn.return_value = mock_saml
+        mock_profile_repo.find_by_ad_groups = AsyncMock(
+            return_value=[
+                ProfileResponse(
+                    id=1,
+                    name="Assurance",
+                    description="",
+                    ad_group="GRP-IDP-ASSURANCE",
+                    is_admin=False,
+                    is_auditor=True,
+                    created_at=datetime(2026, 1, 28),
+                    updated_at=datetime(2026, 1, 28),
+                ),
+            ]
+        )
+        mock_user_repo.create_or_update = AsyncMock(return_value={
+            "id": 1,
+            "username": "marc",
+            "display_name": "Marc",
+            "profile": "assurance",
+            "saml_subject": "marc@example.com",
+            "created_at": "2026-01-28",
+            "updated_at": "2026-01-28",
+        })
+
+        response = await client.post(
+            "/api/v1/auth/saml/callback",
+            data={"SAMLResponse": "base64-assertion"},
+            follow_redirects=False,
+        )
+        assert response.status_code == 302
+        assert "access_token=" in response.headers["location"]
+        mock_profile_repo.find_by_ad_groups.assert_awaited_once_with(
+            ["GRP-IDP-ASSURANCE", "GRP-IDP-DBA-APP"]
+        )
+
+
 async def test_refresh_token_success(client):
     """POST /auth/refresh with valid refresh cookie returns new access token."""
     token_data = {"sub": "1", "username": "marc", "profile": "dbops"}
@@ -144,17 +250,34 @@ async def test_refresh_rejects_access_token(client):
 
 
 async def test_get_me_success(client):
-    """GET /auth/me with valid Bearer token returns user profile."""
-    token_data = {"sub": "1", "username": "marc", "profile": "dbops"}
-    access = create_access_token(token_data)
+    """GET /auth/me with valid Bearer token returns user profile (2.12: profile resolution)."""
+    from app.models.profile import ProfileResponse, CumulativePermissionsResponse
+    from datetime import datetime
 
-    with patch("app.api.deps.user_repository") as mock_repo:
+    token_data = {"sub": "1", "username": "marc", "profile": "dbops", "ad_groups": ["dbops"]}
+    access = create_access_token(token_data)
+    mock_profile = ProfileResponse(
+        id=1, name="DBOPS", description="", ad_group="dbops",
+        is_admin=True, is_auditor=False,
+        created_at=datetime(2026, 1, 28), updated_at=datetime(2026, 1, 28),
+    )
+
+    with (
+        patch("app.api.deps.user_repository") as mock_repo,
+        patch("app.api.deps.profile_repository") as mock_profile_repo,
+        patch("app.api.deps.rbac_service") as mock_rbac,
+    ):
         mock_repo.get_by_username = AsyncMock(return_value={
             "id": 1,
             "username": "marc",
             "display_name": "Marc D.",
             "profile": "dbops",
         })
+        mock_profile_repo.find_by_ad_groups = AsyncMock(return_value=[mock_profile])
+        mock_rbac.get_cumulative_permissions_cached = AsyncMock(
+            return_value=CumulativePermissionsResponse(actions_type="all", targets_type="all")
+        )
+        mock_rbac.get_user_navigation_permissions = lambda p: ["catalog", "executions", "dashboard", "admin"]
 
         response = await client.get(
             "/api/v1/auth/me",
@@ -193,16 +316,33 @@ async def test_auth_router_mounted():
 async def test_get_current_user_binds_user_id_to_structlog(client):
     """AC #3: get_current_user binds user_id to structlog contextvars for request logging."""
     import structlog
-    token_data = {"sub": "42", "username": "cyrille", "profile": "dbops"}
-    access = create_access_token(token_data)
+    from app.models.profile import ProfileResponse, CumulativePermissionsResponse
+    from datetime import datetime
 
-    with patch("app.api.deps.user_repository") as mock_repo:
+    token_data = {"sub": "42", "username": "cyrille", "profile": "dbops", "ad_groups": ["dbops"]}
+    access = create_access_token(token_data)
+    mock_profile = ProfileResponse(
+        id=1, name="DBOPS", description="", ad_group="dbops",
+        is_admin=True, is_auditor=False,
+        created_at=datetime(2026, 1, 28), updated_at=datetime(2026, 1, 28),
+    )
+
+    with (
+        patch("app.api.deps.user_repository") as mock_repo,
+        patch("app.api.deps.profile_repository") as mock_profile_repo,
+        patch("app.api.deps.rbac_service") as mock_rbac,
+    ):
         mock_repo.get_by_username = AsyncMock(return_value={
             "id": 42,
             "username": "cyrille",
             "display_name": "Cyrille",
             "profile": "dbops",
         })
+        mock_profile_repo.find_by_ad_groups = AsyncMock(return_value=[mock_profile])
+        mock_rbac.get_cumulative_permissions_cached = AsyncMock(
+            return_value=CumulativePermissionsResponse(actions_type="all", targets_type="all")
+        )
+        mock_rbac.get_user_navigation_permissions = lambda p: ["catalog", "executions", "dashboard", "admin"]
 
         # Clear any existing context
         structlog.contextvars.clear_contextvars()

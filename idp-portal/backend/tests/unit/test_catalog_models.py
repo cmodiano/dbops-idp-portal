@@ -982,3 +982,10 @@ class TestActionTagsUpdateRequest:
         import pydantic
         with pytest.raises((ValueError, pydantic.ValidationError)):
             ActionTagsUpdateRequest()
+
+    def test_both_provided_raises(self):
+        """Providing both tag_ids and tag_names raises (mutual exclusivity)."""
+        import pydantic
+        with pytest.raises((ValueError, pydantic.ValidationError)) as exc_info:
+            ActionTagsUpdateRequest(tag_ids=[1, 2], tag_names=["rac", "dataguard"])
+        assert "not both" in str(exc_info.value).lower()

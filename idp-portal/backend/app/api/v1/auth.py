@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import structlog
 from fastapi import APIRouter, Depends, Request, Response
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 
 from app.core.config import settings
 from app.core.exceptions import ForbiddenError, UnauthorizedError
@@ -12,7 +12,7 @@ from app.core.saml import create_saml_auth
 from app.core.security import create_access_token, create_refresh_token, verify_token
 from app.api.deps import get_current_user
 from app.models.auth import UserProfile
-from app.repositories import user_repository
+from app.repositories import user_repository, profile_repository
 from app.services import rbac_service
 
 logger = structlog.get_logger()
@@ -50,7 +50,7 @@ async def saml_callback(request: Request):
     if not auth.is_authenticated():
         raise ForbiddenError(code="SAML_NOT_AUTHENTICATED", message="SAML authentication failed")
 
-    # Extract attributes from assertion
+    # Extract attributes from assertion (Story 2.12: groups for multi-profile)
     attributes = auth.get_attributes()
     name_id = auth.get_nameid()
 
@@ -59,24 +59,59 @@ async def saml_callback(request: Request):
     raw_profile = attributes.get("profile", [_DEFAULT_PROFILE])[0] if attributes.get("profile") else _DEFAULT_PROFILE
     saml_subject = name_id
 
+    # AD groups: "groups", "memberOf" or "ad_groups"; fallback single "profile" for backward compat
+    raw_groups = (
+        attributes.get("groups")
+        or attributes.get("memberOf")
+        or attributes.get("ad_groups")
+        or []
+    )
+    if isinstance(raw_groups, str):
+        ad_groups = [raw_groups.strip()] if raw_groups.strip() else []
+    else:
+        ad_groups = [g.strip() for g in raw_groups if g and str(g).strip()]
+    if not ad_groups and raw_profile:
+        ad_groups = [raw_profile]
+
+    # Resolve profiles by AD groups (AC1, AC3): no profile -> 403 NO_PROFILE
+    profiles = await profile_repository.find_by_ad_groups(ad_groups)
+    if not profiles:
+        logger.warning("saml_callback_no_profile", username=username, ad_groups=ad_groups)
+        return JSONResponse(
+            status_code=403,
+            content={
+                "error": {
+                    "code": "NO_PROFILE",
+                    "message": "Aucun profil associé à votre compte.",
+                }
+            },
+        )
+
     # Validate profile against allowed values — fall back to default if unknown
     profile = raw_profile.lower() if raw_profile else _DEFAULT_PROFILE
     if profile not in _ALLOWED_PROFILES:
         logger.warning("saml_unknown_profile", raw_profile=raw_profile, fallback=_DEFAULT_PROFILE)
         profile = _DEFAULT_PROFILE
+    # For USERS table: keep first resolved profile name for backward compat
+    profile_for_db = profiles[0].name.lower() if profiles else profile
 
-    logger.info("saml_callback_success", username=username, profile=profile)
+    logger.info("saml_callback_success", username=username, profile=profile, profile_count=len(profiles))
 
     # Create or update user in DB
     user = await user_repository.create_or_update(
         username=username,
         display_name=display_name,
-        profile=profile,
+        profile=profile_for_db,
         saml_subject=saml_subject,
     )
 
-    # Generate JWT tokens
-    token_data = {"sub": str(user["id"]), "username": user["username"], "profile": user["profile"]}
+    # Generate JWT tokens (include ad_groups for RBAC cumulative permissions, Story 2.12)
+    token_data = {
+        "sub": str(user["id"]),
+        "username": user["username"],
+        "profile": user["profile"],
+        "ad_groups": ad_groups,
+    }
     access_token = create_access_token(token_data)
     refresh_token = create_refresh_token(token_data)
 
@@ -104,8 +139,13 @@ async def refresh_access_token(request: Request):
 
     payload = verify_token(refresh_token, expected_type="refresh")
 
-    # Generate new access token
-    token_data = {"sub": payload.sub, "username": payload.username, "profile": payload.profile}
+    # Generate new access token (preserve ad_groups for RBAC, Story 2.12)
+    token_data = {
+        "sub": payload.sub,
+        "username": payload.username,
+        "profile": payload.profile,
+        "ad_groups": getattr(payload, "ad_groups", None) or [],
+    }
     new_access_token = create_access_token(token_data)
 
     return {"data": {"access_token": new_access_token, "token_type": "bearer"}}

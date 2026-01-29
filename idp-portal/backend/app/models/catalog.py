@@ -105,9 +105,11 @@ class ActionTagsUpdateRequest(BaseModel):
         return out  # keep [] to allow "clear all tags"
 
     @model_validator(mode="after")
-    def require_tag_ids_or_tag_names(self) -> "ActionTagsUpdateRequest":
+    def require_tag_ids_or_tag_names_exclusive(self) -> "ActionTagsUpdateRequest":
         if self.tag_ids is None and self.tag_names is None:
             raise ValueError("provide either tag_ids or tag_names")
+        if self.tag_ids is not None and self.tag_names is not None:
+            raise ValueError("provide either tag_ids or tag_names, not both")
         return self
 
 

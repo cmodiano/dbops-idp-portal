@@ -144,6 +144,42 @@ class TestGetById:
         assert result is None
 
 
+class TestGetByName:
+    """Story 2.13 — get_by_name for import upsert."""
+
+    @pytest.mark.asyncio
+    async def test_get_by_name_found(self, mock_profile_row):
+        mock_cursor = AsyncMock()
+        mock_cursor.fetchone = AsyncMock(return_value=mock_profile_row)
+        mock_cursor.close = AsyncMock()
+        mock_conn = AsyncMock()
+        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+
+        with patch("app.repositories.profile_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+            result = await profile_repository.get_by_name("Assurance")
+
+        assert result is not None
+        assert result.id == 1
+        assert result.name == "Assurance"
+
+    @pytest.mark.asyncio
+    async def test_get_by_name_not_found(self):
+        mock_cursor = AsyncMock()
+        mock_cursor.fetchone = AsyncMock(return_value=None)
+        mock_cursor.close = AsyncMock()
+        mock_conn = AsyncMock()
+        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+
+        with patch("app.repositories.profile_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+            result = await profile_repository.get_by_name("Unknown")
+
+        assert result is None
+
+
 class TestGetAll:
     @pytest.mark.asyncio
     async def test_get_all_empty(self):
@@ -176,6 +212,61 @@ class TestGetAll:
         assert len(result) == 1
         assert result[0].id == 1
         assert result[0].permission_count == 0
+
+
+class TestFindByAdGroups:
+    """Story 2.12: resolve profiles by AD groups."""
+
+    @pytest.mark.asyncio
+    async def test_find_by_ad_groups_empty_list_returns_empty(self):
+        result = await profile_repository.find_by_ad_groups([])
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_find_by_ad_groups_one_match(self, mock_profile_row):
+        mock_cursor = AsyncMock()
+        mock_cursor.fetchall = AsyncMock(return_value=[mock_profile_row])
+        mock_cursor.close = AsyncMock()
+        mock_conn = AsyncMock()
+        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+
+        with patch("app.repositories.profile_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+            result = await profile_repository.find_by_ad_groups(["GRP-IDP-ASSURANCE"])
+
+        assert len(result) == 1
+        assert result[0].id == 1
+        assert result[0].ad_group == "GRP-IDP-ASSURANCE"
+
+    @pytest.mark.asyncio
+    async def test_find_by_ad_groups_two_groups_two_profiles(self, mock_profile_row):
+        row2 = (
+            2,
+            "DBA App",
+            "DBA Applicatif",
+            "GRP-IDP-DBA-APP",
+            0,
+            0,
+            datetime(2026, 1, 28, 10, 0, 0),
+            datetime(2026, 1, 28, 10, 0, 0),
+        )
+        mock_cursor = AsyncMock()
+        mock_cursor.fetchall = AsyncMock(return_value=[mock_profile_row, row2])
+        mock_cursor.close = AsyncMock()
+        mock_conn = AsyncMock()
+        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+
+        with patch("app.repositories.profile_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+            result = await profile_repository.find_by_ad_groups(
+                ["GRP-IDP-ASSURANCE", "GRP-IDP-DBA-APP"]
+            )
+
+        assert len(result) == 2
+        assert result[0].ad_group == "GRP-IDP-ASSURANCE"
+        assert result[1].ad_group == "GRP-IDP-DBA-APP"
 
 
 class TestUpdate:

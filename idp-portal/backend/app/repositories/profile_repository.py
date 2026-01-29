@@ -86,6 +86,21 @@ async def get_by_id(profile_id: int) -> ProfileResponse | None:
     return _row_to_response(row)
 
 
+async def get_by_name(name: str) -> ProfileResponse | None:
+    """Fetch profile by name (Story 2.13 import upsert). Returns None if not found."""
+    query = """
+        SELECT ID, NAME, DESCRIPTION, AD_GROUP, IS_ADMIN, IS_AUDITOR, CREATED_AT, UPDATED_AT
+        FROM PROFILES WHERE NAME = :name
+    """
+    async with get_connection() as conn:
+        cursor = await conn.execute(query, {"name": name})
+        row = await cursor.fetchone()
+        await cursor.close()
+    if row is None:
+        return None
+    return _row_to_response(row)
+
+
 async def get_all() -> list[ProfileListItem]:
     """Return all profiles for list view. permission_count = 0 (2.10)."""
     query = """
@@ -98,6 +113,27 @@ async def get_all() -> list[ProfileListItem]:
         rows = await cursor.fetchall()
         await cursor.close()
     return [_row_to_list_item(row) for row in rows]
+
+
+async def find_by_ad_groups(ad_groups: list[str]) -> list[ProfileResponse]:
+    """Return profiles whose AD_GROUP is in the given list (Story 2.12, AC1). Empty list -> empty result."""
+    if not ad_groups:
+        return []
+    query = """
+        SELECT ID, NAME, DESCRIPTION, AD_GROUP, IS_ADMIN, IS_AUDITOR, CREATED_AT, UPDATED_AT
+        FROM PROFILES
+        WHERE AD_GROUP IN (:ad_groups)
+        ORDER BY NAME
+    """
+    # Oracle in-clause: bind list as multiple params
+    params = {f"g{i}": g for i, g in enumerate(ad_groups)}
+    placeholders = ", ".join(f":g{i}" for i in range(len(ad_groups)))
+    query = query.replace(":ad_groups", placeholders)
+    async with get_connection() as conn:
+        cursor = await conn.execute(query, params)
+        rows = await cursor.fetchall()
+        await cursor.close()
+    return [_row_to_response(row) for row in rows]
 
 
 async def update(profile_id: int, data: ProfileUpdate) -> ProfileResponse | None:

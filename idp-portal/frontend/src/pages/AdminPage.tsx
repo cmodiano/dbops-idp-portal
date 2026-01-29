@@ -7,8 +7,8 @@
  * - Profiles: list, "Nouveau profil", create/edit/delete (Story 2.9, AC #1–#4)
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { Typography, Button, Table, Space, notification, Card, Tag, Tabs } from 'antd';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Typography, Button, Table, Space, notification, Card, Tag, Tabs, Modal } from 'antd';
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { ActionForm } from '../components/admin/ActionForm';
@@ -16,7 +16,7 @@ import { ActionStatusBadge } from '../components/admin/ActionStatusBadge';
 import { ProfileForm } from '../components/admin/ProfileForm';
 import { ProfilesTable } from '../components/admin/ProfilesTable';
 import { createAction, getAction, getAdminActions, updateActionStatus } from '../services/admin_service';
-import { getProfiles, getProfile, createProfile, updateProfile, deleteProfile } from '../services/profiles_service';
+import { getProfiles, getProfile, createProfile, updateProfile, deleteProfile, exportProfilesYaml, importProfilesYaml } from '../services/profiles_service';
 import type { ActionCreate, ActionListItem, ActionDetail, ActionResponse, ActionStatus, StatusTransition, AdminActionsFilters, ProfileCreate, ProfileUpdate, ProfileResponse, ProfileListItem } from '../types/api';
 
 const { Title } = Typography;
@@ -145,6 +145,9 @@ export default function AdminPage() {
   const [profileSubmitting, setProfileSubmitting] = useState(false);
   const [profileSubmitError, setProfileSubmitError] = useState<string | null>(null);
   const [editProfile, setEditProfile] = useState<ProfileResponse | null>(null);
+  const [importYamlModalOpen, setImportYamlModalOpen] = useState(false);
+  const [importYamlLoading, setImportYamlLoading] = useState(false);
+  const importYamlFileRef = useRef<File | null>(null);
 
   const fetchActions = useCallback(async (filters?: AdminActionsFilters) => {
     setLoading(true);
@@ -325,6 +328,49 @@ export default function AdminPage() {
     setProfileSubmitError(null);
   };
 
+  const handleExportYaml = useCallback(async () => {
+    try {
+      await exportProfilesYaml();
+      notification.success({ message: 'Export YAML', description: 'Fichier profiles.yaml téléchargé.' });
+    } catch (err) {
+      notification.error({
+        message: 'Erreur',
+        description: err instanceof Error ? err.message : 'Erreur lors de l\'export YAML',
+      });
+    }
+  }, []);
+
+  const handleImportYaml = useCallback(() => {
+    importYamlFileRef.current = null;
+    setImportYamlModalOpen(true);
+  }, []);
+
+  const handleImportYamlSubmit = useCallback(async () => {
+    const file = importYamlFileRef.current;
+    if (!file) {
+      notification.warning({ message: 'Fichier requis', description: 'Veuillez sélectionner un fichier .yaml ou .yml' });
+      return;
+    }
+    setImportYamlLoading(true);
+    try {
+      const { created, updated } = await importProfilesYaml(file);
+      setImportYamlModalOpen(false);
+      importYamlFileRef.current = null;
+      notification.success({
+        message: 'Import YAML',
+        description: `Import réussi : ${created} créé(s), ${updated} mis à jour.`,
+      });
+      fetchProfiles();
+    } catch (err) {
+      notification.error({
+        message: 'Erreur d\'import',
+        description: err instanceof Error ? err.message : 'Erreur lors de l\'import YAML',
+      });
+    } finally {
+      setImportYamlLoading(false);
+    }
+  }, []);
+
   const handleProfileSubmit = async (values: ProfileCreate | ProfileUpdate) => {
     if (editProfile) return handleProfileUpdate(values as ProfileUpdate);
     return handleProfileCreate(values as ProfileCreate);
@@ -401,6 +447,8 @@ export default function AdminPage() {
                     setEditProfile(null);
                     setProfileModalOpen(true);
                   }}
+                  onExportYaml={handleExportYaml}
+                  onImportYaml={handleImportYaml}
                 />
               </Card>
             ),
@@ -427,6 +475,23 @@ export default function AdminPage() {
         editProfile={editProfile}
         onSuccess={handleProfileSuccess}
       />
+
+      <Modal
+        title="Importer YAML"
+        open={importYamlModalOpen}
+        onCancel={() => { setImportYamlModalOpen(false); importYamlFileRef.current = null; }}
+        onOk={handleImportYamlSubmit}
+        okText="Importer"
+        confirmLoading={importYamlLoading}
+        destroyOnClose
+      >
+        <p style={{ marginBottom: 8 }}>Sélectionnez un fichier profiles.yaml ou .yml :</p>
+        <input
+          type="file"
+          accept=".yaml,.yml"
+          onChange={(e) => { importYamlFileRef.current = e.target.files?.[0] ?? null; }}
+        />
+      </Modal>
     </div>
   );
 }

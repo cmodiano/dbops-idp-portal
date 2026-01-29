@@ -344,6 +344,32 @@ class TestListActions:
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
+    async def test_list_actions_invalid_page_rejected(self, client, dbops_token):
+        """Test page=0 or negative returns 422 (avoids negative offset in repository)."""
+        with patch("app.api.deps.user_repository") as mock_repo:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+            for invalid_page in (0, -1):
+                response = await client.get(
+                    f"/api/v1/admin/actions?page={invalid_page}",
+                    headers={"Authorization": f"Bearer {dbops_token}"},
+                )
+                assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    async def test_list_actions_invalid_page_size_rejected(self, client, dbops_token):
+        """Test page_size=0 or negative returns 422 (avoids ZeroDivisionError in repository)."""
+        with patch("app.api.deps.user_repository") as mock_repo:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+            for invalid_size in (0, -1):
+                response = await client.get(
+                    f"/api/v1/admin/actions?page_size={invalid_size}",
+                    headers={"Authorization": f"Bearer {dbops_token}"},
+                )
+                assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
 
 class TestGetAction:
     """Tests for GET /api/v1/admin/actions/{id}."""
@@ -1069,6 +1095,25 @@ class TestUpdateActionTags:
             )
 
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    @pytest.mark.asyncio
+    async def test_put_tags_422_both_ids_and_names(self, client, dbops_token):
+        """PUT tags with both tag_ids and tag_names returns 422 (mutual exclusivity)."""
+        with patch("app.api.deps.user_repository") as mock_repo:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+
+            response = await client.put(
+                "/api/v1/admin/actions/1/tags",
+                json={"tag_ids": [1, 2], "tag_names": ["rac", "dataguard"]},
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        body = response.json()
+        assert "detail" in body
+        assert any("not both" in str(d).lower() for d in body["detail"])
 
     @pytest.mark.asyncio
     async def test_put_tags_forbidden_non_dbops(self, client, dba_token):

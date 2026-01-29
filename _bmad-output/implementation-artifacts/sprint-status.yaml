@@ -58,11 +58,11 @@ development_status:
   2-6-systeme-de-tags-flexibles-pour-les-actions: done
   2-7-refactorisation-des-connecteurs-generiques: done  # code-review 2026-01-28
   2-8-suppression-du-rail-cab-et-simplification-servicenow: done  # code-review 2026-01-28
-  2-9-gestion-des-profiles-dynamiques: review
-  2-10-permissions-actions-par-profile: backlog
-  2-11-permissions-targets-par-profile: backlog
-  2-12-cumul-des-permissions-multi-profiles: backlog
-  2-13-import-export-profiles-as-code-yaml: backlog
+  2-9-gestion-des-profiles-dynamiques: done  # code-review 2026-01-28
+  2-10-permissions-actions-par-profile: done  # code-review 2026-01-28
+  2-11-permissions-targets-par-profile: done  # code-review 2026-01-28
+  2-12-cumul-des-permissions-multi-profiles: done  # code-review 2026-01-28
+  2-13-import-export-profiles-as-code-yaml: done  # code-review 2026-01-28
   2-14-refactoring-supprimer-ancien-rbac-par-action: backlog
   2-15-dark-mode-toggle: done  # Quick win UX - stakeholder request; code-review 2026-01-28
   2-16-branding-portail-dbops: done  # Quick win - logo + naming

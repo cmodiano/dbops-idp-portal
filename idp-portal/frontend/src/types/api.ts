@@ -187,6 +187,38 @@ export interface ProfileListItem {
   created_at: string;
 }
 
+/** Story 2.10: Actions/env permissions per profile (AC2–AC5). */
+export type ProfileActionsType = 'list' | 'pattern' | 'all';
+
+export interface ProfileActionPermissionsUpdate {
+  actions_type: ProfileActionsType;
+  action_ids?: number[] | null;
+  tag_patterns?: string[] | null;
+  environments?: string[] | null;
+}
+
+export interface ProfileActionPermissionsResponse {
+  actions_type: ProfileActionsType;
+  action_ids: number[];
+  tag_patterns: string[];
+  environments: string[];
+}
+
+/** Story 2.11: Target permissions per profile (AC1–AC5). */
+export type ProfileTargetsType = 'list' | 'pattern' | 'all';
+
+export interface ProfileTargetPermissionsUpdate {
+  targets_type: ProfileTargetsType;
+  target_names?: string[] | null;
+  target_patterns?: string[] | null;
+}
+
+export interface ProfileTargetPermissionsResponse {
+  targets_type: ProfileTargetsType;
+  target_names: string[];
+  target_patterns: string[];
+}
+
 /**
  * Subset of ActionDetail used for real-time preview in admin form.
  * Contains all fields needed to render ActionCard and ActionDrawerPreview.

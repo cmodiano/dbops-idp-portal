@@ -5,7 +5,7 @@ All endpoints require DBOPS profile for access.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 
 from app.core.exceptions import NotFoundError, InvalidStateError
 from app.core.security import require_profile
@@ -58,8 +58,8 @@ async def list_actions(
     status: ActionStatus | None = None,
     category: ActionCategory | None = None,
     engine: ActionEngine | None = None,
-    page: int = 1,
-    page_size: int = 25,
+    page: int = Query(1, ge=1, description="Page number (1-based)"),
+    page_size: int = Query(25, ge=1, description="Items per page"),
     user: UserProfile = Depends(require_profile("dbops")),
 ) -> dict:
     """List all actions for admin dashboard (Story 2.4, AC #2).
