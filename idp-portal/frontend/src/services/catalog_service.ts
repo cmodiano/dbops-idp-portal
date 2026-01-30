@@ -28,9 +28,8 @@ export interface RecentAction {
   last_executed_at: string;
 }
 
-/** Filters for catalog query (Story 3.3, AC9). */
+/** Filters for catalog query (Story 3.3, AC9; Story 2.23: category removed). */
 export interface CatalogFilters {
-  category?: string;
   tags?: string[];
   /** Text search on name, description, tags (debounce 300 ms recommended). */
   q?: string;
@@ -60,13 +59,10 @@ export interface CatalogActionDetailResponse {
 
 /**
  * Fetch catalog actions (AC1, AC3, AC6, AC9, AC10, AC11).
- * Optional filters: category, tags, q, engine, environment, impact (Story 3.3).
+ * Optional filters: tags, q, engine, environment, impact (Story 3.3; Story 2.23: category removed).
  */
 export async function fetchCatalogActions(filters?: CatalogFilters): Promise<CatalogAction[]> {
   const params = new URLSearchParams();
-  if (filters?.category) {
-    params.set('category', filters.category);
-  }
   if (filters?.tags && filters.tags.length > 0) {
     params.set('tags', filters.tags.join(','));
   }

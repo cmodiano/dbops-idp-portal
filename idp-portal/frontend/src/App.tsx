@@ -1,4 +1,4 @@
-import { ConfigProvider } from 'antd';
+import { ConfigProvider, App as AntApp } from 'antd';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
 import { lazy, Suspense, useEffect } from 'react';
 import { lightTheme, darkTheme } from './theme/desjardins';
@@ -57,24 +57,26 @@ function ThemedApp() {
 
   return (
     <ConfigProvider theme={currentTheme}>
-      <BrowserRouter>
-        <AuthProvider>
-          <Suspense fallback={null}>
-            <Routes>
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/auth/callback" element={<AuthCallbackPage />} />
-              <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-                <Route index element={<Navigate to="/catalog" replace />} />
-                <Route path="/catalog" element={<CatalogPage />} />
-                <Route path="/executions" element={<ExecutionsPage />} />
-                <Route path="/dashboard" element={<DashboardPage />} />
-                <Route path="/admin" element={<AdminGuard><AdminPage /></AdminGuard>} />
-              </Route>
-              <Route path="*" element={<NotFoundPage />} />
-            </Routes>
-          </Suspense>
-        </AuthProvider>
-      </BrowserRouter>
+      <AntApp>
+        <BrowserRouter>
+          <AuthProvider>
+            <Suspense fallback={null}>
+              <Routes>
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/auth/callback" element={<AuthCallbackPage />} />
+                <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+                  <Route index element={<Navigate to="/catalog" replace />} />
+                  <Route path="/catalog" element={<CatalogPage />} />
+                  <Route path="/executions" element={<ExecutionsPage />} />
+                  <Route path="/dashboard" element={<DashboardPage />} />
+                  <Route path="/admin" element={<AdminGuard><AdminPage /></AdminGuard>} />
+                </Route>
+                <Route path="*" element={<NotFoundPage />} />
+              </Routes>
+            </Suspense>
+          </AuthProvider>
+        </BrowserRouter>
+      </AntApp>
     </ConfigProvider>
   );
 }

@@ -8,7 +8,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Typography, Button, Table, Space, notification, Card, Tag, Tabs } from 'antd';
+import { Typography, Button, Table, Space, Card, Tag, Tabs, App } from 'antd';
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { ActionWizard } from '../components/admin/ActionWizard';
@@ -124,6 +124,7 @@ const getColumns = (
 ];
 
 export default function AdminPage() {
+  const { notification } = App.useApp();
   const [actions, setActions] = useState<ActionListItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -157,7 +158,7 @@ export default function AdminPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [notification]);
 
   useEffect(() => {
     fetchActions();
@@ -176,7 +177,7 @@ export default function AdminPage() {
     } finally {
       setProfilesLoading(false);
     }
-  }, []);
+  }, [notification]);
 
   const handleCreate = async (action: ActionCreate) => {
     setSubmitting(true);
@@ -303,7 +304,7 @@ export default function AdminPage() {
         description: err instanceof Error ? err.message : 'Erreur lors de l\'export YAML',
       });
     }
-  }, []);
+  }, [notification]);
 
   const handleImportYaml = useCallback(() => {
     setImportYamlModalOpen(true);
@@ -316,7 +317,7 @@ export default function AdminPage() {
       description: `Import reussi : ${created} cree(s), ${updated} mis a jour.`,
     });
     fetchProfiles();
-  }, [fetchProfiles]);
+  }, [notification, fetchProfiles]);
 
   const fetchIntegrations = useCallback(async () => {
     setIntegrationsLoading(true);
@@ -331,7 +332,7 @@ export default function AdminPage() {
     } finally {
       setIntegrationsLoading(false);
     }
-  }, []);
+  }, [notification]);
 
   const handleIntegrationEdit = async (record: IntegrationListItem) => {
     setIntegrationSubmitError(null);

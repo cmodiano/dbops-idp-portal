@@ -1,5 +1,6 @@
 /**
- * Tests for IntegrationForm (Story 2.28, AC3, AC4, AC5).
+ * Tests for IntegrationForm (Story 2.28, 4.9).
+ * Story 4.9: Type libre (AutoComplete), auth_flow (Select), Upload icône.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -10,11 +11,12 @@ import type { IntegrationResponse } from '../../types/api';
 
 const mockOnSubmit = vi.fn().mockResolvedValue({
   id: 1,
-  type: 'aap' as const,
+  type: 'aap',  // Story 4.9: free-form string
   name: 'AAP Prod',
   base_url: 'https://aap.example.com',
   credential_ref: null,
   icon: null,
+  auth_flow: 'token',
   created_at: '2026-01-28T10:00:00Z',
   updated_at: '2026-01-28T10:00:00Z',
 } as IntegrationResponse);
@@ -48,6 +50,7 @@ describe('IntegrationForm', () => {
           base_url: 'https://aap.example.com',
           credential_ref: null,
           icon: null,
+          auth_flow: 'token',
           created_at: '2026-01-28T10:00:00Z',
           updated_at: '2026-01-28T10:00:00Z',
         }}
@@ -56,13 +59,13 @@ describe('IntegrationForm', () => {
     expect(screen.getByText('Modifier l\'intégration')).toBeInTheDocument();
   });
 
-  it('has Type, Nom, URL de base, Référence credentials, Icône fields and Aperçu', () => {
+  it('has Type, Nom, URL de base, Référence credentials, Auth Flow, Icône fields and Aperçu', () => {
     render(<IntegrationForm {...defaultProps} />);
     expect(screen.getByLabelText(/Type de plateforme/)).toBeInTheDocument();
     expect(screen.getByLabelText(/^Nom/)).toBeInTheDocument();
     expect(screen.getByLabelText(/URL de base/)).toBeInTheDocument();
     expect(screen.getByLabelText(/Référence credentials/)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Icône/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Flow d'authentification/)).toBeInTheDocument();
     expect(screen.getByText('Aperçu')).toBeInTheDocument();
   });
 
@@ -90,20 +93,22 @@ describe('IntegrationForm', () => {
     });
   });
 
-  it('submits with type, name, base_url and calls onSuccess', async () => {
+  it('submits with type, name, base_url, auth_flow and calls onSuccess (Story 4.9)', async () => {
     const user = userEvent.setup();
     render(<IntegrationForm {...defaultProps} />);
-    await user.type(screen.getByLabelText(/^Nom/), 'AAP Prod');
-    await user.type(screen.getByLabelText(/URL de base/), 'https://aap.example.com');
+    await user.type(screen.getByLabelText(/Type de plateforme/), 'jenkins');
+    await user.type(screen.getByLabelText(/^Nom/), 'Jenkins CI');
+    await user.type(screen.getByLabelText(/URL de base/), 'https://jenkins.example.com');
     await user.click(screen.getByRole('button', { name: /Créer/i }));
     await waitFor(() => expect(mockOnSubmit).toHaveBeenCalled());
     expect(mockOnSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'aap',
-        name: 'AAP Prod',
-        base_url: 'https://aap.example.com',
+        type: 'jenkins',
+        name: 'Jenkins CI',
+        base_url: 'https://jenkins.example.com',
         credential_ref: null,
         icon: null,
+        auth_flow: null,
       })
     );
     expect(mockOnSuccess).toHaveBeenCalled();
@@ -116,14 +121,15 @@ describe('IntegrationForm', () => {
     expect(mockOnCancel).toHaveBeenCalled();
   });
 
-  it('populates form fields with editIntegration values in edit mode', async () => {
+  it('populates form fields with editIntegration values in edit mode (Story 4.9)', async () => {
     const editIntegration = {
       id: 1,
-      type: 'terraform' as const,
+      type: 'terraform',
       name: 'Terraform Cloud',
       base_url: 'https://app.terraform.io',
       credential_ref: 'secret/terraform/prod',
       icon: 'https://example.com/terraform.png',
+      auth_flow: 'pat' as const,
       created_at: '2026-01-28T10:00:00Z',
       updated_at: '2026-01-28T10:00:00Z',
     };
@@ -133,9 +139,9 @@ describe('IntegrationForm', () => {
     await waitFor(() => {
       expect(screen.getByLabelText(/^Nom/)).toHaveValue('Terraform Cloud');
     });
+    expect(screen.getByLabelText(/Type de plateforme/)).toHaveValue('terraform');
     expect(screen.getByLabelText(/URL de base/)).toHaveValue('https://app.terraform.io');
     expect(screen.getByLabelText(/Référence credentials/)).toHaveValue('secret/terraform/prod');
-    expect(screen.getByLabelText(/Icône/)).toHaveValue('https://example.com/terraform.png');
   });
 
   it('shows Avatar preview when icon is a valid URL', async () => {
@@ -152,14 +158,39 @@ describe('IntegrationForm', () => {
     });
   });
 
-  it('shows preset icon when icon field is empty', () => {
+  it('shows fallback API icon when icon field is empty (Story 4.9)', () => {
     render(<IntegrationForm {...defaultProps} />);
-    // Default type is 'aap', so the preset icon should be rendered (ApiOutlined)
-    // The preview section should contain an icon (not an Avatar with URL)
+    // Story 4.9: No type-specific icons, fallback to generic ApiOutlined
     const previewLabel = screen.getByText('Aperçu');
     expect(previewLabel).toBeInTheDocument();
-    // Avatar with URL would have img tag, preset icon doesn't
-    const img = document.querySelector('.ant-avatar img');
-    expect(img).not.toBeInTheDocument();
+    // Should render Avatar with ApiOutlined icon
+    const avatar = document.querySelector('.ant-avatar');
+    expect(avatar).toBeInTheDocument();
+  });
+
+  it('validates type required and max length (Story 4.9 AC1)', async () => {
+    const user = userEvent.setup();
+    render(<IntegrationForm {...defaultProps} />);
+    await user.type(screen.getByLabelText(/^Nom/), 'Test Integration');
+    await user.type(screen.getByLabelText(/URL de base/), 'https://example.com');
+    await user.click(screen.getByRole('button', { name: /Créer/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Le type est requis/)).toBeInTheDocument();
+    });
+  });
+
+  it('allows free-form type input (Story 4.9 AC1)', async () => {
+    const user = userEvent.setup();
+    render(<IntegrationForm {...defaultProps} />);
+    await user.type(screen.getByLabelText(/Type de plateforme/), 'custom-platform');
+    await user.type(screen.getByLabelText(/^Nom/), 'Custom Platform');
+    await user.type(screen.getByLabelText(/URL de base/), 'https://custom.example.com');
+    await user.click(screen.getByRole('button', { name: /Créer/i }));
+    await waitFor(() => expect(mockOnSubmit).toHaveBeenCalled());
+    expect(mockOnSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'custom-platform',
+      })
+    );
   });
 });

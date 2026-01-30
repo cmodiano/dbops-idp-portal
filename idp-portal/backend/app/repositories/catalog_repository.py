@@ -77,11 +77,12 @@ def _row_to_action_response(row: tuple, tags: list[str] | None = None) -> Action
     Story 2.18 AC5: default_impact_level.
     Story 2.24: change_model_code column removed — change_type_config per env only in detail.
     Story 2.23: category removed — use tags instead.
+    Story 3.4: documentation_md (FR12).
 
-    Expected row order (12 columns after V019):
+    Expected row order (13 columns after V022):
     0:ID, 1:NAME, 2:DESCRIPTION, 3:ENGINE, 4:PLATFORM,
     5:PARAMETERS_SCHEMA, 6:IMPACT_RULES, 7:DEFAULT_IMPACT_LEVEL,
-    8:STATUS, 9:CREATED_BY, 10:CREATED_AT, 11:UPDATED_AT
+    8:STATUS, 9:CREATED_BY, 10:CREATED_AT, 11:UPDATED_AT, 12:DOCUMENTATION_MD
     """
     return ActionResponse(
         id=row[0],
@@ -97,6 +98,7 @@ def _row_to_action_response(row: tuple, tags: list[str] | None = None) -> Action
         created_at=row[10],
         updated_at=row[11],
         tags=tags if tags is not None else [],
+        documentation_md=row[12] if len(row) > 12 else None,
     )
 
 
@@ -230,12 +232,13 @@ def _row_to_action_detail(row: tuple, tags: list[str] | None = None) -> ActionDe
     Story 2.18 AC5: default_impact_level.
     Story 2.24: change_model_code column removed; change_type_config per env.
     Story 2.23: category removed — use tags instead.
+    Story 3.4: documentation_md (FR12).
 
-    Expected row order (14 columns after V019):
+    Expected row order (15 columns after V022):
     0:ID, 1:NAME, 2:DESCRIPTION, 3:ENGINE, 4:PLATFORM,
     5:PARAMETERS_SCHEMA, 6:IMPACT_RULES, 7:DEFAULT_IMPACT_LEVEL,
     8:STATUS, 9:CREATED_BY, 10:CREATED_AT, 11:UPDATED_AT,
-    12:EXECUTION_STEPS, 13:CHANGE_TYPE_CONFIG
+    12:EXECUTION_STEPS, 13:CHANGE_TYPE_CONFIG, 14:DOCUMENTATION_MD
     """
     return ActionDetail(
         id=row[0],
@@ -253,6 +256,7 @@ def _row_to_action_detail(row: tuple, tags: list[str] | None = None) -> ActionDe
         execution_steps=_safe_parse_execution_steps(row[12]) if len(row) > 12 else None,
         change_type_config=_safe_parse_change_type_config(row[13]) if len(row) > 13 else None,
         tags=tags if tags is not None else [],
+        documentation_md=row[14] if len(row) > 14 else None,
     )
 
 
@@ -414,10 +418,10 @@ async def create(action: ActionCreate, user_id: int) -> ActionResponse:
     query = """
         INSERT INTO ACTIONS_CATALOG
         (NAME, DESCRIPTION, ENGINE, PLATFORM,
-         PARAMETERS_SCHEMA, IMPACT_RULES, DEFAULT_IMPACT_LEVEL, STATUS, CREATED_BY)
+         PARAMETERS_SCHEMA, IMPACT_RULES, DEFAULT_IMPACT_LEVEL, STATUS, CREATED_BY, DOCUMENTATION_MD)
         VALUES
         (:name, :description, :engine, :platform,
-         :parameters_schema, :impact_rules, :default_impact_level, :status, :created_by)
+         :parameters_schema, :impact_rules, :default_impact_level, :status, :created_by, :documentation_md)
         RETURNING ID INTO :out_id
     """
     params = {
@@ -430,6 +434,7 @@ async def create(action: ActionCreate, user_id: int) -> ActionResponse:
         "default_impact_level": action.default_impact_level.value if action.default_impact_level else None,
         "status": ActionStatus.DRAFT.value,
         "created_by": user_id,
+        "documentation_md": action.documentation_md,
     }
 
     async with get_connection() as conn:
@@ -473,7 +478,8 @@ async def create(action: ActionCreate, user_id: int) -> ActionResponse:
         created_at=result.created_at,
         updated_at=result.updated_at,
         tags=result.tags,
-    )  # Story 2.24: change_model_code removed from ActionResponse
+        documentation_md=result.documentation_md,
+    )  # Story 2.24: change_model_code removed; Story 3.4: documentation_md added
 
 
 async def get_by_id(action_id: int) -> ActionDetail | None:
@@ -491,7 +497,7 @@ async def get_by_id(action_id: int) -> ActionDetail | None:
     query = """
         SELECT ID, NAME, DESCRIPTION, ENGINE, PLATFORM,
                PARAMETERS_SCHEMA, IMPACT_RULES, DEFAULT_IMPACT_LEVEL, STATUS, CREATED_BY,
-               CREATED_AT, UPDATED_AT, EXECUTION_STEPS, CHANGE_TYPE_CONFIG
+               CREATED_AT, UPDATED_AT, EXECUTION_STEPS, CHANGE_TYPE_CONFIG, DOCUMENTATION_MD
         FROM ACTIONS_CATALOG
         WHERE ID = :action_id
     """
@@ -538,7 +544,7 @@ async def list_all(
     base_query = """
         SELECT ID, NAME, DESCRIPTION, ENGINE, PLATFORM,
                PARAMETERS_SCHEMA, IMPACT_RULES, DEFAULT_IMPACT_LEVEL, STATUS, CREATED_BY,
-               CREATED_AT, UPDATED_AT
+               CREATED_AT, UPDATED_AT, DOCUMENTATION_MD
         FROM ACTIONS_CATALOG
     """
 
@@ -610,7 +616,7 @@ async def list_catalog(
     base_query = """
         SELECT AC.ID, AC.NAME, AC.DESCRIPTION, AC.ENGINE, AC.PLATFORM,
                AC.PARAMETERS_SCHEMA, AC.IMPACT_RULES, AC.DEFAULT_IMPACT_LEVEL, AC.STATUS, AC.CREATED_BY,
-               AC.CREATED_AT, AC.UPDATED_AT,
+               AC.CREATED_AT, AC.UPDATED_AT, AC.DOCUMENTATION_MD,
                COALESCE((SELECT COUNT(*) FROM EXECUTION_LOG EL WHERE EL.ACTION_ID = AC.ID), 0) AS EXECUTION_COUNT
         FROM ACTIONS_CATALOG AC
     """
@@ -683,10 +689,10 @@ async def list_catalog(
 
     results = []
     for row in rows:
-        action = _row_to_action_response(row[:12], tags=tags_map.get(row[0], []))
+        action = _row_to_action_response(row[:13], tags=tags_map.get(row[0], []))
         results.append({
             **action.model_dump(mode="json"),
-            "execution_count": row[12],
+            "execution_count": row[13],
         })
     return results
 
@@ -849,6 +855,7 @@ async def update_action(
             PARAMETERS_SCHEMA = :parameters_schema,
             IMPACT_RULES = :impact_rules,
             DEFAULT_IMPACT_LEVEL = :default_impact_level,
+            DOCUMENTATION_MD = :documentation_md,
             UPDATED_AT = SYSTIMESTAMP
         WHERE ID = :action_id
     """
@@ -861,6 +868,7 @@ async def update_action(
         "parameters_schema": _json_to_str(action_update.parameters_schema),
         "impact_rules": _json_to_str(action_update.impact_rules),
         "default_impact_level": action_update.default_impact_level.value if action_update.default_impact_level else None,
+        "documentation_md": action_update.documentation_md,
     }
 
     async with get_connection() as conn:
@@ -890,7 +898,7 @@ async def update_action(
         entity_id=action_id,
         details={
             "action_name": action_update.name,
-            "updated_fields": ["name", "description", "engine", "platform", "parameters_schema", "impact_rules", "default_impact_level"],
+            "updated_fields": ["name", "description", "engine", "platform", "parameters_schema", "impact_rules", "default_impact_level", "documentation_md"],
         },
     )
 

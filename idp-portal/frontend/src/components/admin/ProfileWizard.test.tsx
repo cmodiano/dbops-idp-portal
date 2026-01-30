@@ -10,7 +10,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { App } from 'antd';
 import { ProfileWizard } from './ProfileWizard';
+
+const renderWithApp = (ui: React.ReactElement) => render(<App>{ui}</App>);
 import * as profilesService from '../../services/profiles_service';
 import * as adminService from '../../services/admin_service';
 import type { ProfileResponse, ProfileActionPermissionsResponse, ProfileTargetPermissionsResponse } from '../../types/api';
@@ -80,7 +83,7 @@ describe('ProfileWizard', () => {
 
   describe('Task 7.1 — Wizard 3 étapes, navigation, soumission', () => {
     it('affiche le wizard avec 3 étapes (AC1)', async () => {
-      render(<ProfileWizard {...defaultProps} />);
+      renderWithApp(<ProfileWizard {...defaultProps} />);
 
       // Steps should be visible
       expect(screen.getByText('Général')).toBeInTheDocument();
@@ -89,7 +92,7 @@ describe('ProfileWizard', () => {
     });
 
     it('affiche l\'étape 1 Général par défaut (AC2)', async () => {
-      render(<ProfileWizard {...defaultProps} />);
+      renderWithApp(<ProfileWizard {...defaultProps} />);
 
       // Step 1 fields should be visible
       expect(screen.getByLabelText(/Nom du profil/i)).toBeInTheDocument();
@@ -99,7 +102,7 @@ describe('ProfileWizard', () => {
 
     it('valide le nom requis avant de passer à l\'étape 2 (AC2)', async () => {
       const user = userEvent.setup();
-      render(<ProfileWizard {...defaultProps} />);
+      renderWithApp(<ProfileWizard {...defaultProps} />);
 
       // Try to go next without filling name
       const nextButton = screen.getByRole('button', { name: /Suivant/i });
@@ -113,7 +116,7 @@ describe('ProfileWizard', () => {
 
     it('navigation Suivant/Précédent permet de naviguer entre les étapes (AC5)', async () => {
       const user = userEvent.setup();
-      render(<ProfileWizard {...defaultProps} />);
+      renderWithApp(<ProfileWizard {...defaultProps} />);
 
       // Fill step 1 (required for validation)
       await user.type(screen.getByLabelText(/Nom du profil/i), 'Mon Profil');
@@ -146,7 +149,7 @@ describe('ProfileWizard', () => {
     it('soumission à l\'étape 3 appelle les bonnes APIs (AC6)', async () => {
       const user = userEvent.setup();
       const onSuccess = vi.fn();
-      render(<ProfileWizard {...defaultProps} onSuccess={onSuccess} />);
+      renderWithApp(<ProfileWizard {...defaultProps} onSuccess={onSuccess} />);
 
       // Step 1: Fill required fields
       await user.type(screen.getByLabelText(/Nom du profil/i), 'Nouveau Profil');
@@ -192,7 +195,7 @@ describe('ProfileWizard', () => {
 
     it('bouton Enregistrer visible uniquement à l\'étape 3 (AC6)', async () => {
       const user = userEvent.setup();
-      render(<ProfileWizard {...defaultProps} />);
+      renderWithApp(<ProfileWizard {...defaultProps} />);
 
       // Step 1: No Enregistrer button
       expect(screen.queryByRole('button', { name: /Enregistrer/i })).not.toBeInTheDocument();
@@ -221,7 +224,7 @@ describe('ProfileWizard', () => {
 
   describe('Task 7.2 — Mode édition : pré-remplissage', () => {
     it('charge et affiche les données du profil existant (AC7)', async () => {
-      render(<ProfileWizard {...defaultProps} editProfile={mockProfile} />);
+      renderWithApp(<ProfileWizard {...defaultProps} editProfile={mockProfile} />);
 
       await waitFor(() => {
         expect(mockProfilesService.getProfileActions).toHaveBeenCalledWith(1);
@@ -239,7 +242,7 @@ describe('ProfileWizard', () => {
     it('en mode édition, appelle updateProfile au lieu de createProfile (AC7)', async () => {
       const user = userEvent.setup();
       const onSuccess = vi.fn();
-      render(<ProfileWizard {...defaultProps} editProfile={mockProfile} onSuccess={onSuccess} />);
+      renderWithApp(<ProfileWizard {...defaultProps} editProfile={mockProfile} onSuccess={onSuccess} />);
 
       // Wait for all API calls to complete (profile data loading)
       await waitFor(() => {
@@ -284,7 +287,7 @@ describe('ProfileWizard', () => {
     });
 
     it('affiche le titre "Modifier le profil" en mode édition (AC7)', async () => {
-      render(<ProfileWizard {...defaultProps} editProfile={mockProfile} />);
+      renderWithApp(<ProfileWizard {...defaultProps} editProfile={mockProfile} />);
 
       await waitFor(() => {
         expect(screen.getByText(/Modifier le profil/i)).toBeInTheDocument();
@@ -292,7 +295,7 @@ describe('ProfileWizard', () => {
     });
 
     it('affiche le titre "Nouveau profil" en mode création', () => {
-      render(<ProfileWizard {...defaultProps} />);
+      renderWithApp(<ProfileWizard {...defaultProps} />);
       expect(screen.getByText(/Nouveau profil/i)).toBeInTheDocument();
     });
   });
@@ -300,7 +303,7 @@ describe('ProfileWizard', () => {
   describe('Task 7.3 — Régression : mêmes payloads qu\'avec ProfileForm', () => {
     it('envoie le même payload ProfileCreate que ProfileForm', async () => {
       const user = userEvent.setup();
-      render(<ProfileWizard {...defaultProps} />);
+      renderWithApp(<ProfileWizard {...defaultProps} />);
 
       // Fill all fields like ProfileForm would
       await user.type(screen.getByLabelText(/Nom du profil/i), 'Test Profile');
@@ -333,7 +336,7 @@ describe('ProfileWizard', () => {
 
     it('envoie le même payload ProfileActionPermissionsUpdate que ProfileForm', async () => {
       const user = userEvent.setup();
-      render(<ProfileWizard {...defaultProps} />);
+      renderWithApp(<ProfileWizard {...defaultProps} />);
 
       // Step 1
       await user.type(screen.getByLabelText(/Nom du profil/i), 'Test');
@@ -365,7 +368,7 @@ describe('ProfileWizard', () => {
 
     it('envoie le même payload ProfileTargetPermissionsUpdate que ProfileForm', async () => {
       const user = userEvent.setup();
-      render(<ProfileWizard {...defaultProps} />);
+      renderWithApp(<ProfileWizard {...defaultProps} />);
 
       // Navigate to step 3
       await user.type(screen.getByLabelText(/Nom du profil/i), 'Test');
@@ -394,7 +397,7 @@ describe('ProfileWizard', () => {
   describe('AC3 — Étape 2 Permissions Actions', () => {
     it('affiche Radio.Group avec 3 options (all, list, pattern)', async () => {
       const user = userEvent.setup();
-      render(<ProfileWizard {...defaultProps} />);
+      renderWithApp(<ProfileWizard {...defaultProps} />);
 
       // Navigate to step 2
       await user.type(screen.getByLabelText(/Nom du profil/i), 'Test');
@@ -410,7 +413,7 @@ describe('ProfileWizard', () => {
 
     it('affiche multi-select environnements', async () => {
       const user = userEvent.setup();
-      render(<ProfileWizard {...defaultProps} />);
+      renderWithApp(<ProfileWizard {...defaultProps} />);
 
       await user.type(screen.getByLabelText(/Nom du profil/i), 'Test');
       await user.type(screen.getByLabelText(/Groupe AD/i), 'GRP');
@@ -425,7 +428,7 @@ describe('ProfileWizard', () => {
   describe('AC4 — Étape 3 Permissions Targets', () => {
     it('affiche Radio.Group avec 3 options (all, list, pattern)', async () => {
       const user = userEvent.setup();
-      render(<ProfileWizard {...defaultProps} />);
+      renderWithApp(<ProfileWizard {...defaultProps} />);
 
       // Navigate to step 3
       await user.type(screen.getByLabelText(/Nom du profil/i), 'Test');
@@ -447,7 +450,7 @@ describe('ProfileWizard', () => {
       const user = userEvent.setup();
       mockProfilesService.createProfile.mockRejectedValue(new Error('Création échouée'));
 
-      render(<ProfileWizard {...defaultProps} />);
+      renderWithApp(<ProfileWizard {...defaultProps} />);
 
       await user.type(screen.getByLabelText(/Nom du profil/i), 'Test');
       await user.type(screen.getByLabelText(/Groupe AD/i), 'GRP');
@@ -468,7 +471,7 @@ describe('ProfileWizard', () => {
       mockProfilesService.putProfileActions.mockRejectedValue(new Error('Permissions actions échouées'));
 
       const onSuccess = vi.fn();
-      render(<ProfileWizard {...defaultProps} onSuccess={onSuccess} />);
+      renderWithApp(<ProfileWizard {...defaultProps} onSuccess={onSuccess} />);
 
       await user.type(screen.getByLabelText(/Nom du profil/i), 'Test');
       await user.type(screen.getByLabelText(/Groupe AD/i), 'GRP');
@@ -490,7 +493,7 @@ describe('ProfileWizard', () => {
     it('appelle onCancel quand on clique Annuler', async () => {
       const user = userEvent.setup();
       const onCancel = vi.fn();
-      render(<ProfileWizard {...defaultProps} onCancel={onCancel} />);
+      renderWithApp(<ProfileWizard {...defaultProps} onCancel={onCancel} />);
 
       await user.click(screen.getByRole('button', { name: /Annuler/i }));
 
@@ -498,13 +501,13 @@ describe('ProfileWizard', () => {
     });
 
     it('reset le state quand le modal se ferme', async () => {
-      const { rerender } = render(<ProfileWizard {...defaultProps} />);
+      const { rerender } = renderWithApp(<ProfileWizard {...defaultProps} />);
 
       // Close modal
-      rerender(<ProfileWizard {...defaultProps} open={false} />);
+      rerender(<App><ProfileWizard {...defaultProps} open={false} /></App>);
 
       // Reopen
-      rerender(<ProfileWizard {...defaultProps} open={true} />);
+      rerender(<App><ProfileWizard {...defaultProps} open={true} /></App>);
 
       // Should be back to step 1 with empty fields (wait for Form to mount after reopen)
       await waitFor(() => {

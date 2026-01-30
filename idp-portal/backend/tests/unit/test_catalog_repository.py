@@ -45,7 +45,7 @@ def sample_action_create():
 
 @pytest.fixture
 def mock_db_row():
-    """Sample database row for action. Story 2.24: CHANGE_MODEL_CODE column removed (V019)."""
+    """Sample database row for action. Story 3.4: DOCUMENTATION_MD column added (V022)."""
     return (
         1,  # ID
         "Create PDB Oracle",  # NAME
@@ -59,6 +59,7 @@ def mock_db_row():
         42,  # CREATED_BY
         datetime(2026, 1, 28, 10, 0, 0),  # CREATED_AT
         None,  # UPDATED_AT
+        None,  # DOCUMENTATION_MD (Story 3.4)
     )
 
 
@@ -67,7 +68,7 @@ def mock_db_row():
 
 @pytest.fixture
 def mock_db_row_with_detail():
-    """Sample database row for action detail. Story 2.24: CHANGE_MODEL_CODE removed (V019)."""
+    """Sample database row for action detail. Story 3.4: DOCUMENTATION_MD column added (V022)."""
     return (
         1,  # ID
         "Create PDB Oracle",  # NAME
@@ -83,12 +84,13 @@ def mock_db_row_with_detail():
         None,  # UPDATED_AT
         None,  # EXECUTION_STEPS
         None,  # CHANGE_TYPE_CONFIG
+        None,  # DOCUMENTATION_MD (Story 3.4)
     )
 
 
 @pytest.fixture
 def mock_db_row_with_execution_steps():
-    """Sample database row for action with execution_steps and change_type_config (Story 2.24: new format, no CHANGE_MODEL_CODE)."""
+    """Sample database row for action with execution_steps and change_type_config. Story 3.4: DOCUMENTATION_MD column added."""
     return (
         1,  # ID
         "Create PDB Oracle",  # NAME
@@ -104,12 +106,13 @@ def mock_db_row_with_execution_steps():
         datetime(2026, 1, 28, 11, 0, 0),  # UPDATED_AT
         '[{"order": 1, "name": "Verification", "type": "prerequisite", "connector_type": "none", "connector_config": null, "conditional_environments": null}]',  # EXECUTION_STEPS
         '{"DEV": {"required": false}, "PROD": {"required": true, "change_model_code": "1516B"}}',  # CHANGE_TYPE_CONFIG (Story 2.24)
+        '# Documentation\n\nThis action creates a PDB.',  # DOCUMENTATION_MD (Story 3.4)
     )
 
 
 @pytest.fixture
 def mock_db_row_published():
-    """Sample database row for published action. Story 2.24: no CATEGORY, no CHANGE_MODEL_CODE (V018, V019)."""
+    """Sample database row for published action. Story 3.4: DOCUMENTATION_MD column added (V022)."""
     return (
         2,  # ID
         "Published Action",  # NAME
@@ -125,6 +128,7 @@ def mock_db_row_published():
         None,  # UPDATED_AT
         None,  # EXECUTION_STEPS
         None,  # CHANGE_TYPE_CONFIG
+        None,  # DOCUMENTATION_MD (Story 3.4)
     )
 
 
@@ -675,7 +679,7 @@ class TestUpdateStatus:
 
     @pytest.fixture
     def mock_db_row_draft(self):
-        """Sample database row for draft action. Story 2.24: no CATEGORY, no CHANGE_MODEL_CODE (V018, V019)."""
+        """Sample database row for draft action. Story 3.4: DOCUMENTATION_MD column added (V022)."""
         return (
             1,  # ID
             "Draft Action",  # NAME
@@ -691,11 +695,12 @@ class TestUpdateStatus:
             None,  # UPDATED_AT
             None,  # EXECUTION_STEPS
             None,  # CHANGE_TYPE_CONFIG
+            None,  # DOCUMENTATION_MD (Story 3.4)
         )
 
     @pytest.fixture
     def mock_db_row_published(self):
-        """Sample database row for published action. Story 2.24: no CATEGORY, no CHANGE_MODEL_CODE."""
+        """Sample database row for published action. Story 3.4: DOCUMENTATION_MD column added (V022)."""
         return (
             1,  # ID
             "Published Action",  # NAME
@@ -711,11 +716,12 @@ class TestUpdateStatus:
             datetime(2026, 1, 28, 11, 0, 0),  # UPDATED_AT
             None,  # EXECUTION_STEPS
             None,  # CHANGE_TYPE_CONFIG
+            None,  # DOCUMENTATION_MD (Story 3.4)
         )
 
     @pytest.fixture
     def mock_db_row_disabled(self):
-        """Sample database row for disabled action. Story 2.24: no CATEGORY, no CHANGE_MODEL_CODE."""
+        """Sample database row for disabled action. Story 3.4: DOCUMENTATION_MD column added (V022)."""
         return (
             1,  # ID
             "Disabled Action",  # NAME
@@ -731,6 +737,7 @@ class TestUpdateStatus:
             datetime(2026, 1, 28, 12, 0, 0),  # UPDATED_AT
             None,  # EXECUTION_STEPS
             None,  # CHANGE_TYPE_CONFIG
+            None,  # DOCUMENTATION_MD (Story 3.4)
         )
 
     @pytest.mark.asyncio
@@ -1209,7 +1216,7 @@ class TestListCatalog:
 
     @pytest.fixture
     def mock_db_row_catalog(self):
-        """Sample database row for catalog list with execution_count."""
+        """Sample database row for catalog list with execution_count. Story 3.4: DOCUMENTATION_MD column added (V022)."""
         return (
             1,  # ID
             "Create PDB Oracle",  # NAME
@@ -1223,6 +1230,7 @@ class TestListCatalog:
             42,  # CREATED_BY
             datetime(2026, 1, 28, 10, 0, 0),  # CREATED_AT
             None,  # UPDATED_AT
+            '# Documentation\n\nThis action creates a PDB.',  # DOCUMENTATION_MD (Story 3.4)
             5,  # EXECUTION_COUNT
         )
 
@@ -1419,3 +1427,156 @@ class TestListTagsWithCounts:
         assert captured_params.get("aid0") == 1
         assert captured_params.get("aid1") == 2
         assert captured_params.get("aid2") == 3
+
+
+class TestDocumentationMd:
+    """Tests for documentation_md field (Story 3.4, FR12)."""
+
+    @pytest.fixture
+    def mock_db_row_with_documentation(self):
+        """Sample database row with documentation_md content."""
+        return (
+            1,  # ID
+            "Create PDB Oracle",  # NAME
+            "Creates a Pluggable Database",  # DESCRIPTION
+            "Oracle",  # ENGINE
+            "AAP",  # PLATFORM
+            '{"type": "object"}',  # PARAMETERS_SCHEMA
+            '{"DEV": {"level": "low"}}',  # IMPACT_RULES
+            "low",  # DEFAULT_IMPACT_LEVEL
+            "published",  # STATUS
+            42,  # CREATED_BY
+            datetime(2026, 1, 28, 10, 0, 0),  # CREATED_AT
+            None,  # UPDATED_AT
+            None,  # EXECUTION_STEPS
+            None,  # CHANGE_TYPE_CONFIG
+            "# Create PDB\n\n## Overview\n\nThis action creates a **Pluggable Database**.\n\n```sql\nCREATE PLUGGABLE DATABASE pdb_name;\n```",  # DOCUMENTATION_MD
+        )
+
+    @pytest.fixture
+    def mock_db_row_without_documentation(self):
+        """Sample database row without documentation_md content."""
+        return (
+            2,  # ID
+            "Delete PDB",  # NAME
+            "Deletes a Pluggable Database",  # DESCRIPTION
+            "Oracle",  # ENGINE
+            "AAP",  # PLATFORM
+            None,  # PARAMETERS_SCHEMA
+            None,  # IMPACT_RULES
+            None,  # DEFAULT_IMPACT_LEVEL
+            "published",  # STATUS
+            42,  # CREATED_BY
+            datetime(2026, 1, 28, 10, 0, 0),  # CREATED_AT
+            None,  # UPDATED_AT
+            None,  # EXECUTION_STEPS
+            None,  # CHANGE_TYPE_CONFIG
+            None,  # DOCUMENTATION_MD
+        )
+
+    def test_row_to_action_detail_with_documentation_md(self, mock_db_row_with_documentation):
+        """Test _row_to_action_detail includes documentation_md when present (AC4)."""
+        result = catalog_repository._row_to_action_detail(mock_db_row_with_documentation)
+        assert result.documentation_md is not None
+        assert "# Create PDB" in result.documentation_md
+        assert "```sql" in result.documentation_md
+
+    def test_row_to_action_detail_without_documentation_md(self, mock_db_row_without_documentation):
+        """Test _row_to_action_detail returns None for documentation_md when absent (AC3)."""
+        result = catalog_repository._row_to_action_detail(mock_db_row_without_documentation)
+        assert result.documentation_md is None
+
+    def test_row_to_action_response_with_documentation_md(self, mock_db_row_with_documentation):
+        """Test _row_to_action_response includes documentation_md (AC4)."""
+        row_for_response = mock_db_row_with_documentation[:12] + (mock_db_row_with_documentation[14],)
+        result = catalog_repository._row_to_action_response(row_for_response)
+        assert result.documentation_md is not None
+        assert "# Create PDB" in result.documentation_md
+
+    @pytest.mark.asyncio
+    async def test_get_by_id_returns_documentation_md(self, mock_db_row_with_documentation):
+        """Test get_by_id returns documentation_md field (AC4)."""
+        mock_cursor = AsyncMock()
+        mock_cursor.fetchone = AsyncMock(return_value=mock_db_row_with_documentation)
+        mock_cursor.close = AsyncMock()
+
+        mock_conn = AsyncMock()
+        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+
+        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+            with patch("app.repositories.catalog_repository.get_tags_for_action", new_callable=AsyncMock, return_value=[]):
+                result = await catalog_repository.get_by_id(1)
+
+        assert result is not None
+        assert result.documentation_md is not None
+        assert "# Create PDB" in result.documentation_md
+
+    @pytest.mark.asyncio
+    async def test_get_by_id_returns_null_documentation_md(self, mock_db_row_without_documentation):
+        """Test get_by_id returns None for documentation_md when not set (AC3)."""
+        mock_cursor = AsyncMock()
+        mock_cursor.fetchone = AsyncMock(return_value=mock_db_row_without_documentation)
+        mock_cursor.close = AsyncMock()
+
+        mock_conn = AsyncMock()
+        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+
+        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+            with patch("app.repositories.catalog_repository.get_tags_for_action", new_callable=AsyncMock, return_value=[]):
+                result = await catalog_repository.get_by_id(2)
+
+        assert result is not None
+        assert result.documentation_md is None
+
+    @pytest.mark.asyncio
+    async def test_create_action_with_documentation_md(self, mock_db_row_with_documentation):
+        """Test create action with documentation_md persists to database."""
+        from app.models.catalog import ActionCreate, ActionEngine, ActionPlatform
+
+        action_create = ActionCreate(
+            name="Create PDB Oracle",
+            description="Creates a Pluggable Database",
+            engine=ActionEngine.ORACLE,
+            platform=ActionPlatform.AAP,
+            documentation_md="# Create PDB\n\nThis action creates a PDB.",
+        )
+
+        captured_params = {}
+        mock_cursor = AsyncMock()
+        mock_cursor.close = AsyncMock()
+        mock_conn = AsyncMock()
+        mock_conn.commit = AsyncMock()
+
+        mock_out_id = MagicMock()
+        mock_out_id.getvalue.return_value = [1]
+        mock_conn.var = MagicMock(return_value=mock_out_id)
+
+        mock_cursor_get = AsyncMock()
+        mock_cursor_get.fetchone = AsyncMock(return_value=mock_db_row_with_documentation)
+        mock_cursor_get.close = AsyncMock()
+
+        call_count = 0
+
+        async def mock_execute(query, params):
+            nonlocal call_count, captured_params
+            call_count += 1
+            if call_count == 1:
+                captured_params = {k: v for k, v in params.items() if k != "out_id"}
+                return mock_cursor
+            return mock_cursor_get
+
+        mock_conn.execute = mock_execute
+
+        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+            with patch("app.repositories.catalog_repository.get_tags_for_action", new_callable=AsyncMock, return_value=[]):
+                result = await catalog_repository.create(action_create, user_id=42)
+
+        assert "documentation_md" in captured_params
+        assert captured_params["documentation_md"] == "# Create PDB\n\nThis action creates a PDB."
+        assert result.documentation_md is not None

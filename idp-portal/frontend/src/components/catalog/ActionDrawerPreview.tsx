@@ -1,5 +1,5 @@
 /**
- * ActionDrawerPreview - Read-only preview of action detail (Story 2.5, AC #1, #2, #4; Story 3.2).
+ * ActionDrawerPreview - Read-only preview of action detail (Story 2.5, AC #1, #2, #4; Story 3.2; Story 3.4; Story 4.1).
  *
  * Usage contexts:
  * - AdminPreview: inline preview card (role="region", no focus trap)
@@ -11,16 +11,23 @@
  * - Engine and platform info
  * - Tags (category display) - Story 3.2
  * - Parameters list with types (from parameters_schema) - Story 3.2
+ * - Documentation section with rendered Markdown (Story 3.4, FR12)
  * - "Exécuter" button with permission state (AC3) - Story 3.2
  *
  * Props:
  * - canExecute: undefined = enabled (admin preview), false = disabled with tooltip (catalog)
+ * - onExecute: callback when Execute button is clicked (Story 4.1, Task 7)
  *
  * Story 2.23: category removed — use tags for categorization.
+ * Story 3.4: documentation_md field with Markdown rendering.
+ * Story 4.1: Execute button opens ExecutionWizard.
  */
 
-import { Card, Typography, Button, Descriptions, Space, Empty, Tag, Tooltip, theme } from 'antd';
-import { PlayCircleOutlined } from '@ant-design/icons';
+import { Card, Typography, Button, Descriptions, Space, Empty, Tag, Tooltip, Divider, theme } from 'antd';
+import { PlayCircleOutlined, FileTextOutlined } from '@ant-design/icons';
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeSanitize from 'rehype-sanitize';
 import type { ActionPreviewData } from '../../types/api';
 import { ImpactIndicator } from '../shared/ImpactIndicator';
 import { STYLE_TOKENS } from '../../theme/styleTokens';
@@ -34,6 +41,8 @@ export interface ActionDrawerPreviewProps {
   canExecute?: boolean;
   /** Story 3.2 AC3: environments where user can execute. */
   allowedEnvironments?: string[];
+  /** Story 4.1 Task 7: callback when Execute button is clicked. Opens ExecutionWizard. */
+  onExecute?: () => void;
 }
 
 /** Parameter info extracted from JSON Schema. */
@@ -66,6 +75,7 @@ export function ActionDrawerPreview({
   visible = true,
   canExecute,
   allowedEnvironments = [],
+  onExecute,
 }: ActionDrawerPreviewProps) {
   const { token } = theme.useToken();
 
@@ -90,7 +100,7 @@ export function ActionDrawerPreview({
         body: { padding: STYLE_TOKENS.drawerPreviewPadding },
       }}
     >
-      <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <Title level={4} style={{ margin: 0 }}>
@@ -158,7 +168,108 @@ export function ActionDrawerPreview({
           )}
         </div>
 
-        {/* Execute button - Story 3.2, AC3 */}
+        {/* Documentation section - Story 3.4, FR12, AC1, AC2, AC3, AC5 */}
+        <Divider style={{ margin: '16px 0' }} />
+        <div>
+          <Space align="center" style={{ marginBottom: 8 }}>
+            <FileTextOutlined />
+            <Text strong>Documentation</Text>
+          </Space>
+          {action.documentation_md ? (
+            <div
+              style={{
+                maxHeight: 300,
+                overflowY: 'auto',
+                padding: '12px 16px',
+                backgroundColor: token.colorBgTextHover,
+                borderRadius: token.borderRadius,
+              }}
+              data-testid="documentation-content"
+            >
+              <Markdown
+                remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeSanitize]}
+                components={{
+                  // Style headings to match Ant Design
+                  h1: ({ children }) => <Title level={3}>{children}</Title>,
+                  h2: ({ children }) => <Title level={4}>{children}</Title>,
+                  h3: ({ children }) => <Title level={5}>{children}</Title>,
+                  h4: ({ children }) => <Text strong style={{ display: 'block', marginTop: 8 }}>{children}</Text>,
+                  h5: ({ children }) => <Text strong style={{ display: 'block', marginTop: 8 }}>{children}</Text>,
+                  h6: ({ children }) => <Text strong style={{ display: 'block', marginTop: 8 }}>{children}</Text>,
+                  // Style paragraphs
+                  p: ({ children }) => <Paragraph style={{ marginBottom: 8 }}>{children}</Paragraph>,
+                  // Style code blocks
+                  code: ({ className, children }) => {
+                    const isInline = !className;
+                    if (isInline) {
+                      return <Text code>{children}</Text>;
+                    }
+                    return (
+                      <pre
+                        style={{
+                          backgroundColor: token.colorBgContainer,
+                          padding: 12,
+                          borderRadius: token.borderRadius,
+                          overflow: 'auto',
+                          fontSize: 13,
+                          border: `1px solid ${token.colorBorder}`,
+                        }}
+                      >
+                        <code>{children}</code>
+                      </pre>
+                    );
+                  },
+                  // Style tables for Ant Design consistency
+                  table: ({ children }) => (
+                    <table
+                      style={{
+                        width: '100%',
+                        borderCollapse: 'collapse',
+                        marginBottom: 16,
+                      }}
+                    >
+                      {children}
+                    </table>
+                  ),
+                  th: ({ children }) => (
+                    <th
+                      style={{
+                        padding: '8px 12px',
+                        backgroundColor: token.colorBgTextHover,
+                        border: `1px solid ${token.colorBorder}`,
+                        textAlign: 'left',
+                      }}
+                    >
+                      {children}
+                    </th>
+                  ),
+                  td: ({ children }) => (
+                    <td
+                      style={{
+                        padding: '8px 12px',
+                        border: `1px solid ${token.colorBorder}`,
+                      }}
+                    >
+                      {children}
+                    </td>
+                  ),
+                }}
+              >
+                {action.documentation_md}
+              </Markdown>
+            </div>
+          ) : (
+            <Empty
+              description="Aucune documentation disponible"
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              style={{ margin: 0 }}
+              data-testid="documentation-empty"
+            />
+          )}
+        </div>
+
+        {/* Execute button - Story 3.2 AC3, Story 4.1 Task 7 */}
         <Tooltip title={executeTooltip}>
           <Button
             type="primary"
@@ -166,6 +277,7 @@ export function ActionDrawerPreview({
             disabled={isExecuteDisabled}
             block
             aria-label={isExecuteDisabled ? 'Executer (acces non autorise)' : 'Executer'}
+            onClick={onExecute}
           >
             Executer
           </Button>

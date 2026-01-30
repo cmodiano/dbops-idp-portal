@@ -1,10 +1,12 @@
-"""Integration models for remote platform configuration (Story 2.27).
+"""Integration models for remote platform configuration (Story 2.27, 4.9).
 
 Defines Pydantic models for:
-- IntegrationType: enum of supported platform types
+- AuthFlow: enum of supported authentication flows
 - IntegrationCreate: input model for creating integrations
 - IntegrationUpdate: input model for updating integrations
 - IntegrationResponse: output model for integration (no secrets exposed)
+
+Story 4.9: Type is now free-form string (not enum), auth_flow added for execution flow.
 """
 
 from datetime import datetime
@@ -13,31 +15,46 @@ from enum import Enum
 from pydantic import BaseModel, Field, field_validator
 
 
-class IntegrationType(str, Enum):
-    """Supported integration types (aligned with ConnectorType from catalog models)."""
-    AAP = "aap"
-    SERVICENOW = "servicenow"
-    TERRAFORM = "terraform"
-    AZUREDEVOPS = "azuredevops"
-    JIRA = "jira"
-    GITHUB_ACTIONS = "github_actions"
+class AuthFlow(str, Enum):
+    """Supported authentication flows for integrations (Story 4.9, AC2).
+    
+    - token: Bearer token (Authorization: Bearer <token>)
+    - basic: Basic auth (Authorization: Basic <base64(user:pass)>)
+    - basic_then_token: Basic auth then exchange for token (POST /auth/login → Bearer)
+    - pat: Personal Access Token (Authorization: token <pat> or X-Api-Key: <pat>)
+    """
+    TOKEN = "token"
+    BASIC = "basic"
+    BASIC_THEN_TOKEN = "basic_then_token"
+    PAT = "pat"
 
 
 class IntegrationCreate(BaseModel):
-    """Input model for creating an integration (Story 2.27, AC3).
+    """Input model for creating an integration (Story 2.27, 4.9).
 
     Attributes:
-        type: Integration type (aap, servicenow, terraform, azuredevops, jira, github_actions)
+        type: Integration type - free-form platform name (1-100 chars, Story 4.9 AC1)
         name: Unique integration name (1-255 chars)
         base_url: Base URL of the remote platform (valid URL format)
         credential_ref: Optional Vault path or logical name for credentials (NFR7: no secrets stored)
-        icon: Optional icon identifier (preset name or URL)
+        icon: Optional icon identifier (preset name, URL, or uploaded icon path)
+        auth_flow: Optional authentication flow (token, basic, basic_then_token, pat) (Story 4.9 AC2)
     """
-    type: IntegrationType
+    type: str = Field(..., min_length=1, max_length=100)
     name: str = Field(..., min_length=1, max_length=255)
     base_url: str = Field(..., min_length=1, max_length=2000)
     credential_ref: str | None = Field(None, max_length=500)
     icon: str | None = Field(None, max_length=500)
+    auth_flow: AuthFlow | None = None
+
+    @field_validator("type")
+    @classmethod
+    def strip_type(cls, v: str) -> str:
+        """Strip whitespace from type and validate not empty (Story 4.9 AC1)."""
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("type cannot be empty or whitespace only")
+        return stripped
 
     @field_validator("name")
     @classmethod
@@ -62,15 +79,27 @@ class IntegrationCreate(BaseModel):
 
 
 class IntegrationUpdate(BaseModel):
-    """Input model for updating an integration (Story 2.27, AC3).
+    """Input model for updating an integration (Story 2.27, 4.9).
 
     All fields optional for partial update. Same validation as IntegrationCreate.
     """
-    type: IntegrationType | None = None
+    type: str | None = Field(None, min_length=1, max_length=100)
     name: str | None = Field(None, min_length=1, max_length=255)
     base_url: str | None = Field(None, min_length=1, max_length=2000)
     credential_ref: str | None = Field(None, max_length=500)
     icon: str | None = Field(None, max_length=500)
+    auth_flow: AuthFlow | None = None
+
+    @field_validator("type")
+    @classmethod
+    def strip_type(cls, v: str | None) -> str | None:
+        """Strip whitespace from type and validate not empty (Story 4.9 AC1)."""
+        if v is None:
+            return None
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("type cannot be empty or whitespace only")
+        return stripped
 
     @field_validator("name")
     @classmethod
@@ -98,15 +127,16 @@ class IntegrationUpdate(BaseModel):
 
 
 class IntegrationResponse(BaseModel):
-    """Output model for integration (Story 2.27, AC2).
+    """Output model for integration (Story 2.27, 4.9).
 
     Note: credential_ref is included (reference only, no secret value).
     """
     id: int
-    type: IntegrationType
+    type: str
     name: str
     base_url: str
     credential_ref: str | None = None
     icon: str | None = None
+    auth_flow: AuthFlow | None = None
     created_at: datetime
     updated_at: datetime

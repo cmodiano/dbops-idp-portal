@@ -205,5 +205,35 @@ describe('TopNav', () => {
         expect(screen.getByLabelText('Activer le theme clair')).toBeInTheDocument();
       });
     });
+
+    // Story 3-7: Verify theme toggle still works after light theme enhancements (Task 3.3)
+    it('theme toggle persists and works correctly after light theme modifications (Story 3-7, Task 3.3)', async () => {
+      const user = userEvent.setup();
+      mockAuthSession('dbops', ['catalog', 'executions', 'dashboard', 'admin']);
+      renderTopNav();
+
+      // Start in light mode
+      await waitFor(() => {
+        expect(screen.getByLabelText('Activer le theme sombre')).toBeInTheDocument();
+      });
+
+      // Toggle to dark
+      await user.click(screen.getByRole('switch'));
+      await waitFor(() => {
+        expect(screen.getByLabelText('Activer le theme clair')).toBeInTheDocument();
+      });
+
+      // Verify localStorage persistence
+      expect(localStorage.getItem('idp-portal-theme')).toBe('dark');
+
+      // Toggle back to light
+      await user.click(screen.getByRole('switch'));
+      await waitFor(() => {
+        expect(screen.getByLabelText('Activer le theme sombre')).toBeInTheDocument();
+      });
+
+      // Verify localStorage updated
+      expect(localStorage.getItem('idp-portal-theme')).toBe('light');
+    });
   });
 });

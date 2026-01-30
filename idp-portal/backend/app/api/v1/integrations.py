@@ -1,14 +1,19 @@
-"""Integrations CRUD API (Story 2.27). Routes under /admin/integrations, RBAC require_profile("dbops").
+"""Integrations CRUD API (Story 2.27, 4.9). Routes under /admin/integrations, RBAC require_profile("dbops").
 
 AC2: GET /integrations returns list (no secrets exposed).
 AC3: POST/PUT create or update integrations.
 AC4: All routes protected by DBOPS profile.
+Story 4.9: POST /upload-icon for icon file upload.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Body, Depends, Path, status
+import uuid
+from pathlib import Path as FilePath
 
+from fastapi import APIRouter, Body, Depends, File, Path, UploadFile, status
+
+from app.core.config import settings
 from app.core.exceptions import InvalidStateError, NotFoundError
 from app.core.security import require_profile
 from app.models.auth import UserProfile
@@ -133,3 +138,58 @@ async def delete_integration(
             message=f"Integration {integration_id} introuvable",
             details={"integration_id": integration_id},
         )
+
+
+@router.post("/upload-icon", status_code=status.HTTP_201_CREATED, response_model=None)
+async def upload_icon(
+    file: UploadFile = File(...),
+    user: UserProfile = Depends(require_profile("dbops")),
+) -> dict:
+    """POST /admin/integrations/upload-icon — upload integration icon (Story 4.9, AC3).
+
+    Accepts multipart/form-data with image file (PNG, JPEG, SVG).
+    Validates MIME type and size (max 2MB).
+    Stores file locally in backend/static/icons/ with unique UUID filename.
+
+    Returns:
+        HTTP 201 with { "data": { "icon_url": "/static/icons/{uuid}.{ext}" } }
+        HTTP 400 if validation fails (invalid MIME type, size > 2MB, no file)
+    """
+    # Validation: MIME type (image/png, image/jpeg, image/svg+xml)
+    allowed_mime_types = {"image/png", "image/jpeg", "image/jpg", "image/svg+xml"}
+    if file.content_type not in allowed_mime_types:
+        raise InvalidStateError(
+            code="INVALID_FILE_TYPE",
+            message=f"Type MIME invalide: {file.content_type}. Acceptés: PNG, JPEG, SVG.",
+            details={"content_type": file.content_type, "allowed": list(allowed_mime_types)},
+        )
+
+    # Read file content
+    content = await file.read()
+
+    # Validation: size max 2MB
+    max_size_mb = 2
+    max_size_bytes = max_size_mb * 1024 * 1024
+    if len(content) > max_size_bytes:
+        raise InvalidStateError(
+            code="FILE_TOO_LARGE",
+            message=f"Fichier trop volumineux: {len(content)} bytes. Maximum: {max_size_mb}MB.",
+            details={"size_bytes": len(content), "max_bytes": max_size_bytes},
+        )
+
+    # Generate unique filename with UUID
+    file_ext = FilePath(file.filename or "icon.png").suffix or ".png"
+    unique_filename = f"{uuid.uuid4()}{file_ext}"
+
+    # Create static/icons directory if doesn't exist (Story 4.9, LOW-9 fix: centralized path)
+    icons_dir = settings.get_static_path() / "icons"
+    icons_dir.mkdir(parents=True, exist_ok=True)
+
+    # Write file to disk
+    icon_path = icons_dir / unique_filename
+    with open(icon_path, "wb") as f:
+        f.write(content)
+
+    # Return relative URL for frontend use
+    icon_url = f"/static/icons/{unique_filename}"
+    return {"data": {"icon_url": icon_url}}

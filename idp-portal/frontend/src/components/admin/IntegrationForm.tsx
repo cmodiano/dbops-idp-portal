@@ -1,41 +1,31 @@
 /**
- * IntegrationForm — création/édition d'intégration (Story 2.28, AC3, AC4).
- * Champs : Type, Nom, URL de base, Référence credentials (optionnel), Icône (optionnel).
- * Preview icône (Avatar si URL, sinon preset par type). Validation type, nom, base_url (URL).
+ * IntegrationForm — création/édition d'intégration (Story 2.28, 4.9).
+ * Story 4.9: Type libre (AutoComplete), auth_flow (Select), Upload icône.
+ * Champs : Type (libre), Nom, URL de base, Référence credentials, Auth flow, Icône (upload ou URL).
  */
 
-import { useEffect } from 'react';
-import { Form, Input, Modal, Alert, Select, Avatar, Space, Button } from 'antd';
-import {
-  ApiOutlined,
-  CloudServerOutlined,
-  BuildOutlined,
-  BranchesOutlined,
-  ProjectOutlined,
-  GithubOutlined,
-} from '@ant-design/icons';
-import type { IntegrationType, IntegrationCreate, IntegrationUpdate, IntegrationResponse } from '../../types/api';
-import { INTEGRATION_TYPE_LABELS, INTEGRATION_TYPE_ICON_COLORS } from '../../types/api';
+import { useEffect, useState } from 'react';
+import { Form, Input, Modal, Alert, Select, Avatar, Space, Button, AutoComplete, Upload, message } from 'antd';
+import type { UploadFile } from 'antd';
+import { UploadOutlined, ApiOutlined } from '@ant-design/icons';
+import type { AuthFlow, IntegrationCreate, IntegrationUpdate, IntegrationResponse } from '../../types/api';
+import { SUGGESTED_INTEGRATION_TYPES, AUTH_FLOW_LABELS } from '../../types/api';
 
-const TYPE_ICONS: Record<IntegrationType, React.ReactNode> = {
-  aap: <ApiOutlined style={{ color: INTEGRATION_TYPE_ICON_COLORS.aap, fontSize: 20 }} />,
-  servicenow: <CloudServerOutlined style={{ color: INTEGRATION_TYPE_ICON_COLORS.servicenow, fontSize: 20 }} />,
-  terraform: <BuildOutlined style={{ color: INTEGRATION_TYPE_ICON_COLORS.terraform, fontSize: 20 }} />,
-  azuredevops: <BranchesOutlined style={{ color: INTEGRATION_TYPE_ICON_COLORS.azuredevops, fontSize: 20 }} />,
-  jira: <ProjectOutlined style={{ color: INTEGRATION_TYPE_ICON_COLORS.jira, fontSize: 20 }} />,
-  github_actions: <GithubOutlined style={{ color: INTEGRATION_TYPE_ICON_COLORS.github_actions, fontSize: 20 }} />,
-};
+/** Type suggestions for AutoComplete (Story 4.9 AC1). */
+const TYPE_SUGGESTIONS = SUGGESTED_INTEGRATION_TYPES.map((t) => ({ value: t }));
 
-const TYPE_OPTIONS: { value: IntegrationType; label: string }[] = (
-  Object.entries(INTEGRATION_TYPE_LABELS) as [IntegrationType, string][]
+/** Auth flow options for Select (Story 4.9 AC2). */
+const AUTH_FLOW_OPTIONS: { value: AuthFlow; label: string }[] = (
+  Object.entries(AUTH_FLOW_LABELS) as [AuthFlow, string][]
 ).map(([value, label]) => ({ value, label }));
 
 export interface IntegrationFormValues {
-  type: IntegrationType;
+  type: string; // Story 4.9 AC1: free-form platform name
   name: string;
   base_url: string;
   credential_ref?: string | null;
   icon?: string | null;
+  auth_flow?: AuthFlow | null; // Story 4.9 AC2: authentication flow
 }
 
 export interface IntegrationFormProps {
@@ -62,13 +52,16 @@ export function IntegrationForm({
 }: IntegrationFormProps) {
   const [form] = Form.useForm<IntegrationFormValues>();
   const isEdit = !!editIntegration;
+  const [uploadedIconUrl, setUploadedIconUrl] = useState<string | null>(null);
+  const [fileList, setFileList] = useState<UploadFile[]>([]);
 
-  const watchType = Form.useWatch('type', form);
   const watchIcon = Form.useWatch('icon', form);
 
   useEffect(() => {
     if (!open) return;
     form.resetFields();
+    setUploadedIconUrl(null);
+    setFileList([]);
     if (editIntegration) {
       form.setFieldsValue({
         type: editIntegration.type,
@@ -76,14 +69,16 @@ export function IntegrationForm({
         base_url: editIntegration.base_url,
         credential_ref: editIntegration.credential_ref ?? undefined,
         icon: editIntegration.icon ?? undefined,
+        auth_flow: editIntegration.auth_flow ?? undefined,
       });
     } else {
       form.setFieldsValue({
-        type: 'aap',
+        type: '',
         name: '',
         base_url: '',
         credential_ref: undefined,
         icon: undefined,
+        auth_flow: undefined,
       });
     }
   }, [open, editIntegration, form]);
@@ -92,11 +87,12 @@ export function IntegrationForm({
     try {
       const values = await form.validateFields();
       const payload: IntegrationCreate | IntegrationUpdate = {
-        type: values.type,
+        type: values.type.trim(),
         name: values.name.trim(),
         base_url: values.base_url.trim(),
         credential_ref: values.credential_ref?.trim() || null,
-        icon: values.icon?.trim() || null,
+        icon: uploadedIconUrl || values.icon?.trim() || null, // Prioritize uploaded icon
+        auth_flow: values.auth_flow || null,
       };
       const res = await onSubmit(payload);
       if (res && onSuccess) onSuccess(res);
@@ -107,14 +103,49 @@ export function IntegrationForm({
     }
   };
 
-  const iconPreview =
-    watchIcon && (watchIcon.startsWith('http://') || watchIcon.startsWith('https://')) ? (
-      <Avatar src={watchIcon} shape="square" size={32} />
-    ) : (
-      <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32 }}>
-        {watchType && TYPE_ICONS[watchType]}
-      </span>
-    );
+  const handleIconUpload = async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    // Get JWT token from localStorage (Story 4.9 fix: add Authorization header)
+    const token = localStorage.getItem('access_token');
+
+    try {
+      const response = await fetch('/api/v1/admin/integrations/upload-icon', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        message.error(errorData.error?.message || 'Échec de l\'upload');
+        return;
+      }
+
+      const result = await response.json();
+      const iconUrl = result.data?.icon_url;
+      if (iconUrl) {
+        setUploadedIconUrl(iconUrl);
+        form.setFieldsValue({ icon: iconUrl });
+        message.success('Icône uploadée avec succès');
+      }
+    } catch (err) {
+      message.error('Erreur lors de l\'upload de l\'icône');
+    }
+  };
+
+  const iconPreview = watchIcon ? (
+    <Avatar
+      src={watchIcon.startsWith('/') ? watchIcon : watchIcon}
+      shape="square"
+      size={32}
+      icon={<ApiOutlined />}
+    />
+  ) : (
+    <Avatar shape="square" size={32} icon={<ApiOutlined />} />
+  );
 
   return (
     <Modal
@@ -139,12 +170,19 @@ export function IntegrationForm({
       <Form form={form} layout="vertical" preserve={false}>
         <Form.Item
           name="type"
-          label="Type de plateforme"
-          rules={[{ required: true, message: 'Le type est requis' }]}
+          label="Type de plateforme (libre)"
+          rules={[
+            { required: true, message: 'Le type est requis' },
+            { max: 100, message: 'Le type ne peut pas dépasser 100 caractères' },
+          ]}
+          tooltip="Nom libre de la plateforme (ex: aap, terraform, jenkins...)"
         >
-          <Select
-            placeholder="Sélectionner un type"
-            options={TYPE_OPTIONS}
+          <AutoComplete
+            placeholder="Saisir ou choisir un type"
+            options={TYPE_SUGGESTIONS}
+            filterOption={(input, option) =>
+              (option?.value ?? '').toLowerCase().includes(input.toLowerCase())
+            }
             aria-label="Type de plateforme"
           />
         </Form.Item>
@@ -183,11 +221,50 @@ export function IntegrationForm({
             aria-label="Référence credentials"
           />
         </Form.Item>
-        <Form.Item name="icon" label="Icône">
-          <Input
-            placeholder="URL de l'icône ou vide pour preset par type"
-            aria-label="Icône"
+        <Form.Item name="auth_flow" label="Flow d'authentification">
+          <Select
+            placeholder="Sélectionner un flow (optionnel)"
+            options={AUTH_FLOW_OPTIONS}
+            allowClear
+            aria-label="Flow d'authentification"
           />
+        </Form.Item>
+        <Form.Item label="Icône" tooltip="Uploader une icône ou saisir une URL">
+          <Space direction="vertical" style={{ width: '100%' }}>
+            <Upload
+              accept="image/*"
+              maxCount={1}
+              fileList={fileList}
+              beforeUpload={(file) => {
+                const isImage = file.type.startsWith('image/');
+                if (!isImage) {
+                  message.error('Vous ne pouvez uploader que des images!');
+                  return Upload.LIST_IGNORE;
+                }
+                const isLt2M = file.size / 1024 / 1024 < 2;
+                if (!isLt2M) {
+                  message.error('L\'image doit faire moins de 2MB!');
+                  return Upload.LIST_IGNORE;
+                }
+                handleIconUpload(file);
+                setFileList([file]);
+                return false; // Prevent default upload
+              }}
+              onRemove={() => {
+                setFileList([]);
+                setUploadedIconUrl(null);
+                form.setFieldsValue({ icon: undefined });
+              }}
+            >
+              <Button icon={<UploadOutlined />}>Uploader une icône</Button>
+            </Upload>
+            <Form.Item name="icon" noStyle>
+              <Input
+                placeholder="...ou saisir URL de l'icône"
+                aria-label="URL icône"
+              />
+            </Form.Item>
+          </Space>
         </Form.Item>
         <Form.Item label="Aperçu" colon={false} style={{ marginBottom: 0 }}>
           <Space align="center">{iconPreview}</Space>

@@ -1,17 +1,19 @@
 /**
- * CatalogPage - Main catalog page for browsing actions (Story 3.1, 3.3).
+ * CatalogPage - Main catalog page for browsing actions (Story 3.1, 3.3, 3.5, 4.1).
  *
  * Features:
- * - Category tabs (Tout, Provisioning, Patching, Administration, Monitoring, Mes actions)
+ * - Two tabs: Tout (all actions), Mes actions (favorites + recent) — Story 2.23: categories removed
  * - Grid/List view toggle (AC2)
  * - ActionCard display with execution_count (AC3)
- * - Favorite toggle (AC4, AC12, AC13)
+ * - Favorite toggle with tooltip (AC4, AC12, AC13; Story 3.5)
  * - "Mes actions" tab with favorites and recent actions (AC5)
  * - Search with debounce 300 ms (AC1), server-side + filters (AC2–AC9)
- * - Lateral filters panel 240 px (AC2, AC3, AC8): Tags (with count), Engine, Environment, Impact
+ * - TagCloud for visual multi-tag filtering (Story 3.5, AC1-6)
+ * - Lateral filters panel 240 px (AC2, AC3, AC8): Engine, Environment, Impact
  * - Active filter chips + Réinitialiser (AC4, AC5)
  * - Empty state "Aucune action ne correspond à vos filtres" (AC5)
  * - Counter with aria-live (AC6)
+ * - ExecutionWizard integration (Story 4.1, Task 7)
  */
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
@@ -30,6 +32,7 @@ import {
   message,
   Select,
   Tag,
+  Tooltip,
 } from 'antd';
 import {
   AppstoreOutlined,
@@ -41,6 +44,8 @@ import {
 } from '@ant-design/icons';
 import { ActionCard } from '../components/catalog/ActionCard';
 import { ActionDrawerPreview } from '../components/catalog/ActionDrawerPreview';
+import { ExecutionWizard } from '../components/catalog/ExecutionWizard';
+import { TagCloud } from '../components/catalog/TagCloud';
 import { useAuth } from '../contexts/AuthContext';
 import { useDebounce } from '../hooks/useDebounce';
 import { useMediaQuery } from '../hooks/useMediaQuery';
@@ -65,13 +70,9 @@ const { Title, Text } = Typography;
 /** localStorage key for view mode (AC2). */
 const CATALOG_VIEW_MODE_KEY = 'catalog-view-mode';
 
-/** Category tab definitions (AC6). */
-const CATEGORY_TABS = [
+/** Tab definitions: All actions and My actions (Story 2.23: categories removed, use tags instead). */
+const CATALOG_TABS = [
   { key: 'all', label: 'Tout' },
-  { key: 'provisioning', label: 'Provisioning' },
-  { key: 'patching', label: 'Patching' },
-  { key: 'administration', label: 'Administration' },
-  { key: 'monitoring', label: 'Monitoring' },
   { key: 'my-actions', label: 'Mes actions' },
 ];
 
@@ -153,15 +154,14 @@ export default function CatalogPage() {
   const [selectedActionEnvs, setSelectedActionEnvs] = useState<string[]>([]);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [drawerLoading, setDrawerLoading] = useState(false);
+  const [executionWizardOpen, setExecutionWizardOpen] = useState(false);
   const lastFocusedCardRef = useRef<HTMLElement | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const category = activeTab === 'all' || activeTab === 'my-actions' ? undefined : activeTab;
       const [actionsData, favoritesData, recentData, tagsData] = await Promise.all([
         fetchCatalogActions({
-          category,
           tags: filterTags.length > 0 ? filterTags : undefined,
           q: debouncedQ.trim() || undefined,
           engine: filterEngine,
@@ -282,6 +282,21 @@ export default function CatalogPage() {
     }
   };
 
+  // Open ExecutionWizard (Story 4.1, Task 7)
+  const handleExecuteClick = useCallback(() => {
+    setExecutionWizardOpen(true);
+  }, []);
+
+  // Handle execution success (Story 4.1, Task 7)
+  const handleExecutionSuccess = useCallback((executionId: number) => {
+    setExecutionWizardOpen(false);
+    setDrawerVisible(false);
+    // TODO: Navigate to execution timeline (Story 4.6) or show success
+    message.success(`Execution #${executionId} soumise avec succes`);
+    // Reload data to update execution counts
+    loadData();
+  }, [loadData]);
+
   // Render action card with favorite button (disabled when not authenticated — Task 5.1)
   const renderActionCard = (action: CatalogAction) => {
     const isFav = favorites.has(action.id);
@@ -307,20 +322,22 @@ export default function CatalogPage() {
           onClick={(e) => handleActionClick(action, e)}
           variant="default"
         />
-        <Button
-          type="text"
-          icon={isFav ? <HeartFilled style={{ color: '#eb2f96' }} /> : <HeartOutlined />}
-          onClick={(e) => handleToggleFavorite(action.id, e)}
-          disabled={!isAuthenticated}
-          style={{
-            position: 'absolute',
-            top: 8,
-            right: 8,
-            background: 'rgba(255,255,255,0.9)',
-            borderRadius: '50%',
-          }}
-          aria-label={isFav ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-        />
+        <Tooltip title={isFav ? 'Retirer des favoris' : 'Ajouter aux favoris'}>
+          <Button
+            type="text"
+            icon={isFav ? <HeartFilled style={{ color: '#eb2f96' }} /> : <HeartOutlined />}
+            onClick={(e) => handleToggleFavorite(action.id, e)}
+            disabled={!isAuthenticated}
+            style={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              background: 'rgba(255,255,255,0.9)',
+              borderRadius: '50%',
+            }}
+            aria-label={isFav ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+          />
+        </Tooltip>
       </div>
     );
   };
@@ -371,16 +388,6 @@ export default function CatalogPage() {
 
   const renderFiltersPanel = () => (
     <Space direction="vertical" style={{ width: '100%' }} size="middle">
-      <Text strong>Tags</Text>
-      <Select
-        mode="multiple"
-        placeholder="Tags"
-        style={{ width: '100%' }}
-        value={filterTags}
-        onChange={setFilterTags}
-        options={tagsWithCounts.map((t) => ({ value: t.name, label: `${t.name} (${t.action_count})` }))}
-        allowClear
-      />
       <Text strong>Moteur</Text>
       <Select
         placeholder="Moteur"
@@ -495,11 +502,11 @@ export default function CatalogPage() {
             </Space>
           )}
 
-          {/* Category Tabs + count (AC6, AC7) */}
+          {/* Catalog Tabs (Story 2.23: categories removed, use tags for filtering) */}
           <Tabs
             activeKey={activeTab}
             onChange={setActiveTab}
-            items={CATEGORY_TABS.map((tab) => ({
+            items={CATALOG_TABS.map((tab) => ({
               key: tab.key,
               label: (
                 <span>
@@ -510,11 +517,19 @@ export default function CatalogPage() {
             }))}
             style={{ marginBottom: 16 }}
           />
-          {!loading && (
-            <Text type="secondary" aria-live="polite" style={{ display: 'block', marginBottom: 16 }}>
-              {filteredActions.length} action{filteredActions.length !== 1 ? 's' : ''}
-            </Text>
+
+          {/* Tag Cloud for multi-select filtering (Story 3.5, AC1-6) */}
+          {activeTab !== 'my-actions' && tagsWithCounts.length > 0 && (
+            <TagCloud
+              tags={tagsWithCounts}
+              selectedTags={filterTags}
+              onSelectionChange={setFilterTags}
+            />
           )}
+
+          <Text type="secondary" aria-live="polite" style={{ display: 'block', marginBottom: 16 }}>
+            {loading ? 'Chargement…' : `${filteredActions.length} action${filteredActions.length !== 1 ? 's' : ''}`}
+          </Text>
 
           {/* Actions Grid/List */}
           {loading ? (
@@ -591,11 +606,21 @@ export default function CatalogPage() {
             action={toPreviewData(selectedActionDetail)}
             canExecute={selectedActionCanExecute}
             allowedEnvironments={selectedActionEnvs}
+            onExecute={handleExecuteClick}
           />
         ) : selectedAction ? (
           <ActionDrawerPreview action={toPreviewData(selectedAction)} />
         ) : null}
       </Drawer>
+
+      {/* ExecutionWizard (Story 4.1, Task 7) */}
+      <ExecutionWizard
+        open={executionWizardOpen}
+        action={selectedActionDetail}
+        allowedEnvironments={selectedActionEnvs}
+        onCancel={() => setExecutionWizardOpen(false)}
+        onSuccess={handleExecutionSuccess}
+      />
     </div>
   );
 }

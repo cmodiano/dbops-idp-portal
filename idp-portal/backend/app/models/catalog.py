@@ -119,6 +119,7 @@ class ActionCreate(BaseModel):
         parameters_schema: Optional JSON Schema for action parameters
         impact_rules: Optional impact rules per environment
         default_impact_level: Default impact when no rule matches environment (Story 2.18 AC5)
+        documentation_md: Optional Markdown documentation (Story 3.4, FR12)
         (Story 2.24: change_model_code removed; change_type_config is in ExecutionStepsUpdate only.)
     """
     name: str = Field(..., min_length=1, max_length=255)
@@ -128,6 +129,7 @@ class ActionCreate(BaseModel):
     parameters_schema: dict[str, Any] | None = None
     impact_rules: dict[str, Any] | None = None
     default_impact_level: ImpactLevel | None = None
+    documentation_md: str | None = Field(None, max_length=100_000)
 
     @field_validator("name")
     @classmethod
@@ -192,6 +194,7 @@ class ActionResponse(BaseModel):
     Story 2.18 AC5: includes default_impact_level.
     Story 2.24: change_model_code removed; change_type_config per env.
     Story 2.23: category removed — use tags instead.
+    Story 3.4: includes documentation_md (FR12).
     """
     id: int
     name: str
@@ -206,6 +209,7 @@ class ActionResponse(BaseModel):
     created_at: datetime
     updated_at: datetime | None = None
     tags: list[str] = Field(default_factory=list)
+    documentation_md: str | None = None
 
 
 class ActionDetail(ActionResponse):

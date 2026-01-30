@@ -8,7 +8,7 @@
  */
 
 import { useRef, useCallback } from 'react';
-import { Modal, Space, Button, Collapse, notification } from 'antd';
+import { Modal, Space, Button, Collapse, App } from 'antd';
 import { DownloadOutlined } from '@ant-design/icons';
 import { PROFILE_YAML_TEMPLATE, PROFILE_YAML_TEMPLATE_FILENAME } from '../../utils/profileYamlTemplate';
 import { importProfilesYaml } from '../../services/profiles_service';
@@ -20,6 +20,7 @@ export interface ProfileImportModalProps {
 }
 
 export function ProfileImportModal({ open, onCancel, onSuccess }: ProfileImportModalProps) {
+  const { notification } = App.useApp();
   const fileRef = useRef<File | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 

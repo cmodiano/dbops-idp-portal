@@ -1,4 +1,4 @@
-"""Tests for integration repository (Story 2.27, AC1-AC4)."""
+"""Tests for integration repository (Story 2.27, 4.9)."""
 
 import pytest
 from datetime import datetime
@@ -6,31 +6,35 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import oracledb
 
-from app.models.integration import IntegrationCreate, IntegrationUpdate, IntegrationResponse, IntegrationType
+from app.models.integration import IntegrationCreate, IntegrationUpdate, IntegrationResponse, AuthFlow
 from app.repositories import integration_repository
 from app.repositories.integration_repository import DuplicateNameError
 
 
 @pytest.fixture
 def sample_integration_create():
+    """Sample integration with free-form type and auth_flow (Story 4.9)."""
     return IntegrationCreate(
-        type=IntegrationType.AAP,
+        type="aap",  # Story 4.9: type is now free-form string
         name="AAP Production",
         base_url="https://aap.example.com",
         credential_ref="secret/idp/aap-prod",
         icon="aap",
+        auth_flow=AuthFlow.TOKEN,
     )
 
 
 @pytest.fixture
 def sample_integration_response():
+    """Sample response with free-form type and auth_flow (Story 4.9)."""
     return IntegrationResponse(
         id=1,
-        type=IntegrationType.AAP,
+        type="aap",  # Story 4.9: type is now string
         name="AAP Production",
         base_url="https://aap.example.com",
         credential_ref="secret/idp/aap-prod",
         icon="aap",
+        auth_flow=AuthFlow.TOKEN,
         created_at=datetime(2026, 1, 29, 10, 0, 0),
         updated_at=datetime(2026, 1, 29, 10, 0, 0),
     )
@@ -38,6 +42,7 @@ def sample_integration_response():
 
 @pytest.fixture
 def mock_integration_row():
+    """Mock row with 9 columns including auth_flow (Story 4.9)."""
     return (
         1,
         "aap",
@@ -45,6 +50,7 @@ def mock_integration_row():
         "https://aap.example.com",
         "secret/idp/aap-prod",
         "aap",
+        "token",  # auth_flow
         datetime(2026, 1, 29, 10, 0, 0),
         datetime(2026, 1, 29, 10, 0, 0),
     )
@@ -52,15 +58,18 @@ def mock_integration_row():
 
 class TestRowConversions:
     def test_row_to_integration_response(self, mock_integration_row):
+        """Story 4.9: Test row conversion with auth_flow."""
         r = integration_repository._row_to_integration_response(mock_integration_row)
         assert r.id == 1
-        assert r.type == IntegrationType.AAP
+        assert r.type == "aap"
         assert r.name == "AAP Production"
         assert r.base_url == "https://aap.example.com"
         assert r.credential_ref == "secret/idp/aap-prod"
         assert r.icon == "aap"
+        assert r.auth_flow == AuthFlow.TOKEN
 
     def test_row_to_integration_response_null_optional_fields(self):
+        """Story 4.9 AC5: Test row with NULL auth_flow (backward compatibility)."""
         row = (
             2,
             "servicenow",
@@ -68,14 +77,34 @@ class TestRowConversions:
             "https://dev.servicenow.com",
             None,  # credential_ref
             None,  # icon
+            None,  # auth_flow (nullable for backward compatibility)
             datetime(2026, 1, 29, 10, 0, 0),
             datetime(2026, 1, 29, 10, 0, 0),
         )
         r = integration_repository._row_to_integration_response(row)
         assert r.id == 2
-        assert r.type == IntegrationType.SERVICENOW
+        assert r.type == "servicenow"
         assert r.credential_ref is None
         assert r.icon is None
+        assert r.auth_flow is None
+
+    def test_row_to_integration_response_free_form_type(self):
+        """Story 4.9 AC1: Test with free-form type (not in legacy enum)."""
+        row = (
+            3,
+            "jenkins",  # Free-form type not in original enum
+            "Jenkins CI",
+            "https://jenkins.example.com",
+            "secret/jenkins",
+            None,
+            "pat",  # PAT auth flow
+            datetime(2026, 1, 29, 10, 0, 0),
+            datetime(2026, 1, 29, 10, 0, 0),
+        )
+        r = integration_repository._row_to_integration_response(row)
+        assert r.id == 3
+        assert r.type == "jenkins"
+        assert r.auth_flow == AuthFlow.PAT
 
 
 class TestGetAll:
@@ -103,6 +132,7 @@ class TestGetAll:
             "https://prod.servicenow.com",
             "secret/idp/snow-prod",
             "servicenow",
+            "basic",  # auth_flow (Story 4.9)
             datetime(2026, 1, 29, 11, 0, 0),
             datetime(2026, 1, 29, 11, 0, 0),
         )

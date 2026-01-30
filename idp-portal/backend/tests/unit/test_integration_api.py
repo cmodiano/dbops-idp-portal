@@ -1,4 +1,4 @@
-"""Tests for integrations API endpoints (Story 2.27, AC2-AC4).
+"""Tests for integrations API endpoints (Story 2.27, 4.9).
 
 Tests:
 - GET /api/v1/admin/integrations — list integrations (200, 403)
@@ -6,17 +6,18 @@ Tests:
 - POST /api/v1/admin/integrations — create integration (201, 400, 422, 403)
 - PUT /api/v1/admin/integrations/{id} — update integration (200, 400, 404, 422, 403)
 - DELETE /api/v1/admin/integrations/{id} — delete integration (204, 404, 403)
+- POST /api/v1/admin/integrations/upload-icon — upload icon (Story 4.9, 201, 400, 403)
 """
 
 import pytest
 from datetime import datetime
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, patch, mock_open, MagicMock
 from httpx import AsyncClient, ASGITransport
 from fastapi import status
 
 from app.main import app
 from app.core.security import create_access_token
-from app.models.integration import IntegrationResponse, IntegrationType
+from app.models.integration import IntegrationResponse, AuthFlow
 from app.repositories.integration_repository import DuplicateNameError
 
 
@@ -41,14 +42,15 @@ def dba_token():
 
 @pytest.fixture
 def sample_integration_response():
-    """Sample IntegrationResponse for mocked repository."""
+    """Sample IntegrationResponse with free-form type and auth_flow (Story 4.9)."""
     return IntegrationResponse(
         id=1,
-        type=IntegrationType.AAP,
+        type="aap",  # Story 4.9: free-form string
         name="AAP Production",
         base_url="https://aap.example.com",
         credential_ref="secret/idp/aap-prod",
         icon="aap",
+        auth_flow=AuthFlow.TOKEN,
         created_at=datetime(2026, 1, 29, 10, 0, 0),
         updated_at=datetime(2026, 1, 29, 10, 0, 0),
     )
@@ -56,14 +58,15 @@ def sample_integration_response():
 
 @pytest.fixture
 def sample_integration_response_2():
-    """Second sample IntegrationResponse for list tests."""
+    """Second sample IntegrationResponse for list tests (Story 4.9)."""
     return IntegrationResponse(
         id=2,
-        type=IntegrationType.SERVICENOW,
+        type="servicenow",  # Story 4.9: free-form string
         name="ServiceNow Prod",
         base_url="https://prod.servicenow.com",
         credential_ref="secret/idp/snow-prod",
         icon="servicenow",
+        auth_flow=AuthFlow.BASIC,
         created_at=datetime(2026, 1, 29, 11, 0, 0),
         updated_at=datetime(2026, 1, 29, 11, 0, 0),
     )
@@ -251,11 +254,12 @@ class TestCreateIntegration:
         """Test creating integration with minimal fields (no credential_ref, no icon)."""
         minimal_response = IntegrationResponse(
             id=1,
-            type=IntegrationType.TERRAFORM,
+            type="terraform",  # Story 4.9: free-form string
             name="Terraform Cloud",
             base_url="https://terraform.io",
             credential_ref=None,
             icon=None,
+            auth_flow=None,  # Story 4.9: auth_flow field
             created_at=datetime(2026, 1, 29, 10, 0, 0),
             updated_at=datetime(2026, 1, 29, 10, 0, 0),
         )
@@ -326,8 +330,8 @@ class TestCreateIntegration:
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
     @pytest.mark.asyncio
-    async def test_create_integration_validation_error_invalid_type(self, client, dbops_token):
-        """Test creating integration with invalid type returns 422."""
+    async def test_create_integration_validation_error_type_too_long(self, client, dbops_token):
+        """Test creating integration with type > 100 chars returns 422 (Story 4.9 AC1)."""
         with patch("app.api.deps.user_repository") as mock_repo:
             mock_repo.get_by_username = AsyncMock(return_value={
                 "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
@@ -336,7 +340,7 @@ class TestCreateIntegration:
             response = await client.post(
                 "/api/v1/admin/integrations",
                 json={
-                    "type": "unknown_type",
+                    "type": "x" * 101,  # 101 characters - exceeds max_length=100
                     "name": "Test",
                     "base_url": "https://test.com",
                 },
@@ -414,11 +418,12 @@ class TestUpdateIntegration:
         """Test updating integration returns 200."""
         updated = IntegrationResponse(
             id=1,
-            type=IntegrationType.AAP,
+            type="aap",  # Story 4.9: free-form string
             name="AAP Production v2",
             base_url="https://aap-v2.example.com",
             credential_ref="secret/idp/aap-prod-v2",
             icon="aap",
+            auth_flow=AuthFlow.TOKEN,  # Story 4.9: auth_flow field
             created_at=datetime(2026, 1, 29, 10, 0, 0),
             updated_at=datetime(2026, 1, 29, 12, 0, 0),
         )
@@ -549,6 +554,94 @@ class TestDeleteIntegration:
             response = await client.delete(
                 "/api/v1/admin/integrations/1",
                 headers={"Authorization": f"Bearer {dba_token}"},
+            )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+class TestUploadIcon:
+    """Tests for POST /api/v1/admin/integrations/upload-icon (Story 4.9, AC3, AC6)."""
+
+    @pytest.mark.asyncio
+    async def test_upload_icon_success(self, client, dbops_token):
+        """Test uploading icon returns 201 with icon_url (Story 4.9, AC3; LOW-10 fix: full isolation)."""
+        with patch("app.api.deps.user_repository") as mock_repo, \
+             patch("builtins.open", mock_open()) as mock_file, \
+             patch("pathlib.Path.mkdir") as mock_mkdir, \
+             patch("pathlib.Path.exists", return_value=True):
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+
+            # Create fake PNG file
+            files = {"file": ("test-icon.png", b"fake-png-content", "image/png")}
+            response = await client.post(
+                "/api/v1/admin/integrations/upload-icon",
+                headers={"Authorization": f"Bearer {dbops_token}"},
+                files=files,
+            )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        data = response.json()
+        assert "data" in data
+        assert "icon_url" in data["data"]
+        assert data["data"]["icon_url"].startswith("/static/icons/")
+        assert data["data"]["icon_url"].endswith(".png")
+
+    @pytest.mark.asyncio
+    async def test_upload_icon_invalid_mime_type(self, client, dbops_token):
+        """Test uploading non-image file returns 400 (Story 4.9, AC3)."""
+        with patch("app.api.deps.user_repository") as mock_repo:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+
+            # Create fake text file
+            files = {"file": ("test.txt", b"not-an-image", "text/plain")}
+            response = await client.post(
+                "/api/v1/admin/integrations/upload-icon",
+                headers={"Authorization": f"Bearer {dbops_token}"},
+                files=files,
+            )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        data = response.json()
+        assert data["error"]["code"] == "INVALID_FILE_TYPE"
+
+    @pytest.mark.asyncio
+    async def test_upload_icon_file_too_large(self, client, dbops_token):
+        """Test uploading file > 2MB returns 400 (Story 4.9, AC3)."""
+        with patch("app.api.deps.user_repository") as mock_repo:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+
+            # Create fake large file (3MB)
+            large_content = b"x" * (3 * 1024 * 1024)
+            files = {"file": ("large-icon.png", large_content, "image/png")}
+            response = await client.post(
+                "/api/v1/admin/integrations/upload-icon",
+                headers={"Authorization": f"Bearer {dbops_token}"},
+                files=files,
+            )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        data = response.json()
+        assert data["error"]["code"] == "FILE_TOO_LARGE"
+
+    @pytest.mark.asyncio
+    async def test_upload_icon_forbidden_non_dbops(self, client, dba_token):
+        """Test uploading icon with non-DBOPS profile returns 403 (Story 4.9, AC3)."""
+        with patch("app.api.deps.user_repository") as mock_repo:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 2, "username": "dba-user", "display_name": "DBA", "profile": "dba_app"
+            })
+
+            files = {"file": ("test-icon.png", b"fake-png-content", "image/png")}
+            response = await client.post(
+                "/api/v1/admin/integrations/upload-icon",
+                headers={"Authorization": f"Bearer {dba_token}"},
+                files=files,
             )
 
         assert response.status_code == status.HTTP_403_FORBIDDEN

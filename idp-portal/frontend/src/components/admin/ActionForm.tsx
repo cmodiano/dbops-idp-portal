@@ -1,5 +1,5 @@
 /**
- * ActionForm component for creating/editing catalog actions (Story 2.1, AC #1, #6; Story 2.2, AC #1, #2, #3; Story 2.5).
+ * ActionForm component for creating/editing catalog actions (Story 2.1, AC #1, #6; Story 2.2, AC #1, #2, #3; Story 2.5; Story 3.4).
  *
  * Features:
  * - Inline validation (AC #6)
@@ -7,6 +7,7 @@
  * - Execution steps editor (Story 2.2, AC #1, #2)
  * - Change type config (Story 2.2, AC #3)
  * - Real-time preview with split view layout (Story 2.5, AC #1, #3)
+ * - Documentation Markdown editor (Story 3.4)
  * - Accessibility: aria-labels, focus management, aria-live preview
  */
 
@@ -43,6 +44,7 @@ const { TextArea } = Input;
 interface ActionFormValues extends ActionCreate {
   execution_steps?: ExecutionStep[];
   change_type_config?: Record<string, ChangeTypeConfigEntry>;
+  documentation_md?: string | null;
 }
 
 interface ActionFormProps {
@@ -79,6 +81,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
   const watchedDescription = Form.useWatch('description', form);
   const watchedEngine = Form.useWatch('engine', form);
   const watchedPlatform = Form.useWatch('platform', form);
+  const watchedDocumentationMd = Form.useWatch('documentation_md', form);
 
   // Load tags for autocomplete when modal opens (Story 2.6, AC #1)
   useEffect(() => {
@@ -118,8 +121,9 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
       impact_level: impactLevel,
       parameters_schema: parsedSchema,
       tags: selectedTags,
+      documentation_md: (watchedDocumentationMd as string) || null,
     };
-  }, [watchedName, watchedDescription, watchedEngine, watchedPlatform, parameterList, impactRulesList, previewEnvironment, defaultImpactLevel, selectedTags]);
+  }, [watchedName, watchedDescription, watchedEngine, watchedPlatform, parameterList, impactRulesList, previewEnvironment, defaultImpactLevel, selectedTags, watchedDocumentationMd]);
 
   // Focus on name input when modal opens (AC #7 accessibility)
   useEffect(() => {
@@ -139,6 +143,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
         description: editAction.description,
         engine: editAction.engine,
         platform: editAction.platform,
+        documentation_md: editAction.documentation_md,
       } as unknown as ActionFormValues);
       setExecutionSteps(editAction.execution_steps || []);
       setChangeTypeConfig(editAction.change_type_config ?? {});
@@ -259,6 +264,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
         parameters_schema: parameterListToSchema(parameterList),
         impact_rules: listToImpactRules(impactRulesList),
         default_impact_level: defaultImpactLevel,
+        documentation_md: values.documentation_md || null,
       };
 
       const result = await onSubmit(action);
@@ -377,6 +383,21 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
                 aria-label="Description de l'action"
                 showCount
                 maxLength={4000}
+              />
+            </Form.Item>
+
+            {/* Story 3.4: Documentation Markdown editor */}
+            <Form.Item
+              name="documentation_md"
+              label="Documentation (Markdown)"
+              tooltip="Documentation detaillee de l'action. Supporte le format Markdown : titres, listes, blocs de code, tableaux."
+            >
+              <TextArea
+                rows={6}
+                placeholder={`# Titre\n\nDescription detaillee...\n\n## Utilisation\n\n- Etape 1\n- Etape 2\n\n\`\`\`sql\nSELECT * FROM exemple;\n\`\`\``}
+                aria-label="Documentation de l'action en Markdown"
+                showCount
+                maxLength={100000}
               />
             </Form.Item>
 

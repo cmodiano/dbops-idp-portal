@@ -1,6 +1,6 @@
 # Story 3.4 : Documentation contextuelle d'une action
 
-Status: ready-for-dev
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -26,28 +26,28 @@ afin de comprendre en profondeur ce que fait l'action avant de l'exécuter.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Backend : champ documentation** (AC: 4)
-  - [ ] 1.1 Migration Flyway : ajouter colonne `DOCUMENTATION_MD` CLOB (nullable) à `ACTIONS_CATALOG`. Nom de fichier : `V022__add_documentation_md.sql`.
-  - [ ] 1.2 Modèle Pydantic : ajouter `documentation_md: str | None` dans `ActionResponse`, `ActionDetail`, `ActionCreate` (optionnel à la création). Modèle SQL/mapping dans `catalog.py` et repository : inclure la colonne dans SELECT/INSERT/UPDATE.
-  - [ ] 1.3 GET /api/v1/catalog/actions/{id} : retourner `documentation_md` dans la fiche détaillée (déjà inclus si colonne mappée).
+- [x] **Task 1 — Backend : champ documentation** (AC: 4)
+  - [x] 1.1 Migration Flyway : ajouter colonne `DOCUMENTATION_MD` CLOB (nullable) à `ACTIONS_CATALOG`. Nom de fichier : `V022__add_documentation_md.sql`.
+  - [x] 1.2 Modèle Pydantic : ajouter `documentation_md: str | None` dans `ActionResponse`, `ActionDetail`, `ActionCreate` (optionnel à la création). Modèle SQL/mapping dans `catalog.py` et repository : inclure la colonne dans SELECT/INSERT/UPDATE.
+  - [x] 1.3 GET /api/v1/catalog/actions/{id} : retourner `documentation_md` dans la fiche détaillée (déjà inclus si colonne mappée).
 
-- [ ] **Task 2 — Frontend : section Documentation dans le drawer** (AC: 1, 2, 3, 5)
-  - [ ] 2.1 Dans `ActionDrawerPreview` (ou drawer parent) : ajouter une section « Documentation » sous la description courte (ou un onglet « Documentation » si le drawer utilise des Tabs). Contenu : rendu Markdown du champ `documentation_md`.
-  - [ ] 2.2 Rendu Markdown : utiliser une librairie type `react-markdown` avec support titres (h1–h6), listes, blocs de code (syntax highlighting optionnel), tableaux. Sanitiser le HTML si la lib génère du HTML (éviter XSS).
-  - [ ] 2.3 Zone documentation scrollable : conteneur avec `overflow-y: auto` et hauteur max pour que le scroll reste dans le drawer (AC2).
-  - [ ] 2.4 Si `documentation_md` est vide ou null : afficher « Aucune documentation disponible » (AC3).
+- [x] **Task 2 — Frontend : section Documentation dans le drawer** (AC: 1, 2, 3, 5)
+  - [x] 2.1 Dans `ActionDrawerPreview` (ou drawer parent) : ajouter une section « Documentation » sous la description courte (ou un onglet « Documentation » si le drawer utilise des Tabs). Contenu : rendu Markdown du champ `documentation_md`.
+  - [x] 2.2 Rendu Markdown : utiliser une librairie type `react-markdown` avec support titres (h1–h6), listes, blocs de code (syntax highlighting optionnel), tableaux. Sanitiser le HTML si la lib génère du HTML (éviter XSS).
+  - [x] 2.3 Zone documentation scrollable : conteneur avec `overflow-y: auto` et hauteur max pour que le scroll reste dans le drawer (AC2).
+  - [x] 2.4 Si `documentation_md` est vide ou null : afficher « Aucune documentation disponible » (AC3).
 
-- [ ] **Task 3 — Admin : édition de la documentation** (hors scope strict FR12 — optionnel pour cohérence)
-  - [ ] 3.1 Si l’admin édite une action (ActionWizard ou formulaire action) : ajouter un champ texte long (TextArea) ou éditeur Markdown pour `documentation_md`. Sauvegarder via PUT/PATCH existant.
-  - [ ] 3.2 Sinon : laisser la possibilité d’alimenter la colonne via script/migration ou une story ultérieure.
+- [x] **Task 3 — Admin : édition de la documentation** (hors scope strict FR12 — optionnel pour cohérence)
+  - [x] 3.1 Si l'admin édite une action (ActionWizard ou formulaire action) : ajouter un champ texte long (TextArea) ou éditeur Markdown pour `documentation_md`. Sauvegarder via PUT/PATCH existant.
+  - [x] 3.2 Sinon : laisser la possibilité d'alimenter la colonne via script/migration ou une story ultérieure.
 
-- [ ] **Task 4 — Types et API client frontend** (AC: 1, 4)
-  - [ ] 4.1 `api.ts` : ajouter `documentation_md?: string | null` dans `ActionResponse`, `ActionDetail`, `ActionPreviewData` (ou type utilisé par le drawer).
-  - [ ] 4.2 `catalog_service` / appel GET action by id : s’assurer que la réponse inclut `documentation_md` (déjà le cas si le backend le renvoie).
+- [x] **Task 4 — Types et API client frontend** (AC: 1, 4)
+  - [x] 4.1 `api.ts` : ajouter `documentation_md?: string | null` dans `ActionResponse`, `ActionDetail`, `ActionPreviewData` (ou type utilisé par le drawer).
+  - [x] 4.2 `catalog_service` / appel GET action by id : s'assurer que la réponse inclut `documentation_md` (déjà le cas si le backend le renvoie).
 
-- [ ] **Task 5 — Tests** (AC: tous)
-  - [ ] 5.1 Backend : test unitaire GET /catalog/actions/{id} avec/sans `documentation_md` ; test création/update action avec `documentation_md`. Test migration V022.
-  - [ ] 5.2 Frontend : test ActionDrawerPreview (ou drawer) — section Documentation affichée avec Markdown rendu ; état vide « Aucune documentation disponible » ; scroll dans le drawer.
+- [x] **Task 5 — Tests** (AC: tous)
+  - [x] 5.1 Backend : test unitaire GET /catalog/actions/{id} avec/sans `documentation_md` ; test création/update action avec `documentation_md`. Test migration V022.
+  - [x] 5.2 Frontend : test ActionDrawerPreview (ou drawer) — section Documentation affichée avec Markdown rendu ; état vide « Aucune documentation disponible » ; scroll dans le drawer.
 
 ## Dev Notes
 
@@ -104,10 +104,34 @@ afin de comprendre en profondeur ce que fait l'action avant de l'exécuter.
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+Claude Opus 4.5 (claude-opus-4-5-20251101)
 
 ### Debug Log References
 
+None
+
 ### Completion Notes List
 
+- **Backend**: Added `DOCUMENTATION_MD` CLOB column via V022 migration. Updated Pydantic models (ActionCreate, ActionResponse, ActionDetail) and catalog_repository.py to include documentation_md in all SELECT/INSERT/UPDATE queries.
+- **Frontend**: Installed react-markdown, remark-gfm, and rehype-sanitize. Added Documentation section in ActionDrawerPreview with rendered Markdown, scrollable container (maxHeight 300px), and empty state. Updated TypeScript types in api.ts.
+- **Admin**: Added TextArea for documentation_md in ActionForm with Markdown placeholder, maxLength 100k, showCount. Field is included in preview data and saved with action.
+- **Tests**: Added 7 new backend tests (TestDocumentationMd class), 3 V022 migration tests (test_migration.py), and 7 frontend tests (documentation section + table AC5). All backend and frontend tests pass.
+- **Code review fixes (2026-01-29)**: rehype-sanitize for XSS (link hrefs); V022 unit tests; package-lock in File List; frontend test for Markdown tables (AC5); documentation_md max_length 100k (Pydantic + ActionForm); Space orientation; placeholder template literal.
+
 ### File List
+
+**Backend (idp-portal/backend)**
+- `database/migrations/V022__add_documentation_md.sql` (NEW)
+- `app/models/catalog.py` (MODIFIED - ActionCreate, ActionResponse, documentation_md max_length 100k)
+- `app/repositories/catalog_repository.py` (MODIFIED - SQL queries, row mappings, create return)
+- `tests/unit/test_catalog_repository.py` (MODIFIED - fixtures, TestDocumentationMd class)
+- `tests/unit/test_catalog_api.py` (MODIFIED - sample_action_detail fixture, 2 new tests)
+- `tests/unit/test_migration.py` (MODIFIED - V022 tests: file exists, adds DOCUMENTATION_MD, comment)
+
+**Frontend (idp-portal/frontend)**
+- `package.json` (MODIFIED - react-markdown, remark-gfm, rehype-sanitize dependencies)
+- `package-lock.json` (MODIFIED - lockfile for new deps)
+- `src/types/api.ts` (MODIFIED - documentation_md in ActionCreate, ActionResponse, ActionPreviewData)
+- `src/components/catalog/ActionDrawerPreview.tsx` (MODIFIED - Documentation section, rehype-sanitize, Space orientation)
+- `src/components/catalog/ActionDrawerPreview.test.tsx` (MODIFIED - 7 new tests incl. table AC5)
+- `src/components/admin/ActionForm.tsx` (MODIFIED - documentation_md TextArea, maxLength 100k, placeholder)

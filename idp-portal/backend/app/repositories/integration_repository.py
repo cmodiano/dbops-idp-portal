@@ -1,9 +1,10 @@
-"""Integration repository using raw SQL via python-oracledb (Story 2.27).
+"""Integration repository using raw SQL via python-oracledb (Story 2.27, 4.9).
 
 Handles CRUD operations for INTEGRATIONS table with:
 - Parameterized queries for security
 - Structured logging with correlation_id
 - No secrets stored (credential_ref is a reference only, NFR7)
+- Story 4.9: Type is free-form string, auth_flow added
 """
 
 from __future__ import annotations
@@ -20,39 +21,40 @@ from app.models.integration import (
     IntegrationCreate,
     IntegrationUpdate,
     IntegrationResponse,
-    IntegrationType,
+    AuthFlow,
 )
 
 logger = structlog.get_logger()
 
 
 def _row_to_integration_response(row: tuple) -> IntegrationResponse:
-    """Convert database row to IntegrationResponse model.
+    """Convert database row to IntegrationResponse model (Story 4.9).
 
-    Expected row order (8 columns):
-    0:ID, 1:TYPE, 2:NAME, 3:BASE_URL, 4:CREDENTIAL_REF, 5:ICON, 6:CREATED_AT, 7:UPDATED_AT
+    Expected row order (9 columns):
+    0:ID, 1:TYPE, 2:NAME, 3:BASE_URL, 4:CREDENTIAL_REF, 5:ICON, 6:AUTH_FLOW, 7:CREATED_AT, 8:UPDATED_AT
     """
     return IntegrationResponse(
         id=row[0],
-        type=IntegrationType(row[1]),
+        type=row[1],  # Story 4.9: type is now str (not enum)
         name=row[2],
         base_url=row[3],
         credential_ref=row[4],
         icon=row[5],
-        created_at=row[6],
-        updated_at=row[7],
+        auth_flow=AuthFlow(row[6]) if row[6] is not None else None,
+        created_at=row[7],
+        updated_at=row[8],
     )
 
 
 async def get_all() -> list[IntegrationResponse]:
-    """Return all integrations ordered by name (Story 2.27, AC2).
+    """Return all integrations ordered by name (Story 2.27, 4.9).
 
     Returns:
         List of IntegrationResponse ordered by NAME ASC
     """
     start_time = time.perf_counter()
     query = """
-        SELECT ID, TYPE, NAME, BASE_URL, CREDENTIAL_REF, ICON, CREATED_AT, UPDATED_AT
+        SELECT ID, TYPE, NAME, BASE_URL, CREDENTIAL_REF, ICON, AUTH_FLOW, CREATED_AT, UPDATED_AT
         FROM INTEGRATIONS
         ORDER BY NAME
     """
@@ -74,7 +76,7 @@ async def get_all() -> list[IntegrationResponse]:
 
 
 async def get_by_id(integration_id: int) -> IntegrationResponse | None:
-    """Fetch an integration by ID (Story 2.27, AC2).
+    """Fetch an integration by ID (Story 2.27, 4.9).
 
     Args:
         integration_id: The integration ID to fetch
@@ -84,7 +86,7 @@ async def get_by_id(integration_id: int) -> IntegrationResponse | None:
     """
     start_time = time.perf_counter()
     query = """
-        SELECT ID, TYPE, NAME, BASE_URL, CREDENTIAL_REF, ICON, CREATED_AT, UPDATED_AT
+        SELECT ID, TYPE, NAME, BASE_URL, CREDENTIAL_REF, ICON, AUTH_FLOW, CREATED_AT, UPDATED_AT
         FROM INTEGRATIONS
         WHERE ID = :integration_id
     """
@@ -110,7 +112,7 @@ async def get_by_id(integration_id: int) -> IntegrationResponse | None:
 
 
 async def get_by_name(name: str) -> IntegrationResponse | None:
-    """Fetch an integration by name (for uniqueness check).
+    """Fetch an integration by name (for uniqueness check, Story 4.9).
 
     Args:
         name: The integration name to fetch
@@ -120,7 +122,7 @@ async def get_by_name(name: str) -> IntegrationResponse | None:
     """
     start_time = time.perf_counter()
     query = """
-        SELECT ID, TYPE, NAME, BASE_URL, CREDENTIAL_REF, ICON, CREATED_AT, UPDATED_AT
+        SELECT ID, TYPE, NAME, BASE_URL, CREDENTIAL_REF, ICON, AUTH_FLOW, CREATED_AT, UPDATED_AT
         FROM INTEGRATIONS
         WHERE NAME = :name
     """
@@ -154,7 +156,7 @@ class DuplicateNameError(Exception):
 
 
 async def create(integration: IntegrationCreate) -> IntegrationResponse:
-    """Create a new integration (Story 2.27, AC3).
+    """Create a new integration (Story 2.27, 4.9).
 
     Args:
         integration: IntegrationCreate model with integration data
@@ -168,17 +170,18 @@ async def create(integration: IntegrationCreate) -> IntegrationResponse:
     start_time = time.perf_counter()
     query = """
         INSERT INTO INTEGRATIONS
-        (TYPE, NAME, BASE_URL, CREDENTIAL_REF, ICON)
+        (TYPE, NAME, BASE_URL, CREDENTIAL_REF, ICON, AUTH_FLOW)
         VALUES
-        (:type, :name, :base_url, :credential_ref, :icon)
+        (:type, :name, :base_url, :credential_ref, :icon, :auth_flow)
         RETURNING ID INTO :out_id
     """
     params = {
-        "type": integration.type.value,
+        "type": integration.type,  # Story 4.9: type is now str (not enum)
         "name": integration.name,
         "base_url": integration.base_url,
         "credential_ref": integration.credential_ref,
         "icon": integration.icon,
+        "auth_flow": integration.auth_flow.value if integration.auth_flow else None,
     }
 
     async with get_connection() as conn:
@@ -221,7 +224,7 @@ async def create(integration: IntegrationCreate) -> IntegrationResponse:
 
 
 async def update(integration_id: int, integration: IntegrationUpdate) -> IntegrationResponse | None:
-    """Update an existing integration (Story 2.27, AC3).
+    """Update an existing integration (Story 2.27, 4.9).
 
     Args:
         integration_id: The integration ID to update
@@ -253,7 +256,7 @@ async def update(integration_id: int, integration: IntegrationUpdate) -> Integra
 
     if integration.type is not None:
         update_fields.append("TYPE = :type")
-        params["type"] = integration.type.value
+        params["type"] = integration.type  # Story 4.9: type is now str (not enum)
 
     if integration.name is not None:
         update_fields.append("NAME = :name")
@@ -263,7 +266,7 @@ async def update(integration_id: int, integration: IntegrationUpdate) -> Integra
         update_fields.append("BASE_URL = :base_url")
         params["base_url"] = integration.base_url
 
-    # credential_ref and icon can be set to None to clear them
+    # credential_ref, icon, and auth_flow can be set to None to clear them
     if "credential_ref" in integration.model_fields_set:
         update_fields.append("CREDENTIAL_REF = :credential_ref")
         params["credential_ref"] = integration.credential_ref
@@ -271,6 +274,10 @@ async def update(integration_id: int, integration: IntegrationUpdate) -> Integra
     if "icon" in integration.model_fields_set:
         update_fields.append("ICON = :icon")
         params["icon"] = integration.icon
+
+    if "auth_flow" in integration.model_fields_set:
+        update_fields.append("AUTH_FLOW = :auth_flow")
+        params["auth_flow"] = integration.auth_flow.value if integration.auth_flow else None
 
     if not update_fields:
         # No fields to update, return existing

@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Modal, Steps, Button, Form, Input, Select, Radio, Switch, Alert, Space, notification } from 'antd';
+import { Modal, Steps, Button, Form, Input, Select, Radio, Switch, Alert, Space, App } from 'antd';
 import type {
   ProfileCreate,
   ProfileUpdate,
@@ -63,6 +63,7 @@ export function ProfileWizard({
   editProfile,
   onSuccess,
 }: ProfileWizardProps) {
+  const { notification } = App.useApp();
   const [form] = Form.useForm<ProfileWizardValues>();
   const [currentStep, setCurrentStep] = useState(0);
   const [submitError, setSubmitError] = useState<string | null>(null);

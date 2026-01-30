@@ -1,6 +1,7 @@
 """Application settings loaded from environment variables."""
 
 from enum import Enum
+from pathlib import Path
 from typing import Literal
 
 from pydantic import field_validator
@@ -53,6 +54,22 @@ class Settings(BaseSettings):
     # Logging configuration (AC #8)
     log_level: LogLevel = LogLevel.INFO
 
+    # Inventory sync configuration (Story 4.2, Task 1.5)
+    inventory_api_url: str = ""
+    inventory_api_timeout: int = 30
+    inventory_api_token: str = ""
+    inventory_sync_interval_hours: int = 1
+    inventory_cache_ttl_seconds: int = 3600
+
+    # Vault configuration (Story 4.2bis, Task 1.1)
+    vault_addr: str = ""
+    vault_token: str = ""
+    vault_role_id: str = ""
+    vault_secret_id: str = ""
+
+    # Static files configuration (Story 4.9, LOW-9 fix)
+    static_files_path: str = ""  # If empty, defaults to backend/static/
+
     @field_validator("log_level", mode="before")
     @classmethod
     def validate_log_level(cls, v: str | LogLevel) -> LogLevel:
@@ -66,6 +83,17 @@ class Settings(BaseSettings):
                 f"Invalid log_level '{v}'. Must be one of: "
                 f"{', '.join(level.value for level in LogLevel)}"
             )
+
+    def get_static_path(self) -> Path:
+        """Get the static files directory path (Story 4.9, LOW-9 fix).
+        
+        Returns:
+            Path to static files directory. Defaults to backend/static/ if not configured.
+        """
+        if self.static_files_path:
+            return Path(self.static_files_path)
+        # Default: backend/static/ (relative to config.py location)
+        return Path(__file__).parent.parent / "static"
 
 
 settings = Settings()

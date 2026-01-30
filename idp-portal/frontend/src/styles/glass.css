@@ -10,12 +10,13 @@
   position: relative;
 }
 
-/* Light mode: subtle glass */
+/* Light mode: subtle glass with visible border for contrast */
+/* Story 3-7: Enhanced contrast - bordure visible sur fond grisé */
 html.light .ant-card {
-  background: rgba(255, 255, 255, 0.85) !important;
+  background: rgba(255, 255, 255, 0.92) !important;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 /* Dark mode: glass with depth */
@@ -38,7 +39,8 @@ html.dark .ant-card:hover:not(.card-preview) {
 }
 
 html.light .ant-card:hover:not(.card-preview) {
-  background: rgba(255, 255, 255, 0.95) !important;
+  background: rgba(255, 255, 255, 0.98) !important;
+  border-color: rgba(0, 0, 0, 0.12);
 }
 
 /* Glass highlight on top edge */
@@ -159,6 +161,22 @@ html.dark header.ant-layout-header {
   border: 1px solid var(--ant-color-border-secondary);
 }
 
+/* Story 3-7: Light mode modal/drawer with enhanced shadows */
+html.light .ant-modal-content {
+  background: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.16);
+}
+
+html.light .ant-drawer .ant-drawer-content {
+  background: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.12);
+}
+
 html.dark .ant-modal-content {
   background: rgba(26, 26, 36, 0.95) !important;
   backdrop-filter: blur(24px);
@@ -211,15 +229,122 @@ html.dark .ant-drawer-header {
   }
 }
 
-/* === Notification glass === */
-.ant-notification-notice {
+/* === Message glass (toast) === */
+.ant-message-notice-content {
+  border-radius: 8px;
+  overflow: hidden;
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
 }
 
+/* Story 3-7: Enhanced shadow for better depth */
+html.light .ant-message-notice-content {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+}
+
+html.dark .ant-message-notice-content {
+  background: rgba(26, 26, 36, 0.7) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+/* Message glass highlight on top edge */
+.ant-message-notice-content::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 8px;
+  right: 8px;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3) 20%,
+    rgba(255, 255, 255, 0.5) 50%,
+    rgba(255, 255, 255, 0.3) 80%,
+    transparent
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+html.dark .ant-message-notice-content::before {
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(255, 255, 255, 0.05) 20%,
+    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0.05) 80%,
+    transparent
+  );
+}
+
+/* Position relative for ::before pseudo-element */
+.ant-message-notice-content {
+  position: relative;
+}
+
+/* === Notification glass === */
+.ant-notification-notice {
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* Story 3-7: Enhanced shadow for better depth */
+html.light .ant-notification-notice {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+  color: var(--ant-color-text);
+}
+
 html.dark .ant-notification-notice {
-  background: rgba(26, 26, 36, 0.9) !important;
+  background: rgba(26, 26, 36, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+/* Notification glass highlight on top edge */
+.ant-notification-notice::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 8px;
+  right: 8px;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3) 20%,
+    rgba(255, 255, 255, 0.5) 50%,
+    rgba(255, 255, 255, 0.3) 80%,
+    transparent
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+html.dark .ant-notification-notice::before {
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(255, 255, 255, 0.05) 20%,
+    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0.05) 80%,
+    transparent
+  );
+}
+
+html.light .ant-notification-notice-message,
+html.light .ant-notification-notice-description {
+  color: var(--ant-color-text);
+}
+
+html.dark .ant-notification-notice-message,
+html.dark .ant-notification-notice-description {
+  color: rgba(255, 255, 255, 0.95);
 }
 
 /* === Dropdown glass === */

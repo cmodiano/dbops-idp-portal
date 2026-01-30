@@ -87,19 +87,21 @@ development_status:
   3-1-catalogue-actions-avec-modes-affichage-et-favoris: done  # code-review fixes 2026-01-29
   3-2-fiche-descriptive-en-drawer-lateral: done  # Code review + tests passed 2026-01-29
   3-3-recherche-et-filtrage-du-catalogue-par-tags: done  # Code review approved + fixes 2026-01-29
-  3-4-documentation-contextuelle-dune-action: ready-for-dev
-  3-5-nuage-tags-et-clarte-favoris: backlog  # Nuage de tags multi-select + tooltip/aria-label favori (PM feedback)
+  3-4-documentation-contextuelle-dune-action: done  # All tasks completed 2026-01-29
+  3-5-nuage-tags-et-clarte-favoris: done  # Nuage de tags multi-select + tooltip/aria-label favori (code-review 2026-01-29)
+  3-6-toasts-liquid-glass: done  # UX — Toasts (message/notification) alignés sur design system liquid glass (transparence, blur, coins lisses)
+  3-7-light-theme-contraste-et-ombres: done  # UX — Light theme : contraste fond/éléments + ombres plus prononcées (code-review fixes 2026-01-29)
   epic-3-retrospective: optional
 
   # === Epic 4: Execution & Suivi Temps Reel (MVP) ===
-  epic-4: backlog
-  4-1-wizard-execution-en-3-etapes: backlog
-  4-2-donnees-inventaire-pour-formulaires-dynamiques: backlog
-  4-2bis-connecteur-hashicorp-vault: backlog  # Connexion dynamique a Vault, get_secret; secret 0 via env
-  4-9-integrations-type-libre-flow-upload-icone: backlog  # Type libre, flow auth (token/basic/pat), upload icône
-  4-3-moteur-execution-et-facade-api: backlog
-  4-4-adapter-plateforme-aap: backlog
-  4-5-integration-servicenow-ouverture-automatique-changement: backlog
+  epic-4: in-progress
+  4-1-wizard-execution-en-3-etapes: done  # Code review fixes applied 2026-01-29
+  4-2-donnees-inventaire-pour-formulaires-dynamiques: done  # Code review: 7 issues fixed, 24/24 tests pass (2026-01-29)
+  4-2bis-connecteur-hashicorp-vault: done  # Code review: 5 HIGH + 4 MEDIUM issues fixed, 11/11 tests pass (2026-01-29)
+  4-9-integrations-type-libre-flow-upload-icone: done  # Code review: ALL 10 issues fixed (3 CRITICAL + 4 MEDIUM + 3 LOW) - 100% complete (2026-01-29)
+  4-3-moteur-execution-et-facade-api: done  # Code review: 10 issues fixed (3 HIGH, 5 MEDIUM, 2 LOW) — RBAC implemented, correlation_id propagated, NFR2 tested (2026-01-29)
+  4-4-adapter-plateforme-aap: done  # Code review 2026-01-29: 3 MEDIUM fixes, 33/33 tests pass
+  4-5-integration-servicenow-ouverture-automatique-changement: ready-for-dev
   4-6-timeline-execution-temps-reel: backlog
   4-7-resultat-execution-logs-et-gestion-erreur: backlog
   4-8-historique-des-executions: backlog
@@ -146,6 +148,19 @@ development_status:
   10-2-demande-de-consultation-expert-dba: backlog
   10-3-interface-ia-conversationnelle-pour-decouverte-dactions: backlog
   epic-10-retrospective: optional
+
+  # === Epic 11: Scheduling & Maintenance Planifiée (Phase 2) ===
+  epic-11: backlog
+  11-1-modele-donnees-scheduled-executions-et-recurrence: backlog  # Table scheduled_executions + recurring_patterns (one-time vs recurring)
+  11-2-setup-celery-beat-avec-postgresql-backend: backlog  # Integration Celery + Redis/RabbitMQ + persistent schedules en DB
+  11-3-api-creer-execution-planifiee-one-time: backlog  # POST /api/v1/scheduled-executions avec date/heure future
+  11-4-worker-celery-execution-scheduled-tasks: backlog  # Worker qui poll et execute les actions planifiées
+  11-5-ui-scheduler-dans-wizard-execution: backlog  # Option "Exécuter maintenant" vs "Planifier" dans ExecutionWizard
+  11-6-liste-executions-planifiees-et-annulation: backlog  # Page admin : voir/annuler les executions scheduled
+  11-7-patterns-recurrence-simples-daily-weekly: backlog  # Support récurrence basique (tous les jours, toutes les semaines)
+  11-8-cron-expressions-pour-recurrence-avancee: backlog  # Support expressions cron complètes pour power users
+  11-9-monitoring-celery-flower-ou-equivalent: backlog  # UI de monitoring des jobs Celery (Flower ou autre)
+  epic-11-retrospective: optional
 
   # === Epic M: Migration FastAPI vers Django REST (Arrimage plateforme) ===
   epic-m: backlog

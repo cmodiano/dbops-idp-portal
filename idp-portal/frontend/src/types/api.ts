@@ -40,6 +40,8 @@ export interface ActionCreate {
   /** Story 2.18 AC5: Default impact level when no rule matches the environment. */
   default_impact_level?: ImpactLevel | null;
   /** Story 2.24: change_model_code removed; change_type_config is in ExecutionStepsUpdate only. */
+  /** Story 3.4 FR12: Markdown documentation for contextual help. */
+  documentation_md?: string | null;
 }
 
 export interface ActionResponse {
@@ -59,6 +61,8 @@ export interface ActionResponse {
   created_at: string;
   updated_at: string | null;
   tags?: string[];
+  /** Story 3.4 FR12: Markdown documentation for contextual help. */
+  documentation_md?: string | null;
 }
 
 /** Per-environment change config (Story 2.24). required=true implies change_model_code required, alphanumeric max 50. */
@@ -72,6 +76,7 @@ export interface ActionDetail extends ActionResponse {
   execution_steps: ExecutionStep[] | null;
   /** Story 2.24: per-env { required, change_model_code }. */
   change_type_config: Record<string, ChangeTypeConfigEntry> | null;
+  /* documentation_md is inherited from ActionResponse (Story 3.4) */
 }
 
 // === Execution Steps Types (Story 2.2; Story 2.7 connector_type) ===
@@ -253,70 +258,56 @@ export interface ProfileTargetPermissionsResponse {
   target_patterns: string[];
 }
 
-// === Integration Types (Story 2.28) ===
+// === Integration Types (Story 2.28, 4.9) ===
 
-/** Integration platform type (aligned with backend IntegrationType). */
-export type IntegrationType =
-  | 'aap'
-  | 'servicenow'
-  | 'terraform'
-  | 'azuredevops'
-  | 'jira'
-  | 'github_actions';
+/** Story 4.9 AC1: Integration type is now free-form string (not enum).
+ * Suggested types for UI autocomplete (legacy types, not enforced). */
+export const SUGGESTED_INTEGRATION_TYPES = [
+  'aap',
+  'servicenow',
+  'terraform',
+  'azuredevops',
+  'jira',
+  'github_actions',
+] as const;
 
-/** Labels for integration types (french). */
-export const INTEGRATION_TYPE_LABELS: Record<IntegrationType, string> = {
-  aap: 'AAP',
-  servicenow: 'ServiceNow',
-  terraform: 'Terraform',
-  azuredevops: 'Azure DevOps',
-  jira: 'Jira',
-  github_actions: 'GitHub Actions',
-};
+/** Authentication flow types (Story 4.9 AC2). */
+export type AuthFlow = 'token' | 'basic' | 'basic_then_token' | 'pat';
 
-/** Icon components for integration types (shared between Table and Form). */
-export const INTEGRATION_TYPE_ICON_COLORS: Record<IntegrationType, string> = {
-  aap: '#1890ff',
-  servicenow: '#52c41a',
-  terraform: '#722ed1',
-  azuredevops: '#0078d4',
-  jira: '#0052cc',
-  github_actions: '#24292e',
-};
-
-/** Tag colors for integration types in table display. */
-export const INTEGRATION_TYPE_TAG_COLORS: Record<IntegrationType, string> = {
-  aap: 'blue',
-  servicenow: 'green',
-  terraform: 'purple',
-  azuredevops: 'geekblue',
-  jira: 'blue',
-  github_actions: 'default',
+/** Labels for auth flows (french). */
+export const AUTH_FLOW_LABELS: Record<AuthFlow, string> = {
+  token: 'Token (Bearer)',
+  basic: 'Basic (Username/Password)',
+  basic_then_token: 'Basic puis Token',
+  pat: 'PAT (Personal Access Token)',
 };
 
 export interface IntegrationCreate {
-  type: IntegrationType;
+  type: string; // Story 4.9 AC1: free-form platform name (1-100 chars)
   name: string;
   base_url: string;
   credential_ref?: string | null;
   icon?: string | null;
+  auth_flow?: AuthFlow | null; // Story 4.9 AC2: authentication flow
 }
 
 export interface IntegrationUpdate {
-  type?: IntegrationType;
+  type?: string; // Story 4.9 AC1: free-form platform name
   name?: string;
   base_url?: string;
   credential_ref?: string | null;
   icon?: string | null;
+  auth_flow?: AuthFlow | null; // Story 4.9 AC2: authentication flow
 }
 
 export interface IntegrationResponse {
   id: number;
-  type: IntegrationType;
+  type: string; // Story 4.9 AC1: free-form platform name
   name: string;
   base_url: string;
   credential_ref: string | null;
   icon: string | null;
+  auth_flow: AuthFlow | null; // Story 4.9 AC2: authentication flow
   created_at: string;
   updated_at: string;
 }
@@ -339,4 +330,52 @@ export interface ActionPreviewData {
   tags?: string[];
   /** Nombre d'exécutions (affiché si disponible, Task 1.1). */
   execution_count?: number | null;
+  /** Story 3.4 FR12: Markdown documentation for contextual help. */
+  documentation_md?: string | null;
+}
+
+// === Execution Types (Story 4.1) ===
+
+/** Execution environment (Story 4.1, AC2). */
+export type ExecutionEnvironment = 'dev' | 'staging' | 'prod';
+
+/** Execution status (Story 4.1). */
+export type ExecutionStatusType = 'SUBMITTED' | 'PENDING_APPROVAL' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+
+/** Request to create a new execution (Story 4.1, Task 1.1). */
+export interface ExecutionCreateRequest {
+  action_id: number;
+  environment: ExecutionEnvironment;
+  parameters?: Record<string, unknown> | null;
+}
+
+/** Response from POST /executions (Story 4.1, Task 1.1). */
+export interface ExecutionCreateResponse {
+  execution_id: number;
+  status: ExecutionStatusType;
+  created_at: string;
+}
+
+/** Execution record (Story 4.1). */
+export interface ExecutionResponse {
+  id: number;
+  action_id: number;
+  action_name: string | null;
+  user_id: number;
+  environment: ExecutionEnvironment;
+  parameters: Record<string, unknown> | null;
+  status: ExecutionStatusType;
+  servicenow_change_id: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+}
+
+// === Inventory Types (Story 4.1, Task 2) ===
+
+/** Inventory item for dropdowns (Story 4.1, Task 2.1). */
+export interface InventoryItem {
+  id: string;
+  name: string;
+  environment: string | null;
 }

@@ -191,7 +191,7 @@ class TestListCatalogActions:
 
 @pytest.fixture
 def sample_action_detail():
-    """Sample ActionDetail for catalog detail endpoint (Story 3.2)."""
+    """Sample ActionDetail for catalog detail endpoint (Story 3.2, 3.4)."""
     return ActionDetail(
         id=1,
         name="Create PDB Oracle",
@@ -222,6 +222,7 @@ def sample_action_detail():
             )
         ],
         change_type_config=None,
+        documentation_md="# Create PDB\n\n## Overview\n\nThis action creates a **Pluggable Database**.\n\n```sql\nCREATE PLUGGABLE DATABASE pdb_name;\n```",
     )
 
 
@@ -491,6 +492,35 @@ class TestGetCatalogActionById:
         data = response.json()
         assert data["can_execute"] is False
         assert data["allowed_environments"] == []
+
+    @pytest.mark.asyncio
+    async def test_get_action_by_id_returns_documentation_md(self, client, sample_action_detail):
+        """GET /catalog/actions/{id} returns documentation_md when present (Story 3.4, AC1, AC4)."""
+        with patch("app.api.v1.catalog.catalog_repository.get_by_id", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = sample_action_detail
+
+            response = await client.get("/api/v1/catalog/actions/1")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert "documentation_md" in data["data"]
+        assert data["data"]["documentation_md"] is not None
+        assert "# Create PDB" in data["data"]["documentation_md"]
+        assert "```sql" in data["data"]["documentation_md"]
+
+    @pytest.mark.asyncio
+    async def test_get_action_by_id_returns_null_documentation_md(self, client, sample_action_detail):
+        """GET /catalog/actions/{id} returns null documentation_md when not set (Story 3.4, AC3)."""
+        action_without_docs = sample_action_detail.model_copy(update={"documentation_md": None})
+        with patch("app.api.v1.catalog.catalog_repository.get_by_id", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = action_without_docs
+
+            response = await client.get("/api/v1/catalog/actions/1")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert "documentation_md" in data["data"]
+        assert data["data"]["documentation_md"] is None
 
 
 class TestListCatalogTags:

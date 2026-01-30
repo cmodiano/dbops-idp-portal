@@ -140,3 +140,27 @@ def test_v021_has_index_on_user_id():
     """Story 3.1 AC14: USER_FAVORITES has index on user_id for efficient lookups."""
     sql = _read_migration(V021_FILE)
     assert "INDEX" in sql and "USER_ID" in sql
+
+
+# Story 3.4: V022 DOCUMENTATION_MD column (FR12)
+V022_FILE = "V022__add_documentation_md.sql"
+
+
+def test_v022_file_exists():
+    """Story 3.4: V022 migration file exists (DOCUMENTATION_MD column)."""
+    assert (MIGRATIONS_DIR / V022_FILE).is_file()
+
+
+def test_v022_adds_documentation_md_column():
+    """Story 3.4 AC4: V022 adds DOCUMENTATION_MD CLOB to ACTIONS_CATALOG."""
+    sql = _read_migration(V022_FILE)
+    assert "ALTER TABLE ACTIONS_CATALOG" in sql
+    assert "DOCUMENTATION_MD" in sql
+    assert "CLOB" in sql
+
+
+def test_v022_comment_documents_column():
+    """Story 3.4: V022 documents DOCUMENTATION_MD in COMMENT."""
+    sql = _read_migration(V022_FILE)
+    assert "COMMENT ON COLUMN" in sql
+    assert "DOCUMENTATION_MD" in sql

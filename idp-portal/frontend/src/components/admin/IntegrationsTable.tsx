@@ -1,25 +1,14 @@
 /**
- * IntegrationsTable — liste des intégrations (Story 2.28, AC2).
- * Colonnes : icône, nom, type, URL, date de création. Actions : Modifier, Supprimer (confirmation).
+ * IntegrationsTable — liste des intégrations (Story 2.28, 4.9).
+ * Story 4.9: Type libre (string), auth_flow, icône uploadée affichée.
+ * Colonnes : icône, nom, type, URL, auth_flow, date de création. Actions : Modifier, Supprimer.
  */
 
 import { Table, Button, Space, Modal, Avatar, Tag, Tooltip } from 'antd';
-import { ReloadOutlined } from '@ant-design/icons';
+import { ReloadOutlined, ApiOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import {
-  ApiOutlined,
-  CloudServerOutlined,
-  BuildOutlined,
-  BranchesOutlined,
-  ProjectOutlined,
-  GithubOutlined,
-} from '@ant-design/icons';
-import type { IntegrationListItem, IntegrationType } from '../../types/api';
-import {
-  INTEGRATION_TYPE_LABELS,
-  INTEGRATION_TYPE_ICON_COLORS,
-  INTEGRATION_TYPE_TAG_COLORS,
-} from '../../types/api';
+import type { IntegrationListItem } from '../../types/api';
+import { AUTH_FLOW_LABELS } from '../../types/api';
 
 export interface IntegrationsTableProps {
   dataSource: IntegrationListItem[];
@@ -30,30 +19,20 @@ export interface IntegrationsTableProps {
   onRefresh?: () => void;
 }
 
-const TYPE_ICONS: Record<IntegrationType, React.ReactNode> = {
-  aap: <ApiOutlined style={{ color: INTEGRATION_TYPE_ICON_COLORS.aap }} />,
-  servicenow: <CloudServerOutlined style={{ color: INTEGRATION_TYPE_ICON_COLORS.servicenow }} />,
-  terraform: <BuildOutlined style={{ color: INTEGRATION_TYPE_ICON_COLORS.terraform }} />,
-  azuredevops: <BranchesOutlined style={{ color: INTEGRATION_TYPE_ICON_COLORS.azuredevops }} />,
-  jira: <ProjectOutlined style={{ color: INTEGRATION_TYPE_ICON_COLORS.jira }} />,
-  github_actions: <GithubOutlined style={{ color: INTEGRATION_TYPE_ICON_COLORS.github_actions }} />,
-};
-
 function truncateUrl(url: string, max = 40): string {
   if (url.length <= max) return url;
   return `${url.slice(0, max)}…`;
 }
 
+/** Render icon: uploaded icon (/static/...), URL (http...), or fallback (Story 4.9 AC3). */
 function renderIcon(record: IntegrationListItem) {
   const icon = record.icon;
-  if (icon && (icon.startsWith('http://') || icon.startsWith('https://'))) {
-    return <Avatar src={icon} shape="square" size="small" />;
+  if (icon) {
+    // Uploaded icon (starts with /) or external URL
+    return <Avatar src={icon} shape="square" size="small" icon={<ApiOutlined />} />;
   }
-  return (
-    <span style={{ fontSize: 18 }} title={INTEGRATION_TYPE_LABELS[record.type]}>
-      {TYPE_ICONS[record.type]}
-    </span>
-  );
+  // Fallback: generic API icon
+  return <Avatar shape="square" size="small" icon={<ApiOutlined />} />;
 }
 
 export function IntegrationsTable({
@@ -93,10 +72,16 @@ export function IntegrationsTable({
       title: 'Type',
       dataIndex: 'type',
       key: 'type',
-      render: (t: IntegrationType) => (
-        <Tag color={INTEGRATION_TYPE_TAG_COLORS[t]}>{INTEGRATION_TYPE_LABELS[t]}</Tag>
-      ),
+      render: (t: string) => <Tag>{t}</Tag>,
       sorter: (a, b) => a.type.localeCompare(b.type),
+    },
+    {
+      title: 'Auth Flow',
+      dataIndex: 'auth_flow',
+      key: 'auth_flow',
+      render: (flow: string | null) => (
+        flow ? <Tag color="blue">{AUTH_FLOW_LABELS[flow as keyof typeof AUTH_FLOW_LABELS] || flow}</Tag> : '—'
+      ),
     },
     {
       title: 'URL',

@@ -86,17 +86,18 @@ describe('CatalogPage', () => {
     vi.mocked(catalogService.removeFavorite).mockResolvedValue(undefined);
   });
 
-  it('renders page title and category tabs (AC1, AC6)', async () => {
+  it('renders page title and tabs (AC1, AC6; Story 2.23: categories removed)', async () => {
     render(<CatalogPage />);
 
     await waitFor(() => {
       expect(screen.getByText('Catalogue')).toBeInTheDocument();
     });
 
+    // Story 2.23: Only "Tout" and "Mes actions" tabs (categories removed, use tags instead)
     expect(screen.getByRole('tab', { name: /Tout/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /Provisioning/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /Patching/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /Mes actions/i })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /Provisioning/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /Patching/i })).not.toBeInTheDocument();
   });
 
   it('displays action cards with execution_count (AC3)', async () => {
@@ -207,18 +208,24 @@ describe('CatalogPage', () => {
     expect(favoriteButtons.length).toBeGreaterThan(0);
   });
 
-  it('fetches data with category filter when tab changes (AC6)', async () => {
+  it('fetches data without category filter (Story 2.23: categories removed)', async () => {
     render(<CatalogPage />);
 
     await waitFor(() => {
-      expect(catalogService.fetchCatalogActions).toHaveBeenCalledWith({ category: undefined });
+      // Story 2.23: No category parameter sent (categories removed, use tags instead)
+      expect(catalogService.fetchCatalogActions).toHaveBeenCalledWith(
+        expect.not.objectContaining({ category: expect.anything() })
+      );
     });
 
-    const provisioningTab = screen.getByRole('tab', { name: /Provisioning/i });
-    await userEvent.click(provisioningTab);
+    // Switching to "Mes actions" also doesn't send category
+    const myActionsTab = screen.getByRole('tab', { name: /Mes actions/i });
+    await userEvent.click(myActionsTab);
 
     await waitFor(() => {
-      expect(catalogService.fetchCatalogActions).toHaveBeenCalledWith({ category: 'provisioning' });
+      expect(catalogService.fetchCatalogActions).toHaveBeenCalledWith(
+        expect.not.objectContaining({ category: expect.anything() })
+      );
     });
   });
 
@@ -378,6 +385,162 @@ describe('CatalogPage', () => {
       await waitFor(() => {
         const executeButton = screen.getByRole('button', { name: /Executer/i });
         expect(executeButton).not.toBeDisabled();
+      });
+    });
+  });
+
+  // Story 3.5 Tests - Tag Cloud and Favorite Clarity
+  describe('Story 3.5 - TagCloud and Favorite Clarity', () => {
+    const mockTagsWithCounts: catalogService.CatalogTagWithCount[] = [
+      { name: 'provisioning', action_count: 5 },
+      { name: 'patching', action_count: 3 },
+      { name: 'oracle', action_count: 8 },
+    ];
+
+    beforeEach(() => {
+      vi.mocked(catalogService.fetchCatalogTags).mockResolvedValue(mockTagsWithCounts);
+    });
+
+    it('displays TagCloud with tags from API (AC1, AC12)', async () => {
+      render(<CatalogPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('provisioning (5)')).toBeInTheDocument();
+        expect(screen.getByText('patching (3)')).toBeInTheDocument();
+        expect(screen.getByText('oracle (8)')).toBeInTheDocument();
+      });
+    });
+
+    it('does not display TagCloud on "Mes actions" tab (AC10)', async () => {
+      render(<CatalogPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('provisioning (5)')).toBeInTheDocument();
+      });
+
+      const myActionsTab = screen.getByRole('tab', { name: /Mes actions/i });
+      await userEvent.click(myActionsTab);
+
+      await waitFor(() => {
+        expect(screen.queryByText('provisioning (5)')).not.toBeInTheDocument();
+      });
+    });
+
+    it('filters actions when tag is clicked in TagCloud (AC2)', async () => {
+      vi.mocked(catalogService.fetchCatalogActions).mockImplementation(async (filters) => {
+        if (filters?.tags?.includes('patching')) {
+          return [mockActions[1]]; // Only Patch Database
+        }
+        return mockActions;
+      });
+
+      render(<CatalogPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('patching (3)')).toBeInTheDocument();
+      });
+
+      await userEvent.click(screen.getByText('patching (3)'));
+
+      await waitFor(() => {
+        expect(catalogService.fetchCatalogActions).toHaveBeenCalledWith(
+          expect.objectContaining({ tags: ['patching'] })
+        );
+      });
+    });
+
+    it('updates action count with aria-live when filtering (AC2, AC6)', async () => {
+      vi.mocked(catalogService.fetchCatalogActions).mockImplementation(async (filters) => {
+        if (filters?.tags?.includes('patching')) {
+          return [mockActions[1]]; // Only Patch Database
+        }
+        return mockActions;
+      });
+
+      render(<CatalogPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('2 actions')).toBeInTheDocument();
+      });
+
+      await userEvent.click(screen.getByText('patching (3)'));
+
+      await waitFor(() => {
+        const counter = screen.getByText('1 action');
+        expect(counter).toHaveAttribute('aria-live', 'polite');
+      });
+    });
+
+    it('favorite button has aria-label for accessibility (AC8)', async () => {
+      render(<CatalogPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
+      });
+
+      // Action 1 is favorited, action 2 is not
+      const removeLabel = screen.getByLabelText('Retirer des favoris');
+      const addLabel = screen.getByLabelText('Ajouter aux favoris');
+
+      expect(removeLabel).toBeInTheDocument();
+      expect(addLabel).toBeInTheDocument();
+    });
+
+    it('shows tooltip on favorite button hover (AC7)', async () => {
+      render(<CatalogPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
+      });
+
+      const removeFavButton = screen.getByLabelText('Retirer des favoris');
+      await userEvent.hover(removeFavButton);
+
+      await waitFor(() => {
+        // Ant Design Tooltip renders title in portal; content may be in role="tooltip" or as visible text
+        const tooltip = document.querySelector('[role="tooltip"]') ?? document.body;
+        expect(tooltip).toHaveTextContent('Retirer des favoris');
+      });
+    });
+
+    it('favorite button shows distinct visual state (AC9)', async () => {
+      render(<CatalogPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
+      });
+
+      // Favorited action: HeartFilled with color #eb2f96 (distinct from outline)
+      const favButton = screen.getByLabelText('Retirer des favoris');
+      const heartIcon = favButton.querySelector('svg');
+      expect(heartIcon).toBeInTheDocument();
+      const iconWrapper = favButton.querySelector('.anticon');
+      expect(iconWrapper).toBeInTheDocument();
+      // HeartFilled uses color #eb2f96 (inline style preserved in jsdom)
+      expect(iconWrapper).toHaveStyle({ color: '#eb2f96' });
+    });
+
+    it('shows counter with loading state when refetching (AC2)', async () => {
+      vi.mocked(catalogService.fetchCatalogActions).mockImplementation(
+        () => new Promise((resolve) => setTimeout(() => resolve(mockActions), 200))
+      );
+
+      render(<CatalogPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('2 actions')).toBeInTheDocument();
+      });
+
+      // Counter stays visible (shows "Chargement…" during refetch)
+      const counterRegion = screen.getByText('2 actions').closest('[aria-live="polite"]');
+      expect(counterRegion).toBeInTheDocument();
+
+      // Switch tab to trigger refetch (Story 2.23: use "Mes actions" instead of removed category tabs)
+      await userEvent.click(screen.getByRole('tab', { name: /Mes actions/i }));
+
+      await waitFor(() => {
+        expect(counterRegion).toBeInTheDocument();
+        expect(counterRegion?.textContent).toMatch(/Chargement…|2 actions/);
       });
     });
   });

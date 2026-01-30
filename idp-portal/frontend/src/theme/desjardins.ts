@@ -75,11 +75,12 @@ export const lightTheme: ThemeConfig = {
   token: {
     ...sharedTokens,
     // Colors - Light mode (AC #4, #5)
-    // Slightly cooler gray for more modern feel
-    colorBgBase: '#f4f6f8',
+    // Cooler, darker gray background for better contrast with white surfaces
+    // Story 3-7: Enhanced contrast - fond plus grisé pour distinguer les cartes
+    colorBgBase: '#e5eaef',
     colorBgContainer: '#FFFFFF',
     colorBgElevated: '#FFFFFF',
-    colorBgLayout: '#f4f6f8',
+    colorBgLayout: '#e5eaef',
     colorText: '#1a1a2e',
     colorTextSecondary: '#5c5c6d',
     colorTextTertiary: '#8c8c9a',
@@ -88,9 +89,10 @@ export const lightTheme: ThemeConfig = {
     // Primary hover - darker for light mode
     colorPrimaryHover: '#006b3e',
     // Liquid glass shadows - soft, diffused, multi-layer with subtle highlight
-    boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.8)',
-    boxShadowSecondary: '0 2px 4px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.9)',
-    boxShadowTertiary: '0 4px 8px rgba(0,0,0,0.06), 0 16px 40px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,1)',
+    // Story 3-7: Enhanced shadow intensity for better depth perception
+    boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.8)',
+    boxShadowSecondary: '0 2px 6px rgba(0,0,0,0.10), 0 8px 24px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.9)',
+    boxShadowTertiary: '0 4px 10px rgba(0,0,0,0.12), 0 16px 40px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,1)',
   },
   components: {
     ...sharedComponents,
@@ -101,7 +103,7 @@ export const lightTheme: ThemeConfig = {
     },
     Layout: {
       headerBg: '#FFFFFF',
-      bodyBg: '#f4f6f8',
+      bodyBg: '#e5eaef',
       siderBg: '#FFFFFF',
     },
     Card: {
@@ -109,8 +111,8 @@ export const lightTheme: ThemeConfig = {
       colorBgContainer: '#FFFFFF',
     },
     Table: {
-      headerBg: '#fafbfc',
-      rowHoverBg: '#f8f9fa',
+      headerBg: '#f0f3f6',
+      rowHoverBg: '#f5f7f9',
     },
   },
 };

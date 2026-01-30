@@ -27,16 +27,6 @@ describe('catalog_service', () => {
       expect(result).toEqual(mockActions);
     });
 
-    it('fetches catalog actions with category filter (AC6)', async () => {
-      const mockActions = [{ id: 1, name: 'Provisioning Action' }];
-      vi.mocked(apiClient.apiFetch).mockResolvedValue(mockActions);
-
-      const result = await catalogService.fetchCatalogActions({ category: 'provisioning' });
-
-      expect(apiClient.apiFetch).toHaveBeenCalledWith('/catalog/actions?category=provisioning');
-      expect(result).toEqual(mockActions);
-    });
-
     it('fetches catalog actions with tags filter', async () => {
       vi.mocked(apiClient.apiFetch).mockResolvedValue([]);
 
