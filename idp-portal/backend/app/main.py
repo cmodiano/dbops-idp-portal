@@ -12,7 +12,7 @@ from app.core.database import create_pool, close_pool
 from app.core.exceptions import IdpError
 from app.core.logging import configure_logging
 from app.core.middleware import CorrelationIdMiddleware, RequestLoggingMiddleware
-from app.api.v1 import admin, auth, catalog, health, tags
+from app.api.v1 import admin, auth, catalog, health, tags, users
 
 import structlog
 
@@ -72,3 +72,4 @@ app.include_router(auth.router, prefix="/api/v1", tags=["auth"])
 app.include_router(tags.router, prefix="/api/v1", tags=["tags"])
 app.include_router(admin.router, prefix="/api/v1", tags=["admin"])
 app.include_router(catalog.router, prefix="/api/v1", tags=["catalog"])
+app.include_router(users.router, prefix="/api/v1", tags=["users"])

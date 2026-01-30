@@ -18,13 +18,9 @@ import type {
 } from '../../types/api';
 import { getProfileActions, putProfileActions, getProfileTargets, putProfileTargets } from '../../services/profiles_service';
 import { listActions, getTags } from '../../services/admin_service';
+import { ENVIRONMENT_OPTIONS, MOCK_TARGET_OPTIONS } from '../../utils/profileOptions';
 
 const { TextArea } = Input;
-
-const ENVIRONMENT_OPTIONS = ['DEV', 'STAGING', 'PROD'];
-
-/** Story 2.11: Mock inventory targets until Epic 4 (AC3). */
-const MOCK_TARGET_OPTIONS = ['assurance-db01', 'assurance-db02', 'infra-oracle-prod'];
 
 export interface ProfileFormValues {
   name: string;

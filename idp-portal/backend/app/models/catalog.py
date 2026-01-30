@@ -1,26 +1,21 @@
 """Catalog models for Software Catalog actions (Story 2.1, FR1; Story 2.6 tags).
 
 Defines Pydantic models for:
-- ActionCategory, ActionEngine, ActionPlatform, ActionStatus enums
+- ActionEngine, ActionPlatform, ActionStatus enums
 - ActionCreate: input model for creating actions
 - ActionResponse: output model for action list
-- ActionDetail: output model with full details including rbac_policies
+- ActionDetail: output model with full details (Story 2.14: rbac_policies removed — RBAC via profiles)
 - TagCreate, TagResponse: tag models (Story 2.6, FR11c)
+- Story 2.23: ActionCategory removed — use tags for categorization
 """
 
 from datetime import datetime
 from enum import Enum
 from typing import Any
 
+import re
+
 from pydantic import BaseModel, Field, field_validator, model_validator
-
-
-class ActionCategory(str, Enum):
-    """Valid action categories for Software Catalog."""
-    PROVISIONING = "Provisioning"
-    PATCHING = "Patching"
-    ADMINISTRATION = "Administration"
-    MONITORING = "Monitoring"
 
 
 class ActionEngine(str, Enum):
@@ -119,19 +114,20 @@ class ActionCreate(BaseModel):
     Attributes:
         name: Action name (1-255 chars, unique)
         description: Action description (max 4000 chars)
-        category: One of Provisioning, Patching, Administration, Monitoring
         engine: Database engine (Oracle, SQL Server, DB2)
         platform: Execution platform (AAP, GitHub Actions, Azure DevOps, Terraform)
         parameters_schema: Optional JSON Schema for action parameters
         impact_rules: Optional impact rules per environment
+        default_impact_level: Default impact when no rule matches environment (Story 2.18 AC5)
+        (Story 2.24: change_model_code removed; change_type_config is in ExecutionStepsUpdate only.)
     """
     name: str = Field(..., min_length=1, max_length=255)
     description: str | None = Field(None, max_length=4000)
-    category: ActionCategory
     engine: ActionEngine
     platform: ActionPlatform
     parameters_schema: dict[str, Any] | None = None
     impact_rules: dict[str, Any] | None = None
+    default_impact_level: ImpactLevel | None = None
 
     @field_validator("name")
     @classmethod
@@ -188,21 +184,23 @@ class ActionCreate(BaseModel):
 
         return v
 
-
 class ActionResponse(BaseModel):
     """Output model for action in list views (AC #5).
 
     Excludes rbac_policies for list performance.
     Story 2.6: includes tags (tag names) for display.
+    Story 2.18 AC5: includes default_impact_level.
+    Story 2.24: change_model_code removed; change_type_config per env.
+    Story 2.23: category removed — use tags instead.
     """
     id: int
     name: str
     description: str | None = None
-    category: ActionCategory
     engine: ActionEngine
     platform: ActionPlatform
     parameters_schema: dict[str, Any] | None = None
     impact_rules: dict[str, Any] | None = None
+    default_impact_level: ImpactLevel | None = None
     status: ActionStatus
     created_by: int | None = None
     created_at: datetime
@@ -213,11 +211,11 @@ class ActionResponse(BaseModel):
 class ActionDetail(ActionResponse):
     """Output model for action detail view (AC #5).
 
-    Includes rbac_policies for full action details.
+    Story 2.14: rbac_policies removed — RBAC now managed via profiles.
+    Story 2.24: change_type_config is dict[str, ChangeTypeConfigEntry].
     """
-    rbac_policies: dict[str, Any] | None = None
     execution_steps: list["ExecutionStep"] | None = None
-    change_type_config: dict[str, "ChangeType"] | None = None
+    change_type_config: dict[str, "ChangeTypeConfigEntry"] | None = None
 
 
 # === Story 2.2: Execution Steps and Change Type Models ===
@@ -246,13 +244,19 @@ class ExecutionStepType(str, Enum):
     VERIFICATION = "verification"
 
 
-class ChangeType(str, Enum):
-    """ServiceNow change types (FR4). Story 2.8: CAB removed; only pre-approved supported.
+class ChangeTypeConfigEntry(BaseModel):
+    """Per-environment change config (Story 2.24). required=True implies change_model_code required, alphanumeric max 50."""
+    required: bool = False
+    change_model_code: str | None = Field(None, max_length=50)
 
-    change_type_config means « changement requis (pre-approuvé) » per environment.
-    Stored values are exclusively "pre_approved". Legacy "cab" is converted on read (repository).
-    """
-    PRE_APPROVED = "pre_approved"
+    @model_validator(mode="after")
+    def require_code_when_required(self) -> "ChangeTypeConfigEntry":
+        if self.required and (self.change_model_code is None or not self.change_model_code.strip()):
+            raise ValueError("change_model_code is required when required is true")
+        if self.change_model_code is not None and self.change_model_code.strip():
+            if not re.match(r"^[A-Za-z0-9]+$", self.change_model_code):
+                raise ValueError("change_model_code must be alphanumeric only")
+        return self
 
 
 class ExecutionStep(BaseModel):
@@ -301,10 +305,26 @@ class ExecutionStepsUpdate(BaseModel):
 
     Attributes:
         steps: Ordered list of execution steps
-        change_type_config: Change type configuration per environment
+        change_type_config: Per-env change config (Story 2.24: required + change_model_code)
     """
     steps: list[ExecutionStep]
-    change_type_config: dict[str, ChangeType] | None = None
+    change_type_config: dict[str, ChangeTypeConfigEntry] | None = None
+
+    @field_validator("change_type_config", mode="before")
+    @classmethod
+    def reject_legacy_change_type_config(
+        cls, v: dict[str, Any] | None
+    ) -> dict[str, Any] | None:
+        """Reject legacy format (env -> string) with clear message (Story 2.24 AC4)."""
+        if v is None:
+            return None
+        for env, val in v.items():
+            if isinstance(val, str):
+                raise ValueError(
+                    "change_type_config uses legacy format (environment -> string). "
+                    'Use new format: {"ENV": {"required": true|false, "change_model_code": "..."}}.'
+                )
+        return v
 
     @field_validator("steps")
     @classmethod
@@ -329,73 +349,9 @@ class ExecutionStepsUpdate(BaseModel):
         return v
 
 
-# === Story 2.3: RBAC Policies Models ===
-
-
-class UserProfile(str, Enum):
-    """User profiles for RBAC (FR3, Story 2.3).
-
-    Defines the four user profiles that can access actions.
-    """
-    DBA_APPLICATIF = "dba_applicatif"
-    DBA_INFRASTRUCTURE = "dba_infrastructure"
-    CLIENT_BUSINESS = "client_business"
-    DBOPS = "dbops"
-
-
-class EnvironmentPermission(BaseModel):
-    """Permission configuration for a single environment (AC #1, #2).
-
-    Attributes:
-        profiles: List of authorized profiles for this environment
-        requires_approval: Whether approval is required before execution
-        approver_profiles: Profiles that can approve (required if requires_approval=True)
-    """
-    profiles: list[UserProfile]
-    requires_approval: bool = False
-    approver_profiles: list[UserProfile] | None = None
-
-    @field_validator("profiles")
-    @classmethod
-    def validate_profiles_not_empty(cls, v: list[UserProfile]) -> list[UserProfile]:
-        """Validate at least one profile is specified."""
-        if not v:
-            raise ValueError("at least one profile is required per environment")
-        return v
-
-    @field_validator("approver_profiles")
-    @classmethod
-    def validate_approver_profiles(
-        cls, v: list[UserProfile] | None, info
-    ) -> list[UserProfile] | None:
-        """Validate approver_profiles is provided when requires_approval is True."""
-        requires_approval = info.data.get("requires_approval", False)
-        if requires_approval and (v is None or len(v) == 0):
-            raise ValueError(
-                "approver_profiles is required when requires_approval is True"
-            )
-        return v
-
-
-class RbacPolicies(BaseModel):
-    """RBAC policies configuration per environment (AC #1, #2).
-
-    Attributes:
-        environments: Dict mapping environment name to EnvironmentPermission
-    """
-    environments: dict[str, EnvironmentPermission]
-
-
-class RbacPoliciesUpdate(BaseModel):
-    """Input model for updating RBAC policies (AC #4).
-
-    Attributes:
-        policies: The RBAC policies configuration
-    """
-    policies: RbacPolicies
-
-
 # === Story 2.4: Status Transition and Lifecycle Models ===
+# Note: Story 2.3 RBAC by action models (UserProfile, EnvironmentPermission, RbacPolicies,
+# RbacPoliciesUpdate) removed in Story 2.14 — RBAC now managed via profiles.
 
 
 class StatusTransition(str, Enum):
@@ -471,11 +427,11 @@ class ActionListItem(BaseModel):
     """Output model for action in admin dashboard list (Story 2.4, AC #2; Story 2.6 tags).
 
     Lightweight model for listing actions with execution stats and tags.
+    Story 2.23: category removed — use tags instead.
     """
     id: int
     name: str
     status: ActionStatus
-    category: ActionCategory
     engine: ActionEngine
     created_at: datetime
     execution_count: int = 0

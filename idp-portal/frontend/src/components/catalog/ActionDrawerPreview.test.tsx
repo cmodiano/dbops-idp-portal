@@ -6,7 +6,6 @@ import type { ActionPreviewData } from '../../types/api';
 const mockAction: ActionPreviewData = {
   name: 'Creer PDB Oracle',
   description: 'Cree une nouvelle Pluggable Database Oracle sur le serveur cible.',
-  category: 'Provisioning',
   engine: 'Oracle',
   platform: 'AAP',
   impact_level: 'high',
@@ -42,11 +41,10 @@ describe('ActionDrawerPreview', () => {
     expect(screen.getByText('Eleve')).toBeInTheDocument();
   });
 
-  it('renders engine, category, and platform metadata', () => {
+  it('renders engine and platform metadata (Story 2.23: category removed)', () => {
     render(<ActionDrawerPreview action={mockAction} />);
 
     expect(screen.getByText('Oracle')).toBeInTheDocument();
-    expect(screen.getByText('Provisioning')).toBeInTheDocument();
     expect(screen.getByText('AAP')).toBeInTheDocument();
   });
 
@@ -65,12 +63,28 @@ describe('ActionDrawerPreview', () => {
     expect(screen.getByText('Aucun parametre defini')).toBeInTheDocument();
   });
 
-  it('renders disabled Execute button', () => {
+  it('renders enabled Execute button by default (admin preview mode)', () => {
     render(<ActionDrawerPreview action={mockAction} />);
 
     const button = screen.getByRole('button', { name: /Executer/i });
     expect(button).toBeInTheDocument();
+    expect(button).not.toBeDisabled();
+  });
+
+  it('renders disabled Execute button when canExecute is false (Story 3.2, AC3)', () => {
+    render(<ActionDrawerPreview action={mockAction} canExecute={false} />);
+
+    const button = screen.getByRole('button', { name: /Executer/i });
+    expect(button).toBeInTheDocument();
     expect(button).toBeDisabled();
+  });
+
+  it('renders enabled Execute button when canExecute is true (Story 3.2, AC3)', () => {
+    render(<ActionDrawerPreview action={mockAction} canExecute={true} allowedEnvironments={['DEV', 'PROD']} />);
+
+    const button = screen.getByRole('button', { name: /Executer/i });
+    expect(button).toBeInTheDocument();
+    expect(button).not.toBeDisabled();
   });
 
   it('returns null when visible is false', () => {
@@ -93,10 +107,26 @@ describe('ActionDrawerPreview', () => {
     expect(screen.getByText('Aucune description disponible.')).toBeInTheDocument();
   });
 
-  it('has correct aria-label on disabled button', () => {
-    render(<ActionDrawerPreview action={mockAction} />);
+  it('has correct aria-label on disabled button (Story 3.2, AC3)', () => {
+    render(<ActionDrawerPreview action={mockAction} canExecute={false} />);
 
     const button = screen.getByRole('button', { name: /Executer/i });
-    expect(button).toHaveAttribute('aria-label', 'Executer (desactive en mode preview)');
+    expect(button).toHaveAttribute('aria-label', 'Executer (acces non autorise)');
+  });
+
+  it('renders tags as category (Story 3.2, AC1)', () => {
+    render(<ActionDrawerPreview action={mockAction} />);
+
+    expect(screen.getByText('oracle')).toBeInTheDocument();
+    expect(screen.getByText('provisioning')).toBeInTheDocument();
+  });
+
+  it('renders parameter types from schema (Story 3.2, AC1)', () => {
+    render(<ActionDrawerPreview action={mockAction} />);
+
+    // Parameters should show type info (multiple strings expected)
+    const stringTypes = screen.getAllByText(': string');
+    expect(stringTypes.length).toBeGreaterThanOrEqual(2); // pdb_name and target_server
+    expect(screen.getByText(': number')).toBeInTheDocument(); // size_gb
   });
 });

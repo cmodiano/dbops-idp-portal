@@ -1,0 +1,17 @@
+# IDP Portal - Development environment
+# Usage: docker compose up -d oracle
+# Then run migrations from host: ORACLE_DSN=localhost:1521/XEPDB1 ORACLE_USER=idp_app ORACLE_PASSWORD=changeme ./scripts/run_migrations.sh
+
+services:
+  oracle:
+    image: gvenzl/oracle-xe:21-slim
+    environment:
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD:-oracle}
+    ports:
+      - "1521:1521"
+    volumes:
+      - oracle_data:/opt/oracle/oradata
+      - ./database/init:/container-entrypoint-initdb.d:ro
+
+volumes:
+  oracle_data:

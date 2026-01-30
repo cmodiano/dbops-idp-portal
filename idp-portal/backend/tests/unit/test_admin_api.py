@@ -15,7 +15,6 @@ from fastapi import status
 from app.main import app
 from app.core.security import create_access_token
 from app.models.catalog import (
-    ActionCategory,
     ActionEngine,
     ActionPlatform,
     ActionStatus,
@@ -25,7 +24,7 @@ from app.models.catalog import (
     ConnectorType,
     ExecutionStep,
     ExecutionStepType,
-    ChangeType,
+    ChangeTypeConfigEntry,
     StatusTransition,
     ActionListResponse,
     TagResponse,
@@ -54,16 +53,16 @@ def dba_token():
 
 @pytest.fixture
 def sample_action_response():
-    """Sample ActionResponse for mocked repository."""
+    """Sample ActionResponse for mocked repository. Story 2.24: change_model_code removed."""
     return ActionResponse(
         id=1,
         name="Create PDB Oracle",
         description="Creates a Pluggable Database",
-        category=ActionCategory.PROVISIONING,
         engine=ActionEngine.ORACLE,
         platform=ActionPlatform.AAP,
         parameters_schema={"type": "object"},
         impact_rules={"DEV": {"level": "low"}},
+        default_impact_level=None,
         status=ActionStatus.DRAFT,
         created_by=1,
         created_at=datetime(2026, 1, 28, 10, 0, 0),
@@ -73,53 +72,46 @@ def sample_action_response():
 
 @pytest.fixture
 def sample_action_detail():
-    """Sample ActionDetail for mocked repository (valid RbacPolicies shape)."""
+    """Sample ActionDetail for mocked repository. Story 2.14: rbac_policies removed."""
     return ActionDetail(
         id=1,
         name="Create PDB Oracle",
         description="Creates a Pluggable Database",
-        category=ActionCategory.PROVISIONING,
         engine=ActionEngine.ORACLE,
         platform=ActionPlatform.AAP,
         parameters_schema={"type": "object"},
         impact_rules={"DEV": {"level": "low"}},
+        default_impact_level=None,
         status=ActionStatus.DRAFT,
         created_by=1,
         created_at=datetime(2026, 1, 28, 10, 0, 0),
         updated_at=None,
-        rbac_policies={
-            "environments": {
-                "DEV": {"profiles": ["dba_applicatif"], "requires_approval": False, "approver_profiles": None},
-            }
-        },
     )
 
 
 @pytest.fixture
 def sample_action_detail_with_steps():
-    """Sample ActionDetail with execution_steps and change_type_config (valid RbacPolicies shape)."""
+    """Sample ActionDetail with execution_steps and change_type_config. Story 2.14: rbac_policies removed."""
     return ActionDetail(
         id=1,
         name="Create PDB Oracle",
         description="Creates a Pluggable Database",
-        category=ActionCategory.PROVISIONING,
         engine=ActionEngine.ORACLE,
         platform=ActionPlatform.AAP,
         parameters_schema={"type": "object"},
         impact_rules={"DEV": {"level": "low"}},
+        default_impact_level=None,
         status=ActionStatus.DRAFT,
         created_by=1,
         created_at=datetime(2026, 1, 28, 10, 0, 0),
         updated_at=datetime(2026, 1, 28, 11, 0, 0),
-        rbac_policies={
-            "environments": {
-                "DEV": {"profiles": ["dba_applicatif"], "requires_approval": False, "approver_profiles": None},
-            }
-        },
         execution_steps=[
             ExecutionStep(order=1, name="Verification", type=ExecutionStepType.PREREQUISITE, connector_type=ConnectorType.NONE),
         ],
-        change_type_config={"DEV": ChangeType.PRE_APPROVED, "PROD": ChangeType.PRE_APPROVED},
+        change_type_config={
+            "DEV": ChangeTypeConfigEntry(required=False),
+            "PROD": ChangeTypeConfigEntry(required=True, change_model_code="1516B"),
+        },
     )
 
 
@@ -140,7 +132,6 @@ class TestCreateAction:
                 json={
                     "name": "Create PDB Oracle",
                     "description": "Creates a Pluggable Database",
-                    "category": "Provisioning",
                     "engine": "Oracle",
                     "platform": "AAP",
                 },
@@ -167,7 +158,6 @@ class TestCreateAction:
                 "/api/v1/admin/actions",
                 json={
                     "name": "Create PDB Oracle",
-                    "category": "Provisioning",
                     "engine": "Oracle",
                     "platform": "AAP",
                     "parameters_schema": {"type": "object", "properties": {}},
@@ -189,7 +179,6 @@ class TestCreateAction:
                 "/api/v1/admin/actions",
                 json={
                     "name": "",
-                    "category": "Provisioning",
                     "engine": "Oracle",
                     "platform": "AAP",
                 },
@@ -209,7 +198,7 @@ class TestCreateAction:
                 "/api/v1/admin/actions",
                 json={
                     "name": "Test",
-                    # missing category, engine, platform
+                    # missing engine, platform
                 },
                 headers={"Authorization": f"Bearer {dbops_token}"},
             )
@@ -227,7 +216,6 @@ class TestCreateAction:
                 "/api/v1/admin/actions",
                 json={
                     "name": "Test",
-                    "category": "Provisioning",
                     "engine": "Oracle",
                     "platform": "AAP",
                 },
@@ -248,8 +236,7 @@ class TestListActions:
                 id=1,
                 name="Draft Action",
                 status=ActionStatus.DRAFT,
-                category=ActionCategory.PROVISIONING,
-                engine=ActionEngine.ORACLE,
+                    engine=ActionEngine.ORACLE,
                 created_at=datetime(2026, 1, 28, 10, 0, 0),
                 execution_count=0,
             ),
@@ -257,7 +244,6 @@ class TestListActions:
                 id=2,
                 name="Published Action",
                 status=ActionStatus.PUBLISHED,
-                category=ActionCategory.ADMINISTRATION,
                 engine=ActionEngine.SQL_SERVER,
                 created_at=datetime(2026, 1, 27, 10, 0, 0),
                 execution_count=42,
@@ -307,7 +293,7 @@ class TestListActions:
             )
 
         assert response.status_code == status.HTTP_200_OK
-        mock_list.assert_called_once_with(status=ActionStatus.DRAFT, category=None, engine=None, page=1, page_size=25)
+        mock_list.assert_called_once_with(status=ActionStatus.DRAFT, engine=None, page=1, page_size=25)
 
     async def test_list_actions_empty(self, client, dbops_token):
         """Test listing actions when none exist."""
@@ -392,8 +378,8 @@ class TestGetAction:
         data = response.json()
         assert "data" in data
         assert data["data"]["id"] == 1
-        assert data["data"]["rbac_policies"] is not None
-        assert "environments" in data["data"]["rbac_policies"]
+        # Story 2.14: rbac_policies removed — RBAC now managed via profiles
+        assert "rbac_policies" not in data["data"]
 
     async def test_get_action_not_found(self, client, dbops_token):
         """Test getting non-existent action returns 404."""
@@ -451,7 +437,7 @@ class TestUpdateActionSteps:
                     "steps": [
                         {"order": 1, "name": "Verification", "type": "prerequisite", "connector_type": "none"}
                     ],
-                    "change_type_config": {"DEV": "pre_approved", "PROD": "pre_approved"},
+                    "change_type_config": {"DEV": {"required": False}, "PROD": {"required": True, "change_model_code": "1516B"}},
                 },
                 headers={"Authorization": f"Bearer {dbops_token}"},
             )
@@ -496,7 +482,7 @@ class TestUpdateActionSteps:
                             "conditional_environments": ["PROD"],
                         }
                     ],
-                    "change_type_config": {"PROD": "pre_approved"},
+                    "change_type_config": {"PROD": {"required": False}},
                 },
                 headers={"Authorization": f"Bearer {dbops_token}"},
             )
@@ -534,8 +520,8 @@ class TestUpdateActionSteps:
 
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
-    async def test_update_steps_change_type_config_cab_rejected_422(self, client, dbops_token):
-        """Story 2.8, AC4: PUT steps with change_type_config \"cab\" returns 422 (CAB removed)."""
+    async def test_update_steps_change_type_config_legacy_format_rejected_422(self, client, dbops_token):
+        """Story 2.24 AC4: PUT steps with legacy change_type_config (env -> string) returns 422 with explicit message."""
         with patch("app.api.deps.user_repository") as mock_repo:
             mock_repo.get_by_username = AsyncMock(return_value={
                 "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
@@ -545,12 +531,36 @@ class TestUpdateActionSteps:
                 "/api/v1/admin/actions/1/steps",
                 json={
                     "steps": [{"order": 1, "name": "Step", "type": "prerequisite", "connector_type": "none"}],
-                    "change_type_config": {"DEV": "pre_approved", "PROD": "cab"},
+                    "change_type_config": {"DEV": "pre_approved", "PROD": "pre_approved"},
                 },
                 headers={"Authorization": f"Bearer {dbops_token}"},
             )
 
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        body = response.json()
+        detail_str = str(body.get("detail", []))
+        assert "legacy" in detail_str.lower() or "new format" in detail_str.lower() or "required" in detail_str.lower()
+
+    async def test_update_steps_change_type_config_required_without_code_returns_422(self, client, dbops_token):
+        """Story 2.24 AC2/AC4: PUT steps with required=true but missing change_model_code returns 422."""
+        with patch("app.api.deps.user_repository") as mock_repo:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+
+            response = await client.put(
+                "/api/v1/admin/actions/1/steps",
+                json={
+                    "steps": [{"order": 1, "name": "Step", "type": "prerequisite", "connector_type": "none"}],
+                    "change_type_config": {"PROD": {"required": True}},
+                },
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        body = response.json()
+        detail_str = str(body.get("detail", []))
+        assert "change_model_code" in detail_str or "required" in detail_str.lower()
 
     async def test_update_steps_not_found(self, client, dbops_token):
         """Test updating steps for non-existent action returns 404."""
@@ -641,159 +651,10 @@ class TestUpdateActionSteps:
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
-# === Story 2.3: PUT /admin/actions/{id}/rbac Tests ===
+# Story 2.3 RBAC tests removed in Story 2.14 — RBAC now managed via profiles.
 
-
-class TestUpdateActionRbac:
-    """Tests for PUT /api/v1/admin/actions/{id}/rbac (Story 2.3, AC #4)."""
-
-    @pytest.fixture
-    def sample_action_detail_with_rbac(self):
-        """Sample ActionDetail with RBAC policies."""
-        return ActionDetail(
-            id=1,
-            name="Create PDB Oracle",
-            description="Creates a Pluggable Database",
-            category=ActionCategory.PROVISIONING,
-            engine=ActionEngine.ORACLE,
-            platform=ActionPlatform.AAP,
-            parameters_schema={"type": "object"},
-            impact_rules={"DEV": {"level": "low"}},
-            status=ActionStatus.DRAFT,
-            created_by=1,
-            created_at=datetime(2026, 1, 28, 10, 0, 0),
-            updated_at=datetime(2026, 1, 28, 11, 0, 0),
-            rbac_policies={
-                "environments": {
-                    "DEV": {"profiles": ["dba_applicatif"], "requires_approval": False, "approver_profiles": None}
-                }
-            },
-        )
-
-    async def test_update_rbac_success(self, client, dbops_token, sample_action_detail_with_rbac):
-        """Test updating RBAC policies returns 200."""
-        with patch("app.api.deps.user_repository") as mock_repo, \
-             patch("app.repositories.catalog_repository.update_rbac_policies", new_callable=AsyncMock) as mock_update:
-            mock_repo.get_by_username = AsyncMock(return_value={
-                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
-            })
-            mock_update.return_value = sample_action_detail_with_rbac
-
-            response = await client.put(
-                "/api/v1/admin/actions/1/rbac",
-                json={
-                    "policies": {
-                        "environments": {
-                            "DEV": {"profiles": ["dba_applicatif", "client_business"], "requires_approval": False},
-                            "PROD": {"profiles": ["dba_applicatif"], "requires_approval": True, "approver_profiles": ["dba_infrastructure"]},
-                        }
-                    }
-                },
-                headers={"Authorization": f"Bearer {dbops_token}"},
-            )
-
-        assert response.status_code == status.HTTP_200_OK
-        data = response.json()
-        assert "data" in data
-        assert data["data"]["id"] == 1
-
-    async def test_update_rbac_not_found(self, client, dbops_token):
-        """Test updating RBAC for non-existent action returns 404."""
-        with patch("app.api.deps.user_repository") as mock_repo, \
-             patch("app.repositories.catalog_repository.update_rbac_policies", new_callable=AsyncMock) as mock_update:
-            mock_repo.get_by_username = AsyncMock(return_value={
-                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
-            })
-            mock_update.return_value = None
-
-            response = await client.put(
-                "/api/v1/admin/actions/999/rbac",
-                json={
-                    "policies": {
-                        "environments": {
-                            "DEV": {"profiles": ["dba_applicatif"], "requires_approval": False},
-                        }
-                    }
-                },
-                headers={"Authorization": f"Bearer {dbops_token}"},
-            )
-
-        assert response.status_code == status.HTTP_404_NOT_FOUND
-        data = response.json()
-        assert "error" in data
-        assert data["error"]["code"] == "NOT_FOUND"
-
-    async def test_update_rbac_not_draft_returns_400(self, client, dbops_token):
-        """Test updating RBAC for non-draft action returns 400."""
-        with patch("app.api.deps.user_repository") as mock_repo, \
-             patch("app.repositories.catalog_repository.update_rbac_policies", new_callable=AsyncMock) as mock_update:
-            mock_repo.get_by_username = AsyncMock(return_value={
-                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
-            })
-            mock_update.side_effect = RepoInvalidStateError(
-                "Les politiques RBAC ne peuvent etre modifiees que pour une action en brouillon",
-                current_status="published",
-            )
-
-            response = await client.put(
-                "/api/v1/admin/actions/1/rbac",
-                json={
-                    "policies": {
-                        "environments": {
-                            "DEV": {"profiles": ["dba_applicatif"], "requires_approval": False},
-                        }
-                    }
-                },
-                headers={"Authorization": f"Bearer {dbops_token}"},
-            )
-
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        data = response.json()
-        assert "error" in data
-        assert data["error"]["code"] == "INVALID_STATE"
-        assert data["error"]["details"]["status"] == "published"
-
-    async def test_update_rbac_validation_error_empty_profiles(self, client, dbops_token):
-        """Test updating RBAC with empty profiles returns 422."""
-        with patch("app.api.deps.user_repository") as mock_repo:
-            mock_repo.get_by_username = AsyncMock(return_value={
-                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
-            })
-
-            response = await client.put(
-                "/api/v1/admin/actions/1/rbac",
-                json={
-                    "policies": {
-                        "environments": {
-                            "DEV": {"profiles": [], "requires_approval": False},
-                        }
-                    }
-                },
-                headers={"Authorization": f"Bearer {dbops_token}"},
-            )
-
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-
-    async def test_update_rbac_forbidden_non_dbops(self, client, dba_token):
-        """Test updating RBAC with non-DBOPS profile returns 403."""
-        with patch("app.api.deps.user_repository") as mock_repo:
-            mock_repo.get_by_username = AsyncMock(return_value={
-                "id": 2, "username": "dba-user", "display_name": "DBA", "profile": "dba_app"
-            })
-
-            response = await client.put(
-                "/api/v1/admin/actions/1/rbac",
-                json={
-                    "policies": {
-                        "environments": {
-                            "DEV": {"profiles": ["dba_applicatif"], "requires_approval": False},
-                        }
-                    }
-                },
-                headers={"Authorization": f"Bearer {dba_token}"},
-            )
-
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+# Story 2.24: change_model_code removed from ActionCreate/ActionResponse/ActionDetail.
+# change_type_config is in ExecutionStepsUpdate (PUT /actions/{id}/steps) only.
 
 
 # === Story 2.4: PATCH /admin/actions/{id}/status Tests ===
@@ -809,7 +670,6 @@ class TestUpdateActionStatus:
             id=1,
             name="Published Action",
             description="A published action",
-            category=ActionCategory.PROVISIONING,
             engine=ActionEngine.ORACLE,
             platform=ActionPlatform.AAP,
             status=ActionStatus.PUBLISHED,
@@ -825,7 +685,6 @@ class TestUpdateActionStatus:
             id=1,
             name="Disabled Action",
             description="A disabled action",
-            category=ActionCategory.PROVISIONING,
             engine=ActionEngine.ORACLE,
             platform=ActionPlatform.AAP,
             status=ActionStatus.DISABLED,
@@ -1001,7 +860,6 @@ class TestUpdateActionTags:
             id=1,
             name="Create PDB",
             description="",
-            category=ActionCategory.PROVISIONING,
             engine=ActionEngine.ORACLE,
             platform=ActionPlatform.AAP,
             parameters_schema=None,
@@ -1010,7 +868,6 @@ class TestUpdateActionTags:
             created_by=1,
             created_at=datetime(2026, 1, 28, 10, 0, 0),
             updated_at=None,
-            rbac_policies=None,
             execution_steps=None,
             change_type_config=None,
             tags=["rac", "dataguard"],

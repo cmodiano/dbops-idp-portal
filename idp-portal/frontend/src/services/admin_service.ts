@@ -10,7 +10,6 @@ import type {
   ActionListItem,
   ActionStatus,
   ExecutionStepsUpdate,
-  RbacPoliciesUpdate,
   StatusTransition,
   AdminActionsFilters,
   ActionListResponse,
@@ -36,11 +35,10 @@ export async function createAction(action: ActionCreate): Promise<ActionResponse
 export async function getAdminActions(filters?: AdminActionsFilters): Promise<ActionListResponse> {
   const params = new URLSearchParams();
   if (filters?.status) params.append('status', filters.status);
-  if (filters?.category) params.append('category', filters.category);
   if (filters?.engine) params.append('engine', filters.engine);
   if (filters?.page) params.append('page', filters.page.toString());
   if (filters?.page_size) params.append('page_size', filters.page_size.toString());
-  
+
   const queryString = params.toString();
   return apiFetch<ActionListResponse>(`/admin/actions${queryString ? `?${queryString}` : ''}`);
 }
@@ -63,6 +61,18 @@ export async function getAction(id: number): Promise<ActionDetail> {
 }
 
 /**
+ * Update action metadata (name, parameters_schema, impact_rules, etc.).
+ * Requires DBOPS profile. Story 2.4, AC #3.
+ * Story 2.23: category removed — use tags instead.
+ */
+export async function updateAction(actionId: number, action: ActionCreate): Promise<ActionDetail> {
+  return apiFetch<ActionDetail>(`/admin/actions/${actionId}`, {
+    method: 'PUT',
+    body: JSON.stringify(action),
+  });
+}
+
+/**
  * Update execution steps and change type config for an action.
  * Requires DBOPS profile. Action must be in draft status.
  * Story 2.2, AC #5.
@@ -72,21 +82,6 @@ export async function updateActionSteps(
   data: ExecutionStepsUpdate
 ): Promise<ActionDetail> {
   return apiFetch<ActionDetail>(`/admin/actions/${actionId}/steps`, {
-    method: 'PUT',
-    body: JSON.stringify(data),
-  });
-}
-
-/**
- * Update RBAC policies for an action.
- * Requires DBOPS profile. Action must be in draft status.
- * Story 2.3, AC #4.
- */
-export async function updateActionRbac(
-  actionId: number,
-  data: RbacPoliciesUpdate
-): Promise<ActionDetail> {
-  return apiFetch<ActionDetail>(`/admin/actions/${actionId}/rbac`, {
     method: 'PUT',
     body: JSON.stringify(data),
   });

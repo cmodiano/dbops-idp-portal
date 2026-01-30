@@ -10,14 +10,13 @@ import json
 
 from app.models.catalog import (
     ActionCreate,
-    ActionCategory,
     ActionEngine,
     ActionPlatform,
     ActionStatus,
     ConnectorType,
     ExecutionStep,
     ExecutionStepType,
-    ChangeType,
+    ChangeTypeConfigEntry,
     StatusTransition,
     InvalidTransitionError,
 )
@@ -27,11 +26,10 @@ from app.repositories.catalog_repository import InvalidStateError
 
 @pytest.fixture
 def sample_action_create():
-    """Sample ActionCreate for testing."""
+    """Sample ActionCreate for testing. Story 2.23: category removed."""
     return ActionCreate(
         name="Create PDB Oracle",
         description="Creates a Pluggable Database",
-        category=ActionCategory.PROVISIONING,
         engine=ActionEngine.ORACLE,
         platform=ActionPlatform.AAP,
         parameters_schema={
@@ -47,16 +45,16 @@ def sample_action_create():
 
 @pytest.fixture
 def mock_db_row():
-    """Sample database row for action."""
+    """Sample database row for action. Story 2.24: CHANGE_MODEL_CODE column removed (V019)."""
     return (
         1,  # ID
         "Create PDB Oracle",  # NAME
         "Creates a Pluggable Database",  # DESCRIPTION
-        "Provisioning",  # CATEGORY
         "Oracle",  # ENGINE
         "AAP",  # PLATFORM
         '{"type": "object"}',  # PARAMETERS_SCHEMA (CLOB as string)
         '{"DEV": {"level": "low"}}',  # IMPACT_RULES
+        None,  # DEFAULT_IMPACT_LEVEL (Story 2.18 AC5)
         "draft",  # STATUS
         42,  # CREATED_BY
         datetime(2026, 1, 28, 10, 0, 0),  # CREATED_AT
@@ -64,27 +62,25 @@ def mock_db_row():
     )
 
 
-# Valid RBAC JSON (Story 2.3 schema with "environments" key) for row fixtures
-_VALID_RBAC_JSON = '{"environments": {"DEV": {"profiles": ["dba_applicatif"], "requires_approval": false, "approver_profiles": null}}}'
+# Story 2.14: RBAC_POLICIES column removed — RBAC now managed via profiles.
 
 
 @pytest.fixture
-def mock_db_row_with_rbac():
-    """Sample database row for action with rbac_policies (valid RbacPolicies schema)."""
+def mock_db_row_with_detail():
+    """Sample database row for action detail. Story 2.24: CHANGE_MODEL_CODE removed (V019)."""
     return (
         1,  # ID
         "Create PDB Oracle",  # NAME
         "Creates a Pluggable Database",  # DESCRIPTION
-        "Provisioning",  # CATEGORY
         "Oracle",  # ENGINE
         "AAP",  # PLATFORM
         '{"type": "object"}',  # PARAMETERS_SCHEMA
         '{"DEV": {"level": "low"}}',  # IMPACT_RULES
+        None,  # DEFAULT_IMPACT_LEVEL (Story 2.18 AC5)
         "draft",  # STATUS
         42,  # CREATED_BY
         datetime(2026, 1, 28, 10, 0, 0),  # CREATED_AT
         None,  # UPDATED_AT
-        _VALID_RBAC_JSON,  # RBAC_POLICIES
         None,  # EXECUTION_STEPS
         None,  # CHANGE_TYPE_CONFIG
     )
@@ -92,43 +88,41 @@ def mock_db_row_with_rbac():
 
 @pytest.fixture
 def mock_db_row_with_execution_steps():
-    """Sample database row for action with execution_steps and change_type_config."""
+    """Sample database row for action with execution_steps and change_type_config (Story 2.24: new format, no CHANGE_MODEL_CODE)."""
     return (
         1,  # ID
         "Create PDB Oracle",  # NAME
         "Creates a Pluggable Database",  # DESCRIPTION
-        "Provisioning",  # CATEGORY
         "Oracle",  # ENGINE
         "AAP",  # PLATFORM
         '{"type": "object"}',  # PARAMETERS_SCHEMA
         '{"DEV": {"level": "low"}}',  # IMPACT_RULES
+        "low",  # DEFAULT_IMPACT_LEVEL (Story 2.18 AC5)
         "draft",  # STATUS
         42,  # CREATED_BY
         datetime(2026, 1, 28, 10, 0, 0),  # CREATED_AT
         datetime(2026, 1, 28, 11, 0, 0),  # UPDATED_AT
-        _VALID_RBAC_JSON,  # RBAC_POLICIES
-        '[{"order": 1, "name": "Verification", "type": "prerequisite", "is_servicenow_change": false, "conditional_environments": null}]',  # EXECUTION_STEPS
-        '{"DEV": "pre_approved", "PROD": "cab"}',  # CHANGE_TYPE_CONFIG
+        '[{"order": 1, "name": "Verification", "type": "prerequisite", "connector_type": "none", "connector_config": null, "conditional_environments": null}]',  # EXECUTION_STEPS
+        '{"DEV": {"required": false}, "PROD": {"required": true, "change_model_code": "1516B"}}',  # CHANGE_TYPE_CONFIG (Story 2.24)
     )
 
 
 @pytest.fixture
 def mock_db_row_published():
-    """Sample database row for published action."""
+    """Sample database row for published action. Story 2.24: no CATEGORY, no CHANGE_MODEL_CODE (V018, V019)."""
     return (
         2,  # ID
         "Published Action",  # NAME
         "A published action",  # DESCRIPTION
-        "Administration",  # CATEGORY
         "Oracle",  # ENGINE
         "AAP",  # PLATFORM
         None,  # PARAMETERS_SCHEMA
         None,  # IMPACT_RULES
+        None,  # DEFAULT_IMPACT_LEVEL (Story 2.18 AC5)
         "published",  # STATUS
         42,  # CREATED_BY
         datetime(2026, 1, 28, 10, 0, 0),  # CREATED_AT
         None,  # UPDATED_AT
-        None,  # RBAC_POLICIES
         None,  # EXECUTION_STEPS
         None,  # CHANGE_TYPE_CONFIG
     )
@@ -166,38 +160,24 @@ class TestRowConversions:
         result = catalog_repository._row_to_action_response(mock_db_row)
         assert result.id == 1
         assert result.name == "Create PDB Oracle"
-        assert result.category == ActionCategory.PROVISIONING
         assert result.engine == ActionEngine.ORACLE
         assert result.platform == ActionPlatform.AAP
         assert result.status == ActionStatus.DRAFT
 
-    def test_row_to_action_detail(self, mock_db_row_with_rbac):
-        """Test converting row to ActionDetail with rbac_policies (safe parse, normalized shape)."""
-        result = catalog_repository._row_to_action_detail(mock_db_row_with_rbac)
+    def test_row_to_action_detail(self, mock_db_row_with_detail):
+        """Test converting row to ActionDetail. Story 2.14: rbac_policies removed."""
+        result = catalog_repository._row_to_action_detail(mock_db_row_with_detail)
         assert result.id == 1
-        assert result.rbac_policies is not None
-        assert "environments" in result.rbac_policies
-        assert "DEV" in result.rbac_policies["environments"]
-        assert result.rbac_policies["environments"]["DEV"]["profiles"] == ["dba_applicatif"]
-
-    def test_row_to_action_detail_invalid_rbac_json_returns_none(self):
-        """Test that invalid RBAC CLOB yields rbac_policies=None (no 500)."""
-        row = (
-            1, "A", "B", "Provisioning", "Oracle", "AAP",
-            None, None, "draft", 42, datetime(2026, 1, 28), None,
-            '{"invalid": "no environments key"}',  # invalid for RbacPolicies
-            None, None,
-        )
-        result = catalog_repository._row_to_action_detail(row)
-        assert result.id == 1
-        assert result.rbac_policies is None
+        assert result.name == "Create PDB Oracle"
+        # Story 2.14: rbac_policies removed
+        assert not hasattr(result, "rbac_policies")
 
 
 class TestCreate:
     """Tests for create() function."""
 
     @pytest.mark.asyncio
-    async def test_create_action_success(self, sample_action_create, mock_db_row_with_rbac):
+    async def test_create_action_success(self, sample_action_create, mock_db_row_with_detail):
         """Test creating action successfully."""
         mock_cursor = AsyncMock()
         mock_conn = AsyncMock()
@@ -211,7 +191,7 @@ class TestCreate:
 
         # For the get_by_id call after create
         mock_cursor_get = AsyncMock()
-        mock_cursor_get.fetchone = AsyncMock(return_value=mock_db_row_with_rbac)
+        mock_cursor_get.fetchone = AsyncMock(return_value=mock_db_row_with_detail)
 
         call_count = 0
 
@@ -236,7 +216,7 @@ class TestCreate:
         assert result.tags == []
 
     @pytest.mark.asyncio
-    async def test_create_action_with_json_fields(self, sample_action_create, mock_db_row_with_rbac):
+    async def test_create_action_with_json_fields(self, sample_action_create, mock_db_row_with_detail):
         """Test that JSON fields are properly serialized."""
         captured_params = {}
 
@@ -250,7 +230,7 @@ class TestCreate:
         mock_conn.var = MagicMock(return_value=mock_out_id)
 
         mock_cursor_get = AsyncMock()
-        mock_cursor_get.fetchone = AsyncMock(return_value=mock_db_row_with_rbac)
+        mock_cursor_get.fetchone = AsyncMock(return_value=mock_db_row_with_detail)
         mock_cursor_get.close = AsyncMock()
 
         call_count = 0
@@ -284,10 +264,10 @@ class TestGetById:
     """Tests for get_by_id() function."""
 
     @pytest.mark.asyncio
-    async def test_get_by_id_found(self, mock_db_row_with_rbac):
+    async def test_get_by_id_found(self, mock_db_row_with_detail):
         """Test getting action by ID when found (Story 2.6: tags mocked)."""
         mock_cursor = AsyncMock()
-        mock_cursor.fetchone = AsyncMock(return_value=mock_db_row_with_rbac)
+        mock_cursor.fetchone = AsyncMock(return_value=mock_db_row_with_detail)
         mock_cursor.close = AsyncMock()
 
         mock_conn = AsyncMock()
@@ -302,7 +282,8 @@ class TestGetById:
         assert result is not None
         assert result.id == 1
         assert result.name == "Create PDB Oracle"
-        assert result.rbac_policies is not None
+        # Story 2.14: rbac_policies removed
+        assert not hasattr(result, "rbac_policies")
         assert result.tags == []
 
     @pytest.mark.asyncio
@@ -464,12 +445,21 @@ class TestExecutionStepsConversions:
         assert result is None
 
     def test_parse_change_type_config(self):
-        """Test parsing change type config from JSON string (Story 2.8: "cab" → pre_approved)."""
-        json_str = '{"DEV": "pre_approved", "PROD": "cab"}'
+        """Test parsing change type config new format (Story 2.24)."""
+        json_str = '{"DEV": {"required": false}, "PROD": {"required": true, "change_model_code": "1516B"}}'
         result = catalog_repository._parse_change_type_config(json_str)
         assert result is not None
-        assert result["DEV"] == ChangeType.PRE_APPROVED
-        assert result["PROD"] == ChangeType.PRE_APPROVED
+        assert result["DEV"].required is False
+        assert result["DEV"].change_model_code is None
+        assert result["PROD"].required is True
+        assert result["PROD"].change_model_code == "1516B"
+
+    def test_parse_change_type_config_legacy_raises(self):
+        """Story 2.24 AC4: Legacy format (env -> string) raises LegacyChangeTypeConfigError."""
+        from app.repositories.catalog_repository import LegacyChangeTypeConfigError
+        json_str = '{"DEV": "pre_approved", "PROD": "pre_approved"}'
+        with pytest.raises(LegacyChangeTypeConfigError, match="legacy format"):
+            catalog_repository._parse_change_type_config(json_str)
 
     def test_parse_change_type_config_none(self):
         """Test parsing None returns None."""
@@ -499,14 +489,16 @@ class TestExecutionStepsConversions:
         assert result is None
 
     def test_change_type_config_to_json(self):
-        """Test converting change type config to JSON string (Story 2.8: only "pre_approved", never "cab")."""
-        config = {"DEV": ChangeType.PRE_APPROVED, "PROD": ChangeType.PRE_APPROVED}
+        """Test converting change type config to JSON string (Story 2.24)."""
+        config = {
+            "DEV": ChangeTypeConfigEntry(required=False),
+            "PROD": ChangeTypeConfigEntry(required=True, change_model_code="1516B"),
+        }
         result = catalog_repository._change_type_config_to_json(config)
         assert result is not None
         parsed = json.loads(result)
-        assert parsed["DEV"] == "pre_approved"
-        assert parsed["PROD"] == "pre_approved"
-        assert "cab" not in result
+        assert parsed["DEV"] == {"required": False, "change_model_code": None}
+        assert parsed["PROD"] == {"required": True, "change_model_code": "1516B"}
 
     def test_change_type_config_to_json_none(self):
         """Test converting None returns None."""
@@ -558,7 +550,10 @@ class TestUpdateExecutionSteps:
             steps = [
                 ExecutionStep(order=1, name="Verification", type=ExecutionStepType.PREREQUISITE, connector_type=ConnectorType.NONE),
             ]
-            change_config = {"DEV": ChangeType.PRE_APPROVED, "PROD": ChangeType.PRE_APPROVED}
+            change_config = {
+                "DEV": ChangeTypeConfigEntry(required=False),
+                "PROD": ChangeTypeConfigEntry(required=True, change_model_code="1516B"),
+            }
 
             result = await catalog_repository.update_execution_steps(1, steps, change_config)
 
@@ -655,371 +650,21 @@ class TestRowToActionDetailWithExecutionSteps:
     """Tests for _row_to_action_detail with execution_steps."""
 
     def test_row_to_action_detail_with_execution_steps(self, mock_db_row_with_execution_steps):
-        """Test converting row to ActionDetail with execution_steps (legacy format → connector_type)."""
+        """Test converting row to ActionDetail with execution_steps and new change_type_config (Story 2.24)."""
         result = catalog_repository._row_to_action_detail(mock_db_row_with_execution_steps)
         assert result.id == 1
         assert result.execution_steps is not None
         assert len(result.execution_steps) == 1
         assert result.execution_steps[0].name == "Verification"
-        assert result.execution_steps[0].connector_type == ConnectorType.NONE  # legacy is_servicenow_change: false
+        assert result.execution_steps[0].connector_type == ConnectorType.NONE
         assert result.change_type_config is not None
-        assert result.change_type_config["DEV"] == ChangeType.PRE_APPROVED
-        assert result.change_type_config["PROD"] == ChangeType.PRE_APPROVED  # "cab" converted on read (Story 2.8)
+        assert result.change_type_config["DEV"].required is False
+        assert result.change_type_config["PROD"].required is True
+        assert result.change_type_config["PROD"].change_model_code == "1516B"
 
 
-# === Story 2.3: RBAC Policies Tests ===
-
-
-class TestRbacPoliciesConversions:
-    """Tests for RBAC policies JSON conversion helpers (Story 2.3)."""
-
-    def test_rbac_policies_to_json(self):
-        """Test converting RbacPolicies to JSON string."""
-        from app.models.catalog import RbacPolicies, EnvironmentPermission, UserProfile
-
-        policies = RbacPolicies(
-            environments={
-                "DEV": EnvironmentPermission(
-                    profiles=[UserProfile.DBA_APPLICATIF, UserProfile.CLIENT_BUSINESS],
-                    requires_approval=False,
-                ),
-                "PROD": EnvironmentPermission(
-                    profiles=[UserProfile.DBA_APPLICATIF],
-                    requires_approval=True,
-                    approver_profiles=[UserProfile.DBA_INFRASTRUCTURE],
-                ),
-            }
-        )
-        result = catalog_repository._rbac_policies_to_json(policies)
-        assert result is not None
-        parsed = json.loads(result)
-        assert "environments" in parsed
-        assert "DEV" in parsed["environments"]
-        assert parsed["environments"]["DEV"]["profiles"] == ["dba_applicatif", "client_business"]
-        assert parsed["environments"]["PROD"]["requires_approval"] is True
-
-    def test_rbac_policies_to_json_none(self):
-        """Test converting None returns None."""
-        result = catalog_repository._rbac_policies_to_json(None)
-        assert result is None
-
-    def test_parse_rbac_policies(self):
-        """Test parsing RBAC policies from JSON string."""
-        json_str = '{"environments": {"DEV": {"profiles": ["dba_applicatif"], "requires_approval": false, "approver_profiles": null}}}'
-        result = catalog_repository._parse_rbac_policies(json_str)
-        assert result is not None
-        assert "DEV" in result.environments
-        assert result.environments["DEV"].profiles[0] == catalog_repository.UserProfile.DBA_APPLICATIF
-
-    def test_parse_rbac_policies_none(self):
-        """Test parsing None returns None."""
-        result = catalog_repository._parse_rbac_policies(None)
-        assert result is None
-
-    def test_safe_parse_rbac_policies_invalid_json(self):
-        """Test safe parse logs warning and returns None on invalid JSON."""
-        result = catalog_repository._safe_parse_rbac_policies("not valid json")
-        assert result is None
-
-    def test_safe_parse_rbac_policies_valid(self):
-        """Test safe parse returns valid RbacPolicies on valid JSON."""
-        json_str = '{"environments": {"DEV": {"profiles": ["dba_applicatif"], "requires_approval": false, "approver_profiles": null}}}'
-        result = catalog_repository._safe_parse_rbac_policies(json_str)
-        assert result is not None
-
-
-class TestUpdateRbacPolicies:
-    """Tests for update_rbac_policies() function (Story 2.3, AC #4)."""
-
-    @pytest.fixture
-    def sample_rbac_policies(self):
-        """Sample RbacPolicies for testing."""
-        from app.models.catalog import RbacPolicies, EnvironmentPermission, UserProfile
-
-        return RbacPolicies(
-            environments={
-                "DEV": EnvironmentPermission(
-                    profiles=[UserProfile.DBA_APPLICATIF, UserProfile.CLIENT_BUSINESS],
-                    requires_approval=False,
-                ),
-                "PROD": EnvironmentPermission(
-                    profiles=[UserProfile.DBA_APPLICATIF],
-                    requires_approval=True,
-                    approver_profiles=[UserProfile.DBA_INFRASTRUCTURE],
-                ),
-            }
-        )
-
-    @pytest.fixture
-    def mock_db_row_with_rbac_policies(self):
-        """Sample database row with updated RBAC policies."""
-        return (
-            1,  # ID
-            "Create PDB Oracle",  # NAME
-            "Creates a Pluggable Database",  # DESCRIPTION
-            "Provisioning",  # CATEGORY
-            "Oracle",  # ENGINE
-            "AAP",  # PLATFORM
-            '{"type": "object"}',  # PARAMETERS_SCHEMA
-            '{"DEV": {"level": "low"}}',  # IMPACT_RULES
-            "draft",  # STATUS
-            42,  # CREATED_BY
-            datetime(2026, 1, 28, 10, 0, 0),  # CREATED_AT
-            datetime(2026, 1, 28, 11, 0, 0),  # UPDATED_AT
-            '{"environments": {"DEV": {"profiles": ["dba_applicatif"], "requires_approval": false, "approver_profiles": null}}}',  # RBAC_POLICIES
-            None,  # EXECUTION_STEPS
-            None,  # CHANGE_TYPE_CONFIG
-        )
-
-    @pytest.mark.asyncio
-    async def test_update_rbac_policies_success(self, sample_rbac_policies, mock_db_row_with_rbac_policies):
-        """Test updating RBAC policies successfully."""
-        mock_cursor_check = AsyncMock()
-        mock_cursor_check.fetchone = AsyncMock(return_value=("draft",))
-        mock_cursor_check.close = AsyncMock()
-
-        mock_cursor_update = AsyncMock()
-        mock_cursor_update.close = AsyncMock()
-        mock_cursor_update.rowcount = 1
-
-        mock_cursor_get = AsyncMock()
-        mock_cursor_get.fetchone = AsyncMock(return_value=mock_db_row_with_rbac_policies)
-        mock_cursor_get.close = AsyncMock()
-
-        mock_conn = AsyncMock()
-        mock_conn.commit = AsyncMock()
-
-        call_count = 0
-
-        async def mock_execute(query, params):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return mock_cursor_check
-            elif call_count == 2:
-                return mock_cursor_update
-            return mock_cursor_get
-
-        mock_conn.execute = mock_execute
-
-        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
-            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
-            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            result = await catalog_repository.update_rbac_policies(1, sample_rbac_policies)
-
-        assert result is not None
-        assert result.id == 1
-
-    @pytest.mark.asyncio
-    async def test_update_rbac_policies_not_found(self, sample_rbac_policies):
-        """Test updating RBAC policies when action not found."""
-        mock_cursor = AsyncMock()
-        mock_cursor.fetchone = AsyncMock(return_value=None)
-        mock_cursor.close = AsyncMock()
-
-        mock_conn = AsyncMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
-
-        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
-            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
-            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            result = await catalog_repository.update_rbac_policies(999, sample_rbac_policies)
-
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_update_rbac_policies_not_draft_raises_error(self, sample_rbac_policies):
-        """Test updating RBAC policies when action is not draft raises InvalidStateError."""
-        mock_cursor = AsyncMock()
-        mock_cursor.fetchone = AsyncMock(return_value=("published",))
-        mock_cursor.close = AsyncMock()
-
-        mock_conn = AsyncMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
-
-        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
-            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
-            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            with pytest.raises(InvalidStateError) as exc_info:
-                await catalog_repository.update_rbac_policies(1, sample_rbac_policies)
-
-            assert exc_info.value.current_status == "published"
-
-    @pytest.mark.asyncio
-    async def test_update_rbac_policies_zero_rows_raises_error(self, sample_rbac_policies):
-        """Test update_rbac_policies when UPDATE affects 0 rows (race: published meanwhile)."""
-        mock_cursor_check = AsyncMock()
-        mock_cursor_check.fetchone = AsyncMock(return_value=("draft",))
-        mock_cursor_check.close = AsyncMock()
-
-        mock_cursor_update = AsyncMock()
-        mock_cursor_update.close = AsyncMock()
-        mock_cursor_update.rowcount = 0
-
-        mock_cursor_status = AsyncMock()
-        mock_cursor_status.fetchone = AsyncMock(return_value=("published",))
-        mock_cursor_status.close = AsyncMock()
-
-        mock_conn = AsyncMock()
-        mock_conn.commit = AsyncMock()
-
-        call_count = 0
-
-        async def mock_execute(query, params):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return mock_cursor_check
-            if call_count == 2:
-                return mock_cursor_update
-            return mock_cursor_status
-
-        mock_conn.execute = mock_execute
-
-        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
-            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
-            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            with pytest.raises(InvalidStateError) as exc_info:
-                await catalog_repository.update_rbac_policies(1, sample_rbac_policies)
-
-            assert exc_info.value.current_status == "published"
-
-
-class TestListAllWithRbacFilter:
-    """Tests for list_all() with RBAC filtering (Story 2.3, AC #3)."""
-
-    @pytest.fixture
-    def mock_db_row_with_rbac_full(self):
-        """Database row with RBAC policies allowing client_business in DEV."""
-        return (
-            1,  # ID
-            "Action for client",  # NAME
-            "Visible to client",  # DESCRIPTION
-            "Provisioning",  # CATEGORY
-            "Oracle",  # ENGINE
-            "AAP",  # PLATFORM
-            None,  # PARAMETERS_SCHEMA
-            None,  # IMPACT_RULES
-            "published",  # STATUS
-            42,  # CREATED_BY
-            datetime(2026, 1, 28, 10, 0, 0),  # CREATED_AT
-            None,  # UPDATED_AT
-            '{"environments": {"DEV": {"profiles": ["client_business", "dba_applicatif"], "requires_approval": false, "approver_profiles": null}}}',  # RBAC_POLICIES
-        )
-
-    @pytest.fixture
-    def mock_db_row_dba_only(self):
-        """Database row with RBAC policies allowing only DBA profiles."""
-        return (
-            2,  # ID
-            "Action DBA only",  # NAME
-            "Not visible to client",  # DESCRIPTION
-            "Administration",  # CATEGORY
-            "Oracle",  # ENGINE
-            "AAP",  # PLATFORM
-            None,  # PARAMETERS_SCHEMA
-            None,  # IMPACT_RULES
-            "published",  # STATUS
-            42,  # CREATED_BY
-            datetime(2026, 1, 28, 10, 0, 0),  # CREATED_AT
-            None,  # UPDATED_AT
-            '{"environments": {"DEV": {"profiles": ["dba_applicatif"], "requires_approval": false, "approver_profiles": null}}}',  # RBAC_POLICIES
-        )
-
-    @pytest.fixture
-    def mock_db_row_no_rbac(self):
-        """Database row with no RBAC policies (visible to all)."""
-        return (
-            3,  # ID
-            "Action no RBAC",  # NAME
-            "Visible to all",  # DESCRIPTION
-            "Monitoring",  # CATEGORY
-            "Oracle",  # ENGINE
-            "AAP",  # PLATFORM
-            None,  # PARAMETERS_SCHEMA
-            None,  # IMPACT_RULES
-            "published",  # STATUS
-            42,  # CREATED_BY
-            datetime(2026, 1, 28, 10, 0, 0),  # CREATED_AT
-            None,  # UPDATED_AT
-            None,  # RBAC_POLICIES - None means visible to all
-        )
-
-    @pytest.mark.asyncio
-    async def test_list_all_no_filter_returns_all(self, mock_db_row_with_rbac_full, mock_db_row_dba_only):
-        """Test list_all without user_profile returns all actions (Story 2.6: get_tags_for_actions mocked)."""
-        mock_cursor = AsyncMock()
-        mock_cursor.fetchall = AsyncMock(return_value=[mock_db_row_with_rbac_full, mock_db_row_dba_only])
-        mock_cursor.close = AsyncMock()
-
-        mock_conn = AsyncMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
-
-        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
-            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
-            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
-            with patch("app.repositories.catalog_repository.get_tags_for_actions", new_callable=AsyncMock, return_value={1: [], 2: []}):
-                result = await catalog_repository.list_all(user_profile=None)
-
-        assert len(result) == 2
-        assert all(r.tags == [] for r in result)
-
-    @pytest.mark.asyncio
-    async def test_list_all_client_business_sees_allowed_only(
-        self, mock_db_row_with_rbac_full, mock_db_row_dba_only, mock_db_row_no_rbac
-    ):
-        """Test list_all with client_business profile filters out DBA-only actions."""
-        mock_cursor = AsyncMock()
-        mock_cursor.fetchall = AsyncMock(return_value=[
-            mock_db_row_with_rbac_full,  # Visible: client_business in DEV
-            mock_db_row_dba_only,        # Not visible: only dba_applicatif
-            mock_db_row_no_rbac,         # Visible: no RBAC = all can see
-        ])
-        mock_cursor.close = AsyncMock()
-
-        mock_conn = AsyncMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
-
-        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
-            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
-            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
-            with patch("app.repositories.catalog_repository.get_tags_for_actions", new_callable=AsyncMock, return_value={1: [], 2: [], 3: []}):
-                from app.models.catalog import UserProfile
-                result = await catalog_repository.list_all(user_profile=UserProfile.CLIENT_BUSINESS)
-
-        assert len(result) == 2
-        names = [r.name for r in result]
-        assert "Action for client" in names
-        assert "Action no RBAC" in names
-        assert "Action DBA only" not in names
-
-    @pytest.mark.asyncio
-    async def test_list_all_dba_applicatif_sees_all_with_rbac(
-        self, mock_db_row_with_rbac_full, mock_db_row_dba_only
-    ):
-        """Test list_all with dba_applicatif profile sees both actions."""
-        mock_cursor = AsyncMock()
-        mock_cursor.fetchall = AsyncMock(return_value=[
-            mock_db_row_with_rbac_full,  # Visible: dba_applicatif in DEV
-            mock_db_row_dba_only,        # Visible: dba_applicatif in DEV
-        ])
-        mock_cursor.close = AsyncMock()
-
-        mock_conn = AsyncMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
-
-        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
-            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
-            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
-            with patch("app.repositories.catalog_repository.get_tags_for_actions", new_callable=AsyncMock, return_value={1: [], 2: []}):
-                from app.models.catalog import UserProfile
-                result = await catalog_repository.list_all(user_profile=UserProfile.DBA_APPLICATIF)
-
-        assert len(result) == 2
+# Story 2.3 RBAC by action tests removed in Story 2.14 — RBAC now managed via profiles.
+# Removed: TestRbacPoliciesConversions, TestUpdateRbacPolicies, TestListAllWithRbacFilter
 
 
 # === Story 2.4: Status Transition and Lifecycle Tests ===
@@ -1030,63 +675,60 @@ class TestUpdateStatus:
 
     @pytest.fixture
     def mock_db_row_draft(self):
-        """Sample database row for draft action."""
+        """Sample database row for draft action. Story 2.24: no CATEGORY, no CHANGE_MODEL_CODE (V018, V019)."""
         return (
             1,  # ID
             "Draft Action",  # NAME
             "A draft action",  # DESCRIPTION
-            "Provisioning",  # CATEGORY
             "Oracle",  # ENGINE
             "AAP",  # PLATFORM
             None,  # PARAMETERS_SCHEMA
             None,  # IMPACT_RULES
+            None,  # DEFAULT_IMPACT_LEVEL (Story 2.18 AC5)
             "draft",  # STATUS
             42,  # CREATED_BY
             datetime(2026, 1, 28, 10, 0, 0),  # CREATED_AT
             None,  # UPDATED_AT
-            None,  # RBAC_POLICIES
             None,  # EXECUTION_STEPS
             None,  # CHANGE_TYPE_CONFIG
         )
 
     @pytest.fixture
     def mock_db_row_published(self):
-        """Sample database row for published action."""
+        """Sample database row for published action. Story 2.24: no CATEGORY, no CHANGE_MODEL_CODE."""
         return (
             1,  # ID
             "Published Action",  # NAME
             "A published action",  # DESCRIPTION
-            "Provisioning",  # CATEGORY
             "Oracle",  # ENGINE
             "AAP",  # PLATFORM
             None,  # PARAMETERS_SCHEMA
             None,  # IMPACT_RULES
+            None,  # DEFAULT_IMPACT_LEVEL (Story 2.18 AC5)
             "published",  # STATUS
             42,  # CREATED_BY
             datetime(2026, 1, 28, 10, 0, 0),  # CREATED_AT
             datetime(2026, 1, 28, 11, 0, 0),  # UPDATED_AT
-            None,  # RBAC_POLICIES
             None,  # EXECUTION_STEPS
             None,  # CHANGE_TYPE_CONFIG
         )
 
     @pytest.fixture
     def mock_db_row_disabled(self):
-        """Sample database row for disabled action."""
+        """Sample database row for disabled action. Story 2.24: no CATEGORY, no CHANGE_MODEL_CODE."""
         return (
             1,  # ID
             "Disabled Action",  # NAME
             "A disabled action",  # DESCRIPTION
-            "Provisioning",  # CATEGORY
             "Oracle",  # ENGINE
             "AAP",  # PLATFORM
             None,  # PARAMETERS_SCHEMA
             None,  # IMPACT_RULES
+            None,  # DEFAULT_IMPACT_LEVEL (Story 2.18 AC5)
             "disabled",  # STATUS
             42,  # CREATED_BY
             datetime(2026, 1, 28, 10, 0, 0),  # CREATED_AT
             datetime(2026, 1, 28, 12, 0, 0),  # UPDATED_AT
-            None,  # RBAC_POLICIES
             None,  # EXECUTION_STEPS
             None,  # CHANGE_TYPE_CONFIG
         )
@@ -1271,13 +913,12 @@ class TestListAllAdmin:
 
     @pytest.fixture
     def mock_db_rows_admin(self):
-        """Sample database rows for admin dashboard."""
+        """Sample database rows for admin dashboard. Query returns ID, NAME, STATUS, ENGINE, CREATED_AT, EXECUTION_COUNT (Story 2.23: no CATEGORY)."""
         return [
             (
                 1,  # ID
                 "Draft Action",  # NAME
                 "draft",  # STATUS
-                "Provisioning",  # CATEGORY
                 "Oracle",  # ENGINE
                 datetime(2026, 1, 28, 10, 0, 0),  # CREATED_AT
                 0,  # EXECUTION_COUNT
@@ -1286,7 +927,6 @@ class TestListAllAdmin:
                 2,  # ID
                 "Published Action",  # NAME
                 "published",  # STATUS
-                "Administration",  # CATEGORY
                 "SQL Server",  # ENGINE
                 datetime(2026, 1, 27, 10, 0, 0),  # CREATED_AT
                 42,  # EXECUTION_COUNT
@@ -1295,7 +935,6 @@ class TestListAllAdmin:
                 3,  # ID
                 "Disabled Action",  # NAME
                 "disabled",  # STATUS
-                "Patching",  # CATEGORY
                 "Oracle",  # ENGINE
                 datetime(2026, 1, 26, 10, 0, 0),  # CREATED_AT
                 15,  # EXECUTION_COUNT
@@ -1563,3 +1202,220 @@ class TestTagsRepository:
 
         assert call_count == 3  # DELETE + 2 INSERTs
         mock_conn.commit.assert_called_once()
+
+
+class TestListCatalog:
+    """Tests for list_catalog() function (Story 3.1, AC1, AC3, AC10, AC11)."""
+
+    @pytest.fixture
+    def mock_db_row_catalog(self):
+        """Sample database row for catalog list with execution_count."""
+        return (
+            1,  # ID
+            "Create PDB Oracle",  # NAME
+            "Creates a Pluggable Database",  # DESCRIPTION
+            "Oracle",  # ENGINE
+            "AAP",  # PLATFORM
+            '{"type": "object"}',  # PARAMETERS_SCHEMA
+            '{"DEV": {"level": "low"}}',  # IMPACT_RULES
+            "low",  # DEFAULT_IMPACT_LEVEL
+            "published",  # STATUS
+            42,  # CREATED_BY
+            datetime(2026, 1, 28, 10, 0, 0),  # CREATED_AT
+            None,  # UPDATED_AT
+            5,  # EXECUTION_COUNT
+        )
+
+    @pytest.mark.asyncio
+    async def test_list_catalog_returns_actions_with_execution_count(self, mock_db_row_catalog):
+        """AC3: list_catalog includes execution_count for each action."""
+        mock_cursor = AsyncMock()
+        mock_cursor.fetchall = AsyncMock(return_value=[mock_db_row_catalog])
+        mock_cursor.close = AsyncMock()
+
+        mock_conn = AsyncMock()
+        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+
+        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+            with patch("app.repositories.catalog_repository.get_tags_for_actions", new_callable=AsyncMock, return_value={1: ["rac"]}):
+                result = await catalog_repository.list_catalog(status=ActionStatus.PUBLISHED)
+
+        assert len(result) == 1
+        assert result[0]["id"] == 1
+        assert result[0]["name"] == "Create PDB Oracle"
+        assert result[0]["execution_count"] == 5
+        assert result[0]["tags"] == ["rac"]
+
+    @pytest.mark.asyncio
+    async def test_list_catalog_with_tags_filter(self, mock_db_row_catalog):
+        """AC6: list_catalog filters by tags (category maps to tag)."""
+        mock_cursor = AsyncMock()
+        mock_cursor.fetchall = AsyncMock(return_value=[mock_db_row_catalog])
+        mock_cursor.close = AsyncMock()
+
+        mock_conn = AsyncMock()
+        captured_params = {}
+
+        async def capture_execute(query, params):
+            captured_params.update(params)
+            return mock_cursor
+
+        mock_conn.execute = capture_execute
+
+        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+            with patch("app.repositories.catalog_repository.get_tags_for_actions", new_callable=AsyncMock, return_value={1: []}):
+                result = await catalog_repository.list_catalog(
+                    status=ActionStatus.PUBLISHED,
+                    tags_filter=["provisioning"],
+                )
+
+        assert len(result) == 1
+        assert captured_params.get("tag0") == "provisioning"
+
+    @pytest.mark.asyncio
+    async def test_list_catalog_with_action_ids_filter(self, mock_db_row_catalog):
+        """AC11: list_catalog filters by action_ids (RBAC filtering)."""
+        mock_cursor = AsyncMock()
+        mock_cursor.fetchall = AsyncMock(return_value=[mock_db_row_catalog])
+        mock_cursor.close = AsyncMock()
+
+        mock_conn = AsyncMock()
+        captured_params = {}
+
+        async def capture_execute(query, params):
+            captured_params.update(params)
+            return mock_cursor
+
+        mock_conn.execute = capture_execute
+
+        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+            with patch("app.repositories.catalog_repository.get_tags_for_actions", new_callable=AsyncMock, return_value={1: []}):
+                result = await catalog_repository.list_catalog(
+                    status=ActionStatus.PUBLISHED,
+                    action_ids_filter=[1, 2, 3],
+                )
+
+        assert len(result) == 1
+        assert captured_params.get("aid0") == 1
+        assert captured_params.get("aid1") == 2
+        assert captured_params.get("aid2") == 3
+
+    @pytest.mark.asyncio
+    async def test_list_catalog_empty(self):
+        """Test list_catalog returns empty list when no actions match."""
+        mock_cursor = AsyncMock()
+        mock_cursor.fetchall = AsyncMock(return_value=[])
+        mock_cursor.close = AsyncMock()
+
+        mock_conn = AsyncMock()
+        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+
+        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            result = await catalog_repository.list_catalog()
+
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_list_catalog_with_q_engine_environment_impact(self, mock_db_row_catalog):
+        """Story 3.3 AC9: list_catalog accepts q, engine, environment, impact (case-insensitive search)."""
+        mock_cursor = AsyncMock()
+        mock_cursor.fetchall = AsyncMock(return_value=[mock_db_row_catalog])
+        mock_cursor.close = AsyncMock()
+
+        mock_conn = AsyncMock()
+        captured_params = {}
+        captured_query = []
+
+        async def capture_execute(query, params):
+            captured_params.update(params)
+            captured_query.append(query)
+            return mock_cursor
+
+        mock_conn.execute = capture_execute
+
+        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+            with patch("app.repositories.catalog_repository.get_tags_for_actions", new_callable=AsyncMock, return_value={1: ["rac"]}):
+                result = await catalog_repository.list_catalog(
+                    status=ActionStatus.PUBLISHED,
+                    q="oracle",
+                    engine="Oracle",
+                    environment="PROD",
+                    impact="high",
+                )
+
+        assert len(result) == 1
+        # Story 3.3: Case-insensitive search uses UPPER()
+        assert captured_params.get("q_name") == "%ORACLE%"
+        assert captured_params.get("q_desc") == "%ORACLE%"
+        assert captured_params.get("q_tag") == "%ORACLE%"
+        assert captured_params.get("engine") == "Oracle"
+        assert captured_params.get("environment") == "PROD"
+        assert captured_params.get("impact") == "high"
+        query_str = captured_query[0]
+        assert "UPPER(AC.NAME) LIKE :q_name" in query_str
+        assert "ENGINE = :engine" in query_str
+        assert "DEFAULT_IMPACT_LEVEL = :impact" in query_str
+
+
+class TestListTagsWithCounts:
+    """Tests for list_tags_with_counts() (Story 3.3, AC3, AC10)."""
+
+    @pytest.mark.asyncio
+    async def test_list_tags_with_counts_returns_name_and_count(self):
+        """list_tags_with_counts returns list of { name, action_count } for published actions."""
+        mock_cursor = AsyncMock()
+        mock_cursor.fetchall = AsyncMock(return_value=[("rac", 5), ("dataguard", 2)])
+        mock_cursor.close = AsyncMock()
+        mock_conn = AsyncMock()
+        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+
+        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            result = await catalog_repository.list_tags_with_counts()
+
+        assert len(result) == 2
+        assert result[0]["name"] == "rac"
+        assert result[0]["action_count"] == 5
+        assert result[1]["name"] == "dataguard"
+        assert result[1]["action_count"] == 2
+
+    @pytest.mark.asyncio
+    async def test_list_tags_with_counts_with_action_ids_filter(self):
+        """list_tags_with_counts with action_ids_filter restricts to those actions."""
+        mock_cursor = AsyncMock()
+        mock_cursor.fetchall = AsyncMock(return_value=[("rac", 2)])
+        mock_cursor.close = AsyncMock()
+        mock_conn = AsyncMock()
+        captured_params = {}
+
+        async def capture_execute(query, params):
+            captured_params.update(params)
+            return mock_cursor
+
+        mock_conn.execute = capture_execute
+
+        with patch("app.repositories.catalog_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            result = await catalog_repository.list_tags_with_counts(action_ids_filter=[1, 2, 3])
+
+        assert len(result) == 1
+        assert result[0]["name"] == "rac"
+        assert result[0]["action_count"] == 2
+        assert captured_params.get("aid0") == 1
+        assert captured_params.get("aid1") == 2
+        assert captured_params.get("aid2") == 3

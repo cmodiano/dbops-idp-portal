@@ -6,7 +6,6 @@ import type { ActionPreviewData } from '../../types/api';
 const mockAction: ActionPreviewData = {
   name: 'Creer PDB Oracle',
   description: 'Cree une nouvelle Pluggable Database Oracle sur le serveur cible avec les parametres specifies.',
-  category: 'Provisioning',
   engine: 'Oracle',
   platform: 'AAP',
   impact_level: 'medium',
@@ -66,12 +65,6 @@ describe('ActionCard', () => {
     render(<ActionCard action={actionWithManyTags} />);
 
     expect(screen.getByText('+2')).toBeInTheDocument();
-  });
-
-  it('renders category badge', () => {
-    render(<ActionCard action={mockAction} />);
-
-    expect(screen.getByText('Provisioning')).toBeInTheDocument();
   });
 
   it('calls onClick when clicked with default variant', () => {

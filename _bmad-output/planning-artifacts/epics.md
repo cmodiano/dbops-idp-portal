@@ -889,6 +889,270 @@ So that la gestion de schema est robuste et les patterns sont modernes.
 **And** les tests unitaires passent avec les nouvelles migrations
 **And** un script de migration de donnees est fourni si necessaire
 
+### Story 2.21 : Code modele de changement preapprouve
+
+As a DBOPS,
+I want specifier le code du modele de changement preapprouve (ex: "1516B") pour chaque action,
+So that le service d'integration ServiceNow cree le changement avec le bon modele.
+
+**Acceptance Criteria:**
+
+**Given** un DBOPS edite une action qui necessite un changement ServiceNow
+**When** il accede a la section changement
+**Then** il voit un champ `change_model_code` (texte alphanumerique)
+
+**Given** le DBOPS saisit un code
+**When** le format ne respecte pas `^[A-Za-z0-9]+$`
+**Then** une erreur de validation s'affiche inline
+
+**And** migration SQL ajoute colonne `change_model_code VARCHAR(50)` nullable a `ACTIONS_CATALOG`
+**And** modele Pydantic `Action` mis a jour avec champ optionnel
+**And** API `PUT /api/v1/admin/actions/{id}` accepte le nouveau champ
+
+### Story 2.22 : Wizard de creation et edition d'action
+
+As a DBOPS,
+I want creer ou editer une action via un wizard en 3 etapes,
+So that l'experience soit plus guidee et moins intimidante qu'un long formulaire.
+
+**Acceptance Criteria:**
+
+**Given** un DBOPS clique sur "Nouvelle action" ou "Editer"
+**When** le wizard s'ouvre
+**Then** il affiche 3 etapes : (1) General, (2) Parametres, (3) Impact & Change
+
+**Etape 1 - General** : nom, description, moteur, plateforme, tags
+**Etape 2 - Parametres** : editeur visuel (reutilise composant Story 2.17)
+**Etape 3 - Impact & Change** : regles d'impact (Story 2.18) + `change_model_code`
+
+**Given** un DBOPS navigue entre les etapes
+**When** il clique Precedent/Suivant
+**Then** les donnees saisies sont conservees (state local)
+
+**Given** un DBOPS est sur l'etape 3
+**When** il clique "Enregistrer"
+**Then** l'action est creee/mise a jour via l'API existante
+
+**And** en mode edition, les champs sont pre-remplis
+**And** indicateur de progression visible (stepper)
+**And** validation par etape avant passage a la suivante
+
+### Story 2.23 : Suppression de la Categorie — Tags Only
+
+As a DBOPS,
+I want que le champ Categorie soit supprime du formulaire d'action,
+So that je n'utilise que les tags pour organiser et filtrer les actions (simplification).
+
+**Acceptance Criteria:**
+
+**Given** un DBOPS cree ou edite une action
+**When** il accede au formulaire
+**Then** le champ "Categorie" n'est plus present
+
+**Given** une action existante a une categorie assignee
+**When** la migration s'execute
+**Then** un tag correspondant est cree automatiquement (ex: "Patching" → tag "patching")
+**And** ce tag est associe a l'action
+
+**Given** un utilisateur consulte le catalogue ou l'admin
+**When** la page s'affiche
+**Then** la categorie n'est plus affichee (remplacee par les tags)
+
+**And** migration SQL : colonne `CATEGORY` devient nullable
+**And** migration donnees : creation des tags a partir des categories existantes et association aux actions
+**And** backend : champ `category` retire de `ActionCreate` (ou rendu optionnel temporairement)
+**And** frontend : select "Categorie" supprime du formulaire ActionForm
+**And** les filtres par categorie sont supprimes (utiliser filtres par tags existants)
+
+### Story 2.24 : Changement ServiceNow conditionnel par environnement
+
+As a DBOPS,
+I want definir si un changement ServiceNow est requis pour chaque environnement et specifier le code modele par environnement,
+So that je configure precisement quels environnements necessitent une ouverture de changement (souvent uniquement PROD).
+
+**Acceptance Criteria:**
+
+**Given** un DBOPS configure la section Changement d'une action
+**When** il voit la liste des environnements
+**Then** pour chaque environnement il peut activer/desactiver "Changement requis" (toggle, defaut: non)
+
+**Given** un DBOPS active "Changement requis" pour un environnement
+**When** le toggle est active
+**Then** un champ "Code modele" apparait pour cet environnement
+**And** le code modele est obligatoire et doit etre alphanumerique (max 50 caracteres)
+
+**Given** un DBOPS desactive "Changement requis" pour un environnement
+**When** le toggle est desactive
+**Then** le champ "Code modele" disparait pour cet environnement
+
+**Exemple de configuration:**
+- DEV : Changement requis = Non
+- STAGING : Changement requis = Non
+- PROD : Changement requis = Oui, Code modele = "1516B"
+
+**And** structure `change_type_config` evolue vers : `{"PROD": {"required": true, "change_model_code": "1516B"}}`
+**And** migration donnees : si `change_model_code` existait au niveau action, le reporter sur les environnements qui avaient `pre_approved`
+**And** le champ `change_model_code` au niveau action est supprime (deplace dans `change_type_config`)
+**And** validation backend : si `required: true`, alors `change_model_code` obligatoire et alphanumerique
+**And** API accepte la nouvelle structure et rejette l'ancienne avec message d'erreur clair
+
+### Story 2.25 : Wizard de creation et edition de profil avec permissions
+
+As a DBOPS,
+I want creer ou editer un profil via un wizard en 3 etapes incluant la configuration des permissions,
+So that je puisse definir les autorisations du profil directement lors de sa creation.
+
+**Acceptance Criteria:**
+
+**Given** un DBOPS clique sur "Nouveau profil" ou "Editer" un profil
+**When** le wizard s'ouvre
+**Then** il affiche 3 etapes : (1) General, (2) Permissions Actions, (3) Permissions Targets
+
+**Etape 1 - General:**
+- Nom du profil (obligatoire)
+- Description (optionnel)
+- Groupe AD associe (optionnel)
+- Flags : Admin (toggle), Auditeur (toggle)
+
+**Etape 2 - Permissions Actions:**
+**Given** un DBOPS configure les permissions actions
+**When** il selectionne le type de permission
+**Then** il peut choisir parmi : "Toutes les actions", "Liste d'actions", "Pattern de tags"
+
+**Given** le type est "Liste d'actions"
+**When** le DBOPS configure
+**Then** un multi-select affiche les actions existantes (publiees)
+
+**Given** le type est "Pattern de tags"
+**When** le DBOPS configure
+**Then** un champ texte permet de saisir des patterns (ex: "oracle*", "provisioning")
+
+**Given** un type de permission est selectionne
+**When** le DBOPS configure les environnements
+**Then** un multi-select permet de choisir les environnements autorises (DEV, STAGING, PROD, etc.)
+
+**Etape 3 - Permissions Targets:**
+**Given** un DBOPS configure les permissions targets
+**When** il selectionne le type de permission
+**Then** il peut choisir parmi : "Toutes les targets", "Liste de targets", "Pattern"
+
+**Given** le type est "Liste de targets" ou "Pattern"
+**When** le DBOPS configure
+**Then** un champ texte libre permet de saisir les noms ou patterns (MVP : texte libre, futur : connexion API inventaire)
+
+**Given** un DBOPS navigue entre les etapes
+**When** il clique Precedent/Suivant
+**Then** les donnees saisies sont conservees (state local)
+
+**Given** un DBOPS est sur l'etape 3
+**When** il clique "Enregistrer"
+**Then** le profil est cree/mis a jour via les APIs existantes (POST/PUT /profiles, /profiles/{id}/action-permissions, /profiles/{id}/target-permissions)
+
+**And** en mode edition, les champs sont pre-remplis avec les donnees et permissions existantes
+**And** indicateur de progression visible (stepper)
+**And** validation par etape avant passage a la suivante
+**And** composants UI coherents avec le wizard actions (Story 2.22)
+
+### Story 2.26 : Visualisation du format YAML pour import de profils
+
+As a DBOPS,
+I want voir un exemple du format YAML attendu et telecharger un template,
+So that je puisse preparer correctement mon fichier d'import de profils.
+
+**Acceptance Criteria:**
+
+**Given** un DBOPS accede a l'interface d'import de profils
+**When** la page s'affiche
+**Then** un exemple YAML commente est visible dans un bloc collapsible (replie par defaut)
+
+**Given** un DBOPS veut voir l'exemple
+**When** il clique sur "Voir le format YAML"
+**Then** le bloc se deplie et affiche un exemple complet avec commentaires explicatifs
+
+**Exemple de contenu:**
+```yaml
+# Format d'import de profil DBOPS Portal
+# Tous les champs sont optionnels sauf 'name'
+
+name: "dba_oracle"                    # Obligatoire - Nom unique du profil
+description: "DBAs Oracle production" # Description du profil
+ad_group: "GRP-DBA-ORACLE"           # Groupe Active Directory associe
+is_admin: false                       # Acces admin (defaut: false)
+is_auditor: false                     # Acces audit (defaut: false)
+
+action_permissions:
+  type: "pattern"                     # "all" | "list" | "pattern"
+  patterns: ["oracle*", "backup*"]    # Si type=pattern
+  # action_ids: [1, 2, 3]            # Si type=list
+  environments: ["DEV", "STAGING", "PROD"]
+
+target_permissions:
+  type: "list"                        # "all" | "list" | "pattern"
+  targets: ["srv-ora-01", "srv-ora-02"]
+  # patterns: ["srv-ora-*"]          # Si type=pattern
+```
+
+**Given** un DBOPS veut un fichier template
+**When** il clique sur "Telecharger template"
+**Then** un fichier `profile-template.yaml` est telecharge avec la structure vide/exemple
+
+**And** le bloc exemple utilise une coloration syntaxique YAML
+**And** le bouton telecharger est visible meme quand le bloc est replie
+
+### Story 2.27 : Backend — Integrations (plateformes distantes)
+
+As a DBOPS,
+I want stocker la configuration des plateformes distantes (AAP, Terraform, ServiceNow, etc.) : type, nom, URL, reference aux credentials, icone,
+So that le portail peut declarer quelles instances appeler pour declencher les executions et les afficher dans l'admin.
+
+**Acceptance Criteria:**
+
+**Given** une migration SQL est executee
+**When** la table INTEGRATIONS est creee
+**Then** elle contient au minimum : ID (identity), TYPE (aap | servicenow | terraform | azuredevops | jira | github_actions), NAME (unique), BASE_URL, CREDENTIAL_REF (reference Vault ou nom logique — aucun secret stocke, NFR7), ICON (varchar — identifiant preset ou URL d'icone), CREATED_AT, UPDATED_AT
+
+**Given** un DBOPS appelle les API admin des integrations
+**When** il fait GET /api/v1/admin/integrations
+**Then** la liste des integrations est retournee (sans exposer de secret)
+
+**Given** un DBOPS cree ou modifie une integration
+**When** il fait POST /api/v1/admin/integrations ou PUT /api/v1/admin/integrations/{id}
+**Then** le backend valide type, name, base_url, credential_ref (optionnel), icon (optionnel) et persiste en base
+
+**And** les routes sont protegees par le profil DBOPS (require_profile dbops)
+**And** aucun credential brut n'est stocke — uniquement credential_ref (NFR7, FR29)
+
+### Story 2.28 : Frontend — Section Admin Integrations (liste, formulaire, icone)
+
+As a DBOPS,
+I want une section Admin « Integrations » avec liste des plateformes distantes, ajout/edition (type, nom, URL, credential ref, icone),
+So that je configure les instances AAP, Terraform, etc. et leur representation visuelle (icone) depuis l'interface.
+
+**Acceptance Criteria:**
+
+**Given** un DBOPS accede a la page Admin
+**When** il consulte les onglets
+**Then** un onglet « Integrations » est visible (a cote de Actions et Profils)
+
+**Given** un DBOPS ouvre l'onglet Integrations
+**When** la page se charge
+**Then** un tableau liste les integrations (colonnes : icone, nom, type, URL, date creation) avec actions Modifier / Supprimer et un bouton « Nouvelle integration »
+
+**Given** un DBOPS clique sur « Nouvelle integration » ou « Modifier »
+**When** un formulaire (ou modal) s'affiche
+**Then** les champs sont : Type (select : AAP, ServiceNow, Terraform, Azure DevOps, Jira, GitHub Actions), Nom, URL de base, Reference credentials (optionnel, ex. chemin Vault ou nom logique), Icone (optionnel)
+
+**Given** le champ Icone est configure
+**When** l'utilisateur saisit une valeur
+**Then** soit il selectionne un preset par type (icone associee au type : AAP, Terraform, etc.), soit il fournit une URL d'icone (image) ; l'icone choisie est affichee en apercu dans le formulaire et dans la liste
+
+**Given** un DBOPS soumet le formulaire
+**When** les validations passent (nom, URL requis ; type requis)
+**Then** l'appel API POST ou PUT est envoye et la liste des integrations est rafraichie
+
+**And** UX coherente avec les onglets Actions et Profils (Ant Design, formulaires, notifications succes/erreur)
+**And** les libelles sont en francais
+
 ---
 
 ## Epic 3 : Decouverte du Catalogue (Marc)
@@ -1025,6 +1289,47 @@ So that je comprenne en profondeur ce que fait l'action avant de l'executer.
 **And** le rendu Markdown supporte : titres, listes, blocs de code, tableaux
 **And** FR12 est satisfaite
 
+### Story 3.5 : Nuage de tags et clarte du bouton favori
+
+As a DBA,
+I want filtrer le catalogue par un ou plusieurs tags via un nuage de tags colore et comprendre clairement comment ajouter une action a mes favoris,
+So that je navigue dans un catalogue avec beaucoup de tags sans multiplication d'onglets et j'utilise les favoris sans ambiguite.
+
+**Acceptance Criteria:**
+
+**Given** le DBA est sur l'onglet Catalogue (hors vue « Mes actions »)
+**When** la page affiche la liste des actions
+**Then** un nuage de tags (tag cloud) s'affiche au-dessus de la grille/liste, contenant tous les tags presents sur les actions du catalogue (ou les tags disponibles cote API).
+
+**Given** le nuage de tags est affiche
+**When** le DBA clique sur un tag
+**Then** ce tag est selectionne (mise en evidence visuelle) et la liste des actions se filtre pour n'afficher que les actions portant ce tag. Le compteur « X actions » se met a jour (aria-live="polite").
+
+**Given** un ou plusieurs tags sont deja selectionnes
+**When** le DBA clique sur un autre tag
+**Then** ce tag s'ajoute a la selection et le filtre est une intersection (AND) : seules les actions ayant tous les tags selectionnes sont affichees.
+
+**Given** des tags sont selectionnes
+**When** le DBA clique a nouveau sur un tag deja selectionne
+**Then** ce tag est deselectionne et la liste se met a jour en consequence.
+
+**Given** des tags sont selectionnes
+**When** le DBA souhaite tout reinitialiser
+**Then** un controle « Reinitialiser les filtres » (ou equivalent) est disponible et deselectionne tous les tags.
+
+**Given** le DBA consulte une ActionCard (grille ou liste)
+**When** il survole ou focus l'icone etoile (favori)
+**Then** un tooltip s'affiche : « Ajouter aux favoris » si l'action n'est pas en favori, « Retirer des favoris » si elle l'est deja.
+
+**Given** le bouton favori (icone etoile) est present
+**Then** il possede un aria-label explicite : « Ajouter aux favoris » ou « Retirer des favoris » selon l'etat, pour l'accessibilite.
+
+**Given** le bouton favori est affiche
+**Then** l'etat visuel est net : etoile vide (ou contour) = pas en favori, etoile pleine (ou couleur distincte) = en favori.
+
+**And** l'onglet « Mes actions » (favoris + recents) reste inchange : un seul onglet dedie, pas de modification de son comportement.
+**And** FR11 et FR11b sont affines.
+
 ---
 
 ## Epic 4 : Execution & Suivi Temps Reel
@@ -1086,6 +1391,29 @@ So that je selectionne des valeurs valides sans saisie manuelle.
 **And** la performance du catalogue n'est pas impactee par la sync (NFR20)
 **And** FR42 et FR43 sont satisfaites
 
+### Story 4.2bis : Connecteur HashiCorp Vault
+
+As a systeme,
+I want un connecteur Vault qui se connecte dynamiquement a HashiCorp Vault et recupere les secrets a la demande (par chemin / credential_ref),
+So that le moteur d'execution peut resoudre les credential_ref des integrations (Story 2.27) et fournir les credentials aux adapters de plateforme sans stocker de secret dans le portail.
+
+**Acceptance Criteria:**
+
+**Given** le backend demarre avec une config Vault valide (voir Dev Notes)
+**When** le connecteur Vault est initialise
+**Then** il se connecte a Vault en utilisant le "secret 0" fourni par l'environnement (VAULT_ADDR, VAULT_TOKEN ou VAULT_ROLE_ID + VAULT_SECRET_ID pour AppRole) — jamais stocke en base ni expose dans l'admin
+
+**Given** le moteur d'execution (Story 4.3) ou un service a besoin d'un secret
+**When** il appelle le connecteur avec un chemin ou credential_ref (ex. secret/data/idp/aap-prod)
+**Then** le connecteur interroge Vault dynamiquement, retourne le secret (ou les champs necessaires) et ne le persiste pas
+
+**Given** Vault est indisponible ou le secret 0 est invalide
+**When** le connecteur tente de se connecter ou de recuperer un secret
+**Then** une erreur explicite est remontee (ex. VaultError) et le caller peut refuser l'execution (NFR21)
+
+**And** le connecteur est expose comme service injectable (ex. vault_service ou VaultConnector) utilise par le moteur d'execution
+**And** FR17 et FR29 sont satisfaites pour la recuperation dynamique des credentials
+
 ### Story 4.3 : Moteur d'execution et facade API
 
 As a DBA,
@@ -1101,12 +1429,12 @@ So that l'execution se lance de maniere fiable sans que je connaisse l'infrastru
 
 **Given** l'execution est creee
 **When** le moteur d'execution demarre
-**Then** il recupere les secrets necessaires depuis Vault via l'API Vault (FR17, FR29)
+**Then** il recupere les secrets necessaires via le connecteur Vault (Story 4.2bis) en resolvant les credential_ref des integrations (Story 2.27) — FR17, FR29
 **And** il selectionne l'adapter de plateforme correct (Strategy Pattern) selon la plateforme definie dans l'action
 **And** il appelle adapter.trigger() avec les parametres et les secrets
 
 **Given** Vault est indisponible
-**When** le moteur tente de recuperer les secrets
+**When** le moteur tente de recuperer les secrets via le connecteur Vault
 **Then** l'execution est refusee avec un message explicite "Vault indisponible — execution impossible" (NFR21)
 **And** le statut passe a "erreur" avec la cause dans EXECUTION_STEPS
 

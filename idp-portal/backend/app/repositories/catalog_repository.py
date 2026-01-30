@@ -1,9 +1,11 @@
 """Catalog repository using raw SQL via python-oracledb (Story 2.1, AC #4).
 
 Handles CRUD operations for ACTIONS_CATALOG table with:
-- CLOB columns for JSON (parameters_schema, impact_rules, rbac_policies)
+- CLOB columns for JSON (parameters_schema, impact_rules, execution_steps, change_type_config)
 - Parameterized queries for security
 - Structured logging with correlation_id
+
+Story 2.14: rbac_policies column removed — RBAC now managed via profiles.
 """
 
 from __future__ import annotations
@@ -22,16 +24,13 @@ from app.models.catalog import (
     ActionDetail,
     ActionResponse,
     ActionStatus,
-    ActionCategory,
     ActionEngine,
     ActionPlatform,
+    ImpactLevel,
     ConnectorType,
     ExecutionStep,
     ExecutionStepType,
-    ChangeType,
-    UserProfile,
-    EnvironmentPermission,
-    RbacPolicies,
+    ChangeTypeConfigEntry,
     StatusTransition,
     InvalidTransitionError,
     validate_transition,
@@ -61,17 +60,38 @@ def _str_to_json(data: str | None) -> dict[str, Any] | None:
     return json.loads(data)
 
 
+def _parse_impact_level(value: str | None) -> ImpactLevel | None:
+    """Parse impact level string to ImpactLevel enum, returning None if invalid."""
+    if value is None:
+        return None
+    try:
+        return ImpactLevel(value)
+    except ValueError:
+        return None
+
+
 def _row_to_action_response(row: tuple, tags: list[str] | None = None) -> ActionResponse:
-    """Convert database row to ActionResponse model (Story 2.6: optional tags)."""
+    """Convert database row to ActionResponse model.
+
+    Story 2.6: optional tags.
+    Story 2.18 AC5: default_impact_level.
+    Story 2.24: change_model_code column removed — change_type_config per env only in detail.
+    Story 2.23: category removed — use tags instead.
+
+    Expected row order (12 columns after V019):
+    0:ID, 1:NAME, 2:DESCRIPTION, 3:ENGINE, 4:PLATFORM,
+    5:PARAMETERS_SCHEMA, 6:IMPACT_RULES, 7:DEFAULT_IMPACT_LEVEL,
+    8:STATUS, 9:CREATED_BY, 10:CREATED_AT, 11:UPDATED_AT
+    """
     return ActionResponse(
         id=row[0],
         name=row[1],
         description=row[2],
-        category=ActionCategory(row[3]),
-        engine=ActionEngine(row[4]),
-        platform=ActionPlatform(row[5]),
-        parameters_schema=_str_to_json(row[6]),
-        impact_rules=_str_to_json(row[7]),
+        engine=ActionEngine(row[3]),
+        platform=ActionPlatform(row[4]),
+        parameters_schema=_str_to_json(row[5]),
+        impact_rules=_str_to_json(row[6]),
+        default_impact_level=_parse_impact_level(row[7]),
         status=ActionStatus(row[8]),
         created_by=row[9],
         created_at=row[10],
@@ -119,8 +139,16 @@ def _parse_execution_steps(data: str | None) -> list[ExecutionStep] | None:
     return out
 
 
-def _parse_change_type_config(data: str | None) -> dict[str, ChangeType] | None:
-    """Parse change_type_config JSON to dict of ChangeType (Story 2.8: "cab" → pre_approved)."""
+class LegacyChangeTypeConfigError(ValueError):
+    """Raised when change_type_config uses legacy format (env -> string). Story 2.24: use {env: {required, change_model_code}}."""
+
+
+def _parse_change_type_config(data: str | None) -> dict[str, ChangeTypeConfigEntry] | None:
+    """Parse change_type_config JSON to dict of ChangeTypeConfigEntry (Story 2.24).
+
+    New format: {"PROD": {"required": true, "change_model_code": "1516B"}, "DEV": {"required": false}}.
+    Raises LegacyChangeTypeConfigError if legacy format (env -> "pre_approved" string) is found.
+    """
     if data is None:
         return None
     try:
@@ -129,13 +157,19 @@ def _parse_change_type_config(data: str | None) -> dict[str, ChangeType] | None:
         raise ValueError(f"Invalid change_type_config JSON in database: {e}") from e
     if not isinstance(config_data, dict):
         raise ValueError("change_type_config must be a JSON object")
-    out: dict[str, ChangeType] = {}
-    for env, ct in config_data.items():
-        s = (ct if isinstance(ct, str) else str(ct)).strip().lower()
-        if s == "cab":
-            out[env] = ChangeType.PRE_APPROVED
-        else:
-            out[env] = ChangeType(s)
+    out: dict[str, ChangeTypeConfigEntry] = {}
+    for env, val in config_data.items():
+        if isinstance(val, str):
+            raise LegacyChangeTypeConfigError(
+                "change_type_config uses legacy format (environment -> string). "
+                "Use new format: {\"ENV\": {\"required\": true|false, \"change_model_code\": \"...\"}}."
+            )
+        if not isinstance(val, dict):
+            raise ValueError(f"change_type_config[{env}] must be an object with required, optional change_model_code")
+        out[env] = ChangeTypeConfigEntry(
+            required=val.get("required", False),
+            change_model_code=val.get("change_model_code"),
+        )
     return out
 
 
@@ -156,11 +190,14 @@ def _execution_steps_to_json(steps: list[ExecutionStep] | None) -> str | None:
     ])
 
 
-def _change_type_config_to_json(config: dict[str, ChangeType] | None) -> str | None:
-    """Convert dict of ChangeType to JSON string for CLOB storage (Story 2.8: only "pre_approved", never "cab")."""
+def _change_type_config_to_json(config: dict[str, ChangeTypeConfigEntry] | None) -> str | None:
+    """Convert dict of ChangeTypeConfigEntry to JSON string for CLOB storage (Story 2.24)."""
     if config is None:
         return None
-    return json.dumps({env: ChangeType.PRE_APPROVED.value for env, ct in config.items()})
+    return json.dumps({
+        env: {"required": entry.required, "change_model_code": entry.change_model_code}
+        for env, entry in config.items()
+    })
 
 
 def _safe_parse_execution_steps(data: str | None) -> list[ExecutionStep] | None:
@@ -174,103 +211,47 @@ def _safe_parse_execution_steps(data: str | None) -> list[ExecutionStep] | None:
         return None
 
 
-def _safe_parse_change_type_config(data: str | None) -> dict[str, ChangeType] | None:
-    """Parse change_type_config CLOB; on invalid JSON log and return None to avoid 500."""
+def _safe_parse_change_type_config(data: str | None) -> dict[str, ChangeTypeConfigEntry] | None:
+    """Parse change_type_config CLOB; on invalid/legacy JSON log and return None to avoid 500."""
     if data is None:
         return None
     try:
         return _parse_change_type_config(data)
-    except ValueError as e:
+    except (ValueError, LegacyChangeTypeConfigError) as e:
         logger.warning("catalog_repository_invalid_change_type_config_json", raw=data[:200] if data else None, error=str(e))
         return None
 
 
-# === Story 2.3: RBAC Policies Helpers ===
-
-
-def _rbac_policies_to_json(policies: RbacPolicies | None) -> str | None:
-    """Convert RbacPolicies to JSON string for CLOB storage."""
-    if policies is None:
-        return None
-    return json.dumps({
-        "environments": {
-            env: {
-                "profiles": [p.value for p in perm.profiles],
-                "requires_approval": perm.requires_approval,
-                "approver_profiles": [p.value for p in perm.approver_profiles] if perm.approver_profiles else None,
-            }
-            for env, perm in policies.environments.items()
-        }
-    })
-
-
-def _parse_rbac_policies(data: str | None) -> RbacPolicies | None:
-    """Parse RBAC policies JSON to RbacPolicies model."""
-    if data is None:
-        return None
-    try:
-        policies_data = json.loads(data)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Invalid rbac_policies JSON in database: {e}") from e
-
-    if not isinstance(policies_data, dict) or "environments" not in policies_data:
-        raise ValueError("rbac_policies must have 'environments' key")
-
-    environments = {}
-    for env, perm_data in policies_data["environments"].items():
-        if not isinstance(perm_data, dict):
-            raise ValueError(f"rbac_policies.environments[{env}] must be an object")
-
-        profiles = [UserProfile(p) for p in perm_data.get("profiles", [])]
-        requires_approval = perm_data.get("requires_approval", False)
-        approver_profiles = None
-        if perm_data.get("approver_profiles"):
-            approver_profiles = [UserProfile(p) for p in perm_data["approver_profiles"]]
-
-        environments[env] = EnvironmentPermission(
-            profiles=profiles,
-            requires_approval=requires_approval,
-            approver_profiles=approver_profiles,
-        )
-
-    return RbacPolicies(environments=environments)
-
-
-def _safe_parse_rbac_policies(data: str | None) -> RbacPolicies | None:
-    """Parse rbac_policies CLOB; on invalid JSON log and return None to avoid 500."""
-    if data is None:
-        return None
-    try:
-        return _parse_rbac_policies(data)
-    except (ValueError, KeyError) as e:
-        logger.warning("catalog_repository_invalid_rbac_policies_json", raw=data[:200] if data else None, error=str(e))
-        return None
-
-
 def _row_to_action_detail(row: tuple, tags: list[str] | None = None) -> ActionDetail:
-    """Convert database row to ActionDetail model (includes rbac_policies, execution_steps, change_type_config).
+    """Convert database row to ActionDetail model (includes execution_steps, change_type_config).
 
-    Uses _safe_parse_rbac_policies for RBAC CLOB to avoid 500 on invalid JSON (Story 2.2 pattern).
     Story 2.6: optional tags (tag names).
+    Story 2.14: rbac_policies removed — RBAC now managed via profiles.
+    Story 2.18 AC5: default_impact_level.
+    Story 2.24: change_model_code column removed; change_type_config per env.
+    Story 2.23: category removed — use tags instead.
+
+    Expected row order (14 columns after V019):
+    0:ID, 1:NAME, 2:DESCRIPTION, 3:ENGINE, 4:PLATFORM,
+    5:PARAMETERS_SCHEMA, 6:IMPACT_RULES, 7:DEFAULT_IMPACT_LEVEL,
+    8:STATUS, 9:CREATED_BY, 10:CREATED_AT, 11:UPDATED_AT,
+    12:EXECUTION_STEPS, 13:CHANGE_TYPE_CONFIG
     """
-    rbac_parsed = _safe_parse_rbac_policies(row[12]) if len(row) > 12 else None
-    rbac_policies = rbac_parsed.model_dump() if rbac_parsed else None
     return ActionDetail(
         id=row[0],
         name=row[1],
         description=row[2],
-        category=ActionCategory(row[3]),
-        engine=ActionEngine(row[4]),
-        platform=ActionPlatform(row[5]),
-        parameters_schema=_str_to_json(row[6]),
-        impact_rules=_str_to_json(row[7]),
+        engine=ActionEngine(row[3]),
+        platform=ActionPlatform(row[4]),
+        parameters_schema=_str_to_json(row[5]),
+        impact_rules=_str_to_json(row[6]),
+        default_impact_level=_parse_impact_level(row[7]),
         status=ActionStatus(row[8]),
         created_by=row[9],
         created_at=row[10],
         updated_at=row[11],
-        rbac_policies=rbac_policies,
-        execution_steps=_safe_parse_execution_steps(row[13]) if len(row) > 13 else None,
-        change_type_config=_safe_parse_change_type_config(row[14]) if len(row) > 14 else None,
+        execution_steps=_safe_parse_execution_steps(row[12]) if len(row) > 12 else None,
+        change_type_config=_safe_parse_change_type_config(row[13]) if len(row) > 13 else None,
         tags=tags if tags is not None else [],
     )
 
@@ -329,6 +310,39 @@ async def get_tags_for_actions(action_ids: list[int]) -> dict[int, list[str]]:
     for action_id, name in rows:
         result[action_id].append(name)
     return result
+
+
+async def list_tags_with_counts(
+    action_ids_filter: list[int] | None = None,
+) -> list[dict[str, Any]]:
+    """List tag names with action counts for published actions (Story 3.3, AC3, AC10).
+
+    Args:
+        action_ids_filter: Optional list of action IDs to restrict to (RBAC). When None, all published actions.
+
+    Returns:
+        List of { "name": str, "action_count": int } ordered by name ASC.
+    """
+    base_query = """
+        SELECT t.NAME, COUNT(DISTINCT at.ACTION_ID) AS ACTION_COUNT
+        FROM TAGS t
+        INNER JOIN ACTION_TAGS at ON at.TAG_ID = t.ID
+        INNER JOIN ACTIONS_CATALOG AC ON AC.ID = at.ACTION_ID AND AC.STATUS = :status
+    """
+    params: dict[str, Any] = {"status": ActionStatus.PUBLISHED.value}
+    if action_ids_filter:
+        placeholders = ", ".join(f":aid{i}" for i in range(len(action_ids_filter)))
+        base_query += f" AND AC.ID IN ({placeholders})"
+        for i, aid in enumerate(action_ids_filter):
+            params[f"aid{i}"] = aid
+    base_query += " GROUP BY t.NAME ORDER BY t.NAME ASC"
+
+    async with get_connection() as conn:
+        cursor = await conn.execute(base_query, params)
+        rows = await cursor.fetchall()
+        await cursor.close()
+
+    return [{"name": row[0], "action_count": row[1]} for row in rows]
 
 
 async def create_tag_if_not_exists(name: str) -> int:
@@ -393,27 +407,27 @@ async def create(action: ActionCreate, user_id: int) -> ActionResponse:
         ActionResponse with the created action
 
     Note:
-        Uses Oracle sequence for ID generation.
+        Uses Oracle identity column for ID (Story 2.20); RETURNING ID.
         Status defaults to 'draft' as per V002 migration.
     """
     start_time = time.perf_counter()
     query = """
         INSERT INTO ACTIONS_CATALOG
-        (NAME, DESCRIPTION, CATEGORY, ENGINE, PLATFORM,
-         PARAMETERS_SCHEMA, IMPACT_RULES, STATUS, CREATED_BY)
+        (NAME, DESCRIPTION, ENGINE, PLATFORM,
+         PARAMETERS_SCHEMA, IMPACT_RULES, DEFAULT_IMPACT_LEVEL, STATUS, CREATED_BY)
         VALUES
-        (:name, :description, :category, :engine, :platform,
-         :parameters_schema, :impact_rules, :status, :created_by)
+        (:name, :description, :engine, :platform,
+         :parameters_schema, :impact_rules, :default_impact_level, :status, :created_by)
         RETURNING ID INTO :out_id
     """
     params = {
         "name": action.name,
         "description": action.description,
-        "category": action.category.value,
         "engine": action.engine.value,
         "platform": action.platform.value,
         "parameters_schema": _json_to_str(action.parameters_schema),
         "impact_rules": _json_to_str(action.impact_rules),
+        "default_impact_level": action.default_impact_level.value if action.default_impact_level else None,
         "status": ActionStatus.DRAFT.value,
         "created_by": user_id,
     }
@@ -449,21 +463,23 @@ async def create(action: ActionCreate, user_id: int) -> ActionResponse:
         id=result.id,
         name=result.name,
         description=result.description,
-        category=result.category,
         engine=result.engine,
         platform=result.platform,
         parameters_schema=result.parameters_schema,
         impact_rules=result.impact_rules,
+        default_impact_level=result.default_impact_level,
         status=result.status,
         created_by=result.created_by,
         created_at=result.created_at,
         updated_at=result.updated_at,
         tags=result.tags,
-    )
+    )  # Story 2.24: change_model_code removed from ActionResponse
 
 
 async def get_by_id(action_id: int) -> ActionDetail | None:
-    """Fetch an action by ID with full details including rbac_policies, execution_steps, change_type_config.
+    """Fetch an action by ID with full details including execution_steps, change_type_config.
+
+    Story 2.14: rbac_policies removed — RBAC now managed via profiles.
 
     Args:
         action_id: The action ID to fetch
@@ -473,9 +489,9 @@ async def get_by_id(action_id: int) -> ActionDetail | None:
     """
     start_time = time.perf_counter()
     query = """
-        SELECT ID, NAME, DESCRIPTION, CATEGORY, ENGINE, PLATFORM,
-               PARAMETERS_SCHEMA, IMPACT_RULES, STATUS, CREATED_BY,
-               CREATED_AT, UPDATED_AT, RBAC_POLICIES, EXECUTION_STEPS, CHANGE_TYPE_CONFIG
+        SELECT ID, NAME, DESCRIPTION, ENGINE, PLATFORM,
+               PARAMETERS_SCHEMA, IMPACT_RULES, DEFAULT_IMPACT_LEVEL, STATUS, CREATED_BY,
+               CREATED_AT, UPDATED_AT, EXECUTION_STEPS, CHANGE_TYPE_CONFIG
         FROM ACTIONS_CATALOG
         WHERE ID = :action_id
     """
@@ -502,42 +518,16 @@ async def get_by_id(action_id: int) -> ActionDetail | None:
     return _row_to_action_detail(row, tags=tags)
 
 
-def _action_visible_for_profile(rbac_json: str | None, user_profile: UserProfile) -> bool:
-    """Check if an action is visible for a given user profile based on RBAC policies.
-
-    Args:
-        rbac_json: RBAC policies JSON string from database (or None)
-        user_profile: The user profile to check
-
-    Returns:
-        True if action is visible, False otherwise.
-        If rbac_json is None, action is visible to all.
-    """
-    if rbac_json is None:
-        return True  # No RBAC policies = visible to all
-
-    policies = _safe_parse_rbac_policies(rbac_json)
-    if policies is None:
-        return True  # Invalid JSON = treat as visible to all (defensive)
-
-    # Action is visible if user_profile is in at least one environment's profiles
-    for env_perm in policies.environments.values():
-        if user_profile in env_perm.profiles:
-            return True
-
-    return False
-
-
 async def list_all(
     status: ActionStatus | None = None,
-    user_profile: UserProfile | None = None,
     tags_filter: list[str] | None = None,
 ) -> list[ActionResponse]:
-    """List all actions, optionally filtered by status, RBAC profile, and tags (Story 2.6, AC4).
+    """List all actions, optionally filtered by status and tags (Story 2.6, AC4).
+
+    Story 2.14: RBAC filtering by action removed — use profile-based permissions instead.
 
     Args:
         status: Optional status filter
-        user_profile: Optional user profile for RBAC filtering (invisible filtering)
         tags_filter: Optional list of tag names (normalized). Actions with at least one match.
 
     Returns:
@@ -545,21 +535,12 @@ async def list_all(
     """
     start_time = time.perf_counter()
 
-    # Include RBAC_POLICIES in query if filtering is needed
-    if user_profile is not None:
-        base_query = """
-            SELECT ID, NAME, DESCRIPTION, CATEGORY, ENGINE, PLATFORM,
-                   PARAMETERS_SCHEMA, IMPACT_RULES, STATUS, CREATED_BY,
-                   CREATED_AT, UPDATED_AT, RBAC_POLICIES
-            FROM ACTIONS_CATALOG
-        """
-    else:
-        base_query = """
-            SELECT ID, NAME, DESCRIPTION, CATEGORY, ENGINE, PLATFORM,
-                   PARAMETERS_SCHEMA, IMPACT_RULES, STATUS, CREATED_BY,
-                   CREATED_AT, UPDATED_AT
-            FROM ACTIONS_CATALOG
-        """
+    base_query = """
+        SELECT ID, NAME, DESCRIPTION, ENGINE, PLATFORM,
+               PARAMETERS_SCHEMA, IMPACT_RULES, DEFAULT_IMPACT_LEVEL, STATUS, CREATED_BY,
+               CREATED_AT, UPDATED_AT
+        FROM ACTIONS_CATALOG
+    """
 
     conditions = []
     params: dict[str, Any] = {}
@@ -583,15 +564,6 @@ async def list_all(
         rows = await cursor.fetchall()
         await cursor.close()
 
-    # Apply RBAC filtering in Python (cannot do JSON filtering in Oracle easily)
-    if user_profile is not None:
-        filtered_rows = []
-        for row in rows:
-            rbac_json = row[12] if len(row) > 12 else None
-            if _action_visible_for_profile(rbac_json, user_profile):
-                filtered_rows.append(row[:12])  # Remove RBAC_POLICIES column for ActionResponse
-        rows = filtered_rows
-
     # Story 2.6: attach tags per action (batch query)
     action_ids = [row[0] for row in rows]
     tags_map = await get_tags_for_actions(action_ids)
@@ -603,12 +575,120 @@ async def list_all(
         params=params,
         duration_ms=duration_ms,
         status_filter=status.value if status else None,
-        user_profile=user_profile.value if user_profile else None,
         tags_filter=tags_filter,
         count=len(rows),
     )
 
     return [_row_to_action_response(row, tags=tags_map.get(row[0], [])) for row in rows]
+
+
+async def list_catalog(
+    status: ActionStatus | None = None,
+    tags_filter: list[str] | None = None,
+    action_ids_filter: list[int] | None = None,
+    q: str | None = None,
+    engine: str | None = None,
+    environment: str | None = None,
+    impact: str | None = None,
+) -> list[dict]:
+    """List actions for catalog with execution_count (Story 3.1, 3.3, AC1, AC3, AC9, AC10, AC11).
+
+    Args:
+        status: Optional status filter (default: published)
+        tags_filter: Optional list of tag names (normalized). Actions with at least one match.
+        action_ids_filter: Optional list of action IDs to restrict results (RBAC filtering)
+        q: Optional text search on NAME, DESCRIPTION, and tag names (LIKE, OR).
+        engine: Optional filter on AC.ENGINE (e.g. Oracle, SQL Server).
+        environment: Optional filter: actions whose impact_rules has this key (e.g. PROD, DEV).
+        impact: Optional filter on AC.DEFAULT_IMPACT_LEVEL (e.g. low, medium, high).
+
+    Returns:
+        List of action dicts with execution_count, ordered by name ASC
+    """
+    start_time = time.perf_counter()
+
+    base_query = """
+        SELECT AC.ID, AC.NAME, AC.DESCRIPTION, AC.ENGINE, AC.PLATFORM,
+               AC.PARAMETERS_SCHEMA, AC.IMPACT_RULES, AC.DEFAULT_IMPACT_LEVEL, AC.STATUS, AC.CREATED_BY,
+               AC.CREATED_AT, AC.UPDATED_AT,
+               COALESCE((SELECT COUNT(*) FROM EXECUTION_LOG EL WHERE EL.ACTION_ID = AC.ID), 0) AS EXECUTION_COUNT
+        FROM ACTIONS_CATALOG AC
+    """
+
+    conditions = []
+    params: dict[str, Any] = {}
+    if status is not None:
+        conditions.append("AC.STATUS = :status")
+        params["status"] = status.value
+    if tags_filter:
+        placeholders = ", ".join(f":tag{i}" for i in range(len(tags_filter)))
+        conditions.append(
+            f"AC.ID IN (SELECT at.ACTION_ID FROM ACTION_TAGS at "
+            f"INNER JOIN TAGS t ON t.ID = at.TAG_ID WHERE t.NAME IN ({placeholders}))"
+        )
+        for i, t in enumerate(tags_filter):
+            params[f"tag{i}"] = normalize_tag_name(t) or t
+    if action_ids_filter:
+        placeholders = ", ".join(f":aid{i}" for i in range(len(action_ids_filter)))
+        conditions.append(f"AC.ID IN ({placeholders})")
+        for i, aid in enumerate(action_ids_filter):
+            params[f"aid{i}"] = aid
+    if q and q.strip():
+        # Story 3.3: Case-insensitive search using UPPER() for Oracle compatibility
+        q_pattern = f"%{q.strip().upper()}%"
+        params["q_name"] = q_pattern
+        params["q_desc"] = q_pattern
+        params["q_tag"] = q_pattern
+        conditions.append(
+            "(UPPER(AC.NAME) LIKE :q_name OR UPPER(AC.DESCRIPTION) LIKE :q_desc OR "
+            "AC.ID IN (SELECT at.ACTION_ID FROM ACTION_TAGS at INNER JOIN TAGS t ON t.ID = at.TAG_ID WHERE UPPER(t.NAME) LIKE :q_tag))"
+        )
+    if engine:
+        conditions.append("AC.ENGINE = :engine")
+        params["engine"] = engine
+    if environment:
+        conditions.append("JSON_EXISTS(AC.IMPACT_RULES, '$.' || :environment) = 1")
+        params["environment"] = environment
+    if impact:
+        conditions.append("AC.DEFAULT_IMPACT_LEVEL = :impact")
+        params["impact"] = impact
+
+    where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
+    query = base_query + where_clause + " ORDER BY AC.NAME ASC"
+
+    async with get_connection() as conn:
+        cursor = await conn.execute(query, params)
+        rows = await cursor.fetchall()
+        await cursor.close()
+
+    # Attach tags per action (batch query)
+    action_ids = [row[0] for row in rows]
+    tags_map = await get_tags_for_actions(action_ids)
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.debug(
+        "catalog_repository_list_catalog",
+        query=query.strip()[:200],
+        params={k: v for k, v in params.items() if not k.startswith("aid")},
+        duration_ms=duration_ms,
+        status_filter=status.value if status else None,
+        tags_filter=tags_filter,
+        action_ids_filter_count=len(action_ids_filter) if action_ids_filter else 0,
+        q=q,
+        engine=engine,
+        environment=environment,
+        impact=impact,
+        count=len(rows),
+    )
+
+    results = []
+    for row in rows:
+        action = _row_to_action_response(row[:12], tags=tags_map.get(row[0], []))
+        results.append({
+            **action.model_dump(mode="json"),
+            "execution_count": row[12],
+        })
+    return results
 
 
 class InvalidStateError(Exception):
@@ -622,7 +702,7 @@ class InvalidStateError(Exception):
 async def update_execution_steps(
     action_id: int,
     steps: list[ExecutionStep],
-    change_type_config: dict[str, ChangeType] | None,
+    change_type_config: dict[str, ChangeTypeConfigEntry] | None,
 ) -> ActionDetail | None:
     """Update execution steps and change type config for an action.
 
@@ -715,96 +795,6 @@ async def update_execution_steps(
     return await get_by_id(action_id)
 
 
-async def update_rbac_policies(
-    action_id: int,
-    policies: RbacPolicies,
-) -> ActionDetail | None:
-    """Update RBAC policies for an action (Story 2.3, AC #4).
-
-    Args:
-        action_id: The action ID to update
-        policies: RBAC policies configuration
-
-    Returns:
-        ActionDetail if found and updated, None if not found
-
-    Raises:
-        InvalidStateError: If action is not in 'draft' status
-    """
-    start_time = time.perf_counter()
-
-    # First check if action exists and get its status
-    check_query = """
-        SELECT STATUS FROM ACTIONS_CATALOG WHERE ID = :action_id
-    """
-    async with get_connection() as conn:
-        cursor = await conn.execute(check_query, {"action_id": action_id})
-        row = await cursor.fetchone()
-        await cursor.close()
-
-    if row is None:
-        duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
-        logger.debug(
-            "catalog_repository_update_rbac_policies",
-            query=check_query.strip(),
-            params={"action_id": action_id},
-            duration_ms=duration_ms,
-            action_id=action_id,
-            found=False,
-        )
-        return None
-
-    current_status = row[0]
-    if current_status != ActionStatus.DRAFT.value:
-        raise InvalidStateError(
-            "Les politiques RBAC ne peuvent etre modifiees que pour une action en brouillon",
-            current_status=current_status,
-        )
-
-    # Update the action (check rowcount to avoid race: published between check and update)
-    update_query = """
-        UPDATE ACTIONS_CATALOG
-        SET RBAC_POLICIES = :rbac_policies,
-            UPDATED_AT = SYSTIMESTAMP
-        WHERE ID = :action_id AND STATUS = 'draft'
-    """
-    params = {
-        "action_id": action_id,
-        "rbac_policies": _rbac_policies_to_json(policies),
-    }
-
-    async with get_connection() as conn:
-        cursor = await conn.execute(update_query, params)
-        rowcount = cursor.rowcount
-        if rowcount == 0:
-            status_cursor = await conn.execute(
-                "SELECT STATUS FROM ACTIONS_CATALOG WHERE ID = :action_id",
-                {"action_id": action_id},
-            )
-            status_row = await status_cursor.fetchone()
-            await status_cursor.close()
-            await cursor.close()
-            new_status = status_row[0] if status_row else "unknown"
-            raise InvalidStateError(
-                "L'action n'est plus en brouillon ou a ete modifiee entre-temps",
-                current_status=new_status,
-            )
-        await conn.commit()
-        await cursor.close()
-
-    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
-    logger.debug(
-        "catalog_repository_update_rbac_policies",
-        query=update_query.strip(),
-        params={"action_id": action_id, "rbac_policies": "..."},
-        duration_ms=duration_ms,
-        action_id=action_id,
-    )
-
-    # Fetch and return updated action
-    return await get_by_id(action_id)
-
-
 # === Story 2.4: Status Transition and Lifecycle ===
 
 
@@ -816,7 +806,7 @@ async def update_action(
     """Update action metadata (name, description, category, etc.) (Story 2.4, AC #3).
 
     Allowed for published actions (metadata only).
-    Execution steps and RBAC can only be changed in draft status.
+    Execution steps can only be changed in draft status.
 
     Args:
         action_id: The action ID to update
@@ -849,16 +839,16 @@ async def update_action(
         )
         return None
 
-    # Update the action metadata (allowed for all statuses)
+    # Update the action metadata (allowed for all statuses). Story 2.24: change_model_code removed.
     update_query = """
         UPDATE ACTIONS_CATALOG
         SET NAME = :name,
             DESCRIPTION = :description,
-            CATEGORY = :category,
             ENGINE = :engine,
             PLATFORM = :platform,
             PARAMETERS_SCHEMA = :parameters_schema,
             IMPACT_RULES = :impact_rules,
+            DEFAULT_IMPACT_LEVEL = :default_impact_level,
             UPDATED_AT = SYSTIMESTAMP
         WHERE ID = :action_id
     """
@@ -866,11 +856,11 @@ async def update_action(
         "action_id": action_id,
         "name": action_update.name,
         "description": action_update.description,
-        "category": action_update.category.value,
         "engine": action_update.engine.value,
         "platform": action_update.platform.value,
         "parameters_schema": _json_to_str(action_update.parameters_schema),
         "impact_rules": _json_to_str(action_update.impact_rules),
+        "default_impact_level": action_update.default_impact_level.value if action_update.default_impact_level else None,
     }
 
     async with get_connection() as conn:
@@ -900,7 +890,7 @@ async def update_action(
         entity_id=action_id,
         details={
             "action_name": action_update.name,
-            "updated_fields": ["name", "description", "category", "engine", "platform", "parameters_schema", "impact_rules"],
+            "updated_fields": ["name", "description", "engine", "platform", "parameters_schema", "impact_rules", "default_impact_level"],
         },
     )
 
@@ -1033,22 +1023,24 @@ async def update_status(
 
 
 def _row_to_action_list_item(row: tuple, tags: list[str] | None = None) -> ActionListItem:
-    """Convert database row to ActionListItem model for admin dashboard (Story 2.6: optional tags)."""
+    """Convert database row to ActionListItem model for admin dashboard (Story 2.6: optional tags).
+
+    Story 2.23: category removed — use tags instead.
+    Expected row order (6 columns): 0:ID, 1:NAME, 2:STATUS, 3:ENGINE, 4:CREATED_AT, 5:EXECUTION_COUNT
+    """
     return ActionListItem(
         id=row[0],
         name=row[1],
         status=ActionStatus(row[2]),
-        category=ActionCategory(row[3]),
-        engine=ActionEngine(row[4]),
-        created_at=row[5],
-        execution_count=row[6] or 0,
+        engine=ActionEngine(row[3]),
+        created_at=row[4],
+        execution_count=row[5] or 0,
         tags=tags if tags is not None else [],
     )
 
 
 async def list_all_admin(
     status: ActionStatus | None = None,
-    category: ActionCategory | None = None,
     engine: ActionEngine | None = None,
     page: int = 1,
     page_size: int = 25,
@@ -1056,10 +1048,10 @@ async def list_all_admin(
     """List all actions for admin dashboard with execution counts (Story 2.4, AC #2).
 
     DBOPS only - no RBAC filtering. Returns all actions regardless of status.
+    Story 2.23: category filter removed — use tags instead.
 
     Args:
         status: Optional status filter
-        category: Optional category filter
         engine: Optional engine filter
         page: Page number (1-based)
         page_size: Number of items per page
@@ -1076,10 +1068,6 @@ async def list_all_admin(
     if status is not None:
         conditions.append("STATUS = :status")
         params["status"] = status.value
-
-    if category is not None:
-        conditions.append("CATEGORY = :category")
-        params["category"] = category.value
 
     if engine is not None:
         conditions.append("ENGINE = :engine")
@@ -1101,7 +1089,7 @@ async def list_all_admin(
 
     # Fetch paginated results
     base_query = """
-        SELECT ID, NAME, STATUS, CATEGORY, ENGINE, CREATED_AT,
+        SELECT ID, NAME, STATUS, ENGINE, CREATED_AT,
                COALESCE((SELECT COUNT(*) FROM EXECUTION_LOG EL WHERE EL.ACTION_ID = AC.ID), 0) AS EXECUTION_COUNT
         FROM ACTIONS_CATALOG AC
     """

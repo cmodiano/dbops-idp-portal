@@ -42,6 +42,40 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   return body.data as T;
 }
 
+/**
+ * Fetch API returning the full JSON body (not just .data).
+ * Use when response includes extra fields alongside data (e.g., can_execute, allowed_environments).
+ * Includes auth headers and 401 retry logic.
+ */
+export async function apiFetchRaw<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = _getAccessToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(init?.headers as Record<string, string> ?? {}),
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  let response = await fetch(`${API_BASE}${path}`, { ...init, headers });
+
+  // 401 interceptor: attempt token refresh and retry once
+  if (response.status === 401 && token) {
+    const newToken = await _onRefreshNeeded();
+    if (newToken) {
+      headers['Authorization'] = `Bearer ${newToken}`;
+      response = await fetch(`${API_BASE}${path}`, { ...init, headers });
+    }
+  }
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ error: { message: 'Unknown error' } }));
+    throw new Error(body.error?.message ?? 'Unknown error');
+  }
+  if (response.status === 204) return undefined as T;
+  return await response.json() as T;
+}
+
 /** GET and return response as Blob (e.g. file download). Uses auth. */
 export async function apiFetchBlob(path: string): Promise<Blob> {
   const token = _getAccessToken();

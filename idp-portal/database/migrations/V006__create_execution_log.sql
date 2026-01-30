@@ -1,0 +1,23 @@
+-- V006: Create EXECUTION_LOG table
+-- Story 2.4 - Publier et gerer le cycle de vie d'une action
+-- Tracks action executions for dashboard statistics
+
+-- Execution log table (Story 2.20: identity column)
+CREATE TABLE EXECUTION_LOG (
+    ID              NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    ACTION_ID       NUMBER NOT NULL,
+    USER_ID         VARCHAR2(100) NOT NULL,
+    ENVIRONMENT     VARCHAR2(50) NOT NULL,
+    STARTED_AT      TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    COMPLETED_AT    TIMESTAMP,
+    STATUS          VARCHAR2(20) DEFAULT 'running' NOT NULL,
+
+    -- Constraints
+    CONSTRAINT FK_EXEC_LOG_ACTION FOREIGN KEY (ACTION_ID) REFERENCES ACTIONS_CATALOG(ID),
+    CONSTRAINT CK_EXEC_LOG_STATUS CHECK (STATUS IN ('running', 'success', 'failed', 'cancelled'))
+);
+
+-- Indexes for common queries
+CREATE INDEX IDX_EXEC_LOG_ACTION ON EXECUTION_LOG(ACTION_ID);
+CREATE INDEX IDX_EXEC_LOG_USER ON EXECUTION_LOG(USER_ID);
+CREATE INDEX IDX_EXEC_LOG_STARTED ON EXECUTION_LOG(STARTED_AT);

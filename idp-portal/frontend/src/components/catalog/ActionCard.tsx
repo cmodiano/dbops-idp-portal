@@ -129,13 +129,6 @@ export function ActionCard({ action, onClick, variant = 'default' }: ActionCardP
           </Space>
         )}
 
-        {/* Category badge */}
-        {action.category && (
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            {action.category}
-          </Text>
-        )}
-
         {/* Execution count (si disponible, Task 1.1) */}
         {typeof action.execution_count === 'number' && action.execution_count >= 0 && (
           <Text type="secondary" style={{ fontSize: 12 }}>

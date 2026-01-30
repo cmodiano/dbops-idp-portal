@@ -1,21 +1,25 @@
 /**
- * ActionDrawerPreview - Read-only preview of action detail drawer (Story 2.5, AC #1, #2, #4).
+ * ActionDrawerPreview - Read-only preview of action detail (Story 2.5, AC #1, #2, #4; Story 3.2).
  *
- * Used in AdminPreview to simulate the drawer that DBA will see in the catalog.
+ * Usage contexts:
+ * - AdminPreview: inline preview card (role="region", no focus trap)
+ * - CatalogPage drawer: inside Ant Design Drawer (role="dialog" on parent, focus trap managed by Drawer)
+ *
  * Displays:
  * - Action name and description
  * - Impact indicator
- * - Engine and category info
- * - Parameters list (from parameters_schema)
- * - Disabled "Executer" button (read-only)
+ * - Engine and platform info
+ * - Tags (category display) - Story 3.2
+ * - Parameters list with types (from parameters_schema) - Story 3.2
+ * - "Exécuter" button with permission state (AC3) - Story 3.2
  *
- * Accessibility:
- * - role="region" (not dialog, since it's inline and not modal)
- * - aria-label for screen readers
- * - No focus trap (read-only preview, not interactive dialog)
+ * Props:
+ * - canExecute: undefined = enabled (admin preview), false = disabled with tooltip (catalog)
+ *
+ * Story 2.23: category removed — use tags for categorization.
  */
 
-import { Card, Typography, Button, Descriptions, Space, Empty, theme } from 'antd';
+import { Card, Typography, Button, Descriptions, Space, Empty, Tag, Tooltip, theme } from 'antd';
 import { PlayCircleOutlined } from '@ant-design/icons';
 import type { ActionPreviewData } from '../../types/api';
 import { ImpactIndicator } from '../shared/ImpactIndicator';
@@ -26,27 +30,52 @@ const { Title, Paragraph, Text } = Typography;
 export interface ActionDrawerPreviewProps {
   action: ActionPreviewData;
   visible?: boolean;
+  /** Story 3.2 AC3: whether user can execute this action. */
+  canExecute?: boolean;
+  /** Story 3.2 AC3: environments where user can execute. */
+  allowedEnvironments?: string[];
 }
 
-function extractParametersList(schema: Record<string, unknown> | null): string[] {
+/** Parameter info extracted from JSON Schema. */
+interface ParameterInfo {
+  name: string;
+  type: string;
+  required: boolean;
+}
+
+function extractParametersWithTypes(schema: Record<string, unknown> | null): ParameterInfo[] {
   if (!schema) return [];
 
-  // JSON Schema format: { "properties": { "param1": {...}, "param2": {...} } }
-  // TODO: support $ref, allOf, oneOf for advanced schemas (code-review LOW).
-  const properties = schema.properties as Record<string, unknown> | undefined;
+  // JSON Schema format: { "properties": { "param1": { "type": "string" }, "param2": { "type": "number" } }, "required": ["param1"] }
+  const properties = schema.properties as Record<string, Record<string, unknown>> | undefined;
+  const required = (schema.required as string[]) || [];
+
   if (properties && typeof properties === 'object') {
-    return Object.keys(properties);
+    return Object.entries(properties).map(([name, prop]) => ({
+      name,
+      type: (prop?.type as string) || 'any',
+      required: required.includes(name),
+    }));
   }
 
   return [];
 }
 
-export function ActionDrawerPreview({ action, visible = true }: ActionDrawerPreviewProps) {
+export function ActionDrawerPreview({
+  action,
+  visible = true,
+  canExecute,
+  allowedEnvironments = [],
+}: ActionDrawerPreviewProps) {
   const { token } = theme.useToken();
 
   if (!visible) return null;
 
-  const parameters = extractParametersList(action.parameters_schema);
+  const parameters = extractParametersWithTypes(action.parameters_schema);
+  const isExecuteDisabled = canExecute === false;
+  const executeTooltip = isExecuteDisabled
+    ? 'Acces non autorise pour cet environnement'
+    : undefined;
 
   return (
     <Card
@@ -61,7 +90,7 @@ export function ActionDrawerPreview({ action, visible = true }: ActionDrawerPrev
         body: { padding: STYLE_TOKENS.drawerPreviewPadding },
       }}
     >
-      <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
+      <Space direction="vertical" size="middle" style={{ width: '100%' }}>
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <Title level={4} style={{ margin: 0 }}>
@@ -77,16 +106,25 @@ export function ActionDrawerPreview({ action, visible = true }: ActionDrawerPrev
           {action.description || 'Aucune description disponible.'}
         </Paragraph>
 
+        {/* Tags (category) - Story 3.2, AC1 */}
+        {action.tags && action.tags.length > 0 && (
+          <div>
+            <Text strong style={{ display: 'block', marginBottom: 8 }}>
+              Categorie
+            </Text>
+            <Space size={[4, 4]} wrap>
+              {action.tags.map((tag) => (
+                <Tag key={tag}>{tag}</Tag>
+              ))}
+            </Space>
+          </div>
+        )}
+
         {/* Metadata */}
         <Descriptions column={1} size="small" bordered={false}>
           {action.engine && (
             <Descriptions.Item label="Moteur">
               <Text>{action.engine}</Text>
-            </Descriptions.Item>
-          )}
-          {action.category && (
-            <Descriptions.Item label="Categorie">
-              <Text>{action.category}</Text>
             </Descriptions.Item>
           )}
           {action.platform && (
@@ -96,7 +134,7 @@ export function ActionDrawerPreview({ action, visible = true }: ActionDrawerPrev
           )}
         </Descriptions>
 
-        {/* Parameters */}
+        {/* Parameters with types - Story 3.2, AC1 */}
         <div>
           <Text strong style={{ display: 'block', marginBottom: 8 }}>
             Parametres attendus
@@ -104,8 +142,10 @@ export function ActionDrawerPreview({ action, visible = true }: ActionDrawerPrev
           {parameters.length > 0 ? (
             <ul style={{ margin: 0, paddingLeft: 20 }}>
               {parameters.map((param) => (
-                <li key={param}>
-                  <Text code>{param}</Text>
+                <li key={param.name}>
+                  <Text code>{param.name}</Text>
+                  <Text type="secondary"> : {param.type}</Text>
+                  {param.required && <Text type="danger"> *</Text>}
                 </li>
               ))}
             </ul>
@@ -118,16 +158,18 @@ export function ActionDrawerPreview({ action, visible = true }: ActionDrawerPrev
           )}
         </div>
 
-        {/* Disabled Execute button (AC #4 - read-only) */}
-        <Button
-          type="primary"
-          icon={<PlayCircleOutlined />}
-          disabled
-          block
-          aria-label="Executer (desactive en mode preview)"
-        >
-          Executer
-        </Button>
+        {/* Execute button - Story 3.2, AC3 */}
+        <Tooltip title={executeTooltip}>
+          <Button
+            type="primary"
+            icon={<PlayCircleOutlined />}
+            disabled={isExecuteDisabled}
+            block
+            aria-label={isExecuteDisabled ? 'Executer (acces non autorise)' : 'Executer'}
+          >
+            Executer
+          </Button>
+        </Tooltip>
       </Space>
     </Card>
   );

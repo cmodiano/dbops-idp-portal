@@ -11,7 +11,6 @@ import pytest
 from datetime import datetime
 
 from app.models.catalog import (
-    ActionCategory,
     ActionEngine,
     ActionPlatform,
     ActionStatus,
@@ -21,7 +20,7 @@ from app.models.catalog import (
     ConnectorType,
     ExecutionStepType,
     ExecutionStep,
-    ChangeType,
+    ChangeTypeConfigEntry,
     ExecutionStepsUpdate,
     TagCreate,
     TagResponse,
@@ -37,12 +36,10 @@ class TestActionCreateValidation:
         """Test creating action with minimal required fields."""
         action = ActionCreate(
             name="Create PDB",
-            category=ActionCategory.PROVISIONING,
             engine=ActionEngine.ORACLE,
             platform=ActionPlatform.AAP,
         )
         assert action.name == "Create PDB"
-        assert action.category == ActionCategory.PROVISIONING
         assert action.engine == ActionEngine.ORACLE
         assert action.platform == ActionPlatform.AAP
         assert action.description is None
@@ -54,7 +51,6 @@ class TestActionCreateValidation:
         action = ActionCreate(
             name="Patch Database",
             description="Apply database patches",
-            category=ActionCategory.PATCHING,
             engine=ActionEngine.SQL_SERVER,
             platform=ActionPlatform.GITHUB_ACTIONS,
             parameters_schema={
@@ -74,7 +70,6 @@ class TestActionCreateValidation:
         """Test that name is stripped of whitespace."""
         action = ActionCreate(
             name="  Create PDB  ",
-            category=ActionCategory.PROVISIONING,
             engine=ActionEngine.ORACLE,
             platform=ActionPlatform.AAP,
         )
@@ -85,8 +80,7 @@ class TestActionCreateValidation:
         with pytest.raises(ValueError):
             ActionCreate(
                 name="",
-                category=ActionCategory.PROVISIONING,
-                engine=ActionEngine.ORACLE,
+                    engine=ActionEngine.ORACLE,
                 platform=ActionPlatform.AAP,
             )
 
@@ -95,8 +89,7 @@ class TestActionCreateValidation:
         with pytest.raises(ValueError):
             ActionCreate(
                 name="   ",
-                category=ActionCategory.PROVISIONING,
-                engine=ActionEngine.ORACLE,
+                    engine=ActionEngine.ORACLE,
                 platform=ActionPlatform.AAP,
             )
 
@@ -105,8 +98,7 @@ class TestActionCreateValidation:
         with pytest.raises(ValueError):
             ActionCreate(
                 name="x" * 256,
-                category=ActionCategory.PROVISIONING,
-                engine=ActionEngine.ORACLE,
+                    engine=ActionEngine.ORACLE,
                 platform=ActionPlatform.AAP,
             )
 
@@ -114,7 +106,6 @@ class TestActionCreateValidation:
         """Test that name at 255 chars is valid."""
         action = ActionCreate(
             name="x" * 255,
-            category=ActionCategory.PROVISIONING,
             engine=ActionEngine.ORACLE,
             platform=ActionPlatform.AAP,
         )
@@ -126,8 +117,7 @@ class TestActionCreateValidation:
             ActionCreate(
                 name="Test Action",
                 description="x" * 4001,
-                category=ActionCategory.PROVISIONING,
-                engine=ActionEngine.ORACLE,
+                    engine=ActionEngine.ORACLE,
                 platform=ActionPlatform.AAP,
             )
 
@@ -136,7 +126,6 @@ class TestActionCreateValidation:
         action = ActionCreate(
             name="Test Action",
             description="x" * 4000,
-            category=ActionCategory.PROVISIONING,
             engine=ActionEngine.ORACLE,
             platform=ActionPlatform.AAP,
         )
@@ -150,7 +139,6 @@ class TestParametersSchemaValidation:
         """Test valid JSON Schema is accepted."""
         action = ActionCreate(
             name="Test",
-            category=ActionCategory.PROVISIONING,
             engine=ActionEngine.ORACLE,
             platform=ActionPlatform.AAP,
             parameters_schema={
@@ -169,7 +157,6 @@ class TestParametersSchemaValidation:
         """Test minimal valid schema with just type."""
         action = ActionCreate(
             name="Test",
-            category=ActionCategory.PROVISIONING,
             engine=ActionEngine.ORACLE,
             platform=ActionPlatform.AAP,
             parameters_schema={"type": "object"},
@@ -180,7 +167,6 @@ class TestParametersSchemaValidation:
         """Test None parameters_schema is valid."""
         action = ActionCreate(
             name="Test",
-            category=ActionCategory.PROVISIONING,
             engine=ActionEngine.ORACLE,
             platform=ActionPlatform.AAP,
             parameters_schema=None,
@@ -192,8 +178,7 @@ class TestParametersSchemaValidation:
         with pytest.raises(ValueError, match="valid JSON Schema"):
             ActionCreate(
                 name="Test",
-                category=ActionCategory.PROVISIONING,
-                engine=ActionEngine.ORACLE,
+                    engine=ActionEngine.ORACLE,
                 platform=ActionPlatform.AAP,
                 parameters_schema={"foo": "bar", "baz": 123},
             )
@@ -203,8 +188,7 @@ class TestParametersSchemaValidation:
         with pytest.raises(ValueError, match="valid JSON Schema"):
             ActionCreate(
                 name="Test",
-                category=ActionCategory.PROVISIONING,
-                engine=ActionEngine.ORACLE,
+                    engine=ActionEngine.ORACLE,
                 platform=ActionPlatform.AAP,
                 parameters_schema={},
             )
@@ -217,7 +201,6 @@ class TestImpactRulesValidation:
         """Test valid impact rules with single environment."""
         action = ActionCreate(
             name="Test",
-            category=ActionCategory.PROVISIONING,
             engine=ActionEngine.ORACLE,
             platform=ActionPlatform.AAP,
             impact_rules={"DEV": {"level": "low"}},
@@ -228,7 +211,6 @@ class TestImpactRulesValidation:
         """Test valid impact rules with multiple environments."""
         action = ActionCreate(
             name="Test",
-            category=ActionCategory.PROVISIONING,
             engine=ActionEngine.ORACLE,
             platform=ActionPlatform.AAP,
             impact_rules={
@@ -245,8 +227,7 @@ class TestImpactRulesValidation:
         for level in ["low", "medium", "high", "critical"]:
             action = ActionCreate(
                 name="Test",
-                category=ActionCategory.PROVISIONING,
-                engine=ActionEngine.ORACLE,
+                    engine=ActionEngine.ORACLE,
                 platform=ActionPlatform.AAP,
                 impact_rules={"ENV": {"level": level}},
             )
@@ -256,7 +237,6 @@ class TestImpactRulesValidation:
         """Test None impact_rules is valid."""
         action = ActionCreate(
             name="Test",
-            category=ActionCategory.PROVISIONING,
             engine=ActionEngine.ORACLE,
             platform=ActionPlatform.AAP,
             impact_rules=None,
@@ -268,8 +248,7 @@ class TestImpactRulesValidation:
         with pytest.raises(ValueError, match="level must be one of"):
             ActionCreate(
                 name="Test",
-                category=ActionCategory.PROVISIONING,
-                engine=ActionEngine.ORACLE,
+                    engine=ActionEngine.ORACLE,
                 platform=ActionPlatform.AAP,
                 impact_rules={"DEV": {"level": "invalid"}},
             )
@@ -279,8 +258,7 @@ class TestImpactRulesValidation:
         with pytest.raises(ValueError, match="must have a 'level' key"):
             ActionCreate(
                 name="Test",
-                category=ActionCategory.PROVISIONING,
-                engine=ActionEngine.ORACLE,
+                    engine=ActionEngine.ORACLE,
                 platform=ActionPlatform.AAP,
                 impact_rules={"DEV": {"severity": "high"}},
             )
@@ -290,22 +268,14 @@ class TestImpactRulesValidation:
         with pytest.raises(ValueError, match="must be an object"):
             ActionCreate(
                 name="Test",
-                category=ActionCategory.PROVISIONING,
-                engine=ActionEngine.ORACLE,
+                    engine=ActionEngine.ORACLE,
                 platform=ActionPlatform.AAP,
                 impact_rules={"DEV": "low"},
             )
 
 
 class TestActionEnums:
-    """Tests for action enums."""
-
-    def test_action_category_values(self):
-        """Test ActionCategory enum values."""
-        assert ActionCategory.PROVISIONING.value == "Provisioning"
-        assert ActionCategory.PATCHING.value == "Patching"
-        assert ActionCategory.ADMINISTRATION.value == "Administration"
-        assert ActionCategory.MONITORING.value == "Monitoring"
+    """Tests for action enums. Story 2.23: ActionCategory removed."""
 
     def test_action_engine_values(self):
         """Test ActionEngine enum values."""
@@ -336,7 +306,6 @@ class TestActionResponse:
             id=1,
             name="Test Action",
             description="A test",
-            category=ActionCategory.PROVISIONING,
             engine=ActionEngine.ORACLE,
             platform=ActionPlatform.AAP,
             status=ActionStatus.DRAFT,
@@ -349,28 +318,13 @@ class TestActionResponse:
 
 
 class TestActionDetail:
-    """Tests for ActionDetail model."""
-
-    def test_action_detail_includes_rbac(self):
-        """Test ActionDetail includes rbac_policies."""
-        detail = ActionDetail(
-            id=1,
-            name="Test Action",
-            category=ActionCategory.PROVISIONING,
-            engine=ActionEngine.ORACLE,
-            platform=ActionPlatform.AAP,
-            status=ActionStatus.DRAFT,
-            created_at=datetime(2026, 1, 28, 10, 0, 0),
-            rbac_policies={"DBOPS": {"DEV": True, "PROD": True}},
-        )
-        assert detail.rbac_policies == {"DBOPS": {"DEV": True, "PROD": True}}
+    """Tests for ActionDetail model. Story 2.14: rbac_policies removed."""
 
     def test_action_detail_inherits_from_response(self):
         """Test ActionDetail inherits all ActionResponse fields."""
         detail = ActionDetail(
             id=1,
             name="Test",
-            category=ActionCategory.PROVISIONING,
             engine=ActionEngine.ORACLE,
             platform=ActionPlatform.AAP,
             status=ActionStatus.DRAFT,
@@ -381,7 +335,8 @@ class TestActionDetail:
         assert hasattr(detail, "name")
         assert hasattr(detail, "parameters_schema")
         assert hasattr(detail, "impact_rules")
-        assert hasattr(detail, "rbac_policies")
+        # Story 2.14: rbac_policies removed
+        assert not hasattr(detail, "rbac_policies")
 
     def test_action_detail_includes_execution_steps(self):
         """AC #1: ActionDetail includes execution_steps field (Story 2.2; Story 2.7 connector_type)."""
@@ -394,17 +349,18 @@ class TestActionDetail:
         detail = ActionDetail(
             id=1,
             name="Test",
-            category=ActionCategory.PROVISIONING,
             engine=ActionEngine.ORACLE,
             platform=ActionPlatform.AAP,
             status=ActionStatus.DRAFT,
             created_at=datetime(2026, 1, 28),
             execution_steps=[step],
-            change_type_config={"PROD": ChangeType.PRE_APPROVED},
+            change_type_config={"PROD": ChangeTypeConfigEntry(required=True, change_model_code="1516B")},
         )
         assert detail.execution_steps is not None
         assert len(detail.execution_steps) == 1
-        assert detail.change_type_config == {"PROD": ChangeType.PRE_APPROVED}
+        assert detail.change_type_config is not None
+        assert detail.change_type_config["PROD"].required is True
+        assert detail.change_type_config["PROD"].change_model_code == "1516B"
 
 
 # === Story 2.2: Execution Steps and Change Type Models Tests ===
@@ -420,13 +376,30 @@ class TestExecutionStepTypeEnum:
         assert ExecutionStepType.VERIFICATION.value == "verification"
 
 
-class TestChangeTypeEnum:
-    """Tests for ChangeType enum (AC #3). Story 2.8: CAB removed, only pre_approved."""
+class TestChangeTypeConfigEntry:
+    """Tests for ChangeTypeConfigEntry (Story 2.24). required + change_model_code per env."""
 
-    def test_change_type_values(self):
-        """Test ChangeType enum values."""
-        assert ChangeType.PRE_APPROVED.value == "pre_approved"
-        assert len(ChangeType) == 1
+    def test_required_false_no_code(self):
+        """required=False, change_model_code optional."""
+        e = ChangeTypeConfigEntry(required=False)
+        assert e.required is False
+        assert e.change_model_code is None
+
+    def test_required_true_with_code(self):
+        """required=True with alphanumeric change_model_code."""
+        e = ChangeTypeConfigEntry(required=True, change_model_code="1516B")
+        assert e.required is True
+        assert e.change_model_code == "1516B"
+
+    def test_required_true_without_code_raises(self):
+        """required=True without change_model_code raises."""
+        with pytest.raises(ValueError, match="change_model_code is required"):
+            ChangeTypeConfigEntry(required=True)
+
+    def test_change_model_code_alphanumeric_only(self):
+        """change_model_code must be alphanumeric."""
+        with pytest.raises(ValueError, match="alphanumeric"):
+            ChangeTypeConfigEntry(required=True, change_model_code="1516-B")
 
 
 class TestConnectorTypeEnum:
@@ -546,7 +519,7 @@ class TestExecutionStepsUpdateValidation:
     """Tests for ExecutionStepsUpdate model validation (AC #5)."""
 
     def test_valid_execution_steps_update(self):
-        """Test valid ExecutionStepsUpdate with sequential order (Story 2.7: connector_type)."""
+        """Test valid ExecutionStepsUpdate with new change_type_config format (Story 2.24)."""
         update = ExecutionStepsUpdate(
             steps=[
                 ExecutionStep(order=1, name="Step 1", type=ExecutionStepType.PREREQUISITE, connector_type=ConnectorType.NONE),
@@ -554,13 +527,14 @@ class TestExecutionStepsUpdateValidation:
                 ExecutionStep(order=3, name="Step 3", type=ExecutionStepType.VERIFICATION, connector_type=ConnectorType.NONE),
             ],
             change_type_config={
-                "DEV": ChangeType.PRE_APPROVED,
-                "STAGING": ChangeType.PRE_APPROVED,
-                "PROD": ChangeType.PRE_APPROVED,
+                "DEV": ChangeTypeConfigEntry(required=False),
+                "STAGING": ChangeTypeConfigEntry(required=False),
+                "PROD": ChangeTypeConfigEntry(required=True, change_model_code="1516B"),
             },
         )
         assert len(update.steps) == 3
-        assert update.change_type_config["PROD"] == ChangeType.PRE_APPROVED
+        assert update.change_type_config["PROD"].required is True
+        assert update.change_type_config["PROD"].change_model_code == "1516B"
 
     def test_empty_steps_raises_error(self):
         """Test that empty steps list raises validation error."""
@@ -616,155 +590,22 @@ class TestExecutionStepsUpdateValidation:
         )
         assert len(update.steps) == 1
 
+    def test_legacy_change_type_config_string_rejected(self):
+        """Story 2.24 AC4: Legacy format (env -> string) rejected with clear message."""
+        with pytest.raises(ValueError, match="legacy format"):
+            ExecutionStepsUpdate(
+                steps=[
+                    ExecutionStep(order=1, name="Step", type=ExecutionStepType.PREREQUISITE, connector_type=ConnectorType.NONE),
+                ],
+                change_type_config={"PROD": "pre_approved"},
+            )
+
 
 # === Story 2.3: RBAC Policies Models Tests ===
 
 
-class TestUserProfileEnum:
-    """Tests for UserProfile enum (Story 2.3, AC #1)."""
-
-    def test_user_profile_values(self):
-        """Test UserProfile enum values."""
-        from app.models.catalog import UserProfile
-
-        assert UserProfile.DBA_APPLICATIF.value == "dba_applicatif"
-        assert UserProfile.DBA_INFRASTRUCTURE.value == "dba_infrastructure"
-        assert UserProfile.CLIENT_BUSINESS.value == "client_business"
-        assert UserProfile.DBOPS.value == "dbops"
-
-
-class TestEnvironmentPermissionValidation:
-    """Tests for EnvironmentPermission model validation (Story 2.3, AC #1, #2)."""
-
-    def test_valid_environment_permission_minimal(self):
-        """Test creating permission with minimal required fields."""
-        from app.models.catalog import EnvironmentPermission, UserProfile
-
-        perm = EnvironmentPermission(
-            profiles=[UserProfile.DBA_APPLICATIF],
-            requires_approval=False,
-        )
-        assert perm.profiles == [UserProfile.DBA_APPLICATIF]
-        assert perm.requires_approval is False
-        assert perm.approver_profiles is None
-
-    def test_valid_environment_permission_with_approval(self):
-        """AC #2: Test permission with approval requirement."""
-        from app.models.catalog import EnvironmentPermission, UserProfile
-
-        perm = EnvironmentPermission(
-            profiles=[UserProfile.DBA_APPLICATIF, UserProfile.DBA_INFRASTRUCTURE],
-            requires_approval=True,
-            approver_profiles=[UserProfile.DBA_INFRASTRUCTURE],
-        )
-        assert perm.requires_approval is True
-        assert perm.approver_profiles == [UserProfile.DBA_INFRASTRUCTURE]
-
-    def test_empty_profiles_raises_error(self):
-        """AC #1: Test that empty profiles list raises validation error."""
-        from app.models.catalog import EnvironmentPermission
-
-        with pytest.raises(ValueError, match="at least one profile"):
-            EnvironmentPermission(
-                profiles=[],
-                requires_approval=False,
-            )
-
-    def test_approval_requires_approver_profiles(self):
-        """AC #2: Test that requires_approval=True requires approver_profiles."""
-        from app.models.catalog import EnvironmentPermission, UserProfile
-
-        with pytest.raises(ValueError, match="approver_profiles.*required"):
-            EnvironmentPermission(
-                profiles=[UserProfile.DBA_APPLICATIF],
-                requires_approval=True,
-                approver_profiles=None,
-            )
-
-    def test_approval_empty_approver_profiles_raises_error(self):
-        """AC #2: Test that empty approver_profiles raises error when requires_approval=True."""
-        from app.models.catalog import EnvironmentPermission, UserProfile
-
-        with pytest.raises(ValueError, match="approver_profiles.*required"):
-            EnvironmentPermission(
-                profiles=[UserProfile.DBA_APPLICATIF],
-                requires_approval=True,
-                approver_profiles=[],
-            )
-
-    def test_no_approval_allows_none_approver_profiles(self):
-        """Test that requires_approval=False allows None approver_profiles."""
-        from app.models.catalog import EnvironmentPermission, UserProfile
-
-        perm = EnvironmentPermission(
-            profiles=[UserProfile.DBA_APPLICATIF],
-            requires_approval=False,
-            approver_profiles=None,
-        )
-        assert perm.approver_profiles is None
-
-
-class TestRbacPoliciesValidation:
-    """Tests for RbacPolicies model validation (Story 2.3, AC #1, #2)."""
-
-    def test_valid_rbac_policies_all_envs(self):
-        """Test valid RBAC policies with all environments."""
-        from app.models.catalog import RbacPolicies, EnvironmentPermission, UserProfile
-
-        policies = RbacPolicies(
-            environments={
-                "DEV": EnvironmentPermission(
-                    profiles=[UserProfile.DBA_APPLICATIF, UserProfile.DBA_INFRASTRUCTURE, UserProfile.CLIENT_BUSINESS],
-                    requires_approval=False,
-                ),
-                "STAGING": EnvironmentPermission(
-                    profiles=[UserProfile.DBA_APPLICATIF, UserProfile.DBA_INFRASTRUCTURE],
-                    requires_approval=False,
-                ),
-                "PROD": EnvironmentPermission(
-                    profiles=[UserProfile.DBA_APPLICATIF, UserProfile.DBA_INFRASTRUCTURE],
-                    requires_approval=True,
-                    approver_profiles=[UserProfile.DBA_INFRASTRUCTURE],
-                ),
-            }
-        )
-        assert len(policies.environments) == 3
-        assert policies.environments["PROD"].requires_approval is True
-
-    def test_valid_rbac_policies_single_env(self):
-        """Test valid RBAC policies with single environment."""
-        from app.models.catalog import RbacPolicies, EnvironmentPermission, UserProfile
-
-        policies = RbacPolicies(
-            environments={
-                "DEV": EnvironmentPermission(
-                    profiles=[UserProfile.CLIENT_BUSINESS],
-                    requires_approval=False,
-                ),
-            }
-        )
-        assert len(policies.environments) == 1
-
-
-class TestRbacPoliciesUpdateValidation:
-    """Tests for RbacPoliciesUpdate model validation (Story 2.3, AC #4)."""
-
-    def test_valid_rbac_policies_update(self):
-        """Test valid RbacPoliciesUpdate."""
-        from app.models.catalog import RbacPoliciesUpdate, RbacPolicies, EnvironmentPermission, UserProfile
-
-        update = RbacPoliciesUpdate(
-            policies=RbacPolicies(
-                environments={
-                    "DEV": EnvironmentPermission(
-                        profiles=[UserProfile.DBA_APPLICATIF],
-                        requires_approval=False,
-                    ),
-                }
-            )
-        )
-        assert update.policies is not None
-        assert "DEV" in update.policies.environments
+# Story 2.3 RBAC by action model tests removed in Story 2.14 — RBAC now managed via profiles.
+# Removed: TestUserProfileEnum, TestEnvironmentPermissionValidation, TestRbacPoliciesValidation, TestRbacPoliciesUpdateValidation
 
 
 # === Story 2.4: Status Transition and Lifecycle Models Tests ===
@@ -868,14 +709,13 @@ class TestActionListItemModel:
     """Tests for ActionListItem model (Story 2.4, AC #2)."""
 
     def test_action_list_item_creation(self):
-        """Test ActionListItem model creation with all fields."""
-        from app.models.catalog import ActionListItem, ActionStatus, ActionCategory, ActionEngine
+        """Test ActionListItem model creation with all fields. Story 2.23: category removed."""
+        from app.models.catalog import ActionListItem, ActionStatus, ActionEngine
 
         item = ActionListItem(
             id=1,
             name="Creer PDB Oracle",
             status=ActionStatus.PUBLISHED,
-            category=ActionCategory.PROVISIONING,
             engine=ActionEngine.ORACLE,
             created_at=datetime(2026, 1, 28, 10, 0, 0),
             execution_count=42,
@@ -887,13 +727,12 @@ class TestActionListItemModel:
 
     def test_action_list_item_default_execution_count(self):
         """Test ActionListItem with default execution_count of 0."""
-        from app.models.catalog import ActionListItem, ActionStatus, ActionCategory, ActionEngine
+        from app.models.catalog import ActionListItem, ActionStatus, ActionEngine
 
         item = ActionListItem(
             id=1,
             name="Test",
             status=ActionStatus.DRAFT,
-            category=ActionCategory.ADMINISTRATION,
             engine=ActionEngine.SQL_SERVER,
             created_at=datetime(2026, 1, 28),
         )
@@ -901,13 +740,12 @@ class TestActionListItemModel:
 
     def test_action_list_item_default_tags(self):
         """Test ActionListItem with default tags (Story 2.6)."""
-        from app.models.catalog import ActionListItem, ActionStatus, ActionCategory, ActionEngine
+        from app.models.catalog import ActionListItem, ActionStatus, ActionEngine
 
         item = ActionListItem(
             id=1,
             name="Test",
             status=ActionStatus.DRAFT,
-            category=ActionCategory.ADMINISTRATION,
             engine=ActionEngine.SQL_SERVER,
             created_at=datetime(2026, 1, 28),
         )
@@ -989,3 +827,8 @@ class TestActionTagsUpdateRequest:
         with pytest.raises((ValueError, pydantic.ValidationError)) as exc_info:
             ActionTagsUpdateRequest(tag_ids=[1, 2], tag_names=["rac", "dataguard"])
         assert "not both" in str(exc_info.value).lower()
+
+
+# === Story 2.24: ChangeTypeConfigEntry (replaces action-level change_model_code) ===
+# ChangeTypeConfigEntry validation covered in TestChangeTypeConfigEntry above.
+# ActionCreate no longer has change_model_code; change_type_config is in ExecutionStepsUpdate only.

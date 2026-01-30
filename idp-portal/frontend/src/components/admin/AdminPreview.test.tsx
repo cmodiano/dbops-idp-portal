@@ -6,7 +6,6 @@ import type { ActionPreviewData } from '../../types/api';
 const mockFormData: ActionPreviewData = {
   name: 'Creer PDB Oracle',
   description: 'Cree une nouvelle Pluggable Database Oracle.',
-  category: 'Provisioning',
   engine: 'Oracle',
   platform: 'AAP',
   impact_level: 'medium',
@@ -85,10 +84,11 @@ describe('AdminPreview', () => {
     expect(impactIndicators.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('renders disabled execute button in drawer preview', () => {
+  it('renders enabled execute button in drawer preview (admin preview mode)', () => {
     render(<AdminPreview formData={mockFormData} />);
 
+    // In admin preview mode, button is enabled to show what users with permission will see
     const button = screen.getByRole('button', { name: /Executer/i });
-    expect(button).toBeDisabled();
+    expect(button).not.toBeDisabled();
   });
 });

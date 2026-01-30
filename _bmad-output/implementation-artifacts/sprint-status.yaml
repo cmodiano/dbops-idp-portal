@@ -63,27 +63,40 @@ development_status:
   2-11-permissions-targets-par-profile: done  # code-review 2026-01-28
   2-12-cumul-des-permissions-multi-profiles: done  # code-review 2026-01-28
   2-13-import-export-profiles-as-code-yaml: done  # code-review 2026-01-28
-  2-14-refactoring-supprimer-ancien-rbac-par-action: backlog
+  2-14-refactoring-supprimer-ancien-rbac-par-action: done  # 2026-01-29
   2-15-dark-mode-toggle: done  # Quick win UX - stakeholder request; code-review 2026-01-28
   2-16-branding-portail-dbops: done  # Quick win - logo + naming
-  2-17-editeur-visuel-de-parametres-daction: backlog  # FR1 - Remplace input JSON par editeur visuel
-  2-18-editeur-visuel-des-regles-dimpact: backlog  # FR1 - Regles d'impact par environnement
-  2-19-setup-environnement-oracle-dev-avec-docker: backlog  # Tech debt - Docker Compose Oracle pour dev
-  2-20-refactoring-migrations-flyway-et-identity-columns: backlog  # Tech debt - Flyway natif + identity columns
+  2-17-editeur-visuel-de-parametres-daction: done  # FR1 - Remplace input JSON par editeur visuel (code-review 2026-01-29)
+  2-18-editeur-visuel-des-regles-dimpact: done  # FR1 - Regles d'impact par environnement; adversarial review approved 2026-01-29
+  2-19-setup-environnement-oracle-dev-avec-docker: done  # Tech debt - Docker Compose Oracle pour dev (code-review 2026-01-29)
+  2-20-refactoring-migrations-flyway-et-identity-columns: done  # Tech debt - Flyway natif + identity columns (code-review 2026-01-29)
+  2-21-code-modele-de-changement-preapprouve: done  # Change model code ServiceNow par action (code-review 2026-01-29)
+  2-22-wizard-de-creation-et-edition-daction: done  # UX - Wizard 3 etapes pour creation/edition action (code-review 2026-01-29)
+  2-23-suppression-de-la-categorie-tags-only: done  # Simplification - tags only (2026-01-29)  # Simplification - utiliser uniquement les tags
+  2-24-changement-servicenow-conditionnel-par-environnement: done  # Config changement requis + code modele par env (code-review 2026-01-29)
+  2-25-wizard-de-creation-et-edition-de-profil-avec-permissions: done  # Wizard 3 etapes pour profils + permissions (code-review 2026-01-29)
+  2-26-visualisation-format-yaml-import-profils: done  # UX - Exemple YAML + template telecharger (code-review 2026-01-29)
+  2-27-backend-integrations-plateformes-distantes: done  # Config plateformes distantes (AAP, Terraform, etc.) — type, URL, credential_ref, icon (code-review 2026-01-29)
+  2-28-frontend-admin-integrations-liste-formulaire-icone: done  # Onglet Admin Integrations + liste, formulaire, icone (code-review 2026-01-29)
   epic-2-retrospective: optional
 
+  # === Epic 2: TERMINÉ ===
+
   # === Epic 3: Decouverte du Catalogue - Marc (MVP) ===
-  epic-3: backlog
-  3-1-catalogue-actions-avec-modes-affichage-et-favoris: backlog
-  3-2-fiche-descriptive-en-drawer-lateral: backlog
-  3-3-recherche-et-filtrage-du-catalogue-par-tags: backlog
-  3-4-documentation-contextuelle-dune-action: backlog
+  epic-3: in-progress
+  3-1-catalogue-actions-avec-modes-affichage-et-favoris: done  # code-review fixes 2026-01-29
+  3-2-fiche-descriptive-en-drawer-lateral: done  # Code review + tests passed 2026-01-29
+  3-3-recherche-et-filtrage-du-catalogue-par-tags: done  # Code review approved + fixes 2026-01-29
+  3-4-documentation-contextuelle-dune-action: ready-for-dev
+  3-5-nuage-tags-et-clarte-favoris: backlog  # Nuage de tags multi-select + tooltip/aria-label favori (PM feedback)
   epic-3-retrospective: optional
 
   # === Epic 4: Execution & Suivi Temps Reel (MVP) ===
   epic-4: backlog
   4-1-wizard-execution-en-3-etapes: backlog
   4-2-donnees-inventaire-pour-formulaires-dynamiques: backlog
+  4-2bis-connecteur-hashicorp-vault: backlog  # Connexion dynamique a Vault, get_secret; secret 0 via env
+  4-9-integrations-type-libre-flow-upload-icone: backlog  # Type libre, flow auth (token/basic/pat), upload icône
   4-3-moteur-execution-et-facade-api: backlog
   4-4-adapter-plateforme-aap: backlog
   4-5-integration-servicenow-ouverture-automatique-changement: backlog
@@ -133,3 +146,17 @@ development_status:
   10-2-demande-de-consultation-expert-dba: backlog
   10-3-interface-ia-conversationnelle-pour-decouverte-dactions: backlog
   epic-10-retrospective: optional
+
+  # === Epic M: Migration FastAPI vers Django REST (Arrimage plateforme) ===
+  epic-m: backlog
+  m-1-bootstrap-projet-django-et-drf: backlog
+  m-2-modeles-django-et-migrations-schema-oracle: backlog
+  m-3-couche-donnees-repositories-vers-orm-django: backlog
+  m-4-api-rest-catalogue-et-admin-actions-tags: backlog
+  m-5-api-rest-profils-et-permissions: backlog
+  m-6-api-rest-auth-health-integrations: backlog
+  m-7-authentification-saml-et-securite: backlog
+  m-8-middleware-logging-observabilite: backlog
+  m-9-tests-unitaires-et-integration-parite: backlog
+  m-10-strategie-bascule-et-decommissionnement-fastapi: backlog
+  epic-m-retrospective: optional

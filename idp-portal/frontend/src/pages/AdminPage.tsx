@@ -7,17 +7,21 @@
  * - Profiles: list, "Nouveau profil", create/edit/delete (Story 2.9, AC #1–#4)
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { Typography, Button, Table, Space, notification, Card, Tag, Tabs, Modal } from 'antd';
+import { useState, useEffect, useCallback } from 'react';
+import { Typography, Button, Table, Space, notification, Card, Tag, Tabs } from 'antd';
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import { ActionForm } from '../components/admin/ActionForm';
+import { ActionWizard } from '../components/admin/ActionWizard';
 import { ActionStatusBadge } from '../components/admin/ActionStatusBadge';
-import { ProfileForm } from '../components/admin/ProfileForm';
+import { ProfileWizard } from '../components/admin/ProfileWizard';
 import { ProfilesTable } from '../components/admin/ProfilesTable';
-import { createAction, getAction, getAdminActions, updateActionStatus } from '../services/admin_service';
-import { getProfiles, getProfile, createProfile, updateProfile, deleteProfile, exportProfilesYaml, importProfilesYaml } from '../services/profiles_service';
-import type { ActionCreate, ActionListItem, ActionDetail, ActionResponse, ActionStatus, StatusTransition, AdminActionsFilters, ProfileCreate, ProfileUpdate, ProfileResponse, ProfileListItem } from '../types/api';
+import { ProfileImportModal } from '../components/admin/ProfileImportModal';
+import { IntegrationsTable } from '../components/admin/IntegrationsTable';
+import { IntegrationForm } from '../components/admin/IntegrationForm';
+import { createAction, getAction, getAdminActions, updateAction, updateActionStatus } from '../services/admin_service';
+import { getProfiles, getProfile, deleteProfile, exportProfilesYaml } from '../services/profiles_service';
+import { getIntegrations, getIntegration, createIntegration, updateIntegration, deleteIntegration } from '../services/integrations_service';
+import type { ActionCreate, ActionListItem, ActionDetail, ActionResponse, ActionStatus, StatusTransition, AdminActionsFilters, ProfileResponse, ProfileListItem, IntegrationResponse, IntegrationListItem, IntegrationCreate, IntegrationUpdate } from '../types/api';
 
 const { Title } = Typography;
 
@@ -30,18 +34,6 @@ const getColumns = (
     dataIndex: 'name',
     key: 'name',
     sorter: (a, b) => a.name.localeCompare(b.name),
-  },
-  {
-    title: 'Categorie',
-    dataIndex: 'category',
-    key: 'category',
-    filters: [
-      { text: 'Provisioning', value: 'Provisioning' },
-      { text: 'Patching', value: 'Patching' },
-      { text: 'Administration', value: 'Administration' },
-      { text: 'Monitoring', value: 'Monitoring' },
-    ],
-    onFilter: (value, record) => record.category === value,
   },
   {
     title: 'Moteur',
@@ -142,12 +134,15 @@ export default function AdminPage() {
   const [profiles, setProfiles] = useState<ProfileListItem[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
-  const [profileSubmitting, setProfileSubmitting] = useState(false);
-  const [profileSubmitError, setProfileSubmitError] = useState<string | null>(null);
   const [editProfile, setEditProfile] = useState<ProfileResponse | null>(null);
   const [importYamlModalOpen, setImportYamlModalOpen] = useState(false);
-  const [importYamlLoading, setImportYamlLoading] = useState(false);
-  const importYamlFileRef = useRef<File | null>(null);
+
+  const [integrations, setIntegrations] = useState<IntegrationListItem[]>([]);
+  const [integrationsLoading, setIntegrationsLoading] = useState(false);
+  const [integrationModalOpen, setIntegrationModalOpen] = useState(false);
+  const [editIntegration, setEditIntegration] = useState<IntegrationResponse | null>(null);
+  const [integrationSubmitError, setIntegrationSubmitError] = useState<string | null>(null);
+  const [integrationSubmitting, setIntegrationSubmitting] = useState(false);
 
   const fetchActions = useCallback(async (filters?: AdminActionsFilters) => {
     setLoading(true);
@@ -196,9 +191,10 @@ export default function AdminPage() {
     }
   };
 
-  const handleEditSubmit = async (_action: ActionCreate) => {
+  const handleEditSubmit = async (action: ActionCreate) => {
     if (!editAction) throw new Error('editAction manquant');
-    return editAction;
+    const updated = await updateAction(editAction.id, action);
+    return updated;
   };
 
   const handleEdit = async (record: ActionListItem) => {
@@ -256,35 +252,7 @@ export default function AdminPage() {
     setSubmitError(null);
   };
 
-  const handleProfileCreate = async (payload: ProfileCreate) => {
-    setProfileSubmitting(true);
-    setProfileSubmitError(null);
-    try {
-      const created = await createProfile(payload);
-      return created;
-    } catch (err) {
-      setProfileSubmitError(err instanceof Error ? err.message : 'Erreur de creation');
-      setProfileSubmitting(false);
-      throw err;
-    }
-  };
-
-  const handleProfileUpdate = async (payload: ProfileUpdate) => {
-    if (!editProfile) throw new Error('editProfile manquant');
-    setProfileSubmitting(true);
-    setProfileSubmitError(null);
-    try {
-      const updated = await updateProfile(editProfile.id, payload);
-      return updated;
-    } catch (err) {
-      setProfileSubmitError(err instanceof Error ? err.message : 'Erreur de mise a jour');
-      setProfileSubmitting(false);
-      throw err;
-    }
-  };
-
   const handleProfileEdit = async (record: ProfileListItem) => {
-    setProfileSubmitError(null);
     try {
       const detail = await getProfile(record.id);
       setEditProfile(detail);
@@ -311,10 +279,8 @@ export default function AdminPage() {
   };
 
   const handleProfileSuccess = (profile: ProfileResponse) => {
-    setProfileSubmitting(false);
     setProfileModalOpen(false);
     setEditProfile(null);
-    setProfileSubmitError(null);
     notification.success({
       message: 'Succes',
       description: editProfile ? `Profil "${profile.name}" mis a jour` : `Profil "${profile.name}" cree`,
@@ -325,7 +291,6 @@ export default function AdminPage() {
   const handleProfileCancel = () => {
     setProfileModalOpen(false);
     setEditProfile(null);
-    setProfileSubmitError(null);
   };
 
   const handleExportYaml = useCallback(async () => {
@@ -341,39 +306,97 @@ export default function AdminPage() {
   }, []);
 
   const handleImportYaml = useCallback(() => {
-    importYamlFileRef.current = null;
     setImportYamlModalOpen(true);
   }, []);
 
-  const handleImportYamlSubmit = useCallback(async () => {
-    const file = importYamlFileRef.current;
-    if (!file) {
-      notification.warning({ message: 'Fichier requis', description: 'Veuillez sélectionner un fichier .yaml ou .yml' });
-      return;
-    }
-    setImportYamlLoading(true);
+  const handleImportYamlSuccess = useCallback((created: number, updated: number) => {
+    setImportYamlModalOpen(false);
+    notification.success({
+      message: 'Import YAML',
+      description: `Import reussi : ${created} cree(s), ${updated} mis a jour.`,
+    });
+    fetchProfiles();
+  }, [fetchProfiles]);
+
+  const fetchIntegrations = useCallback(async () => {
+    setIntegrationsLoading(true);
     try {
-      const { created, updated } = await importProfilesYaml(file);
-      setImportYamlModalOpen(false);
-      importYamlFileRef.current = null;
-      notification.success({
-        message: 'Import YAML',
-        description: `Import réussi : ${created} créé(s), ${updated} mis à jour.`,
-      });
-      fetchProfiles();
+      const list = await getIntegrations();
+      setIntegrations(list);
     } catch (err) {
       notification.error({
-        message: 'Erreur d\'import',
-        description: err instanceof Error ? err.message : 'Erreur lors de l\'import YAML',
+        message: 'Erreur',
+        description: err instanceof Error ? err.message : 'Erreur de chargement des intégrations',
       });
     } finally {
-      setImportYamlLoading(false);
+      setIntegrationsLoading(false);
     }
   }, []);
 
-  const handleProfileSubmit = async (values: ProfileCreate | ProfileUpdate) => {
-    if (editProfile) return handleProfileUpdate(values as ProfileUpdate);
-    return handleProfileCreate(values as ProfileCreate);
+  const handleIntegrationEdit = async (record: IntegrationListItem) => {
+    setIntegrationSubmitError(null);
+    try {
+      const detail = await getIntegration(record.id);
+      setEditIntegration(detail);
+      setIntegrationModalOpen(true);
+    } catch (err) {
+      notification.error({
+        message: 'Erreur',
+        description: err instanceof Error ? err.message : 'Impossible de charger l\'intégration',
+      });
+    }
+  };
+
+  const handleIntegrationDelete = async (record: IntegrationListItem) => {
+    try {
+      await deleteIntegration(record.id);
+      notification.success({
+        message: 'Succes',
+        description: `Intégration « ${record.name} » supprimée`,
+      });
+      fetchIntegrations();
+    } catch (err) {
+      notification.error({
+        message: 'Erreur',
+        description: err instanceof Error ? err.message : 'Impossible de supprimer l\'intégration',
+      });
+    }
+  };
+
+  const handleIntegrationSuccess = (integration: IntegrationResponse) => {
+    setIntegrationModalOpen(false);
+    setEditIntegration(null);
+    setIntegrationSubmitError(null);
+    const wasEdit = !!editIntegration;
+    notification.success({
+      message: 'Succès',
+      description: wasEdit
+        ? `Intégration « ${integration.name} » mise à jour`
+        : `Intégration « ${integration.name} » créée avec succès`,
+    });
+    fetchIntegrations();
+  };
+
+  const handleIntegrationCancel = () => {
+    setIntegrationModalOpen(false);
+    setEditIntegration(null);
+    setIntegrationSubmitError(null);
+  };
+
+  const handleIntegrationSubmit = async (payload: IntegrationCreate | IntegrationUpdate) => {
+    setIntegrationSubmitting(true);
+    setIntegrationSubmitError(null);
+    try {
+      if (editIntegration) {
+        return await updateIntegration(editIntegration.id, payload as IntegrationUpdate);
+      }
+      return await createIntegration(payload as IntegrationCreate);
+    } catch (err) {
+      setIntegrationSubmitError(err instanceof Error ? err.message : 'Erreur lors de l\'enregistrement');
+      throw err;
+    } finally {
+      setIntegrationSubmitting(false);
+    }
   };
 
   return (
@@ -390,7 +413,10 @@ export default function AdminPage() {
 
       <Tabs
         defaultActiveKey="actions"
-        onChange={(key) => { if (key === 'profiles') fetchProfiles(); }}
+        onChange={(key) => {
+          if (key === 'profiles') fetchProfiles();
+          if (key === 'integrations') fetchIntegrations();
+        }}
         items={[
           {
             key: 'actions',
@@ -435,7 +461,7 @@ export default function AdminPage() {
           },
           {
             key: 'profiles',
-            label: 'Profiles',
+            label: 'Profils',
             children: (
               <Card styles={{ header: { borderBottom: 'none', paddingBottom: 0 }, body: { paddingTop: 16 } }}>
                 <ProfilesTable
@@ -453,10 +479,29 @@ export default function AdminPage() {
               </Card>
             ),
           },
+          {
+            key: 'integrations',
+            label: 'Intégrations',
+            children: (
+              <Card styles={{ header: { borderBottom: 'none', paddingBottom: 0 }, body: { paddingTop: 16 } }}>
+                <IntegrationsTable
+                  dataSource={integrations}
+                  loading={integrationsLoading}
+                  onEdit={handleIntegrationEdit}
+                  onDelete={handleIntegrationDelete}
+                  onNew={() => {
+                    setEditIntegration(null);
+                    setIntegrationModalOpen(true);
+                  }}
+                  onRefresh={fetchIntegrations}
+                />
+              </Card>
+            ),
+          },
         ]}
       />
 
-      <ActionForm
+      <ActionWizard
         open={modalOpen}
         onCancel={handleCancel}
         onSubmit={editAction ? handleEditSubmit : handleCreate}
@@ -466,32 +511,28 @@ export default function AdminPage() {
         onSuccess={handleSuccess}
       />
 
-      <ProfileForm
+      <ProfileWizard
         open={profileModalOpen}
         onCancel={handleProfileCancel}
-        onSubmit={handleProfileSubmit}
-        loading={profileSubmitting}
-        error={profileSubmitError}
         editProfile={editProfile}
         onSuccess={handleProfileSuccess}
       />
 
-      <Modal
-        title="Importer YAML"
+      <ProfileImportModal
         open={importYamlModalOpen}
-        onCancel={() => { setImportYamlModalOpen(false); importYamlFileRef.current = null; }}
-        onOk={handleImportYamlSubmit}
-        okText="Importer"
-        confirmLoading={importYamlLoading}
-        destroyOnClose
-      >
-        <p style={{ marginBottom: 8 }}>Sélectionnez un fichier profiles.yaml ou .yml :</p>
-        <input
-          type="file"
-          accept=".yaml,.yml"
-          onChange={(e) => { importYamlFileRef.current = e.target.files?.[0] ?? null; }}
-        />
-      </Modal>
+        onCancel={() => setImportYamlModalOpen(false)}
+        onSuccess={handleImportYamlSuccess}
+      />
+
+      <IntegrationForm
+        open={integrationModalOpen}
+        onCancel={handleIntegrationCancel}
+        onSubmit={handleIntegrationSubmit}
+        loading={integrationSubmitting}
+        error={integrationSubmitError}
+        editIntegration={editIntegration}
+        onSuccess={handleIntegrationSuccess}
+      />
     </div>
   );
 }

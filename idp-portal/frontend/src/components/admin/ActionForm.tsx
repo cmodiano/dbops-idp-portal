@@ -15,50 +15,34 @@ import { Form, Input, Select, Modal, Alert, Collapse, Typography, Row, Col } fro
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import type {
   ActionCreate,
-  ActionCategory,
   ActionEngine,
   ActionPlatform,
   ActionDetail,
   ActionResponse,
   ExecutionStep,
-  ChangeType,
-  RbacPolicies,
+  ChangeTypeConfigEntry,
   ActionPreviewData,
   ImpactLevel,
+  ParameterDefinition,
+  ImpactRuleDefinition,
 } from '../../types/api';
+import { schemaToParameterList, parameterListToSchema } from '../../utils/parametersSchema';
+import { impactRulesToList, listToImpactRules } from '../../utils/impactRulesSchema';
+import { ENGINE_OPTIONS, PLATFORM_OPTIONS } from '../../utils/actionOptions';
 import { StepsEditor } from './StepsEditor';
+import { ParametersEditor } from './ParametersEditor';
+import { ImpactRulesEditor } from './ImpactRulesEditor';
 import { ChangeTypeConfig } from './ChangeTypeConfig';
-import { RbacEditor } from './RbacEditor';
 import { AdminPreview } from './AdminPreview';
-import { updateActionSteps, updateActionRbac, getTags, updateActionTags } from '../../services/admin_service';
+import { updateActionSteps, getTags, updateActionTags } from '../../services/admin_service';
 
 const { Text } = Typography;
 
 const { TextArea } = Input;
 
-const CATEGORY_OPTIONS: { value: ActionCategory; label: string }[] = [
-  { value: 'Provisioning', label: 'Provisioning' },
-  { value: 'Patching', label: 'Patching' },
-  { value: 'Administration', label: 'Administration' },
-  { value: 'Monitoring', label: 'Monitoring' },
-];
-
-const ENGINE_OPTIONS: { value: ActionEngine; label: string }[] = [
-  { value: 'Oracle', label: 'Oracle' },
-  { value: 'SQL Server', label: 'SQL Server' },
-  { value: 'DB2', label: 'DB2' },
-];
-
-const PLATFORM_OPTIONS: { value: ActionPlatform; label: string }[] = [
-  { value: 'AAP', label: 'AAP (Ansible Automation Platform)' },
-  { value: 'GitHub Actions', label: 'GitHub Actions' },
-  { value: 'Azure DevOps', label: 'Azure DevOps' },
-  { value: 'Terraform', label: 'Terraform' },
-];
-
 interface ActionFormValues extends ActionCreate {
   execution_steps?: ExecutionStep[];
-  change_type_config?: Record<string, ChangeType>;
+  change_type_config?: Record<string, ChangeTypeConfigEntry>;
 }
 
 interface ActionFormProps {
@@ -77,11 +61,13 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
   const [form] = Form.useForm<ActionFormValues>();
   const nameInputRef = useRef<HTMLInputElement>(null);
   const [stepsError, setStepsError] = useState<string | null>(null);
-  const [rbacError, setRbacError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [executionSteps, setExecutionSteps] = useState<ExecutionStep[]>([]);
-  const [changeTypeConfig, setChangeTypeConfig] = useState<Record<string, ChangeType>>({});
-  const [rbacPolicies, setRbacPolicies] = useState<RbacPolicies | null>(null);
+  const [changeTypeConfig, setChangeTypeConfig] = useState<Record<string, ChangeTypeConfigEntry>>({});
+  const [parameterList, setParameterList] = useState<ParameterDefinition[]>([]);
+  const [impactRulesList, setImpactRulesList] = useState<ImpactRuleDefinition[]>([]);
+  const [defaultImpactLevel, setDefaultImpactLevel] = useState<ImpactLevel | null>(null);
+  const [previewEnvironment, setPreviewEnvironment] = useState<string | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagsOptions, setTagsOptions] = useState<{ value: string; label: string }[]>([]);
 
@@ -91,11 +77,8 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
   // Story 2.5: Real-time preview using Form.useWatch
   const watchedName = Form.useWatch('name', form);
   const watchedDescription = Form.useWatch('description', form);
-  const watchedCategory = Form.useWatch('category', form);
   const watchedEngine = Form.useWatch('engine', form);
   const watchedPlatform = Form.useWatch('platform', form);
-  const watchedParametersSchema = Form.useWatch('parameters_schema', form);
-  const watchedImpactRules = Form.useWatch('impact_rules', form);
 
   // Load tags for autocomplete when modal opens (Story 2.6, AC #1)
   useEffect(() => {
@@ -105,46 +88,38 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
       .catch(() => setTagsOptions([]));
   }, [open]);
 
-  // Transform form values to ActionPreviewData for preview
+  // Transform form values to ActionPreviewData for preview (Story 2.17: parameters from visual editor list; Story 2.18: impact rules from list)
   const previewData: ActionPreviewData = useMemo(() => {
-    // Parse parameters_schema JSON if valid
-    let parsedSchema: Record<string, unknown> | null = null;
-    if (watchedParametersSchema) {
-      try {
-        parsedSchema = JSON.parse(watchedParametersSchema as unknown as string);
-      } catch {
-        // Invalid JSON, leave as null
-      }
-    }
+    const parsedSchema = parameterListToSchema(parameterList);
 
-    // Extract impact_level from impact_rules (use first environment or default)
+    // Story 2.18 AC3/AC5: Extract impact_level from impactRulesList based on selected preview environment
+    // AC5: Fall back to defaultImpactLevel when no rule matches or list is empty
     let impactLevel: ImpactLevel | null = null;
-    if (watchedImpactRules) {
-      try {
-        const parsedRules = JSON.parse(watchedImpactRules as unknown as string) as Record<string, { level: string }>;
-        const firstEnv = Object.keys(parsedRules)[0];
-        if (firstEnv && parsedRules[firstEnv]?.level) {
-          const level = parsedRules[firstEnv].level;
-          if (['low', 'medium', 'high', 'critical'].includes(level)) {
-            impactLevel = level as ImpactLevel;
-          }
-        }
-      } catch {
-        // Invalid JSON, leave as null
+    if (impactRulesList.length > 0) {
+      // If previewEnvironment is set, use that environment's rule; otherwise use first rule
+      const targetEnv = previewEnvironment || impactRulesList[0]?.environment;
+      const matchingRule = impactRulesList.find((r) => r.environment === targetEnv);
+      if (matchingRule?.level) {
+        impactLevel = matchingRule.level;
+      } else {
+        // No matching rule for this environment — use default
+        impactLevel = defaultImpactLevel;
       }
+    } else {
+      // No rules defined — use default impact level (AC5)
+      impactLevel = defaultImpactLevel;
     }
 
     return {
       name: (watchedName as string) || '',
       description: (watchedDescription as string) || null,
-      category: (watchedCategory as ActionCategory) || null,
       engine: (watchedEngine as ActionEngine) || null,
       platform: (watchedPlatform as ActionPlatform) || null,
       impact_level: impactLevel,
       parameters_schema: parsedSchema,
       tags: selectedTags,
     };
-  }, [watchedName, watchedDescription, watchedCategory, watchedEngine, watchedPlatform, watchedParametersSchema, watchedImpactRules, selectedTags]);
+  }, [watchedName, watchedDescription, watchedEngine, watchedPlatform, parameterList, impactRulesList, previewEnvironment, defaultImpactLevel, selectedTags]);
 
   // Focus on name input when modal opens (AC #7 accessibility)
   useEffect(() => {
@@ -162,39 +137,38 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
       form.setFieldsValue({
         name: editAction.name,
         description: editAction.description,
-        category: editAction.category,
         engine: editAction.engine,
         platform: editAction.platform,
-        parameters_schema: editAction.parameters_schema
-          ? JSON.stringify(editAction.parameters_schema, null, 2)
-          : undefined,
-        impact_rules: editAction.impact_rules
-          ? JSON.stringify(editAction.impact_rules, null, 2)
-          : undefined,
       } as unknown as ActionFormValues);
       setExecutionSteps(editAction.execution_steps || []);
-      setChangeTypeConfig(editAction.change_type_config || {});
+      setChangeTypeConfig(editAction.change_type_config ?? {});
+      setParameterList(
+        schemaToParameterList(editAction.parameters_schema ?? undefined).map((p, i) => ({
+          ...p,
+          id: p.id ?? `param-${i}-${Date.now()}`,
+        }))
+      );
+      // Story 2.18: Load impact_rules as list for visual editor
+      setImpactRulesList(impactRulesToList(editAction.impact_rules ?? undefined));
+      // Story 2.18 AC5: Load default impact level
+      setDefaultImpactLevel(editAction.default_impact_level ?? null);
+      setPreviewEnvironment(null);
       setSelectedTags(editAction.tags ?? []);
-      // Parse rbac_policies if present (it's stored as Record<string, unknown>)
-      if (editAction.rbac_policies && typeof editAction.rbac_policies === 'object' && 'environments' in editAction.rbac_policies) {
-        setRbacPolicies(editAction.rbac_policies as unknown as RbacPolicies);
-      } else {
-        setRbacPolicies(null);
-      }
     } else if (!open) {
       form.resetFields();
       setExecutionSteps([]);
       setChangeTypeConfig({});
-      setRbacPolicies(null);
+      setParameterList([]);
+      setImpactRulesList([]);
+      setDefaultImpactLevel(null);
+      setPreviewEnvironment(null);
       setSelectedTags([]);
       setStepsError(null);
-      setRbacError(null);
     }
   }, [open, editAction, form]);
 
   const handleFinish = async (values: ActionFormValues) => {
     setStepsError(null);
-    setRbacError(null);
     setSaving(true);
     try {
       // In edit mode, require at least one step (Task 5.3; API does not accept empty steps)
@@ -217,15 +191,61 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
         }
       }
 
-      // Validate RBAC before any persist (Story 2.3; code-review: avoid persisting then failing)
-      if (rbacPolicies) {
-        for (const [env, perm] of Object.entries(rbacPolicies.environments)) {
-          if (!perm.profiles || perm.profiles.length === 0) {
-            setRbacError(`L'environnement ${env} doit avoir au moins un profil autorise.`);
+      // Story 2.17 AC4: validate parameters before save (nom requis, noms uniques)
+      if (parameterList.length > 0) {
+        const names = parameterList.map((p) => (p.name ?? '').trim());
+        const emptyIndex = names.findIndex((n) => !n);
+        if (emptyIndex >= 0) {
+          setStepsError(`Le paramètre ${emptyIndex + 1} doit avoir un nom.`);
+          return;
+        }
+        const seen = new Set<string>();
+        for (let i = 0; i < names.length; i++) {
+          if (seen.has(names[i])) {
+            setStepsError(`Deux paramètres ont le même nom "${names[i]}". Chaque nom doit être unique.`);
             return;
           }
-          if (perm.requires_approval && (!perm.approver_profiles || perm.approver_profiles.length === 0)) {
-            setRbacError(`L'environnement ${env} requiert des profils approbateurs si l'approbation est activee.`);
+          seen.add(names[i]);
+        }
+      }
+
+      // Story 2.18 AC6: validate impact rules before save (environnement requis, niveau requis, environnements uniques)
+      if (impactRulesList.length > 0) {
+        const envs = impactRulesList.map((r) => (r.environment ?? '').trim());
+        const emptyEnvIndex = envs.findIndex((e) => !e);
+        if (emptyEnvIndex >= 0) {
+          setStepsError(`La règle d'impact ${emptyEnvIndex + 1} doit avoir un environnement.`);
+          return;
+        }
+        const seenEnvs = new Set<string>();
+        for (let i = 0; i < envs.length; i++) {
+          if (seenEnvs.has(envs[i])) {
+            setStepsError(`Deux règles d'impact utilisent l'environnement "${envs[i]}". Chaque environnement doit être unique.`);
+            return;
+          }
+          seenEnvs.add(envs[i]);
+        }
+        const missingLevelIndex = impactRulesList.findIndex((r) => !r.level);
+        if (missingLevelIndex >= 0) {
+          setStepsError(`La règle d'impact ${missingLevelIndex + 1} doit avoir un niveau.`);
+          return;
+        }
+      }
+
+      // Story 2.24 AC2: validate change_type_config — when required=true, change_model_code required and alphanumeric max 50
+      for (const [env, entry] of Object.entries(changeTypeConfig)) {
+        if (entry?.required) {
+          const code = (entry.change_model_code ?? '').trim();
+          if (!code) {
+            setStepsError(`Le code modèle est obligatoire pour ${env} lorsque « Changement requis » est activé.`);
+            return;
+          }
+          if (!/^[A-Za-z0-9]+$/.test(code)) {
+            setStepsError(`Le code modèle pour ${env} doit être alphanumérique uniquement.`);
+            return;
+          }
+          if (code.length > 50) {
+            setStepsError(`Le code modèle pour ${env} ne peut pas dépasser 50 caractères.`);
             return;
           }
         }
@@ -234,29 +254,42 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
       const action: ActionCreate = {
         name: values.name,
         description: values.description,
-        category: values.category,
         engine: values.engine,
         platform: values.platform,
-        parameters_schema: values.parameters_schema
-          ? JSON.parse(values.parameters_schema as unknown as string)
-          : null,
-        impact_rules: values.impact_rules
-          ? JSON.parse(values.impact_rules as unknown as string)
-          : null,
+        parameters_schema: parameterListToSchema(parameterList),
+        impact_rules: listToImpactRules(impactRulesList),
+        default_impact_level: defaultImpactLevel,
       };
 
       const result = await onSubmit(action);
       const actionId = editAction?.id ?? (result as ActionDetail | ActionResponse | undefined)?.id;
 
-      if (executionSteps.length > 0 && actionId) {
-        await updateActionSteps(actionId, {
-          steps: executionSteps,
-          change_type_config: Object.keys(changeTypeConfig).length > 0 ? changeTypeConfig : null,
-        });
-      }
+      // Story 2.24: send change_type_config when we have steps OR when we have change config (use placeholder step if no steps)
+      const hasChangeTypeConfig = Object.keys(changeTypeConfig).length > 0;
+      const stepsToSend =
+        executionSteps.length > 0
+          ? executionSteps
+          : hasChangeTypeConfig
+            ? [{ order: 1, name: 'Étape à configurer', type: 'prerequisite' as const, connector_type: 'none' as const, conditional_environments: null }]
+            : [];
+      const change_type_config =
+        hasChangeTypeConfig
+          ? Object.fromEntries(
+              Object.entries(changeTypeConfig).map(([env, e]) => [
+                env,
+                {
+                  required: e?.required ?? false,
+                  change_model_code: e?.required ? (e.change_model_code?.trim() || null) : null,
+                },
+              ])
+            )
+          : null;
 
-      if (rbacPolicies && actionId) {
-        await updateActionRbac(actionId, { policies: rbacPolicies });
+      if (actionId && (stepsToSend.length > 0 || change_type_config !== null)) {
+        await updateActionSteps(actionId, {
+          steps: stepsToSend,
+          change_type_config,
+        });
       }
 
       if (actionId) {
@@ -269,18 +302,6 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
       setStepsError(err instanceof Error ? err.message : 'Erreur lors de la mise à jour des étapes');
     } finally {
       setSaving(false);
-    }
-  };
-
-  const validateJson = (_: unknown, value: string) => {
-    if (!value || value.trim() === '') {
-      return Promise.resolve();
-    }
-    try {
-      JSON.parse(value);
-      return Promise.resolve();
-    } catch {
-      return Promise.reject(new Error('JSON invalide'));
     }
   };
 
@@ -313,16 +334,6 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
         <Alert
           message="Erreur etapes"
           description={stepsError}
-          type="error"
-          showIcon
-          style={{ marginBottom: 16 }}
-        />
-      )}
-
-      {rbacError && (
-        <Alert
-          message="Erreur contrôle d'accès (RBAC)"
-          description={rbacError}
           type="error"
           showIcon
           style={{ marginBottom: 16 }}
@@ -370,18 +381,6 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
             </Form.Item>
 
             <Form.Item
-              name="category"
-              label="Categorie"
-              rules={[{ required: true, message: 'La categorie est requise' }]}
-            >
-              <Select
-                options={CATEGORY_OPTIONS}
-                placeholder="Selectionnez une categorie"
-                aria-label="Categorie de l'action"
-              />
-            </Form.Item>
-
-            <Form.Item
               name="engine"
               label="Moteur de base de donnees"
               rules={[{ required: true, message: 'Le moteur est requis' }]}
@@ -405,33 +404,60 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
               />
             </Form.Item>
 
+            {/* Story 2.17: Parametres — editeur visuel (AC1–AC6) */}
             <Form.Item
-              name="parameters_schema"
-              label="Schema des parametres (JSON Schema)"
-              rules={[{ validator: validateJson }]}
-              tooltip="Schema JSON Schema draft-07 definissant les parametres de l'action"
+              label="Parametres"
+              tooltip="Definissez les parametres de l'action via l'editeur visuel (nom, type, requis, defaut, description)"
             >
-              <TextArea
-                rows={4}
-                placeholder='{"type": "object", "properties": {...}}'
-                aria-label="Schema des parametres au format JSON"
-                style={{ fontFamily: 'monospace' }}
+              <ParametersEditor value={parameterList} onChange={setParameterList} />
+            </Form.Item>
+
+            {/* Story 2.18: Regles d'impact — editeur visuel (AC1–AC6) */}
+            <Form.Item
+              label="Regles d'impact"
+              tooltip="Definissez les regles d'impact par environnement (niveau de risque et justification)"
+            >
+              <ImpactRulesEditor value={impactRulesList} onChange={setImpactRulesList} />
+            </Form.Item>
+
+            {/* Story 2.18 AC5: Niveau d'impact par defaut */}
+            <Form.Item
+              label="Niveau d'impact par defaut"
+              tooltip="Niveau applique quand aucune regle ne correspond a l'environnement d'execution"
+            >
+              <Select
+                value={defaultImpactLevel ?? undefined}
+                onChange={(v) => setDefaultImpactLevel(v || null)}
+                allowClear
+                placeholder="Selectionnez un niveau par defaut"
+                style={{ width: 220 }}
+                aria-label="Niveau d'impact par defaut"
+                options={[
+                  { value: 'low', label: 'Faible (vert)' },
+                  { value: 'medium', label: 'Moyen (orange)' },
+                  { value: 'high', label: 'Eleve (rouge)' },
+                  { value: 'critical', label: 'Critique (rouge fonce)' },
+                ]}
               />
             </Form.Item>
 
-            <Form.Item
-              name="impact_rules"
-              label="Regles d'impact (JSON)"
-              rules={[{ validator: validateJson }]}
-              tooltip='Ex: {"DEV": {"level": "low"}, "PROD": {"level": "high"}}'
-            >
-              <TextArea
-                rows={3}
-                placeholder='{"DEV": {"level": "low"}, "PROD": {"level": "high"}}'
-                aria-label="Regles d'impact au format JSON"
-                style={{ fontFamily: 'monospace' }}
-              />
-            </Form.Item>
+            {/* Story 2.18 AC3: Selecteur d'environnement pour preview dynamique */}
+            {impactRulesList.length > 1 && (
+              <Form.Item
+                label="Environnement de preview"
+                tooltip="Selectionnez l'environnement pour voir l'impact correspondant dans la preview"
+              >
+                <Select
+                  value={previewEnvironment ?? undefined}
+                  onChange={(v) => setPreviewEnvironment(v || null)}
+                  allowClear
+                  placeholder="Selectionnez un environnement"
+                  style={{ width: 200 }}
+                  aria-label="Environnement pour la preview"
+                  options={impactRulesList.map((r) => ({ value: r.environment, label: r.environment }))}
+                />
+              </Form.Item>
+            )}
 
             {/* Story 2.6, AC #1, #2: Section Tags — multi-select + auto-completion, create on Enter */}
             <Form.Item
@@ -477,33 +503,13 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
                       </Form.Item>
 
                       <Form.Item
-                        label="Type de changement ServiceNow par environnement"
-                        tooltip="Definissez le type de changement (pre-approuve) par environnement (AC #3). Story 2.8: CAB supprime."
+                        label="Changement ServiceNow par environnement"
+                        tooltip="Pour chaque environnement : activer « Changement requis » et, si actif, saisir le code modèle (alphanumérique, max 50). Story 2.24."
+                        style={{ marginBottom: 16 }}
                       >
                         <ChangeTypeConfig value={changeTypeConfig} onChange={setChangeTypeConfig} />
                       </Form.Item>
                     </>
-                  ),
-                },
-                {
-                  key: 'rbac-policies',
-                  label: (
-                    <Text strong>
-                      Controle d'acces (RBAC)
-                      {rbacPolicies && (
-                        <Text type="secondary" style={{ marginLeft: 8 }}>
-                          (configure)
-                        </Text>
-                      )}
-                    </Text>
-                  ),
-                  children: (
-                    <Form.Item
-                      label="Politiques RBAC par environnement"
-                      tooltip="Definissez les profils autorises et les regles d'approbation par environnement (Story 2.3, AC #1, #2)"
-                    >
-                      <RbacEditor value={rbacPolicies ?? undefined} onChange={setRbacPolicies} />
-                    </Form.Item>
                   ),
                 },
               ]}

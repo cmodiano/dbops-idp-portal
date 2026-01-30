@@ -7,10 +7,9 @@ import { useMediaQuery } from '../../hooks/useMediaQuery';
 
 import { updateActionSteps } from '../../services/admin_service';
 
-// Mock the admin_service module (Story 2.6: getTags, updateActionTags)
+// Mock the admin_service module (Story 2.6: getTags, updateActionTags). Story 2.14: updateActionRbac removed.
 vi.mock('../../services/admin_service', () => ({
   updateActionSteps: vi.fn().mockResolvedValue({}),
-  updateActionRbac: vi.fn().mockResolvedValue({}),
   getTags: vi.fn().mockResolvedValue([]),
   updateActionTags: vi.fn().mockResolvedValue({}),
 }));
@@ -82,13 +81,14 @@ describe('ActionForm', () => {
   });
 
   describe('Preview Read-Only (Story 2.5, AC #4)', () => {
-    it('renders disabled Execute button in preview', async () => {
+    it('renders enabled Execute button in admin preview (shows what users with permission see)', async () => {
       await act(async () => {
         render(<ActionForm {...defaultProps} />);
       });
 
+      // In admin preview mode, button is enabled to preview what authorized users will see
       const executeButton = screen.getByRole('button', { name: /Executer/i });
-      expect(executeButton).toBeDisabled();
+      expect(executeButton).not.toBeDisabled();
     });
   });
 
@@ -127,20 +127,58 @@ describe('ActionForm', () => {
       });
     });
 
-    it('shows error when JSON is invalid', async () => {
+    // Story 2.18: ImpactRulesEditor replaced JSON TextArea — validation via submit, not inline JSON
+    it('shows error when impact rules have duplicate environment on submit', async () => {
       const user = userEvent.setup();
+      // Edit action with impact_rules that will be loaded as two DEV rules after manipulation
+      const editWithImpactRules: ActionDetail = {
+        id: 1,
+        name: 'Test Action',
+        description: null,
+        engine: 'Oracle',
+        platform: 'AAP',
+        parameters_schema: null,
+        impact_rules: { DEV: { level: 'low' } },
+        default_impact_level: null,
+        status: 'draft',
+        created_by: 1,
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: null,
+        execution_steps: [
+          {
+            order: 1,
+            name: 'Step',
+            type: 'prerequisite',
+            connector_type: 'none',
+            conditional_environments: null,
+          },
+        ],
+        change_type_config: null,
+      };
 
       await act(async () => {
-        render(<ActionForm {...defaultProps} />);
+        render(<ActionForm {...defaultProps} editAction={editWithImpactRules} />);
       });
 
-      const schemaInput = screen.getByLabelText('Schema des parametres au format JSON');
-      await user.type(schemaInput, 'invalid json');
-      await user.tab(); // Trigger blur
+      // Add a second rule that also uses DEV environment
+      const addRuleButton = screen.getByRole('button', { name: /ajouter une regle/i });
+      await user.click(addRuleButton);
+
+      // The new rule starts with empty environment, select DEV for it
+      const envSelects = screen.getAllByRole('combobox', { name: /environnement regle/i });
+      // The second select (index 1) is the new rule
+      await user.click(envSelects[1]);
+      // Click on DEV option
+      const devOptions = screen.getAllByText('DEV');
+      await user.click(devOptions[devOptions.length - 1]);
+
+      // Now try to submit - should show duplicate environment error
+      await user.click(screen.getByText('Enregistrer'));
 
       await waitFor(() => {
-        expect(screen.getByText('JSON invalide')).toBeInTheDocument();
+        expect(screen.getByText(/Deux règles d'impact utilisent l'environnement "DEV"/i)).toBeInTheDocument();
       });
+      expect(mockOnSubmit).not.toHaveBeenCalled();
     });
   });
 
@@ -149,18 +187,18 @@ describe('ActionForm', () => {
       id: 1,
       name: 'Existing Action',
       description: 'Existing description',
-      category: 'Provisioning',
       engine: 'Oracle',
       platform: 'AAP',
       parameters_schema: { type: 'object', properties: { param1: { type: 'string' } } },
       impact_rules: { DEV: { level: 'low' } },
+      default_impact_level: null,
       status: 'draft',
       created_by: 1,
       created_at: '2026-01-01T00:00:00Z',
       updated_at: null,
-      rbac_policies: null,
       execution_steps: null,
       change_type_config: null,
+      tags: [],
     };
 
     it('populates form with existing action data in edit mode', async () => {
@@ -171,6 +209,48 @@ describe('ActionForm', () => {
       await waitFor(() => {
         expect(screen.getByDisplayValue('Existing Action')).toBeInTheDocument();
         expect(screen.getByDisplayValue('Existing description')).toBeInTheDocument();
+      });
+    });
+
+    it('Story 2.17 (AC5): populates ParametersEditor with existing parameters_schema in edit mode', async () => {
+      await act(async () => {
+        render(<ActionForm {...defaultProps} editAction={mockEditAction} />);
+      });
+
+      await waitFor(() => {
+        // mockEditAction has parameters_schema: { type: 'object', properties: { param1: { type: 'string' } } }
+        expect(screen.getByDisplayValue('param1')).toBeInTheDocument();
+      });
+    });
+
+    it('Story 2.18 (AC5): populates ImpactRulesEditor with existing impact_rules in edit mode', async () => {
+      await act(async () => {
+        render(<ActionForm {...defaultProps} editAction={mockEditAction} />);
+      });
+
+      await waitFor(() => {
+        // mockEditAction has impact_rules: { DEV: { level: 'low' } }
+        // ImpactRulesEditor shows the rule card with environment and level
+        expect(screen.getByText('Regle 1')).toBeInTheDocument();
+        // ImpactIndicator displays 'Faible' for low level (may appear multiple times)
+        expect(screen.getAllByText('Faible').length).toBeGreaterThanOrEqual(1);
+      });
+    });
+
+    it('Story 2.18 (Issue #4): handles null/empty impact_rules in edit mode', async () => {
+      const editWithNullImpact: ActionDetail = {
+        ...mockEditAction,
+        impact_rules: null,
+        default_impact_level: null,
+      };
+
+      await act(async () => {
+        render(<ActionForm {...defaultProps} editAction={editWithNullImpact} />);
+      });
+
+      await waitFor(() => {
+        // With null impact_rules, ImpactRulesEditor shows empty state
+        expect(screen.getByText(/aucune regle d'impact/i)).toBeInTheDocument();
       });
     });
 
@@ -190,7 +270,7 @@ describe('ActionForm', () => {
       expect(screen.getByText('Enregistrer')).toBeInTheDocument();
     });
 
-    it('save sends change_type_config with only pre_approved, never cab (Story 2.8, AC4)', async () => {
+    it('save sends change_type_config in new format (Story 2.24)', async () => {
       const user = userEvent.setup();
       const editWithSteps: ActionDetail = {
         ...mockEditAction,
@@ -203,7 +283,7 @@ describe('ActionForm', () => {
             conditional_environments: null,
           },
         ],
-        change_type_config: { DEV: 'pre_approved', PROD: 'pre_approved' },
+        change_type_config: { DEV: { required: false }, PROD: { required: true, change_model_code: '1516B' } },
       };
       await act(async () => {
         render(<ActionForm {...defaultProps} editAction={editWithSteps} />);
@@ -216,8 +296,240 @@ describe('ActionForm', () => {
       const call = vi.mocked(updateActionSteps).mock.calls[0];
       const payload = call[1];
       expect(payload.change_type_config).toBeDefined();
-      expect(Object.values(payload.change_type_config!).every((v) => v === 'pre_approved')).toBe(true);
-      expect(Object.values(payload.change_type_config!).includes('cab')).toBe(false);
+      expect(payload.change_type_config!.PROD).toEqual({ required: true, change_model_code: '1516B' });
+      expect(payload.change_type_config!.DEV).toEqual({ required: false, change_model_code: null });
+    });
+  });
+
+  describe('Story 2.17: Parameters visual editor (AC4, AC5)', () => {
+    it('edit mode submit sends parameters_schema from ParametersEditor', async () => {
+      const user = userEvent.setup();
+      const editActionWithParams: ActionDetail = {
+        id: 1,
+        name: 'Existing Action',
+        description: 'Existing description',
+        engine: 'Oracle',
+        platform: 'AAP',
+        parameters_schema: { type: 'object', properties: { param1: { type: 'string' } } },
+        impact_rules: { DEV: { level: 'low' } },
+        default_impact_level: null,
+        status: 'draft',
+        created_by: 1,
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: null,
+        execution_steps: [
+          {
+            order: 1,
+            name: 'Step',
+            type: 'prerequisite',
+            connector_type: 'none',
+            conditional_environments: null,
+          },
+        ],
+        change_type_config: null,
+      };
+
+      await act(async () => {
+        render(<ActionForm {...defaultProps} editAction={editActionWithParams} />);
+      });
+
+      await user.click(screen.getByText('Enregistrer'));
+
+      await waitFor(() => {
+        expect(mockOnSubmit).toHaveBeenCalled();
+      });
+      const call = mockOnSubmit.mock.calls[0];
+      const payload = call[0];
+      expect(payload.parameters_schema).not.toBeNull();
+      expect(payload.parameters_schema?.type).toBe('object');
+      expect(payload.parameters_schema?.properties?.param1).toMatchObject({ type: 'string' });
+    });
+
+    it('blocks submit when two parameters have same name (AC4 validation)', async () => {
+      const user = userEvent.setup();
+      const editWithTwoParams: ActionDetail = {
+        id: 1,
+        name: 'Edit',
+        description: null,
+        engine: 'Oracle',
+        platform: 'AAP',
+        parameters_schema: {
+          type: 'object',
+          properties: {
+            p1: { type: 'string' },
+            p2: { type: 'string' },
+          },
+          required: [],
+        },
+        impact_rules: { DEV: { level: 'low' } },
+        default_impact_level: null,
+        status: 'draft',
+        created_by: 1,
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: null,
+        execution_steps: [
+          {
+            order: 1,
+            name: 'Step',
+            type: 'prerequisite',
+            connector_type: 'none',
+            conditional_environments: null,
+          },
+        ],
+        change_type_config: null,
+      };
+      await act(async () => {
+        render(<ActionForm {...defaultProps} editAction={editWithTwoParams} />);
+      });
+      // Change second param name to same as first
+      const nameInputs = screen.getAllByLabelText(/Nom parametre \d/i);
+      await user.clear(nameInputs[1]);
+      await user.type(nameInputs[1], 'p1');
+      await user.click(screen.getByText('Enregistrer'));
+      await waitFor(() => {
+        expect(screen.getByText(/Deux paramètres ont le même nom/i)).toBeInTheDocument();
+      });
+      expect(mockOnSubmit).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Story 2.18: ImpactRulesEditor visual editor (AC3)', () => {
+    it('AC3: preview updates dynamically when preview environment selector changes', async () => {
+      const user = userEvent.setup();
+      const editWithMultipleRules: ActionDetail = {
+        id: 1,
+        name: 'Test Action',
+        description: null,
+        engine: 'Oracle',
+        platform: 'AAP',
+        parameters_schema: null,
+        // Two rules with different levels
+        impact_rules: {
+          DEV: { level: 'low', criteria: 'Dev env' },
+          PROD: { level: 'high', criteria: 'Production' },
+        },
+        default_impact_level: null,
+        status: 'draft',
+        created_by: 1,
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: null,
+        execution_steps: [
+          {
+            order: 1,
+            name: 'Step',
+            type: 'prerequisite',
+            connector_type: 'none',
+            conditional_environments: null,
+          },
+        ],
+        change_type_config: null,
+      };
+
+      await act(async () => {
+        render(<ActionForm {...defaultProps} editAction={editWithMultipleRules} />);
+      });
+
+      // Wait for form to populate
+      await waitFor(() => {
+        expect(screen.getByText('Regle 1')).toBeInTheDocument();
+        expect(screen.getByText('Regle 2')).toBeInTheDocument();
+      });
+
+      // Preview environment selector should be visible (because >1 rule)
+      const envPreviewSelect = screen.getByRole('combobox', { name: /environnement pour la preview/i });
+      expect(envPreviewSelect).toBeInTheDocument();
+
+      // Initially, preview shows first rule's level (DEV = low = "Faible")
+      // AdminPreview shows impact indicator
+      const previewSection = document.querySelector('[aria-live="polite"]');
+      expect(previewSection).toBeInTheDocument();
+
+      // Change preview environment to PROD (multiple PROD texts may exist - use last one from dropdown)
+      await user.click(envPreviewSelect);
+      const prodOptions = screen.getAllByText('PROD');
+      await user.click(prodOptions[prodOptions.length - 1]);
+
+      // Now preview should show PROD's level (high = "Eleve")
+      // The AdminPreview component renders ImpactIndicator which shows the level text
+      await waitFor(() => {
+        // Check that "Eleve" appears in the preview area (high level)
+        const eleveIndicators = screen.getAllByText('Eleve');
+        expect(eleveIndicators.length).toBeGreaterThanOrEqual(1);
+      });
+    });
+  });
+
+  describe('Story 2.24: ChangeTypeConfig per env (required + change_model_code)', () => {
+    it('blocks submit when required=true for PROD but code is empty', async () => {
+      const user = userEvent.setup();
+      const editAction: ActionDetail = {
+        id: 1,
+        name: 'Test Action',
+        description: null,
+        engine: 'Oracle',
+        platform: 'AAP',
+        parameters_schema: null,
+        impact_rules: null,
+        default_impact_level: null,
+        status: 'draft',
+        created_by: 1,
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: null,
+        execution_steps: [
+          { order: 1, name: 'Step', type: 'prerequisite', connector_type: 'none', conditional_environments: null },
+        ],
+        change_type_config: { PROD: { required: true, change_model_code: '' } },
+        tags: [],
+      };
+
+      await act(async () => {
+        render(<ActionForm {...defaultProps} editAction={editAction} />);
+      });
+
+      const collapseHeader = screen.getByText(/etapes d'execution/i);
+      await user.click(collapseHeader);
+
+      await user.click(screen.getByText('Enregistrer'));
+
+      await waitFor(() => {
+        expect(screen.getByText(/Le code modèle est obligatoire pour PROD/i)).toBeInTheDocument();
+      });
+      expect(mockOnSubmit).not.toHaveBeenCalled();
+    });
+
+    it('blocks submit when required=true but code is non-alphanumeric', async () => {
+      const user = userEvent.setup();
+      const editAction: ActionDetail = {
+        id: 1,
+        name: 'Test Action',
+        description: null,
+        engine: 'Oracle',
+        platform: 'AAP',
+        parameters_schema: null,
+        impact_rules: null,
+        default_impact_level: null,
+        status: 'draft',
+        created_by: 1,
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: null,
+        execution_steps: [
+          { order: 1, name: 'Step', type: 'prerequisite', connector_type: 'none', conditional_environments: null },
+        ],
+        change_type_config: { PROD: { required: true, change_model_code: '1516-B' } },
+        tags: [],
+      };
+
+      await act(async () => {
+        render(<ActionForm {...defaultProps} editAction={editAction} />);
+      });
+
+      await user.click(screen.getByText('Enregistrer'));
+
+      // Should show error and block submit (message contains "alphanumérique")
+      await waitFor(() => {
+        expect(screen.getByText(/code modèle pour PROD/i)).toBeInTheDocument();
+      });
+      expect(mockOnSubmit).not.toHaveBeenCalled();
     });
   });
 
