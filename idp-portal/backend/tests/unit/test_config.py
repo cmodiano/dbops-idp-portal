@@ -13,4 +13,6 @@ def test_default_oracle_settings():
 
 def test_default_cors_origin():
     s = Settings()
+    assert s.cors_origins == ["http://localhost:5173"]
     assert s.cors_origin == "http://localhost:5173"
+    assert s.frontend_base_url == "http://localhost:5173"

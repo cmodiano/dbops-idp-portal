@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import structlog
 from fastapi import APIRouter, Depends, Request, Response
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.core.config import settings
 from app.core.exceptions import ForbiddenError, UnauthorizedError
@@ -80,9 +80,25 @@ async def saml_callback(request: Request):
     access_token = create_access_token(token_data)
     refresh_token = create_refresh_token(token_data)
 
-    # Redirect to SPA with access token as URL fragment, set refresh token as httpOnly cookie
-    redirect_url = f"{settings.cors_origin}/auth/callback#access_token={access_token}"
-    response = RedirectResponse(url=redirect_url, status_code=302)
+    # Response strategy:
+    # - redirect: portal flow (browser redirected to FRONTEND_BASE_URL)
+    # - json: API-only flow (tokens returned as JSON)
+    if settings.saml_callback_mode == "json":
+        response: Response = JSONResponse(
+            status_code=200,
+            content={
+                "data": {
+                    "access_token": access_token,
+                    "refresh_token": refresh_token,
+                    "token_type": "bearer",
+                }
+            },
+        )
+    else:
+        redirect_url = f"{settings.frontend_base_url}/auth/callback#access_token={access_token}"
+        response = RedirectResponse(url=redirect_url, status_code=302)
+
+    # Set refresh token as httpOnly cookie (used by /auth/refresh)
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
