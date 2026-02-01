@@ -54,37 +54,208 @@ class TestNavigationPermissions:
 
 
 class TestCanExecute:
-    """Tests for can_execute with caching."""
+    """Tests for can_execute with granular RBAC (Story 7.3)."""
 
     @pytest.fixture(autouse=True)
     def clear_cache(self):
         """Clear permission cache before each test."""
         _permission_cache.clear()
+        _cumulative_permissions_cache.clear()
         yield
         _permission_cache.clear()
+        _cumulative_permissions_cache.clear()
 
-    async def test_can_execute_queries_repository(self):
-        """First call queries user_repository.has_permission."""
-        with patch("app.services.rbac_service.user_repository") as mock_repo:
-            mock_repo.has_permission = AsyncMock(return_value=True)
+    async def test_can_execute_with_actions_type_all(self):
+        """User with actions_type=all can execute any action in allowed env."""
+        perms = CumulativePermissionsResponse(
+            actions_type="all",
+            action_ids=[],
+            tag_patterns=[],
+            environments=["DEV", "PROD"],
+            targets_type="list",
+            target_names=[],
+            target_patterns=[],
+        )
+        with (
+            patch("app.services.rbac_service.user_repository") as mock_user_repo,
+            patch("app.services.rbac_service.profile_repository") as mock_profile_repo,
+            patch(
+                "app.services.rbac_service.get_cumulative_permissions_cached",
+                new_callable=AsyncMock,
+                return_value=perms,
+            ),
+        ):
+            mock_user_repo.get_by_id = AsyncMock(return_value={"id": 1, "profile": "dbops"})
+            mock_profile_repo.find_by_ad_groups = AsyncMock(
+                return_value=[type("Profile", (), {"id": 1})()]
+            )
             result = await can_execute(1, 10, "PROD")
             assert result is True
-            mock_repo.has_permission.assert_awaited_once_with(1, 10, "PROD")
+
+    async def test_can_execute_with_action_id_in_list(self):
+        """User with action_id in action_ids list can execute that action."""
+        perms = CumulativePermissionsResponse(
+            actions_type="list",
+            action_ids=[10, 20, 30],
+            tag_patterns=[],
+            environments=["DEV", "STAGING"],
+            targets_type="list",
+            target_names=[],
+            target_patterns=[],
+        )
+        with (
+            patch("app.services.rbac_service.user_repository") as mock_user_repo,
+            patch("app.services.rbac_service.profile_repository") as mock_profile_repo,
+            patch(
+                "app.services.rbac_service.get_cumulative_permissions_cached",
+                new_callable=AsyncMock,
+                return_value=perms,
+            ),
+        ):
+            mock_user_repo.get_by_id = AsyncMock(return_value={"id": 1, "profile": "dba"})
+            mock_profile_repo.find_by_ad_groups = AsyncMock(
+                return_value=[type("Profile", (), {"id": 1})()]
+            )
+            result = await can_execute(1, 10, "DEV")
+            assert result is True
+
+    async def test_can_execute_with_tag_pattern_match(self):
+        """User with tag_pattern matching action tags can execute."""
+        perms = CumulativePermissionsResponse(
+            actions_type="pattern",
+            action_ids=[],
+            tag_patterns=["provisioning", "patching"],
+            environments=["DEV", "PROD"],
+            targets_type="list",
+            target_names=[],
+            target_patterns=[],
+        )
+        with (
+            patch("app.services.rbac_service.user_repository") as mock_user_repo,
+            patch("app.services.rbac_service.profile_repository") as mock_profile_repo,
+            patch("app.services.rbac_service.catalog_repository") as mock_catalog_repo,
+            patch(
+                "app.services.rbac_service.get_cumulative_permissions_cached",
+                new_callable=AsyncMock,
+                return_value=perms,
+            ),
+        ):
+            mock_user_repo.get_by_id = AsyncMock(return_value={"id": 1, "profile": "dba"})
+            mock_profile_repo.find_by_ad_groups = AsyncMock(
+                return_value=[type("Profile", (), {"id": 1})()]
+            )
+            mock_catalog_repo.get_tags_for_action = AsyncMock(return_value=["provisioning", "oracle"])
+            result = await can_execute(1, 10, "DEV")
+            assert result is True
+
+    async def test_can_execute_denied_wrong_environment(self):
+        """Returns False when environment not in allowed list."""
+        perms = CumulativePermissionsResponse(
+            actions_type="all",
+            action_ids=[],
+            tag_patterns=[],
+            environments=["DEV"],  # Only DEV allowed
+            targets_type="list",
+            target_names=[],
+            target_patterns=[],
+        )
+        with (
+            patch("app.services.rbac_service.user_repository") as mock_user_repo,
+            patch("app.services.rbac_service.profile_repository") as mock_profile_repo,
+            patch(
+                "app.services.rbac_service.get_cumulative_permissions_cached",
+                new_callable=AsyncMock,
+                return_value=perms,
+            ),
+        ):
+            mock_user_repo.get_by_id = AsyncMock(return_value={"id": 1, "profile": "dba"})
+            mock_profile_repo.find_by_ad_groups = AsyncMock(
+                return_value=[type("Profile", (), {"id": 1})()]
+            )
+            result = await can_execute(1, 10, "PROD")  # PROD not allowed
+            assert result is False
+
+    async def test_can_execute_denied_no_action_permission(self):
+        """Returns False when action not in allowed actions and no tag match."""
+        perms = CumulativePermissionsResponse(
+            actions_type="list",
+            action_ids=[20, 30],  # Action 10 not in list
+            tag_patterns=["monitoring"],
+            environments=["DEV", "PROD"],
+            targets_type="list",
+            target_names=[],
+            target_patterns=[],
+        )
+        with (
+            patch("app.services.rbac_service.user_repository") as mock_user_repo,
+            patch("app.services.rbac_service.profile_repository") as mock_profile_repo,
+            patch("app.services.rbac_service.catalog_repository") as mock_catalog_repo,
+            patch(
+                "app.services.rbac_service.get_cumulative_permissions_cached",
+                new_callable=AsyncMock,
+                return_value=perms,
+            ),
+        ):
+            mock_user_repo.get_by_id = AsyncMock(return_value={"id": 1, "profile": "dba"})
+            mock_profile_repo.find_by_ad_groups = AsyncMock(
+                return_value=[type("Profile", (), {"id": 1})()]
+            )
+            mock_catalog_repo.get_tags_for_action = AsyncMock(return_value=["provisioning"])  # No match
+            result = await can_execute(1, 10, "DEV")
+            assert result is False
 
     async def test_can_execute_caches_result(self):
         """Second call uses cache, not repository."""
-        with patch("app.services.rbac_service.user_repository") as mock_repo:
-            mock_repo.has_permission = AsyncMock(return_value=True)
+        perms = CumulativePermissionsResponse(
+            actions_type="all",
+            action_ids=[],
+            tag_patterns=[],
+            environments=["DEV", "PROD"],
+            targets_type="list",
+            target_names=[],
+            target_patterns=[],
+        )
+        with (
+            patch("app.services.rbac_service.user_repository") as mock_user_repo,
+            patch("app.services.rbac_service.profile_repository") as mock_profile_repo,
+            patch(
+                "app.services.rbac_service.get_cumulative_permissions_cached",
+                new_callable=AsyncMock,
+                return_value=perms,
+            ),
+        ):
+            mock_user_repo.get_by_id = AsyncMock(return_value={"id": 1, "profile": "dbops"})
+            mock_profile_repo.find_by_ad_groups = AsyncMock(
+                return_value=[type("Profile", (), {"id": 1})()]
+            )
             await can_execute(1, 10, "PROD")
             await can_execute(1, 10, "PROD")
-            # Only one call — second hit cache
-            assert mock_repo.has_permission.await_count == 1
+            # Only one call to get_by_id — second hit cache
+            assert mock_user_repo.get_by_id.await_count == 1
 
-    async def test_can_execute_returns_false(self):
-        """Returns False when permission not found."""
-        with patch("app.services.rbac_service.user_repository") as mock_repo:
-            mock_repo.has_permission = AsyncMock(return_value=False)
-            result = await can_execute(2, 20, "DEV")
+    async def test_can_execute_returns_false_when_user_not_found(self):
+        """Returns False when user does not exist in database."""
+        with patch("app.services.rbac_service.user_repository") as mock_user_repo:
+            mock_user_repo.get_by_id = AsyncMock(return_value=None)
+            result = await can_execute(999, 10, "DEV")
+            assert result is False
+
+    async def test_can_execute_returns_false_when_user_has_no_profile(self):
+        """Returns False when user exists but has no profile."""
+        with patch("app.services.rbac_service.user_repository") as mock_user_repo:
+            mock_user_repo.get_by_id = AsyncMock(return_value={"id": 1, "profile": None})
+            result = await can_execute(1, 10, "DEV")
+            assert result is False
+
+    async def test_can_execute_returns_false_when_no_profile_ids_found(self):
+        """Returns False when user profile doesn't map to any profile IDs."""
+        with (
+            patch("app.services.rbac_service.user_repository") as mock_user_repo,
+            patch("app.services.rbac_service.profile_repository") as mock_profile_repo,
+        ):
+            mock_user_repo.get_by_id = AsyncMock(return_value={"id": 1, "profile": "unknown_profile"})
+            mock_profile_repo.find_by_ad_groups = AsyncMock(return_value=[])  # No profiles found
+            result = await can_execute(1, 10, "DEV")
             assert result is False
 
 
@@ -94,31 +265,31 @@ class TestInvalidateCache:
     @pytest.fixture(autouse=True)
     def clear_cache(self):
         _permission_cache.clear()
+        _cumulative_permissions_cache.clear()
         yield
         _permission_cache.clear()
+        _cumulative_permissions_cache.clear()
 
     async def test_invalidate_removes_user_entries(self):
         """invalidate_cache removes all entries for a user."""
-        with patch("app.services.rbac_service.user_repository") as mock_repo:
-            mock_repo.has_permission = AsyncMock(return_value=True)
-            await can_execute(1, 10, "PROD")
-            await can_execute(1, 20, "DEV")
-            assert len(_permission_cache) == 2
+        # Manually populate cache to test invalidation
+        _permission_cache["1:10:PROD"] = True
+        _permission_cache["1:20:DEV"] = True
+        assert len(_permission_cache) == 2
 
-            invalidate_cache(1)
-            assert len(_permission_cache) == 0
+        invalidate_cache(1)
+        assert len(_permission_cache) == 0
 
     async def test_invalidate_preserves_other_users(self):
         """invalidate_cache only removes specified user's entries."""
-        with patch("app.services.rbac_service.user_repository") as mock_repo:
-            mock_repo.has_permission = AsyncMock(return_value=True)
-            await can_execute(1, 10, "PROD")
-            await can_execute(2, 10, "PROD")
-            assert len(_permission_cache) == 2
+        # Manually populate cache to test invalidation
+        _permission_cache["1:10:PROD"] = True
+        _permission_cache["2:10:PROD"] = True
+        assert len(_permission_cache) == 2
 
-            invalidate_cache(1)
-            assert len(_permission_cache) == 1
-            assert "2:10:PROD" in _permission_cache
+        invalidate_cache(1)
+        assert len(_permission_cache) == 1
+        assert "2:10:PROD" in _permission_cache
 
 
 class TestGetCumulativePermissions:
@@ -302,8 +473,12 @@ class TestGetCumulativePermissionsCached:
         ):
             await get_cumulative_permissions_cached(1, [1])
         assert len(_cumulative_permissions_cache) == 1
+        # Also populate permission cache
+        _permission_cache["1:10:PROD"] = True
+        assert len(_permission_cache) == 1
         invalidate_permissions_cache()
         assert len(_cumulative_permissions_cache) == 0
+        assert len(_permission_cache) == 0  # Both caches should be cleared
 
     @pytest.mark.asyncio
     async def test_cache_invalidation_forces_refetch(self):

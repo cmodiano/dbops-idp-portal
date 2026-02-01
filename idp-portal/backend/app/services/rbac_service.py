@@ -1,15 +1,23 @@
-"""RBAC service: permission evaluation with in-memory cache (Story 2.12: cumulative permissions)."""
+"""RBAC service: permission evaluation with in-memory cache (Story 2.12: cumulative permissions).
+
+Story 7.3: Granular RBAC by action x profile x environment.
+"""
 
 from __future__ import annotations
 
+import structlog
 from cachetools import TTLCache
 
 from app.models.profile import CumulativePermissionsResponse
 from app.repositories import (
+    catalog_repository,
     profile_action_permission_repository,
+    profile_repository,
     profile_target_permission_repository,
     user_repository,
 )
+
+logger = structlog.get_logger()
 
 # Navigation tabs by profile — DBOPS sees Admin, others do not
 _NAVIGATION_MAP: dict[str, list[str]] = {
@@ -99,8 +107,13 @@ async def get_cumulative_permissions_cached(
 
 
 def invalidate_permissions_cache() -> None:
-    """Invalidate all cached cumulative permissions (AC5: on profile/permissions admin change)."""
+    """Invalidate all cached permissions (AC5: on profile/permissions admin change).
+
+    Clears both the cumulative permissions cache and the per-request permission cache
+    to ensure permission changes take effect immediately.
+    """
     _cumulative_permissions_cache.clear()
+    _permission_cache.clear()
 
 
 def invalidate_cache(user_id: int) -> None:
@@ -113,11 +126,134 @@ def invalidate_cache(user_id: int) -> None:
 
 
 async def can_execute(user_id: int, action_id: int, environment: str) -> bool:
-    """Check if user has permission to execute action in environment. Cached 60s."""
+    """Check if user has permission to execute action in environment (Story 7.3, AC4, AC5).
+
+    Evaluates granular RBAC combining action x profile x environment:
+    1. Get user's profile IDs from AD groups
+    2. Get cumulative permissions (cached 60s)
+    3. Check environment is in allowed environments
+    4. Check action permission by: actions_type="all", action_id in list, or tag_patterns match
+
+    Args:
+        user_id: User ID to check permissions for
+        action_id: Action ID being executed
+        environment: Target environment (DEV, STAGING, PROD, etc.)
+
+    Returns:
+        True if user has permission, False otherwise
+    """
     cache_key = f"{user_id}:{action_id}:{environment}"
     if cache_key in _permission_cache:
-        return _permission_cache[cache_key]
+        cached_result = _permission_cache[cache_key]
+        logger.debug(
+            "rbac_can_execute_cache_hit",
+            user_id=user_id,
+            action_id=action_id,
+            environment=environment,
+            result=cached_result,
+        )
+        return cached_result
 
-    result = await user_repository.has_permission(user_id, action_id, environment)
-    _permission_cache[cache_key] = result
-    return result
+    # Get user's profile IDs
+    user_data = await user_repository.get_by_id(user_id)
+    if not user_data:
+        logger.warning(
+            "rbac_permission_denied_user_not_found",
+            user_id=user_id,
+            action_id=action_id,
+            environment=environment,
+        )
+        _permission_cache[cache_key] = False
+        return False
+
+    # Get profiles by AD group (user's profile field)
+    user_profile = user_data.get("profile")
+    if not user_profile:
+        logger.warning(
+            "rbac_permission_denied_no_profile",
+            user_id=user_id,
+            action_id=action_id,
+            environment=environment,
+        )
+        _permission_cache[cache_key] = False
+        return False
+
+    profiles = await profile_repository.find_by_ad_groups([user_profile.lower()])
+    profile_ids = [p.id for p in profiles] if profiles else []
+
+    if not profile_ids:
+        logger.warning(
+            "rbac_permission_denied_no_profile_ids",
+            user_id=user_id,
+            user_profile=user_profile,
+            action_id=action_id,
+            environment=environment,
+        )
+        _permission_cache[cache_key] = False
+        return False
+
+    # Get cumulative permissions (cached)
+    perms = await get_cumulative_permissions_cached(user_id, profile_ids)
+
+    # Check environment permission
+    allowed_envs = [e.upper() for e in (perms.environments or [])]
+    env_upper = environment.upper()
+    if env_upper not in allowed_envs:
+        logger.warning(
+            "rbac_permission_denied_environment",
+            user_id=user_id,
+            action_id=action_id,
+            environment=environment,
+            allowed_environments=perms.environments,
+        )
+        _permission_cache[cache_key] = False
+        return False
+
+    # Check action permission based on actions_type
+    if perms.actions_type == "all":
+        logger.info(
+            "rbac_permission_granted_all_actions",
+            user_id=user_id,
+            action_id=action_id,
+            environment=environment,
+        )
+        _permission_cache[cache_key] = True
+        return True
+
+    # Check if action_id is in allowed list
+    if action_id in (perms.action_ids or []):
+        logger.info(
+            "rbac_permission_granted_action_id",
+            user_id=user_id,
+            action_id=action_id,
+            environment=environment,
+        )
+        _permission_cache[cache_key] = True
+        return True
+
+    # Check tag patterns match
+    if perms.tag_patterns:
+        action_tags = await catalog_repository.get_tags_for_action(action_id)
+        matching_tags = set(action_tags) & set(perms.tag_patterns)
+        if matching_tags:
+            logger.info(
+                "rbac_permission_granted_tag_pattern",
+                user_id=user_id,
+                action_id=action_id,
+                environment=environment,
+                matching_tags=list(matching_tags),
+            )
+            _permission_cache[cache_key] = True
+            return True
+
+    logger.warning(
+        "rbac_permission_denied_no_match",
+        user_id=user_id,
+        action_id=action_id,
+        environment=environment,
+        actions_type=perms.actions_type,
+        action_ids=perms.action_ids,
+        tag_patterns=perms.tag_patterns,
+    )
+    _permission_cache[cache_key] = False
+    return False
