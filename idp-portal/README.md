@@ -136,6 +136,28 @@ python ../scripts/seed_dev_data.py --env=dev
 - **Exécutions** : liste avec tous les statuts, détail avec timeline/logs/erreur
 - **Dashboard** : stats et activité récente avec données
 
+### Test du mode Business (Story 7.1)
+
+Le profil BUSINESS dans le seed data utilise une interface simplifiée :
+- **Descriptions sanitizées** : termes techniques (pipeline, playbook, webhook, etc.) remplacés par des équivalents accessibles
+- **Onglet Admin masqué** : seuls les onglets Catalogue, Exécutions et Dashboard sont visibles
+- **Fiche action simplifiée** : métadonnées techniques masquées, indicateur d'impact avec callout visuel
+
+Pour tester en mode business, utiliser l'utilisateur `user1` (profil BUSINESS) avec le système d'authentification, ou modifier temporairement le mock user dans `frontend/src/contexts/AuthContext.tsx` :
+
+```typescript
+const DEV_MOCK_USER: User = {
+  id: 1,
+  username: 'fatima.business',
+  display_name: 'Fatima Business',
+  profile: 'business',  // ou 'client_business'
+  navigation_tabs: ['catalog', 'executions', 'dashboard'],
+  is_auditor: false,
+};
+```
+
+Le flag `is_business_profile` est retourné par l'API `/auth/me` et conditionne l'affichage simplifié.
+
 **Important :** Ce script est réservé à la base de développement. Il refuse de s'exécuter si `APP_ENV` n'est pas `development` ou si `--env=dev` n'est pas spécifié. En cas d'échec du script après un `--reset`, la base reste vide (rollback automatique).
 
 ## Structure

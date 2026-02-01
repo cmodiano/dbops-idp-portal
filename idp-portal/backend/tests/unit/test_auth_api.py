@@ -374,3 +374,91 @@ async def test_get_current_user_dev_bypass_binds_user_id(client):
         assert data["username"] == "dev-user"
     finally:
         settings.auth_dev_bypass = original_bypass
+
+
+async def test_get_me_returns_is_business_profile_for_client_business(client):
+    """Story 7.1: GET /auth/me returns is_business_profile=true for client_business profile."""
+    from app.models.profile import ProfileResponse, CumulativePermissionsResponse
+    from datetime import datetime
+
+    token_data = {"sub": "1", "username": "fatima", "profile": "client_business", "ad_groups": ["client_business"]}
+    access = create_access_token(token_data)
+    mock_profile = ProfileResponse(
+        id=1, name="Client Business", description="", ad_group="client_business",
+        is_admin=False, is_auditor=False,
+        created_at=datetime(2026, 1, 28), updated_at=datetime(2026, 1, 28),
+    )
+
+    with (
+        patch("app.api.deps.user_repository") as mock_repo,
+        patch("app.api.deps.profile_repository") as mock_profile_repo,
+        patch("app.api.deps.rbac_service") as mock_rbac,
+    ):
+        mock_repo.get_by_username = AsyncMock(return_value={
+            "id": 1,
+            "username": "fatima",
+            "display_name": "Fatima B.",
+            "profile": "client_business",
+        })
+        mock_profile_repo.find_by_ad_groups = AsyncMock(return_value=[mock_profile])
+        mock_rbac.get_cumulative_permissions_cached = AsyncMock(
+            return_value=CumulativePermissionsResponse(actions_type="list", targets_type="list", action_ids=[1, 2])
+        )
+        mock_rbac.get_user_navigation_permissions = lambda p: ["catalog", "executions", "dashboard"]
+        mock_rbac.is_business_profile = lambda p: p.lower() == "client_business"
+
+        response = await client.get(
+            "/api/v1/auth/me",
+            headers={"Authorization": f"Bearer {access}"},
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["username"] == "fatima"
+        assert data["profile"] == "client_business"
+        assert data["is_business_profile"] is True
+        # Business profiles don't have admin tab
+        assert "admin" not in data["navigation_tabs"]
+
+
+async def test_get_me_returns_is_business_profile_false_for_dbops(client):
+    """Story 7.1: GET /auth/me returns is_business_profile=false for dbops profile."""
+    from app.models.profile import ProfileResponse, CumulativePermissionsResponse
+    from datetime import datetime
+
+    token_data = {"sub": "1", "username": "karim", "profile": "dbops", "ad_groups": ["dbops"]}
+    access = create_access_token(token_data)
+    mock_profile = ProfileResponse(
+        id=1, name="DBOPS", description="", ad_group="dbops",
+        is_admin=True, is_auditor=False,
+        created_at=datetime(2026, 1, 28), updated_at=datetime(2026, 1, 28),
+    )
+
+    with (
+        patch("app.api.deps.user_repository") as mock_repo,
+        patch("app.api.deps.profile_repository") as mock_profile_repo,
+        patch("app.api.deps.rbac_service") as mock_rbac,
+    ):
+        mock_repo.get_by_username = AsyncMock(return_value={
+            "id": 1,
+            "username": "karim",
+            "display_name": "Karim DBA",
+            "profile": "dbops",
+        })
+        mock_profile_repo.find_by_ad_groups = AsyncMock(return_value=[mock_profile])
+        mock_rbac.get_cumulative_permissions_cached = AsyncMock(
+            return_value=CumulativePermissionsResponse(actions_type="all", targets_type="all")
+        )
+        mock_rbac.get_user_navigation_permissions = lambda p: ["catalog", "executions", "dashboard", "admin"]
+        mock_rbac.is_business_profile = lambda p: p.lower() == "client_business"
+
+        response = await client.get(
+            "/api/v1/auth/me",
+            headers={"Authorization": f"Bearer {access}"},
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["username"] == "karim"
+        assert data["profile"] == "dbops"
+        assert data["is_business_profile"] is False
+        # DBOPS has admin tab
+        assert "admin" in data["navigation_tabs"]

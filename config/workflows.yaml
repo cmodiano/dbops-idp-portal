@@ -1,12 +1,15 @@
 workflows:
   create-story:
-    prompt_template: "/bmad:bmm:workflows:create-story - Create story: {{.StoryKey}}. Do not ask questions."
+    prompt_template: "/bmad_bmm_create-story - Create story: {{.StoryKey}}. Do not ask questions."
+
+  validate-story:
+    prompt_template: "/bmad_bmm_create-story -v - Validate story: {{.StoryKey}}. Do not ask questions."
 
   dev-story:
-    prompt_template: "/bmad:bmm:workflows:dev-story - Work on story: {{.StoryKey}}. Complete all tasks. Run tests after each implementation. Do not ask clarifying questions - use best judgment based on existing patterns."
+    prompt_template: "/bmad_bmm_dev-story - Work on story: {{.StoryKey}}. Complete all tasks. Run tests after each implementation. Do not ask clarifying questions - use best judgment based on existing patterns."
 
   code-review:
-    prompt_template: "/bmad:bmm:workflows:code-review - Review story: {{.StoryKey}}. When presenting fix options, always choose to auto-fix all issues immediately. Do not wait for user input."
+    prompt_template: "/bmad_bmm_code-review - Review story: {{.StoryKey}}. When presenting fix options, always choose to auto-fix all issues immediately. Do not wait for user input."
 
   git-commit:
     prompt_template: "Commit all changes for story {{.StoryKey}} with a descriptive commit message following conventional commits format. Then push to the current branch. Do not ask questions."
@@ -14,6 +17,7 @@ workflows:
 full_cycle:
   steps:
     - create-story
+    - validate-story
     - dev-story
     - code-review
     - git-commit

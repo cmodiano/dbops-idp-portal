@@ -1,5 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { NavigationTabKey, User } from '../types/common';
+import { BUSINESS_PROFILES } from '../types/common';
 import { setAuthAccessors } from '../services/api_client';
 import { refreshAccessToken, fetchCurrentUser as fetchUser, logoutApi } from '../services/auth_service';
 
@@ -28,6 +29,8 @@ interface AuthContextValue {
   logout: () => Promise<void>;
   refreshToken: () => Promise<string | null>;
   hasTab: (tabKey: NavigationTabKey) => boolean;
+  /** Story 7.1: true if user has a business profile (simplified UI). */
+  isBusinessProfile: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -39,6 +42,7 @@ const AuthContext = createContext<AuthContextValue>({
   logout: async () => {},
   refreshToken: async () => null,
   hasTab: () => false,
+  isBusinessProfile: false,
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -143,6 +147,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [user],
   );
 
+  // Story 7.1: Determine if user has a business profile (simplified UI)
+  // Uses backend-provided flag if available, otherwise falls back to local profile check
+  const isBusinessProfile = useMemo(() => {
+    if (!user) return false;
+    // Prefer backend-provided flag (AC5: RBAC from API)
+    if (typeof user.is_business_profile === 'boolean') {
+      return user.is_business_profile;
+    }
+    // Fallback: check profile against known business profiles
+    return BUSINESS_PROFILES.includes(user.profile);
+  }, [user]);
+
   const value: AuthContextValue = {
     user,
     accessToken,
@@ -152,6 +168,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logout,
     refreshToken: refreshTokenFn,
     hasTab,
+    isBusinessProfile,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -1,29 +1,32 @@
 /**
- * ActionDrawerPreview - Read-only preview of action detail (Story 2.5, AC #1, #2, #4; Story 3.2; Story 3.4; Story 4.1).
+ * ActionDrawerPreview - Read-only preview of action detail (Story 2.5, AC #1, #2, #4; Story 3.2; Story 3.4; Story 4.1; Story 7.1).
  *
  * Usage contexts:
  * - AdminPreview: inline preview card (role="region", no focus trap)
  * - CatalogPage drawer: inside Ant Design Drawer (role="dialog" on parent, focus trap managed by Drawer)
+ * - Business catalog (Story 7.1): simplified view with variant='business'
  *
  * Displays:
- * - Action name and description
- * - Impact indicator
- * - Engine and platform info
+ * - Action name and description (sanitized in business variant)
+ * - Impact indicator with visual callout in business variant
+ * - Engine and platform info (hidden in business variant)
  * - Tags (category display) - Story 3.2
- * - Parameters list with types (from parameters_schema) - Story 3.2
+ * - Parameters list with types (from parameters_schema) - Story 3.2 (simplified labels in business)
  * - Documentation section with rendered Markdown (Story 3.4, FR12)
- * - "Exécuter" button with permission state (AC3) - Story 3.2
+ * - "Exécuter" button with permission state (AC3) - Story 3.2 (larger in business)
  *
  * Props:
  * - canExecute: undefined = enabled (admin preview), false = disabled with tooltip (catalog)
  * - onExecute: callback when Execute button is clicked (Story 4.1, Task 7)
+ * - variant: 'default' | 'business' - simplified UI for business users (Story 7.1)
  *
  * Story 2.23: category removed — use tags for categorization.
  * Story 3.4: documentation_md field with Markdown rendering.
  * Story 4.1: Execute button opens ExecutionWizard.
+ * Story 7.1: Business variant with sanitized descriptions, impact callout, larger execute button.
  */
 
-import { Card, Typography, Button, Descriptions, Space, Empty, Tag, Tooltip, Divider, Badge, theme } from 'antd';
+import { Card, Typography, Button, Descriptions, Space, Empty, Tag, Tooltip, Divider, Badge, Alert, theme } from 'antd';
 import { PlayCircleOutlined, FileTextOutlined, ApartmentOutlined } from '@ant-design/icons';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -31,8 +34,10 @@ import rehypeSanitize from 'rehype-sanitize';
 import type { ActionPreviewData } from '../../types/api';
 import { useTheme } from '../../contexts/ThemeContext';
 import { ImpactIndicator } from '../shared/ImpactIndicator';
+import { IMPACT_LABELS } from '../shared/impactLabels';
 import { getTagStyle } from '../../utils/tagStyles';
 import { STYLE_TOKENS } from '../../theme/styleTokens';
+import { sanitizeDescription } from '../../utils/businessLanguage';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -45,6 +50,8 @@ export interface ActionDrawerPreviewProps {
   allowedEnvironments?: string[];
   /** Story 4.1 Task 7: callback when Execute button is clicked. Opens ExecutionWizard. */
   onExecute?: () => void;
+  /** Story 7.1: 'business' variant for simplified UI for business users. */
+  variant?: 'default' | 'business';
 }
 
 /** Parameter info extracted from JSON Schema. */
@@ -79,10 +86,12 @@ export function ActionDrawerPreview({
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future env-specific execute
   allowedEnvironments = [],
   onExecute,
+  variant = 'default',
 }: ActionDrawerPreviewProps) {
   const { effectiveMode } = useTheme();
   const isDark = effectiveMode === 'dark';
   const { token } = theme.useToken();
+  const isBusiness = variant === 'business';
 
   if (!visible) return null;
 
@@ -92,6 +101,19 @@ export function ActionDrawerPreview({
     ? 'Acces non autorise pour cet environnement'
     : undefined;
   const isWorkflow = action.item_type === 'workflow';
+
+  // Story 7.1: Sanitize description for business users
+  const displayDescription = isBusiness
+    ? sanitizeDescription(action.description)
+    : action.description;
+
+  // Story 7.1: Impact label for business callout
+  const impactLabel = action.impact_level ? IMPACT_LABELS[action.impact_level] : null;
+  const impactAlertType = action.impact_level === 'high' ? 'error' : action.impact_level === 'medium' ? 'warning' : 'info';
+
+  // Story 7.1: Simplified labels for business variant
+  const parametersLabel = isBusiness ? 'Options' : 'Parametres attendus';
+  const categoryLabel = isBusiness ? 'Type' : 'Categorie';
 
   return (
     <Card
@@ -128,16 +150,26 @@ export function ActionDrawerPreview({
           )}
         </div>
 
-        {/* Description */}
+        {/* Description - sanitized for business variant (Story 7.1) */}
         <Paragraph type="secondary" style={{ marginBottom: 0 }}>
-          {action.description || 'Aucune description disponible.'}
+          {displayDescription || 'Aucune description disponible.'}
         </Paragraph>
 
-        {/* Tags (category) - Story 3.2, AC1 */}
+        {/* Story 7.1 AC3: Impact callout for business users (triple coding: icon, color, text) */}
+        {isBusiness && action.impact_level && (
+          <Alert
+            type={impactAlertType}
+            title={`Niveau d'impact: ${impactLabel}`}
+            showIcon
+            style={{ marginTop: 8 }}
+          />
+        )}
+
+        {/* Tags (category) - Story 3.2, AC1; Story 7.1: simplified label */}
         {action.tags && action.tags.length > 0 && (
           <div>
             <Text strong style={{ display: 'block', marginBottom: 8 }}>
-              Categorie
+              {categoryLabel}
             </Text>
             <Space size={[4, 4]} wrap>
               {action.tags.map((tag) => {
@@ -152,24 +184,26 @@ export function ActionDrawerPreview({
           </div>
         )}
 
-        {/* Metadata */}
-        <Descriptions column={1} size="small" bordered={false}>
-          {action.engine && (
-            <Descriptions.Item label="Moteur">
-              <Text>{action.engine}</Text>
-            </Descriptions.Item>
-          )}
-          {action.platform && (
-            <Descriptions.Item label="Plateforme">
-              <Text>{action.platform}</Text>
-            </Descriptions.Item>
-          )}
-        </Descriptions>
+        {/* Metadata - hidden for business variant (Story 7.1: action as black box) */}
+        {!isBusiness && (
+          <Descriptions column={1} size="small" bordered={false}>
+            {action.engine && (
+              <Descriptions.Item label="Moteur">
+                <Text>{action.engine}</Text>
+              </Descriptions.Item>
+            )}
+            {action.platform && (
+              <Descriptions.Item label="Plateforme">
+                <Text>{action.platform}</Text>
+              </Descriptions.Item>
+            )}
+          </Descriptions>
+        )}
 
-        {/* Parameters with types - Story 3.2, AC1 */}
+        {/* Parameters with types - Story 3.2, AC1; Story 7.1: simplified label */}
         <div>
           <Text strong style={{ display: 'block', marginBottom: 8 }}>
-            Parametres attendus
+            {parametersLabel}
           </Text>
           {parameters.length > 0 ? (
             <ul style={{ margin: 0, paddingLeft: 20 }}>
@@ -291,13 +325,14 @@ export function ActionDrawerPreview({
           )}
         </div>
 
-        {/* Execute button - Story 3.2 AC3, Story 4.1 Task 7 */}
+        {/* Execute button - Story 3.2 AC3, Story 4.1 Task 7, Story 7.1: larger for business */}
         <Tooltip title={executeTooltip}>
           <Button
             type="primary"
             icon={<PlayCircleOutlined />}
             disabled={isExecuteDisabled}
             block
+            size={isBusiness ? 'large' : 'middle'}
             aria-label={isExecuteDisabled ? 'Executer (acces non autorise)' : 'Executer'}
             onClick={onExecute}
           >

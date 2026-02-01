@@ -231,4 +231,126 @@ describe('ActionDrawerPreview', () => {
     const table = within(docSection).getByRole('table');
     expect(table).toBeInTheDocument();
   });
+
+  // === Story 7.1: Business variant tests ===
+  describe('business variant (Story 7.1)', () => {
+    const actionWithTechnicalTerms: ActionPreviewData = {
+      name: 'Database Action', // Name is not sanitized
+      description: 'Run the Ansible playbook via the pipeline to deploy changes',
+      engine: 'Oracle',
+      platform: 'AAP',
+      impact_level: 'high',
+      parameters_schema: {
+        type: 'object',
+        properties: {
+          target: { type: 'string' },
+        },
+        required: ['target'],
+      },
+      tags: ['provisioning'],
+    };
+
+    it('sanitizes technical terms in description for business variant (AC2)', () => {
+      renderWithTheme(
+        <ActionDrawerPreview action={actionWithTechnicalTerms} variant="business" />
+      );
+
+      // Description should be sanitized
+      // "Ansible" -> "automatisation", "playbook" -> "action", "pipeline" -> "processus automatique"
+      expect(screen.getByText(/automatisation/i)).toBeInTheDocument();
+      expect(screen.getByText(/processus automatique/i)).toBeInTheDocument();
+    });
+
+    it('displays original description for default variant', () => {
+      renderWithTheme(
+        <ActionDrawerPreview action={actionWithTechnicalTerms} variant="default" />
+      );
+
+      expect(screen.getByText(/playbook/i)).toBeInTheDocument();
+    });
+
+    it('shows impact Alert callout for business variant (AC3)', () => {
+      renderWithTheme(
+        <ActionDrawerPreview action={actionWithTechnicalTerms} variant="business" />
+      );
+
+      // Should have an Alert component with impact information
+      expect(screen.getByText("Niveau d'impact: Eleve")).toBeInTheDocument();
+    });
+
+    it('does not show impact Alert for default variant', () => {
+      renderWithTheme(
+        <ActionDrawerPreview action={actionWithTechnicalTerms} variant="default" />
+      );
+
+      // No alert with impact label (the badge shows "Eleve" but not in Alert format)
+      expect(screen.queryByText("Niveau d'impact:")).not.toBeInTheDocument();
+    });
+
+    it('hides engine and platform metadata for business variant (black box)', () => {
+      renderWithTheme(
+        <ActionDrawerPreview action={actionWithTechnicalTerms} variant="business" />
+      );
+
+      // Engine and platform should not be displayed
+      // They appear in Descriptions items with label "Moteur" and "Plateforme"
+      expect(screen.queryByText('Moteur')).not.toBeInTheDocument();
+      expect(screen.queryByText('Plateforme')).not.toBeInTheDocument();
+    });
+
+    it('shows engine and platform for default variant', () => {
+      renderWithTheme(
+        <ActionDrawerPreview action={actionWithTechnicalTerms} variant="default" />
+      );
+
+      expect(screen.getByText('Moteur')).toBeInTheDocument();
+      expect(screen.getByText('Plateforme')).toBeInTheDocument();
+    });
+
+    it('uses simplified label "Options" instead of "Parametres attendus" (AC3)', () => {
+      renderWithTheme(
+        <ActionDrawerPreview action={actionWithTechnicalTerms} variant="business" />
+      );
+
+      expect(screen.getByText('Options')).toBeInTheDocument();
+      expect(screen.queryByText('Parametres attendus')).not.toBeInTheDocument();
+    });
+
+    it('uses simplified label "Type" instead of "Categorie" (AC2)', () => {
+      renderWithTheme(
+        <ActionDrawerPreview action={actionWithTechnicalTerms} variant="business" />
+      );
+
+      expect(screen.getByText('Type')).toBeInTheDocument();
+      expect(screen.queryByText('Categorie')).not.toBeInTheDocument();
+    });
+
+    it('renders larger Execute button for business variant (AC3)', () => {
+      renderWithTheme(
+        <ActionDrawerPreview action={actionWithTechnicalTerms} variant="business" />
+      );
+
+      const button = screen.getByRole('button', { name: /Executer/i });
+      // Button should have class or style for large size
+      expect(button).toHaveClass('ant-btn-lg');
+    });
+
+    it('renders normal Execute button for default variant', () => {
+      renderWithTheme(
+        <ActionDrawerPreview action={actionWithTechnicalTerms} variant="default" />
+      );
+
+      const button = screen.getByRole('button', { name: /Executer/i });
+      expect(button).not.toHaveClass('ant-btn-lg');
+    });
+
+    it('maintains accessibility in business variant', () => {
+      renderWithTheme(
+        <ActionDrawerPreview action={actionWithTechnicalTerms} variant="business" />
+      );
+
+      const region = screen.getByRole('region');
+      expect(region).toHaveAttribute('aria-label');
+    });
+  });
 });

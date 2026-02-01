@@ -5,12 +5,13 @@ import { AuthProvider, useAuth } from './AuthContext';
 
 // Helper component to expose AuthContext values
 function AuthDisplay() {
-  const { user, isAuthenticated, isLoading, login, logout } = useAuth();
+  const { user, isAuthenticated, isLoading, login, logout, isBusinessProfile } = useAuth();
   return (
     <div>
       <span data-testid="loading">{String(isLoading)}</span>
       <span data-testid="authenticated">{String(isAuthenticated)}</span>
       <span data-testid="username">{user?.username ?? 'none'}</span>
+      <span data-testid="is-business-profile">{String(isBusinessProfile)}</span>
       <button data-testid="login" onClick={login}>Login</button>
       <button data-testid="logout" onClick={logout}>Logout</button>
     </div>
@@ -138,6 +139,121 @@ describe('AuthProvider', () => {
 
     await waitFor(() => {
       expect(hrefSetter).toHaveBeenCalledWith('/login');
+    });
+  });
+
+  // Story 7.1: isBusinessProfile tests
+  describe('isBusinessProfile (Story 7.1)', () => {
+    it('returns false when user is not authenticated', async () => {
+      render(
+        <AuthProvider>
+          <AuthDisplay />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('loading').textContent).toBe('false');
+      });
+
+      expect(screen.getByTestId('is-business-profile').textContent).toBe('false');
+    });
+
+    it('returns true when user has client_business profile', async () => {
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ data: { access_token: 'token', token_type: 'bearer' } }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            data: {
+              id: 1,
+              username: 'fatima',
+              display_name: 'Fatima B.',
+              profile: 'client_business',
+              navigation_tabs: ['catalog', 'executions', 'dashboard'],
+            },
+          }),
+        });
+
+      render(
+        <AuthProvider>
+          <AuthDisplay />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('authenticated').textContent).toBe('true');
+      });
+
+      expect(screen.getByTestId('is-business-profile').textContent).toBe('true');
+    });
+
+    it('returns false when user has dbops profile', async () => {
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ data: { access_token: 'token', token_type: 'bearer' } }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            data: {
+              id: 1,
+              username: 'karim',
+              display_name: 'Karim DBA',
+              profile: 'dbops',
+              navigation_tabs: ['catalog', 'executions', 'dashboard', 'admin'],
+            },
+          }),
+        });
+
+      render(
+        <AuthProvider>
+          <AuthDisplay />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('authenticated').textContent).toBe('true');
+      });
+
+      expect(screen.getByTestId('is-business-profile').textContent).toBe('false');
+    });
+
+    it('uses backend-provided is_business_profile flag when available', async () => {
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ data: { access_token: 'token', token_type: 'bearer' } }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            data: {
+              id: 1,
+              username: 'test',
+              display_name: 'Test User',
+              profile: 'dba_applicatif', // Not in BUSINESS_PROFILES
+              is_business_profile: true, // But backend says it's business
+              navigation_tabs: ['catalog', 'executions', 'dashboard'],
+            },
+          }),
+        });
+
+      render(
+        <AuthProvider>
+          <AuthDisplay />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('authenticated').textContent).toBe('true');
+      });
+
+      // Should trust backend flag over local profile check
+      expect(screen.getByTestId('is-business-profile').textContent).toBe('true');
     });
   });
 });

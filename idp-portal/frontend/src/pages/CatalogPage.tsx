@@ -42,7 +42,7 @@ import {
   SearchOutlined,
   FilterOutlined,
 } from '@ant-design/icons';
-import { ActionCard } from '../components/catalog/ActionCard';
+import { ActionCard, type ActionCardProps } from '../components/catalog/ActionCard';
 import { ActionDrawerPreview } from '../components/catalog/ActionDrawerPreview';
 import { ExecutionWizard } from '../components/catalog/ExecutionWizard';
 import { TagCloud } from '../components/catalog/TagCloud';
@@ -133,7 +133,7 @@ function getStoredViewMode(): ViewMode {
 
 export default function CatalogPage() {
   const { message } = App.useApp();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isBusinessProfile } = useAuth();
   const isWide = useMediaQuery(1280);
   const [viewMode, setViewMode] = useState<ViewMode>(getStoredViewMode);
   const [activeTab, setActiveTab] = useState('all');
@@ -305,9 +305,11 @@ export default function CatalogPage() {
   }, [loadData]);
 
   // Render action card with favorite button (disabled when not authenticated — Task 5.1)
+  // Story 7.1: Use 'business' variant for business profiles (simplified descriptions)
   const renderActionCard = (action: CatalogAction) => {
     const isFav = favorites.has(action.id);
     const preview = toPreviewData(action);
+    const cardVariant: ActionCardProps['variant'] = isBusinessProfile ? 'business' : 'default';
 
     return (
       <div
@@ -326,7 +328,7 @@ export default function CatalogPage() {
         <ActionCard
           action={preview}
           onClick={(e) => handleActionClick(action, e)}
-          variant="default"
+          variant={cardVariant}
           isFavorite={isFav}
           onToggleFavorite={(e) => handleToggleFavorite(action.id, e)}
           showFavoriteButton={isAuthenticated}
@@ -602,9 +604,13 @@ export default function CatalogPage() {
             canExecute={selectedActionCanExecute}
             allowedEnvironments={selectedActionEnvs}
             onExecute={handleExecuteClick}
+            variant={isBusinessProfile ? 'business' : 'default'}
           />
         ) : selectedAction ? (
-          <ActionDrawerPreview action={toPreviewData(selectedAction)} />
+          <ActionDrawerPreview
+            action={toPreviewData(selectedAction)}
+            variant={isBusinessProfile ? 'business' : 'default'}
+          />
         ) : null}
       </Drawer>
 

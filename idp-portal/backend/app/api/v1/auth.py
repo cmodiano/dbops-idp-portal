@@ -178,9 +178,14 @@ async def refresh_access_token(request: Request):
 
 @router.get("/auth/me")
 async def get_current_user_profile(user: UserProfile = Depends(get_current_user)):
-    """Return the authenticated user's profile with navigation permissions."""
+    """Return the authenticated user's profile with navigation permissions.
+
+    Story 7.1: Includes is_business_profile flag for simplified UI.
+    """
     data = user.model_dump()
     data["navigation_tabs"] = rbac_service.get_user_navigation_permissions(user.profile)
+    # Story 7.1: Flag for business profile (simplified catalog UI)
+    data["is_business_profile"] = rbac_service.is_business_profile(user.profile)
     return {"data": data}
 
 

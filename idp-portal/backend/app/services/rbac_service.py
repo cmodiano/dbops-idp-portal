@@ -17,6 +17,10 @@ _NAVIGATION_MAP: dict[str, list[str]] = {
 }
 _DEFAULT_TABS: list[str] = ["catalog", "executions", "dashboard"]
 
+# Story 7.1: Business profiles for simplified UI
+# Includes variations for backward compatibility with seed data
+_BUSINESS_PROFILES: set[str] = {"client_business", "business"}
+
 # Permission cache: key = "user_id:action_id:environment", value = bool
 _permission_cache: TTLCache[str, bool] = TTLCache(maxsize=10000, ttl=60)
 
@@ -29,6 +33,11 @@ _cumulative_permissions_cache: TTLCache[str, CumulativePermissionsResponse] = TT
 def get_user_navigation_permissions(profile: str) -> list[str]:
     """Return navigation tab keys based on user profile."""
     return _NAVIGATION_MAP.get(profile.lower(), _DEFAULT_TABS)
+
+
+def is_business_profile(profile: str) -> bool:
+    """Story 7.1: Check if profile is a business profile (simplified UI)."""
+    return profile.lower() in _BUSINESS_PROFILES
 
 
 async def get_cumulative_permissions(profile_ids: list[int]) -> CumulativePermissionsResponse:

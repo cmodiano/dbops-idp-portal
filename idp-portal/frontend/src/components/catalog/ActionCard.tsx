@@ -1,15 +1,16 @@
 /**
- * ActionCard - Reusable card component for catalog actions (Story 2.5, AC #1, #2; Story 5.7 AC3).
+ * ActionCard - Reusable card component for catalog actions (Story 2.5, AC #1, #2; Story 5.7 AC3; Story 7.1).
  *
  * Used in:
  * - Admin preview (Epic 2) with variant='preview'
  * - Catalog listing (Epic 3) with variant='default'
+ * - Business catalog (Story 7.1) with variant='business' - simplified descriptions
  *
  * Features:
  * - Engine icon (Oracle, SQL Server, DB2) for actions
  * - Workflow icon (ApartmentOutlined) for workflows (Story 5.7, AC3)
  * - Title (1 line, truncated)
- * - Description (2 lines, truncated)
+ * - Description (2 lines, truncated) - sanitized in business variant
  * - ImpactIndicator (triple coding)
  * - Tags (max 3 visible + "+N more")
  * - Hover effect (default variant only)
@@ -25,19 +26,21 @@ import {
   HeartOutlined,
   HeartFilled,
 } from '@ant-design/icons';
-import type { ActionPreviewData, ActionEngine, ItemType } from '../../types/api';
+import type { ActionPreviewData, ActionEngine } from '../../types/api';
 import { useTheme } from '../../contexts/ThemeContext';
 import { ImpactIndicator } from '../shared/ImpactIndicator';
 import { IMPACT_LABELS } from '../shared/impactLabels';
 import { STYLE_TOKENS } from '../../theme/styleTokens';
 import { getTagStyle } from '../../utils/tagStyles';
+import { sanitizeDescription } from '../../utils/businessLanguage';
 
 const { Text, Paragraph } = Typography;
 
 export interface ActionCardProps {
   action: ActionPreviewData;
   onClick?: () => void;
-  variant?: 'default' | 'preview';
+  /** 'default' = standard, 'preview' = admin preview, 'business' = simplified for business users (Story 7.1). */
+  variant?: 'default' | 'preview' | 'business';
   /** When set, shows favorite heart inside the card (catalog only). */
   isFavorite?: boolean;
   /** Called when favorite is toggled; caller should stopPropagation. */
@@ -86,8 +89,14 @@ export function ActionCard({
   const { effectiveMode } = useTheme();
   const isDark = effectiveMode === 'dark';
   const isPreview = variant === 'preview';
+  const isBusiness = variant === 'business';
   const isClickable = !!onClick && !isPreview;
   const isWorkflow = action.item_type === 'workflow';
+
+  // Story 7.1 AC2: Sanitize description for business users
+  const displayDescription = isBusiness
+    ? sanitizeDescription(action.description)
+    : action.description;
 
   // Story 5.7, AC3: Use workflow icon for workflows, engine icon for actions
   const icon = isWorkflow
@@ -153,13 +162,13 @@ export function ActionCard({
           )}
         </div>
 
-        {/* Description (2 lines max) */}
+        {/* Description (2 lines max) - sanitized for business variant (Story 7.1) */}
         <Paragraph
           type="secondary"
-          ellipsis={{ rows: 2, tooltip: action.description }}
+          ellipsis={{ rows: 2, tooltip: displayDescription }}
           style={{ marginBottom: 8 }}
         >
-          {action.description || 'Aucune description'}
+          {displayDescription || 'Aucune description'}
         </Paragraph>
 
         {/* Tags — pastel, pill-shaped, user-friendly */}

@@ -173,4 +173,51 @@ describe('ActionCard', () => {
 
     expect(screen.queryByText(/exécution/)).not.toBeInTheDocument();
   });
+
+  // Story 7.1: Business variant tests
+  describe('business variant (Story 7.1)', () => {
+    const actionWithTechnicalTerms: ActionPreviewData = {
+      name: 'Database Action', // Name is not sanitized, only description
+      description: 'Run the Ansible playbook to deploy the database via the pipeline',
+      engine: 'Oracle',
+      platform: 'AAP',
+      impact_level: 'medium',
+      parameters_schema: null,
+      tags: ['provisioning'],
+    };
+
+    it('sanitizes technical terms in description for business variant', () => {
+      renderWithTheme(<ActionCard action={actionWithTechnicalTerms} variant="business" />);
+
+      // Description should be sanitized (playbook -> action, pipeline -> processus automatique)
+      // The description text contains the sanitized terms
+      expect(screen.getByText(/automatisation/)).toBeInTheDocument(); // Ansible -> automatisation
+      expect(screen.getByText(/processus automatique/)).toBeInTheDocument(); // pipeline -> processus automatique
+    });
+
+    it('displays original description for default variant', () => {
+      renderWithTheme(<ActionCard action={actionWithTechnicalTerms} variant="default" />);
+
+      expect(screen.getByText(/playbook/)).toBeInTheDocument();
+    });
+
+    it('is clickable in business variant', () => {
+      const handleClick = vi.fn();
+      renderWithTheme(
+        <ActionCard action={actionWithTechnicalTerms} onClick={handleClick} variant="business" />
+      );
+
+      const card = screen.getByRole('article');
+      fireEvent.click(card);
+
+      expect(handleClick).toHaveBeenCalledTimes(1);
+    });
+
+    it('maintains accessibility in business variant', () => {
+      renderWithTheme(<ActionCard action={actionWithTechnicalTerms} variant="business" />);
+
+      const card = screen.getByRole('article');
+      expect(card).toHaveAttribute('aria-label');
+    });
+  });
 });
