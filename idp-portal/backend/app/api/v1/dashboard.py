@@ -1,17 +1,21 @@
-"""Dashboard API (Story 5.1, Task 1.1, 1.3, 1.4; Story 8.3).
+"""Dashboard API (Story 5.1, Task 1.1, 1.3, 1.4; Story 8.3; Story 8.4).
 
 Provides endpoints for dashboard statistics and recent activity:
-- GET /api/v1/dashboard/stats: Aggregated statistics (AC1, Story 8.3 AC6 period filter)
+- GET /api/v1/dashboard/stats: Aggregated statistics (AC1, Story 8.3 AC6 period filter, Story 8.4 AC7 advanced filters)
 - GET /api/v1/dashboard/recent: Executions from last 24h (AC2, same window as stats)
-- GET /api/v1/dashboard/stats-by-technology: Executions by engine (Story 8.3, AC3, AC7)
-- GET /api/v1/dashboard/stats-by-environment: Executions by env (Story 8.3, AC4, AC7)
+- GET /api/v1/dashboard/stats-by-technology: Executions by engine (Story 8.3, AC3, AC7; Story 8.4 filters)
+- GET /api/v1/dashboard/stats-by-environment: Executions by env (Story 8.3, AC4, AC7; Story 8.4 filters)
+- GET /api/v1/dashboard/timeseries: Executions over time (Story 8.4 filters)
+- GET /api/v1/dashboard/filter-options: Available filter values (Story 8.4, AC1)
 
 RBAC: Endpoints restricted to DBA and DBOPS profiles (Story 5.1 Dev Notes).
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from datetime import date
+
+from fastapi import APIRouter, Depends, Query
 import structlog
 
 from app.api.deps import get_current_user
@@ -24,6 +28,7 @@ from app.models.dashboard import (
     EnvironmentStats,
     DashboardStatsByTechnologyResponse,
     DashboardStatsByEnvironmentResponse,
+    FilterOptionsResponse,
 )
 from app.repositories import execution_repository
 
@@ -86,9 +91,15 @@ class DashboardTimeSeriesResponse(BaseModel):
 @router.get("/stats", response_model=DashboardStatsResponse)
 async def get_dashboard_stats(
     user: UserProfile = Depends(get_current_user),
-    days: int = 14,
+    days: int = Query(14, description="Period filter in days"),
+    engine: str | None = Query(None, description="Filter by engine"),
+    environment: str | None = Query(None, description="Filter by environment"),
+    tags: list[str] | None = Query(None, description="Filter by tags"),
+    status: str | None = Query(None, description="Filter by execution status"),
+    from_date: date | None = Query(None, description="Custom period start (YYYY-MM-DD)"),
+    to_date: date | None = Query(None, description="Custom period end (YYYY-MM-DD)"),
 ) -> DashboardStatsResponse:
-    """GET /api/v1/dashboard/stats - Dashboard statistics (Story 5.1, AC1, AC4; Story 8.3, AC6).
+    """GET /api/v1/dashboard/stats - Dashboard statistics (Story 5.1, AC1, AC4; Story 8.3, AC6; Story 8.4, AC7).
 
     Returns aggregated metrics for the dashboard:
     - executions_jour: Executions created today (always current day)
@@ -97,14 +108,39 @@ async def get_dashboard_stats(
     - executions_en_erreur: Failed executions in selected period
 
     Query Parameters:
-        days: Period filter in days (7, 14, 30, 90). Default 14.
+        days: Period filter in days (7, 14, 30, 90). Default 14. Ignored if from_date/to_date provided.
+        engine: Filter by database engine (Story 8.4)
+        environment: Filter by environment (Story 8.4)
+        tags: Filter by action tags (Story 8.4)
+        status: Filter by execution status (Story 8.4)
+        from_date: Custom period start - overrides days (Story 8.4)
+        to_date: Custom period end - overrides days (Story 8.4)
 
     Restricted to DBA and DBOPS profiles.
     """
     _require_dashboard_profile(user)
-    logger.info("dashboard_stats_requested", user_id=user.id, profile=user.profile, days=days)
+    logger.info(
+        "dashboard_stats_requested",
+        user_id=user.id,
+        profile=user.profile,
+        days=days,
+        engine=engine,
+        environment=environment,
+        tags=tags,
+        status=status,
+        from_date=str(from_date) if from_date else None,
+        to_date=str(to_date) if to_date else None,
+    )
 
-    stats = await execution_repository.get_dashboard_stats(days=days)
+    stats = await execution_repository.get_dashboard_stats(
+        days=days,
+        engine=engine,
+        environment=environment,
+        tags=tags,
+        status=status,
+        from_date=from_date,
+        to_date=to_date,
+    )
     return DashboardStatsResponse(data=DashboardStatsData(**stats))
 
 
@@ -134,16 +170,47 @@ async def get_dashboard_recent(
 @router.get("/timeseries", response_model=DashboardTimeSeriesResponse)
 async def get_dashboard_timeseries(
     user: UserProfile = Depends(get_current_user),
-    days: int = 14,
+    days: int = Query(14, description="Period filter in days"),
+    engine: str | None = Query(None, description="Filter by engine"),
+    environment: str | None = Query(None, description="Filter by environment"),
+    tags: list[str] | None = Query(None, description="Filter by tags"),
+    from_date: date | None = Query(None, description="Custom period start (YYYY-MM-DD)"),
+    to_date: date | None = Query(None, description="Custom period end (YYYY-MM-DD)"),
 ) -> DashboardTimeSeriesResponse:
-    """GET /api/v1/dashboard/timeseries - Executions over time for line chart.
+    """GET /api/v1/dashboard/timeseries - Executions over time for line chart (Story 8.4, AC7).
 
     Returns daily success and failed counts for the last N days (default 14).
+
+    Query Parameters:
+        days: Period filter in days. Default 14. Ignored if from_date/to_date provided.
+        engine: Filter by database engine (Story 8.4)
+        environment: Filter by environment (Story 8.4)
+        tags: Filter by action tags (Story 8.4)
+        from_date: Custom period start - overrides days (Story 8.4)
+        to_date: Custom period end - overrides days (Story 8.4)
+
+    Note: status filter is not available for timeseries since it always tracks
+    success (COMPLETED) vs failed (FAILED) counts regardless of other statuses.
+
     Restricted to DBA and DBOPS profiles.
     """
     _require_dashboard_profile(user)
-    logger.info("dashboard_timeseries_requested", user_id=user.id, days=days)
-    points = await execution_repository.get_dashboard_timeseries(days=days)
+    logger.info(
+        "dashboard_timeseries_requested",
+        user_id=user.id,
+        days=days,
+        engine=engine,
+        environment=environment,
+    )
+    points = await execution_repository.get_dashboard_timeseries(
+        days=days,
+        engine=engine,
+        environment=environment,
+        tags=tags,
+        status=None,  # Not used for timeseries - always tracks success/failed
+        from_date=from_date,
+        to_date=to_date,
+    )
     return DashboardTimeSeriesResponse(data=points)
 
 
@@ -154,41 +221,110 @@ async def get_dashboard_timeseries(
 @router.get("/stats-by-technology", response_model=DashboardStatsByTechnologyResponse)
 async def get_stats_by_technology(
     user: UserProfile = Depends(get_current_user),
-    days: int = 14,
+    days: int = Query(14, description="Period filter in days"),
+    environment: str | None = Query(None, description="Filter by environment"),
+    tags: list[str] | None = Query(None, description="Filter by tags"),
+    status: str | None = Query(None, description="Filter by execution status"),
+    from_date: date | None = Query(None, description="Custom period start (YYYY-MM-DD)"),
+    to_date: date | None = Query(None, description="Custom period end (YYYY-MM-DD)"),
 ) -> DashboardStatsByTechnologyResponse:
-    """GET /api/v1/dashboard/stats-by-technology - Executions grouped by engine (Story 8.3, AC3, AC7).
+    """GET /api/v1/dashboard/stats-by-technology - Executions grouped by engine (Story 8.3, AC3, AC7; Story 8.4, AC7).
 
     Returns execution counts and success rates aggregated by database engine.
 
     Query Parameters:
-        days: Period filter in days (7, 14, 30, 90). Default 14.
+        days: Period filter in days (7, 14, 30, 90). Default 14. Ignored if from_date/to_date provided.
+        environment: Filter by environment (Story 8.4)
+        tags: Filter by action tags (Story 8.4)
+        status: Filter by execution status (Story 8.4)
+        from_date: Custom period start - overrides days (Story 8.4)
+        to_date: Custom period end - overrides days (Story 8.4)
+
+    Note: engine is not a filter since it's the grouping key.
 
     Restricted to DBA and DBOPS profiles.
     """
     _require_dashboard_profile(user)
-    logger.info("dashboard_stats_by_technology_requested", user_id=user.id, days=days)
+    logger.info(
+        "dashboard_stats_by_technology_requested",
+        user_id=user.id,
+        days=days,
+        environment=environment,
+    )
 
-    stats = await execution_repository.get_stats_by_technology(days=days)
+    stats = await execution_repository.get_stats_by_technology(
+        days=days,
+        environment=environment,
+        tags=tags,
+        status=status,
+        from_date=from_date,
+        to_date=to_date,
+    )
     return DashboardStatsByTechnologyResponse(data=[TechnologyStats(**s) for s in stats])
 
 
 @router.get("/stats-by-environment", response_model=DashboardStatsByEnvironmentResponse)
 async def get_stats_by_environment(
     user: UserProfile = Depends(get_current_user),
-    days: int = 14,
+    days: int = Query(14, description="Period filter in days"),
+    engine: str | None = Query(None, description="Filter by engine"),
+    tags: list[str] | None = Query(None, description="Filter by tags"),
+    status: str | None = Query(None, description="Filter by execution status"),
+    from_date: date | None = Query(None, description="Custom period start (YYYY-MM-DD)"),
+    to_date: date | None = Query(None, description="Custom period end (YYYY-MM-DD)"),
 ) -> DashboardStatsByEnvironmentResponse:
-    """GET /api/v1/dashboard/stats-by-environment - Executions grouped by environment (Story 8.3, AC4, AC7).
+    """GET /api/v1/dashboard/stats-by-environment - Executions grouped by environment (Story 8.3, AC4, AC7; Story 8.4, AC7).
 
     Returns execution counts and success rates aggregated by environment.
     Results are ordered: dev, staging, prod, then alphabetical for custom envs.
 
     Query Parameters:
-        days: Period filter in days (7, 14, 30, 90). Default 14.
+        days: Period filter in days (7, 14, 30, 90). Default 14. Ignored if from_date/to_date provided.
+        engine: Filter by database engine (Story 8.4)
+        tags: Filter by action tags (Story 8.4)
+        status: Filter by execution status (Story 8.4)
+        from_date: Custom period start - overrides days (Story 8.4)
+        to_date: Custom period end - overrides days (Story 8.4)
+
+    Note: environment is not a filter since it's the grouping key.
 
     Restricted to DBA and DBOPS profiles.
     """
     _require_dashboard_profile(user)
-    logger.info("dashboard_stats_by_environment_requested", user_id=user.id, days=days)
+    logger.info(
+        "dashboard_stats_by_environment_requested",
+        user_id=user.id,
+        days=days,
+        engine=engine,
+    )
 
-    stats = await execution_repository.get_stats_by_environment(days=days)
+    stats = await execution_repository.get_stats_by_environment(
+        days=days,
+        engine=engine,
+        tags=tags,
+        status=status,
+        from_date=from_date,
+        to_date=to_date,
+    )
     return DashboardStatsByEnvironmentResponse(data=[EnvironmentStats(**s) for s in stats])
+
+
+@router.get("/filter-options", response_model=FilterOptionsResponse)
+async def get_filter_options(
+    user: UserProfile = Depends(get_current_user),
+) -> FilterOptionsResponse:
+    """GET /api/v1/dashboard/filter-options - Available filter values (Story 8.4, Task 14).
+
+    Returns distinct values for each filter type based on actual data:
+    - engines: Available database engines from published actions
+    - environments: Used environments from executions
+    - tags: All available tags
+    - statuses: All possible execution statuses
+
+    Restricted to DBA and DBOPS profiles.
+    """
+    _require_dashboard_profile(user)
+    logger.info("dashboard_filter_options_requested", user_id=user.id)
+
+    options = await execution_repository.get_filter_options()
+    return FilterOptionsResponse(**options)

@@ -1,5 +1,5 @@
 /**
- * Dashboard service (Story 5.1, Task 2.1; Story 8.3).
+ * Dashboard service (Story 5.1, Task 2.1; Story 8.3; Story 8.4).
  *
  * Provides functions to fetch dashboard statistics and recent executions.
  */
@@ -11,10 +11,37 @@ import type {
   DashboardTimeSeriesPoint,
   TechnologyStats,
   EnvironmentStats,
+  DashboardFilters,
+  FilterOptions,
 } from '../types/api';
 
 /**
- * Fetch dashboard statistics (Story 5.1, AC1, AC4; Story 8.3, AC6).
+ * Build query string from filters, ignoring null/undefined/empty values (Story 8.4, Task 9.5).
+ * Note: When fromDate/toDate are set, days is NOT sent (custom date range takes priority).
+ */
+function buildFilterParams(filters: DashboardFilters = {}): URLSearchParams {
+  const params = new URLSearchParams();
+
+  // Only send days if NOT using custom date range (fromDate/toDate take priority)
+  const hasCustomDateRange = !!(filters.fromDate && filters.toDate);
+  if (filters.days && !hasCustomDateRange) {
+    params.set('days', filters.days.toString());
+  }
+  if (filters.engine) params.set('engine', filters.engine);
+  if (filters.environment) params.set('environment', filters.environment);
+  if (filters.status) params.set('status', filters.status);
+  if (filters.fromDate) params.set('from_date', filters.fromDate);
+  if (filters.toDate) params.set('to_date', filters.toDate);
+  // Tags as multiple query params
+  if (filters.tags && filters.tags.length > 0) {
+    filters.tags.forEach((tag) => params.append('tags', tag));
+  }
+
+  return params;
+}
+
+/**
+ * Fetch dashboard statistics (Story 5.1, AC1, AC4; Story 8.3, AC6; Story 8.4, AC7).
  *
  * Returns aggregated metrics:
  * - executions_jour: Executions today (always current day)
@@ -22,11 +49,12 @@ import type {
  * - executions_en_cours: Running executions
  * - executions_en_erreur: Failed executions in selected period
  *
- * @param days Period filter in days (7, 14, 30, 90). Default 14.
+ * @param filters Optional filters including days, engine, environment, tags, status, fromDate, toDate
  * @returns DashboardStats
  */
-export async function fetchStats(days: number = 14): Promise<DashboardStats> {
-  return apiFetch<DashboardStats>(`/dashboard/stats?days=${days}`);
+export async function fetchStats(filters: DashboardFilters = {}): Promise<DashboardStats> {
+  const params = buildFilterParams({ days: 14, ...filters });
+  return apiFetch<DashboardStats>(`/dashboard/stats?${params.toString()}`);
 }
 
 /**
@@ -41,42 +69,62 @@ export async function fetchRecent(): Promise<DashboardRecentExecution[]> {
 }
 
 /**
- * Fetch executions time series for line chart (last N days).
+ * Fetch executions time series for line chart (Story 8.4, AC7).
  *
- * @param days Number of days (default 14)
+ * @param filters Optional filters including days, engine, environment, tags, status, fromDate, toDate
  * @returns Array of { date, success, failed } per day
  */
 export async function fetchTimeSeries(
-  days: number = 14,
+  filters: DashboardFilters = {},
 ): Promise<DashboardTimeSeriesPoint[]> {
-  return apiFetch<DashboardTimeSeriesPoint[]>(`/dashboard/timeseries?days=${days}`);
+  const params = buildFilterParams({ days: 14, ...filters });
+  return apiFetch<DashboardTimeSeriesPoint[]>(`/dashboard/timeseries?${params.toString()}`);
 }
 
 /**
- * Fetch execution stats grouped by database engine (Story 8.3, AC3, AC7).
+ * Fetch execution stats grouped by database engine (Story 8.3, AC3, AC7; Story 8.4, AC7).
  *
  * Returns executions aggregated by engine with count and success rate.
+ * Note: engine filter is not applicable here since engine is the grouping key.
  *
- * @param days Period filter in days (7, 14, 30, 90). Default 14.
+ * @param filters Optional filters including days, environment, tags, status, fromDate, toDate
  * @returns Array of TechnologyStats
  */
 export async function fetchStatsByTechnology(
-  days: number = 14,
+  filters: DashboardFilters = {},
 ): Promise<TechnologyStats[]> {
-  return apiFetch<TechnologyStats[]>(`/dashboard/stats-by-technology?days=${days}`);
+  // Remove engine from filters since it's the grouping key
+  const { engine: _engine, ...restFilters } = filters;
+  const params = buildFilterParams({ days: 14, ...restFilters });
+  return apiFetch<TechnologyStats[]>(`/dashboard/stats-by-technology?${params.toString()}`);
 }
 
 /**
- * Fetch execution stats grouped by environment (Story 8.3, AC4, AC7).
+ * Fetch execution stats grouped by environment (Story 8.3, AC4, AC7; Story 8.4, AC7).
  *
  * Returns executions aggregated by environment with count and success rate.
  * Results are ordered: dev, staging, prod, then alphabetical.
+ * Note: environment filter is not applicable here since environment is the grouping key.
  *
- * @param days Period filter in days (7, 14, 30, 90). Default 14.
+ * @param filters Optional filters including days, engine, tags, status, fromDate, toDate
  * @returns Array of EnvironmentStats
  */
 export async function fetchStatsByEnvironment(
-  days: number = 14,
+  filters: DashboardFilters = {},
 ): Promise<EnvironmentStats[]> {
-  return apiFetch<EnvironmentStats[]>(`/dashboard/stats-by-environment?days=${days}`);
+  // Remove environment from filters since it's the grouping key
+  const { environment: _environment, ...restFilters } = filters;
+  const params = buildFilterParams({ days: 14, ...restFilters });
+  return apiFetch<EnvironmentStats[]>(`/dashboard/stats-by-environment?${params.toString()}`);
+}
+
+/**
+ * Fetch available filter options (Story 8.4, Task 14).
+ *
+ * Returns distinct values for each filter type based on actual data.
+ *
+ * @returns FilterOptions with engines, environments, tags, statuses
+ */
+export async function fetchFilterOptions(): Promise<FilterOptions> {
+  return apiFetch<FilterOptions>('/dashboard/filter-options');
 }

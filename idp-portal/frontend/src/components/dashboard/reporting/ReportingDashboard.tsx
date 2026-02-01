@@ -1,16 +1,17 @@
 /**
  * ReportingDashboard - Dashboard with statistics by technology and environment.
- * Story 8.3, AC1, AC2, AC6, AC8.
+ * Story 8.3, AC1, AC2, AC6, AC8; Story 8.4 (advanced filters).
  *
  * Displays:
- * - Period selector (7, 14, 30, 90 days)
+ * - Advanced filters panel (engine, environment, tags, status, date range)
+ * - Period selector (7, 14, 30, 90 days) - disabled when custom date range is set
  * - StatCards row (executions today, success rate, in progress, errors)
  * - TechnologyBarChart and EnvironmentBarChart side by side
  * - TrendLineChart full width
  * - Link to Executions page (replaces removed Recent Executions table)
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Row, Col, Segmented, Alert, Space, Typography } from 'antd';
 import { Link } from 'react-router';
 import {
@@ -24,17 +25,22 @@ import { StatCard } from '../StatCard';
 import { TechnologyBarChart } from './TechnologyBarChart';
 import { EnvironmentBarChart } from './EnvironmentBarChart';
 import { TrendLineChart } from './TrendLineChart';
+import { AdvancedFiltersPanel } from './AdvancedFiltersPanel';
 import {
   fetchStats,
   fetchStatsByTechnology,
   fetchStatsByEnvironment,
   fetchTimeSeries,
+  fetchFilterOptions,
 } from '../../../services/dashboard_service';
+import { useUrlFilters } from '../../../hooks/useUrlFilters';
 import type {
   DashboardStats,
   TechnologyStats,
   EnvironmentStats,
   DashboardTimeSeriesPoint,
+  DashboardFilters,
+  FilterOptions,
 } from '../../../types/api';
 
 const { Text } = Typography;
@@ -48,9 +54,14 @@ const PERIOD_OPTIONS = [
 ];
 
 export function ReportingDashboard() {
-  const [period, setPeriod] = useState<number>(14);
+  // URL-synced filters (Story 8.4, AC6, AC8)
+  const [filters, setFilters] = useUrlFilters();
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Filter options from API (Story 8.4, Task 14)
+  const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
 
   // Data states
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -58,6 +69,44 @@ export function ReportingDashboard() {
   const [envStats, setEnvStats] = useState<EnvironmentStats[]>([]);
   const [timeSeries, setTimeSeries] = useState<DashboardTimeSeriesPoint[]>([]);
 
+  // Determine if custom date range is set (disables Segmented)
+  const hasCustomDateRange = !!(filters.fromDate && filters.toDate);
+
+  // Current period from filters or default
+  const period = filters.days || 14;
+
+  // Handle period change via Segmented
+  const handlePeriodChange = useCallback(
+    (value: number) => {
+      setFilters({
+        ...filters,
+        days: value,
+        // Clear custom date range when selecting preset period
+        fromDate: undefined,
+        toDate: undefined,
+      });
+    },
+    [filters, setFilters],
+  );
+
+  // Handle filter changes from AdvancedFiltersPanel
+  const handleFiltersChange = useCallback(
+    (newFilters: DashboardFilters) => {
+      setFilters(newFilters);
+    },
+    [setFilters],
+  );
+
+  // Load filter options on mount (Story 8.4, Task 14)
+  useEffect(() => {
+    fetchFilterOptions()
+      .then(setFilterOptions)
+      .catch(() => {
+        // Silently fail - panel will use fallback options
+      });
+  }, []);
+
+  // Load dashboard data when filters change
   useEffect(() => {
     let cancelled = false;
 
@@ -65,12 +114,18 @@ export function ReportingDashboard() {
       setLoading(true);
       setError(null);
 
+      // Build API filters object
+      const apiFilters: DashboardFilters = {
+        ...filters,
+        days: hasCustomDateRange ? undefined : period,
+      };
+
       try {
         const [statsData, techData, envData, timeData] = await Promise.all([
-          fetchStats(period),
-          fetchStatsByTechnology(period),
-          fetchStatsByEnvironment(period),
-          fetchTimeSeries(period),
+          fetchStats(apiFilters),
+          fetchStatsByTechnology(apiFilters),
+          fetchStatsByEnvironment(apiFilters),
+          fetchTimeSeries(apiFilters),
         ]);
 
         if (cancelled) return;
@@ -92,16 +147,30 @@ export function ReportingDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [period]);
+  }, [filters, hasCustomDateRange, period]);
 
   return (
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-      {/* Period selector */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+      {/* Advanced filters panel (Story 8.4, AC1) */}
+      <AdvancedFiltersPanel
+        filters={filters}
+        onFiltersChange={handleFiltersChange}
+        loading={loading}
+        filterOptions={filterOptions}
+      />
+
+      {/* Period selector - disabled when custom date range is set */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 16 }}>
+        {hasCustomDateRange && (
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            Période personnalisée active
+          </Text>
+        )}
         <Segmented
           options={PERIOD_OPTIONS}
           value={period}
-          onChange={(val) => setPeriod(val as number)}
+          onChange={(val) => handlePeriodChange(val as number)}
+          disabled={hasCustomDateRange}
         />
       </div>
 
@@ -121,7 +190,7 @@ export function ReportingDashboard() {
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} md={6}>
           <StatCard
-            label="Executions du jour"
+            label="Exécutions du jour"
             value={stats?.executions_jour ?? 0}
             icon={<RocketOutlined />}
             loading={loading}
@@ -129,7 +198,7 @@ export function ReportingDashboard() {
         </Col>
         <Col xs={24} sm={12} md={6}>
           <StatCard
-            label="Taux de succes"
+            label="Taux de succès"
             value={stats?.taux_succes_pct ?? 0}
             suffix="%"
             icon={<CheckCircleOutlined />}

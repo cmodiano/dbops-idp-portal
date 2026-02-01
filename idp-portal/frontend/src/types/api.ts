@@ -595,3 +595,39 @@ export interface EnvironmentStats {
   /** Success rate percentage (0-100), null if no finished executions. */
   success_rate: number | null;
 }
+
+// === Dashboard Advanced Filters Types (Story 8.4) ===
+
+/** Status values for execution filter (Story 8.4, Task 8.2).
+ * Includes all execution statuses including approval workflow statuses (Story 7.4). */
+export type DashboardFilterStatus = 'PENDING' | 'SUBMITTED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'PENDING_APPROVAL' | 'REJECTED';
+
+/** Advanced filters for dashboard endpoints (Story 8.4, AC1, AC6, AC7). */
+export interface DashboardFilters {
+  /** Filter by database engine (e.g., 'aap', 'terraform'). */
+  engine?: string;
+  /** Filter by environment (e.g., 'dev', 'staging', 'prod'). */
+  environment?: string;
+  /** Filter by action tags (actions having any of these tags). */
+  tags?: string[];
+  /** Filter by execution status. */
+  status?: DashboardFilterStatus;
+  /** Custom period start (YYYY-MM-DD). */
+  fromDate?: string;
+  /** Custom period end (YYYY-MM-DD). */
+  toDate?: string;
+  /** Period in days (used when fromDate/toDate not provided). */
+  days?: number;
+}
+
+/** Available filter options from API (Story 8.4, Task 14). */
+export interface FilterOptions {
+  /** Available database engines from published actions. */
+  engines: string[];
+  /** Used environments from executions. */
+  environments: string[];
+  /** All available tags. */
+  tags: string[];
+  /** All possible execution statuses. */
+  statuses: string[];
+}

@@ -1,14 +1,16 @@
-"""Tests for dashboard API endpoints (Story 5.1, Task 5.1; Story 8.3).
+"""Tests for dashboard API endpoints (Story 5.1, Task 5.1; Story 8.3; Story 8.4).
 
 Tests:
-- GET /api/v1/dashboard/stats: Returns aggregated statistics (AC1, AC4, Story 8.3 AC6 period filter)
+- GET /api/v1/dashboard/stats: Returns aggregated statistics (AC1, AC4, Story 8.3 AC6 period filter, Story 8.4 advanced filters)
 - GET /api/v1/dashboard/recent: Returns executions from last 24h (AC2, AC4)
-- GET /api/v1/dashboard/stats-by-technology: Returns executions grouped by engine (Story 8.3, AC3, AC7)
-- GET /api/v1/dashboard/stats-by-environment: Returns executions grouped by environment (Story 8.3, AC4, AC7)
+- GET /api/v1/dashboard/stats-by-technology: Returns executions grouped by engine (Story 8.3, AC3, AC7; Story 8.4 filters)
+- GET /api/v1/dashboard/stats-by-environment: Returns executions grouped by environment (Story 8.3, AC4, AC7; Story 8.4 filters)
+- GET /api/v1/dashboard/timeseries: Executions over time (Story 8.4 filters)
+- GET /api/v1/dashboard/filter-options: Available filter values (Story 8.4, AC1)
 """
 
 import pytest
-from datetime import datetime
+from datetime import datetime, date
 from unittest.mock import AsyncMock, patch
 from httpx import AsyncClient, ASGITransport
 from fastapi import status
@@ -350,7 +352,8 @@ class TestGetStatsByTechnology:
             response = await client.get("/api/v1/dashboard/stats-by-technology?days=30")
 
         assert response.status_code == status.HTTP_200_OK
-        mock_get.assert_called_once_with(days=30)
+        call_kwargs = mock_get.call_args.kwargs
+        assert call_kwargs["days"] == 30
 
     @pytest.mark.asyncio
     async def test_get_stats_by_technology_default_days(self, client, mock_auth_dba):
@@ -361,7 +364,8 @@ class TestGetStatsByTechnology:
             response = await client.get("/api/v1/dashboard/stats-by-technology")
 
         assert response.status_code == status.HTTP_200_OK
-        mock_get.assert_called_once_with(days=14)
+        call_kwargs = mock_get.call_args.kwargs
+        assert call_kwargs["days"] == 14
 
     @pytest.mark.asyncio
     async def test_get_stats_by_technology_empty_data(self, client, mock_auth_dba):
@@ -429,7 +433,8 @@ class TestGetStatsByEnvironment:
             response = await client.get("/api/v1/dashboard/stats-by-environment?days=90")
 
         assert response.status_code == status.HTTP_200_OK
-        mock_get.assert_called_once_with(days=90)
+        call_kwargs = mock_get.call_args.kwargs
+        assert call_kwargs["days"] == 90
 
     @pytest.mark.asyncio
     async def test_get_stats_by_environment_default_days(self, client, mock_auth_dba):
@@ -440,7 +445,8 @@ class TestGetStatsByEnvironment:
             response = await client.get("/api/v1/dashboard/stats-by-environment")
 
         assert response.status_code == status.HTTP_200_OK
-        mock_get.assert_called_once_with(days=14)
+        call_kwargs = mock_get.call_args.kwargs
+        assert call_kwargs["days"] == 14
 
     @pytest.mark.asyncio
     async def test_get_stats_by_environment_empty_data(self, client, mock_auth_dba):
@@ -490,7 +496,9 @@ class TestGetDashboardStatsWithPeriod:
             response = await client.get("/api/v1/dashboard/stats?days=30")
 
         assert response.status_code == status.HTTP_200_OK
-        mock_get.assert_called_once_with(days=30)
+        # Check days parameter was passed (other params are None by default)
+        call_kwargs = mock_get.call_args.kwargs
+        assert call_kwargs["days"] == 30
 
     @pytest.mark.asyncio
     async def test_get_stats_default_days(self, client, mock_auth_dba):
@@ -508,4 +516,312 @@ class TestGetDashboardStatsWithPeriod:
             response = await client.get("/api/v1/dashboard/stats")
 
         assert response.status_code == status.HTTP_200_OK
-        mock_get.assert_called_once_with(days=14)
+        # Check days parameter defaults to 14
+        call_kwargs = mock_get.call_args.kwargs
+        assert call_kwargs["days"] == 14
+
+
+# --- Story 8.4: Advanced Filters Tests ---
+
+
+class TestDashboardAdvancedFilters:
+    """Tests for dashboard advanced filters (Story 8.4, AC7)."""
+
+    @pytest.mark.asyncio
+    async def test_get_stats_with_engine_filter(self, client, mock_auth_dba):
+        """GET /dashboard/stats accepts engine filter parameter (Story 8.4, AC2)."""
+        mock_stats = {
+            "executions_jour": 5,
+            "taux_succes_pct": 95.0,
+            "executions_en_cours": 1,
+            "executions_en_erreur": 0,
+        }
+
+        with patch("app.api.v1.dashboard.execution_repository.get_dashboard_stats", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_stats
+
+            response = await client.get("/api/v1/dashboard/stats?engine=aap")
+
+        assert response.status_code == status.HTTP_200_OK
+        call_kwargs = mock_get.call_args.kwargs
+        assert call_kwargs["engine"] == "aap"
+
+    @pytest.mark.asyncio
+    async def test_get_stats_with_environment_filter(self, client, mock_auth_dba):
+        """GET /dashboard/stats accepts environment filter parameter (Story 8.4, AC3)."""
+        mock_stats = {
+            "executions_jour": 3,
+            "taux_succes_pct": 100.0,
+            "executions_en_cours": 0,
+            "executions_en_erreur": 0,
+        }
+
+        with patch("app.api.v1.dashboard.execution_repository.get_dashboard_stats", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_stats
+
+            response = await client.get("/api/v1/dashboard/stats?environment=prod")
+
+        assert response.status_code == status.HTTP_200_OK
+        call_kwargs = mock_get.call_args.kwargs
+        assert call_kwargs["environment"] == "prod"
+
+    @pytest.mark.asyncio
+    async def test_get_stats_with_combined_filters(self, client, mock_auth_dba):
+        """GET /dashboard/stats accepts multiple filters combined (Story 8.4, AC4)."""
+        mock_stats = {
+            "executions_jour": 2,
+            "taux_succes_pct": 100.0,
+            "executions_en_cours": 0,
+            "executions_en_erreur": 0,
+        }
+
+        with patch("app.api.v1.dashboard.execution_repository.get_dashboard_stats", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_stats
+
+            response = await client.get("/api/v1/dashboard/stats?engine=aap&environment=prod&status=COMPLETED")
+
+        assert response.status_code == status.HTTP_200_OK
+        call_kwargs = mock_get.call_args.kwargs
+        assert call_kwargs["engine"] == "aap"
+        assert call_kwargs["environment"] == "prod"
+        assert call_kwargs["status"] == "COMPLETED"
+
+    @pytest.mark.asyncio
+    async def test_get_stats_with_custom_date_range(self, client, mock_auth_dba):
+        """GET /dashboard/stats accepts from_date and to_date parameters."""
+        mock_stats = {
+            "executions_jour": 10,
+            "taux_succes_pct": 90.0,
+            "executions_en_cours": 0,
+            "executions_en_erreur": 1,
+        }
+
+        with patch("app.api.v1.dashboard.execution_repository.get_dashboard_stats", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_stats
+
+            response = await client.get("/api/v1/dashboard/stats?from_date=2026-01-01&to_date=2026-01-31")
+
+        assert response.status_code == status.HTTP_200_OK
+        call_kwargs = mock_get.call_args.kwargs
+        assert call_kwargs["from_date"] == date(2026, 1, 1)
+        assert call_kwargs["to_date"] == date(2026, 1, 31)
+
+    @pytest.mark.asyncio
+    async def test_get_stats_with_tags_filter(self, client, mock_auth_dba):
+        """GET /dashboard/stats accepts tags filter as list."""
+        mock_stats = {
+            "executions_jour": 8,
+            "taux_succes_pct": 87.5,
+            "executions_en_cours": 1,
+            "executions_en_erreur": 1,
+        }
+
+        with patch("app.api.v1.dashboard.execution_repository.get_dashboard_stats", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_stats
+
+            response = await client.get("/api/v1/dashboard/stats?tags=oracle&tags=postgresql")
+
+        assert response.status_code == status.HTTP_200_OK
+        call_kwargs = mock_get.call_args.kwargs
+        assert call_kwargs["tags"] == ["oracle", "postgresql"]
+
+    @pytest.mark.asyncio
+    async def test_get_stats_by_technology_with_environment_filter(self, client, mock_auth_dba):
+        """GET /dashboard/stats-by-technology accepts environment filter (Story 8.4)."""
+        mock_stats = [{"engine": "Oracle", "count": 25, "success_rate": 96.0}]
+
+        with patch("app.api.v1.dashboard.execution_repository.get_stats_by_technology", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_stats
+
+            response = await client.get("/api/v1/dashboard/stats-by-technology?environment=prod")
+
+        assert response.status_code == status.HTTP_200_OK
+        call_kwargs = mock_get.call_args.kwargs
+        assert call_kwargs["environment"] == "prod"
+
+    @pytest.mark.asyncio
+    async def test_get_stats_by_technology_with_all_filters(self, client, mock_auth_dba):
+        """GET /dashboard/stats-by-technology accepts all advanced filters (Story 8.4, AC7)."""
+        mock_stats = [{"engine": "Oracle", "count": 10, "success_rate": 100.0}]
+
+        with patch("app.api.v1.dashboard.execution_repository.get_stats_by_technology", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_stats
+
+            response = await client.get(
+                "/api/v1/dashboard/stats-by-technology?environment=prod&tags=oracle&tags=patch&status=COMPLETED&from_date=2026-01-01&to_date=2026-01-31"
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        call_kwargs = mock_get.call_args.kwargs
+        assert call_kwargs["environment"] == "prod"
+        assert call_kwargs["tags"] == ["oracle", "patch"]
+        assert call_kwargs["status"] == "COMPLETED"
+        assert call_kwargs["from_date"] == date(2026, 1, 1)
+        assert call_kwargs["to_date"] == date(2026, 1, 31)
+
+    @pytest.mark.asyncio
+    async def test_get_stats_by_environment_with_engine_filter(self, client, mock_auth_dba):
+        """GET /dashboard/stats-by-environment accepts engine filter (Story 8.4)."""
+        mock_stats = [{"environment": "prod", "count": 15, "success_rate": 100.0}]
+
+        with patch("app.api.v1.dashboard.execution_repository.get_stats_by_environment", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_stats
+
+            response = await client.get("/api/v1/dashboard/stats-by-environment?engine=aap")
+
+        assert response.status_code == status.HTTP_200_OK
+        call_kwargs = mock_get.call_args.kwargs
+        assert call_kwargs["engine"] == "aap"
+
+    @pytest.mark.asyncio
+    async def test_get_timeseries_with_filters(self, client, mock_auth_dba):
+        """GET /dashboard/timeseries accepts filter parameters (Story 8.4)."""
+        mock_timeseries = [
+            {"date": "2026-01-30", "success": 10, "failed": 1},
+            {"date": "2026-01-31", "success": 8, "failed": 2},
+        ]
+
+        with patch("app.api.v1.dashboard.execution_repository.get_dashboard_timeseries", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_timeseries
+
+            response = await client.get("/api/v1/dashboard/timeseries?engine=aap&environment=prod")
+
+        assert response.status_code == status.HTTP_200_OK
+        call_kwargs = mock_get.call_args.kwargs
+        assert call_kwargs["engine"] == "aap"
+        assert call_kwargs["environment"] == "prod"
+
+
+class TestGetFilterOptions:
+    """Tests for GET /api/v1/dashboard/filter-options (Story 8.4, Task 14)."""
+
+    @pytest.mark.asyncio
+    async def test_get_filter_options_returns_all_option_types(self, client, mock_auth_dba):
+        """GET /dashboard/filter-options returns engines, environments, tags, statuses."""
+        mock_options = {
+            "engines": ["Oracle", "PostgreSQL", "aap"],
+            "environments": ["dev", "staging", "prod"],
+            "tags": ["database", "automation", "patch"],
+            "statuses": ["PENDING", "RUNNING", "COMPLETED", "FAILED"],
+        }
+
+        with patch("app.api.v1.dashboard.execution_repository.get_filter_options", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_options
+
+            response = await client.get("/api/v1/dashboard/filter-options")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert "engines" in data
+        assert "environments" in data
+        assert "tags" in data
+        assert "statuses" in data
+        assert len(data["engines"]) == 3
+        assert len(data["environments"]) == 3
+        assert len(data["tags"]) == 3
+
+    @pytest.mark.asyncio
+    async def test_get_filter_options_empty_data(self, client, mock_auth_dba):
+        """GET /dashboard/filter-options returns empty lists when no data."""
+        mock_options = {
+            "engines": [],
+            "environments": [],
+            "tags": [],
+            "statuses": ["PENDING", "RUNNING", "COMPLETED", "FAILED"],
+        }
+
+        with patch("app.api.v1.dashboard.execution_repository.get_filter_options", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_options
+
+            response = await client.get("/api/v1/dashboard/filter-options")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["engines"] == []
+        assert data["environments"] == []
+
+    @pytest.mark.asyncio
+    async def test_get_filter_options_forbidden_for_non_dba(self, client, mock_auth_viewer):
+        """GET /dashboard/filter-options returns 403 for non-DBA/DBOPS profiles."""
+        response = await client.get("/api/v1/dashboard/filter-options")
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    @pytest.mark.asyncio
+    async def test_get_filter_options_dbops_allowed(self, client, mock_auth_dbops):
+        """GET /dashboard/filter-options is accessible by DBOPS profile."""
+        mock_options = {
+            "engines": ["Oracle"],
+            "environments": ["dev"],
+            "tags": [],
+            "statuses": ["COMPLETED"],
+        }
+
+        with patch("app.api.v1.dashboard.execution_repository.get_filter_options", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_options
+
+            response = await client.get("/api/v1/dashboard/filter-options")
+
+        assert response.status_code == status.HTTP_200_OK
+
+
+class TestDashboardFiltersValidation:
+    """Tests for DashboardFilters model validation (Story 8.4, Task 1)."""
+
+    def test_dashboard_filters_validates_date_range(self):
+        """DashboardFilters rejects from_date > to_date."""
+        from app.models.dashboard import DashboardFilters
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            DashboardFilters(from_date=date(2026, 1, 31), to_date=date(2026, 1, 1))
+
+    def test_dashboard_filters_accepts_valid_date_range(self):
+        """DashboardFilters accepts from_date <= to_date."""
+        from app.models.dashboard import DashboardFilters
+
+        filters = DashboardFilters(from_date=date(2026, 1, 1), to_date=date(2026, 1, 31))
+        assert filters.from_date == date(2026, 1, 1)
+        assert filters.to_date == date(2026, 1, 31)
+
+    def test_dashboard_filters_accepts_empty(self):
+        """DashboardFilters accepts empty filters."""
+        from app.models.dashboard import DashboardFilters
+
+        filters = DashboardFilters()
+        assert filters.engine is None
+        assert filters.environment is None
+        assert filters.tags is None
+
+    def test_dashboard_filters_accepts_tags_list(self):
+        """DashboardFilters accepts tags as list."""
+        from app.models.dashboard import DashboardFilters
+
+        filters = DashboardFilters(tags=["oracle", "postgresql"])
+        assert filters.tags == ["oracle", "postgresql"]
+
+
+class TestDashboardFiltersApiValidation:
+    """Integration tests for DashboardFilters validation at API level (Story 8.4, Task 1.2)."""
+
+    @pytest.mark.asyncio
+    async def test_stats_rejects_invalid_date_range(self, client, mock_auth_dba):
+        """GET /dashboard/stats returns 422 when from_date > to_date."""
+        response = await client.get("/api/v1/dashboard/stats?from_date=2026-01-31&to_date=2026-01-01")
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    @pytest.mark.asyncio
+    async def test_stats_accepts_valid_date_range(self, client, mock_auth_dba):
+        """GET /dashboard/stats accepts valid date range."""
+        mock_stats = {
+            "executions_jour": 5,
+            "taux_succes_pct": 90.0,
+            "executions_en_cours": 1,
+            "executions_en_erreur": 0,
+        }
+
+        with patch("app.api.v1.dashboard.execution_repository.get_dashboard_stats", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_stats
+
+            response = await client.get("/api/v1/dashboard/stats?from_date=2026-01-01&to_date=2026-01-31")
+
+        assert response.status_code == status.HTTP_200_OK
