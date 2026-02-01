@@ -3,10 +3,13 @@
  *
  * Affiche Quoi (étape échouée), Pourquoi (cause), Options (Relancer, Voir logs, Contacter DBA).
  * role="alert", aria-labelledby, focus automatique sur le premier bouton option.
+ *
+ * Story 7.2, AC3: Business variant with simplified labels and sanitized error messages.
  */
 
 import { useEffect, useRef } from 'react';
 import { Button } from 'antd';
+import { sanitizeDescription } from '../../utils/businessLanguage';
 
 const ERROR_COLOR = '#EF4444';
 
@@ -25,6 +28,8 @@ export interface StructuredErrorCardProps {
   onViewLogs?: () => void;
   /** Callback Contacter DBA (lien mailto ou page aide). */
   onContact?: () => void;
+  /** Display variant: 'default' for technical users, 'business' for simplified view (Story 7.2, Task 3.1). */
+  variant?: 'default' | 'business';
 }
 
 export function StructuredErrorCard({
@@ -33,12 +38,20 @@ export function StructuredErrorCard({
   onRetry,
   onViewLogs,
   onContact,
+  variant = 'default',
 }: StructuredErrorCardProps) {
   const firstOptionRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     firstOptionRef.current?.focus();
   }, []);
+
+  // Story 7.2, Task 3.2: Simplified labels for business variant
+  const quoiLabel = variant === 'business' ? 'Qu\'est-ce qui s\'est passe?' : 'Quoi';
+  const pourquoiLabel = variant === 'business' ? 'Explication' : 'Pourquoi';
+
+  // Story 7.2, Task 3.3: Apply sanitizeDescription() to error message in business mode
+  const displayPourquoi = variant === 'business' ? sanitizeDescription(pourquoi) : pourquoi;
 
   return (
     <div
@@ -56,7 +69,7 @@ export function StructuredErrorCard({
           id="structured-error-quoi-heading"
           style={{ margin: '0 0 4px 0', fontSize: 14, fontWeight: 600, color: '#374151' }}
         >
-          Quoi
+          {quoiLabel}
         </h3>
         <p style={{ margin: 0, fontSize: 14, color: '#1f2937' }}>{quoi}</p>
       </section>
@@ -65,27 +78,50 @@ export function StructuredErrorCard({
           id="structured-error-pourquoi-heading"
           style={{ margin: '0 0 4px 0', fontSize: 14, fontWeight: 600, color: '#374151' }}
         >
-          Pourquoi
+          {pourquoiLabel}
         </h3>
-        <p style={{ margin: 0, fontSize: 14, color: ERROR_COLOR }}>{pourquoi}</p>
+        <p style={{ margin: 0, fontSize: 14, color: ERROR_COLOR }}>{displayPourquoi}</p>
       </section>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        <Button
-          ref={firstOptionRef}
-          type="primary"
-          danger
-          onClick={onRetry}
-          disabled={!onRetry}
-          style={{ outlineOffset: 2 }}
-        >
-          Relancer
-        </Button>
-        <Button onClick={onViewLogs} disabled={!onViewLogs} style={{ outlineOffset: 2 }}>
-          Voir logs
-        </Button>
-        <Button onClick={onContact} disabled={!onContact} style={{ outlineOffset: 2 }}>
-          Contacter DBA
-        </Button>
+        {/* Story 7.2, Task 3.4/3.5: Reorder buttons for business variant - Contact DBA is primary */}
+        {variant === 'business' ? (
+          <>
+            <Button
+              ref={firstOptionRef}
+              type="primary"
+              onClick={onContact}
+              disabled={!onContact}
+              style={{ outlineOffset: 2 }}
+            >
+              Contacter DBA
+            </Button>
+            <Button onClick={onRetry} disabled={!onRetry} style={{ outlineOffset: 2 }}>
+              Relancer
+            </Button>
+            <Button type="text" onClick={onViewLogs} disabled={!onViewLogs} style={{ outlineOffset: 2 }}>
+              Voir logs
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button
+              ref={firstOptionRef}
+              type="primary"
+              danger
+              onClick={onRetry}
+              disabled={!onRetry}
+              style={{ outlineOffset: 2 }}
+            >
+              Relancer
+            </Button>
+            <Button onClick={onViewLogs} disabled={!onViewLogs} style={{ outlineOffset: 2 }}>
+              Voir logs
+            </Button>
+            <Button onClick={onContact} disabled={!onContact} style={{ outlineOffset: 2 }}>
+              Contacter DBA
+            </Button>
+          </>
+        )}
       </div>
     </div>
   );

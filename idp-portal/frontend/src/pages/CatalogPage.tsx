@@ -614,7 +614,7 @@ export default function CatalogPage() {
         ) : null}
       </Drawer>
 
-      {/* ExecutionWizard + Timeline (Story 4.1, 4.6, Task 4) */}
+      {/* ExecutionWizard + Timeline (Story 4.1, 4.6, Task 4; Story 7.2, Task 4.1) */}
       <ExecutionWizard
         open={executionWizardOpen}
         action={selectedActionDetail}
@@ -626,6 +626,7 @@ export default function CatalogPage() {
         }}
         onSuccess={handleExecutionSuccess}
         onBackToCatalog={handleBackToCatalog}
+        variant={isBusinessProfile ? 'simplified' : 'default'}
       />
     </div>
   );

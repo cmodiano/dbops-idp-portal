@@ -43,13 +43,29 @@ import { submitExecution, fetchInventoryItems } from '../../services/execution_s
 import { ImpactIndicator } from '../shared/ImpactIndicator';
 import { ExecutionTimeline } from '../execution';
 import { STYLE_TOKENS } from '../../theme/styleTokens';
+import { sanitizeDescription } from '../../utils/businessLanguage';
 
 const { Text, Title } = Typography;
 
-const STEP_ITEMS = [
+/** Step items for default variant (technical users). */
+const STEP_ITEMS_DEFAULT = [
   { title: 'Environnement', content: 'Choisir la cible' },
   { title: 'Parametres', content: 'Configurer l\'action' },
   { title: 'Confirmation', content: 'Verifier et executer' },
+];
+
+/** Step items for simplified variant (business users) — Story 7.2, Task 1.2. */
+const STEP_ITEMS_SIMPLIFIED = [
+  { title: 'Ou executer?', content: 'Selectionnez l\'environnement' },
+  { title: 'Informations requises', content: 'Remplissez les champs' },
+  { title: 'Verifier et lancer', content: 'Tout est pret?' },
+];
+
+/** Step descriptions for simplified variant (business users) — Story 7.2, Task 1.3. */
+const STEP_DESCRIPTIONS_SIMPLIFIED = [
+  'Selectionnez l\'environnement ou l\'action sera executee. Si un seul est disponible, il est deja selectionne pour vous.',
+  'Remplissez les informations necessaires. Tous les champs marques sont obligatoires.',
+  'Verifiez que tout est correct avant de lancer l\'action.',
 ];
 
 /** Environment display names. */
@@ -74,6 +90,8 @@ export interface ExecutionWizardProps {
   onSuccess?: (executionId: number) => void;
   /** Callback to close timeline and return to catalog (Story 4.6). */
   onBackToCatalog?: () => void;
+  /** Display variant: 'default' for technical users, 'simplified' for business users (Story 7.2, Task 1.1). */
+  variant?: 'default' | 'simplified';
 }
 
 /** Parameter field info extracted from JSON Schema. */
@@ -167,8 +185,12 @@ export function ExecutionWizard({
   onCancel,
   onSuccess,
   onBackToCatalog,
+  variant = 'default',
 }: ExecutionWizardProps) {
   const { notification } = App.useApp();
+
+  // Story 7.2, Task 1.2: Select step items based on variant
+  const STEP_ITEMS = variant === 'simplified' ? STEP_ITEMS_SIMPLIFIED : STEP_ITEMS_DEFAULT;
   const [form] = Form.useForm();
   const [currentStep, setCurrentStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -218,12 +240,18 @@ export function ExecutionWizard({
         return;
       }
       setCurrentStep(0);
-      setSelectedEnvironment(null);
       setParameters({});
       setSubmitError(null);
       form.resetFields();
+
+      // Story 7.2, Task 2.2: Auto-select environment if only one is available
+      if (allowedEnvironments.length === 1) {
+        setSelectedEnvironment(allowedEnvironments[0] as ExecutionEnvironment);
+      } else {
+        setSelectedEnvironment(null);
+      }
     }
-  }, [open, action, form, notification, onCancel]);
+  }, [open, action, form, notification, onCancel, allowedEnvironments]);
 
   // Load environments from inventory (cached, loaded once)
   useEffect(() => {
@@ -426,10 +454,19 @@ export function ExecutionWizard({
   // Render Step 1: Environment selection
   const renderEnvironmentStep = () => (
     <div>
+      {/* Story 7.2, Task 1.3: Contextual help description for simplified variant */}
+      {variant === 'simplified' && (
+        <Alert
+          type="info"
+          showIcon
+          description={STEP_DESCRIPTIONS_SIMPLIFIED[0]}
+          style={{ marginBottom: 16 }}
+        />
+      )}
       <Form.Item
-        label="Environnement cible"
+        label={variant === 'simplified' ? 'Environnement' : 'Environnement cible'}
         required
-        tooltip="Selectionnez l'environnement sur lequel executer l'action."
+        tooltip={variant === 'simplified' ? undefined : 'Selectionnez l\'environnement sur lequel executer l\'action.'}
       >
         <Select
           ref={(ref) => {
@@ -474,6 +511,16 @@ export function ExecutionWizard({
         />
       )}
 
+      {/* Story 7.2, Task 2.3: Informative message when environment is auto-selected */}
+      {allowedEnvironments.length === 1 && selectedEnvironment && (
+        <Alert
+          type="success"
+          showIcon
+          description="Environnement selectionne automatiquement car c'est le seul disponible pour vous."
+          style={{ marginBottom: 16 }}
+        />
+      )}
+
       {selectedEnvironment === 'prod' && (
         <Alert
           title="Avertissement - Environnement Production"
@@ -502,10 +549,21 @@ export function ExecutionWizard({
       initialValues={parameters}
       onValuesChange={(_, allValues) => setParameters(allValues)}
     >
+      {/* Story 7.2, Task 1.3: Contextual help description for simplified variant */}
+      {variant === 'simplified' && (
+        <Alert
+          type="info"
+          showIcon
+          description={STEP_DESCRIPTIONS_SIMPLIFIED[1]}
+          style={{ marginBottom: 16 }}
+        />
+      )}
       {parameterFields.length === 0 ? (
         <Alert
           title="Aucun parametre requis"
-          description="Cette action ne necessite pas de parametres."
+          description={variant === 'simplified'
+            ? 'Aucune information supplementaire n\'est necessaire.'
+            : 'Cette action ne necessite pas de parametres.'}
           type="info"
           showIcon
         />
@@ -524,6 +582,11 @@ export function ExecutionWizard({
           if (field.maximum !== undefined) {
             rules.push({ type: 'number', max: field.maximum, message: `Maximum: ${field.maximum}` });
           }
+
+          // Story 7.2, Task 1.4: Apply sanitizeDescription() in simplified mode
+          const displayDescription = variant === 'simplified' && field.description
+            ? sanitizeDescription(field.description)
+            : field.description;
 
           const getFieldInput = () => {
             if (field.inventorySource && inventoryData[field.inventorySource]) {
@@ -604,7 +667,7 @@ export function ExecutionWizard({
               name={field.name}
               label={field.label}
               rules={rules}
-              tooltip={field.description ? { title: field.description, icon: <InfoCircleOutlined /> } : undefined}
+              tooltip={displayDescription ? { title: displayDescription, icon: <InfoCircleOutlined /> } : undefined}
             >
               {index === 0 ? (
                 <div ref={(ref) => { firstFieldRef.current = ref?.querySelector('input, select, [role="combobox"]') as HTMLElement; }}>
@@ -624,14 +687,23 @@ export function ExecutionWizard({
   const renderConfirmationStep = () => {
     const changeConfig = action?.change_type_config?.[selectedEnvironment?.toUpperCase() ?? ''];
     const isChangeRequired = changeConfig?.required ?? false;
-    
+
     // Get environment display name from inventory cache or fallback to labels
-    const environmentName = environmentsCache?.find((env) => env.id === selectedEnvironment)?.name 
-      ?? ENVIRONMENT_LABELS[selectedEnvironment!] 
+    const environmentName = environmentsCache?.find((env) => env.id === selectedEnvironment)?.name
+      ?? ENVIRONMENT_LABELS[selectedEnvironment!]
       ?? selectedEnvironment;
 
     return (
       <div>
+        {/* Story 7.2, Task 1.3: Contextual help description for simplified variant */}
+        {variant === 'simplified' && (
+          <Alert
+            type="info"
+            showIcon
+            description={STEP_DESCRIPTIONS_SIMPLIFIED[2]}
+            style={{ marginBottom: 16 }}
+          />
+        )}
         <Title level={5}>{action?.name}</Title>
 
         <Descriptions column={1} size="small" bordered style={{ marginBottom: 16 }}>
@@ -709,6 +781,7 @@ export function ExecutionWizard({
           onContact={() => {
             window.location.href = 'mailto:?subject=IDP%20Portal%20-%20Support%20DBA';
           }}
+          errorCardVariant={variant === 'simplified' ? 'business' : 'default'}
         />
       </Modal>
     );

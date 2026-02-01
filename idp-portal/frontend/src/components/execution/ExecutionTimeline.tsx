@@ -43,6 +43,8 @@ export interface ExecutionTimelineProps {
   onRetry?: () => void;
   /** Callback Contacter DBA (Story 4.7, AC2). */
   onContact?: () => void;
+  /** Variant for StructuredErrorCard: 'default' or 'business' (Story 7.2, Task 4.2). */
+  errorCardVariant?: 'default' | 'business';
 }
 
 export function ExecutionTimeline({
@@ -52,6 +54,7 @@ export function ExecutionTimeline({
   mode = 'realtime',
   onRetry,
   onContact,
+  errorCardVariant = 'default',
 }: ExecutionTimelineProps) {
   const useRealtime = mode === 'realtime' && executionId != null;
   const { steps: wsSteps, execution: wsExecution, loading, error } = useWebSocket(useRealtime ? executionId : null);
@@ -78,7 +81,7 @@ export function ExecutionTimeline({
     [steps, logsDrawerStepId],
   );
 
-  // MEDIUM-3 FIX: Dedicated aria-live announcement for status changes
+  // Dedicated aria-live announcement for status changes (AC4 accessibility)
   const statusAnnouncement = useMemo(() => {
     const runningStep = steps.find((s) => s.status === 'RUNNING');
     const failedStep = steps.find((s) => s.status === 'FAILED');
@@ -130,7 +133,7 @@ export function ExecutionTimeline({
         />
       )}
 
-      {/* Story 4.7, AC2: StructuredErrorCard quand FAILED */}
+      {/* Story 4.7, AC2: StructuredErrorCard quand FAILED; Story 7.2, Task 4.2: pass variant */}
       {execution?.status === 'FAILED' && failedStep && (
         <div style={{ marginBottom: 16 }}>
           <StructuredErrorCard
@@ -141,6 +144,7 @@ export function ExecutionTimeline({
             onRetry={onRetry}
             onViewLogs={() => setLogsDrawerStepId(failedStep.id)}
             onContact={onContact}
+            variant={errorCardVariant}
           />
         </div>
       )}
@@ -150,7 +154,7 @@ export function ExecutionTimeline({
         aria-label="Timeline d'exécution"
         style={{ padding: '16px 0' }}
       >
-        {/* MEDIUM-3 FIX: Single aria-live region for status announcements (AC4) */}
+        {/* Single aria-live region for status announcements (AC4) */}
         <div
           aria-live="polite"
           aria-atomic="true"

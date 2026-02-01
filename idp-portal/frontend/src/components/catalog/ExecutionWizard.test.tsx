@@ -590,4 +590,165 @@ describe('ExecutionWizard', () => {
       });
     });
   });
+
+  // Story 7.2: Simplified variant tests
+  describe('Simplified Variant (Story 7.2)', () => {
+    it('renders simplified step labels when variant is simplified (Task 5.1)', () => {
+      render(
+        <ExecutionWizard {...defaultProps} variant="simplified" />,
+        { wrapper: TestWrapper }
+      );
+
+      // Should show simplified labels instead of technical ones
+      expect(screen.getByText('Ou executer?')).toBeInTheDocument();
+      expect(screen.getByText('Informations requises')).toBeInTheDocument();
+      expect(screen.getByText('Verifier et lancer')).toBeInTheDocument();
+    });
+
+    it('shows contextual help description on step 1 in simplified mode (Task 5.1)', () => {
+      render(
+        <ExecutionWizard {...defaultProps} variant="simplified" />,
+        { wrapper: TestWrapper }
+      );
+
+      expect(screen.getByText(/Selectionnez l'environnement ou l'action sera executee/)).toBeInTheDocument();
+    });
+
+    it('shows contextual help description on step 2 in simplified mode (Task 5.1)', async () => {
+      const user = userEvent.setup();
+      render(
+        <ExecutionWizard {...defaultProps} variant="simplified" />,
+        { wrapper: TestWrapper }
+      );
+
+      // Go to step 2
+      const select = screen.getByRole('combobox');
+      await user.click(select);
+      await user.click(screen.getByText('Developpement'));
+      await user.click(screen.getByRole('button', { name: /suivant/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/Remplissez les informations necessaires/)).toBeInTheDocument();
+      });
+    });
+
+    it('shows contextual help description on step 3 in simplified mode (Task 5.1)', async () => {
+      const user = userEvent.setup();
+      render(
+        <ExecutionWizard {...defaultProps} variant="simplified" />,
+        { wrapper: TestWrapper }
+      );
+
+      // Go through all steps
+      const select = screen.getByRole('combobox');
+      await user.click(select);
+      await user.click(screen.getByText('Developpement'));
+      await user.click(screen.getByRole('button', { name: /suivant/i }));
+
+      await waitFor(() => expect(screen.getByLabelText('PDB Name')).toBeInTheDocument());
+      await user.type(screen.getByLabelText('PDB Name'), 'TEST_PDB');
+      await user.click(screen.getByRole('button', { name: /suivant/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/Verifiez que tout est correct avant de lancer/)).toBeInTheDocument();
+      });
+    });
+
+    it('does not show contextual descriptions in default mode', () => {
+      render(
+        <ExecutionWizard {...defaultProps} variant="default" />,
+        { wrapper: TestWrapper }
+      );
+
+      // Should NOT show simplified contextual help
+      expect(screen.queryByText(/Selectionnez l'environnement ou l'action sera executee/)).not.toBeInTheDocument();
+    });
+
+    it('uses default labels when variant is not specified', () => {
+      render(<ExecutionWizard {...defaultProps} />, { wrapper: TestWrapper });
+
+      // Should show default labels
+      expect(screen.getByText('Environnement')).toBeInTheDocument();
+      expect(screen.getByText('Parametres')).toBeInTheDocument();
+      expect(screen.getByText('Confirmation')).toBeInTheDocument();
+    });
+  });
+
+  // Story 7.2: Environment auto-selection tests
+  describe('Environment Auto-Selection (Story 7.2, Task 5.2)', () => {
+    it('auto-selects environment when only one is allowed', async () => {
+      render(
+        <ExecutionWizard {...defaultProps} allowedEnvironments={['dev']} />,
+        { wrapper: TestWrapper }
+      );
+
+      // Wait for async operations to complete
+      await waitFor(() => {
+        // Environment should be pre-selected
+        expect(screen.getByText('Developpement')).toBeInTheDocument();
+      });
+      // Next button should be enabled
+      const nextButton = screen.getByRole('button', { name: /suivant/i });
+      expect(nextButton).not.toBeDisabled();
+    });
+
+    it('shows auto-selection message when environment is pre-selected', async () => {
+      render(
+        <ExecutionWizard {...defaultProps} allowedEnvironments={['dev']} />,
+        { wrapper: TestWrapper }
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText(/Environnement selectionne automatiquement car c'est le seul disponible/)).toBeInTheDocument();
+      });
+    });
+
+    it('does not auto-select when multiple environments are allowed', async () => {
+      render(
+        <ExecutionWizard {...defaultProps} allowedEnvironments={['dev', 'staging']} />,
+        { wrapper: TestWrapper }
+      );
+
+      // Wait for async operations to complete
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /suivant/i })).toBeInTheDocument();
+      });
+
+      // Next button should be disabled (no selection yet)
+      const nextButton = screen.getByRole('button', { name: /suivant/i });
+      expect(nextButton).toBeDisabled();
+
+      // Auto-selection message should not appear
+      expect(screen.queryByText(/Environnement selectionne automatiquement/)).not.toBeInTheDocument();
+    });
+  });
+
+  // Story 7.2: Accessibility tests for simplified variant
+  describe('Accessibility - Simplified Variant (Story 7.2, Task 5.5)', () => {
+    it('has proper aria-labels for simplified step titles', async () => {
+      render(
+        <ExecutionWizard {...defaultProps} variant="simplified" />,
+        { wrapper: TestWrapper }
+      );
+
+      // Wait for async operations to complete
+      await waitFor(() => {
+        // Steps should have aria-label with current step info
+        expect(screen.getByLabelText(/Etape 1 sur 3: Ou executer\?/)).toBeInTheDocument();
+      });
+    });
+
+    it('environment select maintains aria-label in simplified mode', async () => {
+      render(
+        <ExecutionWizard {...defaultProps} variant="simplified" />,
+        { wrapper: TestWrapper }
+      );
+
+      // Wait for async operations to complete
+      await waitFor(() => {
+        // Combobox should still have aria-label
+        expect(screen.getByLabelText('Environnement cible')).toBeInTheDocument();
+      });
+    });
+  });
 });
