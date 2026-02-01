@@ -544,3 +544,32 @@ export interface AuditExecutionListResponse {
   data: AuditExecutionEntry[];
   pagination: PaginationInfo;
 }
+
+// === Admin Analytics Types (Story 8.2) ===
+
+/** Executions count per engine (Story 8.2, AC1). */
+export interface EngineExecutions {
+  engine: string;
+  count: number;
+}
+
+/** Executions count per user profile (Story 8.2, AC1). */
+export interface ProfileExecutions {
+  profile: string;
+  count: number;
+}
+
+/** Weekly adoption trend point (Story 8.2, AC2). */
+export interface WeeklyTrendPoint {
+  week_start: string; // YYYY-MM-DD
+  engine: string;
+  count: number;
+}
+
+/** Admin analytics dashboard data (Story 8.2, AC1, AC4). */
+export interface AdminAnalytics {
+  total_published_actions: number;
+  executions_by_engine: EngineExecutions[];
+  executions_by_profile: ProfileExecutions[];
+  adoption_trend: WeeklyTrendPoint[];
+}

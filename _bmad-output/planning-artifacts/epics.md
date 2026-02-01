@@ -1893,6 +1893,404 @@ So that je mesure l'impact de la plateforme et j'identifie les axes d'ameliorati
 **And** les graphiques utilisent une librairie integree (Ant Design Charts ou equivalent)
 **And** FR40 est satisfaite
 
+### Story 8.3 : Dashboard de reporting avec statistiques par technologie et environnement
+
+As a DBA,
+I want consulter un dashboard de reporting avec des statistiques agregees par technologie (moteur) et par environnement,
+So that je comprends les tendances d'utilisation et les problemes par plateforme et environnement.
+
+**Acceptance Criteria:**
+
+**Given** un DBA accede a l'onglet Dashboard
+**When** la page se charge
+**Then** le dashboard affiche uniquement des statistiques et graphiques (pas de table d'executions recentes)
+
+**Given** le dashboard est charge
+**When** le DBA consulte les statistiques
+**Then** des StatCards affichent : executions du jour, taux de succes (%), executions en cours, executions en erreur
+
+**Given** le DBA consulte les graphiques
+**When** il voit la section "Repartition par technologie"
+**Then** un graphique en barres affiche le nombre d'executions par moteur (AAP, Terraform, ServiceNow, etc.) sur la periode selectionnee
+
+**Given** le DBA consulte les graphiques
+**When** il voit la section "Repartition par environnement"
+**Then** un graphique en barres affiche le nombre d'executions par environnement (dev, staging, prod) sur la periode selectionnee
+
+**Given** le DBA consulte les tendances
+**When** il voit le graphique temporel
+**Then** un graphique ligne affiche les executions sur les 14 derniers jours avec une courbe par statut (succes, echec) et optionnellement par technologie
+
+**Given** le DBA veut filtrer les donnees
+**When** il selectionne une periode (7j, 14j, 30j, 90j)
+**Then** tous les widgets et graphiques se mettent a jour avec les donnees de la periode selectionnee
+
+**And** l'API GET /api/v1/dashboard/stats accepte des parametres de filtre (period, engine, environment)
+**And** l'API GET /api/v1/dashboard/stats-by-technology retourne les executions groupees par moteur
+**And** l'API GET /api/v1/dashboard/stats-by-environment retourne les executions groupees par environnement
+**And** la table "Recent Executions" est retiree du Dashboard (redondante avec la page Executions)
+**And** un lien "Voir toutes les executions" redirige vers la page Executions
+
+### Story 8.4 : Filtres avances pour le dashboard de reporting
+
+As a DBA,
+I want appliquer des filtres avances sur le dashboard (technologie, environnement, tags, periode personnalisee),
+So that je peux analyser des sous-ensembles specifiques d'executions.
+
+**Acceptance Criteria:**
+
+**Given** un DBA consulte le dashboard
+**When** il ouvre le panneau de filtres avances
+**Then** les filtres disponibles sont : periode (date debut/fin), technologie (moteur), environnement, tags d'actions, statut d'execution
+
+**Given** le DBA selectionne un filtre technologie
+**When** il choisit "AAP" dans le selecteur
+**Then** tous les widgets et graphiques se mettent a jour pour afficher uniquement les executions AAP
+
+**Given** le DBA selectionne un filtre environnement
+**When** il choisit "prod" dans le selecteur
+**Then** tous les widgets et graphiques se mettent a jour pour afficher uniquement les executions en production
+
+**Given** le DBA selectionne plusieurs filtres simultanement
+**When** il combine technologie + environnement + periode
+**Then** tous les filtres sont appliques en AND (intersection)
+
+**Given** le DBA a applique des filtres
+**When** il clique sur "Reinitialiser"
+**Then** tous les filtres reviennent aux valeurs par defaut et les widgets se mettent a jour
+
+**Given** le DBA a applique des filtres
+**When** il partage l'URL du dashboard
+**Then** les filtres sont preserves dans les parametres de requete URL (query params)
+
+**And** l'API GET /api/v1/dashboard/stats accepte les parametres query : engine, environment, tags[], status, from_date, to_date
+**And** l'API GET /api/v1/dashboard/stats-by-technology accepte les memes filtres
+**And** l'API GET /api/v1/dashboard/stats-by-environment accepte les memes filtres
+**And** les filtres sont persistes dans le localStorage pour la session utilisateur
+
+### Story 8.5 : Export de rapports analytics
+
+As a DBA,
+I want exporter les statistiques du dashboard en CSV ou PDF,
+So that je peux partager des rapports avec mon equipe ou les archiver.
+
+**Acceptance Criteria:**
+
+**Given** un DBA consulte le dashboard avec des filtres appliques
+**When** il clique sur le bouton "Exporter"
+**Then** un menu propose : "Exporter en CSV", "Exporter en PDF"
+
+**Given** le DBA selectionne "Exporter en CSV"
+**When** le fichier est genere
+**Then** le CSV contient : periode, statistiques globales (executions_jour, taux_succes, etc.), repartition par technologie, repartition par environnement, tendances temporelles (series de dates)
+
+**Given** le DBA selectionne "Exporter en PDF"
+**When** le fichier est genere
+**Then** le PDF contient : titre du rapport avec date de generation, periode analysee, filtres appliques, graphiques (StatCards, barres, ligne), tableau de donnees detaillees
+
+**Given** le DBA exporte un rapport
+**When** le fichier est telecharge
+**Then** le nom du fichier inclut la date et l'heure : "dashboard-report-2026-02-01-14-30.csv"
+
+**Given** le DBA exporte avec des filtres actifs
+**When** le rapport est genere
+**Then** les filtres sont documentes dans le rapport (section "Parametres d'analyse")
+
+**And** l'API GET /api/v1/dashboard/export/csv accepte les memes parametres de filtre que /stats
+**And** l'API GET /api/v1/dashboard/export/pdf accepte les memes parametres de filtre que /stats
+**And** le backend genere le CSV avec pandas ou equivalent
+**And** le backend genere le PDF avec reportlab ou weasyprint (ou frontend avec jsPDF + html2canvas)
+
+### Story 8.6 : Comparaisons et analyses avancees
+
+As a DBA,
+I want comparer les performances entre technologies, environnements ou periodes,
+So that j'identifie les meilleures pratiques et les axes d'amelioration.
+
+**Acceptance Criteria:**
+
+**Given** un DBA consulte le dashboard
+**When** il selectionne le mode "Comparaison"
+**Then** une interface permet de selectionner deux dimensions a comparer : technologie vs technologie, environnement vs environnement, ou periode vs periode
+
+**Given** le DBA compare deux technologies
+**When** il selectionne "AAP" vs "Terraform"
+**Then** un graphique compare cote a cote : taux de succes, temps moyen d'execution, nombre d'executions, nombre d'incidents
+
+**Given** le DBA compare deux environnements
+**When** il selectionne "dev" vs "prod"
+**Then** un graphique compare cote a cote les memes metriques par environnement
+
+**Given** le DBA compare deux periodes
+**When** il selectionne "Semaine derniere" vs "Semaine actuelle"
+**Then** un graphique compare cote a cote les tendances sur les deux periodes avec indicateurs de variation (delta %)
+
+**Given** le DBA consulte une comparaison
+**When** il voit les resultats
+**Then** les differences significatives sont mises en evidence visuellement (couleurs, badges de variation)
+
+**Given** le DBA veut analyser les causes d'une difference
+**When** il clique sur une metrique dans la comparaison
+**Then** un drawer s'ouvre avec la liste des executions correspondantes (filtrees) avec possibilite d'aller vers le detail
+
+**And** l'API GET /api/v1/dashboard/compare accepte les parametres : dimension (technology|environment|period), value1, value2, metrics[] (success_rate, avg_time, etc.)
+**And** l'API retourne les metriques pour chaque dimension avec les deltas de variation
+**And** les graphiques de comparaison utilisent des barres groupees ou des lignes doubles selon le type de comparaison
+
+### Story 8.7 : Navigation par categories avec tabs et filtres integres
+
+As a DBA,
+I want naviguer dans le catalogue par categories (tabs) et affiner avec des tags et filtres,
+So that je trouve rapidement les actions par type d'operation sans avoir besoin d'un drawer de filtres separe.
+
+**Acceptance Criteria:**
+
+**Given** un DBA accede au catalogue
+**When** la page se charge
+**Then** des tabs de categories s'affichent en haut : "Tout", "Provisioning", "Patching", "Administration", "Monitoring", "Backup", "Mes actions"
+
+**Given** le DBA selectionne une categorie (ex: "Patching")
+**When** il clique sur le tab
+**Then** seules les actions ayant un tag correspondant a la categorie s'affichent (ex: tag "patching")
+
+**Given** le DBA est sur une categorie
+**When** il voit les tags disponibles sous les tabs
+**Then** un TagCloud affiche uniquement les tags pertinents pour cette categorie avec leurs compteurs
+
+**Given** le DBA veut filtrer davantage
+**When** il selectionne des tags dans le TagCloud
+**Then** les filtres se cumulent avec la categorie active (intersection)
+
+**Given** le DBA veut filtrer par moteur, environnement ou impact
+**When** il consulte la barre de filtres horizontale sous les tabs
+**Then** des Select compacts s'affichent : Moteur, Environnement, Impact (remplace le drawer lateral)
+
+**Given** le DBA applique plusieurs filtres (categorie + tags + moteur)
+**When** il consulte les resultats
+**Then** tous les filtres actifs sont visibles comme chips sous la barre de filtres avec possibilite de les supprimer individuellement
+
+**Given** le drawer de filtres lateral existait
+**When** cette story est implementee
+**Then** le drawer est supprime et remplace par la barre de filtres horizontale integree
+
+**And** les categories sont mappees a des tags specifiques : "provisioning", "patching", "administration", "monitoring", "backup"
+**And** l'API GET /api/v1/catalog/actions accepte un parametre `category` qui filtre par tag correspondant
+**And** l'API GET /api/v1/catalog/tags accepte un parametre `category` pour retourner uniquement les tags de cette categorie
+**And** le tab "Tout" affiche toutes les actions sans filtre de categorie
+**And** le tab "Mes actions" affiche les favoris et recents (comportement existant)
+
+### Story 8.9 : Tabs "Toutes les executions" et "Mes executions" sur la page Executions
+
+As a DBA,
+I want voir toutes les executions auxquelles j'ai acces ou uniquement mes propres executions via des tabs,
+So that je peux choisir entre une vue globale (pour supervision) ou une vue personnelle (pour mes actions).
+
+**Acceptance Criteria:**
+
+**Given** un DBA accede a la page Executions
+**When** la page se charge
+**Then** deux tabs s'affichent : "Toutes les executions" et "Mes executions"
+
+**Given** le DBA selectionne le tab "Toutes les executions"
+**When** la page se charge
+**Then** la table affiche toutes les executions auxquelles l'utilisateur a acces selon les regles RBAC (meme comportement que le Dashboard pour les executions recentes)
+
+**Given** le DBA selectionne le tab "Mes executions"
+**When** la page se charge
+**Then** la table affiche uniquement les executions de l'utilisateur connecte (comportement actuel de Story 4.8)
+
+**Given** le DBA change de tab
+**When** il passe de "Mes executions" a "Toutes les executions" (ou inversement)
+**Then** la table se recharge avec les donnees correspondantes et la pagination se remet a la page 1
+
+**Given** le DBA applique des filtres (tri, pagination)
+**When** il change de tab
+**Then** les filtres sont conserves (tri et pagination restent actifs)
+
+**Given** un utilisateur non-DBA/DBOPS accede a la page Executions
+**When** la page se charge
+**Then** seul le tab "Mes executions" est visible (pas de tab "Toutes les executions")
+
+**And** l'API GET /api/v1/executions retourne les executions de l'utilisateur courant (comportement existant)
+**And** l'API GET /api/v1/executions?all=true retourne toutes les executions auxquelles l'utilisateur a acces selon RBAC (nouveau parametre)
+**And** le backend filtre les executions selon les permissions RBAC de l'utilisateur (meme logique que pour le catalogue)
+**And** seuls les profils DBA et DBOPS peuvent utiliser le parametre ?all=true
+**And** la table affiche une colonne "Utilisateur" (user_display_name) dans le tab "Toutes les executions" pour distinguer qui a lance chaque execution
+
+### Story 8.10 : Vue liste en tableau avec colonnes pour le catalogue
+
+As a DBA,
+I want voir la vue liste du catalogue sous forme de tableau avec des colonnes correspondant aux champs des cards,
+So that je peux comparer rapidement plusieurs actions et acceder aux informations importantes sans ouvrir chaque card.
+
+**Acceptance Criteria:**
+
+**Given** un DBA selectionne la vue liste dans le catalogue
+**When** la page affiche les actions
+**Then** un tableau Ant Design s'affiche avec des colonnes : Action (nom + icone), Description, Impact, Tags, Moteur, Executions, Favori, Actions
+
+**Given** le DBA consulte le tableau
+**When** il voit la colonne "Action"
+**Then** elle affiche l'icone (moteur ou workflow) et le nom de l'action en gras
+
+**Given** le DBA consulte la colonne "Description"
+**When** il voit le contenu
+**Then** la description est tronquee a 2 lignes avec ellipsis et tooltip au survol pour voir le texte complet
+
+**Given** le DBA consulte la colonne "Impact"
+**When** il voit les valeurs
+**Then** l'ImpactIndicator s'affiche avec le meme code couleur que dans les cards (triple coding)
+
+**Given** le DBA consulte la colonne "Tags"
+**When** il voit les tags
+**Then** les 3 premiers tags sont affiches avec un "+N" si d'autres tags existent (comme dans les cards)
+
+**Given** le DBA consulte la colonne "Executions"
+**When** il voit le nombre
+**Then** le format est "N execution(s)" comme dans les cards
+
+**Given** le DBA consulte la colonne "Favori"
+**When** il voit l'icone
+**Then** un bouton avec icone coeur permet de toggle le favori (meme comportement que dans les cards)
+
+**Given** le DBA consulte la colonne "Actions"
+**When** il voit les boutons
+**Then** un bouton "Voir details" ouvre le drawer avec ActionDrawerPreview (meme comportement que clic sur card)
+
+**Given** le DBA veut trier les actions
+**When** il clique sur un header de colonne
+**Then** le tri s'applique sur cette colonne (nom, moteur, executions, impact)
+
+**Given** le DBA survole une ligne du tableau
+**When** il passe la souris
+**Then** la ligne est surlignee pour indiquer qu'elle est cliquable
+
+**And** le tableau utilise Ant Design Table avec pagination si necessaire (ou scroll infini)
+**And** les colonnes sont responsive : sur mobile, certaines colonnes peuvent etre masquees ou combinees
+**And** le skeleton loading affiche des lignes de tableau (pas des cards) quand viewMode === 'list'
+**And** le tableau conserve les memes fonctionnalites que les cards : favori, ouverture drawer, affichage des metriques si disponibles
+
+### Story 8.7 : Navigation par categories avec tabs et filtres integres
+
+As a DBA,
+I want naviguer dans le catalogue par categories (tabs) et affiner avec des tags et filtres,
+So that je trouve rapidement les actions par type d'operation sans avoir besoin d'un drawer de filtres separe.
+
+**Acceptance Criteria:**
+
+**Given** un DBA accede au catalogue
+**When** la page se charge
+**Then** des tabs de categories s'affichent en haut : "Tout", "Provisioning", "Patching", "Administration", "Monitoring", "Backup", "Mes actions"
+
+**Given** le DBA selectionne une categorie (ex: "Patching")
+**When** il clique sur le tab
+**Then** seules les actions ayant un tag correspondant a la categorie s'affichent (ex: tag "patching")
+
+**Given** le DBA est sur une categorie
+**When** il voit les tags disponibles sous les tabs
+**Then** un TagCloud affiche uniquement les tags pertinents pour cette categorie avec leurs compteurs
+
+**Given** le DBA veut filtrer davantage
+**When** il selectionne des tags dans le TagCloud
+**Then** les filtres se cumulent avec la categorie active (intersection)
+
+**Given** le DBA veut filtrer par moteur, environnement ou impact
+**When** il consulte la barre de filtres horizontale sous les tabs
+**Then** des Select compacts s'affichent : Moteur, Environnement, Impact (remplace le drawer lateral)
+
+**Given** le DBA applique plusieurs filtres (categorie + tags + moteur)
+**When** il consulte les resultats
+**Then** tous les filtres actifs sont visibles comme chips sous la barre de filtres avec possibilite de les supprimer individuellement
+
+**Given** le drawer de filtres lateral existait
+**When** cette story est implementee
+**Then** le drawer est supprime et remplace par la barre de filtres horizontale integree
+
+**And** les categories sont mappees a des tags specifiques : "provisioning", "patching", "administration", "monitoring", "backup"
+**And** l'API GET /api/v1/catalog/actions accepte un parametre `category` qui filtre par tag correspondant
+**And** l'API GET /api/v1/catalog/tags accepte un parametre `category` pour retourner uniquement les tags de cette categorie
+**And** le tab "Tout" affiche toutes les actions sans filtre de categorie
+**And** le tab "Mes actions" affiche les favoris et recents (comportement existant)
+
+### Story 8.8 : Deplacement des approbations vers la page Executions et notification dans la top bar
+
+As a DBA,
+I want voir les approbations en attente sur la page Executions avec une notification dans la top bar,
+So that je suis alerte des approbations requises et je peux les gerer directement dans le contexte des executions.
+
+**Acceptance Criteria:**
+
+**Given** un DBA accede a la page Executions
+**When** la page se charge
+**Then** une section "Approbations en attente" s'affiche avant la liste des executions (si des approbations sont en attente)
+
+**Given** la section approbations est affichee
+**When** le DBA consulte la liste
+**Then** elle contient les memes informations qu'avant : action, demandeur, environnement, date de soumission, boutons Approuver/Refuser
+
+**Given** un DBA consulte le Dashboard
+**When** la page se charge
+**Then** la section "Approbations en attente" n'est plus affichee (deplacee vers Executions)
+
+**Given** un DBA ou DBOPS a des approbations en attente
+**When** il consulte la top bar
+**Then** une icone de cloche (BellOutlined) s'affiche avec un badge indiquant le nombre d'approbations en attente
+
+**Given** le DBA clique sur l'icone de cloche
+**When** il interagit avec elle
+**Then** il est redirige vers la page Executions (ou la section approbations scroll automatiquement en vue)
+
+**Given** le DBA n'a pas d'approbations en attente
+**When** il consulte la top bar
+**Then** l'icone de cloche n'affiche pas de badge (ou affiche 0 de maniere discrete)
+
+**And** l'API GET /api/v1/executions/pending-approvals?count_only=true est appelee periodiquement (polling ou WebSocket) pour mettre a jour le badge
+**And** le badge se met a jour en temps reel quand une approbation est ajoutee ou resolue
+**And** la section approbations sur ExecutionsPage utilise le meme composant PendingApprovalsList que le Dashboard utilisait
+**And** seuls les profils DBA et DBOPS voient l'icone de cloche et la section approbations
+
+---
+
+As a DBA,
+I want naviguer dans le catalogue par categories (tabs) et affiner avec des tags et filtres,
+So that je trouve rapidement les actions par type d'operation sans avoir besoin d'un drawer de filtres separe.
+
+**Acceptance Criteria:**
+
+**Given** un DBA accede au catalogue
+**When** la page se charge
+**Then** des tabs de categories s'affichent en haut : "Tout", "Provisioning", "Patching", "Administration", "Monitoring", "Backup", "Mes actions"
+
+**Given** le DBA selectionne une categorie (ex: "Patching")
+**When** il clique sur le tab
+**Then** seules les actions ayant un tag correspondant a la categorie s'affichent (ex: tag "patching")
+
+**Given** le DBA est sur une categorie
+**When** il voit les tags disponibles sous les tabs
+**Then** un TagCloud affiche uniquement les tags pertinents pour cette categorie avec leurs compteurs
+
+**Given** le DBA veut filtrer davantage
+**When** il selectionne des tags dans le TagCloud
+**Then** les filtres se cumulent avec la categorie active (intersection)
+
+**Given** le DBA veut filtrer par moteur, environnement ou impact
+**When** il consulte la barre de filtres horizontale sous les tabs
+**Then** des Select compacts s'affichent : Moteur, Environnement, Impact (remplace le drawer lateral)
+
+**Given** le DBA applique plusieurs filtres (categorie + tags + moteur)
+**When** il consulte les resultats
+**Then** tous les filtres actifs sont visibles comme chips sous la barre de filtres avec possibilite de les supprimer individuellement
+
+**Given** le drawer de filtres lateral existait
+**When** cette story est implementee
+**Then** le drawer est supprime et remplace par la barre de filtres horizontale integree
+
+**And** les categories sont mappees a des tags specifiques : "provisioning", "patching", "administration", "monitoring", "backup"
+**And** l'API GET /api/v1/catalog/actions accepte un parametre `category` qui filtre par tag correspondant
+**And** l'API GET /api/v1/catalog/tags accepte un parametre `category` pour retourner uniquement les tags de cette categorie
+**And** le tab "Tout" affiche toutes les actions sans filtre de categorie
+**And** le tab "Mes actions" affiche les favoris et recents (comportement existant)
+
 ---
 
 ## Epic 9 : Autoremediation

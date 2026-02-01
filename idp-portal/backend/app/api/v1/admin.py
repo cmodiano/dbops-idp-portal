@@ -25,7 +25,7 @@ from app.models.catalog import (
     ActionListResponse,
     get_allowed_transitions,
 )
-from app.repositories import catalog_repository
+from app.repositories import catalog_repository, execution_repository
 from app.repositories.catalog_repository import (
     InvalidStateError as RepoInvalidStateError,
     WorkflowLoopError,
@@ -34,6 +34,7 @@ from app.repositories.catalog_repository import (
 
 from app.api.v1 import profiles
 from app.api.v1 import integrations
+from app.models.execution import AdminAnalyticsResponse
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 router.include_router(profiles.router)
@@ -356,3 +357,32 @@ async def update_action_status(
         )
 
     return {"data": action.model_dump(mode="json")}
+
+
+# --- Story 8.2: Admin Analytics Endpoint ---
+
+
+@router.get("/analytics")
+async def get_admin_analytics(
+    days: int = Query(90, ge=1, le=365, description="Period in days (30, 90, 365)"),
+    user: UserProfile = Depends(require_profile("dbops")),
+) -> dict:
+    """GET /api/v1/admin/analytics - Admin analytics dashboard (Story 8.2, AC1, AC4).
+
+    Returns aggregated analytics for DBOPS dashboard:
+    - total_published_actions: Published actions count
+    - executions_by_engine: Breakdown by database engine
+    - executions_by_profile: Breakdown by user profile
+    - adoption_trend: Weekly trend per engine
+
+    Args:
+        days: Period filter (30, 90, 365 days). Default 90.
+
+    Returns:
+        { "data": AdminAnalyticsResponse }
+
+    Requires:
+        DBOPS profile (403 if other profile).
+    """
+    analytics = await execution_repository.get_admin_analytics(days=days)
+    return {"data": AdminAnalyticsResponse(**analytics).model_dump(mode="json")}

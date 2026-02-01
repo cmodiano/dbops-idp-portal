@@ -198,3 +198,42 @@ class ActionStatsResponse(BaseModel):
     avg_execution_time_ms: int | None = Field(None, ge=0, description="Average execution time in ms")
     total_executions: int = Field(..., ge=0, description="Total executions count")
     incidents_count: int = Field(..., ge=0, description="Number of failed executions")
+
+
+# --- Story 8.2: Admin Analytics Models ---
+
+
+class EngineExecutions(BaseModel):
+    """Executions count per engine (Story 8.2, AC1, Task 1.2)."""
+    engine: str = Field(..., description="Engine name (Oracle, SQL Server, DB2)")
+    count: int = Field(..., ge=0, description="Number of executions")
+
+
+class ProfileExecutions(BaseModel):
+    """Executions count per user profile (Story 8.2, AC1, Task 1.3)."""
+    profile: str = Field(..., description="Profile name")
+    count: int = Field(..., ge=0, description="Number of executions")
+
+
+class WeeklyTrendPoint(BaseModel):
+    """Weekly adoption trend point (Story 8.2, AC2, Task 1.4)."""
+    week_start: str = Field(..., description="Week start date (YYYY-MM-DD)")
+    engine: str = Field(..., description="Engine name")
+    count: int = Field(..., ge=0, description="Number of executions")
+
+
+class AdminAnalyticsResponse(BaseModel):
+    """Response model for GET /admin/analytics (Story 8.2, AC1, AC4).
+
+    Aggregated admin dashboard analytics with period filtering.
+
+    Attributes:
+        total_published_actions: Number of published actions in catalog.
+        executions_by_engine: Breakdown by database engine.
+        executions_by_profile: Breakdown by user profile.
+        adoption_trend: Weekly trend per engine over the period.
+    """
+    total_published_actions: int = Field(..., ge=0, description="Published actions count")
+    executions_by_engine: list[EngineExecutions] = Field(default_factory=list)
+    executions_by_profile: list[ProfileExecutions] = Field(default_factory=list)
+    adoption_trend: list[WeeklyTrendPoint] = Field(default_factory=list)

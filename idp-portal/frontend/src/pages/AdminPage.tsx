@@ -1,10 +1,11 @@
 /**
- * AdminPage - Administration du Catalogue (Story 2.1, AC #1; Story 2.4, AC #2; Story 2.9 Profiles).
+ * AdminPage - Administration du Catalogue (Story 2.1, AC #1; Story 2.4, AC #2; Story 2.9 Profiles; Story 8.2 Analytics).
  *
  * Features:
- * - Tabs: Actions | Profiles
+ * - Tabs: Actions | Profiles | Integrations | Metriques (Story 8.2)
  * - Actions: list, "Nouvelle action", status badge, notifications
  * - Profiles: list, "Nouveau profil", create/edit/delete (Story 2.9, AC #1–#4)
+ * - Metriques: DBOPS analytics dashboard (Story 8.2)
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -26,6 +27,7 @@ import { ProfilesTable } from '../components/admin/ProfilesTable';
 import { ProfileImportModal } from '../components/admin/ProfileImportModal';
 import { IntegrationsTable } from '../components/admin/IntegrationsTable';
 import { IntegrationForm } from '../components/admin/IntegrationForm';
+import { AdminAnalyticsDashboard } from '../components/admin/analytics';
 import { createAction, getAction, getAdminActions, updateAction, updateActionStatus } from '../services/admin_service';
 import { getProfiles, getProfile, deleteProfile, exportProfilesYaml } from '../services/profiles_service';
 import { getIntegrations, getIntegration, createIntegration, updateIntegration, deleteIntegration } from '../services/integrations_service';
@@ -530,6 +532,15 @@ export default function AdminPage() {
                   }}
                   onRefresh={fetchIntegrations}
                 />
+              </Card>
+            ),
+          },
+          {
+            key: 'analytics',
+            label: 'Metriques',
+            children: (
+              <Card styles={{ header: { borderBottom: 'none', paddingBottom: 0 }, body: { paddingTop: 16 } }}>
+                <AdminAnalyticsDashboard />
               </Card>
             ),
           },

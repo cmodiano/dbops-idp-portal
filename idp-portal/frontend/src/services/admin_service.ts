@@ -13,6 +13,7 @@ import type {
   StatusTransition,
   AdminActionsFilters,
   ActionListResponse,
+  AdminAnalytics,
 } from '../types/api';
 
 /**
@@ -135,4 +136,14 @@ export async function updateActionTags(
     method: 'PUT',
     body: JSON.stringify(payload),
   });
+}
+
+/**
+ * Fetch admin analytics dashboard data (Story 8.2, AC4).
+ * Requires DBOPS profile.
+ *
+ * @param days - Period in days (30, 90, 365). Default 90.
+ */
+export async function fetchAdminAnalytics(days: number = 90): Promise<AdminAnalytics> {
+  return apiFetch<AdminAnalytics>(`/admin/analytics?days=${days}`);
 }

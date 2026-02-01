@@ -787,3 +787,95 @@ class TestGetActionStats:
             result = await execution_repository.get_action_stats(1)
 
         assert result["success_rate"] == 80.0  # 80 / (80 + 20) * 100
+
+
+# === Story 8.2 Tests: Admin Analytics ===
+
+
+class TestGetAdminAnalytics:
+    """Tests for execution_repository.get_admin_analytics (Story 8.2, AC4)."""
+
+    @pytest.mark.asyncio
+    async def test_get_admin_analytics_returns_all_aggregations(self):
+        """get_admin_analytics returns complete analytics data."""
+        mock_cursor = MagicMock()
+        mock_cursor.close = AsyncMock()
+
+        # Sequence of fetchone/fetchall calls for each query
+        mock_cursor.fetchone = AsyncMock(return_value=(15,))  # published_query
+        mock_cursor.fetchall = AsyncMock(side_effect=[
+            [("Oracle", 100), ("SQL Server", 50)],  # by_engine_query
+            [("dba_app", 80), ("dbops", 70)],  # by_profile_query
+            [("2026-01-01", "Oracle", 10), ("2026-01-08", "Oracle", 20)],  # trend_query
+        ])
+        mock_cursor.execute = AsyncMock()
+
+        mock_conn = MagicMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            result = await execution_repository.get_admin_analytics(days=90)
+
+        assert result is not None
+        assert result["total_published_actions"] == 15
+        assert len(result["executions_by_engine"]) == 2
+        assert result["executions_by_engine"][0]["engine"] == "Oracle"
+        assert result["executions_by_engine"][0]["count"] == 100
+        assert len(result["executions_by_profile"]) == 2
+        assert result["executions_by_profile"][0]["profile"] == "dba_app"
+        assert len(result["adoption_trend"]) == 2
+        assert result["adoption_trend"][0]["week_start"] == "2026-01-01"
+
+    @pytest.mark.asyncio
+    async def test_get_admin_analytics_handles_empty_data(self):
+        """get_admin_analytics returns empty lists when no data."""
+        mock_cursor = MagicMock()
+        mock_cursor.close = AsyncMock()
+        mock_cursor.fetchone = AsyncMock(return_value=(0,))  # No published actions
+        mock_cursor.fetchall = AsyncMock(side_effect=[[], [], []])  # Empty results
+        mock_cursor.execute = AsyncMock()
+
+        mock_conn = MagicMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            result = await execution_repository.get_admin_analytics(days=30)
+
+        assert result is not None
+        assert result["total_published_actions"] == 0
+        assert result["executions_by_engine"] == []
+        assert result["executions_by_profile"] == []
+        assert result["adoption_trend"] == []
+
+    @pytest.mark.asyncio
+    async def test_get_admin_analytics_uses_correct_period(self):
+        """get_admin_analytics passes days parameter to queries."""
+        mock_cursor = MagicMock()
+        mock_cursor.close = AsyncMock()
+        mock_cursor.fetchone = AsyncMock(return_value=(0,))
+        mock_cursor.fetchall = AsyncMock(side_effect=[[], [], []])
+        mock_cursor.execute = AsyncMock()
+
+        mock_conn = MagicMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            await execution_repository.get_admin_analytics(days=365)
+
+        # Verify days parameter was used in queries (2nd, 3rd, 4th execute calls)
+        execute_calls = mock_cursor.execute.call_args_list
+        # Query 2 (by_engine) - check days param
+        assert execute_calls[1][0][1]["days"] == 365
+        # Query 3 (by_profile) - check days param
+        assert execute_calls[2][0][1]["days"] == 365
+        # Query 4 (trend) - check days param
+        assert execute_calls[3][0][1]["days"] == 365

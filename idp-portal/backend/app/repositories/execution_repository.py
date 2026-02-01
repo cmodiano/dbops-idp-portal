@@ -1219,3 +1219,123 @@ async def get_action_stats(action_id: int) -> dict[str, Any] | None:
         "total_executions": total_executions,
         "incidents_count": failed_count,
     }
+
+
+# --- Story 8.2: Admin Analytics Repository Methods ---
+
+# Default period for admin analytics (Story 8.2, AC3)
+ADMIN_ANALYTICS_DEFAULT_DAYS = 90
+
+
+async def get_admin_analytics(days: int = ADMIN_ANALYTICS_DEFAULT_DAYS) -> dict[str, Any]:
+    """Get aggregated admin analytics for dashboards (Story 8.2, AC1, AC4).
+
+    Calculates metrics over the specified period:
+    - total_published_actions: Count of published actions
+    - executions_by_engine: Aggregated by engine (GROUP BY)
+    - executions_by_profile: Aggregated by user profile (GROUP BY)
+    - adoption_trend: Weekly trend per engine (TRUNC by ISO week)
+
+    Args:
+        days: Number of days for period filter (30, 90, 365)
+
+    Returns:
+        Dict with all analytics data for AdminAnalyticsResponse
+    """
+    start_time = time.perf_counter()
+
+    # Query 1: Count published actions
+    published_query = """
+        SELECT COUNT(*) AS total FROM ACTIONS_CATALOG WHERE STATUS = 'published'
+    """
+
+    # Query 2: Executions by engine
+    by_engine_query = """
+        SELECT
+            NVL(a.ENGINE, 'N/A') AS engine,
+            COUNT(*) AS count
+        FROM EXECUTIONS e
+        LEFT JOIN ACTIONS_CATALOG a ON e.ACTION_ID = a.ID
+        WHERE e.CREATED_AT >= SYSDATE - :days
+        GROUP BY NVL(a.ENGINE, 'N/A')
+        ORDER BY count DESC
+    """
+
+    # Query 3: Executions by profile
+    by_profile_query = """
+        SELECT
+            NVL(p.NAME, 'unknown') AS profile,
+            COUNT(*) AS count
+        FROM EXECUTIONS e
+        LEFT JOIN USERS u ON e.USER_ID = u.ID
+        LEFT JOIN PROFILES p ON LOWER(u.PROFILE) = LOWER(p.NAME)
+        WHERE e.CREATED_AT >= SYSDATE - :days
+        GROUP BY NVL(p.NAME, 'unknown')
+        ORDER BY count DESC
+    """
+
+    # Query 4: Weekly adoption trend per engine (ISO week via TRUNC IW)
+    trend_query = """
+        SELECT
+            TO_CHAR(TRUNC(e.CREATED_AT, 'IW'), 'YYYY-MM-DD') AS week_start,
+            NVL(a.ENGINE, 'N/A') AS engine,
+            COUNT(*) AS count
+        FROM EXECUTIONS e
+        LEFT JOIN ACTIONS_CATALOG a ON e.ACTION_ID = a.ID
+        WHERE e.CREATED_AT >= SYSDATE - :days
+        GROUP BY TRUNC(e.CREATED_AT, 'IW'), NVL(a.ENGINE, 'N/A')
+        ORDER BY week_start, engine
+    """
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+
+        # Execute all queries
+        await cursor.execute(published_query)
+        published_row = await cursor.fetchone()
+        total_published = published_row[0] if published_row else 0
+
+        await cursor.execute(by_engine_query, {"days": days})
+        engine_rows = await cursor.fetchall()
+
+        await cursor.execute(by_profile_query, {"days": days})
+        profile_rows = await cursor.fetchall()
+
+        await cursor.execute(trend_query, {"days": days})
+        trend_rows = await cursor.fetchall()
+
+        cursor.close()
+
+    # Transform results
+    executions_by_engine = [
+        {"engine": row[0], "count": row[1]}
+        for row in engine_rows
+    ]
+
+    executions_by_profile = [
+        {"profile": row[0], "count": row[1]}
+        for row in profile_rows
+    ]
+
+    adoption_trend = [
+        {"week_start": row[0], "engine": row[1], "count": row[2]}
+        for row in trend_rows
+    ]
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.info(
+        "execution_repository_get_admin_analytics",
+        duration_ms=duration_ms,
+        days=days,
+        total_published=total_published,
+        engine_groups=len(executions_by_engine),
+        profile_groups=len(executions_by_profile),
+        trend_points=len(adoption_trend),
+    )
+
+    return {
+        "total_published_actions": total_published,
+        "executions_by_engine": executions_by_engine,
+        "executions_by_profile": executions_by_profile,
+        "adoption_trend": adoption_trend,
+    }

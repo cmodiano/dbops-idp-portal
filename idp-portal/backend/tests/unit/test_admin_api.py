@@ -987,3 +987,124 @@ class TestUpdateActionTags:
             )
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+# === Story 8.2: GET /admin/analytics Tests ===
+
+
+class TestGetAdminAnalytics:
+    """Tests for GET /api/v1/admin/analytics (Story 8.2, AC1, AC4)."""
+
+    @pytest.mark.asyncio
+    async def test_get_analytics_success_default_period(self, client, dbops_token):
+        """GET /admin/analytics returns analytics with default 90 days period."""
+        mock_analytics = {
+            "total_published_actions": 15,
+            "executions_by_engine": [{"engine": "Oracle", "count": 100}],
+            "executions_by_profile": [{"profile": "dba_app", "count": 80}],
+            "adoption_trend": [{"week_start": "2026-01-01", "engine": "Oracle", "count": 10}],
+        }
+        with patch("app.api.deps.user_repository") as mock_repo, \
+             patch("app.repositories.execution_repository.get_admin_analytics", new_callable=AsyncMock) as mock_get:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+            mock_get.return_value = mock_analytics
+
+            response = await client.get(
+                "/api/v1/admin/analytics",
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert "data" in data
+        assert data["data"]["total_published_actions"] == 15
+        assert len(data["data"]["executions_by_engine"]) == 1
+        assert data["data"]["executions_by_engine"][0]["engine"] == "Oracle"
+        mock_get.assert_called_once_with(days=90)  # Default period
+
+    @pytest.mark.asyncio
+    async def test_get_analytics_with_custom_period(self, client, dbops_token):
+        """GET /admin/analytics?days=30 uses custom period."""
+        mock_analytics = {
+            "total_published_actions": 10,
+            "executions_by_engine": [],
+            "executions_by_profile": [],
+            "adoption_trend": [],
+        }
+        with patch("app.api.deps.user_repository") as mock_repo, \
+             patch("app.repositories.execution_repository.get_admin_analytics", new_callable=AsyncMock) as mock_get:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+            mock_get.return_value = mock_analytics
+
+            response = await client.get(
+                "/api/v1/admin/analytics?days=30",
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        mock_get.assert_called_once_with(days=30)
+
+    @pytest.mark.asyncio
+    async def test_get_analytics_with_365_days_period(self, client, dbops_token):
+        """GET /admin/analytics?days=365 uses 12 months period."""
+        mock_analytics = {
+            "total_published_actions": 20,
+            "executions_by_engine": [],
+            "executions_by_profile": [],
+            "adoption_trend": [],
+        }
+        with patch("app.api.deps.user_repository") as mock_repo, \
+             patch("app.repositories.execution_repository.get_admin_analytics", new_callable=AsyncMock) as mock_get:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+            mock_get.return_value = mock_analytics
+
+            response = await client.get(
+                "/api/v1/admin/analytics?days=365",
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        mock_get.assert_called_once_with(days=365)
+
+    @pytest.mark.asyncio
+    async def test_get_analytics_forbidden_non_dbops(self, client, dba_token):
+        """GET /admin/analytics with non-DBOPS profile returns 403."""
+        with patch("app.api.deps.user_repository") as mock_repo:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 2, "username": "dba-user", "display_name": "DBA", "profile": "dba_app"
+            })
+
+            response = await client.get(
+                "/api/v1/admin/analytics",
+                headers={"Authorization": f"Bearer {dba_token}"},
+            )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    @pytest.mark.asyncio
+    async def test_get_analytics_invalid_days_rejected(self, client, dbops_token):
+        """GET /admin/analytics?days=0 or days>365 returns 422."""
+        with patch("app.api.deps.user_repository") as mock_repo:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+
+            # days=0 should fail validation
+            response = await client.get(
+                "/api/v1/admin/analytics?days=0",
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+            assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+            # days>365 should fail validation
+            response = await client.get(
+                "/api/v1/admin/analytics?days=400",
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+            assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
