@@ -123,14 +123,14 @@ development_status:
     # === Epic 7: Self-Service Business & RBAC Granulaire - Fatima (Phase 2) ===
     epic-7: backlog
     7-1-vue-catalogue-simplifiee-pour-client-business: done
-    7-2-golden-path-guide-pour-client-business: done
-    7-3-rbac-granulaire-par-action-profil-et-environnement: done
-    7-4-workflow-approbation-pour-la-production: done
+    7-2-golden-path-guide-pour-client-business: backlog
+    7-3-rbac-granulaire-par-action-profil-et-environnement: backlog
+    7-4-workflow-approbation-pour-la-production: backlog
     epic-7-retrospective: optional
-    # === Epic 8: Analytics & Scorecards (Phase 2) ===
+    # === Epic 8: Analytics & Scorecards (Phasße 2) ===
     epic-8: backlog
-    8-1-scorecards-par-action: done
-    8-2-dashboards-globaux-dbops: done
+    8-1-scorecards-par-action: backlog
+    8-2-dashboards-globaux-dbops: backlog
     epic-8-retrospective: optional
     # === Epic 9: Autoremediation (Phase 2) ===
     epic-9: backlog
