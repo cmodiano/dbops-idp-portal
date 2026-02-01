@@ -4,13 +4,17 @@
  *
  * Displays action status with appropriate color coding:
  * - draft: theme secondary text (works in light/dark)
- * - published: green
+ * - published: vert lisible (fond saturé, texte blanc)
  * - disabled: red
  */
 
 import { Tag, theme } from 'antd';
 import { EditOutlined, CheckCircleOutlined, StopOutlined } from '@ant-design/icons';
 import type { ActionStatus } from '../../types/api';
+
+/** Vert Publiée: fond saturé pour bonne lisibilité (évite le badge trop clair) */
+const PUBLISHED_BG = '#006b3e';
+const PUBLISHED_TEXT = '#fff';
 
 interface ActionStatusBadgeProps {
   status: ActionStatus;
@@ -20,18 +24,16 @@ export function ActionStatusBadge({ status }: ActionStatusBadgeProps) {
   const { token } = theme.useToken();
 
   const draftConfig = {
-    color: token.colorTextSecondary,
     label: 'Brouillon',
     icon: <EditOutlined />,
   };
   const publishedConfig = {
-    color: token.colorSuccess,
-    label: 'Publiee',
+    label: 'Publiée',
     icon: <CheckCircleOutlined />,
   };
   const disabledConfig = {
     color: token.colorError,
-    label: 'Desactivee',
+    label: 'Désactivée',
     icon: <StopOutlined />,
   };
 
@@ -40,14 +42,41 @@ export function ActionStatusBadge({ status }: ActionStatusBadgeProps) {
     : status === 'published' ? publishedConfig
     : disabledConfig;
 
+  if (status === 'draft') {
+    return (
+      <Tag
+        icon={config.icon}
+        aria-label={`Statut: ${config.label}`}
+        style={{ color: token.colorTextSecondary, borderColor: token.colorBorder }}
+      >
+        {config.label}
+      </Tag>
+    );
+  }
+
+  if (status === 'published') {
+    return (
+      <Tag
+        icon={config.icon}
+        aria-label={`Statut: ${config.label}`}
+        style={{
+          background: PUBLISHED_BG,
+          color: PUBLISHED_TEXT,
+          borderColor: PUBLISHED_BG,
+        }}
+      >
+        {config.label}
+      </Tag>
+    );
+  }
+
   return (
     <Tag
-      color={status === 'draft' ? undefined : config.color}
-      icon={config.icon}
-      aria-label={`Statut: ${config.label}`}
-      style={status === 'draft' ? { color: token.colorTextSecondary, borderColor: token.colorBorder } : undefined}
+      color={disabledConfig.color}
+      icon={disabledConfig.icon}
+      aria-label={`Statut: ${disabledConfig.label}`}
     >
-      {config.label}
+      {disabledConfig.label}
     </Tag>
   );
 }

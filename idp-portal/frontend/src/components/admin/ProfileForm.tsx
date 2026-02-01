@@ -80,7 +80,7 @@ export function ProfileForm({
         target_names: [],
         target_patterns: [],
       });
-      setLoadingActions(true);
+      queueMicrotask(() => setLoadingActions(true));
       Promise.all([
         getProfileActions(editProfile.id),
         getProfileTargets(editProfile.id),
@@ -140,7 +140,7 @@ export function ProfileForm({
       try {
         await putProfileActions(editProfile.id, actionsPayload);
         await putProfileTargets(editProfile.id, targetsPayload);
-      } catch (e) {
+      } catch {
         setPermError('Profil mis à jour, mais erreur lors de la sauvegarde des permissions. Réessayez en éditant le profil.');
         if (res && onSuccess) onSuccess(res);
         return;
@@ -156,16 +156,16 @@ export function ProfileForm({
       onCancel={onCancel}
       onOk={handleSubmit}
       confirmLoading={loading}
-      destroyOnClose
+      destroyOnHidden
       okText={isEdit ? 'Enregistrer' : 'Créer'}
       cancelText="Annuler"
       cancelButtonProps={{ disabled: loading }}
     >
       {error && (
-        <Alert type="error" message={error} style={{ marginBottom: 16 }} showIcon />
+        <Alert type="error" title={error} style={{ marginBottom: 16 }} showIcon />
       )}
       {permError && (
-        <Alert type="warning" message={permError} style={{ marginBottom: 16 }} showIcon />
+        <Alert type="warning" title={permError} style={{ marginBottom: 16 }} showIcon />
       )}
       <Form form={form} layout="vertical" preserve={false}>
         <Form.Item

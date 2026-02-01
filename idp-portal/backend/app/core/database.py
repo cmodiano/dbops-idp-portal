@@ -1,11 +1,16 @@
 """Oracle database pool management using python-oracledb (Thin mode).
 
-AC #7: Configures oracledb.create_pool() for async connection pooling.
-The pool is created synchronously but returns an AsyncConnectionPool
-that can be used with async/await for acquiring connections.
+AC #7: Configures oracledb.create_pool_async() for async connection pooling.
+The pool and acquire() are async so repositories can use async with get_connection().
+
+CLOB/BLOB columns are fetched as strings/bytes (fetch_lobs=False) so repositories
+do not need to handle AsyncLOB/LOB objects when parsing JSON or text.
 """
 
 import oracledb
+
+# Fetch CLOB/BLOB as string/bytes instead of LOB locators (avoids AsyncLOB in row data)
+oracledb.defaults.fetch_lobs = False
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
@@ -15,10 +20,9 @@ pool: oracledb.AsyncConnectionPool | None = None
 
 
 def create_pool() -> None:
-    """Create Oracle connection pool (AC #7).
+    """Create Oracle async connection pool (AC #7).
     
-    Creates a connection pool synchronously. The returned pool
-    supports async operations via pool.acquire() in async context.
+    Uses create_pool_async() (sync in oracledb 3.x) so pool.acquire() returns an async context manager.
     
     Pool configuration:
     - min: Minimum connections (default 2)
@@ -26,9 +30,8 @@ def create_pool() -> None:
     - dsn: Oracle database connection string
     """
     global pool
-    # Note: create_pool() is synchronous but returns AsyncConnectionPool
-    # for use with async/await. There is no create_pool_async() function.
-    pool = oracledb.create_pool(
+    # create_pool_async() returns AsyncConnectionPool directly (no await in oracledb 3.x)
+    pool = oracledb.create_pool_async(
         user=settings.oracle_user,
         password=settings.oracle_password,
         dsn=settings.oracle_dsn,

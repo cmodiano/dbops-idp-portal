@@ -3,7 +3,7 @@
 # Usage: ./scripts/run_migrations.sh
 #
 # Environment variables required (same as backend):
-#   ORACLE_DSN (e.g. localhost:1521/XEPDB1)
+#   ORACLE_DSN (e.g. localhost:1521/FREEPDB1)
 #   ORACLE_USER, ORACLE_PASSWORD
 #
 # Flyway uses flyway_schema_history; migrations in database/migrations/ (V001__desc.sql).

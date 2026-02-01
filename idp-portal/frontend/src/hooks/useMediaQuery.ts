@@ -18,7 +18,7 @@ export function useMediaQuery(minWidth: number = 1280): boolean {
   useEffect(() => {
     const mq = window.matchMedia(`(min-width: ${minWidth}px)`);
     const handler = (e: MediaQueryListEvent) => setMatches(e.matches);
-    setMatches(mq.matches);
+    queueMicrotask(() => setMatches(mq.matches));
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
   }, [minWidth]);

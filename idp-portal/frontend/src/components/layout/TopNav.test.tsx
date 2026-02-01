@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useEffect } from 'react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { ConfigProvider } from 'antd';
 import { TopNav } from './TopNav';
 import { AuthProvider } from '../../contexts/AuthContext';
 import { ThemeProvider } from '../../contexts/ThemeContext';
+import { DashboardProvider, useDashboard } from '../../contexts/DashboardContext';
 import { lightTheme } from '../../theme/desjardins';
 
 function mockAuthSession(profile: string, navigationTabs: string[]) {
@@ -28,18 +30,24 @@ function mockAuthSession(profile: string, navigationTabs: string[]) {
     });
 }
 
-function renderTopNav(initialPath = '/catalog') {
+/** Wrapper that sets one unseen error on mount (Story 5.2 badge test). */
+function TopNavWithUnseenError() {
+  const { addUnseenError } = useDashboard();
+  useEffect(() => {
+    addUnseenError(1);
+  }, [addUnseenError]);
+  return <TopNav />;
+}
+
+function renderTopNav(initialPath = '/catalog', withUnseenError = false) {
+  const Nav = withUnseenError ? TopNavWithUnseenError : TopNav;
   const router = createMemoryRouter(
     [
-      {
-        path: '/',
-        element: <TopNav />,
-        children: [],
-      },
-      { path: '/catalog', element: <TopNav /> },
-      { path: '/executions', element: <TopNav /> },
-      { path: '/dashboard', element: <TopNav /> },
-      { path: '/admin', element: <TopNav /> },
+      { path: '/', element: <Nav />, children: [] },
+      { path: '/catalog', element: <Nav /> },
+      { path: '/executions', element: <Nav /> },
+      { path: '/dashboard', element: <Nav /> },
+      { path: '/admin', element: <Nav /> },
     ],
     { initialEntries: [initialPath] },
   );
@@ -48,7 +56,9 @@ function renderTopNav(initialPath = '/catalog') {
     <ThemeProvider>
       <ConfigProvider theme={lightTheme}>
         <AuthProvider>
-          <RouterProvider router={router} />
+          <DashboardProvider>
+            <RouterProvider router={router} />
+          </DashboardProvider>
         </AuthProvider>
       </ConfigProvider>
     </ThemeProvider>,
@@ -234,6 +244,21 @@ describe('TopNav', () => {
 
       // Verify localStorage updated
       expect(localStorage.getItem('idp-portal-theme')).toBe('light');
+    });
+  });
+
+  describe('Story 5.2 — Badge Dashboard (AC2, AC3)', () => {
+    it('Dashboard tab shows aria-label when there are unseen errors and user is not on dashboard', async () => {
+      mockAuthSession('dbops', ['catalog', 'executions', 'dashboard', 'admin']);
+      renderTopNav('/catalog', true);
+
+      await waitFor(() => {
+        expect(screen.getByText('Dashboard')).toBeInTheDocument();
+      });
+      const dashboardButton = screen.getByRole('button', {
+        name: /Dashboard \(1 erreur non vue\)/,
+      });
+      expect(dashboardButton).toBeInTheDocument();
     });
   });
 });

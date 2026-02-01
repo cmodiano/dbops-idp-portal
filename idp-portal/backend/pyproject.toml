@@ -1,3 +1,10 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
 [project]
 name = "idp-portal-backend"
 version = "0.1.0"
@@ -17,6 +24,7 @@ dependencies = [
     "pyyaml>=6.0",
     "jsonschema>=4.20",
     "hvac>=2.4.0",
+    "reportlab>=4.0",
 ]
 
 [project.optional-dependencies]

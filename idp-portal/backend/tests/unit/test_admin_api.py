@@ -293,7 +293,7 @@ class TestListActions:
             )
 
         assert response.status_code == status.HTTP_200_OK
-        mock_list.assert_called_once_with(status=ActionStatus.DRAFT, engine=None, page=1, page_size=25)
+        mock_list.assert_called_once_with(status=ActionStatus.DRAFT, engine=None, item_type=None, page=1, page_size=25)
 
     async def test_list_actions_empty(self, client, dbops_token):
         """Test listing actions when none exist."""

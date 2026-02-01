@@ -46,6 +46,12 @@ class ServiceNowError(IdpError):
         super().__init__(502, code, message, details)
 
 
+class BadRequestError(IdpError):
+    """Raised when request is invalid (HTTP 400)."""
+    def __init__(self, code: str, message: str, details: dict | None = None):
+        super().__init__(400, code, message, details)
+
+
 class InvalidStateError(IdpError):
     """Raised when resource is in invalid state for operation (HTTP 400)."""
     def __init__(self, code: str, message: str, details: dict | None = None):

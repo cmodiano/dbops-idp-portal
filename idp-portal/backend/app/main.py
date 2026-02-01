@@ -15,7 +15,8 @@ from app.core.database import create_pool, close_pool
 from app.core.exceptions import IdpError
 from app.core.logging import configure_logging
 from app.core.middleware import CorrelationIdMiddleware, RequestLoggingMiddleware
-from app.api.v1 import admin, auth, catalog, executions, health, inventory, tags, users
+from app.api.v1 import admin, audit, auth, catalog, dashboard, executions, health, inventory, tags, users
+from app.api import websocket_routes
 from app.services.inventory_service import sync_inventory
 
 import structlog
@@ -61,10 +62,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     configure_logging()
     try:
-        create_pool()  # Synchronous function, returns AsyncConnectionPool
+        create_pool()
         logger.info("oracle_pool_started")
     except Exception as exc:
         logger.warning("oracle_pool_failed", error=str(exc))
+        raise  # Fail startup so pool is never None; user sees real error (e.g. Oracle unreachable)
 
     # Start inventory sync background task (Story 4.2, Task 1.3)
     api_url = getattr(settings, "inventory_api_url", None)
@@ -140,6 +142,9 @@ app.include_router(catalog.router, prefix="/api/v1", tags=["catalog"])
 app.include_router(users.router, prefix="/api/v1", tags=["users"])
 app.include_router(executions.router, prefix="/api/v1", tags=["executions"])
 app.include_router(inventory.router, prefix="/api/v1", tags=["inventory"])
+app.include_router(dashboard.router, prefix="/api/v1", tags=["dashboard"])
+app.include_router(audit.router, prefix="/api/v1", tags=["audit"])
+app.include_router(websocket_routes.router, prefix="/ws", tags=["websocket"])
 
 # Mount static files for uploaded icons (Story 4.9, Task 3.3; LOW-8, LOW-9 fixes)
 static_path = settings.get_static_path()

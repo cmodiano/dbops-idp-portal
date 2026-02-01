@@ -4,11 +4,13 @@
  * Provides functions to submit executions and fetch inventory data.
  */
 
-import { apiFetch } from './api_client';
+import { apiFetch, apiFetchRaw } from './api_client';
 import type {
   ExecutionCreateRequest,
   ExecutionCreateResponse,
   ExecutionResponse,
+  ExecutionStepResponse,
+  StepLogsResponse,
   InventoryItem,
 } from '../types/api';
 
@@ -40,17 +42,58 @@ export async function getExecution(executionId: number): Promise<ExecutionRespon
 }
 
 /**
- * List user's executions (Story 4.1).
+ * Get execution steps by ID (Story 4.6, Task 2.4).
+ *
+ * @param executionId - Execution ID
+ * @returns Array of ExecutionStepResponse
+ * @throws Error if execution not found (404)
+ */
+export async function getExecutionSteps(
+  executionId: number,
+): Promise<ExecutionStepResponse[]> {
+  return apiFetch<ExecutionStepResponse[]>(`/executions/${executionId}/steps`);
+}
+
+/**
+ * Get step logs (Story 4.7, AC6).
+ *
+ * @param executionId - Execution ID
+ * @param stepId - Step ID
+ * @returns StepLogsResponse with output, error_message, timestamps
+ * @throws Error if execution or step not found (404)
+ */
+export async function getStepLogs(
+  executionId: number,
+  stepId: number,
+): Promise<StepLogsResponse> {
+  return apiFetch<StepLogsResponse>(`/executions/${executionId}/steps/${stepId}/logs`);
+}
+
+/** Response shape for GET /executions (Story 4.8 AC4: pagination). */
+export interface ListExecutionsResponse {
+  data: ExecutionResponse[];
+  pagination: {
+    page: number;
+    page_size: number;
+    total_count: number;
+    total_pages: number;
+  };
+}
+
+/**
+ * List user's executions (Story 4.1, 4.8 AC4).
  *
  * @param limit - Maximum number of executions to return (default 50)
  * @param offset - Offset for pagination (default 0)
- * @returns Array of ExecutionResponse
+ * @returns ListExecutionsResponse with data and pagination (total_count for UI)
  */
 export async function listExecutions(
   limit = 50,
   offset = 0
-): Promise<ExecutionResponse[]> {
-  return apiFetch<ExecutionResponse[]>(`/executions?limit=${limit}&offset=${offset}`);
+): Promise<ListExecutionsResponse> {
+  return apiFetchRaw<ListExecutionsResponse>(
+    `/executions?limit=${limit}&offset=${offset}`
+  );
 }
 
 /**

@@ -194,6 +194,82 @@ const SortableStepCard: React.FC<SortableStepCardProps> = ({
               />
             </Form.Item>
           )}
+
+          {/* Story 4.10 AC4: Type de ressource AAP (job template | workflow job) */}
+          {step.connector_type === 'aap' && (
+            <>
+              <Form.Item label="Type de ressource" style={{ marginBottom: 0 }}>
+                <Select
+                  value={(step.connector_config?.resource_type as string) ?? 'job_template'}
+                  onChange={(val) =>
+                    onStepChange(index, 'connector_config', {
+                      ...(step.connector_config || {}),
+                      resource_type: val,
+                    })
+                  }
+                  options={[
+                    { value: 'job_template', label: 'Job template' },
+                    { value: 'workflow_job', label: 'Workflow job' },
+                  ]}
+                  style={{ width: 160 }}
+                  aria-label={`Type ressource AAP etape ${step.order}`}
+                />
+              </Form.Item>
+              <Form.Item
+                label="ID template"
+                validateStatus={
+                  step.connector_type === 'aap' &&
+                  (step.connector_config?.resource_type === 'workflow_job'
+                    ? (step.connector_config?.workflow_job_template_id == null ||
+                        step.connector_config?.workflow_job_template_id === '' ||
+                        step.connector_config?.workflow_job_template_id === 0)
+                    : (step.connector_config?.job_template_id == null ||
+                        step.connector_config?.job_template_id === '' ||
+                        step.connector_config?.job_template_id === 0))
+                    ? 'error'
+                    : ''
+                }
+                help={
+                  step.connector_type === 'aap' &&
+                  (step.connector_config?.resource_type === 'workflow_job'
+                    ? (step.connector_config?.workflow_job_template_id == null ||
+                        step.connector_config?.workflow_job_template_id === '' ||
+                        step.connector_config?.workflow_job_template_id === 0)
+                    : (step.connector_config?.job_template_id == null ||
+                        step.connector_config?.job_template_id === '' ||
+                        step.connector_config?.job_template_id === 0))
+                    ? 'ID template requis pour une etape AAP'
+                    : ''
+                }
+                style={{ marginBottom: 0 }}
+              >
+                <Input
+                  type="number"
+                  min={1}
+                  value={
+                    (step.connector_config?.resource_type === 'workflow_job'
+                      ? step.connector_config?.workflow_job_template_id
+                      : step.connector_config?.job_template_id) ?? ''
+                  }
+                  onChange={(e) => {
+                    const v = e.target.value ? Number(e.target.value) : undefined;
+                    const cfg = { ...(step.connector_config || {}), resource_type: step.connector_config?.resource_type ?? 'job_template' };
+                    if (cfg.resource_type === 'workflow_job') {
+                      cfg.workflow_job_template_id = v;
+                      delete cfg.job_template_id;
+                    } else {
+                      cfg.job_template_id = v;
+                      delete cfg.workflow_job_template_id;
+                    }
+                    onStepChange(index, 'connector_config', cfg);
+                  }}
+                  placeholder="ID du template AAP"
+                  style={{ width: 120 }}
+                  aria-label={`ID template AAP etape ${step.order}`}
+                />
+              </Form.Item>
+            </>
+          )}
         </Space>
       </Space>
     </Card>

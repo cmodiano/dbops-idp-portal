@@ -1,5 +1,5 @@
 import './TopNav.css';
-import { Dropdown, Avatar, Space, Typography, theme } from 'antd';
+import { Dropdown, Avatar, Space, Typography, theme, Badge } from 'antd';
 import {
   AppstoreOutlined,
   PlayCircleOutlined,
@@ -9,10 +9,12 @@ import {
   UserOutlined,
   SunOutlined,
   MoonOutlined,
+  AuditOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useDashboard } from '../../contexts/DashboardContext';
 import type { NavigationTabKey } from '../../types/common';
 import type { MenuProps } from 'antd';
 
@@ -23,6 +25,7 @@ const TAB_CONFIG: Record<NavigationTabKey, { label: string; icon: React.ReactNod
   executions: { label: 'Exécutions', icon: <PlayCircleOutlined /> },
   dashboard: { label: 'Dashboard', icon: <DashboardOutlined /> },
   admin: { label: 'Admin', icon: <SettingOutlined /> },
+  audit: { label: 'Audit', icon: <AuditOutlined /> },
 };
 
 const TAB_ROUTES: Record<NavigationTabKey, string> = {
@@ -30,6 +33,7 @@ const TAB_ROUTES: Record<NavigationTabKey, string> = {
   executions: '/executions',
   dashboard: '/dashboard',
   admin: '/admin',
+  audit: '/audit',
 };
 
 export function TopNav() {
@@ -38,6 +42,7 @@ export function TopNav() {
   const { user, logout } = useAuth();
   const { effectiveMode, toggleTheme } = useTheme();
   const { token } = theme.useToken();
+  const { unseenErrorCount } = useDashboard();
 
   const navigationTabs = user?.navigation_tabs ?? [];
 
@@ -114,11 +119,17 @@ export function TopNav() {
         {navigationTabs.map((key) => {
           const isActive = key === activeKey;
           const config = TAB_CONFIG[key];
-          return (
+          const showBadge = key === 'dashboard' && unseenErrorCount > 0 && !isActive;
+          const dashboardAriaLabel =
+            key === 'dashboard' && unseenErrorCount > 0
+              ? `Dashboard (${unseenErrorCount} erreur${unseenErrorCount > 1 ? 's' : ''} non vue${unseenErrorCount > 1 ? 's' : ''})`
+              : undefined;
+          const buttonContent = (
             <button
               key={key}
               onClick={() => handleNavClick(key)}
               className={`nav-pill ${isActive ? 'nav-pill-active' : ''}`}
+              aria-label={dashboardAriaLabel}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -141,6 +152,19 @@ export function TopNav() {
               {config?.icon}
               <span>{config?.label ?? key}</span>
             </button>
+          );
+          // Show badge for dashboard when there are unseen errors (Story 5.2, AC2)
+          return showBadge ? (
+            <Badge
+              key={key}
+              dot
+              offset={[-4, 4]}
+              style={{ backgroundColor: token.colorError }}
+            >
+              {buttonContent}
+            </Badge>
+          ) : (
+            <span key={key}>{buttonContent}</span>
           );
         })}
       </div>

@@ -5,8 +5,8 @@
 -- 1. Drop TYPE CHECK constraint to allow free-form type
 ALTER TABLE INTEGRATIONS DROP CONSTRAINT CK_INTEGRATIONS_TYPE;
 
--- 2. Modify TYPE column to allow longer free-form platform names (already VARCHAR2(50), extend to 100)
-ALTER TABLE INTEGRATIONS MODIFY TYPE VARCHAR2(100) NOT NULL;
+-- 2. Modify TYPE column to allow longer free-form platform names (already VARCHAR2(50) NOT NULL, extend to 100)
+ALTER TABLE INTEGRATIONS MODIFY TYPE VARCHAR2(100);
 
 -- 3. Add AUTH_FLOW column with enum constraint (token, basic, basic_then_token, pat)
 -- Nullable for backward compatibility with existing integrations

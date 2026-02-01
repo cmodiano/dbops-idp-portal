@@ -26,7 +26,32 @@ _ALLOWED_PROFILES = {"dba_applicatif", "dba_infrastructure", "dbops"}
 
 @router.get("/auth/saml/login")
 async def saml_login(request: Request):
-    """Initiate SP-initiated SAML flow. Redirects browser to IdP SSO URL."""
+    """Initiate SP-initiated SAML flow. Redirects browser to IdP SSO URL.
+    When AUTH_DEV_BYPASS is true, skips IdP and redirects to frontend with dev JWT (dev-only).
+    """
+    if settings.auth_dev_bypass:
+        token_data = {
+            "sub": "0",
+            "username": "dev-user",
+            "profile": "dbops",
+            "ad_groups": ["dbops"],
+        }
+        access_token = create_access_token(token_data)
+        refresh_token = create_refresh_token(token_data)
+        redirect_url = f"{settings.cors_origin}/auth/callback#access_token={access_token}"
+        response = RedirectResponse(url=redirect_url, status_code=302)
+        response.set_cookie(
+            key="refresh_token",
+            value=refresh_token,
+            httponly=True,
+            secure=settings.app_env != "development",
+            samesite="lax",
+            max_age=settings.jwt_refresh_token_expire_hours * 3600,
+            path="/api/v1/auth",
+        )
+        logger.info("auth_dev_bypass_login", redirect_origin=settings.cors_origin)
+        return response
+
     auth = create_saml_auth(request)
     sso_url = auth.login()
     logger.info("saml_login_redirect", sso_url=sso_url)

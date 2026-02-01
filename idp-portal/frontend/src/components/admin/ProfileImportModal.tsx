@@ -51,7 +51,7 @@ export function ProfileImportModal({ open, onCancel, onSuccess }: ProfileImportM
         description: err instanceof Error ? err.message : 'Erreur lors de l\'import YAML',
       });
     }
-  }, [onSuccess]);
+  }, [onSuccess, notification]);
 
   const handleCancel = useCallback(() => {
     fileRef.current = null;

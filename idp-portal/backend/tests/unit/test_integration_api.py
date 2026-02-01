@@ -1,4 +1,4 @@
-"""Tests for integrations API endpoints (Story 2.27, 4.9).
+"""Tests for integrations API endpoints (Story 2.27, 4.9, 5.4).
 
 Tests:
 - GET /api/v1/admin/integrations — list integrations (200, 403)
@@ -7,6 +7,7 @@ Tests:
 - PUT /api/v1/admin/integrations/{id} — update integration (200, 400, 404, 422, 403)
 - DELETE /api/v1/admin/integrations/{id} — delete integration (204, 404, 403)
 - POST /api/v1/admin/integrations/upload-icon — upload icon (Story 4.9, 201, 400, 403)
+- Story 5.4: config JSON Schema validation — valid accepted, invalid returns 400 INVALID_CONFIG
 """
 
 import pytest
@@ -42,7 +43,7 @@ def dba_token():
 
 @pytest.fixture
 def sample_integration_response():
-    """Sample IntegrationResponse with free-form type and auth_flow (Story 4.9)."""
+    """Sample IntegrationResponse with free-form type and auth_flow (Story 4.9, 5.3)."""
     return IntegrationResponse(
         id=1,
         type="aap",  # Story 4.9: free-form string
@@ -51,6 +52,8 @@ def sample_integration_response():
         credential_ref="secret/idp/aap-prod",
         icon="aap",
         auth_flow=AuthFlow.TOKEN,
+        token_url=None,
+        config=None,
         created_at=datetime(2026, 1, 29, 10, 0, 0),
         updated_at=datetime(2026, 1, 29, 10, 0, 0),
     )
@@ -58,7 +61,7 @@ def sample_integration_response():
 
 @pytest.fixture
 def sample_integration_response_2():
-    """Second sample IntegrationResponse for list tests (Story 4.9)."""
+    """Second sample IntegrationResponse for list tests (Story 4.9, 5.3)."""
     return IntegrationResponse(
         id=2,
         type="servicenow",  # Story 4.9: free-form string
@@ -67,6 +70,8 @@ def sample_integration_response_2():
         credential_ref="secret/idp/snow-prod",
         icon="servicenow",
         auth_flow=AuthFlow.BASIC,
+        token_url=None,
+        config=None,
         created_at=datetime(2026, 1, 29, 11, 0, 0),
         updated_at=datetime(2026, 1, 29, 11, 0, 0),
     )
@@ -260,6 +265,8 @@ class TestCreateIntegration:
             credential_ref=None,
             icon=None,
             auth_flow=None,  # Story 4.9: auth_flow field
+            token_url=None,
+            config=None,
             created_at=datetime(2026, 1, 29, 10, 0, 0),
             updated_at=datetime(2026, 1, 29, 10, 0, 0),
         )
@@ -390,6 +397,335 @@ class TestCreateIntegration:
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
     @pytest.mark.asyncio
+    async def test_create_integration_with_token_url_and_config(self, client, dbops_token):
+        """Story 5.3: POST with token_url and config returns 201 and includes them in response (AC3). Valid per 5.4 schema."""
+        response_with_flow = IntegrationResponse(
+            id=1,
+            type="aap",
+            name="AAP With Flow",
+            base_url="https://aap.example.com",
+            credential_ref="secret/aap",
+            icon=None,
+            auth_flow=AuthFlow.BASIC_THEN_TOKEN,
+            token_url="https://aap.example.com/api/v2/token/",
+            config={"auth_flow": [{"step": "obtain_token", "url_ref": "token_url"}]},
+            created_at=datetime(2026, 1, 29, 10, 0, 0),
+            updated_at=datetime(2026, 1, 29, 10, 0, 0),
+        )
+        with patch("app.api.deps.user_repository") as mock_repo, \
+             patch("app.repositories.integration_repository.create", new_callable=AsyncMock) as mock_create:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+            mock_create.return_value = response_with_flow
+
+            response = await client.post(
+                "/api/v1/admin/integrations",
+                json={
+                    "type": "aap",
+                    "name": "AAP With Flow",
+                    "base_url": "https://aap.example.com",
+                    "credential_ref": "secret/aap",
+                    "auth_flow": "basic_then_token",
+                    "token_url": "https://aap.example.com/api/v2/token/",
+                    "config": {"auth_flow": [{"step": "obtain_token", "url_ref": "token_url"}]},
+                },
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        data = response.json()
+        assert data["data"]["token_url"] == "https://aap.example.com/api/v2/token/"
+        assert data["data"]["config"] == {"auth_flow": [{"step": "obtain_token", "url_ref": "token_url"}]}
+
+    @pytest.mark.asyncio
+    async def test_create_integration_valid_config_full_returns_201(self, client, dbops_token):
+        """Story 5.4 AC2: POST with valid full config (credentials.ref, keys, use_token_from_step) accepted."""
+        valid_config = {
+            "auth_flow": [
+                {
+                    "step": "obtain_token",
+                    "url_ref": "token_url",
+                    "credentials": {"ref": "credential_ref", "keys": ["username", "password"]},
+                    "response_token_path": "access_token",
+                },
+                {"step": "call_api", "url_ref": "base_url", "credentials": {"use_token_from_step": 0}},
+            ]
+        }
+        response_with_config = IntegrationResponse(
+            id=1,
+            type="aap",
+            name="AAP Full Config",
+            base_url="https://aap.example.com",
+            credential_ref="secret/aap",
+            icon=None,
+            auth_flow=AuthFlow.BASIC_THEN_TOKEN,
+            token_url="https://aap.example.com/token",
+            config=valid_config,
+            created_at=datetime(2026, 1, 29, 10, 0, 0),
+            updated_at=datetime(2026, 1, 29, 10, 0, 0),
+        )
+        with patch("app.api.deps.user_repository") as mock_repo, \
+             patch("app.repositories.integration_repository.create", new_callable=AsyncMock) as mock_create:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+            mock_create.return_value = response_with_config
+
+            response = await client.post(
+                "/api/v1/admin/integrations",
+                json={
+                    "type": "aap",
+                    "name": "AAP Full Config",
+                    "base_url": "https://aap.example.com",
+                    "credential_ref": "secret/aap",
+                    "auth_flow": "basic_then_token",
+                    "token_url": "https://aap.example.com/token",
+                    "config": valid_config,
+                },
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.json()["data"]["config"] == valid_config
+
+    @pytest.mark.asyncio
+    async def test_create_integration_empty_config_accepted(self, client, dbops_token, sample_integration_response):
+        """Story 5.4: POST with config {} is accepted (optional, no schema validation)."""
+        with patch("app.api.deps.user_repository") as mock_repo, \
+             patch("app.repositories.integration_repository.create", new_callable=AsyncMock) as mock_create:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+            mock_create.return_value = sample_integration_response
+
+            response = await client.post(
+                "/api/v1/admin/integrations",
+                json={
+                    "type": "aap",
+                    "name": "AAP Empty Config",
+                    "base_url": "https://aap.example.com",
+                    "config": {},
+                },
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_201_CREATED
+
+    @pytest.mark.asyncio
+    async def test_create_integration_invalid_config_credentials_ref_arbitrary_returns_400(self, client, dbops_token):
+        """Story 5.4 AC1/AC2: POST with credentials.ref arbitrary (e.g. Vault path) returns 400 INVALID_CONFIG."""
+        with patch("app.api.deps.user_repository") as mock_repo:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+
+            response = await client.post(
+                "/api/v1/admin/integrations",
+                json={
+                    "type": "aap",
+                    "name": "AAP",
+                    "base_url": "https://aap.example.com",
+                    "config": {
+                        "auth_flow": [
+                            {
+                                "step": "obtain_token",
+                                "url_ref": "token_url",
+                                "credentials": {"ref": "vault/secret/mysecret", "keys": ["username", "password"]},
+                            }
+                        ]
+                    },
+                },
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        data = response.json()
+        assert data["error"]["code"] == "INVALID_CONFIG"
+        assert "field" in data["error"].get("details", {})
+
+    @pytest.mark.asyncio
+    async def test_create_integration_invalid_config_empty_auth_flow_returns_400(self, client, dbops_token):
+        """Story 5.4 AC2: POST with config.auth_flow empty array returns 400 INVALID_CONFIG (minItems: 1)."""
+        with patch("app.api.deps.user_repository") as mock_repo:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+
+            response = await client.post(
+                "/api/v1/admin/integrations",
+                json={
+                    "type": "aap",
+                    "name": "AAP",
+                    "base_url": "https://aap.example.com",
+                    "config": {"auth_flow": []},
+                },
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        data = response.json()
+        assert data["error"]["code"] == "INVALID_CONFIG"
+
+    @pytest.mark.asyncio
+    async def test_create_integration_invalid_config_unknown_step_returns_400(self, client, dbops_token):
+        """Story 5.4 AC2: POST with config step unknown returns 400 INVALID_CONFIG."""
+        with patch("app.api.deps.user_repository") as mock_repo:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+
+            response = await client.post(
+                "/api/v1/admin/integrations",
+                json={
+                    "type": "aap",
+                    "name": "AAP",
+                    "base_url": "https://aap.example.com",
+                    "config": {"auth_flow": [{"step": "unknown_step", "url_ref": "token_url"}]},
+                },
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        data = response.json()
+        assert "error" in data
+        assert data["error"]["code"] == "INVALID_CONFIG"
+        assert "field" in data["error"].get("details", {})
+
+    @pytest.mark.asyncio
+    async def test_create_integration_invalid_config_url_ref_returns_400(self, client, dbops_token):
+        """Story 5.4 AC2: POST with config url_ref invalid (e.g. vault path) returns 400 INVALID_CONFIG."""
+        with patch("app.api.deps.user_repository") as mock_repo:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+
+            response = await client.post(
+                "/api/v1/admin/integrations",
+                json={
+                    "type": "aap",
+                    "name": "AAP",
+                    "base_url": "https://aap.example.com",
+                    "config": {"auth_flow": [{"step": "obtain_token", "url_ref": "vault/secret/path"}]},
+                },
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        data = response.json()
+        assert data["error"]["code"] == "INVALID_CONFIG"
+
+    @pytest.mark.asyncio
+    async def test_create_integration_invalid_config_missing_auth_flow_returns_400(self, client, dbops_token):
+        """Story 5.4 AC2: POST with config missing auth_flow returns 400 INVALID_CONFIG."""
+        with patch("app.api.deps.user_repository") as mock_repo:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+
+            response = await client.post(
+                "/api/v1/admin/integrations",
+                json={
+                    "type": "aap",
+                    "name": "AAP",
+                    "base_url": "https://aap.example.com",
+                    "config": {"other_key": 1},
+                },
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        data = response.json()
+        assert data["error"]["code"] == "INVALID_CONFIG"
+
+    @pytest.mark.asyncio
+    async def test_create_integration_token_url_invalid_returns_422(self, client, dbops_token):
+        """Story 5.3 AC1: token_url must be http(s); invalid URL returns 422."""
+        with patch("app.api.deps.user_repository") as mock_repo:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+
+            response = await client.post(
+                "/api/v1/admin/integrations",
+                json={
+                    "type": "aap",
+                    "name": "AAP",
+                    "base_url": "https://aap.example.com",
+                    "token_url": "ftp://invalid.example.com/token",
+                },
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    @pytest.mark.asyncio
+    async def test_create_integration_config_invalid_auth_flow_not_list_returns_400(self, client, dbops_token):
+        """Story 5.4 AC2: config.auth_flow not a list returns 400 INVALID_CONFIG (JSON Schema)."""
+        with patch("app.api.deps.user_repository") as mock_repo:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+
+            response = await client.post(
+                "/api/v1/admin/integrations",
+                json={
+                    "type": "aap",
+                    "name": "AAP",
+                    "base_url": "https://aap.example.com",
+                    "config": {"auth_flow": "not_a_list"},
+                },
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["error"]["code"] == "INVALID_CONFIG"
+
+    @pytest.mark.asyncio
+    async def test_create_integration_config_missing_step_key_returns_400(self, client, dbops_token):
+        """Story 5.4 AC2: config.auth_flow step missing 'step' key returns 400 INVALID_CONFIG (JSON Schema)."""
+        with patch("app.api.deps.user_repository") as mock_repo:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+
+            response = await client.post(
+                "/api/v1/admin/integrations",
+                json={
+                    "type": "aap",
+                    "name": "AAP",
+                    "base_url": "https://aap.example.com",
+                    "config": {"auth_flow": [{"url_ref": "token_url"}]},
+                },
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["error"]["code"] == "INVALID_CONFIG"
+
+    @pytest.mark.asyncio
+    async def test_create_integration_config_invalid_step_value_returns_400(self, client, dbops_token):
+        """Story 5.4 AC2: config.auth_flow step invalid value returns 400 INVALID_CONFIG (JSON Schema)."""
+        with patch("app.api.deps.user_repository") as mock_repo:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+
+            response = await client.post(
+                "/api/v1/admin/integrations",
+                json={
+                    "type": "aap",
+                    "name": "AAP",
+                    "base_url": "https://aap.example.com",
+                    "config": {"auth_flow": [{"step": "invalid_step_name"}]},
+                },
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["error"]["code"] == "INVALID_CONFIG"
+
+    @pytest.mark.asyncio
     async def test_create_integration_forbidden_non_dbops(self, client, dba_token):
         """Test creating integration with non-DBOPS profile returns 403 (AC4)."""
         with patch("app.api.deps.user_repository") as mock_repo:
@@ -424,6 +760,8 @@ class TestUpdateIntegration:
             credential_ref="secret/idp/aap-prod-v2",
             icon="aap",
             auth_flow=AuthFlow.TOKEN,  # Story 4.9: auth_flow field
+            token_url=None,
+            config=None,
             created_at=datetime(2026, 1, 29, 10, 0, 0),
             updated_at=datetime(2026, 1, 29, 12, 0, 0),
         )
@@ -486,6 +824,56 @@ class TestUpdateIntegration:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         data = response.json()
         assert data["error"]["code"] == "DUPLICATE_NAME"
+
+    @pytest.mark.asyncio
+    async def test_update_integration_with_config_null_retracts_config(self, client, dbops_token):
+        """Story 5.3: PUT with config null retracts config (AC3)."""
+        updated = IntegrationResponse(
+            id=1,
+            type="aap",
+            name="AAP Production",
+            base_url="https://aap.example.com",
+            credential_ref="secret/aap",
+            icon="aap",
+            auth_flow=AuthFlow.TOKEN,
+            token_url=None,
+            config=None,
+            created_at=datetime(2026, 1, 29, 10, 0, 0),
+            updated_at=datetime(2026, 1, 29, 12, 0, 0),
+        )
+        with patch("app.api.deps.user_repository") as mock_repo, \
+             patch("app.repositories.integration_repository.update", new_callable=AsyncMock) as mock_update:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+            mock_update.return_value = updated
+
+            response = await client.put(
+                "/api/v1/admin/integrations/1",
+                json={"config": None},
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["data"]["config"] is None
+
+    @pytest.mark.asyncio
+    async def test_update_integration_invalid_config_returns_400(self, client, dbops_token):
+        """Story 5.4 AC2: PUT with invalid config (unknown step) returns 400 INVALID_CONFIG."""
+        with patch("app.api.deps.user_repository") as mock_repo:
+            mock_repo.get_by_username = AsyncMock(return_value={
+                "id": 1, "username": "dbops-user", "display_name": "DBOPS", "profile": "dbops"
+            })
+
+            response = await client.put(
+                "/api/v1/admin/integrations/1",
+                json={"config": {"auth_flow": [{"step": "invalid_step", "url_ref": "base_url"}]}},
+                headers={"Authorization": f"Bearer {dbops_token}"},
+            )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        data = response.json()
+        assert data["error"]["code"] == "INVALID_CONFIG"
 
     @pytest.mark.asyncio
     async def test_update_integration_forbidden_non_dbops(self, client, dba_token):

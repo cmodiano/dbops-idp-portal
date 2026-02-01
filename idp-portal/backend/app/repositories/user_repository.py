@@ -8,13 +8,14 @@ from app.core.database import get_connection
 async def get_by_username(username: str) -> dict | None:
     """Fetch a user by username. Returns dict or None."""
     async with get_connection() as conn:
-        cursor = await conn.execute(
+        cursor = conn.cursor()
+        await cursor.execute(
             "SELECT ID, USERNAME, DISPLAY_NAME, PROFILE, SAML_SUBJECT, CREATED_AT, UPDATED_AT "
             "FROM USERS WHERE USERNAME = :username",
             {"username": username},
         )
         row = await cursor.fetchone()
-        await cursor.close()
+        cursor.close()
         if row is None:
             return None
         return {
@@ -31,13 +32,14 @@ async def get_by_username(username: str) -> dict | None:
 async def get_by_id(user_id: int) -> dict | None:
     """Fetch a user by ID. Returns dict or None."""
     async with get_connection() as conn:
-        cursor = await conn.execute(
+        cursor = conn.cursor()
+        await cursor.execute(
             "SELECT ID, USERNAME, DISPLAY_NAME, PROFILE, SAML_SUBJECT, CREATED_AT, UPDATED_AT "
             "FROM USERS WHERE ID = :user_id",
             {"user_id": user_id},
         )
         row = await cursor.fetchone()
-        await cursor.close()
+        cursor.close()
         if row is None:
             return None
         return {
@@ -54,13 +56,14 @@ async def get_by_id(user_id: int) -> dict | None:
 async def get_user_permissions(user_id: int) -> list[dict]:
     """Fetch all permissions for a user. Returns list of dicts."""
     async with get_connection() as conn:
-        cursor = await conn.execute(
+        cursor = conn.cursor()
+        await cursor.execute(
             "SELECT USER_ID, ACTION_ID, ENVIRONMENT, GRANTED_BY, GRANTED_AT "
             "FROM USER_PERMISSIONS WHERE USER_ID = :user_id",
             {"user_id": user_id},
         )
         rows = await cursor.fetchall()
-        await cursor.close()
+        cursor.close()
         return [
             {
                 "user_id": row[0],
@@ -76,13 +79,14 @@ async def get_user_permissions(user_id: int) -> list[dict]:
 async def has_permission(user_id: int, action_id: int, environment: str) -> bool:
     """Check if user has permission for action in environment."""
     async with get_connection() as conn:
-        cursor = await conn.execute(
+        cursor = conn.cursor()
+        await cursor.execute(
             "SELECT 1 FROM USER_PERMISSIONS "
             "WHERE USER_ID = :user_id AND ACTION_ID = :action_id AND ENVIRONMENT = :environment",
             {"user_id": user_id, "action_id": action_id, "environment": environment},
         )
         row = await cursor.fetchone()
-        await cursor.close()
+        cursor.close()
         return row is not None
 
 
@@ -94,7 +98,8 @@ async def create_or_update(
 ) -> dict:
     """Create or update a user via MERGE (atomic upsert). Returns the user dict."""
     async with get_connection() as conn:
-        cursor = await conn.execute(
+        cursor = conn.cursor()
+        await cursor.execute(
             "MERGE INTO USERS u "
             "USING (SELECT :username AS USERNAME FROM DUAL) src "
             "ON (u.USERNAME = src.USERNAME) "
@@ -114,6 +119,6 @@ async def create_or_update(
             },
         )
         await conn.commit()
-        await cursor.close()
+        cursor.close()
 
     return await get_by_username(username)  # type: ignore[return-value]

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 import structlog
@@ -100,15 +100,15 @@ async def create_execution(
     }
 
     async with get_connection() as conn:
-        # Create output variables for RETURNING clause
-        out_id = conn.var(int)
-        out_created_at = conn.var(datetime)
+        cursor = conn.cursor()
+        # Create output variables for RETURNING clause (AsyncConnection has no .var; use cursor.var)
+        out_id = cursor.var(int)
+        out_created_at = cursor.var(datetime)
         params["out_id"] = out_id
         params["out_created_at"] = out_created_at
-
-        cursor = await conn.execute(query, params)
+        await cursor.execute(query, params)
         await conn.commit()
-        await cursor.close()
+        cursor.close()
 
         execution_id = out_id.getvalue()[0]
         created_at = out_created_at.getvalue()[0]
@@ -151,9 +151,10 @@ async def get_by_id(execution_id: int) -> ExecutionResponse | None:
     """
 
     async with get_connection() as conn:
-        cursor = await conn.execute(query, {"execution_id": execution_id})
+        cursor = conn.cursor()
+        await cursor.execute(query, {"execution_id": execution_id})
         row = await cursor.fetchone()
-        await cursor.close()
+        cursor.close()
 
     duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
     logger.debug(
@@ -199,9 +200,10 @@ async def list_by_user(
     params = {"user_id": user_id, "limit": limit, "offset": offset}
 
     async with get_connection() as conn:
-        cursor = await conn.execute(query, params)
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
         rows = await cursor.fetchall()
-        await cursor.close()
+        cursor.close()
 
     duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
     logger.debug(
@@ -212,6 +214,17 @@ async def list_by_user(
     )
 
     return [_row_to_execution_response(row[:10], action_name=row[10]) for row in rows]
+
+
+async def count_by_user(user_id: int) -> int:
+    """Return total number of executions for a user (Story 4.8, AC4 pagination)."""
+    query = "SELECT COUNT(*) FROM EXECUTIONS WHERE USER_ID = :user_id"
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, {"user_id": user_id})
+        row = await cursor.fetchone()
+        cursor.close()
+    return row[0] if row else 0
 
 
 async def update_status(
@@ -251,10 +264,11 @@ async def update_status(
     """
 
     async with get_connection() as conn:
-        cursor = await conn.execute(query, params)
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
         rowcount = cursor.rowcount
         await conn.commit()
-        await cursor.close()
+        cursor.close()
 
     duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
     logger.info(
@@ -282,9 +296,10 @@ async def action_exists(action_id: int) -> bool:
         WHERE ID = :action_id AND STATUS = 'published'
     """
     async with get_connection() as conn:
-        cursor = await conn.execute(query, {"action_id": action_id})
+        cursor = conn.cursor()
+        await cursor.execute(query, {"action_id": action_id})
         row = await cursor.fetchone()
-        await cursor.close()
+        cursor.close()
     return row is not None
 
 
@@ -302,9 +317,10 @@ async def get_action_parameters_schema(action_id: int) -> dict[str, Any] | None:
         WHERE ID = :action_id
     """
     async with get_connection() as conn:
-        cursor = await conn.execute(query, {"action_id": action_id})
+        cursor = conn.cursor()
+        await cursor.execute(query, {"action_id": action_id})
         row = await cursor.fetchone()
-        await cursor.close()
+        cursor.close()
     if row is None or row[0] is None:
         return None
     return _str_to_json(row[0])
@@ -324,16 +340,17 @@ async def get_action_execution_steps(action_id: int) -> list[dict[str, Any]]:
         WHERE ID = :action_id
     """
     async with get_connection() as conn:
-        cursor = await conn.execute(query, {"action_id": action_id})
+        cursor = conn.cursor()
+        await cursor.execute(query, {"action_id": action_id})
         row = await cursor.fetchone()
-        await cursor.close()
+        cursor.close()
     if row is None or row[0] is None:
         return []
     return _str_to_json(row[0]) or []
 
 
 async def get_action_with_integration(action_id: int) -> dict[str, Any] | None:
-    """Get action with integration details for execution (Story 4.3, Task 4.3).
+    """Get action with integration details for execution (Story 4.3, Task 4.3; Story 4.5, Task 2.2).
 
     Args:
         action_id: Action ID
@@ -342,34 +359,45 @@ async def get_action_with_integration(action_id: int) -> dict[str, Any] | None:
         Dict with action and integration info, or None if not found
     """
     query = """
-        SELECT A.ID, A.NAME, A.PLATFORM, A.EXECUTION_STEPS,
+        SELECT A.ID, A.NAME, A.PLATFORM, A.EXECUTION_STEPS, A.CHANGE_MODEL_CODE,
                I.ID AS INTEGRATION_ID, I.NAME AS INTEGRATION_NAME,
-               I.PLATFORM_TYPE, I.BASE_URL, I.CREDENTIAL_REF, I.AUTH_FLOW
+               I.TYPE AS PLATFORM_TYPE, I.BASE_URL, I.CREDENTIAL_REF, I.AUTH_FLOW,
+               I.TOKEN_URL, I.CONFIG
         FROM ACTIONS_CATALOG A
         LEFT JOIN INTEGRATIONS I ON A.INTEGRATION_ID = I.ID
         WHERE A.ID = :action_id
     """
     async with get_connection() as conn:
-        cursor = await conn.execute(query, {"action_id": action_id})
+        cursor = conn.cursor()
+        await cursor.execute(query, {"action_id": action_id})
         row = await cursor.fetchone()
-        await cursor.close()
+        cursor.close()
 
     if row is None:
         return None
+
+    # CONFIG CLOB: read as string if LOB (Story 5.3)
+    config_raw = row[12]
+    if config_raw is not None and hasattr(config_raw, "read"):
+        config_raw = config_raw.read()
+    config = _str_to_json(config_raw) if config_raw else None
 
     return {
         "id": row[0],
         "name": row[1],
         "platform": row[2],
         "execution_steps": _str_to_json(row[3]) if row[3] else [],
+        "change_model_code": row[4],
         "integration": {
-            "id": row[4],
-            "name": row[5],
-            "platform_type": row[6],
-            "base_url": row[7],
-            "credential_ref": row[8],
-            "auth_flow": row[9],
-        } if row[4] else None,
+            "id": row[5],
+            "name": row[6],
+            "platform_type": row[7],
+            "base_url": row[8],
+            "credential_ref": row[9],
+            "auth_flow": row[10],
+            "token_url": row[11],
+            "config": config,
+        } if row[5] else None,
     }
 
 
@@ -423,8 +451,9 @@ async def create_execution_steps(
     """
 
     async with get_connection() as conn:
+        cursor = conn.cursor()
         for step in steps:
-            out_id = conn.var(int)
+            out_id = cursor.var(int)
             params = {
                 "execution_id": execution_id,
                 "step_order": step.step_order,
@@ -433,9 +462,9 @@ async def create_execution_steps(
                 "status": StepStatus.PENDING.value,
                 "out_id": out_id,
             }
-            cursor = await conn.execute(query, params)
-            await cursor.close()
+            await cursor.execute(query, params)
             created_ids.append(out_id.getvalue()[0])
+        cursor.close()
 
         await conn.commit()
 
@@ -469,9 +498,10 @@ async def get_steps_by_execution_id(execution_id: int) -> list[ExecutionStepResp
     """
 
     async with get_connection() as conn:
-        cursor = await conn.execute(query, {"execution_id": execution_id})
+        cursor = conn.cursor()
+        await cursor.execute(query, {"execution_id": execution_id})
         rows = await cursor.fetchall()
-        await cursor.close()
+        cursor.close()
 
     duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
     logger.debug(
@@ -482,6 +512,31 @@ async def get_steps_by_execution_id(execution_id: int) -> list[ExecutionStepResp
     )
 
     return [_row_to_step_response(row) for row in rows]
+
+
+async def get_step_by_id(step_id: int) -> ExecutionStepResponse | None:
+    """Fetch a single execution step by ID (Story 4.6, Task 1.4).
+
+    Args:
+        step_id: Step ID to fetch
+
+    Returns:
+        ExecutionStepResponse if found, None otherwise
+    """
+    query = """
+        SELECT ID, EXECUTION_ID, STEP_ORDER, STEP_NAME, STEP_TYPE,
+               STATUS, STARTED_AT, COMPLETED_AT, OUTPUT, PLATFORM_JOB_ID, ERROR_MESSAGE
+        FROM EXECUTION_STEPS
+        WHERE ID = :step_id
+    """
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, {"step_id": step_id})
+        row = await cursor.fetchone()
+        cursor.close()
+    if row is None:
+        return None
+    return _row_to_step_response(row)
 
 
 async def update_step_status(
@@ -533,10 +588,11 @@ async def update_step_status(
     """
 
     async with get_connection() as conn:
-        cursor = await conn.execute(query, params)
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
         rowcount = cursor.rowcount
         await conn.commit()
-        await cursor.close()
+        cursor.close()
 
     duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
     logger.info(
@@ -573,10 +629,11 @@ async def skip_remaining_steps(execution_id: int) -> int:
     }
 
     async with get_connection() as conn:
-        cursor = await conn.execute(query, params)
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
         rowcount = cursor.rowcount
         await conn.commit()
-        await cursor.close()
+        cursor.close()
 
     logger.info(
         "execution_repository_skip_remaining_steps",
@@ -585,3 +642,168 @@ async def skip_remaining_steps(execution_id: int) -> int:
     )
 
     return rowcount
+
+
+# --- Dashboard Repository Methods (Story 5.1, Task 1.2) ---
+
+
+async def get_dashboard_stats() -> dict[str, Any]:
+    """Get aggregated dashboard statistics (Story 5.1, AC1, AC4).
+
+    Returns:
+        Dict with:
+        - executions_jour: Count of executions created today
+        - taux_succes_pct: Success rate % over last 24h (COMPLETED / (COMPLETED + FAILED) * 100)
+        - executions_en_cours: Count of running/pending executions
+        - executions_en_erreur: Count of failed executions in last 24h
+    """
+    start_time = time.perf_counter()
+    query = """
+        SELECT
+            (SELECT COUNT(*) FROM EXECUTIONS WHERE TRUNC(CREATED_AT) = TRUNC(SYSDATE)) AS executions_jour,
+            (SELECT COUNT(*) FROM EXECUTIONS WHERE STATUS IN ('SUBMITTED', 'RUNNING', 'PENDING_APPROVAL')) AS executions_en_cours,
+            (SELECT COUNT(*) FROM EXECUTIONS WHERE STATUS = 'FAILED' AND CREATED_AT >= SYSDATE - 1) AS executions_en_erreur,
+            (SELECT COUNT(*) FROM EXECUTIONS WHERE STATUS = 'COMPLETED' AND CREATED_AT >= SYSDATE - 1) AS completed_24h,
+            (SELECT COUNT(*) FROM EXECUTIONS WHERE STATUS = 'FAILED' AND CREATED_AT >= SYSDATE - 1) AS failed_24h
+        FROM DUAL
+    """
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query)
+        row = await cursor.fetchone()
+        cursor.close()
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+
+    executions_jour = row[0] or 0
+    executions_en_cours = row[1] or 0
+    executions_en_erreur = row[2] or 0
+    completed_24h = row[3] or 0
+    failed_24h = row[4] or 0
+
+    # Calculate success rate: avoid division by zero
+    total_finished = completed_24h + failed_24h
+    taux_succes_pct = round((completed_24h / total_finished) * 100, 1) if total_finished > 0 else 0.0
+
+    logger.debug(
+        "execution_repository_get_dashboard_stats",
+        duration_ms=duration_ms,
+        executions_jour=executions_jour,
+        taux_succes_pct=taux_succes_pct,
+    )
+
+    return {
+        "executions_jour": executions_jour,
+        "taux_succes_pct": taux_succes_pct,
+        "executions_en_cours": executions_en_cours,
+        "executions_en_erreur": executions_en_erreur,
+    }
+
+
+async def list_recent_executions(limit: int = 100) -> list[dict[str, Any]]:
+    """List recent executions for dashboard (Story 5.1, AC2, AC4).
+
+    Returns:
+    - All executions from the **last 24 hours** (same window as stats: executions_en_erreur, taux_succes_pct).
+    - Plus **all executions currently running/pending** (SUBMITTED, RUNNING, PENDING_APPROVAL),
+      so the table shows the same "en cours" as the stat card even if they started >24h ago.
+    From ALL users (DBA/DBOPS visibility). Includes platform and engine from the action.
+
+    Args:
+        limit: Maximum number of executions to return (default 100)
+
+    Returns:
+        List of dicts with: id, action_name, user_display_name, environment, status, created_at, platform, engine
+    """
+    start_time = time.perf_counter()
+    query = """
+        SELECT E.ID, A.NAME AS ACTION_NAME, U.DISPLAY_NAME AS USER_DISPLAY_NAME,
+               E.ENVIRONMENT, E.STATUS, E.CREATED_AT, A.PLATFORM, A.ENGINE
+        FROM EXECUTIONS E
+        LEFT JOIN ACTIONS_CATALOG A ON A.ID = E.ACTION_ID
+        LEFT JOIN USERS U ON U.ID = E.USER_ID
+        WHERE (E.CREATED_AT >= SYSDATE - 1)
+           OR (E.STATUS IN ('SUBMITTED', 'RUNNING', 'PENDING_APPROVAL'))
+        ORDER BY E.CREATED_AT DESC
+        FETCH FIRST :limit ROWS ONLY
+    """
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, {"limit": limit})
+        rows = await cursor.fetchall()
+        cursor.close()
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.debug(
+        "execution_repository_list_recent_executions",
+        duration_ms=duration_ms,
+        count=len(rows),
+    )
+
+    return [
+        {
+            "id": row[0],
+            "action_name": row[1],
+            "user_display_name": row[2] or "Unknown",
+            "environment": row[3],
+            "status": row[4],
+            "created_at": row[5].isoformat() if row[5] else None,
+            "platform": row[6],
+            "engine": row[7],
+        }
+        for row in rows
+    ]
+
+
+async def get_dashboard_timeseries(days: int = 14) -> list[dict[str, Any]]:
+    """Get execution counts over time for dashboard line chart.
+
+    Returns daily counts of COMPLETED (success) and FAILED for the last N days.
+
+    Args:
+        days: Number of days to include (default 14)
+
+    Returns:
+        List of dicts with: date (YYYY-MM-DD), success, failed
+    """
+    start_time = time.perf_counter()
+    # Oracle: group by TRUNC(created_at), count by status
+    query = """
+        SELECT TRUNC(E.CREATED_AT) AS EXEC_DATE,
+               SUM(CASE WHEN E.STATUS = 'COMPLETED' THEN 1 ELSE 0 END) AS SUCCESS,
+               SUM(CASE WHEN E.STATUS = 'FAILED' THEN 1 ELSE 0 END) AS FAILED
+        FROM EXECUTIONS E
+        WHERE E.CREATED_AT >= TRUNC(SYSDATE) - :days
+        GROUP BY TRUNC(E.CREATED_AT)
+        ORDER BY EXEC_DATE ASC
+    """
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, {"days": days})
+        rows = await cursor.fetchall()
+        cursor.close()
+
+    # Build full date range with zeros for missing days (last N days including today)
+    today = datetime.now().date()
+    date_to_counts: dict[str, dict[str, Any]] = {}
+    for i in range(days):
+        dt = today - timedelta(days=days - 1 - i)
+        key = dt.strftime("%Y-%m-%d")
+        date_to_counts[key] = {"date": key, "success": 0, "failed": 0}
+    for row in rows:
+        exec_date = row[0]
+        if hasattr(exec_date, "strftime"):
+            key = exec_date.strftime("%Y-%m-%d")
+        else:
+            key = str(exec_date)[:10]
+        if key in date_to_counts:
+            date_to_counts[key]["success"] = row[1] or 0
+            date_to_counts[key]["failed"] = row[2] or 0
+
+    result = sorted(date_to_counts.values(), key=lambda x: x["date"])
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.debug("execution_repository_get_dashboard_timeseries", duration_ms=duration_ms, days=days)
+    return result

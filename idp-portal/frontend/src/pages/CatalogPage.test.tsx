@@ -510,14 +510,14 @@ describe('CatalogPage', () => {
         expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
       });
 
-      // Favorited action: HeartFilled with color #eb2f96 (distinct from outline)
+      // Favorited action: HeartFilled with color #f5222d (vivid red, distinct from outline)
       const favButton = screen.getByLabelText('Retirer des favoris');
       const heartIcon = favButton.querySelector('svg');
       expect(heartIcon).toBeInTheDocument();
       const iconWrapper = favButton.querySelector('.anticon');
       expect(iconWrapper).toBeInTheDocument();
-      // HeartFilled uses color #eb2f96 (inline style preserved in jsdom)
-      expect(iconWrapper).toHaveStyle({ color: '#eb2f96' });
+      // HeartFilled uses color #f5222d (inline style preserved in jsdom)
+      expect(iconWrapper).toHaveStyle({ color: '#f5222d' });
     });
 
     it('shows counter with loading state when refetching (AC2)', async () => {

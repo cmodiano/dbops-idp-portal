@@ -1,4 +1,4 @@
-"""Tests for integration repository (Story 2.27, 4.9)."""
+"""Tests for integration repository (Story 2.27, 4.9, 5.3)."""
 
 import pytest
 from datetime import datetime
@@ -9,6 +9,17 @@ import oracledb
 from app.models.integration import IntegrationCreate, IntegrationUpdate, IntegrationResponse, AuthFlow
 from app.repositories import integration_repository
 from app.repositories.integration_repository import DuplicateNameError
+
+
+def _row(*cols):
+    """Build 11-column row: ID, TYPE, NAME, BASE_URL, CREDENTIAL_REF, ICON, AUTH_FLOW, TOKEN_URL, CONFIG, CREATED_AT, UPDATED_AT (Story 5.3)."""
+    default_ts = (datetime(2026, 1, 29, 10, 0, 0), datetime(2026, 1, 29, 10, 0, 0))
+    cols = list(cols)
+    while len(cols) < 7:
+        cols.append(None)
+    # Pad to 11: token_url, config, created_at, updated_at
+    cols.extend([None] * (11 - len(cols) - 2) + [default_ts[0], default_ts[1]])
+    return tuple(cols[:11])
 
 
 @pytest.fixture
@@ -26,7 +37,7 @@ def sample_integration_create():
 
 @pytest.fixture
 def sample_integration_response():
-    """Sample response with free-form type and auth_flow (Story 4.9)."""
+    """Sample response with free-form type and auth_flow (Story 4.9, 5.3)."""
     return IntegrationResponse(
         id=1,
         type="aap",  # Story 4.9: type is now string
@@ -35,6 +46,8 @@ def sample_integration_response():
         credential_ref="secret/idp/aap-prod",
         icon="aap",
         auth_flow=AuthFlow.TOKEN,
+        token_url=None,
+        config=None,
         created_at=datetime(2026, 1, 29, 10, 0, 0),
         updated_at=datetime(2026, 1, 29, 10, 0, 0),
     )
@@ -42,8 +55,8 @@ def sample_integration_response():
 
 @pytest.fixture
 def mock_integration_row():
-    """Mock row with 9 columns including auth_flow (Story 4.9)."""
-    return (
+    """Mock row with 11 columns including auth_flow, token_url, config (Story 4.9, 5.3)."""
+    return _row(
         1,
         "aap",
         "AAP Production",
@@ -51,8 +64,6 @@ def mock_integration_row():
         "secret/idp/aap-prod",
         "aap",
         "token",  # auth_flow
-        datetime(2026, 1, 29, 10, 0, 0),
-        datetime(2026, 1, 29, 10, 0, 0),
     )
 
 
@@ -70,7 +81,7 @@ class TestRowConversions:
 
     def test_row_to_integration_response_null_optional_fields(self):
         """Story 4.9 AC5: Test row with NULL auth_flow (backward compatibility)."""
-        row = (
+        row = _row(
             2,
             "servicenow",
             "ServiceNow Dev",
@@ -78,8 +89,6 @@ class TestRowConversions:
             None,  # credential_ref
             None,  # icon
             None,  # auth_flow (nullable for backward compatibility)
-            datetime(2026, 1, 29, 10, 0, 0),
-            datetime(2026, 1, 29, 10, 0, 0),
         )
         r = integration_repository._row_to_integration_response(row)
         assert r.id == 2
@@ -90,7 +99,7 @@ class TestRowConversions:
 
     def test_row_to_integration_response_free_form_type(self):
         """Story 4.9 AC1: Test with free-form type (not in legacy enum)."""
-        row = (
+        row = _row(
             3,
             "jenkins",  # Free-form type not in original enum
             "Jenkins CI",
@@ -98,13 +107,29 @@ class TestRowConversions:
             "secret/jenkins",
             None,
             "pat",  # PAT auth flow
-            datetime(2026, 1, 29, 10, 0, 0),
-            datetime(2026, 1, 29, 10, 0, 0),
         )
         r = integration_repository._row_to_integration_response(row)
         assert r.id == 3
         assert r.type == "jenkins"
         assert r.auth_flow == AuthFlow.PAT
+
+    def test_row_to_integration_response_token_url_and_config(self):
+        """Story 5.3: Test row with token_url and config (CONFIG as JSON string)."""
+        row = _row(
+            4,
+            "aap",
+            "AAP With Config",
+            "https://aap.example.com",
+            "secret/aap",
+            None,
+            "basic_then_token",
+            "https://aap.example.com/api/v2/token/",  # token_url
+            '{"auth_flow": [{"step": "obtain_token", "url_ref": "token_url"}]}',  # config CLOB
+        )
+        r = integration_repository._row_to_integration_response(row)
+        assert r.id == 4
+        assert r.token_url == "https://aap.example.com/api/v2/token/"
+        assert r.config == {"auth_flow": [{"step": "obtain_token", "url_ref": "token_url"}]}
 
 
 class TestGetAll:
@@ -125,7 +150,7 @@ class TestGetAll:
 
     @pytest.mark.asyncio
     async def test_get_all_with_data(self, mock_integration_row):
-        row2 = (
+        row2 = _row(
             2,
             "servicenow",
             "ServiceNow Prod",
@@ -133,9 +158,10 @@ class TestGetAll:
             "secret/idp/snow-prod",
             "servicenow",
             "basic",  # auth_flow (Story 4.9)
-            datetime(2026, 1, 29, 11, 0, 0),
-            datetime(2026, 1, 29, 11, 0, 0),
         )
+        row2 = (2, "servicenow", "ServiceNow Prod", "https://prod.servicenow.com",
+                "secret/idp/snow-prod", "servicenow", "basic", None, None,
+                datetime(2026, 1, 29, 11, 0, 0), datetime(2026, 1, 29, 11, 0, 0))
         mock_cursor = AsyncMock()
         mock_cursor.fetchall = AsyncMock(return_value=[mock_integration_row, row2])
         mock_cursor.close = AsyncMock()
@@ -220,6 +246,50 @@ class TestGetByName:
 
 
 class TestCreate:
+    @pytest.mark.asyncio
+    async def test_create_with_token_url_and_config(self, sample_integration_response):
+        """Story 5.3: Create integration with token_url and config (AC2, AC3)."""
+        create = IntegrationCreate(
+            type="aap",
+            name="AAP With Flow",
+            base_url="https://aap.example.com",
+            credential_ref="secret/aap",
+            icon=None,
+            auth_flow=AuthFlow.BASIC_THEN_TOKEN,
+            token_url="https://aap.example.com/api/v2/token/",
+            config={"auth_flow": [{"step": "obtain_token", "url_ref": "token_url", "credentials": {"keys": ["username", "password"]}}]},
+        )
+        response_with_config = IntegrationResponse(
+            id=1,
+            type="aap",
+            name="AAP With Flow",
+            base_url="https://aap.example.com",
+            credential_ref="secret/aap",
+            icon=None,
+            auth_flow=AuthFlow.BASIC_THEN_TOKEN,
+            token_url="https://aap.example.com/api/v2/token/",
+            config={"auth_flow": [{"step": "obtain_token"}]},
+            created_at=datetime(2026, 1, 29, 10, 0, 0),
+            updated_at=datetime(2026, 1, 29, 10, 0, 0),
+        )
+        with patch("app.repositories.integration_repository.get_connection") as mock_get_conn:
+            mock_cursor = AsyncMock()
+            mock_cursor.close = AsyncMock()
+            mock_conn = AsyncMock()
+            mock_conn.execute = AsyncMock(return_value=mock_cursor)
+            mock_var = MagicMock()
+            mock_var.getvalue.return_value = [1]
+            mock_conn.var = lambda _: mock_var
+            mock_conn.commit = AsyncMock()
+            mock_conn.rollback = AsyncMock()
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+            with patch("app.repositories.integration_repository.get_by_id", new_callable=AsyncMock) as mock_get:
+                mock_get.return_value = response_with_config
+                result = await integration_repository.create(create)
+        assert result.token_url == "https://aap.example.com/api/v2/token/"
+        assert result.config == {"auth_flow": [{"step": "obtain_token"}]}
+
     @pytest.mark.asyncio
     async def test_create_success(self, sample_integration_create, sample_integration_response):
         mock_cursor = AsyncMock()
@@ -320,6 +390,107 @@ class TestUpdate:
 
         assert result is not None
         assert result.id == 1
+
+    @pytest.mark.asyncio
+    async def test_update_with_token_url_and_config(self, sample_integration_response):
+        """Story 5.3: Update with token_url and config (code-review fix MED-3)."""
+        updated_response = IntegrationResponse(
+            id=1,
+            type="aap",
+            name="AAP Production",
+            base_url="https://aap.example.com",
+            credential_ref="secret/idp/aap-prod",
+            icon="aap",
+            auth_flow=AuthFlow.BASIC_THEN_TOKEN,
+            token_url="https://aap.example.com/api/v2/token/",
+            config={"auth_flow": [{"step": "obtain_token", "url_ref": "token_url"}]},
+            created_at=datetime(2026, 1, 29, 10, 0, 0),
+            updated_at=datetime(2026, 1, 29, 12, 0, 0),
+        )
+        mock_cursor = AsyncMock()
+        mock_cursor.rowcount = 1
+        mock_cursor.close = AsyncMock()
+        mock_conn = AsyncMock()
+        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+        mock_conn.commit = AsyncMock()
+
+        with patch("app.repositories.integration_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+            with patch("app.repositories.integration_repository.get_by_id", new_callable=AsyncMock) as mock_get:
+                # First call returns existing, second call returns updated
+                mock_get.side_effect = [sample_integration_response, updated_response]
+                result = await integration_repository.update(
+                    1,
+                    IntegrationUpdate(
+                        auth_flow=AuthFlow.BASIC_THEN_TOKEN,
+                        token_url="https://aap.example.com/api/v2/token/",
+                        config={"auth_flow": [{"step": "obtain_token", "url_ref": "token_url"}]},
+                    ),
+                )
+
+        assert result is not None
+        assert result.token_url == "https://aap.example.com/api/v2/token/"
+        assert result.config == {"auth_flow": [{"step": "obtain_token", "url_ref": "token_url"}]}
+        # Verify SQL includes TOKEN_URL and CONFIG
+        execute_call = mock_conn.execute.call_args
+        sql = execute_call[0][0]
+        assert "TOKEN_URL" in sql
+        assert "CONFIG" in sql
+
+    @pytest.mark.asyncio
+    async def test_update_config_null_clears_config(self, sample_integration_response):
+        """Story 5.3: Update with config=None clears config (code-review fix MED-3)."""
+        # Start with existing that has config
+        existing_with_config = IntegrationResponse(
+            id=1,
+            type="aap",
+            name="AAP Production",
+            base_url="https://aap.example.com",
+            credential_ref="secret/idp/aap-prod",
+            icon="aap",
+            auth_flow=AuthFlow.BASIC_THEN_TOKEN,
+            token_url="https://aap.example.com/api/v2/token/",
+            config={"auth_flow": [{"step": "obtain_token"}]},
+            created_at=datetime(2026, 1, 29, 10, 0, 0),
+            updated_at=datetime(2026, 1, 29, 10, 0, 0),
+        )
+        updated_no_config = IntegrationResponse(
+            id=1,
+            type="aap",
+            name="AAP Production",
+            base_url="https://aap.example.com",
+            credential_ref="secret/idp/aap-prod",
+            icon="aap",
+            auth_flow=AuthFlow.BASIC_THEN_TOKEN,
+            token_url="https://aap.example.com/api/v2/token/",
+            config=None,  # Cleared
+            created_at=datetime(2026, 1, 29, 10, 0, 0),
+            updated_at=datetime(2026, 1, 29, 12, 0, 0),
+        )
+        mock_cursor = AsyncMock()
+        mock_cursor.rowcount = 1
+        mock_cursor.close = AsyncMock()
+        mock_conn = AsyncMock()
+        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+        mock_conn.commit = AsyncMock()
+
+        with patch("app.repositories.integration_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
+            with patch("app.repositories.integration_repository.get_by_id", new_callable=AsyncMock) as mock_get:
+                mock_get.side_effect = [existing_with_config, updated_no_config]
+                # Use model_construct to set model_fields_set explicitly
+                update = IntegrationUpdate.model_construct(config=None, _fields_set={"config"})
+                result = await integration_repository.update(1, update)
+
+        assert result is not None
+        assert result.config is None
+        # Verify CONFIG = :config with None value
+        execute_call = mock_conn.execute.call_args
+        params = execute_call[0][1]
+        assert "config" in params
+        assert params["config"] is None
 
 
 class TestDelete:

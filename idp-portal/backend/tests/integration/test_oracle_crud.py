@@ -1,7 +1,7 @@
 """Minimal integration test: Oracle connection + CRUD against Docker Oracle (AC2).
 
 Run with Oracle up: docker compose up -d oracle, wait ~1–2 min, then:
-  cd idp-portal/backend && ORACLE_DSN=localhost:1521/XEPDB1 ORACLE_USER=idp_app ORACLE_PASSWORD=changeme pytest tests/integration/ -v
+  cd idp-portal/backend && ORACLE_DSN=localhost:1521/FREEPDB1 ORACLE_USER=idp_app ORACLE_PASSWORD=changeme pytest tests/integration/ -v
 Skipped when ORACLE_DSN / ORACLE_USER / ORACLE_PASSWORD are not set.
 Uses skip_if_no_oracle fixture from conftest.py.
 """

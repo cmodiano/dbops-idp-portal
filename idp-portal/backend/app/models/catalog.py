@@ -1,12 +1,14 @@
-"""Catalog models for Software Catalog actions (Story 2.1, FR1; Story 2.6 tags).
+"""Catalog models for Software Catalog actions and workflows (Story 2.1, FR1; Story 2.6 tags; Story 5.7 workflows).
 
 Defines Pydantic models for:
-- ActionEngine, ActionPlatform, ActionStatus enums
-- ActionCreate: input model for creating actions
-- ActionResponse: output model for action list
+- ActionEngine, ActionPlatform, ActionStatus, ItemType enums
+- ActionCreate: input model for creating actions/workflows
+- ActionResponse: output model for action/workflow list
 - ActionDetail: output model with full details (Story 2.14: rbac_policies removed — RBAC via profiles)
 - TagCreate, TagResponse: tag models (Story 2.6, FR11c)
+- WorkflowStep: workflow step referencing an existing action (Story 5.7, AC2)
 - Story 2.23: ActionCategory removed — use tags for categorization
+- Story 5.7: ItemType (action | workflow) for catalog entries
 """
 
 from datetime import datetime
@@ -38,6 +40,16 @@ class ActionStatus(str, Enum):
     DRAFT = "draft"
     PUBLISHED = "published"
     DISABLED = "disabled"
+
+
+class ItemType(str, Enum):
+    """Catalog entry type (Story 5.7, AC1).
+
+    - action: Executable unit with connector (AAP, ServiceNow, etc.)
+    - workflow: Container of action references, no connector on the workflow itself
+    """
+    ACTION = "action"
+    WORKFLOW = "workflow"
 
 
 class ImpactLevel(str, Enum):
@@ -109,13 +121,14 @@ class ActionTagsUpdateRequest(BaseModel):
 
 
 class ActionCreate(BaseModel):
-    """Input model for creating a new action (AC #2, #5).
+    """Input model for creating a new action or workflow (AC #2, #5; Story 5.7 AC1).
 
     Attributes:
-        name: Action name (1-255 chars, unique)
-        description: Action description (max 4000 chars)
-        engine: Database engine (Oracle, SQL Server, DB2)
-        platform: Execution platform (AAP, GitHub Actions, Azure DevOps, Terraform)
+        name: Action/workflow name (1-255 chars, unique)
+        description: Description (max 4000 chars)
+        item_type: Entry type (action or workflow). Default: action.
+        engine: Database engine (Oracle, SQL Server, DB2). Required for actions, optional for workflows.
+        platform: Execution platform (AAP, GitHub Actions, etc.). Required for actions, optional for workflows.
         parameters_schema: Optional JSON Schema for action parameters
         impact_rules: Optional impact rules per environment
         default_impact_level: Default impact when no rule matches environment (Story 2.18 AC5)
@@ -124,12 +137,23 @@ class ActionCreate(BaseModel):
     """
     name: str = Field(..., min_length=1, max_length=255)
     description: str | None = Field(None, max_length=4000)
-    engine: ActionEngine
-    platform: ActionPlatform
+    item_type: ItemType = ItemType.ACTION
+    engine: ActionEngine | None = None
+    platform: ActionPlatform | None = None
     parameters_schema: dict[str, Any] | None = None
     impact_rules: dict[str, Any] | None = None
     default_impact_level: ImpactLevel | None = None
     documentation_md: str | None = Field(None, max_length=100_000)
+
+    @model_validator(mode="after")
+    def require_engine_platform_for_action(self) -> "ActionCreate":
+        """For item_type=action, engine and platform are required (Story 5.7 AC1)."""
+        if self.item_type == ItemType.ACTION:
+            if self.engine is None:
+                raise ValueError("engine is required for action type")
+            if self.platform is None:
+                raise ValueError("platform is required for action type")
+        return self
 
     @field_validator("name")
     @classmethod
@@ -187,7 +211,7 @@ class ActionCreate(BaseModel):
         return v
 
 class ActionResponse(BaseModel):
-    """Output model for action in list views (AC #5).
+    """Output model for action/workflow in list views (AC #5; Story 5.7 AC1).
 
     Excludes rbac_policies for list performance.
     Story 2.6: includes tags (tag names) for display.
@@ -195,12 +219,14 @@ class ActionResponse(BaseModel):
     Story 2.24: change_model_code removed; change_type_config per env.
     Story 2.23: category removed — use tags instead.
     Story 3.4: includes documentation_md (FR12).
+    Story 5.7: includes item_type; engine/platform optional for workflows.
     """
     id: int
     name: str
     description: str | None = None
-    engine: ActionEngine
-    platform: ActionPlatform
+    item_type: ItemType = ItemType.ACTION
+    engine: ActionEngine | None = None
+    platform: ActionPlatform | None = None
     parameters_schema: dict[str, Any] | None = None
     impact_rules: dict[str, Any] | None = None
     default_impact_level: ImpactLevel | None = None
@@ -213,12 +239,14 @@ class ActionResponse(BaseModel):
 
 
 class ActionDetail(ActionResponse):
-    """Output model for action detail view (AC #5).
+    """Output model for action/workflow detail view (AC #5; Story 5.7 AC2).
 
     Story 2.14: rbac_policies removed — RBAC now managed via profiles.
     Story 2.24: change_type_config is dict[str, ChangeTypeConfigEntry].
+    Story 5.7: workflow_steps for workflows (list of action references).
     """
     execution_steps: list["ExecutionStep"] | None = None
+    workflow_steps: list["WorkflowStep"] | None = None
     change_type_config: dict[str, "ChangeTypeConfigEntry"] | None = None
 
 
@@ -304,6 +332,31 @@ class ExecutionStep(BaseModel):
         return v
 
 
+class WorkflowStep(BaseModel):
+    """Workflow step referencing an existing action (Story 5.7, AC2).
+
+    A workflow contains steps that are references to existing actions (not connector steps).
+    The connector is on the referenced action, not on the workflow step.
+
+    Attributes:
+        order: Step order (1-based, sequential)
+        name: Optional display name (defaults to referenced action name)
+        referenced_action_id: ID of the action to execute at this step
+    """
+    order: int = Field(..., ge=1)
+    name: str | None = Field(None, max_length=255)
+    referenced_action_id: int = Field(..., gt=0)
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, v: str | None) -> str | None:
+        """Strip whitespace from name if provided."""
+        if v is None:
+            return None
+        stripped = v.strip()
+        return stripped if stripped else None
+
+
 class ExecutionStepsUpdate(BaseModel):
     """Input model for updating execution steps (AC #5).
 
@@ -336,6 +389,37 @@ class ExecutionStepsUpdate(BaseModel):
         """Validate steps order is unique and sequential starting from 1."""
         if not v:
             raise ValueError("at least one step is required")
+
+        orders = [step.order for step in v]
+
+        # Check uniqueness
+        if len(orders) != len(set(orders)):
+            raise ValueError("step order values must be unique")
+
+        # Check sequential starting from 1
+        expected = list(range(1, len(v) + 1))
+        if sorted(orders) != expected:
+            raise ValueError(
+                f"step order must be sequential starting from 1 (expected {expected}, got {sorted(orders)})"
+            )
+
+        return v
+
+
+class WorkflowStepsUpdate(BaseModel):
+    """Input model for updating workflow steps (Story 5.7, AC2).
+
+    Attributes:
+        steps: Ordered list of workflow steps (action references)
+    """
+    steps: list[WorkflowStep]
+
+    @field_validator("steps")
+    @classmethod
+    def validate_steps_order(cls, v: list[WorkflowStep]) -> list[WorkflowStep]:
+        """Validate steps order is unique and sequential starting from 1."""
+        if not v:
+            raise ValueError("at least one step is required for a workflow")
 
         orders = [step.order for step in v]
 
@@ -396,6 +480,12 @@ _VALID_TRANSITIONS: dict[ActionStatus, dict[StatusTransition, ActionStatus]] = {
 }
 
 
+def get_allowed_transitions(current_status: ActionStatus) -> list[str]:
+    """Return the list of allowed transition values for a status (for API error details)."""
+    allowed = _VALID_TRANSITIONS.get(current_status, {})
+    return [t.value for t in allowed]
+
+
 def validate_transition(current_status: ActionStatus, transition: StatusTransition) -> ActionStatus:
     """Validate and return the new status for a given transition.
 
@@ -428,15 +518,17 @@ class StatusUpdateRequest(BaseModel):
 
 
 class ActionListItem(BaseModel):
-    """Output model for action in admin dashboard list (Story 2.4, AC #2; Story 2.6 tags).
+    """Output model for action/workflow in admin dashboard list (Story 2.4, AC #2; Story 2.6 tags; Story 5.7 AC3).
 
-    Lightweight model for listing actions with execution stats and tags.
+    Lightweight model for listing actions/workflows with execution stats and tags.
     Story 2.23: category removed — use tags instead.
+    Story 5.7: item_type for workflow icon display.
     """
     id: int
     name: str
+    item_type: ItemType = ItemType.ACTION
     status: ActionStatus
-    engine: ActionEngine
+    engine: ActionEngine | None = None
     created_at: datetime
     execution_count: int = 0
     tags: list[str] = Field(default_factory=list)

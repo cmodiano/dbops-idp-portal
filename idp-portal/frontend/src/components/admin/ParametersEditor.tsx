@@ -100,7 +100,7 @@ const SortableParamCard: React.FC<SortableParamCardProps> = ({
       size="small"
       styles={{ body: { padding: '12px' } }}
     >
-      <Space direction="vertical" style={{ width: '100%' }} size="small">
+      <Space orientation="vertical" style={{ width: '100%' }} size="small">
         <Space align="center" style={{ width: '100%', justifyContent: 'space-between' }}>
           <Space>
             <HolderOutlined
@@ -250,7 +250,7 @@ export const ParametersEditor: React.FC<ParametersEditorProps> = ({ value = [], 
 
   return (
     <div>
-      <Space direction="vertical" style={{ width: '100%' }}>
+      <Space orientation="vertical" style={{ width: '100%' }}>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
             {value.map((param, index) => (

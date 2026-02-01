@@ -1,23 +1,57 @@
-/* TopNav — Modern Navigation Styles */
+/* TopNav — Liquid glass pills (style Talent Lab) */
 
 /* Logo hover */
 .nav-logo:hover {
   opacity: 0.8;
 }
 
-/* Navigation Pills */
+/* Navigation Pills: verre dépoli + blur */
 .nav-pill {
   position: relative;
   overflow: hidden;
+  backdrop-filter: blur(14px) saturate(1.15);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+
+html.light .nav-pill {
+  background: rgba(255, 255, 255, 0.45) !important;
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+html.dark .nav-pill {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .nav-pill:hover {
-  background: rgba(0, 135, 78, 0.08) !important;
+  background: rgba(0, 135, 78, 0.12) !important;
   color: var(--ant-color-primary) !important;
+  border-color: rgba(0, 135, 78, 0.2);
+}
+
+html.dark .nav-pill:hover {
+  background: rgba(0, 135, 78, 0.15) !important;
+  border-color: rgba(0, 135, 78, 0.25);
 }
 
 .nav-pill-active {
   font-weight: 600 !important;
+}
+
+html.light .nav-pill-active {
+  background: rgba(0, 135, 78, 0.14) !important;
+  border-color: rgba(0, 135, 78, 0.25);
+  box-shadow: 0 2px 8px rgba(0, 135, 78, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+html.dark .nav-pill-active {
+  background: rgba(0, 135, 78, 0.18) !important;
+  border-color: rgba(0, 135, 78, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .nav-pill-active::after {
@@ -40,23 +74,65 @@
   outline-offset: 2px;
 }
 
-/* Theme toggle hover */
+/* Theme toggle: pill verre dépoli */
+.theme-toggle {
+  backdrop-filter: blur(14px) saturate(1.15);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+
+html.light .theme-toggle {
+  background: rgba(255, 255, 255, 0.45) !important;
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+html.dark .theme-toggle {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
 .theme-toggle:hover {
-  background: rgba(0, 135, 78, 0.1) !important;
+  background: rgba(0, 135, 78, 0.12) !important;
   transform: scale(1.05);
+  border-color: rgba(0, 135, 78, 0.2);
 }
 
 html.dark .theme-toggle:hover {
-  background: rgba(255, 255, 255, 0.12) !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
-/* Profile hover */
+/* Profile: pill verre dépoli */
+.nav-profile {
+  backdrop-filter: blur(14px) saturate(1.15);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+
+html.light .nav-profile {
+  background: rgba(255, 255, 255, 0.45) !important;
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+html.dark .nav-profile {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
 .nav-profile:hover {
-  background: rgba(0, 135, 78, 0.08) !important;
+  background: rgba(0, 135, 78, 0.1) !important;
+  border-color: rgba(0, 135, 78, 0.2);
 }
 
 html.dark .nav-profile:hover {
   background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 /* Dark mode pill adjustments */

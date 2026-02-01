@@ -19,6 +19,20 @@ from app.models.execution import ExecutionStatus, ExecutionEnvironment, Executio
 
 
 @pytest.fixture
+def mock_audit_repository():
+    """Mock audit_repository for tests (Story 6.1)."""
+    with patch("app.api.v1.executions.audit_repository") as mock_audit:
+        mock_audit.create_entry = AsyncMock(return_value=1)
+        yield mock_audit
+
+
+@pytest.fixture(autouse=True)
+def auto_mock_audit_repository(mock_audit_repository):
+    """Auto-apply mock_audit_repository to all tests."""
+    return mock_audit_repository
+
+
+@pytest.fixture
 def client():
     """Async test client for FastAPI app."""
     transport = ASGITransport(app=app)
@@ -43,6 +57,24 @@ def mock_auth():
     app.dependency_overrides.pop(get_current_user, None)
 
 
+@pytest.fixture
+def mock_auth_regular_user():
+    """Mock authentication with a regular user (not DBA/DBOPS) for ownership tests."""
+    from app.api.deps import get_current_user
+    from app.models.auth import UserProfile
+
+    user = UserProfile(
+        id=1,
+        username="test_user",
+        display_name="Test User",
+        profile="developer",  # Not dba/dbops, cannot see others' executions
+    )
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    yield user
+    app.dependency_overrides.pop(get_current_user, None)
+
+
 class TestCreateExecution:
     """Tests for POST /api/v1/executions (Story 4.1, Task 1.1 + Story 4.3)."""
 
@@ -58,6 +90,7 @@ class TestCreateExecution:
              patch("app.api.v1.executions.execution_repository.create_execution", new_callable=AsyncMock) as mock_create, \
              patch("app.api.v1.executions.rbac_service.can_execute", new_callable=AsyncMock) as mock_rbac, \
              patch("app.api.v1.executions.get_vault_service") as mock_vault_factory, \
+             patch("app.api.v1.executions.get_servicenow_service", new=AsyncMock(return_value=None)) as mock_servicenow_factory, \
              patch("app.api.v1.executions.ExecutionService", return_value=mock_execution_service):
 
             mock_exists.return_value = True
@@ -102,10 +135,13 @@ class TestCreateExecution:
         with patch("app.api.v1.executions.execution_repository.action_exists", new_callable=AsyncMock) as mock_exists, \
              patch("app.api.v1.executions.execution_repository.get_action_parameters_schema", new_callable=AsyncMock) as mock_schema, \
              patch("app.api.v1.executions.execution_repository.create_execution", new_callable=AsyncMock) as mock_create, \
+             patch("app.api.v1.executions.rbac_service.can_execute", new_callable=AsyncMock) as mock_rbac, \
              patch("app.api.v1.executions.get_vault_service") as mock_vault_factory, \
+             patch("app.api.v1.executions.get_servicenow_service", new=AsyncMock(return_value=None)) as mock_servicenow_factory, \
              patch("app.api.v1.executions.ExecutionService", return_value=mock_execution_service):
 
             mock_exists.return_value = True
+            mock_rbac.return_value = True
             mock_schema.return_value = None
             mock_create.return_value = ExecutionCreateResponse(
                 execution_id=42,
@@ -183,9 +219,11 @@ class TestCreateExecution:
     async def test_create_execution_validates_parameters_against_schema(self, client, mock_auth):
         """POST /executions validates parameters against action's parameters_schema (Task 1.4)."""
         with patch("app.api.v1.executions.execution_repository.action_exists", new_callable=AsyncMock) as mock_exists, \
-             patch("app.api.v1.executions.execution_repository.get_action_parameters_schema", new_callable=AsyncMock) as mock_schema:
+             patch("app.api.v1.executions.execution_repository.get_action_parameters_schema", new_callable=AsyncMock) as mock_schema, \
+             patch("app.api.v1.executions.rbac_service.can_execute", new_callable=AsyncMock) as mock_rbac:
 
             mock_exists.return_value = True
+            mock_rbac.return_value = True
             mock_schema.return_value = {
                 "type": "object",
                 "properties": {
@@ -214,9 +252,11 @@ class TestCreateExecution:
     async def test_create_execution_missing_required_parameter(self, client, mock_auth):
         """POST /executions returns 400 when required parameter is missing (Task 1.4)."""
         with patch("app.api.v1.executions.execution_repository.action_exists", new_callable=AsyncMock) as mock_exists, \
-             patch("app.api.v1.executions.execution_repository.get_action_parameters_schema", new_callable=AsyncMock) as mock_schema:
+             patch("app.api.v1.executions.execution_repository.get_action_parameters_schema", new_callable=AsyncMock) as mock_schema, \
+             patch("app.api.v1.executions.rbac_service.can_execute", new_callable=AsyncMock) as mock_rbac:
 
             mock_exists.return_value = True
+            mock_rbac.return_value = True
             mock_schema.return_value = {
                 "type": "object",
                 "properties": {
@@ -244,9 +284,11 @@ class TestCreateExecution:
     async def test_create_execution_invalid_parameter_type(self, client, mock_auth):
         """POST /executions returns 400 when parameter has wrong type (Task 1.4)."""
         with patch("app.api.v1.executions.execution_repository.action_exists", new_callable=AsyncMock) as mock_exists, \
-             patch("app.api.v1.executions.execution_repository.get_action_parameters_schema", new_callable=AsyncMock) as mock_schema:
+             patch("app.api.v1.executions.execution_repository.get_action_parameters_schema", new_callable=AsyncMock) as mock_schema, \
+             patch("app.api.v1.executions.rbac_service.can_execute", new_callable=AsyncMock) as mock_rbac:
 
             mock_exists.return_value = True
+            mock_rbac.return_value = True
             mock_schema.return_value = {
                 "type": "object",
                 "properties": {
@@ -278,10 +320,13 @@ class TestCreateExecution:
         with patch("app.api.v1.executions.execution_repository.action_exists", new_callable=AsyncMock) as mock_exists, \
              patch("app.api.v1.executions.execution_repository.get_action_parameters_schema", new_callable=AsyncMock) as mock_schema, \
              patch("app.api.v1.executions.execution_repository.create_execution", new_callable=AsyncMock) as mock_create, \
+             patch("app.api.v1.executions.rbac_service.can_execute", new_callable=AsyncMock) as mock_rbac, \
              patch("app.api.v1.executions.get_vault_service"), \
+             patch("app.api.v1.executions.get_servicenow_service", new=AsyncMock(return_value=None)), \
              patch("app.api.v1.executions.ExecutionService", return_value=mock_execution_service):
 
             mock_exists.return_value = True
+            mock_rbac.return_value = True
             mock_schema.return_value = None  # No schema
             mock_create.return_value = ExecutionCreateResponse(
                 execution_id=1,
@@ -311,10 +356,13 @@ class TestCreateExecution:
             with patch("app.api.v1.executions.execution_repository.action_exists", new_callable=AsyncMock) as mock_exists, \
                  patch("app.api.v1.executions.execution_repository.get_action_parameters_schema", new_callable=AsyncMock) as mock_schema, \
                  patch("app.api.v1.executions.execution_repository.create_execution", new_callable=AsyncMock) as mock_create, \
+                 patch("app.api.v1.executions.rbac_service.can_execute", new_callable=AsyncMock) as mock_rbac, \
                  patch("app.api.v1.executions.get_vault_service"), \
+                 patch("app.api.v1.executions.get_servicenow_service", new=AsyncMock(return_value=None)), \
                  patch("app.api.v1.executions.ExecutionService", return_value=mock_execution_service):
 
                 mock_exists.return_value = True
+                mock_rbac.return_value = True
                 mock_schema.return_value = None
                 mock_create.return_value = ExecutionCreateResponse(
                     execution_id=1,
@@ -393,8 +441,8 @@ class TestGetExecution:
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
     @pytest.mark.asyncio
-    async def test_get_execution_not_owned_by_user(self, client, mock_auth):
-        """GET /executions/{id} returns 404 when execution belongs to another user."""
+    async def test_get_execution_not_owned_by_user(self, client, mock_auth_regular_user):
+        """GET /executions/{id} returns 404 when execution belongs to another user (non-DBA)."""
         from app.models.execution import ExecutionResponse
 
         with patch("app.api.v1.executions.execution_repository.get_by_id", new_callable=AsyncMock) as mock_get:
@@ -402,7 +450,7 @@ class TestGetExecution:
                 id=1,
                 action_id=1,
                 action_name="Create PDB",
-                user_id=999,  # Different user than mock_auth (id=1)
+                user_id=999,  # Different user than mock_auth_regular_user (id=1)
                 environment=ExecutionEnvironment.DEV,
                 parameters={},
                 status=ExecutionStatus.SUBMITTED,
@@ -419,10 +467,12 @@ class TestListExecutions:
 
     @pytest.mark.asyncio
     async def test_list_executions_returns_user_executions(self, client, mock_auth):
-        """GET /executions returns list of user's executions."""
+        """GET /executions returns list of user's executions and pagination (Story 4.8 AC4)."""
         from app.models.execution import ExecutionResponse
 
-        with patch("app.api.v1.executions.execution_repository.list_by_user", new_callable=AsyncMock) as mock_list:
+        with patch("app.api.v1.executions.execution_repository.count_by_user", new_callable=AsyncMock) as mock_count, \
+             patch("app.api.v1.executions.execution_repository.list_by_user", new_callable=AsyncMock) as mock_list:
+            mock_count.return_value = 2
             mock_list.return_value = [
                 ExecutionResponse(
                     id=1,
@@ -451,23 +501,33 @@ class TestListExecutions:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert len(data["data"]) == 2
+        assert "pagination" in data
+        assert data["pagination"]["total_count"] == 2
+        assert data["pagination"]["page_size"] == 50
         mock_list.assert_called_once_with(user_id=1, limit=50, offset=0)
 
     @pytest.mark.asyncio
     async def test_list_executions_with_pagination(self, client, mock_auth):
-        """GET /executions accepts limit and offset parameters."""
-        with patch("app.api.v1.executions.execution_repository.list_by_user", new_callable=AsyncMock) as mock_list:
+        """GET /executions accepts limit and offset parameters (Story 4.8)."""
+        with patch("app.api.v1.executions.execution_repository.count_by_user", new_callable=AsyncMock) as mock_count, \
+             patch("app.api.v1.executions.execution_repository.list_by_user", new_callable=AsyncMock) as mock_list:
+            mock_count.return_value = 0
             mock_list.return_value = []
 
             response = await client.get("/api/v1/executions?limit=10&offset=20")
 
         assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["pagination"]["page"] == 3  # offset 20, limit 10 -> page 3
+        assert data["pagination"]["total_count"] == 0
         mock_list.assert_called_once_with(user_id=1, limit=10, offset=20)
 
     @pytest.mark.asyncio
     async def test_list_executions_caps_limit_at_100(self, client, mock_auth):
         """GET /executions caps limit at 100 for performance."""
-        with patch("app.api.v1.executions.execution_repository.list_by_user", new_callable=AsyncMock) as mock_list:
+        with patch("app.api.v1.executions.execution_repository.count_by_user", new_callable=AsyncMock) as mock_count, \
+             patch("app.api.v1.executions.execution_repository.list_by_user", new_callable=AsyncMock) as mock_list:
+            mock_count.return_value = 0
             mock_list.return_value = []
 
             response = await client.get("/api/v1/executions?limit=500")
@@ -544,8 +604,8 @@ class TestGetExecutionSteps:
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
     @pytest.mark.asyncio
-    async def test_get_execution_steps_not_owned_by_user(self, client, mock_auth):
-        """GET /executions/{id}/steps returns 404 when not owned by user."""
+    async def test_get_execution_steps_not_owned_by_user(self, client, mock_auth_regular_user):
+        """GET /executions/{id}/steps returns 404 when not owned by user (non-DBA)."""
         from app.models.execution import ExecutionResponse
 
         mock_execution = ExecutionResponse(
@@ -567,6 +627,126 @@ class TestGetExecutionSteps:
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
+class TestGetStepLogs:
+    """Tests for GET /api/v1/executions/{id}/steps/{step_id}/logs (Story 4.7, AC6, Task 6.1)."""
+
+    @pytest.mark.asyncio
+    async def test_get_step_logs_returns_output_and_error_message(self, client, mock_auth):
+        """GET /executions/{id}/steps/{step_id}/logs returns step logs with output/error_message."""
+        from app.models.execution import ExecutionResponse, ExecutionStepResponse, StepStatus, StepType
+
+        mock_execution = ExecutionResponse(
+            id=1,
+            action_id=1,
+            action_name="Create PDB",
+            user_id=1,
+            environment=ExecutionEnvironment.DEV,
+            parameters={},
+            status=ExecutionStatus.COMPLETED,
+            created_at=datetime(2026, 1, 29, 10, 0, 0),
+        )
+
+        mock_step = ExecutionStepResponse(
+            id=101,
+            execution_id=1,
+            step_order=1,
+            step_name="Platform",
+            step_type=StepType.PLATFORM,
+            status=StepStatus.FAILED,
+            started_at=datetime(2026, 1, 29, 10, 0, 0),
+            completed_at=datetime(2026, 1, 29, 10, 0, 10),
+            output={"job_id": "aap-123", "stdout": "..."},
+            error_message="Connection timeout",
+        )
+
+        with patch("app.api.v1.executions.execution_repository.get_by_id", new_callable=AsyncMock) as mock_get, \
+             patch("app.api.v1.executions.execution_repository.get_step_by_id", new_callable=AsyncMock) as mock_step_get:
+
+            mock_get.return_value = mock_execution
+            mock_step_get.return_value = mock_step
+
+            response = await client.get("/api/v1/executions/1/steps/101/logs")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["data"]["step_id"] == 101
+        assert data["data"]["output"] == {"job_id": "aap-123", "stdout": "..."}
+        assert data["data"]["error_message"] == "Connection timeout"
+        assert "started_at" in data["data"]
+        assert "completed_at" in data["data"]
+
+    @pytest.mark.asyncio
+    async def test_get_step_logs_execution_not_found(self, client, mock_auth):
+        """GET step logs returns 404 when execution not found."""
+        with patch("app.api.v1.executions.execution_repository.get_by_id", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = None
+
+            response = await client.get("/api/v1/executions/999/steps/101/logs")
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.json()["error"]["code"] == "EXECUTION_NOT_FOUND"
+
+    @pytest.mark.asyncio
+    async def test_get_step_logs_not_owned_by_user(self, client, mock_auth_regular_user):
+        """GET step logs returns 404 when execution belongs to another user (non-DBA RBAC)."""
+        from app.models.execution import ExecutionResponse
+
+        mock_execution = ExecutionResponse(
+            id=1,
+            action_id=1,
+            action_name="Create PDB",
+            user_id=999,
+            environment=ExecutionEnvironment.DEV,
+            parameters={},
+            status=ExecutionStatus.RUNNING,
+            created_at=datetime(2026, 1, 29, 10, 0, 0),
+        )
+
+        with patch("app.api.v1.executions.execution_repository.get_by_id", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_execution
+
+            response = await client.get("/api/v1/executions/1/steps/101/logs")
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_get_step_logs_step_not_found(self, client, mock_auth):
+        """GET step logs returns 404 when step not found or step not in execution."""
+        from app.models.execution import ExecutionResponse, ExecutionStepResponse, StepStatus, StepType
+
+        mock_execution = ExecutionResponse(
+            id=1,
+            action_id=1,
+            action_name="Create PDB",
+            user_id=1,
+            environment=ExecutionEnvironment.DEV,
+            parameters={},
+            status=ExecutionStatus.RUNNING,
+            created_at=datetime(2026, 1, 29, 10, 0, 0),
+        )
+
+        # Step exists but belongs to another execution (execution_id=2)
+        mock_step = ExecutionStepResponse(
+            id=101,
+            execution_id=2,
+            step_order=1,
+            step_name="Platform",
+            step_type=StepType.PLATFORM,
+            status=StepStatus.COMPLETED,
+        )
+
+        with patch("app.api.v1.executions.execution_repository.get_by_id", new_callable=AsyncMock) as mock_get, \
+             patch("app.api.v1.executions.execution_repository.get_step_by_id", new_callable=AsyncMock) as mock_step_get:
+
+            mock_get.return_value = mock_execution
+            mock_step_get.return_value = mock_step
+
+            response = await client.get("/api/v1/executions/1/steps/101/logs")
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.json()["error"]["code"] == "STEP_NOT_FOUND"
+
+
 class TestExecutionPerformance:
     """Tests for execution performance requirements (NFR2)."""
 
@@ -584,6 +764,7 @@ class TestExecutionPerformance:
              patch("app.api.v1.executions.execution_repository.create_execution", new_callable=AsyncMock) as mock_create, \
              patch("app.api.v1.executions.rbac_service.can_execute", new_callable=AsyncMock) as mock_rbac, \
              patch("app.api.v1.executions.get_vault_service") as mock_vault_factory, \
+             patch("app.api.v1.executions.get_servicenow_service", new=AsyncMock(return_value=None)) as mock_servicenow_factory, \
              patch("app.api.v1.executions.ExecutionService", return_value=mock_execution_service):
 
             mock_exists.return_value = True
@@ -610,3 +791,105 @@ class TestExecutionPerformance:
         assert response.status_code == status.HTTP_201_CREATED
         # NFR2: Response must be under 3 seconds (3000ms)
         assert elapsed_time < 3.0, f"Response time {elapsed_time:.3f}s exceeds NFR2 requirement of 3s"
+
+
+class TestExecutionAudit:
+    """Tests for execution audit trail (Story 6.1)."""
+
+    @pytest.mark.asyncio
+    async def test_create_execution_creates_audit_entry(self, client, mock_auth, mock_audit_repository):
+        """POST /executions creates EXECUTION_SUBMITTED audit entry (AC1)."""
+        from app.repositories.audit_repository import AuditActionType, AuditEntityType
+
+        mock_execution_service = MagicMock()
+        mock_execution_service.prepare_execution = AsyncMock(return_value=True)
+        mock_execution_service.start_execution = AsyncMock()
+
+        with patch("app.api.v1.executions.execution_repository.action_exists", new_callable=AsyncMock) as mock_exists, \
+             patch("app.api.v1.executions.execution_repository.get_action_parameters_schema", new_callable=AsyncMock) as mock_schema, \
+             patch("app.api.v1.executions.execution_repository.create_execution", new_callable=AsyncMock) as mock_create, \
+             patch("app.api.v1.executions.rbac_service.can_execute", new_callable=AsyncMock) as mock_rbac, \
+             patch("app.api.v1.executions.get_vault_service") as mock_vault_factory, \
+             patch("app.api.v1.executions.get_servicenow_service", new=AsyncMock(return_value=None)), \
+             patch("app.api.v1.executions.ExecutionService", return_value=mock_execution_service):
+
+            mock_exists.return_value = True
+            mock_rbac.return_value = True
+            mock_schema.return_value = None
+            mock_create.return_value = ExecutionCreateResponse(
+                execution_id=42,
+                status=ExecutionStatus.SUBMITTED,
+                created_at=datetime(2026, 1, 29, 10, 0, 0),
+            )
+
+            response = await client.post(
+                "/api/v1/executions",
+                json={
+                    "action_id": 5,
+                    "environment": "prod",
+                    "parameters": {"pdb_name": "PROD_PDB"},
+                }
+            )
+
+        assert response.status_code == status.HTTP_201_CREATED
+
+        # Verify audit_repository.create_entry was called with correct params
+        mock_audit_repository.create_entry.assert_called_once()
+        call_args = mock_audit_repository.create_entry.call_args
+
+        # Check action_type and entity_type
+        assert call_args.kwargs["action_type"] == AuditActionType.EXECUTION_SUBMITTED
+        assert call_args.kwargs["entity_type"] == AuditEntityType.EXECUTION
+        assert call_args.kwargs["entity_id"] == 42
+        assert call_args.kwargs["user_id"] == "1"  # mock_auth user id
+
+        # Check details contain required fields (AC1)
+        details = call_args.kwargs["details"]
+        assert details["action_id"] == 5
+        assert details["environment"] == "prod"
+        assert details["parameters"] == {"pdb_name": "PROD_PDB"}
+        assert "rbac_context" in details
+
+        # Check correlation_id is present (AC6)
+        assert call_args.kwargs["correlation_id"] is not None
+
+    @pytest.mark.asyncio
+    async def test_create_execution_captures_ip_address(self, client, mock_auth, mock_audit_repository):
+        """POST /executions captures IP address in audit entry (AC5)."""
+        mock_execution_service = MagicMock()
+        mock_execution_service.prepare_execution = AsyncMock(return_value=True)
+        mock_execution_service.start_execution = AsyncMock()
+
+        with patch("app.api.v1.executions.execution_repository.action_exists", new_callable=AsyncMock) as mock_exists, \
+             patch("app.api.v1.executions.execution_repository.get_action_parameters_schema", new_callable=AsyncMock) as mock_schema, \
+             patch("app.api.v1.executions.execution_repository.create_execution", new_callable=AsyncMock) as mock_create, \
+             patch("app.api.v1.executions.rbac_service.can_execute", new_callable=AsyncMock) as mock_rbac, \
+             patch("app.api.v1.executions.get_vault_service") as mock_vault_factory, \
+             patch("app.api.v1.executions.get_servicenow_service", new=AsyncMock(return_value=None)), \
+             patch("app.api.v1.executions.ExecutionService", return_value=mock_execution_service):
+
+            mock_exists.return_value = True
+            mock_rbac.return_value = True
+            mock_schema.return_value = None
+            mock_create.return_value = ExecutionCreateResponse(
+                execution_id=1,
+                status=ExecutionStatus.SUBMITTED,
+                created_at=datetime(2026, 1, 29, 10, 0, 0),
+            )
+
+            response = await client.post(
+                "/api/v1/executions",
+                json={"action_id": 1, "environment": "dev", "parameters": {}},
+            )
+
+        assert response.status_code == status.HTTP_201_CREATED
+
+        # Verify ip_address is captured (may be testclient or None)
+        call_args = mock_audit_repository.create_entry.call_args
+        # ip_address should be passed (may be None for test client)
+        assert "ip_address" in call_args.kwargs
+
+        # Verify start_execution (background task) receives client_ip for AC5 propagation
+        mock_execution_service.start_execution.assert_called_once()
+        start_call = mock_execution_service.start_execution.call_args
+        assert "client_ip" in start_call.kwargs

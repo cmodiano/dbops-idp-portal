@@ -1,6 +1,6 @@
 /**
- * ActionWizard tests (Story 2.22, AC #1–#5, Task 7).
- * - Wizard displays 3 steps; navigation preserves values; submit sends payload; edit mode pre-fills.
+ * ActionWizard tests (Story 2.22, AC #1–#5, Task 7; Story 4.10 AC4).
+ * - Wizard 3 steps: Général, Automatisme & Paramètres, Impact & Changement. 1 action = 1 étape. Plateforme définit le connecteur.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -36,12 +36,12 @@ describe('ActionWizard', () => {
   });
 
   describe('AC1: Ouverture du wizard', () => {
-    it('affiche 3 étapes : Général, Paramètres, Impact & Changement', async () => {
+    it('affiche 3 étapes : Général, Automatisme & Paramètres, Impact & Changement', async () => {
       await act(async () => {
         render(<ActionWizard {...defaultProps} />);
       });
       expect(screen.getByText('Général')).toBeInTheDocument();
-      expect(screen.getByText('Paramètres')).toBeInTheDocument();
+      expect(screen.getByText('Automatisme & Paramètres')).toBeInTheDocument();
       expect(screen.getByText('Impact & Changement')).toBeInTheDocument();
     });
 
@@ -90,7 +90,7 @@ describe('ActionWizard', () => {
       });
     });
 
-    it('bouton Enregistrer visible uniquement à l’étape 3', async () => {
+    it("bouton Enregistrer visible uniquement à l’étape 3", async () => {
       const user = userEvent.setup();
       const editAction: ActionDetail = {
         id: 1,
@@ -127,7 +127,50 @@ describe('ActionWizard', () => {
   });
 
   describe('AC4: Enregistrement', () => {
-    it('à l’étape 3, Enregistrer envoie le payload via onSubmit (mode édition pré-rempli)', async () => {
+    it("à l'étape 3, Enregistrer envoie le payload (AAP : ID template requis)", async () => {
+      const user = userEvent.setup();
+      const editAction: ActionDetail = {
+        id: 10,
+        name: 'Action à modifier',
+        description: 'Desc',
+        engine: 'Oracle',
+        platform: 'AAP',
+        parameters_schema: null,
+        impact_rules: null,
+        default_impact_level: null,
+        status: 'draft',
+        created_by: null,
+        created_at: '',
+        updated_at: null,
+        execution_steps: null,
+        change_type_config: null,
+        tags: [],
+      };
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} editAction={editAction} />);
+      });
+
+      await waitFor(() => expect(screen.getByLabelText("Nom de l'action")).toHaveValue('Action à modifier'));
+      await user.click(screen.getByRole('button', { name: /Suivant/i }));
+      await waitFor(() => expect(screen.getByLabelText('ID template AAP')).toBeInTheDocument());
+      await user.type(screen.getByLabelText('ID template AAP'), '42');
+      await user.click(screen.getByRole('button', { name: /Suivant/i }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
+      await waitFor(() => {
+        expect(mockOnSubmit).toHaveBeenCalledTimes(1);
+        const payload = mockOnSubmit.mock.calls[0][0];
+        expect(payload.name).toBe('Action à modifier');
+        expect(payload.engine).toBe('Oracle');
+        expect(payload.platform).toBe('AAP');
+        expect(payload.parameters_schema).toBeDefined();
+        expect(payload.impact_rules).toBeDefined();
+      });
+    });
+  });
+
+  describe('AC4: Enregistrement', () => {
+    it('à l’étape 4, Enregistrer envoie le payload via onSubmit (mode édition pré-rempli)', async () => {
       const user = userEvent.setup();
       const editAction: ActionDetail = {
         id: 10,
@@ -153,8 +196,9 @@ describe('ActionWizard', () => {
       });
       await user.click(screen.getByRole('button', { name: /Suivant/i }));
       await waitFor(() => {
-        expect(screen.getByText(/Ajouter un parametre/i)).toBeInTheDocument();
+        expect(screen.getByLabelText('ID template AAP')).toBeInTheDocument();
       });
+      await user.type(screen.getByLabelText('ID template AAP'), '42');
       await user.click(screen.getByRole('button', { name: /Suivant/i }));
       await waitFor(() => {
         expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeInTheDocument();
@@ -242,7 +286,7 @@ describe('ActionWizard', () => {
   });
 
   describe('Story 2.24: change_type_config payload', () => {
-    it('calls updateActionSteps with change_type_config in new format when step 2 has change config and user submits', async () => {
+    it('calls updateActionSteps with single step and change_type_config when user submits at step 3', async () => {
       const user = userEvent.setup();
       const editAction: ActionDetail = {
         id: 1,
@@ -265,11 +309,13 @@ describe('ActionWizard', () => {
         render(<ActionWizard {...defaultProps} editAction={editAction} />);
       });
       await user.click(screen.getByRole('button', { name: /Suivant/i }));
+      await waitFor(() => expect(screen.getByLabelText('ID template AAP')).toBeInTheDocument());
+      await user.type(screen.getByLabelText('ID template AAP'), '1');
       await user.click(screen.getByRole('button', { name: /Suivant/i }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeInTheDocument());
       const prodSwitch = screen.getByLabelText(/Changement requis pour PROD/i);
       await user.click(prodSwitch);
-      const submitBtn = screen.getByRole('button', { name: /Enregistrer/i });
-      await user.click(submitBtn);
+      await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
       await waitFor(() => {
         expect(updateActionSteps).toHaveBeenCalledWith(
           1,
@@ -282,6 +328,7 @@ describe('ActionWizard', () => {
         );
       });
       const callPayload = vi.mocked(updateActionSteps).mock.calls[0][1];
+      expect(callPayload.steps).toHaveLength(1);
       expect(callPayload.change_type_config).toBeDefined();
       expect(callPayload.change_type_config!.PROD.required).toBe(true);
     });

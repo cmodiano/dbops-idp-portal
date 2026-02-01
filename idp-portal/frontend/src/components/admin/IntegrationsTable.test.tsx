@@ -1,13 +1,25 @@
 /**
  * Tests for IntegrationsTable (Story 2.28, AC2, AC6).
+ * Story 5.5: Uses App.useApp().modal.confirm (Ant Design 6.2).
  */
 
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { Modal } from 'antd';
+import { App } from 'antd';
 import { IntegrationsTable } from './IntegrationsTable';
 import type { IntegrationListItem } from '../../types/api';
+
+const mockModalConfirm = vi.fn();
+
+function renderWithApp(ui: React.ReactElement) {
+  vi.spyOn(App, 'useApp').mockReturnValue({
+    message: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), loading: vi.fn() },
+    notification: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), open: vi.fn() },
+    modal: { confirm: mockModalConfirm },
+  } as ReturnType<typeof App.useApp>);
+  return render(<App>{ui}</App>);
+}
 
 const items: IntegrationListItem[] = [
   {
@@ -35,8 +47,12 @@ const defaultProps = {
 };
 
 describe('IntegrationsTable', () => {
+  beforeEach(() => {
+    mockModalConfirm.mockReset();
+  });
+
   it('renders table with columns Icône, Nom, Type, URL, Date de création', () => {
-    render(<IntegrationsTable {...defaultProps} />);
+    renderWithApp(<IntegrationsTable {...defaultProps} />);
     expect(screen.getByText('Icône')).toBeInTheDocument();
     expect(screen.getByText('Nom')).toBeInTheDocument();
     expect(screen.getByText('Type')).toBeInTheDocument();
@@ -45,36 +61,36 @@ describe('IntegrationsTable', () => {
   });
 
   it('renders integrations and Nouvelle intégration button', () => {
-    render(<IntegrationsTable {...defaultProps} />);
+    renderWithApp(<IntegrationsTable {...defaultProps} />);
     expect(screen.getByText('AAP Prod')).toBeInTheDocument();
-    expect(screen.getByText('AAP')).toBeInTheDocument();
+    expect(screen.getByText('aap')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Nouvelle intégration/i })).toBeInTheDocument();
   });
 
   it('calls onNew when Nouvelle intégration clicked', async () => {
     const user = userEvent.setup();
-    render(<IntegrationsTable {...defaultProps} />);
+    renderWithApp(<IntegrationsTable {...defaultProps} />);
     await user.click(screen.getByRole('button', { name: /Nouvelle intégration/i }));
     expect(mockOnNew).toHaveBeenCalled();
   });
 
   it('calls onEdit when Modifier clicked', async () => {
     const user = userEvent.setup();
-    render(<IntegrationsTable {...defaultProps} />);
+    renderWithApp(<IntegrationsTable {...defaultProps} />);
     await user.click(screen.getByRole('button', { name: /Modifier/i }));
     expect(mockOnEdit).toHaveBeenCalledWith(items[0]);
   });
 
   it('shows confirmation modal and calls onDelete when Supprimer clicked and confirmed', async () => {
     let confirmOnOk: () => void = () => {};
-    vi.spyOn(Modal, 'confirm').mockImplementation((opts) => {
-      confirmOnOk = (opts?.onOk as () => void) ?? (() => {});
+    mockModalConfirm.mockImplementation((opts: { onOk?: () => void }) => {
+      confirmOnOk = opts?.onOk ?? (() => {});
       return { destroy: vi.fn(), update: vi.fn() };
     });
     const user = userEvent.setup();
-    render(<IntegrationsTable {...defaultProps} />);
+    renderWithApp(<IntegrationsTable {...defaultProps} />);
     await user.click(screen.getByRole('button', { name: /Supprimer/i }));
-    expect(Modal.confirm).toHaveBeenCalledWith(
+    expect(mockModalConfirm).toHaveBeenCalledWith(
       expect.objectContaining({
         title: 'Supprimer l\'intégration',
         content: expect.stringContaining('AAP Prod'),
@@ -85,11 +101,10 @@ describe('IntegrationsTable', () => {
     );
     await confirmOnOk();
     expect(mockOnDelete).toHaveBeenCalledWith(items[0]);
-    vi.restoreAllMocks();
   });
 
   it('shows empty state when no integrations', () => {
-    render(<IntegrationsTable {...defaultProps} dataSource={[]} />);
+    renderWithApp(<IntegrationsTable {...defaultProps} dataSource={[]} />);
     expect(screen.getByText('Aucune intégration')).toBeInTheDocument();
   });
 
@@ -106,7 +121,7 @@ describe('IntegrationsTable', () => {
         updated_at: '2026-01-28T10:00:00Z',
       },
     ];
-    render(<IntegrationsTable {...defaultProps} dataSource={itemsWithIcon} />);
+    renderWithApp(<IntegrationsTable {...defaultProps} dataSource={itemsWithIcon} />);
     // When icon is a URL, an img element should be rendered inside Avatar
     const avatarImg = document.querySelector('img[src="https://example.com/terraform-icon.png"]');
     expect(avatarImg).toBeInTheDocument();
@@ -114,7 +129,7 @@ describe('IntegrationsTable', () => {
 
   it('renders preset icon when integration has no icon URL', () => {
     // items[0] has icon: null, so it should render the preset icon for 'aap' type
-    render(<IntegrationsTable {...defaultProps} />);
+    renderWithApp(<IntegrationsTable {...defaultProps} />);
     // Avatar with URL would have img tag, preset icon doesn't have img
     // Find the icon column cell and verify it doesn't contain an Avatar img
     const rows = document.querySelectorAll('.ant-table-row');
@@ -128,7 +143,7 @@ describe('IntegrationsTable', () => {
   it('calls onRefresh when Actualiser clicked', async () => {
     const mockOnRefresh = vi.fn();
     const user = userEvent.setup();
-    render(<IntegrationsTable {...defaultProps} onRefresh={mockOnRefresh} />);
+    renderWithApp(<IntegrationsTable {...defaultProps} onRefresh={mockOnRefresh} />);
     await user.click(screen.getByRole('button', { name: /Actualiser/i }));
     expect(mockOnRefresh).toHaveBeenCalled();
   });

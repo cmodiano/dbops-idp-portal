@@ -1,4 +1,4 @@
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AuthProvider, useAuth } from './AuthContext';
@@ -21,7 +21,7 @@ describe('AuthProvider', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     // Default: refresh fails (no session)
-    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 401 });
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 401 });
   });
 
   it('renders children', async () => {
@@ -75,7 +75,7 @@ describe('AuthProvider', () => {
   });
 
   it('restores session from refresh token on mount', async () => {
-    global.fetch = vi.fn()
+    globalThis.fetch = vi.fn()
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ data: { access_token: 'new-access-token', token_type: 'bearer' } }),
@@ -112,7 +112,7 @@ describe('AuthProvider', () => {
     });
 
     // Restore session first
-    global.fetch = vi.fn()
+    globalThis.fetch = vi.fn()
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ data: { access_token: 'token', token_type: 'bearer' } }),

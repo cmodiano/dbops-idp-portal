@@ -6,8 +6,14 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { App } from 'antd';
 import { IntegrationForm } from './IntegrationForm';
 import type { IntegrationResponse } from '../../types/api';
+
+// Wrapper to provide App context for useApp() hook
+function renderWithApp(ui: React.ReactElement) {
+  return render(<App>{ui}</App>);
+}
 
 const mockOnSubmit = vi.fn().mockResolvedValue({
   id: 1,
@@ -35,7 +41,7 @@ const defaultProps = {
 
 describe('IntegrationForm', () => {
   it('renders Nouvelle intégration when not editing', () => {
-    render(<IntegrationForm {...defaultProps} />);
+    renderWithApp(<IntegrationForm {...defaultProps} />);
     expect(screen.getByText('Nouvelle intégration')).toBeInTheDocument();
   });
 
@@ -60,7 +66,7 @@ describe('IntegrationForm', () => {
   });
 
   it('has Type, Nom, URL de base, Référence credentials, Auth Flow, Icône fields and Aperçu', () => {
-    render(<IntegrationForm {...defaultProps} />);
+    renderWithApp(<IntegrationForm {...defaultProps} />);
     expect(screen.getByLabelText(/Type de plateforme/)).toBeInTheDocument();
     expect(screen.getByLabelText(/^Nom/)).toBeInTheDocument();
     expect(screen.getByLabelText(/URL de base/)).toBeInTheDocument();
@@ -70,13 +76,13 @@ describe('IntegrationForm', () => {
   });
 
   it('shows error alert when error prop is set', () => {
-    render(<IntegrationForm {...defaultProps} error="Nom déjà utilisé." />);
+    renderWithApp(<IntegrationForm {...defaultProps} error="Nom déjà utilisé." />);
     expect(screen.getByText('Nom déjà utilisé.')).toBeInTheDocument();
   });
 
   it('validates name and base_url required, and URL format', async () => {
     const user = userEvent.setup();
-    render(<IntegrationForm {...defaultProps} />);
+    renderWithApp(<IntegrationForm {...defaultProps} />);
     await user.click(screen.getByRole('button', { name: /Créer/i }));
     await waitFor(() => {
       expect(screen.getByText(/Le nom est requis/)).toBeInTheDocument();
@@ -95,7 +101,7 @@ describe('IntegrationForm', () => {
 
   it('submits with type, name, base_url, auth_flow and calls onSuccess (Story 4.9)', async () => {
     const user = userEvent.setup();
-    render(<IntegrationForm {...defaultProps} />);
+    renderWithApp(<IntegrationForm {...defaultProps} />);
     await user.type(screen.getByLabelText(/Type de plateforme/), 'jenkins');
     await user.type(screen.getByLabelText(/^Nom/), 'Jenkins CI');
     await user.type(screen.getByLabelText(/URL de base/), 'https://jenkins.example.com');
@@ -116,7 +122,7 @@ describe('IntegrationForm', () => {
 
   it('calls onCancel when Annuler clicked', async () => {
     const user = userEvent.setup();
-    render(<IntegrationForm {...defaultProps} />);
+    renderWithApp(<IntegrationForm {...defaultProps} />);
     await user.click(screen.getByRole('button', { name: /Annuler/i }));
     expect(mockOnCancel).toHaveBeenCalled();
   });
@@ -133,7 +139,7 @@ describe('IntegrationForm', () => {
       created_at: '2026-01-28T10:00:00Z',
       updated_at: '2026-01-28T10:00:00Z',
     };
-    render(<IntegrationForm {...defaultProps} editIntegration={editIntegration} />);
+    renderWithApp(<IntegrationForm {...defaultProps} editIntegration={editIntegration} />);
 
     // Verify form fields are populated with editIntegration values
     await waitFor(() => {
@@ -146,10 +152,10 @@ describe('IntegrationForm', () => {
 
   it('shows Avatar preview when icon is a valid URL', async () => {
     const user = userEvent.setup();
-    render(<IntegrationForm {...defaultProps} />);
+    renderWithApp(<IntegrationForm {...defaultProps} />);
 
-    // Enter an icon URL
-    await user.type(screen.getByLabelText(/Icône/), 'https://example.com/my-icon.png');
+    // Enter an icon URL (using aria-label on the Input field)
+    await user.type(screen.getByLabelText(/URL icône/), 'https://example.com/my-icon.png');
 
     // Check that an img element with the icon URL appears in the preview
     await waitFor(() => {
@@ -159,7 +165,7 @@ describe('IntegrationForm', () => {
   });
 
   it('shows fallback API icon when icon field is empty (Story 4.9)', () => {
-    render(<IntegrationForm {...defaultProps} />);
+    renderWithApp(<IntegrationForm {...defaultProps} />);
     // Story 4.9: No type-specific icons, fallback to generic ApiOutlined
     const previewLabel = screen.getByText('Aperçu');
     expect(previewLabel).toBeInTheDocument();
@@ -170,7 +176,7 @@ describe('IntegrationForm', () => {
 
   it('validates type required and max length (Story 4.9 AC1)', async () => {
     const user = userEvent.setup();
-    render(<IntegrationForm {...defaultProps} />);
+    renderWithApp(<IntegrationForm {...defaultProps} />);
     await user.type(screen.getByLabelText(/^Nom/), 'Test Integration');
     await user.type(screen.getByLabelText(/URL de base/), 'https://example.com');
     await user.click(screen.getByRole('button', { name: /Créer/i }));
@@ -181,7 +187,7 @@ describe('IntegrationForm', () => {
 
   it('allows free-form type input (Story 4.9 AC1)', async () => {
     const user = userEvent.setup();
-    render(<IntegrationForm {...defaultProps} />);
+    renderWithApp(<IntegrationForm {...defaultProps} />);
     await user.type(screen.getByLabelText(/Type de plateforme/), 'custom-platform');
     await user.type(screen.getByLabelText(/^Nom/), 'Custom Platform');
     await user.type(screen.getByLabelText(/URL de base/), 'https://custom.example.com');

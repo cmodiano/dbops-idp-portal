@@ -11,22 +11,37 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
 import jsonschema
 import structlog
 
 from app.api.deps import get_current_user
 from app.api.services import get_vault_service
+from app.repositories import audit_repository
+from app.repositories.audit_repository import AuditActionType, AuditEntityType
 from app.core.exceptions import ForbiddenError, InvalidStateError, NotFoundError
 from app.models.auth import UserProfile
-from app.models.execution import ExecutionCreate
+from app.models.execution import ExecutionCreate, StepLogsResponse
 from app.repositories import execution_repository
 from app.services import rbac_service
 from app.services.execution_service import ExecutionService, generate_correlation_id
+from app.websocket.execution_ws import get_execution_ws_manager
+from app.websocket.dashboard_ws import get_dashboard_ws_manager
+from app.api.services import get_servicenow_service
 
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/executions", tags=["executions"])
+
+# Profiles that can view any execution (e.g. from dashboard recent list)
+_EXECUTION_VIEW_ANY_PROFILES = frozenset({"dba", "dbops"})
+
+
+def _can_view_execution(execution_user_id: int, user: UserProfile) -> bool:
+    """True if user may view this execution (owner or DBA/DBOPS)."""
+    if user.id == execution_user_id:
+        return True
+    return (user.profile or "").lower() in _EXECUTION_VIEW_ANY_PROFILES
 
 
 def _validate_parameters_against_schema(
@@ -87,6 +102,7 @@ def _validate_parameters_against_schema(
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=None)
 async def create_execution(
     payload: ExecutionCreate,
+    request: Request,
     background_tasks: BackgroundTasks,
     user: UserProfile = Depends(get_current_user),
 ) -> dict:
@@ -156,16 +172,46 @@ async def create_execution(
 
     execution_id = result.execution_id
 
-    # Prepare execution steps (Story 4.3, Task 3.4)
+    # Get client IP address (Story 6.1, AC5)
+    client_ip = request.client.host if request.client else None
+    # Check for X-Forwarded-For header if behind proxy
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        client_ip = forwarded_for.split(",")[0].strip()
+
+    # Audit: EXECUTION_SUBMITTED (Story 6.1, AC1)
+    await audit_repository.create_entry(
+        user_id=str(user.id),
+        action_type=AuditActionType.EXECUTION_SUBMITTED,
+        entity_type=AuditEntityType.EXECUTION,
+        entity_id=execution_id,
+        details={
+            "action_id": payload.action_id,
+            "environment": payload.environment.value,
+            "parameters": payload.parameters,
+            "rbac_context": {"user_id": user.id, "profile": user.profile},
+        },
+        ip_address=client_ip,
+        correlation_id=correlation_id,
+    )
+
+    # Prepare execution steps (Story 4.3, Task 3.4; Story 4.5, Task 2)
     vault_service = get_vault_service()
-    execution_service = ExecutionService(vault_service)
+    servicenow_service = await get_servicenow_service(vault_service)
+    execution_service = ExecutionService(
+        vault_service,
+        servicenow_service,
+        ws_manager=get_execution_ws_manager(),
+        dashboard_ws_manager=get_dashboard_ws_manager(),
+    )
     await execution_service.prepare_execution(execution_id, correlation_id)
 
-    # Trigger background execution (Story 4.3, Task 3.6)
+    # Trigger background execution (Story 4.3, Task 3.6); pass client_ip for audit AC5 (Story 6.1)
     background_tasks.add_task(
         execution_service.start_execution,
         execution_id,
         correlation_id,
+        client_ip=client_ip,
     )
 
     logger.info(
@@ -202,7 +248,7 @@ async def get_execution(
     """
     execution = await execution_repository.get_by_id(execution_id)
 
-    if execution is None or execution.user_id != user.id:
+    if execution is None or not _can_view_execution(execution.user_id, user):
         raise NotFoundError(
             code="EXECUTION_NOT_FOUND",
             message="Execution introuvable",
@@ -218,18 +264,30 @@ async def list_executions(
     limit: int = 50,
     offset: int = 0,
 ) -> dict:
-    """GET /api/v1/executions - List user's executions (Story 4.1).
+    """GET /api/v1/executions - List user's executions (Story 4.1, 4.8 AC4).
 
     Returns:
-        { "data": list[ExecutionResponse] }
+        { "data": list[ExecutionResponse], "pagination": { page, page_size, total_count, total_pages } }
     """
+    limit = min(max(1, limit), 100)
+    offset = max(offset, 0)
+    total_count = await execution_repository.count_by_user(user_id=user.id)
     executions = await execution_repository.list_by_user(
         user_id=user.id,
-        limit=min(limit, 100),  # Cap at 100
-        offset=max(offset, 0),
+        limit=limit,
+        offset=offset,
     )
-
-    return {"data": [e.model_dump(mode="json") for e in executions]}
+    page = (offset // limit) + 1
+    total_pages = (total_count + limit - 1) // limit if total_count > 0 else 1
+    return {
+        "data": [e.model_dump(mode="json") for e in executions],
+        "pagination": {
+            "page": page,
+            "page_size": limit,
+            "total_count": total_count,
+            "total_pages": total_pages,
+        },
+    }
 
 
 @router.get("/{execution_id}/steps", response_model=None)
@@ -247,10 +305,10 @@ async def get_execution_steps(
     Raises:
         404: If execution not found or doesn't belong to user
     """
-    # Verify execution exists and belongs to user
+    # Verify execution exists and user may view it (owner or DBA/DBOPS)
     execution = await execution_repository.get_by_id(execution_id)
 
-    if execution is None or execution.user_id != user.id:
+    if execution is None or not _can_view_execution(execution.user_id, user):
         raise NotFoundError(
             code="EXECUTION_NOT_FOUND",
             message="Execution introuvable",
@@ -261,3 +319,48 @@ async def get_execution_steps(
     steps = await execution_repository.get_steps_by_execution_id(execution_id)
 
     return {"data": [s.model_dump(mode="json") for s in steps]}
+
+
+@router.get("/{execution_id}/steps/{step_id}/logs", response_model=None)
+async def get_step_logs(
+    execution_id: int,
+    step_id: int,
+    user: UserProfile = Depends(get_current_user),
+) -> dict:
+    """GET /api/v1/executions/{id}/steps/{step_id}/logs - Get step logs (Story 4.7, AC6).
+
+    Returns logs for a single step: output, error_message, started_at, completed_at.
+    RBAC: same as GET execution (execution must belong to current user).
+
+    Returns:
+        { "data": { "step_id": int, "output": {...}, "error_message": str|null, "started_at", "completed_at" } }
+
+    Raises:
+        404: Execution or step not found, or execution not owned by user
+    """
+    execution = await execution_repository.get_by_id(execution_id)
+
+    if execution is None or not _can_view_execution(execution.user_id, user):
+        raise NotFoundError(
+            code="EXECUTION_NOT_FOUND",
+            message="Execution introuvable",
+            details={"execution_id": execution_id},
+        )
+
+    step = await execution_repository.get_step_by_id(step_id)
+
+    if step is None or step.execution_id != execution_id:
+        raise NotFoundError(
+            code="STEP_NOT_FOUND",
+            message="Etape introuvable",
+            details={"execution_id": execution_id, "step_id": step_id},
+        )
+
+    logs = StepLogsResponse(
+        step_id=step.id,
+        output=step.output,
+        error_message=step.error_message,
+        started_at=step.started_at,
+        completed_at=step.completed_at,
+    )
+    return {"data": logs.model_dump(mode="json")}

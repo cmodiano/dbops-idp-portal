@@ -42,13 +42,16 @@ class BaseAdapter(ABC):
         parameters: dict[str, Any],
         credentials: dict[str, Any],
         correlation_id: str,
+        *,
+        integration: dict[str, Any] | None = None,
     ) -> str:
-        """Trigger execution on the platform (Story 4.3, Task 5.1).
+        """Trigger execution on the platform (Story 4.3, Task 5.1, 5.3).
 
         Args:
             parameters: Execution parameters (action-specific)
             credentials: Credentials from Vault (e.g., {"username": ..., "password": ...})
             correlation_id: Request correlation ID for tracing
+            integration: Optional integration dict with token_url, config (flow steps) for config-driven auth (Story 5.3)
 
         Returns:
             platform_job_id: External job ID from the platform (e.g., AAP job ID)
@@ -119,6 +122,8 @@ class MockAdapter(BaseAdapter):
         parameters: dict[str, Any],
         credentials: dict[str, Any],
         correlation_id: str,
+        *,
+        integration: dict[str, Any] | None = None,
     ) -> str:
         """Return mock job ID."""
         self._job_counter += 1

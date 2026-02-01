@@ -41,14 +41,15 @@ import type {
 } from '../../types/api';
 import { submitExecution, fetchInventoryItems } from '../../services/execution_service';
 import { ImpactIndicator } from '../shared/ImpactIndicator';
+import { ExecutionTimeline } from '../execution';
 import { STYLE_TOKENS } from '../../theme/styleTokens';
 
 const { Text, Title } = Typography;
 
 const STEP_ITEMS = [
-  { title: 'Environnement', description: 'Choisir la cible' },
-  { title: 'Parametres', description: 'Configurer l\'action' },
-  { title: 'Confirmation', description: 'Verifier et executer' },
+  { title: 'Environnement', content: 'Choisir la cible' },
+  { title: 'Parametres', content: 'Configurer l\'action' },
+  { title: 'Confirmation', content: 'Verifier et executer' },
 ];
 
 /** Environment display names. */
@@ -65,10 +66,14 @@ export interface ExecutionWizardProps {
   action: CatalogActionDetail | null;
   /** Environments where user is allowed to execute. */
   allowedEnvironments: string[];
+  /** When set, wizard shows timeline instead of steps (Story 4.6, Task 4.2). */
+  activeExecutionId?: number | null;
   /** Callback when wizard is cancelled. */
   onCancel: () => void;
   /** Callback on successful execution submission. Returns execution_id. */
   onSuccess?: (executionId: number) => void;
+  /** Callback to close timeline and return to catalog (Story 4.6). */
+  onBackToCatalog?: () => void;
 }
 
 /** Parameter field info extracted from JSON Schema. */
@@ -158,8 +163,10 @@ export function ExecutionWizard({
   open,
   action,
   allowedEnvironments,
+  activeExecutionId,
   onCancel,
   onSuccess,
+  onBackToCatalog,
 }: ExecutionWizardProps) {
   const { notification } = App.useApp();
   const [form] = Form.useForm();
@@ -204,7 +211,7 @@ export function ExecutionWizard({
       // Verify action is published before allowing execution
       if (action.status !== 'published') {
         notification.error({
-          message: 'Action non disponible',
+          title: 'Action non disponible',
           description: 'Cette action n\'est pas publiee et ne peut pas etre executee.',
         });
         onCancel();
@@ -328,7 +335,7 @@ export function ExecutionWizard({
     if (currentStep === 0) {
       // Validate environment selected
       if (!selectedEnvironment) {
-        notification.warning({ message: 'Veuillez selectionner un environnement.' });
+        notification.warning({ title: 'Veuillez selectionner un environnement.' });
         return;
       }
     } else if (currentStep === 1) {
@@ -351,7 +358,7 @@ export function ExecutionWizard({
   const handleSubmit = useCallback(async () => {
     if (!action || !selectedEnvironment) {
       notification.warning({
-        message: 'Donnees incompletes',
+        title: 'Donnees incompletes',
         description: 'Veuillez completer toutes les etapes du wizard.',
       });
       return;
@@ -379,7 +386,7 @@ export function ExecutionWizard({
       });
 
       notification.success({
-        message: 'Execution soumise',
+        title: 'Execution soumise',
         description: `Execution #${response.execution_id} creee avec succes.`,
       });
 
@@ -389,7 +396,7 @@ export function ExecutionWizard({
       const message = err instanceof Error ? err.message : 'Erreur lors de la soumission';
       setSubmitError(message);
       notification.error({
-        message: 'Erreur',
+        title: 'Erreur',
         description: message,
         duration: 5, // Show error longer
       });
@@ -469,7 +476,7 @@ export function ExecutionWizard({
 
       {selectedEnvironment === 'prod' && (
         <Alert
-          message="Avertissement - Environnement Production"
+          title="Avertissement - Environnement Production"
           description="Vous etes sur le point d'executer une action en production. Verifiez attentivement les parametres."
           type="warning"
           showIcon
@@ -497,7 +504,7 @@ export function ExecutionWizard({
     >
       {parameterFields.length === 0 ? (
         <Alert
-          message="Aucun parametre requis"
+          title="Aucun parametre requis"
           description="Cette action ne necessite pas de parametres."
           type="info"
           showIcon
@@ -663,7 +670,7 @@ export function ExecutionWizard({
 
         {submitError && (
           <Alert
-            message="Erreur"
+            title="Erreur"
             description={submitError}
             type="error"
             showIcon
@@ -674,11 +681,42 @@ export function ExecutionWizard({
     );
   };
 
-  if (!action) return null;
+  if (!action && !activeExecutionId) return null;
+
+  // Story 4.6, Task 4.2: Timeline mode after execution success
+  if (activeExecutionId != null) {
+    return (
+      <Modal
+        title="Execution en cours"
+        open={open}
+        onCancel={onBackToCatalog ?? onCancel}
+        footer={
+          <Button type="primary" onClick={onBackToCatalog ?? onCancel}>
+            Retour au catalogue
+          </Button>
+        }
+        width={640}
+        destroyOnHidden
+        styles={{
+          body: { maxHeight: 'calc(100vh - 220px)', overflowY: 'auto' },
+        }}
+        aria-label="Timeline d'execution"
+      >
+        <ExecutionTimeline
+          executionId={activeExecutionId}
+          mode="realtime"
+          onRetry={onBackToCatalog ?? onCancel}
+          onContact={() => {
+            window.location.href = 'mailto:?subject=IDP%20Portal%20-%20Support%20DBA';
+          }}
+        />
+      </Modal>
+    );
+  }
 
   return (
     <Modal
-      title={`Executer: ${action.name}`}
+      title={`Executer: ${action!.name}`}
       open={open}
       onCancel={onCancel}
       footer={null}
@@ -687,14 +725,14 @@ export function ExecutionWizard({
       styles={{
         body: { maxHeight: 'calc(100vh - 220px)', overflowY: 'auto' },
       }}
-      aria-label={`Wizard d'execution: ${action.name}`}
+      aria-label={`Wizard d'execution: ${action!.name}`}
     >
       <div onKeyDown={handleKeyDown}>
         <Steps
           current={currentStep}
           items={STEP_ITEMS.map((item, i) => ({
             title: item.title,
-            description: item.description,
+            content: item.content,
             status: i === currentStep ? 'process' : i < currentStep ? 'finish' : 'wait',
           }))}
           style={{ marginBottom: 24 }}

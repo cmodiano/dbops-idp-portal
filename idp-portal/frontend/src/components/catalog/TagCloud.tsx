@@ -6,13 +6,16 @@
  * - Multi-select with AND logic (AC2, AC3)
  * - Toggle selection on click (AC4)
  * - Reset button when tags selected (AC5)
- * - Colorful distinct styling (AC6)
+ * - Same pastel colors as catalog cards (AC6)
  * - Keyboard accessible (AC6)
  */
 
 import { Tag, Button, Space } from 'antd';
 import { CloseCircleOutlined } from '@ant-design/icons';
 import type { CatalogTagWithCount } from '../../services/catalog_service';
+import { useTheme } from '../../contexts/ThemeContext';
+import { getTagStyle } from '../../utils/tagStyles';
+import { STYLE_TOKENS } from '../../theme/styleTokens';
 
 const { CheckableTag } = Tag;
 
@@ -30,6 +33,9 @@ export interface TagCloudProps {
  * Each tag is clickable and toggles selection (AND logic for filtering).
  */
 export function TagCloud({ tags, selectedTags, onSelectionChange }: TagCloudProps) {
+  const { effectiveMode } = useTheme();
+  const isDark = effectiveMode === 'dark';
+
   const handleTagToggle = (tagName: string, checked: boolean) => {
     if (checked) {
       onSelectionChange([...selectedTags, tagName]);
@@ -64,6 +70,7 @@ export function TagCloud({ tags, selectedTags, onSelectionChange }: TagCloudProp
     >
       {tags.map((tag) => {
         const isSelected = selectedTags.includes(tag.name);
+        const tagStyle = getTagStyle(tag.name, isDark);
         return (
           <CheckableTag
             key={tag.name}
@@ -76,6 +83,8 @@ export function TagCloud({ tags, selectedTags, onSelectionChange }: TagCloudProp
               padding: '4px 12px',
               borderRadius: 16,
               fontSize: 13,
+              ...tagStyle,
+              border: isSelected ? `2px solid ${STYLE_TOKENS.colorPrimary}` : tagStyle.border,
             }}
           >
             {tag.name} ({tag.action_count})

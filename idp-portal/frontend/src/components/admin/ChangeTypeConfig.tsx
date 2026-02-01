@@ -46,7 +46,7 @@ export const ChangeTypeConfig: React.FC<ChangeTypeConfigProps> = ({
 
   return (
     <div role="table" aria-label="Configuration type de changement par environnement">
-      <Space direction="vertical" style={{ width: '100%' }}>
+      <Space orientation="vertical" style={{ width: '100%' }}>
         <div
           style={{
             display: 'grid',

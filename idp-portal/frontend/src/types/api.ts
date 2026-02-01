@@ -28,12 +28,18 @@ export type ActionPlatform = 'AAP' | 'GitHub Actions' | 'Azure DevOps' | 'Terraf
 export type ActionStatus = 'draft' | 'published' | 'disabled';
 /** Impact level for actions (Story 2.5, 2.18). */
 export type ImpactLevel = 'low' | 'medium' | 'high' | 'critical';
+/** Item type: action or workflow (Story 5.7, AC1). */
+export type ItemType = 'action' | 'workflow';
 
 export interface ActionCreate {
   name: string;
   description?: string | null;
-  engine: ActionEngine;
-  platform: ActionPlatform;
+  /** Story 5.7: item type (action or workflow). Default: action. */
+  item_type?: ItemType;
+  /** Engine is required for actions, optional for workflows (Story 5.7). */
+  engine?: ActionEngine | null;
+  /** Platform is required for actions, optional for workflows (Story 5.7). */
+  platform?: ActionPlatform | null;
   parameters_schema?: Record<string, unknown> | null;
   /** Story 2.18: impact_rules includes criteria field. */
   impact_rules?: Record<string, { level: ImpactLevel; criteria?: string | null }> | null;
@@ -48,8 +54,12 @@ export interface ActionResponse {
   id: number;
   name: string;
   description: string | null;
-  engine: ActionEngine;
-  platform: ActionPlatform;
+  /** Story 5.7: item type (action or workflow). */
+  item_type: ItemType;
+  /** Engine (nullable for workflows). */
+  engine: ActionEngine | null;
+  /** Platform (nullable for workflows). */
+  platform: ActionPlatform | null;
   parameters_schema: Record<string, unknown> | null;
   /** Story 2.18: impact_rules includes criteria field. */
   impact_rules: Record<string, { level: ImpactLevel; criteria?: string | null }> | null;
@@ -71,9 +81,23 @@ export interface ChangeTypeConfigEntry {
   change_model_code?: string | null;
 }
 
+/** Workflow step - reference to an existing action (Story 5.7, AC2). */
+export interface WorkflowStep {
+  order: number;
+  name: string | null;
+  referenced_action_id: number;
+}
+
+/** Request to update workflow steps (Story 5.7, AC2). */
+export interface WorkflowStepsUpdate {
+  steps: WorkflowStep[];
+}
+
 export interface ActionDetail extends ActionResponse {
   /** Story 2.14: rbac_policies removed — RBAC now managed via profiles. */
   execution_steps: ExecutionStep[] | null;
+  /** Story 5.7: workflow steps for workflows (action references). */
+  workflow_steps: WorkflowStep[] | null;
   /** Story 2.24: per-env { required, change_model_code }. */
   change_type_config: Record<string, ChangeTypeConfigEntry> | null;
   /* documentation_md is inherited from ActionResponse (Story 3.4) */
@@ -121,8 +145,11 @@ export interface StatusUpdateRequest {
 export interface ActionListItem {
   id: number;
   name: string;
+  /** Story 5.7: item type for workflow icon display. */
+  item_type?: ItemType;
   status: ActionStatus;
-  engine: ActionEngine;
+  /** Engine (nullable for workflows). */
+  engine: ActionEngine | null;
   created_at: string;
   execution_count: number;
   tags?: string[];
@@ -131,6 +158,8 @@ export interface ActionListItem {
 export interface AdminActionsFilters {
   status?: ActionStatus;
   engine?: ActionEngine;
+  /** Story 5.7: filter by item type (action or workflow). */
+  item_type?: ItemType;
   page?: number;
   page_size?: number;
 }
@@ -323,6 +352,8 @@ export type IntegrationListItem = IntegrationResponse;
 export interface ActionPreviewData {
   name: string;
   description: string | null;
+  /** Story 5.7: item type for workflow icon display. */
+  item_type?: ItemType;
   engine: ActionEngine | null;
   platform: ActionPlatform | null;
   impact_level: ImpactLevel | null;
@@ -371,6 +402,36 @@ export interface ExecutionResponse {
   created_at: string;
 }
 
+/** Execution step status (Story 4.6). */
+export type ExecutionStepStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'SKIPPED';
+
+/** Execution step type (Story 4.6). */
+export type ExecutionStepTypeApi = 'vault' | 'servicenow' | 'platform' | 'prerequisite' | 'verification';
+
+/** Execution step response from GET /executions/{id}/steps (Story 4.6). */
+export interface ExecutionStepResponse {
+  id: number;
+  execution_id: number;
+  step_order: number;
+  step_name: string;
+  step_type: ExecutionStepTypeApi;
+  status: ExecutionStepStatus;
+  started_at: string | null;
+  completed_at: string | null;
+  output: Record<string, unknown> | null;
+  platform_job_id: string | null;
+  error_message: string | null;
+}
+
+/** Step logs from GET /executions/{id}/steps/{step_id}/logs (Story 4.7, AC6). */
+export interface StepLogsResponse {
+  step_id: number;
+  output: Record<string, unknown> | null;
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
 // === Inventory Types (Story 4.1, Task 2) ===
 
 /** Inventory item for dropdowns (Story 4.1, Task 2.1). */
@@ -378,4 +439,83 @@ export interface InventoryItem {
   id: string;
   name: string;
   environment: string | null;
+}
+
+// === Dashboard Types (Story 5.1) ===
+
+/** Dashboard statistics from GET /dashboard/stats (Story 5.1, AC1). */
+export interface DashboardStats {
+  executions_jour: number;
+  taux_succes_pct: number;
+  executions_en_cours: number;
+  executions_en_erreur: number;
+}
+
+/** Recent execution for dashboard table (Story 5.1, AC2). */
+export interface DashboardRecentExecution {
+  id: number;
+  action_name: string | null;
+  user_display_name: string;
+  environment: ExecutionEnvironment;
+  status: ExecutionStatusType;
+  created_at: string | null;
+  /** Execution platform from action (e.g. AAP, GitHub Actions). */
+  platform?: string | null;
+  /** Engine/technology from action (e.g. Oracle, SQL Server, DB2). */
+  engine?: string | null;
+}
+
+/** One day in the dashboard executions time series (line chart). */
+export interface DashboardTimeSeriesPoint {
+  date: string; // YYYY-MM-DD
+  success: number;
+  failed: number;
+}
+
+// === Audit Types (Story 6.3) ===
+
+/** Audit entry status filter (derived from action_type). */
+export type AuditStatusFilter = 'success' | 'failed' | 'running';
+
+/** Audit entry from GET /audit/executions (Story 6.3, AC1, AC3). */
+export interface AuditExecutionEntry {
+  id: number;
+  timestamp: string;
+  user_id: string;
+  action_type: string;
+  entity_type: string;
+  entity_id: number; // execution_id
+  action_name?: string; // Story 6.3, HIGH-4: enriched action name
+  details: {
+    action_id?: number;
+    environment?: string;
+    status?: string;
+    parameters?: Record<string, unknown>;
+    servicenow_change_id?: string;
+    error_message?: string;
+    [key: string]: unknown;
+  } | null;
+  ip_address: string | null;
+  correlation_id: string | null;
+  derived_status: 'success' | 'failed' | 'running' | 'unknown';
+}
+
+/** Filters for GET /audit/executions (Story 6.3, AC2, AC6). */
+export interface AuditExecutionFilters {
+  from?: string;
+  to?: string;
+  environment?: string;
+  action_id?: number;
+  user_id?: string;
+  status?: AuditStatusFilter;
+  sort?: string; // Sort field: timestamp, user_id, action_type
+  order?: string; // Sort order: asc, desc
+  limit?: number;
+  offset?: number;
+}
+
+/** Response from GET /audit/executions (Story 6.3). */
+export interface AuditExecutionListResponse {
+  data: AuditExecutionEntry[];
+  pagination: PaginationInfo;
 }

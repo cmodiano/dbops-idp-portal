@@ -13,7 +13,8 @@ const DEV_MOCK_USER: User = {
   username: 'dev.dbops',
   display_name: 'Dev DBOPS User',
   profile: 'dbops',
-  navigation_tabs: ['catalog', 'executions', 'dashboard', 'admin'],
+  navigation_tabs: ['catalog', 'executions', 'dashboard', 'admin', 'audit'],
+  is_auditor: true, // Story 6.3: enable audit tab in dev mode
 };
 
 const DEV_MOCK_TOKEN = 'dev-mock-token-for-testing';
@@ -126,7 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const tokenMatch = hash.match(/access_token=([^&]+)/);
       const token = tokenMatch ? tokenMatch[1] : null;
       if (token) {
-        setAccessToken(token);
+        queueMicrotask(() => setAccessToken(token));
         // Clean URL fragment immediately after extraction
         window.history.replaceState(null, '', window.location.pathname);
         // Fetch user profile with the extracted token
@@ -156,6 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
+/* eslint-disable-next-line react-refresh/only-export-components -- useAuth is the standard context consumer pattern */
 export function useAuth() {
   return useContext(AuthContext);
 }

@@ -38,140 +38,141 @@ project: test
 project_key: test
 tracking_system: file-system
 story_location: implementation-artifacts
-
 development_status:
-  # === Epic 1: Bootstrap Projet & Authentification (MVP) ===
-  epic-1: done
-  1-1-initialisation-monorepo-et-environnement-de-developpement: done
-  1-2-authentification-saml-2-0-et-session-jwt: done
-  1-3-profil-rbac-et-navigation-du-portail: done
-  1-4-observabilite-health-check-et-ci-cd: done
-  epic-1-retrospective: optional
+    # === Epic 1: Bootstrap Projet & Authentification (MVP) ===
+    epic-1: done
+    1-1-initialisation-monorepo-et-environnement-de-developpement: done
+    1-2-authentification-saml-2-0-et-session-jwt: done
+    1-3-profil-rbac-et-navigation-du-portail: done
+    1-4-observabilite-health-check-et-ci-cd: done
+    epic-1-retrospective: optional
+    # === Epic 2: Administration du Catalogue - Karim (MVP) ===
+    epic-2: in-progress
+    2-1-creer-une-action-avec-ses-metadonnees: done
+    2-2-definir-les-etapes-execution-et-changement-servicenow: done
+    2-3-configurer-le-rbac-par-action: done # OBSOLETE - remplace par 2-9 a 2-14
+    2-4-publier-et-gerer-le-cycle-de-vie: done
+    2-5-preview-temps-reel-de-laction: done
+    2-6-systeme-de-tags-flexibles-pour-les-actions: done
+    2-7-refactorisation-des-connecteurs-generiques: done # code-review 2026-01-28
+    2-8-suppression-du-rail-cab-et-simplification-servicenow: done # code-review 2026-01-28
+    2-9-gestion-des-profiles-dynamiques: done # code-review 2026-01-28
+    2-10-permissions-actions-par-profile: done # code-review 2026-01-28
+    2-11-permissions-targets-par-profile: done # code-review 2026-01-28
+    2-12-cumul-des-permissions-multi-profiles: done # code-review 2026-01-28
+    2-13-import-export-profiles-as-code-yaml: done # code-review 2026-01-28
+    2-14-refactoring-supprimer-ancien-rbac-par-action: done # 2026-01-29
+    2-15-dark-mode-toggle: done # Quick win UX - stakeholder request; code-review 2026-01-28
+    2-16-branding-portail-dbops: done # Quick win - logo + naming
+    2-17-editeur-visuel-de-parametres-daction: done # FR1 - Remplace input JSON par editeur visuel (code-review 2026-01-29)
+    2-18-editeur-visuel-des-regles-dimpact: done # FR1 - Regles d'impact par environnement; adversarial review approved 2026-01-29
+    2-19-setup-environnement-oracle-dev-avec-docker: done # Tech debt - Docker Compose Oracle pour dev (code-review 2026-01-29)
+    2-20-refactoring-migrations-flyway-et-identity-columns: done # Tech debt - Flyway natif + identity columns (code-review 2026-01-29)
+    2-21-code-modele-de-changement-preapprouve: done # Change model code ServiceNow par action (code-review 2026-01-29)
+    2-22-wizard-de-creation-et-edition-daction: done # UX - Wizard 3 etapes pour creation/edition action (code-review 2026-01-29)
+    2-23-suppression-de-la-categorie-tags-only: done # Simplification - tags only (2026-01-29)  # Simplification - utiliser uniquement les tags
+    2-24-changement-servicenow-conditionnel-par-environnement: done # Config changement requis + code modele par env (code-review 2026-01-29)
+    2-25-wizard-de-creation-et-edition-de-profil-avec-permissions: done # Wizard 3 etapes pour profils + permissions (code-review 2026-01-29)
+    2-26-visualisation-format-yaml-import-profils: done # UX - Exemple YAML + template telecharger (code-review 2026-01-29)
+    2-27-backend-integrations-plateformes-distantes: done # Config plateformes distantes (AAP, Terraform, etc.) — type, URL, credential_ref, icon (code-review 2026-01-29)
+    2-28-frontend-admin-integrations-liste-formulaire-icone: done # Onglet Admin Integrations + liste, formulaire, icone (code-review 2026-01-29)
+    epic-2-retrospective: optional
+    # === Epic 2: TERMINÉ ===
 
-  # === Epic 2: Administration du Catalogue - Karim (MVP) ===
-  epic-2: in-progress
-  2-1-creer-une-action-avec-ses-metadonnees: done
-  2-2-definir-les-etapes-execution-et-changement-servicenow: done
-  2-3-configurer-le-rbac-par-action: done  # OBSOLETE - remplace par 2-9 a 2-14
-  2-4-publier-et-gerer-le-cycle-de-vie: done
-  2-5-preview-temps-reel-de-laction: done
-  2-6-systeme-de-tags-flexibles-pour-les-actions: done
-  2-7-refactorisation-des-connecteurs-generiques: done  # code-review 2026-01-28
-  2-8-suppression-du-rail-cab-et-simplification-servicenow: done  # code-review 2026-01-28
-  2-9-gestion-des-profiles-dynamiques: done  # code-review 2026-01-28
-  2-10-permissions-actions-par-profile: done  # code-review 2026-01-28
-  2-11-permissions-targets-par-profile: done  # code-review 2026-01-28
-  2-12-cumul-des-permissions-multi-profiles: done  # code-review 2026-01-28
-  2-13-import-export-profiles-as-code-yaml: done  # code-review 2026-01-28
-  2-14-refactoring-supprimer-ancien-rbac-par-action: done  # 2026-01-29
-  2-15-dark-mode-toggle: done  # Quick win UX - stakeholder request; code-review 2026-01-28
-  2-16-branding-portail-dbops: done  # Quick win - logo + naming
-  2-17-editeur-visuel-de-parametres-daction: done  # FR1 - Remplace input JSON par editeur visuel (code-review 2026-01-29)
-  2-18-editeur-visuel-des-regles-dimpact: done  # FR1 - Regles d'impact par environnement; adversarial review approved 2026-01-29
-  2-19-setup-environnement-oracle-dev-avec-docker: done  # Tech debt - Docker Compose Oracle pour dev (code-review 2026-01-29)
-  2-20-refactoring-migrations-flyway-et-identity-columns: done  # Tech debt - Flyway natif + identity columns (code-review 2026-01-29)
-  2-21-code-modele-de-changement-preapprouve: done  # Change model code ServiceNow par action (code-review 2026-01-29)
-  2-22-wizard-de-creation-et-edition-daction: done  # UX - Wizard 3 etapes pour creation/edition action (code-review 2026-01-29)
-  2-23-suppression-de-la-categorie-tags-only: done  # Simplification - tags only (2026-01-29)  # Simplification - utiliser uniquement les tags
-  2-24-changement-servicenow-conditionnel-par-environnement: done  # Config changement requis + code modele par env (code-review 2026-01-29)
-  2-25-wizard-de-creation-et-edition-de-profil-avec-permissions: done  # Wizard 3 etapes pour profils + permissions (code-review 2026-01-29)
-  2-26-visualisation-format-yaml-import-profils: done  # UX - Exemple YAML + template telecharger (code-review 2026-01-29)
-  2-27-backend-integrations-plateformes-distantes: done  # Config plateformes distantes (AAP, Terraform, etc.) — type, URL, credential_ref, icon (code-review 2026-01-29)
-  2-28-frontend-admin-integrations-liste-formulaire-icone: done  # Onglet Admin Integrations + liste, formulaire, icone (code-review 2026-01-29)
-  epic-2-retrospective: optional
-
-  # === Epic 2: TERMINÉ ===
-
-  # === Epic 3: Decouverte du Catalogue - Marc (MVP) ===
-  epic-3: in-progress
-  3-1-catalogue-actions-avec-modes-affichage-et-favoris: done  # code-review fixes 2026-01-29
-  3-2-fiche-descriptive-en-drawer-lateral: done  # Code review + tests passed 2026-01-29
-  3-3-recherche-et-filtrage-du-catalogue-par-tags: done  # Code review approved + fixes 2026-01-29
-  3-4-documentation-contextuelle-dune-action: done  # All tasks completed 2026-01-29
-  3-5-nuage-tags-et-clarte-favoris: done  # Nuage de tags multi-select + tooltip/aria-label favori (code-review 2026-01-29)
-  3-6-toasts-liquid-glass: done  # UX — Toasts (message/notification) alignés sur design system liquid glass (transparence, blur, coins lisses)
-  3-7-light-theme-contraste-et-ombres: done  # UX — Light theme : contraste fond/éléments + ombres plus prononcées (code-review fixes 2026-01-29)
-  epic-3-retrospective: optional
-
-  # === Epic 4: Execution & Suivi Temps Reel (MVP) ===
-  epic-4: in-progress
-  4-1-wizard-execution-en-3-etapes: done  # Code review fixes applied 2026-01-29
-  4-2-donnees-inventaire-pour-formulaires-dynamiques: done  # Code review: 7 issues fixed, 24/24 tests pass (2026-01-29)
-  4-2bis-connecteur-hashicorp-vault: done  # Code review: 5 HIGH + 4 MEDIUM issues fixed, 11/11 tests pass (2026-01-29)
-  4-9-integrations-type-libre-flow-upload-icone: done  # Code review: ALL 10 issues fixed (3 CRITICAL + 4 MEDIUM + 3 LOW) - 100% complete (2026-01-29)
-  4-3-moteur-execution-et-facade-api: done  # Code review: 10 issues fixed (3 HIGH, 5 MEDIUM, 2 LOW) — RBAC implemented, correlation_id propagated, NFR2 tested (2026-01-29)
-  4-4-adapter-plateforme-aap: done  # Code review 2026-01-29: 3 MEDIUM fixes, 33/33 tests pass
-  4-5-integration-servicenow-ouverture-automatique-changement: ready-for-dev
-  4-6-timeline-execution-temps-reel: backlog
-  4-7-resultat-execution-logs-et-gestion-erreur: backlog
-  4-8-historique-des-executions: backlog
-  epic-4-retrospective: optional
-
-  # === Epic 5: Dashboard & Activite (Phase 2) ===
-  epic-5: backlog
-  5-1-dashboard-avec-statistiques-et-activite-recente: backlog
-  5-2-statuts-temps-reel-et-notifications-sur-le-dashboard: backlog
-  epic-5-retrospective: optional
-
-  # === Epic 6: Audit & Conformite SOC1 - Nadia (Phase 2) ===
-  epic-6: backlog
-  6-1-traces-audit-immutables-pour-chaque-execution: backlog
-  6-2-evidence-specifique-patching-et-comptes-a-privileges: backlog
-  6-3-consultation-historique-audit-filtre: backlog
-  6-4-export-rapports-audit: backlog
-  epic-6-retrospective: optional
-
-  # === Epic 7: Self-Service Business & RBAC Granulaire - Fatima (Phase 2) ===
-  epic-7: backlog
-  7-1-vue-catalogue-simplifiee-pour-client-business: backlog
-  7-2-golden-path-guide-pour-client-business: backlog
-  7-3-rbac-granulaire-par-action-profil-et-environnement: backlog
-  7-4-workflow-approbation-pour-la-production: backlog
-  epic-7-retrospective: optional
-
-  # === Epic 8: Analytics & Scorecards (Phase 2) ===
-  epic-8: backlog
-  8-1-scorecards-par-action: backlog
-  8-2-dashboards-globaux-dbops: backlog
-  epic-8-retrospective: optional
-
-  # === Epic 9: Autoremediation (Phase 2) ===
-  epic-9: backlog
-  9-1-detection-echec-et-proposition-actions-correctives: backlog
-  9-2-declenchement-manuel-action-corrective-par-dba: backlog
-  9-3-execution-automatique-corrective-pour-faible-risque: backlog
-  epic-9-retrospective: optional
-
-  # === Epic 10: Documentation IA, Communication & Interface Conversationnelle (Phase 3) ===
-  epic-10: backlog
-  10-1-auto-generation-de-documentation-via-ia: backlog
-  10-2-demande-de-consultation-expert-dba: backlog
-  10-3-interface-ia-conversationnelle-pour-decouverte-dactions: backlog
-  epic-10-retrospective: optional
-
-  # === Epic 11: Scheduling & Maintenance Planifiée (Phase 2) ===
-  epic-11: backlog
-  11-1-modele-donnees-scheduled-executions-et-recurrence: backlog  # Table scheduled_executions + recurring_patterns (one-time vs recurring)
-  11-2-setup-celery-beat-avec-postgresql-backend: backlog  # Integration Celery + Redis/RabbitMQ + persistent schedules en DB
-  11-3-api-creer-execution-planifiee-one-time: backlog  # POST /api/v1/scheduled-executions avec date/heure future
-  11-4-worker-celery-execution-scheduled-tasks: backlog  # Worker qui poll et execute les actions planifiées
-  11-5-ui-scheduler-dans-wizard-execution: backlog  # Option "Exécuter maintenant" vs "Planifier" dans ExecutionWizard
-  11-6-liste-executions-planifiees-et-annulation: backlog  # Page admin : voir/annuler les executions scheduled
-  11-7-patterns-recurrence-simples-daily-weekly: backlog  # Support récurrence basique (tous les jours, toutes les semaines)
-  11-8-cron-expressions-pour-recurrence-avancee: backlog  # Support expressions cron complètes pour power users
-  11-9-monitoring-celery-flower-ou-equivalent: backlog  # UI de monitoring des jobs Celery (Flower ou autre)
-  epic-11-retrospective: optional
-
-  # === Epic M: Migration FastAPI vers Django REST (Arrimage plateforme) ===
-  epic-m: backlog
-  m-1-bootstrap-projet-django-et-drf: backlog
-  m-2-modeles-django-et-migrations-schema-oracle: backlog
-  m-3-couche-donnees-repositories-vers-orm-django: backlog
-  m-4-api-rest-catalogue-et-admin-actions-tags: backlog
-  m-5-api-rest-profils-et-permissions: backlog
-  m-6-api-rest-auth-health-integrations: backlog
-  m-7-authentification-saml-et-securite: backlog
-  m-8-middleware-logging-observabilite: backlog
-  m-9-tests-unitaires-et-integration-parite: backlog
-  m-10-strategie-bascule-et-decommissionnement-fastapi: backlog
-  epic-m-retrospective: optional
+    # === Epic 3: Decouverte du Catalogue - Marc (MVP) ===
+    epic-3: in-progress
+    3-1-catalogue-actions-avec-modes-affichage-et-favoris: done # code-review fixes 2026-01-29
+    3-2-fiche-descriptive-en-drawer-lateral: done # Code review + tests passed 2026-01-29
+    3-3-recherche-et-filtrage-du-catalogue-par-tags: done # Code review approved + fixes 2026-01-29
+    3-4-documentation-contextuelle-dune-action: done # All tasks completed 2026-01-29
+    3-5-nuage-tags-et-clarte-favoris: done # Nuage de tags multi-select + tooltip/aria-label favori (code-review 2026-01-29)
+    3-6-toasts-liquid-glass: done # UX — Toasts (message/notification) alignés sur design system liquid glass (transparence, blur, coins lisses)
+    3-7-light-theme-contraste-et-ombres: done # UX — Light theme : contraste fond/éléments + ombres plus prononcées (code-review fixes 2026-01-29)
+    epic-3-retrospective: optional
+    # === Epic 4: Execution & Suivi Temps Reel (MVP) ===
+    epic-4: in-progress
+    4-1-wizard-execution-en-3-etapes: done # Code review fixes applied 2026-01-29
+    4-2-donnees-inventaire-pour-formulaires-dynamiques: done # Code review: 7 issues fixed, 24/24 tests pass (2026-01-29)
+    4-2bis-connecteur-hashicorp-vault: done # Code review: 5 HIGH + 4 MEDIUM issues fixed, 11/11 tests pass (2026-01-29)
+    4-9-integrations-type-libre-flow-upload-icone: done # Code review: ALL 10 issues fixed (3 CRITICAL + 4 MEDIUM + 3 LOW) - 100% complete (2026-01-29)
+    4-3-moteur-execution-et-facade-api: done # Code review: 10 issues fixed (3 HIGH, 5 MEDIUM, 2 LOW) — RBAC implemented, correlation_id propagated, NFR2 tested (2026-01-29)
+    4-4-adapter-plateforme-aap: done # Code review 2026-01-29: 3 MEDIUM fixes, 33/33 tests pass
+    4-5-integration-servicenow-ouverture-automatique-changement: done # 2026-01-30: Code review fixes applied, 32/32 execution+servicenow tests pass
+    4-6-timeline-execution-temps-reel: done # Code review 2026-01-30: 3 HIGH + 4 MEDIUM fixes applied
+    4-7-resultat-execution-logs-et-gestion-erreur: done # Code review 2026-01-30: 4 MEDIUM fixes applied
+    4-8-historique-des-executions: done # Code review 2026-01-30: 2 HIGH + 4 MEDIUM fixes, 18/18 frontend + list backend tests pass
+    4-10-adapter-aap-workflow-job-et-job-template: done # resource_type (job_template | workflow_job) par action; code-review 2026-01-30
+    epic-4-retrospective: optional
+    # === Epic 5: Dashboard & Activite (Phase 2) ===
+    epic-5: in-progress
+    5-1-dashboard-avec-statistiques-et-activite-recente: done # Code review 2026-01-30: 2 HIGH + 2 MEDIUM + 3 LOW fixes applied, 12 backend + 30 frontend tests pass
+    5-2-statuts-temps-reel-et-notifications-sur-le-dashboard: done # 2026-01-30: Code review fixes applied (2 HIGH + 4 MEDIUM + 2 LOW)
+    5-3-token-url-et-structure-flow-integrations: done # Code review 2026-01-30: 2 HIGH + 4 MEDIUM fixes — explicit error handling, config validation, test coverage
+    5-4-json-schema-flow-integrations-validation: done # JSON Schema du config, validation create/update ; code-review 2026-01-30
+    5-5-alignement-react-ant-design-6-2-bonnes-pratiques: done # Audit + alignement React & Ant 6.2; code-review 2026-01-30: 7 fixes appliqués
+    5-6-script-seed-donnees-bd-tests-frontend: done # Seed reproductible couvrant tous les cas pour tests frontend; code-review 2026-01-30
+    5-7-workflow-conteneur-actions-icone-catalogue: done # Code review 2026-01-30: 10 issues fixed (4 HIGH + 3 MEDIUM + 3 LOW); Tasks 1,2,5 done, Tasks 3,4,6 pending (execution engine, admin UI, tests)
+    epic-5-retrospective: optional
+    # === Epic 6: Audit & Conformite SOC1 - Nadia (Phase 2) ===
+    epic-6: in-progress
+    6-1-traces-audit-immutables-pour-chaque-execution: done # Code review 2026-01-30: 2 HIGH + 4 MEDIUM + 2 LOW fixes, 69/69 tests pass
+    6-2-evidence-specifique-patching-et-comptes-a-privileges: done # Code review 2026-01-31: 10 fixes (1 CRITICAL + 5 MEDIUM + 4 LOW), 33/33 tests pass
+    6-3-consultation-historique-audit-filtre: done # Code review fixes applied 2026-01-31: CRITICAL-1 + 4 HIGH fixes
+    6-4-export-rapports-audit: done # Code review 2026-01-31: 10 fixes (3 HIGH + 4 MEDIUM + 3 LOW) - action_name et servicenow_change_id ajoutés CSV/PDF, enrichissement cohérent avec /executions
+    epic-6-retrospective: optional
+    # === Epic 7: Self-Service Business & RBAC Granulaire - Fatima (Phase 2) ===
+    epic-7: backlog
+    7-1-vue-catalogue-simplifiee-pour-client-business: done
+    7-2-golden-path-guide-pour-client-business: backlog
+    7-3-rbac-granulaire-par-action-profil-et-environnement: backlog
+    7-4-workflow-approbation-pour-la-production: backlog
+    epic-7-retrospective: optional
+    # === Epic 8: Analytics & Scorecards (Phase 2) ===
+    epic-8: backlog
+    8-1-scorecards-par-action: backlog
+    8-2-dashboards-globaux-dbops: backlog
+    epic-8-retrospective: optional
+    # === Epic 9: Autoremediation (Phase 2) ===
+    epic-9: backlog
+    9-1-detection-echec-et-proposition-actions-correctives: backlog
+    9-2-declenchement-manuel-action-corrective-par-dba: backlog
+    9-3-execution-automatique-corrective-pour-faible-risque: backlog
+    epic-9-retrospective: optional
+    # === Epic 10: Documentation IA, Communication & Interface Conversationnelle (Phase 3) ===
+    epic-10: backlog
+    10-1-auto-generation-de-documentation-via-ia: backlog
+    10-2-demande-de-consultation-expert-dba: backlog
+    10-3-interface-ia-conversationnelle-pour-decouverte-dactions: backlog
+    epic-10-retrospective: optional
+    # === Epic 11: Scheduling & Maintenance Planifiée (Phase 2) ===
+    epic-11: backlog
+    11-1-modele-donnees-scheduled-executions-et-recurrence: backlog # Table scheduled_executions + recurring_patterns (one-time vs recurring)
+    11-2-setup-celery-beat-avec-postgresql-backend: backlog # Integration Celery + Redis/RabbitMQ + persistent schedules en DB
+    11-3-api-creer-execution-planifiee-one-time: backlog # POST /api/v1/scheduled-executions avec date/heure future
+    11-4-worker-celery-execution-scheduled-tasks: backlog # Worker qui poll et execute les actions planifiées
+    11-5-ui-scheduler-dans-wizard-execution: backlog # Option "Exécuter maintenant" vs "Planifier" dans ExecutionWizard
+    11-6-liste-executions-planifiees-et-annulation: backlog # Page admin : voir/annuler les executions scheduled
+    11-7-patterns-recurrence-simples-daily-weekly: backlog # Support récurrence basique (tous les jours, toutes les semaines)
+    11-8-cron-expressions-pour-recurrence-avancee: backlog # Support expressions cron complètes pour power users
+    11-9-monitoring-celery-flower-ou-equivalent: backlog # UI de monitoring des jobs Celery (Flower ou autre)
+    epic-11-retrospective: optional
+    # === Epic M: Migration FastAPI vers Django REST (Arrimage plateforme) ===
+    epic-m: backlog
+    m-1-bootstrap-projet-django-et-drf: backlog
+    m-2-modeles-django-et-migrations-schema-oracle: backlog
+    m-3-couche-donnees-repositories-vers-orm-django: backlog
+    m-4-api-rest-catalogue-et-admin-actions-tags: backlog
+    m-5-api-rest-profils-et-permissions: backlog
+    m-6-api-rest-auth-health-integrations: backlog
+    m-7-authentification-saml-et-securite: backlog
+    m-8-middleware-logging-observabilite: backlog
+    m-9-tests-unitaires-et-integration-parite: backlog
+    m-10-strategie-bascule-et-decommissionnement-fastapi: backlog
+    epic-m-retrospective: optional
+    # === Epic 12: Documentation technique (post-Django) ===
+    # À réaliser après le passage à Django pour documenter la cible finale.
+    epic-12: backlog
+    12-1-documentation-backend-implementation: backlog # Documentation détaillée de l'implémentation backend
+    12-2-documentation-frontend-implementation: backlog # Documentation détaillée de l'implémentation frontend
+    12-3-schema-base-donnees-et-relations-tables: backlog # Schéma de base de données et relations entre les tables
+    epic-12-retrospective: optional

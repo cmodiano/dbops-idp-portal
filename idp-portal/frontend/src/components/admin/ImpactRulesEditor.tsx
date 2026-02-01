@@ -18,7 +18,6 @@ import {
   Card,
   Typography,
   Form,
-  theme,
 } from 'antd';
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import type { ImpactRuleDefinition, ImpactLevel } from '../../types/api';
@@ -59,8 +58,6 @@ const RuleCard: React.FC<RuleCardProps> = ({
   onRuleChange,
   onRemove,
 }) => {
-  const { token } = theme.useToken();
-
   // Check for duplicate environment
   const duplicateEnv =
     rule.environment.trim() !== '' &&

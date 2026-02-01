@@ -23,13 +23,15 @@
  * Story 4.1: Execute button opens ExecutionWizard.
  */
 
-import { Card, Typography, Button, Descriptions, Space, Empty, Tag, Tooltip, Divider, theme } from 'antd';
-import { PlayCircleOutlined, FileTextOutlined } from '@ant-design/icons';
+import { Card, Typography, Button, Descriptions, Space, Empty, Tag, Tooltip, Divider, Badge, theme } from 'antd';
+import { PlayCircleOutlined, FileTextOutlined, ApartmentOutlined } from '@ant-design/icons';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
 import type { ActionPreviewData } from '../../types/api';
+import { useTheme } from '../../contexts/ThemeContext';
 import { ImpactIndicator } from '../shared/ImpactIndicator';
+import { getTagStyle } from '../../utils/tagStyles';
 import { STYLE_TOKENS } from '../../theme/styleTokens';
 
 const { Title, Paragraph, Text } = Typography;
@@ -74,9 +76,12 @@ export function ActionDrawerPreview({
   action,
   visible = true,
   canExecute,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future env-specific execute
   allowedEnvironments = [],
   onExecute,
 }: ActionDrawerPreviewProps) {
+  const { effectiveMode } = useTheme();
+  const isDark = effectiveMode === 'dark';
   const { token } = theme.useToken();
 
   if (!visible) return null;
@@ -86,6 +91,7 @@ export function ActionDrawerPreview({
   const executeTooltip = isExecuteDisabled
     ? 'Acces non autorise pour cet environnement'
     : undefined;
+  const isWorkflow = action.item_type === 'workflow';
 
   return (
     <Card
@@ -103,9 +109,20 @@ export function ActionDrawerPreview({
       <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <Title level={4} style={{ margin: 0 }}>
-            {action.name || 'Sans nom'}
-          </Title>
+          <Space align="center" size={8}>
+            {/* Story 5.7, AC3: Workflow indicator */}
+            {isWorkflow && (
+              <Tooltip title="Workflow (chaîne d'actions)">
+                <Badge
+                  count={<ApartmentOutlined style={{ color: '#722ed1' }} />}
+                  style={{ backgroundColor: 'transparent' }}
+                />
+              </Tooltip>
+            )}
+            <Title level={4} style={{ margin: 0 }}>
+              {action.name || 'Sans nom'}
+            </Title>
+          </Space>
           {action.impact_level && (
             <ImpactIndicator level={action.impact_level} />
           )}
@@ -123,9 +140,14 @@ export function ActionDrawerPreview({
               Categorie
             </Text>
             <Space size={[4, 4]} wrap>
-              {action.tags.map((tag) => (
-                <Tag key={tag}>{tag}</Tag>
-              ))}
+              {action.tags.map((tag) => {
+                const tagStyle = getTagStyle(tag, isDark);
+                return (
+                  <Tag key={tag} style={{ borderRadius: 16, padding: '2px 10px', ...tagStyle }}>
+                    {tag}
+                  </Tag>
+                );
+              })}
             </Space>
           </div>
         )}

@@ -1,4 +1,4 @@
-"""Catalog repository using raw SQL via python-oracledb (Story 2.1, AC #4).
+"""Catalog repository using raw SQL via python-oracledb (Story 2.1, AC #4; Story 5.7 workflows).
 
 Handles CRUD operations for ACTIONS_CATALOG table with:
 - CLOB columns for JSON (parameters_schema, impact_rules, execution_steps, change_type_config)
@@ -6,11 +6,13 @@ Handles CRUD operations for ACTIONS_CATALOG table with:
 - Structured logging with correlation_id
 
 Story 2.14: rbac_policies column removed — RBAC now managed via profiles.
+Story 5.7: item_type (action | workflow), workflow_steps for workflows.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import time
 from datetime import datetime
 from typing import Any
@@ -27,9 +29,11 @@ from app.models.catalog import (
     ActionEngine,
     ActionPlatform,
     ImpactLevel,
+    ItemType,
     ConnectorType,
     ExecutionStep,
     ExecutionStepType,
+    WorkflowStep,
     ChangeTypeConfigEntry,
     StatusTransition,
     InvalidTransitionError,
@@ -70,6 +74,36 @@ def _parse_impact_level(value: str | None) -> ImpactLevel | None:
         return None
 
 
+def _parse_item_type(value: str | None) -> ItemType:
+    """Parse item_type string to ItemType enum, defaulting to ACTION."""
+    if value is None:
+        return ItemType.ACTION
+    try:
+        return ItemType(value)
+    except ValueError:
+        return ItemType.ACTION
+
+
+def _parse_engine(value: str | None) -> ActionEngine | None:
+    """Parse engine string to ActionEngine enum, returning None if invalid/null (workflow case)."""
+    if value is None:
+        return None
+    try:
+        return ActionEngine(value)
+    except ValueError:
+        return None
+
+
+def _parse_platform(value: str | None) -> ActionPlatform | None:
+    """Parse platform string to ActionPlatform enum, returning None if invalid/null (workflow case)."""
+    if value is None:
+        return None
+    try:
+        return ActionPlatform(value)
+    except ValueError:
+        return None
+
+
 def _row_to_action_response(row: tuple, tags: list[str] | None = None) -> ActionResponse:
     """Convert database row to ActionResponse model.
 
@@ -78,18 +112,20 @@ def _row_to_action_response(row: tuple, tags: list[str] | None = None) -> Action
     Story 2.24: change_model_code column removed — change_type_config per env only in detail.
     Story 2.23: category removed — use tags instead.
     Story 3.4: documentation_md (FR12).
+    Story 5.7: item_type, nullable engine/platform for workflows.
 
-    Expected row order (13 columns after V022):
+    Expected row order (14 columns after V027):
     0:ID, 1:NAME, 2:DESCRIPTION, 3:ENGINE, 4:PLATFORM,
     5:PARAMETERS_SCHEMA, 6:IMPACT_RULES, 7:DEFAULT_IMPACT_LEVEL,
-    8:STATUS, 9:CREATED_BY, 10:CREATED_AT, 11:UPDATED_AT, 12:DOCUMENTATION_MD
+    8:STATUS, 9:CREATED_BY, 10:CREATED_AT, 11:UPDATED_AT, 12:DOCUMENTATION_MD, 13:ITEM_TYPE
     """
     return ActionResponse(
         id=row[0],
         name=row[1],
         description=row[2],
-        engine=ActionEngine(row[3]),
-        platform=ActionPlatform(row[4]),
+        item_type=_parse_item_type(row[13]) if len(row) > 13 else ItemType.ACTION,
+        engine=_parse_engine(row[3]),
+        platform=_parse_platform(row[4]),
         parameters_schema=_str_to_json(row[5]),
         impact_rules=_str_to_json(row[6]),
         default_impact_level=_parse_impact_level(row[7]),
@@ -224,6 +260,67 @@ def _safe_parse_change_type_config(data: str | None) -> dict[str, ChangeTypeConf
         return None
 
 
+def _parse_workflow_steps(data: str | None) -> list[WorkflowStep] | None:
+    """Parse workflow_steps JSON from EXECUTION_STEPS CLOB (Story 5.7, AC2).
+
+    Workflow steps have step_type='action_reference' and referenced_action_id.
+    """
+    if data is None:
+        return None
+    try:
+        steps_data = json.loads(data)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid workflow_steps JSON in database: {e}") from e
+    if not isinstance(steps_data, list):
+        raise ValueError("workflow_steps must be a JSON array")
+    out = []
+    for i, s in enumerate(steps_data):
+        if not isinstance(s, dict):
+            raise ValueError(f"workflow_steps[{i}] must be an object")
+        # Workflow steps have step_type='action_reference' and referenced_action_id
+        if s.get("step_type") != "action_reference":
+            raise ValueError(f"workflow_steps[{i}] must have step_type='action_reference'")
+        if "referenced_action_id" not in s:
+            raise ValueError(f"workflow_steps[{i}] must have referenced_action_id")
+        try:
+            out.append(
+                WorkflowStep(
+                    order=s["order"],
+                    name=s.get("name"),
+                    referenced_action_id=s["referenced_action_id"],
+                )
+            )
+        except (KeyError, ValueError) as e:
+            raise ValueError(f"Invalid workflow_steps[{i}]: {e}") from e
+    return out
+
+
+def _safe_parse_workflow_steps(data: str | None) -> list[WorkflowStep] | None:
+    """Parse workflow_steps CLOB; on invalid JSON log and return None to avoid 500."""
+    if data is None:
+        return None
+    try:
+        return _parse_workflow_steps(data)
+    except ValueError as e:
+        logger.warning("catalog_repository_invalid_workflow_steps_json", raw=data[:200] if data else None, error=str(e))
+        return None
+
+
+def _workflow_steps_to_json(steps: list[WorkflowStep] | None) -> str | None:
+    """Convert list of WorkflowStep to JSON string for CLOB storage (Story 5.7, AC2)."""
+    if steps is None:
+        return None
+    return json.dumps([
+        {
+            "order": s.order,
+            "name": s.name,
+            "step_type": "action_reference",
+            "referenced_action_id": s.referenced_action_id,
+        }
+        for s in steps
+    ])
+
+
 def _row_to_action_detail(row: tuple, tags: list[str] | None = None) -> ActionDetail:
     """Convert database row to ActionDetail model (includes execution_steps, change_type_config).
 
@@ -233,19 +330,32 @@ def _row_to_action_detail(row: tuple, tags: list[str] | None = None) -> ActionDe
     Story 2.24: change_model_code column removed; change_type_config per env.
     Story 2.23: category removed — use tags instead.
     Story 3.4: documentation_md (FR12).
+    Story 5.7: item_type, workflow_steps for workflows.
 
-    Expected row order (15 columns after V022):
+    Expected row order (16 columns after V027):
     0:ID, 1:NAME, 2:DESCRIPTION, 3:ENGINE, 4:PLATFORM,
     5:PARAMETERS_SCHEMA, 6:IMPACT_RULES, 7:DEFAULT_IMPACT_LEVEL,
     8:STATUS, 9:CREATED_BY, 10:CREATED_AT, 11:UPDATED_AT,
-    12:EXECUTION_STEPS, 13:CHANGE_TYPE_CONFIG, 14:DOCUMENTATION_MD
+    12:EXECUTION_STEPS, 13:CHANGE_TYPE_CONFIG, 14:DOCUMENTATION_MD, 15:ITEM_TYPE
     """
+    item_type = _parse_item_type(row[15]) if len(row) > 15 else ItemType.ACTION
+    steps_data = row[12] if len(row) > 12 else None
+
+    # Parse steps based on item_type (Story 5.7)
+    execution_steps = None
+    workflow_steps = None
+    if item_type == ItemType.WORKFLOW:
+        workflow_steps = _safe_parse_workflow_steps(steps_data)
+    else:
+        execution_steps = _safe_parse_execution_steps(steps_data)
+
     return ActionDetail(
         id=row[0],
         name=row[1],
         description=row[2],
-        engine=ActionEngine(row[3]),
-        platform=ActionPlatform(row[4]),
+        item_type=item_type,
+        engine=_parse_engine(row[3]),
+        platform=_parse_platform(row[4]),
         parameters_schema=_str_to_json(row[5]),
         impact_rules=_str_to_json(row[6]),
         default_impact_level=_parse_impact_level(row[7]),
@@ -253,7 +363,8 @@ def _row_to_action_detail(row: tuple, tags: list[str] | None = None) -> ActionDe
         created_by=row[9],
         created_at=row[10],
         updated_at=row[11],
-        execution_steps=_safe_parse_execution_steps(row[12]) if len(row) > 12 else None,
+        execution_steps=execution_steps,
+        workflow_steps=workflow_steps,
         change_type_config=_safe_parse_change_type_config(row[13]) if len(row) > 13 else None,
         tags=tags if tags is not None else [],
         documentation_md=row[14] if len(row) > 14 else None,
@@ -272,14 +383,43 @@ async def get_all_tags() -> list[TagResponse]:
     """Return all tags ordered by name (Story 2.6, AC #5)."""
     query = "SELECT ID, NAME, CREATED_AT FROM TAGS ORDER BY NAME"
     async with get_connection() as conn:
-        cursor = await conn.execute(query, {})
+        cursor = conn.cursor()
+        await cursor.execute(query, {})
         rows = await cursor.fetchall()
-        await cursor.close()
+        cursor.close()
     return [_row_to_tag_response(row) for row in rows]
 
 
+async def get_action_names_by_ids(action_ids: list[int]) -> dict[int, str]:
+    """Return action names by action IDs (Story 6.3, HIGH-4 fix).
+
+    Args:
+        action_ids: List of action IDs to fetch names for
+
+    Returns:
+        Dictionary mapping action_id -> action_name
+    """
+    if not action_ids:
+        return {}
+
+    placeholders = ", ".join(f":id{i}" for i in range(len(action_ids)))
+    query = f"""
+        SELECT ID, NAME FROM ACTIONS_CATALOG
+        WHERE ID IN ({placeholders})
+    """
+    params = {f"id{i}": aid for i, aid in enumerate(action_ids)}
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
+        rows = await cursor.fetchall()
+        cursor.close()
+
+    return {row[0]: row[1] for row in rows}
+
+
 async def get_tags_for_action(action_id: int) -> list[str]:
-    """Return tag names for an action (Story 2.6)."""
+    """Return tag names for an action (Story 2.6, used by Story 6.2 for audit enrichment)."""
     query = """
         SELECT t.NAME FROM TAGS t
         INNER JOIN ACTION_TAGS at ON at.TAG_ID = t.ID
@@ -287,9 +427,10 @@ async def get_tags_for_action(action_id: int) -> list[str]:
         ORDER BY t.NAME
     """
     async with get_connection() as conn:
-        cursor = await conn.execute(query, {"action_id": action_id})
+        cursor = conn.cursor()
+        await cursor.execute(query, {"action_id": action_id})
         rows = await cursor.fetchall()
-        await cursor.close()
+        cursor.close()
     return [row[0] for row in rows]
 
 
@@ -307,9 +448,10 @@ async def get_tags_for_actions(action_ids: list[int]) -> dict[int, list[str]]:
     """
     params = {f"id{i}": aid for i, aid in enumerate(action_ids)}
     async with get_connection() as conn:
-        cursor = await conn.execute(query, params)
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
         rows = await cursor.fetchall()
-        await cursor.close()
+        cursor.close()
     result: dict[int, list[str]] = {aid: [] for aid in action_ids}
     for action_id, name in rows:
         result[action_id].append(name)
@@ -342,9 +484,10 @@ async def list_tags_with_counts(
     base_query += " GROUP BY t.NAME ORDER BY t.NAME ASC"
 
     async with get_connection() as conn:
-        cursor = await conn.execute(base_query, params)
+        cursor = conn.cursor()
+        await cursor.execute(base_query, params)
         rows = await cursor.fetchall()
-        await cursor.close()
+        cursor.close()
 
     return [{"name": row[0], "action_count": row[1]} for row in rows]
 
@@ -364,22 +507,25 @@ async def create_tag_if_not_exists(name: str) -> int:
         RETURNING ID INTO :out_id
     """
     async with get_connection() as conn:
-        cursor = await conn.execute(select_query, {"name": normalized})
+        cursor = conn.cursor()
+        await cursor.execute(select_query, {"name": normalized})
         row = await cursor.fetchone()
-        await cursor.close()
+        cursor.close()
         if row:
             return row[0]
         try:
-            out_id = conn.var(int)
-            cursor = await conn.execute(insert_query, {"name": normalized, "out_id": out_id})
+            cursor = conn.cursor()
+            out_id = cursor.var(int)
+            await cursor.execute(insert_query, {"name": normalized, "out_id": out_id})
             await conn.commit()
-            await cursor.close()
+            cursor.close()
             return out_id.getvalue()[0]
         except oracledb.IntegrityError:
             await conn.rollback()
-            cursor = await conn.execute(select_query, {"name": normalized})
+            cursor = conn.cursor()
+            await cursor.execute(select_query, {"name": normalized})
             row = await cursor.fetchone()
-            await cursor.close()
+            cursor.close()
             if row:
                 return row[0]
             raise
@@ -388,47 +534,53 @@ async def create_tag_if_not_exists(name: str) -> int:
 async def set_action_tags(action_id: int, tag_ids: list[int]) -> None:
     """Replace all tags for an action (Story 2.6, AC #5)."""
     async with get_connection() as conn:
-        await conn.execute(
+        cur = conn.cursor()
+        await cur.execute(
             "DELETE FROM ACTION_TAGS WHERE ACTION_ID = :action_id",
             {"action_id": action_id},
         )
+        cur.close()
         for tag_id in tag_ids:
-            await conn.execute(
+            cur = conn.cursor()
+            await cur.execute(
                 "INSERT INTO ACTION_TAGS (ACTION_ID, TAG_ID) VALUES (:action_id, :tag_id)",
                 {"action_id": action_id, "tag_id": tag_id},
             )
+            cur.close()
         await conn.commit()
 
 
 async def create(action: ActionCreate, user_id: int) -> ActionResponse:
-    """Create a new action in the catalog.
+    """Create a new action or workflow in the catalog (Story 5.7).
 
     Args:
-        action: ActionCreate model with action data
+        action: ActionCreate model with action/workflow data
         user_id: ID of the user creating the action
 
     Returns:
-        ActionResponse with the created action
+        ActionResponse with the created action/workflow
 
     Note:
         Uses Oracle identity column for ID (Story 2.20); RETURNING ID.
         Status defaults to 'draft' as per V002 migration.
+        Story 5.7: item_type distinguishes actions from workflows.
     """
     start_time = time.perf_counter()
     query = """
         INSERT INTO ACTIONS_CATALOG
-        (NAME, DESCRIPTION, ENGINE, PLATFORM,
+        (NAME, DESCRIPTION, ENGINE, PLATFORM, ITEM_TYPE,
          PARAMETERS_SCHEMA, IMPACT_RULES, DEFAULT_IMPACT_LEVEL, STATUS, CREATED_BY, DOCUMENTATION_MD)
         VALUES
-        (:name, :description, :engine, :platform,
+        (:name, :description, :engine, :platform, :item_type,
          :parameters_schema, :impact_rules, :default_impact_level, :status, :created_by, :documentation_md)
         RETURNING ID INTO :out_id
     """
     params = {
         "name": action.name,
         "description": action.description,
-        "engine": action.engine.value,
-        "platform": action.platform.value,
+        "engine": action.engine.value if action.engine else None,
+        "platform": action.platform.value if action.platform else None,
+        "item_type": action.item_type.value,
         "parameters_schema": _json_to_str(action.parameters_schema),
         "impact_rules": _json_to_str(action.impact_rules),
         "default_impact_level": action.default_impact_level.value if action.default_impact_level else None,
@@ -438,13 +590,12 @@ async def create(action: ActionCreate, user_id: int) -> ActionResponse:
     }
 
     async with get_connection() as conn:
-        # Create output variable for RETURNING clause
-        out_id = conn.var(int)
+        cursor = conn.cursor()
+        out_id = cursor.var(int)
         params["out_id"] = out_id
-
-        cursor = await conn.execute(query, params)
+        await cursor.execute(query, params)
         await conn.commit()
-        await cursor.close()
+        cursor.close()
 
         action_id = out_id.getvalue()[0]
 
@@ -457,6 +608,7 @@ async def create(action: ActionCreate, user_id: int) -> ActionResponse:
         duration_ms=duration_ms,
         action_id=action_id,
         action_name=action.name,
+        item_type=action.item_type.value,
     )
 
     # Fetch the created action to return full response (includes tags)
@@ -468,6 +620,7 @@ async def create(action: ActionCreate, user_id: int) -> ActionResponse:
         id=result.id,
         name=result.name,
         description=result.description,
+        item_type=result.item_type,
         engine=result.engine,
         platform=result.platform,
         parameters_schema=result.parameters_schema,
@@ -479,16 +632,17 @@ async def create(action: ActionCreate, user_id: int) -> ActionResponse:
         updated_at=result.updated_at,
         tags=result.tags,
         documentation_md=result.documentation_md,
-    )  # Story 2.24: change_model_code removed; Story 3.4: documentation_md added
+    )  # Story 2.24: change_model_code removed; Story 3.4: documentation_md added; Story 5.7: item_type added
 
 
 async def get_by_id(action_id: int) -> ActionDetail | None:
-    """Fetch an action by ID with full details including execution_steps, change_type_config.
+    """Fetch an action/workflow by ID with full details including execution_steps, change_type_config.
 
     Story 2.14: rbac_policies removed — RBAC now managed via profiles.
+    Story 5.7: includes ITEM_TYPE for action vs workflow distinction.
 
     Args:
-        action_id: The action ID to fetch
+        action_id: The action/workflow ID to fetch
 
     Returns:
         ActionDetail if found, None otherwise
@@ -497,15 +651,16 @@ async def get_by_id(action_id: int) -> ActionDetail | None:
     query = """
         SELECT ID, NAME, DESCRIPTION, ENGINE, PLATFORM,
                PARAMETERS_SCHEMA, IMPACT_RULES, DEFAULT_IMPACT_LEVEL, STATUS, CREATED_BY,
-               CREATED_AT, UPDATED_AT, EXECUTION_STEPS, CHANGE_TYPE_CONFIG, DOCUMENTATION_MD
+               CREATED_AT, UPDATED_AT, EXECUTION_STEPS, CHANGE_TYPE_CONFIG, DOCUMENTATION_MD, ITEM_TYPE
         FROM ACTIONS_CATALOG
         WHERE ID = :action_id
     """
 
     async with get_connection() as conn:
-        cursor = await conn.execute(query, {"action_id": action_id})
+        cursor = conn.cursor()
+        await cursor.execute(query, {"action_id": action_id})
         row = await cursor.fetchone()
-        await cursor.close()
+        cursor.close()
 
     duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
     logger.debug(
@@ -527,14 +682,17 @@ async def get_by_id(action_id: int) -> ActionDetail | None:
 async def list_all(
     status: ActionStatus | None = None,
     tags_filter: list[str] | None = None,
+    item_type: ItemType | None = None,
 ) -> list[ActionResponse]:
-    """List all actions, optionally filtered by status and tags (Story 2.6, AC4).
+    """List all actions/workflows, optionally filtered by status, tags, item_type (Story 2.6, AC4; Story 5.7).
 
     Story 2.14: RBAC filtering by action removed — use profile-based permissions instead.
+    Story 5.7: Optional item_type filter (action or workflow).
 
     Args:
         status: Optional status filter
         tags_filter: Optional list of tag names (normalized). Actions with at least one match.
+        item_type: Optional item type filter (action or workflow)
 
     Returns:
         List of ActionResponse ordered by created_at DESC
@@ -544,7 +702,7 @@ async def list_all(
     base_query = """
         SELECT ID, NAME, DESCRIPTION, ENGINE, PLATFORM,
                PARAMETERS_SCHEMA, IMPACT_RULES, DEFAULT_IMPACT_LEVEL, STATUS, CREATED_BY,
-               CREATED_AT, UPDATED_AT, DOCUMENTATION_MD
+               CREATED_AT, UPDATED_AT, DOCUMENTATION_MD, ITEM_TYPE
         FROM ACTIONS_CATALOG
     """
 
@@ -553,6 +711,9 @@ async def list_all(
     if status is not None:
         conditions.append("STATUS = :status")
         params["status"] = status.value
+    if item_type is not None:
+        conditions.append("ITEM_TYPE = :item_type")
+        params["item_type"] = item_type.value
     if tags_filter:
         placeholders = ", ".join(f":tag{i}" for i in range(len(tags_filter)))
         conditions.append(
@@ -566,9 +727,10 @@ async def list_all(
     query = base_query + where_clause + " ORDER BY CREATED_AT DESC"
 
     async with get_connection() as conn:
-        cursor = await conn.execute(query, params)
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
         rows = await cursor.fetchall()
-        await cursor.close()
+        cursor.close()
 
     # Story 2.6: attach tags per action (batch query)
     action_ids = [row[0] for row in rows]
@@ -581,6 +743,7 @@ async def list_all(
         params=params,
         duration_ms=duration_ms,
         status_filter=status.value if status else None,
+        item_type_filter=item_type.value if item_type else None,
         tags_filter=tags_filter,
         count=len(rows),
     )
@@ -596,8 +759,9 @@ async def list_catalog(
     engine: str | None = None,
     environment: str | None = None,
     impact: str | None = None,
+    item_type_filter: ItemType | None = None,
 ) -> list[dict]:
-    """List actions for catalog with execution_count (Story 3.1, 3.3, AC1, AC3, AC9, AC10, AC11).
+    """List actions/workflows for catalog with execution_count (Story 3.1, 3.3, AC1, AC3, AC9, AC10, AC11; Story 5.7).
 
     Args:
         status: Optional status filter (default: published)
@@ -607,16 +771,17 @@ async def list_catalog(
         engine: Optional filter on AC.ENGINE (e.g. Oracle, SQL Server).
         environment: Optional filter: actions whose impact_rules has this key (e.g. PROD, DEV).
         impact: Optional filter on AC.DEFAULT_IMPACT_LEVEL (e.g. low, medium, high).
+        item_type_filter: Optional filter on AC.ITEM_TYPE (action or workflow) (Story 5.7).
 
     Returns:
-        List of action dicts with execution_count, ordered by name ASC
+        List of action/workflow dicts with execution_count, ordered by name ASC
     """
     start_time = time.perf_counter()
 
     base_query = """
         SELECT AC.ID, AC.NAME, AC.DESCRIPTION, AC.ENGINE, AC.PLATFORM,
                AC.PARAMETERS_SCHEMA, AC.IMPACT_RULES, AC.DEFAULT_IMPACT_LEVEL, AC.STATUS, AC.CREATED_BY,
-               AC.CREATED_AT, AC.UPDATED_AT, AC.DOCUMENTATION_MD,
+               AC.CREATED_AT, AC.UPDATED_AT, AC.DOCUMENTATION_MD, AC.ITEM_TYPE,
                COALESCE((SELECT COUNT(*) FROM EXECUTION_LOG EL WHERE EL.ACTION_ID = AC.ID), 0) AS EXECUTION_COUNT
         FROM ACTIONS_CATALOG AC
     """
@@ -626,6 +791,9 @@ async def list_catalog(
     if status is not None:
         conditions.append("AC.STATUS = :status")
         params["status"] = status.value
+    if item_type_filter is not None:
+        conditions.append("AC.ITEM_TYPE = :item_type")
+        params["item_type"] = item_type_filter.value
     if tags_filter:
         placeholders = ", ".join(f":tag{i}" for i in range(len(tags_filter)))
         conditions.append(
@@ -653,8 +821,11 @@ async def list_catalog(
         conditions.append("AC.ENGINE = :engine")
         params["engine"] = engine
     if environment:
-        conditions.append("JSON_EXISTS(AC.IMPACT_RULES, '$.' || :environment) = 1")
-        params["environment"] = environment
+        # Oracle JSON_EXISTS requires path to be a literal (ORA-40454). Validate to prevent SQL injection.
+        if not re.fullmatch(r"[A-Za-z0-9_]+", environment):
+            raise ValueError("environment must be alphanumeric or underscore only")
+        json_path_literal = f"$.{environment}".replace("'", "''")
+        conditions.append(f"JSON_EXISTS(AC.IMPACT_RULES, '{json_path_literal}') = 1")
     if impact:
         conditions.append("AC.DEFAULT_IMPACT_LEVEL = :impact")
         params["impact"] = impact
@@ -663,9 +834,10 @@ async def list_catalog(
     query = base_query + where_clause + " ORDER BY AC.NAME ASC"
 
     async with get_connection() as conn:
-        cursor = await conn.execute(query, params)
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
         rows = await cursor.fetchall()
-        await cursor.close()
+        cursor.close()
 
     # Attach tags per action (batch query)
     action_ids = [row[0] for row in rows]
@@ -678,6 +850,7 @@ async def list_catalog(
         params={k: v for k, v in params.items() if not k.startswith("aid")},
         duration_ms=duration_ms,
         status_filter=status.value if status else None,
+        item_type_filter=item_type_filter.value if item_type_filter else None,
         tags_filter=tags_filter,
         action_ids_filter_count=len(action_ids_filter) if action_ids_filter else 0,
         q=q,
@@ -687,12 +860,13 @@ async def list_catalog(
         count=len(rows),
     )
 
+    # Row has 15 columns: 0-12 base, 13 ITEM_TYPE, 14 EXECUTION_COUNT (Story 5.7)
     results = []
     for row in rows:
-        action = _row_to_action_response(row[:13], tags=tags_map.get(row[0], []))
+        action = _row_to_action_response(row[:14], tags=tags_map.get(row[0], []))
         results.append({
             **action.model_dump(mode="json"),
-            "execution_count": row[13],
+            "execution_count": row[14],
         })
     return results
 
@@ -730,9 +904,10 @@ async def update_execution_steps(
         SELECT STATUS FROM ACTIONS_CATALOG WHERE ID = :action_id
     """
     async with get_connection() as conn:
-        cursor = await conn.execute(check_query, {"action_id": action_id})
+        cursor = conn.cursor()
+        await cursor.execute(check_query, {"action_id": action_id})
         row = await cursor.fetchone()
-        await cursor.close()
+        cursor.close()
 
     if row is None:
         duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
@@ -746,11 +921,18 @@ async def update_execution_steps(
         )
         return None
 
-    current_status = row[0]
+    current_status_raw = row[0]
+    current_status = (current_status_raw or "").strip().lower() if isinstance(current_status_raw, str) else str(current_status_raw or "").strip().lower()
     if current_status != ActionStatus.DRAFT.value:
+        logger.warning(
+            "catalog_repository_update_execution_steps_invalid_status",
+            action_id=action_id,
+            current_status=current_status,
+            current_status_raw=current_status_raw,
+        )
         raise InvalidStateError(
             f"Les etapes ne peuvent etre modifiees que pour une action en brouillon",
-            current_status=current_status,
+            current_status=current_status or "unknown",
         )
 
     # Update the action (check rowcount to avoid race: published between check and update)
@@ -768,23 +950,31 @@ async def update_execution_steps(
     }
 
     async with get_connection() as conn:
-        cursor = await conn.execute(update_query, params)
+        cursor = conn.cursor()
+        await cursor.execute(update_query, params)
         rowcount = cursor.rowcount
         if rowcount == 0:
-            status_cursor = await conn.execute(
+            status_cursor = conn.cursor()
+            await status_cursor.execute(
                 "SELECT STATUS FROM ACTIONS_CATALOG WHERE ID = :action_id",
                 {"action_id": action_id},
             )
             status_row = await status_cursor.fetchone()
-            await status_cursor.close()
-            await cursor.close()
+            status_cursor.close()
+            cursor.close()
             new_status = status_row[0] if status_row else "unknown"
+            logger.warning(
+                "catalog_repository_update_execution_steps_no_row_updated",
+                action_id=action_id,
+                current_status_at_update=new_status,
+                message="UPDATE matched 0 rows; status may have changed since check",
+            )
             raise InvalidStateError(
                 "L'action n'est plus en brouillon ou a été modifiée entre-temps",
                 current_status=new_status,
             )
         await conn.commit()
-        await cursor.close()
+        cursor.close()
 
     duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
     log_params = {k: v for k, v in params.items()}
@@ -829,9 +1019,10 @@ async def update_action(
         SELECT STATUS FROM ACTIONS_CATALOG WHERE ID = :action_id
     """
     async with get_connection() as conn:
-        cursor = await conn.execute(check_query, {"action_id": action_id})
+        cursor = conn.cursor()
+        await cursor.execute(check_query, {"action_id": action_id})
         row = await cursor.fetchone()
-        await cursor.close()
+        cursor.close()
 
     if row is None:
         duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
@@ -863,8 +1054,8 @@ async def update_action(
         "action_id": action_id,
         "name": action_update.name,
         "description": action_update.description,
-        "engine": action_update.engine.value,
-        "platform": action_update.platform.value,
+        "engine": action_update.engine.value if action_update.engine else None,
+        "platform": action_update.platform.value if action_update.platform else None,
         "parameters_schema": _json_to_str(action_update.parameters_schema),
         "impact_rules": _json_to_str(action_update.impact_rules),
         "default_impact_level": action_update.default_impact_level.value if action_update.default_impact_level else None,
@@ -872,9 +1063,10 @@ async def update_action(
     }
 
     async with get_connection() as conn:
-        cursor = await conn.execute(update_query, params)
+        cursor = conn.cursor()
+        await cursor.execute(update_query, params)
         rowcount = cursor.rowcount
-        await cursor.close()
+        cursor.close()
 
         if rowcount == 0:
             duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
@@ -941,9 +1133,10 @@ async def update_status(
         SELECT STATUS FROM ACTIONS_CATALOG WHERE ID = :action_id
     """
     async with get_connection() as conn:
-        cursor = await conn.execute(check_query, {"action_id": action_id})
+        cursor = conn.cursor()
+        await cursor.execute(check_query, {"action_id": action_id})
         row = await cursor.fetchone()
-        await cursor.close()
+        cursor.close()
 
     if row is None:
         duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
@@ -976,18 +1169,20 @@ async def update_status(
     }
 
     async with get_connection() as conn:
-        cursor = await conn.execute(update_query, params)
+        cursor = conn.cursor()
+        await cursor.execute(update_query, params)
         rowcount = cursor.rowcount
-        await cursor.close()
+        cursor.close()
 
         if rowcount == 0:
             # Race condition: status changed between check and update
-            status_cursor = await conn.execute(
+            status_cursor = conn.cursor()
+            await status_cursor.execute(
                 "SELECT STATUS FROM ACTIONS_CATALOG WHERE ID = :action_id",
                 {"action_id": action_id},
             )
             status_row = await status_cursor.fetchone()
-            await status_cursor.close()
+            status_cursor.close()
             actual_status = status_row[0] if status_row else "unknown"
             raise InvalidTransitionError(
                 current_status=actual_status,
@@ -1031,18 +1226,20 @@ async def update_status(
 
 
 def _row_to_action_list_item(row: tuple, tags: list[str] | None = None) -> ActionListItem:
-    """Convert database row to ActionListItem model for admin dashboard (Story 2.6: optional tags).
+    """Convert database row to ActionListItem model for admin dashboard (Story 2.6: optional tags; Story 5.7: item_type).
 
     Story 2.23: category removed — use tags instead.
-    Expected row order (6 columns): 0:ID, 1:NAME, 2:STATUS, 3:ENGINE, 4:CREATED_AT, 5:EXECUTION_COUNT
+    Story 5.7: item_type for workflow icon display.
+    Expected row order (7 columns): 0:ID, 1:NAME, 2:STATUS, 3:ENGINE, 4:CREATED_AT, 5:ITEM_TYPE, 6:EXECUTION_COUNT
     """
     return ActionListItem(
         id=row[0],
         name=row[1],
         status=ActionStatus(row[2]),
-        engine=ActionEngine(row[3]),
+        engine=_parse_engine(row[3]),
         created_at=row[4],
-        execution_count=row[5] or 0,
+        item_type=_parse_item_type(row[5]) if len(row) > 5 else ItemType.ACTION,
+        execution_count=row[6] if len(row) > 6 else 0,
         tags=tags if tags is not None else [],
     )
 
@@ -1050,17 +1247,20 @@ def _row_to_action_list_item(row: tuple, tags: list[str] | None = None) -> Actio
 async def list_all_admin(
     status: ActionStatus | None = None,
     engine: ActionEngine | None = None,
+    item_type: ItemType | None = None,
     page: int = 1,
     page_size: int = 25,
 ) -> tuple[list[ActionListItem], PaginationInfo]:
-    """List all actions for admin dashboard with execution counts (Story 2.4, AC #2).
+    """List all actions/workflows for admin dashboard with execution counts (Story 2.4, AC #2; Story 5.7).
 
-    DBOPS only - no RBAC filtering. Returns all actions regardless of status.
+    DBOPS only - no RBAC filtering. Returns all actions/workflows regardless of status.
     Story 2.23: category filter removed — use tags instead.
+    Story 5.7: item_type filter for actions vs workflows.
 
     Args:
         status: Optional status filter
         engine: Optional engine filter
+        item_type: Optional item_type filter (action or workflow)
         page: Page number (1-based)
         page_size: Number of items per page
 
@@ -1081,23 +1281,27 @@ async def list_all_admin(
         conditions.append("ENGINE = :engine")
         params["engine"] = engine.value
 
+    if item_type is not None:
+        conditions.append("ITEM_TYPE = :item_type")
+        params["item_type"] = item_type.value
+
     where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
 
     # Count total matching records
     count_query = f"SELECT COUNT(*) FROM ACTIONS_CATALOG AC{where_clause}"
     async with get_connection() as conn:
-        cursor = await conn.execute(count_query, params)
+        cursor = conn.cursor()
+        await cursor.execute(count_query, params)
         count_row = await cursor.fetchone()
         total_count = count_row[0] if count_row else 0
-        await cursor.close()
+        cursor.close()
 
     # Calculate pagination
     total_pages = (total_count + page_size - 1) // page_size if total_count > 0 else 0
     offset = (page - 1) * page_size
 
-    # Fetch paginated results
     base_query = """
-        SELECT ID, NAME, STATUS, ENGINE, CREATED_AT,
+        SELECT ID, NAME, STATUS, ENGINE, CREATED_AT, ITEM_TYPE,
                COALESCE((SELECT COUNT(*) FROM EXECUTION_LOG EL WHERE EL.ACTION_ID = AC.ID), 0) AS EXECUTION_COUNT
         FROM ACTIONS_CATALOG AC
     """
@@ -1106,9 +1310,10 @@ async def list_all_admin(
     params["page_size"] = page_size
 
     async with get_connection() as conn:
-        cursor = await conn.execute(query, params)
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
         rows = await cursor.fetchall()
-        await cursor.close()
+        cursor.close()
 
     # Story 2.6: attach tags per action (batch query)
     action_ids = [row[0] for row in rows]
@@ -1124,6 +1329,7 @@ async def list_all_admin(
         total_count=total_count,
         page=page,
         page_size=page_size,
+        item_type_filter=item_type.value if item_type else None,
     )
 
     pagination = PaginationInfo(
@@ -1133,4 +1339,227 @@ async def list_all_admin(
         total_pages=total_pages,
     )
 
+    # Row has 7 columns: 0:ID, 1:NAME, 2:STATUS, 3:ENGINE, 4:CREATED_AT, 5:ITEM_TYPE, 6:EXECUTION_COUNT (Story 5.7)
     return [_row_to_action_list_item(row, tags=tags_map.get(row[0], [])) for row in rows], pagination
+
+
+# === Story 5.7: Workflow support (AC2, AC5) ===
+
+
+class WorkflowLoopError(ValueError):
+    """Raised when a workflow contains circular references (Story 5.7, AC5)."""
+
+    def __init__(self, workflow_id: int, cycle_path: list[int]):
+        self.workflow_id = workflow_id
+        self.cycle_path = cycle_path
+        message = f"Workflow {workflow_id} contains circular reference: {' -> '.join(map(str, cycle_path))}"
+        super().__init__(message)
+
+
+class InvalidWorkflowStepError(ValueError):
+    """Raised when a workflow step references an invalid action (Story 5.7, AC2)."""
+
+    def __init__(self, step_order: int, referenced_action_id: int, reason: str):
+        self.step_order = step_order
+        self.referenced_action_id = referenced_action_id
+        message = f"Step {step_order}: action {referenced_action_id} - {reason}"
+        super().__init__(message)
+
+
+async def validate_workflow_steps(
+    workflow_id: int,
+    steps: list[WorkflowStep],
+) -> None:
+    """Validate workflow steps: check referenced actions exist and detect loops (Story 5.7, AC2, AC5).
+
+    Args:
+        workflow_id: The workflow ID being validated
+        steps: List of workflow steps to validate
+
+    Raises:
+        InvalidWorkflowStepError: If a referenced action doesn't exist or is itself a workflow
+        WorkflowLoopError: If circular references are detected
+    """
+    if not steps:
+        return
+
+    # Get referenced action IDs
+    referenced_ids = [s.referenced_action_id for s in steps]
+
+    # Query all referenced actions
+    placeholders = ", ".join(f":id{i}" for i in range(len(referenced_ids)))
+    query = f"""
+        SELECT ID, NAME, ITEM_TYPE, STATUS FROM ACTIONS_CATALOG
+        WHERE ID IN ({placeholders})
+    """
+    params = {f"id{i}": aid for i, aid in enumerate(referenced_ids)}
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
+        rows = await cursor.fetchall()
+        cursor.close()
+
+    # Build lookup: action_id -> (name, item_type, status)
+    action_info = {row[0]: (row[1], row[2], row[3]) for row in rows}
+
+    # Validate each step
+    for step in steps:
+        aid = step.referenced_action_id
+        if aid not in action_info:
+            raise InvalidWorkflowStepError(step.order, aid, "action not found")
+
+        name, item_type, status = action_info[aid]
+
+        # Check the referenced action is actually an action (not a workflow)
+        if item_type == ItemType.WORKFLOW.value:
+            # Workflows can reference other workflows but we need to check for loops
+            await _detect_workflow_loop(workflow_id, aid, visited=set())
+
+        # Check referenced action is published (or draft if workflow is draft)
+        # Note: allow draft actions for draft workflows (flexibility during creation)
+
+
+async def _detect_workflow_loop(
+    original_workflow_id: int,
+    current_action_id: int,
+    visited: set[int],
+) -> None:
+    """Recursively detect loops in workflow references (Story 5.7, AC5).
+
+    Args:
+        original_workflow_id: The workflow we're validating (to detect loops back to it)
+        current_action_id: The action/workflow we're currently checking
+        visited: Set of already visited action IDs in this path
+
+    Raises:
+        WorkflowLoopError: If a circular reference is detected
+    """
+    if current_action_id == original_workflow_id:
+        raise WorkflowLoopError(original_workflow_id, list(visited) + [current_action_id])
+
+    if current_action_id in visited:
+        # Already checked this node in another path, no loop through original
+        return
+
+    visited.add(current_action_id)
+
+    # Check if current_action_id is a workflow with steps
+    query = """
+        SELECT ITEM_TYPE, EXECUTION_STEPS FROM ACTIONS_CATALOG
+        WHERE ID = :action_id
+    """
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, {"action_id": current_action_id})
+        row = await cursor.fetchone()
+        cursor.close()
+
+    if row is None:
+        return
+
+    item_type, steps_data = row
+    if item_type != ItemType.WORKFLOW.value or not steps_data:
+        return
+
+    # Parse workflow steps and recurse
+    try:
+        steps = _parse_workflow_steps(steps_data)
+    except ValueError:
+        return
+
+    if steps:
+        for step in steps:
+            await _detect_workflow_loop(original_workflow_id, step.referenced_action_id, visited.copy())
+
+
+async def update_workflow_steps(
+    workflow_id: int,
+    steps: list[WorkflowStep],
+) -> ActionDetail | None:
+    """Update workflow steps for a workflow (Story 5.7, AC2).
+
+    Args:
+        workflow_id: The workflow ID to update
+        steps: List of workflow steps (action references)
+
+    Returns:
+        ActionDetail if found and updated, None if not found
+
+    Raises:
+        InvalidStateError: If action is not a workflow or not in 'draft' status
+        InvalidWorkflowStepError: If a referenced action doesn't exist
+        WorkflowLoopError: If circular references are detected
+    """
+    start_time = time.perf_counter()
+
+    # First check if workflow exists, is a workflow, and is in draft status
+    check_query = """
+        SELECT STATUS, ITEM_TYPE FROM ACTIONS_CATALOG WHERE ID = :workflow_id
+    """
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(check_query, {"workflow_id": workflow_id})
+        row = await cursor.fetchone()
+        cursor.close()
+
+    if row is None:
+        logger.debug(
+            "catalog_repository_update_workflow_steps",
+            workflow_id=workflow_id,
+            found=False,
+        )
+        return None
+
+    current_status, item_type = row
+
+    if item_type != ItemType.WORKFLOW.value:
+        raise InvalidStateError(
+            "Cannot update workflow steps on an action - must be a workflow",
+            current_status=current_status,
+        )
+
+    if current_status != ActionStatus.DRAFT.value:
+        raise InvalidStateError(
+            "Les etapes workflow ne peuvent etre modifiees que pour un workflow en brouillon",
+            current_status=current_status,
+        )
+
+    # Validate steps (check references and detect loops)
+    await validate_workflow_steps(workflow_id, steps)
+
+    # Update the workflow steps
+    update_query = """
+        UPDATE ACTIONS_CATALOG
+        SET EXECUTION_STEPS = :workflow_steps,
+            UPDATED_AT = SYSTIMESTAMP
+        WHERE ID = :workflow_id AND STATUS = 'draft' AND ITEM_TYPE = 'workflow'
+    """
+    params = {
+        "workflow_id": workflow_id,
+        "workflow_steps": _workflow_steps_to_json(steps),
+    }
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(update_query, params)
+        rowcount = cursor.rowcount
+        if rowcount == 0:
+            cursor.close()
+            raise InvalidStateError(
+                "Le workflow n'est plus en brouillon ou a été modifié entre-temps",
+                current_status="unknown",
+            )
+        await conn.commit()
+        cursor.close()
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.debug(
+        "catalog_repository_update_workflow_steps",
+        workflow_id=workflow_id,
+        steps_count=len(steps),
+        duration_ms=duration_ms,
+    )
+
+    # Fetch and return updated workflow
+    return await get_by_id(workflow_id)

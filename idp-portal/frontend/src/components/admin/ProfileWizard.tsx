@@ -200,7 +200,7 @@ export function ProfileWizard({
       } catch (permErr) {
         // Profile created/updated but permissions failed - still call onSuccess
         notification.warning({
-          message: 'Permissions non enregistrées',
+          title: 'Permissions non enregistrées',
           description: permErr instanceof Error ? permErr.message : 'Les permissions n\'ont pas pu être enregistrées. Éditez le profil pour réessayer.',
         });
         onSuccess?.(profile);
@@ -269,7 +269,7 @@ export function ProfileWizard({
 
         {/* Step 2: Permissions Actions */}
         {currentStep === 1 && (
-          <Space direction="vertical" style={{ width: '100%' }} size="middle">
+          <Space orientation="vertical" style={{ width: '100%' }} size="middle">
             <Form.Item name="actions_type" label="Type de permission actions">
               <Radio.Group>
                 <Radio value="all" aria-label="Toutes les actions">Toutes les actions</Radio>
@@ -321,7 +321,7 @@ export function ProfileWizard({
 
         {/* Step 3: Permissions Targets */}
         {currentStep === 2 && (
-          <Space direction="vertical" style={{ width: '100%' }} size="middle">
+          <Space orientation="vertical" style={{ width: '100%' }} size="middle">
             <Form.Item name="targets_type" label="Type de permission targets">
               <Radio.Group>
                 <Radio value="all" aria-label="Toutes les targets">Toutes les targets</Radio>
@@ -372,14 +372,14 @@ export function ProfileWizard({
       aria-label={isEditMode ? 'Modifier le profil' : 'Nouveau profil'}
     >
       {submitError && (
-        <Alert message="Erreur" description={submitError} type="error" showIcon style={{ marginBottom: 16 }} />
+        <Alert title="Erreur" description={submitError} type="error" showIcon style={{ marginBottom: 16 }} />
       )}
 
       <Steps
         current={currentStep}
         items={STEP_ITEMS.map((item, i) => ({
           title: item.title,
-          ...(item.content != null && { description: item.content }),
+          ...(item.content != null && { content: item.content }),
           status: i === currentStep ? 'process' : i < currentStep ? 'finish' : 'wait',
         }))}
         style={{ marginBottom: 24 }}

@@ -40,9 +40,10 @@ async def get_target_permissions(profile_id: int) -> ProfileTargetPermissionsRes
         WHERE PROFILE_ID = :profile_id
     """
     async with get_connection() as conn:
-        cursor = await conn.execute(query, {"profile_id": profile_id})
+        cursor = conn.cursor()
+        await cursor.execute(query, {"profile_id": profile_id})
         row = await cursor.fetchone()
-        await cursor.close()
+        cursor.close()
     if row is None:
         return None
     perm_type = row[0].upper() if row[0] else "ALL"
@@ -54,6 +55,39 @@ async def get_target_permissions(profile_id: int) -> ProfileTargetPermissionsRes
         target_names=target_names,
         target_patterns=target_patterns,
     )
+
+
+async def get_target_permissions_for_profile_ids(
+    profile_ids: list[int],
+) -> dict[int, ProfileTargetPermissionsResponse]:
+    """Fetch target permissions for multiple profiles. Returns dict profile_id -> response (missing = no row)."""
+    if not profile_ids:
+        return {}
+    placeholders = ", ".join(f":p{i}" for i in range(len(profile_ids)))
+    query = f"""
+        SELECT PROFILE_ID, PERMISSION_TYPE, TARGET_NAMES_JSON, TARGET_PATTERNS_JSON
+        FROM PROFILE_TARGET_PERMISSIONS
+        WHERE PROFILE_ID IN ({placeholders})
+    """
+    params = {f"p{i}": pid for i, pid in enumerate(profile_ids)}
+    result: dict[int, ProfileTargetPermissionsResponse] = {}
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
+        rows = await cursor.fetchall()
+        cursor.close()
+    type_map = {"LIST": "list", "PATTERN": "pattern", "ALL": "all"}
+    for row in rows:
+        profile_id = row[0]
+        perm_type = (row[1] or "ALL").upper()
+        target_names = _json_load_str_list(row[2]) if row[2] else []
+        target_patterns = _json_load_str_list(row[3]) if row[3] else []
+        result[profile_id] = ProfileTargetPermissionsResponse(
+            targets_type=type_map.get(perm_type, "all"),
+            target_names=target_names,
+            target_patterns=target_patterns,
+        )
+    return result
 
 
 async def set_target_permissions(
@@ -87,9 +121,10 @@ async def set_target_permissions(
         "target_patterns_json": target_patterns_json,
     }
     async with get_connection() as conn:
-        cursor = await conn.execute(merge_sql, params)
+        cursor = conn.cursor()
+        await cursor.execute(merge_sql, params)
         await conn.commit()
-        await cursor.close()
+        cursor.close()
 
     return ProfileTargetPermissionsResponse(
         targets_type=payload.targets_type,

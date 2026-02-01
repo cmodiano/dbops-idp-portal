@@ -1,8 +1,8 @@
 /**
- * ActionWizard — Wizard 3 étapes pour création/édition d'action (Story 2.22, AC #1–#5).
+ * ActionWizard — Wizard 3 étapes pour création/édition d'action (Story 2.22, AC #1–#5; Story 4.10 AC4).
  *
- * Étapes : (1) Général, (2) Paramètres, (3) Impact & Changement.
- * Réutilise ParametersEditor, ImpactRulesEditor et la logique de build payload d'ActionForm.
+ * Modèle : 1 action = 1 étape. La plateforme (step 1) définit le connecteur.
+ * Étapes : (1) Général (nom, moteur, plateforme, tags), (2) Automatisme & Paramètres (quel job/workflow appeler + paramètres), (3) Impact & Changement.
  */
 
 import { useEffect, useState } from 'react';
@@ -11,10 +11,13 @@ import type {
   ActionCreate,
   ActionDetail,
   ActionResponse,
+  ActionPlatform,
   ParameterDefinition,
   ImpactRuleDefinition,
   ImpactLevel,
   ChangeTypeConfigEntry,
+  ExecutionStep,
+  ConnectorType,
 } from '../../types/api';
 import { schemaToParameterList, parameterListToSchema } from '../../utils/parametersSchema';
 import { impactRulesToList, listToImpactRules } from '../../utils/impactRulesSchema';
@@ -26,9 +29,20 @@ import { ENGINE_OPTIONS, PLATFORM_OPTIONS } from '../../utils/actionOptions';
 
 const { TextArea } = Input;
 
+/** Plateforme (step 1) définit le connecteur. 1 action = 1 step. */
+function platformToConnector(platform: ActionPlatform): ConnectorType {
+  const map: Record<ActionPlatform, ConnectorType> = {
+    AAP: 'aap',
+    'GitHub Actions': 'github_actions',
+    'Azure DevOps': 'azuredevops',
+    Terraform: 'terraform',
+  };
+  return map[platform] ?? 'none';
+}
+
 const STEP_ITEMS = [
   { title: 'Général', content: 'Nom, moteur, plateforme, tags' },
-  { title: 'Paramètres', content: 'Éditeur visuel des paramètres' },
+  { title: 'Automatisme & Paramètres', content: 'Quel job/workflow appeler et paramètres' },
   { title: 'Impact & Changement', content: 'Règles d\'impact et code modèle' },
 ];
 
@@ -63,8 +77,13 @@ export function ActionWizard({
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagsOptions, setTagsOptions] = useState<{ value: string; label: string }[]>([]);
   const [changeTypeConfig, setChangeTypeConfig] = useState<Record<string, ChangeTypeConfigEntry>>({});
+  /** Pour AAP : type de ressource (job_template | workflow_job) et ID template. 1 action = 1 étape. */
+  const [aapResourceType, setAapResourceType] = useState<'job_template' | 'workflow_job'>('job_template');
+  const [aapTemplateId, setAapTemplateId] = useState<number | undefined>(undefined);
 
   const isEditMode = !!editAction;
+  const platform = Form.useWatch<ActionPlatform>('platform', form);
+  const isPlatformAAP = platform === 'AAP';
 
   useEffect(() => {
     if (!open) return;
@@ -91,6 +110,19 @@ export function ActionWizard({
       setDefaultImpactLevel(editAction.default_impact_level ?? null);
       setSelectedTags(editAction.tags ?? []);
       setChangeTypeConfig(editAction.change_type_config ?? {});
+      const singleStep = editAction.execution_steps?.[0];
+      if (singleStep?.connector_type === 'aap' && singleStep.connector_config) {
+        const rt = singleStep.connector_config.resource_type as string;
+        setAapResourceType(rt === 'workflow_job' ? 'workflow_job' : 'job_template');
+        const tid =
+          rt === 'workflow_job'
+            ? singleStep.connector_config.workflow_job_template_id
+            : singleStep.connector_config.job_template_id;
+        setAapTemplateId(tid != null ? Number(tid) : undefined);
+      } else {
+        setAapResourceType('job_template');
+        setAapTemplateId(undefined);
+      }
       setCurrentStep(0);
     } else if (!open) {
       form.resetFields();
@@ -99,6 +131,8 @@ export function ActionWizard({
       setDefaultImpactLevel(null);
       setSelectedTags([]);
       setChangeTypeConfig({});
+      setAapResourceType('job_template');
+      setAapTemplateId(undefined);
       setCurrentStep(0);
       setSubmitError(null);
     }
@@ -165,6 +199,11 @@ export function ActionWizard({
       }
     }
 
+    if (values.platform === 'AAP' && (aapTemplateId == null || aapTemplateId < 1)) {
+      setSubmitError('Pour la plateforme AAP, l\'ID du template (job ou workflow) est requis.');
+      return;
+    }
+
     setSaving(true);
     try {
       const payload: ActionCreate = {
@@ -187,7 +226,7 @@ export function ActionWizard({
         } catch (tagErr) {
           if (done) onSuccess?.(done);
           notification.warning({
-            message: 'Tags non mis à jour',
+            title: 'Tags non mis à jour',
             description: tagErr instanceof Error ? tagErr.message : 'Les tags n\'ont pas pu être enregistrés. L\'action a bien été créée/modifiée.',
           });
           setSaving(false);
@@ -195,17 +234,31 @@ export function ActionWizard({
         }
       }
 
-      if (actionId && Object.keys(changeTypeConfig).length > 0) {
-        const change_type_config = Object.fromEntries(
-          Object.entries(changeTypeConfig).map(([env, e]) => [
-            env,
-            { required: e?.required ?? false, change_model_code: e?.required ? (e.change_model_code?.trim() || null) : null },
-          ])
-        );
-        await updateActionSteps(actionId, {
-          steps: [{ order: 1, name: 'Étape à configurer', type: 'prerequisite', connector_type: 'none', conditional_environments: null }],
-          change_type_config,
-        });
+      if (actionId) {
+        const change_type_config = Object.keys(changeTypeConfig).length > 0
+          ? Object.fromEntries(
+              Object.entries(changeTypeConfig).map(([env, e]) => [
+                env,
+                { required: e?.required ?? false, change_model_code: e?.required ? (e.change_model_code?.trim() || null) : null },
+              ])
+            )
+          : null;
+        const connector = platformToConnector(values.platform);
+        const connector_config =
+          connector === 'aap' && aapTemplateId != null && aapTemplateId >= 1
+            ? aapResourceType === 'workflow_job'
+              ? { resource_type: 'workflow_job' as const, workflow_job_template_id: aapTemplateId }
+              : { resource_type: 'job_template' as const, job_template_id: aapTemplateId }
+            : null;
+        const singleStep: ExecutionStep = {
+          order: 1,
+          name: 'Exécution',
+          type: 'execution',
+          connector_type: connector,
+          connector_config: connector_config ?? undefined,
+          conditional_environments: null,
+        };
+        await updateActionSteps(actionId, { steps: [singleStep], change_type_config });
       }
 
       if (done) onSuccess?.(done);
@@ -253,12 +306,51 @@ export function ActionWizard({
           </Form.Item>
         </div>
         {currentStep === 1 && (
-          <Form.Item label="Paramètres" tooltip="Définissez les paramètres de l'action via l'éditeur visuel.">
-            <ParametersEditor value={parameterList} onChange={setParameterList} />
-          </Form.Item>
+          <Space orientation="vertical" style={{ width: '100%' }} size="middle">
+            {isPlatformAAP && (
+              <>
+                <Form.Item label="Quel automatisme appeler ?" style={{ marginBottom: 0 }}>
+                  <Space wrap>
+                    <Form.Item label="Type de ressource" style={{ marginBottom: 0 }}>
+                      <Select
+                        value={aapResourceType}
+                        onChange={setAapResourceType}
+                        options={[
+                          { value: 'job_template', label: 'Job template' },
+                          { value: 'workflow_job', label: 'Workflow job' },
+                        ]}
+                        style={{ width: 160 }}
+                        aria-label="Type ressource AAP"
+                      />
+                    </Form.Item>
+                    <Form.Item
+                      label="ID template"
+                      required
+                      validateStatus={isPlatformAAP && (aapTemplateId == null || aapTemplateId < 1) ? 'error' : ''}
+                      help={isPlatformAAP && (aapTemplateId == null || aapTemplateId < 1) ? 'ID du job template ou workflow job template AAP' : ''}
+                      style={{ marginBottom: 0 }}
+                    >
+                      <Input
+                        type="number"
+                        min={1}
+                        value={aapTemplateId ?? ''}
+                        onChange={(e) => setAapTemplateId(e.target.value ? Number(e.target.value) : undefined)}
+                        placeholder="ID template AAP"
+                        style={{ width: 120 }}
+                        aria-label="ID template AAP"
+                      />
+                    </Form.Item>
+                  </Space>
+                </Form.Item>
+              </>
+            )}
+            <Form.Item label="Paramètres" tooltip="Définissez les paramètres de l'action (extra_vars, etc.).">
+              <ParametersEditor value={parameterList} onChange={setParameterList} />
+            </Form.Item>
+          </Space>
         )}
         {currentStep === 2 && (
-          <Space direction="vertical" style={{ width: '100%' }} size="middle">
+          <Space orientation="vertical" style={{ width: '100%' }} size="middle">
             <Form.Item label="Règles d'impact" tooltip="Définissez les règles d'impact par environnement.">
               <ImpactRulesEditor value={impactRulesList} onChange={setImpactRulesList} />
             </Form.Item>
@@ -302,17 +394,17 @@ export function ActionWizard({
       aria-label={isEditMode ? "Modifier l'action" : 'Nouvelle action'}
     >
       {error && (
-        <Alert message="Erreur" description={error} type="error" showIcon style={{ marginBottom: 16 }} />
+        <Alert title="Erreur" description={error} type="error" showIcon style={{ marginBottom: 16 }} />
       )}
       {submitError && (
-        <Alert message="Erreur" description={submitError} type="error" showIcon style={{ marginBottom: 16 }} />
+        <Alert title="Erreur" description={submitError} type="error" showIcon style={{ marginBottom: 16 }} />
       )}
 
       <Steps
         current={currentStep}
         items={STEP_ITEMS.map((item, i) => ({
           title: item.title,
-          ...(item.content != null && { description: item.content }),
+          ...(item.content != null && { content: item.content }),
           status: i === currentStep ? 'process' : i < currentStep ? 'finish' : 'wait',
         }))}
         style={{ marginBottom: 24 }}

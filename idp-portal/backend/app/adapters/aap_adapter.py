@@ -1,6 +1,8 @@
-"""AAP (Ansible Automation Platform) adapter (Story 4.4).
+"""AAP (Ansible Automation Platform) adapter (Story 4.4, 4.10, 5.3).
 
 Implements platform adapter for triggering and monitoring jobs on AAP/Tower.
+Story 4.10: supports job_template and workflow_job resource types.
+Story 5.3: if integration has config (auth_flow steps), obtain_token then call_api; else legacy auth_flow + credential_ref.
 Uses Strategy Pattern - inherits from BaseAdapter interface.
 """
 
@@ -51,6 +53,7 @@ class AAPAdapter(BaseAdapter):
         super().__init__(platform_type, base_url)
         self._client: httpx.AsyncClient | None = None
         self._credentials: dict[str, Any] = {}
+        self._resource_type: str = "job_template"  # job_template | workflow_job (Story 4.10)
 
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create httpx async client with timeout."""
@@ -85,47 +88,153 @@ class AAPAdapter(BaseAdapter):
             )
             return auth, headers
 
+    async def _resolve_credentials_from_config(
+        self,
+        credentials: dict[str, Any],
+        integration: dict[str, Any],
+        correlation_id: str,
+    ) -> dict[str, Any]:
+        """If integration has config with obtain_token step, POST to token_url and merge token into credentials (Story 5.3).
+
+        Raises:
+            PlatformError: If token acquisition fails (code-review fix HIGH-1: explicit failure instead of silent fallback)
+        """
+        config = integration.get("config") or {}
+        steps = config.get("auth_flow") or []
+        obtain = next((s for s in steps if s.get("step") == "obtain_token"), None)
+        if not obtain:
+            return credentials
+
+        token_url = integration.get("token_url") or integration.get("base_url")
+        if not token_url:
+            logger.warning("aap_config_obtain_token_no_url", correlation_id=correlation_id)
+            raise PlatformError(
+                code="AAP_TOKEN_URL_MISSING",
+                message="Config spécifie obtain_token mais token_url est absent",
+            )
+
+        cred_spec = obtain.get("credentials") or {}
+        keys = cred_spec.get("keys") or []
+        body = {k: credentials.get(k) for k in keys if k in credentials}
+        response_token_path = obtain.get("response_token_path") or "access_token"
+
+        try:
+            client = await self._get_client()
+            response = await client.post(token_url, json=body)
+            response.raise_for_status()
+            data = response.json()
+            # Support path like "access_token" or nested "data.access_token"
+            token = data
+            for part in response_token_path.split("."):
+                token = token.get(part) if isinstance(token, dict) else None
+            if token and isinstance(token, str):
+                logger.info(
+                    "aap_config_obtain_token_success",
+                    correlation_id=correlation_id,
+                    token_url=token_url,
+                )
+                return {**credentials, "token": token}
+            # Token not found in response at expected path
+            logger.error(
+                "aap_config_obtain_token_path_not_found",
+                correlation_id=correlation_id,
+                response_token_path=response_token_path,
+            )
+            raise PlatformError(
+                code="AAP_TOKEN_NOT_IN_RESPONSE",
+                message=f"Token non trouvé dans la réponse au path '{response_token_path}'",
+            )
+        except PlatformError:
+            raise
+        except Exception as e:
+            logger.error(
+                "aap_config_obtain_token_failed",
+                correlation_id=correlation_id,
+                token_url=token_url,
+                error=str(e),
+            )
+            raise PlatformError(
+                code="AAP_TOKEN_ACQUISITION_FAILED",
+                message=f"Échec obtention token: {str(e)}",
+            ) from e
+
     async def trigger(
         self,
         parameters: dict[str, Any],
         credentials: dict[str, Any],
         correlation_id: str,
+        *,
+        integration: dict[str, Any] | None = None,
     ) -> str:
-        """Trigger job template execution on AAP (Story 4.4, AC1).
+        """Trigger job template or workflow job execution on AAP (Story 4.4, 4.10, 5.3).
 
-        Sends POST request to AAP /api/v2/job_templates/{id}/launch/ endpoint.
+        If integration has config with obtain_token step, resolves token first (Story 5.3).
+        Otherwise uses credentials as-is (legacy auth_flow + credential_ref).
+
+        Sends POST to job_templates/{id}/launch/ or workflow_job_templates/{id}/launch/
+        according to resource_type (default job_template).
 
         Args:
-            parameters: Must contain "job_template_id", optional "extra_vars"
+            parameters: Must contain job_template_id or workflow_job_template_id; optional extra_vars
             credentials: Vault credentials (token or username/password)
             correlation_id: Request correlation ID for tracing
+            integration: Optional integration dict with token_url, config (Story 5.3)
 
         Returns:
             AAP job ID as string
 
         Raises:
-            ValueError: If job_template_id missing in parameters
+            ValueError: If template id missing
             PlatformError: If AAP unavailable, auth fails, or template not found
         """
-        # Extract job_template_id (Task 1.4)
-        template_id = parameters.get("job_template_id")
-        if not template_id:
-            raise ValueError("job_template_id requis pour AAP")
+        # Story 5.3: resolve token from config flow if present
+        if integration and (integration.get("config") or integration.get("token_url")):
+            credentials = await self._resolve_credentials_from_config(
+                credentials, integration, correlation_id
+            )
+
+        # Story 4.10: resource_type job_template | workflow_job (AC2, AC3)
+        resource_type = parameters.get("resource_type", "job_template")
+        self._resource_type = resource_type
+
+        if resource_type == "workflow_job":
+            raw_id = parameters.get("workflow_job_template_id")
+            if raw_id is None or raw_id == "":
+                raise ValueError("workflow_job_template_id requis pour AAP (resource_type=workflow_job)")
+            try:
+                template_id = int(raw_id)
+            except (TypeError, ValueError):
+                raise ValueError("workflow_job_template_id doit etre un entier") from None
+            if template_id < 1:
+                raise ValueError("workflow_job_template_id doit etre strictement positif")
+            url = f"{self.base_url}/api/v2/workflow_job_templates/{template_id}/launch/"
+        else:
+            raw_id = parameters.get("job_template_id")
+            if raw_id is None or raw_id == "":
+                raise ValueError("job_template_id requis pour AAP")
+            try:
+                template_id = int(raw_id)
+            except (TypeError, ValueError):
+                raise ValueError("job_template_id doit etre un entier") from None
+            if template_id < 1:
+                raise ValueError("job_template_id doit etre strictement positif")
+            url = f"{self.base_url}/api/v2/job_templates/{template_id}/launch/"
 
         # Store credentials for later get_status calls
         self._credentials = credentials
 
-        # Build request
-        url = f"{self.base_url}/api/v2/job_templates/{template_id}/launch/"
         auth, headers = self._get_auth_headers(credentials)
 
-        # Extract extra_vars from parameters
-        extra_vars = {k: v for k, v in parameters.items() if k != "job_template_id"}
+        # Exclude adapter params from extra_vars (Story 4.10)
+        adapter_keys = {"resource_type", "job_template_id", "workflow_job_template_id", "template_id"}
+        extra_vars = {k: v for k, v in parameters.items() if k not in adapter_keys}
         body = {"extra_vars": extra_vars} if extra_vars else {}
 
+        log_event = "aap_workflow_trigger_started" if resource_type == "workflow_job" else "aap_trigger_started"
         logger.info(
-            "aap_trigger_started",
+            log_event,
             template_id=template_id,
+            resource_type=resource_type,
             correlation_id=correlation_id,
             url=url,
         )
@@ -142,6 +251,7 @@ class AAPAdapter(BaseAdapter):
                 "aap_trigger_success",
                 template_id=template_id,
                 job_id=job_id,
+                resource_type=resource_type,
                 correlation_id=correlation_id,
             )
 
@@ -175,6 +285,7 @@ class AAPAdapter(BaseAdapter):
             logger.error(
                 "aap_trigger_http_error",
                 template_id=template_id,
+                resource_type=resource_type,
                 correlation_id=correlation_id,
                 status_code=status_code,
             )
@@ -185,6 +296,11 @@ class AAPAdapter(BaseAdapter):
                     message="Authentification AAP échouée",
                 )
             elif status_code == 404:
+                if resource_type == "workflow_job":
+                    raise PlatformError(
+                        code="AAP_WORKFLOW_JOB_TEMPLATE_NOT_FOUND",
+                        message=f"Workflow job template AAP introuvable: {template_id}",
+                    )
                 raise PlatformError(
                     code="AAP_JOB_TEMPLATE_NOT_FOUND",
                     message=f"Job template AAP introuvable: {template_id}",
@@ -196,9 +312,9 @@ class AAPAdapter(BaseAdapter):
                 )
 
     async def get_status(self, platform_job_id: str) -> dict[str, Any]:
-        """Get current status of AAP job (Story 4.4, AC3).
+        """Get current status of AAP job (Story 4.4, 4.10).
 
-        Polls AAP /api/v2/jobs/{id}/ endpoint for job status.
+        Polls /api/v2/jobs/{id}/ or /api/v2/workflow_jobs/{id}/ according to resource_type.
 
         Args:
             platform_job_id: AAP job ID from trigger()
@@ -209,7 +325,10 @@ class AAPAdapter(BaseAdapter):
         Raises:
             PlatformError: If job not found (404)
         """
-        url = f"{self.base_url}/api/v2/jobs/{platform_job_id}/"
+        if self._resource_type == "workflow_job":
+            url = f"{self.base_url}/api/v2/workflow_jobs/{platform_job_id}/"
+        else:
+            url = f"{self.base_url}/api/v2/jobs/{platform_job_id}/"
         auth, headers = self._get_auth_headers(self._credentials)
 
         try:
@@ -245,12 +364,27 @@ class AAPAdapter(BaseAdapter):
             }
 
         except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404:
+            status_code = e.response.status_code
+            if status_code == 404:
+                if self._resource_type == "workflow_job":
+                    raise PlatformError(
+                        code="AAP_WORKFLOW_JOB_NOT_FOUND",
+                        message=f"Workflow job AAP introuvable: {platform_job_id}",
+                    )
                 raise PlatformError(
                     code="AAP_JOB_NOT_FOUND",
                     message=f"Job AAP introuvable: {platform_job_id}",
                 )
-            raise
+            logger.error(
+                "aap_get_status_http_error",
+                job_id=platform_job_id,
+                resource_type=self._resource_type,
+                status_code=status_code,
+            )
+            raise PlatformError(
+                code="AAP_ERROR",
+                message=f"Erreur AAP HTTP {status_code}",
+            ) from e
 
     async def parse_callback(self, callback_data: dict[str, Any]) -> dict[str, Any]:
         """Parse AAP webhook callback data (Story 4.4, AC4).

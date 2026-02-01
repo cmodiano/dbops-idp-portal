@@ -207,7 +207,16 @@ class TestGetAll:
         with patch("app.repositories.profile_repository.get_connection") as mock_get_conn:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
             mock_get_conn.return_value.__aexit__ = AsyncMock(return_value=None)
-            result = await profile_repository.get_all()
+            with patch(
+                "app.repositories.profile_repository.profile_action_permission_repository.get_actions_permissions_for_profile_ids",
+                new_callable=AsyncMock,
+                return_value={},
+            ), patch(
+                "app.repositories.profile_repository.profile_target_permission_repository.get_target_permissions_for_profile_ids",
+                new_callable=AsyncMock,
+                return_value={},
+            ):
+                result = await profile_repository.get_all()
 
         assert len(result) == 1
         assert result[0].id == 1

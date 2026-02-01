@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
+import { ThemeProvider } from '../../contexts/ThemeContext';
 import { ActionDrawerPreview } from './ActionDrawerPreview';
 import type { ActionPreviewData } from '../../types/api';
 
@@ -20,36 +21,53 @@ const mockAction: ActionPreviewData = {
   tags: ['oracle', 'provisioning'],
 };
 
+function renderWithTheme(ui: React.ReactElement) {
+  return render(<ThemeProvider>{ui}</ThemeProvider>);
+}
+
 describe('ActionDrawerPreview', () => {
+  beforeEach(() => {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes('dark') ? false : true,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+  });
+
   it('renders action name and description', () => {
-    render(<ActionDrawerPreview action={mockAction} />);
+    renderWithTheme(<ActionDrawerPreview action={mockAction} />);
 
     expect(screen.getByText('Creer PDB Oracle')).toBeInTheDocument();
     expect(screen.getByText(/Cree une nouvelle Pluggable Database/)).toBeInTheDocument();
   });
 
   it('renders with correct aria-label for accessibility', () => {
-    render(<ActionDrawerPreview action={mockAction} />);
+    renderWithTheme(<ActionDrawerPreview action={mockAction} />);
 
     const region = screen.getByRole('region');
     expect(region).toHaveAttribute('aria-label', 'Preview fiche action: Creer PDB Oracle');
   });
 
   it('renders impact indicator when impact_level is provided', () => {
-    render(<ActionDrawerPreview action={mockAction} />);
+    renderWithTheme(<ActionDrawerPreview action={mockAction} />);
 
     expect(screen.getByText('Eleve')).toBeInTheDocument();
   });
 
   it('renders engine and platform metadata (Story 2.23: category removed)', () => {
-    render(<ActionDrawerPreview action={mockAction} />);
+    renderWithTheme(<ActionDrawerPreview action={mockAction} />);
 
     expect(screen.getByText('Oracle')).toBeInTheDocument();
     expect(screen.getByText('AAP')).toBeInTheDocument();
   });
 
   it('renders parameters from parameters_schema', () => {
-    render(<ActionDrawerPreview action={mockAction} />);
+    renderWithTheme(<ActionDrawerPreview action={mockAction} />);
 
     expect(screen.getByText('pdb_name')).toBeInTheDocument();
     expect(screen.getByText('target_server')).toBeInTheDocument();
@@ -58,13 +76,13 @@ describe('ActionDrawerPreview', () => {
 
   it('renders empty state when no parameters defined', () => {
     const actionWithoutParams = { ...mockAction, parameters_schema: null };
-    render(<ActionDrawerPreview action={actionWithoutParams} />);
+    renderWithTheme(<ActionDrawerPreview action={actionWithoutParams} />);
 
     expect(screen.getByText('Aucun parametre defini')).toBeInTheDocument();
   });
 
   it('renders enabled Execute button by default (admin preview mode)', () => {
-    render(<ActionDrawerPreview action={mockAction} />);
+    renderWithTheme(<ActionDrawerPreview action={mockAction} />);
 
     const button = screen.getByRole('button', { name: /Executer/i });
     expect(button).toBeInTheDocument();
@@ -72,7 +90,7 @@ describe('ActionDrawerPreview', () => {
   });
 
   it('renders disabled Execute button when canExecute is false (Story 3.2, AC3)', () => {
-    render(<ActionDrawerPreview action={mockAction} canExecute={false} />);
+    renderWithTheme(<ActionDrawerPreview action={mockAction} canExecute={false} />);
 
     const button = screen.getByRole('button', { name: /Executer/i });
     expect(button).toBeInTheDocument();
@@ -80,7 +98,7 @@ describe('ActionDrawerPreview', () => {
   });
 
   it('renders enabled Execute button when canExecute is true (Story 3.2, AC3)', () => {
-    render(<ActionDrawerPreview action={mockAction} canExecute={true} allowedEnvironments={['DEV', 'PROD']} />);
+    renderWithTheme(<ActionDrawerPreview action={mockAction} canExecute={true} allowedEnvironments={['DEV', 'PROD']} />);
 
     const button = screen.getByRole('button', { name: /Executer/i });
     expect(button).toBeInTheDocument();
@@ -88,41 +106,41 @@ describe('ActionDrawerPreview', () => {
   });
 
   it('returns null when visible is false', () => {
-    const { container } = render(<ActionDrawerPreview action={mockAction} visible={false} />);
+    const { container } = renderWithTheme(<ActionDrawerPreview action={mockAction} visible={false} />);
 
     expect(container.firstChild).toBeNull();
   });
 
   it('renders placeholder text when name is empty', () => {
     const actionWithoutName = { ...mockAction, name: '' };
-    render(<ActionDrawerPreview action={actionWithoutName} />);
+    renderWithTheme(<ActionDrawerPreview action={actionWithoutName} />);
 
     expect(screen.getByText('Sans nom')).toBeInTheDocument();
   });
 
   it('renders placeholder text when description is null', () => {
     const actionWithoutDesc = { ...mockAction, description: null };
-    render(<ActionDrawerPreview action={actionWithoutDesc} />);
+    renderWithTheme(<ActionDrawerPreview action={actionWithoutDesc} />);
 
     expect(screen.getByText('Aucune description disponible.')).toBeInTheDocument();
   });
 
   it('has correct aria-label on disabled button (Story 3.2, AC3)', () => {
-    render(<ActionDrawerPreview action={mockAction} canExecute={false} />);
+    renderWithTheme(<ActionDrawerPreview action={mockAction} canExecute={false} />);
 
     const button = screen.getByRole('button', { name: /Executer/i });
     expect(button).toHaveAttribute('aria-label', 'Executer (acces non autorise)');
   });
 
   it('renders tags as category (Story 3.2, AC1)', () => {
-    render(<ActionDrawerPreview action={mockAction} />);
+    renderWithTheme(<ActionDrawerPreview action={mockAction} />);
 
     expect(screen.getByText('oracle')).toBeInTheDocument();
     expect(screen.getByText('provisioning')).toBeInTheDocument();
   });
 
   it('renders parameter types from schema (Story 3.2, AC1)', () => {
-    render(<ActionDrawerPreview action={mockAction} />);
+    renderWithTheme(<ActionDrawerPreview action={mockAction} />);
 
     // Parameters should show type info (multiple strings expected)
     const stringTypes = screen.getAllByText(': string');
@@ -137,7 +155,7 @@ describe('ActionDrawerPreview', () => {
       ...mockAction,
       documentation_md: '# Getting Started\n\nThis is a **test** action.',
     };
-    render(<ActionDrawerPreview action={actionWithDocs} />);
+    renderWithTheme(<ActionDrawerPreview action={actionWithDocs} />);
 
     expect(screen.getByText('Documentation')).toBeInTheDocument();
     expect(screen.getByTestId('documentation-content')).toBeInTheDocument();
@@ -147,7 +165,7 @@ describe('ActionDrawerPreview', () => {
 
   it('renders empty state when documentation_md is null (Story 3.4, AC3)', () => {
     const actionWithoutDocs = { ...mockAction, documentation_md: null };
-    render(<ActionDrawerPreview action={actionWithoutDocs} />);
+    renderWithTheme(<ActionDrawerPreview action={actionWithoutDocs} />);
 
     expect(screen.getByText('Documentation')).toBeInTheDocument();
     expect(screen.getByText('Aucune documentation disponible')).toBeInTheDocument();
@@ -156,7 +174,7 @@ describe('ActionDrawerPreview', () => {
 
   it('renders empty state when documentation_md is undefined (Story 3.4, AC3)', () => {
     // mockAction has no documentation_md
-    render(<ActionDrawerPreview action={mockAction} />);
+    renderWithTheme(<ActionDrawerPreview action={mockAction} />);
 
     expect(screen.getByText('Documentation')).toBeInTheDocument();
     expect(screen.getByText('Aucune documentation disponible')).toBeInTheDocument();
@@ -167,7 +185,7 @@ describe('ActionDrawerPreview', () => {
       ...mockAction,
       documentation_md: '# Title\n\n' + 'Lorem ipsum dolor sit amet. '.repeat(100),
     };
-    render(<ActionDrawerPreview action={actionWithLongDocs} />);
+    renderWithTheme(<ActionDrawerPreview action={actionWithLongDocs} />);
 
     const container = screen.getByTestId('documentation-content');
     expect(container).toHaveStyle({ overflowY: 'auto' });
@@ -179,7 +197,7 @@ describe('ActionDrawerPreview', () => {
       ...mockAction,
       documentation_md: '```sql\nSELECT * FROM users;\n```',
     };
-    render(<ActionDrawerPreview action={actionWithCode} />);
+    renderWithTheme(<ActionDrawerPreview action={actionWithCode} />);
 
     expect(screen.getByText('SELECT * FROM users;')).toBeInTheDocument();
   });
@@ -189,7 +207,7 @@ describe('ActionDrawerPreview', () => {
       ...mockAction,
       documentation_md: '- Item 1\n- Item 2\n- Item 3',
     };
-    render(<ActionDrawerPreview action={actionWithList} />);
+    renderWithTheme(<ActionDrawerPreview action={actionWithList} />);
 
     expect(screen.getByText('Item 1')).toBeInTheDocument();
     expect(screen.getByText('Item 2')).toBeInTheDocument();
@@ -201,7 +219,7 @@ describe('ActionDrawerPreview', () => {
       ...mockAction,
       documentation_md: '| Col A | Col B |\n|------|------|\n| a1   | b1   |\n| a2   | b2   |',
     };
-    render(<ActionDrawerPreview action={actionWithTable} />);
+    renderWithTheme(<ActionDrawerPreview action={actionWithTable} />);
 
     const docSection = screen.getByTestId('documentation-content');
     expect(within(docSection).getByText('Col A')).toBeInTheDocument();

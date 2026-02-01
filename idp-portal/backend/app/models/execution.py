@@ -142,6 +142,18 @@ class ExecutionStepResponse(BaseModel):
     error_message: str | None = None
 
 
+class StepLogsResponse(BaseModel):
+    """Response model for GET /executions/{id}/steps/{step_id}/logs (Story 4.7, AC6).
+
+    Returns step logs: output, error_message, timestamps.
+    """
+    step_id: int
+    output: dict[str, Any] | None = None
+    error_message: str | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
 class ExecutionStepCreate(BaseModel):
     """Input model for creating execution steps (Story 4.3, Task 2.2).
 

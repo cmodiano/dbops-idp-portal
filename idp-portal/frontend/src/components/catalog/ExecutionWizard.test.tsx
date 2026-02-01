@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from 'antd';
 import { ExecutionWizard } from './ExecutionWizard';
@@ -584,8 +584,10 @@ describe('ExecutionWizard', () => {
         // Ant Design Select shows loading via aria-busy or spinner
       });
 
-      // Resolve the promise
-      resolveDatabases!(mockDatabaseItems);
+      // Resolve the promise (wrap in act to avoid state update warning)
+      await act(async () => {
+        resolveDatabases!(mockDatabaseItems);
+      });
     });
   });
 });

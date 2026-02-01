@@ -45,7 +45,7 @@ def sample_action_create():
 
 @pytest.fixture
 def mock_db_row():
-    """Sample database row for action. Story 3.4: DOCUMENTATION_MD column added (V022)."""
+    """Sample database row for action. Story 5.7: ITEM_TYPE column added (V027)."""
     return (
         1,  # ID
         "Create PDB Oracle",  # NAME
@@ -60,6 +60,7 @@ def mock_db_row():
         datetime(2026, 1, 28, 10, 0, 0),  # CREATED_AT
         None,  # UPDATED_AT
         None,  # DOCUMENTATION_MD (Story 3.4)
+        "action",  # ITEM_TYPE (Story 5.7)
     )
 
 
@@ -68,7 +69,7 @@ def mock_db_row():
 
 @pytest.fixture
 def mock_db_row_with_detail():
-    """Sample database row for action detail. Story 3.4: DOCUMENTATION_MD column added (V022)."""
+    """Sample database row for action detail. Story 5.7: ITEM_TYPE column added (V027)."""
     return (
         1,  # ID
         "Create PDB Oracle",  # NAME
@@ -85,12 +86,13 @@ def mock_db_row_with_detail():
         None,  # EXECUTION_STEPS
         None,  # CHANGE_TYPE_CONFIG
         None,  # DOCUMENTATION_MD (Story 3.4)
+        "action",  # ITEM_TYPE (Story 5.7)
     )
 
 
 @pytest.fixture
 def mock_db_row_with_execution_steps():
-    """Sample database row for action with execution_steps and change_type_config. Story 3.4: DOCUMENTATION_MD column added."""
+    """Sample database row for action with execution_steps and change_type_config. Story 5.7: ITEM_TYPE column added."""
     return (
         1,  # ID
         "Create PDB Oracle",  # NAME
@@ -107,12 +109,13 @@ def mock_db_row_with_execution_steps():
         '[{"order": 1, "name": "Verification", "type": "prerequisite", "connector_type": "none", "connector_config": null, "conditional_environments": null}]',  # EXECUTION_STEPS
         '{"DEV": {"required": false}, "PROD": {"required": true, "change_model_code": "1516B"}}',  # CHANGE_TYPE_CONFIG (Story 2.24)
         '# Documentation\n\nThis action creates a PDB.',  # DOCUMENTATION_MD (Story 3.4)
+        "action",  # ITEM_TYPE (Story 5.7)
     )
 
 
 @pytest.fixture
 def mock_db_row_published():
-    """Sample database row for published action. Story 3.4: DOCUMENTATION_MD column added (V022)."""
+    """Sample database row for published action. Story 5.7: ITEM_TYPE column added (V027)."""
     return (
         2,  # ID
         "Published Action",  # NAME
@@ -129,6 +132,7 @@ def mock_db_row_published():
         None,  # EXECUTION_STEPS
         None,  # CHANGE_TYPE_CONFIG
         None,  # DOCUMENTATION_MD (Story 3.4)
+        "action",  # ITEM_TYPE (Story 5.7)
     )
 
 

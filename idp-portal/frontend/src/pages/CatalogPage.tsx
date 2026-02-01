@@ -29,10 +29,10 @@ import {
   Space,
   Card,
   Drawer,
-  message,
   Select,
   Tag,
   Tooltip,
+  App,
 } from 'antd';
 import {
   AppstoreOutlined,
@@ -132,6 +132,7 @@ function getStoredViewMode(): ViewMode {
 }
 
 export default function CatalogPage() {
+  const { message } = App.useApp();
   const { isAuthenticated } = useAuth();
   const isWide = useMediaQuery(1280);
   const [viewMode, setViewMode] = useState<ViewMode>(getStoredViewMode);
@@ -155,6 +156,7 @@ export default function CatalogPage() {
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [drawerLoading, setDrawerLoading] = useState(false);
   const [executionWizardOpen, setExecutionWizardOpen] = useState(false);
+  const [activeExecutionId, setActiveExecutionId] = useState<number | null>(null);
   const lastFocusedCardRef = useRef<HTMLElement | null>(null);
 
   const loadData = useCallback(async () => {
@@ -182,7 +184,7 @@ export default function CatalogPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, debouncedQ, filterTags, filterEngine, filterEnvironment, filterImpact]);
+  }, [activeTab, debouncedQ, filterTags, filterEngine, filterEnvironment, filterImpact, message]);
 
   useEffect(() => {
     loadData();
@@ -223,7 +225,7 @@ export default function CatalogPage() {
         setFavorites((prev) => new Set(prev).add(actionId));
         message.success('Ajoutée aux favoris');
       }
-    } catch (error) {
+    } catch {
       message.error('Erreur lors de la mise à jour des favoris');
     }
   };
@@ -287,13 +289,18 @@ export default function CatalogPage() {
     setExecutionWizardOpen(true);
   }, []);
 
-  // Handle execution success (Story 4.1, Task 7)
+  // Handle execution success (Story 4.1, 4.6) — show timeline in wizard, do not close
   const handleExecutionSuccess = useCallback((executionId: number) => {
+    setActiveExecutionId(executionId);
+    message.success(`Execution #${executionId} demarree`);
+    loadData();
+  }, [loadData, message]);
+
+  // Back to catalog — close timeline and wizard (Story 4.6, Task 4.2)
+  const handleBackToCatalog = useCallback(() => {
+    setActiveExecutionId(null);
     setExecutionWizardOpen(false);
     setDrawerVisible(false);
-    // TODO: Navigate to execution timeline (Story 4.6) or show success
-    message.success(`Execution #${executionId} soumise avec succes`);
-    // Reload data to update execution counts
     loadData();
   }, [loadData]);
 
@@ -305,7 +312,6 @@ export default function CatalogPage() {
     return (
       <div
         key={action.id}
-        style={{ position: 'relative' }}
         tabIndex={0}
         role="button"
         aria-label={`Voir détails: ${action.name}`}
@@ -321,23 +327,10 @@ export default function CatalogPage() {
           action={preview}
           onClick={(e) => handleActionClick(action, e)}
           variant="default"
+          isFavorite={isFav}
+          onToggleFavorite={(e) => handleToggleFavorite(action.id, e)}
+          showFavoriteButton={isAuthenticated}
         />
-        <Tooltip title={isFav ? 'Retirer des favoris' : 'Ajouter aux favoris'}>
-          <Button
-            type="text"
-            icon={isFav ? <HeartFilled style={{ color: '#eb2f96' }} /> : <HeartOutlined />}
-            onClick={(e) => handleToggleFavorite(action.id, e)}
-            disabled={!isAuthenticated}
-            style={{
-              position: 'absolute',
-              top: 8,
-              right: 8,
-              background: 'rgba(255,255,255,0.9)',
-              borderRadius: '50%',
-            }}
-            aria-label={isFav ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-          />
-        </Tooltip>
       </div>
     );
   };
@@ -345,7 +338,7 @@ export default function CatalogPage() {
   // Loading skeleton: cards in grid mode, rows in list mode (AC9)
   const renderSkeleton = () =>
     viewMode === 'list' ? (
-      <Space direction="vertical" style={{ width: '100%' }}>
+      <Space orientation="vertical" style={{ width: '100%' }}>
         {Array.from({ length: 6 }).map((_, i) => (
           <Card key={i}>
             <Skeleton active paragraph={{ rows: 1 }} />
@@ -387,7 +380,7 @@ export default function CatalogPage() {
   };
 
   const renderFiltersPanel = () => (
-    <Space direction="vertical" style={{ width: '100%' }} size="middle">
+    <Space orientation="vertical" style={{ width: '100%' }} size="middle">
       <Text strong>Moteur</Text>
       <Select
         placeholder="Moteur"
@@ -511,7 +504,9 @@ export default function CatalogPage() {
               label: (
                 <span>
                   {tab.key === 'my-actions' && <HeartOutlined style={{ marginRight: 4 }} />}
-                  {tab.label}
+                  {tab.key === 'my-actions'
+                    ? `Mes actions${favorites.size > 0 ? ` (${favorites.size})` : ''}`
+                    : tab.label}
                 </span>
               ),
             }))}
@@ -545,7 +540,7 @@ export default function CatalogPage() {
               ))}
             </Row>
           ) : (
-            <Space direction="vertical" style={{ width: '100%' }}>
+            <Space orientation="vertical" style={{ width: '100%' }}>
               {filteredActions.map((action) => renderActionCard(action))}
             </Space>
           )}
@@ -577,7 +572,7 @@ export default function CatalogPage() {
       <Drawer
         title="Filtres"
         placement="left"
-        width={240}
+        styles={{ wrapper: { width: 240 } }}
         open={filtersPanelOpen && !isWide}
         onClose={() => setFiltersPanelOpen(false)}
         aria-label="Panneau de filtres"
@@ -589,7 +584,7 @@ export default function CatalogPage() {
       <Drawer
         title={selectedAction?.name || 'Detail'}
         placement="right"
-        width={480}
+        styles={{ wrapper: { width: 480 } }}
         open={drawerVisible}
         onClose={handleDrawerClose}
         keyboard
@@ -613,13 +608,18 @@ export default function CatalogPage() {
         ) : null}
       </Drawer>
 
-      {/* ExecutionWizard (Story 4.1, Task 7) */}
+      {/* ExecutionWizard + Timeline (Story 4.1, 4.6, Task 4) */}
       <ExecutionWizard
         open={executionWizardOpen}
         action={selectedActionDetail}
         allowedEnvironments={selectedActionEnvs}
-        onCancel={() => setExecutionWizardOpen(false)}
+        activeExecutionId={activeExecutionId}
+        onCancel={() => {
+          setActiveExecutionId(null);
+          setExecutionWizardOpen(false);
+        }}
         onSuccess={handleExecutionSuccess}
+        onBackToCatalog={handleBackToCatalog}
       />
     </div>
   );

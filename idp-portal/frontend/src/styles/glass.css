@@ -1,46 +1,92 @@
 /**
- * Liquid Glass Effects - Modern 2026 UI
- * Applied to Ant Design components via CSS overrides
+ * Liquid Glass / Glassmorphism (inspiré freefrontend.com/css-glassmorphism).
+ * - backdrop-filter + rgba pour le flou et la transparence
+ * - bordure lumineuse (refractive edge) + inset box-shadow
+ * - texture bruit légère sur le fond pour plus de réalisme
  */
 
-/* === Cards with glass effect === */
+/* === Texture bruit sur le fond (effet frosted plus réaliste) === */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.015' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.04;
+}
+
+html.dark body::after {
+  opacity: 0.06;
+  mix-blend-mode: overlay;
+}
+
+/* Contenu au-dessus de la texture */
+#root {
+  position: relative;
+  z-index: 1;
+}
+
+/* === Cards: blur + bordure verre + border-radius moderne (12px) === */
 .ant-card {
   border: 1px solid var(--ant-color-border-secondary);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 12px;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
+  overflow: hidden;
 }
 
-/* Light mode: subtle glass with visible border for contrast */
-/* Story 3-7: Enhanced contrast - bordure visible sur fond grisé */
+/* Light: bordure verre (refractive edge) + double inset pour épaisseur */
 html.light .ant-card {
-  background: rgba(255, 255, 255, 0.92) !important;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.5) !important;
+  backdrop-filter: blur(40px) saturate(1.25);
+  -webkit-backdrop-filter: blur(40px) saturate(1.25);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.02),
+    0 0 40px rgba(0, 0, 0, 0.04),
+    0 4px 24px rgba(0, 0, 0, 0.06),
+    0 1px 0 rgba(255, 255, 255, 0.9) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.02) inset;
 }
 
-/* Dark mode: glass with depth */
+/* Dark: bordure verre + double inset */
 html.dark .ant-card {
-  background: rgba(26, 26, 36, 0.75) !important;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: rgba(20, 20, 30, 0.42) !important;
+  backdrop-filter: blur(44px) saturate(1.15);
+  -webkit-backdrop-filter: blur(44px) saturate(1.15);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.2),
+    0 0 60px rgba(0, 0, 0, 0.2),
+    0 8px 32px rgba(0, 0, 0, 0.25),
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.15) inset;
 }
 
-/* Hover only for interactive cards; exclude preview (read-only) */
+/* Hover: lift + halo et ombre plus marqués */
 .ant-card:hover:not(.card-preview) {
-  transform: translateY(-2px);
-  box-shadow: var(--ant-box-shadow-secondary);
-}
-
-html.dark .ant-card:hover:not(.card-preview) {
-  border-color: var(--ant-color-border);
-  background: rgba(30, 30, 42, 0.85) !important;
+  transform: translateY(-4px);
 }
 
 html.light .ant-card:hover:not(.card-preview) {
-  background: rgba(255, 255, 255, 0.98) !important;
-  border-color: rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.68) !important;
+  border-color: rgba(255, 255, 255, 0.75);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.03),
+    0 0 56px rgba(0, 0, 0, 0.06),
+    0 12px 40px rgba(0, 0, 0, 0.08),
+    0 1px 0 rgba(255, 255, 255, 0.95) inset;
+}
+
+html.dark .ant-card:hover:not(.card-preview) {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(26, 26, 38, 0.58) !important;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.3),
+    0 0 80px rgba(0, 0, 0, 0.25),
+    0 16px 48px rgba(0, 0, 0, 0.35),
+    0 1px 0 rgba(255, 255, 255, 0.06) inset;
 }
 
 /* Glass highlight on top edge */
@@ -58,7 +104,7 @@ html.light .ant-card:hover:not(.card-preview) {
     rgba(255, 255, 255, 0.3) 80%,
     transparent
   );
-  border-radius: 8px 8px 0 0;
+  border-radius: 12px 12px 0 0;
   pointer-events: none;
   z-index: 1;
 }
@@ -80,14 +126,14 @@ html.dark .ant-card::before {
 }
 
 html.dark .ant-btn-default {
-  background: rgba(36, 36, 48, 0.8) !important;
+  background: rgba(36, 36, 48, 0.55) !important;
   border-color: var(--ant-color-border);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 html.dark .ant-btn-default:hover {
-  background: rgba(45, 45, 60, 0.9) !important;
+  background: rgba(45, 45, 60, 0.7) !important;
   border-color: var(--ant-color-border-secondary);
   transform: translateY(-1px);
 }
@@ -106,10 +152,15 @@ html.light .ant-btn-default:hover {
   transform: translateY(-1px);
 }
 
-/* === Table with subtle glass === */
+/* === Table: glass panel (inside card) === */
 .ant-table-wrapper .ant-table {
   border-radius: 8px;
   overflow: hidden;
+}
+
+html.light .ant-table-thead > tr > th {
+  background: rgba(255, 255, 255, 0.35) !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 html.dark .ant-table {
@@ -117,7 +168,7 @@ html.dark .ant-table {
 }
 
 html.dark .ant-table-thead > tr > th {
-  background: rgba(26, 26, 36, 0.6) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -127,7 +178,7 @@ html.dark .ant-table-tbody > tr > td {
 }
 
 html.dark .ant-table-tbody > tr:hover > td {
-  background: rgba(255, 255, 255, 0.03) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
 }
 
 .ant-table-thead > tr > th {
@@ -139,55 +190,79 @@ html.dark .ant-table-tbody > tr:hover > td {
   transition: background-color 0.2s ease;
 }
 
-/* === Header glass effect === */
+/* === Header: blur fort + ombre douce === */
 header.ant-layout-header {
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(32px) saturate(1.2);
+  -webkit-backdrop-filter: blur(32px) saturate(1.2);
+  border-bottom: 1px solid transparent;
 }
 
 html.light header.ant-layout-header {
-  background: rgba(255, 255, 255, 0.8) !important;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.48) !important;
+  border-bottom-color: rgba(0, 0, 0, 0.05);
+  box-shadow:
+    0 0 40px rgba(0, 0, 0, 0.03),
+    0 1px 0 rgba(255, 255, 255, 0.85),
+    0 4px 20px rgba(0, 0, 0, 0.04);
 }
 
 html.dark header.ant-layout-header {
-  background: rgba(26, 26, 36, 0.85) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(16, 16, 24, 0.48) !important;
+  border-bottom-color: rgba(255, 255, 255, 0.05);
+  box-shadow:
+    0 0 60px rgba(0, 0, 0, 0.2),
+    0 1px 0 rgba(255, 255, 255, 0.04),
+    0 8px 32px rgba(0, 0, 0, 0.25);
 }
 
-/* === Modal/Drawer glass === */
+/* === Modal/Drawer: blur fort + ombres liquides === */
 .ant-modal-content,
 .ant-drawer-content {
   border: 1px solid var(--ant-color-border-secondary);
 }
 
-/* Story 3-7: Light mode modal/drawer with enhanced shadows */
 html.light .ant-modal-content {
-  background: rgba(255, 255, 255, 0.95) !important;
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.16);
+  background: rgba(255, 255, 255, 0.52) !important;
+  backdrop-filter: blur(48px) saturate(1.25);
+  -webkit-backdrop-filter: blur(48px) saturate(1.25);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.02),
+    0 0 80px rgba(0, 0, 0, 0.06),
+    0 24px 64px rgba(0, 0, 0, 0.12),
+    0 1px 0 rgba(255, 255, 255, 0.92) inset;
 }
 
 html.light .ant-drawer .ant-drawer-content {
-  background: rgba(255, 255, 255, 0.95) !important;
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.52) !important;
+  backdrop-filter: blur(48px) saturate(1.25);
+  -webkit-backdrop-filter: blur(48px) saturate(1.25);
+  box-shadow:
+    0 0 60px rgba(0, 0, 0, 0.05),
+    -8px 0 48px rgba(0, 0, 0, 0.08),
+    0 1px 0 rgba(255, 255, 255, 0.92) inset;
 }
 
 html.dark .ant-modal-content {
-  background: rgba(26, 26, 36, 0.95) !important;
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(20, 20, 30, 0.6) !important;
+  backdrop-filter: blur(52px) saturate(1.15);
+  -webkit-backdrop-filter: blur(52px) saturate(1.15);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.3),
+    0 0 100px rgba(0, 0, 0, 0.3),
+    0 32px 80px rgba(0, 0, 0, 0.4),
+    0 1px 0 rgba(255, 255, 255, 0.04) inset;
 }
 
 html.dark .ant-drawer .ant-drawer-content {
-  background: rgba(26, 26, 36, 0.95) !important;
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  background: rgba(20, 20, 30, 0.6) !important;
+  backdrop-filter: blur(52px) saturate(1.15);
+  -webkit-backdrop-filter: blur(52px) saturate(1.15);
+  box-shadow:
+    0 0 80px rgba(0, 0, 0, 0.25),
+    -12px 0 56px rgba(0, 0, 0, 0.35),
+    0 1px 0 rgba(255, 255, 255, 0.04) inset;
 }
 
 html.dark .ant-modal-header {
@@ -200,17 +275,29 @@ html.dark .ant-drawer-header {
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-/* === Input fields === */
+/* === Inputs: subtle glass feel === */
 .ant-input,
 .ant-select-selector,
 .ant-picker {
-  transition: all 0.2s ease;
+  transition: all 0.25s ease;
+}
+
+html.light .ant-input,
+html.light .ant-select-selector,
+html.light .ant-picker {
+  background: rgba(255, 255, 255, 0.65) !important;
+}
+
+html.dark .ant-input,
+html.dark .ant-select-selector,
+html.dark .ant-picker {
+  background: rgba(255, 255, 255, 0.03) !important;
 }
 
 .ant-input:focus,
 .ant-select-focused .ant-select-selector,
 .ant-picker-focused {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ant-color-primary) 10%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ant-color-primary) 15%, transparent);
 }
 
 /* === Smooth page transitions === */
@@ -229,25 +316,30 @@ html.dark .ant-drawer-header {
   }
 }
 
-/* === Message glass (toast) === */
+/* === Message (toast): blur + halo === */
 .ant-message-notice-content {
   border-radius: 8px;
   overflow: hidden;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(28px) saturate(1.2);
+  -webkit-backdrop-filter: blur(28px) saturate(1.2);
 }
 
-/* Story 3-7: Enhanced shadow for better depth */
 html.light .ant-message-notice-content {
-  background: rgba(255, 255, 255, 0.92) !important;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+  background: rgba(255, 255, 255, 0.58) !important;
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow:
+    0 0 40px rgba(0, 0, 0, 0.05),
+    0 8px 32px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 html.dark .ant-message-notice-content {
-  background: rgba(26, 26, 36, 0.7) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  background: rgba(24, 24, 34, 0.55) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow:
+    0 0 50px rgba(0, 0, 0, 0.25),
+    0 8px 32px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
   color: rgba(255, 255, 255, 0.95);
 }
 
@@ -285,26 +377,32 @@ html.dark .ant-message-notice-content::before {
   position: relative;
 }
 
-/* === Notification glass === */
+/* === Notification: blur + ombres douces === */
 .ant-notification-notice {
   border-radius: 8px;
   overflow: hidden;
   position: relative;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(28px) saturate(1.2);
+  -webkit-backdrop-filter: blur(28px) saturate(1.2);
 }
 
-/* Story 3-7: Enhanced shadow for better depth */
 html.light .ant-notification-notice {
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow:
+    0 0 40px rgba(0, 0, 0, 0.05),
+    0 8px 32px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
   color: var(--ant-color-text);
 }
 
 html.dark .ant-notification-notice {
-  background: rgba(26, 26, 36, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(24, 24, 34, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow:
+    0 0 50px rgba(0, 0, 0, 0.25),
+    0 8px 32px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
   color: rgba(255, 255, 255, 0.95);
 }
 
@@ -347,33 +445,166 @@ html.dark .ant-notification-notice-description {
   color: rgba(255, 255, 255, 0.95);
 }
 
-/* === Dropdown glass === */
+/* === Dropdown: blur + halo === */
+html.light .ant-dropdown .ant-dropdown-menu {
+  background: rgba(255, 255, 255, 0.62) !important;
+  backdrop-filter: blur(24px) saturate(1.2);
+  -webkit-backdrop-filter: blur(24px) saturate(1.2);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow:
+    0 0 40px rgba(0, 0, 0, 0.05),
+    0 8px 32px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
 html.dark .ant-dropdown .ant-dropdown-menu {
-  background: rgba(26, 26, 36, 0.95) !important;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(22, 22, 32, 0.62) !important;
+  backdrop-filter: blur(36px) saturate(1.15);
+  -webkit-backdrop-filter: blur(36px) saturate(1.15);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow:
+    0 0 60px rgba(0, 0, 0, 0.25),
+    0 12px 40px rgba(0, 0, 0, 0.3);
 }
 
 html.dark .ant-dropdown .ant-dropdown-menu-item:hover {
   background: rgba(255, 255, 255, 0.06) !important;
 }
 
-/* === Select dropdown glass === */
+/* === Select dropdown === */
+html.light .ant-select-dropdown {
+  background: rgba(255, 255, 255, 0.62) !important;
+  backdrop-filter: blur(24px) saturate(1.2);
+  -webkit-backdrop-filter: blur(24px) saturate(1.2);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow:
+    0 0 40px rgba(0, 0, 0, 0.05),
+    0 8px 32px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
 html.dark .ant-select-dropdown {
-  background: rgba(26, 26, 36, 0.95) !important;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(22, 22, 32, 0.62) !important;
+  backdrop-filter: blur(36px) saturate(1.15);
+  -webkit-backdrop-filter: blur(36px) saturate(1.15);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow:
+    0 0 60px rgba(0, 0, 0, 0.25),
+    0 12px 40px rgba(0, 0, 0, 0.3);
 }
 
 html.dark .ant-select-item-option-active:not(.ant-select-item-option-disabled) {
   background: rgba(255, 255, 255, 0.06) !important;
 }
 
-/* === Tooltip glass === */
+/* === Tooltip: blur === */
+html.light .ant-tooltip-inner {
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
 html.dark .ant-tooltip-inner {
-  background: rgba(26, 26, 36, 0.95) !important;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(22, 22, 32, 0.72) !important;
+  backdrop-filter: blur(24px) saturate(1.1);
+  -webkit-backdrop-filter: blur(24px) saturate(1.1);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+}
+
+/* === Tags / Badges: pill en verre dépoli (style Talent Lab) === */
+.ant-tag {
+  border-radius: 999px;
+  border: 1px solid transparent;
+  backdrop-filter: blur(12px) saturate(1.15);
+  -webkit-backdrop-filter: blur(12px) saturate(1.15);
+  transition: all 0.2s ease;
+}
+
+/* Fond glass par défaut (sans !important pour laisser les couleurs custom du catalogue) */
+html.light .ant-tag {
+  background: rgba(255, 255, 255, 0.55);
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+html.dark .ant-tag {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* Tag checkable (TagCloud, filtres) */
+.ant-tag-checkable {
+  border-radius: 999px;
+  backdrop-filter: blur(12px) saturate(1.15);
+  -webkit-backdrop-filter: blur(12px) saturate(1.15);
+}
+
+html.light .ant-tag-checkable:not(.ant-tag-checkable-checked) {
+  background: rgba(255, 255, 255, 0.5) !important;
+  border-color: rgba(255, 255, 255, 0.45);
+}
+
+html.light .ant-tag-checkable-checked {
+  background: rgba(0, 135, 78, 0.18) !important;
+  border-color: rgba(0, 135, 78, 0.35);
+  box-shadow: 0 1px 6px rgba(0, 135, 78, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+html.dark .ant-tag-checkable:not(.ant-tag-checkable-checked) {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+html.dark .ant-tag-checkable-checked {
+  background: rgba(0, 135, 78, 0.2) !important;
+  border-color: rgba(0, 135, 78, 0.35);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Tabs: barre claire, onglet actif mis en avant (sans effet pill flottant) */
+.ant-tabs-nav {
+  margin-bottom: 0;
+  padding: 0 0 2px;
+}
+
+.ant-tabs-tab {
+  padding: 10px 16px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+/* Inactifs: pas de fond, juste le texte */
+html.light .ant-tabs-tab:not(.ant-tabs-tab-active) {
+  background: transparent !important;
+  color: var(--ant-color-text-secondary);
+}
+
+html.dark .ant-tabs-tab:not(.ant-tabs-tab-active) {
+  background: transparent !important;
+  color: var(--ant-color-text-secondary);
+}
+
+html.light .ant-tabs-tab:not(.ant-tabs-tab-active):hover {
+  color: var(--ant-color-text);
+}
+
+html.dark .ant-tabs-tab:not(.ant-tabs-tab-active):hover {
+  color: var(--ant-color-text);
+}
+
+/* Actif: léger fond + couleur primaire (ligne en bas via ink bar) */
+html.light .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: var(--ant-color-primary);
+  font-weight: 600;
+}
+
+html.dark .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: var(--ant-color-primary);
+  font-weight: 600;
+}
+
+.ant-tabs-ink-bar {
+  height: 3px;
+  border-radius: 3px 3px 0 0;
 }

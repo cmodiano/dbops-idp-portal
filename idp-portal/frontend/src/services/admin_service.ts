@@ -2,7 +2,7 @@
  * Admin service for catalog actions (Story 2.1, AC #5).
  */
 
-import { apiFetch } from './api_client';
+import { apiFetch, apiFetchRaw } from './api_client';
 import type {
   ActionCreate,
   ActionResponse,
@@ -40,7 +40,8 @@ export async function getAdminActions(filters?: AdminActionsFilters): Promise<Ac
   if (filters?.page_size) params.append('page_size', filters.page_size.toString());
 
   const queryString = params.toString();
-  return apiFetch<ActionListResponse>(`/admin/actions${queryString ? `?${queryString}` : ''}`);
+  // Use apiFetchRaw so we get { data, pagination }; apiFetch would return only body.data (the array).
+  return apiFetchRaw<ActionListResponse>(`/admin/actions${queryString ? `?${queryString}` : ''}`);
 }
 
 /**

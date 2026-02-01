@@ -1,4 +1,4 @@
-"""Integration models for remote platform configuration (Story 2.27, 4.9).
+"""Integration models for remote platform configuration (Story 2.27, 4.9, 5.3).
 
 Defines Pydantic models for:
 - AuthFlow: enum of supported authentication flows
@@ -7,6 +7,7 @@ Defines Pydantic models for:
 - IntegrationResponse: output model for integration (no secrets exposed)
 
 Story 4.9: Type is now free-form string (not enum), auth_flow added for execution flow.
+Story 5.3: token_url (optional) and config (optional JSON flow steps + credentials per step).
 """
 
 from datetime import datetime
@@ -30,7 +31,7 @@ class AuthFlow(str, Enum):
 
 
 class IntegrationCreate(BaseModel):
-    """Input model for creating an integration (Story 2.27, 4.9).
+    """Input model for creating an integration (Story 2.27, 4.9, 5.3).
 
     Attributes:
         type: Integration type - free-form platform name (1-100 chars, Story 4.9 AC1)
@@ -39,6 +40,8 @@ class IntegrationCreate(BaseModel):
         credential_ref: Optional Vault path or logical name for credentials (NFR7: no secrets stored)
         icon: Optional icon identifier (preset name, URL, or uploaded icon path)
         auth_flow: Optional authentication flow (token, basic, basic_then_token, pat) (Story 4.9 AC2)
+        token_url: Optional URL for token acquisition (Story 5.3 AC1); validated http(s)
+        config: Optional JSON flow steps + credentials per step (Story 5.3 AC2); no secret values
     """
     type: str = Field(..., min_length=1, max_length=100)
     name: str = Field(..., min_length=1, max_length=255)
@@ -46,6 +49,8 @@ class IntegrationCreate(BaseModel):
     credential_ref: str | None = Field(None, max_length=500)
     icon: str | None = Field(None, max_length=500)
     auth_flow: AuthFlow | None = None
+    token_url: str | None = Field(None, max_length=2000)
+    config: dict | None = None
 
     @field_validator("type")
     @classmethod
@@ -77,9 +82,24 @@ class IntegrationCreate(BaseModel):
             raise ValueError("base_url must be a valid URL starting with http:// or https://")
         return stripped
 
+    @field_validator("token_url")
+    @classmethod
+    def validate_token_url(cls, v: str | None) -> str | None:
+        """Validate token_url is a valid http(s) URL when provided (Story 5.3 AC1)."""
+        if v is None:
+            return None
+        stripped = v.strip()
+        if not stripped:
+            return None
+        if not stripped.startswith(("http://", "https://")):
+            raise ValueError("token_url must be a valid URL starting with http:// or https://")
+        return stripped
+
+    # config: validated in API layer via JSON Schema (Story 5.4) to return 400 INVALID_CONFIG
+
 
 class IntegrationUpdate(BaseModel):
-    """Input model for updating an integration (Story 2.27, 4.9).
+    """Input model for updating an integration (Story 2.27, 4.9, 5.3).
 
     All fields optional for partial update. Same validation as IntegrationCreate.
     """
@@ -89,6 +109,8 @@ class IntegrationUpdate(BaseModel):
     credential_ref: str | None = Field(None, max_length=500)
     icon: str | None = Field(None, max_length=500)
     auth_flow: AuthFlow | None = None
+    token_url: str | None = Field(None, max_length=2000)
+    config: dict | None = None
 
     @field_validator("type")
     @classmethod
@@ -125,11 +147,26 @@ class IntegrationUpdate(BaseModel):
             raise ValueError("base_url must be a valid URL starting with http:// or https://")
         return stripped
 
+    @field_validator("token_url")
+    @classmethod
+    def validate_token_url(cls, v: str | None) -> str | None:
+        """Validate token_url is a valid http(s) URL when provided (Story 5.3 AC1)."""
+        if v is None:
+            return None
+        stripped = v.strip()
+        if not stripped:
+            return None
+        if not stripped.startswith(("http://", "https://")):
+            raise ValueError("token_url must be a valid URL starting with http:// or https://")
+        return stripped
+
+    # config: validated in API layer via JSON Schema (Story 5.4) to return 400 INVALID_CONFIG
+
 
 class IntegrationResponse(BaseModel):
-    """Output model for integration (Story 2.27, 4.9).
+    """Output model for integration (Story 2.27, 4.9, 5.3).
 
-    Note: credential_ref is included (reference only, no secret value).
+    Note: credential_ref and config contain references/keys only, no secret values.
     """
     id: int
     type: str
@@ -138,5 +175,7 @@ class IntegrationResponse(BaseModel):
     credential_ref: str | None = None
     icon: str | None = None
     auth_flow: AuthFlow | None = None
+    token_url: str | None = None
+    config: dict | None = None
     created_at: datetime
     updated_at: datetime

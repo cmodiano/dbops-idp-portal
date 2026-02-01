@@ -47,6 +47,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
  * Must be used within a ThemeProvider.
  * @throws Error if used outside of ThemeProvider
  */
+/* eslint-disable-next-line react-refresh/only-export-components -- useTheme is the standard context consumer pattern */
 export function useTheme(): ThemeContextValue {
   const context = useContext(ThemeContext);
   if (context === null) {

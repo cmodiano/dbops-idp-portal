@@ -18,19 +18,12 @@ import {
 } from '@ant-design/icons';
 import type { ImpactLevel } from '../../types/api';
 import { STYLE_TOKENS } from '../../theme/styleTokens';
+import { IMPACT_LABELS } from './impactLabels';
 
 export interface ImpactIndicatorProps {
   level: ImpactLevel;
   size?: 'small' | 'default';
 }
-
-/** Exported for ActionCard aria-label (UX spec: "[nom], impact [niveau]"). */
-export const IMPACT_LABELS: Record<ImpactLevel, string> = {
-  low: 'Faible',
-  medium: 'Moyen',
-  high: 'Eleve',
-  critical: 'Critique',
-};
 
 interface ImpactConfig {
   color: string;

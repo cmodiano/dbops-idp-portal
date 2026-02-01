@@ -12,6 +12,7 @@ class UserProfile(BaseModel):
     profile: str
     profile_ids: list[int] | None = None  # Story 2.12: resolved from ad_groups
     cumulative_permissions: Any = None  # CumulativePermissionsResponse when multi-profile
+    is_auditor: bool = False  # Story 6.3: auditor role for audit log access
 
 
 class TokenPayload(BaseModel):

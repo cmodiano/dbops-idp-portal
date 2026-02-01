@@ -26,9 +26,10 @@ async def list_favorites(user_id: int) -> list[dict]:
         ORDER BY CREATED_AT DESC
     """
     async with get_connection() as conn:
-        cursor = await conn.execute(query, {"user_id": user_id})
+        cursor = conn.cursor()
+        await cursor.execute(query, {"user_id": user_id})
         rows = await cursor.fetchall()
-        await cursor.close()
+        cursor.close()
 
     return [{"action_id": row[0], "created_at": row[1]} for row in rows]
 
@@ -48,9 +49,10 @@ async def add_favorite(user_id: int, action_id: int) -> None:
             VALUES (src.USER_ID, src.ACTION_ID)
     """
     async with get_connection() as conn:
-        cursor = await conn.execute(query, {"user_id": user_id, "action_id": action_id})
+        cursor = conn.cursor()
+        await cursor.execute(query, {"user_id": user_id, "action_id": action_id})
         await conn.commit()
-        await cursor.close()
+        cursor.close()
 
 
 async def remove_favorite(user_id: int, action_id: int) -> bool:
@@ -68,10 +70,11 @@ async def remove_favorite(user_id: int, action_id: int) -> bool:
         WHERE USER_ID = :user_id AND ACTION_ID = :action_id
     """
     async with get_connection() as conn:
-        cursor = await conn.execute(query, {"user_id": user_id, "action_id": action_id})
+        cursor = conn.cursor()
+        await cursor.execute(query, {"user_id": user_id, "action_id": action_id})
         rowcount = cursor.rowcount
         await conn.commit()
-        await cursor.close()
+        cursor.close()
 
     return rowcount > 0
 
@@ -91,9 +94,10 @@ async def is_favorite(user_id: int, action_id: int) -> bool:
         WHERE USER_ID = :user_id AND ACTION_ID = :action_id
     """
     async with get_connection() as conn:
-        cursor = await conn.execute(query, {"user_id": user_id, "action_id": action_id})
+        cursor = conn.cursor()
+        await cursor.execute(query, {"user_id": user_id, "action_id": action_id})
         row = await cursor.fetchone()
-        await cursor.close()
+        cursor.close()
 
     return row is not None
 
@@ -120,9 +124,10 @@ async def list_recent_actions(user_id: int, limit: int = 10) -> list[dict]:
         FETCH FIRST :limit ROWS ONLY
     """
     async with get_connection() as conn:
-        cursor = await conn.execute(query, {"user_id": str(user_id), "limit": limit})
+        cursor = conn.cursor()
+        await cursor.execute(query, {"user_id": str(user_id), "limit": limit})
         rows = await cursor.fetchall()
-        await cursor.close()
+        cursor.close()
 
     return [
         {

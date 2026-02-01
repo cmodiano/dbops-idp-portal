@@ -5,6 +5,7 @@ import { ConfigProvider } from 'antd';
 import { AppLayout } from './AppLayout';
 import { AuthProvider } from '../../contexts/AuthContext';
 import { ThemeProvider } from '../../contexts/ThemeContext';
+import { DashboardProvider } from '../../contexts/DashboardContext';
 import { lightTheme } from '../../theme/desjardins';
 
 function renderLayout(initialPath = '/test') {
@@ -30,7 +31,9 @@ function renderLayout(initialPath = '/test') {
     <ThemeProvider>
       <ConfigProvider theme={lightTheme}>
         <AuthProvider>
-          <RouterProvider router={router} />
+          <DashboardProvider>
+            <RouterProvider router={router} />
+          </DashboardProvider>
         </AuthProvider>
       </ConfigProvider>
     </ThemeProvider>,

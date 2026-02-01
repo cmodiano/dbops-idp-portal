@@ -4,9 +4,9 @@
  * Colonnes : icône, nom, type, URL, auth_flow, date de création. Actions : Modifier, Supprimer.
  */
 
-import { Table, Button, Space, Modal, Avatar, Tag, Tooltip } from 'antd';
-import { ReloadOutlined, ApiOutlined } from '@ant-design/icons';
-import type { ColumnsType } from 'antd/es/table';
+import { Table, Button, Space, Avatar, Tag, Tooltip, App } from 'antd';
+import type { TableProps } from 'antd';
+import { ReloadOutlined, ApiOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import type { IntegrationListItem } from '../../types/api';
 import { AUTH_FLOW_LABELS } from '../../types/api';
 
@@ -43,8 +43,9 @@ export function IntegrationsTable({
   onNew,
   onRefresh,
 }: IntegrationsTableProps) {
+  const { modal } = App.useApp();
   const handleDeleteClick = (record: IntegrationListItem) => {
-    Modal.confirm({
+    modal.confirm({
       title: 'Supprimer l\'intégration',
       content: `Voulez-vous vraiment supprimer l'intégration « ${record.name} » ?`,
       okText: 'Supprimer',
@@ -54,7 +55,7 @@ export function IntegrationsTable({
     });
   };
 
-  const columns: ColumnsType<IntegrationListItem> = [
+  const columns: TableProps<IntegrationListItem>['columns'] = [
     {
       title: 'Icône',
       dataIndex: 'icon',
@@ -102,13 +103,19 @@ export function IntegrationsTable({
     {
       title: '',
       key: 'actions',
-      width: 180,
+      width: 220,
       render: (_: unknown, record: IntegrationListItem) => (
-        <Space size="small">
-          <Button type="link" size="small" onClick={() => onEdit(record)}>
+        <Space size="small" style={{ whiteSpace: 'nowrap' }}>
+          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => onEdit(record)}>
             Modifier
           </Button>
-          <Button type="link" size="small" danger onClick={() => handleDeleteClick(record)}>
+          <Button
+            type="link"
+            size="small"
+            danger
+            icon={<DeleteOutlined />}
+            onClick={() => handleDeleteClick(record)}
+          >
             Supprimer
           </Button>
         </Space>

@@ -8,8 +8,7 @@ CREATE TABLE TAGS (
     CREATED_AT      TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
     CONSTRAINT UK_TAGS_NAME UNIQUE (NAME)
 );
-
-CREATE INDEX IDX_TAGS_NAME ON TAGS(NAME);
+-- IDX on NAME non nécessaire : Oracle crée déjà un index pour UNIQUE(NAME).
 
 -- Junction table: action <-> tags (many-to-many)
 CREATE TABLE ACTION_TAGS (

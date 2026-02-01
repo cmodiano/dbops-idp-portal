@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Form, Input, Modal, Alert, Select, Avatar, Space, Button, AutoComplete, Upload, message } from 'antd';
+import { Form, Input, Modal, Alert, Select, Avatar, Space, Button, AutoComplete, Upload, App } from 'antd';
 import type { UploadFile } from 'antd';
 import { UploadOutlined, ApiOutlined } from '@ant-design/icons';
 import type { AuthFlow, IntegrationCreate, IntegrationUpdate, IntegrationResponse } from '../../types/api';
@@ -50,6 +50,7 @@ export function IntegrationForm({
   editIntegration,
   onSuccess,
 }: IntegrationFormProps) {
+  const { message } = App.useApp();
   const [form] = Form.useForm<IntegrationFormValues>();
   const isEdit = !!editIntegration;
   const [uploadedIconUrl, setUploadedIconUrl] = useState<string | null>(null);
@@ -57,21 +58,42 @@ export function IntegrationForm({
 
   const watchIcon = Form.useWatch('icon', form);
 
+  // Valeurs pour préremplir en édition (stable pour initialValues / key)
+  const editValues =
+    open && editIntegration
+      ? {
+          type: editIntegration.type,
+          name: editIntegration.name,
+          base_url: editIntegration.base_url,
+          credential_ref: editIntegration.credential_ref ?? undefined,
+          icon: editIntegration.icon ?? undefined,
+          auth_flow: editIntegration.auth_flow ?? undefined,
+        }
+      : null;
+
   useEffect(() => {
     if (!open) return;
-    form.resetFields();
-    setUploadedIconUrl(null);
-    setFileList([]);
     if (editIntegration) {
-      form.setFieldsValue({
-        type: editIntegration.type,
-        name: editIntegration.name,
-        base_url: editIntegration.base_url,
-        credential_ref: editIntegration.credential_ref ?? undefined,
-        icon: editIntegration.icon ?? undefined,
-        auth_flow: editIntegration.auth_flow ?? undefined,
-      });
+      setUploadedIconUrl(null);
+      setFileList([]);
+      // Appliquer après le rendu des champs (évite que la modal n'ait pas encore monté les inputs)
+      const t = setTimeout(() => {
+        form.setFieldsValue({
+          type: editIntegration.type,
+          name: editIntegration.name,
+          base_url: editIntegration.base_url,
+          credential_ref: editIntegration.credential_ref ?? undefined,
+          icon: editIntegration.icon ?? undefined,
+          auth_flow: editIntegration.auth_flow ?? undefined,
+        });
+      }, 0);
+      return () => clearTimeout(t);
     } else {
+      form.resetFields();
+      queueMicrotask(() => {
+        setUploadedIconUrl(null);
+        setFileList([]);
+      });
       form.setFieldsValue({
         type: '',
         name: '',
@@ -131,7 +153,7 @@ export function IntegrationForm({
         form.setFieldsValue({ icon: iconUrl });
         message.success('Icône uploadée avec succès');
       }
-    } catch (err) {
+    } catch {
       message.error('Erreur lors de l\'upload de l\'icône');
     }
   };
@@ -165,9 +187,15 @@ export function IntegrationForm({
       }
     >
       {error && (
-        <Alert type="error" message={error} style={{ marginBottom: 16 }} showIcon />
+        <Alert type="error" title={error} style={{ marginBottom: 16 }} showIcon />
       )}
-      <Form form={form} layout="vertical" preserve={false}>
+      <Form
+        form={form}
+        layout="vertical"
+        preserve={false}
+        initialValues={editValues ?? undefined}
+        key={editIntegration ? `edit-${editIntegration.id}` : 'create'}
+      >
         <Form.Item
           name="type"
           label="Type de plateforme (libre)"
@@ -230,7 +258,7 @@ export function IntegrationForm({
           />
         </Form.Item>
         <Form.Item label="Icône" tooltip="Uploader une icône ou saisir une URL">
-          <Space direction="vertical" style={{ width: '100%' }}>
+          <Space orientation="vertical" style={{ width: '100%' }}>
             <Upload
               accept="image/*"
               maxCount={1}

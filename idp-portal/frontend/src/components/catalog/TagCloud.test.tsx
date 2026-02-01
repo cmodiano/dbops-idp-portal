@@ -1,5 +1,6 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { ThemeProvider } from '../../contexts/ThemeContext';
 import { TagCloud } from './TagCloud';
 import type { CatalogTagWithCount } from '../../services/catalog_service';
 
@@ -10,9 +11,26 @@ const mockTags: CatalogTagWithCount[] = [
   { name: 'monitoring', action_count: 2 },
 ];
 
+function renderWithTheme(ui: React.ReactElement) {
+  return render(<ThemeProvider>{ui}</ThemeProvider>);
+}
+
 describe('TagCloud', () => {
+  beforeEach(() => {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes('dark') ? false : true,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+  });
+
   it('renders all tags with their counts (AC1, AC6)', () => {
-    render(<TagCloud tags={mockTags} selectedTags={[]} onSelectionChange={() => {}} />);
+    renderWithTheme(<TagCloud tags={mockTags} selectedTags={[]} onSelectionChange={() => {}} />);
 
     expect(screen.getByText('oracle (5)')).toBeInTheDocument();
     expect(screen.getByText('patching (3)')).toBeInTheDocument();
@@ -21,7 +39,7 @@ describe('TagCloud', () => {
   });
 
   it('renders tags in an accessible group with keyboard focus (AC6)', () => {
-    render(<TagCloud tags={mockTags} selectedTags={[]} onSelectionChange={() => {}} />);
+    renderWithTheme(<TagCloud tags={mockTags} selectedTags={[]} onSelectionChange={() => {}} />);
 
     const group = screen.getByRole('group', { name: 'Filtres par tags' });
     expect(group).toBeInTheDocument();
@@ -32,7 +50,7 @@ describe('TagCloud', () => {
 
   it('toggles tag selection on click (AC2)', () => {
     const handleChange = vi.fn();
-    render(<TagCloud tags={mockTags} selectedTags={[]} onSelectionChange={handleChange} />);
+    renderWithTheme(<TagCloud tags={mockTags} selectedTags={[]} onSelectionChange={handleChange} />);
 
     fireEvent.click(screen.getByText('oracle (5)'));
 
@@ -41,7 +59,7 @@ describe('TagCloud', () => {
 
   it('adds tag to existing selection (multi-select AND) (AC3)', () => {
     const handleChange = vi.fn();
-    render(<TagCloud tags={mockTags} selectedTags={['oracle']} onSelectionChange={handleChange} />);
+    renderWithTheme(<TagCloud tags={mockTags} selectedTags={['oracle']} onSelectionChange={handleChange} />);
 
     fireEvent.click(screen.getByText('patching (3)'));
 
@@ -50,7 +68,7 @@ describe('TagCloud', () => {
 
   it('removes tag from selection when clicked again (AC4)', () => {
     const handleChange = vi.fn();
-    render(<TagCloud tags={mockTags} selectedTags={['oracle', 'patching']} onSelectionChange={handleChange} />);
+    renderWithTheme(<TagCloud tags={mockTags} selectedTags={['oracle', 'patching']} onSelectionChange={handleChange} />);
 
     fireEvent.click(screen.getByText('oracle (5)'));
 
@@ -58,20 +76,20 @@ describe('TagCloud', () => {
   });
 
   it('shows reset button only when tags are selected (AC5)', () => {
-    const { rerender } = render(
+    const { rerender } = renderWithTheme(
       <TagCloud tags={mockTags} selectedTags={[]} onSelectionChange={() => {}} />
     );
 
     expect(screen.queryByRole('button', { name: 'Réinitialiser les filtres par tags' })).not.toBeInTheDocument();
 
-    rerender(<TagCloud tags={mockTags} selectedTags={['oracle']} onSelectionChange={() => {}} />);
+    rerender(<ThemeProvider><TagCloud tags={mockTags} selectedTags={['oracle']} onSelectionChange={() => {}} /></ThemeProvider>);
 
     expect(screen.getByRole('button', { name: 'Réinitialiser les filtres par tags' })).toBeInTheDocument();
   });
 
   it('calls onSelectionChange with empty array when reset is clicked (AC5)', () => {
     const handleChange = vi.fn();
-    render(<TagCloud tags={mockTags} selectedTags={['oracle', 'patching']} onSelectionChange={handleChange} />);
+    renderWithTheme(<TagCloud tags={mockTags} selectedTags={['oracle', 'patching']} onSelectionChange={handleChange} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Réinitialiser les filtres par tags' }));
 
@@ -79,7 +97,7 @@ describe('TagCloud', () => {
   });
 
   it('applies distinct style to selected tags (AC6)', () => {
-    render(<TagCloud tags={mockTags} selectedTags={['oracle']} onSelectionChange={() => {}} />);
+    renderWithTheme(<TagCloud tags={mockTags} selectedTags={['oracle']} onSelectionChange={() => {}} />);
 
     // Selected tag should have checked style (Ant Design Tag.CheckableTag)
     // The class is on the outer CheckableTag span element
@@ -88,14 +106,14 @@ describe('TagCloud', () => {
   });
 
   it('renders empty state when no tags provided', () => {
-    render(<TagCloud tags={[]} selectedTags={[]} onSelectionChange={() => {}} />);
+    renderWithTheme(<TagCloud tags={[]} selectedTags={[]} onSelectionChange={() => {}} />);
 
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 
   it('is keyboard accessible - toggles on Enter key', () => {
     const handleChange = vi.fn();
-    render(<TagCloud tags={mockTags} selectedTags={[]} onSelectionChange={handleChange} />);
+    renderWithTheme(<TagCloud tags={mockTags} selectedTags={[]} onSelectionChange={handleChange} />);
 
     const tagButton = screen.getByText('oracle (5)').closest('span')!;
     fireEvent.keyDown(tagButton, { key: 'Enter' });
@@ -105,7 +123,7 @@ describe('TagCloud', () => {
 
   it('is keyboard accessible - toggles on Space key', () => {
     const handleChange = vi.fn();
-    render(<TagCloud tags={mockTags} selectedTags={[]} onSelectionChange={handleChange} />);
+    renderWithTheme(<TagCloud tags={mockTags} selectedTags={[]} onSelectionChange={handleChange} />);
 
     const tagButton = screen.getByText('oracle (5)').closest('span')!;
     fireEvent.keyDown(tagButton, { key: ' ' });

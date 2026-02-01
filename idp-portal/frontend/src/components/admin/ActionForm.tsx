@@ -328,7 +328,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
     >
       {error && (
         <Alert
-          message="Erreur"
+          title="Erreur"
           description={error}
           type="error"
           showIcon
@@ -338,7 +338,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
 
       {stepsError && (
         <Alert
-          message="Erreur etapes"
+          title="Erreur etapes"
           description={stepsError}
           type="error"
           showIcon

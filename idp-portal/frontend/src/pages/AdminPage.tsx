@@ -9,8 +9,16 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Typography, Button, Table, Space, Card, Tag, Tabs, App } from 'antd';
-import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
-import type { ColumnsType } from 'antd/es/table';
+import type { TableProps } from 'antd';
+import {
+  PlusOutlined,
+  ReloadOutlined,
+  EditOutlined,
+  SendOutlined,
+  EyeOutlined,
+  StopOutlined,
+  PlayCircleOutlined,
+} from '@ant-design/icons';
 import { ActionWizard } from '../components/admin/ActionWizard';
 import { ActionStatusBadge } from '../components/admin/ActionStatusBadge';
 import { ProfileWizard } from '../components/admin/ProfileWizard';
@@ -22,13 +30,16 @@ import { createAction, getAction, getAdminActions, updateAction, updateActionSta
 import { getProfiles, getProfile, deleteProfile, exportProfilesYaml } from '../services/profiles_service';
 import { getIntegrations, getIntegration, createIntegration, updateIntegration, deleteIntegration } from '../services/integrations_service';
 import type { ActionCreate, ActionListItem, ActionDetail, ActionResponse, ActionStatus, StatusTransition, AdminActionsFilters, ProfileResponse, ProfileListItem, IntegrationResponse, IntegrationListItem, IntegrationCreate, IntegrationUpdate } from '../types/api';
+import { getTagStyle } from '../utils/tagStyles';
+import { useTheme } from '../contexts/ThemeContext';
 
 const { Title } = Typography;
 
 const getColumns = (
   onEdit: (record: ActionListItem) => void,
   onStatusChange: (record: ActionListItem, transition: StatusTransition) => void,
-): ColumnsType<ActionListItem> => [
+  isDark: boolean,
+): TableProps<ActionListItem>['columns'] => [
   {
     title: 'Nom',
     dataIndex: 'name',
@@ -66,9 +77,14 @@ const getColumns = (
     render: (tags: string[] | undefined) =>
       (tags?.length ? (
         <Space size={4} wrap>
-          {tags.map((t) => (
-            <Tag key={t}>{t}</Tag>
-          ))}
+          {tags.map((t) => {
+            const tagStyle = getTagStyle(t, isDark);
+            return (
+              <Tag key={t} style={{ borderRadius: 16, padding: '2px 10px', ...tagStyle }}>
+                {t}
+              </Tag>
+            );
+          })}
         </Space>
       ) : (
         <Typography.Text type="secondary">—</Typography.Text>
@@ -90,30 +106,46 @@ const getColumns = (
       <Space size="small">
         {record.status === 'draft' && (
           <>
-            <Button type="link" size="small" onClick={() => onEdit(record)}>
+            <Button type="link" size="small" icon={<EditOutlined />} onClick={() => onEdit(record)}>
               Modifier
             </Button>
-            <Button type="link" size="small" onClick={() => onStatusChange(record, 'publish')}>
+            <Button
+              type="link"
+              size="small"
+              icon={<SendOutlined />}
+              onClick={() => onStatusChange(record, 'publish')}
+            >
               Publier
             </Button>
           </>
         )}
         {record.status === 'published' && (
           <>
-            <Button type="link" size="small" onClick={() => onEdit(record)}>
+            <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => onEdit(record)}>
               Voir
             </Button>
-            <Button type="link" size="small" danger onClick={() => onStatusChange(record, 'disable')}>
+            <Button
+              type="link"
+              size="small"
+              danger
+              icon={<StopOutlined />}
+              onClick={() => onStatusChange(record, 'disable')}
+            >
               Desactiver
             </Button>
           </>
         )}
         {record.status === 'disabled' && (
           <>
-            <Button type="link" size="small" onClick={() => onEdit(record)}>
+            <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => onEdit(record)}>
               Voir
             </Button>
-            <Button type="link" size="small" onClick={() => onStatusChange(record, 'enable')}>
+            <Button
+              type="link"
+              size="small"
+              icon={<PlayCircleOutlined />}
+              onClick={() => onStatusChange(record, 'enable')}
+            >
               Reactiver
             </Button>
           </>
@@ -125,6 +157,7 @@ const getColumns = (
 
 export default function AdminPage() {
   const { notification } = App.useApp();
+  const { effectiveMode } = useTheme();
   const [actions, setActions] = useState<ActionListItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -149,10 +182,10 @@ export default function AdminPage() {
     setLoading(true);
     try {
       const response = await getAdminActions(filters);
-      setActions(response.data);
+      setActions(response.data ?? []);
     } catch (err) {
       notification.error({
-        message: 'Erreur',
+        title: 'Erreur',
         description: err instanceof Error ? err.message : 'Erreur de chargement',
       });
     } finally {
@@ -171,7 +204,7 @@ export default function AdminPage() {
       setProfiles(list);
     } catch (err) {
       notification.error({
-        message: 'Erreur',
+        title: 'Erreur',
         description: err instanceof Error ? err.message : 'Erreur de chargement des profils',
       });
     } finally {
@@ -206,7 +239,7 @@ export default function AdminPage() {
       setModalOpen(true);
     } catch (err) {
       notification.error({
-        message: 'Erreur',
+        title: 'Erreur',
         description: err instanceof Error ? err.message : 'Impossible de charger l\'action',
       });
     }
@@ -221,13 +254,13 @@ export default function AdminPage() {
         enable: 'reactivee',
       };
       notification.success({
-        message: 'Succes',
+        title: 'Succes',
         description: `Action "${record.name}" ${statusLabels[transition]}`,
       });
       fetchActions();
     } catch (err) {
       notification.error({
-        message: 'Erreur',
+        title: 'Erreur',
         description: err instanceof Error ? err.message : 'Impossible de changer le statut',
       });
     }
@@ -241,7 +274,7 @@ export default function AdminPage() {
     setSubmitError(null);
     const name = 'name' in action ? action.name : '';
     notification.success({
-      message: 'Succes',
+      title: 'Succes',
       description: wasEdit ? `Action "${name}" mise a jour` : `Action "${name}" creee avec succes`,
     });
     fetchActions();
@@ -260,7 +293,7 @@ export default function AdminPage() {
       setProfileModalOpen(true);
     } catch (err) {
       notification.error({
-        message: 'Erreur',
+        title: 'Erreur',
         description: err instanceof Error ? err.message : 'Impossible de charger le profil',
       });
     }
@@ -269,11 +302,11 @@ export default function AdminPage() {
   const handleProfileDelete = async (record: ProfileListItem) => {
     try {
       await deleteProfile(record.id);
-      notification.success({ message: 'Succes', description: `Profil "${record.name}" supprime` });
+      notification.success({ title: 'Succes', description: `Profil "${record.name}" supprime` });
       fetchProfiles();
     } catch (err) {
       notification.error({
-        message: 'Erreur',
+        title: 'Erreur',
         description: err instanceof Error ? err.message : 'Impossible de supprimer le profil',
       });
     }
@@ -283,7 +316,7 @@ export default function AdminPage() {
     setProfileModalOpen(false);
     setEditProfile(null);
     notification.success({
-      message: 'Succes',
+      title: 'Succes',
       description: editProfile ? `Profil "${profile.name}" mis a jour` : `Profil "${profile.name}" cree`,
     });
     fetchProfiles();
@@ -297,10 +330,10 @@ export default function AdminPage() {
   const handleExportYaml = useCallback(async () => {
     try {
       await exportProfilesYaml();
-      notification.success({ message: 'Export YAML', description: 'Fichier profiles.yaml téléchargé.' });
+      notification.success({ title: 'Export YAML', description: 'Fichier profiles.yaml téléchargé.' });
     } catch (err) {
       notification.error({
-        message: 'Erreur',
+        title: 'Erreur',
         description: err instanceof Error ? err.message : 'Erreur lors de l\'export YAML',
       });
     }
@@ -313,7 +346,7 @@ export default function AdminPage() {
   const handleImportYamlSuccess = useCallback((created: number, updated: number) => {
     setImportYamlModalOpen(false);
     notification.success({
-      message: 'Import YAML',
+      title: 'Import YAML',
       description: `Import reussi : ${created} cree(s), ${updated} mis a jour.`,
     });
     fetchProfiles();
@@ -326,7 +359,7 @@ export default function AdminPage() {
       setIntegrations(list);
     } catch (err) {
       notification.error({
-        message: 'Erreur',
+        title: 'Erreur',
         description: err instanceof Error ? err.message : 'Erreur de chargement des intégrations',
       });
     } finally {
@@ -339,10 +372,11 @@ export default function AdminPage() {
     try {
       const detail = await getIntegration(record.id);
       setEditIntegration(detail);
-      setIntegrationModalOpen(true);
+      // Ouvrir la modal au prochain tick pour que le formulaire reçoive bien editIntegration (préremplissage)
+      setTimeout(() => setIntegrationModalOpen(true), 0);
     } catch (err) {
       notification.error({
-        message: 'Erreur',
+        title: 'Erreur',
         description: err instanceof Error ? err.message : 'Impossible de charger l\'intégration',
       });
     }
@@ -352,13 +386,13 @@ export default function AdminPage() {
     try {
       await deleteIntegration(record.id);
       notification.success({
-        message: 'Succes',
+        title: 'Succes',
         description: `Intégration « ${record.name} » supprimée`,
       });
       fetchIntegrations();
     } catch (err) {
       notification.error({
-        message: 'Erreur',
+        title: 'Erreur',
         description: err instanceof Error ? err.message : 'Impossible de supprimer l\'intégration',
       });
     }
@@ -370,7 +404,7 @@ export default function AdminPage() {
     setIntegrationSubmitError(null);
     const wasEdit = !!editIntegration;
     notification.success({
-      message: 'Succès',
+      title: 'Succès',
       description: wasEdit
         ? `Intégration « ${integration.name} » mise à jour`
         : `Intégration « ${integration.name} » créée avec succès`,
@@ -450,7 +484,7 @@ export default function AdminPage() {
                 }}
               >
                 <Table
-                  columns={getColumns(handleEdit, handleStatusChange)}
+                  columns={getColumns(handleEdit, handleStatusChange, effectiveMode === 'dark')}
                   dataSource={actions}
                   rowKey="id"
                   loading={loading}

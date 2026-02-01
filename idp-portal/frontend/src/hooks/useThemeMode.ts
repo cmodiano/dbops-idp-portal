@@ -34,16 +34,6 @@ function getStoredMode(): ThemeMode {
   return 'system';
 }
 
-/**
- * Resolves mode to effective mode (light or dark).
- */
-function resolveEffectiveMode(mode: ThemeMode): EffectiveThemeMode {
-  if (mode === 'system') {
-    return getSystemPreference();
-  }
-  return mode;
-}
-
 export interface UseThemeModeReturn {
   /** Current mode setting (light, dark, or system) */
   mode: ThemeMode;

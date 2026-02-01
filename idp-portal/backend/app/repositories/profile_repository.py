@@ -12,6 +12,8 @@ from app.models.profile import (
     ProfileResponse,
     ProfileUpdate,
 )
+from app.repositories import profile_action_permission_repository
+from app.repositories import profile_target_permission_repository
 
 
 def _row_to_response(row: tuple) -> ProfileResponse:
@@ -28,14 +30,45 @@ def _row_to_response(row: tuple) -> ProfileResponse:
     )
 
 
-def _row_to_list_item(row: tuple) -> ProfileListItem:
-    """Map DB row to ProfileListItem. permission_count = 0 until PROFILE_ACTION_PERMISSIONS (2.10)."""
+def _row_to_list_item(row: tuple, permission_count: int = 0) -> ProfileListItem:
+    """Map DB row to ProfileListItem. permission_count computed from actions + targets permissions."""
     return ProfileListItem(
         id=row[0],
         name=row[1],
         ad_group=row[2],
-        permission_count=0,
+        permission_count=permission_count,
         created_at=row[3],
+    )
+
+
+def _count_actions_permissions(
+    actions: object | None,
+) -> int:
+    """Count effective action permissions (type all=1, else sum of list lengths)."""
+    if actions is None:
+        return 0
+    a = actions
+    if getattr(a, "actions_type", None) == "all":
+        return 1
+    return (
+        len(getattr(a, "action_ids", []) or [])
+        + len(getattr(a, "tag_patterns", []) or [])
+        + len(getattr(a, "environments", []) or [])
+    )
+
+
+def _count_targets_permissions(
+    targets: object | None,
+) -> int:
+    """Count effective target permissions (type all=1, else sum of list lengths)."""
+    if targets is None:
+        return 0
+    t = targets
+    if getattr(t, "targets_type", None) == "all":
+        return 1
+    return (
+        len(getattr(t, "target_names", []) or [])
+        + len(getattr(t, "target_patterns", []) or [])
     )
 
 
@@ -54,12 +87,13 @@ async def create(data: ProfileCreate) -> ProfileResponse:
         "is_auditor": 1 if data.is_auditor else 0,
     }
     async with get_connection() as conn:
-        out_id = conn.var(int)
+        cursor = conn.cursor()
+        out_id = cursor.var(int)
         params["out_id"] = out_id
         try:
-            cursor = await conn.execute(query, params)
+            await cursor.execute(query, params)
             await conn.commit()
-            await cursor.close()
+            cursor.close()
             pid = out_id.getvalue()[0]
         except oracledb.IntegrityError:
             await conn.rollback()
@@ -78,9 +112,10 @@ async def get_by_id(profile_id: int) -> ProfileResponse | None:
         FROM PROFILES WHERE ID = :profile_id
     """
     async with get_connection() as conn:
-        cursor = await conn.execute(query, {"profile_id": profile_id})
+        cursor = conn.cursor()
+        await cursor.execute(query, {"profile_id": profile_id})
         row = await cursor.fetchone()
-        await cursor.close()
+        cursor.close()
     if row is None:
         return None
     return _row_to_response(row)
@@ -93,26 +128,46 @@ async def get_by_name(name: str) -> ProfileResponse | None:
         FROM PROFILES WHERE NAME = :name
     """
     async with get_connection() as conn:
-        cursor = await conn.execute(query, {"name": name})
+        cursor = conn.cursor()
+        await cursor.execute(query, {"name": name})
         row = await cursor.fetchone()
-        await cursor.close()
+        cursor.close()
     if row is None:
         return None
     return _row_to_response(row)
 
 
 async def get_all() -> list[ProfileListItem]:
-    """Return all profiles for list view. permission_count = 0 (2.10)."""
+    """Return all profiles for list view with permission_count from actions + targets permissions."""
     query = """
         SELECT ID, NAME, AD_GROUP, CREATED_AT
         FROM PROFILES
         ORDER BY NAME
     """
     async with get_connection() as conn:
-        cursor = await conn.execute(query, {})
+        cursor = conn.cursor()
+        await cursor.execute(query, {})
         rows = await cursor.fetchall()
-        await cursor.close()
-    return [_row_to_list_item(row) for row in rows]
+        cursor.close()
+    if not rows:
+        return []
+    profile_ids = [row[0] for row in rows]
+    actions_map = await profile_action_permission_repository.get_actions_permissions_for_profile_ids(
+        profile_ids
+    )
+    targets_map = await profile_target_permission_repository.get_target_permissions_for_profile_ids(
+        profile_ids
+    )
+    return [
+        _row_to_list_item(
+            row,
+            permission_count=(
+                _count_actions_permissions(actions_map.get(row[0]))
+                + _count_targets_permissions(targets_map.get(row[0]))
+            ),
+        )
+        for row in rows
+    ]
 
 
 async def find_by_ad_groups(ad_groups: list[str]) -> list[ProfileResponse]:
@@ -130,9 +185,10 @@ async def find_by_ad_groups(ad_groups: list[str]) -> list[ProfileResponse]:
     placeholders = ", ".join(f":g{i}" for i in range(len(ad_groups)))
     query = query.replace(":ad_groups", placeholders)
     async with get_connection() as conn:
-        cursor = await conn.execute(query, params)
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
         rows = await cursor.fetchall()
-        await cursor.close()
+        cursor.close()
     return [_row_to_response(row) for row in rows]
 
 
@@ -157,9 +213,10 @@ async def update(profile_id: int, data: ProfileUpdate) -> ProfileResponse | None
     params = {**updates, "profile_id": profile_id}
     async with get_connection() as conn:
         try:
-            cursor = await conn.execute(query, params)
+            cursor = conn.cursor()
+            await cursor.execute(query, params)
             await conn.commit()
-            await cursor.close()
+            cursor.close()
         except oracledb.IntegrityError:
             await conn.rollback()
             raise InvalidStateError(
@@ -174,8 +231,9 @@ async def delete(profile_id: int) -> bool:
     """Delete profile by ID. Returns True if deleted, False if not found."""
     query = "DELETE FROM PROFILES WHERE ID = :profile_id"
     async with get_connection() as conn:
-        cursor = await conn.execute(query, {"profile_id": profile_id})
+        cursor = conn.cursor()
+        await cursor.execute(query, {"profile_id": profile_id})
         await conn.commit()
         n = cursor.rowcount
-        await cursor.close()
+        cursor.close()
     return n > 0

@@ -16,14 +16,21 @@ from app.models.catalog import (
     ActionDetail,
     ActionStatus,
     ActionEngine,
+    ItemType,
     ExecutionStepsUpdate,
+    WorkflowStepsUpdate,
     StatusUpdateRequest,
     ActionTagsUpdateRequest,
     InvalidTransitionError,
     ActionListResponse,
+    get_allowed_transitions,
 )
 from app.repositories import catalog_repository
-from app.repositories.catalog_repository import InvalidStateError as RepoInvalidStateError
+from app.repositories.catalog_repository import (
+    InvalidStateError as RepoInvalidStateError,
+    WorkflowLoopError,
+    InvalidWorkflowStepError,
+)
 
 from app.api.v1 import profiles
 from app.api.v1 import integrations
@@ -57,19 +64,22 @@ async def create_action(
 async def list_actions(
     status: ActionStatus | None = None,
     engine: ActionEngine | None = None,
+    item_type: ItemType | None = None,
     page: int = Query(1, ge=1, description="Page number (1-based)"),
     page_size: int = Query(25, ge=1, description="Items per page"),
     user: UserProfile = Depends(require_profile("dbops")),
 ) -> dict:
-    """List all actions for admin dashboard (Story 2.4, AC #2).
+    """List all actions/workflows for admin dashboard (Story 2.4, AC #2; Story 5.7).
 
-    Returns all actions (all statuses) with execution counts.
+    Returns all actions/workflows (all statuses) with execution counts.
     No RBAC filtering - DBOPS sees everything.
     Story 2.23: category filter removed — use tags instead.
+    Story 5.7: item_type filter (action or workflow).
 
     Args:
         status: Optional filter by status (draft, published, disabled)
         engine: Optional filter by engine
+        item_type: Optional filter by item type (action or workflow)
         page: Page number (1-based, default 1)
         page_size: Items per page (default 25)
 
@@ -79,6 +89,7 @@ async def list_actions(
     actions, pagination = await catalog_repository.list_all_admin(
         status=status,
         engine=engine,
+        item_type=item_type,
         page=page,
         page_size=page_size,
     )
@@ -136,7 +147,10 @@ async def update_action_steps(
         raise InvalidStateError(
             code="INVALID_STATE",
             message=str(e),
-            details={"status": e.current_status},
+            details={
+                "status": e.current_status,
+                "required_status": "draft",
+            },
         )
 
     if action is None:
@@ -147,6 +161,77 @@ async def update_action_steps(
         )
 
     return {"data": action.model_dump(mode="json")}
+
+
+@router.put("/actions/{action_id}/workflow-steps")
+async def update_workflow_steps(
+    action_id: int,
+    data: WorkflowStepsUpdate,
+    user: UserProfile = Depends(require_profile("dbops")),
+) -> dict:
+    """Update workflow steps for a workflow (Story 5.7, AC2, AC4).
+
+    Body: { "steps": [{ "order": 1, "referenced_action_id": 42, "name": "Optional name" }, ...] }
+    Only allowed for workflows in 'draft' status.
+    Validates that referenced actions exist and detects circular references.
+
+    Returns:
+        HTTP 200 with { "data": ActionDetail } on success
+        HTTP 404 if workflow not found
+        HTTP 400 if not a workflow, not in draft status, circular reference detected, or referenced action not found
+        HTTP 422 if validation fails
+    """
+    try:
+        action = await catalog_repository.update_workflow_steps(
+            action_id,
+            steps=data.steps,
+        )
+    except RepoInvalidStateError as e:
+        raise InvalidStateError(
+            code="INVALID_STATE",
+            message=str(e),
+            details={"status": e.current_status},
+        )
+    except WorkflowLoopError as e:
+        raise InvalidStateError(
+            code="WORKFLOW_LOOP",
+            message=str(e),
+            details={"workflow_id": e.workflow_id, "cycle_path": e.cycle_path},
+        )
+    except InvalidWorkflowStepError as e:
+        raise InvalidStateError(
+            code="INVALID_WORKFLOW_STEP",
+            message=str(e),
+            details={"step_order": e.step_order, "referenced_action_id": e.referenced_action_id},
+        )
+
+    if action is None:
+        raise NotFoundError(
+            code="NOT_FOUND",
+            message=f"Workflow {action_id} introuvable",
+            details={"action_id": action_id},
+        )
+
+    return {"data": action.model_dump(mode="json")}
+
+
+@router.get("/actions/eligible-for-workflow")
+async def list_eligible_actions_for_workflow(
+    user: UserProfile = Depends(require_profile("dbops")),
+) -> dict:
+    """List actions eligible for workflow steps (Story 5.7, AC4).
+
+    Returns only published actions (not workflows) that can be referenced in workflow steps.
+    This is used to populate the action selector in the workflow step editor.
+
+    Returns:
+        { "data": list[ActionResponse] } - published actions only
+    """
+    actions = await catalog_repository.list_all(
+        status=ActionStatus.PUBLISHED,
+        item_type=ItemType.ACTION,
+    )
+    return {"data": [a.model_dump(mode="json") for a in actions]}
 
 
 @router.put("/actions/{action_id}")
@@ -248,10 +333,19 @@ async def update_action_status(
             user_id=str(user.id),
         )
     except InvalidTransitionError as e:
+        try:
+            status_enum = ActionStatus(e.current_status)
+            allowed = get_allowed_transitions(status_enum)
+        except ValueError:
+            allowed = []
         raise InvalidStateError(
             code="INVALID_STATE",
             message=str(e),
-            details={"current_status": e.current_status, "transition": e.transition},
+            details={
+                "current_status": e.current_status,
+                "transition": e.transition,
+                "allowed_transitions": allowed,
+            },
         )
 
     if action is None:

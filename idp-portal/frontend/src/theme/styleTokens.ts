@@ -25,4 +25,29 @@ export const STYLE_TOKENS = {
     high: '#F97316',
     critical: '#EF4444',
   } as const,
+  /**
+   * Tag category palette (charte graphique).
+   * Green/teal/blue family with distinct hue and lightness so tags are easy to tell apart.
+   * Light mode: varied tints, dark text. Dark mode: darker tints, light text.
+   */
+  tagCategoryPaletteLight: [
+    '#7bc490', // medium green
+    '#5eb8b8', // teal
+    '#8fba8f', // sage / yellow-green
+    '#5ba8c4', // blue-teal
+    '#9dd9b8', // light mint
+    '#6ba88a', // green-teal
+  ] as const,
+  tagCategoryPaletteDark: [
+    '#2d6b3d', // dark green
+    '#2a5a5a', // dark teal
+    '#3d6b3d', // dark sage
+    '#2a5266', // dark blue-teal
+    '#3d7a5a', // dark mint
+    '#2e5c4a', // dark green-teal
+  ] as const,
+  /** Text on light tag backgrounds (light mode). */
+  tagTextOnLight: '#1f2937',
+  /** Text on dark tag backgrounds (dark mode). */
+  tagTextOnDark: '#e5e7eb',
 } as const;

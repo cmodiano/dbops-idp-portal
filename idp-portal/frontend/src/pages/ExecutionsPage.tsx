@@ -1,5 +1,316 @@
-import { Typography } from 'antd';
+/**
+ * ExecutionsPage - Execution history (Story 4.8).
+ *
+ * AC1: Table with columns: action, environment, status, date, duration.
+ * AC3: Running executions first with blue pulsed indicator.
+ * AC4: Pagination 25, skeleton loading, sortable columns.
+ * AC2: Click opens drawer with ExecutionTimeline (historical mode).
+ */
+
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { Typography, Table, Drawer, Tag, Skeleton, Badge, Alert } from 'antd';
+import type { TableProps, TablePaginationConfig } from 'antd';
+
+// Ant Design 6.2: Extract table event types from public API
+type TableOnChange<T> = NonNullable<TableProps<T>['onChange']>;
+type SorterResult<T> = Parameters<TableOnChange<T>>[2];
+type FilterValue = Parameters<TableOnChange<never>>[1][string];
+import { ExecutionTimeline } from '../components/execution/ExecutionTimeline';
+import { listExecutions, getExecution, getExecutionSteps } from '../services/execution_service';
+import type { ExecutionResponse, ExecutionStepResponse, ExecutionStatusType } from '../types/api';
+
+const { Title } = Typography;
+
+const PAGE_SIZE = 25;
+
+/** Running statuses that appear first with visual indicator (AC3). */
+const RUNNING_STATUSES: ExecutionStatusType[] = ['RUNNING', 'SUBMITTED', 'PENDING_APPROVAL'];
+
+/** Status colors for Tag display. */
+const STATUS_CONFIG: Record<ExecutionStatusType, { color: string; label: string }> = {
+  SUBMITTED: { color: 'blue', label: 'Soumise' },
+  PENDING_APPROVAL: { color: 'orange', label: 'En attente' },
+  RUNNING: { color: 'processing', label: 'En cours' },
+  COMPLETED: { color: 'success', label: 'Terminée' },
+  FAILED: { color: 'error', label: 'Échouée' },
+  CANCELLED: { color: 'default', label: 'Annulée' },
+};
+
+/** Format duration from ISO timestamps. */
+function formatDuration(startedAt: string | null, completedAt: string | null): string {
+  if (!startedAt || !completedAt) return '—';
+  const start = new Date(startedAt).getTime();
+  const end = new Date(completedAt).getTime();
+  const seconds = Math.round((end - start) / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remaining = seconds % 60;
+  return remaining ? `${minutes}m ${remaining}s` : `${minutes}m`;
+}
+
+/** Format date for display. */
+function formatDate(dateStr: string | null): string {
+  if (!dateStr) return '—';
+  const date = new Date(dateStr);
+  return date.toLocaleString('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/** Check if execution is in a running state (AC3). */
+function isRunning(status: ExecutionStatusType): boolean {
+  return RUNNING_STATUSES.includes(status);
+}
 
 export default function ExecutionsPage() {
-  return <Typography.Title level={2}>Executions</Typography.Title>;
+  const [executions, setExecutions] = useState<ExecutionResponse[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [sortField, setSortField] = useState<string>('created_at');
+  const [sortOrder, setSortOrder] = useState<'ascend' | 'descend'>('descend');
+
+  // Drawer state (AC2)
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [selectedExecution, setSelectedExecution] = useState<ExecutionResponse | null>(null);
+  const [selectedSteps, setSelectedSteps] = useState<ExecutionStepResponse[]>([]);
+  const [drawerLoading, setDrawerLoading] = useState(false);
+  const [drawerError, setDrawerError] = useState<string | null>(null);
+
+  // Fetch executions (AC4: pagination with total_count from API)
+  const fetchData = useCallback(async (page: number) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const offset = (page - 1) * PAGE_SIZE;
+      const result = await listExecutions(PAGE_SIZE, offset);
+      setExecutions(result.data);
+      setTotalCount(result.pagination.total_count);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur de chargement');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData(currentPage);
+  }, [currentPage, fetchData]);
+
+  // Sort executions: running first, then by sortField (AC3)
+  const sortedExecutions = useMemo(() => {
+    const sorted = [...executions];
+
+    // First sort by running status (running first)
+    sorted.sort((a, b) => {
+      const aRunning = isRunning(a.status) ? 0 : 1;
+      const bRunning = isRunning(b.status) ? 0 : 1;
+      if (aRunning !== bRunning) return aRunning - bRunning;
+
+      // Then by selected field
+      let aVal: string | number | null = null;
+      let bVal: string | number | null = null;
+
+      if (sortField === 'created_at') {
+        aVal = a.created_at;
+        bVal = b.created_at;
+      } else if (sortField === 'status') {
+        aVal = a.status;
+        bVal = b.status;
+      } else if (sortField === 'action_name') {
+        aVal = a.action_name || '';
+        bVal = b.action_name || '';
+      }
+
+      if (aVal === null || bVal === null) return 0;
+      if (aVal < bVal) return sortOrder === 'ascend' ? -1 : 1;
+      if (aVal > bVal) return sortOrder === 'ascend' ? 1 : -1;
+      return 0;
+    });
+
+    return sorted;
+  }, [executions, sortField, sortOrder]);
+
+  // Open drawer with execution details (AC2)
+  const handleRowClick = async (record: ExecutionResponse) => {
+    setDrawerOpen(true);
+    setDrawerLoading(true);
+    setDrawerError(null);
+    setSelectedExecution(null);
+    setSelectedSteps([]);
+
+    try {
+      const [execution, steps] = await Promise.all([
+        getExecution(record.id),
+        getExecutionSteps(record.id),
+      ]);
+      setSelectedExecution(execution);
+      setSelectedSteps(steps);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erreur de chargement du détail';
+      setDrawerError(message);
+    } finally {
+      setDrawerLoading(false);
+    }
+  };
+
+  const handleTableChange = (
+    pagination: TablePaginationConfig,
+    _filters: Record<string, FilterValue | null>,
+    sorter: SorterResult<ExecutionResponse> | SorterResult<ExecutionResponse>[],
+  ) => {
+    if (pagination.current && pagination.current !== currentPage) {
+      setCurrentPage(pagination.current);
+    }
+
+    const singleSorter = Array.isArray(sorter) ? sorter[0] : sorter;
+    if (singleSorter?.field) {
+      setSortField(singleSorter.field as string);
+      setSortOrder(singleSorter.order || 'descend');
+    }
+  };
+
+  // Table columns (AC1)
+  const columns: TableProps<ExecutionResponse>['columns'] = [
+    {
+      title: 'Action',
+      dataIndex: 'action_name',
+      key: 'action_name',
+      sorter: true,
+      sortOrder: sortField === 'action_name' ? sortOrder : undefined,
+      render: (name: string | null, record: ExecutionResponse) => (
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {isRunning(record.status) && (
+            <Badge status="processing" />
+          )}
+          {name || `Action #${record.action_id}`}
+        </span>
+      ),
+    },
+    {
+      title: 'Environnement',
+      dataIndex: 'environment',
+      key: 'environment',
+      width: 120,
+      render: (env: string) => env?.toUpperCase() || '—',
+    },
+    {
+      title: 'Statut',
+      dataIndex: 'status',
+      key: 'status',
+      sorter: true,
+      sortOrder: sortField === 'status' ? sortOrder : undefined,
+      width: 140,
+      render: (status: ExecutionStatusType) => {
+        const config = STATUS_CONFIG[status] || { color: 'default', label: status };
+        return (
+          <Tag color={config.color}>
+            {config.label}
+          </Tag>
+        );
+      },
+    },
+    {
+      title: 'Date',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      sorter: true,
+      sortOrder: sortField === 'created_at' ? sortOrder : undefined,
+      width: 160,
+      render: (date: string, record: ExecutionResponse) => formatDate(record.started_at || date),
+    },
+    {
+      title: 'Durée',
+      key: 'duration',
+      width: 100,
+      render: (_: unknown, record: ExecutionResponse) =>
+        formatDuration(record.started_at, record.completed_at),
+    },
+  ];
+
+  // Skeleton table during loading (AC4, Task 1.4: skeleton rows)
+  if (loading && executions.length === 0) {
+    const skeletonColumns = [
+      { title: 'Action', key: 'action', width: 200, render: () => <Skeleton active title={false} paragraph={{ rows: 1 }} /> },
+      { title: 'Environnement', key: 'env', width: 120, render: () => <Skeleton active title={false} paragraph={{ rows: 1 }} /> },
+      { title: 'Statut', key: 'status', width: 140, render: () => <Skeleton active title={false} paragraph={{ rows: 1 }} /> },
+      { title: 'Date', key: 'date', width: 160, render: () => <Skeleton active title={false} paragraph={{ rows: 1 }} /> },
+      { title: 'Durée', key: 'duration', width: 100, render: () => <Skeleton active title={false} paragraph={{ rows: 1 }} /> },
+    ];
+    const skeletonData = Array.from({ length: 10 }, (_, i) => ({ key: i }));
+    return (
+      <div style={{ padding: 24 }}>
+        <Title level={2}>Exécutions</Title>
+        <Table
+          columns={skeletonColumns}
+          dataSource={skeletonData}
+          rowKey="key"
+          pagination={false}
+          showHeader
+        />
+      </div>
+    );
+  }
+
+  if (error && executions.length === 0) {
+    return (
+      <div style={{ padding: 24 }}>
+        <Title level={2}>Exécutions</Title>
+        <Typography.Text type="danger">{error}</Typography.Text>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: 24 }}>
+      <Title level={2}>Exécutions</Title>
+
+      <Table<ExecutionResponse>
+        dataSource={sortedExecutions}
+        columns={columns}
+        rowKey="id"
+        loading={loading}
+        pagination={{
+          current: currentPage,
+          pageSize: PAGE_SIZE,
+          total: totalCount,
+          showSizeChanger: false,
+        }}
+        onChange={handleTableChange}
+        onRow={(record) => ({
+          onClick: () => handleRowClick(record),
+          style: { cursor: 'pointer' },
+        })}
+        locale={{
+          emptyText: 'Aucune exécution trouvée',
+        }}
+      />
+
+      {/* Drawer with ExecutionTimeline (AC2) */}
+      <Drawer
+        title={selectedExecution ? `Exécution — ${selectedExecution.action_name || `Action #${selectedExecution.action_id}`}` : 'Détail exécution'}
+        open={drawerOpen}
+        onClose={() => { setDrawerOpen(false); setDrawerError(null); }}
+        styles={{ wrapper: { width: 480 } }}
+        destroyOnHidden
+      >
+        {drawerLoading ? (
+          <Skeleton active paragraph={{ rows: 6 }} />
+        ) : drawerError ? (
+          <Alert type="error" title="Erreur de chargement" description={drawerError} showIcon />
+        ) : selectedExecution ? (
+          <ExecutionTimeline
+            execution={selectedExecution}
+            steps={selectedSteps}
+            mode="historical"
+          />
+        ) : null}
+      </Drawer>
+    </div>
+  );
 }

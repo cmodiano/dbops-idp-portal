@@ -16,6 +16,7 @@ from fastapi import APIRouter, Body, Depends, File, Path, UploadFile, status
 from app.core.config import settings
 from app.core.exceptions import InvalidStateError, NotFoundError
 from app.core.security import require_profile
+from app.schemas.integration_config import validate_integration_config
 from app.models.auth import UserProfile
 from app.models.integration import (
     IntegrationCreate,
@@ -69,12 +70,16 @@ async def create_integration(
 
     Validates type (enum), name (unique, non-empty), base_url (valid URL).
     credential_ref and icon are optional.
+    config (optional): validated against JSON Schema (backend/app/schemas/integration_config_schema.json).
+    If invalid → 400 with error.code "INVALID_CONFIG", error.details: { "field", "error", "schema_path" }.
 
     Returns:
         HTTP 201 with { "data": IntegrationResponse }
-        HTTP 400 if name already exists
+        HTTP 400 if name already exists or config invalid (Story 5.4; code INVALID_CONFIG, details.field/details.error)
         HTTP 422 if validation fails
     """
+    if payload.config is not None and payload.config:
+        validate_integration_config(payload.config)
     try:
         integration = await integration_repository.create(payload)
     except DuplicateNameError as e:
@@ -95,13 +100,16 @@ async def update_integration(
     """PUT /admin/integrations/{id} — update integration (AC3).
 
     Partial update: only provided fields are updated.
+    config (if provided): validated against JSON Schema; invalid → 400 INVALID_CONFIG (details.field, details.error).
 
     Returns:
         HTTP 200 with { "data": IntegrationResponse }
-        HTTP 400 if new name already exists
+        HTTP 400 if new name already exists or config invalid (Story 5.4; code INVALID_CONFIG)
         HTTP 404 if not found
         HTTP 422 if validation fails
     """
+    if payload.config is not None and payload.config:
+        validate_integration_config(payload.config)
     try:
         integration = await integration_repository.update(integration_id, payload)
     except DuplicateNameError as e:

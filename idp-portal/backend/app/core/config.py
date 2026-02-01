@@ -70,6 +70,12 @@ class Settings(BaseSettings):
     # Static files configuration (Story 4.9, LOW-9 fix)
     static_files_path: str = ""  # If empty, defaults to backend/static/
 
+    # ServiceNow configuration (Story 4.5, Task 6.1)
+    servicenow_base_url: str = ""  # e.g., https://desjardins.service-now.com
+    servicenow_timeout: int = 30  # Timeout in seconds (NFR19)
+    servicenow_retry_count: int = 1  # Number of retries on timeout
+    servicenow_credential_ref: str = ""  # Vault path for ServiceNow credentials
+
     @field_validator("log_level", mode="before")
     @classmethod
     def validate_log_level(cls, v: str | LogLevel) -> LogLevel:
