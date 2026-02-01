@@ -16,7 +16,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.api.deps import get_optional_user
 from app.models.auth import UserProfile
 from app.models.catalog import ActionDetail, ActionStatus, ImpactLevel, normalize_tag_name
-from app.repositories import catalog_repository
+from app.models.execution import ActionStatsResponse
+from app.repositories import catalog_repository, execution_repository
 
 # Story 3.3: Validation pattern for environment parameter (alphanumeric + underscore only)
 _ENVIRONMENT_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
@@ -238,3 +239,45 @@ async def get_catalog_action_by_id(
         "can_execute": can_execute,
         "allowed_environments": allowed_environments,
     }
+
+
+@router.get("/actions/{action_id}/stats")
+async def get_action_stats(
+    action_id: int,
+    user: UserProfile | None = Depends(get_optional_user),
+) -> dict:
+    """Get execution stats for a specific action (Story 8.1, AC4, AC5).
+
+    Returns aggregated performance metrics over the last 30 days:
+    - success_rate: % of successful executions
+    - avg_execution_time_ms: average execution time
+    - total_executions: total number of executions
+    - incidents_count: number of failed executions
+
+    - Returns 404 if action not found or not published
+    - Returns null data if no executions exist (AC3: "Pas encore de donnees")
+
+    Args:
+        action_id: The action ID to get stats for
+
+    Returns:
+        { "data": ActionStatsResponse | null }
+    """
+    # First verify the action exists and is published
+    action = await catalog_repository.get_by_id(action_id)
+    if action is None or action.status != ActionStatus.PUBLISHED:
+        raise HTTPException(status_code=404, detail="Action non trouvée")
+
+    # RBAC check if user is authenticated
+    if user and user.cumulative_permissions:
+        if not _check_rbac_for_action(action, user.cumulative_permissions):
+            raise HTTPException(status_code=404, detail="Action non trouvée")
+
+    # Get stats from repository
+    stats = await execution_repository.get_action_stats(action_id)
+
+    # Return null if no executions (AC3)
+    if stats is None:
+        return {"data": None}
+
+    return {"data": ActionStatsResponse(**stats)}

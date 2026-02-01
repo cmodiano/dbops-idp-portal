@@ -1,4 +1,4 @@
-"""Tests for execution repository (Story 4.1, Task 8.1 + Story 4.3, Task 6.1).
+"""Tests for execution repository (Story 4.1, Task 8.1 + Story 4.3, Task 6.1 + Story 8.1).
 
 Tests execution_repository functions:
 - create_execution: insert and return execution ID
@@ -7,6 +7,7 @@ Tests execution_repository functions:
 - create_execution_steps: insert step records (Story 4.3)
 - get_steps_by_execution_id: retrieve steps (Story 4.3)
 - update_step_status: update step status (Story 4.3)
+- get_action_stats: aggregated stats for an action (Story 8.1)
 """
 
 import pytest
@@ -662,3 +663,127 @@ class TestGetActionExecutionSteps:
             result = await execution_repository.get_action_execution_steps(1)
 
         assert result == []
+
+
+# === Story 8.1 Tests: Action Stats ===
+
+
+class TestGetActionStats:
+    """Tests for execution_repository.get_action_stats (Story 8.1, AC4, AC5)."""
+
+    @pytest.mark.asyncio
+    async def test_get_action_stats_returns_stats_with_executions(self):
+        """get_action_stats returns aggregated stats when executions exist."""
+        # Row: total_executions, completed_count, failed_count, avg_duration_ms
+        row = (100, 90, 10, 5000.0)
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone = AsyncMock(return_value=row)
+        mock_cursor.close = AsyncMock()
+        mock_cursor.execute = AsyncMock()
+
+        mock_conn = MagicMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            result = await execution_repository.get_action_stats(1)
+
+        assert result is not None
+        assert result["total_executions"] == 100
+        assert result["incidents_count"] == 10
+        assert result["success_rate"] == 90.0  # 90 / (90 + 10) * 100
+        assert result["avg_execution_time_ms"] == 5000
+
+    @pytest.mark.asyncio
+    async def test_get_action_stats_returns_none_when_no_executions(self):
+        """get_action_stats returns None when no executions exist (AC3)."""
+        row = (0, 0, 0, None)
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone = AsyncMock(return_value=row)
+        mock_cursor.close = AsyncMock()
+        mock_cursor.execute = AsyncMock()
+
+        mock_conn = MagicMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            result = await execution_repository.get_action_stats(999)
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_get_action_stats_handles_all_failures(self):
+        """get_action_stats handles case where all executions failed (0% success)."""
+        row = (10, 0, 10, None)  # 10 total, 0 completed, 10 failed, no avg time
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone = AsyncMock(return_value=row)
+        mock_cursor.close = AsyncMock()
+        mock_cursor.execute = AsyncMock()
+
+        mock_conn = MagicMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            result = await execution_repository.get_action_stats(1)
+
+        assert result is not None
+        assert result["success_rate"] == 0.0  # 0 / (0 + 10) * 100
+        assert result["avg_execution_time_ms"] is None
+        assert result["incidents_count"] == 10
+
+    @pytest.mark.asyncio
+    async def test_get_action_stats_handles_all_success(self):
+        """get_action_stats handles case where all executions succeeded (100% success)."""
+        row = (50, 50, 0, 1234.5)  # 50 total, 50 completed, 0 failed
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone = AsyncMock(return_value=row)
+        mock_cursor.close = AsyncMock()
+        mock_cursor.execute = AsyncMock()
+
+        mock_conn = MagicMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            result = await execution_repository.get_action_stats(1)
+
+        assert result is not None
+        assert result["success_rate"] == 100.0  # 50 / (50 + 0) * 100
+        assert result["incidents_count"] == 0
+        assert result["avg_execution_time_ms"] == 1234  # Rounded with round()
+
+    @pytest.mark.asyncio
+    async def test_get_action_stats_calculates_success_rate_correctly(self):
+        """get_action_stats calculates success_rate as completed/(completed+failed)*100."""
+        # 80 completed, 20 failed = 80% success rate
+        row = (120, 80, 20, 3000.0)  # 120 total (includes other statuses), 80+20=100 finished
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone = AsyncMock(return_value=row)
+        mock_cursor.close = AsyncMock()
+        mock_cursor.execute = AsyncMock()
+
+        mock_conn = MagicMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            result = await execution_repository.get_action_stats(1)
+
+        assert result["success_rate"] == 80.0  # 80 / (80 + 20) * 100

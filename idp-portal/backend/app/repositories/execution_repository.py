@@ -1142,3 +1142,80 @@ async def get_by_id_with_approval(execution_id: int) -> dict[str, Any] | None:
         "requester_name": row[14],
         "approver_name": row[15],
     }
+
+
+# --- Story 8.1: Action Stats Repository Methods ---
+
+# Default period for action stats calculation (Story 8.1, AC5)
+ACTION_STATS_DEFAULT_DAYS = 30
+
+
+async def get_action_stats(action_id: int) -> dict[str, Any] | None:
+    """Get aggregated execution stats for a specific action (Story 8.1, AC4, AC5).
+
+    Calculates metrics over the last 30 days:
+    - total_executions: Count of all executions
+    - completed_count: Count of COMPLETED executions
+    - failed_count: Count of FAILED executions (incidents)
+    - success_rate: (completed / (completed + failed)) * 100, None if no executions
+    - avg_execution_time_ms: Average execution time in milliseconds for COMPLETED executions
+
+    Args:
+        action_id: ID of the action to get stats for
+
+    Returns:
+        Dict with stats or None if action not found or no executions
+    """
+    start_time = time.perf_counter()
+    query = """
+        SELECT
+            (SELECT COUNT(*) FROM EXECUTIONS WHERE ACTION_ID = :action_id AND CREATED_AT >= SYSDATE - :days) AS total_executions,
+            (SELECT COUNT(*) FROM EXECUTIONS WHERE ACTION_ID = :action_id AND STATUS = 'COMPLETED' AND CREATED_AT >= SYSDATE - :days) AS completed_count,
+            (SELECT COUNT(*) FROM EXECUTIONS WHERE ACTION_ID = :action_id AND STATUS = 'FAILED' AND CREATED_AT >= SYSDATE - :days) AS failed_count,
+            (SELECT AVG(
+                (CAST(COMPLETED_AT AS DATE) - CAST(STARTED_AT AS DATE)) * 24 * 60 * 60 * 1000
+             ) FROM EXECUTIONS
+             WHERE ACTION_ID = :action_id AND STATUS = 'COMPLETED'
+             AND COMPLETED_AT IS NOT NULL AND STARTED_AT IS NOT NULL
+             AND CREATED_AT >= SYSDATE - :days) AS avg_duration_ms
+        FROM DUAL
+    """
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, {"action_id": action_id, "days": ACTION_STATS_DEFAULT_DAYS})
+        row = await cursor.fetchone()
+        cursor.close()
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+
+    total_executions = row[0] or 0
+    completed_count = row[1] or 0
+    failed_count = row[2] or 0
+    avg_duration_ms = row[3]
+
+    # Calculate success rate: avoid division by zero
+    total_finished = completed_count + failed_count
+    success_rate = round((completed_count / total_finished) * 100, 1) if total_finished > 0 else None
+
+    # Round avg_duration_ms if present
+    avg_execution_time_ms = round(avg_duration_ms) if avg_duration_ms is not None else None
+
+    logger.debug(
+        "execution_repository_get_action_stats",
+        duration_ms=duration_ms,
+        action_id=action_id,
+        total_executions=total_executions,
+        success_rate=success_rate,
+    )
+
+    # Return None if no executions at all (AC3: "Pas encore de donnees")
+    if total_executions == 0:
+        return None
+
+    return {
+        "success_rate": success_rate,
+        "avg_execution_time_ms": avg_execution_time_ms,
+        "total_executions": total_executions,
+        "incidents_count": failed_count,
+    }

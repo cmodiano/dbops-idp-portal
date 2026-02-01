@@ -57,13 +57,14 @@ import {
   fetchRecentActions,
   addFavorite,
   removeFavorite,
+  fetchActionStats,
   type CatalogAction,
   type CatalogActionDetail,
   type CatalogTagWithCount,
   type FavoriteEntry,
   type RecentAction,
 } from '../services/catalog_service';
-import type { ActionPreviewData, ImpactLevel } from '../types/api';
+import type { ActionPreviewData, ActionStats, ImpactLevel } from '../types/api';
 
 const { Title, Text } = Typography;
 
@@ -96,8 +97,8 @@ const IMPACT_OPTIONS = [
 /** View mode: grid or list (AC2). */
 type ViewMode = 'grid' | 'list';
 
-/** Convert CatalogAction to ActionPreviewData for ActionCard. */
-function toPreviewData(action: CatalogAction): ActionPreviewData {
+/** Convert CatalogAction to ActionPreviewData for ActionCard (Story 8.1: optional stats). */
+function toPreviewData(action: CatalogAction, stats?: ActionStats | null): ActionPreviewData {
   // Extract default impact level from impact_rules if available
   let impactLevel: ImpactLevel | null = null;
   const impactRules = action.impact_level
@@ -118,6 +119,7 @@ function toPreviewData(action: CatalogAction): ActionPreviewData {
     parameters_schema: action.parameters_schema,
     tags: action.tags,
     execution_count: action.execution_count,
+    stats: stats ?? null,
   };
 }
 
@@ -153,6 +155,8 @@ export default function CatalogPage() {
   const [selectedActionDetail, setSelectedActionDetail] = useState<CatalogActionDetail | null>(null);
   const [selectedActionCanExecute, setSelectedActionCanExecute] = useState(false);
   const [selectedActionEnvs, setSelectedActionEnvs] = useState<string[]>([]);
+  const [selectedActionStats, setSelectedActionStats] = useState<ActionStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [drawerLoading, setDrawerLoading] = useState(false);
   const [executionWizardOpen, setExecutionWizardOpen] = useState(false);
@@ -240,7 +244,7 @@ export default function CatalogPage() {
     }
   };
 
-  // Open action drawer and fetch full detail (Story 3.2, AC1, AC5)
+  // Open action drawer and fetch full detail + stats (Story 3.2, AC1, AC5; Story 8.1)
   const handleActionClick = async (action: CatalogAction, event?: React.MouseEvent) => {
     // Store the clicked element for focus return (AC2)
     if (event?.currentTarget) {
@@ -250,20 +254,28 @@ export default function CatalogPage() {
     setSelectedActionDetail(null);
     setSelectedActionCanExecute(false);
     setSelectedActionEnvs([]);
+    setSelectedActionStats(null);
     setDrawerVisible(true);
     setDrawerLoading(true);
+    setStatsLoading(true);
 
     try {
-      const response = await fetchCatalogActionById(action.id);
-      setSelectedActionDetail(response.data);
-      setSelectedActionCanExecute(response.can_execute);
-      setSelectedActionEnvs(response.allowed_environments);
+      // Fetch action detail and stats in parallel (Story 8.1, Task 8.2)
+      const [detailResponse, statsResponse] = await Promise.all([
+        fetchCatalogActionById(action.id),
+        fetchActionStats(action.id).catch(() => null), // Stats are optional, don't fail if unavailable
+      ]);
+      setSelectedActionDetail(detailResponse.data);
+      setSelectedActionCanExecute(detailResponse.can_execute);
+      setSelectedActionEnvs(detailResponse.allowed_environments);
+      setSelectedActionStats(statsResponse);
     } catch (error) {
       console.error('Failed to load action detail:', error);
       message.error('Erreur lors du chargement de l\'action');
       // Keep drawer open with basic info from list
     } finally {
       setDrawerLoading(false);
+      setStatsLoading(false);
     }
   };
 
@@ -274,6 +286,7 @@ export default function CatalogPage() {
     setSelectedActionDetail(null);
     setSelectedActionCanExecute(false);
     setSelectedActionEnvs([]);
+    setSelectedActionStats(null);
     // Return focus to the card that opened the drawer (AC2)
     if (lastFocusedCardRef.current) {
       // Use setTimeout to ensure focus happens after drawer animation completes
@@ -600,16 +613,18 @@ export default function CatalogPage() {
           </Card>
         ) : selectedActionDetail ? (
           <ActionDrawerPreview
-            action={toPreviewData(selectedActionDetail)}
+            action={toPreviewData(selectedActionDetail, selectedActionStats)}
             canExecute={selectedActionCanExecute}
             allowedEnvironments={selectedActionEnvs}
             onExecute={handleExecuteClick}
             variant={isBusinessProfile ? 'business' : 'default'}
+            statsLoading={statsLoading}
           />
         ) : selectedAction ? (
           <ActionDrawerPreview
             action={toPreviewData(selectedAction)}
             variant={isBusinessProfile ? 'business' : 'default'}
+            statsLoading={statsLoading}
           />
         ) : null}
       </Drawer>

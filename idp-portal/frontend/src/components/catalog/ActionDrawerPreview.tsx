@@ -27,7 +27,7 @@
  */
 
 import { Card, Typography, Button, Descriptions, Space, Empty, Tag, Tooltip, Divider, Badge, Alert, theme } from 'antd';
-import { PlayCircleOutlined, FileTextOutlined, ApartmentOutlined } from '@ant-design/icons';
+import { PlayCircleOutlined, FileTextOutlined, ApartmentOutlined, BarChartOutlined } from '@ant-design/icons';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
@@ -38,6 +38,7 @@ import { IMPACT_LABELS } from '../shared/impactLabels';
 import { getTagStyle } from '../../utils/tagStyles';
 import { STYLE_TOKENS } from '../../theme/styleTokens';
 import { sanitizeDescription } from '../../utils/businessLanguage';
+import { ActionMetrics } from './ActionMetrics';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -52,6 +53,8 @@ export interface ActionDrawerPreviewProps {
   onExecute?: () => void;
   /** Story 7.1: 'business' variant for simplified UI for business users. */
   variant?: 'default' | 'business';
+  /** Story 8.1: Loading state for stats (separate from action data). */
+  statsLoading?: boolean;
 }
 
 /** Parameter info extracted from JSON Schema. */
@@ -83,11 +86,14 @@ export function ActionDrawerPreview({
   action,
   visible = true,
   canExecute,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future env-specific execute
   allowedEnvironments = [],
   onExecute,
   variant = 'default',
+  statsLoading = false,
 }: ActionDrawerPreviewProps) {
+  // Note: allowedEnvironments is passed to the component for future env-specific execute button logic
+  // Currently used in parent (CatalogPage) to determine canExecute; kept here for complete prop interface
+  void allowedEnvironments;
   const { effectiveMode } = useTheme();
   const isDark = effectiveMode === 'dark';
   const { token } = theme.useToken();
@@ -324,6 +330,20 @@ export function ActionDrawerPreview({
             />
           )}
         </div>
+
+        {/* Metrics section - Story 8.1, AC1, AC2, AC3 (hidden in business variant) */}
+        {!isBusiness && (
+          <>
+            <Divider style={{ margin: '16px 0' }} />
+            <div data-testid="metrics-section">
+              <Space align="center" style={{ marginBottom: 8 }}>
+                <BarChartOutlined />
+                <Text strong>Metriques (30 derniers jours)</Text>
+              </Space>
+              <ActionMetrics stats={action.stats} loading={statsLoading} />
+            </div>
+          </>
+        )}
 
         {/* Execute button - Story 3.2 AC3, Story 4.1 Task 7, Story 7.1: larger for business */}
         <Tooltip title={executeTooltip}>

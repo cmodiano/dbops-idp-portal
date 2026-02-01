@@ -17,3 +17,6 @@ export type { TagCloudProps } from './TagCloud';
 
 export { ExecutionWizard } from './ExecutionWizard';
 export type { ExecutionWizardProps } from './ExecutionWizard';
+
+export { ActionMetrics } from './ActionMetrics';
+export type { ActionMetricsProps } from './ActionMetrics';

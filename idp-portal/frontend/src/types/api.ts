@@ -363,6 +363,23 @@ export interface ActionPreviewData {
   execution_count?: number | null;
   /** Story 3.4 FR12: Markdown documentation for contextual help. */
   documentation_md?: string | null;
+  /** Story 8.1: Performance stats for action scorecard (optional, loaded separately). */
+  stats?: ActionStats | null;
+}
+
+/**
+ * Action performance statistics (Story 8.1, AC1, AC4).
+ * Aggregated metrics over the last 30 days.
+ */
+export interface ActionStats {
+  /** Success rate percentage (COMPLETED / (COMPLETED + FAILED) * 100). Null if no finished executions. */
+  success_rate: number | null;
+  /** Average execution time in milliseconds for COMPLETED executions. Null if no completed executions. */
+  avg_execution_time_ms: number | null;
+  /** Total number of executions in the period. */
+  total_executions: number;
+  /** Number of FAILED executions (incidents). */
+  incidents_count: number;
 }
 
 // === Execution Types (Story 4.1) ===

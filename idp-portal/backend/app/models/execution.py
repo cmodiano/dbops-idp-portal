@@ -179,3 +179,22 @@ class ExecutionStepCreate(BaseModel):
     step_order: int = Field(..., ge=1, description="Order in execution sequence")
     step_name: str = Field(..., min_length=1, max_length=255, description="Display name")
     step_type: StepType = Field(..., description="Type of step")
+
+
+class ActionStatsResponse(BaseModel):
+    """Response model for GET /catalog/actions/{id}/stats (Story 8.1, AC1, AC4).
+
+    Aggregated performance metrics for a specific action over the last 30 days.
+
+    Attributes:
+        success_rate: Percentage of successful executions (COMPLETED / (COMPLETED + FAILED) * 100).
+                      None if no finished executions.
+        avg_execution_time_ms: Average execution time in milliseconds for COMPLETED executions.
+                               None if no completed executions.
+        total_executions: Total number of executions in the period.
+        incidents_count: Number of FAILED executions (incidents).
+    """
+    success_rate: float | None = Field(None, ge=0, le=100, description="Success rate percentage")
+    avg_execution_time_ms: int | None = Field(None, ge=0, description="Average execution time in ms")
+    total_executions: int = Field(..., ge=0, description="Total executions count")
+    incidents_count: int = Field(..., ge=0, description="Number of failed executions")

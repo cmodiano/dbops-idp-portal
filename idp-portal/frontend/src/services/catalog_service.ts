@@ -5,7 +5,7 @@
  */
 
 import { apiFetch, apiFetchRaw } from './api_client';
-import type { ActionPreviewData } from '../types/api';
+import type { ActionPreviewData, ActionStats } from '../types/api';
 
 /** Action with execution_count for catalog display. */
 export interface CatalogAction extends ActionPreviewData {
@@ -139,4 +139,17 @@ export async function fetchCatalogActionById(
     can_execute: response.can_execute ?? false,
     allowed_environments: response.allowed_environments ?? [],
   };
+}
+
+/**
+ * Fetch action stats for scorecard display (Story 8.1, AC4, AC5).
+ * Returns aggregated metrics over the last 30 days.
+ * Returns null if no executions exist (AC3).
+ *
+ * @param actionId - The action ID to fetch stats for
+ * @returns ActionStats or null if no data
+ */
+export async function fetchActionStats(actionId: number): Promise<ActionStats | null> {
+  const response = await apiFetchRaw<{ data: ActionStats | null }>(`/catalog/actions/${actionId}/stats`);
+  return response.data;
 }

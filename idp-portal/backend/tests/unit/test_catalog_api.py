@@ -1,6 +1,7 @@
 """Tests for catalog API endpoints.
 
 Story 2.14: RBAC by action removed — access control now via profile permissions.
+Story 8.1: Action stats endpoint for scorecards.
 Tests GET /api/v1/catalog/actions returns published actions.
 """
 
@@ -575,5 +576,97 @@ class TestListCatalogTags:
             assert response.status_code == status.HTTP_200_OK
             call_kwargs = mock_tags.call_args.kwargs
             assert call_kwargs.get("action_ids_filter") == [1, 2]
+        finally:
+            app.dependency_overrides.pop(get_optional_user, None)
+
+
+class TestGetActionStats:
+    """Tests for GET /api/v1/catalog/actions/{id}/stats (Story 8.1, AC4)."""
+
+    @pytest.mark.asyncio
+    async def test_get_action_stats_returns_stats(self, client, sample_action_detail):
+        """GET /catalog/actions/{id}/stats returns stats for action with executions (AC1, AC4)."""
+        with patch("app.api.v1.catalog.catalog_repository.get_by_id", new_callable=AsyncMock) as mock_get, \
+             patch("app.api.v1.catalog.execution_repository.get_action_stats", new_callable=AsyncMock) as mock_stats:
+            mock_get.return_value = sample_action_detail
+            mock_stats.return_value = {
+                "success_rate": 95.5,
+                "avg_execution_time_ms": 5000,
+                "total_executions": 100,
+                "incidents_count": 5,
+            }
+
+            response = await client.get("/api/v1/catalog/actions/1/stats")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert "data" in data
+        assert data["data"]["success_rate"] == 95.5
+        assert data["data"]["avg_execution_time_ms"] == 5000
+        assert data["data"]["total_executions"] == 100
+        assert data["data"]["incidents_count"] == 5
+
+    @pytest.mark.asyncio
+    async def test_get_action_stats_returns_null_for_no_executions(self, client, sample_action_detail):
+        """GET /catalog/actions/{id}/stats returns null data when no executions (AC3)."""
+        with patch("app.api.v1.catalog.catalog_repository.get_by_id", new_callable=AsyncMock) as mock_get, \
+             patch("app.api.v1.catalog.execution_repository.get_action_stats", new_callable=AsyncMock) as mock_stats:
+            mock_get.return_value = sample_action_detail
+            mock_stats.return_value = None  # No executions
+
+            response = await client.get("/api/v1/catalog/actions/1/stats")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["data"] is None
+
+    @pytest.mark.asyncio
+    async def test_get_action_stats_returns_404_for_nonexistent_action(self, client):
+        """GET /catalog/actions/{id}/stats returns 404 when action does not exist."""
+        with patch("app.api.v1.catalog.catalog_repository.get_by_id", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = None
+
+            response = await client.get("/api/v1/catalog/actions/999/stats")
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_get_action_stats_returns_404_for_draft_action(self, client, sample_action_detail):
+        """GET /catalog/actions/{id}/stats returns 404 for non-published actions."""
+        draft_action = sample_action_detail.model_copy(update={"status": ActionStatus.DRAFT})
+        with patch("app.api.v1.catalog.catalog_repository.get_by_id", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = draft_action
+
+            response = await client.get("/api/v1/catalog/actions/1/stats")
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_get_action_stats_with_rbac_denied(self, client, sample_action_detail):
+        """GET /catalog/actions/{id}/stats returns 404 when user lacks RBAC permission."""
+        from app.api.deps import get_optional_user
+        from app.models.auth import UserProfile
+        from app.models.profile import CumulativePermissionsResponse
+
+        user = UserProfile(
+            id=1,
+            username="test",
+            display_name="Test User",
+            profile="viewer",
+            cumulative_permissions=CumulativePermissionsResponse(
+                actions_type="list",
+                action_ids=[99, 100],  # action 1 not in list
+                tag_patterns=[],
+            ),
+        )
+
+        app.dependency_overrides[get_optional_user] = lambda: user
+        try:
+            with patch("app.api.v1.catalog.catalog_repository.get_by_id", new_callable=AsyncMock) as mock_get:
+                mock_get.return_value = sample_action_detail
+
+                response = await client.get("/api/v1/catalog/actions/1/stats")
+
+            assert response.status_code == status.HTTP_404_NOT_FOUND
         finally:
             app.dependency_overrides.pop(get_optional_user, None)

@@ -127,9 +127,9 @@ development_status:
     7-3-rbac-granulaire-par-action-profil-et-environnement: done # Code review 2026-02-01: 1 MEDIUM fix (invalidate_permissions_cache), 3 edge case tests added, 23/23 tests pass
     7-4-workflow-approbation-pour-la-production: done # Code review 2026-02-01: 3 fixes (1 HIGH: ApprovalRequest body, 2 MEDIUM: user_display_name, Oracle index syntax)
     epic-7-retrospective: optional
-    # === Epic 8: Analytics & Scorecards (Phasße 2) ===
-    epic-8: backlog
-    8-1-scorecards-par-action: backlog
+    # === Epic 8: Analytics & Scorecards (Phase 2) ===
+    epic-8: in-progress
+    8-1-scorecards-par-action: done # Code review 2026-02-01: 8 fixes (2 HIGH + 4 MEDIUM + 2 LOW), all tests pass
     8-2-dashboards-globaux-dbops: backlog
     epic-8-retrospective: optional
     # === Epic 9: Autoremediation (Phase 2) ===

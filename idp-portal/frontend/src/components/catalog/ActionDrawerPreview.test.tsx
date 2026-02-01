@@ -352,5 +352,82 @@ describe('ActionDrawerPreview', () => {
       const region = screen.getByRole('region');
       expect(region).toHaveAttribute('aria-label');
     });
+
+    it('hides metrics section for business variant (Story 8.1, AC1)', () => {
+      const actionWithStats = {
+        ...actionWithTechnicalTerms,
+        stats: {
+          success_rate: 95.0,
+          avg_execution_time_ms: 5000,
+          total_executions: 100,
+          incidents_count: 5,
+        },
+      };
+      renderWithTheme(
+        <ActionDrawerPreview action={actionWithStats} variant="business" />
+      );
+
+      // Metrics section should be hidden for business users
+      expect(screen.queryByTestId('metrics-section')).not.toBeInTheDocument();
+    });
+  });
+
+  // === Story 8.1: Metrics section tests ===
+  describe('metrics section (Story 8.1)', () => {
+    const actionWithStats: ActionPreviewData = {
+      ...mockAction,
+      stats: {
+        success_rate: 95.5,
+        avg_execution_time_ms: 5000,
+        total_executions: 100,
+        incidents_count: 5,
+      },
+    };
+
+    it('renders metrics section for default variant (AC1)', () => {
+      renderWithTheme(<ActionDrawerPreview action={actionWithStats} />);
+
+      expect(screen.getByTestId('metrics-section')).toBeInTheDocument();
+      expect(screen.getByText('Metriques (30 derniers jours)')).toBeInTheDocument();
+    });
+
+    it('renders metrics with stats data (AC1)', () => {
+      renderWithTheme(<ActionDrawerPreview action={actionWithStats} />);
+
+      expect(screen.getByText('Taux de succes')).toBeInTheDocument();
+      expect(screen.getByText('Temps moyen')).toBeInTheDocument();
+      expect(screen.getByText('Executions')).toBeInTheDocument();
+      expect(screen.getByText('Incidents')).toBeInTheDocument();
+    });
+
+    it('shows empty message when stats is null (AC3)', () => {
+      const actionNoStats = { ...mockAction, stats: null };
+      renderWithTheme(<ActionDrawerPreview action={actionNoStats} />);
+
+      expect(screen.getByTestId('metrics-section')).toBeInTheDocument();
+      expect(screen.getByText('Pas encore de donnees')).toBeInTheDocument();
+    });
+
+    it('shows empty message when stats is undefined (AC3)', () => {
+      // mockAction has no stats
+      renderWithTheme(<ActionDrawerPreview action={mockAction} />);
+
+      expect(screen.getByTestId('metrics-section')).toBeInTheDocument();
+      expect(screen.getByText('Pas encore de donnees')).toBeInTheDocument();
+    });
+
+    it('shows loading state when statsLoading is true', () => {
+      renderWithTheme(<ActionDrawerPreview action={actionWithStats} statsLoading={true} />);
+
+      expect(screen.getByTestId('metrics-section')).toBeInTheDocument();
+      // The ActionMetrics component should show loading state
+    });
+
+    it('hides metrics section for business variant (AC1 - business exclusion)', () => {
+      renderWithTheme(<ActionDrawerPreview action={actionWithStats} variant="business" />);
+
+      expect(screen.queryByTestId('metrics-section')).not.toBeInTheDocument();
+      expect(screen.queryByText('Metriques (30 derniers jours)')).not.toBeInTheDocument();
+    });
   });
 });
