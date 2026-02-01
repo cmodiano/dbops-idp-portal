@@ -125,7 +125,7 @@ development_status:
     7-1-vue-catalogue-simplifiee-pour-client-business: done
     7-2-golden-path-guide-pour-client-business: done
     7-3-rbac-granulaire-par-action-profil-et-environnement: done
-    7-4-workflow-approbation-pour-la-production: backlog
+    7-4-workflow-approbation-pour-la-production: done
     epic-7-retrospective: optional
     # === Epic 8: Analytics & Scorecards (Phase 2) ===
     epic-8: backlog
