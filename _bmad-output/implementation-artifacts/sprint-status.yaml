@@ -130,7 +130,7 @@ development_status:
     # === Epic 8: Analytics & Scorecards (Phase 2) ===
     epic-8: backlog
     8-1-scorecards-par-action: done
-    8-2-dashboards-globaux-dbops: backlog
+    8-2-dashboards-globaux-dbops: done
     epic-8-retrospective: optional
     # === Epic 9: Autoremediation (Phase 2) ===
     epic-9: backlog
