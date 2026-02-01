@@ -677,30 +677,34 @@ async def skip_remaining_steps(execution_id: int) -> int:
 # --- Dashboard Repository Methods (Story 5.1, Task 1.2) ---
 
 
-async def get_dashboard_stats() -> dict[str, Any]:
-    """Get aggregated dashboard statistics (Story 5.1, AC1, AC4).
+async def get_dashboard_stats(days: int = 14) -> dict[str, Any]:
+    """Get aggregated dashboard statistics (Story 5.1, AC1, AC4; Story 8.3, AC6).
+
+    Args:
+        days: Number of days for period filter (default 14). Only affects taux_succes_pct
+              and executions_en_erreur. executions_jour always shows today.
 
     Returns:
         Dict with:
-        - executions_jour: Count of executions created today
-        - taux_succes_pct: Success rate % over last 24h (COMPLETED / (COMPLETED + FAILED) * 100)
-        - executions_en_cours: Count of running/pending executions
-        - executions_en_erreur: Count of failed executions in last 24h
+        - executions_jour: Count of executions created today (always current day)
+        - taux_succes_pct: Success rate % over selected period (COMPLETED / (COMPLETED + FAILED) * 100)
+        - executions_en_cours: Count of running/pending executions (always current)
+        - executions_en_erreur: Count of failed executions in selected period
     """
     start_time = time.perf_counter()
     query = """
         SELECT
             (SELECT COUNT(*) FROM EXECUTIONS WHERE TRUNC(CREATED_AT) = TRUNC(SYSDATE)) AS executions_jour,
             (SELECT COUNT(*) FROM EXECUTIONS WHERE STATUS IN ('SUBMITTED', 'RUNNING', 'PENDING_APPROVAL')) AS executions_en_cours,
-            (SELECT COUNT(*) FROM EXECUTIONS WHERE STATUS = 'FAILED' AND CREATED_AT >= SYSDATE - 1) AS executions_en_erreur,
-            (SELECT COUNT(*) FROM EXECUTIONS WHERE STATUS = 'COMPLETED' AND CREATED_AT >= SYSDATE - 1) AS completed_24h,
-            (SELECT COUNT(*) FROM EXECUTIONS WHERE STATUS = 'FAILED' AND CREATED_AT >= SYSDATE - 1) AS failed_24h
+            (SELECT COUNT(*) FROM EXECUTIONS WHERE STATUS = 'FAILED' AND CREATED_AT >= SYSDATE - :days) AS executions_en_erreur,
+            (SELECT COUNT(*) FROM EXECUTIONS WHERE STATUS = 'COMPLETED' AND CREATED_AT >= SYSDATE - :days) AS completed_period,
+            (SELECT COUNT(*) FROM EXECUTIONS WHERE STATUS = 'FAILED' AND CREATED_AT >= SYSDATE - :days) AS failed_period
         FROM DUAL
     """
 
     async with get_connection() as conn:
         cursor = conn.cursor()
-        await cursor.execute(query)
+        await cursor.execute(query, {"days": days})
         row = await cursor.fetchone()
         cursor.close()
 
@@ -709,16 +713,17 @@ async def get_dashboard_stats() -> dict[str, Any]:
     executions_jour = row[0] or 0
     executions_en_cours = row[1] or 0
     executions_en_erreur = row[2] or 0
-    completed_24h = row[3] or 0
-    failed_24h = row[4] or 0
+    completed_period = row[3] or 0
+    failed_period = row[4] or 0
 
     # Calculate success rate: avoid division by zero
-    total_finished = completed_24h + failed_24h
-    taux_succes_pct = round((completed_24h / total_finished) * 100, 1) if total_finished > 0 else 0.0
+    total_finished = completed_period + failed_period
+    taux_succes_pct = round((completed_period / total_finished) * 100, 1) if total_finished > 0 else 0.0
 
     logger.debug(
         "execution_repository_get_dashboard_stats",
         duration_ms=duration_ms,
+        days=days,
         executions_jour=executions_jour,
         taux_succes_pct=taux_succes_pct,
     )
@@ -1339,3 +1344,139 @@ async def get_admin_analytics(days: int = ADMIN_ANALYTICS_DEFAULT_DAYS) -> dict[
         "executions_by_profile": executions_by_profile,
         "adoption_trend": adoption_trend,
     }
+
+
+# --- Story 8.3: Dashboard Reporting Repository Methods ---
+
+# Default period for dashboard reporting stats
+DASHBOARD_REPORTING_DEFAULT_DAYS = 14
+
+
+async def get_stats_by_technology(days: int = DASHBOARD_REPORTING_DEFAULT_DAYS) -> list[dict[str, Any]]:
+    """Get aggregated execution stats by database engine (Story 8.3, AC3, AC7).
+
+    Aggregates executions by engine from ACTIONS_CATALOG, calculating:
+    - count: Total executions per engine
+    - success_rate: Percentage of successful executions (COMPLETED / (COMPLETED + FAILED) * 100)
+
+    Args:
+        days: Number of days to include (default 14)
+
+    Returns:
+        List of dicts with: engine, count, success_rate (ordered by count DESC)
+    """
+    start_time = time.perf_counter()
+    query = """
+        SELECT
+            NVL(a.ENGINE, 'N/A') AS engine,
+            COUNT(*) AS total_count,
+            SUM(CASE WHEN e.STATUS = 'COMPLETED' THEN 1 ELSE 0 END) AS completed,
+            SUM(CASE WHEN e.STATUS = 'FAILED' THEN 1 ELSE 0 END) AS failed
+        FROM EXECUTIONS e
+        LEFT JOIN ACTIONS_CATALOG a ON e.ACTION_ID = a.ID
+        WHERE e.CREATED_AT >= SYSDATE - :days
+        GROUP BY NVL(a.ENGINE, 'N/A')
+        ORDER BY total_count DESC
+    """
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, {"days": days})
+        rows = await cursor.fetchall()
+        cursor.close()
+
+    result = []
+    for row in rows:
+        engine = row[0]
+        total_count = row[1] or 0
+        completed = row[2] or 0
+        failed = row[3] or 0
+
+        # Calculate success rate: avoid division by zero
+        total_finished = completed + failed
+        success_rate = round((completed / total_finished) * 100, 1) if total_finished > 0 else None
+
+        result.append({
+            "engine": engine,
+            "count": total_count,
+            "success_rate": success_rate,
+        })
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.debug(
+        "execution_repository_get_stats_by_technology",
+        duration_ms=duration_ms,
+        days=days,
+        engine_count=len(result),
+    )
+
+    return result
+
+
+async def get_stats_by_environment(days: int = DASHBOARD_REPORTING_DEFAULT_DAYS) -> list[dict[str, Any]]:
+    """Get aggregated execution stats by environment (Story 8.3, AC4, AC7).
+
+    Aggregates executions by environment, calculating:
+    - count: Total executions per environment
+    - success_rate: Percentage of successful executions (COMPLETED / (COMPLETED + FAILED) * 100)
+
+    Results are ordered logically: dev, staging, prod, then alphabetical for others.
+
+    Args:
+        days: Number of days to include (default 14)
+
+    Returns:
+        List of dicts with: environment, count, success_rate
+    """
+    start_time = time.perf_counter()
+    query = """
+        SELECT
+            e.ENVIRONMENT,
+            COUNT(*) AS total_count,
+            SUM(CASE WHEN e.STATUS = 'COMPLETED' THEN 1 ELSE 0 END) AS completed,
+            SUM(CASE WHEN e.STATUS = 'FAILED' THEN 1 ELSE 0 END) AS failed
+        FROM EXECUTIONS e
+        WHERE e.CREATED_AT >= SYSDATE - :days
+        GROUP BY e.ENVIRONMENT
+        ORDER BY
+            CASE e.ENVIRONMENT
+                WHEN 'dev' THEN 1
+                WHEN 'staging' THEN 2
+                WHEN 'prod' THEN 3
+                ELSE 4
+            END,
+            e.ENVIRONMENT
+    """
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, {"days": days})
+        rows = await cursor.fetchall()
+        cursor.close()
+
+    result = []
+    for row in rows:
+        environment = row[0]
+        total_count = row[1] or 0
+        completed = row[2] or 0
+        failed = row[3] or 0
+
+        # Calculate success rate: avoid division by zero
+        total_finished = completed + failed
+        success_rate = round((completed / total_finished) * 100, 1) if total_finished > 0 else None
+
+        result.append({
+            "environment": environment,
+            "count": total_count,
+            "success_rate": success_rate,
+        })
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.debug(
+        "execution_repository_get_stats_by_environment",
+        duration_ms=duration_ms,
+        days=days,
+        environment_count=len(result),
+    )
+
+    return result

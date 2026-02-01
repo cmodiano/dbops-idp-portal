@@ -1,8 +1,10 @@
-"""Tests for dashboard API endpoints (Story 5.1, Task 5.1).
+"""Tests for dashboard API endpoints (Story 5.1, Task 5.1; Story 8.3).
 
 Tests:
-- GET /api/v1/dashboard/stats: Returns aggregated statistics (AC1, AC4)
+- GET /api/v1/dashboard/stats: Returns aggregated statistics (AC1, AC4, Story 8.3 AC6 period filter)
 - GET /api/v1/dashboard/recent: Returns executions from last 24h (AC2, AC4)
+- GET /api/v1/dashboard/stats-by-technology: Returns executions grouped by engine (Story 8.3, AC3, AC7)
+- GET /api/v1/dashboard/stats-by-environment: Returns executions grouped by environment (Story 8.3, AC4, AC7)
 """
 
 import pytest
@@ -307,3 +309,203 @@ class TestDashboardIntegration:
         assert recent_response.status_code == status.HTTP_200_OK
         assert stats_response.json()["data"]["executions_jour"] == 5
         assert len(recent_response.json()["data"]) == 1
+
+
+# --- Story 8.3: Stats by Technology and Environment Tests ---
+
+
+class TestGetStatsByTechnology:
+    """Tests for GET /api/v1/dashboard/stats-by-technology (Story 8.3, AC3, AC7)."""
+
+    @pytest.mark.asyncio
+    async def test_get_stats_by_technology_returns_engine_aggregations(self, client, mock_auth_dba):
+        """GET /dashboard/stats-by-technology returns engine aggregations with count and success_rate."""
+        mock_stats = [
+            {"engine": "Oracle", "count": 50, "success_rate": 95.0},
+            {"engine": "PostgreSQL", "count": 30, "success_rate": 88.5},
+            {"engine": "N/A", "count": 10, "success_rate": None},
+        ]
+
+        with patch("app.api.v1.dashboard.execution_repository.get_stats_by_technology", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_stats
+
+            response = await client.get("/api/v1/dashboard/stats-by-technology")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert "data" in data
+        assert len(data["data"]) == 3
+        assert data["data"][0]["engine"] == "Oracle"
+        assert data["data"][0]["count"] == 50
+        assert data["data"][0]["success_rate"] == 95.0
+
+    @pytest.mark.asyncio
+    async def test_get_stats_by_technology_with_days_parameter(self, client, mock_auth_dba):
+        """GET /dashboard/stats-by-technology accepts days query parameter."""
+        mock_stats = [{"engine": "Oracle", "count": 100, "success_rate": 90.0}]
+
+        with patch("app.api.v1.dashboard.execution_repository.get_stats_by_technology", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_stats
+
+            response = await client.get("/api/v1/dashboard/stats-by-technology?days=30")
+
+        assert response.status_code == status.HTTP_200_OK
+        mock_get.assert_called_once_with(days=30)
+
+    @pytest.mark.asyncio
+    async def test_get_stats_by_technology_default_days(self, client, mock_auth_dba):
+        """GET /dashboard/stats-by-technology uses default 14 days."""
+        with patch("app.api.v1.dashboard.execution_repository.get_stats_by_technology", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = []
+
+            response = await client.get("/api/v1/dashboard/stats-by-technology")
+
+        assert response.status_code == status.HTTP_200_OK
+        mock_get.assert_called_once_with(days=14)
+
+    @pytest.mark.asyncio
+    async def test_get_stats_by_technology_empty_data(self, client, mock_auth_dba):
+        """GET /dashboard/stats-by-technology returns empty list when no data."""
+        with patch("app.api.v1.dashboard.execution_repository.get_stats_by_technology", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = []
+
+            response = await client.get("/api/v1/dashboard/stats-by-technology")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["data"] == []
+
+    @pytest.mark.asyncio
+    async def test_get_stats_by_technology_forbidden_for_non_dba(self, client, mock_auth_viewer):
+        """GET /dashboard/stats-by-technology returns 403 for non-DBA/DBOPS profiles."""
+        response = await client.get("/api/v1/dashboard/stats-by-technology")
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    @pytest.mark.asyncio
+    async def test_get_stats_by_technology_dbops_allowed(self, client, mock_auth_dbops):
+        """GET /dashboard/stats-by-technology is accessible by DBOPS profile."""
+        with patch("app.api.v1.dashboard.execution_repository.get_stats_by_technology", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = []
+
+            response = await client.get("/api/v1/dashboard/stats-by-technology")
+
+        assert response.status_code == status.HTTP_200_OK
+
+
+class TestGetStatsByEnvironment:
+    """Tests for GET /api/v1/dashboard/stats-by-environment (Story 8.3, AC4, AC7)."""
+
+    @pytest.mark.asyncio
+    async def test_get_stats_by_environment_returns_env_aggregations(self, client, mock_auth_dba):
+        """GET /dashboard/stats-by-environment returns environment aggregations with count and success_rate."""
+        mock_stats = [
+            {"environment": "dev", "count": 40, "success_rate": 92.0},
+            {"environment": "staging", "count": 25, "success_rate": 88.0},
+            {"environment": "prod", "count": 20, "success_rate": 95.0},
+        ]
+
+        with patch("app.api.v1.dashboard.execution_repository.get_stats_by_environment", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_stats
+
+            response = await client.get("/api/v1/dashboard/stats-by-environment")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert "data" in data
+        assert len(data["data"]) == 3
+        # Verify order: dev, staging, prod
+        assert data["data"][0]["environment"] == "dev"
+        assert data["data"][1]["environment"] == "staging"
+        assert data["data"][2]["environment"] == "prod"
+
+    @pytest.mark.asyncio
+    async def test_get_stats_by_environment_with_days_parameter(self, client, mock_auth_dba):
+        """GET /dashboard/stats-by-environment accepts days query parameter."""
+        mock_stats = [{"environment": "prod", "count": 50, "success_rate": 98.0}]
+
+        with patch("app.api.v1.dashboard.execution_repository.get_stats_by_environment", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_stats
+
+            response = await client.get("/api/v1/dashboard/stats-by-environment?days=90")
+
+        assert response.status_code == status.HTTP_200_OK
+        mock_get.assert_called_once_with(days=90)
+
+    @pytest.mark.asyncio
+    async def test_get_stats_by_environment_default_days(self, client, mock_auth_dba):
+        """GET /dashboard/stats-by-environment uses default 14 days."""
+        with patch("app.api.v1.dashboard.execution_repository.get_stats_by_environment", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = []
+
+            response = await client.get("/api/v1/dashboard/stats-by-environment")
+
+        assert response.status_code == status.HTTP_200_OK
+        mock_get.assert_called_once_with(days=14)
+
+    @pytest.mark.asyncio
+    async def test_get_stats_by_environment_empty_data(self, client, mock_auth_dba):
+        """GET /dashboard/stats-by-environment returns empty list when no data."""
+        with patch("app.api.v1.dashboard.execution_repository.get_stats_by_environment", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = []
+
+            response = await client.get("/api/v1/dashboard/stats-by-environment")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["data"] == []
+
+    @pytest.mark.asyncio
+    async def test_get_stats_by_environment_forbidden_for_non_dba(self, client, mock_auth_viewer):
+        """GET /dashboard/stats-by-environment returns 403 for non-DBA/DBOPS profiles."""
+        response = await client.get("/api/v1/dashboard/stats-by-environment")
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    @pytest.mark.asyncio
+    async def test_get_stats_by_environment_dbops_allowed(self, client, mock_auth_dbops):
+        """GET /dashboard/stats-by-environment is accessible by DBOPS profile."""
+        with patch("app.api.v1.dashboard.execution_repository.get_stats_by_environment", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = []
+
+            response = await client.get("/api/v1/dashboard/stats-by-environment")
+
+        assert response.status_code == status.HTTP_200_OK
+
+
+class TestGetDashboardStatsWithPeriod:
+    """Tests for GET /api/v1/dashboard/stats with period filter (Story 8.3, AC6)."""
+
+    @pytest.mark.asyncio
+    async def test_get_stats_with_days_parameter(self, client, mock_auth_dba):
+        """GET /dashboard/stats accepts days query parameter."""
+        mock_stats = {
+            "executions_jour": 10,
+            "taux_succes_pct": 85.0,
+            "executions_en_cours": 2,
+            "executions_en_erreur": 3,
+        }
+
+        with patch("app.api.v1.dashboard.execution_repository.get_dashboard_stats", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_stats
+
+            response = await client.get("/api/v1/dashboard/stats?days=30")
+
+        assert response.status_code == status.HTTP_200_OK
+        mock_get.assert_called_once_with(days=30)
+
+    @pytest.mark.asyncio
+    async def test_get_stats_default_days(self, client, mock_auth_dba):
+        """GET /dashboard/stats uses default 14 days."""
+        mock_stats = {
+            "executions_jour": 5,
+            "taux_succes_pct": 90.0,
+            "executions_en_cours": 1,
+            "executions_en_erreur": 0,
+        }
+
+        with patch("app.api.v1.dashboard.execution_repository.get_dashboard_stats", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_stats
+
+            response = await client.get("/api/v1/dashboard/stats")
+
+        assert response.status_code == status.HTTP_200_OK
+        mock_get.assert_called_once_with(days=14)

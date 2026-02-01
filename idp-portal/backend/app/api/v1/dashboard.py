@@ -1,8 +1,10 @@
-"""Dashboard API (Story 5.1, Task 1.1, 1.3, 1.4).
+"""Dashboard API (Story 5.1, Task 1.1, 1.3, 1.4; Story 8.3).
 
 Provides endpoints for dashboard statistics and recent activity:
-- GET /api/v1/dashboard/stats: Aggregated statistics (AC1)
+- GET /api/v1/dashboard/stats: Aggregated statistics (AC1, Story 8.3 AC6 period filter)
 - GET /api/v1/dashboard/recent: Executions from last 24h (AC2, same window as stats)
+- GET /api/v1/dashboard/stats-by-technology: Executions by engine (Story 8.3, AC3, AC7)
+- GET /api/v1/dashboard/stats-by-environment: Executions by env (Story 8.3, AC4, AC7)
 
 RBAC: Endpoints restricted to DBA and DBOPS profiles (Story 5.1 Dev Notes).
 """
@@ -10,12 +12,19 @@ RBAC: Endpoints restricted to DBA and DBOPS profiles (Story 5.1 Dev Notes).
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
 import structlog
 
 from app.api.deps import get_current_user
 from app.core.exceptions import ForbiddenError
 from app.models.auth import UserProfile
+from app.models.dashboard import (
+    DashboardStatsData,
+    DashboardStatsResponse,
+    TechnologyStats,
+    EnvironmentStats,
+    DashboardStatsByTechnologyResponse,
+    DashboardStatsByEnvironmentResponse,
+)
 from app.repositories import execution_repository
 
 logger = structlog.get_logger()
@@ -35,19 +44,10 @@ def _require_dashboard_profile(user: UserProfile) -> None:
         )
 
 
-class DashboardStatsData(BaseModel):
-    """Dashboard statistics (Story 5.1, AC1, AC4)."""
-
-    executions_jour: int
-    taux_succes_pct: float
-    executions_en_cours: int
-    executions_en_erreur: int
+# DashboardStatsData, DashboardStatsResponse imported from app.models.dashboard
 
 
-class DashboardStatsResponse(BaseModel):
-    """Response wrapper for GET /dashboard/stats."""
-
-    data: DashboardStatsData
+from pydantic import BaseModel
 
 
 class DashboardRecentItem(BaseModel):
@@ -86,21 +86,25 @@ class DashboardTimeSeriesResponse(BaseModel):
 @router.get("/stats", response_model=DashboardStatsResponse)
 async def get_dashboard_stats(
     user: UserProfile = Depends(get_current_user),
+    days: int = 14,
 ) -> DashboardStatsResponse:
-    """GET /api/v1/dashboard/stats - Dashboard statistics (Story 5.1, AC1, AC4).
+    """GET /api/v1/dashboard/stats - Dashboard statistics (Story 5.1, AC1, AC4; Story 8.3, AC6).
 
     Returns aggregated metrics for the dashboard:
-    - executions_jour: Executions created today
-    - taux_succes_pct: Success rate (%) over last 24h
+    - executions_jour: Executions created today (always current day)
+    - taux_succes_pct: Success rate (%) over selected period
     - executions_en_cours: Currently running executions
-    - executions_en_erreur: Failed executions in last 24h
+    - executions_en_erreur: Failed executions in selected period
+
+    Query Parameters:
+        days: Period filter in days (7, 14, 30, 90). Default 14.
 
     Restricted to DBA and DBOPS profiles.
     """
     _require_dashboard_profile(user)
-    logger.info("dashboard_stats_requested", user_id=user.id, profile=user.profile)
+    logger.info("dashboard_stats_requested", user_id=user.id, profile=user.profile, days=days)
 
-    stats = await execution_repository.get_dashboard_stats()
+    stats = await execution_repository.get_dashboard_stats(days=days)
     return DashboardStatsResponse(data=DashboardStatsData(**stats))
 
 
@@ -141,3 +145,50 @@ async def get_dashboard_timeseries(
     logger.info("dashboard_timeseries_requested", user_id=user.id, days=days)
     points = await execution_repository.get_dashboard_timeseries(days=days)
     return DashboardTimeSeriesResponse(data=points)
+
+
+# --- Story 8.3: Stats by Technology and Environment ---
+# TechnologyStats, EnvironmentStats, response wrappers imported from app.models.dashboard
+
+
+@router.get("/stats-by-technology", response_model=DashboardStatsByTechnologyResponse)
+async def get_stats_by_technology(
+    user: UserProfile = Depends(get_current_user),
+    days: int = 14,
+) -> DashboardStatsByTechnologyResponse:
+    """GET /api/v1/dashboard/stats-by-technology - Executions grouped by engine (Story 8.3, AC3, AC7).
+
+    Returns execution counts and success rates aggregated by database engine.
+
+    Query Parameters:
+        days: Period filter in days (7, 14, 30, 90). Default 14.
+
+    Restricted to DBA and DBOPS profiles.
+    """
+    _require_dashboard_profile(user)
+    logger.info("dashboard_stats_by_technology_requested", user_id=user.id, days=days)
+
+    stats = await execution_repository.get_stats_by_technology(days=days)
+    return DashboardStatsByTechnologyResponse(data=[TechnologyStats(**s) for s in stats])
+
+
+@router.get("/stats-by-environment", response_model=DashboardStatsByEnvironmentResponse)
+async def get_stats_by_environment(
+    user: UserProfile = Depends(get_current_user),
+    days: int = 14,
+) -> DashboardStatsByEnvironmentResponse:
+    """GET /api/v1/dashboard/stats-by-environment - Executions grouped by environment (Story 8.3, AC4, AC7).
+
+    Returns execution counts and success rates aggregated by environment.
+    Results are ordered: dev, staging, prod, then alphabetical for custom envs.
+
+    Query Parameters:
+        days: Period filter in days (7, 14, 30, 90). Default 14.
+
+    Restricted to DBA and DBOPS profiles.
+    """
+    _require_dashboard_profile(user)
+    logger.info("dashboard_stats_by_environment_requested", user_id=user.id, days=days)
+
+    stats = await execution_repository.get_stats_by_environment(days=days)
+    return DashboardStatsByEnvironmentResponse(data=[EnvironmentStats(**s) for s in stats])

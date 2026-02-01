@@ -1,0 +1,120 @@
+/**
+ * EnvironmentBarChart - Horizontal bar chart showing executions by environment.
+ * Story 8.3, AC4.
+ *
+ * Uses recharts BarChart with horizontal layout (layout="vertical").
+ * Environment colors: dev (green), staging (orange), prod (red).
+ */
+
+import { Card, Empty, Skeleton } from 'antd';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+} from 'recharts';
+import type { EnvironmentStats } from '../../../types/api';
+
+export interface EnvironmentBarChartProps {
+  /** Environment stats data. */
+  data: EnvironmentStats[];
+  /** Whether the chart is loading. */
+  loading?: boolean;
+}
+
+/** Environment color palette (Story 8.3 Dev Notes). */
+const ENVIRONMENT_COLORS: Record<string, string> = {
+  dev: '#10B981',     // vert
+  staging: '#F59E0B', // orange
+  prod: '#EF4444',    // rouge
+};
+
+/** Get color for an environment (fallback to gray). */
+function getEnvironmentColor(env: string): string {
+  return ENVIRONMENT_COLORS[env.toLowerCase()] ?? '#6B7280';
+}
+
+/** Chart sizing constants. */
+const MIN_CHART_HEIGHT = 150;
+const BAR_HEIGHT_PER_ITEM = 50;
+
+/** Custom tooltip content with count and success rate. */
+function CustomTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  const data = payload[0]?.payload as EnvironmentStats;
+  return (
+    <div style={{
+      background: 'var(--color-bg-elevated, #fff)',
+      padding: '8px 12px',
+      border: '1px solid var(--color-border-secondary, #d9d9d9)',
+      borderRadius: 4,
+      fontSize: 12,
+    }}>
+      <div style={{ fontWeight: 600, marginBottom: 4 }}>{label}</div>
+      <div>Executions: {data.count}</div>
+      {data.success_rate !== null && (
+        <div>Taux de succes: {data.success_rate.toFixed(1)}%</div>
+      )}
+    </div>
+  );
+}
+
+export function EnvironmentBarChart({ data, loading = false }: EnvironmentBarChartProps) {
+  if (loading) {
+    return (
+      <Card title="Repartition par environnement" size="small">
+        <Skeleton active paragraph={{ rows: 3 }} />
+      </Card>
+    );
+  }
+
+  if (!data.length) {
+    return (
+      <Card title="Repartition par environnement" size="small">
+        <Empty description="Aucune execution sur la periode" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+      </Card>
+    );
+  }
+
+  return (
+    <Card title="Repartition par environnement" size="small">
+      <ResponsiveContainer width="100%" height={Math.max(MIN_CHART_HEIGHT, data.length * BAR_HEIGHT_PER_ITEM)}>
+        <BarChart
+          data={data}
+          layout="vertical"
+          margin={{ top: 8, right: 24, left: 0, bottom: 8 }}
+          aria-label="Graphique des executions par environnement"
+        >
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" horizontal={false} />
+          <XAxis
+            type="number"
+            tick={{ fontSize: 12 }}
+            tickLine={false}
+            axisLine={{ stroke: 'rgba(0,0,0,0.06)' }}
+            allowDecimals={false}
+          />
+          <YAxis
+            type="category"
+            dataKey="environment"
+            tick={{ fontSize: 12 }}
+            tickLine={false}
+            axisLine={false}
+            width={80}
+          />
+          <Tooltip content={<CustomTooltip />} />
+          <Bar dataKey="count" name="Executions" radius={[0, 4, 4, 0]}>
+            {data.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={getEnvironmentColor(entry.environment)} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </Card>
+  );
+}
+
+export default EnvironmentBarChart;

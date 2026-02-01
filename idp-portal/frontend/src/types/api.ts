@@ -573,3 +573,25 @@ export interface AdminAnalytics {
   executions_by_profile: ProfileExecutions[];
   adoption_trend: WeeklyTrendPoint[];
 }
+
+// === Reporting Dashboard Types (Story 8.3) ===
+
+/** Executions aggregated by database engine (Story 8.3, AC3, AC7). */
+export interface TechnologyStats {
+  /** Database engine name (e.g., Oracle, PostgreSQL, N/A). */
+  engine: string;
+  /** Total execution count for this engine. */
+  count: number;
+  /** Success rate percentage (0-100), null if no finished executions. */
+  success_rate: number | null;
+}
+
+/** Executions aggregated by environment (Story 8.3, AC4, AC7). */
+export interface EnvironmentStats {
+  /** Environment name (dev, staging, prod). */
+  environment: string;
+  /** Total execution count for this environment. */
+  count: number;
+  /** Success rate percentage (0-100), null if no finished executions. */
+  success_rate: number | null;
+}

@@ -1,46 +1,41 @@
 /**
- * Tests for DashboardPage (Story 5.1, Task 5.2).
+ * Tests for DashboardPage (Story 8.3).
+ *
+ * DashboardPage now uses ReportingDashboard component.
+ * Tests verify:
+ * - Page title renders
+ * - ReportingDashboard is rendered
+ * - PendingApprovalsList is shown for DBA/DBOPS profiles
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import { App } from 'antd';
+import { createMemoryRouter, RouterProvider } from 'react-router';
 import DashboardPage from './DashboardPage';
-import { DashboardProvider } from '../contexts/DashboardContext';
+import { AuthProvider } from '../contexts/AuthContext';
 import * as dashboardService from '../services/dashboard_service';
 import * as executionService from '../services/execution_service';
 import type {
   DashboardStats,
-  DashboardRecentExecution,
+  TechnologyStats,
+  EnvironmentStats,
   DashboardTimeSeriesPoint,
-  ExecutionResponse,
-  ExecutionStepResponse,
 } from '../types/api';
 
 vi.mock('../services/dashboard_service');
 vi.mock('../services/execution_service');
-vi.mock('../hooks/useWebSocket', () => ({
-  useWebSocket: vi.fn(() => ({
-    steps: [],
-    execution: null,
-    loading: false,
-    error: null,
-    lastMessage: null,
-  })),
-}));
-vi.mock('../hooks/useDashboardWebSocket', () => ({
-  useDashboardWebSocket: vi.fn(() => ({
-    connected: true,
-    lastMessage: null,
-    error: null,
-  })),
-}));
 
-/** Wrapper with DashboardProvider and App for tests (Story 5.2, 5.5). */
-function renderWithProvider(ui: React.ReactElement) {
-  return render(<App><DashboardProvider>{ui}</DashboardProvider></App>);
-}
+// Mock recharts to avoid ResponsiveContainer dimension issues in tests
+vi.mock('recharts', async () => {
+  const actual = await vi.importActual('recharts');
+  return {
+    ...actual,
+    ResponsiveContainer: ({ children }: { children: React.ReactNode }) => (
+      <div style={{ width: 500, height: 300 }}>{children}</div>
+    ),
+  };
+});
 
 const mockStats: DashboardStats = {
   executions_jour: 15,
@@ -49,27 +44,14 @@ const mockStats: DashboardStats = {
   executions_en_erreur: 2,
 };
 
-const mockRecent: DashboardRecentExecution[] = [
-  {
-    id: 1,
-    action_name: 'Create PDB',
-    user_display_name: 'Alice DBA',
-    environment: 'dev',
-    status: 'COMPLETED',
-    created_at: '2026-01-30T10:00:00Z',
-    platform: 'AAP',
-    engine: 'Oracle',
-  },
-  {
-    id: 2,
-    action_name: 'Drop PDB',
-    user_display_name: 'Bob Ops',
-    environment: 'prod',
-    status: 'FAILED',
-    created_at: '2026-01-30T09:00:00Z',
-    platform: 'GitHub Actions',
-    engine: 'SQL Server',
-  },
+const mockTechStats: TechnologyStats[] = [
+  { engine: 'Oracle', count: 50, success_rate: 95.0 },
+  { engine: 'PostgreSQL', count: 30, success_rate: 88.5 },
+];
+
+const mockEnvStats: EnvironmentStats[] = [
+  { environment: 'dev', count: 40, success_rate: 92.0 },
+  { environment: 'prod', count: 20, success_rate: 95.0 },
 ];
 
 const mockTimeSeries: DashboardTimeSeriesPoint[] = [
@@ -78,215 +60,158 @@ const mockTimeSeries: DashboardTimeSeriesPoint[] = [
   { date: '2026-01-30', success: 3, failed: 2 },
 ];
 
-const mockExecution: ExecutionResponse = {
-  id: 1,
-  action_id: 10,
-  action_name: 'Create PDB',
-  user_id: 1,
-  environment: 'dev',
-  parameters: {},
-  status: 'COMPLETED',
-  servicenow_change_id: null,
-  started_at: '2026-01-30T10:00:00Z',
-  completed_at: '2026-01-30T10:00:30Z',
-  created_at: '2026-01-30T10:00:00Z',
-};
+/** Mock auth session */
+function mockAuthSession(profile: string) {
+  global.fetch = vi.fn()
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: { access_token: 'token', token_type: 'bearer' } }),
+    })
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        data: {
+          id: 1,
+          username: 'test.user',
+          display_name: 'Test User',
+          profile,
+          navigation_tabs: ['dashboard', 'catalog', 'executions'],
+        },
+      }),
+    });
+}
 
-const mockSteps: ExecutionStepResponse[] = [
-  {
-    id: 101,
-    execution_id: 1,
-    step_order: 1,
-    step_name: 'Vault',
-    step_type: 'vault',
-    status: 'COMPLETED',
-    started_at: '2026-01-30T10:00:00Z',
-    completed_at: '2026-01-30T10:00:05Z',
-    output: null,
-    platform_job_id: null,
-    error_message: null,
-  },
-];
+/** Helper to render component with router and auth */
+function renderWithProviders() {
+  const router = createMemoryRouter(
+    [{ path: '/', element: <DashboardPage /> }],
+    { initialEntries: ['/'] }
+  );
+  return render(
+    <App>
+      <AuthProvider>
+        <RouterProvider router={router} />
+      </AuthProvider>
+    </App>
+  );
+}
 
 describe('DashboardPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockAuthSession('dba');
     vi.mocked(dashboardService.fetchStats).mockResolvedValue(mockStats);
-    vi.mocked(dashboardService.fetchRecent).mockResolvedValue(mockRecent);
+    vi.mocked(dashboardService.fetchStatsByTechnology).mockResolvedValue(mockTechStats);
+    vi.mocked(dashboardService.fetchStatsByEnvironment).mockResolvedValue(mockEnvStats);
     vi.mocked(dashboardService.fetchTimeSeries).mockResolvedValue(mockTimeSeries);
-    vi.mocked(executionService.getExecution).mockResolvedValue(mockExecution);
-    vi.mocked(executionService.getExecutionSteps).mockResolvedValue(mockSteps);
+    vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
+      data: [],
+      pagination: { page: 1, page_size: 50, total: 0, total_pages: 0 },
+    });
   });
 
   it('renders page title', async () => {
-    renderWithProvider(<DashboardPage />);
-
-    expect(screen.getByRole('heading', { name: /Dashboard/i })).toBeInTheDocument();
-  });
-
-  it('displays statistics in StatCards (AC1)', async () => {
-    renderWithProvider(<DashboardPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Exécutions aujourd'hui")).toBeInTheDocument();
+    await act(async () => {
+      renderWithProviders();
     });
 
-    expect(screen.getByText('15')).toBeInTheDocument();
-    expect(screen.getByText('87.5%')).toBeInTheDocument();
-    expect(screen.getByText('3')).toBeInTheDocument();
-    expect(screen.getByText('2')).toBeInTheDocument();
-  });
-
-  it('displays recent executions table (AC2)', async () => {
-    renderWithProvider(<DashboardPage />);
-
     await waitFor(() => {
-      expect(screen.getByText('Create PDB')).toBeInTheDocument();
-    });
-
-    expect(screen.getByText('Alice DBA')).toBeInTheDocument();
-    expect(screen.getByText('Bob Ops')).toBeInTheDocument();
-  });
-
-  it('shows loading skeletons initially (AC6)', () => {
-    vi.mocked(dashboardService.fetchStats).mockImplementation(
-      () => new Promise(() => {}) // Never resolves
-    );
-    vi.mocked(dashboardService.fetchRecent).mockImplementation(
-      () => new Promise(() => {})
-    );
-
-    renderWithProvider(<DashboardPage />);
-
-    // Should have skeleton elements
-    expect(document.querySelectorAll('.ant-skeleton').length).toBeGreaterThan(0);
-  });
-
-  it('shows error alert when stats fetch fails', async () => {
-    vi.mocked(dashboardService.fetchStats).mockRejectedValue(new Error('Network error'));
-
-    renderWithProvider(<DashboardPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Erreur de chargement des statistiques')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /Dashboard/i })).toBeInTheDocument();
     });
   });
 
-  it('shows error alert when recent fetch fails', async () => {
-    vi.mocked(dashboardService.fetchRecent).mockRejectedValue(new Error('Network error'));
-
-    renderWithProvider(<DashboardPage />);
+  it('displays StatCards from ReportingDashboard (AC2)', async () => {
+    await act(async () => {
+      renderWithProviders();
+    });
 
     await waitFor(() => {
-      expect(screen.getByText('Erreur de chargement')).toBeInTheDocument();
+      expect(screen.getByText('15')).toBeInTheDocument(); // executions_jour
+    });
+
+    expect(screen.getByText('87.5%')).toBeInTheDocument(); // taux_succes_pct
+    expect(screen.getByText('3')).toBeInTheDocument(); // executions_en_cours
+    expect(screen.getByText('2')).toBeInTheDocument(); // executions_en_erreur
+  });
+
+  it('displays period selector (AC6)', async () => {
+    await act(async () => {
+      renderWithProviders();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('7 jours')).toBeInTheDocument();
+      expect(screen.getByText('14 jours')).toBeInTheDocument();
+      expect(screen.getByText('30 jours')).toBeInTheDocument();
+      expect(screen.getByText('90 jours')).toBeInTheDocument();
     });
   });
 
-  it('opens modal when clicking on execution row (AC3)', async () => {
-    const user = userEvent.setup();
-    renderWithProvider(<DashboardPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Create PDB')).toBeInTheDocument();
+  it('displays charts from ReportingDashboard (AC3, AC4, AC5)', async () => {
+    await act(async () => {
+      renderWithProviders();
     });
 
-    await user.click(screen.getByText('Create PDB'));
-
     await waitFor(() => {
-      expect(screen.getByText('Exécution — Create PDB')).toBeInTheDocument();
-    });
-
-    // Verify getExecution and getExecutionSteps were called
-    expect(executionService.getExecution).toHaveBeenCalledWith(1);
-    expect(executionService.getExecutionSteps).toHaveBeenCalledWith(1);
-  });
-
-  it('displays ExecutionTimeline in modal (AC3)', async () => {
-    const user = userEvent.setup();
-    renderWithProvider(<DashboardPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Create PDB')).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByText('Create PDB'));
-
-    await waitFor(() => {
-      // ExecutionTimeline should render the step
-      expect(screen.getByText('Vault')).toBeInTheDocument();
+      expect(screen.getByText('Repartition par technologie')).toBeInTheDocument();
+      expect(screen.getByText('Repartition par environnement')).toBeInTheDocument();
+      expect(screen.getByText('Tendances temporelles')).toBeInTheDocument();
     });
   });
 
-  it('shows modal error when execution fetch fails', async () => {
-    const user = userEvent.setup();
-    vi.mocked(executionService.getExecution).mockRejectedValue(new Error('Not found'));
-
-    renderWithProvider(<DashboardPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Create PDB')).toBeInTheDocument();
+  it('displays link to executions page (AC8)', async () => {
+    await act(async () => {
+      renderWithProviders();
     });
 
-    await user.click(screen.getByText('Create PDB'));
-
     await waitFor(() => {
-      expect(screen.getByText('Not found')).toBeInTheDocument();
+      expect(screen.getByText(/Voir toutes les executions/i)).toBeInTheDocument();
     });
+
+    const link = screen.getByRole('link', { name: /Voir toutes les executions/i });
+    expect(link).toHaveAttribute('href', '/executions');
   });
 
-  it('shows modal with close control when opening execution', async () => {
-    const user = userEvent.setup();
-    renderWithProvider(<DashboardPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Create PDB')).toBeInTheDocument();
+  it('does not display Recent Executions table (AC8 - removed)', async () => {
+    await act(async () => {
+      renderWithProviders();
     });
 
-    await user.click(screen.getByText('Create PDB'));
+    await waitFor(() => {
+      expect(screen.getByText('15')).toBeInTheDocument();
+    });
 
-    const dialog = await screen.findByRole('dialog');
-    expect(dialog).toBeInTheDocument();
-    expect(screen.getByText('Exécution — Create PDB')).toBeInTheDocument();
-    // Modal has a close control (Ant Design renders .ant-modal-close)
-    const closeControl = document.querySelector('.ant-modal-close');
-    expect(closeControl).toBeInTheDocument();
+    // Should NOT have "Activite recente" card from old design
+    expect(screen.queryByText('Activite recente')).not.toBeInTheDocument();
   });
 
-  it('renders 4 StatCards in responsive grid (AC5)', async () => {
-    renderWithProvider(<DashboardPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Exécutions aujourd'hui")).toBeInTheDocument();
+  it('shows pending approvals for DBA profile (Story 7.4)', async () => {
+    vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
+      data: [
+        {
+          id: 1,
+          action_id: 10,
+          action_name: 'Test Action',
+          user_id: 2,
+          user_display_name: 'Test User',
+          environment: 'prod',
+          parameters: {},
+          status: 'PENDING_APPROVAL',
+          servicenow_change_id: null,
+          started_at: null,
+          completed_at: null,
+          created_at: '2026-01-30T10:00:00Z',
+        },
+      ],
+      pagination: { page: 1, page_size: 50, total: 1, total_pages: 1 },
     });
 
-    // Should have 4 stat cards
-    expect(screen.getByText("Exécutions aujourd'hui")).toBeInTheDocument();
-    expect(screen.getByText('Taux de succès (24h)')).toBeInTheDocument();
-    expect(screen.getByText('En cours')).toBeInTheDocument();
-    expect(screen.getByText('En erreur (24h)')).toBeInTheDocument();
-  });
-
-  it('shows spinning icon when executions are in progress', async () => {
-    renderWithProvider(<DashboardPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText('3')).toBeInTheDocument();
+    await act(async () => {
+      renderWithProviders();
     });
 
-    // The SyncOutlined icon should have spin class when value > 0
-    const spinIcon = document.querySelector('.anticon-sync');
-    expect(spinIcon).toBeInTheDocument();
-  });
-
-  it('applies error variant to stat card when errors exist', async () => {
-    renderWithProvider(<DashboardPage />);
-
     await waitFor(() => {
-      expect(screen.getByText('2')).toBeInTheDocument();
+      expect(screen.getByText('Approbations en attente')).toBeInTheDocument();
     });
-
-    // Find the error stat card (has red border)
-    const errorCard = screen.getByText('En erreur (24h)').closest('.ant-card');
-    expect(errorCard).toHaveStyle({ borderLeft: '4px solid #EF4444' });
   });
 });
