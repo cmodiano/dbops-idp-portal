@@ -1,7 +1,5 @@
 """Health check endpoint."""
 
-from typing import Any
-
 import structlog
 from fastapi import APIRouter, Request
 from starlette.responses import JSONResponse

@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, status
 from app.core.exceptions import NotFoundError, InvalidStateError
 from app.core.security import require_profile
 from app.models.auth import UserProfile
-from app.models.catalog import ActionCreate, ActionResponse, ActionDetail, ActionStatus, ExecutionStepsUpdate, RbacPoliciesUpdate
+from app.models.catalog import ActionCreate, ActionStatus, ExecutionStepsUpdate, RbacPoliciesUpdate
 from app.repositories import catalog_repository
 from app.repositories.catalog_repository import InvalidStateError as RepoInvalidStateError
 

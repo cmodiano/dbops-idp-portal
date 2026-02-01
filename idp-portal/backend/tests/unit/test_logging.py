@@ -1,13 +1,10 @@
 """Tests for structured logging configuration (AC #2, #3, #8)."""
 
 import json
-import logging
 import structlog
 from io import StringIO
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 import pytest
-
-from app.core.logging import configure_logging
 
 
 def test_configure_logging_produces_json():

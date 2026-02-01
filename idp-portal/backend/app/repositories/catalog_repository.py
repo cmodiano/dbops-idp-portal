@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import time
-from datetime import datetime
 from typing import Any
 
 import structlog
@@ -507,7 +506,7 @@ async def update_execution_steps(
     current_status = row[0]
     if current_status != ActionStatus.DRAFT.value:
         raise InvalidStateError(
-            f"Les etapes ne peuvent etre modifiees que pour une action en brouillon",
+            "Les etapes ne peuvent etre modifiees que pour une action en brouillon",
             current_status=current_status,
         )
 
