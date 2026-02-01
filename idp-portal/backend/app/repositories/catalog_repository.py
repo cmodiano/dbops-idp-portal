@@ -1563,3 +1563,103 @@ async def update_workflow_steps(
 
     # Fetch and return updated workflow
     return await get_by_id(workflow_id)
+
+
+# === Story 7.4: Approval Workflow (AC1) ===
+
+
+async def get_requires_approval(action_id: int, environment: str) -> bool:
+    """Check if action requires DBA approval for given environment (Story 7.4, AC1).
+
+    Returns True if:
+    - Environment is 'prod'
+    - AND action's impact_rules[environment].level == 'critical' or 'high'
+
+    Args:
+        action_id: Action ID to check
+        environment: Target environment (dev, staging, prod)
+
+    Returns:
+        True if DBA approval is required, False otherwise
+    """
+    # Only production requires approval
+    if environment.lower() != "prod":
+        return False
+
+    query = """
+        SELECT IMPACT_RULES, DEFAULT_IMPACT_LEVEL
+        FROM ACTIONS_CATALOG
+        WHERE ID = :action_id
+    """
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, {"action_id": action_id})
+        row = await cursor.fetchone()
+        cursor.close()
+
+    if row is None:
+        return False
+
+    impact_rules_json = row[0]
+    default_impact_level = row[1]
+
+    # Parse impact_rules JSON
+    impact_rules = _str_to_json(impact_rules_json) if impact_rules_json else None
+
+    # Get impact level for this environment
+    impact_level = None
+    if impact_rules:
+        env_rules = impact_rules.get(environment.lower(), {})
+        impact_level = env_rules.get("level")
+
+    # Fallback to default_impact_level if no specific rule
+    if impact_level is None:
+        impact_level = default_impact_level
+
+    # Require approval for critical or high impact in prod
+    return impact_level in ("critical", "high")
+
+
+async def get_action_impact_level(action_id: int, environment: str) -> str | None:
+    """Get impact level for action in given environment (Story 7.4).
+
+    Args:
+        action_id: Action ID
+        environment: Target environment
+
+    Returns:
+        Impact level string ('low', 'medium', 'high', 'critical') or None
+    """
+    query = """
+        SELECT IMPACT_RULES, DEFAULT_IMPACT_LEVEL
+        FROM ACTIONS_CATALOG
+        WHERE ID = :action_id
+    """
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, {"action_id": action_id})
+        row = await cursor.fetchone()
+        cursor.close()
+
+    if row is None:
+        return None
+
+    impact_rules_json = row[0]
+    default_impact_level = row[1]
+
+    # Parse impact_rules JSON
+    impact_rules = _str_to_json(impact_rules_json) if impact_rules_json else None
+
+    # Get impact level for this environment
+    impact_level = None
+    if impact_rules:
+        env_rules = impact_rules.get(environment.lower(), {})
+        impact_level = env_rules.get("level")
+
+    # Fallback to default_impact_level if no specific rule
+    if impact_level is None:
+        impact_level = default_impact_level
+
+    return impact_level

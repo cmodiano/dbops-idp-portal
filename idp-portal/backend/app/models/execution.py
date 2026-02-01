@@ -14,13 +14,14 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class ExecutionStatus(str, Enum):
-    """Execution lifecycle status (Story 4.1, Task 1.3)."""
+    """Execution lifecycle status (Story 4.1, Task 1.3; Story 7.4 AC4: REJECTED)."""
     SUBMITTED = "SUBMITTED"
     PENDING_APPROVAL = "PENDING_APPROVAL"
     RUNNING = "RUNNING"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
+    REJECTED = "REJECTED"
 
 
 class StepStatus(str, Enum):
@@ -70,7 +71,7 @@ class ExecutionCreate(BaseModel):
 
 
 class ExecutionResponse(BaseModel):
-    """Output model for execution (Story 4.1, Task 1.1).
+    """Output model for execution (Story 4.1, Task 1.1; Story 7.4 approval fields).
 
     Attributes:
         id: Execution ID
@@ -84,11 +85,16 @@ class ExecutionResponse(BaseModel):
         started_at: When execution started running
         completed_at: When execution completed
         created_at: When execution was submitted
+        approved_by: ID of DBA who approved/rejected (Story 7.4)
+        approved_at: Timestamp of approval/rejection (Story 7.4)
+        approval_comment: Comment from approver (Story 7.4)
+        rejection_reason: Alias for approval_comment when REJECTED (Story 7.4)
     """
     id: int
     action_id: int
     action_name: str | None = None
     user_id: int
+    user_display_name: str | None = None  # Story 7.4: for pending approvals list
     environment: ExecutionEnvironment
     parameters: dict[str, Any] | None = None
     status: ExecutionStatus
@@ -96,6 +102,17 @@ class ExecutionResponse(BaseModel):
     started_at: datetime | None = None
     completed_at: datetime | None = None
     created_at: datetime
+    # Story 7.4: Approval workflow fields
+    approved_by: int | None = None
+    approved_at: datetime | None = None
+    approval_comment: str | None = None
+
+    @property
+    def rejection_reason(self) -> str | None:
+        """Alias for approval_comment when status is REJECTED."""
+        if self.status == ExecutionStatus.REJECTED:
+            return self.approval_comment
+        return None
 
 
 class ExecutionCreateResponse(BaseModel):

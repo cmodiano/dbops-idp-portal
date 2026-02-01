@@ -338,6 +338,86 @@ describe('ExecutionTimeline', () => {
     });
   });
 
+  // Story 7.4: PENDING_APPROVAL and REJECTED status display
+  describe('Story 7.4 approval workflow status', () => {
+    it('shows pending approval banner when execution is PENDING_APPROVAL', () => {
+      mockUseWebSocket.mockReturnValue({
+        steps: [],
+        execution: {
+          id: 1,
+          status: 'PENDING_APPROVAL',
+          environment: 'prod',
+        } as unknown as import('../../types/api').ExecutionResponse,
+        loading: false,
+        error: null,
+        lastMessage: null,
+      });
+
+      render(<ExecutionTimeline executionId={1} mode="realtime" />);
+
+      expect(screen.getByText("En attente d'approbation DBA")).toBeInTheDocument();
+      expect(screen.getByText(/Cette exécution nécessite l'approbation/)).toBeInTheDocument();
+    });
+
+    it('shows rejected banner when execution is REJECTED', () => {
+      mockUseWebSocket.mockReturnValue({
+        steps: [],
+        execution: {
+          id: 1,
+          status: 'REJECTED',
+          approval_comment: 'Policy violation',
+          approved_at: '2026-02-01T10:00:00Z',
+        } as unknown as import('../../types/api').ExecutionResponse,
+        loading: false,
+        error: null,
+        lastMessage: null,
+      });
+
+      render(<ExecutionTimeline executionId={1} mode="realtime" />);
+
+      expect(screen.getByText('Exécution refusée')).toBeInTheDocument();
+      expect(screen.getByText(/Cette exécution a été refusée/)).toBeInTheDocument();
+      expect(screen.getByText(/Policy violation/)).toBeInTheDocument();
+    });
+
+    it('shows approved info in success banner when execution was approved', () => {
+      mockUseWebSocket.mockReturnValue({
+        steps: [
+          {
+            id: 1,
+            execution_id: 1,
+            step_order: 1,
+            step_name: 'Platform',
+            step_type: 'platform',
+            status: 'COMPLETED',
+            started_at: '2026-02-01T10:00:00',
+            completed_at: '2026-02-01T10:00:10',
+            output: null,
+            platform_job_id: null,
+            error_message: null,
+          },
+        ],
+        execution: {
+          id: 1,
+          status: 'COMPLETED',
+          started_at: '2026-02-01T10:00:00',
+          completed_at: '2026-02-01T10:00:10',
+          approved_by: 10,
+          approved_at: '2026-02-01T09:55:00',
+          approval_comment: 'Approved after review',
+        } as unknown as import('../../types/api').ExecutionResponse,
+        loading: false,
+        error: null,
+        lastMessage: null,
+      });
+
+      render(<ExecutionTimeline executionId={1} mode="realtime" />);
+
+      expect(screen.getByText('Exécution terminée avec succès')).toBeInTheDocument();
+      expect(screen.getByText(/Approuvé le/)).toBeInTheDocument();
+    });
+  });
+
   // Story 4.7: Bandeau succès, StructuredErrorCard, logs (Task 6.2)
   describe('Story 4.7 result and error UI', () => {
     it('shows success banner when execution status is COMPLETED', () => {

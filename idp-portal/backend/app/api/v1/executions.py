@@ -1,10 +1,13 @@
-"""Executions API (Story 4.1, Task 1.1, 1.4 + Story 4.3, Task 3).
+"""Executions API (Story 4.1, Task 1.1, 1.4 + Story 4.3, Task 3; Story 7.4 Approval Workflow).
 
 Provides endpoints for execution submission and retrieval.
 - POST /api/v1/executions: Submit a new execution
 - GET /api/v1/executions/{id}: Get execution by ID
 - GET /api/v1/executions: List user's executions
 - GET /api/v1/executions/{id}/steps: Get execution steps
+- POST /api/v1/executions/{id}/approve: DBA approves execution (Story 7.4)
+- POST /api/v1/executions/{id}/reject: DBA rejects execution (Story 7.4)
+- GET /api/v1/executions/pending-approvals: List pending approvals (Story 7.4)
 """
 
 from __future__ import annotations
@@ -15,13 +18,20 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
 import jsonschema
 import structlog
 
+from pydantic import BaseModel, Field
+
 from app.api.deps import get_current_user
 from app.api.services import get_vault_service
-from app.repositories import audit_repository
+from app.repositories import audit_repository, catalog_repository
 from app.repositories.audit_repository import AuditActionType, AuditEntityType
 from app.core.exceptions import ForbiddenError, InvalidStateError, NotFoundError
 from app.models.auth import UserProfile
-from app.models.execution import ExecutionCreate, StepLogsResponse
+from app.models.execution import ExecutionCreate, ExecutionStatus, StepLogsResponse
+
+
+class ApprovalRequest(BaseModel):
+    """Request body for approve/reject endpoints (Story 7.4)."""
+    comment: str | None = Field(default=None, max_length=1000)
 from app.repositories import execution_repository
 from app.services import rbac_service
 from app.services.execution_service import ExecutionService, generate_correlation_id
@@ -35,6 +45,14 @@ router = APIRouter(prefix="/executions", tags=["executions"])
 
 # Profiles that can view any execution (e.g. from dashboard recent list)
 _EXECUTION_VIEW_ANY_PROFILES = frozenset({"dba", "dbops"})
+
+# Profiles that can approve/reject executions (Story 7.4, AC2, AC3, AC4)
+_APPROVAL_PROFILES = frozenset({"dba", "dbops"})
+
+
+def _can_approve(user: UserProfile) -> bool:
+    """True if user can approve/reject executions (Story 7.4)."""
+    return (user.profile or "").lower() in _APPROVAL_PROFILES
 
 
 def _can_view_execution(execution_user_id: int, user: UserProfile) -> bool:
@@ -162,6 +180,76 @@ async def create_execution(
     schema = await execution_repository.get_action_parameters_schema(payload.action_id)
     _validate_parameters_against_schema(payload.parameters, schema)
 
+    # Story 7.4 AC1: Check if approval is required for this action/environment
+    requires_approval = await catalog_repository.get_requires_approval(
+        payload.action_id, payload.environment.value
+    )
+
+    # Get client IP address (Story 6.1, AC5)
+    client_ip = request.client.host if request.client else None
+    # Check for X-Forwarded-For header if behind proxy
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        client_ip = forwarded_for.split(",")[0].strip()
+
+    if requires_approval:
+        # Story 7.4 AC1: Create execution with PENDING_APPROVAL status, do NOT start execution
+        result = await execution_repository.create_execution_pending_approval(
+            user_id=user.id,
+            action_id=payload.action_id,
+            environment=payload.environment.value,
+            parameters=payload.parameters,
+        )
+
+        execution_id = result.execution_id
+
+        # Audit: EXECUTION_PENDING_APPROVAL (Story 7.4)
+        await audit_repository.create_entry(
+            user_id=str(user.id),
+            action_type=AuditActionType.EXECUTION_PENDING_APPROVAL,
+            entity_type=AuditEntityType.EXECUTION,
+            entity_id=execution_id,
+            details={
+                "action_id": payload.action_id,
+                "environment": payload.environment.value,
+                "parameters": payload.parameters,
+                "rbac_context": {"user_id": user.id, "profile": user.profile},
+                "requires_approval": True,
+            },
+            ip_address=client_ip,
+            correlation_id=correlation_id,
+        )
+
+        # Notify DBA via WebSocket (Story 7.4 AC6)
+        dashboard_ws_manager = get_dashboard_ws_manager()
+        action = await catalog_repository.get_by_id(payload.action_id)
+        action_name = action.name if action else None
+        await dashboard_ws_manager.broadcast_approval_required(
+            execution_id=execution_id,
+            action_name=action_name,
+            user_display_name=user.display_name,
+            environment=payload.environment.value,
+        )
+
+        logger.info(
+            "execution_pending_approval",
+            execution_id=execution_id,
+            status="PENDING_APPROVAL",
+            action_id=payload.action_id,
+            environment=payload.environment.value,
+        )
+
+        return {
+            "data": {
+                "execution_id": execution_id,
+                "status": result.status.value,
+                "requires_approval": True,
+                "correlation_id": correlation_id,
+                "created_at": result.created_at.isoformat(),
+            }
+        }
+
+    # Standard flow: no approval required
     # Create execution record (Story 4.1)
     result = await execution_repository.create_execution(
         user_id=user.id,
@@ -171,13 +259,6 @@ async def create_execution(
     )
 
     execution_id = result.execution_id
-
-    # Get client IP address (Story 6.1, AC5)
-    client_ip = request.client.host if request.client else None
-    # Check for X-Forwarded-For header if behind proxy
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        client_ip = forwarded_for.split(",")[0].strip()
 
     # Audit: EXECUTION_SUBMITTED (Story 6.1, AC1)
     await audit_repository.create_entry(
@@ -228,6 +309,64 @@ async def create_execution(
             "correlation_id": correlation_id,
             "created_at": result.created_at.isoformat(),
         }
+    }
+
+
+# --- Story 7.4: Approval Workflow Endpoints ---
+# NOTE: These routes MUST be defined before routes with {execution_id} parameter
+# to avoid FastAPI interpreting "pending-approvals" as an integer execution_id.
+
+
+@router.get("/pending-approvals", response_model=None)
+async def list_pending_approvals(
+    user: UserProfile = Depends(get_current_user),
+    limit: int = 50,
+    offset: int = 0,
+    count_only: bool = False,
+) -> dict:
+    """GET /api/v1/executions/pending-approvals - List pending approvals (Story 7.4, AC2, AC6).
+
+    DBA/DBOPS only endpoint. Lists all executions waiting for approval.
+
+    Args:
+        count_only: If true, return only the count (for badge)
+
+    Returns:
+        { "data": list[ExecutionResponse], "pagination": {...} }
+        OR { "count": int } if count_only=true
+
+    Raises:
+        403: If user is not DBA/DBOPS
+    """
+    if not _can_approve(user):
+        raise ForbiddenError(
+            code="PERMISSION_DENIED",
+            message="Seuls les DBA et DBOPS peuvent consulter les approbations en attente",
+            details={"user_profile": user.profile},
+        )
+
+    if count_only:
+        count = await execution_repository.count_pending_approvals()
+        return {"count": count}
+
+    limit = min(max(1, limit), 100)
+    offset = max(offset, 0)
+    total_count = await execution_repository.count_pending_approvals()
+    executions = await execution_repository.list_pending_approvals(
+        limit=limit,
+        offset=offset,
+    )
+    page = (offset // limit) + 1
+    total_pages = (total_count + limit - 1) // limit if total_count > 0 else 1
+
+    return {
+        "data": [e.model_dump(mode="json") for e in executions],
+        "pagination": {
+            "page": page,
+            "page_size": limit,
+            "total_count": total_count,
+            "total_pages": total_pages,
+        },
     }
 
 
@@ -364,3 +503,243 @@ async def get_step_logs(
         completed_at=step.completed_at,
     )
     return {"data": logs.model_dump(mode="json")}
+
+
+@router.post("/{execution_id}/approve", status_code=status.HTTP_200_OK, response_model=None)
+async def approve_execution(
+    execution_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    user: UserProfile = Depends(get_current_user),
+    payload: ApprovalRequest | None = None,
+) -> dict:
+    """POST /api/v1/executions/{id}/approve - DBA approves execution (Story 7.4, AC3, AC5).
+
+    Validates:
+    - User has DBA/DBOPS profile
+    - Execution exists and status is PENDING_APPROVAL
+    - User is not the requester (cannot self-approve)
+
+    On approval:
+    - Updates status to SUBMITTED
+    - Records approver, timestamp, comment
+    - Starts background execution
+    - Creates AUDIT_LOG entry
+
+    Returns:
+        { "data": { "execution_id": int, "status": "SUBMITTED", "approved_by": int } }
+
+    Raises:
+        403: If user cannot approve or is self-approving
+        404: If execution not found or not in PENDING_APPROVAL status
+    """
+    correlation_id = generate_correlation_id()
+    structlog.contextvars.bind_contextvars(correlation_id=correlation_id)
+
+    if not _can_approve(user):
+        raise ForbiddenError(
+            code="PERMISSION_DENIED",
+            message="Seuls les DBA et DBOPS peuvent approuver les executions",
+            details={"user_profile": user.profile},
+        )
+
+    # Check execution exists and is pending approval
+    execution = await execution_repository.get_by_id(execution_id)
+
+    if execution is None:
+        raise NotFoundError(
+            code="EXECUTION_NOT_FOUND",
+            message="Execution introuvable",
+            details={"execution_id": execution_id},
+        )
+
+    if execution.status != ExecutionStatus.PENDING_APPROVAL:
+        raise InvalidStateError(
+            code="INVALID_STATUS",
+            message="L'execution n'est pas en attente d'approbation",
+            details={"execution_id": execution_id, "current_status": execution.status.value},
+        )
+
+    # Prevent self-approval
+    if execution.user_id == user.id:
+        raise ForbiddenError(
+            code="SELF_APPROVAL_FORBIDDEN",
+            message="Vous ne pouvez pas approuver votre propre demande d'execution",
+            details={"execution_id": execution_id, "requester_id": execution.user_id},
+        )
+
+    # Extract comment from payload
+    comment = payload.comment if payload else None
+
+    # Approve the execution
+    approved = await execution_repository.approve(execution_id, user.id, comment)
+
+    if not approved:
+        raise InvalidStateError(
+            code="APPROVAL_FAILED",
+            message="L'approbation a echoue (execution peut avoir ete modifiee)",
+            details={"execution_id": execution_id},
+        )
+
+    # Get client IP for audit
+    client_ip = request.client.host if request.client else None
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        client_ip = forwarded_for.split(",")[0].strip()
+
+    # Audit: EXECUTION_APPROVED (Story 7.4)
+    await audit_repository.create_entry(
+        user_id=str(user.id),
+        action_type=AuditActionType.EXECUTION_APPROVED,
+        entity_type=AuditEntityType.EXECUTION,
+        entity_id=execution_id,
+        details={
+            "action_id": execution.action_id,
+            "environment": execution.environment.value,
+            "requester_id": execution.user_id,
+            "approver_id": user.id,
+            "approver_profile": user.profile,
+            "comment": comment,
+        },
+        ip_address=client_ip,
+        correlation_id=correlation_id,
+    )
+
+    # Prepare and start execution (Story 4.3 flow)
+    vault_service = get_vault_service()
+    servicenow_service = await get_servicenow_service(vault_service)
+    execution_service = ExecutionService(
+        vault_service,
+        servicenow_service,
+        ws_manager=get_execution_ws_manager(),
+        dashboard_ws_manager=get_dashboard_ws_manager(),
+    )
+    await execution_service.prepare_execution(execution_id, correlation_id)
+
+    # Start execution in background
+    background_tasks.add_task(
+        execution_service.start_execution,
+        execution_id,
+        correlation_id,
+        client_ip=client_ip,
+    )
+
+    logger.info(
+        "execution_approved",
+        execution_id=execution_id,
+        approver_id=user.id,
+    )
+
+    return {
+        "data": {
+            "execution_id": execution_id,
+            "status": ExecutionStatus.SUBMITTED.value,
+            "approved_by": user.id,
+            "correlation_id": correlation_id,
+        }
+    }
+
+
+@router.post("/{execution_id}/reject", status_code=status.HTTP_200_OK, response_model=None)
+async def reject_execution(
+    execution_id: int,
+    request: Request,
+    user: UserProfile = Depends(get_current_user),
+    payload: ApprovalRequest | None = None,
+) -> dict:
+    """POST /api/v1/executions/{id}/reject - DBA rejects execution (Story 7.4, AC4, AC5).
+
+    Validates:
+    - User has DBA/DBOPS profile
+    - Execution exists and status is PENDING_APPROVAL
+
+    On rejection:
+    - Updates status to REJECTED
+    - Records rejector, timestamp, comment
+    - Creates AUDIT_LOG entry
+
+    Returns:
+        { "data": { "execution_id": int, "status": "REJECTED", "rejected_by": int } }
+
+    Raises:
+        403: If user cannot reject
+        404: If execution not found or not in PENDING_APPROVAL status
+    """
+    correlation_id = generate_correlation_id()
+    structlog.contextvars.bind_contextvars(correlation_id=correlation_id)
+
+    if not _can_approve(user):
+        raise ForbiddenError(
+            code="PERMISSION_DENIED",
+            message="Seuls les DBA et DBOPS peuvent refuser les executions",
+            details={"user_profile": user.profile},
+        )
+
+    # Check execution exists and is pending approval
+    execution = await execution_repository.get_by_id(execution_id)
+
+    if execution is None:
+        raise NotFoundError(
+            code="EXECUTION_NOT_FOUND",
+            message="Execution introuvable",
+            details={"execution_id": execution_id},
+        )
+
+    if execution.status != ExecutionStatus.PENDING_APPROVAL:
+        raise InvalidStateError(
+            code="INVALID_STATUS",
+            message="L'execution n'est pas en attente d'approbation",
+            details={"execution_id": execution_id, "current_status": execution.status.value},
+        )
+
+    # Extract comment from payload
+    comment = payload.comment if payload else None
+
+    # Reject the execution
+    rejected = await execution_repository.reject(execution_id, user.id, comment)
+
+    if not rejected:
+        raise InvalidStateError(
+            code="REJECTION_FAILED",
+            message="Le refus a echoue (execution peut avoir ete modifiee)",
+            details={"execution_id": execution_id},
+        )
+
+    # Get client IP for audit
+    client_ip = request.client.host if request.client else None
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        client_ip = forwarded_for.split(",")[0].strip()
+
+    # Audit: EXECUTION_REJECTED (Story 7.4)
+    await audit_repository.create_entry(
+        user_id=str(user.id),
+        action_type=AuditActionType.EXECUTION_REJECTED,
+        entity_type=AuditEntityType.EXECUTION,
+        entity_id=execution_id,
+        details={
+            "action_id": execution.action_id,
+            "environment": execution.environment.value,
+            "requester_id": execution.user_id,
+            "rejector_id": user.id,
+            "rejector_profile": user.profile,
+            "comment": comment,
+        },
+        ip_address=client_ip,
+        correlation_id=correlation_id,
+    )
+
+    logger.info(
+        "execution_rejected",
+        execution_id=execution_id,
+        rejector_id=user.id,
+    )
+
+    return {
+        "data": {
+            "execution_id": execution_id,
+            "status": ExecutionStatus.REJECTED.value,
+            "rejected_by": user.id,
+            "rejection_reason": comment,
+        }
+    }

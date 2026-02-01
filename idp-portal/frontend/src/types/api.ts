@@ -370,8 +370,8 @@ export interface ActionPreviewData {
 /** Execution environment (Story 4.1, AC2). */
 export type ExecutionEnvironment = 'dev' | 'staging' | 'prod';
 
-/** Execution status (Story 4.1). */
-export type ExecutionStatusType = 'SUBMITTED' | 'PENDING_APPROVAL' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+/** Execution status (Story 4.1; Story 7.4: REJECTED). */
+export type ExecutionStatusType = 'SUBMITTED' | 'PENDING_APPROVAL' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'REJECTED';
 
 /** Request to create a new execution (Story 4.1, Task 1.1). */
 export interface ExecutionCreateRequest {
@@ -387,12 +387,14 @@ export interface ExecutionCreateResponse {
   created_at: string;
 }
 
-/** Execution record (Story 4.1). */
+/** Execution record (Story 4.1; Story 7.4: approval fields). */
 export interface ExecutionResponse {
   id: number;
   action_id: number;
   action_name: string | null;
   user_id: number;
+  /** Story 7.4: Display name of requester for pending approvals. */
+  user_display_name?: string | null;
   environment: ExecutionEnvironment;
   parameters: Record<string, unknown> | null;
   status: ExecutionStatusType;
@@ -400,6 +402,12 @@ export interface ExecutionResponse {
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
+  /** Story 7.4: ID of DBA who approved/rejected. */
+  approved_by?: number | null;
+  /** Story 7.4: Timestamp of approval/rejection. */
+  approved_at?: string | null;
+  /** Story 7.4: Comment from approver. */
+  approval_comment?: string | null;
 }
 
 /** Execution step status (Story 4.6). */

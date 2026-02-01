@@ -92,6 +92,43 @@ class DashboardWebSocketManager:
 
         await self._broadcast(message)
 
+    async def broadcast_approval_required(
+        self,
+        execution_id: int,
+        action_name: str | None = None,
+        user_display_name: str | None = None,
+        environment: str | None = None,
+    ) -> None:
+        """Broadcast approval_required message to dashboard clients (Story 7.4, AC6).
+
+        Notifies DBA/DBOPS users that a new execution requires approval.
+
+        Format: {"type": "approval_required", "execution_id": int, "action_name": str, ...}
+
+        Args:
+            execution_id: Execution ID awaiting approval
+            action_name: Name of the action
+            user_display_name: Display name of the requester
+            environment: Target environment (typically "prod")
+        """
+        message: dict[str, Any] = {
+            "type": "approval_required",
+            "execution_id": execution_id,
+        }
+        if action_name is not None:
+            message["action_name"] = action_name
+        if user_display_name is not None:
+            message["requester"] = user_display_name
+        if environment is not None:
+            message["environment"] = environment
+
+        await self._broadcast(message)
+        logger.info(
+            "dashboard_websocket_broadcast_approval_required",
+            execution_id=execution_id,
+            action_name=action_name,
+        )
+
     async def _broadcast(self, message: dict[str, Any]) -> None:
         """Send JSON message to ALL connected dashboard clients.
 

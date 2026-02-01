@@ -1,14 +1,15 @@
 /**
- * ExecutionTimeline - Real-time execution timeline (Story 4.6, 4.7).
+ * ExecutionTimeline - Real-time execution timeline (Story 4.6, 4.7; Story 7.4 approval).
  *
  * Vertical timeline with nodes per step. States: PENDING, RUNNING, COMPLETED, FAILED, SKIPPED.
  * Story 4.7: Bandeau succès (AC1), StructuredErrorCard (AC2), logs expand + panneau détaillé (AC3, AC4).
+ * Story 7.4: PENDING_APPROVAL and REJECTED status display.
  * AC4: role="list", role="listitem", aria-expanded, aria-live="polite".
  */
 
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, MinusOutlined } from '@ant-design/icons';
-import { Spin, Typography, Alert, Drawer, Button, Tooltip } from 'antd';
+import { CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, MinusOutlined, ClockCircleOutlined, StopOutlined } from '@ant-design/icons';
+import { Spin, Typography, Alert, Drawer, Button, Tooltip, Tag } from 'antd';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { StructuredErrorCard } from './StructuredErrorCard';
 import type { ExecutionResponse, ExecutionStepResponse, ExecutionStepStatus } from '../../types/api';
@@ -111,6 +112,54 @@ export function ExecutionTimeline({
 
   return (
     <>
+      {/* Story 7.4 AC1: Bandeau attente approbation */}
+      {execution?.status === 'PENDING_APPROVAL' && (
+        <Alert
+          type="warning"
+          showIcon
+          icon={<ClockCircleOutlined />}
+          message="En attente d'approbation DBA"
+          description={
+            <>
+              Cette exécution nécessite l'approbation d'un DBA avant de pouvoir démarrer.
+              <br />
+              <Tag color="orange" style={{ marginTop: 8 }}>Environnement : {execution.environment.toUpperCase()}</Tag>
+            </>
+          }
+          style={{ marginBottom: 16 }}
+        />
+      )}
+
+      {/* Story 7.4 AC4: Bandeau refus */}
+      {execution?.status === 'REJECTED' && (
+        <Alert
+          type="error"
+          showIcon
+          icon={<StopOutlined />}
+          message="Exécution refusée"
+          description={
+            <>
+              Cette exécution a été refusée par un DBA.
+              {execution.approval_comment && (
+                <>
+                  <br />
+                  <strong>Motif :</strong> {execution.approval_comment}
+                </>
+              )}
+              {execution.approved_at && (
+                <>
+                  <br />
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    Refusé le {new Date(execution.approved_at).toLocaleString()}
+                  </Text>
+                </>
+              )}
+            </>
+          }
+          style={{ marginBottom: 16 }}
+        />
+      )}
+
       {/* Story 4.7, AC1: Bandeau succès quand COMPLETED */}
       {execution?.status === 'COMPLETED' && steps.length > 0 && (
         <Alert
@@ -127,6 +176,16 @@ export function ExecutionTimeline({
               <Tooltip title="Bientôt disponible">
                 <span style={{ cursor: 'default', color: 'inherit', textDecoration: 'none' }}>Trace d'audit</span>
               </Tooltip>
+              {/* Story 7.4: Show approval info if was approved */}
+              {execution.approved_by && execution.approved_at && (
+                <>
+                  <br />
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    Approuvé le {new Date(execution.approved_at).toLocaleString()}
+                    {execution.approval_comment && <> — {execution.approval_comment}</>}
+                  </Text>
+                </>
+              )}
             </>
           }
           style={{ marginBottom: 16 }}

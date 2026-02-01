@@ -9,22 +9,25 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Typography, Row, Col, Card, Modal, Skeleton, Alert } from 'antd';
+import { Typography, Row, Col, Card, Modal, Skeleton, Alert, Tag, Space } from 'antd';
 import {
   PlayCircleOutlined,
   CheckCircleOutlined,
   SyncOutlined,
   CloseCircleOutlined,
+  SafetyCertificateOutlined,
 } from '@ant-design/icons';
 import { StatCard } from '../components/dashboard/StatCard';
 import { RecentExecutions } from '../components/dashboard/RecentExecutions';
 import { ExecutionsChart } from '../components/dashboard/ExecutionsChart';
 import { ExecutionTimeline } from '../components/execution/ExecutionTimeline';
+import { PendingApprovalsList } from '../components/dashboard/PendingApprovalsList';
 import { fetchStats, fetchRecent, fetchTimeSeries } from '../services/dashboard_service';
 import { getIntegrations } from '../services/integrations_service';
 import { useDashboardWebSocket } from '../hooks/useDashboardWebSocket';
 import { useDashboard } from '../contexts/DashboardContext';
-import { getExecution, getExecutionSteps } from '../services/execution_service';
+import { getExecution, getExecutionSteps, listPendingApprovals } from '../services/execution_service';
+import { useAuth } from '../contexts/AuthContext';
 import type {
   DashboardStats,
   DashboardRecentExecution,
@@ -36,6 +39,10 @@ import type {
 const { Title } = Typography;
 
 export default function DashboardPage() {
+  // Auth context for profile check (Story 7.4)
+  const { user } = useAuth();
+  const canApprove = user?.profile?.toLowerCase() === 'dba' || user?.profile?.toLowerCase() === 'dbops';
+
   // Stats state
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
@@ -52,6 +59,10 @@ export default function DashboardPage() {
 
   // Integration icons by type (platform/engine) for recent table
   const [integrationIconsByType, setIntegrationIconsByType] = useState<Record<string, string | null>>({});
+
+  // Story 7.4: Pending approvals state (visible only for DBA/DBOPS)
+  const [pendingApprovals, setPendingApprovals] = useState<ExecutionResponse[]>([]);
+  const [pendingApprovalsLoading, setPendingApprovalsLoading] = useState(false);
 
   // Execution detail modal state (AC3 — modal for better small-window / logs reading)
   const [modalOpen, setModalOpen] = useState(false);
@@ -141,9 +152,34 @@ export default function DashboardPage() {
     }
   }, []);
 
+  // Story 7.4: Load pending approvals for DBA/DBOPS
+  const loadPendingApprovals = useCallback(async () => {
+    if (!canApprove) return;
+    setPendingApprovalsLoading(true);
+    try {
+      const response = await listPendingApprovals(50, 0);
+      setPendingApprovals(response.data);
+    } catch {
+      setPendingApprovals([]);
+    } finally {
+      setPendingApprovalsLoading(false);
+    }
+  }, [canApprove]);
+
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Story 7.4: Load pending approvals on mount and when canApprove changes
+  useEffect(() => {
+    loadPendingApprovals();
+  }, [loadPendingApprovals]);
+
+  // Story 7.4: Callback after approval/rejection
+  const handleApprovalComplete = useCallback(() => {
+    loadPendingApprovals();
+    loadData(); // Refresh stats and recent executions too
+  }, [loadPendingApprovals, loadData]);
 
   // Open modal with execution details (AC3 — modal + scrollable body for logs in small window)
   const handleRowClick = async (execution: DashboardRecentExecution) => {
@@ -214,6 +250,26 @@ export default function DashboardPage() {
 
       {/* Line chart: executions over time (success vs failure) */}
       <ExecutionsChart data={timeSeries} loading={timeSeriesLoading} />
+
+      {/* Story 7.4: Pending approvals section (DBA/DBOPS only) */}
+      {canApprove && pendingApprovals.length > 0 && (
+        <Card
+          title={
+            <Space>
+              <SafetyCertificateOutlined style={{ color: '#F59E0B' }} />
+              <span>Approbations en attente</span>
+              <Tag color="warning">{pendingApprovals.length}</Tag>
+            </Space>
+          }
+          style={{ marginBottom: 24, borderColor: '#F59E0B' }}
+        >
+          <PendingApprovalsList
+            executions={pendingApprovals}
+            loading={pendingApprovalsLoading}
+            onActionComplete={handleApprovalComplete}
+          />
+        </Card>
+      )}
 
       {statsError && (
         <Alert

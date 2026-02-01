@@ -44,18 +44,28 @@ def _str_to_json(data: str | None) -> dict[str, Any] | None:
     return json.loads(data)
 
 
-def _row_to_execution_response(row: tuple, action_name: str | None = None) -> ExecutionResponse:
+def _row_to_execution_response(
+    row: tuple,
+    action_name: str | None = None,
+    user_display_name: str | None = None,
+    approved_by: int | None = None,
+    approved_at: datetime | None = None,
+    approval_comment: str | None = None,
+) -> ExecutionResponse:
     """Convert database row to ExecutionResponse model.
 
     Expected row order (10 columns):
     0:ID, 1:ACTION_ID, 2:USER_ID, 3:ENVIRONMENT, 4:PARAMETERS,
     5:STATUS, 6:SERVICENOW_CHANGE_ID, 7:STARTED_AT, 8:COMPLETED_AT, 9:CREATED_AT
+
+    Story 7.4: Optional approval fields passed separately.
     """
     return ExecutionResponse(
         id=row[0],
         action_id=row[1],
         action_name=action_name,
         user_id=row[2],
+        user_display_name=user_display_name,
         environment=ExecutionEnvironment(row[3]),
         parameters=_str_to_json(row[4]),
         status=ExecutionStatus(row[5]),
@@ -63,6 +73,9 @@ def _row_to_execution_response(row: tuple, action_name: str | None = None) -> Ex
         started_at=row[7],
         completed_at=row[8],
         created_at=row[9],
+        approved_by=approved_by,
+        approved_at=approved_at,
+        approval_comment=approval_comment,
     )
 
 
@@ -132,7 +145,7 @@ async def create_execution(
 
 
 async def get_by_id(execution_id: int) -> ExecutionResponse | None:
-    """Fetch an execution by ID with action name (Story 4.1).
+    """Fetch an execution by ID with action name and approval fields (Story 4.1, Story 7.4).
 
     Args:
         execution_id: The execution ID to fetch
@@ -144,7 +157,8 @@ async def get_by_id(execution_id: int) -> ExecutionResponse | None:
     query = """
         SELECT E.ID, E.ACTION_ID, E.USER_ID, E.ENVIRONMENT, E.PARAMETERS,
                E.STATUS, E.SERVICENOW_CHANGE_ID, E.STARTED_AT, E.COMPLETED_AT, E.CREATED_AT,
-               A.NAME AS ACTION_NAME
+               A.NAME AS ACTION_NAME,
+               E.APPROVED_BY, E.APPROVED_AT, E.APPROVAL_COMMENT
         FROM EXECUTIONS E
         LEFT JOIN ACTIONS_CATALOG A ON A.ID = E.ACTION_ID
         WHERE E.ID = :execution_id
@@ -167,8 +181,14 @@ async def get_by_id(execution_id: int) -> ExecutionResponse | None:
     if row is None:
         return None
 
-    # Row has 11 columns: 0-9 are execution fields, 10 is action_name
-    return _row_to_execution_response(row[:10], action_name=row[10])
+    # Row has 14 columns: 0-9 execution fields, 10 action_name, 11-13 approval fields
+    return _row_to_execution_response(
+        row[:10],
+        action_name=row[10],
+        approved_by=row[11],
+        approved_at=row[12],
+        approval_comment=row[13],
+    )
 
 
 async def list_by_user(
@@ -176,7 +196,7 @@ async def list_by_user(
     limit: int = 50,
     offset: int = 0,
 ) -> list[ExecutionResponse]:
-    """List executions for a user (Story 4.1).
+    """List executions for a user (Story 4.1, Story 7.4 approval fields).
 
     Args:
         user_id: User ID to filter by
@@ -190,7 +210,8 @@ async def list_by_user(
     query = """
         SELECT E.ID, E.ACTION_ID, E.USER_ID, E.ENVIRONMENT, E.PARAMETERS,
                E.STATUS, E.SERVICENOW_CHANGE_ID, E.STARTED_AT, E.COMPLETED_AT, E.CREATED_AT,
-               A.NAME AS ACTION_NAME
+               A.NAME AS ACTION_NAME,
+               E.APPROVED_BY, E.APPROVED_AT, E.APPROVAL_COMMENT
         FROM EXECUTIONS E
         LEFT JOIN ACTIONS_CATALOG A ON A.ID = E.ACTION_ID
         WHERE E.USER_ID = :user_id
@@ -213,7 +234,16 @@ async def list_by_user(
         count=len(rows),
     )
 
-    return [_row_to_execution_response(row[:10], action_name=row[10]) for row in rows]
+    return [
+        _row_to_execution_response(
+            row[:10],
+            action_name=row[10],
+            approved_by=row[11],
+            approved_at=row[12],
+            approval_comment=row[13],
+        )
+        for row in rows
+    ]
 
 
 async def count_by_user(user_id: int) -> int:
@@ -807,3 +837,308 @@ async def get_dashboard_timeseries(days: int = 14) -> list[dict[str, Any]]:
     duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
     logger.debug("execution_repository_get_dashboard_timeseries", duration_ms=duration_ms, days=days)
     return result
+
+
+# --- Story 7.4: Approval Workflow Repository Methods ---
+
+
+async def create_execution_pending_approval(
+    user_id: int,
+    action_id: int,
+    environment: str,
+    parameters: dict[str, Any] | None,
+) -> ExecutionCreateResponse:
+    """Create execution with PENDING_APPROVAL status (Story 7.4, AC1).
+
+    Does NOT trigger background execution - waits for DBA approval.
+
+    Args:
+        user_id: ID of the user initiating the execution
+        action_id: ID of the action to execute
+        environment: Target environment (dev, staging, prod)
+        parameters: Execution parameters
+
+    Returns:
+        ExecutionCreateResponse with execution_id, status=PENDING_APPROVAL, created_at
+    """
+    start_time = time.perf_counter()
+    query = """
+        INSERT INTO EXECUTIONS
+        (ACTION_ID, USER_ID, ENVIRONMENT, PARAMETERS, STATUS)
+        VALUES
+        (:action_id, :user_id, :environment, :parameters, :status)
+        RETURNING ID, CREATED_AT INTO :out_id, :out_created_at
+    """
+    params = {
+        "action_id": action_id,
+        "user_id": user_id,
+        "environment": environment,
+        "parameters": _json_to_str(parameters),
+        "status": ExecutionStatus.PENDING_APPROVAL.value,
+    }
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        out_id = cursor.var(int)
+        out_created_at = cursor.var(datetime)
+        params["out_id"] = out_id
+        params["out_created_at"] = out_created_at
+        await cursor.execute(query, params)
+        await conn.commit()
+        cursor.close()
+
+        execution_id = out_id.getvalue()[0]
+        created_at = out_created_at.getvalue()[0]
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.info(
+        "execution_repository_create_pending_approval",
+        duration_ms=duration_ms,
+        execution_id=execution_id,
+        action_id=action_id,
+        user_id=user_id,
+        environment=environment,
+    )
+
+    return ExecutionCreateResponse(
+        execution_id=execution_id,
+        status=ExecutionStatus.PENDING_APPROVAL,
+        created_at=created_at,
+    )
+
+
+async def approve(
+    execution_id: int,
+    approver_id: int,
+    comment: str | None = None,
+) -> bool:
+    """Approve an execution pending approval (Story 7.4, AC3).
+
+    Updates:
+    - STATUS: PENDING_APPROVAL -> SUBMITTED
+    - APPROVED_BY: approver user ID
+    - APPROVED_AT: current timestamp
+    - APPROVAL_COMMENT: optional comment
+
+    Args:
+        execution_id: Execution ID to approve
+        approver_id: User ID of the DBA approving
+        comment: Optional approval comment
+
+    Returns:
+        True if approved, False if not found or wrong status
+    """
+    start_time = time.perf_counter()
+
+    query = """
+        UPDATE EXECUTIONS
+        SET STATUS = :new_status,
+            APPROVED_BY = :approver_id,
+            APPROVED_AT = SYSTIMESTAMP,
+            APPROVAL_COMMENT = :comment
+        WHERE ID = :execution_id AND STATUS = :current_status
+    """
+    params = {
+        "execution_id": execution_id,
+        "new_status": ExecutionStatus.SUBMITTED.value,
+        "current_status": ExecutionStatus.PENDING_APPROVAL.value,
+        "approver_id": approver_id,
+        "comment": comment,
+    }
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
+        rowcount = cursor.rowcount
+        await conn.commit()
+        cursor.close()
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.info(
+        "execution_repository_approve",
+        duration_ms=duration_ms,
+        execution_id=execution_id,
+        approver_id=approver_id,
+        approved=rowcount > 0,
+    )
+
+    return rowcount > 0
+
+
+async def reject(
+    execution_id: int,
+    rejector_id: int,
+    comment: str | None = None,
+) -> bool:
+    """Reject an execution pending approval (Story 7.4, AC4).
+
+    Updates:
+    - STATUS: PENDING_APPROVAL -> REJECTED
+    - APPROVED_BY: rejector user ID (who made the decision)
+    - APPROVED_AT: current timestamp
+    - APPROVAL_COMMENT: rejection reason
+
+    Args:
+        execution_id: Execution ID to reject
+        rejector_id: User ID of the DBA rejecting
+        comment: Optional rejection comment
+
+    Returns:
+        True if rejected, False if not found or wrong status
+    """
+    start_time = time.perf_counter()
+
+    query = """
+        UPDATE EXECUTIONS
+        SET STATUS = :new_status,
+            APPROVED_BY = :rejector_id,
+            APPROVED_AT = SYSTIMESTAMP,
+            APPROVAL_COMMENT = :comment,
+            COMPLETED_AT = SYSTIMESTAMP
+        WHERE ID = :execution_id AND STATUS = :current_status
+    """
+    params = {
+        "execution_id": execution_id,
+        "new_status": ExecutionStatus.REJECTED.value,
+        "current_status": ExecutionStatus.PENDING_APPROVAL.value,
+        "rejector_id": rejector_id,
+        "comment": comment,
+    }
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
+        rowcount = cursor.rowcount
+        await conn.commit()
+        cursor.close()
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.info(
+        "execution_repository_reject",
+        duration_ms=duration_ms,
+        execution_id=execution_id,
+        rejector_id=rejector_id,
+        rejected=rowcount > 0,
+    )
+
+    return rowcount > 0
+
+
+async def list_pending_approvals(
+    limit: int = 50,
+    offset: int = 0,
+) -> list[ExecutionResponse]:
+    """List executions pending approval (Story 7.4, AC2, AC6).
+
+    Returns all PENDING_APPROVAL executions for DBA review.
+
+    Args:
+        limit: Maximum number of results
+        offset: Offset for pagination
+
+    Returns:
+        List of ExecutionResponse with PENDING_APPROVAL status
+    """
+    start_time = time.perf_counter()
+    query = """
+        SELECT E.ID, E.ACTION_ID, E.USER_ID, E.ENVIRONMENT, E.PARAMETERS,
+               E.STATUS, E.SERVICENOW_CHANGE_ID, E.STARTED_AT, E.COMPLETED_AT, E.CREATED_AT,
+               A.NAME AS ACTION_NAME,
+               U.DISPLAY_NAME AS USER_DISPLAY_NAME
+        FROM EXECUTIONS E
+        LEFT JOIN ACTIONS_CATALOG A ON A.ID = E.ACTION_ID
+        LEFT JOIN USERS U ON U.ID = E.USER_ID
+        WHERE E.STATUS = :status
+        ORDER BY E.CREATED_AT ASC
+        OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY
+    """
+    params = {
+        "status": ExecutionStatus.PENDING_APPROVAL.value,
+        "limit": limit,
+        "offset": offset,
+    }
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
+        rows = await cursor.fetchall()
+        cursor.close()
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.info(
+        "execution_repository_list_pending_approvals",
+        duration_ms=duration_ms,
+        count=len(rows),
+    )
+
+    return [
+        _row_to_execution_response(row[:10], action_name=row[10], user_display_name=row[11])
+        for row in rows
+    ]
+
+
+async def count_pending_approvals() -> int:
+    """Count pending approval executions (Story 7.4, AC6).
+
+    Returns:
+        Number of executions with PENDING_APPROVAL status
+    """
+    query = "SELECT COUNT(*) FROM EXECUTIONS WHERE STATUS = :status"
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, {"status": ExecutionStatus.PENDING_APPROVAL.value})
+        row = await cursor.fetchone()
+        cursor.close()
+    return row[0] if row else 0
+
+
+async def get_by_id_with_approval(execution_id: int) -> dict[str, Any] | None:
+    """Fetch execution by ID with approval details (Story 7.4, AC3, AC4).
+
+    Args:
+        execution_id: The execution ID to fetch
+
+    Returns:
+        Dict with execution fields + approved_by, approved_at, approval_comment
+    """
+    query = """
+        SELECT E.ID, E.ACTION_ID, E.USER_ID, E.ENVIRONMENT, E.PARAMETERS,
+               E.STATUS, E.SERVICENOW_CHANGE_ID, E.STARTED_AT, E.COMPLETED_AT, E.CREATED_AT,
+               A.NAME AS ACTION_NAME,
+               E.APPROVED_BY, E.APPROVED_AT, E.APPROVAL_COMMENT,
+               U.DISPLAY_NAME AS REQUESTER_NAME,
+               AU.DISPLAY_NAME AS APPROVER_NAME
+        FROM EXECUTIONS E
+        LEFT JOIN ACTIONS_CATALOG A ON A.ID = E.ACTION_ID
+        LEFT JOIN USERS U ON U.ID = E.USER_ID
+        LEFT JOIN USERS AU ON AU.ID = E.APPROVED_BY
+        WHERE E.ID = :execution_id
+    """
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, {"execution_id": execution_id})
+        row = await cursor.fetchone()
+        cursor.close()
+
+    if row is None:
+        return None
+
+    return {
+        "id": row[0],
+        "action_id": row[1],
+        "user_id": row[2],
+        "environment": row[3],
+        "parameters": _str_to_json(row[4]),
+        "status": row[5],
+        "servicenow_change_id": row[6],
+        "started_at": row[7],
+        "completed_at": row[8],
+        "created_at": row[9],
+        "action_name": row[10],
+        "approved_by": row[11],
+        "approved_at": row[12],
+        "approval_comment": row[13],
+        "requester_name": row[14],
+        "approver_name": row[15],
+    }
