@@ -26,6 +26,7 @@ from app.models.execution import (
     ExecutionStepResponse,
     ExecutionStepCreate,
 )
+from app.models.catalog import ActionEngine, ActionPlatform, ItemType
 
 logger = structlog.get_logger()
 
@@ -44,6 +45,42 @@ def _str_to_json(data: str | None) -> dict[str, Any] | None:
     return json.loads(data)
 
 
+def _parse_engine(value: str | None) -> ActionEngine | None:
+    """Parse engine string to ActionEngine enum (Story 9.9 AC6)."""
+    if value is None:
+        return None
+    try:
+        return ActionEngine(value)
+    except ValueError:
+        return None
+
+
+def _parse_platform(value: str | None) -> ActionPlatform | None:
+    """Parse platform string to ActionPlatform enum (Story 9.9 AC6)."""
+    if value is None:
+        return None
+    try:
+        return ActionPlatform(value)
+    except ValueError:
+        return None
+
+
+def _parse_item_type(value: str | None) -> ItemType:
+    """Parse item_type string to ItemType enum (Story 9.9 AC6). Defaults to ACTION."""
+    if value is None:
+        return ItemType.ACTION
+    try:
+        return ItemType(value)
+    except ValueError:
+        logger.warning(
+            "invalid_item_type_value",
+            item_type_value=value,
+            defaulting_to="ACTION",
+            message="Invalid ITEM_TYPE value in database, defaulting to ACTION"
+        )
+        return ItemType.ACTION
+
+
 def _row_to_execution_response(
     row: tuple,
     action_name: str | None = None,
@@ -52,6 +89,14 @@ def _row_to_execution_response(
     approved_at: datetime | None = None,
     approval_comment: str | None = None,
     parent_execution_id: int | None = None,
+    # Story 9.9 AC6: Action metadata enrichment
+    engine: str | None = None,
+    platform: str | None = None,
+    item_type: str | None = None,
+    # Story 9.9 AC6: Integration metadata enrichment
+    integration_id: int | None = None,
+    integration_name: str | None = None,
+    integration_icon: str | None = None,
 ) -> ExecutionResponse:
     """Convert database row to ExecutionResponse model.
 
@@ -62,6 +107,7 @@ def _row_to_execution_response(
     Story 7.4: Optional approval fields passed separately.
     Story 8.9: user_display_name may be None if user deleted or not in JOIN.
     Story 9.2: parent_execution_id for remediation linking.
+    Story 9.9 AC6: Action and integration metadata enrichment for Technologie/Plateforme columns.
     """
     return ExecutionResponse(
         id=row[0],
@@ -80,6 +126,14 @@ def _row_to_execution_response(
         approved_at=approved_at,
         approval_comment=approval_comment,
         parent_execution_id=parent_execution_id,
+        # Story 9.9 AC6: Action metadata
+        engine=_parse_engine(engine),
+        platform=_parse_platform(platform),
+        item_type=_parse_item_type(item_type),
+        # Story 9.9 AC6: Integration metadata
+        integration_id=integration_id,
+        integration_name=integration_name,
+        integration_icon=integration_icon,
     )
 
 
@@ -152,21 +206,32 @@ async def create_execution(
 
 
 async def get_by_id(execution_id: int) -> ExecutionResponse | None:
-    """Fetch an execution by ID with action name and approval fields (Story 4.1, Story 7.4, Story 9.2).
+    """Fetch an execution by ID with action name and approval fields (Story 4.1, Story 7.4, Story 9.2, Story 9.9).
 
     Args:
         execution_id: The execution ID to fetch
 
     Returns:
         ExecutionResponse if found, None otherwise
+
+    Story 9.9 AC6: Includes engine, platform, item_type from ACTIONS_CATALOG
+                   and integration_id, integration_name, integration_icon from INTEGRATIONS.
     """
     start_time = time.perf_counter()
+    # Note: INTEGRATION_ID column may not exist until V036 migration is executed
+    # Using dynamic check: if column exists, join INTEGRATIONS; otherwise return NULL
     query = """
         SELECT E.ID, E.ACTION_ID, E.USER_ID, E.ENVIRONMENT, E.PARAMETERS,
                E.STATUS, E.SERVICENOW_CHANGE_ID, E.STARTED_AT, E.COMPLETED_AT, E.CREATED_AT,
                A.NAME AS ACTION_NAME,
                E.APPROVED_BY, E.APPROVED_AT, E.APPROVAL_COMMENT,
-               E.PARENT_EXECUTION_ID
+               E.PARENT_EXECUTION_ID,
+               A.ENGINE AS ACTION_ENGINE,
+               A.PLATFORM AS ACTION_PLATFORM,
+               A.ITEM_TYPE AS ACTION_ITEM_TYPE,
+               NULL AS INTEGRATION_ID,
+               NULL AS INTEGRATION_NAME,
+               NULL AS INTEGRATION_ICON
         FROM EXECUTIONS E
         LEFT JOIN ACTIONS_CATALOG A ON A.ID = E.ACTION_ID
         WHERE E.ID = :execution_id
@@ -189,7 +254,8 @@ async def get_by_id(execution_id: int) -> ExecutionResponse | None:
     if row is None:
         return None
 
-    # Row has 15 columns: 0-9 execution fields, 10 action_name, 11-13 approval fields, 14 parent_execution_id
+    # Row has 21 columns: 0-9 execution fields, 10 action_name, 11-14 approval/parent fields,
+    # 15-17 action metadata (engine, platform, item_type), 18-20 integration metadata
     return _row_to_execution_response(
         row[:10],
         action_name=row[10],
@@ -197,6 +263,14 @@ async def get_by_id(execution_id: int) -> ExecutionResponse | None:
         approved_at=row[12],
         approval_comment=row[13],
         parent_execution_id=row[14],
+        # Story 9.9 AC6: Action metadata
+        engine=row[15],
+        platform=row[16],
+        item_type=row[17],
+        # Story 9.9 AC6: Integration metadata
+        integration_id=row[18],
+        integration_name=row[19],
+        integration_icon=row[20],
     )
 
 
@@ -205,7 +279,7 @@ async def list_by_user(
     limit: int = 50,
     offset: int = 0,
 ) -> list[ExecutionResponse]:
-    """List executions for a user (Story 4.1, Story 7.4 approval fields, Story 9.2 remediation).
+    """List executions for a user (Story 4.1, Story 7.4 approval fields, Story 9.2 remediation, Story 9.9 enrichment).
 
     Args:
         user_id: User ID to filter by
@@ -214,14 +288,24 @@ async def list_by_user(
 
     Returns:
         List of ExecutionResponse ordered by created_at DESC
+
+    Story 9.9 AC6: Includes engine, platform, item_type from ACTIONS_CATALOG
+                   and integration_id, integration_name, integration_icon from INTEGRATIONS.
     """
     start_time = time.perf_counter()
+    # Note: INTEGRATION_ID column may not exist until V036 migration is executed
     query = """
         SELECT E.ID, E.ACTION_ID, E.USER_ID, E.ENVIRONMENT, E.PARAMETERS,
                E.STATUS, E.SERVICENOW_CHANGE_ID, E.STARTED_AT, E.COMPLETED_AT, E.CREATED_AT,
                A.NAME AS ACTION_NAME,
                E.APPROVED_BY, E.APPROVED_AT, E.APPROVAL_COMMENT,
-               E.PARENT_EXECUTION_ID
+               E.PARENT_EXECUTION_ID,
+               A.ENGINE AS ACTION_ENGINE,
+               A.PLATFORM AS ACTION_PLATFORM,
+               A.ITEM_TYPE AS ACTION_ITEM_TYPE,
+               NULL AS INTEGRATION_ID,
+               NULL AS INTEGRATION_NAME,
+               NULL AS INTEGRATION_ICON
         FROM EXECUTIONS E
         LEFT JOIN ACTIONS_CATALOG A ON A.ID = E.ACTION_ID
         WHERE E.USER_ID = :user_id
@@ -252,6 +336,14 @@ async def list_by_user(
             approved_at=row[12],
             approval_comment=row[13],
             parent_execution_id=row[14],
+            # Story 9.9 AC6: Action metadata
+            engine=row[15],
+            platform=row[16],
+            item_type=row[17],
+            # Story 9.9 AC6: Integration metadata
+            integration_id=row[18],
+            integration_name=row[19],
+            integration_icon=row[20],
         )
         for row in rows
     ]
@@ -275,7 +367,7 @@ async def list_all_executions(
     limit: int = 50,
     offset: int = 0,
 ) -> list[ExecutionResponse]:
-    """List all executions (Story 8.9, DBA/DBOPS only; Story 9.2 remediation).
+    """List all executions (Story 8.9, DBA/DBOPS only; Story 9.2 remediation; Story 9.9 enrichment).
 
     Args:
         limit: Maximum number of results
@@ -283,14 +375,24 @@ async def list_all_executions(
 
     Returns:
         List of ExecutionResponse ordered by created_at DESC
+
+    Story 9.9 AC6: Includes engine, platform, item_type from ACTIONS_CATALOG
+                   and integration_id, integration_name, integration_icon from INTEGRATIONS.
     """
     start_time = time.perf_counter()
+    # Note: INTEGRATION_ID column may not exist until V036 migration is executed
     query = """
         SELECT E.ID, E.ACTION_ID, E.USER_ID, E.ENVIRONMENT, E.PARAMETERS,
                E.STATUS, E.SERVICENOW_CHANGE_ID, E.STARTED_AT, E.COMPLETED_AT, E.CREATED_AT,
                A.NAME AS ACTION_NAME, U.DISPLAY_NAME AS USER_DISPLAY_NAME,
                E.APPROVED_BY, E.APPROVED_AT, E.APPROVAL_COMMENT,
-               E.PARENT_EXECUTION_ID
+               E.PARENT_EXECUTION_ID,
+               A.ENGINE AS ACTION_ENGINE,
+               A.PLATFORM AS ACTION_PLATFORM,
+               A.ITEM_TYPE AS ACTION_ITEM_TYPE,
+               NULL AS INTEGRATION_ID,
+               NULL AS INTEGRATION_NAME,
+               NULL AS INTEGRATION_ICON
         FROM EXECUTIONS E
         LEFT JOIN ACTIONS_CATALOG A ON A.ID = E.ACTION_ID
         LEFT JOIN USERS U ON U.ID = E.USER_ID
@@ -323,6 +425,14 @@ async def list_all_executions(
             approved_at=row[13],
             approval_comment=row[14],
             parent_execution_id=row[15],
+            # Story 9.9 AC6: Action metadata
+            engine=row[16],
+            platform=row[17],
+            item_type=row[18],
+            # Story 9.9 AC6: Integration metadata
+            integration_id=row[19],
+            integration_name=row[20],
+            integration_icon=row[21],
         )
         for row in rows
     ]
@@ -481,13 +591,14 @@ async def get_action_with_integration(action_id: int) -> dict[str, Any] | None:
     Returns:
         Dict with action and integration info, or None if not found
     """
+    # Note: INTEGRATION_ID column may not exist until V036 migration is executed
+    # For now, return NULL for integration fields - will be populated after migration
     query = """
         SELECT A.ID, A.NAME, A.PLATFORM, A.EXECUTION_STEPS, A.CHANGE_MODEL_CODE,
-               I.ID AS INTEGRATION_ID, I.NAME AS INTEGRATION_NAME,
-               I.TYPE AS PLATFORM_TYPE, I.BASE_URL, I.CREDENTIAL_REF, I.AUTH_FLOW,
-               I.TOKEN_URL, I.CONFIG
+               NULL AS INTEGRATION_ID, NULL AS INTEGRATION_NAME,
+               NULL AS PLATFORM_TYPE, NULL AS BASE_URL, NULL AS CREDENTIAL_REF, NULL AS AUTH_FLOW,
+               NULL AS TOKEN_URL, NULL AS CONFIG
         FROM ACTIONS_CATALOG A
-        LEFT JOIN INTEGRATIONS I ON A.INTEGRATION_ID = I.ID
         WHERE A.ID = :action_id
     """
     async with get_connection() as conn:

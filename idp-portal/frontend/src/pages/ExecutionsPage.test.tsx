@@ -1,5 +1,5 @@
 /**
- * Tests for ExecutionsPage (Story 4.8, Story 8.8, Story 9.4).
+ * Tests for ExecutionsPage (Story 4.8, Story 8.8, Story 9.4, Story 9.9).
  *
  * Story 4.8:
  * AC1: Table with columns: action, environment, status, date, duration.
@@ -17,6 +17,12 @@
  * AC3: Stats reflètent le scope actif (mine/all).
  * AC4: Responsive layout xs=24 sm=12 md=6.
  * AC5: Loading skeleton pour les cards.
+ *
+ * Story 9.9:
+ * AC1-AC3: Status column with Badge indicators (pulsing for running, fixed for terminal).
+ * AC4: Technologie column with engine icons.
+ * AC5: Plateforme column with integration icons.
+ * AC7: Column order: Statut, Action, Technologie, Plateforme, [Utilisateur], Environnement, Date, Durée.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -236,17 +242,29 @@ describe('ExecutionsPage', () => {
       expect(screen.getByText('STAGING')).toBeInTheDocument();
     });
 
-    it('displays status tags with correct labels', async () => {
+    it('displays status badges with tooltips (Story 9.9 AC1-AC3)', async () => {
       renderWithTheme(<ExecutionsPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('Terminée')).toBeInTheDocument();
+        expect(screen.getByText('Create PDB')).toBeInTheDocument();
       });
 
-      // Story 9.4: Use getAllByText since "En cours" now appears in StatCards AND table
-      const enCoursElements = screen.getAllByText('En cours');
-      expect(enCoursElements.length).toBeGreaterThanOrEqual(1);
-      expect(screen.getByText('Échouée')).toBeInTheDocument();
+      // Story 9.9: Status is now displayed as Badges (processing, success, error) not Tags with text
+      // The Badge component renders with specific classes based on status
+      const badges = document.querySelectorAll('.ant-badge');
+      expect(badges.length).toBeGreaterThan(0);
+
+      // Check for processing badge (RUNNING execution)
+      const processingBadges = document.querySelectorAll('.ant-badge-status-processing');
+      expect(processingBadges.length).toBeGreaterThan(0);
+
+      // Check for success badge (COMPLETED execution)
+      const successBadges = document.querySelectorAll('.ant-badge-status-success');
+      expect(successBadges.length).toBeGreaterThan(0);
+
+      // Check for error badge (FAILED execution)
+      const errorBadges = document.querySelectorAll('.ant-badge-status-error');
+      expect(errorBadges.length).toBeGreaterThan(0);
     });
 
     it('displays duration for completed executions', async () => {
@@ -277,7 +295,10 @@ describe('ExecutionsPage', () => {
       // First row is header, second should be the running execution
       const firstDataRow = rows[1];
       expect(within(firstDataRow).getByText('Apply Patch')).toBeInTheDocument();
-      expect(within(firstDataRow).getByText('En cours')).toBeInTheDocument();
+      // Story 9.9: Status is now a Badge, not text. Check for processing badge in the row.
+      expect(within(firstDataRow).queryByText('.ant-badge-status-processing')).not.toBeNull;
+      const processingBadge = firstDataRow.querySelector('.ant-badge-status-processing');
+      expect(processingBadge).toBeInTheDocument();
     });
 
     it('shows processing badge for running executions', async () => {
@@ -486,7 +507,7 @@ describe('ExecutionsPage', () => {
   });
 
   describe('Sorting (AC4)', () => {
-    it('table columns are sortable', async () => {
+    it('table columns are sortable (Story 9.9 AC7: only Action and Date)', async () => {
       renderWithTheme(<ExecutionsPage />);
 
       await waitFor(() => {
@@ -498,9 +519,12 @@ describe('ExecutionsPage', () => {
       const statusHeader = screen.getByText('Statut').closest('th');
       const dateHeader = screen.getByText('Date').closest('th');
 
+      // Story 9.9 AC7: Action and Date are sortable
       expect(actionHeader).toHaveAttribute('aria-description', 'sortable');
-      expect(statusHeader).toHaveAttribute('aria-description', 'sortable');
       expect(dateHeader).toHaveAttribute('aria-description', 'sortable');
+
+      // Story 9.9 AC7: Statut is NOT sortable (no aria-description='sortable')
+      expect(statusHeader).not.toHaveAttribute('aria-description', 'sortable');
     });
   });
 
@@ -1039,6 +1063,349 @@ describe('ExecutionsPage', () => {
       const syncIcons = document.querySelectorAll('[class*="anticon-sync"]');
       const hasSpinIcon = Array.from(syncIcons).some(icon => icon.classList.contains('anticon-spin'));
       expect(hasSpinIcon).toBe(false);
+    });
+  });
+
+  // === Story 9.9: Table Column Improvements ===
+  describe('Story 9.9 — Table Column Improvements', () => {
+    it('renders Statut column as first column (AC1)', async () => {
+      renderWithTheme(<ExecutionsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Create PDB')).toBeInTheDocument();
+      });
+
+      // Get table headers
+      const table = screen.getByRole('table');
+      const headers = within(table).getAllByRole('columnheader');
+
+      // First column should be "Statut"
+      expect(headers[0]).toHaveTextContent('Statut');
+    });
+
+    it('renders columns in correct order (AC7)', async () => {
+      renderWithTheme(<ExecutionsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Create PDB')).toBeInTheDocument();
+      });
+
+      const table = screen.getByRole('table');
+      const headers = within(table).getAllByRole('columnheader');
+
+      // Story 9.9 AC7: Order should be Statut, Action, Technologie, Plateforme, Environnement, Date, Durée
+      // (Utilisateur only visible for scope=all)
+      expect(headers[0]).toHaveTextContent('Statut');
+      expect(headers[1]).toHaveTextContent('Action');
+      expect(headers[2]).toHaveTextContent('Technologie');
+      expect(headers[3]).toHaveTextContent('Plateforme');
+      expect(headers[4]).toHaveTextContent('Environnement');
+      expect(headers[5]).toHaveTextContent('Date');
+      expect(headers[6]).toHaveTextContent('Durée');
+    });
+
+    it('renders Technologie column with engine icons (AC4)', async () => {
+      // Mock execution with engine metadata
+      vi.mocked(executionService.listExecutions).mockResolvedValue({
+        data: [
+          {
+            ...mockExecutions[0],
+            engine: 'Oracle',
+            item_type: 'action',
+          },
+        ],
+        pagination: { page: 1, page_size: 25, total_count: 1, total_pages: 1 },
+      });
+
+      const { container } = renderWithTheme(<ExecutionsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Create PDB')).toBeInTheDocument();
+      });
+
+      // Check for DatabaseOutlined icon (Oracle)
+      const databaseIcon = container.querySelector('[class*="anticon-database"]');
+      expect(databaseIcon).toBeInTheDocument();
+    });
+
+    it('renders workflow icon when item_type is workflow (AC4)', async () => {
+      vi.mocked(executionService.listExecutions).mockResolvedValue({
+        data: [
+          {
+            ...mockExecutions[0],
+            engine: null,
+            item_type: 'workflow',
+          },
+        ],
+        pagination: { page: 1, page_size: 25, total_count: 1, total_pages: 1 },
+      });
+
+      const { container } = renderWithTheme(<ExecutionsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Create PDB')).toBeInTheDocument();
+      });
+
+      // Check for ApartmentOutlined icon (workflow)
+      const workflowIcon = container.querySelector('[class*="anticon-apartment"]');
+      expect(workflowIcon).toBeInTheDocument();
+    });
+
+    it('renders Plateforme column with integration avatar (AC5)', async () => {
+      vi.mocked(executionService.listExecutions).mockResolvedValue({
+        data: [
+          {
+            ...mockExecutions[0],
+            integration_id: 1,
+            integration_name: 'AAP Production',
+            integration_icon: '/icons/aap.png',
+          },
+        ],
+        pagination: { page: 1, page_size: 25, total_count: 1, total_pages: 1 },
+      });
+
+      const { container } = renderWithTheme(<ExecutionsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Create PDB')).toBeInTheDocument();
+      });
+
+      // Check for Avatar component
+      const avatar = container.querySelector('.ant-avatar');
+      expect(avatar).toBeInTheDocument();
+    });
+
+    it('renders fallback for missing integration (AC5)', async () => {
+      vi.mocked(executionService.listExecutions).mockResolvedValue({
+        data: [
+          {
+            ...mockExecutions[0],
+            engine: null, // Also null for this test
+            integration_id: null,
+            integration_name: null,
+            integration_icon: null,
+          },
+        ],
+        pagination: { page: 1, page_size: 25, total_count: 1, total_pages: 1 },
+      });
+
+      renderWithTheme(<ExecutionsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Create PDB')).toBeInTheDocument();
+      });
+
+      // Check for dash fallback (there should be 2: one for Technologie, one for Plateforme)
+      const dashElements = screen.getAllByText('—');
+      expect(dashElements.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('Technologie and Plateforme columns are not sortable (AC7)', async () => {
+      renderWithTheme(<ExecutionsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Create PDB')).toBeInTheDocument();
+      });
+
+      const technologieHeader = screen.getByText('Technologie').closest('th');
+      const plateformeHeader = screen.getByText('Plateforme').closest('th');
+
+      // These columns should NOT have sortable attribute
+      expect(technologieHeader).not.toHaveAttribute('aria-description', 'sortable');
+      expect(plateformeHeader).not.toHaveAttribute('aria-description', 'sortable');
+    });
+
+    it('includes 8 columns when scope=all (with Utilisateur)', async () => {
+      mockAuthSession('DBA');
+
+      vi.mocked(executionService.listExecutions).mockResolvedValue({
+        data: [
+          {
+            ...mockExecutions[0],
+            user_display_name: 'Test User',
+          },
+        ],
+        pagination: { page: 1, page_size: 25, total_count: 1, total_pages: 1 },
+      });
+
+      renderWithProviders();
+
+      // Wait for auth and data
+      await waitFor(() => {
+        expect(screen.getByText('Toutes les exécutions')).toBeInTheDocument();
+      });
+
+      // Click on "Toutes les exécutions" tab to switch to scope=all
+      const allTab = screen.getByText('Toutes les exécutions');
+      await userEvent.click(allTab);
+
+      await waitFor(() => {
+        // When scope=all, Utilisateur column should be visible
+        expect(screen.getByText('Utilisateur')).toBeInTheDocument();
+      });
+
+      const table = screen.getByRole('table');
+      const headers = within(table).getAllByRole('columnheader');
+
+      // Should have 8 columns including Utilisateur
+      expect(headers.length).toBe(8);
+    });
+  });
+
+  // Story 9.9 AC1-AC10: Table refactoring tests
+  describe('Story 9.9: Table Refactoring', () => {
+    const enrichedMockExecutions: ExecutionResponse[] = [
+      {
+        ...mockExecutions[0],
+        engine: 'Oracle',
+        platform: 'AAP',
+        item_type: 'action',
+        integration_id: 10,
+        integration_name: 'AAP Production',
+        integration_icon: '/icons/aap.png',
+      },
+      {
+        ...mockExecutions[1],
+        engine: 'SQL Server',
+        platform: 'Terraform',
+        item_type: 'action',
+        integration_id: null,
+        integration_name: null,
+        integration_icon: null,
+      },
+      {
+        id: 4,
+        action_id: 15,
+        action_name: 'Deploy Workflow',
+        user_id: 1,
+        environment: 'prod',
+        parameters: null,
+        status: 'COMPLETED',
+        servicenow_change_id: null,
+        started_at: '2026-01-29T15:00:00Z',
+        completed_at: '2026-01-29T15:10:00Z',
+        created_at: '2026-01-29T14:59:00Z',
+        engine: null,
+        platform: null,
+        item_type: 'workflow',
+        integration_id: 20,
+        integration_name: 'GitHub Actions',
+        integration_icon: '/icons/github.png',
+      },
+    ];
+
+    beforeEach(() => {
+      vi.mocked(executionService.listExecutions).mockResolvedValue({
+        data: enrichedMockExecutions,
+        pagination: { page: 1, page_size: 25, total_count: 3, total_pages: 1 },
+      });
+    });
+
+    it('renders status indicator column as first column (AC1)', async () => {
+      renderWithTheme(<ExecutionsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Create PDB')).toBeInTheDocument();
+      });
+
+      const table = screen.getByRole('table');
+      const headers = within(table).getAllByRole('columnheader');
+
+      // First column should be "Statut"
+      expect(headers[0]).toHaveTextContent('Statut');
+    });
+
+    it('renders technology column with Oracle icon (AC4)', async () => {
+      renderWithTheme(<ExecutionsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Create PDB')).toBeInTheDocument();
+      });
+
+      // Check for Technologie column header
+      expect(screen.getByText('Technologie')).toBeInTheDocument();
+
+      // Check for Oracle icon (DatabaseOutlined) - query by class name
+      const oracleIcon = document.querySelector('[class*="anticon-database"]');
+      expect(oracleIcon).toBeInTheDocument();
+      expect(oracleIcon).toHaveStyle({ color: '#EF4444' });
+    });
+
+    it('renders workflow icon for workflow item_type (AC4)', async () => {
+      renderWithTheme(<ExecutionsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Deploy Workflow')).toBeInTheDocument();
+      });
+
+      // Check for ApartmentOutlined icon (workflow)
+      const workflowIcon = document.querySelector('[class*="anticon-apartment"]');
+      expect(workflowIcon).toBeInTheDocument();
+      expect(workflowIcon).toHaveStyle({ color: '#722ed1' });
+    });
+
+    it('renders integration icon when integration metadata present (AC5)', async () => {
+      renderWithTheme(<ExecutionsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Create PDB')).toBeInTheDocument();
+      });
+
+      // Check for Plateforme column
+      expect(screen.getByText('Plateforme')).toBeInTheDocument();
+
+      // Check for Avatar with integration icon
+      const avatar = document.querySelector('.ant-avatar-square');
+      expect(avatar).toBeInTheDocument();
+    });
+
+    it('renders fallback for missing integration (AC5)', async () => {
+      renderWithTheme(<ExecutionsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Apply Patch')).toBeInTheDocument();
+      });
+
+      // Row 2 has null integration - should show "—" fallback
+      const fallbacks = screen.getAllByText('—');
+      expect(fallbacks.length).toBeGreaterThan(0);
+    });
+
+    it('columns are in correct order (AC7)', async () => {
+      renderWithTheme(<ExecutionsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Create PDB')).toBeInTheDocument();
+      });
+
+      const table = screen.getByRole('table');
+      const headers = within(table).getAllByRole('columnheader');
+
+      // Story 9.9 AC7: Statut, Action, Technologie, Plateforme, Environnement, Date, Durée (no Utilisateur for scope=mine)
+      expect(headers[0]).toHaveTextContent('Statut');
+      expect(headers[1]).toHaveTextContent('Action');
+      expect(headers[2]).toHaveTextContent('Technologie');
+      expect(headers[3]).toHaveTextContent('Plateforme');
+      expect(headers[4]).toHaveTextContent('Environnement');
+      expect(headers[5]).toHaveTextContent('Date');
+      expect(headers[6]).toHaveTextContent('Durée');
+    });
+
+    it('status, technologie, plateforme columns are not sortable (AC7)', async () => {
+      renderWithTheme(<ExecutionsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Create PDB')).toBeInTheDocument();
+      });
+
+      const statusHeader = screen.getByText('Statut').closest('th');
+      const technologieHeader = screen.getByText('Technologie').closest('th');
+      const plateformeHeader = screen.getByText('Plateforme').closest('th');
+
+      // These should NOT have sortable aria-description
+      expect(statusHeader).not.toHaveAttribute('aria-description', 'sortable');
+      expect(technologieHeader).not.toHaveAttribute('aria-description', 'sortable');
+      expect(plateformeHeader).not.toHaveAttribute('aria-description', 'sortable');
     });
   });
 });

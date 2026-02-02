@@ -411,7 +411,7 @@ export interface ExecutionCreateResponse {
   created_at: string;
 }
 
-/** Execution record (Story 4.1; Story 7.4: approval fields; Story 9.2: remediation). */
+/** Execution record (Story 4.1; Story 7.4: approval fields; Story 9.2: remediation; Story 9.9: enrichment). */
 export interface ExecutionResponse {
   id: number;
   action_id: number;
@@ -434,6 +434,18 @@ export interface ExecutionResponse {
   approval_comment?: string | null;
   /** Story 9.2: Parent execution ID for remediation actions. */
   parent_execution_id?: number | null;
+  /** Story 9.9 AC6: Database engine from action (for Technologie column). */
+  engine?: ActionEngine | null;
+  /** Story 9.9 AC6: Execution platform from action. */
+  platform?: ActionPlatform | null;
+  /** Story 9.9 AC6: Item type (action or workflow) from action. */
+  item_type?: ItemType;
+  /** Story 9.9 AC6: Integration ID from execution config (for Plateforme column). */
+  integration_id?: number | null;
+  /** Story 9.9 AC6: Integration name from INTEGRATIONS. */
+  integration_name?: string | null;
+  /** Story 9.9 AC6: Integration icon URL from INTEGRATIONS. */
+  integration_icon?: string | null;
 }
 
 /** Execution step status (Story 4.6). */

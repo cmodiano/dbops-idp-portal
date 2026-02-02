@@ -4,6 +4,7 @@ Defines Pydantic models for:
 - ExecutionStatus: execution lifecycle states
 - ExecutionCreate: input model for creating executions
 - ExecutionResponse: output model for execution records
+- Story 9.9: Added engine, platform, item_type, integration_* fields for table enrichment
 """
 
 from datetime import datetime
@@ -11,6 +12,8 @@ from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, computed_field
+
+from app.models.catalog import ActionEngine, ActionPlatform, ItemType
 
 
 class ExecutionStatus(str, Enum):
@@ -73,7 +76,7 @@ class ExecutionCreate(BaseModel):
 
 
 class ExecutionResponse(BaseModel):
-    """Output model for execution (Story 4.1, Task 1.1; Story 7.4 approval fields; Story 9.2 remediation).
+    """Output model for execution (Story 4.1, Task 1.1; Story 7.4 approval fields; Story 9.2 remediation; Story 9.9 enrichment).
 
     Attributes:
         id: Execution ID
@@ -92,6 +95,12 @@ class ExecutionResponse(BaseModel):
         approval_comment: Comment from approver (Story 7.4)
         rejection_reason: Alias for approval_comment when REJECTED (Story 7.4)
         parent_execution_id: ID of parent execution if this is a remediation (Story 9.2)
+        engine: Database engine from action (Story 9.9 AC6 - for Technologie column). Can be None if action has no engine (legacy data or workflows).
+        platform: Execution platform from action (Story 9.9 AC6). Can be None if action has no platform (legacy data or workflows).
+        item_type: Item type (action or workflow) from action (Story 9.9 AC6). Defaults to 'action' if NULL in database.
+        integration_id: Integration ID from execution config (Story 9.9 AC6 - for Plateforme column). Can be None if execution has no ACTION_EXECUTION_CONFIG record.
+        integration_name: Integration name from INTEGRATIONS (Story 9.9 AC6). Can be None if integration_id is NULL or integration was deleted.
+        integration_icon: Integration icon URL from INTEGRATIONS (Story 9.9 AC6). Can be None if integration_id is NULL or integration has no icon.
     """
     id: int
     action_id: int
@@ -111,6 +120,14 @@ class ExecutionResponse(BaseModel):
     approval_comment: str | None = None
     # Story 9.2: Remediation linking
     parent_execution_id: int | None = None
+    # Story 9.9 AC6: Action metadata enrichment (Technologie column)
+    engine: ActionEngine | None = None
+    platform: ActionPlatform | None = None
+    item_type: ItemType = ItemType.ACTION
+    # Story 9.9 AC6: Integration metadata enrichment (Plateforme column)
+    integration_id: int | None = None
+    integration_name: str | None = None
+    integration_icon: str | None = None
 
     # Story 9-2 code-review fix: Use computed_field for proper serialization
     @computed_field

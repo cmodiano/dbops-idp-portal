@@ -30,19 +30,20 @@ class TestCreateExecution:
     @pytest.mark.asyncio
     async def test_create_execution_inserts_and_returns_response(self):
         """create_execution inserts record and returns ExecutionCreateResponse."""
-        mock_cursor = MagicMock()
-        mock_cursor.close = AsyncMock()
-
         mock_out_id = MagicMock()
         mock_out_id.getvalue.return_value = [42]
 
         mock_out_created_at = MagicMock()
         mock_out_created_at.getvalue.return_value = [datetime(2026, 1, 29, 10, 0, 0)]
 
+        mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
+        mock_cursor.var = MagicMock(side_effect=[mock_out_id, mock_out_created_at])
+        mock_cursor.close = MagicMock()
+
         mock_conn = MagicMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
         mock_conn.commit = AsyncMock()
-        mock_conn.var = MagicMock(side_effect=[mock_out_id, mock_out_created_at])
 
         with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
@@ -63,19 +64,20 @@ class TestCreateExecution:
     @pytest.mark.asyncio
     async def test_create_execution_stores_parameters_as_json(self):
         """create_execution stores parameters as JSON string in CLOB."""
-        mock_cursor = MagicMock()
-        mock_cursor.close = AsyncMock()
-
         mock_out_id = MagicMock()
         mock_out_id.getvalue.return_value = [1]
 
         mock_out_created_at = MagicMock()
         mock_out_created_at.getvalue.return_value = [datetime(2026, 1, 29)]
 
+        mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
+        mock_cursor.var = MagicMock(side_effect=[mock_out_id, mock_out_created_at])
+        mock_cursor.close = MagicMock()
+
         mock_conn = MagicMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
         mock_conn.commit = AsyncMock()
-        mock_conn.var = MagicMock(side_effect=[mock_out_id, mock_out_created_at])
 
         with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
@@ -89,7 +91,7 @@ class TestCreateExecution:
             )
 
         # Check that execute was called with JSON parameters
-        execute_call = mock_conn.execute.call_args
+        execute_call = mock_cursor.execute.call_args
         params = execute_call[0][1]
         assert params["parameters"] == '{"key": "value", "nested": {"inner": 123}}'
         assert params["environment"] == "prod"
@@ -103,11 +105,12 @@ class TestActionExists:
     async def test_action_exists_returns_true_for_published_action(self):
         """action_exists returns True when action exists and is published."""
         mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
         mock_cursor.fetchone = AsyncMock(return_value=(1,))
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()
 
         mock_conn = MagicMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
 
         with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
@@ -121,11 +124,12 @@ class TestActionExists:
     async def test_action_exists_returns_false_when_not_found(self):
         """action_exists returns False when action doesn't exist."""
         mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
         mock_cursor.fetchone = AsyncMock(return_value=None)
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()
 
         mock_conn = MagicMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
 
         with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
@@ -139,11 +143,12 @@ class TestActionExists:
     async def test_action_exists_returns_false_for_draft_action(self):
         """action_exists returns False for draft (non-published) action."""
         mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
         mock_cursor.fetchone = AsyncMock(return_value=None)  # Query filters STATUS='published'
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()
 
         mock_conn = MagicMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
 
         with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
@@ -153,7 +158,7 @@ class TestActionExists:
 
         assert result is False
         # Verify query includes STATUS check
-        execute_call = mock_conn.execute.call_args
+        execute_call = mock_cursor.execute.call_args
         query = execute_call[0][0]
         assert "STATUS = 'published'" in query
 
@@ -167,11 +172,12 @@ class TestGetActionParametersSchema:
         schema_json = '{"type": "object", "properties": {"name": {"type": "string"}}}'
 
         mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
         mock_cursor.fetchone = AsyncMock(return_value=(schema_json,))
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()
 
         mock_conn = MagicMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
 
         with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
@@ -185,11 +191,12 @@ class TestGetActionParametersSchema:
     async def test_get_schema_returns_none_when_no_schema(self):
         """get_action_parameters_schema returns None when action has no schema."""
         mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
         mock_cursor.fetchone = AsyncMock(return_value=(None,))
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()
 
         mock_conn = MagicMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
 
         with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
@@ -203,11 +210,12 @@ class TestGetActionParametersSchema:
     async def test_get_schema_returns_none_when_action_not_found(self):
         """get_action_parameters_schema returns None when action doesn't exist."""
         mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
         mock_cursor.fetchone = AsyncMock(return_value=None)
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()
 
         mock_conn = MagicMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
 
         with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
@@ -219,11 +227,12 @@ class TestGetActionParametersSchema:
 
 
 class TestGetById:
-    """Tests for execution_repository.get_by_id."""
+    """Tests for execution_repository.get_by_id (Story 9.9: enriched with action/integration metadata)."""
 
     @pytest.mark.asyncio
     async def test_get_by_id_returns_execution_with_action_name(self):
         """get_by_id returns ExecutionResponse with action_name from JOIN."""
+        # Story 9.9: Row now has 21 columns including action/integration metadata
         row = (
             1,  # ID
             5,  # ACTION_ID
@@ -236,14 +245,25 @@ class TestGetById:
             None,  # COMPLETED_AT
             datetime(2026, 1, 29, 10, 0, 0),  # CREATED_AT
             "Create PDB",  # ACTION_NAME from JOIN
+            None,  # APPROVED_BY
+            None,  # APPROVED_AT
+            None,  # APPROVAL_COMMENT
+            None,  # PARENT_EXECUTION_ID
+            "Oracle",  # ACTION_ENGINE (Story 9.9 AC6)
+            "AAP",  # ACTION_PLATFORM (Story 9.9 AC6)
+            "action",  # ACTION_ITEM_TYPE (Story 9.9 AC6)
+            10,  # INTEGRATION_ID (Story 9.9 AC6)
+            "AAP Production",  # INTEGRATION_NAME (Story 9.9 AC6)
+            "/icons/aap.png",  # INTEGRATION_ICON (Story 9.9 AC6)
         )
 
         mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
         mock_cursor.fetchone = AsyncMock(return_value=row)
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()
 
         mock_conn = MagicMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
 
         with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
@@ -258,16 +278,25 @@ class TestGetById:
         assert result.environment == ExecutionEnvironment.DEV
         assert result.parameters == {"key": "value"}
         assert result.status == ExecutionStatus.SUBMITTED
+        # Story 9.9 AC6: Verify action metadata enrichment
+        assert result.engine.value == "Oracle"
+        assert result.platform.value == "AAP"
+        assert result.item_type.value == "action"
+        # Story 9.9 AC6: Verify integration metadata enrichment
+        assert result.integration_id == 10
+        assert result.integration_name == "AAP Production"
+        assert result.integration_icon == "/icons/aap.png"
 
     @pytest.mark.asyncio
     async def test_get_by_id_returns_none_when_not_found(self):
         """get_by_id returns None when execution doesn't exist."""
         mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
         mock_cursor.fetchone = AsyncMock(return_value=None)
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()
 
         mock_conn = MagicMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
 
         with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
@@ -277,6 +306,59 @@ class TestGetById:
 
         assert result is None
 
+    @pytest.mark.asyncio
+    async def test_get_by_id_handles_null_enrichment_fields(self):
+        """get_by_id handles missing action/integration metadata gracefully (Story 9.9 AC6)."""
+        # Row with NULL engine, platform, item_type, integration fields
+        row = (
+            1,  # ID
+            5,  # ACTION_ID
+            1,  # USER_ID
+            "prod",  # ENVIRONMENT
+            None,  # PARAMETERS
+            "COMPLETED",  # STATUS
+            "CHG001",  # SERVICENOW_CHANGE_ID
+            datetime(2026, 1, 29, 10, 0, 0),  # STARTED_AT
+            datetime(2026, 1, 29, 10, 5, 0),  # COMPLETED_AT
+            datetime(2026, 1, 29, 9, 55, 0),  # CREATED_AT
+            "Resize Tablespace",  # ACTION_NAME
+            None,  # APPROVED_BY
+            None,  # APPROVED_AT
+            None,  # APPROVAL_COMMENT
+            None,  # PARENT_EXECUTION_ID
+            None,  # ACTION_ENGINE (NULL)
+            None,  # ACTION_PLATFORM (NULL)
+            None,  # ACTION_ITEM_TYPE (NULL - defaults to 'action')
+            None,  # INTEGRATION_ID (NULL)
+            None,  # INTEGRATION_NAME (NULL)
+            None,  # INTEGRATION_ICON (NULL)
+        )
+
+        mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
+        mock_cursor.fetchone = AsyncMock(return_value=row)
+        mock_cursor.close = MagicMock()
+
+        mock_conn = MagicMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            result = await execution_repository.get_by_id(1)
+
+        assert result is not None
+        assert result.id == 1
+        assert result.action_name == "Resize Tablespace"
+        # Story 9.9: NULL values are preserved
+        assert result.engine is None
+        assert result.platform is None
+        assert result.item_type.value == "action"  # Default when NULL
+        assert result.integration_id is None
+        assert result.integration_name is None
+        assert result.integration_icon is None
+
 
 class TestUpdateStatus:
     """Tests for execution_repository.update_status."""
@@ -285,11 +367,12 @@ class TestUpdateStatus:
     async def test_update_status_updates_status(self):
         """update_status updates the status and returns True."""
         mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
         mock_cursor.rowcount = 1
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()
 
         mock_conn = MagicMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
         mock_conn.commit = AsyncMock()
 
         with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
@@ -305,11 +388,12 @@ class TestUpdateStatus:
     async def test_update_status_returns_false_when_not_found(self):
         """update_status returns False when execution doesn't exist."""
         mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
         mock_cursor.rowcount = 0
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()
 
         mock_conn = MagicMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
         mock_conn.commit = AsyncMock()
 
         with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
@@ -324,11 +408,12 @@ class TestUpdateStatus:
     async def test_update_status_sets_started_at_for_running(self):
         """update_status sets STARTED_AT when transitioning to RUNNING."""
         mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
         mock_cursor.rowcount = 1
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()
 
         mock_conn = MagicMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
         mock_conn.commit = AsyncMock()
 
         with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
@@ -337,7 +422,7 @@ class TestUpdateStatus:
 
             await execution_repository.update_status(1, ExecutionStatus.RUNNING)
 
-        execute_call = mock_conn.execute.call_args
+        execute_call = mock_cursor.execute.call_args
         query = execute_call[0][0]
         assert "STARTED_AT = SYSTIMESTAMP" in query
 
@@ -345,11 +430,12 @@ class TestUpdateStatus:
     async def test_update_status_sets_completed_at_for_completed(self):
         """update_status sets COMPLETED_AT when transitioning to COMPLETED."""
         mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
         mock_cursor.rowcount = 1
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()
 
         mock_conn = MagicMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
         mock_conn.commit = AsyncMock()
 
         with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
@@ -358,7 +444,7 @@ class TestUpdateStatus:
 
             await execution_repository.update_status(1, ExecutionStatus.COMPLETED)
 
-        execute_call = mock_conn.execute.call_args
+        execute_call = mock_cursor.execute.call_args
         query = execute_call[0][0]
         assert "COMPLETED_AT = SYSTIMESTAMP" in query
 
@@ -372,18 +458,19 @@ class TestCreateExecutionSteps:
     @pytest.mark.asyncio
     async def test_create_execution_steps_inserts_and_returns_ids(self):
         """create_execution_steps inserts step records and returns IDs."""
-        mock_cursor = MagicMock()
-        mock_cursor.close = AsyncMock()
-
         mock_out_id1 = MagicMock()
         mock_out_id1.getvalue.return_value = [101]
         mock_out_id2 = MagicMock()
         mock_out_id2.getvalue.return_value = [102]
 
+        mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
+        mock_cursor.var = MagicMock(side_effect=[mock_out_id1, mock_out_id2])
+        mock_cursor.close = MagicMock()
+
         mock_conn = MagicMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
         mock_conn.commit = AsyncMock()
-        mock_conn.var = MagicMock(side_effect=[mock_out_id1, mock_out_id2])
 
         steps = [
             ExecutionStepCreate(step_order=1, step_name="Vault", step_type=StepType.VAULT),
@@ -397,22 +484,23 @@ class TestCreateExecutionSteps:
             result = await execution_repository.create_execution_steps(1, steps)
 
         assert result == [101, 102]
-        assert mock_conn.execute.call_count == 2
+        assert mock_cursor.execute.call_count == 2
         mock_conn.commit.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_create_execution_steps_sets_pending_status(self):
         """create_execution_steps sets initial status to PENDING."""
-        mock_cursor = MagicMock()
-        mock_cursor.close = AsyncMock()
-
         mock_out_id = MagicMock()
         mock_out_id.getvalue.return_value = [1]
 
+        mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
+        mock_cursor.var = MagicMock(return_value=mock_out_id)
+        mock_cursor.close = MagicMock()
+
         mock_conn = MagicMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
         mock_conn.commit = AsyncMock()
-        mock_conn.var = MagicMock(return_value=mock_out_id)
 
         steps = [ExecutionStepCreate(step_order=1, step_name="Test", step_type=StepType.PLATFORM)]
 
@@ -422,7 +510,7 @@ class TestCreateExecutionSteps:
 
             await execution_repository.create_execution_steps(1, steps)
 
-        execute_call = mock_conn.execute.call_args
+        execute_call = mock_cursor.execute.call_args
         params = execute_call[0][1]
         assert params["status"] == "PENDING"
 
@@ -439,11 +527,12 @@ class TestGetStepsByExecutionId:
         ]
 
         mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
         mock_cursor.fetchall = AsyncMock(return_value=rows)
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()
 
         mock_conn = MagicMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
 
         with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
@@ -464,11 +553,12 @@ class TestGetStepsByExecutionId:
     async def test_get_steps_returns_empty_list_when_none(self):
         """get_steps_by_execution_id returns empty list when no steps exist."""
         mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
         mock_cursor.fetchall = AsyncMock(return_value=[])
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()
 
         mock_conn = MagicMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
 
         with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
@@ -486,11 +576,12 @@ class TestUpdateStepStatus:
     async def test_update_step_status_updates_and_returns_true(self):
         """update_step_status updates status and returns True."""
         mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
         mock_cursor.rowcount = 1
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()
 
         mock_conn = MagicMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
         mock_conn.commit = AsyncMock()
 
         with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
@@ -506,11 +597,12 @@ class TestUpdateStepStatus:
     async def test_update_step_status_returns_false_when_not_found(self):
         """update_step_status returns False when step doesn't exist."""
         mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
         mock_cursor.rowcount = 0
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()
 
         mock_conn = MagicMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
         mock_conn.commit = AsyncMock()
 
         with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
@@ -525,11 +617,12 @@ class TestUpdateStepStatus:
     async def test_update_step_status_sets_started_at_for_running(self):
         """update_step_status sets STARTED_AT when transitioning to RUNNING."""
         mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
         mock_cursor.rowcount = 1
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()
 
         mock_conn = MagicMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
         mock_conn.commit = AsyncMock()
 
         with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
@@ -538,7 +631,7 @@ class TestUpdateStepStatus:
 
             await execution_repository.update_step_status(1, StepStatus.RUNNING)
 
-        execute_call = mock_conn.execute.call_args
+        execute_call = mock_cursor.execute.call_args
         query = execute_call[0][0]
         assert "STARTED_AT = SYSTIMESTAMP" in query
 
@@ -546,11 +639,12 @@ class TestUpdateStepStatus:
     async def test_update_step_status_sets_completed_at_for_failed(self):
         """update_step_status sets COMPLETED_AT when transitioning to FAILED."""
         mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
         mock_cursor.rowcount = 1
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()
 
         mock_conn = MagicMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
         mock_conn.commit = AsyncMock()
 
         with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
@@ -561,7 +655,7 @@ class TestUpdateStepStatus:
                 1, StepStatus.FAILED, error_message="Vault down"
             )
 
-        execute_call = mock_conn.execute.call_args
+        execute_call = mock_cursor.execute.call_args
         query = execute_call[0][0]
         params = execute_call[0][1]
         assert "COMPLETED_AT = SYSTIMESTAMP" in query
@@ -572,11 +666,12 @@ class TestUpdateStepStatus:
     async def test_update_step_status_with_platform_job_id(self):
         """update_step_status can set platform_job_id."""
         mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
         mock_cursor.rowcount = 1
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()
 
         mock_conn = MagicMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
         mock_conn.commit = AsyncMock()
 
         with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
@@ -587,7 +682,7 @@ class TestUpdateStepStatus:
                 1, StepStatus.COMPLETED, platform_job_id="aap-job-456"
             )
 
-        execute_call = mock_conn.execute.call_args
+        execute_call = mock_cursor.execute.call_args
         query = execute_call[0][0]
         params = execute_call[0][1]
         assert "PLATFORM_JOB_ID = :platform_job_id" in query
@@ -601,11 +696,12 @@ class TestSkipRemainingSteps:
     async def test_skip_remaining_steps_updates_pending_to_skipped(self):
         """skip_remaining_steps marks all PENDING steps as SKIPPED."""
         mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
         mock_cursor.rowcount = 3  # 3 steps skipped
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()
 
         mock_conn = MagicMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
         mock_conn.commit = AsyncMock()
 
         with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
@@ -615,7 +711,7 @@ class TestSkipRemainingSteps:
             result = await execution_repository.skip_remaining_steps(1)
 
         assert result == 3
-        execute_call = mock_conn.execute.call_args
+        execute_call = mock_cursor.execute.call_args
         params = execute_call[0][1]
         assert params["skipped_status"] == "SKIPPED"
         assert params["pending_status"] == "PENDING"
@@ -630,11 +726,12 @@ class TestGetActionExecutionSteps:
         steps_json = '[{"order": 1, "name": "Vault", "type": "vault"}, {"order": 2, "name": "Platform", "type": "platform"}]'
 
         mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
         mock_cursor.fetchone = AsyncMock(return_value=(steps_json,))
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()
 
         mock_conn = MagicMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
 
         with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
@@ -650,11 +747,12 @@ class TestGetActionExecutionSteps:
     async def test_get_action_execution_steps_returns_empty_when_null(self):
         """get_action_execution_steps returns empty list when EXECUTION_STEPS is NULL."""
         mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
         mock_cursor.fetchone = AsyncMock(return_value=(None,))
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()
 
         mock_conn = MagicMock()
-        mock_conn.execute = AsyncMock(return_value=mock_cursor)
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
 
         with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
             mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
@@ -741,6 +839,96 @@ class TestGetActionStats:
         assert result["success_rate"] == 0.0  # 0 / (0 + 10) * 100
         assert result["avg_execution_time_ms"] is None
         assert result["incidents_count"] == 10
+
+    @pytest.mark.asyncio
+    async def test_list_by_user_includes_action_metadata(self):
+        """list_by_user returns executions with engine, platform, item_type from JOIN (Story 9.9 AC6)."""
+        row1 = (
+            1, 5, 1, "dev", None, "COMPLETED", None,
+            datetime(2026, 1, 29, 10, 0, 0), datetime(2026, 1, 29, 10, 5, 0), datetime(2026, 1, 29, 9, 55, 0),
+            "Create PDB", None, None, None, None,
+            "Oracle", "AAP", "action", 10, "AAP Prod", "/icons/aap.png"
+        )
+
+        mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
+        mock_cursor.fetchall = AsyncMock(return_value=[row1])
+        mock_cursor.close = MagicMock()
+
+        mock_conn = MagicMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            result = await execution_repository.list_by_user(user_id=1, limit=50, offset=0)
+
+        assert len(result) == 1
+        assert result[0].engine.value == "Oracle"
+        assert result[0].platform.value == "AAP"
+        assert result[0].item_type.value == "action"
+        assert result[0].integration_id == 10
+        assert result[0].integration_name == "AAP Prod"
+        assert result[0].integration_icon == "/icons/aap.png"
+
+    @pytest.mark.asyncio
+    async def test_list_by_user_handles_missing_integration(self):
+        """list_by_user handles NULL integration_id gracefully (Story 9.9 AC6)."""
+        row1 = (
+            1, 5, 1, "dev", None, "COMPLETED", None,
+            datetime(2026, 1, 29, 10, 0, 0), datetime(2026, 1, 29, 10, 5, 0), datetime(2026, 1, 29, 9, 55, 0),
+            "Create PDB", None, None, None, None,
+            "Oracle", "AAP", "action", None, None, None  # No integration
+        )
+
+        mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
+        mock_cursor.fetchall = AsyncMock(return_value=[row1])
+        mock_cursor.close = MagicMock()
+
+        mock_conn = MagicMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            result = await execution_repository.list_by_user(user_id=1, limit=50, offset=0)
+
+        assert len(result) == 1
+        assert result[0].integration_id is None
+        assert result[0].integration_name is None
+        assert result[0].integration_icon is None
+
+    @pytest.mark.asyncio
+    async def test_list_by_user_handles_workflow_item_type(self):
+        """list_by_user handles workflow item_type with NULL engine (Story 9.9 AC6)."""
+        row1 = (
+            1, 5, 1, "dev", None, "COMPLETED", None,
+            datetime(2026, 1, 29, 10, 0, 0), datetime(2026, 1, 29, 10, 5, 0), datetime(2026, 1, 29, 9, 55, 0),
+            "Deploy Workflow", None, None, None, None,
+            None, None, "workflow", 10, "AAP Prod", "/icons/aap.png"  # Workflow: engine/platform NULL
+        )
+
+        mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
+        mock_cursor.fetchall = AsyncMock(return_value=[row1])
+        mock_cursor.close = MagicMock()
+
+        mock_conn = MagicMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            result = await execution_repository.list_by_user(user_id=1, limit=50, offset=0)
+
+        assert len(result) == 1
+        assert result[0].item_type.value == "workflow"
+        assert result[0].engine is None
+        assert result[0].platform is None
 
     @pytest.mark.asyncio
     async def test_get_action_stats_handles_all_success(self):
@@ -960,12 +1148,12 @@ class TestCreateExecutionWithParent:
 
 
 class TestGetExecutionIncludesParentId:
-    """Tests for get_by_id including parent_execution_id (Story 9.2, Task 20)."""
+    """Tests for get_by_id including parent_execution_id (Story 9.2, Task 20; Story 9.9 enrichment)."""
 
     @pytest.mark.asyncio
     async def test_get_by_id_returns_parent_execution_id(self):
         """get_by_id returns ExecutionResponse with parent_execution_id from query."""
-        # Row with parent_execution_id as last column
+        # Story 9.9: Row now has 21 columns including action/integration metadata
         row = (
             1,  # ID
             5,  # ACTION_ID
@@ -982,6 +1170,12 @@ class TestGetExecutionIncludesParentId:
             None,  # APPROVED_AT
             None,  # APPROVAL_COMMENT
             100,  # PARENT_EXECUTION_ID
+            "Oracle",  # ACTION_ENGINE (Story 9.9 AC6)
+            "AAP",  # ACTION_PLATFORM (Story 9.9 AC6)
+            "action",  # ACTION_ITEM_TYPE (Story 9.9 AC6)
+            None,  # INTEGRATION_ID
+            None,  # INTEGRATION_NAME
+            None,  # INTEGRATION_ICON
         )
 
         mock_cursor = MagicMock()
@@ -1055,18 +1249,19 @@ class TestGetChildrenExecutions:
 
 
 class TestGetParentExecution:
-    """Tests for execution_repository.get_parent_execution (Story 9.2, Task 20)."""
+    """Tests for execution_repository.get_parent_execution (Story 9.2, Task 20; Story 9.9 enrichment)."""
 
     @pytest.mark.asyncio
     async def test_get_parent_execution_returns_parent(self):
         """get_parent_execution returns parent execution when exists."""
         # Row: parent_execution_id query result - should return (parent_execution_id,)
         parent_id_row = (1,)
-        # Parent execution row
+        # Parent execution row - Story 9.9: now 21 columns
         parent_row = (
             1, 4, 1, "dev", None, "FAILED", None,
             datetime(2026, 2, 2, 9, 0), datetime(2026, 2, 2, 9, 5),
-            datetime(2026, 2, 2, 9, 0), "Create PDB", None, None, None, None  # no parent
+            datetime(2026, 2, 2, 9, 0), "Create PDB", None, None, None, None,  # no parent
+            "Oracle", "AAP", "action", None, None, None  # Story 9.9 enrichment fields
         )
 
         mock_cursor = MagicMock()

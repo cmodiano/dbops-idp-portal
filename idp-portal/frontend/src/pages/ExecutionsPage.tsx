@@ -1,5 +1,5 @@
 /**
- * ExecutionsPage - Execution history (Story 4.8, Story 8.8, Story 8.9, Story 9.4).
+ * ExecutionsPage - Execution history (Story 4.8, Story 8.8, Story 8.9, Story 9.4, Story 9.9).
  *
  * AC1: Table with columns: action, environment, status, date, duration.
  * AC3: Running executions first with blue pulsed indicator.
@@ -23,10 +23,17 @@
  * AC3: Stats reflètent le scope actif (mine/all).
  * AC4: Responsive layout xs=24 sm=12 md=6.
  * AC5: Loading skeleton pour les cards.
+ *
+ * Story 9.9:
+ * AC1: Colonne Statut déplacée en première position avec indicateur visuel.
+ * AC2-AC3: Indicateurs pulsants (running) vs fixes (terminal).
+ * AC4: Colonne Technologie avec icône engine/workflow.
+ * AC5: Colonne Plateforme avec icône integration.
+ * AC7: Ordre colonnes: Statut, Action, Technologie, Plateforme, [Utilisateur], Environnement, Date, Durée.
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Typography, Table, Drawer, Tag, Skeleton, Badge, Alert, Card, Space, Row, Col, theme } from 'antd';
+import { Typography, Table, Drawer, Skeleton, Alert, Card, Space, Row, Col, Tag, theme } from 'antd';
 import {
   SafetyCertificateOutlined,
   RocketOutlined,
@@ -35,6 +42,11 @@ import {
   ExclamationCircleOutlined,
 } from '@ant-design/icons';
 import type { TableProps, TablePaginationConfig } from 'antd';
+import {
+  renderStatusIndicator,
+  renderEngineIcon,
+  renderIntegrationIcon,
+} from '../utils/executionRenderers';
 
 // Ant Design 6.2: Extract table event types from public API
 type TableOnChange<T> = NonNullable<TableProps<T>['onChange']>;
@@ -52,18 +64,8 @@ const { Title } = Typography;
 
 const PAGE_SIZE = 25;
 
-/** Running statuses that appear first with visual indicator (AC3). */
+/** Running statuses that appear first with visual indicator (AC3, Story 9.9 AC2). */
 const RUNNING_STATUSES: ExecutionStatusType[] = ['RUNNING', 'SUBMITTED', 'PENDING_APPROVAL'];
-
-/** Status colors for Tag display. */
-const STATUS_CONFIG: Record<ExecutionStatusType, { color: string; label: string }> = {
-  SUBMITTED: { color: 'blue', label: 'Soumise' },
-  PENDING_APPROVAL: { color: 'orange', label: 'En attente' },
-  RUNNING: { color: 'processing', label: 'En cours' },
-  COMPLETED: { color: 'success', label: 'Terminée' },
-  FAILED: { color: 'error', label: 'Échouée' },
-  CANCELLED: { color: 'default', label: 'Annulée' },
-};
 
 /** Format duration from ISO timestamps. */
 function formatDuration(startedAt: string | null, completedAt: string | null): string {
@@ -279,23 +281,48 @@ export default function ExecutionsPage() {
     }
   };
 
-  // Table columns (AC1; Story 8.9 AC9: conditional "Utilisateur" column)
+  // Table columns (Story 9.9 AC7: Statut, Action, Technologie, Plateforme, [Utilisateur], Environnement, Date, Durée)
   const columns: TableProps<ExecutionResponse>['columns'] = useMemo(() => {
     const baseColumns: TableProps<ExecutionResponse>['columns'] = [
+      // Story 9.9 AC1: Colonne Statut en première position
+      {
+        title: 'Statut',
+        dataIndex: 'status',
+        key: 'status',
+        width: 80,
+        align: 'center' as const,
+        render: (status: ExecutionStatusType) => renderStatusIndicator(status),
+        sorter: false, // Story 9.9 AC7: Statut not sortable
+      },
+      // Story 9.9 AC7: Colonne Action (sans badge inline)
       {
         title: 'Action',
         dataIndex: 'action_name',
         key: 'action_name',
         sorter: true,
         sortOrder: sortField === 'action_name' ? sortOrder : undefined,
-        render: (name: string | null, record: ExecutionResponse) => (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {isRunning(record.status) && (
-              <Badge status="processing" />
-            )}
-            {name || `Action #${record.action_id}`}
-          </span>
-        ),
+        render: (name: string | null, record: ExecutionResponse) =>
+          name || `Action #${record.action_id}`,
+      },
+      // Story 9.9 AC4: Colonne Technologie avec icône engine/workflow
+      {
+        title: 'Technologie',
+        key: 'engine',
+        width: 100,
+        align: 'center' as const,
+        render: (_: unknown, record: ExecutionResponse) =>
+          renderEngineIcon(record.engine, record.item_type),
+        sorter: false, // Story 9.9 AC7: Technologie not sortable
+      },
+      // Story 9.9 AC5: Colonne Plateforme avec icône integration
+      {
+        title: 'Plateforme',
+        key: 'integration',
+        width: 120,
+        align: 'center' as const,
+        render: (_: unknown, record: ExecutionResponse) =>
+          renderIntegrationIcon(record.integration_name, record.integration_icon),
+        sorter: false, // Story 9.9 AC7: Plateforme not sortable
       },
     ];
 
@@ -319,22 +346,6 @@ export default function ExecutionsPage() {
         render: (env: string) => env?.toUpperCase() || '—',
       },
       {
-        title: 'Statut',
-        dataIndex: 'status',
-        key: 'status',
-        sorter: true,
-        sortOrder: sortField === 'status' ? sortOrder : undefined,
-        width: 140,
-        render: (status: ExecutionStatusType) => {
-          const config = STATUS_CONFIG[status] || { color: 'default', label: status };
-          return (
-            <Tag color={config.color}>
-              {config.label}
-            </Tag>
-          );
-        },
-      },
-      {
         title: 'Date',
         dataIndex: 'created_at',
         key: 'created_at',
@@ -355,12 +366,18 @@ export default function ExecutionsPage() {
     return baseColumns;
   }, [activeScope, sortField, sortOrder]);
 
-  // Skeleton table during loading (AC4, Task 1.4: skeleton rows)
+  // Skeleton table during loading (AC4, Task 1.4: skeleton rows; Story 9.9: updated column order)
   if (loading && executions.length === 0) {
     const skeletonColumns = [
+      { title: 'Statut', key: 'status', width: 80, render: () => <Skeleton.Button active size="small" shape="circle" /> },
       { title: 'Action', key: 'action', width: 200, render: () => <Skeleton active title={false} paragraph={{ rows: 1 }} /> },
+      { title: 'Technologie', key: 'engine', width: 100, render: () => <Skeleton.Button active size="small" /> },
+      { title: 'Plateforme', key: 'integration', width: 120, render: () => <Skeleton.Button active size="small" /> },
+      // Story 9.9 code-review fix: Add Utilisateur column if scope=all
+      ...(activeScope === 'all' ? [
+        { title: 'Utilisateur', key: 'user', width: 150, render: () => <Skeleton active title={false} paragraph={{ rows: 1 }} /> },
+      ] : []),
       { title: 'Environnement', key: 'env', width: 120, render: () => <Skeleton active title={false} paragraph={{ rows: 1 }} /> },
-      { title: 'Statut', key: 'status', width: 140, render: () => <Skeleton active title={false} paragraph={{ rows: 1 }} /> },
       { title: 'Date', key: 'date', width: 160, render: () => <Skeleton active title={false} paragraph={{ rows: 1 }} /> },
       { title: 'Durée', key: 'duration', width: 100, render: () => <Skeleton active title={false} paragraph={{ rows: 1 }} /> },
     ];

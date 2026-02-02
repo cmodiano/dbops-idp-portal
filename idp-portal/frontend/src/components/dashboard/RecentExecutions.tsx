@@ -1,53 +1,32 @@
 /**
- * RecentExecutions - Dashboard recent activity table (Story 5.1, Task 3.2).
+ * RecentExecutions - Dashboard recent activity table (Story 5.1, Task 3.2; Story 9.9 refactor).
  *
  * Displays the 10 most recent executions with columns:
  * action, user, environment, status, date.
  *
  * AC2: Table shows executions from ALL users (DBA visibility).
+ * Story 9.9 AC8: Uses shared executionRenderers for engine/platform icons.
  */
 
 import { Table, Skeleton, Typography, App, Avatar } from 'antd';
 import {
-  CheckCircleOutlined,
-  CloseCircleOutlined,
   ClockCircleOutlined,
-  SyncOutlined,
-  PauseCircleOutlined,
-  StopOutlined,
   ApiOutlined,
-  DatabaseOutlined,
-  CloudServerOutlined,
-  HddOutlined,
 } from '@ant-design/icons';
 import { useEffect, useRef, useState } from 'react';
 import type { TableProps } from 'antd';
 import type { DashboardRecentExecution, ExecutionStatusType } from '../../types/api';
 import type { ActionEngine } from '../../types/api';
-import { STYLE_TOKENS } from '../../theme/styleTokens';
+import {
+  STATUS_CONFIG,
+  ENGINE_ICONS_CONFIG,
+  ENGINE_ICON_SIZE_VALUE,
+} from '../../utils/executionRenderers';
 
 const { Text } = Typography;
 
-/** Engine icons for Technologie column (no integration icons for engines). Same as ActionCard. */
-const ENGINE_ICON_SIZE = 18;
-const ENGINE_ICONS: Record<ActionEngine, { Icon: React.ComponentType<{ style?: React.CSSProperties }>; color: string }> = {
-  Oracle: { Icon: DatabaseOutlined, color: STYLE_TOKENS.engineIconColor.Oracle },
-  'SQL Server': { Icon: CloudServerOutlined, color: STYLE_TOKENS.engineIconColor['SQL Server'] },
-  DB2: { Icon: HddOutlined, color: STYLE_TOKENS.engineIconColor.DB2 },
-};
-
-/** Status config: icon at start of line, pulsing for running, color for finished. */
-const STATUS_CONFIG: Record<
-  ExecutionStatusType,
-  { label: string; Icon: React.ComponentType<{ spin?: boolean; style?: React.CSSProperties }>; color: string }
-> = {
-  SUBMITTED: { label: 'Soumise', Icon: ClockCircleOutlined, color: '#3B82F6' },
-  PENDING_APPROVAL: { label: 'En attente', Icon: PauseCircleOutlined, color: '#F59E0B' },
-  RUNNING: { label: 'En cours', Icon: SyncOutlined, color: '#3B82F6' },
-  COMPLETED: { label: 'Terminée', Icon: CheckCircleOutlined, color: '#10B981' },
-  FAILED: { label: 'Échouée', Icon: CloseCircleOutlined, color: '#EF4444' },
-  CANCELLED: { label: 'Annulée', Icon: StopOutlined, color: '#9CA3AF' },
-};
+/** Engine icon size for this component (matches shared config). */
+const ENGINE_ICON_SIZE = ENGINE_ICON_SIZE_VALUE;
 
 /** Format date for display. */
 function formatDate(dateStr: string | null): string {
@@ -77,12 +56,13 @@ export interface RecentExecutionsProps {
   integrationIconsByType?: IntegrationIconsByType;
 }
 
-/** Render Technologie column: engine icon + name (Oracle, SQL Server, DB2). */
+/** Render Technologie column: engine icon + name (Oracle, SQL Server, DB2).
+ * Story 9.9 AC8: Uses ENGINE_ICONS_CONFIG from shared executionRenderers. */
 function EngineIconCell({ engine }: { engine: string | null | undefined }) {
   if (!engine) {
     return <span style={{ opacity: 0.4 }}>—</span>;
   }
-  const config = ENGINE_ICONS[engine as ActionEngine];
+  const config = ENGINE_ICONS_CONFIG[engine as ActionEngine];
   if (!config) {
     return <span title={engine} style={{ fontSize: 12, opacity: 0.6 }}>{engine}</span>;
   }
