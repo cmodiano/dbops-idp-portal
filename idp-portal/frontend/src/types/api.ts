@@ -553,6 +553,24 @@ export interface DashboardStats {
   executions_en_erreur: number;
 }
 
+/** Filters for executions page (Story 9.10, AC3, AC4). */
+export interface ExecutionFilters {
+  /** Start date filter (YYYY-MM-DD). */
+  start_date?: string | null;
+  /** End date filter (YYYY-MM-DD). */
+  end_date?: string | null;
+  /** Filter by specific action ID. */
+  action_id?: number | null;
+  /** Filter by engine/technology. */
+  engine?: string | null;
+  /** Filter by tags (AND logic). */
+  tags?: string[] | null;
+  /** Filter by execution status. */
+  status?: ExecutionStatusType | null;
+  /** Filter by environment. */
+  environment?: ExecutionEnvironment | null;
+}
+
 /** Recent execution for dashboard table (Story 5.1, AC2). */
 export interface DashboardRecentExecution {
   id: number;

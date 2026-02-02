@@ -34,8 +34,26 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   }
 
   if (!response.ok) {
-    const body = await response.json().catch(() => ({ error: { message: 'Unknown error' } }));
-    throw new Error(body.error?.message ?? 'Unknown error');
+    let errorMessage = 'Unknown error';
+    const contentType = response.headers.get('content-type');
+    const isJson = contentType?.includes('application/json');
+    
+    if (isJson) {
+      try {
+        const body = await response.json();
+        errorMessage = body.error?.message ?? `Erreur HTTP ${response.status}`;
+      } catch {
+        errorMessage = `Erreur HTTP ${response.status}: ${response.statusText}`;
+      }
+    } else {
+      try {
+        const text = await response.text();
+        errorMessage = text || `Erreur HTTP ${response.status}: ${response.statusText}`;
+      } catch {
+        errorMessage = `Erreur HTTP ${response.status}: ${response.statusText}`;
+      }
+    }
+    throw new Error(errorMessage);
   }
   if (response.status === 204) return undefined as T;
   const body = await response.json();
@@ -69,8 +87,26 @@ export async function apiFetchRaw<T>(path: string, init?: RequestInit): Promise<
   }
 
   if (!response.ok) {
-    const body = await response.json().catch(() => ({ error: { message: 'Unknown error' } }));
-    throw new Error(body.error?.message ?? 'Unknown error');
+    let errorMessage = 'Unknown error';
+    const contentType = response.headers.get('content-type');
+    const isJson = contentType?.includes('application/json');
+    
+    if (isJson) {
+      try {
+        const body = await response.json();
+        errorMessage = body.error?.message ?? `Erreur HTTP ${response.status}`;
+      } catch {
+        errorMessage = `Erreur HTTP ${response.status}: ${response.statusText}`;
+      }
+    } else {
+      try {
+        const text = await response.text();
+        errorMessage = text || `Erreur HTTP ${response.status}: ${response.statusText}`;
+      } catch {
+        errorMessage = `Erreur HTTP ${response.status}: ${response.statusText}`;
+      }
+    }
+    throw new Error(errorMessage);
   }
   if (response.status === 204) return undefined as T;
   return await response.json() as T;
@@ -91,8 +127,26 @@ export async function apiFetchBlob(path: string): Promise<Blob> {
     }
   }
   if (!response.ok) {
-    const body = await response.json().catch(() => ({ error: { message: 'Unknown error' } }));
-    throw new Error(body.error?.message ?? 'Unknown error');
+    let errorMessage = 'Unknown error';
+    const contentType = response.headers.get('content-type');
+    const isJson = contentType?.includes('application/json');
+    
+    if (isJson) {
+      try {
+        const body = await response.json();
+        errorMessage = body.error?.message ?? `Erreur HTTP ${response.status}`;
+      } catch {
+        errorMessage = `Erreur HTTP ${response.status}: ${response.statusText}`;
+      }
+    } else {
+      try {
+        const text = await response.text();
+        errorMessage = text || `Erreur HTTP ${response.status}: ${response.statusText}`;
+      } catch {
+        errorMessage = `Erreur HTTP ${response.status}: ${response.statusText}`;
+      }
+    }
+    throw new Error(errorMessage);
   }
   return response.blob();
 }
@@ -112,8 +166,26 @@ export async function apiPostFormData<T>(path: string, formData: FormData): Prom
     }
   }
   if (!response.ok) {
-    const body = await response.json().catch(() => ({ error: { message: 'Unknown error' } }));
-    throw new Error(body.error?.message ?? 'Unknown error');
+    let errorMessage = 'Unknown error';
+    const contentType = response.headers.get('content-type');
+    const isJson = contentType?.includes('application/json');
+    
+    if (isJson) {
+      try {
+        const body = await response.json();
+        errorMessage = body.error?.message ?? `Erreur HTTP ${response.status}`;
+      } catch {
+        errorMessage = `Erreur HTTP ${response.status}: ${response.statusText}`;
+      }
+    } else {
+      try {
+        const text = await response.text();
+        errorMessage = text || `Erreur HTTP ${response.status}: ${response.statusText}`;
+      } catch {
+        errorMessage = `Erreur HTTP ${response.status}: ${response.statusText}`;
+      }
+    }
+    throw new Error(errorMessage);
   }
   const body = await response.json();
   return body as { data: T };

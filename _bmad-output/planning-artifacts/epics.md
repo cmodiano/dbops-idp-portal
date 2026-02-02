@@ -176,7 +176,7 @@ This document provides the complete epic and story breakdown for test, decomposi
 | FR4 | Epic 2 | DBOPS configure si changement ServiceNow requis par environnement |
 | FR5 | Epic 2 | DBOPS publie une action dans le catalogue |
 | FR6 | Epic 2 | DBOPS modifie ou desactive une action |
-| FR7 | Epic 10 | Auto-generation documentation IA |
+| FR7 | [SUPPRIMÉ] | Auto-generation documentation IA - Epic 10 supprimé |
 | FR8 | Epic 3 | DBA parcourt le catalogue d'actions |
 | FR9 | Epic 3 | DBA consulte la fiche descriptive d'une action |
 | FR10 | Epic 7 | Client Business parcourt une vue simplifiee |
@@ -221,10 +221,10 @@ This document provides the complete epic and story breakdown for test, decomposi
 | FR41 | Epic 5 | Tableau de bord activite recente |
 | FR42 | Epic 4 | Synchronisation inventaire interne |
 | FR43 | Epic 4 | Formulaires dynamiques depuis inventaire |
-| FR44 | Epic 10 | Consultation expert DBA depuis portail |
-| FR45 | Epic 10 | Interface IA conversationnelle |
+| FR44 | [SUPPRIMÉ] | Consultation expert DBA depuis portail - Epic 10 supprimé |
+| FR45 | [SUPPRIMÉ] | Interface IA conversationnelle - Epic 10 supprimé |
 
-**Couverture : 53/53 FR mappees (incluant FR11a-c, FR25a-d, FR26a).**
+**Couverture : 50/53 FR mappees (incluant FR11a-c, FR25a-d, FR26a). FR7, FR44, FR45 non couverts (Epic 10 supprimé).**
 
 ## Epic List
 
@@ -272,11 +272,6 @@ DBOPS et DBA consultent des metriques d'adoption, de performance et de tendances
 Le systeme detecte les echecs d'execution et propose des actions correctives depuis le catalogue, executables automatiquement pour les scenarios a faible risque.
 **FRs couvertes :** FR36, FR37, FR38
 **Phase :** Growth (Phase 2)
-
-### Epic 10 : Documentation IA, Communication & Interface Conversationnelle
-Le systeme auto-genere la documentation des actions, les clients demandent conseil DBA depuis le portail, et les utilisateurs decouvrent des actions via une interface IA conversationnelle.
-**FRs couvertes :** FR7, FR44, FR45
-**Phase :** Vision (Phase 3)
 
 ---
 
@@ -2371,83 +2366,3 @@ So that les echecs mineurs sont corriges sans intervention humaine.
 **And** chaque auto-remediation est tracee dans AUDIT_LOG
 **And** FR38 est satisfaite
 
----
-
-## Epic 10 : Documentation IA, Communication & Interface Conversationnelle
-
-Le systeme auto-genere la documentation des actions, les clients demandent conseil DBA depuis le portail, et les utilisateurs decouvrent des actions via une interface IA conversationnelle.
-
-### Story 10.1 : Auto-generation de documentation via IA
-
-As a DBOPS,
-I want que le systeme genere automatiquement la documentation d'une action a partir du readme de l'automatisation sous-jacente,
-So that la documentation du catalogue est toujours a jour sans effort manuel.
-
-**Acceptance Criteria:**
-
-**Given** un DBOPS cree ou edite une action dans l'admin
-**When** il clique sur "Generer la documentation" et fournit l'URL du repository ou le contenu du readme
-**Then** le systeme analyse le readme via un modele IA et genere une documentation structuree : description, prerequis, parametres, comportement par environnement, exemples
-
-**Given** la documentation est generee
-**When** le DBOPS la consulte dans le formulaire admin
-**Then** il peut la modifier avant de sauvegarder (generation assistee, pas autonome)
-
-**Given** le readme de l'automatisation est mis a jour
-**When** le DBOPS relance la generation
-**Then** la documentation est regeneree avec les deltas identifies
-
-**And** l'API POST /api/v1/admin/actions/{id}/generate-docs envoie le contenu au service IA
-**And** le modele IA est appele via API (Azure OpenAI ou equivalent interne)
-**And** la documentation generee est en Markdown
-**And** FR7 est satisfaite
-
-### Story 10.2 : Demande de consultation expert DBA
-
-As a client business,
-I want demander une consultation expert DBA directement depuis le portail,
-So that j'obtiens de l'aide sans quitter l'outil ni creer un ticket JIRA.
-
-**Acceptance Criteria:**
-
-**Given** Fatima est sur le portail (catalogue, fiche action, ou apres un echec)
-**When** elle clique sur "Contacter un DBA"
-**Then** un formulaire s'ouvre avec : sujet (pre-rempli selon le contexte : action, execution, erreur), description, urgence
-
-**Given** Fatima soumet la demande
-**When** le formulaire est envoye
-**Then** une notification est envoyee au DBA de garde (email ou integration existante) avec le contexte complet (action, execution, erreur si applicable)
-**And** Fatima voit un message de confirmation avec un numero de reference
-
-**Given** le DBA repond
-**When** la reponse est disponible
-**Then** Fatima est notifiee dans le portail (badge sur son profil)
-
-**And** l'API POST /api/v1/consultations cree la demande
-**And** le contexte (action_id, execution_id) est automatiquement attache
-**And** FR44 est satisfaite
-
-### Story 10.3 : Interface IA conversationnelle pour decouverte d'actions
-
-As a utilisateur du portail,
-I want decouvrir des actions en posant des questions en langage naturel,
-So that je trouve la bonne action meme si je ne connais pas le nom exact ni la categorie.
-
-**Acceptance Criteria:**
-
-**Given** un utilisateur ouvre l'interface conversationnelle (accessible depuis la top bar)
-**When** il tape "je dois creer une base Oracle pour mon projet"
-**Then** le systeme repond avec les actions pertinentes du catalogue : "Creer PDB" avec un resume, lien vers la fiche, et indication d'impact
-
-**Given** l'utilisateur pose une question ambigue
-**When** le systeme ne trouve pas de correspondance exacte
-**Then** il pose des questions de clarification : "Quel moteur ? Quel environnement ?"
-
-**Given** l'utilisateur demande une action qui n'existe pas
-**When** le systeme cherche dans le catalogue
-**Then** il repond "Aucune action correspondante trouvee" avec une suggestion de contacter un DBA
-
-**And** le service IA utilise le catalogue comme base de connaissances (RAG ou prompt engineering sur les metadonnees du catalogue)
-**And** les reponses sont filtrees par le RBAC de l'utilisateur — l'IA ne propose jamais une action non autorisee
-**And** l'interface conversationnelle est un panneau lateral ou un widget en bas de page
-**And** FR45 est satisfaite

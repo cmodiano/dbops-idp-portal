@@ -218,8 +218,7 @@ async def get_by_id(execution_id: int) -> ExecutionResponse | None:
                    and integration_id, integration_name, integration_icon from INTEGRATIONS.
     """
     start_time = time.perf_counter()
-    # Note: INTEGRATION_ID column may not exist until V036 migration is executed
-    # Using dynamic check: if column exists, join INTEGRATIONS; otherwise return NULL
+    # Story 9.9 AC6: Use A.INTEGRATION_ID to join with INTEGRATIONS table
     query = """
         SELECT E.ID, E.ACTION_ID, E.USER_ID, E.ENVIRONMENT, E.PARAMETERS,
                E.STATUS, E.SERVICENOW_CHANGE_ID, E.STARTED_AT, E.COMPLETED_AT, E.CREATED_AT,
@@ -229,11 +228,12 @@ async def get_by_id(execution_id: int) -> ExecutionResponse | None:
                A.ENGINE AS ACTION_ENGINE,
                A.PLATFORM AS ACTION_PLATFORM,
                A.ITEM_TYPE AS ACTION_ITEM_TYPE,
-               NULL AS INTEGRATION_ID,
-               NULL AS INTEGRATION_NAME,
-               NULL AS INTEGRATION_ICON
+               I.ID AS INTEGRATION_ID,
+               I.NAME AS INTEGRATION_NAME,
+               I.ICON AS INTEGRATION_ICON
         FROM EXECUTIONS E
         LEFT JOIN ACTIONS_CATALOG A ON A.ID = E.ACTION_ID
+        LEFT JOIN INTEGRATIONS I ON I.ID = A.INTEGRATION_ID
         WHERE E.ID = :execution_id
     """
 
@@ -293,7 +293,7 @@ async def list_by_user(
                    and integration_id, integration_name, integration_icon from INTEGRATIONS.
     """
     start_time = time.perf_counter()
-    # Note: INTEGRATION_ID column may not exist until V036 migration is executed
+    # Story 9.9 AC6: Use A.INTEGRATION_ID to join with INTEGRATIONS table
     query = """
         SELECT E.ID, E.ACTION_ID, E.USER_ID, E.ENVIRONMENT, E.PARAMETERS,
                E.STATUS, E.SERVICENOW_CHANGE_ID, E.STARTED_AT, E.COMPLETED_AT, E.CREATED_AT,
@@ -303,11 +303,12 @@ async def list_by_user(
                A.ENGINE AS ACTION_ENGINE,
                A.PLATFORM AS ACTION_PLATFORM,
                A.ITEM_TYPE AS ACTION_ITEM_TYPE,
-               NULL AS INTEGRATION_ID,
-               NULL AS INTEGRATION_NAME,
-               NULL AS INTEGRATION_ICON
+               I.ID AS INTEGRATION_ID,
+               I.NAME AS INTEGRATION_NAME,
+               I.ICON AS INTEGRATION_ICON
         FROM EXECUTIONS E
         LEFT JOIN ACTIONS_CATALOG A ON A.ID = E.ACTION_ID
+        LEFT JOIN INTEGRATIONS I ON I.ID = A.INTEGRATION_ID
         WHERE E.USER_ID = :user_id
         ORDER BY E.CREATED_AT DESC
         OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY
@@ -380,7 +381,7 @@ async def list_all_executions(
                    and integration_id, integration_name, integration_icon from INTEGRATIONS.
     """
     start_time = time.perf_counter()
-    # Note: INTEGRATION_ID column may not exist until V036 migration is executed
+    # Story 9.9 AC6: Use A.INTEGRATION_ID to join with INTEGRATIONS table
     query = """
         SELECT E.ID, E.ACTION_ID, E.USER_ID, E.ENVIRONMENT, E.PARAMETERS,
                E.STATUS, E.SERVICENOW_CHANGE_ID, E.STARTED_AT, E.COMPLETED_AT, E.CREATED_AT,
@@ -390,12 +391,13 @@ async def list_all_executions(
                A.ENGINE AS ACTION_ENGINE,
                A.PLATFORM AS ACTION_PLATFORM,
                A.ITEM_TYPE AS ACTION_ITEM_TYPE,
-               NULL AS INTEGRATION_ID,
-               NULL AS INTEGRATION_NAME,
-               NULL AS INTEGRATION_ICON
+               I.ID AS INTEGRATION_ID,
+               I.NAME AS INTEGRATION_NAME,
+               I.ICON AS INTEGRATION_ICON
         FROM EXECUTIONS E
         LEFT JOIN ACTIONS_CATALOG A ON A.ID = E.ACTION_ID
         LEFT JOIN USERS U ON U.ID = E.USER_ID
+        LEFT JOIN INTEGRATIONS I ON I.ID = A.INTEGRATION_ID
         ORDER BY E.CREATED_AT DESC
         OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY
     """
@@ -591,14 +593,14 @@ async def get_action_with_integration(action_id: int) -> dict[str, Any] | None:
     Returns:
         Dict with action and integration info, or None if not found
     """
-    # Note: INTEGRATION_ID column may not exist until V036 migration is executed
-    # For now, return NULL for integration fields - will be populated after migration
+    # Story 9.9 AC6: Use A.INTEGRATION_ID to join with INTEGRATIONS table
     query = """
         SELECT A.ID, A.NAME, A.PLATFORM, A.EXECUTION_STEPS, A.CHANGE_MODEL_CODE,
-               NULL AS INTEGRATION_ID, NULL AS INTEGRATION_NAME,
-               NULL AS PLATFORM_TYPE, NULL AS BASE_URL, NULL AS CREDENTIAL_REF, NULL AS AUTH_FLOW,
-               NULL AS TOKEN_URL, NULL AS CONFIG
+               I.ID AS INTEGRATION_ID, I.NAME AS INTEGRATION_NAME,
+               I.TYPE AS PLATFORM_TYPE, I.BASE_URL, I.CREDENTIAL_REF, I.AUTH_FLOW,
+               I.TOKEN_URL, I.CONFIG
         FROM ACTIONS_CATALOG A
+        LEFT JOIN INTEGRATIONS I ON I.ID = A.INTEGRATION_ID
         WHERE A.ID = :action_id
     """
     async with get_connection() as conn:
@@ -2681,3 +2683,586 @@ async def get_execution_stats(
         "executions_en_cours": row[2] or 0,
         "executions_en_erreur": row[3] or 0,
     }
+
+
+# --- Story 9.10: Filtered Execution Functions ---
+
+
+def _build_filter_clauses(
+    params: dict,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    action_id: int | None = None,
+    engine: str | None = None,
+    tags_list: list[str] | None = None,
+    status: str | None = None,
+    environment: str | None = None,
+    table_alias: str = "E",
+    action_alias: str = "A",
+) -> tuple[str, bool]:
+    """Build dynamic WHERE clauses for execution filters (Story 9.10).
+
+    Args:
+        params: Dict to populate with bind parameters
+        start_date: Start date filter (YYYY-MM-DD)
+        end_date: End date filter (YYYY-MM-DD)
+        action_id: Action ID filter
+        engine: Engine/technology filter
+        tags_list: Tags filter (AND logic)
+        status: Status filter
+        environment: Environment filter
+        table_alias: Alias for EXECUTIONS table
+        action_alias: Alias for ACTIONS_CATALOG table
+
+    Returns:
+        Tuple of (SQL clause string, needs_action_join bool)
+    """
+    clauses = []
+    needs_action_join = False
+
+    if start_date:
+        clauses.append(f"{table_alias}.CREATED_AT >= TO_DATE(:start_date, 'YYYY-MM-DD')")
+        params["start_date"] = start_date
+
+    if end_date:
+        # Add 1 day to make end_date inclusive
+        clauses.append(f"{table_alias}.CREATED_AT < TO_DATE(:end_date, 'YYYY-MM-DD') + 1")
+        params["end_date"] = end_date
+
+    if action_id:
+        clauses.append(f"{table_alias}.ACTION_ID = :action_id")
+        params["action_id"] = action_id
+
+    if engine:
+        clauses.append(f"{action_alias}.ENGINE = :engine")
+        params["engine"] = engine
+        needs_action_join = True
+
+    if status:
+        clauses.append(f"{table_alias}.STATUS = :status")
+        params["status"] = status
+
+    if environment:
+        clauses.append(f"{table_alias}.ENVIRONMENT = :environment")
+        params["environment"] = environment.lower()
+
+    if tags_list and len(tags_list) > 0:
+        # Subquery: actions having ALL specified tags (AND logic)
+        tag_placeholders = ", ".join([f":tag_{i}" for i in range(len(tags_list))])
+        clauses.append(f"""
+            {action_alias}.ID IN (
+                SELECT AT.ACTION_ID
+                FROM ACTION_TAGS AT
+                WHERE AT.TAG_NAME IN ({tag_placeholders})
+                GROUP BY AT.ACTION_ID
+                HAVING COUNT(DISTINCT AT.TAG_NAME) = :tags_count
+            )
+        """)
+        for i, tag in enumerate(tags_list):
+            params[f"tag_{i}"] = tag
+        params["tags_count"] = len(tags_list)
+        needs_action_join = True
+
+    clause_str = " AND ".join(clauses) if clauses else ""
+    return clause_str, needs_action_join
+
+
+async def list_by_user_filtered(
+    user_id: int,
+    limit: int = 50,
+    offset: int = 0,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    action_id: int | None = None,
+    engine: str | None = None,
+    tags_list: list[str] | None = None,
+    status: str | None = None,
+    environment: str | None = None,
+) -> list[ExecutionResponse]:
+    """List executions for a user with advanced filters (Story 9.10).
+
+    Args:
+        user_id: User ID to filter by
+        limit: Maximum number of results
+        offset: Offset for pagination
+        start_date, end_date, action_id, engine, tags_list, status, environment: Filters
+
+    Returns:
+        List of ExecutionResponse ordered by created_at DESC
+    """
+    start_time = time.perf_counter()
+
+    params: dict = {"user_id": user_id, "limit": limit, "offset": offset}
+    filter_clause, _ = _build_filter_clauses(
+        params, start_date, end_date, action_id, engine, tags_list, status, environment,
+        table_alias="E", action_alias="A",
+    )
+
+    where_clause = "WHERE E.USER_ID = :user_id"
+    if filter_clause:
+        where_clause += f" AND {filter_clause}"
+
+    query = f"""
+        SELECT E.ID, E.ACTION_ID, E.USER_ID, E.ENVIRONMENT, E.PARAMETERS,
+               E.STATUS, E.SERVICENOW_CHANGE_ID, E.STARTED_AT, E.COMPLETED_AT, E.CREATED_AT,
+               A.NAME AS ACTION_NAME,
+               E.APPROVED_BY, E.APPROVED_AT, E.APPROVAL_COMMENT,
+               E.PARENT_EXECUTION_ID,
+               A.ENGINE AS ACTION_ENGINE,
+               A.PLATFORM AS ACTION_PLATFORM,
+               A.ITEM_TYPE AS ACTION_ITEM_TYPE,
+               I.ID AS INTEGRATION_ID,
+               I.NAME AS INTEGRATION_NAME,
+               I.ICON AS INTEGRATION_ICON
+        FROM EXECUTIONS E
+        LEFT JOIN ACTIONS_CATALOG A ON A.ID = E.ACTION_ID
+        LEFT JOIN INTEGRATIONS I ON I.ID = A.INTEGRATION_ID
+        {where_clause}
+        ORDER BY E.CREATED_AT DESC
+        OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY
+    """
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
+        rows = await cursor.fetchall()
+        cursor.close()
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.debug(
+        "execution_repository_list_by_user_filtered",
+        duration_ms=duration_ms,
+        user_id=user_id,
+        count=len(rows),
+        has_filters=bool(filter_clause),
+    )
+
+    return [
+        _row_to_execution_response(
+            row[:10],
+            action_name=row[10],
+            approved_by=row[11],
+            approved_at=row[12],
+            approval_comment=row[13],
+            parent_execution_id=row[14],
+            engine=row[15],
+            platform=row[16],
+            item_type=row[17],
+            integration_id=row[18],
+            integration_name=row[19],
+            integration_icon=row[20],
+        )
+        for row in rows
+    ]
+
+
+async def count_by_user_filtered(
+    user_id: int,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    action_id: int | None = None,
+    engine: str | None = None,
+    tags_list: list[str] | None = None,
+    status: str | None = None,
+    environment: str | None = None,
+) -> int:
+    """Count executions for a user with advanced filters (Story 9.10)."""
+    params: dict = {"user_id": user_id}
+    filter_clause, needs_action_join = _build_filter_clauses(
+        params, start_date, end_date, action_id, engine, tags_list, status, environment,
+        table_alias="E", action_alias="A",
+    )
+
+    where_clause = "WHERE E.USER_ID = :user_id"
+    if filter_clause:
+        where_clause += f" AND {filter_clause}"
+
+    join_clause = "LEFT JOIN ACTIONS_CATALOG A ON A.ID = E.ACTION_ID" if needs_action_join else ""
+
+    query = f"""
+        SELECT COUNT(*)
+        FROM EXECUTIONS E
+        {join_clause}
+        {where_clause}
+    """
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
+        row = await cursor.fetchone()
+        cursor.close()
+
+    return row[0] if row else 0
+
+
+async def list_all_executions_filtered(
+    limit: int = 50,
+    offset: int = 0,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    action_id: int | None = None,
+    engine: str | None = None,
+    tags_list: list[str] | None = None,
+    status: str | None = None,
+    environment: str | None = None,
+) -> list[ExecutionResponse]:
+    """List all executions with advanced filters (Story 9.10, DBA/DBOPS only).
+
+    Args:
+        limit: Maximum number of results
+        offset: Offset for pagination
+        Filters: start_date, end_date, action_id, engine, tags_list, status, environment
+
+    Returns:
+        List of ExecutionResponse ordered by created_at DESC
+    """
+    start_time = time.perf_counter()
+
+    params: dict = {"limit": limit, "offset": offset}
+    filter_clause, _ = _build_filter_clauses(
+        params, start_date, end_date, action_id, engine, tags_list, status, environment,
+        table_alias="E", action_alias="A",
+    )
+
+    where_clause = f"WHERE {filter_clause}" if filter_clause else ""
+
+    query = f"""
+        SELECT E.ID, E.ACTION_ID, E.USER_ID, E.ENVIRONMENT, E.PARAMETERS,
+               E.STATUS, E.SERVICENOW_CHANGE_ID, E.STARTED_AT, E.COMPLETED_AT, E.CREATED_AT,
+               A.NAME AS ACTION_NAME, U.DISPLAY_NAME AS USER_DISPLAY_NAME,
+               E.APPROVED_BY, E.APPROVED_AT, E.APPROVAL_COMMENT,
+               E.PARENT_EXECUTION_ID,
+               A.ENGINE AS ACTION_ENGINE,
+               A.PLATFORM AS ACTION_PLATFORM,
+               A.ITEM_TYPE AS ACTION_ITEM_TYPE,
+               I.ID AS INTEGRATION_ID,
+               I.NAME AS INTEGRATION_NAME,
+               I.ICON AS INTEGRATION_ICON
+        FROM EXECUTIONS E
+        LEFT JOIN ACTIONS_CATALOG A ON A.ID = E.ACTION_ID
+        LEFT JOIN USERS U ON U.ID = E.USER_ID
+        LEFT JOIN INTEGRATIONS I ON I.ID = A.INTEGRATION_ID
+        {where_clause}
+        ORDER BY E.CREATED_AT DESC
+        OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY
+    """
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
+        rows = await cursor.fetchall()
+        cursor.close()
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.info(
+        "execution_repository_list_all_executions_filtered",
+        duration_ms=duration_ms,
+        limit=limit,
+        offset=offset,
+        rows_returned=len(rows),
+        has_filters=bool(filter_clause),
+    )
+
+    return [
+        _row_to_execution_response(
+            row[:10],
+            action_name=row[10],
+            user_display_name=row[11],
+            approved_by=row[12],
+            approved_at=row[13],
+            approval_comment=row[14],
+            parent_execution_id=row[15],
+            engine=row[16],
+            platform=row[17],
+            item_type=row[18],
+            integration_id=row[19],
+            integration_name=row[20],
+            integration_icon=row[21],
+        )
+        for row in rows
+    ]
+
+
+async def count_all_executions_filtered(
+    start_date: str | None = None,
+    end_date: str | None = None,
+    action_id: int | None = None,
+    engine: str | None = None,
+    tags_list: list[str] | None = None,
+    status: str | None = None,
+    environment: str | None = None,
+) -> int:
+    """Count all executions with advanced filters (Story 9.10)."""
+    params: dict = {}
+    filter_clause, needs_action_join = _build_filter_clauses(
+        params, start_date, end_date, action_id, engine, tags_list, status, environment,
+        table_alias="E", action_alias="A",
+    )
+
+    where_clause = f"WHERE {filter_clause}" if filter_clause else ""
+    join_clause = "LEFT JOIN ACTIONS_CATALOG A ON A.ID = E.ACTION_ID" if needs_action_join else ""
+
+    query = f"""
+        SELECT COUNT(*)
+        FROM EXECUTIONS E
+        {join_clause}
+        {where_clause}
+    """
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
+        row = await cursor.fetchone()
+        cursor.close()
+
+    return row[0] if row else 0
+
+
+async def get_execution_stats_filtered(
+    user_id: int,
+    scope: str,
+    user_profiles: list[str] | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    action_id: int | None = None,
+    engine: str | None = None,
+    tags_list: list[str] | None = None,
+    status: str | None = None,
+    environment: str | None = None,
+) -> dict[str, int | float]:
+    """Get execution statistics with advanced filters (Story 9.10).
+
+    Similar to get_execution_stats but with filter support.
+    When date range is specified, executions_jour becomes "executions in period".
+    """
+    start_time = time.perf_counter()
+
+    # RBAC: DBA/DBOPS can view all, others see only their executions
+    can_view_all = False
+    if user_profiles:
+        for profile in user_profiles:
+            if profile.lower() in ("dba", "dbops"):
+                can_view_all = True
+                break
+
+    effective_scope = scope if (scope == "mine" or can_view_all) else "mine"
+
+    params: dict = {}
+
+    # Build filter clauses
+    filter_clause, needs_action_join = _build_filter_clauses(
+        params, start_date, end_date, action_id, engine, tags_list, status, environment,
+        table_alias="E", action_alias="A",
+    )
+
+    # Build WHERE clause
+    where_parts = []
+    if effective_scope == "mine":
+        where_parts.append("E.USER_ID = :user_id")
+        params["user_id"] = user_id
+    if filter_clause:
+        where_parts.append(filter_clause)
+
+    where_clause = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+
+    # Join clause needed for engine/tags filters
+    join_clause = "LEFT JOIN ACTIONS_CATALOG A ON A.ID = E.ACTION_ID" if needs_action_join else ""
+
+    # Determine period expression for executions_jour
+    if start_date or end_date:
+        # If date filter is applied, count all in period (already filtered by WHERE clause)
+        period_expr = "1"
+    else:
+        # Default: count today's executions
+        period_expr = "CASE WHEN E.CREATED_AT >= TRUNC(SYSTIMESTAMP AT TIME ZONE 'UTC') THEN 1 END"
+
+    query = f"""
+        SELECT
+            COUNT({period_expr}) AS executions_jour,
+            ROUND(
+                100.0 * COUNT(CASE WHEN E.STATUS = 'COMPLETED' THEN 1 END) /
+                NULLIF(COUNT(CASE WHEN E.STATUS IN ('COMPLETED', 'FAILED') THEN 1 END), 0),
+                2
+            ) AS taux_succes_pct,
+            COUNT(CASE WHEN E.STATUS IN ('RUNNING', 'SUBMITTED', 'PENDING_APPROVAL') THEN 1 END) AS executions_en_cours,
+            COUNT(CASE WHEN E.STATUS = 'FAILED' THEN 1 END) AS executions_en_erreur
+        FROM EXECUTIONS E
+        {join_clause}
+        {where_clause}
+    """
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
+        row = await cursor.fetchone()
+        cursor.close()
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.info(
+        "execution_repository_get_execution_stats_filtered",
+        duration_ms=duration_ms,
+        user_id=user_id,
+        scope=scope,
+        effective_scope=effective_scope,
+        has_filters=bool(filter_clause),
+    )
+
+    if row is None:
+        return {
+            "executions_jour": 0,
+            "taux_succes_pct": 0.0,
+            "executions_en_cours": 0,
+            "executions_en_erreur": 0,
+        }
+
+    return {
+        "executions_jour": row[0] or 0,
+        "taux_succes_pct": float(row[1]) if row[1] is not None else 0.0,
+        "executions_en_cours": row[2] or 0,
+        "executions_en_erreur": row[3] or 0,
+    }
+
+
+async def get_execution_timeseries(
+    user_id: int,
+    scope: str,
+    user_profiles: list[str] | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    action_id: int | None = None,
+    engine: str | None = None,
+    tags_list: list[str] | None = None,
+    status: str | None = None,
+    environment: str | None = None,
+) -> list[dict[str, Any]]:
+    """Get daily execution time series for TrendLineChart (Story 9.10, AC5).
+
+    Returns daily counts of success/failed executions.
+    Default period is last 7 days if no date filters provided.
+
+    Args:
+        user_id: Current user ID
+        scope: "mine" for user's executions, "all" for all executions
+        user_profiles: User profiles for RBAC check
+        Filters: start_date, end_date, action_id, engine, tags_list, status, environment
+
+    Returns:
+        List of dicts: [{"date": "YYYY-MM-DD", "success": int, "failed": int}, ...]
+    """
+    start_time = time.perf_counter()
+
+    # RBAC: DBA/DBOPS can view all, others see only their executions
+    can_view_all = False
+    if user_profiles:
+        for profile in user_profiles:
+            if profile.lower() in ("dba", "dbops"):
+                can_view_all = True
+                break
+
+    effective_scope = scope if (scope == "mine" or can_view_all) else "mine"
+
+    params: dict = {}
+
+    # Default date range: last 7 days
+    if not start_date:
+        start_date = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d")
+    if not end_date:
+        end_date = datetime.utcnow().strftime("%Y-%m-%d")
+
+    # Build filter clauses (always include date range)
+    filter_clause, needs_action_join = _build_filter_clauses(
+        params, start_date, end_date, action_id, engine, tags_list, status, environment,
+        table_alias="E", action_alias="A",
+    )
+
+    # Build WHERE clause
+    where_parts = []
+    if effective_scope == "mine":
+        where_parts.append("E.USER_ID = :user_id")
+        params["user_id"] = user_id
+    if filter_clause:
+        where_parts.append(filter_clause)
+
+    where_clause = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+
+    # Join clause needed for engine/tags filters
+    join_clause = "LEFT JOIN ACTIONS_CATALOG A ON A.ID = E.ACTION_ID" if needs_action_join else ""
+
+    query = f"""
+        SELECT
+            TO_CHAR(TRUNC(E.CREATED_AT), 'YYYY-MM-DD') AS exec_date,
+            COUNT(CASE WHEN E.STATUS = 'COMPLETED' THEN 1 END) AS success,
+            COUNT(CASE WHEN E.STATUS = 'FAILED' THEN 1 END) AS failed
+        FROM EXECUTIONS E
+        {join_clause}
+        {where_clause}
+        GROUP BY TRUNC(E.CREATED_AT)
+        ORDER BY exec_date ASC
+    """
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
+        rows = await cursor.fetchall()
+        cursor.close()
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.info(
+        "execution_repository_get_execution_timeseries",
+        duration_ms=duration_ms,
+        user_id=user_id,
+        scope=scope,
+        effective_scope=effective_scope,
+        points_count=len(rows),
+    )
+
+    return [
+        {
+            "date": row[0],
+            "success": row[1] or 0,
+            "failed": row[2] or 0,
+        }
+        for row in rows
+    ]
+
+
+async def get_available_tags(user_id: int) -> list[str]:
+    """Get available tags for filtering executions (Story 9.10, AC3).
+
+    Returns distinct tags from actions that have been executed.
+    For simplicity, returns all tags (no RBAC filtering on tags themselves).
+
+    Args:
+        user_id: Current user ID (for potential RBAC future use)
+
+    Returns:
+        List of distinct tag names sorted alphabetically
+    """
+    start_time = time.perf_counter()
+
+    # Query distinct tags from actions that have executions
+    query = """
+        SELECT DISTINCT AT.TAG_NAME
+        FROM ACTION_TAGS AT
+        WHERE EXISTS (
+            SELECT 1 FROM EXECUTIONS E
+            WHERE E.ACTION_ID = AT.ACTION_ID
+        )
+        ORDER BY AT.TAG_NAME ASC
+    """
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query)
+        rows = await cursor.fetchall()
+        cursor.close()
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.info(
+        "execution_repository_get_available_tags",
+        duration_ms=duration_ms,
+        user_id=user_id,
+        tags_count=len(rows),
+    )
+
+    return [row[0] for row in rows]

@@ -151,15 +151,9 @@ development_status:
     9-7-fix-oracle-bind-variable-comment: done # Code review 2026-02-02: 10 issues fixed (4 CRITICAL + 4 MEDIUM + 2 LOW) - cursor.close() AsyncMock warnings, scan report generated, strict query validation, Oracle 19c version added, regex detection, documentation formatting - 16/16 tests pass, 0 warnings
     9-8-fix-audit-log-approval-action-types: done # Code review 2026-02-02: 5 issues fixed (2 HIGH + 1 MEDIUM + 2 LOW) - duplicate docs file deleted, FastAPI regex->pattern deprecated param fixed (0 warnings), doc paths corrected, misleading comment updated - Verification story: V032-V035 migrations correctes, 29/29 tests pass, 6 integration tests created
     9-9-amelioration-table-executions: done # Code review 2026-02-02: 7 issues fixed (3 backend tests added, error logging improved, File List completed, docstrings enhanced, skeleton fixed, frontend tests added). UX : (1) Colonne statut à gauche avec point plus gros pour actions en cours, points fixes colorés pour terminées (2) Ajouter colonnes Technologie et Plateforme avec icônes (3) Récupérer engine/platform depuis action_id si nécessaire — Implémentation complète : 82 tests frontend + 49 tests backend passent, AC1-10 validés
-    9-10-refonte-dashboard-vers-executions: backlog # Refonte majeure : (1) Supprimer dashboard classique (sépare des choses qui devraient être dans Exécutions - Story 9-4 déjà déplace les cards KPI) (2) Déplacer graphique échecs/succès (TrendLineChart) dans Exécutions avec filtres (3) Ajouter filtres avancés dans Exécutions : range dates (DatePicker.RangePicker), action (Select), technologie (Select), tags (Select multiple), statut (Select), environnement (Select) - pour DBA cherchant une exécution spécifique (4) Dashboard admin DBOPS reste pour analyses avancées
+    9-10-refonte-dashboard-vers-executions: done # 2026-02-02: Implementation complete - (1) Dashboard renamed to Analytics + RBAC DBOPS only (2) TrendLineChart moved to ExecutionsPage (3) AdvancedFiltersPanel created with date range, action, technology, tags, status, environment (4) API endpoints enriched with filter params (5) URL persistence via query params (6) Badge active filter count - 58/58 ExecutionsPage tests + 23/23 TopNav tests + 6/6 DashboardPage tests pass
     9-11-fix-action-execution-config-table: backlog # Bug fix : ORA-00942 ACTION_EXECUTION_CONFIG n'existe pas - (1) Supprimé JOINs vers table inexistante dans get_by_id, list_by_user, list_all (2) Migration V036 ajoute INTEGRATION_ID à ACTIONS_CATALOG si nécessaire (3) Utiliser directement A.INTEGRATION_ID pour joindre INTEGRATIONS
     epic-9-retrospective: optional
-    # === Epic 10: Documentation IA, Communication & Interface Conversationnelle (Phase 3) ===
-    epic-10: backlog
-    10-1-auto-generation-de-documentation-via-ia: backlog
-    10-2-demande-de-consultation-expert-dba: backlog
-    10-3-interface-ia-conversationnelle-pour-decouverte-dactions: backlog
-    epic-10-retrospective: optional
     # === Epic 11: Scheduling & Maintenance Planifiée (Phase 2) ===
     # APPROCHE: Modèle de données + UI/API complètes, mais pas de scheduler intégré (Celery).
     # Les schedules sont récupérés et exécutés par un scheduler externe (Control-M ou Django scheduler).

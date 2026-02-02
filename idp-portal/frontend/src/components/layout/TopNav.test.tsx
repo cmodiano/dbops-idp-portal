@@ -49,7 +49,8 @@ function renderTopNav(initialPath = '/catalog', withUnseenError = false) {
       { path: '/', element: <Nav />, children: [] },
       { path: '/catalog', element: <Nav /> },
       { path: '/executions', element: <Nav /> },
-      { path: '/dashboard', element: <Nav /> },
+      // Story 9.10: Dashboard renamed to Analytics
+      { path: '/analytics', element: <Nav /> },
       { path: '/admin', element: <Nav /> },
     ],
     { initialEntries: [initialPath] },
@@ -84,7 +85,8 @@ describe('TopNav', () => {
         expect(screen.getByText('Catalogue')).toBeInTheDocument();
       });
       expect(screen.getByText('Exécutions')).toBeInTheDocument();
-      expect(screen.getByText('Dashboard')).toBeInTheDocument();
+      // Story 9.10: Dashboard renamed to Analytics
+      expect(screen.getByText('Analytics')).toBeInTheDocument();
       expect(screen.getByText('Admin')).toBeInTheDocument();
     });
   });
@@ -98,7 +100,8 @@ describe('TopNav', () => {
         expect(screen.getByText('Catalogue')).toBeInTheDocument();
       });
       expect(screen.getByText('Exécutions')).toBeInTheDocument();
-      expect(screen.getByText('Dashboard')).toBeInTheDocument();
+      // Story 9.10: Dashboard renamed to Analytics
+      expect(screen.getByText('Analytics')).toBeInTheDocument();
       expect(screen.queryByText('Admin')).not.toBeInTheDocument();
     });
 
@@ -252,18 +255,19 @@ describe('TopNav', () => {
     });
   });
 
-  describe('Story 5.2 — Badge Dashboard (AC2, AC3)', () => {
-    it('Dashboard tab shows aria-label when there are unseen errors and user is not on dashboard', async () => {
+  describe('Story 5.2 — Badge Analytics (AC2, AC3)', () => {
+    // Story 9.10: Dashboard renamed to Analytics
+    it('Analytics tab shows aria-label when there are unseen errors and user is not on analytics', async () => {
       mockAuthSession('dbops', ['catalog', 'executions', 'dashboard', 'admin']);
       renderTopNav('/catalog', true);
 
       await waitFor(() => {
-        expect(screen.getByText('Dashboard')).toBeInTheDocument();
+        expect(screen.getByText('Analytics')).toBeInTheDocument();
       });
-      const dashboardButton = screen.getByRole('button', {
-        name: /Dashboard \(1 erreur non vue\)/,
+      const analyticsButton = screen.getByRole('button', {
+        name: /Analytics \(1 erreur non vue\)/,
       });
-      expect(dashboardButton).toBeInTheDocument();
+      expect(analyticsButton).toBeInTheDocument();
     });
   });
 

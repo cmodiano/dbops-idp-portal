@@ -3,7 +3,7 @@ import { Dropdown, Avatar, Space, Typography, theme, Badge, Tooltip } from 'antd
 import {
   AppstoreOutlined,
   PlayCircleOutlined,
-  DashboardOutlined,
+  BarChartOutlined,
   SettingOutlined,
   LogoutOutlined,
   UserOutlined,
@@ -22,18 +22,20 @@ import type { MenuProps } from 'antd';
 
 const { Text } = Typography;
 
+// Story 9.10: Dashboard renamed to Analytics (DBOPS only for advanced reporting)
 const TAB_CONFIG: Record<NavigationTabKey, { label: string; icon: React.ReactNode }> = {
   catalog: { label: 'Catalogue', icon: <AppstoreOutlined /> },
   executions: { label: 'Exécutions', icon: <PlayCircleOutlined /> },
-  dashboard: { label: 'Dashboard', icon: <DashboardOutlined /> },
+  dashboard: { label: 'Analytics', icon: <BarChartOutlined /> },
   admin: { label: 'Admin', icon: <SettingOutlined /> },
   audit: { label: 'Audit', icon: <AuditOutlined /> },
 };
 
+// Story 9.10: Dashboard route renamed to /analytics
 const TAB_ROUTES: Record<NavigationTabKey, string> = {
   catalog: '/catalog',
   executions: '/executions',
-  dashboard: '/dashboard',
+  dashboard: '/analytics',
   admin: '/admin',
   audit: '/audit',
 };
@@ -138,7 +140,7 @@ export function TopNav() {
           const showBadge = key === 'dashboard' && unseenErrorCount > 0 && !isActive;
           const dashboardAriaLabel =
             key === 'dashboard' && unseenErrorCount > 0
-              ? `Dashboard (${unseenErrorCount} erreur${unseenErrorCount > 1 ? 's' : ''} non vue${unseenErrorCount > 1 ? 's' : ''})`
+              ? `Analytics (${unseenErrorCount} erreur${unseenErrorCount > 1 ? 's' : ''} non vue${unseenErrorCount > 1 ? 's' : ''})`
               : undefined;
           const buttonContent = (
             <button

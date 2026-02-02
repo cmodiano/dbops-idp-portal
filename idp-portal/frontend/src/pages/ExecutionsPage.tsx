@@ -1,5 +1,5 @@
 /**
- * ExecutionsPage - Execution history (Story 4.8, Story 8.8, Story 8.9, Story 9.4, Story 9.9).
+ * ExecutionsPage - Execution history (Story 4.8, 8.8, 8.9, 9.4, 9.9, 9.10).
  *
  * AC1: Table with columns: action, environment, status, date, duration.
  * AC3: Running executions first with blue pulsed indicator.
@@ -20,7 +20,7 @@
  *
  * Story 9.4:
  * AC1: 4 StatCards (executions du jour, taux de succès, en cours, en erreur) déplacées du Dashboard.
- * AC3: Stats reflètent le scope actif (mine/all).
+ * AC3: Stats reflètent le scope actif (mine/all) et filtres.
  * AC4: Responsive layout xs=24 sm=12 md=6.
  * AC5: Loading skeleton pour les cards.
  *
@@ -30,6 +30,15 @@
  * AC4: Colonne Technologie avec icône engine/workflow.
  * AC5: Colonne Plateforme avec icône integration.
  * AC7: Ordre colonnes: Statut, Action, Technologie, Plateforme, [Utilisateur], Environnement, Date, Durée.
+ *
+ * Story 9.10:
+ * AC2: TrendLineChart sous les StatCards, synchronisé avec filtres.
+ * AC3: AdvancedFiltersPanel avec date range, action, technologie, tags, statut, environnement.
+ * AC4: API /executions accepte filtres avancés.
+ * AC5: TrendLineChart reflète les filtres appliqués.
+ * AC6: StatCards reflètent les filtres appliqués.
+ * AC7: Filtres persistés dans URL query params.
+ * AC8: Badge nombre de filtres actifs.
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -56,9 +65,26 @@ import { ExecutionTimeline } from '../components/execution/ExecutionTimeline';
 import { PendingApprovalsList } from '../components/dashboard/PendingApprovalsList';
 import { ExecutionsTabs } from '../components/executions/ExecutionsTabs';
 import { StatCard } from '../components/dashboard/StatCard';
-import { listExecutions, getExecution, getExecutionSteps, listPendingApprovals, fetchExecutionStats } from '../services/execution_service';
+import { ExecutionsFiltersPanel } from '../components/executions/ExecutionsFiltersPanel';
+import { TrendLineChart } from '../components/dashboard/reporting/TrendLineChart';
+import { useExecutionFilters } from '../hooks/useExecutionFilters';
+import {
+  listExecutions,
+  getExecution,
+  getExecutionSteps,
+  listPendingApprovals,
+  fetchExecutionStats,
+  fetchExecutionTimeSeries,
+} from '../services/execution_service';
 import { useAuth } from '../contexts/AuthContext';
-import type { ExecutionResponse, ExecutionStepResponse, ExecutionStatusType, ExecutionScope, DashboardStats } from '../types/api';
+import type {
+  ExecutionResponse,
+  ExecutionStepResponse,
+  ExecutionStatusType,
+  ExecutionScope,
+  DashboardStats,
+  DashboardTimeSeriesPoint,
+} from '../types/api';
 
 const { Title } = Typography;
 
@@ -107,6 +133,9 @@ export default function ExecutionsPage() {
     user?.profile?.toLowerCase() === 'dbops';
   const canViewAll = canApprove; // Same RBAC for both (Story 8.9)
 
+  // Story 9.10: URL-synced filters
+  const { filters, applyFilters, resetFilters, activeFilterCount } = useExecutionFilters();
+
   const [executions, setExecutions] = useState<ExecutionResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -117,6 +146,10 @@ export default function ExecutionsPage() {
 
   // Story 8.9: Scope state for tabs
   const [activeScope, setActiveScope] = useState<ExecutionScope>('mine');
+
+  // Story 9.10: Time series data for TrendLineChart
+  const [timeSeriesData, setTimeSeriesData] = useState<DashboardTimeSeriesPoint[]>([]);
+  const [timeSeriesLoading, setTimeSeriesLoading] = useState(true);
 
   // Story 8.8 AC1, AC2: Pending approvals section
   const [pendingApprovals, setPendingApprovals] = useState<ExecutionResponse[]>([]);
@@ -133,13 +166,13 @@ export default function ExecutionsPage() {
   const [statsData, setStatsData] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
 
-  // Fetch executions (AC4: pagination with total_count from API; Story 8.9: scope filter)
+  // Fetch executions (AC4: pagination with total_count from API; Story 8.9: scope filter; Story 9.10: filters)
   const fetchData = useCallback(async (page: number, scope: ExecutionScope) => {
     setLoading(true);
     setError(null);
     try {
       const offset = (page - 1) * PAGE_SIZE;
-      const result = await listExecutions(PAGE_SIZE, offset, scope);
+      const result = await listExecutions(PAGE_SIZE, offset, scope, filters);
       setExecutions(result.data);
       setTotalCount(result.pagination.total_count);
     } catch (err) {
@@ -147,11 +180,29 @@ export default function ExecutionsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [filters]);
 
   useEffect(() => {
     fetchData(currentPage, activeScope);
   }, [currentPage, activeScope, fetchData]);
+
+  // Story 9.10 AC5: Fetch time series data for TrendLineChart
+  useEffect(() => {
+    async function loadTimeSeries() {
+      setTimeSeriesLoading(true);
+      try {
+        const data = await fetchExecutionTimeSeries(activeScope, filters);
+        setTimeSeriesData(data);
+      } catch (err) {
+        console.error('Erreur chargement timeseries:', err);
+        setTimeSeriesData([]);
+      } finally {
+        setTimeSeriesLoading(false);
+      }
+    }
+
+    loadTimeSeries();
+  }, [activeScope, filters]);
 
   // Story 8.9 AC4, AC5: Handle scope change - reset pagination, preserve sort
   const handleScopeChange = useCallback((scope: ExecutionScope) => {
@@ -178,12 +229,12 @@ export default function ExecutionsPage() {
     loadPendingApprovals();
   }, [loadPendingApprovals]);
 
-  // Story 9.4 AC3: Load stats when scope changes
+  // Story 9.4 AC3, Story 9.10 AC6: Load stats when scope or filters change
   useEffect(() => {
     async function loadStats() {
       setStatsLoading(true);
       try {
-        const stats = await fetchExecutionStats(activeScope);
+        const stats = await fetchExecutionStats(activeScope, filters);
         setStatsData(stats);
       } catch (err) {
         console.error('Erreur chargement stats:', err);
@@ -200,7 +251,7 @@ export default function ExecutionsPage() {
     }
 
     loadStats();
-  }, [activeScope]);
+  }, [activeScope, filters]);
 
   // Story 8.8: Callback after approval/rejection - refresh both lists
   const handleApprovalComplete = useCallback(() => {
@@ -409,11 +460,11 @@ export default function ExecutionsPage() {
     <div style={{ padding: 24 }}>
       <Title level={2}>Exécutions</Title>
 
-      {/* Story 9.4 AC1, AC3, AC4, AC5: StatCards section */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+      {/* Story 9.4 AC1, AC3, AC4, AC5; Story 9.10 AC6: StatCards section (filter-aware) */}
+      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={24} sm={12} md={6}>
           <StatCard
-            label="Exécutions du jour"
+            label={filters.start_date || filters.end_date ? "Exécutions" : "Exécutions du jour"}
             value={statsData?.executions_jour ?? 0}
             icon={<RocketOutlined />}
             loading={statsLoading}
@@ -448,6 +499,20 @@ export default function ExecutionsPage() {
           />
         </Col>
       </Row>
+
+      {/* Story 9.10 AC2, AC5: TrendLineChart (filter-aware) */}
+      <div style={{ marginBottom: 16 }}>
+        <TrendLineChart data={timeSeriesData} loading={timeSeriesLoading} />
+      </div>
+
+      {/* Story 9.10 AC3, AC8: Advanced filters panel */}
+      <ExecutionsFiltersPanel
+        filters={filters}
+        onApplyFilters={applyFilters}
+        onResetFilters={resetFilters}
+        activeFilterCount={activeFilterCount}
+        loading={loading}
+      />
 
       {/* Story 8.8 AC1, AC8: Pending approvals section (DBA/DBOPS only) */}
       {canApprove && pendingApprovals.length > 0 && (

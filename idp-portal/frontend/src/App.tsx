@@ -35,6 +35,17 @@ function AuditGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Story 9.10 AC10: Analytics (formerly Dashboard) restricted to DBOPS
+function AnalyticsGuard({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  // DBOPS only for advanced analytics
+  const isDbops = user?.profile?.toLowerCase() === 'dbops';
+  if (!isDbops) {
+    return <Navigate to="/executions" replace />;
+  }
+  return <>{children}</>;
+}
+
 /**
  * Inner app component that uses theme context.
  * Applies theme to ConfigProvider and updates body background.
@@ -84,7 +95,10 @@ function ThemedApp() {
                   <Route index element={<Navigate to="/catalog" replace />} />
                   <Route path="/catalog" element={<CatalogPage />} />
                   <Route path="/executions" element={<ExecutionsPage />} />
-                  <Route path="/dashboard" element={<DashboardPage />} />
+                  {/* Story 9.10: Dashboard renamed to Analytics, RBAC restricted to DBOPS */}
+                  <Route path="/analytics" element={<AnalyticsGuard><DashboardPage /></AnalyticsGuard>} />
+                  {/* Backward compatibility: redirect /dashboard to /analytics */}
+                  <Route path="/dashboard" element={<Navigate to="/analytics" replace />} />
                   <Route path="/admin" element={<AdminGuard><AdminPage /></AdminGuard>} />
                   <Route path="/audit" element={<AuditGuard><AuditPage /></AuditGuard>} />
                 </Route>

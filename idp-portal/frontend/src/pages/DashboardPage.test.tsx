@@ -1,12 +1,14 @@
 /**
- * Tests for DashboardPage (Story 8.3, Story 8.8).
+ * Tests for DashboardPage/AnalyticsPage (Story 8.3, Story 8.8, Story 9.10).
  *
  * DashboardPage now uses ReportingDashboard component.
  * Tests verify:
- * - Page title renders
- * - ReportingDashboard is rendered
+ * - Page title renders (now "Analytics" per Story 9.10)
+ * - ReportingDashboard is rendered with charts
  *
  * Story 8.8 AC3: PendingApprovalsList removed from Dashboard (moved to ExecutionsPage)
+ * Story 9.4: StatCards moved to ExecutionsPage
+ * Story 9.10: Renamed to Analytics, DBOPS only
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -110,29 +112,19 @@ describe('DashboardPage', () => {
     });
   });
 
-  it('renders page title', async () => {
+  it('renders page title (Story 9.10: renamed to Analytics)', async () => {
     await act(async () => {
       renderWithProviders();
     });
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /Dashboard/i })).toBeInTheDocument();
+      // Story 9.10: Dashboard renamed to Analytics
+      expect(screen.getByRole('heading', { name: /Analytics/i })).toBeInTheDocument();
     });
   });
 
-  it('displays StatCards from ReportingDashboard (AC2)', async () => {
-    await act(async () => {
-      renderWithProviders();
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('15')).toBeInTheDocument(); // executions_jour
-    });
-
-    expect(screen.getByText('87.5%')).toBeInTheDocument(); // taux_succes_pct
-    expect(screen.getByText('3')).toBeInTheDocument(); // executions_en_cours
-    expect(screen.getByText('2')).toBeInTheDocument(); // executions_en_erreur
-  });
+  // Story 9.4: StatCards moved to ExecutionsPage - no longer tested here
+  // it('displays StatCards from ReportingDashboard (AC2)') - REMOVED
 
   it('displays period selector (AC6)', async () => {
     await act(async () => {
@@ -178,7 +170,8 @@ describe('DashboardPage', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('15')).toBeInTheDocument();
+      // Story 9.10: Wait for Analytics title
+      expect(screen.getByRole('heading', { name: /Analytics/i })).toBeInTheDocument();
     });
 
     // Should NOT have "Activite recente" card from old design
@@ -191,7 +184,8 @@ describe('DashboardPage', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('15')).toBeInTheDocument();
+      // Story 9.10: Wait for Analytics title
+      expect(screen.getByRole('heading', { name: /Analytics/i })).toBeInTheDocument();
     });
 
     // Story 8.8 AC3: PendingApprovalsList removed from Dashboard

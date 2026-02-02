@@ -84,9 +84,18 @@ function renderWithProviders() {
   );
 }
 
-/** Simpler render helper with just ThemeProvider for tests without auth */
+/** Simpler render helper with ThemeProvider and Router for tests without auth.
+ * Story 9.10: Router required for useExecutionFilters hook (useSearchParams). */
 function renderWithTheme(ui: React.ReactElement) {
-  return render(<ThemeProvider>{ui}</ThemeProvider>);
+  const router = createMemoryRouter(
+    [{ path: '/', element: ui }],
+    { initialEntries: ['/'] }
+  );
+  return render(
+    <ThemeProvider>
+      <RouterProvider router={router} />
+    </ThemeProvider>
+  );
 }
 
 const mockExecutions: ExecutionResponse[] = [
@@ -199,6 +208,10 @@ describe('ExecutionsPage', () => {
       executions_en_cours: 3,
       executions_en_erreur: 2,
     });
+    // Story 9.10: Mock fetchExecutionTimeSeries for TrendLineChart
+    vi.mocked(executionService.fetchExecutionTimeSeries).mockResolvedValue([]);
+    // Story 9.10: Mock fetchExecutionTags for ExecutionsFiltersPanel
+    vi.mocked(executionService.fetchExecutionTags).mockResolvedValue([]);
   });
 
   describe('Table Display (AC1)', () => {
@@ -217,12 +230,15 @@ describe('ExecutionsPage', () => {
         expect(screen.getByText('Create PDB')).toBeInTheDocument();
       });
 
-      // Check column headers
-      expect(screen.getByText('Action')).toBeInTheDocument();
-      expect(screen.getByText('Environnement')).toBeInTheDocument();
-      expect(screen.getByText('Statut')).toBeInTheDocument();
-      expect(screen.getByText('Date')).toBeInTheDocument();
-      expect(screen.getByText('Durée')).toBeInTheDocument();
+      // Check column headers within table (Story 9.10: filter panel also has labels)
+      const table = screen.getByRole('table');
+      const headers = within(table).getAllByRole('columnheader');
+      const headerTexts = headers.map(h => h.textContent);
+      expect(headerTexts).toContain('Action');
+      expect(headerTexts).toContain('Environnement');
+      expect(headerTexts).toContain('Statut');
+      expect(headerTexts).toContain('Date');
+      expect(headerTexts).toContain('Durée');
     });
 
     it('displays execution data correctly', async () => {
@@ -345,8 +361,9 @@ describe('ExecutionsPage', () => {
         expect(screen.getByText('Action 1')).toBeInTheDocument();
       });
 
-      // API called with limit 25, offset 0, scope 'mine'
-      expect(executionService.listExecutions).toHaveBeenCalledWith(25, 0, 'mine');
+      // API called with limit 25, offset 0, scope 'mine' (and optional filters)
+      // Story 9.10: listExecutions now also takes filters
+      expect(executionService.listExecutions).toHaveBeenCalledWith(25, 0, 'mine', expect.any(Object));
     });
   });
 
@@ -514,10 +531,11 @@ describe('ExecutionsPage', () => {
         expect(screen.getByText('Create PDB')).toBeInTheDocument();
       });
 
-      // Check for sortable indicators on columns
-      const actionHeader = screen.getByText('Action').closest('th');
-      const statusHeader = screen.getByText('Statut').closest('th');
-      const dateHeader = screen.getByText('Date').closest('th');
+      // Check for sortable indicators on columns within table (Story 9.10: filter panel also has labels)
+      const table = screen.getByRole('table');
+      const actionHeader = within(table).getByText('Action').closest('th');
+      const statusHeader = within(table).getByText('Statut').closest('th');
+      const dateHeader = within(table).getByText('Date').closest('th');
 
       // Story 9.9 AC7: Action and Date are sortable
       expect(actionHeader).toHaveAttribute('aria-description', 'sortable');
@@ -700,7 +718,8 @@ describe('ExecutionsPage', () => {
       renderWithTheme(<ExecutionsPage />);
 
       await waitFor(() => {
-        expect(executionService.listExecutions).toHaveBeenCalledWith(25, 0, 'mine');
+        // Story 9.10: listExecutions now also takes filters
+        expect(executionService.listExecutions).toHaveBeenCalledWith(25, 0, 'mine', expect.any(Object));
       });
     });
 
@@ -719,7 +738,8 @@ describe('ExecutionsPage', () => {
       await user.click(screen.getByRole('tab', { name: /Toutes les exécutions/i }));
 
       await waitFor(() => {
-        expect(executionService.listExecutions).toHaveBeenCalledWith(25, 0, 'all');
+        // Story 9.10: listExecutions now also takes filters
+        expect(executionService.listExecutions).toHaveBeenCalledWith(25, 0, 'all', expect.any(Object));
       });
     });
 
@@ -777,13 +797,18 @@ describe('ExecutionsPage', () => {
       mockAuthSession('DBA');
       const user = userEvent.setup();
 
-      // First call returns user's executions (scope=mine)
-      vi.mocked(executionService.listExecutions)
-        .mockResolvedValueOnce(defaultListResponse)
-        .mockResolvedValueOnce({
-          data: mockAllExecutions,
-          pagination: { page: 1, page_size: 25, total_count: 1, total_pages: 1 },
-        });
+      // Story 9.10: Use mockImplementation to dynamically return data based on scope
+      vi.mocked(executionService.listExecutions).mockImplementation(
+        async (_limit, _offset, scope) => {
+          if (scope === 'all') {
+            return {
+              data: mockAllExecutions,
+              pagination: { page: 1, page_size: 25, total_count: 1, total_pages: 1 },
+            };
+          }
+          return defaultListResponse;
+        }
+      );
 
       await act(async () => {
         renderWithProviders();
@@ -829,12 +854,18 @@ describe('ExecutionsPage', () => {
       mockAuthSession('DBA');
       const user = userEvent.setup();
 
-      vi.mocked(executionService.listExecutions)
-        .mockResolvedValueOnce(defaultListResponse)
-        .mockResolvedValueOnce({
-          data: mockAllExecutionsNoUser,
-          pagination: { page: 1, page_size: 25, total_count: 1, total_pages: 1 },
-        });
+      // Story 9.10: Use mockImplementation to dynamically return data based on scope
+      vi.mocked(executionService.listExecutions).mockImplementation(
+        async (_limit, _offset, scope) => {
+          if (scope === 'all') {
+            return {
+              data: mockAllExecutionsNoUser,
+              pagination: { page: 1, page_size: 25, total_count: 1, total_pages: 1 },
+            };
+          }
+          return defaultListResponse;
+        }
+      );
 
       await act(async () => {
         renderWithProviders();
@@ -847,7 +878,9 @@ describe('ExecutionsPage', () => {
       await user.click(screen.getByRole('tab', { name: /Toutes les exécutions/i }));
 
       await waitFor(() => {
-        expect(screen.getByText('Utilisateur inconnu')).toBeInTheDocument();
+        // Query within table to avoid finding it in filter panel
+        const table = screen.getByRole('table');
+        expect(within(table).getByText('Utilisateur inconnu')).toBeInTheDocument();
       });
     });
 
@@ -894,7 +927,8 @@ describe('ExecutionsPage', () => {
       renderWithTheme(<ExecutionsPage />);
 
       await waitFor(() => {
-        expect(executionService.fetchExecutionStats).toHaveBeenCalledWith('mine');
+        // Story 9.10: fetchExecutionStats now also takes filters
+        expect(executionService.fetchExecutionStats).toHaveBeenCalledWith('mine', expect.any(Object));
       });
     });
 
@@ -913,7 +947,8 @@ describe('ExecutionsPage', () => {
       await user.click(screen.getByRole('tab', { name: /Toutes les exécutions/i }));
 
       await waitFor(() => {
-        expect(executionService.fetchExecutionStats).toHaveBeenCalledWith('all');
+        // Story 9.10: fetchExecutionStats now also takes filters
+        expect(executionService.fetchExecutionStats).toHaveBeenCalledWith('all', expect.any(Object));
       });
     });
 
@@ -1207,8 +1242,10 @@ describe('ExecutionsPage', () => {
         expect(screen.getByText('Create PDB')).toBeInTheDocument();
       });
 
-      const technologieHeader = screen.getByText('Technologie').closest('th');
-      const plateformeHeader = screen.getByText('Plateforme').closest('th');
+      // Story 9.10: Filter panel also has labels, so query within table
+      const table = screen.getByRole('table');
+      const technologieHeader = within(table).getByText('Technologie').closest('th');
+      const plateformeHeader = within(table).getByText('Plateforme').closest('th');
 
       // These columns should NOT have sortable attribute
       expect(technologieHeader).not.toHaveAttribute('aria-description', 'sortable');
@@ -1322,8 +1359,9 @@ describe('ExecutionsPage', () => {
         expect(screen.getByText('Create PDB')).toBeInTheDocument();
       });
 
-      // Check for Technologie column header
-      expect(screen.getByText('Technologie')).toBeInTheDocument();
+      // Check for Technologie column header within table (Story 9.10: filter panel also has this label)
+      const table = screen.getByRole('table');
+      expect(within(table).getByText('Technologie')).toBeInTheDocument();
 
       // Check for Oracle icon (DatabaseOutlined) - query by class name
       const oracleIcon = document.querySelector('[class*="anticon-database"]');
@@ -1398,9 +1436,11 @@ describe('ExecutionsPage', () => {
         expect(screen.getByText('Create PDB')).toBeInTheDocument();
       });
 
-      const statusHeader = screen.getByText('Statut').closest('th');
-      const technologieHeader = screen.getByText('Technologie').closest('th');
-      const plateformeHeader = screen.getByText('Plateforme').closest('th');
+      // Story 9.10: Filter panel also has labels, so query within table
+      const table = screen.getByRole('table');
+      const statusHeader = within(table).getByText('Statut').closest('th');
+      const technologieHeader = within(table).getByText('Technologie').closest('th');
+      const plateformeHeader = within(table).getByText('Plateforme').closest('th');
 
       // These should NOT have sortable aria-description
       expect(statusHeader).not.toHaveAttribute('aria-description', 'sortable');

@@ -410,15 +410,23 @@ async def create_execution(
 async def get_execution_stats(
     user: UserProfile = Depends(get_current_user),
     scope: str = Query("mine", pattern="^(mine|all)$"),
+    # Story 9.10: Advanced filters for stats
+    start_date: str | None = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: str | None = Query(None, description="End date (YYYY-MM-DD)"),
+    action_id: int | None = Query(None, description="Filter by action ID"),
+    engine: str | None = Query(None, description="Filter by engine (Oracle, SQL Server, etc.)"),
+    tags: str | None = Query(None, description="Filter by tags (comma-separated, AND logic)"),
+    status: str | None = Query(None, description="Filter by status"),
+    environment: str | None = Query(None, description="Filter by environment (dev, staging, prod)"),
 ) -> dict:
-    """GET /api/v1/executions/stats - Get execution statistics (Story 9.4, AC3).
+    """GET /api/v1/executions/stats - Get execution statistics (Story 9.4, AC3; Story 9.10 filters).
 
-    Returns execution statistics filtered by scope:
+    Returns execution statistics filtered by scope and advanced filters:
     - scope=mine: Statistics for current user's executions only (default)
     - scope=all: Global statistics (RBAC applied - DBA/DBOPS see all, others see their own)
 
     Statistics returned:
-    - executions_jour: Count of executions created today (UTC)
+    - executions_jour: Count of executions in period (today if no date filter, else total in range)
     - taux_succes_pct: Success rate percentage (COMPLETED / (COMPLETED + FAILED))
     - executions_en_cours: Count of running executions (RUNNING, SUBMITTED, PENDING_APPROVAL)
     - executions_en_erreur: Count of failed executions (FAILED)
@@ -429,17 +437,33 @@ async def get_execution_stats(
     # Get user's profiles for RBAC check
     user_profiles = [user.profile] if user.profile else []
 
+    # Story 9.10: Parse tags if provided
+    tags_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
+
+    # Story 9.10: Build filters dict
+    filters = {
+        "start_date": start_date,
+        "end_date": end_date,
+        "action_id": action_id,
+        "engine": engine,
+        "tags_list": tags_list,
+        "status": status,
+        "environment": environment,
+    }
+
     logger.info(
         "execution_stats_requested",
         user_id=user.id,
         scope=scope,
         user_profile=user.profile,
+        filters=filters,
     )
 
-    stats = await execution_repository.get_execution_stats(
+    stats = await execution_repository.get_execution_stats_filtered(
         user_id=user.id,
         scope=scope,
         user_profiles=user_profiles,
+        **filters,
     )
 
     logger.info(
@@ -453,6 +477,108 @@ async def get_execution_stats(
     )
 
     return {"data": stats}
+
+
+# --- Story 9.10: Time Series Endpoint for TrendLineChart ---
+
+
+@router.get("/timeseries", response_model=None)
+async def get_execution_timeseries(
+    user: UserProfile = Depends(get_current_user),
+    scope: str = Query("mine", pattern="^(mine|all)$"),
+    # Story 9.10: Advanced filters
+    start_date: str | None = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: str | None = Query(None, description="End date (YYYY-MM-DD)"),
+    action_id: int | None = Query(None, description="Filter by action ID"),
+    engine: str | None = Query(None, description="Filter by engine (Oracle, SQL Server, etc.)"),
+    tags: str | None = Query(None, description="Filter by tags (comma-separated, AND logic)"),
+    status: str | None = Query(None, description="Filter by status"),
+    environment: str | None = Query(None, description="Filter by environment (dev, staging, prod)"),
+) -> dict:
+    """GET /api/v1/executions/timeseries - Get time series data for trend chart (Story 9.10, AC5).
+
+    Returns daily execution counts (success/failed) for TrendLineChart.
+    Default period is last 7 days if no date filters provided.
+
+    Args:
+        scope: "mine" for user's executions (default), "all" for all executions (DBA/DBOPS only)
+        start_date: Start date (defaults to 7 days ago)
+        end_date: End date (defaults to today)
+        Other filters same as /executions endpoint
+
+    Returns:
+        { "data": [{ "date": "YYYY-MM-DD", "success": int, "failed": int }, ...] }
+    """
+    # Get user's profiles for RBAC check
+    user_profiles = [user.profile] if user.profile else []
+
+    # Story 9.10: Parse tags if provided
+    tags_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
+
+    # Story 9.10: Build filters dict
+    filters = {
+        "start_date": start_date,
+        "end_date": end_date,
+        "action_id": action_id,
+        "engine": engine,
+        "tags_list": tags_list,
+        "status": status,
+        "environment": environment,
+    }
+
+    logger.info(
+        "execution_timeseries_requested",
+        user_id=user.id,
+        scope=scope,
+        user_profile=user.profile,
+        filters=filters,
+    )
+
+    timeseries = await execution_repository.get_execution_timeseries(
+        user_id=user.id,
+        scope=scope,
+        user_profiles=user_profiles,
+        **filters,
+    )
+
+    logger.info(
+        "execution_timeseries_returned",
+        user_id=user.id,
+        scope=scope,
+        points_count=len(timeseries),
+    )
+
+    return {"data": timeseries}
+
+
+# --- Story 9.10: Tags Endpoint ---
+
+
+@router.get("/tags", response_model=None)
+async def list_execution_tags(
+    user: UserProfile = Depends(get_current_user),
+) -> dict:
+    """GET /api/v1/executions/tags - Get available tags for filtering (Story 9.10, AC3).
+
+    Returns distinct tags from actions that have been executed, filtered by RBAC.
+
+    Returns:
+        { "data": ["tag1", "tag2", ...] }
+    """
+    logger.info(
+        "execution_tags_requested",
+        user_id=user.id,
+    )
+
+    tags = await execution_repository.get_available_tags(user_id=user.id)
+
+    logger.info(
+        "execution_tags_returned",
+        user_id=user.id,
+        tags_count=len(tags),
+    )
+
+    return {"data": tags}
 
 
 # --- Story 7.4: Approval Workflow Endpoints ---
@@ -546,17 +672,46 @@ async def list_executions(
     limit: int = 50,
     offset: int = 0,
     scope: str = Query("mine", pattern="^(mine|all)$"),  # Fixed: regex -> pattern (Story 9.8 code-review)
+    # Story 9.10: Advanced filters
+    start_date: str | None = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: str | None = Query(None, description="End date (YYYY-MM-DD)"),
+    action_id: int | None = Query(None, description="Filter by action ID"),
+    engine: str | None = Query(None, description="Filter by engine (Oracle, SQL Server, etc.)"),
+    tags: str | None = Query(None, description="Filter by tags (comma-separated, AND logic)"),
+    status: str | None = Query(None, description="Filter by status"),
+    environment: str | None = Query(None, description="Filter by environment (dev, staging, prod)"),
 ) -> dict:
-    """GET /api/v1/executions - List executions with scope filter (Story 4.1, 4.8, 8.9).
+    """GET /api/v1/executions - List executions with scope and advanced filters (Story 4.1, 4.8, 8.9, 9.10).
 
     Args:
         scope: "mine" for user's executions (default), "all" for all executions (DBA/DBOPS only)
+        start_date: Filter by start date (inclusive)
+        end_date: Filter by end date (inclusive)
+        action_id: Filter by specific action
+        engine: Filter by engine/technology
+        tags: Filter by tags (comma-separated, AND logic)
+        status: Filter by execution status
+        environment: Filter by environment
 
     Returns:
         { "data": list[ExecutionResponse], "pagination": { page, page_size, total_count, total_pages } }
     """
     limit = min(max(1, limit), 100)
     offset = max(offset, 0)
+
+    # Story 9.10: Parse tags if provided
+    tags_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
+
+    # Story 9.10: Build filters dict
+    filters = {
+        "start_date": start_date,
+        "end_date": end_date,
+        "action_id": action_id,
+        "engine": engine,
+        "tags_list": tags_list,
+        "status": status,
+        "environment": environment,
+    }
 
     # Story 8.9: Determine if user can view all executions
     can_view_all = (user.profile or "").lower() in _EXECUTION_VIEW_ANY_PROFILES
@@ -569,19 +724,22 @@ async def list_executions(
             profile=user.profile,
             limit=limit,
             offset=offset,
+            filters=filters,
         )  # Story 8.9 code-review: Log scope=all usage for audit
-        total_count = await execution_repository.count_all_executions()
-        executions = await execution_repository.list_all_executions(
+        total_count = await execution_repository.count_all_executions_filtered(**filters)
+        executions = await execution_repository.list_all_executions_filtered(
             limit=limit,
             offset=offset,
+            **filters,
         )
     else:
         # Default behavior: return user's executions only (scope=mine or fallback)
-        total_count = await execution_repository.count_by_user(user_id=user.id)
-        executions = await execution_repository.list_by_user(
+        total_count = await execution_repository.count_by_user_filtered(user_id=user.id, **filters)
+        executions = await execution_repository.list_by_user_filtered(
             user_id=user.id,
             limit=limit,
             offset=offset,
+            **filters,
         )
 
     page = (offset // limit) + 1

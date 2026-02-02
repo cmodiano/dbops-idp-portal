@@ -17,6 +17,8 @@ import type {
   RemediationSuggestion,
   RemediationContext,
   DashboardStats,
+  ExecutionFilters,
+  DashboardTimeSeriesPoint,
 } from '../types/api';
 
 /**
@@ -86,21 +88,42 @@ export interface ListExecutionsResponse {
 }
 
 /**
- * List executions with scope filter (Story 4.1, 4.8, 8.9).
+ * Build query string from filters (Story 9.10).
+ */
+function buildFilterParams(filters?: ExecutionFilters): string {
+  if (!filters) return '';
+  const params = new URLSearchParams();
+
+  if (filters.start_date) params.set('start_date', filters.start_date);
+  if (filters.end_date) params.set('end_date', filters.end_date);
+  if (filters.action_id) params.set('action_id', String(filters.action_id));
+  if (filters.engine) params.set('engine', filters.engine);
+  if (filters.tags && filters.tags.length > 0) params.set('tags', filters.tags.join(','));
+  if (filters.status) params.set('status', filters.status);
+  if (filters.environment) params.set('environment', filters.environment);
+
+  return params.toString();
+}
+
+/**
+ * List executions with scope filter (Story 4.1, 4.8, 8.9, 9.10).
  *
  * @param limit - Maximum number of executions to return (default 50)
  * @param offset - Offset for pagination (default 0)
  * @param scope - "mine" for user's executions (default), "all" for all executions (DBA/DBOPS only)
+ * @param filters - Advanced filters (Story 9.10)
  * @returns ListExecutionsResponse with data and pagination (total_count for UI)
  */
 export async function listExecutions(
   limit = 50,
   offset = 0,
-  scope: ExecutionScope = 'mine'
+  scope: ExecutionScope = 'mine',
+  filters?: ExecutionFilters
 ): Promise<ListExecutionsResponse> {
-  return apiFetchRaw<ListExecutionsResponse>(
-    `/executions?limit=${limit}&offset=${offset}&scope=${scope}`
-  );
+  const baseParams = `limit=${limit}&offset=${offset}&scope=${scope}`;
+  const filterParams = buildFilterParams(filters);
+  const queryString = filterParams ? `${baseParams}&${filterParams}` : baseParams;
+  return apiFetchRaw<ListExecutionsResponse>(`/executions?${queryString}`);
 }
 
 // === Story 7.4: Approval Workflow Functions ===
@@ -208,20 +231,58 @@ export async function rejectExecution(
 // === Story 9.4: Execution Statistics (AC3) ===
 
 /**
- * Fetch execution statistics by scope (Story 9.4, AC3).
+ * Fetch execution statistics by scope and filters (Story 9.4, AC3; Story 9.10).
  *
- * Returns stats filtered by scope:
+ * Returns stats filtered by scope and advanced filters:
  * - scope=mine: Statistics for current user's executions only (default)
  * - scope=all: Global statistics (RBAC applied - DBA/DBOPS see all)
  *
  * @param scope - "mine" for user's stats (default), "all" for all stats
+ * @param filters - Advanced filters (Story 9.10)
  * @returns DashboardStats with executions_jour, taux_succes_pct, executions_en_cours, executions_en_erreur
  * @throws Error if API call fails
  */
 export async function fetchExecutionStats(
-  scope: ExecutionScope = 'mine'
+  scope: ExecutionScope = 'mine',
+  filters?: ExecutionFilters
 ): Promise<DashboardStats> {
-  return apiFetch<DashboardStats>(`/executions/stats?scope=${scope}`);
+  const baseParams = `scope=${scope}`;
+  const filterParams = buildFilterParams(filters);
+  const queryString = filterParams ? `${baseParams}&${filterParams}` : baseParams;
+  return apiFetch<DashboardStats>(`/executions/stats?${queryString}`);
+}
+
+// === Story 9.10: Time Series and Tags ===
+
+/**
+ * Fetch time series data for TrendLineChart (Story 9.10, AC5).
+ *
+ * Returns daily counts of success/failed executions.
+ * Default period is last 7 days if no date filters provided.
+ *
+ * @param scope - "mine" for user's executions (default), "all" for all executions
+ * @param filters - Advanced filters including date range
+ * @returns Array of { date, success, failed } points
+ */
+export async function fetchExecutionTimeSeries(
+  scope: ExecutionScope = 'mine',
+  filters?: ExecutionFilters
+): Promise<DashboardTimeSeriesPoint[]> {
+  const baseParams = `scope=${scope}`;
+  const filterParams = buildFilterParams(filters);
+  const queryString = filterParams ? `${baseParams}&${filterParams}` : baseParams;
+  return apiFetch<DashboardTimeSeriesPoint[]>(`/executions/timeseries?${queryString}`);
+}
+
+/**
+ * Fetch available tags for filtering (Story 9.10, AC3).
+ *
+ * Returns distinct tags from actions that have been executed.
+ *
+ * @returns Array of tag names
+ */
+export async function fetchExecutionTags(): Promise<string[]> {
+  return apiFetch<string[]>('/executions/tags');
 }
 
 // === Story 9.1: Remediation Suggestions (FR36) ===
