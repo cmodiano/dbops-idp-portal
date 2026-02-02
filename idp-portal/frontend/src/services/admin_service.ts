@@ -15,6 +15,7 @@ import type {
   ActionListResponse,
   AdminAnalytics,
   RemediationRule,
+  WorkflowStepsUpdate,
 } from '../types/api';
 
 /**
@@ -163,5 +164,31 @@ export async function updateRemediationRules(
   return apiFetch<ActionDetail>(`/admin/actions/${actionId}/remediation-rules`, {
     method: 'PUT',
     body: JSON.stringify({ remediation_rules: rules }),
+  });
+}
+
+/**
+ * Get actions eligible for workflow steps (Story 9.5, AC2).
+ * Returns published actions only (no workflows).
+ * Requires DBOPS profile.
+ */
+export async function getEligibleActionsForWorkflow(): Promise<ActionListItem[]> {
+  return apiFetch<ActionListItem[]>('/admin/actions/eligible-for-workflow');
+}
+
+/**
+ * Update workflow steps for a workflow (Story 9.5, AC3).
+ * Requires DBOPS profile.
+ *
+ * @param workflowId - Workflow action ID
+ * @param data - Workflow steps to set
+ */
+export async function updateWorkflowSteps(
+  workflowId: number,
+  data: WorkflowStepsUpdate
+): Promise<ActionDetail> {
+  return apiFetch<ActionDetail>(`/admin/actions/${workflowId}/workflow-steps`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
   });
 }

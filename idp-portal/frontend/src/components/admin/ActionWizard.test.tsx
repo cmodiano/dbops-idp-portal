@@ -8,12 +8,17 @@ import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ActionWizard } from './ActionWizard';
 import type { ActionDetail } from '../../types/api';
-import { updateActionSteps } from '../../services/admin_service';
+import { updateActionSteps, updateWorkflowSteps } from '../../services/admin_service';
 
 vi.mock('../../services/admin_service', () => ({
   getTags: vi.fn().mockResolvedValue([]),
   updateActionTags: vi.fn().mockResolvedValue({}),
   updateActionSteps: vi.fn().mockResolvedValue({}),
+  updateWorkflowSteps: vi.fn().mockResolvedValue({}),
+  getEligibleActionsForWorkflow: vi.fn().mockResolvedValue([
+    { id: 100, name: 'Action A', engine: 'Oracle', status: 'published', created_at: '', execution_count: 0 },
+    { id: 101, name: 'Action B', engine: 'SQL Server', status: 'published', created_at: '', execution_count: 0 },
+  ]),
 }));
 
 const mockOnSubmit = vi.fn().mockResolvedValue({ id: 1 });
@@ -342,6 +347,194 @@ describe('ActionWizard', () => {
       });
       await user.click(screen.getByRole('button', { name: /Annuler/i }));
       expect(mockOnCancel).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // Story 9.5: Workflow support tests
+  describe('Story 9.5: Workflow support', () => {
+    it('affiche le choix type action/workflow au Step 1', async () => {
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} />);
+      });
+      expect(screen.getByRole('radio', { name: /Action/i })).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: /Workflow/i })).toBeInTheDocument();
+      // Action selected by default
+      expect(screen.getByRole('radio', { name: /Action/i })).toBeChecked();
+    });
+
+    it('masque les champs engine/platform quand type=workflow est sélectionné', async () => {
+      const user = userEvent.setup();
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} />);
+      });
+      // Initially engine/platform are visible
+      expect(screen.getByLabelText('Moteur')).toBeInTheDocument();
+      expect(screen.getByLabelText('Plateforme')).toBeInTheDocument();
+
+      // Select workflow
+      await user.click(screen.getByRole('radio', { name: /Workflow/i }));
+      await waitFor(() => {
+        expect(screen.queryByLabelText('Moteur')).not.toBeInTheDocument();
+        expect(screen.queryByLabelText('Plateforme')).not.toBeInTheDocument();
+      });
+    });
+
+    it('validation Step 1 workflow : type=workflow avec nom vide génère erreur, mais pas d\'erreur engine/platform', async () => {
+      const user = userEvent.setup();
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} />);
+      });
+      // Select workflow type
+      await user.click(screen.getByRole('radio', { name: /Workflow/i }));
+      // Click next without entering a name
+      await user.click(screen.getByRole('button', { name: /Suivant/i }));
+      // Should show error for missing name
+      await waitFor(() => {
+        expect(screen.getByText('Le nom est requis')).toBeInTheDocument();
+      });
+    });
+
+    it('Step 2 affiche WorkflowStepsEditor si type=workflow', async () => {
+      const user = userEvent.setup();
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} />);
+      });
+      // Select workflow type
+      await user.click(screen.getByRole('radio', { name: /Workflow/i }));
+      // Enter a name
+      await user.type(screen.getByLabelText('Nom du workflow'), 'Mon Workflow');
+      // Go to step 2
+      await user.click(screen.getByRole('button', { name: /Suivant/i }));
+      // Should show WorkflowStepsEditor (shows "Ajouter une étape" button)
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Ajouter une étape/i })).toBeInTheDocument();
+      });
+    });
+
+    it('type radio est désactivé en mode édition', async () => {
+      const editAction: ActionDetail = {
+        id: 1,
+        item_type: 'workflow',
+        name: 'Workflow existant',
+        description: null,
+        engine: null,
+        platform: null,
+        parameters_schema: null,
+        impact_rules: null,
+        default_impact_level: null,
+        status: 'draft',
+        created_by: null,
+        created_at: '',
+        updated_at: null,
+        execution_steps: null,
+        workflow_steps: [{ order: 1, name: 'Step 1', referenced_action_id: 100 }],
+        change_type_config: null,
+        tags: [],
+      };
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} editAction={editAction} />);
+      });
+      // Radio buttons should be disabled in edit mode
+      await waitFor(() => {
+        const actionRadio = screen.getByRole('radio', { name: /Action/i });
+        expect(actionRadio).toBeDisabled();
+        const workflowRadio = screen.getByRole('radio', { name: /Workflow/i });
+        expect(workflowRadio).toBeDisabled();
+      });
+    });
+
+    it('sauvegarde workflow appelle updateWorkflowSteps avec les étapes', async () => {
+      const user = userEvent.setup();
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} />);
+      });
+      // Select workflow type
+      await user.click(screen.getByRole('radio', { name: /Workflow/i }));
+      // Enter a name
+      await user.type(screen.getByLabelText('Nom du workflow'), 'Workflow Test');
+      // Go to step 2
+      await user.click(screen.getByRole('button', { name: /Suivant/i }));
+      // Wait for eligible actions to load and add a step
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Ajouter une étape/i })).toBeInTheDocument();
+      });
+      await user.click(screen.getByRole('button', { name: /Ajouter une étape/i }));
+      // Select an action in the autocomplete
+      await waitFor(() => {
+        expect(screen.getByLabelText('Sélectionner une action')).toBeInTheDocument();
+      });
+      const autocomplete = screen.getByLabelText('Sélectionner une action');
+      await user.click(autocomplete);
+      // Type to filter and select
+      await user.type(autocomplete, 'Action A');
+      await waitFor(() => {
+        expect(screen.getByText(/Action A \(Oracle\)/i)).toBeInTheDocument();
+      });
+      await user.click(screen.getByText(/Action A \(Oracle\)/i));
+      // Go to step 3
+      await user.click(screen.getByRole('button', { name: /Suivant/i }));
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeInTheDocument();
+      });
+      // Save
+      await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
+      // Verify updateWorkflowSteps was called
+      await waitFor(() => {
+        expect(mockOnSubmit).toHaveBeenCalledWith(
+          expect.objectContaining({
+            name: 'Workflow Test',
+            item_type: 'workflow',
+          })
+        );
+        expect(updateWorkflowSteps).toHaveBeenCalledWith(
+          1,
+          expect.objectContaining({
+            steps: expect.arrayContaining([
+              expect.objectContaining({ referenced_action_id: 100 }),
+            ]),
+          })
+        );
+      });
+    });
+
+    it('édition workflow existant charge et pré-remplit WorkflowStepsEditor', async () => {
+      const editAction: ActionDetail = {
+        id: 50,
+        item_type: 'workflow',
+        name: 'Workflow existant',
+        description: 'Description workflow',
+        engine: null,
+        platform: null,
+        parameters_schema: null,
+        impact_rules: null,
+        default_impact_level: null,
+        status: 'draft',
+        created_by: null,
+        created_at: '',
+        updated_at: null,
+        execution_steps: null,
+        workflow_steps: [
+          { order: 1, name: 'Étape un', referenced_action_id: 100 },
+          { order: 2, name: null, referenced_action_id: 101 },
+        ],
+        change_type_config: null,
+        tags: [],
+      };
+      const user = userEvent.setup();
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} editAction={editAction} />);
+      });
+      // Verify workflow type is selected
+      await waitFor(() => {
+        expect(screen.getByRole('radio', { name: /Workflow/i })).toBeChecked();
+      });
+      // Go to step 2
+      await user.click(screen.getByRole('button', { name: /Suivant/i }));
+      // Verify steps are loaded
+      await waitFor(() => {
+        expect(screen.getByText('Étape 1')).toBeInTheDocument();
+        expect(screen.getByText('Étape 2')).toBeInTheDocument();
+      });
     });
   });
 });
