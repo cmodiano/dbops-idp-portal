@@ -397,14 +397,6 @@ async def compare_dashboard(
                 status_code=422,
                 detail="period2_start must be <= period2_end",
             )
-    else:
-        # For technology/environment dimensions, reject period parameters if provided
-        if any([period1_start, period1_end, period2_start, period2_end]):
-            from fastapi import HTTPException
-            raise HTTPException(
-                status_code=422,
-                detail=f"period parameters are not allowed for {dimension.value} comparison. Use 'days' parameter instead.",
-            )
 
         # Get period comparison stats
         result = await execution_repository.get_period_comparison_stats(
@@ -418,6 +410,14 @@ async def compare_dashboard(
         value1_label = f"{period1_start} - {period1_end}"
         value2_label = f"{period2_start} - {period2_end}"
     else:
+        # For technology/environment dimensions, reject period parameters if provided
+        if any([period1_start, period1_end, period2_start, period2_end]):
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=422,
+                detail=f"period parameters are not allowed for {dimension.value} comparison. Use 'days' parameter instead.",
+            )
+
         # Get technology or environment comparison stats
         result = await execution_repository.get_comparison_stats(
             dimension=dimension.value,

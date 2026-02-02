@@ -31,6 +31,7 @@ export interface TagCloudProps {
 /**
  * Tag cloud component for visual multi-select filtering.
  * Each tag is clickable and toggles selection (AND logic for filtering).
+ * Story 8.7 AC3: Tags are pre-filtered by category in parent (CatalogPage).
  */
 export function TagCloud({ tags, selectedTags, onSelectionChange }: TagCloudProps) {
   const { effectiveMode } = useTheme();

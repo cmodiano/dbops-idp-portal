@@ -189,6 +189,74 @@ class TestListCatalogActions:
                 response = await client.get(f"/api/v1/catalog/actions?impact={impact_value}")
                 assert response.status_code == status.HTTP_200_OK
 
+    @pytest.mark.asyncio
+    async def test_list_catalog_actions_category_combined_with_tags(self, client, sample_published_action):
+        """GET /catalog/actions?category=patching&tags=oracle combines filters (Story 8.7, AC4)."""
+        with patch("app.api.v1.catalog.catalog_repository.list_catalog", new_callable=AsyncMock) as mock_list:
+            mock_list.return_value = [{**sample_published_action.model_dump(), "execution_count": 0}]
+
+            response = await client.get("/api/v1/catalog/actions?category=patching&tags=oracle,security")
+
+        assert response.status_code == status.HTTP_200_OK
+        # Category and tags should be combined in tags_filter
+        call_kwargs = mock_list.call_args.kwargs
+        tags_filter = call_kwargs.get("tags_filter")
+        assert "patching" in tags_filter
+        assert "oracle" in tags_filter
+        assert "security" in tags_filter
+
+    @pytest.mark.asyncio
+    async def test_list_catalog_actions_category_combined_with_engine_env_impact(self, client, sample_published_action):
+        """GET /catalog/actions?category=patching&engine=Oracle&environment=PROD&impact=high (Story 8.7, AC4)."""
+        with patch("app.api.v1.catalog.catalog_repository.list_catalog", new_callable=AsyncMock) as mock_list:
+            mock_list.return_value = [{**sample_published_action.model_dump(), "execution_count": 0}]
+
+            response = await client.get(
+                "/api/v1/catalog/actions?category=patching&engine=Oracle&environment=PROD&impact=high"
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        call_kwargs = mock_list.call_args.kwargs
+        assert call_kwargs.get("tags_filter") == ["patching"]
+        assert call_kwargs.get("engine") == "Oracle"
+        assert call_kwargs.get("environment") == "PROD"
+        assert call_kwargs.get("impact") == "high"
+
+    @pytest.mark.asyncio
+    async def test_list_catalog_actions_category_tout_no_filter(self, client, sample_published_action):
+        """GET /catalog/actions?category=tout does not add category to tags_filter (Story 8.7)."""
+        with patch("app.api.v1.catalog.catalog_repository.list_catalog", new_callable=AsyncMock) as mock_list:
+            mock_list.return_value = [{**sample_published_action.model_dump(), "execution_count": 0}]
+
+            response = await client.get("/api/v1/catalog/actions?category=tout")
+
+        assert response.status_code == status.HTTP_200_OK
+        call_kwargs = mock_list.call_args.kwargs
+        # "tout" should not be added to tags_filter
+        assert call_kwargs.get("tags_filter") is None
+
+    @pytest.mark.asyncio
+    async def test_list_catalog_actions_category_tags_engine_env_impact_combined(self, client, sample_published_action):
+        """GET /catalog/actions?category=patching&tags=oracle,security&engine=Oracle&environment=PROD&impact=high (Story 8.7, AC4, Task 3.4)."""
+        with patch("app.api.v1.catalog.catalog_repository.list_catalog", new_callable=AsyncMock) as mock_list:
+            mock_list.return_value = [{**sample_published_action.model_dump(), "execution_count": 0}]
+
+            response = await client.get(
+                "/api/v1/catalog/actions?category=patching&tags=oracle,security&engine=Oracle&environment=PROD&impact=high"
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        call_kwargs = mock_list.call_args.kwargs
+        # Category + tags should be combined in tags_filter
+        tags_filter = call_kwargs.get("tags_filter")
+        assert "patching" in tags_filter
+        assert "oracle" in tags_filter
+        assert "security" in tags_filter
+        # Other filters should be passed separately
+        assert call_kwargs.get("engine") == "Oracle"
+        assert call_kwargs.get("environment") == "PROD"
+        assert call_kwargs.get("impact") == "high"
+
 
 @pytest.fixture
 def sample_action_detail():
@@ -525,7 +593,7 @@ class TestGetCatalogActionById:
 
 
 class TestListCatalogTags:
-    """Tests for GET /api/v1/catalog/tags (Story 3.3, AC3, AC10)."""
+    """Tests for GET /api/v1/catalog/tags (Story 3.3, AC3, AC10; Story 8.7, AC3)."""
 
     @pytest.mark.asyncio
     async def test_list_catalog_tags_returns_name_and_action_count(self, client):
@@ -544,6 +612,55 @@ class TestListCatalogTags:
         assert len(data["data"]) == 2
         assert data["data"][0]["name"] == "rac"
         assert data["data"][0]["action_count"] == 5
+        mock_tags.assert_called_once_with(action_ids_filter=None)
+
+    @pytest.mark.asyncio
+    async def test_list_catalog_tags_filter_by_category(self, client):
+        """GET /catalog/tags?category=patching returns tags from patching actions only (Story 8.7, AC3)."""
+        with patch("app.api.v1.catalog.catalog_repository.list_catalog", new_callable=AsyncMock) as mock_list, \
+             patch("app.api.v1.catalog.catalog_repository.list_tags_with_counts", new_callable=AsyncMock) as mock_tags:
+            mock_list.return_value = [
+                {"id": 1, "tags": ["patching", "oracle"]},
+                {"id": 2, "tags": ["patching", "security"]},
+            ]
+            mock_tags.return_value = [
+                {"name": "patching", "action_count": 2},
+                {"name": "oracle", "action_count": 1},
+                {"name": "security", "action_count": 1},
+            ]
+
+            response = await client.get("/api/v1/catalog/tags?category=patching")
+
+        assert response.status_code == status.HTTP_200_OK
+        # Verify list_catalog was called with tags_filter for category
+        mock_list.assert_called_once()
+        call_kwargs = mock_list.call_args.kwargs
+        assert call_kwargs.get("tags_filter") == ["patching"]
+        # Verify tags_with_counts was called with filtered action_ids
+        mock_tags.assert_called_once_with(action_ids_filter=[1, 2])
+
+    @pytest.mark.asyncio
+    async def test_list_catalog_tags_category_tout_returns_all(self, client):
+        """GET /catalog/tags?category=tout returns all tags (Story 8.7)."""
+        with patch("app.api.v1.catalog.catalog_repository.list_tags_with_counts", new_callable=AsyncMock) as mock_tags:
+            mock_tags.return_value = [{"name": "rac", "action_count": 5}]
+
+            response = await client.get("/api/v1/catalog/tags?category=tout")
+
+        assert response.status_code == status.HTTP_200_OK
+        # Should not filter when category is "tout"
+        mock_tags.assert_called_once_with(action_ids_filter=None)
+
+    @pytest.mark.asyncio
+    async def test_list_catalog_tags_category_mes_actions_returns_all(self, client):
+        """GET /catalog/tags?category=mes-actions returns all tags (Story 8.7)."""
+        with patch("app.api.v1.catalog.catalog_repository.list_tags_with_counts", new_callable=AsyncMock) as mock_tags:
+            mock_tags.return_value = [{"name": "rac", "action_count": 5}]
+
+            response = await client.get("/api/v1/catalog/tags?category=mes-actions")
+
+        assert response.status_code == status.HTTP_200_OK
+        # Should not filter when category is "mes-actions"
         mock_tags.assert_called_once_with(action_ids_filter=None)
 
     @pytest.mark.asyncio
@@ -576,6 +693,44 @@ class TestListCatalogTags:
             assert response.status_code == status.HTTP_200_OK
             call_kwargs = mock_tags.call_args.kwargs
             assert call_kwargs.get("action_ids_filter") == [1, 2]
+        finally:
+            app.dependency_overrides.pop(get_optional_user, None)
+
+    @pytest.mark.asyncio
+    async def test_list_catalog_tags_category_with_rbac(self, client):
+        """GET /catalog/tags?category=patching with RBAC applies both filters (Story 8.7, AC3, Story 3.5)."""
+        from app.api.deps import get_optional_user
+        from app.models.auth import UserProfile
+        from app.models.profile import CumulativePermissionsResponse
+
+        user = UserProfile(
+            id=1,
+            username="dba",
+            display_name="DBA",
+            profile="dba",
+            cumulative_permissions=CumulativePermissionsResponse(
+                actions_type="list",
+                action_ids=[1, 2],  # Only actions 1 and 2 allowed
+                tag_patterns=[],
+            ),
+        )
+        app.dependency_overrides[get_optional_user] = lambda: user
+        try:
+            with patch("app.api.v1.catalog.catalog_repository.list_catalog", new_callable=AsyncMock) as mock_list, \
+                 patch("app.api.v1.catalog.catalog_repository.list_tags_with_counts", new_callable=AsyncMock) as mock_tags:
+                # Repository returns actions matching category "patching"
+                mock_list.return_value = [
+                    {"id": 1, "tags": ["patching", "oracle"]},  # Allowed
+                    {"id": 2, "tags": ["patching"]},  # Allowed
+                    {"id": 3, "tags": ["patching", "security"]},  # NOT in RBAC list
+                ]
+                mock_tags.return_value = [{"name": "patching", "action_count": 2}]
+
+                response = await client.get("/api/v1/catalog/tags?category=patching")
+
+            assert response.status_code == status.HTTP_200_OK
+            # RBAC should filter out action 3
+            mock_tags.assert_called_once_with(action_ids_filter=[1, 2])
         finally:
             app.dependency_overrides.pop(get_optional_user, None)
 

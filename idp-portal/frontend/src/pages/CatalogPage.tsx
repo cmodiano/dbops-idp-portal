@@ -1,16 +1,16 @@
 /**
- * CatalogPage - Main catalog page for browsing actions (Story 3.1, 3.3, 3.5, 4.1).
+ * CatalogPage - Main catalog page for browsing actions (Story 3.1, 3.3, 3.5, 4.1, 8.7).
  *
  * Features:
- * - Two tabs: Tout (all actions), Mes actions (favorites + recent) — Story 2.23: categories removed
+ * - Story 8.7: Category tabs navigation (Tout, Provisioning, Patching, etc.)
+ * - Story 8.7: Horizontal filters bar replacing lateral drawer (AC7)
+ * - Story 8.7: Active filter chips with individual removal (AC6)
  * - Grid/List view toggle (AC2)
  * - ActionCard display with execution_count (AC3)
  * - Favorite toggle with tooltip (AC4, AC12, AC13; Story 3.5)
  * - "Mes actions" tab with favorites and recent actions (AC5)
  * - Search with debounce 300 ms (AC1), server-side + filters (AC2–AC9)
- * - TagCloud for visual multi-tag filtering (Story 3.5, AC1-6)
- * - Lateral filters panel 240 px (AC2, AC3, AC8): Engine, Environment, Impact
- * - Active filter chips + Réinitialiser (AC4, AC5)
+ * - TagCloud for visual multi-tag filtering, filtered by category (Story 3.5, AC1-6; Story 8.7, AC3)
  * - Empty state "Aucune action ne correspond à vos filtres" (AC5)
  * - Counter with aria-live (AC6)
  * - ExecutionWizard integration (Story 4.1, Task 7)
@@ -19,7 +19,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Typography,
-  Tabs,
   Input,
   Row,
   Col,
@@ -29,26 +28,22 @@ import {
   Space,
   Card,
   Drawer,
-  Select,
-  Tag,
-  Tooltip,
   App,
 } from 'antd';
 import {
   AppstoreOutlined,
   BarsOutlined,
-  HeartOutlined,
-  HeartFilled,
   SearchOutlined,
-  FilterOutlined,
 } from '@ant-design/icons';
 import { ActionCard, type ActionCardProps } from '../components/catalog/ActionCard';
 import { ActionDrawerPreview } from '../components/catalog/ActionDrawerPreview';
 import { ExecutionWizard } from '../components/catalog/ExecutionWizard';
 import { TagCloud } from '../components/catalog/TagCloud';
+import { CategoryTabs, type CategoryKey } from '../components/catalog/CategoryTabs';
+import { HorizontalFilters } from '../components/catalog/HorizontalFilters';
+import { ActiveFiltersChips } from '../components/catalog/ActiveFiltersChips';
 import { useAuth } from '../contexts/AuthContext';
 import { useDebounce } from '../hooks/useDebounce';
-import { useMediaQuery } from '../hooks/useMediaQuery';
 import {
   fetchCatalogActions,
   fetchCatalogActionById,
@@ -70,29 +65,6 @@ const { Title, Text } = Typography;
 
 /** localStorage key for view mode (AC2). */
 const CATALOG_VIEW_MODE_KEY = 'catalog-view-mode';
-
-/** Tab definitions: All actions and My actions (Story 2.23: categories removed, use tags instead). */
-const CATALOG_TABS = [
-  { key: 'all', label: 'Tout' },
-  { key: 'my-actions', label: 'Mes actions' },
-];
-
-/** Filter options (Story 3.3, AC2, AC3). */
-const ENGINE_OPTIONS = [
-  { value: 'Oracle', label: 'Oracle' },
-  { value: 'SQL Server', label: 'SQL Server' },
-  { value: 'DB2', label: 'DB2' },
-];
-const ENVIRONMENT_OPTIONS = [
-  { value: 'DEV', label: 'DEV' },
-  { value: 'QUAL', label: 'QUAL' },
-  { value: 'PROD', label: 'PROD' },
-];
-const IMPACT_OPTIONS = [
-  { value: 'low', label: 'Faible' },
-  { value: 'medium', label: 'Moyen' },
-  { value: 'high', label: 'Élevé' },
-];
 
 /** View mode: grid or list (AC2). */
 type ViewMode = 'grid' | 'list';
@@ -136,17 +108,21 @@ function getStoredViewMode(): ViewMode {
 export default function CatalogPage() {
   const { message } = App.useApp();
   const { isAuthenticated, isBusinessProfile } = useAuth();
-  const isWide = useMediaQuery(1280);
   const [viewMode, setViewMode] = useState<ViewMode>(getStoredViewMode);
-  const [activeTab, setActiveTab] = useState('all');
+
+  // Story 8.7: Category state (replaces old activeTab)
+  const [activeCategory, setActiveCategory] = useState<CategoryKey>('tout');
+
   const [searchText, setSearchText] = useState('');
   const debouncedQ = useDebounce(searchText, 300);
   const [filterTags, setFilterTags] = useState<string[]>([]);
-  const [filterEngine, setFilterEngine] = useState<string | undefined>(undefined);
-  const [filterEnvironment, setFilterEnvironment] = useState<string | undefined>(undefined);
-  const [filterImpact, setFilterImpact] = useState<string | undefined>(undefined);
+
+  // Story 8.7: Multi-select filters (replaces single-select)
+  const [filterEngines, setFilterEngines] = useState<string[]>([]);
+  const [filterEnvironments, setFilterEnvironments] = useState<string[]>([]);
+  const [filterImpacts, setFilterImpacts] = useState<string[]>([]);
+
   const [tagsWithCounts, setTagsWithCounts] = useState<CatalogTagWithCount[]>([]);
-  const [filtersPanelOpen, setFiltersPanelOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [actions, setActions] = useState<CatalogAction[]>([]);
   const [favorites, setFavorites] = useState<Set<number>>(new Set());
@@ -166,50 +142,70 @@ export default function CatalogPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
+      // Story 8.7: Include category in API call
+      // NOTE: Backend API currently supports only single engine/environment/impact value (not arrays)
+      // HorizontalFilters uses multi-select UI but we send only the first selected value
+      // TODO: Enhance backend to support multi-value filters (e.g., ?engine=Oracle&engine=SQL%20Server)
       const [actionsData, favoritesData, recentData, tagsData] = await Promise.all([
         fetchCatalogActions({
           tags: filterTags.length > 0 ? filterTags : undefined,
           q: debouncedQ.trim() || undefined,
-          engine: filterEngine,
-          environment: filterEnvironment,
-          impact: filterImpact,
+          engine: filterEngines.length > 0 ? filterEngines[0] : undefined,
+          environment: filterEnvironments.length > 0 ? filterEnvironments[0] : undefined,
+          impact: filterImpacts.length > 0 ? filterImpacts[0] : undefined,
+          category: activeCategory !== 'tout' && activeCategory !== 'mes-actions' ? activeCategory : undefined,
         }),
         fetchFavorites().catch(() => [] as FavoriteEntry[]),
         fetchRecentActions(10).catch(() => [] as RecentAction[]),
-        activeTab !== 'my-actions' ? fetchCatalogTags().catch(() => [] as CatalogTagWithCount[]) : Promise.resolve([] as CatalogTagWithCount[]),
+        // Story 8.7, AC3: Fetch tags filtered by category
+        activeCategory !== 'mes-actions'
+          ? fetchCatalogTags(activeCategory !== 'tout' ? activeCategory : undefined).catch((error) => {
+              console.error('Failed to load tags:', error);
+              message.warning('Impossible de charger les tags');
+              return [] as CatalogTagWithCount[];
+            })
+          : Promise.resolve([] as CatalogTagWithCount[]),
       ]);
       setActions(actionsData);
       setFavorites(new Set(favoritesData.map((f) => f.action_id)));
       setRecentActions(recentData);
-      if (activeTab !== 'my-actions') setTagsWithCounts(tagsData);
+      if (activeCategory !== 'mes-actions') setTagsWithCounts(tagsData);
     } catch (error) {
       console.error('Failed to load catalog:', error);
       message.error('Erreur lors du chargement du catalogue');
     } finally {
       setLoading(false);
     }
-  }, [activeTab, debouncedQ, filterTags, filterEngine, filterEnvironment, filterImpact, message]);
+  }, [activeCategory, debouncedQ, filterTags, filterEngines, filterEnvironments, filterImpacts, message]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
-  const hasActiveFilters = filterTags.length > 0 || filterEngine || filterEnvironment || filterImpact || (searchText.trim().length > 0);
+  const hasActiveFilters =
+    filterTags.length > 0 ||
+    filterEngines.length > 0 ||
+    filterEnvironments.length > 0 ||
+    filterImpacts.length > 0 ||
+    searchText.trim().length > 0 ||
+    (activeCategory !== 'tout' && activeCategory !== 'mes-actions');
+
   const resetFilters = useCallback(() => {
     setSearchText('');
     setFilterTags([]);
-    setFilterEngine(undefined);
-    setFilterEnvironment(undefined);
-    setFilterImpact(undefined);
+    setFilterEngines([]);
+    setFilterEnvironments([]);
+    setFilterImpacts([]);
+    setActiveCategory('tout');
   }, []);
 
   const filteredActions = useMemo(() => {
-    if (activeTab === 'my-actions') {
+    if (activeCategory === 'mes-actions') {
       const recentIds = new Set(recentActions.map((r) => r.action_id));
       return actions.filter((a) => favorites.has(a.id) || recentIds.has(a.id));
     }
     return actions;
-  }, [actions, activeTab, favorites, recentActions]);
+  }, [actions, activeCategory, favorites, recentActions]);
 
   // Toggle favorite
   const handleToggleFavorite = async (actionId: number, e: React.MouseEvent) => {
@@ -243,6 +239,13 @@ export default function CatalogPage() {
       // ignore
     }
   };
+
+  // Story 8.7: Handle category change - reset tags when switching categories
+  const handleCategoryChange = useCallback((category: CategoryKey) => {
+    setActiveCategory(category);
+    // Reset tag selection when changing category (tags are category-specific)
+    setFilterTags([]);
+  }, []);
 
   // Open action drawer and fetch full detail + stats (Story 3.2, AC1, AC5; Story 8.1)
   const handleActionClick = async (action: CatalogAction, event?: React.MouseEvent) => {
@@ -353,7 +356,7 @@ export default function CatalogPage() {
   // Loading skeleton: cards in grid mode, rows in list mode (AC9)
   const renderSkeleton = () =>
     viewMode === 'list' ? (
-      <Space orientation="vertical" style={{ width: '100%' }}>
+      <Space direction="vertical" style={{ width: '100%' }}>
         {Array.from({ length: 6 }).map((_, i) => (
           <Card key={i}>
             <Skeleton active paragraph={{ rows: 1 }} />
@@ -373,14 +376,14 @@ export default function CatalogPage() {
     );
 
   const renderEmpty = () => {
-    const noResultsFromFilters = !loading && filteredActions.length === 0 && hasActiveFilters && activeTab !== 'my-actions';
+    const noResultsFromFilters = !loading && filteredActions.length === 0 && hasActiveFilters && activeCategory !== 'mes-actions';
     return (
       <Empty
         image={Empty.PRESENTED_IMAGE_SIMPLE}
         description={
           noResultsFromFilters
             ? 'Aucune action ne correspond à vos filtres'
-            : activeTab === 'my-actions'
+            : activeCategory === 'mes-actions'
               ? "Aucune action dans 'Mes actions'. Ajoutez des favoris ou executez des actions."
               : 'Aucune action trouvee'
         }
@@ -394,206 +397,122 @@ export default function CatalogPage() {
     );
   };
 
-  const renderFiltersPanel = () => (
-    <Space orientation="vertical" style={{ width: '100%' }} size="middle">
-      <Text strong>Moteur</Text>
-      <Select
-        placeholder="Moteur"
-        style={{ width: '100%' }}
-        value={filterEngine ?? undefined}
-        onChange={(v) => setFilterEngine(v ?? undefined)}
-        options={ENGINE_OPTIONS}
-        allowClear
-      />
-      <Text strong>Environnement</Text>
-      <Select
-        placeholder="Environnement"
-        style={{ width: '100%' }}
-        value={filterEnvironment ?? undefined}
-        onChange={(v) => setFilterEnvironment(v ?? undefined)}
-        options={ENVIRONMENT_OPTIONS}
-        allowClear
-      />
-      <Text strong>Impact</Text>
-      <Select
-        placeholder="Impact"
-        style={{ width: '100%' }}
-        value={filterImpact ?? undefined}
-        onChange={(v) => setFilterImpact(v ?? undefined)}
-        options={IMPACT_OPTIONS}
-        allowClear
-      />
-    </Space>
-  );
-
   return (
     <div style={{ padding: 24 }}>
       <Title level={2}>Catalogue</Title>
 
-      <Row gutter={24} wrap={false}>
-        {/* Sidebar 240px (AC2, AC8) — inline when >= 1280px, Drawer when narrow */}
-        {isWide && (
-          <Col flex="0 0 240px" style={{ minWidth: 240 }}>
-            <div style={{ marginBottom: 16 }}>
-              <Text strong style={{ display: 'block', marginBottom: 8 }}>Filtres</Text>
-              {renderFiltersPanel()}
-            </div>
-          </Col>
-        )}
+      {/* Story 8.7: Category Tabs (AC1, AC2) */}
+      <CategoryTabs
+        activeCategory={activeCategory}
+        onCategoryChange={handleCategoryChange}
+        favoritesCount={favorites.size}
+      />
 
-        <Col flex="1" style={{ minWidth: 0 }}>
-          {/* Controls: View toggle + Search */}
-          <Space style={{ marginBottom: 8, width: '100%', justifyContent: 'space-between' }} wrap>
-            <Space.Compact>
-              {!isWide && (
-                <Button
-                  icon={<FilterOutlined />}
-                  onClick={() => setFiltersPanelOpen(true)}
-                  aria-label="Ouvrir les filtres"
-                >
-                  Filtres
-                </Button>
-              )}
-              <Button
-                type={viewMode === 'grid' ? 'primary' : 'default'}
-                icon={<AppstoreOutlined />}
-                onClick={() => handleViewModeChange('grid')}
-                aria-label="Vue grille"
-              />
-              <Button
-                type={viewMode === 'list' ? 'primary' : 'default'}
-                icon={<BarsOutlined />}
-                onClick={() => handleViewModeChange('list')}
-                aria-label="Vue liste"
-              />
-            </Space.Compact>
-            <Input
-              placeholder="Rechercher..."
-              prefix={<SearchOutlined />}
-              allowClear
-              style={{ maxWidth: 300 }}
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-            />
-          </Space>
+      {/* Story 8.7: Horizontal Filters (AC5) - replaces lateral drawer (AC7) */}
+      {activeCategory !== 'mes-actions' && (
+        <HorizontalFilters
+          selectedEngines={filterEngines}
+          selectedEnvironments={filterEnvironments}
+          selectedImpacts={filterImpacts}
+          onEnginesChange={setFilterEngines}
+          onEnvironmentsChange={setFilterEnvironments}
+          onImpactsChange={setFilterImpacts}
+        />
+      )}
 
-          {/* Chips filtres actifs + Réinitialiser (AC4, AC5) */}
-          {(filterTags.length > 0 || filterEngine || filterEnvironment || filterImpact) && (
-            <Space style={{ marginBottom: 8 }} wrap>
-              {filterTags.map((tag) => (
-                <Tag
-                  key={tag}
-                  closable
-                  onClose={() => setFilterTags((prev) => prev.filter((t) => t !== tag))}
-                >
-                  Tag: {tag}
-                </Tag>
-              ))}
-              {filterEngine && (
-                <Tag closable onClose={() => setFilterEngine(undefined)}>
-                  Moteur: {ENGINE_OPTIONS.find((o) => o.value === filterEngine)?.label ?? filterEngine}
-                </Tag>
-              )}
-              {filterEnvironment && (
-                <Tag closable onClose={() => setFilterEnvironment(undefined)}>
-                  Env: {filterEnvironment}
-                </Tag>
-              )}
-              {filterImpact && (
-                <Tag closable onClose={() => setFilterImpact(undefined)}>
-                  Impact: {IMPACT_OPTIONS.find((o) => o.value === filterImpact)?.label ?? filterImpact}
-                </Tag>
-              )}
-              <Button type="link" size="small" onClick={resetFilters}>
-                Réinitialiser les filtres
-              </Button>
-            </Space>
-          )}
+      {/* Story 8.7: Active Filter Chips (AC6) */}
+      <ActiveFiltersChips
+        activeCategory={activeCategory}
+        selectedTags={filterTags}
+        selectedEngines={filterEngines}
+        selectedEnvironments={filterEnvironments}
+        selectedImpacts={filterImpacts}
+        onRemoveCategory={() => setActiveCategory('tout')}
+        onRemoveTag={(tag) => setFilterTags((prev) => prev.filter((t) => t !== tag))}
+        onRemoveEngine={(engine) => setFilterEngines((prev) => prev.filter((e) => e !== engine))}
+        onRemoveEnvironment={(env) => setFilterEnvironments((prev) => prev.filter((e) => e !== env))}
+        onRemoveImpact={(impact) => setFilterImpacts((prev) => prev.filter((i) => i !== impact))}
+        onClearAll={resetFilters}
+      />
 
-          {/* Catalog Tabs (Story 2.23: categories removed, use tags for filtering) */}
-          <Tabs
-            activeKey={activeTab}
-            onChange={setActiveTab}
-            items={CATALOG_TABS.map((tab) => ({
-              key: tab.key,
-              label: (
-                <span>
-                  {tab.key === 'my-actions' && <HeartOutlined style={{ marginRight: 4 }} />}
-                  {tab.key === 'my-actions'
-                    ? `Mes actions${favorites.size > 0 ? ` (${favorites.size})` : ''}`
-                    : tab.label}
-                </span>
-              ),
-            }))}
-            style={{ marginBottom: 16 }}
+      {/* Controls: View toggle + Search */}
+      <Space style={{ marginBottom: 16, width: '100%', justifyContent: 'space-between' }} wrap>
+        <Space.Compact>
+          <Button
+            type={viewMode === 'grid' ? 'primary' : 'default'}
+            icon={<AppstoreOutlined />}
+            onClick={() => handleViewModeChange('grid')}
+            aria-label="Vue grille"
           />
+          <Button
+            type={viewMode === 'list' ? 'primary' : 'default'}
+            icon={<BarsOutlined />}
+            onClick={() => handleViewModeChange('list')}
+            aria-label="Vue liste"
+          />
+        </Space.Compact>
+        <Input
+          placeholder="Rechercher..."
+          prefix={<SearchOutlined />}
+          allowClear
+          style={{ maxWidth: 300 }}
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+        />
+      </Space>
 
-          {/* Tag Cloud for multi-select filtering (Story 3.5, AC1-6) */}
-          {activeTab !== 'my-actions' && tagsWithCounts.length > 0 && (
-            <TagCloud
-              tags={tagsWithCounts}
-              selectedTags={filterTags}
-              onSelectionChange={setFilterTags}
-            />
-          )}
+      {/* Tag Cloud for multi-select filtering (Story 3.5, AC1-6; Story 8.7, AC3) */}
+      {activeCategory !== 'mes-actions' && tagsWithCounts.length > 0 && (
+        <TagCloud
+          tags={tagsWithCounts}
+          selectedTags={filterTags}
+          onSelectionChange={setFilterTags}
+        />
+      )}
 
-          <Text type="secondary" aria-live="polite" style={{ display: 'block', marginBottom: 16 }}>
-            {loading ? 'Chargement…' : `${filteredActions.length} action${filteredActions.length !== 1 ? 's' : ''}`}
+      <Text type="secondary" aria-live="polite" style={{ display: 'block', marginBottom: 16 }}>
+        {loading ? 'Chargement…' : `${filteredActions.length} action${filteredActions.length !== 1 ? 's' : ''}`}
+      </Text>
+
+      {/* Actions Grid/List */}
+      {loading ? (
+        renderSkeleton()
+      ) : filteredActions.length === 0 ? (
+        renderEmpty()
+      ) : viewMode === 'grid' ? (
+        <Row gutter={[16, 16]}>
+          {filteredActions.map((action) => (
+            <Col key={action.id} xs={24} sm={12} lg={8} xl={6}>
+              {renderActionCard(action)}
+            </Col>
+          ))}
+        </Row>
+      ) : (
+        <Space direction="vertical" style={{ width: '100%' }}>
+          {filteredActions.map((action) => renderActionCard(action))}
+        </Space>
+      )}
+
+      {/* "Mes actions" recent section */}
+      {activeCategory === 'mes-actions' && recentActions.length > 0 && (
+        <div style={{ marginTop: 32 }}>
+          <Title level={4}>Actions recentes</Title>
+          <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
+            Vos dernieres executions
           </Text>
-
-          {/* Actions Grid/List */}
-          {loading ? (
-            renderSkeleton()
-          ) : filteredActions.length === 0 ? (
-            renderEmpty()
-          ) : viewMode === 'grid' ? (
-            <Row gutter={[16, 16]}>
-              {filteredActions.map((action) => (
-                <Col key={action.id} xs={24} sm={12} lg={8} xl={6}>
+          <Row gutter={[16, 16]}>
+            {recentActions.map((recent) => {
+              const action = actions.find((a) => a.id === recent.action_id);
+              if (!action) return null;
+              return (
+                <Col key={recent.action_id} xs={24} sm={12} lg={8} xl={6}>
                   {renderActionCard(action)}
                 </Col>
-              ))}
-            </Row>
-          ) : (
-            <Space orientation="vertical" style={{ width: '100%' }}>
-              {filteredActions.map((action) => renderActionCard(action))}
-            </Space>
-          )}
-
-          {/* "Mes actions" recent section */}
-          {activeTab === 'my-actions' && recentActions.length > 0 && (
-            <div style={{ marginTop: 32 }}>
-              <Title level={4}>Actions recentes</Title>
-              <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
-                Vos dernieres executions
-              </Text>
-              <Row gutter={[16, 16]}>
-                {recentActions.map((recent) => {
-                  const action = actions.find((a) => a.id === recent.action_id);
-                  if (!action) return null;
-                  return (
-                    <Col key={recent.action_id} xs={24} sm={12} lg={8} xl={6}>
-                      {renderActionCard(action)}
-                    </Col>
-                  );
-                })}
-              </Row>
-            </div>
-          )}
-        </Col>
-      </Row>
-
-      {/* Filtres panel Drawer (AC8: under 1280px) */}
-      <Drawer
-        title="Filtres"
-        placement="left"
-        styles={{ wrapper: { width: 240 } }}
-        open={filtersPanelOpen && !isWide}
-        onClose={() => setFiltersPanelOpen(false)}
-        aria-label="Panneau de filtres"
-      >
-        {renderFiltersPanel()}
-      </Drawer>
+              );
+            })}
+          </Row>
+        </div>
+      )}
 
       {/* Action Detail Drawer (Story 3.2, AC1, AC2, AC4, AC5) */}
       <Drawer

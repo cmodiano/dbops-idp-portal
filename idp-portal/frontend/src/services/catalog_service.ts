@@ -28,7 +28,7 @@ export interface RecentAction {
   last_executed_at: string;
 }
 
-/** Filters for catalog query (Story 3.3, AC9; Story 2.23: category removed). */
+/** Filters for catalog query (Story 3.3, AC9; Story 8.7: category added back). */
 export interface CatalogFilters {
   tags?: string[];
   /** Text search on name, description, tags (debounce 300 ms recommended). */
@@ -36,6 +36,8 @@ export interface CatalogFilters {
   engine?: string;
   environment?: string;
   impact?: string;
+  /** Category filter (maps to tag on backend): provisioning, patching, etc. Story 8.7. */
+  category?: string;
 }
 
 /** Tag with action count from GET /catalog/tags (Story 3.3, AC10). */
@@ -59,7 +61,7 @@ export interface CatalogActionDetailResponse {
 
 /**
  * Fetch catalog actions (AC1, AC3, AC6, AC9, AC10, AC11).
- * Optional filters: tags, q, engine, environment, impact (Story 3.3; Story 2.23: category removed).
+ * Optional filters: tags, q, engine, environment, impact, category (Story 3.3; Story 8.7: category added).
  */
 export async function fetchCatalogActions(filters?: CatalogFilters): Promise<CatalogAction[]> {
   const params = new URLSearchParams();
@@ -78,16 +80,27 @@ export async function fetchCatalogActions(filters?: CatalogFilters): Promise<Cat
   if (filters?.impact) {
     params.set('impact', filters.impact);
   }
+  // Story 8.7: Add category filter (skip "tout" and "mes-actions" as they are UI-only)
+  if (filters?.category && filters.category !== 'tout' && filters.category !== 'mes-actions') {
+    params.set('category', filters.category);
+  }
   const query = params.toString() ? `?${params.toString()}` : '';
   return apiFetch<CatalogAction[]>(`/catalog/actions${query}`);
 }
 
 /**
- * Fetch tags with action counts for catalog (Story 3.3, AC3, AC10).
+ * Fetch tags with action counts for catalog (Story 3.3, AC3, AC10; Story 8.7: category filter).
  * Returns list of { name, action_count } for published actions (RBAC applied).
+ * Story 8.7 AC3: When category is provided, returns only tags from actions in that category.
  */
-export async function fetchCatalogTags(): Promise<CatalogTagWithCount[]> {
-  return apiFetch<CatalogTagWithCount[]>('/catalog/tags');
+export async function fetchCatalogTags(category?: string): Promise<CatalogTagWithCount[]> {
+  const params = new URLSearchParams();
+  // Story 8.7: Filter tags by category (skip "tout" and "mes-actions")
+  if (category && category !== 'tout' && category !== 'mes-actions') {
+    params.set('category', category);
+  }
+  const query = params.toString() ? `?${params.toString()}` : '';
+  return apiFetch<CatalogTagWithCount[]>(`/catalog/tags${query}`);
 }
 
 /**

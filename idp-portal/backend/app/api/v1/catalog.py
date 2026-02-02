@@ -36,15 +36,17 @@ def _get_cache_key(
     engine: str | None = None,
     environment: str | None = None,
     impact: str | None = None,
+    category: str | None = None,
 ) -> str:
-    """Generate cache key for catalog query (Story 3.3: all params included)."""
+    """Generate cache key for catalog query (Story 3.3: all params included; Story 8.7: category added)."""
     user_part = f"user_{user_id}" if user_id else "anon"
     tags_part = ",".join(sorted(tags_filter)) if tags_filter else "all"
     q_part = q.strip() if q and q.strip() else ""
     engine_part = engine or ""
     env_part = environment or ""
     impact_part = impact or ""
-    return f"{user_part}_{tags_part}_q{q_part}_e{engine_part}_env{env_part}_i{impact_part}"
+    category_part = category or ""
+    return f"{user_part}_{tags_part}_q{q_part}_e{engine_part}_env{env_part}_i{impact_part}_cat{category_part}"
 
 
 def _filter_by_rbac(
@@ -109,8 +111,9 @@ async def list_catalog_actions(
             raise HTTPException(status_code=400, detail=f"Invalid impact parameter: must be one of {valid_values}") from None
 
     # Combine category and tags filters
+    # Story 8.7: "tout", "all", "mes-actions" are UI-only categories, not actual tags
     tags_filter: list[str] | None = None
-    if category:
+    if category and category.lower() not in ("tout", "all", "mes-actions"):
         tags_filter = [normalize_tag_name(category)]
     if tags:
         extra_tags = [n for s in tags.split(",") if (n := normalize_tag_name(s.strip()))]
@@ -120,9 +123,9 @@ async def list_catalog_actions(
             tags_filter = extra_tags
     tags_filter = tags_filter or None
 
-    # Check cache (Story 3.3: key includes all params)
+    # Check cache (Story 3.3: key includes all params; Story 8.7: category added)
     user_id = user.id if user else None
-    cache_key = _get_cache_key(user_id, tags_filter, q=q, engine=engine, environment=environment, impact=impact)
+    cache_key = _get_cache_key(user_id, tags_filter, q=q, engine=engine, environment=environment, impact=impact, category=category)
     if cache_key in _catalog_cache:
         return {"data": _catalog_cache[cache_key]}
 
@@ -148,23 +151,33 @@ async def list_catalog_actions(
 
 @router.get("/tags")
 async def list_catalog_tags(
+    category: str | None = Query(None, description="Filter tags by category (maps to tag: provisioning, patching, etc.)"),
     user: UserProfile | None = Depends(get_optional_user),
 ) -> dict:
-    """List tags with action counts for published actions (Story 3.3, AC3, AC10).
+    """List tags with action counts for published actions (Story 3.3, AC3, AC10; Story 8.7, AC3).
 
     Returns tags that appear on published actions, with count per tag.
     RBAC: if authenticated, only tags from actions the user can see (same scope as list_catalog).
+    Story 8.7 AC3: When category is provided, returns only tags from actions in that category.
 
     Returns:
         { "data": list[{ "name": string, "action_count": number }] }
     """
+    # Story 8.7: Filter by category (converts category to tag filter)
+    category_tag = normalize_tag_name(category) if category and category.lower() not in ("tout", "all", "mes-actions") else None
+
     action_ids_filter: list[int] | None = None
-    if user and user.cumulative_permissions:
-        actions_type = getattr(user.cumulative_permissions, "actions_type", "all")
-        if actions_type != "all":
-            actions = await catalog_repository.list_catalog(status=ActionStatus.PUBLISHED)
+
+    # Get actions matching category (if any) + RBAC
+    if category_tag or (user and user.cumulative_permissions):
+        tags_filter = [category_tag] if category_tag else None
+        actions = await catalog_repository.list_catalog(
+            status=ActionStatus.PUBLISHED,
+            tags_filter=tags_filter,
+        )
+        if user and user.cumulative_permissions:
             actions = _filter_by_rbac(actions, user.cumulative_permissions)
-            action_ids_filter = [a["id"] for a in actions]
+        action_ids_filter = [a["id"] for a in actions]
 
     tags = await catalog_repository.list_tags_with_counts(action_ids_filter=action_ids_filter)
     return {"data": tags}
