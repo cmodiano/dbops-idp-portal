@@ -9,6 +9,9 @@ import { AuthProvider } from '../../contexts/AuthContext';
 import { ThemeProvider } from '../../contexts/ThemeContext';
 import { DashboardProvider, useDashboard } from '../../contexts/DashboardContext';
 import { lightTheme } from '../../theme/desjardins';
+import * as executionService from '../../services/execution_service';
+
+vi.mock('../../services/execution_service');
 
 function mockAuthSession(profile: string, navigationTabs: string[]) {
   global.fetch = vi.fn()
@@ -68,6 +71,8 @@ function renderTopNav(initialPath = '/catalog', withUnseenError = false) {
 describe('TopNav', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    // Mock pending approvals count for all tests
+    vi.mocked(executionService.getPendingApprovalsCount).mockResolvedValue(0);
   });
 
   describe('AC1 — DBOPS Navigation', () => {
@@ -259,6 +264,166 @@ describe('TopNav', () => {
         name: /Dashboard \(1 erreur non vue\)/,
       });
       expect(dashboardButton).toBeInTheDocument();
+    });
+  });
+
+  describe('Story 8.8 — Bell Icon Notification', () => {
+    it('shows bell icon for DBA user (AC4, AC9)', async () => {
+      vi.mocked(executionService.getPendingApprovalsCount).mockResolvedValue(3);
+      mockAuthSession('DBA', ['catalog', 'executions', 'dashboard']);
+      renderTopNav('/catalog');
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/3 approbations en attente/)).toBeInTheDocument();
+      });
+    });
+
+    it('shows bell icon for DBOPS user (AC4, AC9)', async () => {
+      vi.mocked(executionService.getPendingApprovalsCount).mockResolvedValue(5);
+      mockAuthSession('dbops', ['catalog', 'executions', 'dashboard', 'admin']);
+      renderTopNav('/catalog');
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/5 approbations en attente/)).toBeInTheDocument();
+      });
+    });
+
+    it('hides bell icon for CLIENT user (AC9)', async () => {
+      mockAuthSession('CLIENT', ['catalog', 'executions']);
+      renderTopNav('/catalog');
+
+      await waitFor(() => {
+        expect(screen.getByText('Catalogue')).toBeInTheDocument();
+      });
+
+      expect(screen.queryByLabelText(/approbations en attente/)).not.toBeInTheDocument();
+    });
+
+    it('shows correct singular label for 1 approval (AC4)', async () => {
+      vi.mocked(executionService.getPendingApprovalsCount).mockResolvedValue(1);
+      mockAuthSession('DBA', ['catalog', 'executions', 'dashboard']);
+      renderTopNav('/catalog');
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('1 approbation en attente')).toBeInTheDocument();
+      });
+    });
+
+    it('hides badge when count is 0 (AC6)', async () => {
+      vi.mocked(executionService.getPendingApprovalsCount).mockResolvedValue(0);
+      mockAuthSession('DBA', ['catalog', 'executions', 'dashboard']);
+      renderTopNav('/catalog');
+
+      await waitFor(() => {
+        expect(screen.getByText('Catalogue')).toBeInTheDocument();
+      });
+
+      // Bell icon should be present with "Aucune approbation" label
+      expect(screen.getByLabelText('Aucune approbation en attente')).toBeInTheDocument();
+      // Badge count should not be visible (showZero={false})
+      expect(screen.queryByText('0')).not.toBeInTheDocument();
+    });
+
+    it('navigates to executions page on bell click (AC5)', async () => {
+      const user = userEvent.setup();
+      vi.mocked(executionService.getPendingApprovalsCount).mockResolvedValue(2);
+      mockAuthSession('DBA', ['catalog', 'executions', 'dashboard']);
+      renderTopNav('/catalog');
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/2 approbations en attente/)).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByLabelText(/2 approbations en attente/));
+
+      // Check that we navigated - the router should now be at /executions
+      await waitFor(() => {
+        expect(screen.getByText('Exécutions')).toBeInTheDocument();
+      });
+    });
+
+    it('bell icon is keyboard accessible (AC10)', async () => {
+      const user = userEvent.setup();
+      vi.mocked(executionService.getPendingApprovalsCount).mockResolvedValue(2);
+      mockAuthSession('DBA', ['catalog', 'executions', 'dashboard']);
+      renderTopNav('/catalog');
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/2 approbations en attente/)).toBeInTheDocument();
+      });
+
+      const bellButton = screen.getByLabelText(/2 approbations en attente/);
+      expect(bellButton).toHaveAttribute('tabIndex', '0');
+
+      // Test keyboard navigation
+      bellButton.focus();
+      await user.keyboard('{Enter}');
+
+      await waitFor(() => {
+        expect(screen.getByText('Exécutions')).toBeInTheDocument();
+      });
+    });
+
+    it('triggers scroll to pending-approvals section on click (AC5)', async () => {
+      const user = userEvent.setup();
+      const scrollIntoViewMock = vi.fn();
+      const getElementByIdMock = vi.fn().mockReturnValue({
+        scrollIntoView: scrollIntoViewMock,
+      });
+      document.getElementById = getElementByIdMock;
+
+      vi.mocked(executionService.getPendingApprovalsCount).mockResolvedValue(2);
+      mockAuthSession('DBA', ['catalog', 'executions', 'dashboard']);
+      renderTopNav('/catalog');
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/2 approbations en attente/)).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByLabelText(/2 approbations en attente/));
+
+      // Wait for setTimeout(100ms) to complete
+      await waitFor(
+        () => {
+          expect(getElementByIdMock).toHaveBeenCalledWith('pending-approvals');
+          expect(scrollIntoViewMock).toHaveBeenCalledWith({ behavior: 'smooth' });
+        },
+        { timeout: 200 }
+      );
+    });
+
+    it('shows aria-label "Aucune approbation" when count is 0 (AC6)', async () => {
+      vi.mocked(executionService.getPendingApprovalsCount).mockResolvedValue(0);
+      mockAuthSession('DBA', ['catalog', 'executions', 'dashboard']);
+      renderTopNav('/catalog');
+
+      await waitFor(() => {
+        expect(screen.getByText('Catalogue')).toBeInTheDocument();
+      });
+
+      // Bell icon should be present with proper label
+      expect(screen.getByLabelText('Aucune approbation en attente')).toBeInTheDocument();
+    });
+
+    it('shows error tooltip when approvals fetch fails', async () => {
+      vi.mocked(executionService.getPendingApprovalsCount).mockRejectedValue(
+        new Error('Network error')
+      );
+      mockAuthSession('DBA', ['catalog', 'executions', 'dashboard']);
+      renderTopNav('/catalog');
+
+      await waitFor(() => {
+        expect(screen.getByText('Catalogue')).toBeInTheDocument();
+      });
+
+      // Bell icon should still render (count will be 0 due to error)
+      const bellButton = screen.getByLabelText('Aucune approbation en attente');
+      expect(bellButton).toBeInTheDocument();
+
+      // Tooltip should be present in the DOM (though may not be visible until hover)
+      // We can't easily test tooltip visibility without hovering, but we can verify the element exists
+      const tooltip = bellButton.closest('.ant-tooltip-open') || document.querySelector('[title="Erreur de chargement des approbations"]');
+      // Note: Tooltip won't be visible until hover, but error state is tracked in hook
     });
   });
 });

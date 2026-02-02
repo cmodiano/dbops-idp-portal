@@ -1,14 +1,20 @@
 /**
- * ExecutionsPage - Execution history (Story 4.8).
+ * ExecutionsPage - Execution history (Story 4.8, Story 8.8).
  *
  * AC1: Table with columns: action, environment, status, date, duration.
  * AC3: Running executions first with blue pulsed indicator.
  * AC4: Pagination 25, skeleton loading, sortable columns.
  * AC2: Click opens drawer with ExecutionTimeline (historical mode).
+ *
+ * Story 8.8:
+ * AC1: Section "Approbations en attente" s'affiche avant la liste des exécutions.
+ * AC8: Réutilisation du composant PendingApprovalsList.
+ * AC9: RBAC - seuls DBA/DBOPS voient la section approbations.
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Typography, Table, Drawer, Tag, Skeleton, Badge, Alert } from 'antd';
+import { Typography, Table, Drawer, Tag, Skeleton, Badge, Alert, Card, Space, theme } from 'antd';
+import { SafetyCertificateOutlined } from '@ant-design/icons';
 import type { TableProps, TablePaginationConfig } from 'antd';
 
 // Ant Design 6.2: Extract table event types from public API
@@ -16,7 +22,9 @@ type TableOnChange<T> = NonNullable<TableProps<T>['onChange']>;
 type SorterResult<T> = Parameters<TableOnChange<T>>[2];
 type FilterValue = Parameters<TableOnChange<never>>[1][string];
 import { ExecutionTimeline } from '../components/execution/ExecutionTimeline';
-import { listExecutions, getExecution, getExecutionSteps } from '../services/execution_service';
+import { PendingApprovalsList } from '../components/dashboard/PendingApprovalsList';
+import { listExecutions, getExecution, getExecutionSteps, listPendingApprovals } from '../services/execution_service';
+import { useAuth } from '../contexts/AuthContext';
 import type { ExecutionResponse, ExecutionStepResponse, ExecutionStatusType } from '../types/api';
 
 const { Title } = Typography;
@@ -67,6 +75,13 @@ function isRunning(status: ExecutionStatusType): boolean {
 }
 
 export default function ExecutionsPage() {
+  // Story 8.8 AC9: Auth context for profile check
+  const { user } = useAuth();
+  const { token } = theme.useToken();
+  const canApprove =
+    user?.profile?.toLowerCase() === 'dba' ||
+    user?.profile?.toLowerCase() === 'dbops';
+
   const [executions, setExecutions] = useState<ExecutionResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -74,6 +89,10 @@ export default function ExecutionsPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [sortField, setSortField] = useState<string>('created_at');
   const [sortOrder, setSortOrder] = useState<'ascend' | 'descend'>('descend');
+
+  // Story 8.8 AC1, AC2: Pending approvals section
+  const [pendingApprovals, setPendingApprovals] = useState<ExecutionResponse[]>([]);
+  const [pendingApprovalsLoading, setPendingApprovalsLoading] = useState(false);
 
   // Drawer state (AC2)
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -101,6 +120,30 @@ export default function ExecutionsPage() {
   useEffect(() => {
     fetchData(currentPage);
   }, [currentPage, fetchData]);
+
+  // Story 8.8 AC1: Load pending approvals for DBA/DBOPS
+  const loadPendingApprovals = useCallback(async () => {
+    if (!canApprove) return;
+    setPendingApprovalsLoading(true);
+    try {
+      const response = await listPendingApprovals(50, 0);
+      setPendingApprovals(response.data);
+    } catch {
+      setPendingApprovals([]);
+    } finally {
+      setPendingApprovalsLoading(false);
+    }
+  }, [canApprove]);
+
+  useEffect(() => {
+    loadPendingApprovals();
+  }, [loadPendingApprovals]);
+
+  // Story 8.8: Callback after approval/rejection - refresh both lists
+  const handleApprovalComplete = useCallback(() => {
+    loadPendingApprovals();
+    fetchData(currentPage);
+  }, [loadPendingApprovals, fetchData, currentPage]);
 
   // Sort executions: running first, then by sortField (AC3)
   const sortedExecutions = useMemo(() => {
@@ -269,6 +312,27 @@ export default function ExecutionsPage() {
   return (
     <div style={{ padding: 24 }}>
       <Title level={2}>Exécutions</Title>
+
+      {/* Story 8.8 AC1, AC8: Pending approvals section (DBA/DBOPS only) */}
+      {canApprove && pendingApprovals.length > 0 && (
+        <Card
+          id="pending-approvals"
+          title={
+            <Space>
+              <SafetyCertificateOutlined style={{ color: token.colorWarning }} />
+              <span>Approbations en attente</span>
+              <Tag color="warning">{pendingApprovals.length}</Tag>
+            </Space>
+          }
+          style={{ marginBottom: 24, borderColor: token.colorWarning }}
+        >
+          <PendingApprovalsList
+            executions={pendingApprovals}
+            loading={pendingApprovalsLoading}
+            onActionComplete={handleApprovalComplete}
+          />
+        </Card>
+      )}
 
       <Table<ExecutionResponse>
         dataSource={sortedExecutions}

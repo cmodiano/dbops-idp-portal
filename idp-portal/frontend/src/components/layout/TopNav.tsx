@@ -1,5 +1,5 @@
 import './TopNav.css';
-import { Dropdown, Avatar, Space, Typography, theme, Badge } from 'antd';
+import { Dropdown, Avatar, Space, Typography, theme, Badge, Tooltip } from 'antd';
 import {
   AppstoreOutlined,
   PlayCircleOutlined,
@@ -10,11 +10,13 @@ import {
   SunOutlined,
   MoonOutlined,
   AuditOutlined,
+  BellOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useDashboard } from '../../contexts/DashboardContext';
+import { usePendingApprovalsCount } from '../../hooks/usePendingApprovalsCount';
 import type { NavigationTabKey } from '../../types/common';
 import type { MenuProps } from 'antd';
 
@@ -43,8 +45,22 @@ export function TopNav() {
   const { effectiveMode, toggleTheme } = useTheme();
   const { token } = theme.useToken();
   const { unseenErrorCount } = useDashboard();
+  const { count: pendingApprovalsCount, error: approvalsError } = usePendingApprovalsCount();
 
   const navigationTabs = user?.navigation_tabs ?? [];
+
+  // Story 8.8 AC9: Only DBA/DBOPS see bell icon
+  const showApprovalsBell =
+    user?.profile?.toLowerCase() === 'dba' ||
+    user?.profile?.toLowerCase() === 'dbops';
+
+  // Story 8.8 AC5: Navigate to executions page and scroll to pending-approvals section
+  const handleBellClick = () => {
+    navigate('/executions');
+    setTimeout(() => {
+      document.getElementById('pending-approvals')?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  };
 
   const activeKey = navigationTabs.find((key) =>
     location.pathname.startsWith(TAB_ROUTES[key]),
@@ -171,6 +187,51 @@ export function TopNav() {
 
       {/* Right section */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* Story 8.8 AC4: Approvals bell notification */}
+        {showApprovalsBell && (
+          <Tooltip title={approvalsError ? 'Erreur de chargement des approbations' : undefined}>
+            <Badge
+              count={pendingApprovalsCount}
+              offset={[-5, 5]}
+              style={{ backgroundColor: token.colorPrimary }}
+              showZero={false}
+            >
+              <button
+                onClick={handleBellClick}
+                aria-label={
+                  pendingApprovalsCount === 0
+                    ? 'Aucune approbation en attente'
+                    : `${pendingApprovalsCount} approbation${pendingApprovalsCount !== 1 ? 's' : ''} en attente`
+                }
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleBellClick();
+                  }
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 40,
+                  height: 40,
+                  border: 'none',
+                  borderRadius: 10,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  background: token.colorFillTertiary,
+                  color: pendingApprovalsCount > 0 ? token.colorPrimary : token.colorTextSecondary,
+                  fontSize: 20,
+                }}
+              >
+                <BellOutlined />
+              </button>
+            </Badge>
+          </Tooltip>
+        )}
+
         {/* Theme Toggle - Modern pill */}
         <button
           onClick={toggleTheme}

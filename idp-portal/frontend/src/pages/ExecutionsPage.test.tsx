@@ -1,16 +1,25 @@
 /**
- * Tests for ExecutionsPage (Story 4.8).
+ * Tests for ExecutionsPage (Story 4.8, Story 8.8).
  *
+ * Story 4.8:
  * AC1: Table with columns: action, environment, status, date, duration.
  * AC2: Click opens drawer with ExecutionTimeline (historical mode).
  * AC3: Running executions first with blue indicator.
  * AC4: Pagination 25, skeleton loading, sortable columns.
+ *
+ * Story 8.8:
+ * AC1: Section "Approbations en attente" avant la liste des exécutions.
+ * AC8: Réutilisation du composant PendingApprovalsList.
+ * AC9: RBAC - seuls DBA/DBOPS voient la section approbations.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { createMemoryRouter, RouterProvider } from 'react-router';
+import { App } from 'antd';
 import ExecutionsPage from './ExecutionsPage';
+import { AuthProvider } from '../contexts/AuthContext';
 import * as executionService from '../services/execution_service';
 import type { ExecutionResponse, ExecutionStepResponse } from '../types/api';
 
@@ -18,6 +27,42 @@ vi.mock('../services/execution_service');
 vi.mock('../hooks/useWebSocket', () => ({
   useWebSocket: () => ({ steps: [], execution: null, loading: false, error: null }),
 }));
+
+/** Mock auth session with profile */
+function mockAuthSession(profile: string) {
+  global.fetch = vi.fn()
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: { access_token: 'token', token_type: 'bearer' } }),
+    })
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        data: {
+          id: 1,
+          username: 'test.user',
+          display_name: 'Test User',
+          profile,
+          navigation_tabs: ['dashboard', 'catalog', 'executions'],
+        },
+      }),
+    });
+}
+
+/** Helper to render component with router and auth */
+function renderWithProviders() {
+  const router = createMemoryRouter(
+    [{ path: '/', element: <ExecutionsPage /> }],
+    { initialEntries: ['/'] }
+  );
+  return render(
+    <App>
+      <AuthProvider>
+        <RouterProvider router={router} />
+      </AuthProvider>
+    </App>
+  );
+}
 
 const mockExecutions: ExecutionResponse[] = [
   {
@@ -96,11 +141,32 @@ describe('ExecutionsPage', () => {
     pagination: { page: 1, page_size: 25, total_count: 3, total_pages: 1 },
   };
 
+  const mockPendingApprovals: ExecutionResponse[] = [
+    {
+      id: 100,
+      action_id: 50,
+      action_name: 'Pending Action',
+      user_id: 2,
+      user_display_name: 'Other User',
+      environment: 'prod',
+      parameters: null,
+      status: 'PENDING_APPROVAL',
+      servicenow_change_id: null,
+      started_at: null,
+      completed_at: null,
+      created_at: '2026-01-30T10:00:00Z',
+    },
+  ];
+
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(executionService.listExecutions).mockResolvedValue(defaultListResponse);
     vi.mocked(executionService.getExecution).mockResolvedValue(mockExecutions[0]);
     vi.mocked(executionService.getExecutionSteps).mockResolvedValue(mockSteps);
+    vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
+      data: [],
+      pagination: { page: 1, page_size: 50, total_count: 0, total_pages: 0 },
+    });
   });
 
   describe('Table Display (AC1)', () => {
@@ -421,6 +487,133 @@ describe('ExecutionsPage', () => {
 
       await waitFor(() => {
         expect(screen.getByText('Aucune exécution trouvée')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Story 8.8 — Pending Approvals Section', () => {
+    it('shows pending approvals section for DBA user (AC1, AC9)', async () => {
+      mockAuthSession('DBA');
+      vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
+        data: mockPendingApprovals,
+        pagination: { page: 1, page_size: 50, total_count: 1, total_pages: 1 },
+      });
+
+      await act(async () => {
+        renderWithProviders();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('Approbations en attente')).toBeInTheDocument();
+      });
+
+      expect(screen.getByText('Pending Action')).toBeInTheDocument();
+    });
+
+    it('shows pending approvals section for DBOPS user (AC1, AC9)', async () => {
+      mockAuthSession('DBOPS');
+      vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
+        data: mockPendingApprovals,
+        pagination: { page: 1, page_size: 50, total_count: 1, total_pages: 1 },
+      });
+
+      await act(async () => {
+        renderWithProviders();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('Approbations en attente')).toBeInTheDocument();
+      });
+    });
+
+    it('hides pending approvals section for CLIENT user (AC9)', async () => {
+      mockAuthSession('CLIENT');
+      vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
+        data: mockPendingApprovals,
+        pagination: { page: 1, page_size: 50, total_count: 1, total_pages: 1 },
+      });
+
+      await act(async () => {
+        renderWithProviders();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { name: 'Exécutions' })).toBeInTheDocument();
+      });
+
+      expect(screen.queryByText('Approbations en attente')).not.toBeInTheDocument();
+    });
+
+    it('hides pending approvals section when no approvals (AC1)', async () => {
+      mockAuthSession('DBA');
+      vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
+        data: [],
+        pagination: { page: 1, page_size: 50, total_count: 0, total_pages: 0 },
+      });
+
+      await act(async () => {
+        renderWithProviders();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { name: 'Exécutions' })).toBeInTheDocument();
+      });
+
+      expect(screen.queryByText('Approbations en attente')).not.toBeInTheDocument();
+    });
+
+    it('displays pending-approvals id for scroll navigation (AC5)', async () => {
+      mockAuthSession('DBA');
+      vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
+        data: mockPendingApprovals,
+        pagination: { page: 1, page_size: 50, total_count: 1, total_pages: 1 },
+      });
+
+      await act(async () => {
+        renderWithProviders();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('Approbations en attente')).toBeInTheDocument();
+      });
+
+      const pendingSection = document.getElementById('pending-approvals');
+      expect(pendingSection).toBeInTheDocument();
+    });
+
+    it('shows approve/reject buttons (AC2)', async () => {
+      mockAuthSession('DBA');
+      vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
+        data: mockPendingApprovals,
+        pagination: { page: 1, page_size: 50, total_count: 1, total_pages: 1 },
+      });
+
+      await act(async () => {
+        renderWithProviders();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('Approuver')).toBeInTheDocument();
+        expect(screen.getByText('Refuser')).toBeInTheDocument();
+      });
+    });
+
+    it('displays count badge on section header (AC2)', async () => {
+      mockAuthSession('DBA');
+      vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
+        data: mockPendingApprovals,
+        pagination: { page: 1, page_size: 50, total_count: 1, total_pages: 1 },
+      });
+
+      await act(async () => {
+        renderWithProviders();
+      });
+
+      await waitFor(() => {
+        // The count badge is rendered as a Tag component
+        const tag = document.querySelector('.ant-tag-warning');
+        expect(tag).toBeInTheDocument();
+        expect(tag?.textContent).toBe('1');
       });
     });
   });

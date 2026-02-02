@@ -1,11 +1,12 @@
 /**
- * Tests for DashboardPage (Story 8.3).
+ * Tests for DashboardPage (Story 8.3, Story 8.8).
  *
  * DashboardPage now uses ReportingDashboard component.
  * Tests verify:
  * - Page title renders
  * - ReportingDashboard is rendered
- * - PendingApprovalsList is shown for DBA/DBOPS profiles
+ *
+ * Story 8.8 AC3: PendingApprovalsList removed from Dashboard (moved to ExecutionsPage)
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -15,7 +16,6 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import DashboardPage from './DashboardPage';
 import { AuthProvider } from '../contexts/AuthContext';
 import * as dashboardService from '../services/dashboard_service';
-import * as executionService from '../services/execution_service';
 import type {
   DashboardStats,
   TechnologyStats,
@@ -24,7 +24,6 @@ import type {
 } from '../types/api';
 
 vi.mock('../services/dashboard_service');
-vi.mock('../services/execution_service');
 
 // Mock recharts to avoid ResponsiveContainer dimension issues in tests
 vi.mock('recharts', async () => {
@@ -104,9 +103,10 @@ describe('DashboardPage', () => {
     vi.mocked(dashboardService.fetchStatsByTechnology).mockResolvedValue(mockTechStats);
     vi.mocked(dashboardService.fetchStatsByEnvironment).mockResolvedValue(mockEnvStats);
     vi.mocked(dashboardService.fetchTimeSeries).mockResolvedValue(mockTimeSeries);
-    vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
-      data: [],
-      pagination: { page: 1, page_size: 50, total: 0, total_pages: 0 },
+    vi.mocked(dashboardService.fetchFilterOptions).mockResolvedValue({
+      engines: ['Oracle', 'PostgreSQL'],
+      environments: ['dev', 'staging', 'prod'],
+      actions: ['Action 1', 'Action 2'],
     });
   });
 
@@ -185,33 +185,16 @@ describe('DashboardPage', () => {
     expect(screen.queryByText('Activite recente')).not.toBeInTheDocument();
   });
 
-  it('shows pending approvals for DBA profile (Story 7.4)', async () => {
-    vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
-      data: [
-        {
-          id: 1,
-          action_id: 10,
-          action_name: 'Test Action',
-          user_id: 2,
-          user_display_name: 'Test User',
-          environment: 'prod',
-          parameters: {},
-          status: 'PENDING_APPROVAL',
-          servicenow_change_id: null,
-          started_at: null,
-          completed_at: null,
-          created_at: '2026-01-30T10:00:00Z',
-        },
-      ],
-      pagination: { page: 1, page_size: 50, total: 1, total_pages: 1 },
-    });
-
+  it('does not show pending approvals section (Story 8.8 AC3 - moved to ExecutionsPage)', async () => {
     await act(async () => {
       renderWithProviders();
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Approbations en attente')).toBeInTheDocument();
+      expect(screen.getByText('15')).toBeInTheDocument();
     });
+
+    // Story 8.8 AC3: PendingApprovalsList removed from Dashboard
+    expect(screen.queryByText('Approbations en attente')).not.toBeInTheDocument();
   });
 });
