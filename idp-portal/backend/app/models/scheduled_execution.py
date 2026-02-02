@@ -419,3 +419,64 @@ class ScheduledExecutionListItem(BaseModel):
     correlation_id: str | None = None  # HIGH-1 FIX: AC10 requires correlation_id in details modal
     execution_id: int | None = None  # HIGH-2 FIX: AC10 requires link to effective execution if status=executed
     recurring_pattern: RecurringPatternResponse | None = None  # Story 11.7: Recurring pattern info
+
+
+# === Story 11.10: External Scheduler API Models ===
+
+
+class ScheduledExecutionPendingItem(BaseModel):
+    """Pending execution item for external scheduler API (Story 11.10, AC1).
+
+    Enriched with action and user info via JOINs.
+    Used by GET /api/v1/scheduled-executions/pending endpoint.
+
+    Attributes:
+        scheduled_execution_id: ID of the scheduled execution
+        action_id: ID of the action to execute
+        action_name: Name of the action (from ACTIONS_CATALOG JOIN)
+        user_id: ID of the user who created the schedule
+        user_name: Username (from USERS JOIN)
+        environment: Target environment (dev, staging, prod)
+        parameters: Execution parameters (CLOB JSON)
+        scheduled_at: Date/time for one-time execution (NULL for recurring)
+        recurring_pattern: Pattern info for recurring executions
+        correlation_id: Correlation ID for tracing
+        created_at: When schedule was created
+    """
+    scheduled_execution_id: int = Field(..., description="ID de l'exécution planifiée")
+    action_id: int = Field(..., description="ID de l'action à exécuter")
+    action_name: str = Field(..., description="Nom de l'action")
+    user_id: int = Field(..., description="ID de l'utilisateur ayant créé l'exécution")
+    user_name: str = Field(..., description="Nom d'utilisateur")
+    environment: str = Field(..., description="Environnement (dev, staging, prod)")
+    parameters: dict[str, Any] = Field(default_factory=dict, description="Paramètres de l'action")
+    scheduled_at: datetime | None = Field(None, description="Date/heure planifiée (NULL pour recurring)")
+    recurring_pattern: RecurringPatternResponse | None = Field(None, description="Pattern de récurrence si applicable")
+    correlation_id: str = Field(..., description="Correlation ID pour tracing")
+    created_at: datetime = Field(..., description="Date de création")
+
+
+class ScheduledExecutionUpdateRequest(BaseModel):
+    """Request to update scheduled execution status (Story 11.10, AC4).
+
+    Used by PATCH /api/v1/scheduled-executions/{id} to mark as executed.
+
+    Attributes:
+        status: New status ("cancelled" or "executed")
+        execution_id: ID of the created execution (required when status="executed")
+    """
+    status: Literal["cancelled", "executed"] = Field(
+        ..., description="Nouveau statut"
+    )
+    execution_id: int | None = Field(
+        None, description="ID de l'exécution créée (requis si status=executed)"
+    )
+
+    @model_validator(mode="after")
+    def validate_execution_id_required_for_executed(self):
+        """Validate execution_id is present when status=executed (Story 11.10, AC6)."""
+        if self.status == "executed" and self.execution_id is None:
+            raise ValueError(
+                "execution_id est requis lors de la transition vers status 'executed'"
+            )
+        return self

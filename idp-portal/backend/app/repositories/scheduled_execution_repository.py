@@ -595,6 +595,277 @@ async def get_recurring_pattern(
     )
 
 
+# === Story 11.10: External Scheduler API ===
+
+
+async def list_pending_executions(
+    before: datetime,
+    limit: int = 100,
+    offset: int = 0,
+) -> list:
+    """List pending executions for external scheduler (Story 11.10, AC1).
+
+    Returns executions where:
+    - One-time: status='pending' AND scheduled_at <= before
+    - Recurring: status='pending' AND recurring_pattern.is_active=true AND next_execution_date <= before
+
+    Sorted by effective execution date (most urgent first): COALESCE(scheduled_at, next_execution_date) ASC
+
+    Args:
+        before: Timestamp limit for fetching executions to run
+        limit: Max results to return (1-100)
+        offset: Pagination offset
+
+    Returns:
+        List of ScheduledExecutionPendingItem with enriched action and user info
+    """
+    from app.models.scheduled_execution import ScheduledExecutionPendingItem
+
+    start_time = time.perf_counter()
+
+    # Query with JOINs for enrichment (AC1)
+    query = """
+        SELECT
+            SE.ID AS SCHEDULED_EXECUTION_ID,
+            SE.ACTION_ID,
+            AC.NAME AS ACTION_NAME,
+            SE.USER_ID,
+            U.USERNAME AS USER_NAME,
+            SE.ENVIRONMENT,
+            SE.PARAMETERS,
+            SE.SCHEDULED_AT,
+            SE.CORRELATION_ID,
+            SE.CREATED_AT,
+            RP.PATTERN_TYPE,
+            RP.PATTERN_CONFIG,
+            RP.NEXT_EXECUTION_DATE,
+            RP.IS_ACTIVE
+        FROM SCHEDULED_EXECUTIONS SE
+        INNER JOIN ACTIONS_CATALOG AC ON SE.ACTION_ID = AC.ID
+        INNER JOIN USERS U ON SE.USER_ID = U.ID
+        LEFT JOIN RECURRING_PATTERNS RP ON SE.ID = RP.SCHEDULED_EXECUTION_ID
+        WHERE SE.STATUS = 'pending'
+          AND (
+              (SE.SCHEDULED_AT IS NOT NULL AND SE.SCHEDULED_AT <= :before)
+              OR (RP.NEXT_EXECUTION_DATE IS NOT NULL AND RP.NEXT_EXECUTION_DATE <= :before AND RP.IS_ACTIVE = 1)
+          )
+        ORDER BY COALESCE(SE.SCHEDULED_AT, RP.NEXT_EXECUTION_DATE) ASC
+        OFFSET :offset ROWS
+        FETCH NEXT :limit ROWS ONLY
+    """
+
+    params = {
+        "before": before,
+        "offset": offset,
+        "limit": limit,
+    }
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
+        rows = await cursor.fetchall()
+        cursor.close()
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.info(
+        "scheduled_execution_repository_list_pending",
+        duration_ms=duration_ms,
+        before=before.isoformat(),
+        limit=limit,
+        offset=offset,
+        result_count=len(rows),
+    )
+
+    items = []
+    for row in rows:
+        # Columns: 0:ID, 1:ACTION_ID, 2:ACTION_NAME, 3:USER_ID, 4:USER_NAME,
+        # 5:ENVIRONMENT, 6:PARAMETERS, 7:SCHEDULED_AT, 8:CORRELATION_ID,
+        # 9:CREATED_AT, 10:PATTERN_TYPE, 11:PATTERN_CONFIG, 12:NEXT_EXECUTION_DATE, 13:IS_ACTIVE
+
+        # Parse recurring_pattern if present
+        recurring_pattern = None
+        if row[10] is not None:  # PATTERN_TYPE
+            pattern_config_raw = row[11]
+            if hasattr(pattern_config_raw, "read"):
+                pattern_config_raw = pattern_config_raw.read()
+            recurring_pattern = RecurringPatternResponse(
+                pattern_type=row[10],
+                pattern_config=_str_to_json(pattern_config_raw),
+                next_execution_date=row[12],
+                is_active=bool(row[13]) if row[13] is not None else True,
+            )
+
+        # Parse parameters CLOB
+        params_raw = row[6]
+        if hasattr(params_raw, "read"):
+            params_raw = params_raw.read()
+        parameters = _str_to_json(params_raw) if params_raw else {}
+
+        item = ScheduledExecutionPendingItem(
+            scheduled_execution_id=row[0],
+            action_id=row[1],
+            action_name=row[2],
+            user_id=row[3],
+            user_name=row[4] or "Unknown",
+            environment=row[5],
+            parameters=parameters,
+            scheduled_at=row[7],
+            recurring_pattern=recurring_pattern,
+            correlation_id=row[8] or "",
+            created_at=row[9],
+        )
+        items.append(item)
+
+    return items
+
+
+async def count_pending_executions(before: datetime) -> int:
+    """Count pending executions for external scheduler (Story 11.10, AC2).
+
+    Counts executions with same filter logic as list_pending_executions.
+
+    Args:
+        before: Timestamp limit
+
+    Returns:
+        Total count of matching executions
+    """
+    start_time = time.perf_counter()
+
+    query = """
+        SELECT COUNT(*)
+        FROM SCHEDULED_EXECUTIONS SE
+        LEFT JOIN RECURRING_PATTERNS RP ON SE.ID = RP.SCHEDULED_EXECUTION_ID
+        WHERE SE.STATUS = 'pending'
+          AND (
+              (SE.SCHEDULED_AT IS NOT NULL AND SE.SCHEDULED_AT <= :before)
+              OR (RP.NEXT_EXECUTION_DATE IS NOT NULL AND RP.NEXT_EXECUTION_DATE <= :before AND RP.IS_ACTIVE = 1)
+          )
+    """
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, {"before": before})
+        row = await cursor.fetchone()
+        cursor.close()
+
+    count = row[0] if row else 0
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.debug(
+        "scheduled_execution_repository_count_pending",
+        duration_ms=duration_ms,
+        before=before.isoformat(),
+        count=count,
+    )
+
+    return count
+
+
+async def update_scheduled_execution_status_with_execution_id(
+    scheduled_execution_id: int,
+    new_status: str,
+    execution_id: int | None = None,
+) -> bool:
+    """Update scheduled execution status with execution_id (Story 11.10, AC4).
+
+    Args:
+        scheduled_execution_id: ID of the scheduled execution
+        new_status: New status ("executed", "pending", "cancelled")
+        execution_id: ID of the created execution (for status="executed")
+
+    Returns:
+        True if updated, False if not found
+    """
+    start_time = time.perf_counter()
+
+    query = """
+        UPDATE SCHEDULED_EXECUTIONS
+        SET STATUS = :new_status,
+            EXECUTION_ID = :execution_id,
+            UPDATED_AT = SYSDATE
+        WHERE ID = :scheduled_execution_id
+    """
+
+    params = {
+        "scheduled_execution_id": scheduled_execution_id,
+        "new_status": new_status,
+        "execution_id": execution_id,
+    }
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
+        rowcount = cursor.rowcount
+        await conn.commit()
+        cursor.close()
+
+    updated = rowcount > 0
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.info(
+        "scheduled_execution_repository_update_status_with_execution_id",
+        duration_ms=duration_ms,
+        scheduled_execution_id=scheduled_execution_id,
+        new_status=new_status,
+        execution_id=execution_id,
+        updated=updated,
+    )
+
+    return updated
+
+
+async def update_recurring_pattern_next_execution(
+    scheduled_execution_id: int,
+    new_next_execution_date: datetime,
+) -> bool:
+    """Update next_execution_date for recurring pattern (Story 11.10, AC5).
+
+    Called after external scheduler executes a recurring scheduled execution.
+    Recalculates next_execution_date to schedule the next occurrence.
+
+    Args:
+        scheduled_execution_id: ID of the scheduled execution
+        new_next_execution_date: New calculated next_execution_date
+
+    Returns:
+        True if updated, False if not found
+    """
+    start_time = time.perf_counter()
+
+    query = """
+        UPDATE RECURRING_PATTERNS
+        SET NEXT_EXECUTION_DATE = :new_next_execution_date,
+            UPDATED_AT = SYSTIMESTAMP
+        WHERE SCHEDULED_EXECUTION_ID = :scheduled_execution_id
+    """
+
+    params = {
+        "scheduled_execution_id": scheduled_execution_id,
+        "new_next_execution_date": new_next_execution_date,
+    }
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
+        rowcount = cursor.rowcount
+        await conn.commit()
+        cursor.close()
+
+    updated = rowcount > 0
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.info(
+        "scheduled_execution_repository_update_recurring_next_execution",
+        duration_ms=duration_ms,
+        scheduled_execution_id=scheduled_execution_id,
+        new_next_execution_date=new_next_execution_date.isoformat(),
+        updated=updated,
+    )
+
+    return updated
+
+
 async def update_recurring_pattern_status(
     scheduled_execution_id: int,
     is_active: bool,

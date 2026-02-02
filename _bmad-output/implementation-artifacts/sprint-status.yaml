@@ -165,7 +165,7 @@ development_status:
     11-6-liste-executions-planifiees-et-annulation: done # Code review complete - 5 issues fixed (4 HIGH, 1 MEDIUM) - AC10 correlation_id & execution_id added
     11-7-patterns-recurrence-simples-daily-weekly: done # Code review 2026-02-02: All 14 tasks completed - Backend: RecurringPatternRequest/Response models, recurrence.py (calculate/increment next_execution_date), POST recurring patterns, PATCH toggle is_active, audit SCHEDULED_EXECUTION_RECURRING_* - Frontend: ExecutionWizard Radio.Group daily/weekly, ScheduledExecutionsPage recurring display + toggle - Tests: 22 unit tests (recurrence.py) + 14 integration tests (API) + 9 service tests (frontend)
     11-8-cron-expressions-pour-recurrence-avancee: done # Support expressions cron complètes pour power users - Bibliothèque croniter 3.0+ pour parsing et calcul, validation temps réel, presets UI, helper modal
-    11-10-api-integration-scheduler-externe: backlog # GET /api/v1/scheduled-executions/pending - endpoint pour scheduler externe (Control-M/Django) récupérer schedules à exécuter
+    11-10-api-integration-scheduler-externe: done # GET /api/v1/scheduled-executions/pending - endpoint pour scheduler externe (Control-M/Django) récupérer schedules à exécuter + PATCH status=executed avec recalcul next_execution_date; 19/19 tests pass
     epic-11-retrospective: optional
     # === Epic M: Migration FastAPI vers Django REST (Arrimage plateforme) ===
     epic-m: backlog

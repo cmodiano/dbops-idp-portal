@@ -145,13 +145,30 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         errors=exc.errors(),
         exc_info=True,
     )
+    # Sanitize errors for JSON serialization: ctx may contain non-serializable objects
+    sanitized_errors = []
+    for error in exc.errors():
+        sanitized_error = {
+            "type": error.get("type"),
+            "loc": error.get("loc"),
+            "msg": error.get("msg"),
+            "input": error.get("input"),
+        }
+        # Convert ctx.error to string if it exists and is not serializable
+        if "ctx" in error and error["ctx"]:
+            ctx = error["ctx"].copy()
+            if "error" in ctx:
+                ctx["error"] = str(ctx["error"])
+            sanitized_error["ctx"] = ctx
+        sanitized_errors.append(sanitized_error)
+
     return JSONResponse(
         status_code=422,
         content={
             "error": {
                 "code": "VALIDATION_ERROR",
                 "message": "Erreur de validation de la requête ou de la réponse",
-                "details": {"validation_errors": exc.errors()},
+                "details": {"validation_errors": sanitized_errors},
             }
         },
     )

@@ -751,8 +751,8 @@ class TestCancelScheduledExecution:
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         error = response.json()["error"]
-        assert error["code"] == "INVALID_STATUS"
-        assert "executed" in error["message"].lower()
+        assert error["code"] == "INVALID_STATE"
+        assert "executed" in error["message"].lower() or "pending" in error["message"].lower()
 
     @pytest.mark.asyncio
     async def test_cancel_scheduled_execution_already_cancelled(self, client, mock_auth):
@@ -777,7 +777,7 @@ class TestCancelScheduledExecution:
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         error = response.json()["error"]
-        assert error["code"] == "INVALID_STATUS"
+        assert error["code"] == "INVALID_STATE"
 
     @pytest.mark.asyncio
     async def test_cancel_scheduled_execution_audit_logged(self, client, mock_auth, mock_audit_repository):

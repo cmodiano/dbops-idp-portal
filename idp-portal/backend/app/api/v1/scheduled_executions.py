@@ -1,9 +1,10 @@
-"""Scheduled Executions API (Story 11.3, 11.6, 11.7, 11.8 - API scheduled executions).
+"""Scheduled Executions API (Story 11.3, 11.6, 11.7, 11.8, 11.10 - API scheduled executions).
 
 Provides endpoints for scheduling executions:
 - POST /api/v1/scheduled-executions: Create a scheduled execution (one-time or recurring) (Story 11.3, 11.7, 11.8)
 - GET /api/v1/scheduled-executions: List scheduled executions with filters (Story 11.6)
-- PATCH /api/v1/scheduled-executions/{id}: Cancel a scheduled execution (Story 11.6)
+- GET /api/v1/scheduled-executions/pending: List pending executions for external scheduler (Story 11.10)
+- PATCH /api/v1/scheduled-executions/{id}: Cancel or mark executed (Story 11.6, 11.10)
 - PATCH /api/v1/scheduled-executions/{id}/recurring-pattern: Toggle recurring pattern is_active (Story 11.7)
 - GET /api/v1/scheduled-executions/validate-cron: Validate cron expression (Story 11.8)
 - GET /api/v1/scheduled-executions/cron-next-executions: Preview next N cron executions (Story 11.8)
@@ -31,8 +32,9 @@ from app.models.scheduled_execution import (
     ScheduledExecutionCreate,
     ScheduledExecutionStatus,
     RecurringPatternToggle,
+    ScheduledExecutionUpdateRequest,
 )
-from app.utils.recurrence import calculate_next_execution_date
+from app.utils.recurrence import calculate_next_execution_date, increment_next_execution_date
 
 from app.services import rbac_service
 
@@ -480,39 +482,61 @@ async def list_scheduled_executions(
 
 
 @router.patch("/{scheduled_execution_id}", response_model=None)
-async def cancel_scheduled_execution(
+async def update_scheduled_execution(
     scheduled_execution_id: int,
     request: Request,
+    payload: ScheduledExecutionUpdateRequest | None = None,
     user: UserProfile = Depends(get_current_user),
 ) -> dict:
-    """PATCH /api/v1/scheduled-executions/{id} - Cancel a scheduled execution (Story 11.6, AC5, AC6).
+    """PATCH /api/v1/scheduled-executions/{id} - Update scheduled execution status (Story 11.6, 11.10).
 
-    Cancels a pending scheduled execution. Only pending executions can be cancelled.
+    Supports two operations:
+    - status="cancelled": Cancel a pending execution (Story 11.6)
+    - status="executed": Mark as executed after external scheduler runs it (Story 11.10)
 
-    RBAC:
+    **Request Body (Story 11.10):**
+    - status: "cancelled" or "executed"
+    - execution_id: Required when status="executed" (links to effective execution)
+
+    **For status="executed" with recurring patterns (AC5):**
+    - Automatically recalculates next_execution_date
+    - Status returns to "pending" for next occurrence
+
+    **RBAC:**
     - DBA: can cancel their own scheduled executions
-    - DBOPS: can cancel any scheduled execution
+    - DBOPS: can cancel/execute any scheduled execution
 
-    Validations:
+    **Validations (AC6):**
     - Scheduled execution must exist (404 if not)
     - Status must be "pending" (400 if already executed/cancelled)
-    - User must have permission (403 if DBA trying to cancel others')
+    - execution_id required when status="executed" (400 if missing)
 
-    Returns:
-        { "data": { scheduled_execution_id, status: "cancelled", ... } }
+    **Returns:**
+    - 200 OK with updated execution details
 
-    Raises:
-        400: If status is not "pending"
-        403: If DBA trying to cancel another user's scheduled execution
-        404: If scheduled execution not found
+    **Raises:**
+    - 400 VALIDATION_ERROR: execution_id missing for status="executed"
+    - 400 INVALID_STATE: Already executed/cancelled
+    - 403: Permission denied
+    - 404: Not found
     """
     correlation_id = str(uuid.uuid4())
     structlog.contextvars.bind_contextvars(correlation_id=correlation_id)
 
     try:
+        # Handle backward compatibility: if no payload, default to cancel (Story 11.6 behavior)
+        if payload is None:
+            new_status = "cancelled"
+            execution_id = None
+        else:
+            new_status = payload.status
+            execution_id = payload.execution_id
+
         logger.info(
-            "cancel_scheduled_execution_requested",
+            "update_scheduled_execution_requested",
             scheduled_execution_id=scheduled_execution_id,
+            new_status=new_status,
+            execution_id=execution_id,
             user_id=user.id,
             user_profile=user.profile,
         )
@@ -533,87 +557,195 @@ async def cancel_scheduled_execution(
             )
             raise NotFoundError(
                 code="SCHEDULED_EXECUTION_NOT_FOUND",
-                message="Exécution planifiée introuvable",
+                message=f"Exécution planifiée introuvable avec ID {scheduled_execution_id}",
                 details={"scheduled_execution_id": scheduled_execution_id},
             )
 
-        # RBAC: DBA can only cancel their own, DBOPS can cancel any
+        # RBAC: DBA can only update their own, DBOPS can update any
         if not _is_dbops(user) and scheduled_execution.user_id != user.id:
             logger.warning(
-                "cancel_permission_denied",
+                "update_permission_denied",
                 scheduled_execution_id=scheduled_execution_id,
                 owner_user_id=scheduled_execution.user_id,
                 requester_user_id=user.id,
             )
             raise ForbiddenError(
                 code="PERMISSION_DENIED",
-                message="Vous n'avez pas la permission d'annuler cette exécution planifiée",
+                message="Vous n'avez pas la permission de modifier cette exécution planifiée",
                 details={"scheduled_execution_id": scheduled_execution_id},
             )
 
-        # Validate status is "pending"
+        # Validate status is "pending" (AC6: cannot update already executed/cancelled)
         if scheduled_execution.status != ScheduledExecutionStatus.PENDING:
             logger.warning(
-                "cancel_invalid_status",
+                "update_invalid_status",
                 scheduled_execution_id=scheduled_execution_id,
                 current_status=scheduled_execution.status.value,
             )
             raise InvalidStateError(
-                code="INVALID_STATUS",
-                message=f"Impossible d'annuler une exécution planifiée avec le statut '{scheduled_execution.status.value}'. "
-                        f"Seules les exécutions avec le statut 'pending' peuvent être annulées.",
+                code="INVALID_STATE",
+                message=f"Impossible de mettre à jour une exécution avec status '{scheduled_execution.status.value}'",
                 details={
                     "scheduled_execution_id": scheduled_execution_id,
                     "current_status": scheduled_execution.status.value,
                 },
             )
 
-        # Update status to cancelled
-        updated = await scheduled_execution_repository.update_status(
-            scheduled_execution_id, ScheduledExecutionStatus.CANCELLED.value
-        )
+        # Handle status="executed" (Story 11.10, AC4, AC5)
+        if new_status == "executed":
+            # Get recurring pattern to check if recalculation is needed
+            recurring_pattern = await scheduled_execution_repository.get_recurring_pattern(scheduled_execution_id)
 
-        if not updated:
-            raise InvalidStateError(
-                code="UPDATE_FAILED",
-                message="La mise à jour a échoué (l'exécution planifiée peut avoir été modifiée)",
-                details={"scheduled_execution_id": scheduled_execution_id},
+            if recurring_pattern:
+                # AC5: Recalculate next_execution_date for recurring patterns
+                new_next_execution_date = increment_next_execution_date(
+                    pattern_type=recurring_pattern.pattern_type,
+                    pattern_config=recurring_pattern.pattern_config,
+                    current_next_execution_date=recurring_pattern.next_execution_date,
+                )
+
+                # Update recurring pattern with new next_execution_date
+                await scheduled_execution_repository.update_recurring_pattern_next_execution(
+                    scheduled_execution_id=scheduled_execution_id,
+                    new_next_execution_date=new_next_execution_date,
+                )
+
+                # AC5: For recurring, status returns to "pending" (execution continues)
+                await scheduled_execution_repository.update_scheduled_execution_status_with_execution_id(
+                    scheduled_execution_id=scheduled_execution_id,
+                    new_status="pending",
+                    execution_id=execution_id,
+                )
+
+                logger.info(
+                    "recurring_pattern_next_execution_recalculated",
+                    scheduled_execution_id=scheduled_execution_id,
+                    pattern_type=recurring_pattern.pattern_type,
+                    old_next_execution=recurring_pattern.next_execution_date.isoformat(),
+                    new_next_execution=new_next_execution_date.isoformat(),
+                )
+
+                # AC8: Audit log for executed with recurring recalculation
+                await audit_repository.create_entry(
+                    user_id=str(user.id),
+                    action_type=AuditActionType.SCHEDULED_EXECUTION_EXECUTED,
+                    entity_type=AuditEntityType.SCHEDULED_EXECUTION,
+                    entity_id=scheduled_execution_id,
+                    details={
+                        "action_id": scheduled_execution.action_id,
+                        "action_name": scheduled_execution.action_name,
+                        "execution_id": execution_id,
+                        "recurring": True,
+                        "pattern_type": recurring_pattern.pattern_type,
+                        "next_execution_date": new_next_execution_date.isoformat(),
+                    },
+                    ip_address=client_ip,
+                    correlation_id=correlation_id,
+                )
+
+                final_status = "pending"  # Recurring continues
+                next_exec_date = new_next_execution_date
+            else:
+                # AC5: One-time execution → status stays "executed"
+                await scheduled_execution_repository.update_scheduled_execution_status_with_execution_id(
+                    scheduled_execution_id=scheduled_execution_id,
+                    new_status="executed",
+                    execution_id=execution_id,
+                )
+
+                # AC8: Audit log for one-time executed
+                await audit_repository.create_entry(
+                    user_id=str(user.id),
+                    action_type=AuditActionType.SCHEDULED_EXECUTION_EXECUTED,
+                    entity_type=AuditEntityType.SCHEDULED_EXECUTION,
+                    entity_id=scheduled_execution_id,
+                    details={
+                        "action_id": scheduled_execution.action_id,
+                        "action_name": scheduled_execution.action_name,
+                        "execution_id": execution_id,
+                        "recurring": False,
+                    },
+                    ip_address=client_ip,
+                    correlation_id=correlation_id,
+                )
+
+                final_status = "executed"
+                next_exec_date = None
+
+            logger.info(
+                "scheduled_execution_executed",
+                scheduled_execution_id=scheduled_execution_id,
+                execution_id=execution_id,
+                is_recurring=recurring_pattern is not None,
             )
 
-        # Audit log: SCHEDULED_EXECUTION_CANCELLED
-        await audit_repository.create_entry(
-            user_id=str(user.id),
-            action_type=AuditActionType.SCHEDULED_EXECUTION_CANCELLED,
-            entity_type=AuditEntityType.SCHEDULED_EXECUTION,
-            entity_id=scheduled_execution_id,
-            details={
-                "action_id": scheduled_execution.action_id,
-                "action_name": scheduled_execution.action_name,
-                "scheduled_at": scheduled_execution.scheduled_at.isoformat(),
-                "owner_user_id": scheduled_execution.user_id,
-                "canceller_profile": user.profile,
-            },
-            ip_address=client_ip,
-            correlation_id=correlation_id,
-        )
-
-        logger.info(
-            "scheduled_execution_cancelled",
-            scheduled_execution_id=scheduled_execution_id,
-            user_id=user.id,
-        )
-
-        return {
-            "data": {
-                "scheduled_execution_id": scheduled_execution_id,
-                "action_id": scheduled_execution.action_id,
-                "action_name": scheduled_execution.action_name,
-                "environment": scheduled_execution.environment,
-                "status": ScheduledExecutionStatus.CANCELLED.value,
-                "scheduled_at": scheduled_execution.scheduled_at.isoformat() if scheduled_execution.scheduled_at else None,
-                "created_at": scheduled_execution.created_at.isoformat(),
+            return {
+                "data": {
+                    "scheduled_execution_id": scheduled_execution_id,
+                    "action_id": scheduled_execution.action_id,
+                    "action_name": scheduled_execution.action_name,
+                    "environment": scheduled_execution.environment,
+                    "status": final_status,
+                    "execution_id": execution_id,
+                    "next_execution_date": next_exec_date.isoformat() if next_exec_date else None,
+                }
             }
-        }
+
+        # Handle status="cancelled" (Story 11.6)
+        elif new_status == "cancelled":
+            updated = await scheduled_execution_repository.update_status(
+                scheduled_execution_id, ScheduledExecutionStatus.CANCELLED.value
+            )
+
+            if not updated:
+                raise InvalidStateError(
+                    code="UPDATE_FAILED",
+                    message="La mise à jour a échoué (l'exécution planifiée peut avoir été modifiée)",
+                    details={"scheduled_execution_id": scheduled_execution_id},
+                )
+
+            # Audit log: SCHEDULED_EXECUTION_CANCELLED
+            await audit_repository.create_entry(
+                user_id=str(user.id),
+                action_type=AuditActionType.SCHEDULED_EXECUTION_CANCELLED,
+                entity_type=AuditEntityType.SCHEDULED_EXECUTION,
+                entity_id=scheduled_execution_id,
+                details={
+                    "action_id": scheduled_execution.action_id,
+                    "action_name": scheduled_execution.action_name,
+                    "scheduled_at": scheduled_execution.scheduled_at.isoformat() if scheduled_execution.scheduled_at else None,
+                    "owner_user_id": scheduled_execution.user_id,
+                    "canceller_profile": user.profile,
+                },
+                ip_address=client_ip,
+                correlation_id=correlation_id,
+            )
+
+            logger.info(
+                "scheduled_execution_cancelled",
+                scheduled_execution_id=scheduled_execution_id,
+                user_id=user.id,
+            )
+
+            return {
+                "data": {
+                    "scheduled_execution_id": scheduled_execution_id,
+                    "action_id": scheduled_execution.action_id,
+                    "action_name": scheduled_execution.action_name,
+                    "environment": scheduled_execution.environment,
+                    "status": ScheduledExecutionStatus.CANCELLED.value,
+                    "scheduled_at": scheduled_execution.scheduled_at.isoformat() if scheduled_execution.scheduled_at else None,
+                    "created_at": scheduled_execution.created_at.isoformat(),
+                }
+            }
+
+        # Should not reach here due to Pydantic validation
+        raise InvalidStateError(
+            code="INVALID_STATUS",
+            message=f"Statut invalide: {new_status}",
+            details={"status": new_status},
+        )
+
     finally:
         structlog.contextvars.clear_contextvars()
 
@@ -770,6 +902,111 @@ async def toggle_recurring_pattern(
                 "next_execution_date": updated_pattern.next_execution_date.isoformat() if updated_pattern.next_execution_date else None,
                 "is_active": updated_pattern.is_active,
             }
+        }
+    finally:
+        structlog.contextvars.clear_contextvars()
+
+
+@router.get("/pending", response_model=None)
+async def get_pending_executions(
+    before: datetime = Query(
+        ...,
+        description="Timestamp limite pour récupérer les exécutions à lancer (ISO 8601 UTC)",
+    ),
+    limit: int = Query(100, ge=1, le=100, description="Nombre max d'exécutions à retourner"),
+    offset: int = Query(0, ge=0, description="Offset pour pagination"),
+    user: UserProfile = Depends(get_current_user),
+) -> dict:
+    """GET /api/v1/scheduled-executions/pending - List pending executions for external scheduler (Story 11.10, AC1-AC2).
+
+    Endpoint dedicated to external scheduler (Control-M, Django scheduler).
+    Returns one-time and recurring executions to execute before 'before' timestamp.
+
+    **Query Parameters:**
+    - before (datetime): Timestamp limit (ISO 8601 UTC) - executions with scheduled_at or next_execution_date <= before
+    - limit (int): Max results to return (1-100, default: 100)
+    - offset (int): Pagination offset (default: 0)
+
+    **RBAC:** Requires DBOPS profile (scheduler service account)
+
+    **Returns:**
+    - 200 OK: {"data": [...], "pagination": {...}, "correlation_id": "..."}
+
+    **Response includes for each execution (AC1):**
+    - scheduled_execution_id
+    - action_id, action_name (JOIN with ACTIONS_CATALOG)
+    - user_id, user_name (JOIN with USERS)
+    - environment
+    - parameters
+    - scheduled_at (NULL for recurring)
+    - recurring_pattern (if applicable)
+    - correlation_id
+    - created_at
+
+    **Sort order (AC2):** Sorted by effective date ASC (most urgent first)
+    COALESCE(scheduled_at, next_execution_date) ASC
+    """
+    correlation_id = str(uuid.uuid4())
+    structlog.contextvars.bind_contextvars(correlation_id=correlation_id)
+
+    try:
+        # AC7: RBAC - require DBOPS profile
+        if not _is_dbops(user):
+            logger.warning(
+                "pending_executions_access_denied",
+                user_id=user.id,
+                user_profile=user.profile,
+            )
+            raise ForbiddenError(
+                code="PERMISSION_DENIED",
+                message="Seuls les utilisateurs avec le profil DBOPS peuvent accéder aux exécutions pending",
+                details={"required_profile": "dbops", "current_profile": user.profile},
+            )
+
+        # Ensure before timestamp has timezone (default to UTC)
+        if before.tzinfo is None:
+            before = before.replace(tzinfo=timezone.utc)
+
+        logger.info(
+            "scheduled_executions_pending_requested",
+            before=before.isoformat(),
+            limit=limit,
+            offset=offset,
+            user_id=user.id,
+        )
+
+        # Get pending executions (AC1)
+        items = await scheduled_execution_repository.list_pending_executions(
+            before=before,
+            limit=limit,
+            offset=offset,
+        )
+
+        # Get total count for pagination (AC2)
+        total_count = await scheduled_execution_repository.count_pending_executions(
+            before=before,
+        )
+
+        # Calculate pagination
+        page = (offset // limit) + 1
+        total_pages = (total_count + limit - 1) // limit if total_count > 0 else 1
+
+        logger.info(
+            "scheduled_executions_pending_retrieved",
+            count=len(items),
+            total_count=total_count,
+            correlation_id=correlation_id,
+        )
+
+        return {
+            "data": [item.model_dump(mode="json") for item in items],
+            "pagination": {
+                "page": page,
+                "page_size": limit,
+                "total_count": total_count,
+                "total_pages": total_pages,
+            },
+            "correlation_id": correlation_id,
         }
     finally:
         structlog.contextvars.clear_contextvars()
