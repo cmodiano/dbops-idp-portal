@@ -636,3 +636,61 @@ export interface FilterOptions {
 
 /** Export format for dashboard reports (Story 8.5, AC1). */
 export type ExportFormat = 'csv' | 'pdf';
+
+// === Dashboard Comparison Types (Story 8.6) ===
+
+/** Dimension for comparison analysis (Story 8.6, AC1, AC7). */
+export type ComparisonDimension = 'technology' | 'environment' | 'period';
+
+/** Metrics available for comparison (Story 8.6, AC2, AC7). */
+export type ComparisonMetric = 'success_rate' | 'avg_time' | 'execution_count' | 'incident_count';
+
+/** Statistics for one side of a comparison (Story 8.6, AC7). */
+export interface ComparisonStats {
+  /** Success rate percentage (0-100), null if no finished executions. */
+  success_rate: number | null;
+  /** Average execution time in seconds, null if no completed executions. */
+  avg_time: number | null;
+  /** Total execution count. */
+  execution_count: number;
+  /** Count of failed executions (incidents). */
+  incident_count: number;
+}
+
+/** Result of a comparison between two values (Story 8.6, AC7). */
+export interface ComparisonResult {
+  /** Dimension being compared (technology, environment, period). */
+  dimension: ComparisonDimension;
+  /** First value being compared (label). */
+  value1: string;
+  /** Second value being compared (label). */
+  value2: string;
+  /** Statistics for the first value. */
+  value1_stats: ComparisonStats;
+  /** Statistics for the second value. */
+  value2_stats: ComparisonStats;
+  /** Percentage change for each metric ((value2 - value1) / value1 * 100). */
+  deltas: Record<ComparisonMetric | string, number | null>;
+}
+
+/** Filters for comparison request (Story 8.6, AC1-AC4, AC7). */
+export interface ComparisonFilters {
+  /** Dimension to compare (technology, environment, period). */
+  dimension: ComparisonDimension;
+  /** First value to compare. */
+  value1: string;
+  /** Second value to compare. */
+  value2: string;
+  /** Metrics to include (all if not specified). */
+  metrics?: ComparisonMetric[];
+  /** Period in days (for technology/environment dimensions). */
+  days?: number;
+  /** Start date of first period (for period dimension). */
+  period1Start?: string;
+  /** End date of first period (for period dimension). */
+  period1End?: string;
+  /** Start date of second period (for period dimension). */
+  period2Start?: string;
+  /** End date of second period (for period dimension). */
+  period2End?: string;
+}

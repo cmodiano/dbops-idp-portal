@@ -1,5 +1,5 @@
 /**
- * Tests for ReportingDashboard component (Story 8.3, AC1, AC2, AC6, AC8; Story 8.5).
+ * Tests for ReportingDashboard component (Story 8.3, AC1, AC2, AC6, AC8; Story 8.5; Story 8.6).
  */
 
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
@@ -37,6 +37,7 @@ vi.mock('../../../services/dashboard_service', () => ({
   fetchFilterOptions: vi.fn(),
   exportDashboardCSV: vi.fn(),
   exportDashboardPDF: vi.fn(),
+  fetchComparison: vi.fn(),
 }));
 
 const mockStats = {
@@ -184,6 +185,50 @@ describe('ReportingDashboard', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /exporter/i })).toBeInTheDocument();
+    });
+  });
+
+  // Story 8.6: Comparison mode tests
+  describe('Comparison Mode (Story 8.6)', () => {
+    it('renders mode selector with Stats and Comparison options (AC1)', async () => {
+      await act(async () => {
+        renderWithRouter(<ReportingDashboard />);
+      });
+
+      expect(screen.getByText('Statistiques')).toBeInTheDocument();
+      expect(screen.getByText('Comparaison')).toBeInTheDocument();
+    });
+
+    it('shows stats mode by default (AC1)', async () => {
+      await act(async () => {
+        renderWithRouter(<ReportingDashboard />);
+      });
+
+      // In stats mode, should see the period selector
+      await waitFor(() => {
+        expect(screen.getByText('7 jours')).toBeInTheDocument();
+      });
+    });
+
+    it('switches to comparison mode when Comparaison is clicked (AC1)', async () => {
+      await act(async () => {
+        renderWithRouter(<ReportingDashboard />);
+      });
+
+      // Wait for initial render
+      await waitFor(() => {
+        expect(screen.getByText('Statistiques')).toBeInTheDocument();
+      });
+
+      // Click on Comparison mode
+      await act(async () => {
+        fireEvent.click(screen.getByText('Comparaison'));
+      });
+
+      // In comparison mode, should show compare button
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /comparer/i })).toBeInTheDocument();
+      });
     });
   });
 });

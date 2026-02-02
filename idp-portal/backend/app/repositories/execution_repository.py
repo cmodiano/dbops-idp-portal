@@ -1944,6 +1944,240 @@ async def get_stats_by_technology_for_export(
     return result
 
 
+# --- Story 8.6: Comparison Repository Methods ---
+
+
+async def get_comparison_stats(
+    dimension: str,
+    value1: str,
+    value2: str,
+    days: int = 14,
+) -> dict[str, Any]:
+    """Get comparison stats for technology or environment (Story 8.6, AC2, AC3, AC7).
+
+    Calculates metrics for two values within the same dimension:
+    - success_rate: Percentage of successful executions
+    - avg_time: Average execution time in seconds for COMPLETED executions
+    - execution_count: Total execution count
+    - incident_count: Count of FAILED executions (incidents)
+    - deltas: Percentage change ((value2 - value1) / value1 * 100) for each metric
+
+    Args:
+        dimension: "technology" or "environment"
+        value1: First value to compare (e.g., "aap" for technology, "dev" for environment)
+        value2: Second value to compare
+        days: Number of days for period (default 14)
+
+    Returns:
+        Dict with value1_stats, value2_stats, and deltas
+
+    Raises:
+        ValueError: If dimension is not "technology" or "environment"
+    """
+    start_time = time.perf_counter()
+
+    # Defensive validation: Only allow specific dimension values to prevent SQL injection
+    if dimension not in ("technology", "environment"):
+        msg = f"Invalid dimension: {dimension}. Must be 'technology' or 'environment'."
+        raise ValueError(msg)
+
+    # Build WHERE clause based on dimension
+    if dimension == "technology":
+        filter_column = "NVL(a.ENGINE, 'N/A')"
+        join_clause = "LEFT JOIN ACTIONS_CATALOG a ON e.ACTION_ID = a.ID"
+    else:  # environment
+        filter_column = "e.ENVIRONMENT"
+        join_clause = ""
+
+    # Query for both values in a single query using CASE WHEN
+    query = f"""
+        SELECT
+            {filter_column} AS dim_value,
+            COUNT(*) AS total_count,
+            SUM(CASE WHEN e.STATUS = 'COMPLETED' THEN 1 ELSE 0 END) AS completed,
+            SUM(CASE WHEN e.STATUS = 'FAILED' THEN 1 ELSE 0 END) AS failed,
+            AVG(CASE
+                WHEN e.STATUS = 'COMPLETED' AND e.COMPLETED_AT IS NOT NULL AND e.STARTED_AT IS NOT NULL
+                THEN (CAST(e.COMPLETED_AT AS DATE) - CAST(e.STARTED_AT AS DATE)) * 24 * 60 * 60
+                ELSE NULL
+            END) AS avg_time_sec
+        FROM EXECUTIONS e
+        {join_clause}
+        WHERE e.CREATED_AT >= SYSDATE - :days
+          AND {filter_column} IN (:value1, :value2)
+        GROUP BY {filter_column}
+    """
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, {"days": days, "value1": value1, "value2": value2})
+        rows = await cursor.fetchall()
+        cursor.close()
+
+    # Initialize stats for both values
+    stats = {
+        value1: {"execution_count": 0, "incident_count": 0, "success_rate": None, "avg_time": None},
+        value2: {"execution_count": 0, "incident_count": 0, "success_rate": None, "avg_time": None},
+    }
+
+    for row in rows:
+        dim_value = row[0]
+        total_count = row[1] or 0
+        completed = row[2] or 0
+        failed = row[3] or 0
+        avg_time_sec = row[4]
+
+        # Calculate success rate: avoid division by zero
+        total_finished = completed + failed
+        success_rate = round((completed / total_finished) * 100, 1) if total_finished > 0 else None
+
+        # Round avg_time to 2 decimal places
+        avg_time = round(avg_time_sec, 2) if avg_time_sec is not None else None
+
+        if dim_value in stats:
+            stats[dim_value] = {
+                "execution_count": total_count,
+                "incident_count": failed,
+                "success_rate": success_rate,
+                "avg_time": avg_time,
+            }
+
+    # Calculate deltas: ((value2 - value1) / value1) * 100
+    def calc_delta(v1: float | int | None, v2: float | int | None) -> float | None:
+        if v1 is None or v2 is None:
+            return None
+        if v1 == 0:
+            return None  # Avoid division by zero
+        return round(((v2 - v1) / v1) * 100, 1)
+
+    deltas = {
+        "success_rate": calc_delta(stats[value1]["success_rate"], stats[value2]["success_rate"]),
+        "avg_time": calc_delta(stats[value1]["avg_time"], stats[value2]["avg_time"]),
+        "execution_count": calc_delta(stats[value1]["execution_count"], stats[value2]["execution_count"]),
+        "incident_count": calc_delta(stats[value1]["incident_count"], stats[value2]["incident_count"]),
+    }
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.debug(
+        "execution_repository_get_comparison_stats",
+        duration_ms=duration_ms,
+        dimension=dimension,
+        value1=value1,
+        value2=value2,
+        days=days,
+    )
+
+    return {
+        "value1_stats": stats[value1],
+        "value2_stats": stats[value2],
+        "deltas": deltas,
+    }
+
+
+async def get_period_comparison_stats(
+    period1_start: Any,
+    period1_end: Any,
+    period2_start: Any,
+    period2_end: Any,
+) -> dict[str, Any]:
+    """Get comparison stats between two periods (Story 8.6, AC4, AC7).
+
+    Calculates metrics for two time periods:
+    - success_rate: Percentage of successful executions
+    - avg_time: Average execution time in seconds for COMPLETED executions
+    - execution_count: Total execution count
+    - incident_count: Count of FAILED executions (incidents)
+    - deltas: Percentage change ((period2 - period1) / period1 * 100) for each metric
+
+    Args:
+        period1_start: Start date of first period
+        period1_end: End date of first period
+        period2_start: Start date of second period
+        period2_end: End date of second period
+
+    Returns:
+        Dict with value1_stats (period1), value2_stats (period2), and deltas
+    """
+    start_time = time.perf_counter()
+
+    # Helper function to get stats for a single period
+    async def get_period_stats(start_date: Any, end_date: Any) -> dict[str, Any]:
+        query = """
+            SELECT
+                COUNT(*) AS total_count,
+                SUM(CASE WHEN e.STATUS = 'COMPLETED' THEN 1 ELSE 0 END) AS completed,
+                SUM(CASE WHEN e.STATUS = 'FAILED' THEN 1 ELSE 0 END) AS failed,
+                AVG(CASE
+                    WHEN e.STATUS = 'COMPLETED' AND e.COMPLETED_AT IS NOT NULL AND e.STARTED_AT IS NOT NULL
+                    THEN (CAST(e.COMPLETED_AT AS DATE) - CAST(e.STARTED_AT AS DATE)) * 24 * 60 * 60
+                    ELSE NULL
+                END) AS avg_time_sec
+            FROM EXECUTIONS e
+            WHERE TRUNC(e.CREATED_AT) >= :start_date
+              AND TRUNC(e.CREATED_AT) <= :end_date
+        """
+
+        async with get_connection() as conn:
+            cursor = conn.cursor()
+            await cursor.execute(query, {"start_date": start_date, "end_date": end_date})
+            row = await cursor.fetchone()
+            cursor.close()
+
+        total_count = row[0] or 0
+        completed = row[1] or 0
+        failed = row[2] or 0
+        avg_time_sec = row[3]
+
+        # Calculate success rate: avoid division by zero
+        total_finished = completed + failed
+        success_rate = round((completed / total_finished) * 100, 1) if total_finished > 0 else None
+
+        # Round avg_time to 2 decimal places
+        avg_time = round(avg_time_sec, 2) if avg_time_sec is not None else None
+
+        return {
+            "execution_count": total_count,
+            "incident_count": failed,
+            "success_rate": success_rate,
+            "avg_time": avg_time,
+        }
+
+    # Get stats for both periods
+    period1_stats = await get_period_stats(period1_start, period1_end)
+    period2_stats = await get_period_stats(period2_start, period2_end)
+
+    # Calculate deltas: ((period2 - period1) / period1) * 100
+    def calc_delta(v1: float | int | None, v2: float | int | None) -> float | None:
+        if v1 is None or v2 is None:
+            return None
+        if v1 == 0:
+            return None  # Avoid division by zero
+        return round(((v2 - v1) / v1) * 100, 1)
+
+    deltas = {
+        "success_rate": calc_delta(period1_stats["success_rate"], period2_stats["success_rate"]),
+        "avg_time": calc_delta(period1_stats["avg_time"], period2_stats["avg_time"]),
+        "execution_count": calc_delta(period1_stats["execution_count"], period2_stats["execution_count"]),
+        "incident_count": calc_delta(period1_stats["incident_count"], period2_stats["incident_count"]),
+    }
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.debug(
+        "execution_repository_get_period_comparison_stats",
+        duration_ms=duration_ms,
+        period1_start=str(period1_start),
+        period1_end=str(period1_end),
+        period2_start=str(period2_start),
+        period2_end=str(period2_end),
+    )
+
+    return {
+        "value1_stats": period1_stats,
+        "value2_stats": period2_stats,
+        "deltas": deltas,
+    }
+
+
 async def get_stats_by_environment_for_export(
     days: int = DASHBOARD_REPORTING_DEFAULT_DAYS,
     engine: str | None = None,

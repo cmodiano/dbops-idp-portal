@@ -1139,3 +1139,289 @@ class TestExportModels:
         assert period.from_date == "2026-01-01"
         assert period.to_date == "2026-01-14"
         assert period.days == 14
+
+
+# --- Story 8.6: Dashboard Comparison Tests ---
+
+
+class TestCompareDashboard:
+    """Tests for GET /api/v1/dashboard/compare (Story 8.6, AC2, AC3, AC4, AC7)."""
+
+    @pytest.mark.asyncio
+    async def test_compare_technology_returns_comparison_result(self, client, mock_auth_dba):
+        """GET /dashboard/compare with dimension=technology returns comparison stats (AC2)."""
+        mock_result = {
+            "value1_stats": {"success_rate": 95.0, "avg_time": 45.2, "execution_count": 100, "incident_count": 5},
+            "value2_stats": {"success_rate": 88.0, "avg_time": 52.1, "execution_count": 80, "incident_count": 10},
+            "deltas": {"success_rate": -7.4, "avg_time": 15.3, "execution_count": -20.0, "incident_count": 100.0},
+        }
+
+        with patch("app.api.v1.dashboard.execution_repository.get_comparison_stats", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_result
+
+            response = await client.get(
+                "/api/v1/dashboard/compare?dimension=technology&value1=aap&value2=terraform"
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert "data" in data
+        assert data["data"]["dimension"] == "technology"
+        assert data["data"]["value1"] == "aap"
+        assert data["data"]["value2"] == "terraform"
+        assert data["data"]["value1_stats"]["success_rate"] == 95.0
+        assert data["data"]["value2_stats"]["success_rate"] == 88.0
+        assert data["data"]["deltas"]["success_rate"] == -7.4
+
+    @pytest.mark.asyncio
+    async def test_compare_environment_returns_comparison_result(self, client, mock_auth_dba):
+        """GET /dashboard/compare with dimension=environment returns comparison stats (AC3)."""
+        mock_result = {
+            "value1_stats": {"success_rate": 90.0, "avg_time": 30.0, "execution_count": 50, "incident_count": 5},
+            "value2_stats": {"success_rate": 98.0, "avg_time": 25.0, "execution_count": 40, "incident_count": 1},
+            "deltas": {"success_rate": 8.9, "avg_time": -16.7, "execution_count": -20.0, "incident_count": -80.0},
+        }
+
+        with patch("app.api.v1.dashboard.execution_repository.get_comparison_stats", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_result
+
+            response = await client.get(
+                "/api/v1/dashboard/compare?dimension=environment&value1=dev&value2=prod"
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["data"]["dimension"] == "environment"
+        assert data["data"]["value1"] == "dev"
+        assert data["data"]["value2"] == "prod"
+        assert data["data"]["value2_stats"]["success_rate"] == 98.0
+        # Verify repository called with correct parameters
+        mock_get.assert_called_once_with(dimension="environment", value1="dev", value2="prod", days=14)
+
+    @pytest.mark.asyncio
+    async def test_compare_period_returns_comparison_result(self, client, mock_auth_dba):
+        """GET /dashboard/compare with dimension=period returns comparison stats (AC4)."""
+        mock_result = {
+            "value1_stats": {"success_rate": 85.0, "avg_time": 40.0, "execution_count": 100, "incident_count": 15},
+            "value2_stats": {"success_rate": 92.0, "avg_time": 35.0, "execution_count": 120, "incident_count": 10},
+            "deltas": {"success_rate": 8.2, "avg_time": -12.5, "execution_count": 20.0, "incident_count": -33.3},
+        }
+
+        with patch("app.api.v1.dashboard.execution_repository.get_period_comparison_stats", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_result
+
+            response = await client.get(
+                "/api/v1/dashboard/compare?dimension=period&value1=period1&value2=period2"
+                "&period1_start=2026-01-01&period1_end=2026-01-07"
+                "&period2_start=2026-01-08&period2_end=2026-01-14"
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["data"]["dimension"] == "period"
+        # Period values should show date ranges
+        assert "2026-01-01" in data["data"]["value1"]
+        assert "2026-01-07" in data["data"]["value1"]
+        assert data["data"]["deltas"]["success_rate"] == 8.2
+        # Verify repository called with date objects
+        mock_get.assert_called_once()
+        call_kwargs = mock_get.call_args.kwargs
+        assert call_kwargs["period1_start"] == date(2026, 1, 1)
+        assert call_kwargs["period1_end"] == date(2026, 1, 7)
+        assert call_kwargs["period2_start"] == date(2026, 1, 8)
+        assert call_kwargs["period2_end"] == date(2026, 1, 14)
+
+    @pytest.mark.asyncio
+    async def test_compare_technology_with_days_parameter(self, client, mock_auth_dba):
+        """GET /dashboard/compare accepts days parameter for technology/environment."""
+        mock_result = {
+            "value1_stats": {"success_rate": 90.0, "avg_time": 30.0, "execution_count": 50, "incident_count": 5},
+            "value2_stats": {"success_rate": 92.0, "avg_time": 28.0, "execution_count": 60, "incident_count": 5},
+            "deltas": {"success_rate": 2.2, "avg_time": -6.7, "execution_count": 20.0, "incident_count": 0.0},
+        }
+
+        with patch("app.api.v1.dashboard.execution_repository.get_comparison_stats", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_result
+
+            response = await client.get(
+                "/api/v1/dashboard/compare?dimension=technology&value1=aap&value2=terraform&days=30"
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        mock_get.assert_called_once_with(dimension="technology", value1="aap", value2="terraform", days=30)
+
+    @pytest.mark.asyncio
+    async def test_compare_period_missing_dates_returns_422(self, client, mock_auth_dba):
+        """GET /dashboard/compare with dimension=period without dates returns 422."""
+        response = await client.get(
+            "/api/v1/dashboard/compare?dimension=period&value1=p1&value2=p2"
+        )
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert "period1_start" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_compare_period_invalid_date_range_returns_422(self, client, mock_auth_dba):
+        """GET /dashboard/compare with period1_start > period1_end returns 422."""
+        response = await client.get(
+            "/api/v1/dashboard/compare?dimension=period&value1=p1&value2=p2"
+            "&period1_start=2026-01-07&period1_end=2026-01-01"  # Invalid: start > end
+            "&period2_start=2026-01-08&period2_end=2026-01-14"
+        )
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert "period1_start" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_compare_invalid_dimension_returns_422(self, client, mock_auth_dba):
+        """GET /dashboard/compare with invalid dimension returns 422."""
+        response = await client.get(
+            "/api/v1/dashboard/compare?dimension=invalid&value1=a&value2=b"
+        )
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    @pytest.mark.asyncio
+    async def test_compare_missing_required_params_returns_422(self, client, mock_auth_dba):
+        """GET /dashboard/compare without required params returns 422."""
+        # Missing dimension
+        response = await client.get("/api/v1/dashboard/compare?value1=a&value2=b")
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+        # Missing value1
+        response = await client.get("/api/v1/dashboard/compare?dimension=technology&value2=b")
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+        # Missing value2
+        response = await client.get("/api/v1/dashboard/compare?dimension=technology&value1=a")
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    @pytest.mark.asyncio
+    async def test_compare_forbidden_for_non_dba(self, client, mock_auth_viewer):
+        """GET /dashboard/compare returns 403 for non-DBA/DBOPS profiles (AC7 RBAC)."""
+        response = await client.get(
+            "/api/v1/dashboard/compare?dimension=technology&value1=aap&value2=terraform"
+        )
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    @pytest.mark.asyncio
+    async def test_compare_dbops_allowed(self, client, mock_auth_dbops):
+        """GET /dashboard/compare is accessible by DBOPS profile."""
+        mock_result = {
+            "value1_stats": {"success_rate": 90.0, "avg_time": 30.0, "execution_count": 50, "incident_count": 5},
+            "value2_stats": {"success_rate": 92.0, "avg_time": 28.0, "execution_count": 60, "incident_count": 5},
+            "deltas": {"success_rate": 2.2, "avg_time": -6.7, "execution_count": 20.0, "incident_count": 0.0},
+        }
+
+        with patch("app.api.v1.dashboard.execution_repository.get_comparison_stats", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_result
+
+            response = await client.get(
+                "/api/v1/dashboard/compare?dimension=technology&value1=aap&value2=terraform"
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+
+    @pytest.mark.asyncio
+    async def test_compare_handles_null_stats(self, client, mock_auth_dba):
+        """GET /dashboard/compare handles null values in stats correctly."""
+        mock_result = {
+            "value1_stats": {"success_rate": None, "avg_time": None, "execution_count": 0, "incident_count": 0},
+            "value2_stats": {"success_rate": 100.0, "avg_time": 25.0, "execution_count": 10, "incident_count": 0},
+            "deltas": {"success_rate": None, "avg_time": None, "execution_count": None, "incident_count": None},
+        }
+
+        with patch("app.api.v1.dashboard.execution_repository.get_comparison_stats", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_result
+
+            response = await client.get(
+                "/api/v1/dashboard/compare?dimension=technology&value1=unknown&value2=terraform"
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["data"]["value1_stats"]["success_rate"] is None
+        assert data["data"]["deltas"]["success_rate"] is None
+
+    @pytest.mark.asyncio
+    async def test_compare_default_days_is_14(self, client, mock_auth_dba):
+        """GET /dashboard/compare uses default days=14 for technology/environment."""
+        mock_result = {
+            "value1_stats": {"success_rate": 90.0, "avg_time": 30.0, "execution_count": 50, "incident_count": 5},
+            "value2_stats": {"success_rate": 92.0, "avg_time": 28.0, "execution_count": 60, "incident_count": 5},
+            "deltas": {"success_rate": 2.2, "avg_time": -6.7, "execution_count": 20.0, "incident_count": 0.0},
+        }
+
+        with patch("app.api.v1.dashboard.execution_repository.get_comparison_stats", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_result
+
+            await client.get("/api/v1/dashboard/compare?dimension=technology&value1=aap&value2=terraform")
+
+        # Verify default days=14 was used
+        mock_get.assert_called_once_with(dimension="technology", value1="aap", value2="terraform", days=14)
+
+
+class TestComparisonModels:
+    """Tests for comparison models (Story 8.6, Task 1)."""
+
+    def test_comparison_dimension_enum_values(self):
+        """ComparisonDimension enum has expected values."""
+        from app.models.dashboard import ComparisonDimension
+
+        assert ComparisonDimension.TECHNOLOGY.value == "technology"
+        assert ComparisonDimension.ENVIRONMENT.value == "environment"
+        assert ComparisonDimension.PERIOD.value == "period"
+
+    def test_comparison_metric_enum_values(self):
+        """ComparisonMetric enum has expected values."""
+        from app.models.dashboard import ComparisonMetric
+
+        assert ComparisonMetric.SUCCESS_RATE.value == "success_rate"
+        assert ComparisonMetric.AVG_TIME.value == "avg_time"
+        assert ComparisonMetric.EXECUTION_COUNT.value == "execution_count"
+        assert ComparisonMetric.INCIDENT_COUNT.value == "incident_count"
+
+    def test_comparison_stats_accepts_null_values(self):
+        """ComparisonStats accepts null for success_rate and avg_time."""
+        from app.models.dashboard import ComparisonStats
+
+        stats = ComparisonStats(
+            success_rate=None,
+            avg_time=None,
+            execution_count=0,
+            incident_count=0,
+        )
+        assert stats.success_rate is None
+        assert stats.avg_time is None
+        assert stats.execution_count == 0
+
+    def test_comparison_stats_validates_success_rate_range(self):
+        """ComparisonStats validates success_rate is 0-100."""
+        from app.models.dashboard import ComparisonStats
+        from pydantic import ValidationError
+
+        # Valid
+        stats = ComparisonStats(success_rate=50.0, avg_time=10.0, execution_count=10, incident_count=5)
+        assert stats.success_rate == 50.0
+
+        # Invalid: > 100
+        with pytest.raises(ValidationError):
+            ComparisonStats(success_rate=150.0, avg_time=10.0, execution_count=10, incident_count=5)
+
+        # Invalid: < 0
+        with pytest.raises(ValidationError):
+            ComparisonStats(success_rate=-10.0, avg_time=10.0, execution_count=10, incident_count=5)
+
+    def test_comparison_result_includes_all_fields(self):
+        """ComparisonResult includes all required fields."""
+        from app.models.dashboard import ComparisonResult, ComparisonDimension, ComparisonStats
+
+        result = ComparisonResult(
+            dimension=ComparisonDimension.TECHNOLOGY,
+            value1="aap",
+            value2="terraform",
+            value1_stats=ComparisonStats(success_rate=90.0, avg_time=30.0, execution_count=50, incident_count=5),
+            value2_stats=ComparisonStats(success_rate=88.0, avg_time=35.0, execution_count=40, incident_count=5),
+            deltas={"success_rate": -2.2, "avg_time": 16.7, "execution_count": -20.0, "incident_count": 0.0},
+        )
+        assert result.dimension == ComparisonDimension.TECHNOLOGY
+        assert result.value1 == "aap"
+        assert result.value2 == "terraform"
+        assert result.deltas["success_rate"] == -2.2

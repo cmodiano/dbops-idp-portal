@@ -41,6 +41,11 @@ from app.models.dashboard import (
     FilterOptionsResponse,
     DashboardExportFiltersInfo,
     DashboardExportPeriodInfo,
+    ComparisonDimension,
+    ComparisonMetric,
+    ComparisonStats,
+    ComparisonResult,
+    ComparisonResponse,
 )
 from app.repositories import execution_repository
 
@@ -319,6 +324,136 @@ async def get_stats_by_environment(
         to_date=to_date,
     )
     return DashboardStatsByEnvironmentResponse(data=[EnvironmentStats(**s) for s in stats])
+
+
+@router.get("/compare", response_model=ComparisonResponse)
+async def compare_dashboard(
+    user: UserProfile = Depends(get_current_user),
+    dimension: ComparisonDimension = Query(..., description="Dimension to compare"),
+    value1: str = Query(..., description="First value to compare"),
+    value2: str = Query(..., description="Second value to compare"),
+    metrics: list[ComparisonMetric] | None = Query(None, description="Metrics to include (all if not specified)"),
+    days: int = Query(14, description="Period in days (for technology/environment dimensions)"),
+    period1_start: date | None = Query(None, description="Start date of first period (for period dimension)"),
+    period1_end: date | None = Query(None, description="End date of first period (for period dimension)"),
+    period2_start: date | None = Query(None, description="Start date of second period (for period dimension)"),
+    period2_end: date | None = Query(None, description="End date of second period (for period dimension)"),
+) -> ComparisonResponse:
+    """GET /api/v1/dashboard/compare - Compare metrics between two values (Story 8.6, AC7).
+
+    Compares execution metrics across dimensions:
+    - technology: Compare two database engines (e.g., AAP vs Terraform)
+    - environment: Compare two environments (e.g., dev vs prod)
+    - period: Compare two time periods (e.g., last week vs this week)
+
+    Query Parameters:
+        dimension: Dimension to compare (technology, environment, period)
+        value1: First value to compare
+        value2: Second value to compare
+        metrics: Optional list of metrics to include (defaults to all)
+        days: Period in days for technology/environment comparison (default 14)
+        period1_start, period1_end: First period dates (required for period dimension)
+        period2_start, period2_end: Second period dates (required for period dimension)
+
+    Returns:
+        ComparisonResponse with value1_stats, value2_stats, and deltas
+
+    Restricted to DBA and DBOPS profiles.
+    """
+    _require_dashboard_profile(user)
+    logger.info(
+        "dashboard_compare_requested",
+        user_id=user.id,
+        profile=user.profile,
+        dimension=dimension.value,
+        value1=value1,
+        value2=value2,
+        days=days,
+        period1_start=str(period1_start) if period1_start else None,
+        period1_end=str(period1_end) if period1_end else None,
+        period2_start=str(period2_start) if period2_start else None,
+        period2_end=str(period2_end) if period2_end else None,
+    )
+
+    if dimension == ComparisonDimension.PERIOD:
+        # Validate period parameters
+        if not all([period1_start, period1_end, period2_start, period2_end]):
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=422,
+                detail="period1_start, period1_end, period2_start, period2_end are required for period comparison",
+            )
+
+        # Validate date ranges
+        if period1_start > period1_end:
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=422,
+                detail="period1_start must be <= period1_end",
+            )
+        if period2_start > period2_end:
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=422,
+                detail="period2_start must be <= period2_end",
+            )
+    else:
+        # For technology/environment dimensions, reject period parameters if provided
+        if any([period1_start, period1_end, period2_start, period2_end]):
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=422,
+                detail=f"period parameters are not allowed for {dimension.value} comparison. Use 'days' parameter instead.",
+            )
+
+        # Get period comparison stats
+        result = await execution_repository.get_period_comparison_stats(
+            period1_start=period1_start,
+            period1_end=period1_end,
+            period2_start=period2_start,
+            period2_end=period2_end,
+        )
+
+        # Format value labels for period
+        value1_label = f"{period1_start} - {period1_end}"
+        value2_label = f"{period2_start} - {period2_end}"
+    else:
+        # Get technology or environment comparison stats
+        result = await execution_repository.get_comparison_stats(
+            dimension=dimension.value,
+            value1=value1,
+            value2=value2,
+            days=days,
+        )
+        value1_label = value1
+        value2_label = value2
+
+    # Check if both values have zero executions (no data to compare)
+    v1_stats = result["value1_stats"]
+    v2_stats = result["value2_stats"]
+    if v1_stats["execution_count"] == 0 and v2_stats["execution_count"] == 0:
+        from fastapi import HTTPException
+        logger.warning(
+            "dashboard_compare_no_data",
+            dimension=dimension.value,
+            value1=value1_label,
+            value2=value2_label,
+        )
+        raise HTTPException(
+            status_code=404,
+            detail=f"Aucune donnée trouvée pour la comparaison {value1_label} vs {value2_label} sur les {days} derniers jours.",
+        )
+
+    return ComparisonResponse(
+        data=ComparisonResult(
+            dimension=dimension,
+            value1=value1_label,
+            value2=value2_label,
+            value1_stats=ComparisonStats(**v1_stats),
+            value2_stats=ComparisonStats(**v2_stats),
+            deltas=result["deltas"],
+        )
+    )
 
 
 @router.get("/filter-options", response_model=FilterOptionsResponse)

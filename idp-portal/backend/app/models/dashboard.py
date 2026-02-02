@@ -241,3 +241,85 @@ class DashboardExportData(BaseModel):
     stats_by_technology: list[DashboardExportTechnologyStats]
     stats_by_environment: list[DashboardExportEnvironmentStats]
     timeseries: list[DashboardExportTimeSeriesPoint]
+
+
+# === Comparison Models (Story 8.6) ===
+
+from enum import Enum
+
+
+class ComparisonDimension(str, Enum):
+    """Dimension for comparison analysis (Story 8.6, AC1, AC7).
+
+    Defines what type of comparison the user wants to perform.
+    """
+
+    TECHNOLOGY = "technology"
+    ENVIRONMENT = "environment"
+    PERIOD = "period"
+
+
+class ComparisonMetric(str, Enum):
+    """Metrics available for comparison (Story 8.6, AC2, AC7).
+
+    Defines which metrics can be compared across dimensions.
+    """
+
+    SUCCESS_RATE = "success_rate"
+    AVG_TIME = "avg_time"
+    EXECUTION_COUNT = "execution_count"
+    INCIDENT_COUNT = "incident_count"
+
+
+class ComparisonStats(BaseModel):
+    """Statistics for one side of a comparison (Story 8.6, AC7).
+
+    Attributes:
+        success_rate: Success rate percentage (0-100), None if no finished executions
+        avg_time: Average execution time in seconds, None if no completed executions
+        execution_count: Total execution count
+        incident_count: Count of failed executions (incidents)
+    """
+
+    success_rate: float | None = Field(
+        None,
+        ge=0,
+        le=100,
+        description="Success rate percentage (COMPLETED / (COMPLETED + FAILED) * 100)",
+    )
+    avg_time: float | None = Field(
+        None,
+        ge=0,
+        description="Average execution time in seconds",
+    )
+    execution_count: int = Field(..., ge=0, description="Total execution count")
+    incident_count: int = Field(..., ge=0, description="Count of failed executions")
+
+
+class ComparisonResult(BaseModel):
+    """Result of a comparison between two values (Story 8.6, AC7).
+
+    Attributes:
+        dimension: The dimension being compared (technology, environment, period)
+        value1: First value being compared
+        value2: Second value being compared
+        value1_stats: Statistics for the first value
+        value2_stats: Statistics for the second value
+        deltas: Percentage change for each metric ((value2 - value1) / value1 * 100)
+    """
+
+    dimension: ComparisonDimension = Field(..., description="Dimension being compared")
+    value1: str = Field(..., description="First value being compared")
+    value2: str = Field(..., description="Second value being compared")
+    value1_stats: ComparisonStats = Field(..., description="Statistics for value1")
+    value2_stats: ComparisonStats = Field(..., description="Statistics for value2")
+    deltas: dict[str, float | None] = Field(
+        ...,
+        description="Percentage change for each metric (None if division by zero)",
+    )
+
+
+class ComparisonResponse(BaseModel):
+    """Response wrapper for GET /dashboard/compare (Story 8.6, AC7)."""
+
+    data: ComparisonResult

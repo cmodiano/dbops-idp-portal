@@ -134,7 +134,7 @@ development_status:
     8-3-dashboard-reporting-statistiques-par-technologie-et-environnement: done # Code review 2026-02-01: 6 fixes (1 HIGH + 3 MEDIUM + 2 LOW) - duplicate models removed, Ant Design props fixed
     8-4-filtres-avances-dashboard-reporting: done # Code review 2026-02-01: 11 issues fixed (6 HIGH + 3 MEDIUM + 2 LOW) - status filter clarified, /timeseries param removed, test coverage improved
     8-5-export-rapports-analytics: done # Code review 2026-02-01: 9 fixes (4 HIGH + 3 MEDIUM + 2 LOW) - asyncio import, test assertions, PDF timeseries section added
-    8-6-comparaisons-et-analyses-avancees: backlog
+    8-6-comparaisons-et-analyses-avancees: done # Code review 2026-02-01: 12 issues fixed (5 HIGH + 5 MEDIUM + 2 LOW) - File List populated, PeriodComparisonChart changed to BarChart, validation added
     8-7-navigation-par-categories-avec-tabs-et-filtres-integres: backlog # Catégories comme tabs + filtres horizontaux (remplace drawer latéral)
     8-8-deplacement-approbations-vers-page-executions-et-notification-top-bar: backlog # Déplacer section approbations vers Executions + icône cloche dans top bar
     8-9-tabs-toutes-les-executions-et-mes-executions: backlog # Tabs pour voir toutes les exécutions (RBAC) ou seulement les siennes

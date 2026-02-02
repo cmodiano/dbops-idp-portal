@@ -1,5 +1,5 @@
 /**
- * Dashboard service (Story 5.1, Task 2.1; Story 8.3; Story 8.4; Story 8.5).
+ * Dashboard service (Story 5.1, Task 2.1; Story 8.3; Story 8.4; Story 8.5; Story 8.6).
  *
  * Provides functions to fetch dashboard statistics and recent executions.
  */
@@ -13,6 +13,8 @@ import type {
   EnvironmentStats,
   DashboardFilters,
   FilterOptions,
+  ComparisonFilters,
+  ComparisonResult,
 } from '../types/api';
 
 /**
@@ -185,4 +187,50 @@ export async function exportDashboardPDF(filters: DashboardFilters = {}): Promis
   const blob = await apiFetchBlob(url);
   const filename = generateExportFilename('pdf');
   downloadBlob(blob, filename);
+}
+
+// === Comparison Functions (Story 8.6) ===
+
+/**
+ * Build query parameters for comparison request (Story 8.6, Task 7.2).
+ */
+function buildComparisonParams(filters: ComparisonFilters): URLSearchParams {
+  const params = new URLSearchParams();
+
+  params.set('dimension', filters.dimension);
+  params.set('value1', filters.value1);
+  params.set('value2', filters.value2);
+
+  if (filters.days) {
+    params.set('days', filters.days.toString());
+  }
+
+  // Period dates for period dimension
+  if (filters.period1Start) params.set('period1_start', filters.period1Start);
+  if (filters.period1End) params.set('period1_end', filters.period1End);
+  if (filters.period2Start) params.set('period2_start', filters.period2Start);
+  if (filters.period2End) params.set('period2_end', filters.period2End);
+
+  // Metrics as multiple query params
+  if (filters.metrics && filters.metrics.length > 0) {
+    filters.metrics.forEach((metric) => params.append('metrics', metric));
+  }
+
+  return params;
+}
+
+/**
+ * Fetch comparison data between two values (Story 8.6, AC7).
+ *
+ * Compares execution metrics across dimensions:
+ * - technology: Compare two database engines (e.g., AAP vs Terraform)
+ * - environment: Compare two environments (e.g., dev vs prod)
+ * - period: Compare two time periods (e.g., last week vs this week)
+ *
+ * @param filters Comparison filters with dimension, value1, value2, and optional period dates
+ * @returns ComparisonResult with value1_stats, value2_stats, and deltas
+ */
+export async function fetchComparison(filters: ComparisonFilters): Promise<ComparisonResult> {
+  const params = buildComparisonParams(filters);
+  return apiFetch<ComparisonResult>(`/dashboard/compare?${params.toString()}`);
 }
