@@ -7,6 +7,7 @@ Tests:
 """
 
 import pytest
+import re
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -21,7 +22,7 @@ class TestCreateExecutionPendingApproval:
     async def test_creates_with_pending_approval_status(self):
         """create_execution_pending_approval creates record with PENDING_APPROVAL status."""
         mock_cursor = MagicMock()
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()  # Story 9.7: cursor.close() is sync, not async
 
         mock_out_id = MagicMock()
         mock_out_id.getvalue.return_value = [42]
@@ -55,7 +56,7 @@ class TestCreateExecutionPendingApproval:
     async def test_stores_parameters_as_json(self):
         """create_execution_pending_approval stores parameters as JSON string."""
         mock_cursor = MagicMock()
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()  # Story 9.7: cursor.close() is sync, not async
         mock_cursor.execute = AsyncMock()
 
         mock_out_id = MagicMock()
@@ -96,7 +97,7 @@ class TestApprove:
         """approve updates status from PENDING_APPROVAL to SUBMITTED."""
         mock_cursor = MagicMock()
         mock_cursor.rowcount = 1
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()  # Story 9.7: cursor.close() is sync, not async
         mock_cursor.execute = AsyncMock()
 
         mock_conn = MagicMock()
@@ -123,14 +124,16 @@ class TestApprove:
         assert params["new_status"] == "SUBMITTED"
         assert params["current_status"] == "PENDING_APPROVAL"
         assert params["approver_id"] == 10
-        assert params["comment"] == "Approved for production"
+        # Story 9.7: Verify correct bind variable name (not Oracle reserved word)
+        assert params["approval_comment"] == "Approved for production"
+        assert "comment" not in params, "Should use 'approval_comment', not 'comment' (Oracle reserved word)"
 
     @pytest.mark.asyncio
     async def test_approve_returns_false_when_not_found(self):
         """approve returns False when execution doesn't exist."""
         mock_cursor = MagicMock()
         mock_cursor.rowcount = 0
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()  # Story 9.7: cursor.close() is sync, not async
         mock_cursor.execute = AsyncMock()
 
         mock_conn = MagicMock()
@@ -150,7 +153,7 @@ class TestApprove:
         """approve returns False when execution is not in PENDING_APPROVAL status."""
         mock_cursor = MagicMock()
         mock_cursor.rowcount = 0  # No rows updated because WHERE STATUS = PENDING_APPROVAL didn't match
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()  # Story 9.7: cursor.close() is sync, not async
         mock_cursor.execute = AsyncMock()
 
         mock_conn = MagicMock()
@@ -174,7 +177,7 @@ class TestReject:
         """reject updates status from PENDING_APPROVAL to REJECTED."""
         mock_cursor = MagicMock()
         mock_cursor.rowcount = 1
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()  # Story 9.7: cursor.close() is sync, not async
         mock_cursor.execute = AsyncMock()
 
         mock_conn = MagicMock()
@@ -201,14 +204,16 @@ class TestReject:
         assert params["new_status"] == "REJECTED"
         assert params["current_status"] == "PENDING_APPROVAL"
         assert params["rejector_id"] == 10
-        assert params["comment"] == "Rejected due to policy violation"
+        # Story 9.7: Verify correct bind variable name (not Oracle reserved word)
+        assert params["approval_comment"] == "Rejected due to policy violation"
+        assert "comment" not in params, "Should use 'approval_comment', not 'comment' (Oracle reserved word)"
 
     @pytest.mark.asyncio
     async def test_reject_returns_false_when_not_found(self):
         """reject returns False when execution doesn't exist."""
         mock_cursor = MagicMock()
         mock_cursor.rowcount = 0
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()  # Story 9.7: cursor.close() is sync, not async
         mock_cursor.execute = AsyncMock()
 
         mock_conn = MagicMock()
@@ -245,7 +250,7 @@ class TestListPendingApprovals:
 
         mock_cursor = MagicMock()
         mock_cursor.fetchall = AsyncMock(return_value=rows)
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()  # Story 9.7: cursor.close() is sync, not async
         mock_cursor.execute = AsyncMock()
 
         mock_conn = MagicMock()
@@ -270,7 +275,7 @@ class TestListPendingApprovals:
         """list_pending_approvals returns empty list when no pending approvals."""
         mock_cursor = MagicMock()
         mock_cursor.fetchall = AsyncMock(return_value=[])
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()  # Story 9.7: cursor.close() is sync, not async
         mock_cursor.execute = AsyncMock()
 
         mock_conn = MagicMock()
@@ -293,7 +298,7 @@ class TestCountPendingApprovals:
         """count_pending_approvals returns count of PENDING_APPROVAL executions."""
         mock_cursor = MagicMock()
         mock_cursor.fetchone = AsyncMock(return_value=(5,))
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()  # Story 9.7: cursor.close() is sync, not async
         mock_cursor.execute = AsyncMock()
 
         mock_conn = MagicMock()
@@ -312,7 +317,7 @@ class TestCountPendingApprovals:
         """count_pending_approvals returns 0 when no pending approvals."""
         mock_cursor = MagicMock()
         mock_cursor.fetchone = AsyncMock(return_value=(0,))
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()  # Story 9.7: cursor.close() is sync, not async
         mock_cursor.execute = AsyncMock()
 
         mock_conn = MagicMock()
@@ -343,7 +348,7 @@ class TestGetByIdWithApproval:
 
         mock_cursor = MagicMock()
         mock_cursor.fetchone = AsyncMock(return_value=row)
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()  # Story 9.7: cursor.close() is sync, not async
         mock_cursor.execute = AsyncMock()
 
         mock_conn = MagicMock()
@@ -368,7 +373,7 @@ class TestGetByIdWithApproval:
         """get_by_id_with_approval returns None when execution doesn't exist."""
         mock_cursor = MagicMock()
         mock_cursor.fetchone = AsyncMock(return_value=None)
-        mock_cursor.close = AsyncMock()
+        mock_cursor.close = MagicMock()  # Story 9.7: cursor.close() is sync, not async
         mock_cursor.execute = AsyncMock()
 
         mock_conn = MagicMock()
@@ -381,3 +386,154 @@ class TestGetByIdWithApproval:
             result = await execution_repository.get_by_id_with_approval(999)
 
         assert result is None
+
+
+class TestOracleBindVariableRegression:
+    """Regression tests for Oracle bind variable naming (Story 9.7).
+
+    These tests verify that bind variables avoid Oracle reserved words to prevent
+    ORA-01745 errors. The bug was introduced in Story 7.4 (commit a450130) using
+    :comment, and fixed in Story 9.1 (commit 6163b8e) using :approval_comment.
+
+    Story 9.7 adds these regression tests to prevent reintroduction of the bug,
+    along with comprehensive documentation and codebase scanning for similar issues.
+    """
+
+    @pytest.mark.asyncio
+    async def test_approve_uses_approval_comment_bind_variable(self):
+        """Regression test: approve() must use :approval_comment, not :comment (Oracle reserved word)."""
+        mock_cursor = MagicMock()
+        mock_cursor.rowcount = 1
+        mock_cursor.close = MagicMock()  # cursor.close() is sync, not async
+        mock_cursor.execute = AsyncMock()
+
+        mock_conn = MagicMock()
+        mock_conn.commit = AsyncMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            await execution_repository.approve(
+                execution_id=1,
+                approver_id=2,
+                comment="Test approval comment",
+            )
+
+        # Get the SQL query and params from execute call
+        execute_call = mock_cursor.execute.call_args
+        query = execute_call[0][0]
+        params = execute_call[0][1]
+
+        # Verify SQL uses correct bind variable name
+        assert ":approval_comment" in query, (
+            "Query must use :approval_comment bind variable. "
+            "Using :comment causes ORA-01745 (COMMENT is Oracle reserved word)."
+        )
+
+        # Story 9.7 code-review MEDIUM-3: Use regex to detect standalone :comment (robust edge case handling)
+        # This prevents false positives with ":comment_something" and catches ":comment " or ":comment\n"
+        standalone_comment_pattern = r':comment\b'
+        assert not re.search(standalone_comment_pattern, query.replace(":approval_comment", "")), (
+            "Query must NOT use :comment bind variable (Oracle reserved word). "
+            "Detected standalone :comment (not part of :approval_comment)."
+        )
+
+        # Story 9.7 code-review: Verify query structure to prevent refactoring bugs
+        assert "UPDATE EXECUTIONS" in query, "Query must update EXECUTIONS table"
+        assert "APPROVAL_COMMENT = :approval_comment" in query, "Query must set APPROVAL_COMMENT column"
+        assert "WHERE ID = :execution_id" in query, "Query must filter by execution ID"
+
+        # Verify params dict uses correct key
+        assert "approval_comment" in params, (
+            "params dict must have 'approval_comment' key, not 'comment'."
+        )
+        assert "comment" not in params, (
+            "params dict must NOT have 'comment' key (Oracle reserved word conflict)."
+        )
+        assert params["approval_comment"] == "Test approval comment"
+
+    @pytest.mark.asyncio
+    async def test_reject_uses_approval_comment_bind_variable(self):
+        """Regression test: reject() must use :approval_comment, not :comment (Oracle reserved word)."""
+        mock_cursor = MagicMock()
+        mock_cursor.rowcount = 1
+        mock_cursor.close = MagicMock()  # cursor.close() is sync, not async
+        mock_cursor.execute = AsyncMock()
+
+        mock_conn = MagicMock()
+        mock_conn.commit = AsyncMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            await execution_repository.reject(
+                execution_id=1,
+                rejector_id=2,
+                comment="Test rejection comment",
+            )
+
+        # Get the SQL query and params from execute call
+        execute_call = mock_cursor.execute.call_args
+        query = execute_call[0][0]
+        params = execute_call[0][1]
+
+        # Verify SQL uses correct bind variable name
+        assert ":approval_comment" in query, (
+            "Query must use :approval_comment bind variable. "
+            "Using :comment causes ORA-01745 (COMMENT is Oracle reserved word)."
+        )
+
+        # Story 9.7 code-review MEDIUM-3: Use regex to detect standalone :comment (robust edge case handling)
+        standalone_comment_pattern = r':comment\b'
+        assert not re.search(standalone_comment_pattern, query.replace(":approval_comment", "")), (
+            "Query must NOT use :comment bind variable (Oracle reserved word). "
+            "Detected standalone :comment (not part of :approval_comment)."
+        )
+
+        # Story 9.7 code-review: Verify query structure to prevent refactoring bugs
+        assert "UPDATE EXECUTIONS" in query, "Query must update EXECUTIONS table"
+        assert "APPROVAL_COMMENT = :approval_comment" in query, "Query must set APPROVAL_COMMENT column"
+        assert "WHERE ID = :execution_id" in query, "Query must filter by execution ID"
+
+        # Verify params dict uses correct key
+        assert "approval_comment" in params, (
+            "params dict must have 'approval_comment' key, not 'comment'."
+        )
+        assert "comment" not in params, (
+            "params dict must NOT have 'comment' key (Oracle reserved word conflict)."
+        )
+        assert params["approval_comment"] == "Test rejection comment"
+
+    @pytest.mark.asyncio
+    async def test_approve_with_none_comment_uses_correct_bind_variable(self):
+        """Regression test: approve() with None comment still uses approval_comment key."""
+        mock_cursor = MagicMock()
+        mock_cursor.rowcount = 1
+        mock_cursor.close = MagicMock()  # cursor.close() is sync, not async
+        mock_cursor.execute = AsyncMock()
+
+        mock_conn = MagicMock()
+        mock_conn.commit = AsyncMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            await execution_repository.approve(
+                execution_id=1,
+                approver_id=2,
+                comment=None,  # Optional comment
+            )
+
+        execute_call = mock_cursor.execute.call_args
+        params = execute_call[0][1]
+
+        # Even with None, should use 'approval_comment' key
+        assert "approval_comment" in params
+        assert "comment" not in params
+        assert params["approval_comment"] is None
