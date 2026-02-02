@@ -1,18 +1,157 @@
-"""Scheduled Execution models for Story 11.3 - API créer exécution planifiée one-time.
+"""Scheduled Execution models for Story 11.3, 11.7 - API scheduled executions.
 
 Defines Pydantic models for:
 - ScheduledExecutionStatus: schedule lifecycle states
 - ScheduledExecutionCreate: input model for creating scheduled executions
 - ScheduledExecutionResponse: output model for scheduled execution records
+- RecurringPattern models: daily/weekly recurrence support (Story 11.7)
 """
 
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.models.execution import ExecutionEnvironment
+
+
+# === Recurring Pattern Types (Story 11.7) ===
+
+
+class RecurringPatternType(str, Enum):
+    """Pattern type for recurring executions (Story 11.7, AC1-AC3)."""
+    DAILY = "daily"
+    WEEKLY = "weekly"
+
+
+class DailyPatternConfig(BaseModel):
+    """Configuration for daily recurring pattern (Story 11.7, AC2).
+
+    Attributes:
+        hour: Hour of day (0-23) when execution runs
+        minute: Minute of hour (0-59) when execution runs
+    """
+    hour: int = Field(..., ge=0, le=23, description="Hour of day (0-23)")
+    minute: int = Field(..., ge=0, le=59, description="Minute of hour (0-59)")
+
+
+class WeeklyPatternConfig(BaseModel):
+    """Configuration for weekly recurring pattern (Story 11.7, AC3).
+
+    Attributes:
+        day_of_week: Day of week (1=Monday, 7=Sunday)
+        hour: Hour of day (0-23) when execution runs
+        minute: Minute of hour (0-59) when execution runs
+    """
+    day_of_week: int = Field(
+        ..., ge=1, le=7,
+        description="Day of week: 1=Monday, 2=Tuesday, ..., 7=Sunday"
+    )
+    hour: int = Field(..., ge=0, le=23, description="Hour of day (0-23)")
+    minute: int = Field(..., ge=0, le=59, description="Minute of hour (0-59)")
+
+
+class RecurringPatternRequest(BaseModel):
+    """Recurring pattern in creation request (Story 11.7, AC2, AC3).
+
+    Attributes:
+        pattern_type: Type of recurrence ('daily' or 'weekly')
+        pattern_config: Configuration specific to the pattern type
+    """
+    pattern_type: Literal["daily", "weekly"] = Field(
+        ..., description="Pattern type: 'daily' or 'weekly'"
+    )
+    pattern_config: dict[str, Any] = Field(
+        ..., description="Pattern configuration (hour, minute, day_of_week for weekly)"
+    )
+
+    @field_validator("pattern_config")
+    @classmethod
+    def validate_pattern_config(cls, v: dict[str, Any], info) -> dict[str, Any]:
+        """Validate pattern_config has required fields for the pattern_type."""
+        # Note: pattern_type validation happens in model_validator below
+        return v
+
+    @model_validator(mode="after")
+    def validate_pattern_config_matches_type(self):
+        """Validate pattern_config matches pattern_type (Story 11.7, AC6)."""
+        if self.pattern_type == "daily":
+            # Validate DailyPatternConfig fields
+            if "hour" not in self.pattern_config:
+                raise ValueError(
+                    "Pattern config incomplet : hour et minute requis pour pattern daily"
+                )
+            if "minute" not in self.pattern_config:
+                raise ValueError(
+                    "Pattern config incomplet : hour et minute requis pour pattern daily"
+                )
+            hour = self.pattern_config.get("hour")
+            minute = self.pattern_config.get("minute")
+            if not isinstance(hour, int) or hour < 0 or hour > 23:
+                raise ValueError(
+                    "Valeur invalide pour hour : doit être entre 0 et 23"
+                )
+            if not isinstance(minute, int) or minute < 0 or minute > 59:
+                raise ValueError(
+                    "Valeur invalide pour minute : doit être entre 0 et 59"
+                )
+        elif self.pattern_type == "weekly":
+            # Validate WeeklyPatternConfig fields
+            if "day_of_week" not in self.pattern_config:
+                raise ValueError(
+                    "Pattern config incomplet : day_of_week, hour et minute requis pour pattern weekly"
+                )
+            if "hour" not in self.pattern_config:
+                raise ValueError(
+                    "Pattern config incomplet : day_of_week, hour et minute requis pour pattern weekly"
+                )
+            if "minute" not in self.pattern_config:
+                raise ValueError(
+                    "Pattern config incomplet : day_of_week, hour et minute requis pour pattern weekly"
+                )
+            day_of_week = self.pattern_config.get("day_of_week")
+            hour = self.pattern_config.get("hour")
+            minute = self.pattern_config.get("minute")
+            if not isinstance(day_of_week, int) or day_of_week < 1 or day_of_week > 7:
+                raise ValueError(
+                    "Valeur invalide pour day_of_week : doit être entre 1 (lundi) et 7 (dimanche)"
+                )
+            if not isinstance(hour, int) or hour < 0 or hour > 23:
+                raise ValueError(
+                    "Valeur invalide pour hour : doit être entre 0 et 23"
+                )
+            if not isinstance(minute, int) or minute < 0 or minute > 59:
+                raise ValueError(
+                    "Valeur invalide pour minute : doit être entre 0 et 59"
+                )
+        return self
+
+
+class RecurringPatternResponse(BaseModel):
+    """Recurring pattern in API responses (Story 11.7, AC7, AC8).
+
+    Attributes:
+        pattern_type: Type of recurrence ('daily' or 'weekly')
+        pattern_config: Configuration dict (hour, minute, day_of_week)
+        next_execution_date: Next scheduled execution datetime
+        is_active: Whether the recurrence is active
+    """
+    pattern_type: str = Field(..., description="Pattern type: 'daily' or 'weekly'")
+    pattern_config: dict[str, Any] = Field(..., description="Pattern configuration")
+    next_execution_date: datetime | None = Field(
+        None, description="Next scheduled execution datetime (UTC)"
+    )
+    is_active: bool = Field(..., description="Whether the recurrence is active")
+
+
+class RecurringPatternToggle(BaseModel):
+    """Request to toggle is_active for a recurring pattern (Story 11.7, AC9, AC10).
+
+    Attributes:
+        is_active: New active state for the recurring pattern
+    """
+    is_active: bool = Field(..., description="New active state")
 
 
 class ScheduledExecutionStatus(str, Enum):
@@ -23,13 +162,18 @@ class ScheduledExecutionStatus(str, Enum):
 
 
 class ScheduledExecutionCreate(BaseModel):
-    """Input model for creating a scheduled execution (Story 11.3, AC1).
+    """Input model for creating a scheduled execution (Story 11.3, 11.7).
+
+    Supports two modes:
+    - One-time: scheduled_at is required, recurring_pattern is None
+    - Recurring: recurring_pattern is required, scheduled_at is None
 
     Attributes:
         action_id: ID of the action to schedule (must be published)
         environment: Target environment (dev, staging, prod)
         parameters: Parameters conforming to action's parameters_schema
-        scheduled_at: Future date/time when execution should run (ISO 8601 format)
+        scheduled_at: Future date/time for one-time execution (ISO 8601 format)
+        recurring_pattern: Pattern for recurring execution (Story 11.7)
     """
     action_id: int = Field(
         ...,
@@ -47,10 +191,14 @@ class ScheduledExecutionCreate(BaseModel):
         description="Execution parameters (validated against action's parameters_schema)",
         json_schema_extra={"example": {"db_name": "PRODDB", "version": "19.21"}}
     )
-    scheduled_at: datetime = Field(
-        ...,
-        description="Future date/time for execution (ISO 8601 format, must be in the future)",
+    scheduled_at: datetime | None = Field(
+        None,
+        description="Future date/time for one-time execution (ISO 8601 format, mutually exclusive with recurring_pattern)",
         json_schema_extra={"example": "2026-03-15T14:30:00Z"}
+    )
+    recurring_pattern: RecurringPatternRequest | None = Field(
+        None,
+        description="Recurring pattern configuration (Story 11.7, mutually exclusive with scheduled_at)"
     )
 
     @field_validator("parameters")
@@ -63,12 +211,15 @@ class ScheduledExecutionCreate(BaseModel):
 
     @field_validator("scheduled_at")
     @classmethod
-    def validate_scheduled_at_is_datetime(cls, v: datetime) -> datetime:
-        """Validate scheduled_at is a datetime with timezone.
+    def validate_scheduled_at_is_datetime(cls, v: datetime | None) -> datetime | None:
+        """Validate scheduled_at is a datetime with timezone if provided.
 
         Note: Future validation is done in the service layer to allow proper error response.
         MEDIUM-3 FIX: Enforce timezone requirement at model level.
         """
+        if v is None:
+            return v
+
         if not isinstance(v, datetime):
             raise ValueError("scheduled_at must be a valid datetime")
 
@@ -81,9 +232,22 @@ class ScheduledExecutionCreate(BaseModel):
 
         return v
 
+    @model_validator(mode="after")
+    def validate_scheduling_type(self):
+        """Ensure either scheduled_at OR recurring_pattern is provided, not both (Story 11.7)."""
+        if self.scheduled_at is not None and self.recurring_pattern is not None:
+            raise ValueError(
+                "Impossible de spécifier à la fois scheduled_at et recurring_pattern"
+            )
+        if self.scheduled_at is None and self.recurring_pattern is None:
+            raise ValueError(
+                "Doit spécifier soit scheduled_at (one-time) soit recurring_pattern (récurrent)"
+            )
+        return self
+
 
 class ScheduledExecutionResponse(BaseModel):
-    """Output model for scheduled execution (Story 11.3, AC1, AC7).
+    """Output model for scheduled execution (Story 11.3, 11.7).
 
     Attributes:
         scheduled_execution_id: ID of the scheduled execution
@@ -92,10 +256,11 @@ class ScheduledExecutionResponse(BaseModel):
         action_description: Description of the action (optional, enriched)
         environment: Target environment
         status: Current schedule status
-        scheduled_at: Date/time when execution is scheduled
+        scheduled_at: Date/time when execution is scheduled (NULL for recurring)
         parameters: Submitted parameters
         created_at: When schedule was created
         correlation_id: Request correlation ID for tracing
+        recurring_pattern: Recurring pattern info if applicable (Story 11.7)
     """
     scheduled_execution_id: int = Field(
         ...,
@@ -127,9 +292,9 @@ class ScheduledExecutionResponse(BaseModel):
         description="Current schedule status (pending, executed, cancelled)",
         json_schema_extra={"example": "pending"}
     )
-    scheduled_at: datetime = Field(
-        ...,
-        description="Date/time when execution is scheduled (ISO 8601)",
+    scheduled_at: datetime | None = Field(
+        None,
+        description="Date/time when execution is scheduled (ISO 8601, NULL for recurring)",
         json_schema_extra={"example": "2026-03-15T14:30:00Z"}
     )
     parameters: dict[str, Any] | None = Field(
@@ -147,6 +312,10 @@ class ScheduledExecutionResponse(BaseModel):
         description="Unique correlation ID for request tracing",
         json_schema_extra={"example": "550e8400-e29b-41d4-a716-446655440000"}
     )
+    recurring_pattern: RecurringPatternResponse | None = Field(
+        None,
+        description="Recurring pattern info for recurring executions (Story 11.7)"
+    )
 
 
 class ScheduledExecutionCreateResult(BaseModel):
@@ -160,9 +329,10 @@ class ScheduledExecutionCreateResult(BaseModel):
 
 
 class ScheduledExecutionWithAction(BaseModel):
-    """Scheduled execution with action metadata (Story 11.3, AC7).
+    """Scheduled execution with action metadata (Story 11.3, AC7, Story 11.7).
 
     Used internally by repository for JOIN results.
+    Story 11.7: scheduled_at is optional for recurring executions.
     """
     id: int
     action_id: int
@@ -171,18 +341,20 @@ class ScheduledExecutionWithAction(BaseModel):
     user_id: int
     environment: str
     parameters: dict[str, Any] | None
-    scheduled_at: datetime
+    scheduled_at: datetime | None = None  # Story 11.7: NULL for recurring executions
     status: ScheduledExecutionStatus
     created_at: datetime
     updated_at: datetime | None = None
+    recurring_pattern: RecurringPatternResponse | None = None  # Story 11.7: Recurring pattern info
 
 
 class ScheduledExecutionListItem(BaseModel):
-    """List item for scheduled executions with user info (Story 11.6, AC3, AC10).
+    """List item for scheduled executions with user info (Story 11.6, 11.7).
 
     Used for the admin list view with enriched action and user data.
     HIGH-1 FIX: Added correlation_id for AC10 (details modal requirement).
     HIGH-2 FIX: Added execution_id for AC10 (link to effective execution when status=executed).
+    Story 11.7: Added recurring_pattern for recurring executions.
     """
     scheduled_execution_id: int
     action_id: int
@@ -190,9 +362,10 @@ class ScheduledExecutionListItem(BaseModel):
     user_id: int
     user_name: str
     environment: str
-    scheduled_at: datetime
+    scheduled_at: datetime | None  # Story 11.7: NULL for recurring executions
     status: ScheduledExecutionStatus
     created_at: datetime
     parameters: dict[str, Any] | None = None
     correlation_id: str | None = None  # HIGH-1 FIX: AC10 requires correlation_id in details modal
     execution_id: int | None = None  # HIGH-2 FIX: AC10 requires link to effective execution if status=executed
+    recurring_pattern: RecurringPatternResponse | None = None  # Story 11.7: Recurring pattern info

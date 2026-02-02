@@ -1,13 +1,14 @@
 /**
- * ScheduledExecutionsPage - Liste des exécutions planifiées (Story 11.6).
+ * ScheduledExecutionsPage - Liste des exécutions planifiées (Story 11.6, 11.7).
  *
  * Features:
- * - Table avec colonnes : Action, Utilisateur, Date/heure planifiée, Statut, Environnement, Date de création, Actions
+ * - Table avec colonnes : Type, Action, Utilisateur, Date/heure planifiée, Statut, Environnement, Date de création, Actions
  * - Filtrage par statut, action, plage de dates (AC7-AC9)
  * - RBAC : DBA voit ses propres exécutions, DBOPS voit toutes (AC2) - géré côté backend
  * - Indicateur visuel pour exécutions < 24h (AC4)
  * - Modal de confirmation d'annulation (AC5)
- * - Modal de détails (AC10)
+ * - Modal de détails avec info récurrence (AC10, Story 11.7 AC8)
+ * - Activation/désactivation des récurrences (Story 11.7 AC9, AC10)
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -23,27 +24,58 @@ import {
   App,
   DatePicker,
   Card,
+  Popconfirm,
 } from 'antd';
 import type { TableProps } from 'antd';
-import { ClockCircleOutlined, ReloadOutlined } from '@ant-design/icons';
+import { ClockCircleOutlined, ReloadOutlined, SyncOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import {
   listScheduledExecutions,
   cancelScheduledExecution,
+  toggleRecurringPattern,
 } from '../../services/scheduled_execution_service';
 import type {
   ScheduledExecutionListItem,
   ScheduledExecutionFilters,
   ScheduledExecutionStatus,
+  RecurringPatternResponse,
 } from '../../types/api';
 
 const { RangePicker } = DatePicker;
 
 /** Check if a date is within the next 24 hours and in the future. */
-function isWithin24Hours(scheduledAt: string): boolean {
+function isWithin24Hours(scheduledAt: string | null): boolean {
+  if (!scheduledAt) return false;
   const scheduledDate = dayjs(scheduledAt);
   const now = dayjs();
   return scheduledDate.isAfter(now) && scheduledDate.diff(now, 'hour') <= 24;
+}
+
+/** Day names for weekly pattern display (Story 11.7, AC7). */
+const DAY_NAMES: Record<number, string> = {
+  1: 'lundis',
+  2: 'mardis',
+  3: 'mercredis',
+  4: 'jeudis',
+  5: 'vendredis',
+  6: 'samedis',
+  7: 'dimanches',
+};
+
+/** Format recurring pattern display (Story 11.7, AC7). */
+function formatRecurrenceDisplay(recurringPattern: RecurringPatternResponse): string {
+  const { pattern_type, pattern_config } = recurringPattern;
+  const hour = String('hour' in pattern_config ? pattern_config.hour : 0).padStart(2, '0');
+  const minute = String('minute' in pattern_config ? pattern_config.minute : 0).padStart(2, '0');
+
+  if (pattern_type === 'daily') {
+    return `Tous les jours à ${hour}:${minute} (UTC)`;
+  } else if (pattern_type === 'weekly') {
+    const dayOfWeek = 'day_of_week' in pattern_config ? pattern_config.day_of_week : 1;
+    const dayName = DAY_NAMES[dayOfWeek as number] || 'jours';
+    return `Tous les ${dayName} à ${hour}:${minute} (UTC)`;
+  }
+  return '';
 }
 
 /** Badge status mapping for execution status. */
@@ -77,6 +109,9 @@ export default function ScheduledExecutionsPage() {
 
   // Details modal state
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
+
+  // Story 11.7: Toggle recurring pattern state
+  const [togglingPattern, setTogglingPattern] = useState(false);
 
   const loadScheduledExecutions = useCallback(
     async (page = 1, pageSize = 10) => {
@@ -179,7 +214,67 @@ export default function ScheduledExecutionsPage() {
     }
   };
 
+  // Story 11.7: Handle toggle recurring pattern (AC9, AC10)
+  const handleToggleRecurringPattern = async (newIsActive: boolean) => {
+    if (!selectedExecution?.recurring_pattern) return;
+
+    setTogglingPattern(true);
+    try {
+      await toggleRecurringPattern(
+        selectedExecution.scheduled_execution_id,
+        newIsActive
+      );
+
+      notification.success({
+        message: newIsActive ? 'Récurrence réactivée' : 'Récurrence désactivée',
+        description: newIsActive
+          ? 'La récurrence a été réactivée avec succès'
+          : 'La récurrence a été désactivée avec succès',
+      });
+
+      setDetailsModalVisible(false);
+      setSelectedExecution(null);
+      loadScheduledExecutions(pagination.current, pagination.pageSize);
+    } catch (err: unknown) {
+      const error = err as { status?: number; message?: string };
+      if (error.status === 404) {
+        notification.error({
+          message: 'Erreur',
+          description: 'Récurrence introuvable',
+        });
+      } else if (error.status === 403) {
+        notification.error({
+          message: 'Permission refusée',
+          description: "Vous n'avez pas la permission de modifier cette récurrence",
+        });
+      } else {
+        notification.error({
+          message: 'Erreur',
+          description: error.message ?? 'Une erreur est survenue',
+        });
+      }
+    } finally {
+      setTogglingPattern(false);
+    }
+  };
+
   const columns: TableProps<ScheduledExecutionListItem>['columns'] = [
+    // Story 11.7: Type column (AC7)
+    {
+      title: 'Type',
+      key: 'type',
+      width: 100,
+      render: (_: unknown, record: ScheduledExecutionListItem) => {
+        if (record.recurring_pattern) {
+          return (
+            <Tag color="blue" icon={<SyncOutlined />}>
+              Récurrent
+            </Tag>
+          );
+        }
+        return <Tag>Unique</Tag>;
+      },
+    },
     {
       title: 'Action',
       dataIndex: 'action_name',
@@ -196,9 +291,46 @@ export default function ScheduledExecutionsPage() {
       title: 'Date/heure planifiée',
       dataIndex: 'scheduled_at',
       key: 'scheduled_at',
-      sorter: (a, b) => dayjs(a.scheduled_at).unix() - dayjs(b.scheduled_at).unix(),
+      sorter: (a, b) => {
+        const aDate = a.recurring_pattern?.next_execution_date ?? a.scheduled_at;
+        const bDate = b.recurring_pattern?.next_execution_date ?? b.scheduled_at;
+        return dayjs(aDate).unix() - dayjs(bDate).unix();
+      },
       defaultSortOrder: 'ascend',
-      render: (scheduledAt: string) => {
+      render: (_: unknown, record: ScheduledExecutionListItem) => {
+        // Story 11.7: Different display for recurring vs one-time
+        if (record.recurring_pattern) {
+          const recurrenceText = formatRecurrenceDisplay(record.recurring_pattern);
+          const nextExecution = record.recurring_pattern.next_execution_date
+            ? dayjs(record.recurring_pattern.next_execution_date)
+            : null;
+          const isActive = record.recurring_pattern.is_active;
+
+          return (
+            <div>
+              <div style={{ color: isActive ? 'inherit' : '#999' }}>{recurrenceText}</div>
+              {nextExecution && isActive && (
+                <div style={{ fontSize: '12px', color: '#888' }}>
+                  Prochaine : {nextExecution.format('DD/MM/YYYY à HH:mm')}
+                  {isWithin24Hours(record.recurring_pattern.next_execution_date) && (
+                    <Tag color="orange" style={{ marginLeft: 8 }}>
+                      Bientôt
+                    </Tag>
+                  )}
+                </div>
+              )}
+              {!isActive && (
+                <div style={{ fontSize: '12px', color: '#ff4d4f' }}>
+                  (Désactivé)
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        // One-time execution
+        const scheduledAt = record.scheduled_at;
+        if (!scheduledAt) return '—';
         const scheduledDate = dayjs(scheduledAt);
         const soon = isWithin24Hours(scheduledAt);
         return (
@@ -241,7 +373,7 @@ export default function ScheduledExecutionsPage() {
       width: 200,
       render: (_: unknown, record: ScheduledExecutionListItem) => (
         <Space size="small">
-          {record.status === 'pending' && (
+          {record.status === 'pending' && !record.recurring_pattern && (
             <Button
               type="link"
               size="small"
@@ -379,6 +511,35 @@ export default function ScheduledExecutionsPage() {
           setSelectedExecution(null);
         }}
         footer={[
+          // Story 11.7 AC9/AC10: Toggle buttons for recurring patterns
+          ...(selectedExecution?.recurring_pattern
+            ? [
+                selectedExecution.recurring_pattern.is_active ? (
+                  <Popconfirm
+                    key="disable"
+                    title="Désactiver la récurrence"
+                    description="Êtes-vous sûr de vouloir désactiver cette récurrence ?"
+                    onConfirm={() => handleToggleRecurringPattern(false)}
+                    okText="Désactiver"
+                    cancelText="Annuler"
+                    okButtonProps={{ danger: true }}
+                  >
+                    <Button danger loading={togglingPattern}>
+                      Désactiver la récurrence
+                    </Button>
+                  </Popconfirm>
+                ) : (
+                  <Button
+                    key="enable"
+                    type="primary"
+                    loading={togglingPattern}
+                    onClick={() => handleToggleRecurringPattern(true)}
+                  >
+                    Réactiver la récurrence
+                  </Button>
+                ),
+              ]
+            : []),
           <Button
             key="close"
             onClick={() => {
@@ -394,6 +555,16 @@ export default function ScheduledExecutionsPage() {
         {selectedExecution && (
           <Descriptions column={1} bordered size="small">
             <Descriptions.Item label="ID">{selectedExecution.scheduled_execution_id}</Descriptions.Item>
+            {/* Story 11.7 AC8: Type for recurring executions */}
+            <Descriptions.Item label="Type">
+              {selectedExecution.recurring_pattern ? (
+                <Tag color="blue" icon={<SyncOutlined />}>
+                  Récurrent - {selectedExecution.recurring_pattern.pattern_type === 'daily' ? 'Daily' : 'Weekly'}
+                </Tag>
+              ) : (
+                <Tag>Unique</Tag>
+              )}
+            </Descriptions.Item>
             <Descriptions.Item label="Action">
               {selectedExecution.action_name} (ID: {selectedExecution.action_id})
             </Descriptions.Item>
@@ -412,10 +583,31 @@ export default function ScheduledExecutionsPage() {
                   : '—'}
               </pre>
             </Descriptions.Item>
-            <Descriptions.Item label="Date/heure planifiée">
-              {dayjs(selectedExecution.scheduled_at).format('DD/MM/YYYY à HH:mm')} (UTC)
-            </Descriptions.Item>
-            <Descriptions.Item label="Statut">
+            {/* Story 11.7 AC8: Configuration for recurring patterns */}
+            {selectedExecution.recurring_pattern ? (
+              <>
+                <Descriptions.Item label="Configuration">
+                  {formatRecurrenceDisplay(selectedExecution.recurring_pattern)}
+                </Descriptions.Item>
+                <Descriptions.Item label="Prochaine exécution">
+                  {selectedExecution.recurring_pattern.next_execution_date
+                    ? dayjs(selectedExecution.recurring_pattern.next_execution_date).format('DD/MM/YYYY à HH:mm') + ' (UTC)'
+                    : '—'}
+                </Descriptions.Item>
+                <Descriptions.Item label="Statut récurrence">
+                  {selectedExecution.recurring_pattern.is_active ? (
+                    <Badge status="success" text="Actif" />
+                  ) : (
+                    <Badge status="default" text="Désactivé" />
+                  )}
+                </Descriptions.Item>
+              </>
+            ) : (
+              <Descriptions.Item label="Date/heure planifiée">
+                {dayjs(selectedExecution.scheduled_at).format('DD/MM/YYYY à HH:mm')} (UTC)
+              </Descriptions.Item>
+            )}
+            <Descriptions.Item label="Statut exécution">
               <Badge
                 status={STATUS_CONFIG[selectedExecution.status].status}
                 text={STATUS_CONFIG[selectedExecution.status].text}

@@ -31,6 +31,7 @@ import {
   Badge,
   Tooltip,
   App,
+  Radio,
 } from 'antd';
 import { InfoCircleOutlined, WarningOutlined, ToolOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
@@ -41,6 +42,7 @@ import type {
   ImpactLevel,
   InventoryItem,
   RemediationSuggestion,
+  RecurringPatternRequest,
 } from '../../types/api';
 import { submitExecution, fetchInventoryItems } from '../../services/execution_service';
 import { createScheduledExecution } from '../../services/scheduled_execution_service';
@@ -217,6 +219,14 @@ export function ExecutionWizard({
   const [scheduledAt, setScheduledAt] = useState<Dayjs | null>(null);
   const [schedulingError, setSchedulingError] = useState<string | null>(null);
 
+  // Story 11.7: Recurring pattern state (AC1, AC2, AC3)
+  const [schedulingType, setSchedulingType] = useState<'one-time' | 'daily' | 'weekly'>('one-time');
+  const [dailyHour, setDailyHour] = useState<number>(2);
+  const [dailyMinute, setDailyMinute] = useState<number>(0);
+  const [weeklyDayOfWeek, setWeeklyDayOfWeek] = useState<number>(1); // 1=Monday
+  const [weeklyHour, setWeeklyHour] = useState<number>(14);
+  const [weeklyMinute, setWeeklyMinute] = useState<number>(0);
+
   // Inventory data for dropdowns (with caching)
   const [inventoryData, setInventoryData] = useState<Record<string, InventoryItem[]>>({});
   const [loadingInventory, setLoadingInventory] = useState(false);
@@ -260,10 +270,16 @@ export function ExecutionWizard({
       setParameters({});
       setSubmitError(null);
       form.resetFields();
-      // Story 11.5: Reset scheduling state
+      // Story 11.5, 11.7: Reset scheduling state
       setIsScheduling(false);
       setScheduledAt(null);
       setSchedulingError(null);
+      setSchedulingType('one-time');
+      setDailyHour(2);
+      setDailyMinute(0);
+      setWeeklyDayOfWeek(1);
+      setWeeklyHour(14);
+      setWeeklyMinute(0);
 
       // Story 7.2, Task 2.2: Auto-select environment if only one is available
       if (allowedEnvironments.length === 1) {
@@ -483,7 +499,7 @@ export function ExecutionWizard({
     return error.message || 'Une erreur est survenue lors de la planification';
   }, []);
 
-  // Story 11.5: Handle scheduled execution submission (AC3)
+  // Story 11.5, 11.7: Handle scheduled execution submission (AC3)
   const handleSubmitScheduled = useCallback(async () => {
     if (!action || !selectedEnvironment) {
       notification.warning({
@@ -493,16 +509,18 @@ export function ExecutionWizard({
       return;
     }
 
-    if (!scheduledAt) {
-      setSchedulingError('Veuillez sélectionner une date et heure');
-      return;
-    }
+    // Story 11.7: Validate based on scheduling type
+    if (schedulingType === 'one-time') {
+      if (!scheduledAt) {
+        setSchedulingError('Veuillez sélectionner une date et heure');
+        return;
+      }
 
-    // Client-side validation: date must be in the future (AC5)
-    // Use same validation as DatePicker disabledDate (current moment, not start of day)
-    if (scheduledAt.isBefore(dayjs())) {
-      setSchedulingError('La date planifiée doit être dans le futur');
-      return;
+      // Client-side validation: date must be in the future (AC5)
+      if (scheduledAt.isBefore(dayjs())) {
+        setSchedulingError('La date planifiée doit être dans le futur');
+        return;
+      }
     }
 
     // Edge case: action unpublished while wizard was open (rare but defensive)
@@ -520,24 +538,56 @@ export function ExecutionWizard({
     setSchedulingError(null);
 
     try {
-      // Convert Dayjs to ISO UTC string
-      const scheduled_at_utc = scheduledAt.utc().toISOString();
+      // Story 11.7: Build request based on scheduling type
+      let recurringPattern: RecurringPatternRequest | undefined;
+
+      if (schedulingType === 'daily') {
+        recurringPattern = {
+          pattern_type: 'daily',
+          pattern_config: {
+            hour: dailyHour,
+            minute: dailyMinute,
+          },
+        };
+      } else if (schedulingType === 'weekly') {
+        recurringPattern = {
+          pattern_type: 'weekly',
+          pattern_config: {
+            day_of_week: weeklyDayOfWeek,
+            hour: weeklyHour,
+            minute: weeklyMinute,
+          },
+        };
+      }
 
       const response = await createScheduledExecution({
         action_id: action.id,
         environment: selectedEnvironment,
         parameters: Object.keys(parameters).length > 0 ? parameters : null,
-        scheduled_at: scheduled_at_utc,
+        scheduled_at: schedulingType === 'one-time' ? scheduledAt?.utc().toISOString() : null,
+        recurring_pattern: recurringPattern,
       });
 
       if (import.meta.env.DEV) {
         console.log('[ExecutionWizard] Scheduled execution created:', response.scheduled_execution_id);
       }
 
-      notification.success({
-        message: 'Exécution planifiée',
-        description: `Exécution planifiée pour le ${scheduledAt.utc().format('DD/MM/YYYY [à] HH:mm')} (UTC)`,
-      });
+      // Story 11.7: Different success message for recurring vs one-time
+      if (recurringPattern) {
+        const scheduleText = schedulingType === 'daily'
+          ? `Tous les jours à ${String(dailyHour).padStart(2, '0')}:${String(dailyMinute).padStart(2, '0')} (UTC)`
+          : `Tous les ${['', 'lundis', 'mardis', 'mercredis', 'jeudis', 'vendredis', 'samedis', 'dimanches'][weeklyDayOfWeek]} à ${String(weeklyHour).padStart(2, '0')}:${String(weeklyMinute).padStart(2, '0')} (UTC)`;
+
+        notification.success({
+          message: 'Exécution récurrente créée',
+          description: scheduleText,
+        });
+      } else {
+        notification.success({
+          message: 'Exécution planifiée',
+          description: `Exécution planifiée pour le ${scheduledAt?.utc().format('DD/MM/YYYY [à] HH:mm')} (UTC)`,
+        });
+      }
 
       // Close wizard after success
       onCancel();
@@ -561,7 +611,7 @@ export function ExecutionWizard({
     } finally {
       setSubmitting(false);
     }
-  }, [action, selectedEnvironment, parameters, scheduledAt, notification, onCancel, getSchedulingErrorMessage]);
+  }, [action, selectedEnvironment, parameters, scheduledAt, schedulingType, dailyHour, dailyMinute, weeklyDayOfWeek, weeklyHour, weeklyMinute, notification, onCancel, onSuccess, getSchedulingErrorMessage]);
 
   // Handle keyboard shortcuts
   const handleKeyDown = useCallback(
@@ -879,35 +929,143 @@ export function ExecutionWizard({
           />
         )}
 
-        {/* Story 11.5: Scheduling DatePicker (AC2, AC5, AC7) */}
+        {/* Story 11.5, 11.7: Scheduling options (AC1, AC2, AC3) */}
         {isScheduling && (
           <div style={{ marginTop: 16 }}>
-            <Form.Item
-              label="Date et heure d'exécution"
-              required
-              validateStatus={schedulingError ? 'error' : undefined}
-              help={schedulingError}
-            >
-              <Space align="start">
-                <DatePicker
-                  showTime={{ format: 'HH:mm' }}
-                  format="DD/MM/YYYY HH:mm"
-                  value={scheduledAt}
-                  onChange={(date) => {
-                    setScheduledAt(date);
-                    setSchedulingError(null);
-                  }}
-                  disabledDate={(current) => current && current.isBefore(dayjs())}
-                  disabled={submitting}
-                  style={{ width: 220 }}
-                  placeholder="Sélectionner une date/heure"
-                  aria-label="Date et heure d'exécution planifiée"
-                />
-                <Tooltip title="Fuseau horaire : UTC (serveur). La date sera convertie automatiquement.">
-                  <InfoCircleOutlined style={{ color: '#8c8c8c', cursor: 'help' }} />
-                </Tooltip>
-              </Space>
+            {/* Story 11.7: Type de planification (AC1) */}
+            <Form.Item label="Type de planification" required>
+              <Radio.Group
+                value={schedulingType}
+                onChange={(e) => {
+                  setSchedulingType(e.target.value);
+                  setSchedulingError(null);
+                }}
+                disabled={submitting}
+              >
+                <Radio value="one-time">Une seule fois</Radio>
+                <Radio value="daily">Tous les jours</Radio>
+                <Radio value="weekly">Toutes les semaines</Radio>
+              </Radio.Group>
             </Form.Item>
+
+            {/* One-time: DatePicker (Story 11.5) */}
+            {schedulingType === 'one-time' && (
+              <Form.Item
+                label="Date et heure d'exécution"
+                required
+                validateStatus={schedulingError ? 'error' : undefined}
+                help={schedulingError}
+              >
+                <Space align="start">
+                  <DatePicker
+                    showTime={{ format: 'HH:mm' }}
+                    format="DD/MM/YYYY HH:mm"
+                    value={scheduledAt}
+                    onChange={(date) => {
+                      setScheduledAt(date);
+                      setSchedulingError(null);
+                    }}
+                    disabledDate={(current) => current && current.isBefore(dayjs())}
+                    disabled={submitting}
+                    style={{ width: 220 }}
+                    placeholder="Sélectionner une date/heure"
+                    aria-label="Date et heure d'exécution planifiée"
+                  />
+                  <Tooltip title="Fuseau horaire : UTC (serveur). La date sera convertie automatiquement.">
+                    <InfoCircleOutlined style={{ color: '#8c8c8c', cursor: 'help' }} />
+                  </Tooltip>
+                </Space>
+              </Form.Item>
+            )}
+
+            {/* Daily: Hour and Minute selects (Story 11.7, AC2) */}
+            {schedulingType === 'daily' && (
+              <Form.Item label="Heure d'exécution (UTC)" required>
+                <Space>
+                  <Select
+                    value={dailyHour}
+                    onChange={setDailyHour}
+                    style={{ width: 100 }}
+                    disabled={submitting}
+                    aria-label="Heure"
+                  >
+                    {Array.from({ length: 24 }, (_, i) => (
+                      <Select.Option key={i} value={i}>
+                        {String(i).padStart(2, '0')}h
+                      </Select.Option>
+                    ))}
+                  </Select>
+                  <Select
+                    value={dailyMinute}
+                    onChange={setDailyMinute}
+                    style={{ width: 100 }}
+                    disabled={submitting}
+                    aria-label="Minutes"
+                  >
+                    {[0, 15, 30, 45].map((m) => (
+                      <Select.Option key={m} value={m}>
+                        {String(m).padStart(2, '0')}min
+                      </Select.Option>
+                    ))}
+                  </Select>
+                  <Tooltip title="Fuseau horaire : UTC (serveur).">
+                    <InfoCircleOutlined style={{ color: '#8c8c8c', cursor: 'help' }} />
+                  </Tooltip>
+                </Space>
+              </Form.Item>
+            )}
+
+            {/* Weekly: Day, Hour and Minute selects (Story 11.7, AC3) */}
+            {schedulingType === 'weekly' && (
+              <Form.Item label="Jour et heure d'exécution (UTC)" required>
+                <Space>
+                  <Select
+                    value={weeklyDayOfWeek}
+                    onChange={setWeeklyDayOfWeek}
+                    style={{ width: 120 }}
+                    disabled={submitting}
+                    aria-label="Jour de la semaine"
+                  >
+                    <Select.Option value={1}>Lundi</Select.Option>
+                    <Select.Option value={2}>Mardi</Select.Option>
+                    <Select.Option value={3}>Mercredi</Select.Option>
+                    <Select.Option value={4}>Jeudi</Select.Option>
+                    <Select.Option value={5}>Vendredi</Select.Option>
+                    <Select.Option value={6}>Samedi</Select.Option>
+                    <Select.Option value={7}>Dimanche</Select.Option>
+                  </Select>
+                  <Select
+                    value={weeklyHour}
+                    onChange={setWeeklyHour}
+                    style={{ width: 100 }}
+                    disabled={submitting}
+                    aria-label="Heure"
+                  >
+                    {Array.from({ length: 24 }, (_, i) => (
+                      <Select.Option key={i} value={i}>
+                        {String(i).padStart(2, '0')}h
+                      </Select.Option>
+                    ))}
+                  </Select>
+                  <Select
+                    value={weeklyMinute}
+                    onChange={setWeeklyMinute}
+                    style={{ width: 100 }}
+                    disabled={submitting}
+                    aria-label="Minutes"
+                  >
+                    {[0, 15, 30, 45].map((m) => (
+                      <Select.Option key={m} value={m}>
+                        {String(m).padStart(2, '0')}min
+                      </Select.Option>
+                    ))}
+                  </Select>
+                  <Tooltip title="Fuseau horaire : UTC (serveur).">
+                    <InfoCircleOutlined style={{ color: '#8c8c8c', cursor: 'help' }} />
+                  </Tooltip>
+                </Space>
+              </Form.Item>
+            )}
           </div>
         )}
 

@@ -1,9 +1,10 @@
-"""Scheduled Executions API (Story 11.3, 11.6 - API scheduled executions).
+"""Scheduled Executions API (Story 11.3, 11.6, 11.7 - API scheduled executions).
 
 Provides endpoints for scheduling executions:
-- POST /api/v1/scheduled-executions: Create a one-time scheduled execution (Story 11.3)
+- POST /api/v1/scheduled-executions: Create a scheduled execution (one-time or recurring) (Story 11.3, 11.7)
 - GET /api/v1/scheduled-executions: List scheduled executions with filters (Story 11.6)
 - PATCH /api/v1/scheduled-executions/{id}: Cancel a scheduled execution (Story 11.6)
+- PATCH /api/v1/scheduled-executions/{id}/recurring-pattern: Toggle recurring pattern is_active (Story 11.7)
 """
 
 from __future__ import annotations
@@ -23,7 +24,12 @@ from app.repositories.audit_repository import AuditActionType, AuditEntityType
 from app.repositories import scheduled_execution_repository
 from app.core.exceptions import ForbiddenError, InvalidStateError, NotFoundError
 from app.models.auth import UserProfile
-from app.models.scheduled_execution import ScheduledExecutionCreate, ScheduledExecutionStatus
+from app.models.scheduled_execution import (
+    ScheduledExecutionCreate,
+    ScheduledExecutionStatus,
+    RecurringPatternToggle,
+)
+from app.utils.recurrence import calculate_next_execution_date
 
 from app.services import rbac_service
 
@@ -137,35 +143,36 @@ async def create_scheduled_execution(
     request: Request,
     user: UserProfile = Depends(get_current_user),
 ) -> dict:
-    """POST /api/v1/scheduled-executions - Create a one-time scheduled execution (Story 11.3).
+    """POST /api/v1/scheduled-executions - Create a scheduled execution (Story 11.3, 11.7).
 
-    Creates a scheduled execution for a future date/time.
+    Creates a scheduled execution for a future date/time (one-time) or recurring pattern.
 
     **Request Body:**
     - action_id (int): ID of the action to schedule (must be published)
     - environment (string): Target environment (dev, staging, prod)
     - parameters (object): Execution parameters (validated against action schema)
-    - scheduled_at (datetime): Future date/time when execution should run (ISO 8601 with timezone)
+    - scheduled_at (datetime): Future date/time for one-time execution (mutually exclusive with recurring_pattern)
+    - recurring_pattern (object): Recurring pattern config (Story 11.7, mutually exclusive with scheduled_at)
+      - pattern_type: "daily" or "weekly"
+      - pattern_config: {"hour": int, "minute": int} or {"day_of_week": int, "hour": int, "minute": int}
 
     **Validations:**
     - AC1: action_id exists and is published
-    - AC2: scheduled_at is in the future and has timezone
+    - AC2: scheduled_at is in the future and has timezone (if one-time)
     - AC3: User has RBAC permission for action × environment
     - AC4: parameters conform to action's parameters_schema
     - AC5: action exists and is published (404 if not)
+    - AC6 (11.7): recurring_pattern.pattern_config is valid for pattern_type
 
     **Returns:**
-    - 201 Created with scheduled execution details (AC1)
-    - 400 INVALID_SCHEDULED_DATE: if scheduled_at is in past or missing timezone (AC2)
-    - 400 INVALID_PARAMETERS: if parameters validation fails (AC4)
-    - 403 PERMISSION_DENIED: if user cannot schedule this action (AC3)
-    - 404 ACTION_NOT_FOUND: if action doesn't exist or not published (AC5)
+    - 201 Created with scheduled execution details
+    - 400 INVALID_SCHEDULED_DATE: if scheduled_at is in past or missing timezone
+    - 400 INVALID_PARAMETERS: if parameters validation fails
+    - 400 Pattern validation errors (Story 11.7, AC6)
+    - 403 PERMISSION_DENIED: if user cannot schedule this action
+    - 404 ACTION_NOT_FOUND: if action doesn't exist or not published
 
-    **Security Notes:**
-    - MEDIUM-2 TODO: Rate limiting should be added in future to prevent abuse
-      (currently no limit on number of scheduled executions per user)
-
-    **Response Example:**
+    **Response Example (recurring):**
     ```json
     {
       "data": {
@@ -174,10 +181,16 @@ async def create_scheduled_execution(
         "action_name": "Patching Oracle",
         "environment": "prod",
         "status": "pending",
-        "scheduled_at": "2026-03-15T14:30:00Z",
+        "scheduled_at": null,
         "parameters": {"db_name": "PRODDB"},
         "created_at": "2026-02-02T10:00:00Z",
-        "correlation_id": "uuid-here"
+        "correlation_id": "uuid-here",
+        "recurring_pattern": {
+          "pattern_type": "daily",
+          "pattern_config": {"hour": 2, "minute": 30},
+          "next_execution_date": "2026-02-03T02:30:00Z",
+          "is_active": true
+        }
       }
     }
     ```
@@ -188,12 +201,17 @@ async def create_scheduled_execution(
 
     # HIGH-3 FIX: Ensure correlation_id cleanup in finally block
     try:
+        # Story 11.7: Determine if one-time or recurring
+        is_recurring = payload.recurring_pattern is not None
+
         logger.info(
             "scheduled_execution_create_started",
             action_id=payload.action_id,
             environment=payload.environment.value,
             user_id=user.id,
-            scheduled_at=payload.scheduled_at.isoformat(),
+            scheduled_at=payload.scheduled_at.isoformat() if payload.scheduled_at else None,
+            is_recurring=is_recurring,
+            pattern_type=payload.recurring_pattern.pattern_type if is_recurring else None,
         )
 
         # Get client IP address (AC6 - for audit)
@@ -202,34 +220,32 @@ async def create_scheduled_execution(
         if forwarded_for:
             client_ip = forwarded_for.split(",")[0].strip()
 
-        # AC2: Validate that scheduled_at is in the future
         now = datetime.now(timezone.utc)
 
-        # MEDIUM-3 FIX: Timezone validation now enforced at Pydantic model level
-        # scheduled_at is guaranteed to have timezone here
-        scheduled_at = payload.scheduled_at
+        # Validate scheduled_at for one-time executions
+        if not is_recurring:
+            # AC2: Validate that scheduled_at is in the future
+            scheduled_at = payload.scheduled_at
 
-        if scheduled_at <= now:
-            # LOW-2 FIX: Log validation failure
-            logger.warning(
-                "scheduled_at_in_past",
-                scheduled_at=payload.scheduled_at.isoformat(),
-                current_time=now.isoformat(),
-                user_id=user.id,
-            )
-            raise InvalidStateError(
-                code="INVALID_SCHEDULED_DATE",
-                message="La date planifiée doit être dans le futur",
-                details={
-                    "scheduled_at": payload.scheduled_at.isoformat(),
-                    "current_time": now.isoformat(),
-                },
-            )
+            if scheduled_at <= now:
+                logger.warning(
+                    "scheduled_at_in_past",
+                    scheduled_at=payload.scheduled_at.isoformat(),
+                    current_time=now.isoformat(),
+                    user_id=user.id,
+                )
+                raise InvalidStateError(
+                    code="INVALID_SCHEDULED_DATE",
+                    message="La date planifiée doit être dans le futur",
+                    details={
+                        "scheduled_at": payload.scheduled_at.isoformat(),
+                        "current_time": now.isoformat(),
+                    },
+                )
 
         # AC5: Check action exists and is published
         action_exists = await scheduled_execution_repository.action_exists(payload.action_id)
         if not action_exists:
-            # LOW-2 FIX: Log validation failure
             logger.warning(
                 "action_not_found",
                 action_id=payload.action_id,
@@ -248,7 +264,6 @@ async def create_scheduled_execution(
             environment=payload.environment.value,
         )
         if not has_permission:
-            # LOW-2 FIX: Log permission denial
             logger.warning(
                 "permission_denied",
                 action_id=payload.action_id,
@@ -269,33 +284,58 @@ async def create_scheduled_execution(
         schema = await scheduled_execution_repository.get_action_parameters_schema(payload.action_id)
         _validate_parameters_against_schema(payload.parameters, schema)
 
-        # AC1: Create scheduled execution record
-        # HIGH-1 FIX: Pass correlation_id for AC10 tracing
+        # Story 11.7: Prepare recurring pattern data if applicable
+        recurring_pattern_data = None
+        if is_recurring:
+            pattern = payload.recurring_pattern
+            # Calculate next_execution_date
+            next_execution_date = calculate_next_execution_date(
+                pattern_type=pattern.pattern_type,
+                pattern_config=pattern.pattern_config,
+                reference_datetime=now,
+            )
+
+            recurring_pattern_data = {
+                "pattern_type": pattern.pattern_type,
+                "pattern_config": pattern.pattern_config,
+                "next_execution_date": next_execution_date,
+                "is_active": True,
+            }
+
+        # Create scheduled execution record
         result = await scheduled_execution_repository.create_scheduled_execution(
             user_id=user.id,
             action_id=payload.action_id,
             environment=payload.environment.value,
             parameters=payload.parameters,
-            scheduled_at=payload.scheduled_at,
-            correlation_id=correlation_id,  # HIGH-1 FIX
+            scheduled_at=payload.scheduled_at,  # NULL for recurring
+            correlation_id=correlation_id,
+            recurring_pattern=recurring_pattern_data,  # Story 11.7
         )
 
         scheduled_execution_id = result.id
 
-        # AC7: Get enriched data with action metadata
+        # Get enriched data with action metadata
         enriched = await scheduled_execution_repository.get_by_id(scheduled_execution_id)
 
-        # AC6: Create audit log entry
+        # Audit log entry
+        audit_action_type = (
+            AuditActionType.SCHEDULED_EXECUTION_RECURRING_CREATED
+            if is_recurring
+            else AuditActionType.SCHEDULED_EXECUTION_CREATED
+        )
+
         await audit_repository.create_entry(
             user_id=str(user.id),
-            action_type=AuditActionType.SCHEDULED_EXECUTION_CREATED,
+            action_type=audit_action_type,
             entity_type=AuditEntityType.SCHEDULED_EXECUTION,
             entity_id=scheduled_execution_id,
             details={
                 "action_id": payload.action_id,
                 "environment": payload.environment.value,
                 "parameters": payload.parameters,
-                "scheduled_at": payload.scheduled_at.isoformat(),
+                "scheduled_at": payload.scheduled_at.isoformat() if payload.scheduled_at else None,
+                "recurring_pattern": recurring_pattern_data if is_recurring else None,
                 "rbac_context": {"user_id": user.id, "profile": user.profile},
             },
             ip_address=client_ip,
@@ -308,22 +348,37 @@ async def create_scheduled_execution(
             status="pending",
             action_id=payload.action_id,
             environment=payload.environment.value,
+            is_recurring=is_recurring,
         )
 
-        # Return response wrapped in "data" as per API convention
-        return {
-            "data": {
-                "scheduled_execution_id": scheduled_execution_id,
-                "action_id": payload.action_id,
-                "action_name": enriched.action_name if enriched else None,
-                "environment": payload.environment.value,
-                "status": result.status.value,
-                "scheduled_at": payload.scheduled_at.isoformat(),
-                "parameters": payload.parameters,
-                "created_at": result.created_at.isoformat(),
-                "correlation_id": correlation_id,
-            }
+        # Build response
+        response_data = {
+            "scheduled_execution_id": scheduled_execution_id,
+            "action_id": payload.action_id,
+            "action_name": enriched.action_name if enriched else None,
+            "environment": payload.environment.value,
+            "status": result.status.value,
+            "scheduled_at": payload.scheduled_at.isoformat() if payload.scheduled_at else None,
+            "parameters": payload.parameters,
+            "created_at": result.created_at.isoformat(),
+            "correlation_id": correlation_id,
         }
+
+        # Story 11.7: Include recurring_pattern in response
+        if is_recurring:
+            next_exec_iso = (
+                recurring_pattern_data["next_execution_date"].isoformat()
+                if recurring_pattern_data["next_execution_date"] is not None
+                else None
+            )
+            response_data["recurring_pattern"] = {
+                "pattern_type": recurring_pattern_data["pattern_type"],
+                "pattern_config": recurring_pattern_data["pattern_config"],
+                "next_execution_date": next_exec_iso,
+                "is_active": recurring_pattern_data["is_active"],
+            }
+
+        return {"data": response_data}
     finally:
         # HIGH-3 FIX: Clean up correlation_id from context vars
         structlog.contextvars.clear_contextvars()
@@ -552,8 +607,165 @@ async def cancel_scheduled_execution(
                 "action_name": scheduled_execution.action_name,
                 "environment": scheduled_execution.environment,
                 "status": ScheduledExecutionStatus.CANCELLED.value,
-                "scheduled_at": scheduled_execution.scheduled_at.isoformat(),
+                "scheduled_at": scheduled_execution.scheduled_at.isoformat() if scheduled_execution.scheduled_at else None,
                 "created_at": scheduled_execution.created_at.isoformat(),
+            }
+        }
+    finally:
+        structlog.contextvars.clear_contextvars()
+
+
+@router.patch("/{scheduled_execution_id}/recurring-pattern", response_model=None)
+async def toggle_recurring_pattern(
+    scheduled_execution_id: int,
+    payload: RecurringPatternToggle,
+    request: Request,
+    user: UserProfile = Depends(get_current_user),
+) -> dict:
+    """PATCH /api/v1/scheduled-executions/{id}/recurring-pattern - Toggle recurring pattern (Story 11.7).
+
+    Enables or disables a recurring pattern. When enabling, recalculates next_execution_date.
+
+    **Request Body:**
+    - is_active (bool): New active state for the recurring pattern
+
+    **RBAC:**
+    - DBA: can toggle their own scheduled executions
+    - DBOPS: can toggle any scheduled execution
+
+    **Validations:**
+    - Scheduled execution must exist (404 if not)
+    - Scheduled execution must have a recurring pattern (404 if one-time)
+    - User must have permission (403 if DBA trying to toggle others')
+
+    **Returns:**
+    - 200 OK with updated recurring pattern info
+    - 403 PERMISSION_DENIED: if DBA trying to toggle another user's pattern
+    - 404 SCHEDULED_EXECUTION_NOT_FOUND: if scheduled execution not found
+    - 404 RECURRING_PATTERN_NOT_FOUND: if scheduled execution is one-time (no recurring pattern)
+
+    **Response Example:**
+    ```json
+    {
+      "data": {
+        "pattern_type": "daily",
+        "pattern_config": {"hour": 2, "minute": 30},
+        "next_execution_date": "2026-02-03T02:30:00Z",
+        "is_active": false
+      }
+    }
+    ```
+    """
+    correlation_id = str(uuid.uuid4())
+    structlog.contextvars.bind_contextvars(correlation_id=correlation_id)
+
+    try:
+        logger.info(
+            "toggle_recurring_pattern_requested",
+            scheduled_execution_id=scheduled_execution_id,
+            is_active=payload.is_active,
+            user_id=user.id,
+            user_profile=user.profile,
+        )
+
+        # Get client IP for audit
+        client_ip = request.client.host if request.client else None
+        forwarded_for = request.headers.get("X-Forwarded-For")
+        if forwarded_for:
+            client_ip = forwarded_for.split(",")[0].strip()
+
+        # Fetch scheduled execution
+        scheduled_execution = await scheduled_execution_repository.get_by_id(scheduled_execution_id)
+
+        if scheduled_execution is None:
+            logger.warning(
+                "scheduled_execution_not_found",
+                scheduled_execution_id=scheduled_execution_id,
+            )
+            raise NotFoundError(
+                code="SCHEDULED_EXECUTION_NOT_FOUND",
+                message="Exécution planifiée introuvable",
+                details={"scheduled_execution_id": scheduled_execution_id},
+            )
+
+        # RBAC: DBA can only toggle their own, DBOPS can toggle any
+        if not _is_dbops(user) and scheduled_execution.user_id != user.id:
+            logger.warning(
+                "toggle_permission_denied",
+                scheduled_execution_id=scheduled_execution_id,
+                owner_user_id=scheduled_execution.user_id,
+                requester_user_id=user.id,
+            )
+            raise ForbiddenError(
+                code="PERMISSION_DENIED",
+                message="Vous n'avez pas la permission de modifier cette récurrence",
+                details={"scheduled_execution_id": scheduled_execution_id},
+            )
+
+        # Get existing recurring pattern
+        existing_pattern = await scheduled_execution_repository.get_recurring_pattern(scheduled_execution_id)
+        if existing_pattern is None:
+            logger.warning(
+                "recurring_pattern_not_found",
+                scheduled_execution_id=scheduled_execution_id,
+            )
+            raise NotFoundError(
+                code="RECURRING_PATTERN_NOT_FOUND",
+                message="Cette exécution planifiée n'a pas de pattern de récurrence (exécution unique)",
+                details={"scheduled_execution_id": scheduled_execution_id},
+            )
+
+        # Calculate new next_execution_date if enabling (AC10)
+        new_next_execution_date = None
+        if payload.is_active:
+            new_next_execution_date = calculate_next_execution_date(
+                pattern_type=existing_pattern.pattern_type,
+                pattern_config=existing_pattern.pattern_config,
+                reference_datetime=datetime.now(timezone.utc),
+            )
+
+        # Update recurring pattern
+        updated_pattern = await scheduled_execution_repository.update_recurring_pattern_status(
+            scheduled_execution_id=scheduled_execution_id,
+            is_active=payload.is_active,
+            new_next_execution_date=new_next_execution_date,
+        )
+
+        # Audit log
+        audit_action_type = (
+            AuditActionType.SCHEDULED_EXECUTION_RECURRING_ENABLED
+            if payload.is_active
+            else AuditActionType.SCHEDULED_EXECUTION_RECURRING_DISABLED
+        )
+
+        await audit_repository.create_entry(
+            user_id=str(user.id),
+            action_type=audit_action_type,
+            entity_type=AuditEntityType.SCHEDULED_EXECUTION,
+            entity_id=scheduled_execution_id,
+            details={
+                "pattern_type": existing_pattern.pattern_type,
+                "pattern_config": existing_pattern.pattern_config,
+                "is_active": payload.is_active,
+                "next_execution_date": new_next_execution_date.isoformat() if new_next_execution_date else None,
+            },
+            ip_address=client_ip,
+            correlation_id=correlation_id,
+        )
+
+        logger.info(
+            "recurring_pattern_toggled",
+            scheduled_execution_id=scheduled_execution_id,
+            is_active=payload.is_active,
+            user_id=user.id,
+        )
+
+        return {
+            "data": {
+                "pattern_type": updated_pattern.pattern_type,
+                "pattern_config": updated_pattern.pattern_config,
+                "next_execution_date": updated_pattern.next_execution_date.isoformat() if updated_pattern.next_execution_date else None,
+                "is_active": updated_pattern.is_active,
             }
         }
     finally:

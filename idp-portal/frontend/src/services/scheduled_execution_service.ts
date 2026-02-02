@@ -1,7 +1,8 @@
 /**
- * Scheduled Execution service (Story 11.5, 11.6).
+ * Scheduled Execution service (Story 11.5, 11.6, 11.7).
  *
- * Provides functions to create, list, and cancel scheduled executions.
+ * Provides functions to create, list, cancel scheduled executions,
+ * and toggle recurring patterns.
  */
 
 import { apiFetch } from './api_client';
@@ -9,9 +10,9 @@ import type {
   ScheduledExecutionCreateRequest,
   ScheduledExecutionResponse,
   ScheduledExecutionFilters,
-  ScheduledExecutionListItem,
   ScheduledExecutionListResponse,
   ScheduledExecutionCancelResponse,
+  RecurringPatternResponse,
 } from '../types/api';
 
 /**
@@ -89,6 +90,36 @@ export async function cancelScheduledExecution(
     `/scheduled-executions/${scheduledExecutionId}`,
     {
       method: 'PATCH',
+    }
+  );
+}
+
+/**
+ * Toggle recurring pattern is_active status (Story 11.7, AC9, AC10).
+ *
+ * Enables or disables a recurring pattern. When enabling, recalculates next_execution_date.
+ *
+ * RBAC:
+ * - DBA: can toggle their own scheduled executions
+ * - DBOPS: can toggle any scheduled execution
+ *
+ * @param scheduledExecutionId - ID of the scheduled execution
+ * @param isActive - New active state for the recurring pattern
+ * @returns Updated recurring pattern info
+ * @throws Error with code:
+ *   - SCHEDULED_EXECUTION_NOT_FOUND (404): execution not found
+ *   - RECURRING_PATTERN_NOT_FOUND (404): execution is one-time (no recurring pattern)
+ *   - PERMISSION_DENIED (403): DBA trying to toggle another user's pattern
+ */
+export async function toggleRecurringPattern(
+  scheduledExecutionId: number,
+  isActive: boolean
+): Promise<RecurringPatternResponse> {
+  return apiFetch<RecurringPatternResponse>(
+    `/scheduled-executions/${scheduledExecutionId}/recurring-pattern`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ is_active: isActive }),
     }
   );
 }

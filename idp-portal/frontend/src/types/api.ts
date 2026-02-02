@@ -790,33 +790,69 @@ export interface ComparisonFilters {
   period2End?: string;
 }
 
-// === Scheduled Execution Types (Story 11.5) ===
+// === Scheduled Execution Types (Story 11.5, 11.7) ===
 
 /** Status for scheduled executions (Story 11.5). */
 export type ScheduledExecutionStatus = 'pending' | 'executed' | 'cancelled';
 
-/** Request to create a scheduled execution (Story 11.5, AC3). */
+/** Recurring pattern type (Story 11.7). */
+export type RecurringPatternType = 'daily' | 'weekly';
+
+/** Daily pattern configuration (Story 11.7, AC2). */
+export interface DailyPatternConfig {
+  hour: number; // 0-23
+  minute: number; // 0-59
+}
+
+/** Weekly pattern configuration (Story 11.7, AC3). */
+export interface WeeklyPatternConfig {
+  day_of_week: number; // 1=Monday, 7=Sunday
+  hour: number; // 0-23
+  minute: number; // 0-59
+}
+
+/** Recurring pattern request (Story 11.7). */
+export interface RecurringPatternRequest {
+  pattern_type: RecurringPatternType;
+  pattern_config: DailyPatternConfig | WeeklyPatternConfig;
+}
+
+/** Recurring pattern response (Story 11.7). */
+export interface RecurringPatternResponse {
+  pattern_type: RecurringPatternType;
+  pattern_config: DailyPatternConfig | WeeklyPatternConfig;
+  /** Next execution datetime in UTC (ISO 8601). */
+  next_execution_date: string | null;
+  /** Whether the recurrence is active. */
+  is_active: boolean;
+}
+
+/** Request to create a scheduled execution (Story 11.5, 11.7). */
 export interface ScheduledExecutionCreateRequest {
   action_id: number;
   environment: ExecutionEnvironment;
   parameters?: Record<string, unknown> | null;
-  /** ISO 8601 datetime (UTC) for when to execute. */
-  scheduled_at: string;
+  /** ISO 8601 datetime (UTC) for when to execute (mutually exclusive with recurring_pattern). */
+  scheduled_at?: string | null;
+  /** Recurring pattern configuration (Story 11.7, mutually exclusive with scheduled_at). */
+  recurring_pattern?: RecurringPatternRequest | null;
 }
 
-/** Response from POST /scheduled-executions (Story 11.5, AC3). */
+/** Response from POST /scheduled-executions (Story 11.5, 11.7). */
 export interface ScheduledExecutionResponse {
   scheduled_execution_id: number;
   action_id: number;
   action_name: string;
   environment: ExecutionEnvironment;
   status: ScheduledExecutionStatus;
-  /** ISO 8601 datetime (UTC). */
-  scheduled_at: string;
+  /** ISO 8601 datetime (UTC, null for recurring). */
+  scheduled_at: string | null;
   parameters: Record<string, unknown> | null;
   /** ISO 8601 datetime (UTC). */
   created_at: string;
   correlation_id: string;
+  /** Recurring pattern info for recurring executions (Story 11.7). */
+  recurring_pattern?: RecurringPatternResponse | null;
 }
 
 /** Filters for GET /scheduled-executions (Story 11.6, AC7-AC9). */
@@ -831,9 +867,10 @@ export interface ScheduledExecutionFilters {
   scheduled_to?: string;
 }
 
-/** List item for scheduled executions with enriched user info (Story 11.6, AC3, AC10).
+/** List item for scheduled executions with enriched user info (Story 11.6, 11.7).
  * HIGH-1 FIX: Added correlation_id for AC10 (details modal requirement).
  * HIGH-2 FIX: Added execution_id for AC10 (link to effective execution when status=executed).
+ * Story 11.7: Added recurring_pattern for recurring executions.
  */
 export interface ScheduledExecutionListItem {
   scheduled_execution_id: number;
@@ -842,8 +879,8 @@ export interface ScheduledExecutionListItem {
   user_id: number;
   user_name: string;
   environment: ExecutionEnvironment;
-  /** ISO 8601 datetime (UTC). */
-  scheduled_at: string;
+  /** ISO 8601 datetime (UTC, null for recurring). */
+  scheduled_at: string | null;
   status: ScheduledExecutionStatus;
   /** ISO 8601 datetime (UTC). */
   created_at: string;
@@ -852,6 +889,8 @@ export interface ScheduledExecutionListItem {
   correlation_id?: string | null;
   /** HIGH-2 FIX: ID of the effective execution if status=executed (AC10). */
   execution_id?: number | null;
+  /** Story 11.7: Recurring pattern info for recurring executions. */
+  recurring_pattern?: RecurringPatternResponse | null;
 }
 
 /** Response from GET /scheduled-executions (Story 11.6, AC3). */
