@@ -390,6 +390,9 @@ export type ExecutionEnvironment = 'dev' | 'staging' | 'prod';
 /** Execution status (Story 4.1; Story 7.4: REJECTED). */
 export type ExecutionStatusType = 'SUBMITTED' | 'PENDING_APPROVAL' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'REJECTED';
 
+/** Execution scope for filtering (Story 8.9). */
+export type ExecutionScope = 'all' | 'mine';
+
 /** Request to create a new execution (Story 4.1, Task 1.1). */
 export interface ExecutionCreateRequest {
   action_id: number;

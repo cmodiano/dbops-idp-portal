@@ -12,6 +12,7 @@ import type {
   ExecutionStepResponse,
   StepLogsResponse,
   InventoryItem,
+  ExecutionScope,
 } from '../types/api';
 
 /**
@@ -81,18 +82,20 @@ export interface ListExecutionsResponse {
 }
 
 /**
- * List user's executions (Story 4.1, 4.8 AC4).
+ * List executions with scope filter (Story 4.1, 4.8, 8.9).
  *
  * @param limit - Maximum number of executions to return (default 50)
  * @param offset - Offset for pagination (default 0)
+ * @param scope - "mine" for user's executions (default), "all" for all executions (DBA/DBOPS only)
  * @returns ListExecutionsResponse with data and pagination (total_count for UI)
  */
 export async function listExecutions(
   limit = 50,
-  offset = 0
+  offset = 0,
+  scope: ExecutionScope = 'mine'
 ): Promise<ListExecutionsResponse> {
   return apiFetchRaw<ListExecutionsResponse>(
-    `/executions?limit=${limit}&offset=${offset}`
+    `/executions?limit=${limit}&offset=${offset}&scope=${scope}`
   );
 }
 

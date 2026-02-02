@@ -1,5 +1,5 @@
 /**
- * ExecutionsPage - Execution history (Story 4.8, Story 8.8).
+ * ExecutionsPage - Execution history (Story 4.8, Story 8.8, Story 8.9).
  *
  * AC1: Table with columns: action, environment, status, date, duration.
  * AC3: Running executions first with blue pulsed indicator.
@@ -10,6 +10,13 @@
  * AC1: Section "Approbations en attente" s'affiche avant la liste des exécutions.
  * AC8: Réutilisation du composant PendingApprovalsList.
  * AC9: RBAC - seuls DBA/DBOPS voient la section approbations.
+ *
+ * Story 8.9:
+ * AC1: Tabs "Toutes les exécutions" et "Mes exécutions".
+ * AC2-AC3: Tab "Toutes" shows all executions (RBAC), "Mes" shows user's executions.
+ * AC4-AC5: Tab change reloads data, resets pagination, preserves sort.
+ * AC6: Non-DBA/DBOPS only see "Mes exécutions" tab.
+ * AC9: Column "Utilisateur" visible only for scope=all.
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -23,9 +30,10 @@ type SorterResult<T> = Parameters<TableOnChange<T>>[2];
 type FilterValue = Parameters<TableOnChange<never>>[1][string];
 import { ExecutionTimeline } from '../components/execution/ExecutionTimeline';
 import { PendingApprovalsList } from '../components/dashboard/PendingApprovalsList';
+import { ExecutionsTabs } from '../components/executions/ExecutionsTabs';
 import { listExecutions, getExecution, getExecutionSteps, listPendingApprovals } from '../services/execution_service';
 import { useAuth } from '../contexts/AuthContext';
-import type { ExecutionResponse, ExecutionStepResponse, ExecutionStatusType } from '../types/api';
+import type { ExecutionResponse, ExecutionStepResponse, ExecutionStatusType, ExecutionScope } from '../types/api';
 
 const { Title } = Typography;
 
@@ -75,12 +83,14 @@ function isRunning(status: ExecutionStatusType): boolean {
 }
 
 export default function ExecutionsPage() {
-  // Story 8.8 AC9: Auth context for profile check
+  // Story 8.8 AC9, Story 8.9: Auth context for profile check
   const { user } = useAuth();
   const { token } = theme.useToken();
+  // Story 8.9 code-review: Consolidated RBAC logic - DBA/DBOPS can approve AND view all
   const canApprove =
     user?.profile?.toLowerCase() === 'dba' ||
     user?.profile?.toLowerCase() === 'dbops';
+  const canViewAll = canApprove; // Same RBAC for both (Story 8.9)
 
   const [executions, setExecutions] = useState<ExecutionResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -89,6 +99,9 @@ export default function ExecutionsPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [sortField, setSortField] = useState<string>('created_at');
   const [sortOrder, setSortOrder] = useState<'ascend' | 'descend'>('descend');
+
+  // Story 8.9: Scope state for tabs
+  const [activeScope, setActiveScope] = useState<ExecutionScope>('mine');
 
   // Story 8.8 AC1, AC2: Pending approvals section
   const [pendingApprovals, setPendingApprovals] = useState<ExecutionResponse[]>([]);
@@ -101,13 +114,13 @@ export default function ExecutionsPage() {
   const [drawerLoading, setDrawerLoading] = useState(false);
   const [drawerError, setDrawerError] = useState<string | null>(null);
 
-  // Fetch executions (AC4: pagination with total_count from API)
-  const fetchData = useCallback(async (page: number) => {
+  // Fetch executions (AC4: pagination with total_count from API; Story 8.9: scope filter)
+  const fetchData = useCallback(async (page: number, scope: ExecutionScope) => {
     setLoading(true);
     setError(null);
     try {
       const offset = (page - 1) * PAGE_SIZE;
-      const result = await listExecutions(PAGE_SIZE, offset);
+      const result = await listExecutions(PAGE_SIZE, offset, scope);
       setExecutions(result.data);
       setTotalCount(result.pagination.total_count);
     } catch (err) {
@@ -118,8 +131,15 @@ export default function ExecutionsPage() {
   }, []);
 
   useEffect(() => {
-    fetchData(currentPage);
-  }, [currentPage, fetchData]);
+    fetchData(currentPage, activeScope);
+  }, [currentPage, activeScope, fetchData]);
+
+  // Story 8.9 AC4, AC5: Handle scope change - reset pagination, preserve sort
+  const handleScopeChange = useCallback((scope: ExecutionScope) => {
+    setActiveScope(scope);
+    setCurrentPage(1); // Reset pagination (AC4)
+    // Sort is preserved (AC5) - sortField and sortOrder remain unchanged
+  }, []);
 
   // Story 8.8 AC1: Load pending approvals for DBA/DBOPS
   const loadPendingApprovals = useCallback(async () => {
@@ -142,8 +162,8 @@ export default function ExecutionsPage() {
   // Story 8.8: Callback after approval/rejection - refresh both lists
   const handleApprovalComplete = useCallback(() => {
     loadPendingApprovals();
-    fetchData(currentPage);
-  }, [loadPendingApprovals, fetchData, currentPage]);
+    fetchData(currentPage, activeScope);
+  }, [loadPendingApprovals, fetchData, currentPage, activeScope]);
 
   // Sort executions: running first, then by sortField (AC3)
   const sortedExecutions = useMemo(() => {
@@ -218,63 +238,81 @@ export default function ExecutionsPage() {
     }
   };
 
-  // Table columns (AC1)
-  const columns: TableProps<ExecutionResponse>['columns'] = [
-    {
-      title: 'Action',
-      dataIndex: 'action_name',
-      key: 'action_name',
-      sorter: true,
-      sortOrder: sortField === 'action_name' ? sortOrder : undefined,
-      render: (name: string | null, record: ExecutionResponse) => (
-        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {isRunning(record.status) && (
-            <Badge status="processing" />
-          )}
-          {name || `Action #${record.action_id}`}
-        </span>
-      ),
-    },
-    {
-      title: 'Environnement',
-      dataIndex: 'environment',
-      key: 'environment',
-      width: 120,
-      render: (env: string) => env?.toUpperCase() || '—',
-    },
-    {
-      title: 'Statut',
-      dataIndex: 'status',
-      key: 'status',
-      sorter: true,
-      sortOrder: sortField === 'status' ? sortOrder : undefined,
-      width: 140,
-      render: (status: ExecutionStatusType) => {
-        const config = STATUS_CONFIG[status] || { color: 'default', label: status };
-        return (
-          <Tag color={config.color}>
-            {config.label}
-          </Tag>
-        );
+  // Table columns (AC1; Story 8.9 AC9: conditional "Utilisateur" column)
+  const columns: TableProps<ExecutionResponse>['columns'] = useMemo(() => {
+    const baseColumns: TableProps<ExecutionResponse>['columns'] = [
+      {
+        title: 'Action',
+        dataIndex: 'action_name',
+        key: 'action_name',
+        sorter: true,
+        sortOrder: sortField === 'action_name' ? sortOrder : undefined,
+        render: (name: string | null, record: ExecutionResponse) => (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {isRunning(record.status) && (
+              <Badge status="processing" />
+            )}
+            {name || `Action #${record.action_id}`}
+          </span>
+        ),
       },
-    },
-    {
-      title: 'Date',
-      dataIndex: 'created_at',
-      key: 'created_at',
-      sorter: true,
-      sortOrder: sortField === 'created_at' ? sortOrder : undefined,
-      width: 160,
-      render: (date: string, record: ExecutionResponse) => formatDate(record.started_at || date),
-    },
-    {
-      title: 'Durée',
-      key: 'duration',
-      width: 100,
-      render: (_: unknown, record: ExecutionResponse) =>
-        formatDuration(record.started_at, record.completed_at),
-    },
-  ];
+    ];
+
+    // Story 8.9 AC9: Add "Utilisateur" column only for scope=all
+    if (activeScope === 'all') {
+      baseColumns.push({
+        title: 'Utilisateur',
+        dataIndex: 'user_display_name',
+        key: 'user_display_name',
+        width: 150,
+        render: (name: string | null) => name || 'Utilisateur inconnu',
+      });
+    }
+
+    baseColumns.push(
+      {
+        title: 'Environnement',
+        dataIndex: 'environment',
+        key: 'environment',
+        width: 120,
+        render: (env: string) => env?.toUpperCase() || '—',
+      },
+      {
+        title: 'Statut',
+        dataIndex: 'status',
+        key: 'status',
+        sorter: true,
+        sortOrder: sortField === 'status' ? sortOrder : undefined,
+        width: 140,
+        render: (status: ExecutionStatusType) => {
+          const config = STATUS_CONFIG[status] || { color: 'default', label: status };
+          return (
+            <Tag color={config.color}>
+              {config.label}
+            </Tag>
+          );
+        },
+      },
+      {
+        title: 'Date',
+        dataIndex: 'created_at',
+        key: 'created_at',
+        sorter: true,
+        sortOrder: sortField === 'created_at' ? sortOrder : undefined,
+        width: 160,
+        render: (date: string, record: ExecutionResponse) => formatDate(record.started_at || date),
+      },
+      {
+        title: 'Durée',
+        key: 'duration',
+        width: 100,
+        render: (_: unknown, record: ExecutionResponse) =>
+          formatDuration(record.started_at, record.completed_at),
+      },
+    );
+
+    return baseColumns;
+  }, [activeScope, sortField, sortOrder]);
 
   // Skeleton table during loading (AC4, Task 1.4: skeleton rows)
   if (loading && executions.length === 0) {
@@ -333,6 +371,13 @@ export default function ExecutionsPage() {
           />
         </Card>
       )}
+
+      {/* Story 8.9: Tabs for execution scope (Toutes/Mes exécutions) */}
+      <ExecutionsTabs
+        activeScope={activeScope}
+        onScopeChange={handleScopeChange}
+        canViewAll={canViewAll}
+      />
 
       <Table<ExecutionResponse>
         dataSource={sortedExecutions}

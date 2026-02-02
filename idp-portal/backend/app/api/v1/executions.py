@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
 import jsonschema
 import structlog
 
@@ -402,20 +402,45 @@ async def list_executions(
     user: UserProfile = Depends(get_current_user),
     limit: int = 50,
     offset: int = 0,
+    scope: str = Query("mine", regex="^(mine|all)$"),  # Fixed: pattern -> regex (Story 8.9 code-review)
 ) -> dict:
-    """GET /api/v1/executions - List user's executions (Story 4.1, 4.8 AC4).
+    """GET /api/v1/executions - List executions with scope filter (Story 4.1, 4.8, 8.9).
+
+    Args:
+        scope: "mine" for user's executions (default), "all" for all executions (DBA/DBOPS only)
 
     Returns:
         { "data": list[ExecutionResponse], "pagination": { page, page_size, total_count, total_pages } }
     """
     limit = min(max(1, limit), 100)
     offset = max(offset, 0)
-    total_count = await execution_repository.count_by_user(user_id=user.id)
-    executions = await execution_repository.list_by_user(
-        user_id=user.id,
-        limit=limit,
-        offset=offset,
-    )
+
+    # Story 8.9: Determine if user can view all executions
+    can_view_all = (user.profile or "").lower() in _EXECUTION_VIEW_ANY_PROFILES
+
+    # Story 8.9: If scope=all and user is DBA/DBOPS, return all executions
+    if scope == "all" and can_view_all:
+        logger.info(
+            "list_executions_scope_all",
+            user_id=user.id,
+            profile=user.profile,
+            limit=limit,
+            offset=offset,
+        )  # Story 8.9 code-review: Log scope=all usage for audit
+        total_count = await execution_repository.count_all_executions()
+        executions = await execution_repository.list_all_executions(
+            limit=limit,
+            offset=offset,
+        )
+    else:
+        # Default behavior: return user's executions only (scope=mine or fallback)
+        total_count = await execution_repository.count_by_user(user_id=user.id)
+        executions = await execution_repository.list_by_user(
+            user_id=user.id,
+            limit=limit,
+            offset=offset,
+        )
+
     page = (offset // limit) + 1
     total_pages = (total_count + limit - 1) // limit if total_count > 0 else 1
     return {

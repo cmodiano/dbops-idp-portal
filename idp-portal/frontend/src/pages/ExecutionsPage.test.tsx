@@ -20,6 +20,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { App } from 'antd';
 import ExecutionsPage from './ExecutionsPage';
 import { AuthProvider } from '../contexts/AuthContext';
+import { ThemeProvider } from '../contexts/ThemeContext';
 import * as executionService from '../services/execution_service';
 import type { ExecutionResponse, ExecutionStepResponse } from '../types/api';
 
@@ -27,6 +28,11 @@ vi.mock('../services/execution_service');
 vi.mock('../hooks/useWebSocket', () => ({
   useWebSocket: () => ({ steps: [], execution: null, loading: false, error: null }),
 }));
+
+/** Helper to wrap component with ThemeProvider (Story 8.9: ExecutionsTabs needs ThemeContext) */
+function TestWrapper({ children }: { children: React.ReactNode }) {
+  return <ThemeProvider>{children}</ThemeProvider>;
+}
 
 /** Mock auth session with profile */
 function mockAuthSession(profile: string) {
@@ -56,12 +62,19 @@ function renderWithProviders() {
     { initialEntries: ['/'] }
   );
   return render(
-    <App>
-      <AuthProvider>
-        <RouterProvider router={router} />
-      </AuthProvider>
-    </App>
+    <ThemeProvider>
+      <App>
+        <AuthProvider>
+          <RouterProvider router={router} />
+        </AuthProvider>
+      </App>
+    </ThemeProvider>
   );
+}
+
+/** Simpler render helper with just ThemeProvider for tests without auth */
+function renderWithTheme(ui: React.ReactElement) {
+  return render(<ThemeProvider>{ui}</ThemeProvider>);
 }
 
 const mockExecutions: ExecutionResponse[] = [
@@ -171,7 +184,7 @@ describe('ExecutionsPage', () => {
 
   describe('Table Display (AC1)', () => {
     it('renders page title', async () => {
-      render(<ExecutionsPage />);
+      renderWithTheme(<ExecutionsPage />);
 
       await waitFor(() => {
         expect(screen.getByRole('heading', { name: 'Exécutions' })).toBeInTheDocument();
@@ -179,7 +192,7 @@ describe('ExecutionsPage', () => {
     });
 
     it('displays executions in table with correct columns', async () => {
-      render(<ExecutionsPage />);
+      renderWithTheme(<ExecutionsPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Create PDB')).toBeInTheDocument();
@@ -194,7 +207,7 @@ describe('ExecutionsPage', () => {
     });
 
     it('displays execution data correctly', async () => {
-      render(<ExecutionsPage />);
+      renderWithTheme(<ExecutionsPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Create PDB')).toBeInTheDocument();
@@ -211,7 +224,7 @@ describe('ExecutionsPage', () => {
     });
 
     it('displays status tags with correct labels', async () => {
-      render(<ExecutionsPage />);
+      renderWithTheme(<ExecutionsPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Terminée')).toBeInTheDocument();
@@ -222,7 +235,7 @@ describe('ExecutionsPage', () => {
     });
 
     it('displays duration for completed executions', async () => {
-      render(<ExecutionsPage />);
+      renderWithTheme(<ExecutionsPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Create PDB')).toBeInTheDocument();
@@ -237,7 +250,7 @@ describe('ExecutionsPage', () => {
 
   describe('Running Executions First (AC3)', () => {
     it('displays running executions at the top of the table', async () => {
-      render(<ExecutionsPage />);
+      renderWithTheme(<ExecutionsPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Apply Patch')).toBeInTheDocument();
@@ -253,7 +266,7 @@ describe('ExecutionsPage', () => {
     });
 
     it('shows processing badge for running executions', async () => {
-      render(<ExecutionsPage />);
+      renderWithTheme(<ExecutionsPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Apply Patch')).toBeInTheDocument();
@@ -267,7 +280,7 @@ describe('ExecutionsPage', () => {
 
   describe('Pagination (AC4)', () => {
     it('shows pagination controls', async () => {
-      render(<ExecutionsPage />);
+      renderWithTheme(<ExecutionsPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Create PDB')).toBeInTheDocument();
@@ -290,14 +303,14 @@ describe('ExecutionsPage', () => {
         pagination: { page: 1, page_size: 25, total_count: 30, total_pages: 2 },
       });
 
-      render(<ExecutionsPage />);
+      renderWithTheme(<ExecutionsPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Action 1')).toBeInTheDocument();
       });
 
-      // API called with limit 25, offset 0
-      expect(executionService.listExecutions).toHaveBeenCalledWith(25, 0);
+      // API called with limit 25, offset 0, scope 'mine'
+      expect(executionService.listExecutions).toHaveBeenCalledWith(25, 0, 'mine');
     });
   });
 
@@ -317,7 +330,7 @@ describe('ExecutionsPage', () => {
           )
       );
 
-      render(<ExecutionsPage />);
+      renderWithTheme(<ExecutionsPage />);
 
       // Skeleton should be visible initially
       expect(document.querySelector('.ant-skeleton')).toBeInTheDocument();
@@ -330,7 +343,7 @@ describe('ExecutionsPage', () => {
     it('shows error message on fetch failure', async () => {
       vi.mocked(executionService.listExecutions).mockRejectedValue(new Error('Network error'));
 
-      render(<ExecutionsPage />);
+      renderWithTheme(<ExecutionsPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Network error')).toBeInTheDocument();
@@ -341,7 +354,7 @@ describe('ExecutionsPage', () => {
   describe('Drawer with ExecutionTimeline (AC2)', () => {
     it('opens drawer when clicking on a row', async () => {
       const user = userEvent.setup();
-      render(<ExecutionsPage />);
+      renderWithTheme(<ExecutionsPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Create PDB')).toBeInTheDocument();
@@ -360,7 +373,7 @@ describe('ExecutionsPage', () => {
 
     it('shows drawer with execution title', async () => {
       const user = userEvent.setup();
-      render(<ExecutionsPage />);
+      renderWithTheme(<ExecutionsPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Create PDB')).toBeInTheDocument();
@@ -388,7 +401,7 @@ describe('ExecutionsPage', () => {
         () => new Promise((resolve) => setTimeout(() => resolve(mockSteps), 200))
       );
 
-      render(<ExecutionsPage />);
+      renderWithTheme(<ExecutionsPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Create PDB')).toBeInTheDocument();
@@ -413,7 +426,7 @@ describe('ExecutionsPage', () => {
       const user = userEvent.setup();
       vi.mocked(executionService.getExecution).mockRejectedValue(new Error('Execution not found'));
 
-      render(<ExecutionsPage />);
+      renderWithTheme(<ExecutionsPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Create PDB')).toBeInTheDocument();
@@ -433,7 +446,7 @@ describe('ExecutionsPage', () => {
 
     it('closes drawer when close button is clicked', async () => {
       const user = userEvent.setup();
-      render(<ExecutionsPage />);
+      renderWithTheme(<ExecutionsPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Create PDB')).toBeInTheDocument();
@@ -459,7 +472,7 @@ describe('ExecutionsPage', () => {
 
   describe('Sorting (AC4)', () => {
     it('table columns are sortable', async () => {
-      render(<ExecutionsPage />);
+      renderWithTheme(<ExecutionsPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Create PDB')).toBeInTheDocument();
@@ -483,7 +496,7 @@ describe('ExecutionsPage', () => {
         pagination: { page: 1, page_size: 25, total_count: 0, total_pages: 1 },
       });
 
-      render(<ExecutionsPage />);
+      renderWithTheme(<ExecutionsPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Aucune exécution trouvée')).toBeInTheDocument();
@@ -614,6 +627,201 @@ describe('ExecutionsPage', () => {
         const tag = document.querySelector('.ant-tag-warning');
         expect(tag).toBeInTheDocument();
         expect(tag?.textContent).toBe('1');
+      });
+    });
+  });
+
+  describe('Story 8.9 — ExecutionsTabs Integration', () => {
+    it('shows ExecutionsTabs for DBA user (AC1)', async () => {
+      mockAuthSession('DBA');
+      await act(async () => {
+        renderWithProviders();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: /Toutes les exécutions/i })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: /Mes exécutions/i })).toBeInTheDocument();
+      });
+    });
+
+    it('shows only "Mes exécutions" tab for CLIENT user (AC6)', async () => {
+      mockAuthSession('CLIENT');
+      await act(async () => {
+        renderWithProviders();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: /Mes exécutions/i })).toBeInTheDocument();
+      });
+
+      expect(screen.queryByRole('tab', { name: /Toutes les exécutions/i })).not.toBeInTheDocument();
+    });
+
+    it('calls listExecutions with scope=mine by default (AC3)', async () => {
+      renderWithTheme(<ExecutionsPage />);
+
+      await waitFor(() => {
+        expect(executionService.listExecutions).toHaveBeenCalledWith(25, 0, 'mine');
+      });
+    });
+
+    it('calls listExecutions with scope=all when "Toutes les exécutions" tab is clicked (AC2)', async () => {
+      mockAuthSession('DBA');
+      const user = userEvent.setup();
+
+      await act(async () => {
+        renderWithProviders();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: /Toutes les exécutions/i })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('tab', { name: /Toutes les exécutions/i }));
+
+      await waitFor(() => {
+        expect(executionService.listExecutions).toHaveBeenCalledWith(25, 0, 'all');
+      });
+    });
+
+    it('resets pagination when changing tabs (AC4)', async () => {
+      mockAuthSession('DBA');
+      const user = userEvent.setup();
+
+      // Mock 30 results to enable multiple pages
+      const manyExecutions = Array.from({ length: 25 }, (_, i) => ({
+        ...mockExecutions[0],
+        id: i + 1,
+        action_name: `Action ${i + 1}`,
+      }));
+      vi.mocked(executionService.listExecutions).mockResolvedValue({
+        data: manyExecutions,
+        pagination: { page: 1, page_size: 25, total_count: 30, total_pages: 2 },
+      });
+
+      await act(async () => {
+        renderWithProviders();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: /Toutes les exécutions/i })).toBeInTheDocument();
+      });
+
+      // Switch tabs - should call API with offset 0 (page 1)
+      await user.click(screen.getByRole('tab', { name: /Toutes les exécutions/i }));
+
+      await waitFor(() => {
+        // Last call should be with offset 0 (reset to page 1)
+        const lastCall = vi.mocked(executionService.listExecutions).mock.calls.slice(-1)[0];
+        expect(lastCall[1]).toBe(0); // offset should be 0
+      });
+    });
+
+    it('shows "Utilisateur" column only for scope=all (AC9)', async () => {
+      const mockAllExecutions: ExecutionResponse[] = [
+        {
+          id: 1,
+          action_id: 10,
+          action_name: 'Create PDB',
+          user_id: 2,
+          user_display_name: 'John Doe',
+          environment: 'dev',
+          parameters: null,
+          status: 'COMPLETED',
+          servicenow_change_id: null,
+          started_at: '2026-01-28T10:00:00Z',
+          completed_at: '2026-01-28T10:05:00Z',
+          created_at: '2026-01-28T09:59:00Z',
+        },
+      ];
+
+      mockAuthSession('DBA');
+      const user = userEvent.setup();
+
+      // First call returns user's executions (scope=mine)
+      vi.mocked(executionService.listExecutions)
+        .mockResolvedValueOnce(defaultListResponse)
+        .mockResolvedValueOnce({
+          data: mockAllExecutions,
+          pagination: { page: 1, page_size: 25, total_count: 1, total_pages: 1 },
+        });
+
+      await act(async () => {
+        renderWithProviders();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: /Toutes les exécutions/i })).toBeInTheDocument();
+      });
+
+      // Initially scope=mine, should NOT have "Utilisateur" column
+      expect(screen.queryByText('Utilisateur')).not.toBeInTheDocument();
+
+      // Switch to scope=all
+      await user.click(screen.getByRole('tab', { name: /Toutes les exécutions/i }));
+
+      await waitFor(() => {
+        // Now should have "Utilisateur" column header
+        expect(screen.getByText('Utilisateur')).toBeInTheDocument();
+      });
+
+      // And should display user_display_name value
+      expect(screen.getByText('John Doe')).toBeInTheDocument();
+    });
+
+    it('displays "Utilisateur inconnu" when user_display_name is null (AC9)', async () => {
+      const mockAllExecutionsNoUser: ExecutionResponse[] = [
+        {
+          id: 1,
+          action_id: 10,
+          action_name: 'Create PDB',
+          user_id: 2,
+          user_display_name: null,
+          environment: 'dev',
+          parameters: null,
+          status: 'COMPLETED',
+          servicenow_change_id: null,
+          started_at: '2026-01-28T10:00:00Z',
+          completed_at: '2026-01-28T10:05:00Z',
+          created_at: '2026-01-28T09:59:00Z',
+        },
+      ];
+
+      mockAuthSession('DBA');
+      const user = userEvent.setup();
+
+      vi.mocked(executionService.listExecutions)
+        .mockResolvedValueOnce(defaultListResponse)
+        .mockResolvedValueOnce({
+          data: mockAllExecutionsNoUser,
+          pagination: { page: 1, page_size: 25, total_count: 1, total_pages: 1 },
+        });
+
+      await act(async () => {
+        renderWithProviders();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: /Toutes les exécutions/i })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('tab', { name: /Toutes les exécutions/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Utilisateur inconnu')).toBeInTheDocument();
+      });
+    });
+
+    it('"Mes exécutions" tab is active by default', async () => {
+      mockAuthSession('DBA');
+
+      await act(async () => {
+        renderWithProviders();
+      });
+
+      await waitFor(() => {
+        const mineTab = screen.getByRole('tab', { name: /Mes exécutions/i });
+        expect(mineTab).toHaveAttribute('aria-selected', 'true');
       });
     });
   });

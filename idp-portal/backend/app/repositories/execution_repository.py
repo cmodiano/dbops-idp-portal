@@ -59,6 +59,7 @@ def _row_to_execution_response(
     5:STATUS, 6:SERVICENOW_CHANGE_ID, 7:STARTED_AT, 8:COMPLETED_AT, 9:CREATED_AT
 
     Story 7.4: Optional approval fields passed separately.
+    Story 8.9: user_display_name may be None if user deleted or not in JOIN.
     """
     return ExecutionResponse(
         id=row[0],
@@ -182,6 +183,7 @@ async def get_by_id(execution_id: int) -> ExecutionResponse | None:
         return None
 
     # Row has 14 columns: 0-9 execution fields, 10 action_name, 11-13 approval fields
+    # (Story 8.9: list_all_executions has 15 columns with user_display_name at 11)
     return _row_to_execution_response(
         row[:10],
         action_name=row[10],
@@ -255,6 +257,86 @@ async def count_by_user(user_id: int) -> int:
         row = await cursor.fetchone()
         cursor.close()
     return row[0] if row else 0
+
+
+# --- Story 8.9: Scope-based Execution Listing Methods ---
+
+
+async def list_all_executions(
+    limit: int = 50,
+    offset: int = 0,
+) -> list[ExecutionResponse]:
+    """List all executions (Story 8.9, DBA/DBOPS only).
+
+    Args:
+        limit: Maximum number of results
+        offset: Offset for pagination
+
+    Returns:
+        List of ExecutionResponse ordered by created_at DESC
+    """
+    start_time = time.perf_counter()
+    query = """
+        SELECT E.ID, E.ACTION_ID, E.USER_ID, E.ENVIRONMENT, E.PARAMETERS,
+               E.STATUS, E.SERVICENOW_CHANGE_ID, E.STARTED_AT, E.COMPLETED_AT, E.CREATED_AT,
+               A.NAME AS ACTION_NAME, U.DISPLAY_NAME AS USER_DISPLAY_NAME,
+               E.APPROVED_BY, E.APPROVED_AT, E.APPROVAL_COMMENT
+        FROM EXECUTIONS E
+        LEFT JOIN ACTIONS_CATALOG A ON A.ID = E.ACTION_ID
+        LEFT JOIN USERS U ON U.ID = E.USER_ID
+        ORDER BY E.CREATED_AT DESC
+        OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY
+    """
+    params = {"limit": limit, "offset": offset}
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
+        rows = await cursor.fetchall()
+        cursor.close()
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.info(
+        "execution_repository_list_all_executions",
+        duration_ms=duration_ms,
+        limit=limit,
+        offset=offset,
+        rows_returned=len(rows),
+    )
+
+    return [
+        _row_to_execution_response(
+            row[:10],
+            action_name=row[10],
+            user_display_name=row[11],
+            approved_by=row[12],
+            approved_at=row[13],
+            approval_comment=row[14],
+        )
+        for row in rows
+    ]
+
+
+async def count_all_executions() -> int:
+    """Return total number of all executions (Story 8.9, pagination support)."""
+    start_time = time.perf_counter()
+    query = "SELECT COUNT(*) FROM EXECUTIONS"
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query)
+        row = await cursor.fetchone()
+        cursor.close()
+
+    count = row[0] if row else 0
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.info(
+        "execution_repository_count_all_executions",
+        count=count,
+        elapsed_ms=duration_ms,
+    )
+
+    return count
 
 
 async def update_status(

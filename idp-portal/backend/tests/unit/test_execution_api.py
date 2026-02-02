@@ -893,3 +893,187 @@ class TestExecutionAudit:
         mock_execution_service.start_execution.assert_called_once()
         start_call = mock_execution_service.start_execution.call_args
         assert "client_ip" in start_call.kwargs
+
+
+class TestListExecutionsScope:
+    """Tests for GET /api/v1/executions with scope parameter (Story 8.9)."""
+
+    @pytest.mark.asyncio
+    async def test_list_executions_scope_mine_returns_user_executions(self, client, mock_auth):
+        """GET /executions?scope=mine returns user's executions only (Story 8.9, AC3)."""
+        from app.models.execution import ExecutionResponse
+
+        with patch("app.api.v1.executions.execution_repository.count_by_user", new_callable=AsyncMock) as mock_count, \
+             patch("app.api.v1.executions.execution_repository.list_by_user", new_callable=AsyncMock) as mock_list:
+            mock_count.return_value = 1
+            mock_list.return_value = [
+                ExecutionResponse(
+                    id=1,
+                    action_id=1,
+                    action_name="Create PDB",
+                    user_id=1,
+                    environment=ExecutionEnvironment.DEV,
+                    parameters={},
+                    status=ExecutionStatus.COMPLETED,
+                    created_at=datetime(2026, 1, 29, 10, 0, 0),
+                ),
+            ]
+
+            response = await client.get("/api/v1/executions?scope=mine")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert len(data["data"]) == 1
+        mock_list.assert_called_once_with(user_id=1, limit=50, offset=0)
+
+    @pytest.mark.asyncio
+    async def test_list_executions_scope_all_returns_all_for_dba(self, client, mock_auth):
+        """GET /executions?scope=all returns all executions for DBA (Story 8.9, AC2, AC7)."""
+        from app.models.execution import ExecutionResponse
+
+        with patch("app.api.v1.executions.execution_repository.count_all_executions", new_callable=AsyncMock) as mock_count_all, \
+             patch("app.api.v1.executions.execution_repository.list_all_executions", new_callable=AsyncMock) as mock_list_all:
+            mock_count_all.return_value = 3
+            mock_list_all.return_value = [
+                ExecutionResponse(
+                    id=1,
+                    action_id=1,
+                    action_name="Create PDB",
+                    user_id=1,
+                    user_display_name="Test DBA",
+                    environment=ExecutionEnvironment.DEV,
+                    parameters={},
+                    status=ExecutionStatus.COMPLETED,
+                    created_at=datetime(2026, 1, 29, 10, 0, 0),
+                ),
+                ExecutionResponse(
+                    id=2,
+                    action_id=2,
+                    action_name="Drop PDB",
+                    user_id=2,
+                    user_display_name="Other User",
+                    environment=ExecutionEnvironment.STAGING,
+                    parameters={},
+                    status=ExecutionStatus.RUNNING,
+                    created_at=datetime(2026, 1, 29, 11, 0, 0),
+                ),
+                ExecutionResponse(
+                    id=3,
+                    action_id=1,
+                    action_name="Create PDB",
+                    user_id=3,
+                    user_display_name="Third User",
+                    environment=ExecutionEnvironment.PROD,
+                    parameters={},
+                    status=ExecutionStatus.FAILED,
+                    created_at=datetime(2026, 1, 29, 12, 0, 0),
+                ),
+            ]
+
+            response = await client.get("/api/v1/executions?scope=all")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert len(data["data"]) == 3
+        assert data["pagination"]["total_count"] == 3
+        mock_list_all.assert_called_once_with(limit=50, offset=0)
+
+    @pytest.mark.asyncio
+    async def test_list_executions_scope_all_fallback_for_non_dba(self, client, mock_auth_regular_user):
+        """GET /executions?scope=all falls back to user's executions for non-DBA (Story 8.9, AC8)."""
+        from app.models.execution import ExecutionResponse
+
+        with patch("app.api.v1.executions.execution_repository.count_by_user", new_callable=AsyncMock) as mock_count, \
+             patch("app.api.v1.executions.execution_repository.list_by_user", new_callable=AsyncMock) as mock_list:
+            mock_count.return_value = 1
+            mock_list.return_value = [
+                ExecutionResponse(
+                    id=1,
+                    action_id=1,
+                    action_name="Create PDB",
+                    user_id=1,
+                    environment=ExecutionEnvironment.DEV,
+                    parameters={},
+                    status=ExecutionStatus.COMPLETED,
+                    created_at=datetime(2026, 1, 29, 10, 0, 0),
+                ),
+            ]
+
+            response = await client.get("/api/v1/executions?scope=all")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        # Should use user's list, not all executions (RBAC fallback)
+        mock_list.assert_called_once_with(user_id=1, limit=50, offset=0)
+        assert data["pagination"]["total_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_list_executions_scope_all_count_correct(self, client, mock_auth):
+        """GET /executions?scope=all returns correct total_count (Story 8.9, AC7)."""
+        from app.models.execution import ExecutionResponse
+
+        with patch("app.api.v1.executions.execution_repository.count_all_executions", new_callable=AsyncMock) as mock_count_all, \
+             patch("app.api.v1.executions.execution_repository.list_all_executions", new_callable=AsyncMock) as mock_list_all:
+            mock_count_all.return_value = 150
+            mock_list_all.return_value = []
+
+            response = await client.get("/api/v1/executions?scope=all&limit=25&offset=50")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["pagination"]["total_count"] == 150
+        assert data["pagination"]["page"] == 3  # offset 50, limit 25 -> page 3
+        assert data["pagination"]["total_pages"] == 6  # 150 / 25 = 6 pages
+        mock_list_all.assert_called_once_with(limit=25, offset=50)
+
+    @pytest.mark.asyncio
+    async def test_list_executions_scope_all_includes_user_display_name(self, client, mock_auth):
+        """GET /executions?scope=all includes user_display_name in results (Story 8.9, AC9)."""
+        from app.models.execution import ExecutionResponse
+
+        with patch("app.api.v1.executions.execution_repository.count_all_executions", new_callable=AsyncMock) as mock_count_all, \
+             patch("app.api.v1.executions.execution_repository.list_all_executions", new_callable=AsyncMock) as mock_list_all:
+            mock_count_all.return_value = 1
+            mock_list_all.return_value = [
+                ExecutionResponse(
+                    id=1,
+                    action_id=1,
+                    action_name="Create PDB",
+                    user_id=2,
+                    user_display_name="John Doe",
+                    environment=ExecutionEnvironment.DEV,
+                    parameters={},
+                    status=ExecutionStatus.COMPLETED,
+                    created_at=datetime(2026, 1, 29, 10, 0, 0),
+                ),
+            ]
+
+            response = await client.get("/api/v1/executions?scope=all")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert len(data["data"]) == 1
+        assert data["data"][0]["user_display_name"] == "John Doe"
+
+    @pytest.mark.asyncio
+    async def test_list_executions_scope_invalid_returns_422(self, client, mock_auth):
+        """GET /executions?scope=invalid returns 422 validation error (Story 8.9)."""
+        response = await client.get("/api/v1/executions?scope=invalid")
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    @pytest.mark.asyncio
+    async def test_list_executions_default_scope_is_mine(self, client, mock_auth):
+        """GET /executions without scope parameter defaults to scope=mine (Story 8.9)."""
+        from app.models.execution import ExecutionResponse
+
+        with patch("app.api.v1.executions.execution_repository.count_by_user", new_callable=AsyncMock) as mock_count, \
+             patch("app.api.v1.executions.execution_repository.list_by_user", new_callable=AsyncMock) as mock_list:
+            mock_count.return_value = 0
+            mock_list.return_value = []
+
+            response = await client.get("/api/v1/executions")
+
+        assert response.status_code == status.HTTP_200_OK
+        # Should call list_by_user, not list_all_executions
+        mock_list.assert_called_once_with(user_id=1, limit=50, offset=0)
