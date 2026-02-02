@@ -8,7 +8,7 @@
  * - Grid/List view toggle (AC2)
  * - ActionCard display with execution_count (AC3)
  * - Favorite toggle with tooltip (AC4, AC12, AC13; Story 3.5)
- * - "Mes actions" tab with favorites and recent actions (AC5)
+ * - "Mes actions" tab with favorites only (AC5; Story 9.6 fix)
  * - Search with debounce 300 ms (AC1), server-side + filters (AC2–AC9)
  * - TagCloud for visual multi-tag filtering, filtered by category (Story 3.5, AC1-6; Story 8.7, AC3)
  * - Empty state "Aucune action ne correspond à vos filtres" (AC5)
@@ -50,7 +50,6 @@ import {
   fetchCatalogActionById,
   fetchCatalogTags,
   fetchFavorites,
-  fetchRecentActions,
   addFavorite,
   removeFavorite,
   fetchActionStats,
@@ -58,7 +57,6 @@ import {
   type CatalogActionDetail,
   type CatalogTagWithCount,
   type FavoriteEntry,
-  type RecentAction,
 } from '../services/catalog_service';
 import type { ActionPreviewData, ActionStats, ImpactLevel, RemediationSuggestion } from '../types/api';
 
@@ -127,7 +125,6 @@ export default function CatalogPage() {
   const [loading, setLoading] = useState(true);
   const [actions, setActions] = useState<CatalogAction[]>([]);
   const [favorites, setFavorites] = useState<Set<number>>(new Set());
-  const [recentActions, setRecentActions] = useState<RecentAction[]>([]);
   const [selectedAction, setSelectedAction] = useState<CatalogAction | null>(null);
   const [selectedActionDetail, setSelectedActionDetail] = useState<CatalogActionDetail | null>(null);
   const [selectedActionCanExecute, setSelectedActionCanExecute] = useState(false);
@@ -149,7 +146,7 @@ export default function CatalogPage() {
       // NOTE: Backend API currently supports only single engine/environment/impact value (not arrays)
       // HorizontalFilters uses multi-select UI but we send only the first selected value
       // TODO: Enhance backend to support multi-value filters (e.g., ?engine=Oracle&engine=SQL%20Server)
-      const [actionsData, favoritesData, recentData, tagsData] = await Promise.all([
+      const [actionsData, favoritesData, tagsData] = await Promise.all([
         fetchCatalogActions({
           tags: filterTags.length > 0 ? filterTags : undefined,
           q: debouncedQ.trim() || undefined,
@@ -159,7 +156,6 @@ export default function CatalogPage() {
           category: activeCategory !== 'tout' && activeCategory !== 'mes-actions' ? activeCategory : undefined,
         }),
         fetchFavorites().catch(() => [] as FavoriteEntry[]),
-        fetchRecentActions(10).catch(() => [] as RecentAction[]),
         // Story 8.7, AC3: Fetch tags filtered by category
         activeCategory !== 'mes-actions'
           ? fetchCatalogTags(activeCategory !== 'tout' ? activeCategory : undefined).catch((error) => {
@@ -171,7 +167,6 @@ export default function CatalogPage() {
       ]);
       setActions(actionsData);
       setFavorites(new Set(favoritesData.map((f) => f.action_id)));
-      setRecentActions(recentData);
       if (activeCategory !== 'mes-actions') setTagsWithCounts(tagsData);
     } catch (error) {
       console.error('Failed to load catalog:', error);
@@ -204,11 +199,10 @@ export default function CatalogPage() {
 
   const filteredActions = useMemo(() => {
     if (activeCategory === 'mes-actions') {
-      const recentIds = new Set(recentActions.map((r) => r.action_id));
-      return actions.filter((a) => favorites.has(a.id) || recentIds.has(a.id));
+      return actions.filter((a) => favorites.has(a.id));
     }
     return actions;
-  }, [actions, activeCategory, favorites, recentActions]);
+  }, [actions, activeCategory, favorites]);
 
   // Toggle favorite
   const handleToggleFavorite = async (actionId: number, e: React.MouseEvent) => {
@@ -352,7 +346,7 @@ export default function CatalogPage() {
       console.error('Failed to load suggested action:', error);
       message.error('Erreur lors du chargement de l\'action corrective');
     }
-  }, [message, activeExecutionId]);
+  }, [message]);
 
   // Render action card with favorite button (disabled when not authenticated — Task 5.1)
   // Story 7.1: Use 'business' variant for business profiles (simplified descriptions)
@@ -420,7 +414,7 @@ export default function CatalogPage() {
           noResultsFromFilters
             ? 'Aucune action ne correspond à vos filtres'
             : activeCategory === 'mes-actions'
-              ? "Aucune action dans 'Mes actions'. Ajoutez des favoris ou executez des actions."
+              ? "Aucune action dans 'Mes actions'. Ajoutez des favoris pour les retrouver ici."
               : 'Aucune action trouvee'
         }
       >
@@ -537,27 +531,6 @@ export default function CatalogPage() {
           onToggleFavorite={handleToggleFavorite}
           showFavoriteButton={isAuthenticated}
         />
-      )}
-
-      {/* "Mes actions" recent section */}
-      {activeCategory === 'mes-actions' && recentActions.length > 0 && (
-        <div style={{ marginTop: 32 }}>
-          <Title level={4}>Actions recentes</Title>
-          <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
-            Vos dernieres executions
-          </Text>
-          <Row gutter={[16, 16]}>
-            {recentActions.map((recent) => {
-              const action = actions.find((a) => a.id === recent.action_id);
-              if (!action) return null;
-              return (
-                <Col key={recent.action_id} xs={24} sm={12} lg={8} xl={6}>
-                  {renderActionCard(action)}
-                </Col>
-              );
-            })}
-          </Row>
-        </div>
       )}
 
       {/* Action Detail Drawer (Story 3.2, AC1, AC2, AC4, AC5) */}

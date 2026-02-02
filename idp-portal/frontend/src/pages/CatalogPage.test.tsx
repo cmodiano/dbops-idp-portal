@@ -60,10 +60,6 @@ const mockFavorites: catalogService.FavoriteEntry[] = [
   { action_id: 1, created_at: '2026-01-29T12:00:00' },
 ];
 
-const mockRecentActions: catalogService.RecentAction[] = [
-  { action_id: 2, name: 'Patch Database', last_executed_at: '2026-01-29T11:00:00' },
-];
-
 const mockActionDetail: catalogService.CatalogActionDetailResponse = {
   data: {
     id: 1,
@@ -95,10 +91,10 @@ describe('CatalogPage', () => {
     vi.mocked(catalogService.fetchCatalogTags).mockResolvedValue([]);
     vi.mocked(catalogService.fetchCatalogActionById).mockResolvedValue(mockActionDetail);
     vi.mocked(catalogService.fetchFavorites).mockResolvedValue(mockFavorites);
-    vi.mocked(catalogService.fetchRecentActions).mockResolvedValue(mockRecentActions);
     vi.mocked(catalogService.addFavorite).mockResolvedValue(undefined);
     vi.mocked(catalogService.removeFavorite).mockResolvedValue(undefined);
     vi.mocked(catalogService.fetchActionStats).mockResolvedValue(null); // Story 8.1 stats mock
+    vi.mocked(catalogService.fetchRecentActions).mockResolvedValue([]); // Story 9.6: Mock to verify it's not called
 
     // Mock matchMedia for ThemeProvider
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
@@ -256,7 +252,8 @@ describe('CatalogPage', () => {
     });
   });
 
-  it('shows "Mes actions" with favorites and recent (AC5)', async () => {
+  // Story 9.6: "Mes actions" shows only favorites, not recent actions
+  it('shows "Mes actions" with favorites only (Story 9.6 fix)', async () => {
     renderWithTheme(<CatalogPage />);
 
     await waitFor(() => {
@@ -267,8 +264,11 @@ describe('CatalogPage', () => {
     await userEvent.click(myActionsTab);
 
     await waitFor(() => {
-      // Should show favorited action (id: 1) and recent action (id: 2)
-      expect(screen.getByText('Actions recentes')).toBeInTheDocument();
+      // Should show ONLY favorited action (id: 1), NOT recent action (id: 2)
+      expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument(); // Favorite
+      expect(screen.queryByText('Patch Database')).not.toBeInTheDocument(); // Not a favorite
+      // "Actions récentes" section should NOT exist anymore (Story 9.6 AC2)
+      expect(screen.queryByText('Actions recentes')).not.toBeInTheDocument();
     });
   });
 
@@ -730,6 +730,113 @@ describe('CatalogPage', () => {
       // - ExecutionWizard.test.tsx: "Environment Auto-Selection (Story 7.2, Task 5.2)" - 3 tests
       // - ExecutionWizard.test.tsx: "Accessibility - Simplified Variant (Story 7.2, Task 5.5)" - 2 tests
       expect(true).toBe(true);
+    });
+  });
+
+  // Story 9.6: Fix "Mes actions" filter - favorites only
+  describe('Favorites only filter', () => {
+    it('should show only favorites in "Mes actions" tab, not recent actions (AC1)', async () => {
+      const favoriteAction = { ...mockActions[0], id: 1 }; // Action 1 is favorited
+      const nonFavoriteAction = { ...mockActions[1], id: 2 }; // Action 2 is NOT favorited
+
+      vi.mocked(catalogService.fetchCatalogActions).mockResolvedValue([favoriteAction, nonFavoriteAction]);
+      vi.mocked(catalogService.fetchFavorites).mockResolvedValue([{ action_id: 1, created_at: '2026-01-29T12:00:00' }]);
+
+      renderWithTheme(<CatalogPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
+      });
+
+      const mesActionsTab = screen.getByRole('tab', { name: /Mes actions/i });
+      await userEvent.click(mesActionsTab);
+
+      await waitFor(() => {
+        expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument(); // Favorite
+        expect(screen.queryByText('Patch Database')).not.toBeInTheDocument(); // Not a favorite
+      });
+    });
+
+    it('should not show "Actions récentes" section in "Mes actions" tab (AC2)', async () => {
+      vi.mocked(catalogService.fetchCatalogActions).mockResolvedValue(mockActions);
+      vi.mocked(catalogService.fetchFavorites).mockResolvedValue(mockFavorites);
+
+      renderWithTheme(<CatalogPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
+      });
+
+      const mesActionsTab = screen.getByRole('tab', { name: /Mes actions/i });
+      await userEvent.click(mesActionsTab);
+
+      await waitFor(() => {
+        expect(screen.queryByText(/Actions recentes/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Vos dernieres executions/i)).not.toBeInTheDocument();
+      });
+    });
+
+    it('should show appropriate empty state message when no favorites (AC3)', async () => {
+      vi.mocked(catalogService.fetchCatalogActions).mockResolvedValue(mockActions);
+      vi.mocked(catalogService.fetchFavorites).mockResolvedValue([]); // No favorites
+
+      renderWithTheme(<CatalogPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
+      });
+
+      const mesActionsTab = screen.getByRole('tab', { name: /Mes actions/i });
+      await userEvent.click(mesActionsTab);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Ajoutez des favoris pour les retrouver ici/i)).toBeInTheDocument();
+        // Should NOT mention executing actions (old message)
+        expect(screen.queryByText(/executez des actions/i)).not.toBeInTheDocument();
+      });
+    });
+
+    it('should not call fetchRecentActions in loadData (AC4)', async () => {
+      vi.mocked(catalogService.fetchCatalogActions).mockResolvedValue(mockActions);
+      vi.mocked(catalogService.fetchFavorites).mockResolvedValue(mockFavorites);
+      vi.mocked(catalogService.fetchCatalogTags).mockResolvedValue([]);
+
+      renderWithTheme(<CatalogPage />);
+
+      await waitFor(() => {
+        expect(catalogService.fetchCatalogActions).toHaveBeenCalled();
+        expect(catalogService.fetchFavorites).toHaveBeenCalled();
+        // fetchRecentActions should NOT be called anymore (Story 9.6 optimization)
+        expect(catalogService.fetchRecentActions).not.toHaveBeenCalled();
+      });
+    });
+
+    it('should remove action immediately when unfavorited in "Mes actions" tab', async () => {
+      vi.mocked(catalogService.fetchCatalogActions).mockResolvedValue(mockActions);
+      vi.mocked(catalogService.fetchFavorites).mockResolvedValue(mockFavorites);
+
+      renderWithTheme(<CatalogPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
+      });
+
+      const mesActionsTab = screen.getByRole('tab', { name: /Mes actions/i });
+      await userEvent.click(mesActionsTab);
+
+      await waitFor(() => {
+        expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
+      });
+
+      // Remove favorite
+      const removeFavButton = screen.getByLabelText('Retirer des favoris');
+      await userEvent.click(removeFavButton);
+
+      // Action should disappear immediately from "Mes actions"
+      await waitFor(() => {
+        expect(screen.queryByText('Create PDB Oracle')).not.toBeInTheDocument();
+        expect(catalogService.removeFavorite).toHaveBeenCalledWith(1);
+      });
     });
   });
 });

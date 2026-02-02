@@ -126,6 +126,9 @@ export async function removeFavorite(actionId: number): Promise<void> {
 
 /**
  * Fetch recent actions (AC5).
+ * @deprecated Story 9.6: No longer used in CatalogPage "Mes actions" tab (favorites only).
+ * Recent actions are now available in "Mes exécutions" tab on ExecutionsPage (Story 8.9).
+ * This function can be removed if not used elsewhere.
  */
 export async function fetchRecentActions(limit = 10): Promise<RecentAction[]> {
   return apiFetch<RecentAction[]>(`/users/me/recent-actions?limit=${limit}`);
