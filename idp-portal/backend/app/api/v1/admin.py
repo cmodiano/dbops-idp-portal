@@ -5,9 +5,10 @@ All endpoints require DBOPS profile for access.
 
 from __future__ import annotations
 
+import structlog
 from fastapi import APIRouter, Depends, Query, status
 
-from app.core.exceptions import NotFoundError, InvalidStateError
+from app.core.exceptions import NotFoundError, InvalidStateError, BadRequestError
 from app.core.security import require_profile
 from app.models.auth import UserProfile
 from app.models.catalog import (
@@ -37,6 +38,8 @@ from app.repositories.catalog_repository import (
 from app.api.v1 import profiles
 from app.api.v1 import integrations
 from app.models.execution import AdminAnalyticsResponse
+
+logger = structlog.get_logger()
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 router.include_router(profiles.router)
@@ -100,6 +103,59 @@ async def list_actions(
         "data": [a.model_dump(mode="json") for a in actions],
         "pagination": pagination.model_dump(mode="json"),
     }
+
+
+@router.get("/actions/eligible-for-workflow", response_model=None)
+async def list_eligible_actions_for_workflow(
+    user: UserProfile = Depends(require_profile("dbops")),
+) -> dict:
+    """List actions eligible for workflow steps (Story 5.7, AC4).
+
+    Returns only published actions (not workflows) that can be referenced in workflow steps.
+    This is used to populate the action selector in the workflow step editor.
+
+    Returns:
+        { "data": list[ActionResponse] } - published actions only
+    """
+    try:
+        actions = await catalog_repository.list_all(
+            status=ActionStatus.PUBLISHED,
+            item_type=ItemType.ACTION,
+        )
+        logger.debug(
+            "list_eligible_actions_for_workflow_success",
+            action_count=len(actions),
+        )
+        # Serialize each action individually to catch any serialization errors
+        serialized_actions = []
+        for idx, action in enumerate(actions):
+            try:
+                serialized_actions.append(action.model_dump(mode="json"))
+            except Exception as ser_error:
+                logger.error(
+                    "list_eligible_actions_for_workflow_serialization_error",
+                    action_id=action.id,
+                    action_name=action.name,
+                    error=str(ser_error),
+                    error_type=type(ser_error).__name__,
+                    exc_info=True,
+                )
+                # Skip this action if serialization fails
+                continue
+        return {"data": serialized_actions}
+    except Exception as e:
+        logger.error(
+            "list_eligible_actions_for_workflow_error",
+            error=str(e),
+            error_type=type(e).__name__,
+            exc_info=True,
+        )
+        # Re-raise as 400 instead of letting FastAPI return 422
+        raise BadRequestError(
+            code="LOAD_ACTIONS_ERROR",
+            message=f"Erreur lors du chargement des actions éligibles: {str(e)}",
+            details={"error_type": type(e).__name__, "error_message": str(e)},
+        ) from e
 
 
 @router.get("/actions/{action_id}")
@@ -216,25 +272,6 @@ async def update_workflow_steps(
         )
 
     return {"data": action.model_dump(mode="json")}
-
-
-@router.get("/actions/eligible-for-workflow")
-async def list_eligible_actions_for_workflow(
-    user: UserProfile = Depends(require_profile("dbops")),
-) -> dict:
-    """List actions eligible for workflow steps (Story 5.7, AC4).
-
-    Returns only published actions (not workflows) that can be referenced in workflow steps.
-    This is used to populate the action selector in the workflow step editor.
-
-    Returns:
-        { "data": list[ActionResponse] } - published actions only
-    """
-    actions = await catalog_repository.list_all(
-        status=ActionStatus.PUBLISHED,
-        item_type=ItemType.ACTION,
-    )
-    return {"data": [a.model_dump(mode="json") for a in actions]}
 
 
 @router.put("/actions/{action_id}")

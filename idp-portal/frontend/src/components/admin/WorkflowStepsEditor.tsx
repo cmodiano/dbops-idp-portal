@@ -259,7 +259,16 @@ export const WorkflowStepsEditor: React.FC<WorkflowStepsEditorProps> = ({
       })
       .catch((err) => {
         console.error('Failed to load eligible actions for workflow:', err);
-        setLoadError(err instanceof Error ? err.message : 'Impossible de charger les actions éligibles');
+        // Improve error message to be more helpful
+        let errorMessage = 'Impossible de charger les actions éligibles';
+        if (err instanceof Error) {
+          errorMessage = err.message;
+          // If it's "Unknown error", provide more context
+          if (err.message === 'Unknown error') {
+            errorMessage = 'Erreur lors du chargement des actions éligibles. Vérifiez votre connexion et vos permissions DBOPS.';
+          }
+        }
+        setLoadError(errorMessage);
         setEligibleActions([]);
       })
       .finally(() => {

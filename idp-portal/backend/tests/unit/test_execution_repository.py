@@ -1437,3 +1437,112 @@ class TestGetExecutionStats:
         assert result["taux_succes_pct"] == 0.0
         assert result["executions_en_cours"] == 0
         assert result["executions_en_erreur"] == 0
+
+
+# === Story 9.11 Tests: list_all_executions with integration metadata ===
+
+
+class TestListAllExecutions:
+    """Tests for execution_repository.list_all_executions (Story 9.11, AC4)."""
+
+    @pytest.mark.asyncio
+    async def test_list_all_executions_with_integration(self):
+        """list_all_executions returns executions with integration metadata (Story 9.11 AC4)."""
+        # Row: 10 exec fields + action_name + user_display_name + approval fields + parent_execution_id + metadata
+        row1 = (
+            1, 5, 1, "dev", None, "COMPLETED", None,
+            datetime(2026, 1, 29, 10, 0, 0), datetime(2026, 1, 29, 10, 5, 0), datetime(2026, 1, 29, 9, 55, 0),
+            "Create PDB", "John Doe", None, None, None, None,  # action_name, user_display_name, approval fields, parent_execution_id
+            "Oracle", "AAP", "action",  # engine, platform, item_type
+            10, "AAP Production", "/icons/aap.png"  # integration_id, integration_name, integration_icon
+        )
+
+        mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
+        mock_cursor.fetchall = AsyncMock(return_value=[row1])
+        mock_cursor.close = MagicMock()
+
+        mock_conn = MagicMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            result = await execution_repository.list_all_executions(limit=50, offset=0)
+
+        assert len(result) == 1
+        assert result[0].id == 1
+        assert result[0].action_name == "Create PDB"
+        assert result[0].user_display_name == "John Doe"
+        # Story 9.11 AC4: Verify integration metadata
+        assert result[0].integration_id == 10
+        assert result[0].integration_name == "AAP Production"
+        assert result[0].integration_icon == "/icons/aap.png"
+        # Verify action metadata also present
+        assert result[0].engine.value == "Oracle"
+        assert result[0].platform.value == "AAP"
+        assert result[0].item_type.value == "action"
+
+    @pytest.mark.asyncio
+    async def test_list_all_executions_handles_null_integration(self):
+        """list_all_executions handles NULL integration_id gracefully (Story 9.11 AC4)."""
+        # Action without integration (integration_id = NULL)
+        row1 = (
+            2, 6, 2, "staging", None, "RUNNING", None,
+            datetime(2026, 1, 29, 11, 0, 0), None, datetime(2026, 1, 29, 10, 55, 0),
+            "Legacy Action", "Jane Smith", None, None, None, None,
+            "Oracle", "SSH", "action",  # engine, platform
+            None, None, None  # No integration
+        )
+
+        mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
+        mock_cursor.fetchall = AsyncMock(return_value=[row1])
+        mock_cursor.close = MagicMock()
+
+        mock_conn = MagicMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            result = await execution_repository.list_all_executions(limit=50, offset=0)
+
+        assert len(result) == 1
+        # Story 9.11 AC4: NULL integration fields handled gracefully
+        assert result[0].integration_id is None
+        assert result[0].integration_name is None
+        assert result[0].integration_icon is None
+        # Action metadata still present
+        assert result[0].engine.value == "Oracle"
+
+    @pytest.mark.asyncio
+    async def test_list_all_executions_uses_correct_join_pattern(self):
+        """list_all_executions uses LEFT JOIN INTEGRATIONS ON A.INTEGRATION_ID (Story 9.11)."""
+        mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
+        mock_cursor.fetchall = AsyncMock(return_value=[])
+        mock_cursor.close = MagicMock()
+
+        mock_conn = MagicMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            await execution_repository.list_all_executions(limit=50, offset=0)
+
+        # Verify the correct JOIN pattern is used (Story 9.11 AC2)
+        execute_call = mock_cursor.execute.call_args
+        query = execute_call[0][0]
+        # Must NOT contain ACTION_EXECUTION_CONFIG (Story 9.11 AC1)
+        assert "ACTION_EXECUTION_CONFIG" not in query
+        # Must use LEFT JOIN via A.INTEGRATION_ID (Story 9.11 AC2)
+        assert "LEFT JOIN INTEGRATIONS I ON I.ID = A.INTEGRATION_ID" in query
+        # Must select integration fields
+        assert "I.ID AS INTEGRATION_ID" in query
+        assert "I.NAME AS INTEGRATION_NAME" in query
+        assert "I.ICON AS INTEGRATION_ICON" in query

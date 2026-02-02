@@ -98,7 +98,7 @@ class ExecutionResponse(BaseModel):
         engine: Database engine from action (Story 9.9 AC6 - for Technologie column). Can be None if action has no engine (legacy data or workflows).
         platform: Execution platform from action (Story 9.9 AC6). Can be None if action has no platform (legacy data or workflows).
         item_type: Item type (action or workflow) from action (Story 9.9 AC6). Defaults to 'action' if NULL in database.
-        integration_id: Integration ID from execution config (Story 9.9 AC6 - for Plateforme column). Can be None if execution has no ACTION_EXECUTION_CONFIG record.
+        integration_id: Integration ID from ACTIONS_CATALOG.INTEGRATION_ID (Story 9.9 AC6, fix 9.11). Can be None if action has no integration linked.
         integration_name: Integration name from INTEGRATIONS (Story 9.9 AC6). Can be None if integration_id is NULL or integration was deleted.
         integration_icon: Integration icon URL from INTEGRATIONS (Story 9.9 AC6). Can be None if integration_id is NULL or integration has no icon.
     """

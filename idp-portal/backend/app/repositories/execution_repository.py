@@ -206,7 +206,7 @@ async def create_execution(
 
 
 async def get_by_id(execution_id: int) -> ExecutionResponse | None:
-    """Fetch an execution by ID with action name and approval fields (Story 4.1, Story 7.4, Story 9.2, Story 9.9).
+    """Fetch an execution by ID with action name and approval fields (Story 4.1, Story 7.4, Story 9.2, Story 9.9, Story 9.11).
 
     Args:
         execution_id: The execution ID to fetch
@@ -216,9 +216,11 @@ async def get_by_id(execution_id: int) -> ExecutionResponse | None:
 
     Story 9.9 AC6: Includes engine, platform, item_type from ACTIONS_CATALOG
                    and integration_id, integration_name, integration_icon from INTEGRATIONS.
+    Story 9.11: Uses LEFT JOIN via A.INTEGRATION_ID (from ACTIONS_CATALOG, added by V036).
+                Integration fields can be NULL if action has no integration linked.
     """
     start_time = time.perf_counter()
-    # Story 9.9 AC6: Use A.INTEGRATION_ID to join with INTEGRATIONS table
+    # Story 9.11 fix: Use A.INTEGRATION_ID (ACTIONS_CATALOG) to join INTEGRATIONS - not ACTION_EXECUTION_CONFIG which doesn't exist - not ACTION_EXECUTION_CONFIG which doesn't exist
     query = """
         SELECT E.ID, E.ACTION_ID, E.USER_ID, E.ENVIRONMENT, E.PARAMETERS,
                E.STATUS, E.SERVICENOW_CHANGE_ID, E.STARTED_AT, E.COMPLETED_AT, E.CREATED_AT,
@@ -279,7 +281,7 @@ async def list_by_user(
     limit: int = 50,
     offset: int = 0,
 ) -> list[ExecutionResponse]:
-    """List executions for a user (Story 4.1, Story 7.4 approval fields, Story 9.2 remediation, Story 9.9 enrichment).
+    """List executions for a user (Story 4.1, Story 7.4, Story 9.2, Story 9.9, Story 9.11).
 
     Args:
         user_id: User ID to filter by
@@ -291,9 +293,11 @@ async def list_by_user(
 
     Story 9.9 AC6: Includes engine, platform, item_type from ACTIONS_CATALOG
                    and integration_id, integration_name, integration_icon from INTEGRATIONS.
+    Story 9.11: Uses LEFT JOIN via A.INTEGRATION_ID (from ACTIONS_CATALOG, added by V036).
+                Integration fields can be NULL if action has no integration linked.
     """
     start_time = time.perf_counter()
-    # Story 9.9 AC6: Use A.INTEGRATION_ID to join with INTEGRATIONS table
+    # Story 9.11 fix: Use A.INTEGRATION_ID (ACTIONS_CATALOG) to join INTEGRATIONS - not ACTION_EXECUTION_CONFIG which doesn't exist
     query = """
         SELECT E.ID, E.ACTION_ID, E.USER_ID, E.ENVIRONMENT, E.PARAMETERS,
                E.STATUS, E.SERVICENOW_CHANGE_ID, E.STARTED_AT, E.COMPLETED_AT, E.CREATED_AT,
@@ -368,7 +372,7 @@ async def list_all_executions(
     limit: int = 50,
     offset: int = 0,
 ) -> list[ExecutionResponse]:
-    """List all executions (Story 8.9, DBA/DBOPS only; Story 9.2 remediation; Story 9.9 enrichment).
+    """List all executions (Story 8.9, DBA/DBOPS only; Story 9.2, Story 9.9, Story 9.11).
 
     Args:
         limit: Maximum number of results
@@ -379,9 +383,11 @@ async def list_all_executions(
 
     Story 9.9 AC6: Includes engine, platform, item_type from ACTIONS_CATALOG
                    and integration_id, integration_name, integration_icon from INTEGRATIONS.
+    Story 9.11: Uses LEFT JOIN via A.INTEGRATION_ID (from ACTIONS_CATALOG, added by V036).
+                Integration fields can be NULL if action has no integration linked.
     """
     start_time = time.perf_counter()
-    # Story 9.9 AC6: Use A.INTEGRATION_ID to join with INTEGRATIONS table
+    # Story 9.11 fix: Use A.INTEGRATION_ID (ACTIONS_CATALOG) to join INTEGRATIONS - not ACTION_EXECUTION_CONFIG which doesn't exist
     query = """
         SELECT E.ID, E.ACTION_ID, E.USER_ID, E.ENVIRONMENT, E.PARAMETERS,
                E.STATUS, E.SERVICENOW_CHANGE_ID, E.STARTED_AT, E.COMPLETED_AT, E.CREATED_AT,

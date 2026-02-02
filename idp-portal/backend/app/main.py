@@ -8,6 +8,7 @@ from typing import AsyncIterator
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import RequestValidationError
 from starlette.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
@@ -128,6 +129,29 @@ async def idp_error_handler(request: Request, exc: IdpError) -> JSONResponse:
                 "code": exc.code,
                 "message": exc.message,
                 **({"details": exc.details} if exc.details else {}),
+            }
+        },
+    )
+
+
+# Handler for FastAPI validation errors (422)
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """Handle FastAPI request/response validation errors (422)."""
+    logger.error(
+        "fastapi_validation_error",
+        path=request.url.path,
+        method=request.method,
+        errors=exc.errors(),
+        exc_info=True,
+    )
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": {
+                "code": "VALIDATION_ERROR",
+                "message": "Erreur de validation de la requête ou de la réponse",
+                "details": {"validation_errors": exc.errors()},
             }
         },
     )

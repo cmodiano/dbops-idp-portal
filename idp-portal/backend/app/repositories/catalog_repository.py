@@ -137,6 +137,7 @@ def _row_to_action_response(row: tuple, tags: list[str] | None = None) -> Action
         updated_at=row[11],
         tags=tags if tags is not None else [],
         documentation_md=row[12] if len(row) > 12 else None,
+        remediation_rules=None,  # Not loaded in list_all query for performance
     )
 
 
