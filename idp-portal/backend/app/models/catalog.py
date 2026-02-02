@@ -7,6 +7,7 @@ Defines Pydantic models for:
 - ActionDetail: output model with full details (Story 2.14: rbac_policies removed — RBAC via profiles)
 - TagCreate, TagResponse: tag models (Story 2.6, FR11c)
 - WorkflowStep: workflow step referencing an existing action (Story 5.7, AC2)
+- RemediationRule, RemediationSuggestion: auto-remediation models (Story 9.1, FR36)
 - Story 2.23: ActionCategory removed — use tags for categorization
 - Story 5.7: ItemType (action | workflow) for catalog entries
 """
@@ -58,6 +59,88 @@ class ImpactLevel(str, Enum):
     MEDIUM = "medium"
     HIGH = "high"
     CRITICAL = "critical"
+
+
+class RiskLevel(str, Enum):
+    """Risk levels for remediation rules (Story 9.1, FR36).
+
+    Used to determine auto-trigger eligibility in Story 9.3.
+    - low: Safe to auto-trigger (Story 9.3)
+    - medium: Manual trigger recommended
+    - high: Requires DBA review before execution
+    """
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+# === Story 9.1: Remediation Rule models (FR36) ===
+
+
+class RemediationRule(BaseModel):
+    """Single remediation rule configuration (Story 9.1, AC4).
+
+    Defines when an action should be suggested as corrective action for a failed execution.
+
+    Attributes:
+        error_pattern: Python regex pattern to match against error_message in EXECUTION_STEPS
+        target_action_id: ID of the corrective action in ACTIONS_CATALOG
+        environments: List of environments where this rule applies (e.g., ['dev', 'staging', 'prod'])
+        auto_trigger: Reserved for Story 9.3 (auto-remediation). False for Story 9.1.
+        risk_level: Risk level of the corrective action (low, medium, high)
+    """
+    error_pattern: str = Field(..., min_length=1, max_length=1000)
+    target_action_id: int = Field(..., gt=0)
+    environments: list[str] = Field(..., min_length=1)
+    auto_trigger: bool = False
+    risk_level: RiskLevel = RiskLevel.MEDIUM
+
+    @field_validator("error_pattern")
+    @classmethod
+    def validate_regex_pattern(cls, v: str) -> str:
+        """Validate error_pattern is a valid Python regex."""
+        try:
+            re.compile(v)
+        except re.error as e:
+            raise ValueError(f"error_pattern is not a valid regex: {e}")
+        return v
+
+    @field_validator("environments")
+    @classmethod
+    def validate_environments(cls, v: list[str]) -> list[str]:
+        """Validate environments contains valid environment names."""
+        valid_envs = {"dev", "staging", "prod"}
+        normalized = [env.lower().strip() for env in v]
+        invalid = [env for env in normalized if env not in valid_envs]
+        if invalid:
+            raise ValueError(f"Invalid environments: {invalid}. Valid values: {valid_envs}")
+        return normalized
+
+
+class RemediationSuggestion(BaseModel):
+    """Suggestion for a corrective action (Story 9.1, AC5).
+
+    Returned by GET /api/v1/executions/{id}/remediation endpoint.
+
+    Attributes:
+        action_id: ID of the suggested corrective action
+        action_name: Name of the corrective action for display
+        action_description: Description of the corrective action (may be null)
+        matching_rule: The rule that matched (for debugging/transparency)
+    """
+    action_id: int
+    action_name: str
+    action_description: str | None = None
+    matching_rule: RemediationRule
+
+
+class RemediationRulesUpdateRequest(BaseModel):
+    """Input for PUT /admin/actions/{id}/remediation-rules (Story 9.1, Task 6).
+
+    Attributes:
+        remediation_rules: List of remediation rules or None to clear
+    """
+    remediation_rules: list[RemediationRule] | None = None
 
 
 # === Story 2.6: Tag models (FR11c) ===
@@ -220,6 +303,7 @@ class ActionResponse(BaseModel):
     Story 2.23: category removed — use tags instead.
     Story 3.4: includes documentation_md (FR12).
     Story 5.7: includes item_type; engine/platform optional for workflows.
+    Story 9.1: includes remediation_rules for auto-remediation configuration.
     """
     id: int
     name: str
@@ -236,6 +320,7 @@ class ActionResponse(BaseModel):
     updated_at: datetime | None = None
     tags: list[str] = Field(default_factory=list)
     documentation_md: str | None = None
+    remediation_rules: list[RemediationRule] | None = None
 
 
 class ActionDetail(ActionResponse):
@@ -244,6 +329,7 @@ class ActionDetail(ActionResponse):
     Story 2.14: rbac_policies removed — RBAC now managed via profiles.
     Story 2.24: change_type_config is dict[str, ChangeTypeConfigEntry].
     Story 5.7: workflow_steps for workflows (list of action references).
+    Story 9.1: remediation_rules inherited from ActionResponse.
     """
     execution_steps: list["ExecutionStep"] | None = None
     workflow_steps: list["WorkflowStep"] | None = None

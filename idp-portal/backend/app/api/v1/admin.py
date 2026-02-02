@@ -23,6 +23,8 @@ from app.models.catalog import (
     ActionTagsUpdateRequest,
     InvalidTransitionError,
     ActionListResponse,
+    RemediationRule,
+    RemediationRulesUpdateRequest,
     get_allowed_transitions,
 )
 from app.repositories import catalog_repository, execution_repository
@@ -386,3 +388,53 @@ async def get_admin_analytics(
     """
     analytics = await execution_repository.get_admin_analytics(days=days)
     return {"data": AdminAnalyticsResponse(**analytics).model_dump(mode="json")}
+
+
+# --- Story 9.1: Remediation Rules Management ---
+
+
+@router.put("/actions/{action_id}/remediation-rules")
+async def update_remediation_rules(
+    action_id: int,
+    data: RemediationRulesUpdateRequest,
+    user: UserProfile = Depends(require_profile("dbops")),
+) -> dict:
+    """Update remediation rules for an action (Story 9.1, Task 6).
+
+    Allows DBOPS to configure rules that suggest corrective actions when this action fails.
+
+    Args:
+        action_id: The action ID
+        data: { "remediation_rules": [...] } or { "remediation_rules": null } to clear
+
+    Returns:
+        { "data": ActionDetail } or 404 if action not found
+    """
+    action = await catalog_repository.get_by_id(action_id)
+    if action is None:
+        raise NotFoundError(
+            code="NOT_FOUND",
+            message=f"Action {action_id} introuvable",
+            details={"action_id": action_id},
+        )
+
+    # Validate that target_action_ids reference existing actions
+    if data.remediation_rules:
+        for rule in data.remediation_rules:
+            target = await catalog_repository.get_by_id(rule.target_action_id)
+            if target is None:
+                raise InvalidStateError(
+                    code="INVALID_TARGET_ACTION",
+                    message=f"Action cible {rule.target_action_id} introuvable",
+                    details={"target_action_id": rule.target_action_id},
+                )
+
+    await catalog_repository.update_remediation_rules(action_id, data.remediation_rules)
+    updated = await catalog_repository.get_by_id(action_id)
+    if updated is None:
+        raise NotFoundError(
+            code="NOT_FOUND",
+            message=f"Action {action_id} introuvable",
+            details={"action_id": action_id},
+        )
+    return {"data": updated.model_dump(mode="json")}

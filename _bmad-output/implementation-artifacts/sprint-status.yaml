@@ -141,10 +141,15 @@ development_status:
     8-10-vue-liste-en-tableau-avec-colonnes: done # Code review 2026-02-01: 10 issues fixed (5 HIGH + 3 MEDIUM + 2 LOW) - design tokens, useMemo deps, double skeleton, pluralization, tooltip limits - 66/66 tests pass
     epic-8-retrospective: optional
     # === Epic 9: Autoremediation (Phase 2) ===
-    epic-9: backlog
-    9-1-detection-echec-et-proposition-actions-correctives: backlog
+    epic-9: in-progress
+    9-1-detection-echec-et-proposition-actions-correctives: done # 2026-02-02: All 19 tasks completed - migration V031, remediation models, repository, service, API endpoint, admin UI editor, frontend hook/types/service, StructuredErrorCard suggestions, ExecutionTimeline integration, 60 frontend tests pass
     9-2-declenchement-manuel-action-corrective-par-dba: backlog
     9-3-execution-automatique-corrective-pour-faible-risque: backlog
+    9-4-deplacement-statistiques-executions-vers-page-executions: backlog # Déplacer uniquement les 4 cards KPI (exécutions du jour, taux de succès, en cours, en erreur) du Dashboard vers la page Exécutions
+    9-5-interface-admin-creation-workflows: backlog # Compléter Story 5.7 Task 4 : Interface Admin pour créer/éditer des workflows (choix type action/workflow, éditeur d'étapes avec sélecteur d'actions existantes, validation)
+    9-6-fix-filtre-mes-actions: backlog # Bug fix : "Mes actions" affiche actuellement favoris + récentes (ligne 206 CatalogPage.tsx), mais devrait afficher uniquement les favoris. Supprimer aussi la section "Actions récentes" dans "Mes actions" (ligne 530) car les actions récentes sont déjà disponibles dans "Mes exécutions"
+    9-7-fix-oracle-bind-variable-comment: backlog # Bug fix : ORA-01745 dans approve/reject - variable de liaison :comment entre en conflit avec mot réservé Oracle COMMENT. Renommé en :approval_comment
+    9-8-fix-audit-log-approval-action-types: backlog # Bug fix : ORA-02290 CK_AUDIT_LOG_ACTION_TYPE violated - Migration V032 ajoute EXECUTION_PENDING_APPROVAL, EXECUTION_APPROVED, EXECUTION_REJECTED à la contrainte CHECK
     epic-9-retrospective: optional
     # === Epic 10: Documentation IA, Communication & Interface Conversationnelle (Phase 3) ===
     epic-10: backlog
@@ -153,16 +158,17 @@ development_status:
     10-3-interface-ia-conversationnelle-pour-decouverte-dactions: backlog
     epic-10-retrospective: optional
     # === Epic 11: Scheduling & Maintenance Planifiée (Phase 2) ===
+    # APPROCHE: Modèle de données + UI/API complètes, mais pas de scheduler intégré (Celery).
+    # Les schedules sont récupérés et exécutés par un scheduler externe (Control-M ou Django scheduler).
+    # Pas de seconde base de données, pas de charge backend supplémentaire pour le polling.
     epic-11: backlog
-    11-1-modele-donnees-scheduled-executions-et-recurrence: backlog # Table scheduled_executions + recurring_patterns (one-time vs recurring)
-    11-2-setup-celery-beat-avec-postgresql-backend: backlog # Integration Celery + Redis/RabbitMQ + persistent schedules en DB
+    11-1-modele-donnees-scheduled-executions-et-recurrence: backlog # Table scheduled_executions + recurring_patterns (one-time vs recurring) - next_execution_date pour scheduler externe
     11-3-api-creer-execution-planifiee-one-time: backlog # POST /api/v1/scheduled-executions avec date/heure future
-    11-4-worker-celery-execution-scheduled-tasks: backlog # Worker qui poll et execute les actions planifiées
     11-5-ui-scheduler-dans-wizard-execution: backlog # Option "Exécuter maintenant" vs "Planifier" dans ExecutionWizard
     11-6-liste-executions-planifiees-et-annulation: backlog # Page admin : voir/annuler les executions scheduled
     11-7-patterns-recurrence-simples-daily-weekly: backlog # Support récurrence basique (tous les jours, toutes les semaines)
     11-8-cron-expressions-pour-recurrence-avancee: backlog # Support expressions cron complètes pour power users
-    11-9-monitoring-celery-flower-ou-equivalent: backlog # UI de monitoring des jobs Celery (Flower ou autre)
+    11-10-api-integration-scheduler-externe: backlog # GET /api/v1/scheduled-executions/pending - endpoint pour scheduler externe (Control-M/Django) récupérer schedules à exécuter
     epic-11-retrospective: optional
     # === Epic M: Migration FastAPI vers Django REST (Arrimage plateforme) ===
     epic-m: backlog

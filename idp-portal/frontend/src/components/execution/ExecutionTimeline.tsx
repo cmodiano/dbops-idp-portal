@@ -11,8 +11,9 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, MinusOutlined, ClockCircleOutlined, StopOutlined } from '@ant-design/icons';
 import { Spin, Typography, Alert, Drawer, Button, Tooltip, Tag } from 'antd';
 import { useWebSocket } from '../../hooks/useWebSocket';
+import { useRemediationSuggestions } from '../../hooks/useRemediationSuggestions';
 import { StructuredErrorCard } from './StructuredErrorCard';
-import type { ExecutionResponse, ExecutionStepResponse, ExecutionStepStatus } from '../../types/api';
+import type { ExecutionResponse, ExecutionStepResponse, ExecutionStepStatus, RemediationSuggestion } from '../../types/api';
 
 const { Text } = Typography;
 
@@ -46,6 +47,8 @@ export interface ExecutionTimelineProps {
   onContact?: () => void;
   /** Variant for StructuredErrorCard: 'default' or 'business' (Story 7.2, Task 4.2). */
   errorCardVariant?: 'default' | 'business';
+  /** Callback when a remediation suggestion is clicked (Story 9.1, AC1). */
+  onSuggestionClick?: (suggestion: RemediationSuggestion) => void;
 }
 
 export function ExecutionTimeline({
@@ -56,6 +59,7 @@ export function ExecutionTimeline({
   onRetry,
   onContact,
   errorCardVariant = 'default',
+  onSuggestionClick,
 }: ExecutionTimelineProps) {
   const useRealtime = mode === 'realtime' && executionId != null;
   const { steps: wsSteps, execution: wsExecution, loading, error } = useWebSocket(useRealtime ? executionId : null);
@@ -65,6 +69,13 @@ export function ExecutionTimeline({
     [useRealtime, wsSteps, stepsProp]
   );
   const execution = useRealtime ? wsExecution : executionProp ?? null;
+
+  // Story 9.1, Task 11.1-11.2: Fetch remediation suggestions for failed executions
+  const { suggestions: remediationSuggestions, loading: suggestionsLoading } = useRemediationSuggestions(
+    executionId ?? null,
+    execution?.status ?? null
+  );
+
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [logsDrawerStepId, setLogsDrawerStepId] = useState<number | null>(null);
   const logsDrawerContentRef = useRef<HTMLDivElement>(null);
@@ -192,7 +203,7 @@ export function ExecutionTimeline({
         />
       )}
 
-      {/* Story 4.7, AC2: StructuredErrorCard quand FAILED; Story 7.2, Task 4.2: pass variant */}
+      {/* Story 4.7, AC2: StructuredErrorCard quand FAILED; Story 7.2, Task 4.2: pass variant; Story 9.1, Task 11.3-11.5: pass remediation suggestions */}
       {execution?.status === 'FAILED' && failedStep && (
         <div style={{ marginBottom: 16 }}>
           <StructuredErrorCard
@@ -204,6 +215,9 @@ export function ExecutionTimeline({
             onViewLogs={() => setLogsDrawerStepId(failedStep.id)}
             onContact={onContact}
             variant={errorCardVariant}
+            remediationSuggestions={remediationSuggestions ?? undefined}
+            suggestionsLoading={suggestionsLoading}
+            onSuggestionClick={onSuggestionClick}
           />
         </div>
       )}

@@ -1385,3 +1385,209 @@ class TestCatalogRepositoryFailureResilience:
         # Should NOT have patching fields (fallback to regular audit)
         assert "version_source" not in details
         assert "patch_result" not in details
+
+
+# === Story 9.1: Remediation Suggestions Service Tests ===
+
+
+class TestGetRemediationSuggestions:
+    """Tests for get_remediation_suggestions (Story 9.1, Task 15)."""
+
+    @pytest.mark.asyncio
+    async def test_returns_suggestions_for_failed_execution(self):
+        """Test get_remediation_suggestions returns suggestions for FAILED execution."""
+        from app.services.execution_service import get_remediation_suggestions
+        from app.models.catalog import RemediationRule, RiskLevel
+
+        # Mock execution_repository to return failed execution
+        mock_execution = ExecutionResponse(
+            id=1,
+            action_id=10,
+            action_name="Test Action",
+            user_id=42,
+            created_at=datetime(2026, 1, 28, 10, 0, 0),
+            status=ExecutionStatus.FAILED,
+            environment=ExecutionEnvironment.PROD,
+            parameters={},
+        )
+        mock_step = ExecutionStepResponse(
+            id=101,
+            execution_id=1,
+            step_order=1,
+            step_name="Failed Step",
+            status=StepStatus.FAILED,
+            step_type=StepType.PLATFORM,
+            started_at=datetime(2026, 1, 28, 10, 1, 0),
+            completed_at=datetime(2026, 1, 28, 10, 2, 0),
+            error_message="ORA-00942: table or view does not exist",
+        )
+
+        # Mock action with remediation_rules
+        mock_action = MagicMock()
+        mock_action.id = 10
+        mock_action.name = "Test Action"
+        mock_action.description = "Test Description"
+        mock_action.engine = MagicMock()
+        mock_action.engine.value = "Oracle"
+        mock_action.remediation_rules = [
+            RemediationRule(
+                error_pattern="ORA-\\d+",
+                target_action_id=42,
+                environments=["prod"],
+                auto_trigger=False,
+                risk_level=RiskLevel.MEDIUM,
+            )
+        ]
+
+        # Mock target action (used for fetching by id)
+        mock_target_action = MagicMock()
+        mock_target_action.id = 42
+        mock_target_action.name = "Fix Database Issue"
+        mock_target_action.description = "Fixes database table issues"
+        mock_target_action.engine = MagicMock()
+        mock_target_action.engine.value = "Oracle"
+
+        with patch("app.services.execution_service.execution_repository") as mock_exec_repo, \
+             patch("app.services.execution_service.catalog_repository") as mock_cat_repo:
+            mock_exec_repo.get_by_id = AsyncMock(return_value=mock_execution)
+            mock_exec_repo.get_steps_by_execution_id = AsyncMock(return_value=[mock_step])
+            mock_exec_repo.get_action_with_integration = AsyncMock(return_value={"engine": "Oracle"})
+            mock_cat_repo.get_by_id = AsyncMock(side_effect=lambda x: mock_target_action if x == 42 else mock_action)
+            mock_cat_repo.get_actions_with_remediation_rules = AsyncMock(return_value=[mock_action])
+
+            suggestions = await get_remediation_suggestions(1)
+
+            assert len(suggestions) == 1
+            assert suggestions[0].action_id == 42
+            assert suggestions[0].action_name == "Fix Database Issue"
+            assert suggestions[0].matching_rule.error_pattern == "ORA-\\d+"
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_for_no_matching_rules(self):
+        """Test get_remediation_suggestions returns empty when no rules match."""
+        from app.services.execution_service import get_remediation_suggestions
+        from app.models.catalog import RemediationRule, RiskLevel
+
+        # Mock execution_repository to return failed execution
+        mock_execution = ExecutionResponse(
+            id=1,
+            action_id=10,
+            action_name="Test Action",
+            user_id=42,
+            created_at=datetime(2026, 1, 28, 10, 0, 0),
+            status=ExecutionStatus.FAILED,
+            environment=ExecutionEnvironment.PROD,
+            parameters={},
+        )
+        mock_step = ExecutionStepResponse(
+            id=101,
+            execution_id=1,
+            step_order=1,
+            step_name="Failed Step",
+            status=StepStatus.FAILED,
+            step_type=StepType.PLATFORM,
+            started_at=datetime(2026, 1, 28, 10, 1, 0),
+            completed_at=datetime(2026, 1, 28, 10, 2, 0),
+            error_message="Connection timeout",  # Doesn't match ORA-\d+
+        )
+
+        # Mock action with remediation_rules that won't match
+        mock_action = MagicMock()
+        mock_action.id = 10
+        mock_action.engine = "Oracle"
+        mock_action.remediation_rules = [
+            RemediationRule(
+                error_pattern="ORA-\\d+",  # Won't match "Connection timeout"
+                target_action_id=42,
+                environments=["prod"],
+            )
+        ]
+
+        with patch("app.services.execution_service.execution_repository") as mock_exec_repo, \
+             patch("app.services.execution_service.catalog_repository") as mock_cat_repo:
+            mock_exec_repo.get_by_id = AsyncMock(return_value=mock_execution)
+            mock_exec_repo.get_steps_by_execution_id = AsyncMock(return_value=[mock_step])
+            mock_exec_repo.get_action_with_integration = AsyncMock(return_value={"engine": "Oracle"})
+            mock_cat_repo.get_by_id = AsyncMock(return_value=mock_action)
+            mock_cat_repo.get_actions_with_remediation_rules = AsyncMock(return_value=[mock_action])
+
+            suggestions = await get_remediation_suggestions(1)
+
+            assert suggestions == []
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_for_non_failed_execution(self):
+        """Test get_remediation_suggestions returns empty for non-FAILED execution."""
+        from app.services.execution_service import get_remediation_suggestions
+
+        # Mock execution_repository to return successful execution
+        mock_execution = ExecutionResponse(
+            id=1,
+            action_id=10,
+            action_name="Test Action",
+            user_id=42,
+            created_at=datetime(2026, 1, 28, 10, 0, 0),
+            status=ExecutionStatus.COMPLETED,
+            environment=ExecutionEnvironment.PROD,
+            parameters={},
+        )
+
+        with patch("app.services.execution_service.execution_repository") as mock_exec_repo:
+            mock_exec_repo.get_by_id = AsyncMock(return_value=mock_execution)
+
+            suggestions = await get_remediation_suggestions(1)
+
+            assert suggestions == []
+
+    @pytest.mark.asyncio
+    async def test_filters_by_environment(self):
+        """Test get_remediation_suggestions filters rules by environment."""
+        from app.services.execution_service import get_remediation_suggestions
+        from app.models.catalog import RemediationRule, RiskLevel
+
+        # Mock execution_repository to return failed execution in DEV
+        mock_execution = ExecutionResponse(
+            id=1,
+            action_id=10,
+            action_name="Test Action",
+            user_id=42,
+            created_at=datetime(2026, 1, 28, 10, 0, 0),
+            status=ExecutionStatus.FAILED,
+            environment=ExecutionEnvironment.DEV,  # DEV environment
+            parameters={},
+        )
+        mock_step = ExecutionStepResponse(
+            id=101,
+            execution_id=1,
+            step_order=1,
+            step_name="Failed Step",
+            status=StepStatus.FAILED,
+            step_type=StepType.PLATFORM,
+            started_at=datetime(2026, 1, 28, 10, 1, 0),
+            completed_at=datetime(2026, 1, 28, 10, 2, 0),
+            error_message="ORA-00942: table or view does not exist",
+        )
+
+        # Mock action with remediation_rules only for prod
+        mock_action = MagicMock()
+        mock_action.id = 10
+        mock_action.engine = "Oracle"
+        mock_action.remediation_rules = [
+            RemediationRule(
+                error_pattern="ORA-\\d+",
+                target_action_id=42,
+                environments=["prod"],  # Only applies to PROD, not DEV
+            )
+        ]
+
+        with patch("app.services.execution_service.execution_repository") as mock_exec_repo, \
+             patch("app.services.execution_service.catalog_repository") as mock_cat_repo:
+            mock_exec_repo.get_by_id = AsyncMock(return_value=mock_execution)
+            mock_exec_repo.get_steps_by_execution_id = AsyncMock(return_value=[mock_step])
+            mock_exec_repo.get_action_with_integration = AsyncMock(return_value={"engine": "Oracle"})
+            mock_cat_repo.get_by_id = AsyncMock(return_value=mock_action)
+            mock_cat_repo.get_actions_with_remediation_rules = AsyncMock(return_value=[mock_action])
+
+            suggestions = await get_remediation_suggestions(1)
+
+            assert suggestions == []  # No match because env is DEV

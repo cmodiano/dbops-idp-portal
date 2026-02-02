@@ -1,7 +1,7 @@
 /**
- * Execution service (Story 4.1).
+ * Execution service (Story 4.1; Story 9.1 remediation).
  *
- * Provides functions to submit executions and fetch inventory data.
+ * Provides functions to submit executions, fetch inventory data, and get remediation suggestions.
  */
 
 import { apiFetch, apiFetchRaw } from './api_client';
@@ -13,6 +13,7 @@ import type {
   StepLogsResponse,
   InventoryItem,
   ExecutionScope,
+  RemediationSuggestion,
 } from '../types/api';
 
 /**
@@ -199,6 +200,24 @@ export async function rejectExecution(
     method: 'POST',
     body,
   });
+}
+
+// === Story 9.1: Remediation Suggestions (FR36) ===
+
+/**
+ * Fetch remediation suggestions for a failed execution (Story 9.1, AC5).
+ *
+ * Returns corrective action suggestions based on error_message matching
+ * against remediation_rules configured on actions.
+ *
+ * @param executionId - Execution ID to get suggestions for
+ * @returns Array of RemediationSuggestion (empty if no match or execution not FAILED)
+ * @throws Error if execution not found (404) or user cannot view it (403)
+ */
+export async function fetchRemediationSuggestions(
+  executionId: number
+): Promise<RemediationSuggestion[]> {
+  return apiFetch<RemediationSuggestion[]>(`/executions/${executionId}/remediation`);
 }
 
 /**

@@ -1221,7 +1221,7 @@ async def approve(
         SET STATUS = :new_status,
             APPROVED_BY = :approver_id,
             APPROVED_AT = SYSTIMESTAMP,
-            APPROVAL_COMMENT = :comment
+            APPROVAL_COMMENT = :approval_comment
         WHERE ID = :execution_id AND STATUS = :current_status
     """
     params = {
@@ -1229,7 +1229,7 @@ async def approve(
         "new_status": ExecutionStatus.SUBMITTED.value,
         "current_status": ExecutionStatus.PENDING_APPROVAL.value,
         "approver_id": approver_id,
-        "comment": comment,
+        "approval_comment": comment,
     }
 
     async with get_connection() as conn:
@@ -1279,7 +1279,7 @@ async def reject(
         SET STATUS = :new_status,
             APPROVED_BY = :rejector_id,
             APPROVED_AT = SYSTIMESTAMP,
-            APPROVAL_COMMENT = :comment,
+            APPROVAL_COMMENT = :approval_comment,
             COMPLETED_AT = SYSTIMESTAMP
         WHERE ID = :execution_id AND STATUS = :current_status
     """
@@ -1288,7 +1288,7 @@ async def reject(
         "new_status": ExecutionStatus.REJECTED.value,
         "current_status": ExecutionStatus.PENDING_APPROVAL.value,
         "rejector_id": rejector_id,
-        "comment": comment,
+        "approval_comment": comment,
     }
 
     async with get_connection() as conn:

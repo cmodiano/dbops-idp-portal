@@ -43,6 +43,8 @@ from app.models.catalog import (
     TagCreate,
     TagResponse,
     normalize_tag_name,
+    RemediationRule,
+    RiskLevel,
 )
 from app.repositories import audit_repository
 from app.repositories.audit_repository import AuditActionType, AuditEntityType
@@ -306,6 +308,66 @@ def _safe_parse_workflow_steps(data: str | None) -> list[WorkflowStep] | None:
         return None
 
 
+def _parse_remediation_rules(data: str | None) -> list[RemediationRule] | None:
+    """Parse remediation_rules JSON CLOB to list of RemediationRule models (Story 9.1, AC4).
+
+    Returns None if data is None (no rules configured).
+    Returns empty list if JSON is empty array.
+    """
+    if data is None:
+        return None
+    try:
+        rules_data = json.loads(data)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid remediation_rules JSON in database: {e}") from e
+    if not isinstance(rules_data, list):
+        raise ValueError("remediation_rules must be a JSON array")
+    out = []
+    for i, r in enumerate(rules_data):
+        if not isinstance(r, dict):
+            raise ValueError(f"remediation_rules[{i}] must be an object")
+        try:
+            out.append(
+                RemediationRule(
+                    error_pattern=r["error_pattern"],
+                    target_action_id=r["target_action_id"],
+                    environments=r.get("environments", []),
+                    auto_trigger=r.get("auto_trigger", False),
+                    risk_level=RiskLevel(r.get("risk_level", "medium")),
+                )
+            )
+        except (KeyError, ValueError) as e:
+            raise ValueError(f"Invalid remediation_rules[{i}]: {e}") from e
+    return out
+
+
+def _safe_parse_remediation_rules(data: str | None) -> list[RemediationRule] | None:
+    """Parse remediation_rules CLOB; on invalid JSON log and return None to avoid 500."""
+    if data is None:
+        return None
+    try:
+        return _parse_remediation_rules(data)
+    except ValueError as e:
+        logger.warning("catalog_repository_invalid_remediation_rules_json", raw=data[:200] if data else None, error=str(e))
+        return None
+
+
+def _remediation_rules_to_json(rules: list[RemediationRule] | None) -> str | None:
+    """Convert list of RemediationRule to JSON string for CLOB storage (Story 9.1, AC4)."""
+    if rules is None:
+        return None
+    return json.dumps([
+        {
+            "error_pattern": r.error_pattern,
+            "target_action_id": r.target_action_id,
+            "environments": r.environments,
+            "auto_trigger": r.auto_trigger,
+            "risk_level": r.risk_level.value,
+        }
+        for r in rules
+    ])
+
+
 def _workflow_steps_to_json(steps: list[WorkflowStep] | None) -> str | None:
     """Convert list of WorkflowStep to JSON string for CLOB storage (Story 5.7, AC2)."""
     if steps is None:
@@ -331,12 +393,14 @@ def _row_to_action_detail(row: tuple, tags: list[str] | None = None) -> ActionDe
     Story 2.23: category removed — use tags instead.
     Story 3.4: documentation_md (FR12).
     Story 5.7: item_type, workflow_steps for workflows.
+    Story 9.1: remediation_rules for auto-remediation.
 
-    Expected row order (16 columns after V027):
+    Expected row order (17 columns after V031):
     0:ID, 1:NAME, 2:DESCRIPTION, 3:ENGINE, 4:PLATFORM,
     5:PARAMETERS_SCHEMA, 6:IMPACT_RULES, 7:DEFAULT_IMPACT_LEVEL,
     8:STATUS, 9:CREATED_BY, 10:CREATED_AT, 11:UPDATED_AT,
-    12:EXECUTION_STEPS, 13:CHANGE_TYPE_CONFIG, 14:DOCUMENTATION_MD, 15:ITEM_TYPE
+    12:EXECUTION_STEPS, 13:CHANGE_TYPE_CONFIG, 14:DOCUMENTATION_MD, 15:ITEM_TYPE,
+    16:REMEDIATION_RULES
     """
     item_type = _parse_item_type(row[15]) if len(row) > 15 else ItemType.ACTION
     steps_data = row[12] if len(row) > 12 else None
@@ -368,6 +432,7 @@ def _row_to_action_detail(row: tuple, tags: list[str] | None = None) -> ActionDe
         change_type_config=_safe_parse_change_type_config(row[13]) if len(row) > 13 else None,
         tags=tags if tags is not None else [],
         documentation_md=row[14] if len(row) > 14 else None,
+        remediation_rules=_safe_parse_remediation_rules(row[16]) if len(row) > 16 else None,
     )
 
 
@@ -651,7 +716,8 @@ async def get_by_id(action_id: int) -> ActionDetail | None:
     query = """
         SELECT ID, NAME, DESCRIPTION, ENGINE, PLATFORM,
                PARAMETERS_SCHEMA, IMPACT_RULES, DEFAULT_IMPACT_LEVEL, STATUS, CREATED_BY,
-               CREATED_AT, UPDATED_AT, EXECUTION_STEPS, CHANGE_TYPE_CONFIG, DOCUMENTATION_MD, ITEM_TYPE
+               CREATED_AT, UPDATED_AT, EXECUTION_STEPS, CHANGE_TYPE_CONFIG, DOCUMENTATION_MD, ITEM_TYPE,
+               REMEDIATION_RULES
         FROM ACTIONS_CATALOG
         WHERE ID = :action_id
     """
@@ -1663,3 +1729,109 @@ async def get_action_impact_level(action_id: int, environment: str) -> str | Non
         impact_level = default_impact_level
 
     return impact_level
+
+
+# === Story 9.1: Remediation Rules (FR36) ===
+
+
+async def get_actions_with_remediation_rules() -> list[ActionDetail]:
+    """Fetch all published actions that have remediation_rules configured (Story 9.1, AC2).
+
+    Used by execution_service.get_remediation_suggestions to find applicable corrective actions.
+
+    Returns:
+        List of ActionDetail for published actions with non-NULL remediation_rules
+    """
+    start_time = time.perf_counter()
+    query = """
+        SELECT ID, NAME, DESCRIPTION, ENGINE, PLATFORM,
+               PARAMETERS_SCHEMA, IMPACT_RULES, DEFAULT_IMPACT_LEVEL, STATUS, CREATED_BY,
+               CREATED_AT, UPDATED_AT, EXECUTION_STEPS, CHANGE_TYPE_CONFIG, DOCUMENTATION_MD, ITEM_TYPE,
+               REMEDIATION_RULES
+        FROM ACTIONS_CATALOG
+        WHERE REMEDIATION_RULES IS NOT NULL
+          AND STATUS = :status
+        ORDER BY NAME
+    """
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, {"status": ActionStatus.PUBLISHED.value})
+        rows = await cursor.fetchall()
+        cursor.close()
+
+    # Batch get tags
+    action_ids = [row[0] for row in rows]
+    tags_map = await get_tags_for_actions(action_ids)
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.debug(
+        "catalog_repository_get_actions_with_remediation_rules",
+        duration_ms=duration_ms,
+        count=len(rows),
+    )
+
+    return [_row_to_action_detail(row, tags=tags_map.get(row[0], [])) for row in rows]
+
+
+async def update_remediation_rules(
+    action_id: int,
+    remediation_rules: list[RemediationRule] | None,
+) -> ActionDetail | None:
+    """Update remediation rules for an action (Story 9.1, AC4).
+
+    Args:
+        action_id: The action ID to update
+        remediation_rules: List of remediation rules, or None to clear
+
+    Returns:
+        ActionDetail if found and updated, None if not found
+    """
+    start_time = time.perf_counter()
+
+    # Check if action exists
+    check_query = """
+        SELECT STATUS FROM ACTIONS_CATALOG WHERE ID = :action_id
+    """
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(check_query, {"action_id": action_id})
+        row = await cursor.fetchone()
+        cursor.close()
+
+    if row is None:
+        logger.debug(
+            "catalog_repository_update_remediation_rules",
+            action_id=action_id,
+            found=False,
+        )
+        return None
+
+    # Update remediation rules (allowed for any status)
+    update_query = """
+        UPDATE ACTIONS_CATALOG
+        SET REMEDIATION_RULES = :remediation_rules,
+            UPDATED_AT = SYSTIMESTAMP
+        WHERE ID = :action_id
+    """
+    params = {
+        "action_id": action_id,
+        "remediation_rules": _remediation_rules_to_json(remediation_rules),
+    }
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(update_query, params)
+        await conn.commit()
+        cursor.close()
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.debug(
+        "catalog_repository_update_remediation_rules",
+        action_id=action_id,
+        rules_count=len(remediation_rules) if remediation_rules else 0,
+        duration_ms=duration_ms,
+    )
+
+    # Fetch and return updated action
+    return await get_by_id(action_id)

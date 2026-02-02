@@ -7,10 +7,12 @@ Orchestrates the execution flow:
 4. Trigger execution on platform
 5. Create ServiceNow change if required (Story 4.5)
 6. Handle errors and update step status
+7. Identify remediation suggestions for failed executions (Story 9.1)
 """
 
 from __future__ import annotations
 
+import re
 import uuid
 from typing import TYPE_CHECKING, Any
 
@@ -19,6 +21,7 @@ import structlog
 from app.adapters import get_platform_adapter
 from app.core.exceptions import PlatformError, ServiceNowError, VaultError
 from app.models.execution import ExecutionStatus, StepStatus, StepType, ExecutionStepCreate
+from app.models.catalog import RemediationSuggestion
 from app.repositories import audit_repository, execution_repository, catalog_repository
 from app.repositories.audit_repository import AuditActionType, AuditEntityType
 from app.services.vault_service import VaultService
@@ -925,3 +928,146 @@ def generate_correlation_id() -> str:
         UUID string for correlation
     """
     return str(uuid.uuid4())
+
+
+# === Story 9.1: Remediation Suggestions (FR36) ===
+
+
+async def get_remediation_suggestions(execution_id: int) -> list[RemediationSuggestion]:
+    """Identify applicable corrective actions for a failed execution (Story 9.1, AC2, AC5).
+
+    Algorithm:
+    1. Load execution + steps (find step with FAILED status)
+    2. Extract error_message, environment, engine from failed step
+    3. Load all published actions with remediation_rules configured
+    4. For each action's rules, match:
+       a. error_pattern regex against error_message
+       b. environment in rule.environments
+    5. Score matches: exact engine match (+10) > partial match (+1)
+    6. Return top 3 suggestions sorted by relevance score
+
+    Args:
+        execution_id: ID of the failed execution
+
+    Returns:
+        List of RemediationSuggestion (max 3), empty if no match or execution not failed
+    """
+    # 1. Load execution
+    execution = await execution_repository.get_by_id(execution_id)
+    if execution is None:
+        logger.debug("get_remediation_suggestions_execution_not_found", execution_id=execution_id)
+        return []
+
+    # Only suggest remediation for FAILED executions
+    if execution.status != ExecutionStatus.FAILED:
+        logger.debug(
+            "get_remediation_suggestions_not_failed",
+            execution_id=execution_id,
+            status=execution.status.value,
+        )
+        return []
+
+    # 2. Get steps and find failed step
+    steps = await execution_repository.get_steps_by_execution_id(execution_id)
+    failed_step = next((s for s in steps if s.status == StepStatus.FAILED), None)
+
+    if failed_step is None or not failed_step.error_message:
+        logger.debug(
+            "get_remediation_suggestions_no_failed_step_or_error",
+            execution_id=execution_id,
+        )
+        return []
+
+    error_message = failed_step.error_message
+    environment = execution.environment.value if hasattr(execution.environment, "value") else str(execution.environment)
+
+    # Get engine from the action
+    action_info = await execution_repository.get_action_with_integration(execution.action_id)
+    engine = action_info.get("engine") if action_info else None
+
+    logger.info(
+        "get_remediation_suggestions_matching",
+        execution_id=execution_id,
+        error_message=error_message[:100] if error_message else None,
+        environment=environment,
+        engine=engine,
+    )
+
+    # 3. Load actions with remediation rules
+    actions_with_rules = await catalog_repository.get_actions_with_remediation_rules()
+
+    if not actions_with_rules:
+        logger.debug("get_remediation_suggestions_no_actions_with_rules")
+        return []
+
+    # 4. Match rules
+    suggestions: list[dict[str, Any]] = []
+
+    for action in actions_with_rules:
+        if not action.remediation_rules:
+            continue
+
+        for rule in action.remediation_rules:
+            # a. Match regex error_pattern
+            try:
+                if not re.search(rule.error_pattern, error_message, re.IGNORECASE):
+                    continue
+            except re.error as e:
+                logger.warning(
+                    "get_remediation_suggestions_invalid_regex",
+                    action_id=action.id,
+                    error_pattern=rule.error_pattern,
+                    error=str(e),
+                )
+                continue
+
+            # b. Check environment
+            if environment.lower() not in [env.lower() for env in rule.environments]:
+                continue
+
+            # c. Score pertinence
+            score = 1  # Base score for match
+            if engine and action.engine and action.engine.value == engine:
+                score += 10  # Bonus for exact engine match
+
+            suggestions.append({
+                "action": action,
+                "rule": rule,
+                "score": score,
+            })
+
+    # 5. Sort by score descending, deduplicate by target_action_id (keep highest score)
+    seen_action_ids: set[int] = set()
+    unique_suggestions: list[dict[str, Any]] = []
+
+    for s in sorted(suggestions, key=lambda x: x["score"], reverse=True):
+        target_action_id = s["rule"].target_action_id
+        if target_action_id not in seen_action_ids:
+            seen_action_ids.add(target_action_id)
+            unique_suggestions.append(s)
+
+    # 6. Return top 3 - fetch target action details
+    top_suggestions = unique_suggestions[:3]
+
+    result = []
+    for s in top_suggestions:
+        target_action_id = s["rule"].target_action_id
+        target_action = await catalog_repository.get_by_id(target_action_id)
+        if target_action:
+            result.append(
+                RemediationSuggestion(
+                    action_id=target_action.id,
+                    action_name=target_action.name,
+                    action_description=target_action.description,
+                    matching_rule=s["rule"],
+                )
+            )
+
+    logger.info(
+        "get_remediation_suggestions_result",
+        execution_id=execution_id,
+        suggestions_count=len(result),
+        action_ids=[r.action_id for r in result],
+    )
+
+    return result

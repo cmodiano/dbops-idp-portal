@@ -38,6 +38,7 @@ import type {
   ExecutionEnvironment,
   ImpactLevel,
   InventoryItem,
+  RemediationSuggestion,
 } from '../../types/api';
 import { submitExecution, fetchInventoryItems } from '../../services/execution_service';
 import { ImpactIndicator } from '../shared/ImpactIndicator';
@@ -92,6 +93,8 @@ export interface ExecutionWizardProps {
   onBackToCatalog?: () => void;
   /** Display variant: 'default' for technical users, 'simplified' for business users (Story 7.2, Task 1.1). */
   variant?: 'default' | 'simplified';
+  /** Callback when a remediation suggestion is clicked (Story 9.1, Task 12.2). */
+  onSuggestionClick?: (suggestion: RemediationSuggestion) => void;
 }
 
 /** Parameter field info extracted from JSON Schema. */
@@ -186,6 +189,7 @@ export function ExecutionWizard({
   onSuccess,
   onBackToCatalog,
   variant = 'default',
+  onSuggestionClick,
 }: ExecutionWizardProps) {
   const { notification } = App.useApp();
 
@@ -782,6 +786,7 @@ export function ExecutionWizard({
             window.location.href = 'mailto:?subject=IDP%20Portal%20-%20Support%20DBA';
           }}
           errorCardVariant={variant === 'simplified' ? 'business' : 'default'}
+          onSuggestionClick={onSuggestionClick}
         />
       </Modal>
     );

@@ -26,6 +26,7 @@ import type {
   ImpactLevel,
   ParameterDefinition,
   ImpactRuleDefinition,
+  RemediationRule,
 } from '../../types/api';
 import { schemaToParameterList, parameterListToSchema } from '../../utils/parametersSchema';
 import { impactRulesToList, listToImpactRules } from '../../utils/impactRulesSchema';
@@ -34,8 +35,9 @@ import { StepsEditor } from './StepsEditor';
 import { ParametersEditor } from './ParametersEditor';
 import { ImpactRulesEditor } from './ImpactRulesEditor';
 import { ChangeTypeConfig } from './ChangeTypeConfig';
+import { RemediationRulesEditor, type RemediationRuleDefinition } from './RemediationRulesEditor';
 import { AdminPreview } from './AdminPreview';
-import { updateActionSteps, getTags, updateActionTags } from '../../services/admin_service';
+import { updateActionSteps, getTags, updateActionTags, updateRemediationRules } from '../../services/admin_service';
 
 const { Text } = Typography;
 
@@ -72,6 +74,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
   const [previewEnvironment, setPreviewEnvironment] = useState<string | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagsOptions, setTagsOptions] = useState<{ value: string; label: string }[]>([]);
+  const [remediationRules, setRemediationRules] = useState<RemediationRuleDefinition[]>([]);
 
   const isEditMode = !!editAction;
   const isMin1280 = useMediaQuery(1280);
@@ -159,6 +162,13 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
       setDefaultImpactLevel(editAction.default_impact_level ?? null);
       setPreviewEnvironment(null);
       setSelectedTags(editAction.tags ?? []);
+      // Story 9.1, Task 6: Load remediation_rules
+      setRemediationRules(
+        (editAction.remediation_rules ?? []).map((r, i) => ({
+          ...r,
+          id: `rule-${i}-${Date.now()}`,
+        }))
+      );
     } else if (!open) {
       form.resetFields();
       setExecutionSteps([]);
@@ -168,6 +178,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
       setDefaultImpactLevel(null);
       setPreviewEnvironment(null);
       setSelectedTags([]);
+      setRemediationRules([]);
       setStepsError(null);
     }
   }, [open, editAction, form]);
@@ -300,6 +311,15 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
 
       if (actionId) {
         await updateActionTags(actionId, { tag_names: selectedTags });
+      }
+
+      // Story 9.1, Task 6: Save remediation rules
+      if (actionId) {
+        // Convert to API format (strip internal id field)
+        const rulesToSave = remediationRules.length > 0
+          ? remediationRules.map(({ id: _id, ...rule }) => rule as RemediationRule)
+          : null;
+        await updateRemediationRules(actionId, rulesToSave);
       }
 
       const done = (result as ActionDetail | ActionResponse) ?? editAction;
@@ -531,6 +551,32 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
                         <ChangeTypeConfig value={changeTypeConfig} onChange={setChangeTypeConfig} />
                       </Form.Item>
                     </>
+                  ),
+                },
+                {
+                  key: 'remediation-rules',
+                  label: (
+                    <Text strong>
+                      Règles de remédiation automatique
+                      {remediationRules.length > 0 && (
+                        <Text type="secondary" style={{ marginLeft: 8 }}>
+                          ({remediationRules.length} règle{remediationRules.length > 1 ? 's' : ''})
+                        </Text>
+                      )}
+                    </Text>
+                  ),
+                  children: (
+                    <Form.Item
+                      label="Règles de remédiation"
+                      tooltip="Configurez des règles pour proposer des actions correctives automatiques lorsque cette action échoue (Story 9.1)."
+                      style={{ marginBottom: 16 }}
+                    >
+                      <RemediationRulesEditor
+                        value={remediationRules}
+                        onChange={setRemediationRules}
+                        currentActionId={editAction?.id}
+                      />
+                    </Form.Item>
                   ),
                 },
               ]}

@@ -14,6 +14,7 @@ import type {
   AdminActionsFilters,
   ActionListResponse,
   AdminAnalytics,
+  RemediationRule,
 } from '../types/api';
 
 /**
@@ -146,4 +147,21 @@ export async function updateActionTags(
  */
 export async function fetchAdminAnalytics(days: number = 90): Promise<AdminAnalytics> {
   return apiFetch<AdminAnalytics>(`/admin/analytics?days=${days}`);
+}
+
+/**
+ * Update remediation rules for an action (Story 9.1, Task 6).
+ * Requires DBOPS profile.
+ *
+ * @param actionId - Action ID
+ * @param rules - Array of remediation rules (or null to clear)
+ */
+export async function updateRemediationRules(
+  actionId: number,
+  rules: RemediationRule[] | null
+): Promise<ActionDetail> {
+  return apiFetch<ActionDetail>(`/admin/actions/${actionId}/remediation-rules`, {
+    method: 'PUT',
+    body: JSON.stringify({ remediation_rules: rules }),
+  });
 }

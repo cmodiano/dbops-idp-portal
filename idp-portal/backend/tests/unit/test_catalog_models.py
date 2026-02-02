@@ -26,6 +26,10 @@ from app.models.catalog import (
     TagResponse,
     ActionTagsUpdateRequest,
     normalize_tag_name,
+    RemediationRule,
+    RemediationSuggestion,
+    RemediationRulesUpdateRequest,
+    RiskLevel,
 )
 
 
@@ -832,3 +836,170 @@ class TestActionTagsUpdateRequest:
 # === Story 2.24: ChangeTypeConfigEntry (replaces action-level change_model_code) ===
 # ChangeTypeConfigEntry validation covered in TestChangeTypeConfigEntry above.
 # ActionCreate no longer has change_model_code; change_type_config is in ExecutionStepsUpdate only.
+
+
+# === Story 9.1: Remediation Rules Models Tests ===
+
+
+class TestRiskLevelEnum:
+    """Tests for RiskLevel enum (Story 9.1, AC4)."""
+
+    def test_risk_level_values(self):
+        """Test RiskLevel enum values."""
+        assert RiskLevel.LOW.value == "low"
+        assert RiskLevel.MEDIUM.value == "medium"
+        assert RiskLevel.HIGH.value == "high"
+
+
+class TestRemediationRuleValidation:
+    """Tests for RemediationRule model validation (Story 9.1, AC4)."""
+
+    def test_valid_remediation_rule_minimal(self):
+        """Test creating remediation rule with minimal required fields."""
+        rule = RemediationRule(
+            error_pattern="ORA-\\d+",
+            target_action_id=42,
+            environments=["dev", "prod"],
+        )
+        assert rule.error_pattern == "ORA-\\d+"
+        assert rule.target_action_id == 42
+        assert rule.environments == ["dev", "prod"]
+        assert rule.auto_trigger is False
+        assert rule.risk_level == RiskLevel.MEDIUM
+
+    def test_valid_remediation_rule_full(self):
+        """Test creating remediation rule with all fields."""
+        rule = RemediationRule(
+            error_pattern="timeout|connection refused",
+            target_action_id=123,
+            environments=["staging", "prod"],
+            auto_trigger=True,
+            risk_level=RiskLevel.HIGH,
+        )
+        assert rule.error_pattern == "timeout|connection refused"
+        assert rule.target_action_id == 123
+        assert rule.auto_trigger is True
+        assert rule.risk_level == RiskLevel.HIGH
+
+    def test_error_pattern_empty_raises_error(self):
+        """Test that empty error_pattern raises validation error."""
+        with pytest.raises(ValueError):
+            RemediationRule(
+                error_pattern="",
+                target_action_id=42,
+                environments=["dev"],
+            )
+
+    def test_error_pattern_too_long_raises_error(self):
+        """Test that error_pattern > 1000 chars raises validation error."""
+        with pytest.raises(ValueError):
+            RemediationRule(
+                error_pattern="x" * 1001,
+                target_action_id=42,
+                environments=["dev"],
+            )
+
+    def test_error_pattern_invalid_regex_raises_error(self):
+        """Test that invalid regex pattern raises validation error."""
+        with pytest.raises(ValueError, match="not a valid regex"):
+            RemediationRule(
+                error_pattern="[invalid(regex",
+                target_action_id=42,
+                environments=["dev"],
+            )
+
+    def test_target_action_id_zero_raises_error(self):
+        """Test that target_action_id <= 0 raises validation error."""
+        with pytest.raises(ValueError):
+            RemediationRule(
+                error_pattern="ORA-\\d+",
+                target_action_id=0,
+                environments=["dev"],
+            )
+
+    def test_target_action_id_negative_raises_error(self):
+        """Test that negative target_action_id raises validation error."""
+        with pytest.raises(ValueError):
+            RemediationRule(
+                error_pattern="ORA-\\d+",
+                target_action_id=-1,
+                environments=["dev"],
+            )
+
+    def test_environments_empty_raises_error(self):
+        """Test that empty environments list raises validation error."""
+        with pytest.raises(ValueError):
+            RemediationRule(
+                error_pattern="ORA-\\d+",
+                target_action_id=42,
+                environments=[],
+            )
+
+
+class TestRemediationSuggestionModel:
+    """Tests for RemediationSuggestion model (Story 9.1, AC5)."""
+
+    def test_remediation_suggestion_creation(self):
+        """Test RemediationSuggestion model creation."""
+        rule = RemediationRule(
+            error_pattern="ORA-\\d+",
+            target_action_id=42,
+            environments=["dev"],
+        )
+        suggestion = RemediationSuggestion(
+            action_id=42,
+            action_name="Restart Database Listener",
+            action_description="Restarts the Oracle database listener service",
+            matching_rule=rule,
+        )
+        assert suggestion.action_id == 42
+        assert suggestion.action_name == "Restart Database Listener"
+        assert suggestion.action_description == "Restarts the Oracle database listener service"
+        assert suggestion.matching_rule == rule
+
+    def test_remediation_suggestion_optional_description(self):
+        """Test RemediationSuggestion with null description."""
+        rule = RemediationRule(
+            error_pattern="timeout",
+            target_action_id=10,
+            environments=["staging"],
+        )
+        suggestion = RemediationSuggestion(
+            action_id=10,
+            action_name="Retry Action",
+            matching_rule=rule,
+        )
+        assert suggestion.action_description is None
+
+
+class TestRemediationRulesUpdateRequest:
+    """Tests for RemediationRulesUpdateRequest model (Story 9.1, Task 6)."""
+
+    def test_valid_update_with_rules(self):
+        """Test valid update with remediation rules."""
+        request = RemediationRulesUpdateRequest(
+            remediation_rules=[
+                RemediationRule(
+                    error_pattern="ORA-\\d+",
+                    target_action_id=42,
+                    environments=["dev", "prod"],
+                ),
+                RemediationRule(
+                    error_pattern="timeout",
+                    target_action_id=10,
+                    environments=["staging"],
+                    risk_level=RiskLevel.LOW,
+                ),
+            ]
+        )
+        assert len(request.remediation_rules) == 2
+
+    def test_valid_update_null_clears_rules(self):
+        """Test that null remediation_rules clears all rules."""
+        request = RemediationRulesUpdateRequest(remediation_rules=None)
+        assert request.remediation_rules is None
+
+    def test_valid_update_empty_list_clears_rules(self):
+        """Test that empty list is allowed (clear all rules)."""
+        request = RemediationRulesUpdateRequest(remediation_rules=[])
+        assert request.remediation_rules == []

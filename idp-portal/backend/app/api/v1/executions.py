@@ -1,10 +1,11 @@
-"""Executions API (Story 4.1, Task 1.1, 1.4 + Story 4.3, Task 3; Story 7.4 Approval Workflow).
+"""Executions API (Story 4.1, Task 1.1, 1.4 + Story 4.3, Task 3; Story 7.4 Approval Workflow; Story 9.1 Remediation).
 
 Provides endpoints for execution submission and retrieval.
 - POST /api/v1/executions: Submit a new execution
 - GET /api/v1/executions/{id}: Get execution by ID
 - GET /api/v1/executions: List user's executions
 - GET /api/v1/executions/{id}/steps: Get execution steps
+- GET /api/v1/executions/{id}/remediation: Get remediation suggestions for failed execution (Story 9.1)
 - POST /api/v1/executions/{id}/approve: DBA approves execution (Story 7.4)
 - POST /api/v1/executions/{id}/reject: DBA rejects execution (Story 7.4)
 - GET /api/v1/executions/pending-approvals: List pending approvals (Story 7.4)
@@ -34,7 +35,7 @@ class ApprovalRequest(BaseModel):
     comment: str | None = Field(default=None, max_length=1000)
 from app.repositories import execution_repository
 from app.services import rbac_service
-from app.services.execution_service import ExecutionService, generate_correlation_id
+from app.services.execution_service import ExecutionService, generate_correlation_id, get_remediation_suggestions
 from app.websocket.execution_ws import get_execution_ws_manager
 from app.websocket.dashboard_ws import get_dashboard_ws_manager
 from app.api.services import get_servicenow_service
@@ -528,6 +529,58 @@ async def get_step_logs(
         completed_at=step.completed_at,
     )
     return {"data": logs.model_dump(mode="json")}
+
+
+@router.get("/{execution_id}/remediation", response_model=None)
+async def get_execution_remediation(
+    execution_id: int,
+    user: UserProfile = Depends(get_current_user),
+) -> dict:
+    """GET /api/v1/executions/{id}/remediation - Get remediation suggestions (Story 9.1, AC5).
+
+    Returns corrective action suggestions for a failed execution.
+    Matches error_message against remediation_rules configured on actions.
+
+    RBAC: Same as GET execution (execution must belong to user or user is DBA/DBOPS).
+
+    Returns:
+        { "data": list[RemediationSuggestion] } - Empty list if no match or execution not FAILED
+
+    Raises:
+        403: If user cannot view this execution
+        404: If execution not found
+    """
+    execution = await execution_repository.get_by_id(execution_id)
+
+    if execution is None:
+        raise NotFoundError(
+            code="EXECUTION_NOT_FOUND",
+            message="Execution introuvable",
+            details={"execution_id": execution_id},
+        )
+
+    if not _can_view_execution(execution.user_id, user):
+        raise ForbiddenError(
+            code="PERMISSION_DENIED",
+            message="Vous n'avez pas la permission de consulter cette execution",
+            details={"execution_id": execution_id},
+        )
+
+    logger.info(
+        "remediation_suggestions_requested",
+        execution_id=execution_id,
+        user_id=user.id,
+    )
+
+    suggestions = await get_remediation_suggestions(execution_id)
+
+    logger.info(
+        "remediation_suggestions_returned",
+        execution_id=execution_id,
+        suggestions_count=len(suggestions),
+    )
+
+    return {"data": [s.model_dump(mode="json") for s in suggestions]}
 
 
 @router.post("/{execution_id}/approve", status_code=status.HTTP_200_OK, response_model=None)

@@ -19,6 +19,8 @@ from app.models.catalog import (
     ChangeTypeConfigEntry,
     StatusTransition,
     InvalidTransitionError,
+    RemediationRule,
+    RiskLevel,
 )
 from app.repositories import catalog_repository
 from app.repositories.catalog_repository import InvalidStateError
@@ -1584,3 +1586,84 @@ class TestDocumentationMd:
         assert "documentation_md" in captured_params
         assert captured_params["documentation_md"] == "# Create PDB\n\nThis action creates a PDB."
         assert result.documentation_md is not None
+
+
+# === Story 9.1: Remediation Rules Parse/Serialize Tests ===
+
+
+class TestRemediationRulesJsonConversions:
+    """Tests for remediation_rules JSON conversion helpers (Story 9.1, Task 14)."""
+
+    def test_parse_remediation_rules_valid(self):
+        """Test parsing valid remediation_rules JSON."""
+        json_str = '[{"error_pattern": "ORA-\\\\d+", "target_action_id": 42, "environments": ["dev", "prod"], "auto_trigger": false, "risk_level": "medium"}]'
+        result = catalog_repository._parse_remediation_rules(json_str)
+        assert len(result) == 1
+        assert result[0].error_pattern == "ORA-\\d+"
+        assert result[0].target_action_id == 42
+        assert result[0].environments == ["dev", "prod"]
+        assert result[0].auto_trigger is False
+        assert result[0].risk_level == RiskLevel.MEDIUM
+
+    def test_parse_remediation_rules_multiple(self):
+        """Test parsing multiple remediation rules."""
+        json_str = '''[
+            {"error_pattern": "ORA-\\\\d+", "target_action_id": 42, "environments": ["prod"], "auto_trigger": false, "risk_level": "high"},
+            {"error_pattern": "timeout", "target_action_id": 10, "environments": ["dev", "staging"], "auto_trigger": true, "risk_level": "low"}
+        ]'''
+        result = catalog_repository._parse_remediation_rules(json_str)
+        assert len(result) == 2
+        assert result[0].target_action_id == 42
+        assert result[1].target_action_id == 10
+        assert result[1].auto_trigger is True
+
+    def test_parse_remediation_rules_none(self):
+        """Test parsing None returns None."""
+        result = catalog_repository._parse_remediation_rules(None)
+        assert result is None
+
+    def test_safe_parse_remediation_rules_empty_string(self):
+        """Test safe parsing empty string returns None (invalid JSON)."""
+        result = catalog_repository._safe_parse_remediation_rules("")
+        assert result is None
+
+    def test_parse_remediation_rules_empty_array(self):
+        """Test parsing empty array returns empty list."""
+        result = catalog_repository._parse_remediation_rules("[]")
+        assert result == []
+
+    def test_safe_parse_remediation_rules_invalid_json(self):
+        """Test safe parsing invalid JSON returns None."""
+        result = catalog_repository._safe_parse_remediation_rules("not valid json")
+        assert result is None
+
+    def test_safe_parse_remediation_rules_invalid_structure(self):
+        """Test safe parsing invalid structure returns None."""
+        result = catalog_repository._safe_parse_remediation_rules('{"not": "an_array"}')
+        assert result is None
+
+    def test_remediation_rules_to_json_with_rules(self):
+        """Test serializing remediation rules to JSON."""
+        rules = [
+            RemediationRule(
+                error_pattern="ORA-\\d+",
+                target_action_id=42,
+                environments=["dev", "prod"],
+            )
+        ]
+        result = catalog_repository._remediation_rules_to_json(rules)
+        assert result is not None
+        parsed = json.loads(result)
+        assert len(parsed) == 1
+        assert parsed[0]["error_pattern"] == "ORA-\\d+"
+        assert parsed[0]["target_action_id"] == 42
+
+    def test_remediation_rules_to_json_none(self):
+        """Test serializing None returns None."""
+        result = catalog_repository._remediation_rules_to_json(None)
+        assert result is None
+
+    def test_remediation_rules_to_json_empty(self):
+        """Test serializing empty list returns empty JSON array."""
+        result = catalog_repository._remediation_rules_to_json([])
+        assert result == "[]"

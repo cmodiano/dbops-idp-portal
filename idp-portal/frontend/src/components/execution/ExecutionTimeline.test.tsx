@@ -3,6 +3,7 @@
  *
  * HIGH-2 FIX: Added integration tests for wizard→timeline flow.
  * MEDIUM-4 FIX: Added tests for useWebSocket hook behavior.
+ * Story 9.1: Added tests for remediation suggestions integration (Task 17).
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -10,6 +11,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ExecutionTimeline } from './ExecutionTimeline';
 import { useWebSocket } from '../../hooks/useWebSocket';
+import { useRemediationSuggestions } from '../../hooks/useRemediationSuggestions';
 
 vi.mock('../../hooks/useWebSocket', () => ({
   useWebSocket: vi.fn(() => ({
@@ -21,15 +23,31 @@ vi.mock('../../hooks/useWebSocket', () => ({
   })),
 }));
 
+vi.mock('../../hooks/useRemediationSuggestions', () => ({
+  useRemediationSuggestions: vi.fn(() => ({
+    suggestions: null,
+    loading: false,
+    error: null,
+    refetch: vi.fn(),
+  })),
+}));
+
 vi.mock('../../contexts/AuthContext', () => ({
   useAuth: () => ({ accessToken: 'test-token' }),
 }));
 
 const mockUseWebSocket = useWebSocket as ReturnType<typeof vi.fn>;
+const mockUseRemediationSuggestions = useRemediationSuggestions as ReturnType<typeof vi.fn>;
 
 describe('ExecutionTimeline', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseRemediationSuggestions.mockReturnValue({
+      suggestions: null,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
   });
 
   it('renders empty state when no steps in historical mode', () => {
@@ -551,6 +569,269 @@ describe('ExecutionTimeline', () => {
 
       await user.click(screen.getByText('Vault'));
       expect(screen.getByRole('button', { name: /Voir logs détaillés/ })).toBeInTheDocument();
+    });
+  });
+
+  // Story 9.1: Remediation suggestions integration tests (Task 17)
+  describe('Story 9.1 remediation suggestions', () => {
+    const mockSuggestions = [
+      {
+        action_id: 42,
+        action_name: 'Fix Database Issue',
+        action_description: 'Restarts the database listener',
+        matching_rule: {
+          error_pattern: 'ORA-\\d+',
+          target_action_id: 42,
+          environments: ['prod'],
+          auto_trigger: false,
+          risk_level: 'medium' as const,
+        },
+      },
+      {
+        action_id: 10,
+        action_name: 'Retry Connection',
+        action_description: null,
+        matching_rule: {
+          error_pattern: 'timeout',
+          target_action_id: 10,
+          environments: ['dev', 'prod'],
+          auto_trigger: true,
+          risk_level: 'low' as const,
+        },
+      },
+    ];
+
+    it('calls useRemediationSuggestions with executionId and status', () => {
+      mockUseWebSocket.mockReturnValue({
+        steps: [
+          {
+            id: 101,
+            execution_id: 42,
+            step_order: 1,
+            step_name: 'Platform',
+            step_type: 'platform',
+            status: 'FAILED',
+            started_at: '2026-01-30T10:00:00',
+            completed_at: '2026-01-30T10:00:30',
+            output: null,
+            platform_job_id: null,
+            error_message: 'ORA-12154: TNS:could not resolve service name',
+          },
+        ],
+        execution: {
+          id: 42,
+          status: 'FAILED',
+        },
+        loading: false,
+        error: null,
+        lastMessage: null,
+      });
+
+      render(<ExecutionTimeline executionId={42} mode="realtime" />);
+
+      expect(mockUseRemediationSuggestions).toHaveBeenCalledWith(42, 'FAILED');
+    });
+
+    it('passes remediation suggestions to StructuredErrorCard when execution is FAILED', () => {
+      mockUseWebSocket.mockReturnValue({
+        steps: [
+          {
+            id: 101,
+            execution_id: 42,
+            step_order: 1,
+            step_name: 'Platform',
+            step_type: 'platform',
+            status: 'FAILED',
+            started_at: '2026-01-30T10:00:00',
+            completed_at: '2026-01-30T10:00:30',
+            output: null,
+            platform_job_id: null,
+            error_message: 'ORA-12154: TNS:could not resolve service name',
+          },
+        ],
+        execution: {
+          id: 42,
+          status: 'FAILED',
+        },
+        loading: false,
+        error: null,
+        lastMessage: null,
+      });
+
+      mockUseRemediationSuggestions.mockReturnValue({
+        suggestions: mockSuggestions,
+        loading: false,
+        error: null,
+        refetch: vi.fn(),
+      });
+
+      render(<ExecutionTimeline executionId={42} mode="realtime" />);
+
+      // Verify remediation suggestions section is shown in StructuredErrorCard
+      expect(screen.getByText('Actions correctives suggérées')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Fix Database Issue/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Retry Connection/i })).toBeInTheDocument();
+    });
+
+    it('passes suggestionsLoading to StructuredErrorCard', () => {
+      mockUseWebSocket.mockReturnValue({
+        steps: [
+          {
+            id: 101,
+            execution_id: 42,
+            step_order: 1,
+            step_name: 'Platform',
+            step_type: 'platform',
+            status: 'FAILED',
+            started_at: '2026-01-30T10:00:00',
+            completed_at: '2026-01-30T10:00:30',
+            output: null,
+            platform_job_id: null,
+            error_message: 'Connection timeout',
+          },
+        ],
+        execution: {
+          id: 42,
+          status: 'FAILED',
+        },
+        loading: false,
+        error: null,
+        lastMessage: null,
+      });
+
+      mockUseRemediationSuggestions.mockReturnValue({
+        suggestions: null,
+        loading: true,
+        error: null,
+        refetch: vi.fn(),
+      });
+
+      render(<ExecutionTimeline executionId={42} mode="realtime" />);
+
+      // When loading, StructuredErrorCard should show the loading state
+      expect(screen.getByText('Actions correctives suggérées')).toBeInTheDocument();
+    });
+
+    it('calls onSuggestionClick when a suggestion is clicked', async () => {
+      const user = userEvent.setup();
+      const onSuggestionClick = vi.fn();
+
+      mockUseWebSocket.mockReturnValue({
+        steps: [
+          {
+            id: 101,
+            execution_id: 42,
+            step_order: 1,
+            step_name: 'Platform',
+            step_type: 'platform',
+            status: 'FAILED',
+            started_at: '2026-01-30T10:00:00',
+            completed_at: '2026-01-30T10:00:30',
+            output: null,
+            platform_job_id: null,
+            error_message: 'Connection timeout',
+          },
+        ],
+        execution: {
+          id: 42,
+          status: 'FAILED',
+        },
+        loading: false,
+        error: null,
+        lastMessage: null,
+      });
+
+      mockUseRemediationSuggestions.mockReturnValue({
+        suggestions: mockSuggestions,
+        loading: false,
+        error: null,
+        refetch: vi.fn(),
+      });
+
+      render(
+        <ExecutionTimeline
+          executionId={42}
+          mode="realtime"
+          onSuggestionClick={onSuggestionClick}
+        />
+      );
+
+      await user.click(screen.getByRole('button', { name: /Fix Database Issue/i }));
+
+      expect(onSuggestionClick).toHaveBeenCalledTimes(1);
+      expect(onSuggestionClick).toHaveBeenCalledWith(mockSuggestions[0]);
+    });
+
+    it('does not show remediation suggestions when execution is not FAILED', () => {
+      mockUseWebSocket.mockReturnValue({
+        steps: [
+          {
+            id: 101,
+            execution_id: 42,
+            step_order: 1,
+            step_name: 'Platform',
+            step_type: 'platform',
+            status: 'COMPLETED',
+            started_at: '2026-01-30T10:00:00',
+            completed_at: '2026-01-30T10:00:30',
+            output: null,
+            platform_job_id: null,
+            error_message: null,
+          },
+        ],
+        execution: {
+          id: 42,
+          status: 'COMPLETED',
+          started_at: '2026-01-30T10:00:00',
+          completed_at: '2026-01-30T10:00:30',
+        },
+        loading: false,
+        error: null,
+        lastMessage: null,
+      });
+
+      render(<ExecutionTimeline executionId={42} mode="realtime" />);
+
+      expect(screen.queryByText('Actions correctives suggérées')).not.toBeInTheDocument();
+    });
+
+    it('does not show suggestions section when no suggestions and not loading', () => {
+      mockUseWebSocket.mockReturnValue({
+        steps: [
+          {
+            id: 101,
+            execution_id: 42,
+            step_order: 1,
+            step_name: 'Platform',
+            step_type: 'platform',
+            status: 'FAILED',
+            started_at: '2026-01-30T10:00:00',
+            completed_at: '2026-01-30T10:00:30',
+            output: null,
+            platform_job_id: null,
+            error_message: 'Connection timeout',
+          },
+        ],
+        execution: {
+          id: 42,
+          status: 'FAILED',
+        },
+        loading: false,
+        error: null,
+        lastMessage: null,
+      });
+
+      mockUseRemediationSuggestions.mockReturnValue({
+        suggestions: [],
+        loading: false,
+        error: null,
+        refetch: vi.fn(),
+      });
+
+      render(<ExecutionTimeline executionId={42} mode="realtime" />);
+
+      // StructuredErrorCard should not show remediation section when no suggestions
+      expect(screen.queryByText('Actions correctives suggérées')).not.toBeInTheDocument();
     });
   });
 });

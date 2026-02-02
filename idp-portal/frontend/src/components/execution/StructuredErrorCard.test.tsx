@@ -153,4 +153,133 @@ describe('StructuredErrorCard', () => {
       expect(pourquoiSection).toHaveAttribute('aria-labelledby');
     });
   });
+
+  // Story 9.1: Remediation suggestions tests (Task 16)
+  describe('Remediation Suggestions (Story 9.1)', () => {
+    const mockSuggestions = [
+      {
+        action_id: 42,
+        action_name: 'Fix Database Issue',
+        action_description: 'Restarts the database listener',
+        matching_rule: {
+          error_pattern: 'ORA-\\d+',
+          target_action_id: 42,
+          environments: ['prod'],
+          auto_trigger: false,
+          risk_level: 'medium' as const,
+        },
+      },
+      {
+        action_id: 10,
+        action_name: 'Retry Connection',
+        action_description: null,
+        matching_rule: {
+          error_pattern: 'timeout',
+          target_action_id: 10,
+          environments: ['dev', 'prod'],
+          auto_trigger: true,
+          risk_level: 'low' as const,
+        },
+      },
+    ];
+
+    it('renders remediation suggestions section when suggestions provided', () => {
+      render(
+        <StructuredErrorCard
+          {...defaultProps}
+          remediationSuggestions={mockSuggestions}
+        />
+      );
+      expect(screen.getByText('Actions correctives suggérées')).toBeInTheDocument();
+      expect(screen.getByTestId('remediation-suggestions-section')).toBeInTheDocument();
+    });
+
+    it('renders suggestion buttons with action names', () => {
+      render(
+        <StructuredErrorCard
+          {...defaultProps}
+          remediationSuggestions={mockSuggestions}
+        />
+      );
+      expect(screen.getByRole('button', { name: /Fix Database Issue/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Retry Connection/i })).toBeInTheDocument();
+    });
+
+    it('does not render suggestions section when no suggestions', () => {
+      render(<StructuredErrorCard {...defaultProps} />);
+      expect(screen.queryByText('Actions correctives suggérées')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('remediation-suggestions-section')).not.toBeInTheDocument();
+    });
+
+    it('does not render suggestions section when empty array', () => {
+      render(
+        <StructuredErrorCard
+          {...defaultProps}
+          remediationSuggestions={[]}
+        />
+      );
+      expect(screen.queryByText('Actions correctives suggérées')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('remediation-suggestions-section')).not.toBeInTheDocument();
+    });
+
+    it('calls onSuggestionClick when suggestion button is clicked', async () => {
+      const onSuggestionClick = vi.fn();
+      render(
+        <StructuredErrorCard
+          {...defaultProps}
+          remediationSuggestions={mockSuggestions}
+          onSuggestionClick={onSuggestionClick}
+        />
+      );
+      await userEvent.click(screen.getByRole('button', { name: /Fix Database Issue/i }));
+      expect(onSuggestionClick).toHaveBeenCalledTimes(1);
+      expect(onSuggestionClick).toHaveBeenCalledWith(mockSuggestions[0]);
+    });
+
+    it('renders loading skeleton when suggestionsLoading is true', () => {
+      render(
+        <StructuredErrorCard
+          {...defaultProps}
+          suggestionsLoading={true}
+        />
+      );
+      expect(screen.getByText('Actions correctives suggérées')).toBeInTheDocument();
+      // Skeleton buttons are rendered
+      expect(screen.queryByTestId('remediation-suggestions-section')).not.toBeInTheDocument();
+    });
+
+    it('does not render loading skeleton when not loading and no suggestions', () => {
+      render(
+        <StructuredErrorCard
+          {...defaultProps}
+          suggestionsLoading={false}
+        />
+      );
+      expect(screen.queryByText('Actions correctives suggérées')).not.toBeInTheDocument();
+    });
+
+    it('first suggestion button has primary danger style', () => {
+      render(
+        <StructuredErrorCard
+          {...defaultProps}
+          remediationSuggestions={mockSuggestions}
+        />
+      );
+      const firstButton = screen.getByTestId('remediation-suggestion-42');
+      expect(firstButton).toHaveClass('ant-btn-primary');
+      expect(firstButton).toHaveClass('ant-btn-dangerous');
+    });
+
+    it('suggestion buttons have accessible labels', () => {
+      render(
+        <StructuredErrorCard
+          {...defaultProps}
+          remediationSuggestions={mockSuggestions}
+        />
+      );
+      expect(
+        screen.getByRole('button', { name: /Exécuter action corrective: Fix Database Issue/i })
+      ).toBeInTheDocument();
+    });
+  });
 });

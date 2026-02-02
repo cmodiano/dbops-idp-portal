@@ -60,7 +60,7 @@ import {
   type FavoriteEntry,
   type RecentAction,
 } from '../services/catalog_service';
-import type { ActionPreviewData, ActionStats, ImpactLevel } from '../types/api';
+import type { ActionPreviewData, ActionStats, ImpactLevel, RemediationSuggestion } from '../types/api';
 
 const { Title, Text } = Typography;
 
@@ -321,6 +321,26 @@ export default function CatalogPage() {
     loadData();
   }, [loadData]);
 
+  // Story 9.1, Task 12.4: Handle remediation suggestion click - load suggested action and open wizard
+  const handleRemediationSuggestionClick = useCallback(async (suggestion: RemediationSuggestion) => {
+    try {
+      // Close current execution view
+      setActiveExecutionId(null);
+
+      // Load the suggested action details
+      const detailResponse = await fetchCatalogActionById(suggestion.action_id);
+      setSelectedActionDetail(detailResponse.data);
+      setSelectedActionCanExecute(detailResponse.can_execute);
+      setSelectedActionEnvs(detailResponse.allowed_environments);
+
+      // Keep wizard open with new action
+      setExecutionWizardOpen(true);
+    } catch (error) {
+      console.error('Failed to load suggested action:', error);
+      message.error('Erreur lors du chargement de l\'action corrective');
+    }
+  }, [message]);
+
   // Render action card with favorite button (disabled when not authenticated — Task 5.1)
   // Story 7.1: Use 'business' variant for business profiles (simplified descriptions)
   const renderActionCard = (action: CatalogAction) => {
@@ -561,7 +581,7 @@ export default function CatalogPage() {
         ) : null}
       </Drawer>
 
-      {/* ExecutionWizard + Timeline (Story 4.1, 4.6, Task 4; Story 7.2, Task 4.1) */}
+      {/* ExecutionWizard + Timeline (Story 4.1, 4.6, Task 4; Story 7.2, Task 4.1; Story 9.1, Task 12) */}
       <ExecutionWizard
         open={executionWizardOpen}
         action={selectedActionDetail}
@@ -574,6 +594,7 @@ export default function CatalogPage() {
         onSuccess={handleExecutionSuccess}
         onBackToCatalog={handleBackToCatalog}
         variant={isBusinessProfile ? 'simplified' : 'default'}
+        onSuggestionClick={handleRemediationSuggestionClick}
       />
     </div>
   );

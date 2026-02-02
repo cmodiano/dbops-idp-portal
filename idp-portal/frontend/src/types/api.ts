@@ -101,6 +101,8 @@ export interface ActionDetail extends ActionResponse {
   /** Story 2.24: per-env { required, change_model_code }. */
   change_type_config: Record<string, ChangeTypeConfigEntry> | null;
   /* documentation_md is inherited from ActionResponse (Story 3.4) */
+  /** Story 9.1: Remediation rules for auto-suggesting corrective actions. */
+  remediation_rules?: RemediationRule[] | null;
 }
 
 // === Execution Steps Types (Story 2.2; Story 2.7 connector_type) ===
@@ -458,6 +460,38 @@ export interface StepLogsResponse {
   error_message: string | null;
   started_at: string | null;
   completed_at: string | null;
+}
+
+// === Remediation Types (Story 9.1, FR36) ===
+
+/** Risk level for remediation rules. */
+export type RiskLevel = 'low' | 'medium' | 'high';
+
+/** Remediation rule configuration (Story 9.1, AC4).
+ * Defines when an action should be suggested as corrective for a failed execution. */
+export interface RemediationRule {
+  /** Python regex pattern to match against error_message in EXECUTION_STEPS. */
+  error_pattern: string;
+  /** ID of the corrective action in ACTIONS_CATALOG. */
+  target_action_id: number;
+  /** List of environments where this rule applies (e.g., ['dev', 'staging', 'prod']). */
+  environments: string[];
+  /** Reserved for Story 9.3 (auto-remediation). False for Story 9.1. */
+  auto_trigger: boolean;
+  /** Risk level of the corrective action (low, medium, high). */
+  risk_level: RiskLevel;
+}
+
+/** Remediation suggestion returned by GET /executions/{id}/remediation (Story 9.1, AC5). */
+export interface RemediationSuggestion {
+  /** ID of the suggested corrective action. */
+  action_id: number;
+  /** Name of the corrective action for display. */
+  action_name: string;
+  /** Description of the corrective action (may be null). */
+  action_description: string | null;
+  /** The rule that matched (for debugging/transparency). */
+  matching_rule: RemediationRule;
 }
 
 // === Inventory Types (Story 4.1, Task 2) ===
