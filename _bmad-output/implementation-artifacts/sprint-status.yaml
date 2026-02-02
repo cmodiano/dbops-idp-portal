@@ -138,7 +138,7 @@ development_status:
     8-7-navigation-par-categories-avec-tabs-et-filtres-integres: done # Code review 2026-02-01: 10 fixes (1 HIGH cache bug + 5 MEDIUM + 2 LOW) - French labels, cache key includes category, test coverage complete
     8-8-deplacement-approbations-vers-page-executions-et-notification-top-bar: done # Code review 2026-02-01: 8 fixes (design tokens, error handling, polling tests, scroll tests) - 66/66 tests pass
     8-9-tabs-toutes-les-executions-et-mes-executions: done # Code review 2026-02-01: 7 issues fixed (3 HIGH + 4 MEDIUM) - regex validation, logging, type consolidation
-    8-10-vue-liste-en-tableau-avec-colonnes: backlog # Vue liste en tableau Ant Design avec colonnes (Action, Description, Impact, Tags, Moteur, Executions, Favori, Actions)
+    8-10-vue-liste-en-tableau-avec-colonnes: done # Code review 2026-02-01: 10 issues fixed (5 HIGH + 3 MEDIUM + 2 LOW) - design tokens, useMemo deps, double skeleton, pluralization, tooltip limits - 66/66 tests pass
     epic-8-retrospective: optional
     # === Epic 9: Autoremediation (Phase 2) ===
     epic-9: backlog

@@ -37,6 +37,7 @@ import {
 } from '@ant-design/icons';
 import { ActionCard, type ActionCardProps } from '../components/catalog/ActionCard';
 import { ActionDrawerPreview } from '../components/catalog/ActionDrawerPreview';
+import { ActionTable } from '../components/catalog/ActionTable';
 import { ExecutionWizard } from '../components/catalog/ExecutionWizard';
 import { TagCloud } from '../components/catalog/TagCloud';
 import { CategoryTabs, type CategoryKey } from '../components/catalog/CategoryTabs';
@@ -353,16 +354,18 @@ export default function CatalogPage() {
     );
   };
 
-  // Loading skeleton: cards in grid mode, rows in list mode (AC9)
+  // Loading skeleton: cards in grid mode, table skeleton in list mode (AC9, AC11 Story 8.10)
   const renderSkeleton = () =>
     viewMode === 'list' ? (
-      <Space direction="vertical" style={{ width: '100%' }}>
-        {Array.from({ length: 6 }).map((_, i) => (
-          <Card key={i}>
-            <Skeleton active paragraph={{ rows: 1 }} />
-          </Card>
-        ))}
-      </Space>
+      /* Story 8.10 AC11: Table loading skeleton - ActionTable handles this via loading prop */
+      <ActionTable
+        actions={[]}
+        favorites={favorites}
+        loading={true}
+        onActionClick={handleActionClick}
+        onToggleFavorite={handleToggleFavorite}
+        showFavoriteButton={isAuthenticated}
+      />
     ) : (
       <Row gutter={[16, 16]}>
         {Array.from({ length: 6 }).map((_, i) => (
@@ -474,23 +477,33 @@ export default function CatalogPage() {
         {loading ? 'Chargement…' : `${filteredActions.length} action${filteredActions.length !== 1 ? 's' : ''}`}
       </Text>
 
-      {/* Actions Grid/List */}
-      {loading ? (
-        renderSkeleton()
-      ) : filteredActions.length === 0 ? (
+      {/* Actions Grid/List (Story 8.10: table view for list mode) */}
+      {/* H4 fix: Removed duplicate skeleton for table view - ActionTable handles its own loading state */}
+      {filteredActions.length === 0 && !loading ? (
         renderEmpty()
       ) : viewMode === 'grid' ? (
-        <Row gutter={[16, 16]}>
-          {filteredActions.map((action) => (
-            <Col key={action.id} xs={24} sm={12} lg={8} xl={6}>
-              {renderActionCard(action)}
-            </Col>
-          ))}
-        </Row>
+        loading ? (
+          renderSkeleton()
+        ) : (
+          <Row gutter={[16, 16]}>
+            {filteredActions.map((action) => (
+              <Col key={action.id} xs={24} sm={12} lg={8} xl={6}>
+                {renderActionCard(action)}
+              </Col>
+            ))}
+          </Row>
+        )
       ) : (
-        <Space direction="vertical" style={{ width: '100%' }}>
-          {filteredActions.map((action) => renderActionCard(action))}
-        </Space>
+        /* Story 8.10: ActionTable replaces Space+cards for list view */
+        /* H4 fix: ActionTable manages its own loading skeleton */
+        <ActionTable
+          actions={filteredActions}
+          favorites={favorites}
+          loading={loading}
+          onActionClick={handleActionClick}
+          onToggleFavorite={handleToggleFavorite}
+          showFavoriteButton={isAuthenticated}
+        />
       )}
 
       {/* "Mes actions" recent section */}

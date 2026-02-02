@@ -1,10 +1,12 @@
 /**
- * Tests for CatalogPage (Story 3.1).
+ * Tests for CatalogPage (Story 3.1, Story 8.10).
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { App } from 'antd';
+import { ThemeProvider } from '../contexts/ThemeContext';
 import CatalogPage from './CatalogPage';
 import * as catalogService from '../services/catalog_service';
 
@@ -13,6 +15,17 @@ vi.mock('../services/catalog_service');
 vi.mock('../contexts/AuthContext', () => ({
   useAuth: () => ({ isAuthenticated: true, isBusinessProfile: false }),
 }));
+
+// Render with ThemeProvider and App context (required for ActionTable and message/notification)
+function renderWithTheme(ui: React.ReactElement) {
+  // Mock App.useApp for message API
+  vi.spyOn(App, 'useApp').mockReturnValue({
+    message: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), loading: vi.fn() },
+    notification: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), open: vi.fn() },
+    modal: { confirm: vi.fn(), info: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn() },
+  } as unknown as ReturnType<typeof App.useApp>);
+  return render(<ThemeProvider>{ui}</ThemeProvider>);
+}
 
 const mockActions: catalogService.CatalogAction[] = [
   {
@@ -85,10 +98,23 @@ describe('CatalogPage', () => {
     vi.mocked(catalogService.fetchRecentActions).mockResolvedValue(mockRecentActions);
     vi.mocked(catalogService.addFavorite).mockResolvedValue(undefined);
     vi.mocked(catalogService.removeFavorite).mockResolvedValue(undefined);
+    vi.mocked(catalogService.fetchActionStats).mockResolvedValue(null); // Story 8.1 stats mock
+
+    // Mock matchMedia for ThemeProvider
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes('dark') ? false : true,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
   });
 
   it('renders page title and tabs (AC1, AC6; Story 2.23: categories removed)', async () => {
-    render(<CatalogPage />);
+    renderWithTheme(<CatalogPage />);
 
     await waitFor(() => {
       expect(screen.getByText('Catalogue')).toBeInTheDocument();
@@ -102,7 +128,7 @@ describe('CatalogPage', () => {
   });
 
   it('displays action cards with execution_count (AC3)', async () => {
-    render(<CatalogPage />);
+    renderWithTheme(<CatalogPage />);
 
     await waitFor(() => {
       expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
@@ -114,7 +140,7 @@ describe('CatalogPage', () => {
   });
 
   it('toggles between grid and list view (AC2)', async () => {
-    render(<CatalogPage />);
+    renderWithTheme(<CatalogPage />);
 
     await waitFor(() => {
       expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
@@ -132,7 +158,7 @@ describe('CatalogPage', () => {
 
   it('persists view mode in localStorage (AC2)', async () => {
     localStorage.setItem('catalog-view-mode', 'list');
-    render(<CatalogPage />);
+    renderWithTheme(<CatalogPage />);
 
     await waitFor(() => {
       expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
@@ -150,7 +176,7 @@ describe('CatalogPage', () => {
   });
 
   it('displays action count (AC6)', async () => {
-    render(<CatalogPage />);
+    renderWithTheme(<CatalogPage />);
 
     await waitFor(() => {
       expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
@@ -168,7 +194,7 @@ describe('CatalogPage', () => {
       return mockActions;
     });
 
-    render(<CatalogPage />);
+    renderWithTheme(<CatalogPage />);
 
     await waitFor(() => {
       expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
@@ -198,7 +224,7 @@ describe('CatalogPage', () => {
   });
 
   it('shows favorite indicator for favorited actions (AC4)', async () => {
-    render(<CatalogPage />);
+    renderWithTheme(<CatalogPage />);
 
     await waitFor(() => {
       expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
@@ -210,7 +236,7 @@ describe('CatalogPage', () => {
   });
 
   it('fetches data without category filter (Story 2.23: categories removed)', async () => {
-    render(<CatalogPage />);
+    renderWithTheme(<CatalogPage />);
 
     await waitFor(() => {
       // Story 2.23: No category parameter sent (categories removed, use tags instead)
@@ -231,7 +257,7 @@ describe('CatalogPage', () => {
   });
 
   it('shows "Mes actions" with favorites and recent (AC5)', async () => {
-    render(<CatalogPage />);
+    renderWithTheme(<CatalogPage />);
 
     await waitFor(() => {
       expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
@@ -249,7 +275,7 @@ describe('CatalogPage', () => {
   // Story 3.2 Tests
   describe('Story 3.2 - Drawer', () => {
     it('opens drawer when clicking on action card (AC1)', async () => {
-      render(<CatalogPage />);
+      renderWithTheme(<CatalogPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
@@ -264,7 +290,7 @@ describe('CatalogPage', () => {
     });
 
     it('fetches action detail when drawer opens (AC1, AC6)', async () => {
-      render(<CatalogPage />);
+      renderWithTheme(<CatalogPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
@@ -285,7 +311,7 @@ describe('CatalogPage', () => {
         () => new Promise((resolve) => setTimeout(() => resolve(mockActionDetail), 100))
       );
 
-      render(<CatalogPage />);
+      renderWithTheme(<CatalogPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
@@ -302,7 +328,7 @@ describe('CatalogPage', () => {
     });
 
     it('closes drawer on Escape key (AC2)', async () => {
-      render(<CatalogPage />);
+      renderWithTheme(<CatalogPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
@@ -324,7 +350,7 @@ describe('CatalogPage', () => {
     });
 
     it('returns focus to clicked card after drawer closes (AC2)', async () => {
-      render(<CatalogPage />);
+      renderWithTheme(<CatalogPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
@@ -358,7 +384,7 @@ describe('CatalogPage', () => {
         allowed_environments: [],
       });
 
-      render(<CatalogPage />);
+      renderWithTheme(<CatalogPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
@@ -374,7 +400,7 @@ describe('CatalogPage', () => {
     });
 
     it('drawer displays Execute button enabled when canExecute is true (AC3)', async () => {
-      render(<CatalogPage />);
+      renderWithTheme(<CatalogPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
@@ -403,7 +429,7 @@ describe('CatalogPage', () => {
     });
 
     it('displays TagCloud with tags from API (AC1, AC12)', async () => {
-      render(<CatalogPage />);
+      renderWithTheme(<CatalogPage />);
 
       await waitFor(() => {
         expect(screen.getByText('provisioning (5)')).toBeInTheDocument();
@@ -413,7 +439,7 @@ describe('CatalogPage', () => {
     });
 
     it('does not display TagCloud on "Mes actions" tab (AC10)', async () => {
-      render(<CatalogPage />);
+      renderWithTheme(<CatalogPage />);
 
       await waitFor(() => {
         expect(screen.getByText('provisioning (5)')).toBeInTheDocument();
@@ -435,7 +461,7 @@ describe('CatalogPage', () => {
         return mockActions;
       });
 
-      render(<CatalogPage />);
+      renderWithTheme(<CatalogPage />);
 
       await waitFor(() => {
         expect(screen.getByText('patching (3)')).toBeInTheDocument();
@@ -458,7 +484,7 @@ describe('CatalogPage', () => {
         return mockActions;
       });
 
-      render(<CatalogPage />);
+      renderWithTheme(<CatalogPage />);
 
       await waitFor(() => {
         expect(screen.getByText('2 actions')).toBeInTheDocument();
@@ -473,7 +499,7 @@ describe('CatalogPage', () => {
     });
 
     it('favorite button has aria-label for accessibility (AC8)', async () => {
-      render(<CatalogPage />);
+      renderWithTheme(<CatalogPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
@@ -488,7 +514,7 @@ describe('CatalogPage', () => {
     });
 
     it('shows tooltip on favorite button hover (AC7)', async () => {
-      render(<CatalogPage />);
+      renderWithTheme(<CatalogPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
@@ -505,7 +531,7 @@ describe('CatalogPage', () => {
     });
 
     it('favorite button shows distinct visual state (AC9)', async () => {
-      render(<CatalogPage />);
+      renderWithTheme(<CatalogPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
@@ -526,7 +552,7 @@ describe('CatalogPage', () => {
         () => new Promise((resolve) => setTimeout(() => resolve(mockActions), 200))
       );
 
-      render(<CatalogPage />);
+      renderWithTheme(<CatalogPage />);
 
       await waitFor(() => {
         expect(screen.getByText('2 actions')).toBeInTheDocument();
@@ -542,6 +568,145 @@ describe('CatalogPage', () => {
       await waitFor(() => {
         expect(counterRegion).toBeInTheDocument();
         expect(counterRegion?.textContent).toMatch(/Chargement…|2 actions/);
+      });
+    });
+  });
+
+  // Story 8.10: Table View for List Mode
+  describe('Story 8.10 - Table View', () => {
+    beforeEach(() => {
+      localStorage.removeItem('catalog-view-mode');
+    });
+
+    afterEach(() => {
+      localStorage.removeItem('catalog-view-mode');
+    });
+
+    it('displays ActionTable when viewMode is list (AC1)', async () => {
+      localStorage.setItem('catalog-view-mode', 'list');
+      renderWithTheme(<CatalogPage />);
+
+      await waitFor(() => {
+        // Table should be rendered (not cards)
+        expect(screen.getByRole('table')).toBeInTheDocument();
+      });
+    });
+
+    it('table receives filteredActions data (AC1)', async () => {
+      localStorage.setItem('catalog-view-mode', 'list');
+      renderWithTheme(<CatalogPage />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('table')).toBeInTheDocument();
+        // Actions should be displayed in table rows
+        expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
+        expect(screen.getByText('Patch Database')).toBeInTheDocument();
+      });
+    });
+
+    it('table shows execution count formatted (AC6)', async () => {
+      localStorage.setItem('catalog-view-mode', 'list');
+      renderWithTheme(<CatalogPage />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('table')).toBeInTheDocument();
+        // Execution count should be formatted
+        expect(screen.getByText('42 exécutions')).toBeInTheDocument();
+        expect(screen.getByText('15 exécutions')).toBeInTheDocument();
+      });
+    });
+
+    it('table shows loading skeleton during fetch (AC11)', async () => {
+      localStorage.setItem('catalog-view-mode', 'list');
+      vi.mocked(catalogService.fetchCatalogActions).mockImplementation(
+        () => new Promise((resolve) => setTimeout(() => resolve(mockActions), 500))
+      );
+
+      renderWithTheme(<CatalogPage />);
+
+      await waitFor(() => {
+        // Table with loading state should show spinner
+        expect(screen.getByRole('table')).toBeInTheDocument();
+        const spinner = document.querySelector('.ant-spin');
+        expect(spinner).toBeInTheDocument();
+      });
+    });
+
+    it('clicking table row opens drawer (AC8)', async () => {
+      localStorage.setItem('catalog-view-mode', 'list');
+      renderWithTheme(<CatalogPage />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('table')).toBeInTheDocument();
+      });
+
+      // Click on action name in table
+      const actionName = screen.getByText('Create PDB Oracle');
+      await userEvent.click(actionName);
+
+      await waitFor(() => {
+        expect(catalogService.fetchCatalogActionById).toHaveBeenCalledWith(1);
+      });
+    });
+
+    it('toggle favorite from table works (AC7)', async () => {
+      localStorage.setItem('catalog-view-mode', 'list');
+      renderWithTheme(<CatalogPage />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('table')).toBeInTheDocument();
+      });
+
+      // Find and click favorite button in table
+      const favoriteButtons = screen.getAllByLabelText(/favoris/i);
+      expect(favoriteButtons.length).toBeGreaterThan(0);
+
+      // Click to toggle (action 1 is favorited)
+      await userEvent.click(favoriteButtons[0]);
+
+      await waitFor(() => {
+        expect(catalogService.removeFavorite).toHaveBeenCalledWith(1);
+      });
+    });
+
+    it('table shows favorite indicators (AC7)', async () => {
+      localStorage.setItem('catalog-view-mode', 'list');
+      renderWithTheme(<CatalogPage />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('table')).toBeInTheDocument();
+        // Favorite buttons should be present
+        const favoriteButtons = screen.getAllByRole('button', { name: /favoris/i });
+        expect(favoriteButtons.length).toBeGreaterThan(0);
+      });
+    });
+
+    it('switching between grid and list preserves data (AC2)', async () => {
+      renderWithTheme(<CatalogPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
+      });
+
+      // Start in grid mode (default)
+      expect(screen.queryByRole('table')).not.toBeInTheDocument();
+
+      // Switch to list
+      const listButton = screen.getByLabelText('Vue liste');
+      await userEvent.click(listButton);
+
+      await waitFor(() => {
+        expect(screen.getByRole('table')).toBeInTheDocument();
+        expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
+      });
+
+      // Switch back to grid
+      const gridButton = screen.getByLabelText('Vue grille');
+      await userEvent.click(gridButton);
+
+      await waitFor(() => {
+        expect(screen.queryByRole('table')).not.toBeInTheDocument();
+        expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
       });
     });
   });
