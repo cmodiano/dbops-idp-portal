@@ -48,10 +48,21 @@ export function useRemediationContext(
       setError(null);
       const result = await fetchRemediationContext(executionId);
       setContext(result);
-    } catch (err) {
-      console.error('Failed to fetch remediation context:', err);
-      setError(err instanceof Error ? err : new Error('Unknown error'));
-      setContext(null);
+    } catch (err: any) {
+      // Story 9-2 code-review fix: Better error handling for 404/403
+      if (err.status === 404) {
+        console.warn('Execution not found for remediation context');
+        setContext({ has_remediation: false, successful_remediation: false, remediation_actions: [] });
+        setError(null); // Not an error, just no context
+      } else if (err.status === 403) {
+        console.error('Permission denied for remediation context:', err);
+        setError(new Error('Accès refusé'));
+        setContext(null);
+      } else {
+        console.error('Failed to fetch remediation context:', err);
+        setError(err instanceof Error ? err : new Error('Erreur inconnue'));
+        setContext(null);
+      }
     } finally {
       setLoading(false);
     }
@@ -59,8 +70,10 @@ export function useRemediationContext(
 
   useEffect(() => {
     // Fetch context when executionId or status changes
+    // Story 9-2 code-review fix: Use direct deps to avoid unnecessary re-fetches
     fetchContext();
-  }, [fetchContext]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [executionId, executionStatus]);
 
   // Reset context when status changes from FAILED to something else
   useEffect(() => {

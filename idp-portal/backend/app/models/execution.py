@@ -10,7 +10,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, computed_field
 
 
 class ExecutionStatus(str, Enum):
@@ -112,6 +112,8 @@ class ExecutionResponse(BaseModel):
     # Story 9.2: Remediation linking
     parent_execution_id: int | None = None
 
+    # Story 9-2 code-review fix: Use computed_field for proper serialization
+    @computed_field
     @property
     def rejection_reason(self) -> str | None:
         """Alias for approval_comment when status is REJECTED."""

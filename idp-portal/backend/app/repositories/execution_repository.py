@@ -2392,6 +2392,10 @@ async def get_children_executions(parent_id: int) -> list[ExecutionResponse]:
     Returns:
         List of ExecutionResponse ordered by created_at DESC (most recent first)
     """
+    # Story 9-2 code-review fix: Defensive validation
+    if not isinstance(parent_id, int) or parent_id <= 0:
+        raise ValueError(f"Invalid parent_id: {parent_id}")
+
     start_time = time.perf_counter()
     query = """
         SELECT E.ID, E.ACTION_ID, E.USER_ID, E.ENVIRONMENT, E.PARAMETERS,

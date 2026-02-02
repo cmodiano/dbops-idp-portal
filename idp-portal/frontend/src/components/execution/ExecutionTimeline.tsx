@@ -8,8 +8,8 @@
  */
 
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, MinusOutlined, ClockCircleOutlined, StopOutlined, LinkOutlined, WarningOutlined } from '@ant-design/icons';
-import { Spin, Typography, Alert, Drawer, Button, Tooltip, Tag, Card, Space } from 'antd';
+import { CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, MinusOutlined, ClockCircleOutlined, LinkOutlined, WarningOutlined } from '@ant-design/icons';
+import { Spin, Typography, Alert, Drawer, Button, Tooltip, Tag, Card, Space, Skeleton } from 'antd';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useRemediationSuggestions } from '../../hooks/useRemediationSuggestions';
 import { useRemediationContext } from '../../hooks/useRemediationContext';
@@ -78,7 +78,7 @@ export function ExecutionTimeline({
   );
 
   // Story 9.2, Task 17: Fetch remediation context for failed executions
-  const { context: remediationContext } = useRemediationContext(
+  const { context: remediationContext, loading: remediationLoading } = useRemediationContext(
     executionId ?? null,
     execution?.status ?? null
   );
@@ -248,8 +248,15 @@ export function ExecutionTimeline({
         </div>
       )}
 
+      {/* Story 9.2 code-review fix: Show loading skeleton while fetching remediation context */}
+      {execution?.status === 'FAILED' && remediationLoading && (
+        <Card style={{ marginBottom: 16 }} title="Chargement du contexte de remédiation...">
+          <Skeleton active />
+        </Card>
+      )}
+
       {/* Story 9.2, Task 17: Display remediation context section for failed executions */}
-      {execution?.status === 'FAILED' && remediationContext?.has_remediation && (
+      {execution?.status === 'FAILED' && !remediationLoading && remediationContext?.has_remediation && (
         <Card
           style={{ marginBottom: 16 }}
           title={

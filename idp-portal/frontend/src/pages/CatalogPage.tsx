@@ -328,11 +328,14 @@ export default function CatalogPage() {
   // Story 9.1, Task 12.4; Story 9.2, Task 19: Handle remediation suggestion click - load suggested action and open wizard
   const handleRemediationSuggestionClick = useCallback(async (suggestion: RemediationSuggestion) => {
     try {
-      // Story 9.2, Task 19: Capture the current execution as parent before resetting
-      const currentParentId = activeExecutionId;
+      // Story 9.2 code-review fix: Use functional state update to avoid race condition
+      let capturedParentId: number | null = null;
 
-      // Close current execution view
-      setActiveExecutionId(null);
+      // Close current execution view and capture parent ID atomically
+      setActiveExecutionId((prev) => {
+        capturedParentId = prev;
+        return null;
+      });
 
       // Load the suggested action details
       const detailResponse = await fetchCatalogActionById(suggestion.action_id);
@@ -340,8 +343,8 @@ export default function CatalogPage() {
       setSelectedActionCanExecute(detailResponse.can_execute);
       setSelectedActionEnvs(detailResponse.allowed_environments);
 
-      // Story 9.2, Task 19: Set parent execution ID for remediation linking
-      setParentExecutionId(currentParentId);
+      // Story 9.2 code-review fix: Use captured parent ID from functional update
+      setParentExecutionId(capturedParentId);
 
       // Keep wizard open with new action
       setExecutionWizardOpen(true);

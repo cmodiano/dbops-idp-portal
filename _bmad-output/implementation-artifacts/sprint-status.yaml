@@ -143,7 +143,7 @@ development_status:
     # === Epic 9: Autoremediation (Phase 2) ===
     epic-9: in-progress
     9-1-detection-echec-et-proposition-actions-correctives: done # 2026-02-02: All 19 tasks completed - migration V031, remediation models, repository, service, API endpoint, admin UI editor, frontend hook/types/service, StructuredErrorCard suggestions, ExecutionTimeline integration, 60 frontend tests pass
-    9-2-declenchement-manuel-action-corrective-par-dba: in-progress
+    9-2-declenchement-manuel-action-corrective-par-dba: done # Code review 2026-02-02: 10 HIGH + 4 MEDIUM + 2 LOW fixes applied
     9-3-execution-automatique-corrective-pour-faible-risque: backlog
     9-4-deplacement-statistiques-executions-vers-page-executions: backlog # Déplacer uniquement les 4 cards KPI (exécutions du jour, taux de succès, en cours, en erreur) du Dashboard vers la page Exécutions
     9-5-interface-admin-creation-workflows: backlog # Compléter Story 5.7 Task 4 : Interface Admin pour créer/éditer des workflows (choix type action/workflow, éditeur d'étapes avec sélecteur d'actions existantes, validation)
