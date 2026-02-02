@@ -20,6 +20,7 @@ from app.models.scheduled_execution import (
     ScheduledExecutionStatus,
     ScheduledExecutionCreateResult,
     ScheduledExecutionWithAction,
+    ScheduledExecutionListItem,
 )
 
 logger = structlog.get_logger()
@@ -45,6 +46,7 @@ async def create_scheduled_execution(
     environment: str,
     parameters: dict[str, Any] | None,
     scheduled_at: datetime,
+    correlation_id: str | None = None,
 ) -> ScheduledExecutionCreateResult:
     """Create a scheduled execution record (Story 11.3, AC1).
 
@@ -63,11 +65,12 @@ async def create_scheduled_execution(
         - HIGH-2: Foreign key constraints provide TOCTOU protection
     """
     start_time = time.perf_counter()
+    # HIGH-1 FIX: Store correlation_id for AC10 request tracing
     query = """
         INSERT INTO SCHEDULED_EXECUTIONS
-        (ACTION_ID, USER_ID, ENVIRONMENT, PARAMETERS, SCHEDULED_AT, STATUS)
+        (ACTION_ID, USER_ID, ENVIRONMENT, PARAMETERS, SCHEDULED_AT, STATUS, CORRELATION_ID)
         VALUES
-        (:action_id, :user_id, :environment, :parameters, :scheduled_at, :status)
+        (:action_id, :user_id, :environment, :parameters, :scheduled_at, :status, :correlation_id)
         RETURNING ID, CREATED_AT INTO :out_id, :out_created_at
     """
     params = {
@@ -77,6 +80,7 @@ async def create_scheduled_execution(
         "parameters": _json_to_str(parameters),
         "scheduled_at": scheduled_at,
         "status": ScheduledExecutionStatus.PENDING.value,
+        "correlation_id": correlation_id,  # HIGH-1 FIX
     }
 
     # MEDIUM-4 FIX: Add comprehensive error handling
@@ -257,3 +261,226 @@ async def get_action_parameters_schema(action_id: int) -> dict[str, Any] | None:
     )
 
     return schema
+
+
+async def list_scheduled_executions(
+    user_id: int | None = None,
+    status: str | None = None,
+    action_id: int | None = None,
+    scheduled_from: datetime | None = None,
+    scheduled_to: datetime | None = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[ScheduledExecutionListItem]:
+    """List scheduled executions with filters and enrichment (Story 11.6, AC2, AC3, AC7-9).
+
+    Args:
+        user_id: Filter by user ID (None = all users for DBOPS)
+        status: Filter by status (pending, executed, cancelled)
+        action_id: Filter by action ID
+        scheduled_from: Filter scheduled_at >= scheduled_from
+        scheduled_to: Filter scheduled_at <= scheduled_to
+        limit: Max results to return
+        offset: Results offset for pagination
+
+    Returns:
+        List of ScheduledExecutionListItem with action_name and user_name enriched
+    """
+    start_time = time.perf_counter()
+
+    query = """
+        SELECT
+            SE.ID AS SCHEDULED_EXECUTION_ID,
+            SE.ACTION_ID,
+            A.NAME AS ACTION_NAME,
+            SE.USER_ID,
+            U.DISPLAY_NAME AS USER_NAME,
+            SE.ENVIRONMENT,
+            SE.SCHEDULED_AT,
+            SE.STATUS,
+            SE.CREATED_AT,
+            SE.PARAMETERS,
+            SE.CORRELATION_ID,
+            SE.EXECUTION_ID
+        FROM SCHEDULED_EXECUTIONS SE
+        INNER JOIN ACTIONS_CATALOG A ON SE.ACTION_ID = A.ID
+        INNER JOIN USERS U ON SE.USER_ID = U.ID
+        WHERE 1=1
+    """
+
+    params: dict[str, Any] = {}
+
+    if user_id is not None:
+        query += " AND SE.USER_ID = :user_id"
+        params["user_id"] = user_id
+
+    if status is not None:
+        query += " AND SE.STATUS = :status"
+        params["status"] = status
+
+    if action_id is not None:
+        query += " AND SE.ACTION_ID = :action_id"
+        params["action_id"] = action_id
+
+    if scheduled_from is not None:
+        query += " AND SE.SCHEDULED_AT >= :scheduled_from"
+        params["scheduled_from"] = scheduled_from
+
+    if scheduled_to is not None:
+        query += " AND SE.SCHEDULED_AT <= :scheduled_to"
+        params["scheduled_to"] = scheduled_to
+
+    query += " ORDER BY SE.SCHEDULED_AT ASC"
+    query += f" OFFSET {offset} ROWS FETCH NEXT {limit} ROWS ONLY"
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
+        rows = await cursor.fetchall()
+        cursor.close()
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.info(
+        "scheduled_execution_repository_list",
+        duration_ms=duration_ms,
+        user_id=user_id,
+        status=status,
+        action_id=action_id,
+        scheduled_from=scheduled_from.isoformat() if scheduled_from else None,
+        scheduled_to=scheduled_to.isoformat() if scheduled_to else None,
+        result_count=len(rows),
+    )
+
+    results: list[ScheduledExecutionListItem] = []
+    for row in rows:
+        # Columns: 0:ID, 1:ACTION_ID, 2:ACTION_NAME, 3:USER_ID, 4:USER_NAME,
+        # 5:ENVIRONMENT, 6:SCHEDULED_AT, 7:STATUS, 8:CREATED_AT, 9:PARAMETERS,
+        # 10:CORRELATION_ID (HIGH-1 FIX), 11:EXECUTION_ID (HIGH-2 FIX)
+        results.append(
+            ScheduledExecutionListItem(
+                scheduled_execution_id=row[0],
+                action_id=row[1],
+                action_name=row[2],
+                user_id=row[3],
+                user_name=row[4] or "Unknown",
+                environment=row[5],
+                scheduled_at=row[6],
+                status=ScheduledExecutionStatus(row[7]),
+                created_at=row[8],
+                parameters=_str_to_json(row[9]),
+                correlation_id=row[10],  # HIGH-1 FIX: AC10 requires correlation_id
+                execution_id=row[11],  # HIGH-2 FIX: AC10 link to effective execution
+            )
+        )
+
+    return results
+
+
+async def count_scheduled_executions(
+    user_id: int | None = None,
+    status: str | None = None,
+    action_id: int | None = None,
+    scheduled_from: datetime | None = None,
+    scheduled_to: datetime | None = None,
+) -> int:
+    """Count scheduled executions with filters (Story 11.6 - pagination).
+
+    Args:
+        Same as list_scheduled_executions
+
+    Returns:
+        Total count matching filters
+    """
+    start_time = time.perf_counter()
+
+    query = """
+        SELECT COUNT(*)
+        FROM SCHEDULED_EXECUTIONS SE
+        WHERE 1=1
+    """
+
+    params: dict[str, Any] = {}
+
+    if user_id is not None:
+        query += " AND SE.USER_ID = :user_id"
+        params["user_id"] = user_id
+
+    if status is not None:
+        query += " AND SE.STATUS = :status"
+        params["status"] = status
+
+    if action_id is not None:
+        query += " AND SE.ACTION_ID = :action_id"
+        params["action_id"] = action_id
+
+    if scheduled_from is not None:
+        query += " AND SE.SCHEDULED_AT >= :scheduled_from"
+        params["scheduled_from"] = scheduled_from
+
+    if scheduled_to is not None:
+        query += " AND SE.SCHEDULED_AT <= :scheduled_to"
+        params["scheduled_to"] = scheduled_to
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
+        row = await cursor.fetchone()
+        cursor.close()
+
+    count = row[0] if row else 0
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.debug(
+        "scheduled_execution_repository_count",
+        duration_ms=duration_ms,
+        count=count,
+    )
+
+    return count
+
+
+async def update_status(
+    scheduled_execution_id: int,
+    new_status: str,
+) -> bool:
+    """Update scheduled execution status (Story 11.6, AC5).
+
+    Args:
+        scheduled_execution_id: ID of the scheduled execution
+        new_status: New status to set (cancelled)
+
+    Returns:
+        True if updated, False if not found
+    """
+    start_time = time.perf_counter()
+
+    query = """
+        UPDATE SCHEDULED_EXECUTIONS
+        SET STATUS = :new_status, UPDATED_AT = SYSDATE
+        WHERE ID = :scheduled_execution_id
+    """
+
+    params = {
+        "scheduled_execution_id": scheduled_execution_id,
+        "new_status": new_status,
+    }
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
+        rowcount = cursor.rowcount
+        await conn.commit()
+        cursor.close()
+
+    updated = rowcount > 0
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.info(
+        "scheduled_execution_repository_update_status",
+        duration_ms=duration_ms,
+        scheduled_execution_id=scheduled_execution_id,
+        new_status=new_status,
+        updated=updated,
+    )
+
+    return updated

@@ -175,3 +175,24 @@ class ScheduledExecutionWithAction(BaseModel):
     status: ScheduledExecutionStatus
     created_at: datetime
     updated_at: datetime | None = None
+
+
+class ScheduledExecutionListItem(BaseModel):
+    """List item for scheduled executions with user info (Story 11.6, AC3, AC10).
+
+    Used for the admin list view with enriched action and user data.
+    HIGH-1 FIX: Added correlation_id for AC10 (details modal requirement).
+    HIGH-2 FIX: Added execution_id for AC10 (link to effective execution when status=executed).
+    """
+    scheduled_execution_id: int
+    action_id: int
+    action_name: str
+    user_id: int
+    user_name: str
+    environment: str
+    scheduled_at: datetime
+    status: ScheduledExecutionStatus
+    created_at: datetime
+    parameters: dict[str, Any] | None = None
+    correlation_id: str | None = None  # HIGH-1 FIX: AC10 requires correlation_id in details modal
+    execution_id: int | None = None  # HIGH-2 FIX: AC10 requires link to effective execution if status=executed

@@ -28,6 +28,7 @@ import { ProfileImportModal } from '../components/admin/ProfileImportModal';
 import { IntegrationsTable } from '../components/admin/IntegrationsTable';
 import { IntegrationForm } from '../components/admin/IntegrationForm';
 import { AdminAnalyticsDashboard } from '../components/admin/analytics';
+import ScheduledExecutionsPage from '../components/admin/ScheduledExecutionsPage';
 import { createAction, getAction, getAdminActions, updateAction, updateActionStatus } from '../services/admin_service';
 import { getProfiles, getProfile, deleteProfile, exportProfilesYaml } from '../services/profiles_service';
 import { getIntegrations, getIntegration, createIntegration, updateIntegration, deleteIntegration } from '../services/integrations_service';
@@ -543,6 +544,11 @@ export default function AdminPage() {
                 <AdminAnalyticsDashboard />
               </Card>
             ),
+          },
+          {
+            key: 'scheduled-executions',
+            label: 'Exécutions planifiées',
+            children: <ScheduledExecutionsPage />,
           },
         ]}
       />

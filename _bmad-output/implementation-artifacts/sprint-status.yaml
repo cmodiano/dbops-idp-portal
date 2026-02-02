@@ -162,7 +162,7 @@ development_status:
     11-1-modele-donnees-scheduled-executions-et-recurrence: done # Table scheduled_executions + recurring_patterns (one-time vs recurring) - next_execution_date pour scheduler externe; code-review 2026-02-02: 7 issues fixed (2 HIGH + 4 MEDIUM + 1 LOW) - index composite optimisé, commentaires enrichis
     11-3-api-creer-execution-planifiee-one-time: done # Code review 2026-02-02: 10 issues fixed (3 HIGH + 4 MEDIUM + 3 LOW) - Schema mutation bug, correlation_id leak, timezone validation enforced, nested object validation, DB error handling, validation logging, timezone handling documented - 19/19 tests pass
     11-5-ui-scheduler-dans-wizard-execution: done # Code review 2026-02-02: 10 issues fixed (3 HIGH + 5 MEDIUM + 2 LOW) - date validation, UTC display, onSuccess, accessibility, console logs - 45/45 tests pass
-    11-6-liste-executions-planifiees-et-annulation: backlog # Page admin : voir/annuler les executions scheduled
+    11-6-liste-executions-planifiees-et-annulation: done # Code review complete - 5 issues fixed (4 HIGH, 1 MEDIUM) - AC10 correlation_id & execution_id added
     11-7-patterns-recurrence-simples-daily-weekly: backlog # Support récurrence basique (tous les jours, toutes les semaines)
     11-8-cron-expressions-pour-recurrence-avancee: backlog # Support expressions cron complètes pour power users
     11-10-api-integration-scheduler-externe: backlog # GET /api/v1/scheduled-executions/pending - endpoint pour scheduler externe (Control-M/Django) récupérer schedules à exécuter

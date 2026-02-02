@@ -818,3 +818,60 @@ export interface ScheduledExecutionResponse {
   created_at: string;
   correlation_id: string;
 }
+
+/** Filters for GET /scheduled-executions (Story 11.6, AC7-AC9). */
+export interface ScheduledExecutionFilters {
+  /** Filter by status (pending, executed, cancelled). */
+  status?: ScheduledExecutionStatus;
+  /** Filter by action ID. */
+  action_id?: number;
+  /** Filter by minimum scheduled_at date (ISO 8601). */
+  scheduled_from?: string;
+  /** Filter by maximum scheduled_at date (ISO 8601). */
+  scheduled_to?: string;
+}
+
+/** List item for scheduled executions with enriched user info (Story 11.6, AC3, AC10).
+ * HIGH-1 FIX: Added correlation_id for AC10 (details modal requirement).
+ * HIGH-2 FIX: Added execution_id for AC10 (link to effective execution when status=executed).
+ */
+export interface ScheduledExecutionListItem {
+  scheduled_execution_id: number;
+  action_id: number;
+  action_name: string;
+  user_id: number;
+  user_name: string;
+  environment: ExecutionEnvironment;
+  /** ISO 8601 datetime (UTC). */
+  scheduled_at: string;
+  status: ScheduledExecutionStatus;
+  /** ISO 8601 datetime (UTC). */
+  created_at: string;
+  parameters: Record<string, unknown> | null;
+  /** HIGH-1 FIX: Correlation ID for request tracing (AC10). */
+  correlation_id?: string | null;
+  /** HIGH-2 FIX: ID of the effective execution if status=executed (AC10). */
+  execution_id?: number | null;
+}
+
+/** Response from GET /scheduled-executions (Story 11.6, AC3). */
+export interface ScheduledExecutionListResponse {
+  data: ScheduledExecutionListItem[];
+  pagination: {
+    page: number;
+    page_size: number;
+    total_count: number;
+    total_pages: number;
+  };
+}
+
+/** Response from PATCH /scheduled-executions/{id} (Story 11.6, AC5). */
+export interface ScheduledExecutionCancelResponse {
+  scheduled_execution_id: number;
+  action_id: number;
+  action_name: string;
+  environment: ExecutionEnvironment;
+  status: ScheduledExecutionStatus;
+  scheduled_at: string;
+  created_at: string;
+}

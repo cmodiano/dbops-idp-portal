@@ -1,6 +1,6 @@
-"""Tests for scheduled executions API endpoint (Story 11.3, Task 9).
+"""Tests for scheduled executions API endpoint (Story 11.3, Task 9; Story 11.6).
 
-Tests POST /api/v1/scheduled-executions:
+Tests POST /api/v1/scheduled-executions (Story 11.3):
 - Success case with valid parameters (AC1)
 - Error validation: past date (AC2)
 - Permission denied (AC3)
@@ -8,6 +8,20 @@ Tests POST /api/v1/scheduled-executions:
 - Action not found (AC5)
 - Audit log creation (AC6)
 - Enriched response with action name (AC7)
+
+Tests GET /api/v1/scheduled-executions (Story 11.6):
+- List scheduled executions with RBAC (AC2)
+- Filter by status (AC7)
+- Filter by action_id (AC8)
+- Filter by date range (AC9)
+- Enriched with action_name and user_name (AC3)
+
+Tests PATCH /api/v1/scheduled-executions/{id} (Story 11.6):
+- Cancel pending scheduled execution (AC5)
+- Error: not found (AC5)
+- Error: not pending status (AC5)
+- Error: permission denied for DBA canceling others' (AC5)
+- Audit log for cancellation (AC5)
 """
 
 import pytest
@@ -21,6 +35,7 @@ from app.models.scheduled_execution import (
     ScheduledExecutionStatus,
     ScheduledExecutionCreateResult,
     ScheduledExecutionWithAction,
+    ScheduledExecutionListItem,
 )
 
 
@@ -377,3 +392,421 @@ class TestCreateScheduledExecution:
             )
 
         assert response.status_code == status.HTTP_201_CREATED
+
+
+# ============================================================================
+# Story 11.6: List and Cancel Scheduled Executions
+# ============================================================================
+
+
+@pytest.fixture
+def mock_auth_dbops():
+    """Mock authentication for DBOPS profile (can see all scheduled executions)."""
+    from app.api.deps import get_current_user
+    from app.models.auth import UserProfile
+
+    user = UserProfile(
+        id=2,
+        username="test_dbops",
+        display_name="Test DBOPS",
+        profile="dbops",
+    )
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    yield user
+    app.dependency_overrides.pop(get_current_user, None)
+
+
+class TestListScheduledExecutions:
+    """Tests for GET /api/v1/scheduled-executions (Story 11.6)."""
+
+    @pytest.mark.asyncio
+    async def test_list_scheduled_executions_dba_sees_own(self, client, mock_auth):
+        """GET /scheduled-executions DBA sees only own executions (AC2)."""
+        future_date = datetime.now(timezone.utc) + timedelta(days=30)
+
+        with patch("app.api.v1.scheduled_executions.scheduled_execution_repository.count_scheduled_executions", new_callable=AsyncMock) as mock_count, \
+             patch("app.api.v1.scheduled_executions.scheduled_execution_repository.list_scheduled_executions", new_callable=AsyncMock) as mock_list:
+
+            mock_count.return_value = 2
+            mock_list.return_value = [
+                ScheduledExecutionListItem(
+                    scheduled_execution_id=1,
+                    action_id=1,
+                    action_name="Patching Oracle",
+                    user_id=1,  # Same as mock_auth user
+                    user_name="Test DBA",
+                    environment="prod",
+                    scheduled_at=future_date,
+                    status=ScheduledExecutionStatus.PENDING,
+                    created_at=datetime.now(timezone.utc),
+                ),
+                ScheduledExecutionListItem(
+                    scheduled_execution_id=2,
+                    action_id=2,
+                    action_name="Restart Database",
+                    user_id=1,  # Same as mock_auth user
+                    user_name="Test DBA",
+                    environment="dev",
+                    scheduled_at=future_date + timedelta(days=1),
+                    status=ScheduledExecutionStatus.PENDING,
+                    created_at=datetime.now(timezone.utc),
+                ),
+            ]
+
+            response = await client.get("/api/v1/scheduled-executions")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert "data" in data
+        assert len(data["data"]) == 2
+        assert "pagination" in data
+        assert data["pagination"]["total_count"] == 2
+
+        # Verify user_id filter was passed (DBA sees only own)
+        mock_list.assert_called_once()
+        call_kwargs = mock_list.call_args[1]
+        assert call_kwargs["user_id"] == mock_auth.id
+
+    @pytest.mark.asyncio
+    async def test_list_scheduled_executions_dbops_sees_all(self, client, mock_auth_dbops):
+        """GET /scheduled-executions DBOPS sees all executions (AC2)."""
+        future_date = datetime.now(timezone.utc) + timedelta(days=30)
+
+        with patch("app.api.v1.scheduled_executions.scheduled_execution_repository.count_scheduled_executions", new_callable=AsyncMock) as mock_count, \
+             patch("app.api.v1.scheduled_executions.scheduled_execution_repository.list_scheduled_executions", new_callable=AsyncMock) as mock_list:
+
+            mock_count.return_value = 3
+            mock_list.return_value = [
+                ScheduledExecutionListItem(
+                    scheduled_execution_id=1,
+                    action_id=1,
+                    action_name="Patching Oracle",
+                    user_id=1,  # Different user
+                    user_name="Other DBA",
+                    environment="prod",
+                    scheduled_at=future_date,
+                    status=ScheduledExecutionStatus.PENDING,
+                    created_at=datetime.now(timezone.utc),
+                ),
+                ScheduledExecutionListItem(
+                    scheduled_execution_id=2,
+                    action_id=2,
+                    action_name="Restart Database",
+                    user_id=2,  # Same as DBOPS
+                    user_name="Test DBOPS",
+                    environment="dev",
+                    scheduled_at=future_date + timedelta(days=1),
+                    status=ScheduledExecutionStatus.PENDING,
+                    created_at=datetime.now(timezone.utc),
+                ),
+            ]
+
+            response = await client.get("/api/v1/scheduled-executions")
+
+        assert response.status_code == status.HTTP_200_OK
+
+        # Verify user_id filter was None (DBOPS sees all)
+        mock_list.assert_called_once()
+        call_kwargs = mock_list.call_args[1]
+        assert call_kwargs["user_id"] is None
+
+    @pytest.mark.asyncio
+    async def test_list_scheduled_executions_filter_by_status(self, client, mock_auth):
+        """GET /scheduled-executions filters by status (AC7)."""
+        future_date = datetime.now(timezone.utc) + timedelta(days=30)
+
+        with patch("app.api.v1.scheduled_executions.scheduled_execution_repository.count_scheduled_executions", new_callable=AsyncMock) as mock_count, \
+             patch("app.api.v1.scheduled_executions.scheduled_execution_repository.list_scheduled_executions", new_callable=AsyncMock) as mock_list:
+
+            mock_count.return_value = 1
+            mock_list.return_value = [
+                ScheduledExecutionListItem(
+                    scheduled_execution_id=1,
+                    action_id=1,
+                    action_name="Patching Oracle",
+                    user_id=1,
+                    user_name="Test DBA",
+                    environment="prod",
+                    scheduled_at=future_date,
+                    status=ScheduledExecutionStatus.PENDING,
+                    created_at=datetime.now(timezone.utc),
+                ),
+            ]
+
+            response = await client.get("/api/v1/scheduled-executions?status=pending")
+
+        assert response.status_code == status.HTTP_200_OK
+
+        # Verify status filter was passed
+        mock_list.assert_called_once()
+        call_kwargs = mock_list.call_args[1]
+        assert call_kwargs["status"] == "pending"
+
+    @pytest.mark.asyncio
+    async def test_list_scheduled_executions_filter_by_action(self, client, mock_auth):
+        """GET /scheduled-executions filters by action_id (AC8)."""
+        future_date = datetime.now(timezone.utc) + timedelta(days=30)
+
+        with patch("app.api.v1.scheduled_executions.scheduled_execution_repository.count_scheduled_executions", new_callable=AsyncMock) as mock_count, \
+             patch("app.api.v1.scheduled_executions.scheduled_execution_repository.list_scheduled_executions", new_callable=AsyncMock) as mock_list:
+
+            mock_count.return_value = 1
+            mock_list.return_value = []
+
+            response = await client.get("/api/v1/scheduled-executions?action_id=42")
+
+        assert response.status_code == status.HTTP_200_OK
+
+        # Verify action_id filter was passed
+        mock_list.assert_called_once()
+        call_kwargs = mock_list.call_args[1]
+        assert call_kwargs["action_id"] == 42
+
+    @pytest.mark.asyncio
+    async def test_list_scheduled_executions_filter_by_date_range(self, client, mock_auth):
+        """GET /scheduled-executions filters by date range (AC9)."""
+        # Use URL-safe ISO format with Z suffix
+        scheduled_from = "2026-03-01T00:00:00Z"
+        scheduled_to = "2026-03-31T23:59:59Z"
+
+        with patch("app.api.v1.scheduled_executions.scheduled_execution_repository.count_scheduled_executions", new_callable=AsyncMock) as mock_count, \
+             patch("app.api.v1.scheduled_executions.scheduled_execution_repository.list_scheduled_executions", new_callable=AsyncMock) as mock_list:
+
+            mock_count.return_value = 0
+            mock_list.return_value = []
+
+            response = await client.get(
+                f"/api/v1/scheduled-executions?scheduled_from={scheduled_from}&scheduled_to={scheduled_to}"
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+
+        # Verify date filters were passed
+        mock_list.assert_called_once()
+        call_kwargs = mock_list.call_args[1]
+        assert call_kwargs["scheduled_from"] is not None
+        assert call_kwargs["scheduled_to"] is not None
+
+    @pytest.mark.asyncio
+    async def test_list_scheduled_executions_invalid_status_returns_400(self, client, mock_auth):
+        """GET /scheduled-executions returns 400 for invalid status."""
+        response = await client.get("/api/v1/scheduled-executions?status=invalid_status")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        error = response.json()["error"]
+        assert error["code"] == "INVALID_STATUS"
+
+    @pytest.mark.asyncio
+    async def test_list_scheduled_executions_enriched_with_names(self, client, mock_auth):
+        """GET /scheduled-executions returns enriched data with action_name and user_name (AC3)."""
+        future_date = datetime.now(timezone.utc) + timedelta(days=30)
+
+        with patch("app.api.v1.scheduled_executions.scheduled_execution_repository.count_scheduled_executions", new_callable=AsyncMock) as mock_count, \
+             patch("app.api.v1.scheduled_executions.scheduled_execution_repository.list_scheduled_executions", new_callable=AsyncMock) as mock_list:
+
+            mock_count.return_value = 1
+            mock_list.return_value = [
+                ScheduledExecutionListItem(
+                    scheduled_execution_id=1,
+                    action_id=1,
+                    action_name="Patching Oracle",
+                    user_id=1,
+                    user_name="Marc Dubois",
+                    environment="prod",
+                    scheduled_at=future_date,
+                    status=ScheduledExecutionStatus.PENDING,
+                    created_at=datetime.now(timezone.utc),
+                ),
+            ]
+
+            response = await client.get("/api/v1/scheduled-executions")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()["data"][0]
+        assert data["action_name"] == "Patching Oracle"
+        assert data["user_name"] == "Marc Dubois"
+
+
+class TestCancelScheduledExecution:
+    """Tests for PATCH /api/v1/scheduled-executions/{id} (Story 11.6)."""
+
+    @pytest.mark.asyncio
+    async def test_cancel_scheduled_execution_success(self, client, mock_auth, mock_audit_repository):
+        """PATCH /scheduled-executions/{id} cancels pending execution (AC5)."""
+        future_date = datetime.now(timezone.utc) + timedelta(days=30)
+
+        with patch("app.api.v1.scheduled_executions.scheduled_execution_repository.get_by_id", new_callable=AsyncMock) as mock_get, \
+             patch("app.api.v1.scheduled_executions.scheduled_execution_repository.update_status", new_callable=AsyncMock) as mock_update:
+
+            mock_get.return_value = ScheduledExecutionWithAction(
+                id=1,
+                action_id=1,
+                action_name="Patching Oracle",
+                action_description=None,
+                user_id=1,  # Same as mock_auth user
+                environment="prod",
+                parameters={"db_name": "PRODDB"},
+                scheduled_at=future_date,
+                status=ScheduledExecutionStatus.PENDING,
+                created_at=datetime.now(timezone.utc),
+            )
+            mock_update.return_value = True
+
+            response = await client.patch("/api/v1/scheduled-executions/1")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()["data"]
+        assert data["scheduled_execution_id"] == 1
+        assert data["status"] == "cancelled"
+
+        # Verify audit log was created
+        mock_audit_repository.create_entry.assert_called()
+        call_kwargs = mock_audit_repository.create_entry.call_args[1]
+        assert call_kwargs["action_type"].value == "SCHEDULED_EXECUTION_CANCELLED"
+
+    @pytest.mark.asyncio
+    async def test_cancel_scheduled_execution_dbops_can_cancel_any(self, client, mock_auth_dbops, mock_audit_repository):
+        """PATCH /scheduled-executions/{id} DBOPS can cancel any execution (AC5)."""
+        future_date = datetime.now(timezone.utc) + timedelta(days=30)
+
+        with patch("app.api.v1.scheduled_executions.scheduled_execution_repository.get_by_id", new_callable=AsyncMock) as mock_get, \
+             patch("app.api.v1.scheduled_executions.scheduled_execution_repository.update_status", new_callable=AsyncMock) as mock_update:
+
+            mock_get.return_value = ScheduledExecutionWithAction(
+                id=1,
+                action_id=1,
+                action_name="Patching Oracle",
+                action_description=None,
+                user_id=999,  # Different user
+                environment="prod",
+                parameters={},
+                scheduled_at=future_date,
+                status=ScheduledExecutionStatus.PENDING,
+                created_at=datetime.now(timezone.utc),
+            )
+            mock_update.return_value = True
+
+            response = await client.patch("/api/v1/scheduled-executions/1")
+
+        assert response.status_code == status.HTTP_200_OK
+
+    @pytest.mark.asyncio
+    async def test_cancel_scheduled_execution_dba_cannot_cancel_others(self, client, mock_auth):
+        """PATCH /scheduled-executions/{id} DBA cannot cancel others' executions (AC5)."""
+        future_date = datetime.now(timezone.utc) + timedelta(days=30)
+
+        with patch("app.api.v1.scheduled_executions.scheduled_execution_repository.get_by_id", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = ScheduledExecutionWithAction(
+                id=1,
+                action_id=1,
+                action_name="Patching Oracle",
+                action_description=None,
+                user_id=999,  # Different user
+                environment="prod",
+                parameters={},
+                scheduled_at=future_date,
+                status=ScheduledExecutionStatus.PENDING,
+                created_at=datetime.now(timezone.utc),
+            )
+
+            response = await client.patch("/api/v1/scheduled-executions/1")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        error = response.json()["error"]
+        assert error["code"] == "PERMISSION_DENIED"
+
+    @pytest.mark.asyncio
+    async def test_cancel_scheduled_execution_not_found(self, client, mock_auth):
+        """PATCH /scheduled-executions/{id} returns 404 for non-existent execution."""
+        with patch("app.api.v1.scheduled_executions.scheduled_execution_repository.get_by_id", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = None
+
+            response = await client.patch("/api/v1/scheduled-executions/999")
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        error = response.json()["error"]
+        assert error["code"] == "SCHEDULED_EXECUTION_NOT_FOUND"
+
+    @pytest.mark.asyncio
+    async def test_cancel_scheduled_execution_already_executed(self, client, mock_auth):
+        """PATCH /scheduled-executions/{id} returns 400 for executed status."""
+        past_date = datetime.now(timezone.utc) - timedelta(days=1)
+
+        with patch("app.api.v1.scheduled_executions.scheduled_execution_repository.get_by_id", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = ScheduledExecutionWithAction(
+                id=1,
+                action_id=1,
+                action_name="Patching Oracle",
+                action_description=None,
+                user_id=1,  # Same as mock_auth user
+                environment="prod",
+                parameters={},
+                scheduled_at=past_date,
+                status=ScheduledExecutionStatus.EXECUTED,
+                created_at=datetime.now(timezone.utc) - timedelta(days=2),
+            )
+
+            response = await client.patch("/api/v1/scheduled-executions/1")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        error = response.json()["error"]
+        assert error["code"] == "INVALID_STATUS"
+        assert "executed" in error["message"].lower()
+
+    @pytest.mark.asyncio
+    async def test_cancel_scheduled_execution_already_cancelled(self, client, mock_auth):
+        """PATCH /scheduled-executions/{id} returns 400 for already cancelled."""
+        future_date = datetime.now(timezone.utc) + timedelta(days=30)
+
+        with patch("app.api.v1.scheduled_executions.scheduled_execution_repository.get_by_id", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = ScheduledExecutionWithAction(
+                id=1,
+                action_id=1,
+                action_name="Patching Oracle",
+                action_description=None,
+                user_id=1,  # Same as mock_auth user
+                environment="prod",
+                parameters={},
+                scheduled_at=future_date,
+                status=ScheduledExecutionStatus.CANCELLED,
+                created_at=datetime.now(timezone.utc),
+            )
+
+            response = await client.patch("/api/v1/scheduled-executions/1")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        error = response.json()["error"]
+        assert error["code"] == "INVALID_STATUS"
+
+    @pytest.mark.asyncio
+    async def test_cancel_scheduled_execution_audit_logged(self, client, mock_auth, mock_audit_repository):
+        """PATCH /scheduled-executions/{id} creates audit log entry."""
+        future_date = datetime.now(timezone.utc) + timedelta(days=30)
+
+        with patch("app.api.v1.scheduled_executions.scheduled_execution_repository.get_by_id", new_callable=AsyncMock) as mock_get, \
+             patch("app.api.v1.scheduled_executions.scheduled_execution_repository.update_status", new_callable=AsyncMock) as mock_update:
+
+            mock_get.return_value = ScheduledExecutionWithAction(
+                id=42,
+                action_id=1,
+                action_name="Patching Oracle",
+                action_description=None,
+                user_id=1,
+                environment="prod",
+                parameters={},
+                scheduled_at=future_date,
+                status=ScheduledExecutionStatus.PENDING,
+                created_at=datetime.now(timezone.utc),
+            )
+            mock_update.return_value = True
+
+            response = await client.patch("/api/v1/scheduled-executions/42")
+
+        assert response.status_code == status.HTTP_200_OK
+        mock_audit_repository.create_entry.assert_called_once()
+        call_kwargs = mock_audit_repository.create_entry.call_args[1]
+        assert call_kwargs["action_type"].value == "SCHEDULED_EXECUTION_CANCELLED"
+        assert call_kwargs["entity_type"].value == "scheduled_execution"
+        assert call_kwargs["entity_id"] == 42
+        assert call_kwargs["details"]["action_name"] == "Patching Oracle"
