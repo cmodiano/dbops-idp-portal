@@ -8,7 +8,7 @@
  */
 
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, MinusOutlined, ClockCircleOutlined, LinkOutlined, WarningOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, MinusOutlined, ClockCircleOutlined, LinkOutlined, WarningOutlined, SyncOutlined, ToolOutlined, StopOutlined } from '@ant-design/icons';
 import { Spin, Typography, Alert, Drawer, Button, Tooltip, Tag, Card, Space, Skeleton } from 'antd';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useRemediationSuggestions } from '../../hooks/useRemediationSuggestions';
@@ -63,7 +63,34 @@ export function ExecutionTimeline({
   onSuggestionClick,
 }: ExecutionTimelineProps) {
   const useRealtime = mode === 'realtime' && executionId != null;
-  const { steps: wsSteps, execution: wsExecution, loading, error } = useWebSocket(useRealtime ? executionId : null);
+  const { steps: wsSteps, execution: wsExecution, loading, error, lastMessage } = useWebSocket(useRealtime ? executionId : null);
+
+  // Story 9.3: Listen for auto-remediation WebSocket events
+  // Fix: Batch state updates to avoid race conditions during mount
+  useEffect(() => {
+    if (!lastMessage) return;
+
+    // Use functional updates to ensure state consistency
+    if (lastMessage.type === 'auto_remediation_started') {
+      const data = lastMessage.data as { child_execution_id?: number; corrective_action_name?: string } | undefined;
+      setAutoRemediationState(() => ({
+        inProgress: true,
+        failed: false,
+        childExecutionId: data?.child_execution_id ?? null,
+        correctiveActionName: data?.corrective_action_name ?? null,
+        failureMessage: null,
+      }));
+    } else if (lastMessage.type === 'auto_remediation_failed') {
+      const data = lastMessage.data as { child_execution_id?: number; message?: string } | undefined;
+      setAutoRemediationState((prev) => ({
+        ...prev,
+        inProgress: false,
+        failed: true,
+        childExecutionId: data?.child_execution_id ?? prev.childExecutionId,
+        failureMessage: data?.message ?? 'Tentative de correction automatique échouée',
+      }));
+    }
+  }, [lastMessage]);
 
   const steps = useMemo(
     () => (useRealtime ? wsSteps : (stepsProp ?? [])),
@@ -87,12 +114,42 @@ export function ExecutionTimeline({
   const [logsDrawerStepId, setLogsDrawerStepId] = useState<number | null>(null);
   const logsDrawerContentRef = useRef<HTMLDivElement>(null);
 
+  // Story 9.3: Track auto-remediation state from WebSocket events
+  const [autoRemediationState, setAutoRemediationState] = useState<{
+    inProgress: boolean;
+    failed: boolean;
+    childExecutionId: number | null;
+    correctiveActionName: string | null;
+    failureMessage: string | null;
+  }>({
+    inProgress: false,
+    failed: false,
+    childExecutionId: null,
+    correctiveActionName: null,
+    failureMessage: null,
+  });
+
   // AC4/Task 4.3: Focus trap — move focus into drawer when it opens
   useEffect(() => {
     if (logsDrawerStepId != null && logsDrawerContentRef.current) {
       logsDrawerContentRef.current.focus();
     }
   }, [logsDrawerStepId]);
+
+  // Story 9.3: Reset auto-remediation state when execution changes (track previous)
+  const prevExecutionIdRef = useRef(executionId);
+  useEffect(() => {
+    if (prevExecutionIdRef.current !== executionId) {
+      setAutoRemediationState({
+        inProgress: false,
+        failed: false,
+        childExecutionId: null,
+        correctiveActionName: null,
+        failureMessage: null,
+      });
+      prevExecutionIdRef.current = executionId;
+    }
+  }, [executionId]);
 
   const failedStep = useMemo(() => steps.find((s) => s.status === 'FAILED'), [steps]);
   const logsDrawerStep = useMemo(
@@ -227,6 +284,73 @@ export function ExecutionTimeline({
           }
           style={{ marginBottom: 16 }}
         />
+      )}
+
+      {/* Story 9.3, AC3: Alert when auto-remediation failed (fallback to manual) */}
+      {autoRemediationState.failed && (
+        <Alert
+          type="warning"
+          showIcon
+          icon={<WarningOutlined />}
+          message="Tentative de correction automatique échouée"
+          description={
+            <>
+              {autoRemediationState.failureMessage || "Le système n'a pas pu corriger automatiquement l'erreur."}
+              {' '}Veuillez évaluer manuellement les suggestions ci-dessous.
+              {autoRemediationState.childExecutionId && (
+                <>
+                  <br />
+                  <a
+                    href={`/executions/${autoRemediationState.childExecutionId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ fontSize: 12 }}
+                  >
+                    Voir l'exécution corrective →
+                  </a>
+                </>
+              )}
+            </>
+          }
+          closable
+          style={{ marginBottom: 16 }}
+          data-testid="auto-remediation-failed-alert"
+        />
+      )}
+
+      {/* Story 9.3, AC2: Auto-remediation in progress node */}
+      {autoRemediationState.inProgress && (
+        <Card
+          style={{ marginBottom: 16, borderColor: '#1890ff' }}
+          title={
+            <Space>
+              <SyncOutlined spin style={{ color: '#1890ff' }} />
+              <span>Auto-remédiation en cours</span>
+              <Tag color="blue">AUTOMATIQUE</Tag>
+            </Space>
+          }
+          data-testid="auto-remediation-progress-card"
+        >
+          <Space direction="vertical" size="small" style={{ width: '100%' }}>
+            <Text>
+              <ToolOutlined style={{ marginRight: 8 }} />
+              {autoRemediationState.correctiveActionName || 'Action corrective'}
+            </Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              Le système tente de corriger automatiquement l'erreur détectée...
+            </Text>
+            {autoRemediationState.childExecutionId && (
+              <a
+                href={`/executions/${autoRemediationState.childExecutionId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ fontSize: 12 }}
+              >
+                Voir exécution corrective →
+              </a>
+            )}
+          </Space>
+        </Card>
       )}
 
       {/* Story 4.7, AC2: StructuredErrorCard quand FAILED; Story 7.2, Task 4.2: pass variant; Story 9.1, Task 11.3-11.5: pass remediation suggestions */}

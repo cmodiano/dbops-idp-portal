@@ -834,4 +834,146 @@ describe('ExecutionTimeline', () => {
       expect(screen.queryByText('Actions correctives suggérées')).not.toBeInTheDocument();
     });
   });
+
+  // Story 9.3: Auto-remediation timeline features (Tasks 22-24)
+  describe('Story 9.3 auto-remediation timeline', () => {
+    it('shows auto-remediation progress card when WebSocket sends auto_remediation_started', () => {
+      mockUseWebSocket.mockReturnValue({
+        steps: [
+          {
+            id: 101,
+            execution_id: 42,
+            step_order: 1,
+            step_name: 'Platform',
+            step_type: 'platform',
+            status: 'FAILED',
+            started_at: '2026-01-30T10:00:00',
+            completed_at: '2026-01-30T10:00:30',
+            output: null,
+            platform_job_id: null,
+            error_message: 'ORA-12154: TNS error',
+          },
+        ],
+        execution: {
+          id: 42,
+          status: 'FAILED',
+        },
+        loading: false,
+        error: null,
+        lastMessage: {
+          type: 'auto_remediation_started',
+          data: {
+            child_execution_id: 100,
+            corrective_action_name: 'Restart Database Listener',
+          },
+        },
+      });
+
+      render(<ExecutionTimeline executionId={42} mode="realtime" />);
+
+      expect(screen.getByText('Auto-remédiation en cours')).toBeInTheDocument();
+      expect(screen.getByText(/Restart Database Listener/)).toBeInTheDocument();
+    });
+
+    it('shows fallback alert when WebSocket sends auto_remediation_failed', () => {
+      mockUseWebSocket.mockReturnValue({
+        steps: [
+          {
+            id: 101,
+            execution_id: 42,
+            step_order: 1,
+            step_name: 'Platform',
+            step_type: 'platform',
+            status: 'FAILED',
+            started_at: '2026-01-30T10:00:00',
+            completed_at: '2026-01-30T10:00:30',
+            output: null,
+            platform_job_id: null,
+            error_message: 'ORA-12154: TNS error',
+          },
+        ],
+        execution: {
+          id: 42,
+          status: 'FAILED',
+        },
+        loading: false,
+        error: null,
+        lastMessage: {
+          type: 'auto_remediation_failed',
+          data: {
+            child_execution_id: 100,
+            message: 'Service unavailable',
+          },
+        },
+      });
+
+      render(<ExecutionTimeline executionId={42} mode="realtime" />);
+
+      expect(screen.getByText(/Tentative de correction automatique échouée/)).toBeInTheDocument();
+      expect(screen.getByText(/évaluer manuellement/i)).toBeInTheDocument();
+    });
+
+    it('clears auto-remediation state when execution changes', () => {
+      mockUseWebSocket.mockReturnValue({
+        steps: [],
+        execution: {
+          id: 42,
+          status: 'FAILED',
+        },
+        loading: false,
+        error: null,
+        lastMessage: {
+          type: 'auto_remediation_started',
+          data: {
+            child_execution_id: 100,
+            corrective_action_name: 'Fix Action',
+          },
+        },
+      });
+
+      const { rerender } = render(<ExecutionTimeline executionId={42} mode="realtime" />);
+
+      expect(screen.getByText('Auto-remédiation en cours')).toBeInTheDocument();
+
+      // Simulate switching to a different execution
+      mockUseWebSocket.mockReturnValue({
+        steps: [],
+        execution: {
+          id: 99,
+          status: 'RUNNING',
+        },
+        loading: false,
+        error: null,
+        lastMessage: null,
+      });
+
+      rerender(<ExecutionTimeline executionId={99} mode="realtime" />);
+
+      expect(screen.queryByText('Auto-remédiation en cours')).not.toBeInTheDocument();
+    });
+
+    it('provides link to child execution in auto-remediation progress card', () => {
+      mockUseWebSocket.mockReturnValue({
+        steps: [],
+        execution: {
+          id: 42,
+          status: 'FAILED',
+        },
+        loading: false,
+        error: null,
+        lastMessage: {
+          type: 'auto_remediation_started',
+          data: {
+            child_execution_id: 100,
+            corrective_action_name: 'Fix Action',
+          },
+        },
+      });
+
+      render(<ExecutionTimeline executionId={42} mode="realtime" />);
+
+      const link = screen.getByRole('link', { name: /Voir exécution corrective/i });
+      expect(link).toHaveAttribute('href', '/executions/100');
+    });
+  });
 });

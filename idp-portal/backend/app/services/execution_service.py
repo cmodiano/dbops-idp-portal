@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from app.services.servicenow_service import ServiceNowService
     from app.websocket.execution_ws import ExecutionWebSocketManager
     from app.websocket.dashboard_ws import DashboardWebSocketManager
+    from app.models.execution import ExecutionResponse
 
 logger = structlog.get_logger()
 
@@ -542,6 +543,13 @@ class ExecutionService:
             )
             logger.info("execution_completed", execution_id=execution_id)
 
+            # Story 9.3: Handle child execution completion callback (AC3)
+            if execution.parent_execution_id is not None:
+                # Refresh execution to get updated status
+                completed_exec = await execution_repository.get_by_id(execution_id)
+                if completed_exec:
+                    await self._handle_child_execution_completed(completed_exec, correlation_id)
+
         except Exception as e:
             logger.error("execution_orchestration_failed", error=str(e))
             await self._fail_execution(
@@ -919,6 +927,113 @@ class ExecutionService:
             execution_id=execution_id,
             error=error_message,
         )
+
+        # Story 9.3: Evaluate and trigger auto-remediation if applicable (AC1)
+        if execution and execution.parent_execution_id is None:
+            # Only trigger auto-remediation for root executions (not remediation children)
+            await self._evaluate_auto_remediation(execution, error_message, correlation_id)
+
+    async def _evaluate_auto_remediation(
+        self,
+        execution: "ExecutionResponse",
+        error_message: str,
+        correlation_id: str | None = None,
+    ) -> None:
+        """Evaluate and trigger auto-remediation if applicable (Story 9.3, AC1).
+
+        Args:
+            execution: The failed execution
+            error_message: Error message to match against rules
+            correlation_id: Optional correlation ID for tracing
+        """
+        from app.services.remediation_service import process_failed_execution_for_auto_remediation
+
+        try:
+            child_exec = await process_failed_execution_for_auto_remediation(
+                execution, error_message, correlation_id
+            )
+
+            if child_exec:
+                # Auto-remediation triggered - notify via WebSocket
+                if self.ws_manager:
+                    await self.ws_manager.broadcast_execution_update(
+                        execution.id,
+                        {
+                            "type": "auto_remediation_started",
+                            "child_execution_id": child_exec.id,
+                            "corrective_action_name": child_exec.action_name,
+                        }
+                    )
+
+                logger.info(
+                    "auto_remediation_launched",
+                    parent_execution_id=execution.id,
+                    child_execution_id=child_exec.id,
+                )
+
+                # Start the child execution (prepare + start)
+                # Fix: Handle prepare_execution failure gracefully
+                prepare_success = await self.prepare_execution(child_exec.id, correlation_id or "")
+                if prepare_success:
+                    import asyncio
+                    asyncio.create_task(
+                        self.start_execution(child_exec.id, correlation_id or "")
+                    )
+                else:
+                    logger.error(
+                        "auto_remediation_child_preparation_failed",
+                        child_execution_id=child_exec.id,
+                        parent_execution_id=execution.id,
+                    )
+            else:
+                logger.debug(
+                    "auto_remediation_not_triggered",
+                    execution_id=execution.id,
+                    reason="no_matching_auto_rules",
+                )
+        except Exception as e:
+            logger.error(
+                "auto_remediation_evaluation_error",
+                execution_id=execution.id,
+                error=str(e),
+            )
+
+    async def _handle_child_execution_completed(
+        self,
+        child_exec: "ExecutionResponse",
+        correlation_id: str | None = None,
+    ) -> None:
+        """Handle completion of a child (remediation) execution (Story 9.3, AC3).
+
+        Called when an execution with parent_execution_id completes.
+        Evaluates result and triggers fallback if failed.
+
+        Args:
+            child_exec: The completed child execution
+            correlation_id: Optional correlation ID for tracing
+        """
+        from app.services.remediation_service import (
+            handle_auto_remediation_result,
+            RemediationResult,
+        )
+
+        # Only process SYSTEM-triggered auto-remediations
+        if child_exec.user_id != 0:
+            return
+
+        result = await handle_auto_remediation_result(child_exec, correlation_id)
+
+        if result == RemediationResult.FALLBACK_MANUAL:
+            # Notify parent execution timeline via WebSocket
+            if self.ws_manager and child_exec.parent_execution_id:
+                await self.ws_manager.broadcast_execution_update(
+                    child_exec.parent_execution_id,
+                    {
+                        "type": "auto_remediation_failed",
+                        "child_execution_id": child_exec.id,
+                        "message": "Tentative de correction automatique échouée",
+                    }
+                )
 
 
 def generate_correlation_id() -> str:

@@ -21,6 +21,7 @@ import {
   Switch,
   Tag,
   Tooltip,
+  Alert,
 } from 'antd';
 import { PlusOutlined, DeleteOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import type { RemediationRule, RiskLevel } from '../../types/api';
@@ -184,10 +185,14 @@ const RuleCard: React.FC<RuleCardProps> = ({
 
           <Form.Item
             label={
-              <Tooltip title="Si activé, l'action corrective peut être déclenchée automatiquement sans validation utilisateur">
+              <Tooltip title={
+                rule.risk_level !== 'low'
+                  ? "Auto-déclenchement uniquement disponible pour risque 'Faible'"
+                  : "Si activé, l'action corrective peut être déclenchée automatiquement sans validation utilisateur"
+              }>
                 <Space>
                   Déclenchement auto
-                  <InfoCircleOutlined style={{ color: '#8c8c8c' }} />
+                  <InfoCircleOutlined style={{ color: rule.risk_level !== 'low' ? '#faad14' : '#8c8c8c' }} />
                 </Space>
               </Tooltip>
             }
@@ -197,9 +202,22 @@ const RuleCard: React.FC<RuleCardProps> = ({
               checked={rule.auto_trigger}
               onChange={(v) => onRuleChange(index, 'auto_trigger', v)}
               aria-label={`Déclenchement auto règle ${index + 1}`}
+              disabled={rule.risk_level !== 'low'}
             />
           </Form.Item>
         </Space>
+
+        {/* Story 9.3, AC4: Warning if auto + prod */}
+        {/* Fix: Clarify that auto-trigger is BLOCKED in prod, not just requiring approval */}
+        {rule.auto_trigger && rule.environments?.some(e => e.toLowerCase() === 'prod') && (
+          <Alert
+            type="error"
+            showIcon
+            message="Auto-déclenchement INTERDIT en Production"
+            description="L'auto-déclenchement est bloqué en environnement Production. Cette règle sera refusée par l'API. Retirez 'prod' des environnements autorisés."
+            style={{ marginTop: 8 }}
+          />
+        )}
       </Space>
     </Card>
   );
@@ -242,6 +260,12 @@ export const RemediationRulesEditor: React.FC<RemediationRulesEditorProps> = ({
     const next = [...value];
     const current = { ...next[index] };
     (current as Record<string, unknown>)[field] = fieldValue;
+
+    // Story 9.3, AC4: Auto-disable auto_trigger if risk_level changes from 'low'
+    if (field === 'risk_level' && fieldValue !== 'low' && current.auto_trigger) {
+      current.auto_trigger = false;
+    }
+
     next[index] = current;
     onChange?.(next);
   };

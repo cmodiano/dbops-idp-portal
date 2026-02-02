@@ -429,6 +429,33 @@ async def update_remediation_rules(
                     details={"target_action_id": rule.target_action_id},
                 )
 
+            # Story 9.3, AC4: Validate auto_trigger constraints
+            if rule.auto_trigger:
+                # Auto-trigger only allowed for risk_level=low
+                if rule.risk_level.value != "low":
+                    raise InvalidStateError(
+                        code="INVALID_AUTO_TRIGGER",
+                        message="Auto-déclenchement uniquement autorisé pour niveau de risque 'faible' (low)",
+                        details={
+                            "auto_trigger": True,
+                            "risk_level": rule.risk_level.value,
+                            "expected_risk_level": "low",
+                        },
+                    )
+
+                # Warn if PROD is in environments (blocked at runtime anyway)
+                envs_lower = [e.lower() for e in rule.environments]
+                if "prod" in envs_lower:
+                    raise InvalidStateError(
+                        code="INVALID_AUTO_TRIGGER_PROD",
+                        message="Auto-déclenchement non autorisé en Production - l'approbation DBA est toujours requise",
+                        details={
+                            "auto_trigger": True,
+                            "environments": rule.environments,
+                            "blocked_environment": "prod",
+                        },
+                    )
+
     await catalog_repository.update_remediation_rules(action_id, data.remediation_rules)
     updated = await catalog_repository.get_by_id(action_id)
     if updated is None:
