@@ -1,10 +1,11 @@
 /**
- * ReportingDashboard - Dashboard with statistics by technology and environment.
+ * ReportingDashboard - Dashboard with advanced analytics and comparisons.
  * Story 8.3, AC1, AC2, AC6, AC8; Story 8.4 (advanced filters); Story 8.5 (export); Story 8.6 (comparison).
+ * Story 9.4: StatCards moved to ExecutionsPage.
  *
  * Displays:
  * - Mode selector: Stats vs Comparison (Story 8.6, AC1)
- * - Stats mode: Advanced filters, period selector, export, stat cards, charts
+ * - Stats mode: Advanced filters, period selector, export, charts (StatCards moved to ExecutionsPage)
  * - Comparison mode: Panel to select dimension/values, comparison charts, delta badges
  * - Link to Executions page
  */
@@ -12,14 +13,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Row, Col, Segmented, Alert, Space, Typography } from 'antd';
 import { Link } from 'react-router';
-import {
-  RocketOutlined,
-  CheckCircleOutlined,
-  SyncOutlined,
-  ExclamationCircleOutlined,
-  ArrowRightOutlined,
-} from '@ant-design/icons';
-import { StatCard } from '../StatCard';
+import { ArrowRightOutlined } from '@ant-design/icons';
 import { TechnologyBarChart } from './TechnologyBarChart';
 import { EnvironmentBarChart } from './EnvironmentBarChart';
 import { TrendLineChart } from './TrendLineChart';
@@ -32,7 +26,6 @@ import { PeriodComparisonChart } from './PeriodComparisonChart';
 import { ComparisonSummaryCards } from './ComparisonSummaryCards';
 import { ComparisonExecutionsDrawer } from './ComparisonExecutionsDrawer';
 import {
-  fetchStats,
   fetchStatsByTechnology,
   fetchStatsByEnvironment,
   fetchTimeSeries,
@@ -41,7 +34,6 @@ import {
 } from '../../../services/dashboard_service';
 import { useUrlFilters } from '../../../hooks/useUrlFilters';
 import type {
-  DashboardStats,
   TechnologyStats,
   EnvironmentStats,
   DashboardTimeSeriesPoint,
@@ -73,8 +65,7 @@ export function ReportingDashboard() {
   // Filter options from API (Story 8.4, Task 14)
   const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
 
-  // Data states
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  // Data states (Story 9.4: stats moved to ExecutionsPage)
   const [techStats, setTechStats] = useState<TechnologyStats[]>([]);
   const [envStats, setEnvStats] = useState<EnvironmentStats[]>([]);
   const [timeSeries, setTimeSeries] = useState<DashboardTimeSeriesPoint[]>([]);
@@ -189,8 +180,8 @@ export function ReportingDashboard() {
       };
 
       try {
-        const [statsData, techData, envData, timeData] = await Promise.all([
-          fetchStats(apiFilters),
+        // Story 9.4: stats (StatCards) moved to ExecutionsPage
+        const [techData, envData, timeData] = await Promise.all([
           fetchStatsByTechnology(apiFilters),
           fetchStatsByEnvironment(apiFilters),
           fetchTimeSeries(apiFilters),
@@ -198,7 +189,6 @@ export function ReportingDashboard() {
 
         if (cancelled) return;
 
-        setStats(statsData);
         setTechStats(techData);
         setEnvStats(envData);
         setTimeSeries(timeData);
@@ -264,45 +254,7 @@ export function ReportingDashboard() {
             />
           )}
 
-          {/* StatCards row */}
-          <Row gutter={[16, 16]}>
-            <Col xs={24} sm={12} md={6}>
-              <StatCard
-                label="Exécutions du jour"
-                value={stats?.executions_jour ?? 0}
-                icon={<RocketOutlined />}
-                loading={loading}
-              />
-            </Col>
-            <Col xs={24} sm={12} md={6}>
-              <StatCard
-                label="Taux de succès"
-                value={stats?.taux_succes_pct ?? 0}
-                suffix="%"
-                icon={<CheckCircleOutlined />}
-                variant="success"
-                loading={loading}
-              />
-            </Col>
-            <Col xs={24} sm={12} md={6}>
-              <StatCard
-                label="En cours"
-                value={stats?.executions_en_cours ?? 0}
-                icon={<SyncOutlined spin={!loading && (stats?.executions_en_cours ?? 0) > 0} />}
-                variant="inProgress"
-                loading={loading}
-              />
-            </Col>
-            <Col xs={24} sm={12} md={6}>
-              <StatCard
-                label="En erreur"
-                value={stats?.executions_en_erreur ?? 0}
-                icon={<ExclamationCircleOutlined />}
-                variant="error"
-                loading={loading}
-              />
-            </Col>
-          </Row>
+          {/* Story 9.4: StatCards moved to ExecutionsPage */}
 
           {/* Bar charts row */}
           <Row gutter={[16, 16]}>

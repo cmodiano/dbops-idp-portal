@@ -401,6 +401,60 @@ async def create_execution(
     }
 
 
+# --- Story 9.4: Execution Statistics Endpoint ---
+# NOTE: This route MUST be defined before routes with {execution_id} parameter
+# to avoid FastAPI interpreting "stats" as an integer execution_id.
+
+
+@router.get("/stats", response_model=None)
+async def get_execution_stats(
+    user: UserProfile = Depends(get_current_user),
+    scope: str = Query("mine", regex="^(mine|all)$"),
+) -> dict:
+    """GET /api/v1/executions/stats - Get execution statistics (Story 9.4, AC3).
+
+    Returns execution statistics filtered by scope:
+    - scope=mine: Statistics for current user's executions only (default)
+    - scope=all: Global statistics (RBAC applied - DBA/DBOPS see all, others see their own)
+
+    Statistics returned:
+    - executions_jour: Count of executions created today (UTC)
+    - taux_succes_pct: Success rate percentage (COMPLETED / (COMPLETED + FAILED))
+    - executions_en_cours: Count of running executions (RUNNING, SUBMITTED, PENDING_APPROVAL)
+    - executions_en_erreur: Count of failed executions (FAILED)
+
+    Returns:
+        { "data": { "executions_jour": int, "taux_succes_pct": float, "executions_en_cours": int, "executions_en_erreur": int } }
+    """
+    # Get user's profiles for RBAC check
+    user_profiles = [user.profile] if user.profile else []
+
+    logger.info(
+        "execution_stats_requested",
+        user_id=user.id,
+        scope=scope,
+        user_profile=user.profile,
+    )
+
+    stats = await execution_repository.get_execution_stats(
+        user_id=user.id,
+        scope=scope,
+        user_profiles=user_profiles,
+    )
+
+    logger.info(
+        "execution_stats_returned",
+        user_id=user.id,
+        scope=scope,
+        executions_jour=stats["executions_jour"],
+        taux_succes_pct=stats["taux_succes_pct"],
+        executions_en_cours=stats["executions_en_cours"],
+        executions_en_erreur=stats["executions_en_erreur"],
+    )
+
+    return {"data": stats}
+
+
 # --- Story 7.4: Approval Workflow Endpoints ---
 # NOTE: These routes MUST be defined before routes with {execution_id} parameter
 # to avoid FastAPI interpreting "pending-approvals" as an integer execution_id.

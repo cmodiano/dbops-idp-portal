@@ -2481,3 +2481,92 @@ async def get_parent_execution(execution_id: int) -> ExecutionResponse | None:
     )
 
     return parent
+
+
+# --- Story 9.4: Execution Statistics (AC3) ---
+
+
+async def get_execution_stats(
+    user_id: int,
+    scope: str,
+    user_profiles: list[str] | None = None,
+) -> dict[str, int | float]:
+    """Get execution statistics filtered by scope (Story 9.4, AC3).
+
+    Calculates:
+    - executions_jour: COUNT(*) WHERE created_at >= today 00:00:00 UTC
+    - taux_succes_pct: (COMPLETED / (COMPLETED + FAILED)) * 100, rounded to 2 decimals
+    - executions_en_cours: COUNT status IN (RUNNING, SUBMITTED, PENDING_APPROVAL)
+    - executions_en_erreur: COUNT status = FAILED
+
+    Args:
+        user_id: Current user ID
+        scope: "mine" for user's executions, "all" for all executions (RBAC applied)
+        user_profiles: List of user's profiles for RBAC check (DBA/DBOPS can view all)
+
+    Returns:
+        Dict with executions_jour, taux_succes_pct, executions_en_cours, executions_en_erreur
+    """
+    start_time = time.perf_counter()
+
+    # RBAC: DBA/DBOPS can view all, others see only their executions
+    can_view_all = False
+    if user_profiles:
+        for profile in user_profiles:
+            if profile.lower() in ("dba", "dbops"):
+                can_view_all = True
+                break
+
+    # If scope=all but user doesn't have permission, fall back to scope=mine
+    effective_scope = scope if (scope == "mine" or can_view_all) else "mine"
+
+    # Optimized single-query with CASE WHEN for all stats
+    query = """
+        SELECT
+            COUNT(CASE WHEN CREATED_AT >= TRUNC(SYSTIMESTAMP AT TIME ZONE 'UTC') THEN 1 END) AS executions_jour,
+            ROUND(
+                100.0 * COUNT(CASE WHEN STATUS = 'COMPLETED' THEN 1 END) /
+                NULLIF(COUNT(CASE WHEN STATUS IN ('COMPLETED', 'FAILED') THEN 1 END), 0),
+                2
+            ) AS taux_succes_pct,
+            COUNT(CASE WHEN STATUS IN ('RUNNING', 'SUBMITTED', 'PENDING_APPROVAL') THEN 1 END) AS executions_en_cours,
+            COUNT(CASE WHEN STATUS = 'FAILED' THEN 1 END) AS executions_en_erreur
+        FROM EXECUTIONS
+    """
+
+    params: dict[str, int] = {}
+
+    # Apply user filter if scope=mine
+    if effective_scope == "mine":
+        query += " WHERE USER_ID = :user_id"
+        params["user_id"] = user_id
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, params)
+        row = await cursor.fetchone()
+        cursor.close()
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.info(
+        "execution_repository_get_execution_stats",
+        duration_ms=duration_ms,
+        user_id=user_id,
+        scope=scope,
+        effective_scope=effective_scope,
+    )
+
+    if row is None:
+        return {
+            "executions_jour": 0,
+            "taux_succes_pct": 0.0,
+            "executions_en_cours": 0,
+            "executions_en_erreur": 0,
+        }
+
+    return {
+        "executions_jour": row[0] or 0,
+        "taux_succes_pct": float(row[1]) if row[1] is not None else 0.0,
+        "executions_en_cours": row[2] or 0,
+        "executions_en_erreur": row[3] or 0,
+    }

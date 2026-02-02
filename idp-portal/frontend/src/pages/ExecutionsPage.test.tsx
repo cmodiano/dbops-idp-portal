@@ -1,5 +1,5 @@
 /**
- * Tests for ExecutionsPage (Story 4.8, Story 8.8).
+ * Tests for ExecutionsPage (Story 4.8, Story 8.8, Story 9.4).
  *
  * Story 4.8:
  * AC1: Table with columns: action, environment, status, date, duration.
@@ -11,6 +11,12 @@
  * AC1: Section "Approbations en attente" avant la liste des exécutions.
  * AC8: Réutilisation du composant PendingApprovalsList.
  * AC9: RBAC - seuls DBA/DBOPS voient la section approbations.
+ *
+ * Story 9.4:
+ * AC1: 4 StatCards déplacées du Dashboard vers Exécutions.
+ * AC3: Stats reflètent le scope actif (mine/all).
+ * AC4: Responsive layout xs=24 sm=12 md=6.
+ * AC5: Loading skeleton pour les cards.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -22,7 +28,7 @@ import ExecutionsPage from './ExecutionsPage';
 import { AuthProvider } from '../contexts/AuthContext';
 import { ThemeProvider } from '../contexts/ThemeContext';
 import * as executionService from '../services/execution_service';
-import type { ExecutionResponse, ExecutionStepResponse } from '../types/api';
+import type { ExecutionResponse, ExecutionStepResponse, DashboardStats } from '../types/api';
 
 vi.mock('../services/execution_service');
 vi.mock('../hooks/useWebSocket', () => ({
@@ -180,6 +186,13 @@ describe('ExecutionsPage', () => {
       data: [],
       pagination: { page: 1, page_size: 50, total_count: 0, total_pages: 0 },
     });
+    // Story 9.4: Mock fetchExecutionStats
+    vi.mocked(executionService.fetchExecutionStats).mockResolvedValue({
+      executions_jour: 10,
+      taux_succes_pct: 85.5,
+      executions_en_cours: 3,
+      executions_en_erreur: 2,
+    });
   });
 
   describe('Table Display (AC1)', () => {
@@ -230,7 +243,9 @@ describe('ExecutionsPage', () => {
         expect(screen.getByText('Terminée')).toBeInTheDocument();
       });
 
-      expect(screen.getByText('En cours')).toBeInTheDocument();
+      // Story 9.4: Use getAllByText since "En cours" now appears in StatCards AND table
+      const enCoursElements = screen.getAllByText('En cours');
+      expect(enCoursElements.length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText('Échouée')).toBeInTheDocument();
     });
 
@@ -823,6 +838,207 @@ describe('ExecutionsPage', () => {
         const mineTab = screen.getByRole('tab', { name: /Mes exécutions/i });
         expect(mineTab).toHaveAttribute('aria-selected', 'true');
       });
+    });
+  });
+
+  describe('Story 9.4 — StatCards Section', () => {
+    it('displays 4 StatCards with correct labels (AC1)', async () => {
+      renderWithTheme(<ExecutionsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Exécutions du jour')).toBeInTheDocument();
+        expect(screen.getByText('Taux de succès')).toBeInTheDocument();
+        // "En cours" appears in both StatCard label and table status tag
+        const enCoursElements = screen.getAllByText('En cours');
+        expect(enCoursElements.length).toBeGreaterThanOrEqual(1);
+        expect(screen.getByText('En erreur')).toBeInTheDocument();
+      });
+    });
+
+    it('StatCards display values from API (AC3)', async () => {
+      renderWithTheme(<ExecutionsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('10')).toBeInTheDocument(); // executions_jour
+        expect(screen.getByText('85.5%')).toBeInTheDocument(); // taux_succes_pct
+        expect(screen.getByText('3')).toBeInTheDocument(); // executions_en_cours
+        expect(screen.getByText('2')).toBeInTheDocument(); // executions_en_erreur
+      });
+    });
+
+    it('fetchExecutionStats is called with scope=mine by default (AC3)', async () => {
+      renderWithTheme(<ExecutionsPage />);
+
+      await waitFor(() => {
+        expect(executionService.fetchExecutionStats).toHaveBeenCalledWith('mine');
+      });
+    });
+
+    it('fetchExecutionStats is called with scope=all when tab changes (AC3)', async () => {
+      mockAuthSession('DBA');
+      const user = userEvent.setup();
+
+      await act(async () => {
+        renderWithProviders();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: /Toutes les exécutions/i })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('tab', { name: /Toutes les exécutions/i }));
+
+      await waitFor(() => {
+        expect(executionService.fetchExecutionStats).toHaveBeenCalledWith('all');
+      });
+    });
+
+    it('StatCards are displayed BEFORE pending approvals section (AC1)', async () => {
+      mockAuthSession('DBA');
+      vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
+        data: [
+          {
+            id: 100,
+            action_id: 50,
+            action_name: 'Pending Action',
+            user_id: 2,
+            user_display_name: 'Other User',
+            environment: 'prod',
+            parameters: null,
+            status: 'PENDING_APPROVAL',
+            servicenow_change_id: null,
+            started_at: null,
+            completed_at: null,
+            created_at: '2026-01-30T10:00:00Z',
+          },
+        ],
+        pagination: { page: 1, page_size: 50, total_count: 1, total_pages: 1 },
+      });
+
+      await act(async () => {
+        renderWithProviders();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('Exécutions du jour')).toBeInTheDocument();
+        expect(screen.getByText('Approbations en attente')).toBeInTheDocument();
+      });
+
+      // Check DOM order: StatCards should appear before pending approvals
+      const statsCard = screen.getByText('Exécutions du jour').closest('.ant-card');
+      const approvalsSection = document.getElementById('pending-approvals');
+
+      if (statsCard && approvalsSection) {
+        // Compare positions - stats should come before approvals
+        const statsPosition = statsCard.compareDocumentPosition(approvalsSection);
+        expect(statsPosition & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      }
+    });
+
+    it('shows loading skeleton while stats are loading (AC5)', async () => {
+      vi.mocked(executionService.fetchExecutionStats).mockImplementation(
+        () =>
+          new Promise((resolve) =>
+            setTimeout(
+              () =>
+                resolve({
+                  executions_jour: 10,
+                  taux_succes_pct: 85.5,
+                  executions_en_cours: 3,
+                  executions_en_erreur: 2,
+                }),
+              200
+            )
+          )
+      );
+
+      renderWithTheme(<ExecutionsPage />);
+
+      // Check that skeleton is visible (StatCard uses Skeleton internally when loading=true)
+      await waitFor(() => {
+        const skeletons = document.querySelectorAll('.ant-skeleton');
+        expect(skeletons.length).toBeGreaterThan(0);
+      });
+    });
+
+    it('handles fetchExecutionStats error gracefully (AC5)', async () => {
+      vi.mocked(executionService.fetchExecutionStats).mockRejectedValue(new Error('Network error'));
+
+      renderWithTheme(<ExecutionsPage />);
+
+      // Should display fallback values (0) instead of crashing
+      await waitFor(() => {
+        expect(screen.getByText('Exécutions du jour')).toBeInTheDocument();
+      });
+
+      // Table should still be usable
+      await waitFor(() => {
+        expect(screen.getByText('Create PDB')).toBeInTheDocument();
+      });
+    });
+
+    it('responsive layout has correct Col spans (AC4)', async () => {
+      renderWithTheme(<ExecutionsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Exécutions du jour')).toBeInTheDocument();
+      });
+
+      // Check that Col elements have correct responsive classes
+      const cols = document.querySelectorAll('.ant-col');
+      const statCardCols = Array.from(cols).filter(col =>
+        col.classList.contains('ant-col-xs-24') &&
+        col.classList.contains('ant-col-sm-12') &&
+        col.classList.contains('ant-col-md-6')
+      );
+
+      // Should have 4 StatCard columns with responsive breakpoints
+      expect(statCardCols.length).toBe(4);
+    });
+
+    it('SyncOutlined icon spins when executions_en_cours > 0 (AC1)', async () => {
+      vi.mocked(executionService.fetchExecutionStats).mockResolvedValue({
+        executions_jour: 10,
+        taux_succes_pct: 85.5,
+        executions_en_cours: 3, // > 0, should spin
+        executions_en_erreur: 2,
+      });
+
+      renderWithTheme(<ExecutionsPage />);
+
+      // Wait for stats to load
+      await waitFor(() => {
+        expect(screen.getByText('Exécutions du jour')).toBeInTheDocument();
+      });
+
+      // Allow time for spin to be applied
+      await waitFor(() => {
+        // Check for spin class on SyncOutlined icon (Ant Design adds spin class to span)
+        const syncIcons = document.querySelectorAll('[class*="anticon-sync"]');
+        const hasSpinIcon = Array.from(syncIcons).some(icon => icon.classList.contains('anticon-spin'));
+        expect(hasSpinIcon).toBe(true);
+      });
+    });
+
+    it('SyncOutlined icon does not spin when executions_en_cours = 0', async () => {
+      vi.mocked(executionService.fetchExecutionStats).mockResolvedValue({
+        executions_jour: 10,
+        taux_succes_pct: 100,
+        executions_en_cours: 0, // = 0, should NOT spin
+        executions_en_erreur: 0,
+      });
+
+      renderWithTheme(<ExecutionsPage />);
+
+      // Wait for stats to load
+      await waitFor(() => {
+        expect(screen.getByText('Exécutions du jour')).toBeInTheDocument();
+      });
+
+      // Check that sync icon exists but does not have spin class
+      const syncIcons = document.querySelectorAll('[class*="anticon-sync"]');
+      const hasSpinIcon = Array.from(syncIcons).some(icon => icon.classList.contains('anticon-spin'));
+      expect(hasSpinIcon).toBe(false);
     });
   });
 });

@@ -1,5 +1,5 @@
 /**
- * ExecutionsPage - Execution history (Story 4.8, Story 8.8, Story 8.9).
+ * ExecutionsPage - Execution history (Story 4.8, Story 8.8, Story 8.9, Story 9.4).
  *
  * AC1: Table with columns: action, environment, status, date, duration.
  * AC3: Running executions first with blue pulsed indicator.
@@ -17,11 +17,23 @@
  * AC4-AC5: Tab change reloads data, resets pagination, preserves sort.
  * AC6: Non-DBA/DBOPS only see "Mes exécutions" tab.
  * AC9: Column "Utilisateur" visible only for scope=all.
+ *
+ * Story 9.4:
+ * AC1: 4 StatCards (executions du jour, taux de succès, en cours, en erreur) déplacées du Dashboard.
+ * AC3: Stats reflètent le scope actif (mine/all).
+ * AC4: Responsive layout xs=24 sm=12 md=6.
+ * AC5: Loading skeleton pour les cards.
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Typography, Table, Drawer, Tag, Skeleton, Badge, Alert, Card, Space, theme } from 'antd';
-import { SafetyCertificateOutlined } from '@ant-design/icons';
+import { Typography, Table, Drawer, Tag, Skeleton, Badge, Alert, Card, Space, Row, Col, theme } from 'antd';
+import {
+  SafetyCertificateOutlined,
+  RocketOutlined,
+  CheckCircleOutlined,
+  SyncOutlined,
+  ExclamationCircleOutlined,
+} from '@ant-design/icons';
 import type { TableProps, TablePaginationConfig } from 'antd';
 
 // Ant Design 6.2: Extract table event types from public API
@@ -31,9 +43,10 @@ type FilterValue = Parameters<TableOnChange<never>>[1][string];
 import { ExecutionTimeline } from '../components/execution/ExecutionTimeline';
 import { PendingApprovalsList } from '../components/dashboard/PendingApprovalsList';
 import { ExecutionsTabs } from '../components/executions/ExecutionsTabs';
-import { listExecutions, getExecution, getExecutionSteps, listPendingApprovals } from '../services/execution_service';
+import { StatCard } from '../components/dashboard/StatCard';
+import { listExecutions, getExecution, getExecutionSteps, listPendingApprovals, fetchExecutionStats } from '../services/execution_service';
 import { useAuth } from '../contexts/AuthContext';
-import type { ExecutionResponse, ExecutionStepResponse, ExecutionStatusType, ExecutionScope } from '../types/api';
+import type { ExecutionResponse, ExecutionStepResponse, ExecutionStatusType, ExecutionScope, DashboardStats } from '../types/api';
 
 const { Title } = Typography;
 
@@ -114,6 +127,10 @@ export default function ExecutionsPage() {
   const [drawerLoading, setDrawerLoading] = useState(false);
   const [drawerError, setDrawerError] = useState<string | null>(null);
 
+  // Story 9.4: Execution statistics state (AC1, AC3)
+  const [statsData, setStatsData] = useState<DashboardStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+
   // Fetch executions (AC4: pagination with total_count from API; Story 8.9: scope filter)
   const fetchData = useCallback(async (page: number, scope: ExecutionScope) => {
     setLoading(true);
@@ -158,6 +175,30 @@ export default function ExecutionsPage() {
   useEffect(() => {
     loadPendingApprovals();
   }, [loadPendingApprovals]);
+
+  // Story 9.4 AC3: Load stats when scope changes
+  useEffect(() => {
+    async function loadStats() {
+      setStatsLoading(true);
+      try {
+        const stats = await fetchExecutionStats(activeScope);
+        setStatsData(stats);
+      } catch (err) {
+        console.error('Erreur chargement stats:', err);
+        // Afficher stats vides plutôt que bloquer l'UI
+        setStatsData({
+          executions_jour: 0,
+          taux_succes_pct: 0,
+          executions_en_cours: 0,
+          executions_en_erreur: 0,
+        });
+      } finally {
+        setStatsLoading(false);
+      }
+    }
+
+    loadStats();
+  }, [activeScope]);
 
   // Story 8.8: Callback after approval/rejection - refresh both lists
   const handleApprovalComplete = useCallback(() => {
@@ -350,6 +391,46 @@ export default function ExecutionsPage() {
   return (
     <div style={{ padding: 24 }}>
       <Title level={2}>Exécutions</Title>
+
+      {/* Story 9.4 AC1, AC3, AC4, AC5: StatCards section */}
+      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+        <Col xs={24} sm={12} md={6}>
+          <StatCard
+            label="Exécutions du jour"
+            value={statsData?.executions_jour ?? 0}
+            icon={<RocketOutlined />}
+            loading={statsLoading}
+          />
+        </Col>
+        <Col xs={24} sm={12} md={6}>
+          <StatCard
+            label="Taux de succès"
+            value={statsData?.taux_succes_pct ?? 0}
+            suffix="%"
+            icon={<CheckCircleOutlined />}
+            variant="success"
+            loading={statsLoading}
+          />
+        </Col>
+        <Col xs={24} sm={12} md={6}>
+          <StatCard
+            label="En cours"
+            value={statsData?.executions_en_cours ?? 0}
+            icon={<SyncOutlined spin={!statsLoading && (statsData?.executions_en_cours ?? 0) > 0} />}
+            variant="inProgress"
+            loading={statsLoading}
+          />
+        </Col>
+        <Col xs={24} sm={12} md={6}>
+          <StatCard
+            label="En erreur"
+            value={statsData?.executions_en_erreur ?? 0}
+            icon={<ExclamationCircleOutlined />}
+            variant="error"
+            loading={statsLoading}
+          />
+        </Col>
+      </Row>
 
       {/* Story 8.8 AC1, AC8: Pending approvals section (DBA/DBOPS only) */}
       {canApprove && pendingApprovals.length > 0 && (

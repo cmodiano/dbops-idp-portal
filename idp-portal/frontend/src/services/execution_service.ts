@@ -16,6 +16,7 @@ import type {
   ExecutionScope,
   RemediationSuggestion,
   RemediationContext,
+  DashboardStats,
 } from '../types/api';
 
 /**
@@ -202,6 +203,25 @@ export async function rejectExecution(
     method: 'POST',
     body,
   });
+}
+
+// === Story 9.4: Execution Statistics (AC3) ===
+
+/**
+ * Fetch execution statistics by scope (Story 9.4, AC3).
+ *
+ * Returns stats filtered by scope:
+ * - scope=mine: Statistics for current user's executions only (default)
+ * - scope=all: Global statistics (RBAC applied - DBA/DBOPS see all)
+ *
+ * @param scope - "mine" for user's stats (default), "all" for all stats
+ * @returns DashboardStats with executions_jour, taux_succes_pct, executions_en_cours, executions_en_erreur
+ * @throws Error if API call fails
+ */
+export async function fetchExecutionStats(
+  scope: ExecutionScope = 'mine'
+): Promise<DashboardStats> {
+  return apiFetch<DashboardStats>(`/executions/stats?scope=${scope}`);
 }
 
 // === Story 9.1: Remediation Suggestions (FR36) ===

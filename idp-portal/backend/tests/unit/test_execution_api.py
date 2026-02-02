@@ -1077,3 +1077,135 @@ class TestListExecutionsScope:
         assert response.status_code == status.HTTP_200_OK
         # Should call list_by_user, not list_all_executions
         mock_list.assert_called_once_with(user_id=1, limit=50, offset=0)
+
+
+class TestGetExecutionStats:
+    """Tests for GET /api/v1/executions/stats (Story 9.4, AC3)."""
+
+    @pytest.mark.asyncio
+    async def test_get_execution_stats_mine_returns_user_stats(self, client, mock_auth):
+        """GET /executions/stats?scope=mine returns stats for current user only (Story 9.4, AC3)."""
+        mock_stats = {
+            "executions_jour": 5,
+            "taux_succes_pct": 80.0,
+            "executions_en_cours": 2,
+            "executions_en_erreur": 1,
+        }
+
+        with patch("app.api.v1.executions.execution_repository.get_execution_stats", new_callable=AsyncMock) as mock_get_stats:
+            mock_get_stats.return_value = mock_stats
+
+            response = await client.get("/api/v1/executions/stats?scope=mine")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()["data"]
+        assert data["executions_jour"] == 5
+        assert data["taux_succes_pct"] == 80.0
+        assert data["executions_en_cours"] == 2
+        assert data["executions_en_erreur"] == 1
+
+        # Verify scope=mine was passed
+        mock_get_stats.assert_called_once()
+        call_kwargs = mock_get_stats.call_args.kwargs
+        assert call_kwargs["scope"] == "mine"
+        assert call_kwargs["user_id"] == 1
+
+    @pytest.mark.asyncio
+    async def test_get_execution_stats_all_dba_returns_all_stats(self, client, mock_auth):
+        """GET /executions/stats?scope=all for DBA returns global stats (Story 9.4, AC3)."""
+        mock_stats = {
+            "executions_jour": 100,
+            "taux_succes_pct": 92.5,
+            "executions_en_cours": 10,
+            "executions_en_erreur": 5,
+        }
+
+        with patch("app.api.v1.executions.execution_repository.get_execution_stats", new_callable=AsyncMock) as mock_get_stats:
+            mock_get_stats.return_value = mock_stats
+
+            response = await client.get("/api/v1/executions/stats?scope=all")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()["data"]
+        assert data["executions_jour"] == 100
+        assert data["taux_succes_pct"] == 92.5
+
+        # Verify scope=all was passed (DBA can view all)
+        mock_get_stats.assert_called_once()
+        call_kwargs = mock_get_stats.call_args.kwargs
+        assert call_kwargs["scope"] == "all"
+        assert call_kwargs["user_profiles"] == ["dba"]
+
+    @pytest.mark.asyncio
+    async def test_get_execution_stats_default_scope_is_mine(self, client, mock_auth):
+        """GET /executions/stats without scope defaults to mine (Story 9.4, AC3)."""
+        mock_stats = {
+            "executions_jour": 3,
+            "taux_succes_pct": 75.0,
+            "executions_en_cours": 1,
+            "executions_en_erreur": 0,
+        }
+
+        with patch("app.api.v1.executions.execution_repository.get_execution_stats", new_callable=AsyncMock) as mock_get_stats:
+            mock_get_stats.return_value = mock_stats
+
+            response = await client.get("/api/v1/executions/stats")
+
+        assert response.status_code == status.HTTP_200_OK
+
+        # Verify default scope=mine
+        mock_get_stats.assert_called_once()
+        call_kwargs = mock_get_stats.call_args.kwargs
+        assert call_kwargs["scope"] == "mine"
+
+    @pytest.mark.asyncio
+    async def test_get_execution_stats_invalid_scope_returns_422(self, client, mock_auth):
+        """GET /executions/stats?scope=invalid returns 422 (Story 9.4)."""
+        response = await client.get("/api/v1/executions/stats?scope=invalid")
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    @pytest.mark.asyncio
+    async def test_get_execution_stats_regular_user_scope_all_returns_mine(self, client, mock_auth_regular_user):
+        """GET /executions/stats?scope=all for non-DBA user falls back to mine (Story 9.4, AC3)."""
+        mock_stats = {
+            "executions_jour": 2,
+            "taux_succes_pct": 50.0,
+            "executions_en_cours": 0,
+            "executions_en_erreur": 1,
+        }
+
+        with patch("app.api.v1.executions.execution_repository.get_execution_stats", new_callable=AsyncMock) as mock_get_stats:
+            mock_get_stats.return_value = mock_stats
+
+            response = await client.get("/api/v1/executions/stats?scope=all")
+
+        assert response.status_code == status.HTTP_200_OK
+
+        # Repository will enforce RBAC (user_profiles will be used to decide effective scope)
+        mock_get_stats.assert_called_once()
+        call_kwargs = mock_get_stats.call_args.kwargs
+        assert call_kwargs["scope"] == "all"  # User requested all
+        assert call_kwargs["user_profiles"] == ["developer"]  # But user is not DBA
+
+    @pytest.mark.asyncio
+    async def test_get_execution_stats_handles_zero_stats(self, client, mock_auth):
+        """GET /executions/stats returns 0 for all stats when no executions (Story 9.4)."""
+        mock_stats = {
+            "executions_jour": 0,
+            "taux_succes_pct": 0.0,
+            "executions_en_cours": 0,
+            "executions_en_erreur": 0,
+        }
+
+        with patch("app.api.v1.executions.execution_repository.get_execution_stats", new_callable=AsyncMock) as mock_get_stats:
+            mock_get_stats.return_value = mock_stats
+
+            response = await client.get("/api/v1/executions/stats?scope=mine")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()["data"]
+        assert data["executions_jour"] == 0
+        assert data["taux_succes_pct"] == 0.0
+        assert data["executions_en_cours"] == 0
+        assert data["executions_en_erreur"] == 0

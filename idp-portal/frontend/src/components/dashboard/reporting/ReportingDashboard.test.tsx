@@ -1,5 +1,7 @@
 /**
- * Tests for ReportingDashboard component (Story 8.3, AC1, AC2, AC6, AC8; Story 8.5; Story 8.6).
+ * Tests for ReportingDashboard component (Story 8.3, AC1, AC2, AC6, AC8; Story 8.5; Story 8.6; Story 9.4).
+ *
+ * Story 9.4: StatCards moved to ExecutionsPage - tests updated to verify removal.
  */
 
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
@@ -28,9 +30,8 @@ function renderWithRouter(component: React.ReactNode) {
   return render(<RouterProvider router={router} />);
 }
 
-// Mock dashboard service
+// Mock dashboard service (Story 9.4: fetchStats removed - StatCards moved to ExecutionsPage)
 vi.mock('../../../services/dashboard_service', () => ({
-  fetchStats: vi.fn(),
   fetchStatsByTechnology: vi.fn(),
   fetchStatsByEnvironment: vi.fn(),
   fetchTimeSeries: vi.fn(),
@@ -40,12 +41,7 @@ vi.mock('../../../services/dashboard_service', () => ({
   fetchComparison: vi.fn(),
 }));
 
-const mockStats = {
-  executions_jour: 15,
-  taux_succes_pct: 87.5,
-  executions_en_cours: 3,
-  executions_en_erreur: 2,
-};
+// Story 9.4: mockStats removed - StatCards moved to ExecutionsPage
 
 const mockTechStats = [
   { engine: 'Oracle', count: 50, success_rate: 95.0 },
@@ -72,7 +68,7 @@ const mockFilterOptions = {
 describe('ReportingDashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(dashboardService.fetchStats).mockResolvedValue(mockStats);
+    // Story 9.4: fetchStats removed - StatCards moved to ExecutionsPage
     vi.mocked(dashboardService.fetchStatsByTechnology).mockResolvedValue(mockTechStats);
     vi.mocked(dashboardService.fetchStatsByEnvironment).mockResolvedValue(mockEnvStats);
     vi.mocked(dashboardService.fetchTimeSeries).mockResolvedValue(mockTimeSeries);
@@ -81,18 +77,36 @@ describe('ReportingDashboard', () => {
     vi.mocked(dashboardService.exportDashboardPDF).mockResolvedValue();
   });
 
-  it('renders StatCards with correct values (AC2)', async () => {
-    await act(async () => {
-      renderWithRouter(<ReportingDashboard />);
+  // Story 9.4: StatCards tests removed - moved to ExecutionsPage.test.tsx
+  describe('Story 9.4 — StatCards Removed', () => {
+    it('does NOT render StatCards (moved to ExecutionsPage)', async () => {
+      await act(async () => {
+        renderWithRouter(<ReportingDashboard />);
+      });
+
+      await waitFor(() => {
+        // Charts should still be visible
+        expect(screen.getByText('Repartition par technologie')).toBeInTheDocument();
+      });
+
+      // StatCard labels should NOT be present
+      expect(screen.queryByText('Exécutions du jour')).not.toBeInTheDocument();
+      expect(screen.queryByText('Taux de succès')).not.toBeInTheDocument();
+      expect(screen.queryByText('En cours')).not.toBeInTheDocument();
+      expect(screen.queryByText('En erreur')).not.toBeInTheDocument();
     });
 
-    await waitFor(() => {
-      expect(screen.getByText('15')).toBeInTheDocument(); // executions_jour
-    });
+    it('charts are still rendered after StatCards removal', async () => {
+      await act(async () => {
+        renderWithRouter(<ReportingDashboard />);
+      });
 
-    expect(screen.getByText('87.5%')).toBeInTheDocument(); // taux_succes_pct
-    expect(screen.getByText('3')).toBeInTheDocument(); // executions_en_cours
-    expect(screen.getByText('2')).toBeInTheDocument(); // executions_en_erreur
+      await waitFor(() => {
+        expect(screen.getByText('Repartition par technologie')).toBeInTheDocument();
+        expect(screen.getByText('Repartition par environnement')).toBeInTheDocument();
+        expect(screen.getByText('Tendances temporelles')).toBeInTheDocument();
+      });
+    });
   });
 
   it('renders period selector with options (AC6)', async () => {
@@ -112,9 +126,9 @@ describe('ReportingDashboard', () => {
     });
 
     await waitFor(() => {
-      // fetchStats is called with a filters object containing days: 14
-      expect(dashboardService.fetchStats).toHaveBeenCalled();
-      const firstCall = vi.mocked(dashboardService.fetchStats).mock.calls[0][0];
+      // Story 9.4: fetchStatsByTechnology used instead of fetchStats (StatCards moved)
+      expect(dashboardService.fetchStatsByTechnology).toHaveBeenCalled();
+      const firstCall = vi.mocked(dashboardService.fetchStatsByTechnology).mock.calls[0][0];
       expect(firstCall).toMatchObject({ days: 14 });
     });
 
@@ -124,8 +138,8 @@ describe('ReportingDashboard', () => {
     });
 
     await waitFor(() => {
-      // fetchStats should be called again with days: 30
-      const calls = vi.mocked(dashboardService.fetchStats).mock.calls;
+      // fetchStatsByTechnology should be called again with days: 30
+      const calls = vi.mocked(dashboardService.fetchStatsByTechnology).mock.calls;
       const lastCall = calls[calls.length - 1][0];
       expect(lastCall).toMatchObject({ days: 30 });
     });
@@ -166,7 +180,8 @@ describe('ReportingDashboard', () => {
   });
 
   it('displays error alert on fetch failure', async () => {
-    vi.mocked(dashboardService.fetchStats).mockRejectedValue(new Error('Network error'));
+    // Story 9.4: Use fetchStatsByTechnology instead of fetchStats
+    vi.mocked(dashboardService.fetchStatsByTechnology).mockRejectedValue(new Error('Network error'));
 
     await act(async () => {
       renderWithRouter(<ReportingDashboard />);

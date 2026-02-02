@@ -1109,3 +1109,136 @@ class TestGetParentExecution:
             result = await execution_repository.get_parent_execution(1)
 
         assert result is None
+
+
+class TestGetExecutionStats:
+    """Tests for execution_repository.get_execution_stats (Story 9.4, AC3)."""
+
+    @pytest.mark.asyncio
+    async def test_get_execution_stats_scope_mine_filters_by_user_id(self):
+        """get_execution_stats with scope=mine filters by user_id."""
+        # Row: executions_jour, taux_succes_pct, executions_en_cours, executions_en_erreur
+        row = (5, 85.71, 2, 1)
+
+        mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
+        mock_cursor.fetchone = AsyncMock(return_value=row)
+        mock_cursor.close = MagicMock()
+
+        mock_conn = MagicMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            result = await execution_repository.get_execution_stats(
+                user_id=1,
+                scope="mine",
+                user_profiles=["CLIENT_BUSINESS"],
+            )
+
+        assert result["executions_jour"] == 5
+        assert result["taux_succes_pct"] == 85.71
+        assert result["executions_en_cours"] == 2
+        assert result["executions_en_erreur"] == 1
+
+        # Verify user_id filter was applied
+        execute_call = mock_cursor.execute.call_args
+        query = execute_call[0][0]
+        params = execute_call[0][1]
+        assert "WHERE USER_ID = :user_id" in query
+        assert params["user_id"] == 1
+
+    @pytest.mark.asyncio
+    async def test_get_execution_stats_scope_all_dba_returns_all_stats(self):
+        """get_execution_stats with scope=all and DBA profile returns all stats."""
+        row = (100, 92.5, 10, 5)
+
+        mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
+        mock_cursor.fetchone = AsyncMock(return_value=row)
+        mock_cursor.close = MagicMock()
+
+        mock_conn = MagicMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            result = await execution_repository.get_execution_stats(
+                user_id=1,
+                scope="all",
+                user_profiles=["DBA"],
+            )
+
+        assert result["executions_jour"] == 100
+        assert result["taux_succes_pct"] == 92.5
+        assert result["executions_en_cours"] == 10
+        assert result["executions_en_erreur"] == 5
+
+        # Verify NO user_id filter was applied (DBA can view all)
+        execute_call = mock_cursor.execute.call_args
+        query = execute_call[0][0]
+        assert "WHERE USER_ID = :user_id" not in query
+
+    @pytest.mark.asyncio
+    async def test_get_execution_stats_scope_all_business_returns_mine(self):
+        """get_execution_stats with scope=all but non-DBA profile falls back to scope=mine."""
+        row = (3, 66.67, 1, 1)
+
+        mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
+        mock_cursor.fetchone = AsyncMock(return_value=row)
+        mock_cursor.close = MagicMock()
+
+        mock_conn = MagicMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            result = await execution_repository.get_execution_stats(
+                user_id=5,
+                scope="all",  # User requests all, but doesn't have permission
+                user_profiles=["CLIENT_BUSINESS"],
+            )
+
+        assert result["executions_jour"] == 3
+
+        # Verify user_id filter WAS applied (fallback to mine)
+        execute_call = mock_cursor.execute.call_args
+        query = execute_call[0][0]
+        params = execute_call[0][1]
+        assert "WHERE USER_ID = :user_id" in query
+        assert params["user_id"] == 5
+
+    @pytest.mark.asyncio
+    async def test_get_execution_stats_handles_no_executions(self):
+        """get_execution_stats returns 0 for all stats when no executions exist."""
+        row = (0, None, 0, 0)  # taux_succes_pct is NULL when division by zero
+
+        mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
+        mock_cursor.fetchone = AsyncMock(return_value=row)
+        mock_cursor.close = MagicMock()
+
+        mock_conn = MagicMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            result = await execution_repository.get_execution_stats(
+                user_id=999,
+                scope="mine",
+                user_profiles=["CLIENT_BUSINESS"],
+            )
+
+        assert result["executions_jour"] == 0
+        assert result["taux_succes_pct"] == 0.0
+        assert result["executions_en_cours"] == 0
+        assert result["executions_en_erreur"] == 0
