@@ -1,6 +1,6 @@
 # Story 9.7: Fix Oracle bind variable comment
 
-Status: review
+Status: done
 
 <!-- Note: Validation optionnelle. Exécuter validate-create-story pour contrôle qualité avant dev-story. -->
 
