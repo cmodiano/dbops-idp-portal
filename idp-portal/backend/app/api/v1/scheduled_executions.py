@@ -1,10 +1,12 @@
-"""Scheduled Executions API (Story 11.3, 11.6, 11.7 - API scheduled executions).
+"""Scheduled Executions API (Story 11.3, 11.6, 11.7, 11.8 - API scheduled executions).
 
 Provides endpoints for scheduling executions:
-- POST /api/v1/scheduled-executions: Create a scheduled execution (one-time or recurring) (Story 11.3, 11.7)
+- POST /api/v1/scheduled-executions: Create a scheduled execution (one-time or recurring) (Story 11.3, 11.7, 11.8)
 - GET /api/v1/scheduled-executions: List scheduled executions with filters (Story 11.6)
 - PATCH /api/v1/scheduled-executions/{id}: Cancel a scheduled execution (Story 11.6)
 - PATCH /api/v1/scheduled-executions/{id}/recurring-pattern: Toggle recurring pattern is_active (Story 11.7)
+- GET /api/v1/scheduled-executions/validate-cron: Validate cron expression (Story 11.8)
+- GET /api/v1/scheduled-executions/cron-next-executions: Preview next N cron executions (Story 11.8)
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ from datetime import datetime, timezone
 from typing import Any
 import uuid
 
+from croniter import croniter
 from fastapi import APIRouter, Depends, Query, Request, status
 import jsonschema
 import structlog
@@ -770,3 +773,137 @@ async def toggle_recurring_pattern(
         }
     finally:
         structlog.contextvars.clear_contextvars()
+
+
+@router.get("/validate-cron", response_model=None)
+async def validate_cron_expression(
+    expression: str = Query(..., description="Cron expression to validate"),
+    user: UserProfile = Depends(get_current_user),
+) -> dict:
+    """GET /api/v1/scheduled-executions/validate-cron - Validate a cron expression (Story 11.8, AC2).
+
+    Validates a cron expression syntactically and semantically using croniter.
+
+    **Query Parameters:**
+    - expression (str): Cron expression to validate (5 fields: minute hour day month day_of_week)
+
+    **Returns:**
+    - 200 OK: {"valid": true/false, "error": "error message if invalid"}
+
+    **Examples:**
+    - Valid: "0 2 * * 1-5" → {"valid": true, "error": ""}
+    - Invalid: "99 99 * * *" → {"valid": false, "error": "Expression cron invalide..."}
+    """
+    logger.info(
+        "validate_cron_requested",
+        expression=expression,
+        user_id=user.id,
+    )
+
+    try:
+        # First check: syntax validation
+        if not croniter.is_valid(expression):
+            return {
+                "valid": False,
+                "error": "Expression cron invalide. Format attendu : minute hour day month day_of_week",
+            }
+
+        # Second check: semantic validation - try to get next execution
+        reference = datetime.now(timezone.utc)
+        cron = croniter(expression, reference)
+        _ = cron.get_next(datetime)  # Test iteration works
+
+        logger.info(
+            "cron_validation_success",
+            expression=expression,
+            user_id=user.id,
+        )
+
+        return {"valid": True, "error": ""}
+
+    except Exception as e:
+        logger.warning(
+            "cron_validation_failed",
+            expression=expression,
+            error=str(e),
+            user_id=user.id,
+        )
+        return {
+            "valid": False,
+            "error": f"Expression cron invalide : {str(e)}",
+        }
+
+
+@router.get("/cron-next-executions", response_model=None)
+async def get_cron_next_executions(
+    expression: str = Query(..., description="Cron expression"),
+    count: int = Query(5, ge=1, le=10, description="Number of next executions to return"),
+    user: UserProfile = Depends(get_current_user),
+) -> dict:
+    """GET /api/v1/scheduled-executions/cron-next-executions - Preview next N cron executions (Story 11.8, AC2).
+
+    Calculates the next N execution dates for a given cron expression.
+
+    **Query Parameters:**
+    - expression (str): Cron expression (5 fields: minute hour day month day_of_week)
+    - count (int): Number of next executions to return (1-10, default: 5)
+
+    **Returns:**
+    - 200 OK: {"executions": ["2026-02-03T02:00:00+00:00", ...]}
+
+    **Raises:**
+    - 400: If cron expression is invalid
+
+    **Example:**
+    - expression: "0 2 * * 1-5", count: 5
+    - Returns next 5 weekday mornings at 2:00 AM UTC
+    """
+    logger.info(
+        "cron_next_executions_requested",
+        expression=expression,
+        count=count,
+        user_id=user.id,
+    )
+
+    # Validate expression first
+    if not croniter.is_valid(expression):
+        raise InvalidStateError(
+            code="INVALID_CRON_EXPRESSION",
+            message="Expression cron invalide. Format attendu : minute hour day month day_of_week",
+            details={"expression": expression},
+        )
+
+    try:
+        # Calculate next executions
+        reference = datetime.now(timezone.utc)
+        cron = croniter(expression, reference)
+
+        executions = []
+        for _ in range(count):
+            next_exec = cron.get_next(datetime)
+            # Ensure UTC timezone
+            if next_exec.tzinfo is None:
+                next_exec = next_exec.replace(tzinfo=timezone.utc)
+            executions.append(next_exec.isoformat())
+
+        logger.info(
+            "cron_next_executions_calculated",
+            expression=expression,
+            count=len(executions),
+            user_id=user.id,
+        )
+
+        return {"executions": executions}
+
+    except Exception as e:
+        logger.error(
+            "cron_next_executions_error",
+            expression=expression,
+            error=str(e),
+            user_id=user.id,
+        )
+        raise InvalidStateError(
+            code="CRON_CALCULATION_ERROR",
+            message=f"Erreur lors du calcul des prochaines exécutions : {str(e)}",
+            details={"expression": expression},
+        ) from e

@@ -1,28 +1,30 @@
-"""Scheduled Execution models for Story 11.3, 11.7 - API scheduled executions.
+"""Scheduled Execution models for Story 11.3, 11.7, 11.8 - API scheduled executions.
 
 Defines Pydantic models for:
 - ScheduledExecutionStatus: schedule lifecycle states
 - ScheduledExecutionCreate: input model for creating scheduled executions
 - ScheduledExecutionResponse: output model for scheduled execution records
-- RecurringPattern models: daily/weekly recurrence support (Story 11.7)
+- RecurringPattern models: daily/weekly/cron recurrence support (Story 11.7, 11.8)
 """
 
 from datetime import datetime
 from enum import Enum
 from typing import Any, Literal
 
+from croniter import croniter
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.models.execution import ExecutionEnvironment
 
 
-# === Recurring Pattern Types (Story 11.7) ===
+# === Recurring Pattern Types (Story 11.7, 11.8) ===
 
 
 class RecurringPatternType(str, Enum):
-    """Pattern type for recurring executions (Story 11.7, AC1-AC3)."""
+    """Pattern type for recurring executions (Story 11.7 AC1-AC3, Story 11.8 AC4)."""
     DAILY = "daily"
     WEEKLY = "weekly"
+    CRON = "cron"  # Story 11.8: Advanced cron expressions
 
 
 class DailyPatternConfig(BaseModel):
@@ -52,18 +54,49 @@ class WeeklyPatternConfig(BaseModel):
     minute: int = Field(..., ge=0, le=59, description="Minute of hour (0-59)")
 
 
-class RecurringPatternRequest(BaseModel):
-    """Recurring pattern in creation request (Story 11.7, AC2, AC3).
+class CronPatternConfig(BaseModel):
+    """Configuration for cron recurring pattern (Story 11.8, AC4, AC5).
+
+    Supports standard 5-field cron expressions: minute hour day month day_of_week
 
     Attributes:
-        pattern_type: Type of recurrence ('daily' or 'weekly')
+        cron_expression: Cron expression string (5 fields)
+    """
+    cron_expression: str = Field(
+        ...,
+        description="Cron expression (5 fields: minute hour day month day_of_week)",
+        json_schema_extra={"example": "0 2 * * 1-5"},
+    )
+
+    @field_validator("cron_expression")
+    @classmethod
+    def validate_cron_expression(cls, v: str) -> str:
+        """Validate cron expression format using croniter (Story 11.8, AC5)."""
+        if not v or not v.strip():
+            raise ValueError("Expression cron requise")
+
+        v = v.strip()
+
+        if not croniter.is_valid(v):
+            raise ValueError(
+                "Expression cron invalide. Format attendu : minute hour day month day_of_week"
+            )
+
+        return v
+
+
+class RecurringPatternRequest(BaseModel):
+    """Recurring pattern in creation request (Story 11.7 AC2-AC3, Story 11.8 AC4).
+
+    Attributes:
+        pattern_type: Type of recurrence ('daily', 'weekly', or 'cron')
         pattern_config: Configuration specific to the pattern type
     """
-    pattern_type: Literal["daily", "weekly"] = Field(
-        ..., description="Pattern type: 'daily' or 'weekly'"
+    pattern_type: Literal["daily", "weekly", "cron"] = Field(
+        ..., description="Pattern type: 'daily', 'weekly', or 'cron'"
     )
     pattern_config: dict[str, Any] = Field(
-        ..., description="Pattern configuration (hour, minute, day_of_week for weekly)"
+        ..., description="Pattern configuration (hour, minute, day_of_week for weekly, cron_expression for cron)"
     )
 
     @field_validator("pattern_config")
@@ -75,7 +108,7 @@ class RecurringPatternRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_pattern_config_matches_type(self):
-        """Validate pattern_config matches pattern_type (Story 11.7, AC6)."""
+        """Validate pattern_config matches pattern_type (Story 11.7 AC6, Story 11.8 AC5)."""
         if self.pattern_type == "daily":
             # Validate DailyPatternConfig fields
             if "hour" not in self.pattern_config:
@@ -124,6 +157,23 @@ class RecurringPatternRequest(BaseModel):
             if not isinstance(minute, int) or minute < 0 or minute > 59:
                 raise ValueError(
                     "Valeur invalide pour minute : doit être entre 0 et 59"
+                )
+        elif self.pattern_type == "cron":
+            # Validate CronPatternConfig fields (Story 11.8, AC5)
+            if "cron_expression" not in self.pattern_config:
+                raise ValueError(
+                    "Pattern config incomplet : cron_expression requis pour pattern cron"
+                )
+            cron_expression = self.pattern_config.get("cron_expression")
+            if not isinstance(cron_expression, str) or not cron_expression.strip():
+                raise ValueError(
+                    "Expression cron requise et doit être une chaîne non vide"
+                )
+            # Validate cron expression with croniter
+            if not croniter.is_valid(cron_expression.strip()):
+                raise ValueError(
+                    f"Expression cron invalide : {cron_expression}. "
+                    f"Format attendu : minute hour day month day_of_week"
                 )
         return self
 

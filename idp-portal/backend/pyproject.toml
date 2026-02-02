@@ -25,6 +25,7 @@ dependencies = [
     "jsonschema>=4.20",
     "hvac>=2.4.0",
     "reportlab>=4.0",
+    "croniter>=3.0",
 ]
 
 [project.optional-dependencies]

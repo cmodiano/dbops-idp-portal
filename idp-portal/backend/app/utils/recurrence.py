@@ -1,12 +1,13 @@
-"""Recurrence calculation utilities for Story 11.7 - Recurring executions.
+"""Recurrence calculation utilities for Story 11.7, 11.8 - Recurring executions.
 
-Provides functions to calculate next_execution_date for daily and weekly patterns.
+Provides functions to calculate next_execution_date for daily, weekly, and cron patterns.
 All datetime calculations are performed in UTC.
 """
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from croniter import croniter
 import structlog
 
 logger = structlog.get_logger(__name__)
@@ -17,13 +18,14 @@ def calculate_next_execution_date(
     pattern_config: dict[str, Any],
     reference_datetime: datetime | None = None,
 ) -> datetime:
-    """Calculate next execution date for recurring pattern (Story 11.7, AC4, AC5).
+    """Calculate next execution date for recurring pattern (Story 11.7 AC4-AC5, Story 11.8 AC6).
 
     Args:
-        pattern_type: Type of pattern ("daily" or "weekly")
+        pattern_type: Type of pattern ("daily", "weekly", or "cron")
         pattern_config: Pattern configuration dict
             - daily: {"hour": int, "minute": int}
             - weekly: {"day_of_week": int, "hour": int, "minute": int}
+            - cron: {"cron_expression": str} (Story 11.8)
         reference_datetime: Reference time (defaults to now in UTC)
 
     Returns:
@@ -43,6 +45,8 @@ def calculate_next_execution_date(
         return _calculate_daily_next_execution(pattern_config, reference_datetime)
     elif pattern_type == "weekly":
         return _calculate_weekly_next_execution(pattern_config, reference_datetime)
+    elif pattern_type == "cron":
+        return _calculate_cron_next_execution(pattern_config, reference_datetime)
     else:
         raise ValueError(f"Type de pattern non supporté : {pattern_type}")
 
@@ -173,6 +177,68 @@ def _calculate_weekly_next_execution(
     return target_datetime
 
 
+def _calculate_cron_next_execution(
+    pattern_config: dict[str, Any],
+    reference_datetime: datetime,
+) -> datetime:
+    """Calculate next execution for cron pattern (Story 11.8, AC6).
+
+    Args:
+        pattern_config: {"cron_expression": str}
+            cron_expression: Standard 5-field cron format (minute hour day month day_of_week)
+        reference_datetime: Reference datetime in UTC
+
+    Returns:
+        Next execution datetime in UTC
+
+    Raises:
+        ValueError: If cron expression is missing or invalid
+
+    Examples:
+        - "0 2 * * 1-5" (weekdays at 2am): Next weekday at 02:00 UTC
+        - "0 0 1 * *" (first of month): Next 1st of month at midnight UTC
+        - "*/15 * * * *" (every 15 min): Next 15-minute mark
+    """
+    cron_expression = pattern_config.get("cron_expression")
+
+    if not cron_expression:
+        raise ValueError(
+            "Pattern config incomplet : cron_expression requis pour pattern cron"
+        )
+
+    # Validate cron expression
+    if not croniter.is_valid(cron_expression):
+        raise ValueError(
+            f"Expression cron invalide : {cron_expression}. "
+            f"Format attendu : minute hour day month day_of_week"
+        )
+
+    try:
+        # Create croniter instance with reference datetime
+        cron = croniter(cron_expression, reference_datetime)
+
+        # Get next execution datetime
+        next_execution = cron.get_next(datetime)
+
+        # Ensure result has UTC timezone
+        if next_execution.tzinfo is None:
+            next_execution = next_execution.replace(tzinfo=timezone.utc)
+
+        logger.info(
+            "calculated_cron_next_execution",
+            cron_expression=cron_expression,
+            reference_datetime=reference_datetime.isoformat(),
+            next_execution=next_execution.isoformat(),
+        )
+
+        return next_execution
+
+    except (ValueError, KeyError) as e:
+        raise ValueError(
+            f"Erreur lors du calcul de la prochaine exécution cron : {str(e)}"
+        ) from e
+
+
 def increment_next_execution_date(
     pattern_type: str,
     pattern_config: dict[str, Any],
@@ -181,16 +247,20 @@ def increment_next_execution_date(
     """Increment next_execution_date after execution completes (for scheduler external).
 
     Args:
-        pattern_type: Type of pattern ("daily" or "weekly")
+        pattern_type: Type of pattern ("daily", "weekly", or "cron")
         pattern_config: Pattern configuration dict
         current_next_execution_date: Current next_execution_date
 
     Returns:
-        New next_execution_date (incremented by 1 day for daily, 7 days for weekly)
+        New next_execution_date (incremented by 1 day for daily, 7 days for weekly,
+        calculated via croniter for cron)
     """
     if pattern_type == "daily":
         return current_next_execution_date + timedelta(days=1)
     elif pattern_type == "weekly":
         return current_next_execution_date + timedelta(weeks=1)
+    elif pattern_type == "cron":
+        # For cron, recalculate from current_next_execution_date using croniter
+        return _calculate_cron_next_execution(pattern_config, current_next_execution_date)
     else:
         raise ValueError(f"Type de pattern non supporté : {pattern_type}")

@@ -34,6 +34,7 @@ import {
   cancelScheduledExecution,
   toggleRecurringPattern,
 } from '../../services/scheduled_execution_service';
+import { describeCronExpression } from '../../utils/cronHelper';
 import type {
   ScheduledExecutionListItem,
   ScheduledExecutionFilters,
@@ -62,9 +63,19 @@ const DAY_NAMES: Record<number, string> = {
   7: 'dimanches',
 };
 
-/** Format recurring pattern display (Story 11.7, AC7). */
+/** Format recurring pattern display (Story 11.7 AC7, Story 11.8 AC8). */
 function formatRecurrenceDisplay(recurringPattern: RecurringPatternResponse): string {
   const { pattern_type, pattern_config } = recurringPattern;
+
+  // Story 11.8: Handle cron pattern (AC8)
+  if (pattern_type === 'cron') {
+    const cronExpression = 'cron_expression' in pattern_config ? pattern_config.cron_expression : '';
+    if (cronExpression) {
+      return describeCronExpression(cronExpression as string);
+    }
+    return 'Expression cron';
+  }
+
   const hour = String('hour' in pattern_config ? pattern_config.hour : 0).padStart(2, '0');
   const minute = String('minute' in pattern_config ? pattern_config.minute : 0).padStart(2, '0');
 
@@ -259,13 +270,22 @@ export default function ScheduledExecutionsPage() {
   };
 
   const columns: TableProps<ScheduledExecutionListItem>['columns'] = [
-    // Story 11.7: Type column (AC7)
+    // Story 11.7, 11.8: Type column (AC7, AC12 - distinct badges for cron)
     {
       title: 'Type',
       key: 'type',
-      width: 100,
+      width: 150,
       render: (_: unknown, record: ScheduledExecutionListItem) => {
         if (record.recurring_pattern) {
+          // Story 11.8 AC7: Purple badge for cron patterns
+          if (record.recurring_pattern.pattern_type === 'cron') {
+            return (
+              <Tag color="purple" icon={<SyncOutlined />}>
+                Récurrent - Cron
+              </Tag>
+            );
+          }
+          // Story 11.7: Blue badge for daily/weekly patterns
           return (
             <Tag color="blue" icon={<SyncOutlined />}>
               Récurrent
@@ -555,11 +575,15 @@ export default function ScheduledExecutionsPage() {
         {selectedExecution && (
           <Descriptions column={1} bordered size="small">
             <Descriptions.Item label="ID">{selectedExecution.scheduled_execution_id}</Descriptions.Item>
-            {/* Story 11.7 AC8: Type for recurring executions */}
+            {/* Story 11.7 AC8, Story 11.8 AC8: Type for recurring executions */}
             <Descriptions.Item label="Type">
               {selectedExecution.recurring_pattern ? (
                 <Tag color="blue" icon={<SyncOutlined />}>
-                  Récurrent - {selectedExecution.recurring_pattern.pattern_type === 'daily' ? 'Daily' : 'Weekly'}
+                  Récurrent - {
+                    selectedExecution.recurring_pattern.pattern_type === 'daily' ? 'Daily' :
+                    selectedExecution.recurring_pattern.pattern_type === 'weekly' ? 'Weekly' :
+                    selectedExecution.recurring_pattern.pattern_type === 'cron' ? 'Cron' : 'Unknown'
+                  }
                 </Tag>
               ) : (
                 <Tag>Unique</Tag>
@@ -583,11 +607,18 @@ export default function ScheduledExecutionsPage() {
                   : '—'}
               </pre>
             </Descriptions.Item>
-            {/* Story 11.7 AC8: Configuration for recurring patterns */}
+            {/* Story 11.7 AC8, Story 11.8 AC8: Configuration for recurring patterns */}
             {selectedExecution.recurring_pattern ? (
               <>
                 <Descriptions.Item label="Configuration">
                   {formatRecurrenceDisplay(selectedExecution.recurring_pattern)}
+                  {/* Story 11.8: Show raw cron expression for cron patterns */}
+                  {selectedExecution.recurring_pattern.pattern_type === 'cron' &&
+                    'cron_expression' in selectedExecution.recurring_pattern.pattern_config && (
+                    <div style={{ marginTop: 4, fontSize: 12, color: '#888' }}>
+                      Expression : <code>{selectedExecution.recurring_pattern.pattern_config.cron_expression as string}</code>
+                    </div>
+                  )}
                 </Descriptions.Item>
                 <Descriptions.Item label="Prochaine exécution">
                   {selectedExecution.recurring_pattern.next_execution_date

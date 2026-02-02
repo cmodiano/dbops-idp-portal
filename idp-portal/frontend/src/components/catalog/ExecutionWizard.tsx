@@ -33,7 +33,7 @@ import {
   App,
   Radio,
 } from 'antd';
-import { InfoCircleOutlined, WarningOutlined, ToolOutlined, ClockCircleOutlined } from '@ant-design/icons';
+import { InfoCircleOutlined, WarningOutlined, ToolOutlined, ClockCircleOutlined, CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import type { CatalogActionDetail } from '../../services/catalog_service';
@@ -45,7 +45,10 @@ import type {
   RecurringPatternRequest,
 } from '../../types/api';
 import { submitExecution, fetchInventoryItems } from '../../services/execution_service';
-import { createScheduledExecution } from '../../services/scheduled_execution_service';
+import { createScheduledExecution, validateCronExpression, getCronNextExecutions } from '../../services/scheduled_execution_service';
+import { CRON_PRESETS } from '../../utils/cronHelper';
+import CronExpressionHelper from '../shared/CronExpressionHelper';
+import { debounce } from 'lodash';
 import { ImpactIndicator } from '../shared/ImpactIndicator';
 import { ExecutionTimeline } from '../execution';
 import { STYLE_TOKENS } from '../../theme/styleTokens';
@@ -219,13 +222,20 @@ export function ExecutionWizard({
   const [scheduledAt, setScheduledAt] = useState<Dayjs | null>(null);
   const [schedulingError, setSchedulingError] = useState<string | null>(null);
 
-  // Story 11.7: Recurring pattern state (AC1, AC2, AC3)
-  const [schedulingType, setSchedulingType] = useState<'one-time' | 'daily' | 'weekly'>('one-time');
+  // Story 11.7, 11.8: Recurring pattern state (AC1, AC2, AC3)
+  const [schedulingType, setSchedulingType] = useState<'one-time' | 'daily' | 'weekly' | 'cron'>('one-time');
   const [dailyHour, setDailyHour] = useState<number>(2);
   const [dailyMinute, setDailyMinute] = useState<number>(0);
   const [weeklyDayOfWeek, setWeeklyDayOfWeek] = useState<number>(1); // 1=Monday
   const [weeklyHour, setWeeklyHour] = useState<number>(14);
   const [weeklyMinute, setWeeklyMinute] = useState<number>(0);
+  // Story 11.8: Cron expression state (AC1, AC2, AC3)
+  const [cronExpression, setCronExpression] = useState<string>('');
+  const [cronIsValid, setCronIsValid] = useState<boolean | null>(null);
+  const [cronError, setCronError] = useState<string>('');
+  const [cronNextExecutions, setCronNextExecutions] = useState<string[]>([]);
+  const [cronValidating, setCronValidating] = useState(false);
+  const [showCronHelper, setShowCronHelper] = useState(false);
 
   // Inventory data for dropdowns (with caching)
   const [inventoryData, setInventoryData] = useState<Record<string, InventoryItem[]>>({});
@@ -280,6 +290,11 @@ export function ExecutionWizard({
       setWeeklyDayOfWeek(1);
       setWeeklyHour(14);
       setWeeklyMinute(0);
+      // Story 11.8: Reset cron state
+      setCronExpression('');
+      setCronIsValid(null);
+      setCronError('');
+      setCronNextExecutions([]);
 
       // Story 7.2, Task 2.2: Auto-select environment if only one is available
       if (allowedEnvironments.length === 1) {
@@ -419,6 +434,71 @@ export function ExecutionWizard({
     setCurrentStep((s) => Math.max(s - 1, 0));
   }, []);
 
+  // Story 11.8: Debounced cron validation (AC2)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const validateCronDebounced = useCallback(
+    debounce(async (expression: string) => {
+      if (!expression || !expression.trim()) {
+        setCronIsValid(null);
+        setCronError('');
+        setCronNextExecutions([]);
+        return;
+      }
+
+      setCronValidating(true);
+
+      try {
+        // Validate expression
+        const validation = await validateCronExpression(expression);
+
+        if (validation.valid) {
+          setCronIsValid(true);
+          setCronError('');
+
+          // Get next executions for preview
+          const nextExecs = await getCronNextExecutions(expression, 5);
+          setCronNextExecutions(nextExecs);
+        } else {
+          setCronIsValid(false);
+          setCronError(validation.error || 'Expression cron invalide');
+          setCronNextExecutions([]);
+        }
+      } catch {
+        setCronIsValid(false);
+        setCronError('Erreur de validation');
+        setCronNextExecutions([]);
+      } finally {
+        setCronValidating(false);
+      }
+    }, 500),
+    []
+  );
+
+  // Story 11.8: Handle cron expression input change (AC2)
+  const handleCronChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const expression = e.target.value;
+      setCronExpression(expression);
+      validateCronDebounced(expression);
+    },
+    [validateCronDebounced]
+  );
+
+  // Story 11.8: Handle cron preset selection (AC3)
+  const handleCronPresetChange = useCallback(
+    (value: string) => {
+      if (value === 'custom') {
+        setCronExpression('');
+        setCronIsValid(null);
+        setCronNextExecutions([]);
+      } else {
+        setCronExpression(value);
+        validateCronDebounced(value);
+      }
+    },
+    [validateCronDebounced]
+  );
+
   // Handle submission
   const handleSubmit = useCallback(async () => {
     if (!action || !selectedEnvironment) {
@@ -509,7 +589,7 @@ export function ExecutionWizard({
       return;
     }
 
-    // Story 11.7: Validate based on scheduling type
+    // Story 11.7, 11.8: Validate based on scheduling type
     if (schedulingType === 'one-time') {
       if (!scheduledAt) {
         setSchedulingError('Veuillez sélectionner une date et heure');
@@ -519,6 +599,12 @@ export function ExecutionWizard({
       // Client-side validation: date must be in the future (AC5)
       if (scheduledAt.isBefore(dayjs())) {
         setSchedulingError('La date planifiée doit être dans le futur');
+        return;
+      }
+    } else if (schedulingType === 'cron') {
+      // Story 11.8: Validate cron expression (AC2, AC4)
+      if (!cronExpression || !cronIsValid) {
+        setSchedulingError('Veuillez saisir une expression cron valide');
         return;
       }
     }
@@ -558,6 +644,14 @@ export function ExecutionWizard({
             minute: weeklyMinute,
           },
         };
+      } else if (schedulingType === 'cron') {
+        // Story 11.8: Cron pattern (AC4)
+        recurringPattern = {
+          pattern_type: 'cron',
+          pattern_config: {
+            cron_expression: cronExpression,
+          },
+        };
       }
 
       const response = await createScheduledExecution({
@@ -572,11 +666,16 @@ export function ExecutionWizard({
         console.log('[ExecutionWizard] Scheduled execution created:', response.scheduled_execution_id);
       }
 
-      // Story 11.7: Different success message for recurring vs one-time
+      // Story 11.7, 11.8: Different success message for recurring vs one-time
       if (recurringPattern) {
-        const scheduleText = schedulingType === 'daily'
-          ? `Tous les jours à ${String(dailyHour).padStart(2, '0')}:${String(dailyMinute).padStart(2, '0')} (UTC)`
-          : `Tous les ${['', 'lundis', 'mardis', 'mercredis', 'jeudis', 'vendredis', 'samedis', 'dimanches'][weeklyDayOfWeek]} à ${String(weeklyHour).padStart(2, '0')}:${String(weeklyMinute).padStart(2, '0')} (UTC)`;
+        let scheduleText = '';
+        if (schedulingType === 'daily') {
+          scheduleText = `Tous les jours à ${String(dailyHour).padStart(2, '0')}:${String(dailyMinute).padStart(2, '0')} (UTC)`;
+        } else if (schedulingType === 'weekly') {
+          scheduleText = `Tous les ${['', 'lundis', 'mardis', 'mercredis', 'jeudis', 'vendredis', 'samedis', 'dimanches'][weeklyDayOfWeek]} à ${String(weeklyHour).padStart(2, '0')}:${String(weeklyMinute).padStart(2, '0')} (UTC)`;
+        } else if (schedulingType === 'cron') {
+          scheduleText = `Expression cron : ${cronExpression}`;
+        }
 
         notification.success({
           message: 'Exécution récurrente créée',
@@ -611,7 +710,7 @@ export function ExecutionWizard({
     } finally {
       setSubmitting(false);
     }
-  }, [action, selectedEnvironment, parameters, scheduledAt, schedulingType, dailyHour, dailyMinute, weeklyDayOfWeek, weeklyHour, weeklyMinute, notification, onCancel, onSuccess, getSchedulingErrorMessage]);
+  }, [action, selectedEnvironment, parameters, scheduledAt, schedulingType, dailyHour, dailyMinute, weeklyDayOfWeek, weeklyHour, weeklyMinute, cronExpression, cronIsValid, notification, onCancel, onSuccess, getSchedulingErrorMessage]);
 
   // Handle keyboard shortcuts
   const handleKeyDown = useCallback(
@@ -945,6 +1044,7 @@ export function ExecutionWizard({
                 <Radio value="one-time">Une seule fois</Radio>
                 <Radio value="daily">Tous les jours</Radio>
                 <Radio value="weekly">Toutes les semaines</Radio>
+                <Radio value="cron">Avancé (cron)</Radio>
               </Radio.Group>
             </Form.Item>
 
@@ -1065,6 +1165,84 @@ export function ExecutionWizard({
                   </Tooltip>
                 </Space>
               </Form.Item>
+            )}
+
+            {/* Cron: Expression input with validation and preview (Story 11.8, AC1-AC5) */}
+            {schedulingType === 'cron' && (
+              <div>
+                <Form.Item
+                  label="Expression cron"
+                  required
+                  validateStatus={cronIsValid === false ? 'error' : cronIsValid === true ? 'success' : undefined}
+                  help={cronError || undefined}
+                >
+                  <Space direction="vertical" style={{ width: '100%' }}>
+                    <Space>
+                      <Select
+                        placeholder="Préréglages courants"
+                        onChange={handleCronPresetChange}
+                        style={{ width: 200 }}
+                        disabled={submitting}
+                        aria-label="Préréglages cron"
+                        allowClear
+                        value={CRON_PRESETS.some(p => p.value === cronExpression) ? cronExpression : undefined}
+                      >
+                        {CRON_PRESETS.map((preset) => (
+                          <Select.Option key={preset.value} value={preset.value}>
+                            {preset.label}
+                          </Select.Option>
+                        ))}
+                      </Select>
+                      <Tooltip title="Aide sur les expressions cron">
+                        <Button
+                          type="link"
+                          icon={<QuestionCircleOutlined />}
+                          onClick={() => setShowCronHelper(true)}
+                          style={{ padding: 0 }}
+                        >
+                          Aide
+                        </Button>
+                      </Tooltip>
+                    </Space>
+                    <Input
+                      value={cronExpression}
+                      onChange={handleCronChange}
+                      placeholder="minute heure jour mois jour_semaine (ex: 0 2 * * 1-5)"
+                      disabled={submitting}
+                      aria-label="Expression cron"
+                      suffix={
+                        cronValidating ? (
+                          <LoadingOutlined style={{ color: '#1890ff' }} />
+                        ) : cronIsValid === true ? (
+                          <CheckCircleOutlined style={{ color: '#52c41a' }} />
+                        ) : cronIsValid === false ? (
+                          <CloseCircleOutlined style={{ color: '#ff4d4f' }} />
+                        ) : null
+                      }
+                    />
+                  </Space>
+                </Form.Item>
+
+                {/* Next executions preview (Story 11.8, AC5) */}
+                {cronIsValid && cronNextExecutions.length > 0 && (
+                  <Alert
+                    type="info"
+                    showIcon
+                    icon={<ClockCircleOutlined />}
+                    message="Prochaines exécutions (UTC)"
+                    description={
+                      <ul style={{ margin: '8px 0 0 0', paddingLeft: 20 }}>
+                        {cronNextExecutions.map((exec, i) => (
+                          <li key={i}>
+                            {dayjs(exec).utc().format('DD/MM/YYYY HH:mm')}
+                          </li>
+                        ))}
+                      </ul>
+                    }
+                    style={{ marginBottom: 16 }}
+                  />
+                )}
+              </div>
             )}
           </div>
         )}
@@ -1198,7 +1376,7 @@ export function ExecutionWizard({
                 </Button>
               </>
             )}
-            {/* Story 11.5: Scheduling mode buttons (AC3) */}
+            {/* Story 11.5, 11.7, 11.8: Scheduling mode buttons (AC3) */}
             {currentStep === 2 && isScheduling && (
               <>
                 <Button onClick={() => { setIsScheduling(false); setSchedulingError(null); setScheduledAt(null); }}>
@@ -1208,7 +1386,11 @@ export function ExecutionWizard({
                   type="primary"
                   onClick={handleSubmitScheduled}
                   loading={submitting}
-                  disabled={!scheduledAt}
+                  disabled={
+                    schedulingType === 'one-time' ? !scheduledAt :
+                    schedulingType === 'cron' ? !cronIsValid :
+                    false // daily/weekly always valid
+                  }
                   style={{ backgroundColor: STYLE_TOKENS.primaryColor }}
                 >
                   Confirmer planification
@@ -1217,6 +1399,12 @@ export function ExecutionWizard({
             )}
           </Space>
         </div>
+
+        {/* Story 11.8: Cron expression helper modal (AC3) */}
+        <CronExpressionHelper
+          open={showCronHelper}
+          onClose={() => setShowCronHelper(false)}
+        />
       </div>
     </Modal>
   );

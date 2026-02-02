@@ -21,10 +21,12 @@ import type { ScheduledExecutionListItem, ScheduledExecutionListResponse } from 
 // Mock the scheduled execution service
 const mockListScheduledExecutions = vi.fn();
 const mockCancelScheduledExecution = vi.fn();
+const mockToggleRecurringPattern = vi.fn();
 
 vi.mock('../../services/scheduled_execution_service', () => ({
   listScheduledExecutions: (...args: unknown[]) => mockListScheduledExecutions(...args),
   cancelScheduledExecution: (...args: unknown[]) => mockCancelScheduledExecution(...args),
+  toggleRecurringPattern: (...args: unknown[]) => mockToggleRecurringPattern(...args),
 }));
 
 // Mock App.useApp for notifications
@@ -644,6 +646,205 @@ describe('ScheduledExecutionsPage', () => {
 
       await waitFor(() => {
         expect(screen.getByText(/Exécutions planifiées \(25\)/)).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Recurring patterns - Daily/Weekly (Story 11.7)', () => {
+    it('shows Récurrent tag for daily recurring executions', async () => {
+      const dailyExecution = createMockExecution({
+        scheduled_execution_id: 1,
+        recurring_pattern: {
+          pattern_type: 'daily',
+          pattern_config: { hour: 2, minute: 0 },
+          next_execution_date: dayjs().add(1, 'day').toISOString(),
+          is_active: true,
+        },
+      });
+      mockListScheduledExecutions.mockResolvedValue(createMockResponse([dailyExecution]));
+
+      renderWithApp(<ScheduledExecutionsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Récurrent')).toBeInTheDocument();
+        expect(screen.getByText(/Tous les jours à 02:00/)).toBeInTheDocument();
+      });
+    });
+
+    it('shows Récurrent tag for weekly recurring executions', async () => {
+      const weeklyExecution = createMockExecution({
+        scheduled_execution_id: 1,
+        recurring_pattern: {
+          pattern_type: 'weekly',
+          pattern_config: { day_of_week: 1, hour: 14, minute: 0 },
+          next_execution_date: dayjs().add(1, 'week').toISOString(),
+          is_active: true,
+        },
+      });
+      mockListScheduledExecutions.mockResolvedValue(createMockResponse([weeklyExecution]));
+
+      renderWithApp(<ScheduledExecutionsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Récurrent')).toBeInTheDocument();
+        expect(screen.getByText(/Tous les lundis à 14:00/)).toBeInTheDocument();
+      });
+    });
+
+    it('shows Désactivé for inactive recurring patterns', async () => {
+      const inactiveExecution = createMockExecution({
+        scheduled_execution_id: 1,
+        recurring_pattern: {
+          pattern_type: 'daily',
+          pattern_config: { hour: 2, minute: 0 },
+          next_execution_date: null,
+          is_active: false,
+        },
+      });
+      mockListScheduledExecutions.mockResolvedValue(createMockResponse([inactiveExecution]));
+
+      renderWithApp(<ScheduledExecutionsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('(Désactivé)')).toBeInTheDocument();
+      });
+    });
+
+    it('hides Annuler button for recurring executions', async () => {
+      const recurringExecution = createMockExecution({
+        status: 'pending',
+        recurring_pattern: {
+          pattern_type: 'daily',
+          pattern_config: { hour: 2, minute: 0 },
+          next_execution_date: dayjs().add(1, 'day').toISOString(),
+          is_active: true,
+        },
+      });
+      mockListScheduledExecutions.mockResolvedValue(createMockResponse([recurringExecution]));
+
+      renderWithApp(<ScheduledExecutionsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Récurrent')).toBeInTheDocument();
+        // Annuler button should not be present for recurring patterns
+        expect(screen.queryByRole('button', { name: /^Annuler$/i })).not.toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Cron patterns (Story 11.8)', () => {
+    it('shows Récurrent tag for cron recurring executions', async () => {
+      const cronExecution = createMockExecution({
+        scheduled_execution_id: 1,
+        recurring_pattern: {
+          pattern_type: 'cron',
+          pattern_config: { cron_expression: '0 2 * * *' },
+          next_execution_date: dayjs().add(1, 'day').toISOString(),
+          is_active: true,
+        },
+      });
+      mockListScheduledExecutions.mockResolvedValue(createMockResponse([cronExecution]));
+
+      renderWithApp(<ScheduledExecutionsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Récurrent')).toBeInTheDocument();
+        // Should display human-readable description from cronHelper
+        expect(screen.getByText(/Tous les jours à 2h00/i)).toBeInTheDocument();
+      });
+    });
+
+    it('shows cron pattern type in details modal', async () => {
+      const cronExecution = createMockExecution({
+        scheduled_execution_id: 1,
+        action_name: 'Cron Action',
+        recurring_pattern: {
+          pattern_type: 'cron',
+          pattern_config: { cron_expression: '0 2 * * 1-5' },
+          next_execution_date: dayjs().add(1, 'day').toISOString(),
+          is_active: true,
+        },
+      });
+      mockListScheduledExecutions.mockResolvedValue(createMockResponse([cronExecution]));
+      const user = userEvent.setup();
+
+      renderWithApp(<ScheduledExecutionsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Cron Action')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('button', { name: /Voir détails/i }));
+
+      await waitFor(() => {
+        const modal = screen.getByRole('dialog');
+        // Should show "Récurrent - Cron" in the Type field
+        expect(within(modal).getByText(/Récurrent - Cron/)).toBeInTheDocument();
+        // Should show the raw cron expression
+        expect(within(modal).getByText('0 2 * * 1-5')).toBeInTheDocument();
+      });
+    });
+
+    it('shows human-readable description for complex cron expressions', async () => {
+      const cronExecution = createMockExecution({
+        scheduled_execution_id: 1,
+        recurring_pattern: {
+          pattern_type: 'cron',
+          pattern_config: { cron_expression: '0 14 * * 1' },
+          next_execution_date: dayjs().add(1, 'week').toISOString(),
+          is_active: true,
+        },
+      });
+      mockListScheduledExecutions.mockResolvedValue(createMockResponse([cronExecution]));
+
+      renderWithApp(<ScheduledExecutionsPage />);
+
+      await waitFor(() => {
+        // Should display "Tous les lundis à 14h00" from describeCronExpression
+        expect(screen.getByText(/Tous les lundis à 14h00/)).toBeInTheDocument();
+      });
+    });
+
+    it('shows next execution for cron patterns', async () => {
+      const nextExec = dayjs().add(12, 'hour');
+      const cronExecution = createMockExecution({
+        scheduled_execution_id: 1,
+        recurring_pattern: {
+          pattern_type: 'cron',
+          pattern_config: { cron_expression: '*/15 * * * *' },
+          next_execution_date: nextExec.toISOString(),
+          is_active: true,
+        },
+      });
+      mockListScheduledExecutions.mockResolvedValue(createMockResponse([cronExecution]));
+
+      renderWithApp(<ScheduledExecutionsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Prochaine :/)).toBeInTheDocument();
+        // Should show "Bientôt" tag since it's within 24h
+        expect(screen.getByText('Bientôt')).toBeInTheDocument();
+      });
+    });
+
+    it('displays disabled cron patterns correctly', async () => {
+      const cronExecution = createMockExecution({
+        scheduled_execution_id: 1,
+        recurring_pattern: {
+          pattern_type: 'cron',
+          pattern_config: { cron_expression: '0 0 1 * *' },
+          next_execution_date: null,
+          is_active: false,
+        },
+      });
+      mockListScheduledExecutions.mockResolvedValue(createMockResponse([cronExecution]));
+
+      renderWithApp(<ScheduledExecutionsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('(Désactivé)')).toBeInTheDocument();
+        // Should not show "Prochaine" for disabled patterns
+        expect(screen.queryByText(/Prochaine :/)).not.toBeInTheDocument();
       });
     });
   });

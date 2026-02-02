@@ -1,8 +1,8 @@
 /**
- * Scheduled Execution service (Story 11.5, 11.6, 11.7).
+ * Scheduled Execution service (Story 11.5, 11.6, 11.7, 11.8).
  *
  * Provides functions to create, list, cancel scheduled executions,
- * and toggle recurring patterns.
+ * toggle recurring patterns, and validate cron expressions.
  */
 
 import { apiFetch } from './api_client';
@@ -13,6 +13,8 @@ import type {
   ScheduledExecutionListResponse,
   ScheduledExecutionCancelResponse,
   RecurringPatternResponse,
+  CronValidationResponse,
+  CronNextExecutionsResponse,
 } from '../types/api';
 
 /**
@@ -122,4 +124,44 @@ export async function toggleRecurringPattern(
       body: JSON.stringify({ is_active: isActive }),
     }
   );
+}
+
+/**
+ * Validate a cron expression (Story 11.8, AC2).
+ *
+ * Validates the cron expression syntax and semantics on the backend.
+ *
+ * @param expression - Cron expression to validate (5 fields: minute hour day month day_of_week)
+ * @returns {valid: boolean, error: string} - validation result
+ */
+export async function validateCronExpression(
+  expression: string
+): Promise<CronValidationResponse> {
+  const params = new URLSearchParams({ expression });
+  return apiFetch<CronValidationResponse>(
+    `/scheduled-executions/validate-cron?${params.toString()}`
+  );
+}
+
+/**
+ * Get next N execution dates for a cron expression (Story 11.8, AC2).
+ *
+ * Calculates the next N execution dates based on the cron expression.
+ *
+ * @param expression - Cron expression (5 fields)
+ * @param count - Number of executions to return (1-10, default 5)
+ * @returns Array of ISO 8601 datetime strings
+ */
+export async function getCronNextExecutions(
+  expression: string,
+  count: number = 5
+): Promise<string[]> {
+  const params = new URLSearchParams({
+    expression,
+    count: count.toString(),
+  });
+  const response = await apiFetch<CronNextExecutionsResponse>(
+    `/scheduled-executions/cron-next-executions?${params.toString()}`
+  );
+  return response.executions;
 }

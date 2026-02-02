@@ -795,8 +795,8 @@ export interface ComparisonFilters {
 /** Status for scheduled executions (Story 11.5). */
 export type ScheduledExecutionStatus = 'pending' | 'executed' | 'cancelled';
 
-/** Recurring pattern type (Story 11.7). */
-export type RecurringPatternType = 'daily' | 'weekly';
+/** Recurring pattern type (Story 11.7, 11.8). */
+export type RecurringPatternType = 'daily' | 'weekly' | 'cron';
 
 /** Daily pattern configuration (Story 11.7, AC2). */
 export interface DailyPatternConfig {
@@ -811,16 +811,21 @@ export interface WeeklyPatternConfig {
   minute: number; // 0-59
 }
 
-/** Recurring pattern request (Story 11.7). */
-export interface RecurringPatternRequest {
-  pattern_type: RecurringPatternType;
-  pattern_config: DailyPatternConfig | WeeklyPatternConfig;
+/** Cron pattern configuration (Story 11.8, AC4). */
+export interface CronPatternConfig {
+  cron_expression: string; // 5 fields: minute hour day month day_of_week
 }
 
-/** Recurring pattern response (Story 11.7). */
+/** Recurring pattern request (Story 11.7, 11.8). */
+export interface RecurringPatternRequest {
+  pattern_type: RecurringPatternType;
+  pattern_config: DailyPatternConfig | WeeklyPatternConfig | CronPatternConfig;
+}
+
+/** Recurring pattern response (Story 11.7, 11.8). */
 export interface RecurringPatternResponse {
   pattern_type: RecurringPatternType;
-  pattern_config: DailyPatternConfig | WeeklyPatternConfig;
+  pattern_config: DailyPatternConfig | WeeklyPatternConfig | CronPatternConfig;
   /** Next execution datetime in UTC (ISO 8601). */
   next_execution_date: string | null;
   /** Whether the recurrence is active. */
@@ -913,4 +918,15 @@ export interface ScheduledExecutionCancelResponse {
   status: ScheduledExecutionStatus;
   scheduled_at: string;
   created_at: string;
+}
+
+/** Response from GET /scheduled-executions/validate-cron (Story 11.8, AC2). */
+export interface CronValidationResponse {
+  valid: boolean;
+  error: string;
+}
+
+/** Response from GET /scheduled-executions/cron-next-executions (Story 11.8, AC2). */
+export interface CronNextExecutionsResponse {
+  executions: string[];
 }
