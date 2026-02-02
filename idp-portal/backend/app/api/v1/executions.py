@@ -409,7 +409,7 @@ async def create_execution(
 @router.get("/stats", response_model=None)
 async def get_execution_stats(
     user: UserProfile = Depends(get_current_user),
-    scope: str = Query("mine", regex="^(mine|all)$"),
+    scope: str = Query("mine", pattern="^(mine|all)$"),
 ) -> dict:
     """GET /api/v1/executions/stats - Get execution statistics (Story 9.4, AC3).
 
@@ -545,7 +545,7 @@ async def list_executions(
     user: UserProfile = Depends(get_current_user),
     limit: int = 50,
     offset: int = 0,
-    scope: str = Query("mine", regex="^(mine|all)$"),  # Fixed: pattern -> regex (Story 8.9 code-review)
+    scope: str = Query("mine", pattern="^(mine|all)$"),  # Fixed: regex -> pattern (Story 9.8 code-review)
 ) -> dict:
     """GET /api/v1/executions - List executions with scope filter (Story 4.1, 4.8, 8.9).
 
