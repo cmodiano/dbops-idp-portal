@@ -631,3 +631,8 @@ export interface FilterOptions {
   /** All possible execution statuses. */
   statuses: string[];
 }
+
+// === Dashboard Export Types (Story 8.5) ===
+
+/** Export format for dashboard reports (Story 8.5, AC1). */
+export type ExportFormat = 'csv' | 'pdf';

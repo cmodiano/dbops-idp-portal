@@ -1,10 +1,10 @@
 /**
- * Dashboard service (Story 5.1, Task 2.1; Story 8.3; Story 8.4).
+ * Dashboard service (Story 5.1, Task 2.1; Story 8.3; Story 8.4; Story 8.5).
  *
  * Provides functions to fetch dashboard statistics and recent executions.
  */
 
-import { apiFetch } from './api_client';
+import { apiFetch, apiFetchBlob } from './api_client';
 import type {
   DashboardStats,
   DashboardRecentExecution,
@@ -127,4 +127,62 @@ export async function fetchStatsByEnvironment(
  */
 export async function fetchFilterOptions(): Promise<FilterOptions> {
   return apiFetch<FilterOptions>('/dashboard/filter-options');
+}
+
+/**
+ * Trigger download of a blob with a given filename.
+ * @internal
+ */
+function downloadBlob(blob: Blob, filename: string): void {
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
+}
+
+/**
+ * Extract filename from Content-Disposition header or use fallback.
+ * Note: apiFetchBlob doesn't return headers, so we use a default pattern.
+ * @internal
+ */
+function generateExportFilename(format: 'csv' | 'pdf'): string {
+  const now = new Date();
+  const timestamp = now.toISOString().slice(0, 16).replace('T', '-').replace(':', '-');
+  return `dashboard-report-${timestamp}.${format}`;
+}
+
+/**
+ * Export dashboard data as CSV (Story 8.5, AC2, AC6).
+ * Triggers browser download.
+ *
+ * @param filters Optional filters to apply to export
+ */
+export async function exportDashboardCSV(filters: DashboardFilters = {}): Promise<void> {
+  const params = buildFilterParams({ days: 14, ...filters });
+  const queryString = params.toString();
+  const url = `/dashboard/export/csv${queryString ? `?${queryString}` : ''}`;
+
+  const blob = await apiFetchBlob(url);
+  const filename = generateExportFilename('csv');
+  downloadBlob(blob, filename);
+}
+
+/**
+ * Export dashboard data as PDF (Story 8.5, AC3, AC7).
+ * Triggers browser download.
+ *
+ * @param filters Optional filters to apply to export
+ */
+export async function exportDashboardPDF(filters: DashboardFilters = {}): Promise<void> {
+  const params = buildFilterParams({ days: 14, ...filters });
+  const queryString = params.toString();
+  const url = `/dashboard/export/pdf${queryString ? `?${queryString}` : ''}`;
+
+  const blob = await apiFetchBlob(url);
+  const filename = generateExportFilename('pdf');
+  downloadBlob(blob, filename);
 }

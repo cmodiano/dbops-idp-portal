@@ -123,3 +123,121 @@ class FilterOptionsResponse(BaseModel):
     environments: list[str] = Field(default_factory=list, description="Available environments")
     tags: list[str] = Field(default_factory=list, description="Available tags")
     statuses: list[str] = Field(default_factory=list, description="Available statuses")
+
+
+# === Export Models (Story 8.5) ===
+
+
+class DashboardExportPeriodInfo(BaseModel):
+    """Period information for export report (Story 8.5, Task 1.3).
+
+    Attributes:
+        from_date: Start date of the period (YYYY-MM-DD)
+        to_date: End date of the period (YYYY-MM-DD)
+        days: Number of days in the period
+    """
+
+    from_date: str = Field(..., description="Start date (YYYY-MM-DD)")
+    to_date: str = Field(..., description="End date (YYYY-MM-DD)")
+    days: int = Field(..., ge=1, description="Number of days in period")
+
+
+class DashboardExportFiltersInfo(BaseModel):
+    """Filters applied to export report (Story 8.5, Task 1.2).
+
+    Documents which filters were applied when generating the export.
+
+    Attributes:
+        engine: Filter by database engine
+        environment: Filter by environment
+        tags: Filter by action tags
+        status: Filter by execution status
+        from_date: Custom period start
+        to_date: Custom period end
+    """
+
+    engine: str | None = Field(None, description="Engine filter")
+    environment: str | None = Field(None, description="Environment filter")
+    tags: list[str] | None = Field(None, description="Tags filter")
+    status: str | None = Field(None, description="Status filter")
+    from_date: str | None = Field(None, description="Custom period start")
+    to_date: str | None = Field(None, description="Custom period end")
+
+    def to_display_string(self) -> str:
+        """Convert filters to human-readable string for reports."""
+        parts = []
+        if self.engine:
+            parts.append(f"Moteur: {self.engine}")
+        if self.environment:
+            parts.append(f"Environnement: {self.environment}")
+        if self.tags:
+            parts.append(f"Tags: {', '.join(self.tags)}")
+        if self.status:
+            parts.append(f"Statut: {self.status}")
+        if self.from_date:
+            parts.append(f"Du: {self.from_date}")
+        if self.to_date:
+            parts.append(f"Au: {self.to_date}")
+        return ", ".join(parts) if parts else "Aucun"
+
+
+class DashboardExportTechnologyStats(BaseModel):
+    """Technology stats for export (Story 8.5, Task 1.1).
+
+    Extended version of TechnologyStats with success/failed counts.
+    """
+
+    engine: str = Field(..., description="Database engine name")
+    count: int = Field(..., ge=0, description="Total execution count")
+    success: int = Field(..., ge=0, description="Successful executions")
+    failed: int = Field(..., ge=0, description="Failed executions")
+    success_rate: float | None = Field(None, ge=0, le=100, description="Success rate percentage")
+
+
+class DashboardExportEnvironmentStats(BaseModel):
+    """Environment stats for export (Story 8.5, Task 1.1).
+
+    Extended version of EnvironmentStats with success/failed counts.
+    """
+
+    environment: str = Field(..., description="Environment name")
+    count: int = Field(..., ge=0, description="Total execution count")
+    success: int = Field(..., ge=0, description="Successful executions")
+    failed: int = Field(..., ge=0, description="Failed executions")
+    success_rate: float | None = Field(None, ge=0, le=100, description="Success rate percentage")
+
+
+class DashboardExportTimeSeriesPoint(BaseModel):
+    """Time series point for export (Story 8.5, Task 1.1)."""
+
+    date: str = Field(..., description="Date (YYYY-MM-DD)")
+    success: int = Field(..., ge=0, description="Successful executions")
+    failed: int = Field(..., ge=0, description="Failed executions")
+
+
+class DashboardExportData(BaseModel):
+    """Complete dashboard export data (Story 8.5, Task 1.1).
+
+    Contains all data needed for CSV and PDF exports:
+    - Period information
+    - Applied filters
+    - Global statistics
+    - Stats by technology
+    - Stats by environment
+    - Time series trends
+
+    Attributes:
+        period_info: Period covered by the report
+        filters_applied: Filters used when generating the report
+        stats: Global dashboard statistics
+        stats_by_technology: Breakdown by database engine
+        stats_by_environment: Breakdown by environment
+        timeseries: Daily trends over the period
+    """
+
+    period_info: DashboardExportPeriodInfo
+    filters_applied: DashboardExportFiltersInfo
+    stats: DashboardStatsData
+    stats_by_technology: list[DashboardExportTechnologyStats]
+    stats_by_environment: list[DashboardExportEnvironmentStats]
+    timeseries: list[DashboardExportTimeSeriesPoint]

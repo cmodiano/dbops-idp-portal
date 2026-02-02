@@ -1,5 +1,5 @@
 /**
- * Tests for ReportingDashboard component (Story 8.3, AC1, AC2, AC6, AC8).
+ * Tests for ReportingDashboard component (Story 8.3, AC1, AC2, AC6, AC8; Story 8.5).
  */
 
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
@@ -34,6 +34,9 @@ vi.mock('../../../services/dashboard_service', () => ({
   fetchStatsByTechnology: vi.fn(),
   fetchStatsByEnvironment: vi.fn(),
   fetchTimeSeries: vi.fn(),
+  fetchFilterOptions: vi.fn(),
+  exportDashboardCSV: vi.fn(),
+  exportDashboardPDF: vi.fn(),
 }));
 
 const mockStats = {
@@ -58,6 +61,13 @@ const mockTimeSeries = [
   { date: '2026-01-31', success: 15, failed: 1 },
 ];
 
+const mockFilterOptions = {
+  engines: ['Oracle', 'PostgreSQL'],
+  environments: ['dev', 'prod'],
+  tags: ['patch', 'backup'],
+  statuses: ['COMPLETED', 'FAILED'],
+};
+
 describe('ReportingDashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -65,6 +75,9 @@ describe('ReportingDashboard', () => {
     vi.mocked(dashboardService.fetchStatsByTechnology).mockResolvedValue(mockTechStats);
     vi.mocked(dashboardService.fetchStatsByEnvironment).mockResolvedValue(mockEnvStats);
     vi.mocked(dashboardService.fetchTimeSeries).mockResolvedValue(mockTimeSeries);
+    vi.mocked(dashboardService.fetchFilterOptions).mockResolvedValue(mockFilterOptions);
+    vi.mocked(dashboardService.exportDashboardCSV).mockResolvedValue();
+    vi.mocked(dashboardService.exportDashboardPDF).mockResolvedValue();
   });
 
   it('renders StatCards with correct values (AC2)', async () => {
@@ -98,7 +111,10 @@ describe('ReportingDashboard', () => {
     });
 
     await waitFor(() => {
-      expect(dashboardService.fetchStats).toHaveBeenCalledWith(14);
+      // fetchStats is called with a filters object containing days: 14
+      expect(dashboardService.fetchStats).toHaveBeenCalled();
+      const firstCall = vi.mocked(dashboardService.fetchStats).mock.calls[0][0];
+      expect(firstCall).toMatchObject({ days: 14 });
     });
 
     // Change to 30 days
@@ -107,7 +123,10 @@ describe('ReportingDashboard', () => {
     });
 
     await waitFor(() => {
-      expect(dashboardService.fetchStats).toHaveBeenCalledWith(30);
+      // fetchStats should be called again with days: 30
+      const calls = vi.mocked(dashboardService.fetchStats).mock.calls;
+      const lastCall = calls[calls.length - 1][0];
+      expect(lastCall).toMatchObject({ days: 30 });
     });
   });
 
@@ -154,6 +173,17 @@ describe('ReportingDashboard', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Erreur de chargement')).toBeInTheDocument();
+    });
+  });
+
+  // Story 8.5: Export button integration test
+  it('renders export button (Story 8.5, Task 10.6)', async () => {
+    await act(async () => {
+      renderWithRouter(<ReportingDashboard />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /exporter/i })).toBeInTheDocument();
     });
   });
 });

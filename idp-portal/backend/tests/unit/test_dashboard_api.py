@@ -1,4 +1,4 @@
-"""Tests for dashboard API endpoints (Story 5.1, Task 5.1; Story 8.3; Story 8.4).
+"""Tests for dashboard API endpoints (Story 5.1, Task 5.1; Story 8.3; Story 8.4; Story 8.5).
 
 Tests:
 - GET /api/v1/dashboard/stats: Returns aggregated statistics (AC1, AC4, Story 8.3 AC6 period filter, Story 8.4 advanced filters)
@@ -7,6 +7,8 @@ Tests:
 - GET /api/v1/dashboard/stats-by-environment: Returns executions grouped by environment (Story 8.3, AC4, AC7; Story 8.4 filters)
 - GET /api/v1/dashboard/timeseries: Executions over time (Story 8.4 filters)
 - GET /api/v1/dashboard/filter-options: Available filter values (Story 8.4, AC1)
+- GET /api/v1/dashboard/export/csv: Export dashboard data as CSV (Story 8.5, AC2, AC6)
+- GET /api/v1/dashboard/export/pdf: Export dashboard data as PDF (Story 8.5, AC3, AC7)
 """
 
 import pytest
@@ -825,3 +827,315 @@ class TestDashboardFiltersApiValidation:
             response = await client.get("/api/v1/dashboard/stats?from_date=2026-01-01&to_date=2026-01-31")
 
         assert response.status_code == status.HTTP_200_OK
+
+
+# --- Story 8.5: Dashboard Export Tests ---
+
+
+class TestExportDashboardCSV:
+    """Tests for GET /api/v1/dashboard/export/csv (Story 8.5, AC2, AC4, AC5, AC6)."""
+
+    @pytest.mark.asyncio
+    async def test_export_csv_returns_valid_csv_with_bom(self, client, mock_auth_dba):
+        """GET /dashboard/export/csv returns CSV file with UTF-8 BOM for Excel (AC5.1)."""
+        mock_stats = {
+            "executions_jour": 10,
+            "taux_succes_pct": 85.0,
+            "executions_en_cours": 2,
+            "executions_en_erreur": 1,
+        }
+        mock_tech_stats = [
+            {"engine": "Oracle", "count": 50, "success": 45, "failed": 5, "success_rate": 90.0},
+        ]
+        mock_env_stats = [
+            {"environment": "prod", "count": 30, "success": 28, "failed": 2, "success_rate": 93.3},
+        ]
+        mock_timeseries = [
+            {"date": "2026-01-30", "success": 10, "failed": 1},
+        ]
+
+        with patch("app.api.v1.dashboard.execution_repository.get_dashboard_stats", new_callable=AsyncMock) as mock_stats_get, \
+             patch("app.api.v1.dashboard.execution_repository.get_stats_by_technology_for_export", new_callable=AsyncMock) as mock_tech, \
+             patch("app.api.v1.dashboard.execution_repository.get_stats_by_environment_for_export", new_callable=AsyncMock) as mock_env, \
+             patch("app.api.v1.dashboard.execution_repository.get_dashboard_timeseries", new_callable=AsyncMock) as mock_ts:
+            mock_stats_get.return_value = mock_stats
+            mock_tech.return_value = mock_tech_stats
+            mock_env.return_value = mock_env_stats
+            mock_ts.return_value = mock_timeseries
+
+            response = await client.get("/api/v1/dashboard/export/csv")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.headers["content-type"].startswith("text/csv")
+
+        # Check BOM UTF-8
+        content = response.content.decode("utf-8")
+        assert content.startswith("\ufeff")
+
+    @pytest.mark.asyncio
+    async def test_export_csv_contains_all_required_sections(self, client, mock_auth_dba):
+        """GET /dashboard/export/csv contains all required sections (AC2)."""
+        mock_stats = {
+            "executions_jour": 10,
+            "taux_succes_pct": 85.0,
+            "executions_en_cours": 2,
+            "executions_en_erreur": 1,
+        }
+        mock_tech_stats = [{"engine": "Oracle", "count": 50, "success": 45, "failed": 5, "success_rate": 90.0}]
+        mock_env_stats = [{"environment": "prod", "count": 30, "success": 28, "failed": 2, "success_rate": 93.3}]
+        mock_timeseries = [{"date": "2026-01-30", "success": 10, "failed": 1}]
+
+        with patch("app.api.v1.dashboard.execution_repository.get_dashboard_stats", new_callable=AsyncMock) as mock_stats_get, \
+             patch("app.api.v1.dashboard.execution_repository.get_stats_by_technology_for_export", new_callable=AsyncMock) as mock_tech, \
+             patch("app.api.v1.dashboard.execution_repository.get_stats_by_environment_for_export", new_callable=AsyncMock) as mock_env, \
+             patch("app.api.v1.dashboard.execution_repository.get_dashboard_timeseries", new_callable=AsyncMock) as mock_ts:
+            mock_stats_get.return_value = mock_stats
+            mock_tech.return_value = mock_tech_stats
+            mock_env.return_value = mock_env_stats
+            mock_ts.return_value = mock_timeseries
+
+            response = await client.get("/api/v1/dashboard/export/csv")
+
+        content = response.content.decode("utf-8")
+
+        # Check all sections are present
+        assert "# Paramètres d'analyse" in content
+        assert "# Statistiques globales" in content
+        assert "# Répartition par technologie" in content
+        assert "# Répartition par environnement" in content
+        assert "# Tendances temporelles" in content
+
+    @pytest.mark.asyncio
+    async def test_export_csv_filename_format_correct(self, client, mock_auth_dba):
+        """GET /dashboard/export/csv returns filename with date/time format (AC4)."""
+        mock_stats = {"executions_jour": 0, "taux_succes_pct": 0, "executions_en_cours": 0, "executions_en_erreur": 0}
+
+        with patch("app.api.v1.dashboard.execution_repository.get_dashboard_stats", new_callable=AsyncMock) as mock_stats_get, \
+             patch("app.api.v1.dashboard.execution_repository.get_stats_by_technology_for_export", new_callable=AsyncMock) as mock_tech, \
+             patch("app.api.v1.dashboard.execution_repository.get_stats_by_environment_for_export", new_callable=AsyncMock) as mock_env, \
+             patch("app.api.v1.dashboard.execution_repository.get_dashboard_timeseries", new_callable=AsyncMock) as mock_ts:
+            mock_stats_get.return_value = mock_stats
+            mock_tech.return_value = []
+            mock_env.return_value = []
+            mock_ts.return_value = []
+
+            response = await client.get("/api/v1/dashboard/export/csv")
+
+        assert response.status_code == status.HTTP_200_OK
+        content_disposition = response.headers["content-disposition"]
+        assert "dashboard-report-" in content_disposition
+        assert ".csv" in content_disposition
+        # Pattern: dashboard-report-YYYY-MM-DD-HH-MM.csv
+        import re
+        assert re.search(r'dashboard-report-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}\.csv', content_disposition)
+
+    @pytest.mark.asyncio
+    async def test_export_csv_with_filters_applied(self, client, mock_auth_dba):
+        """GET /dashboard/export/csv includes filters in report (AC5)."""
+        mock_stats = {"executions_jour": 5, "taux_succes_pct": 100.0, "executions_en_cours": 0, "executions_en_erreur": 0}
+
+        with patch("app.api.v1.dashboard.execution_repository.get_dashboard_stats", new_callable=AsyncMock) as mock_stats_get, \
+             patch("app.api.v1.dashboard.execution_repository.get_stats_by_technology_for_export", new_callable=AsyncMock) as mock_tech, \
+             patch("app.api.v1.dashboard.execution_repository.get_stats_by_environment_for_export", new_callable=AsyncMock) as mock_env, \
+             patch("app.api.v1.dashboard.execution_repository.get_dashboard_timeseries", new_callable=AsyncMock) as mock_ts:
+            mock_stats_get.return_value = mock_stats
+            mock_tech.return_value = []
+            mock_env.return_value = []
+            mock_ts.return_value = []
+
+            response = await client.get("/api/v1/dashboard/export/csv?engine=aap&environment=prod")
+
+        content = response.content.decode("utf-8")
+        # Filters should be documented in report
+        assert "Moteur: aap" in content
+        assert "Environnement: prod" in content
+
+    @pytest.mark.asyncio
+    async def test_export_csv_without_filters_mentions_none(self, client, mock_auth_dba):
+        """GET /dashboard/export/csv mentions 'Aucun' when no filters applied (Story 8.5, AC5)."""
+        mock_stats = {"executions_jour": 5, "taux_succes_pct": 100.0, "executions_en_cours": 0, "executions_en_erreur": 0}
+
+        with patch("app.api.v1.dashboard.execution_repository.get_dashboard_stats", new_callable=AsyncMock) as mock_stats_get, \
+             patch("app.api.v1.dashboard.execution_repository.get_stats_by_technology_for_export", new_callable=AsyncMock) as mock_tech, \
+             patch("app.api.v1.dashboard.execution_repository.get_stats_by_environment_for_export", new_callable=AsyncMock) as mock_env, \
+             patch("app.api.v1.dashboard.execution_repository.get_dashboard_timeseries", new_callable=AsyncMock) as mock_ts:
+            mock_stats_get.return_value = mock_stats
+            mock_tech.return_value = []
+            mock_env.return_value = []
+            mock_ts.return_value = []
+
+            response = await client.get("/api/v1/dashboard/export/csv")
+
+        content = response.content.decode("utf-8")
+        assert "Filtres appliqués,Aucun" in content
+
+    @pytest.mark.asyncio
+    async def test_export_csv_forbidden_for_non_dba(self, client, mock_auth_viewer):
+        """GET /dashboard/export/csv returns 403 for non-DBA/DBOPS profiles (Story 8.5, RBAC)."""
+        response = await client.get("/api/v1/dashboard/export/csv")
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+class TestExportDashboardPDF:
+    """Tests for GET /api/v1/dashboard/export/pdf (Story 8.5, AC3, AC4, AC5, AC7)."""
+
+    @pytest.mark.asyncio
+    async def test_export_pdf_returns_valid_pdf(self, client, mock_auth_dba):
+        """GET /dashboard/export/pdf returns valid PDF file (AC3)."""
+        mock_stats = {
+            "executions_jour": 10,
+            "taux_succes_pct": 85.0,
+            "executions_en_cours": 2,
+            "executions_en_erreur": 1,
+        }
+        mock_tech_stats = [{"engine": "Oracle", "count": 50, "success": 45, "failed": 5, "success_rate": 90.0}]
+        mock_env_stats = [{"environment": "prod", "count": 30, "success": 28, "failed": 2, "success_rate": 93.3}]
+        mock_timeseries = [{"date": "2026-01-30", "success": 10, "failed": 1}]
+
+        with patch("app.api.v1.dashboard.execution_repository.get_dashboard_stats", new_callable=AsyncMock) as mock_stats_get, \
+             patch("app.api.v1.dashboard.execution_repository.get_stats_by_technology_for_export", new_callable=AsyncMock) as mock_tech, \
+             patch("app.api.v1.dashboard.execution_repository.get_stats_by_environment_for_export", new_callable=AsyncMock) as mock_env, \
+             patch("app.api.v1.dashboard.execution_repository.get_dashboard_timeseries", new_callable=AsyncMock) as mock_ts:
+            mock_stats_get.return_value = mock_stats
+            mock_tech.return_value = mock_tech_stats
+            mock_env.return_value = mock_env_stats
+            mock_ts.return_value = mock_timeseries
+
+            response = await client.get("/api/v1/dashboard/export/pdf")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.headers["content-type"] == "application/pdf"
+        # PDF starts with %PDF magic bytes
+        assert response.content.startswith(b"%PDF")
+
+    @pytest.mark.asyncio
+    async def test_export_pdf_filename_format_correct(self, client, mock_auth_dba):
+        """GET /dashboard/export/pdf returns filename with date/time format (AC4)."""
+        mock_stats = {"executions_jour": 0, "taux_succes_pct": 0, "executions_en_cours": 0, "executions_en_erreur": 0}
+
+        with patch("app.api.v1.dashboard.execution_repository.get_dashboard_stats", new_callable=AsyncMock) as mock_stats_get, \
+             patch("app.api.v1.dashboard.execution_repository.get_stats_by_technology_for_export", new_callable=AsyncMock) as mock_tech, \
+             patch("app.api.v1.dashboard.execution_repository.get_stats_by_environment_for_export", new_callable=AsyncMock) as mock_env, \
+             patch("app.api.v1.dashboard.execution_repository.get_dashboard_timeseries", new_callable=AsyncMock) as mock_ts:
+            mock_stats_get.return_value = mock_stats
+            mock_tech.return_value = []
+            mock_env.return_value = []
+            mock_ts.return_value = []
+
+            response = await client.get("/api/v1/dashboard/export/pdf")
+
+        assert response.status_code == status.HTTP_200_OK
+        content_disposition = response.headers["content-disposition"]
+        assert "dashboard-report-" in content_disposition
+        assert ".pdf" in content_disposition
+        # Pattern: dashboard-report-YYYY-MM-DD-HH-MM.pdf
+        import re
+        assert re.search(r'dashboard-report-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}\.pdf', content_disposition)
+
+    @pytest.mark.asyncio
+    async def test_export_pdf_with_filters_applied(self, client, mock_auth_dba):
+        """GET /dashboard/export/pdf passes filters to repository (AC5)."""
+        mock_stats = {"executions_jour": 5, "taux_succes_pct": 100.0, "executions_en_cours": 0, "executions_en_erreur": 0}
+
+        with patch("app.api.v1.dashboard.execution_repository.get_dashboard_stats", new_callable=AsyncMock) as mock_stats_get, \
+             patch("app.api.v1.dashboard.execution_repository.get_stats_by_technology_for_export", new_callable=AsyncMock) as mock_tech, \
+             patch("app.api.v1.dashboard.execution_repository.get_stats_by_environment_for_export", new_callable=AsyncMock) as mock_env, \
+             patch("app.api.v1.dashboard.execution_repository.get_dashboard_timeseries", new_callable=AsyncMock) as mock_ts:
+            mock_stats_get.return_value = mock_stats
+            mock_tech.return_value = []
+            mock_env.return_value = []
+            mock_ts.return_value = []
+
+            response = await client.get("/api/v1/dashboard/export/pdf?engine=aap&environment=prod&days=30")
+
+        assert response.status_code == status.HTTP_200_OK
+        # Verify filters were passed to repository
+        call_kwargs = mock_stats_get.call_args.kwargs
+        assert call_kwargs["engine"] == "aap"
+        assert call_kwargs["environment"] == "prod"
+        assert call_kwargs["days"] == 30
+
+    @pytest.mark.asyncio
+    async def test_export_pdf_with_custom_date_range(self, client, mock_auth_dba):
+        """GET /dashboard/export/pdf accepts custom date range."""
+        mock_stats = {"executions_jour": 10, "taux_succes_pct": 90.0, "executions_en_cours": 0, "executions_en_erreur": 1}
+
+        with patch("app.api.v1.dashboard.execution_repository.get_dashboard_stats", new_callable=AsyncMock) as mock_stats_get, \
+             patch("app.api.v1.dashboard.execution_repository.get_stats_by_technology_for_export", new_callable=AsyncMock) as mock_tech, \
+             patch("app.api.v1.dashboard.execution_repository.get_stats_by_environment_for_export", new_callable=AsyncMock) as mock_env, \
+             patch("app.api.v1.dashboard.execution_repository.get_dashboard_timeseries", new_callable=AsyncMock) as mock_ts:
+            mock_stats_get.return_value = mock_stats
+            mock_tech.return_value = []
+            mock_env.return_value = []
+            mock_ts.return_value = []
+
+            response = await client.get("/api/v1/dashboard/export/pdf?from_date=2026-01-01&to_date=2026-01-31")
+
+        assert response.status_code == status.HTTP_200_OK
+        call_kwargs = mock_stats_get.call_args.kwargs
+        assert call_kwargs["from_date"] == date(2026, 1, 1)
+        assert call_kwargs["to_date"] == date(2026, 1, 31)
+
+    @pytest.mark.asyncio
+    async def test_export_pdf_forbidden_for_non_dba(self, client, mock_auth_viewer):
+        """GET /dashboard/export/pdf returns 403 for non-DBA/DBOPS profiles (AC5.8)."""
+        response = await client.get("/api/v1/dashboard/export/pdf")
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    @pytest.mark.asyncio
+    async def test_export_pdf_dbops_allowed(self, client, mock_auth_dbops):
+        """GET /dashboard/export/pdf is accessible by DBOPS profile."""
+        mock_stats = {"executions_jour": 0, "taux_succes_pct": 0, "executions_en_cours": 0, "executions_en_erreur": 0}
+
+        with patch("app.api.v1.dashboard.execution_repository.get_dashboard_stats", new_callable=AsyncMock) as mock_stats_get, \
+             patch("app.api.v1.dashboard.execution_repository.get_stats_by_technology_for_export", new_callable=AsyncMock) as mock_tech, \
+             patch("app.api.v1.dashboard.execution_repository.get_stats_by_environment_for_export", new_callable=AsyncMock) as mock_env, \
+             patch("app.api.v1.dashboard.execution_repository.get_dashboard_timeseries", new_callable=AsyncMock) as mock_ts:
+            mock_stats_get.return_value = mock_stats
+            mock_tech.return_value = []
+            mock_env.return_value = []
+            mock_ts.return_value = []
+
+            response = await client.get("/api/v1/dashboard/export/pdf")
+
+        assert response.status_code == status.HTTP_200_OK
+
+
+class TestExportModels:
+    """Tests for export models (Story 8.5, Task 1)."""
+
+    def test_dashboard_export_filters_info_to_display_string_empty(self):
+        """DashboardExportFiltersInfo.to_display_string() returns 'Aucun' when empty."""
+        from app.models.dashboard import DashboardExportFiltersInfo
+
+        filters = DashboardExportFiltersInfo()
+        assert filters.to_display_string() == "Aucun"
+
+    def test_dashboard_export_filters_info_to_display_string_with_filters(self):
+        """DashboardExportFiltersInfo.to_display_string() returns formatted string with filters."""
+        from app.models.dashboard import DashboardExportFiltersInfo
+
+        filters = DashboardExportFiltersInfo(
+            engine="aap",
+            environment="prod",
+            tags=["oracle", "patch"],
+            status="COMPLETED",
+        )
+        display = filters.to_display_string()
+        assert "Moteur: aap" in display
+        assert "Environnement: prod" in display
+        assert "Tags: oracle, patch" in display
+        assert "Statut: COMPLETED" in display
+
+    def test_dashboard_export_period_info_validation(self):
+        """DashboardExportPeriodInfo requires all fields."""
+        from app.models.dashboard import DashboardExportPeriodInfo
+
+        period = DashboardExportPeriodInfo(
+            from_date="2026-01-01",
+            to_date="2026-01-14",
+            days=14,
+        )
+        assert period.from_date == "2026-01-01"
+        assert period.to_date == "2026-01-14"
+        assert period.days == 14

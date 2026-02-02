@@ -1,10 +1,11 @@
 /**
  * ReportingDashboard - Dashboard with statistics by technology and environment.
- * Story 8.3, AC1, AC2, AC6, AC8; Story 8.4 (advanced filters).
+ * Story 8.3, AC1, AC2, AC6, AC8; Story 8.4 (advanced filters); Story 8.5 (export).
  *
  * Displays:
  * - Advanced filters panel (engine, environment, tags, status, date range)
  * - Period selector (7, 14, 30, 90 days) - disabled when custom date range is set
+ * - Export button (CSV/PDF) - Story 8.5, AC1
  * - StatCards row (executions today, success rate, in progress, errors)
  * - TechnologyBarChart and EnvironmentBarChart side by side
  * - TrendLineChart full width
@@ -26,6 +27,7 @@ import { TechnologyBarChart } from './TechnologyBarChart';
 import { EnvironmentBarChart } from './EnvironmentBarChart';
 import { TrendLineChart } from './TrendLineChart';
 import { AdvancedFiltersPanel } from './AdvancedFiltersPanel';
+import { ExportButton } from './ExportButton';
 import {
   fetchStats,
   fetchStatsByTechnology,
@@ -159,7 +161,7 @@ export function ReportingDashboard() {
         filterOptions={filterOptions}
       />
 
-      {/* Period selector - disabled when custom date range is set */}
+      {/* Period selector and Export button - period disabled when custom date range is set */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 16 }}>
         {hasCustomDateRange && (
           <Text type="secondary" style={{ fontSize: 12 }}>
@@ -171,6 +173,10 @@ export function ReportingDashboard() {
           value={period}
           onChange={(val) => handlePeriodChange(val as number)}
           disabled={hasCustomDateRange}
+        />
+        <ExportButton
+          filters={filters}
+          loading={loading}
         />
       </div>
 

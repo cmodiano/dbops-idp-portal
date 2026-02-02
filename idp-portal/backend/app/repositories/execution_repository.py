@@ -1840,3 +1840,211 @@ async def get_filter_options() -> dict[str, list[str]]:
         "tags": tags,
         "statuses": statuses,
     }
+
+
+# --- Story 8.5: Dashboard Export Repository Methods ---
+
+
+async def get_stats_by_technology_for_export(
+    days: int = DASHBOARD_REPORTING_DEFAULT_DAYS,
+    environment: str | None = None,
+    tags: list[str] | None = None,
+    status: str | None = None,
+    from_date: Any = None,
+    to_date: Any = None,
+) -> list[dict[str, Any]]:
+    """Get aggregated execution stats by database engine for export (Story 8.5, Task 2.2).
+
+    Extended version of get_stats_by_technology with success/failed counts.
+
+    Args:
+        days: Number of days to include (default 14). Used when from_date/to_date not provided.
+        environment: Filter by environment
+        tags: Filter by action tags
+        status: Filter by execution status
+        from_date: Custom period start - overrides days parameter
+        to_date: Custom period end - overrides days parameter
+
+    Returns:
+        List of dicts with: engine, count, success, failed, success_rate
+    """
+    start_time = time.perf_counter()
+
+    # Build filter clauses - engine excluded since it's the GROUP BY key
+    filter_clauses, filter_params = _build_filter_clauses(
+        engine=None,
+        environment=environment,
+        tags=tags,
+        status=status,
+        from_date=from_date,
+        to_date=to_date,
+        table_alias="e",
+        action_alias="a",
+    )
+
+    # Build period condition based on custom dates or days
+    if from_date and to_date:
+        period_condition = "TRUNC(e.CREATED_AT) >= :period_from AND TRUNC(e.CREATED_AT) <= :period_to"
+        filter_params["period_from"] = from_date
+        filter_params["period_to"] = to_date
+    else:
+        period_condition = "e.CREATED_AT >= SYSDATE - :days"
+        filter_params["days"] = days
+
+    # Combine period condition with filters
+    where_parts = [period_condition] + filter_clauses
+    where_clause = " AND ".join(where_parts)
+
+    query = f"""
+        SELECT
+            NVL(a.ENGINE, 'N/A') AS engine,
+            COUNT(*) AS total_count,
+            SUM(CASE WHEN e.STATUS = 'COMPLETED' THEN 1 ELSE 0 END) AS completed,
+            SUM(CASE WHEN e.STATUS = 'FAILED' THEN 1 ELSE 0 END) AS failed
+        FROM EXECUTIONS e
+        LEFT JOIN ACTIONS_CATALOG a ON e.ACTION_ID = a.ID
+        WHERE {where_clause}
+        GROUP BY NVL(a.ENGINE, 'N/A')
+        ORDER BY total_count DESC
+    """
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, filter_params)
+        rows = await cursor.fetchall()
+        cursor.close()
+
+    result = []
+    for row in rows:
+        engine = row[0]
+        total_count = row[1] or 0
+        completed = row[2] or 0
+        failed = row[3] or 0
+
+        # Calculate success rate: avoid division by zero
+        total_finished = completed + failed
+        success_rate = round((completed / total_finished) * 100, 1) if total_finished > 0 else None
+
+        result.append({
+            "engine": engine,
+            "count": total_count,
+            "success": completed,
+            "failed": failed,
+            "success_rate": success_rate,
+        })
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.debug(
+        "execution_repository_get_stats_by_technology_for_export",
+        duration_ms=duration_ms,
+        days=days,
+        engine_count=len(result),
+    )
+
+    return result
+
+
+async def get_stats_by_environment_for_export(
+    days: int = DASHBOARD_REPORTING_DEFAULT_DAYS,
+    engine: str | None = None,
+    tags: list[str] | None = None,
+    status: str | None = None,
+    from_date: Any = None,
+    to_date: Any = None,
+) -> list[dict[str, Any]]:
+    """Get aggregated execution stats by environment for export (Story 8.5, Task 2.2).
+
+    Extended version of get_stats_by_environment with success/failed counts.
+
+    Args:
+        days: Number of days to include (default 14). Used when from_date/to_date not provided.
+        engine: Filter by database engine
+        tags: Filter by action tags
+        status: Filter by execution status
+        from_date: Custom period start - overrides days parameter
+        to_date: Custom period end - overrides days parameter
+
+    Returns:
+        List of dicts with: environment, count, success, failed, success_rate
+    """
+    start_time = time.perf_counter()
+
+    # Build filter clauses - environment excluded since it's the GROUP BY key
+    filter_clauses, filter_params = _build_filter_clauses(
+        engine=engine,
+        environment=None,
+        tags=tags,
+        status=status,
+        from_date=from_date,
+        to_date=to_date,
+        table_alias="e",
+        action_alias="a",
+    )
+
+    # Build period condition based on custom dates or days
+    if from_date and to_date:
+        period_condition = "TRUNC(e.CREATED_AT) >= :period_from AND TRUNC(e.CREATED_AT) <= :period_to"
+        filter_params["period_from"] = from_date
+        filter_params["period_to"] = to_date
+    else:
+        period_condition = "e.CREATED_AT >= SYSDATE - :days"
+        filter_params["days"] = days
+
+    # Combine period condition with filters
+    where_parts = [period_condition] + filter_clauses
+    where_clause = " AND ".join(where_parts)
+
+    query = f"""
+        SELECT
+            e.ENVIRONMENT,
+            COUNT(*) AS total_count,
+            SUM(CASE WHEN e.STATUS = 'COMPLETED' THEN 1 ELSE 0 END) AS completed,
+            SUM(CASE WHEN e.STATUS = 'FAILED' THEN 1 ELSE 0 END) AS failed
+        FROM EXECUTIONS e
+        LEFT JOIN ACTIONS_CATALOG a ON e.ACTION_ID = a.ID
+        WHERE {where_clause}
+        GROUP BY e.ENVIRONMENT
+        ORDER BY
+            CASE e.ENVIRONMENT
+                WHEN 'dev' THEN 1
+                WHEN 'staging' THEN 2
+                WHEN 'prod' THEN 3
+                ELSE 4
+            END,
+            e.ENVIRONMENT
+    """
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, filter_params)
+        rows = await cursor.fetchall()
+        cursor.close()
+
+    result = []
+    for row in rows:
+        environment = row[0]
+        total_count = row[1] or 0
+        completed = row[2] or 0
+        failed = row[3] or 0
+
+        # Calculate success rate: avoid division by zero
+        total_finished = completed + failed
+        success_rate = round((completed / total_finished) * 100, 1) if total_finished > 0 else None
+
+        result.append({
+            "environment": environment,
+            "count": total_count,
+            "success": completed,
+            "failed": failed,
+            "success_rate": success_rate,
+        })
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.debug(
+        "execution_repository_get_stats_by_environment_for_export",
+        duration_ms=duration_ms,
+        days=days,
+        environment_count=len(result),
+    )
+
+    return result
