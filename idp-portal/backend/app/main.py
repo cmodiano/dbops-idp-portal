@@ -16,7 +16,7 @@ from app.core.database import create_pool, close_pool
 from app.core.exceptions import IdpError
 from app.core.logging import configure_logging
 from app.core.middleware import CorrelationIdMiddleware, RequestLoggingMiddleware
-from app.api.v1 import admin, audit, auth, catalog, dashboard, executions, health, inventory, tags, users
+from app.api.v1 import admin, audit, auth, catalog, dashboard, executions, health, inventory, scheduled_executions, tags, users
 from app.api import websocket_routes
 from app.services.inventory_service import sync_inventory
 
@@ -168,6 +168,7 @@ app.include_router(executions.router, prefix="/api/v1", tags=["executions"])
 app.include_router(inventory.router, prefix="/api/v1", tags=["inventory"])
 app.include_router(dashboard.router, prefix="/api/v1", tags=["dashboard"])
 app.include_router(audit.router, prefix="/api/v1", tags=["audit"])
+app.include_router(scheduled_executions.router, prefix="/api/v1", tags=["scheduled-executions"])
 app.include_router(websocket_routes.router, prefix="/ws", tags=["websocket"])
 
 # Mount static files for uploaded icons (Story 4.9, Task 3.3; LOW-8, LOW-9 fixes)

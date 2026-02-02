@@ -83,6 +83,8 @@ class AuditActionType(str, Enum):
     AUTO_REMEDIATION_TRIGGERED = "AUTO_REMEDIATION_TRIGGERED"
     AUTO_REMEDIATION_SUCCESS = "AUTO_REMEDIATION_SUCCESS"
     AUTO_REMEDIATION_FAILED = "AUTO_REMEDIATION_FAILED"
+    # Scheduled execution (Story 11.3, AC6)
+    SCHEDULED_EXECUTION_CREATED = "SCHEDULED_EXECUTION_CREATED"
 
 
 class AuditEntityType(str, Enum):
@@ -91,6 +93,7 @@ class AuditEntityType(str, Enum):
     USER = "user"
     PERMISSION = "permission"
     EXECUTION = "execution"
+    SCHEDULED_EXECUTION = "scheduled_execution"  # Story 11.3, AC6
 
 
 async def create_entry(

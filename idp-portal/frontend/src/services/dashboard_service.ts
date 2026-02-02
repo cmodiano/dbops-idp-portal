@@ -4,7 +4,7 @@
  * Provides functions to fetch dashboard statistics and recent executions.
  */
 
-import { apiFetch, apiFetchBlob } from './api_client';
+import { apiFetch, apiFetchBlob, apiFetchRaw } from './api_client';
 import type {
   DashboardStats,
   DashboardRecentExecution,
@@ -128,7 +128,8 @@ export async function fetchStatsByEnvironment(
  * @returns FilterOptions with engines, environments, tags, statuses
  */
 export async function fetchFilterOptions(): Promise<FilterOptions> {
-  return apiFetch<FilterOptions>('/dashboard/filter-options');
+  // Use apiFetchRaw because the API returns the object directly, not wrapped in .data
+  return apiFetchRaw<FilterOptions>('/dashboard/filter-options');
 }
 
 /**

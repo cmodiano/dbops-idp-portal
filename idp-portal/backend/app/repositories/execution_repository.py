@@ -2012,11 +2012,11 @@ async def get_filter_options() -> dict[str, list[str]]:
             e.ENVIRONMENT
     """
 
-    # Query all tags
+    # Query all tags (same format as get_all_tags in catalog_repository)
     tags_query = """
-        SELECT t.NAME
-        FROM TAGS t
-        ORDER BY t.NAME
+        SELECT NAME
+        FROM TAGS
+        ORDER BY NAME
     """
 
     # Static list of statuses
@@ -2694,7 +2694,7 @@ async def get_execution_stats(
 # --- Story 9.10: Filtered Execution Functions ---
 
 
-def _build_filter_clauses(
+def _build_execution_filter_clauses(
     params: dict,
     start_date: str | None = None,
     end_date: str | None = None,
@@ -2799,7 +2799,7 @@ async def list_by_user_filtered(
     start_time = time.perf_counter()
 
     params: dict = {"user_id": user_id, "limit": limit, "offset": offset}
-    filter_clause, _ = _build_filter_clauses(
+    filter_clause, _ = _build_execution_filter_clauses(
         params, start_date, end_date, action_id, engine, tags_list, status, environment,
         table_alias="E", action_alias="A",
     )
@@ -2874,7 +2874,7 @@ async def count_by_user_filtered(
 ) -> int:
     """Count executions for a user with advanced filters (Story 9.10)."""
     params: dict = {"user_id": user_id}
-    filter_clause, needs_action_join = _build_filter_clauses(
+    filter_clause, needs_action_join = _build_execution_filter_clauses(
         params, start_date, end_date, action_id, engine, tags_list, status, environment,
         table_alias="E", action_alias="A",
     )
@@ -2925,7 +2925,7 @@ async def list_all_executions_filtered(
     start_time = time.perf_counter()
 
     params: dict = {"limit": limit, "offset": offset}
-    filter_clause, _ = _build_filter_clauses(
+    filter_clause, _ = _build_execution_filter_clauses(
         params, start_date, end_date, action_id, engine, tags_list, status, environment,
         table_alias="E", action_alias="A",
     )
@@ -3000,7 +3000,7 @@ async def count_all_executions_filtered(
 ) -> int:
     """Count all executions with advanced filters (Story 9.10)."""
     params: dict = {}
-    filter_clause, needs_action_join = _build_filter_clauses(
+    filter_clause, needs_action_join = _build_execution_filter_clauses(
         params, start_date, end_date, action_id, engine, tags_list, status, environment,
         table_alias="E", action_alias="A",
     )
@@ -3056,7 +3056,7 @@ async def get_execution_stats_filtered(
     params: dict = {}
 
     # Build filter clauses
-    filter_clause, needs_action_join = _build_filter_clauses(
+    filter_clause, needs_action_join = _build_execution_filter_clauses(
         params, start_date, end_date, action_id, engine, tags_list, status, environment,
         table_alias="E", action_alias="A",
     )
@@ -3176,7 +3176,7 @@ async def get_execution_timeseries(
         end_date = datetime.utcnow().strftime("%Y-%m-%d")
 
     # Build filter clauses (always include date range)
-    filter_clause, needs_action_join = _build_filter_clauses(
+    filter_clause, needs_action_join = _build_execution_filter_clauses(
         params, start_date, end_date, action_id, engine, tags_list, status, environment,
         table_alias="E", action_alias="A",
     )
