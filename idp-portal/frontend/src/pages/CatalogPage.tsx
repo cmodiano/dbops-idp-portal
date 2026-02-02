@@ -138,6 +138,8 @@ export default function CatalogPage() {
   const [drawerLoading, setDrawerLoading] = useState(false);
   const [executionWizardOpen, setExecutionWizardOpen] = useState(false);
   const [activeExecutionId, setActiveExecutionId] = useState<number | null>(null);
+  // Story 9.2, Task 19: Parent execution ID for remediation
+  const [parentExecutionId, setParentExecutionId] = useState<number | null>(null);
   const lastFocusedCardRef = useRef<HTMLElement | null>(null);
 
   const loadData = useCallback(async () => {
@@ -313,17 +315,22 @@ export default function CatalogPage() {
     loadData();
   }, [loadData, message]);
 
-  // Back to catalog — close timeline and wizard (Story 4.6, Task 4.2)
+  // Back to catalog — close timeline and wizard (Story 4.6, Task 4.2; Story 9.2, Task 19)
   const handleBackToCatalog = useCallback(() => {
     setActiveExecutionId(null);
     setExecutionWizardOpen(false);
     setDrawerVisible(false);
+    // Story 9.2, Task 19: Reset parent execution ID
+    setParentExecutionId(null);
     loadData();
   }, [loadData]);
 
-  // Story 9.1, Task 12.4: Handle remediation suggestion click - load suggested action and open wizard
+  // Story 9.1, Task 12.4; Story 9.2, Task 19: Handle remediation suggestion click - load suggested action and open wizard
   const handleRemediationSuggestionClick = useCallback(async (suggestion: RemediationSuggestion) => {
     try {
+      // Story 9.2, Task 19: Capture the current execution as parent before resetting
+      const currentParentId = activeExecutionId;
+
       // Close current execution view
       setActiveExecutionId(null);
 
@@ -333,13 +340,16 @@ export default function CatalogPage() {
       setSelectedActionCanExecute(detailResponse.can_execute);
       setSelectedActionEnvs(detailResponse.allowed_environments);
 
+      // Story 9.2, Task 19: Set parent execution ID for remediation linking
+      setParentExecutionId(currentParentId);
+
       // Keep wizard open with new action
       setExecutionWizardOpen(true);
     } catch (error) {
       console.error('Failed to load suggested action:', error);
       message.error('Erreur lors du chargement de l\'action corrective');
     }
-  }, [message]);
+  }, [message, activeExecutionId]);
 
   // Render action card with favorite button (disabled when not authenticated — Task 5.1)
   // Story 7.1: Use 'business' variant for business profiles (simplified descriptions)
@@ -581,7 +591,7 @@ export default function CatalogPage() {
         ) : null}
       </Drawer>
 
-      {/* ExecutionWizard + Timeline (Story 4.1, 4.6, Task 4; Story 7.2, Task 4.1; Story 9.1, Task 12) */}
+      {/* ExecutionWizard + Timeline (Story 4.1, 4.6, Task 4; Story 7.2, Task 4.1; Story 9.1, Task 12; Story 9.2, Task 19) */}
       <ExecutionWizard
         open={executionWizardOpen}
         action={selectedActionDetail}
@@ -590,11 +600,14 @@ export default function CatalogPage() {
         onCancel={() => {
           setActiveExecutionId(null);
           setExecutionWizardOpen(false);
+          // Story 9.2, Task 19: Reset parent execution ID
+          setParentExecutionId(null);
         }}
         onSuccess={handleExecutionSuccess}
         onBackToCatalog={handleBackToCatalog}
         variant={isBusinessProfile ? 'simplified' : 'default'}
         onSuggestionClick={handleRemediationSuggestionClick}
+        parentExecutionId={parentExecutionId}
       />
     </div>
   );

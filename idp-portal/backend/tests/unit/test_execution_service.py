@@ -1591,3 +1591,142 @@ class TestGetRemediationSuggestions:
             suggestions = await get_remediation_suggestions(1)
 
             assert suggestions == []  # No match because env is DEV
+
+
+# === Story 9.2 Tests: Remediation Context (Task 21) ===
+
+
+class TestGetRemediationContext:
+    """Tests for get_remediation_context (Story 9.2, Task 21)."""
+
+    @pytest.mark.asyncio
+    async def test_get_remediation_context_with_successful_child(self):
+        """get_remediation_context returns successful_remediation=true when child COMPLETED."""
+        from app.services.execution_service import get_remediation_context
+
+        mock_children = [
+            ExecutionResponse(
+                id=2,
+                action_id=5,
+                action_name="Fix PDB",
+                user_id=1,
+                environment=ExecutionEnvironment.DEV,
+                parameters=None,
+                status=ExecutionStatus.COMPLETED,
+                created_at=datetime(2026, 2, 2, 10, 0),
+                started_at=datetime(2026, 2, 2, 10, 0),
+                completed_at=datetime(2026, 2, 2, 10, 5),
+                parent_execution_id=1,
+            ),
+        ]
+
+        with patch("app.services.execution_service.execution_repository") as mock_repo:
+            mock_repo.get_children_executions = AsyncMock(return_value=mock_children)
+
+            result = await get_remediation_context(1)
+
+        assert result.has_remediation is True
+        assert result.successful_remediation is True
+        assert len(result.remediation_actions) == 1
+        assert result.remediation_actions[0].execution_id == 2
+        assert result.remediation_actions[0].action_name == "Fix PDB"
+        assert result.remediation_actions[0].status == ExecutionStatus.COMPLETED
+
+    @pytest.mark.asyncio
+    async def test_get_remediation_context_all_failed(self):
+        """get_remediation_context returns successful_remediation=false when all children FAILED."""
+        from app.services.execution_service import get_remediation_context
+
+        mock_children = [
+            ExecutionResponse(
+                id=2,
+                action_id=5,
+                action_name="Fix PDB",
+                user_id=1,
+                environment=ExecutionEnvironment.DEV,
+                parameters=None,
+                status=ExecutionStatus.FAILED,
+                created_at=datetime(2026, 2, 2, 10, 0),
+                started_at=datetime(2026, 2, 2, 10, 0),
+                completed_at=datetime(2026, 2, 2, 10, 5),
+                parent_execution_id=1,
+            ),
+            ExecutionResponse(
+                id=3,
+                action_id=6,
+                action_name="Repair Index",
+                user_id=1,
+                environment=ExecutionEnvironment.DEV,
+                parameters=None,
+                status=ExecutionStatus.FAILED,
+                created_at=datetime(2026, 2, 2, 11, 0),
+                started_at=datetime(2026, 2, 2, 11, 0),
+                completed_at=datetime(2026, 2, 2, 11, 5),
+                parent_execution_id=1,
+            ),
+        ]
+
+        with patch("app.services.execution_service.execution_repository") as mock_repo:
+            mock_repo.get_children_executions = AsyncMock(return_value=mock_children)
+
+            result = await get_remediation_context(1)
+
+        assert result.has_remediation is True
+        assert result.successful_remediation is False
+        assert len(result.remediation_actions) == 2
+
+    @pytest.mark.asyncio
+    async def test_get_remediation_context_no_children(self):
+        """get_remediation_context returns has_remediation=false when no children exist."""
+        from app.services.execution_service import get_remediation_context
+
+        with patch("app.services.execution_service.execution_repository") as mock_repo:
+            mock_repo.get_children_executions = AsyncMock(return_value=[])
+
+            result = await get_remediation_context(1)
+
+        assert result.has_remediation is False
+        assert result.successful_remediation is False
+        assert result.remediation_actions == []
+
+    @pytest.mark.asyncio
+    async def test_get_remediation_context_mixed_statuses(self):
+        """get_remediation_context returns successful=true if at least one child COMPLETED."""
+        from app.services.execution_service import get_remediation_context
+
+        mock_children = [
+            ExecutionResponse(
+                id=2,
+                action_id=5,
+                action_name="Fix PDB",
+                user_id=1,
+                environment=ExecutionEnvironment.DEV,
+                parameters=None,
+                status=ExecutionStatus.FAILED,
+                created_at=datetime(2026, 2, 2, 10, 0),
+                started_at=datetime(2026, 2, 2, 10, 0),
+                completed_at=datetime(2026, 2, 2, 10, 5),
+                parent_execution_id=1,
+            ),
+            ExecutionResponse(
+                id=3,
+                action_id=6,
+                action_name="Repair Index",
+                user_id=1,
+                environment=ExecutionEnvironment.DEV,
+                parameters=None,
+                status=ExecutionStatus.COMPLETED,  # At least one success
+                created_at=datetime(2026, 2, 2, 11, 0),
+                started_at=datetime(2026, 2, 2, 11, 0),
+                completed_at=datetime(2026, 2, 2, 11, 5),
+                parent_execution_id=1,
+            ),
+        ]
+
+        with patch("app.services.execution_service.execution_repository") as mock_repo:
+            mock_repo.get_children_executions = AsyncMock(return_value=mock_children)
+
+            result = await get_remediation_context(1)
+
+        assert result.has_remediation is True
+        assert result.successful_remediation is True  # At least one COMPLETED

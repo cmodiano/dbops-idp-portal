@@ -50,16 +50,18 @@ class ExecutionEnvironment(str, Enum):
 
 
 class ExecutionCreate(BaseModel):
-    """Input model for creating an execution (Story 4.1, Task 1.1).
+    """Input model for creating an execution (Story 4.1, Task 1.1; Story 9.2 remediation).
 
     Attributes:
         action_id: ID of the action to execute
         environment: Target environment (dev, staging, prod)
         parameters: Parameters conforming to action's parameters_schema
+        parent_execution_id: Optional parent execution ID for remediation (Story 9.2)
     """
     action_id: int = Field(..., gt=0, description="ID of the action to execute")
     environment: ExecutionEnvironment = Field(..., description="Target environment")
     parameters: dict[str, Any] | None = Field(default=None, description="Execution parameters")
+    parent_execution_id: int | None = Field(default=None, gt=0, description="Parent execution ID for remediation")
 
     @field_validator("parameters")
     @classmethod
@@ -71,7 +73,7 @@ class ExecutionCreate(BaseModel):
 
 
 class ExecutionResponse(BaseModel):
-    """Output model for execution (Story 4.1, Task 1.1; Story 7.4 approval fields).
+    """Output model for execution (Story 4.1, Task 1.1; Story 7.4 approval fields; Story 9.2 remediation).
 
     Attributes:
         id: Execution ID
@@ -89,6 +91,7 @@ class ExecutionResponse(BaseModel):
         approved_at: Timestamp of approval/rejection (Story 7.4)
         approval_comment: Comment from approver (Story 7.4)
         rejection_reason: Alias for approval_comment when REJECTED (Story 7.4)
+        parent_execution_id: ID of parent execution if this is a remediation (Story 9.2)
     """
     id: int
     action_id: int
@@ -106,6 +109,8 @@ class ExecutionResponse(BaseModel):
     approved_by: int | None = None
     approved_at: datetime | None = None
     approval_comment: str | None = None
+    # Story 9.2: Remediation linking
+    parent_execution_id: int | None = None
 
     @property
     def rejection_reason(self) -> str | None:
@@ -198,6 +203,43 @@ class ActionStatsResponse(BaseModel):
     avg_execution_time_ms: int | None = Field(None, ge=0, description="Average execution time in ms")
     total_executions: int = Field(..., ge=0, description="Total executions count")
     incidents_count: int = Field(..., ge=0, description="Number of failed executions")
+
+
+# --- Story 9.2: Remediation Context Models ---
+
+
+class RemediationAction(BaseModel):
+    """Single remediation action details (Story 9.2, AC3).
+
+    Attributes:
+        execution_id: ID of the remediation execution
+        action_name: Name of the action executed
+        status: Current status of the remediation
+        created_at: When the remediation was triggered
+        completed_at: When the remediation completed (if finished)
+    """
+    execution_id: int = Field(..., description="Remediation execution ID")
+    action_name: str = Field(..., description="Name of the action executed")
+    status: ExecutionStatus = Field(..., description="Status of the remediation")
+    created_at: datetime = Field(..., description="When remediation was triggered")
+    completed_at: datetime | None = Field(None, description="When remediation completed")
+
+
+class RemediationContext(BaseModel):
+    """Remediation context for a failed execution (Story 9.2, AC3).
+
+    Provides information about remediation attempts for a failed execution.
+
+    Attributes:
+        has_remediation: True if at least one remediation attempt exists
+        successful_remediation: True if at least one remediation succeeded
+        remediation_actions: List of all remediation attempts
+    """
+    has_remediation: bool = Field(..., description="Whether remediation attempts exist")
+    successful_remediation: bool = Field(..., description="Whether any remediation succeeded")
+    remediation_actions: list[RemediationAction] = Field(
+        default_factory=list, description="List of remediation attempts"
+    )
 
 
 # --- Story 8.2: Admin Analytics Models ---

@@ -143,13 +143,15 @@ development_status:
     # === Epic 9: Autoremediation (Phase 2) ===
     epic-9: in-progress
     9-1-detection-echec-et-proposition-actions-correctives: done # 2026-02-02: All 19 tasks completed - migration V031, remediation models, repository, service, API endpoint, admin UI editor, frontend hook/types/service, StructuredErrorCard suggestions, ExecutionTimeline integration, 60 frontend tests pass
-    9-2-declenchement-manuel-action-corrective-par-dba: backlog
+    9-2-declenchement-manuel-action-corrective-par-dba: in-progress
     9-3-execution-automatique-corrective-pour-faible-risque: backlog
     9-4-deplacement-statistiques-executions-vers-page-executions: backlog # Déplacer uniquement les 4 cards KPI (exécutions du jour, taux de succès, en cours, en erreur) du Dashboard vers la page Exécutions
     9-5-interface-admin-creation-workflows: backlog # Compléter Story 5.7 Task 4 : Interface Admin pour créer/éditer des workflows (choix type action/workflow, éditeur d'étapes avec sélecteur d'actions existantes, validation)
     9-6-fix-filtre-mes-actions: backlog # Bug fix : "Mes actions" affiche actuellement favoris + récentes (ligne 206 CatalogPage.tsx), mais devrait afficher uniquement les favoris. Supprimer aussi la section "Actions récentes" dans "Mes actions" (ligne 530) car les actions récentes sont déjà disponibles dans "Mes exécutions"
     9-7-fix-oracle-bind-variable-comment: backlog # Bug fix : ORA-01745 dans approve/reject - variable de liaison :comment entre en conflit avec mot réservé Oracle COMMENT. Renommé en :approval_comment
     9-8-fix-audit-log-approval-action-types: backlog # Bug fix : ORA-02290 CK_AUDIT_LOG_ACTION_TYPE violated - Migration V032 ajoute EXECUTION_PENDING_APPROVAL, EXECUTION_APPROVED, EXECUTION_REJECTED à la contrainte CHECK
+    9-9-amelioration-table-executions: backlog # UX : (1) Colonne statut à gauche avec point plus gros pour actions en cours, points fixes colorés pour terminées (2) Ajouter colonnes Technologie et Plateforme avec icônes (3) Récupérer engine/platform depuis action_id si nécessaire
+    9-10-refonte-dashboard-vers-executions: backlog # Refonte majeure : (1) Supprimer dashboard classique (sépare des choses qui devraient être dans Exécutions - Story 9-4 déjà déplace les cards KPI) (2) Déplacer graphique échecs/succès (TrendLineChart) dans Exécutions avec filtres (3) Ajouter filtres avancés dans Exécutions : range dates (DatePicker.RangePicker), action (Select), technologie (Select), tags (Select multiple), statut (Select), environnement (Select) - pour DBA cherchant une exécution spécifique (4) Dashboard admin DBOPS reste pour analyses avancées
     epic-9-retrospective: optional
     # === Epic 10: Documentation IA, Communication & Interface Conversationnelle (Phase 3) ===
     epic-10: backlog

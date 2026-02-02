@@ -32,7 +32,7 @@ import {
   Tooltip,
   App,
 } from 'antd';
-import { InfoCircleOutlined, WarningOutlined } from '@ant-design/icons';
+import { InfoCircleOutlined, WarningOutlined, ToolOutlined } from '@ant-design/icons';
 import type { CatalogActionDetail } from '../../services/catalog_service';
 import type {
   ExecutionEnvironment,
@@ -95,6 +95,8 @@ export interface ExecutionWizardProps {
   variant?: 'default' | 'simplified';
   /** Callback when a remediation suggestion is clicked (Story 9.1, Task 12.2). */
   onSuggestionClick?: (suggestion: RemediationSuggestion) => void;
+  /** Parent execution ID for remediation actions (Story 9.2, Task 14). */
+  parentExecutionId?: number | null;
 }
 
 /** Parameter field info extracted from JSON Schema. */
@@ -190,6 +192,7 @@ export function ExecutionWizard({
   onBackToCatalog,
   variant = 'default',
   onSuggestionClick,
+  parentExecutionId,
 }: ExecutionWizardProps) {
   const { notification } = App.useApp();
 
@@ -415,6 +418,8 @@ export function ExecutionWizard({
         action_id: action.id,
         environment: selectedEnvironment,
         parameters: Object.keys(parameters).length > 0 ? parameters : null,
+        // Story 9.2, Task 14: Include parent_execution_id for remediation
+        parent_execution_id: parentExecutionId ?? null,
       });
 
       notification.success({
@@ -425,7 +430,16 @@ export function ExecutionWizard({
       // Close wizard and call success callback
       onSuccess?.(response.execution_id);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erreur lors de la soumission';
+      // Story 9.2, Task 14: Handle parent validation errors
+      const error = err as Error & { code?: string };
+      let message = error.message || 'Erreur lors de la soumission';
+      if (error.code === 'INVALID_PARENT_STATUS' || message.includes('FAILED')) {
+        message = 'L\'exécution parente n\'est pas en échec';
+      } else if (error.code === 'PARENT_NOT_FOUND' || message.includes('not found')) {
+        message = 'L\'exécution parente est introuvable';
+      } else if (error.code === 'FORBIDDEN' || message.includes('forbidden')) {
+        message = 'Accès refusé à l\'exécution parente';
+      }
       setSubmitError(message);
       notification.error({
         title: 'Erreur',
@@ -806,6 +820,17 @@ export function ExecutionWizard({
       aria-label={`Wizard d'execution: ${action!.name}`}
     >
       <div onKeyDown={handleKeyDown}>
+        {/* Story 9.2, Task 14: Contextual note when executing as remediation */}
+        {parentExecutionId && (
+          <Alert
+            type="info"
+            showIcon
+            icon={<ToolOutlined />}
+            message={`Action corrective pour l'exécution #${parentExecutionId}`}
+            style={{ marginBottom: 16 }}
+          />
+        )}
+
         <Steps
           current={currentStep}
           items={STEP_ITEMS.map((item, i) => ({

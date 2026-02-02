@@ -1,11 +1,12 @@
-"""Executions API (Story 4.1, Task 1.1, 1.4 + Story 4.3, Task 3; Story 7.4 Approval Workflow; Story 9.1 Remediation).
+"""Executions API (Story 4.1, Task 1.1, 1.4 + Story 4.3, Task 3; Story 7.4 Approval Workflow; Story 9.1-9.2 Remediation).
 
 Provides endpoints for execution submission and retrieval.
-- POST /api/v1/executions: Submit a new execution
+- POST /api/v1/executions: Submit a new execution (supports parent_execution_id for remediation - Story 9.2)
 - GET /api/v1/executions/{id}: Get execution by ID
 - GET /api/v1/executions: List user's executions
 - GET /api/v1/executions/{id}/steps: Get execution steps
 - GET /api/v1/executions/{id}/remediation: Get remediation suggestions for failed execution (Story 9.1)
+- GET /api/v1/executions/{id}/remediation-context: Get remediation context (Story 9.2)
 - POST /api/v1/executions/{id}/approve: DBA approves execution (Story 7.4)
 - POST /api/v1/executions/{id}/reject: DBA rejects execution (Story 7.4)
 - GET /api/v1/executions/pending-approvals: List pending approvals (Story 7.4)
@@ -35,7 +36,7 @@ class ApprovalRequest(BaseModel):
     comment: str | None = Field(default=None, max_length=1000)
 from app.repositories import execution_repository
 from app.services import rbac_service
-from app.services.execution_service import ExecutionService, generate_correlation_id, get_remediation_suggestions
+from app.services.execution_service import ExecutionService, generate_correlation_id, get_remediation_suggestions, get_remediation_context
 from app.websocket.execution_ws import get_execution_ws_manager
 from app.websocket.dashboard_ws import get_dashboard_ws_manager
 from app.api.services import get_servicenow_service
@@ -125,12 +126,13 @@ async def create_execution(
     background_tasks: BackgroundTasks,
     user: UserProfile = Depends(get_current_user),
 ) -> dict:
-    """POST /api/v1/executions - Submit a new execution (Story 4.1, AC3, AC4, AC5 + Story 4.3).
+    """POST /api/v1/executions - Submit a new execution (Story 4.1, AC3, AC4, AC5 + Story 4.3 + Story 9.2).
 
     Validates:
     - action_id exists and is published
     - environment is valid (dev, staging, prod)
     - parameters conform to action's parameters_schema (Task 1.4)
+    - parent_execution_id exists and is FAILED if provided (Story 9.2)
 
     Creates execution record, prepares steps, and starts background execution (Story 4.3).
 
@@ -139,7 +141,10 @@ async def create_execution(
 
     Raises:
         400 INVALID_PARAMETERS: If parameters validation fails
+        400 INVALID_PARENT_STATUS: If parent execution is not FAILED (Story 9.2)
         404 ACTION_NOT_FOUND: If action doesn't exist or not published
+        404 PARENT_NOT_FOUND: If parent execution doesn't exist (Story 9.2)
+        403 PERMISSION_DENIED: If user cannot view parent execution (Story 9.2)
     """
     # Generate correlation ID for request tracing (Story 4.3, Task 3.3)
     correlation_id = generate_correlation_id()
@@ -150,6 +155,7 @@ async def create_execution(
         action_id=payload.action_id,
         environment=payload.environment.value,
         user_id=user.id,
+        parent_execution_id=payload.parent_execution_id,
     )
 
     # Check action exists and is published
@@ -159,6 +165,62 @@ async def create_execution(
             code="ACTION_NOT_FOUND",
             message="Action introuvable ou non publiee",
             details={"action_id": payload.action_id},
+        )
+
+    # Story 9.2: Validate parent_execution_id if provided (remediation)
+    parent_environment: str | None = None
+    parent_action_id: int | None = None
+    parent_action_name: str | None = None
+    error_context: dict | None = None
+
+    if payload.parent_execution_id:
+        parent_execution = await execution_repository.get_by_id(payload.parent_execution_id)
+
+        if parent_execution is None:
+            raise NotFoundError(
+                code="PARENT_NOT_FOUND",
+                message="Execution parente introuvable",
+                details={"parent_execution_id": payload.parent_execution_id},
+            )
+
+        # RBAC: User must be able to view parent execution
+        if not _can_view_execution(parent_execution.user_id, user):
+            raise ForbiddenError(
+                code="PERMISSION_DENIED",
+                message="Vous n'avez pas la permission de voir l'execution parente",
+                details={"parent_execution_id": payload.parent_execution_id},
+            )
+
+        # Parent must be FAILED to trigger remediation
+        if parent_execution.status != ExecutionStatus.FAILED:
+            raise InvalidStateError(
+                code="INVALID_PARENT_STATUS",
+                message="L'execution parente n'est pas en echec",
+                details={
+                    "parent_execution_id": payload.parent_execution_id,
+                    "parent_status": parent_execution.status.value,
+                },
+            )
+
+        # Store parent info for audit trail
+        parent_environment = parent_execution.environment.value if hasattr(parent_execution.environment, "value") else str(parent_execution.environment)
+        parent_action_id = parent_execution.action_id
+        parent_action_name = parent_execution.action_name
+
+        # Get error context from failed step
+        parent_steps = await execution_repository.get_steps_by_execution_id(payload.parent_execution_id)
+        failed_step = next((s for s in parent_steps if s.status.value == "FAILED"), None)
+        if failed_step:
+            error_context = {
+                "failed_step": failed_step.step_name,
+                "error_message": failed_step.error_message,
+            }
+
+        logger.info(
+            "remediation_execution_triggered",
+            parent_execution_id=payload.parent_execution_id,
+            parent_status=parent_execution.status.value,
+            child_action_id=payload.action_id,
         )
 
     # RBAC: Check user has permission to execute this action in this environment (Task 3.2)
@@ -200,6 +262,7 @@ async def create_execution(
             action_id=payload.action_id,
             environment=payload.environment.value,
             parameters=payload.parameters,
+            parent_execution_id=payload.parent_execution_id,
         )
 
         execution_id = result.execution_id
@@ -251,12 +314,13 @@ async def create_execution(
         }
 
     # Standard flow: no approval required
-    # Create execution record (Story 4.1)
+    # Create execution record (Story 4.1, Story 9.2)
     result = await execution_repository.create_execution(
         user_id=user.id,
         action_id=payload.action_id,
         environment=payload.environment.value,
         parameters=payload.parameters,
+        parent_execution_id=payload.parent_execution_id,
     )
 
     execution_id = result.execution_id
@@ -272,10 +336,34 @@ async def create_execution(
             "environment": payload.environment.value,
             "parameters": payload.parameters,
             "rbac_context": {"user_id": user.id, "profile": user.profile},
+            "parent_execution_id": payload.parent_execution_id,
         },
         ip_address=client_ip,
         correlation_id=correlation_id,
     )
+
+    # Story 9.2 AC4: Audit remediation execution if this is a child execution
+    if payload.parent_execution_id:
+        action = await catalog_repository.get_by_id(payload.action_id)
+        child_action_name = action.name if action else None
+        await audit_repository.log_remediation(
+            parent_execution_id=payload.parent_execution_id,
+            child_execution_id=execution_id,
+            user_id=user.id,
+            action_id=payload.action_id,
+            parent_action_id=parent_action_id or 0,
+            parent_action_name=parent_action_name,
+            child_action_name=child_action_name,
+            environment=payload.environment.value,
+            error_context=error_context,
+            ip_address=client_ip,
+            correlation_id=correlation_id,
+        )
+        logger.info(
+            "remediation_audit_logged",
+            parent_execution_id=payload.parent_execution_id,
+            child_execution_id=execution_id,
+        )
 
     # Prepare execution steps (Story 4.3, Task 3.4; Story 4.5, Task 2)
     vault_service = get_vault_service()
@@ -581,6 +669,62 @@ async def get_execution_remediation(
     )
 
     return {"data": [s.model_dump(mode="json") for s in suggestions]}
+
+
+@router.get("/{execution_id}/remediation-context", response_model=None)
+async def get_execution_remediation_context(
+    execution_id: int,
+    user: UserProfile = Depends(get_current_user),
+) -> dict:
+    """GET /api/v1/executions/{id}/remediation-context - Get remediation context (Story 9.2, AC3).
+
+    Returns information about remediation attempts for a failed execution.
+    Used to display "Échec — corrigé" status in the timeline.
+
+    RBAC: Same as GET execution (execution must belong to user or user is DBA/DBOPS).
+
+    Returns:
+        { "data": RemediationContext } with:
+        - has_remediation: bool
+        - successful_remediation: bool
+        - remediation_actions: list[RemediationAction]
+
+    Raises:
+        403: If user cannot view this execution
+        404: If execution not found
+    """
+    execution = await execution_repository.get_by_id(execution_id)
+
+    if execution is None:
+        raise NotFoundError(
+            code="EXECUTION_NOT_FOUND",
+            message="Execution introuvable",
+            details={"execution_id": execution_id},
+        )
+
+    if not _can_view_execution(execution.user_id, user):
+        raise ForbiddenError(
+            code="PERMISSION_DENIED",
+            message="Vous n'avez pas la permission de consulter cette execution",
+            details={"execution_id": execution_id},
+        )
+
+    logger.info(
+        "remediation_context_requested",
+        execution_id=execution_id,
+        user_id=user.id,
+    )
+
+    context = await get_remediation_context(execution_id)
+
+    logger.info(
+        "remediation_context_returned",
+        execution_id=execution_id,
+        has_remediation=context.has_remediation,
+        successful_remediation=context.successful_remediation,
+    )
+
+    return {"data": context.model_dump(mode="json")}
 
 
 @router.post("/{execution_id}/approve", status_code=status.HTTP_200_OK, response_model=None)

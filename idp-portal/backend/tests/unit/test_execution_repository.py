@@ -879,3 +879,233 @@ class TestGetAdminAnalytics:
         assert execute_calls[2][0][1]["days"] == 365
         # Query 4 (trend) - check days param
         assert execute_calls[3][0][1]["days"] == 365
+
+
+# === Story 9.2 Tests: Parent Execution ID (Remediation) ===
+
+
+class TestCreateExecutionWithParent:
+    """Tests for execution_repository.create_execution with parent_execution_id (Story 9.2, Task 20)."""
+
+    @pytest.mark.asyncio
+    async def test_create_execution_with_parent_id(self):
+        """create_execution inserts record with parent_execution_id."""
+        mock_out_id = MagicMock()
+        mock_out_id.getvalue.return_value = [42]
+
+        mock_out_created_at = MagicMock()
+        mock_out_created_at.getvalue.return_value = [datetime(2026, 2, 2, 10, 0, 0)]
+
+        mock_cursor = MagicMock()
+        mock_cursor.var = MagicMock(side_effect=[mock_out_id, mock_out_created_at])
+        mock_cursor.execute = AsyncMock()
+        mock_cursor.close = MagicMock()
+
+        mock_conn = MagicMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+        mock_conn.commit = AsyncMock()
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            result = await execution_repository.create_execution(
+                user_id=1,
+                action_id=5,
+                environment="dev",
+                parameters={"pdb_name": "TEST"},
+                parent_execution_id=100,  # Parent execution ID for remediation
+            )
+
+        assert result.execution_id == 42
+        # Verify parent_execution_id was passed to the query
+        execute_call = mock_cursor.execute.call_args
+        params = execute_call[0][1]
+        assert params["parent_execution_id"] == 100
+
+    @pytest.mark.asyncio
+    async def test_create_execution_without_parent_id(self):
+        """create_execution inserts record with NULL parent_execution_id when not provided."""
+        mock_out_id = MagicMock()
+        mock_out_id.getvalue.return_value = [43]
+
+        mock_out_created_at = MagicMock()
+        mock_out_created_at.getvalue.return_value = [datetime(2026, 2, 2, 10, 0, 0)]
+
+        mock_cursor = MagicMock()
+        mock_cursor.var = MagicMock(side_effect=[mock_out_id, mock_out_created_at])
+        mock_cursor.execute = AsyncMock()
+        mock_cursor.close = MagicMock()
+
+        mock_conn = MagicMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+        mock_conn.commit = AsyncMock()
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            result = await execution_repository.create_execution(
+                user_id=1,
+                action_id=5,
+                environment="dev",
+                parameters=None,
+            )
+
+        assert result.execution_id == 43
+        # Verify parent_execution_id is None in params
+        execute_call = mock_cursor.execute.call_args
+        params = execute_call[0][1]
+        assert params["parent_execution_id"] is None
+
+
+class TestGetExecutionIncludesParentId:
+    """Tests for get_by_id including parent_execution_id (Story 9.2, Task 20)."""
+
+    @pytest.mark.asyncio
+    async def test_get_by_id_returns_parent_execution_id(self):
+        """get_by_id returns ExecutionResponse with parent_execution_id from query."""
+        # Row with parent_execution_id as last column
+        row = (
+            1,  # ID
+            5,  # ACTION_ID
+            1,  # USER_ID
+            "dev",  # ENVIRONMENT
+            '{"key": "value"}',  # PARAMETERS
+            "COMPLETED",  # STATUS
+            None,  # SERVICENOW_CHANGE_ID
+            datetime(2026, 2, 2, 10, 0, 0),  # STARTED_AT
+            datetime(2026, 2, 2, 10, 5, 0),  # COMPLETED_AT
+            datetime(2026, 2, 2, 9, 0, 0),  # CREATED_AT
+            "Fix PDB",  # ACTION_NAME from JOIN
+            None,  # APPROVED_BY
+            None,  # APPROVED_AT
+            None,  # APPROVAL_COMMENT
+            100,  # PARENT_EXECUTION_ID
+        )
+
+        mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
+        mock_cursor.fetchone = AsyncMock(return_value=row)
+        mock_cursor.close = MagicMock()
+
+        mock_conn = MagicMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            result = await execution_repository.get_by_id(1)
+
+        assert result is not None
+        assert result.id == 1
+        assert result.parent_execution_id == 100
+
+
+class TestGetChildrenExecutions:
+    """Tests for execution_repository.get_children_executions (Story 9.2, Task 20)."""
+
+    @pytest.mark.asyncio
+    async def test_get_children_executions_returns_ordered_list(self):
+        """get_children_executions returns children ordered by created_at DESC."""
+        rows = [
+            (2, 5, 1, "dev", None, "COMPLETED", None, datetime(2026, 2, 2, 10, 0), datetime(2026, 2, 2, 10, 5), datetime(2026, 2, 2, 10, 0), "Fix PDB", None, None, None, 1),
+            (3, 6, 1, "dev", None, "FAILED", None, datetime(2026, 2, 2, 11, 0), datetime(2026, 2, 2, 11, 5), datetime(2026, 2, 2, 11, 0), "Repair Index", None, None, None, 1),
+        ]
+
+        mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
+        mock_cursor.fetchall = AsyncMock(return_value=rows)
+        mock_cursor.close = MagicMock()
+
+        mock_conn = MagicMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            result = await execution_repository.get_children_executions(1)
+
+        assert len(result) == 2
+        assert result[0].id == 2
+        assert result[0].parent_execution_id == 1
+        assert result[1].id == 3
+        assert result[1].action_name == "Repair Index"
+
+    @pytest.mark.asyncio
+    async def test_get_children_executions_returns_empty_when_none(self):
+        """get_children_executions returns empty list when no children exist."""
+        mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
+        mock_cursor.fetchall = AsyncMock(return_value=[])
+        mock_cursor.close = MagicMock()
+
+        mock_conn = MagicMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            result = await execution_repository.get_children_executions(999)
+
+        assert result == []
+
+
+class TestGetParentExecution:
+    """Tests for execution_repository.get_parent_execution (Story 9.2, Task 20)."""
+
+    @pytest.mark.asyncio
+    async def test_get_parent_execution_returns_parent(self):
+        """get_parent_execution returns parent execution when exists."""
+        # Row: parent_execution_id query result - should return (parent_execution_id,)
+        parent_id_row = (1,)
+        # Parent execution row
+        parent_row = (
+            1, 4, 1, "dev", None, "FAILED", None,
+            datetime(2026, 2, 2, 9, 0), datetime(2026, 2, 2, 9, 5),
+            datetime(2026, 2, 2, 9, 0), "Create PDB", None, None, None, None  # no parent
+        )
+
+        mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
+        mock_cursor.fetchone = AsyncMock(side_effect=[parent_id_row, parent_row])
+        mock_cursor.close = MagicMock()
+
+        mock_conn = MagicMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            result = await execution_repository.get_parent_execution(2)
+
+        assert result is not None
+        assert result.id == 1
+        assert result.action_name == "Create PDB"
+        assert result.status == ExecutionStatus.FAILED
+
+    @pytest.mark.asyncio
+    async def test_get_parent_execution_returns_none_when_no_parent(self):
+        """get_parent_execution returns None when execution has no parent."""
+        # Row where parent_execution_id is NULL
+        row = (None,)
+
+        mock_cursor = MagicMock()
+        mock_cursor.execute = AsyncMock()
+        mock_cursor.fetchone = AsyncMock(return_value=row)
+        mock_cursor.close = MagicMock()
+
+        mock_conn = MagicMock()
+        mock_conn.cursor = MagicMock(return_value=mock_cursor)
+
+        with patch("app.repositories.execution_repository.get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_get_conn.return_value.__aexit__ = AsyncMock()
+
+            result = await execution_repository.get_parent_execution(1)
+
+        assert result is None

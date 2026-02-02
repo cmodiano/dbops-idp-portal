@@ -1,7 +1,8 @@
 /**
- * Execution service (Story 4.1; Story 9.1 remediation).
+ * Execution service (Story 4.1; Story 9.1, 9.2 remediation).
  *
- * Provides functions to submit executions, fetch inventory data, and get remediation suggestions.
+ * Provides functions to submit executions, fetch inventory data, get remediation suggestions,
+ * and fetch remediation context for failed executions.
  */
 
 import { apiFetch, apiFetchRaw } from './api_client';
@@ -14,14 +15,15 @@ import type {
   InventoryItem,
   ExecutionScope,
   RemediationSuggestion,
+  RemediationContext,
 } from '../types/api';
 
 /**
- * Submit a new execution (Story 4.1, Task 1.1).
+ * Submit a new execution (Story 4.1, Task 1.1; Story 9.2 remediation).
  *
- * @param request - Execution request (action_id, environment, parameters)
+ * @param request - Execution request (action_id, environment, parameters, parent_execution_id)
  * @returns ExecutionCreateResponse with execution_id, status, created_at
- * @throws Error if action not found (404) or validation fails (400)
+ * @throws Error if action not found (404), validation fails (400), or parent not visible (403)
  */
 export async function submitExecution(
   request: ExecutionCreateRequest
@@ -218,6 +220,24 @@ export async function fetchRemediationSuggestions(
   executionId: number
 ): Promise<RemediationSuggestion[]> {
   return apiFetch<RemediationSuggestion[]>(`/executions/${executionId}/remediation`);
+}
+
+// === Story 9.2: Remediation Context (AC2, AC3) ===
+
+/**
+ * Fetch remediation context for an execution (Story 9.2, AC2, AC3).
+ *
+ * Returns information about remediation attempts (child executions)
+ * for a failed parent execution, including whether any succeeded.
+ *
+ * @param executionId - Parent execution ID to get remediation context for
+ * @returns RemediationContext with has_remediation, successful_remediation, and remediation_actions
+ * @throws Error if execution not found (404) or user cannot view it (403)
+ */
+export async function fetchRemediationContext(
+  executionId: number
+): Promise<RemediationContext> {
+  return apiFetch<RemediationContext>(`/executions/${executionId}/remediation-context`);
 }
 
 /**

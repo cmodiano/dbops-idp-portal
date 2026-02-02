@@ -395,11 +395,13 @@ export type ExecutionStatusType = 'SUBMITTED' | 'PENDING_APPROVAL' | 'RUNNING' |
 /** Execution scope for filtering (Story 8.9). */
 export type ExecutionScope = 'all' | 'mine';
 
-/** Request to create a new execution (Story 4.1, Task 1.1). */
+/** Request to create a new execution (Story 4.1, Task 1.1; Story 9.2 remediation). */
 export interface ExecutionCreateRequest {
   action_id: number;
   environment: ExecutionEnvironment;
   parameters?: Record<string, unknown> | null;
+  /** Story 9.2: Parent execution ID for remediation (optional). */
+  parent_execution_id?: number | null;
 }
 
 /** Response from POST /executions (Story 4.1, Task 1.1). */
@@ -409,7 +411,7 @@ export interface ExecutionCreateResponse {
   created_at: string;
 }
 
-/** Execution record (Story 4.1; Story 7.4: approval fields). */
+/** Execution record (Story 4.1; Story 7.4: approval fields; Story 9.2: remediation). */
 export interface ExecutionResponse {
   id: number;
   action_id: number;
@@ -430,6 +432,8 @@ export interface ExecutionResponse {
   approved_at?: string | null;
   /** Story 7.4: Comment from approver. */
   approval_comment?: string | null;
+  /** Story 9.2: Parent execution ID for remediation actions. */
+  parent_execution_id?: number | null;
 }
 
 /** Execution step status (Story 4.6). */
@@ -492,6 +496,30 @@ export interface RemediationSuggestion {
   action_description: string | null;
   /** The rule that matched (for debugging/transparency). */
   matching_rule: RemediationRule;
+}
+
+/** Single remediation action attempt (Story 9.2, AC2). */
+export interface RemediationAction {
+  /** ID of the child execution. */
+  execution_id: number;
+  /** Name of the corrective action executed. */
+  action_name: string;
+  /** Status of the remediation execution. */
+  status: ExecutionStatusType;
+  /** When the remediation was created. */
+  created_at: string;
+  /** When the remediation completed (null if still running). */
+  completed_at: string | null;
+}
+
+/** Context about remediation attempts for a failed execution (Story 9.2, AC2, AC3). */
+export interface RemediationContext {
+  /** Whether any remediation has been attempted. */
+  has_remediation: boolean;
+  /** Whether any remediation attempt succeeded. */
+  successful_remediation: boolean;
+  /** List of all remediation actions attempted. */
+  remediation_actions: RemediationAction[];
 }
 
 // === Inventory Types (Story 4.1, Task 2) ===

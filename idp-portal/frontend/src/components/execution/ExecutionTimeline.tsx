@@ -8,12 +8,13 @@
  */
 
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, MinusOutlined, ClockCircleOutlined, StopOutlined } from '@ant-design/icons';
-import { Spin, Typography, Alert, Drawer, Button, Tooltip, Tag } from 'antd';
+import { CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, MinusOutlined, ClockCircleOutlined, StopOutlined, LinkOutlined, WarningOutlined } from '@ant-design/icons';
+import { Spin, Typography, Alert, Drawer, Button, Tooltip, Tag, Card, Space } from 'antd';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useRemediationSuggestions } from '../../hooks/useRemediationSuggestions';
+import { useRemediationContext } from '../../hooks/useRemediationContext';
 import { StructuredErrorCard } from './StructuredErrorCard';
-import type { ExecutionResponse, ExecutionStepResponse, ExecutionStepStatus, RemediationSuggestion } from '../../types/api';
+import type { ExecutionResponse, ExecutionStepResponse, ExecutionStepStatus, RemediationSuggestion, ExecutionStatusType } from '../../types/api';
 
 const { Text } = Typography;
 
@@ -76,6 +77,12 @@ export function ExecutionTimeline({
     execution?.status ?? null
   );
 
+  // Story 9.2, Task 17: Fetch remediation context for failed executions
+  const { context: remediationContext } = useRemediationContext(
+    executionId ?? null,
+    execution?.status ?? null
+  );
+
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [logsDrawerStepId, setLogsDrawerStepId] = useState<number | null>(null);
   const logsDrawerContentRef = useRef<HTMLDivElement>(null);
@@ -123,6 +130,25 @@ export function ExecutionTimeline({
 
   return (
     <>
+      {/* Story 9.2, Task 18: Alert when this is a child remediation execution */}
+      {execution?.parent_execution_id && (
+        <Alert
+          type="info"
+          showIcon
+          icon={<LinkOutlined />}
+          message={
+            <>
+              Cette exécution est une action corrective de l'exécution{' '}
+              <a href={`/executions/${execution.parent_execution_id}`} target="_blank" rel="noopener noreferrer">
+                #{execution.parent_execution_id}
+              </a>
+            </>
+          }
+          style={{ marginBottom: 16 }}
+          data-testid="parent-execution-alert"
+        />
+      )}
+
       {/* Story 7.4 AC1: Bandeau attente approbation */}
       {execution?.status === 'PENDING_APPROVAL' && (
         <Alert
@@ -220,6 +246,74 @@ export function ExecutionTimeline({
             onSuggestionClick={onSuggestionClick}
           />
         </div>
+      )}
+
+      {/* Story 9.2, Task 17: Display remediation context section for failed executions */}
+      {execution?.status === 'FAILED' && remediationContext?.has_remediation && (
+        <Card
+          style={{ marginBottom: 16 }}
+          title={
+            <Space>
+              {remediationContext.successful_remediation ? (
+                <>
+                  <CheckCircleOutlined style={{ color: '#10B981' }} />
+                  <span>Actions correctives appliquées</span>
+                  <Tag color="success">Corrigé</Tag>
+                </>
+              ) : (
+                <>
+                  <WarningOutlined style={{ color: '#F59E0B' }} />
+                  <span>Tentatives de correction</span>
+                  <Tag color="warning">Échec</Tag>
+                </>
+              )}
+            </Space>
+          }
+          data-testid="remediation-context-card"
+        >
+          <Space direction="vertical" style={{ width: '100%' }} size="small">
+            {remediationContext.remediation_actions.map((action) => (
+              <Card.Grid
+                key={action.execution_id}
+                style={{ width: '100%', padding: 12 }}
+                hoverable={false}
+              >
+                <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                  <Space>
+                    <Tag
+                      color={
+                        action.status === 'COMPLETED'
+                          ? 'success'
+                          : action.status === 'FAILED'
+                          ? 'error'
+                          : action.status === 'RUNNING'
+                          ? 'processing'
+                          : 'default'
+                      }
+                    >
+                      {action.status}
+                    </Tag>
+                    <Text strong>{action.action_name}</Text>
+                  </Space>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    Démarrée: {new Date(action.created_at).toLocaleString()}
+                    {action.completed_at && (
+                      <> — Terminée: {new Date(action.completed_at).toLocaleString()}</>
+                    )}
+                  </Text>
+                  <a
+                    href={`/executions/${action.execution_id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ fontSize: 12 }}
+                  >
+                    Voir exécution →
+                  </a>
+                </Space>
+              </Card.Grid>
+            ))}
+          </Space>
+        </Card>
       )}
 
       <div

@@ -77,6 +77,8 @@ class AuditActionType(str, Enum):
     EXECUTION_PENDING_APPROVAL = "EXECUTION_PENDING_APPROVAL"
     EXECUTION_APPROVED = "EXECUTION_APPROVED"
     EXECUTION_REJECTED = "EXECUTION_REJECTED"
+    # Remediation (Story 9.2, AC4)
+    REMEDIATION_EXECUTION_CREATED = "REMEDIATION_EXECUTION_CREATED"
 
 
 class AuditEntityType(str, Enum):
@@ -504,3 +506,63 @@ async def count_execution_audit_entries(
     )
 
     return count
+
+
+# === Story 9.2: Remediation Audit ===
+
+
+async def log_remediation(
+    parent_execution_id: int,
+    child_execution_id: int,
+    user_id: int,
+    action_id: int,
+    parent_action_id: int,
+    parent_action_name: str | None,
+    child_action_name: str | None,
+    environment: str,
+    error_context: dict | None = None,
+    ip_address: str | None = None,
+    correlation_id: str | None = None,
+) -> int:
+    """Create audit log entry for remediation execution (Story 9.2, AC4).
+
+    Records the remediation link between parent (failed) and child (corrective) executions.
+
+    Args:
+        parent_execution_id: ID of the parent (failed) execution
+        child_execution_id: ID of the child (corrective) execution
+        user_id: ID of the user who triggered the remediation
+        action_id: ID of the remediation action
+        parent_action_id: ID of the original action that failed
+        parent_action_name: Name of the original action that failed
+        child_action_name: Name of the remediation action
+        environment: Environment where remediation is running
+        error_context: Optional dict with failed_step, error_message from parent
+        ip_address: Optional IP address of the user
+        correlation_id: Optional correlation ID for request tracing
+
+    Returns:
+        The ID of the created audit entry
+    """
+    details = {
+        "parent_execution_id": parent_execution_id,
+        "parent_action_id": parent_action_id,
+        "parent_action_name": parent_action_name,
+        "child_execution_id": child_execution_id,
+        "child_action_id": action_id,
+        "child_action_name": child_action_name,
+        "environment": environment,
+    }
+
+    if error_context:
+        details["error_context"] = error_context
+
+    return await create_entry(
+        user_id=str(user_id),
+        action_type=AuditActionType.REMEDIATION_EXECUTION_CREATED,
+        entity_type=AuditEntityType.EXECUTION,
+        entity_id=child_execution_id,
+        details=details,
+        ip_address=ip_address,
+        correlation_id=correlation_id,
+    )

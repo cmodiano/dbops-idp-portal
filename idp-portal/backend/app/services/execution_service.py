@@ -1071,3 +1071,69 @@ async def get_remediation_suggestions(execution_id: int) -> list[RemediationSugg
     )
 
     return result
+
+
+# === Story 9.2: Remediation Context (AC3) ===
+
+
+async def get_remediation_context(execution_id: int) -> "RemediationContext":
+    """Get remediation context for an execution (Story 9.2, AC3).
+
+    Returns information about any remediation attempts for a failed execution.
+    Used to display "Échec — corrigé" status in the timeline.
+
+    Args:
+        execution_id: ID of the execution to check
+
+    Returns:
+        RemediationContext with:
+        - has_remediation: True if any child executions exist
+        - successful_remediation: True if any child has COMPLETED status
+        - remediation_actions: List of child execution details
+    """
+    from app.models.execution import RemediationContext, RemediationAction
+
+    # Get child executions
+    children = await execution_repository.get_children_executions(execution_id)
+
+    if not children:
+        logger.debug(
+            "get_remediation_context_no_children",
+            execution_id=execution_id,
+        )
+        return RemediationContext(
+            has_remediation=False,
+            successful_remediation=False,
+            remediation_actions=[],
+        )
+
+    # Build remediation actions list
+    remediation_actions: list[RemediationAction] = []
+    has_successful = False
+
+    for child in children:
+        # Get action name (already in child.action_name from repository)
+        remediation_actions.append(
+            RemediationAction(
+                execution_id=child.id,
+                action_name=child.action_name or f"Action {child.action_id}",
+                status=child.status,
+                created_at=child.created_at,
+                completed_at=child.completed_at,
+            )
+        )
+        if child.status == ExecutionStatus.COMPLETED:
+            has_successful = True
+
+    logger.info(
+        "get_remediation_context_result",
+        execution_id=execution_id,
+        children_count=len(children),
+        has_successful=has_successful,
+    )
+
+    return RemediationContext(
+        has_remediation=True,
+        successful_remediation=has_successful,
+        remediation_actions=remediation_actions,
+    )

@@ -51,6 +51,7 @@ def _row_to_execution_response(
     approved_by: int | None = None,
     approved_at: datetime | None = None,
     approval_comment: str | None = None,
+    parent_execution_id: int | None = None,
 ) -> ExecutionResponse:
     """Convert database row to ExecutionResponse model.
 
@@ -60,6 +61,7 @@ def _row_to_execution_response(
 
     Story 7.4: Optional approval fields passed separately.
     Story 8.9: user_display_name may be None if user deleted or not in JOIN.
+    Story 9.2: parent_execution_id for remediation linking.
     """
     return ExecutionResponse(
         id=row[0],
@@ -77,6 +79,7 @@ def _row_to_execution_response(
         approved_by=approved_by,
         approved_at=approved_at,
         approval_comment=approval_comment,
+        parent_execution_id=parent_execution_id,
     )
 
 
@@ -85,14 +88,16 @@ async def create_execution(
     action_id: int,
     environment: str,
     parameters: dict[str, Any] | None,
+    parent_execution_id: int | None = None,
 ) -> ExecutionCreateResponse:
-    """Create a new execution record (Story 4.1, Task 1.2).
+    """Create a new execution record (Story 4.1, Task 1.2; Story 9.2 remediation).
 
     Args:
         user_id: ID of the user initiating the execution
         action_id: ID of the action to execute
         environment: Target environment (dev, staging, prod)
         parameters: Execution parameters (validated against action's parameters_schema)
+        parent_execution_id: Optional parent execution ID for remediation (Story 9.2)
 
     Returns:
         ExecutionCreateResponse with execution_id, status, created_at
@@ -100,9 +105,9 @@ async def create_execution(
     start_time = time.perf_counter()
     query = """
         INSERT INTO EXECUTIONS
-        (ACTION_ID, USER_ID, ENVIRONMENT, PARAMETERS, STATUS)
+        (ACTION_ID, USER_ID, ENVIRONMENT, PARAMETERS, STATUS, PARENT_EXECUTION_ID)
         VALUES
-        (:action_id, :user_id, :environment, :parameters, :status)
+        (:action_id, :user_id, :environment, :parameters, :status, :parent_execution_id)
         RETURNING ID, CREATED_AT INTO :out_id, :out_created_at
     """
     params = {
@@ -111,6 +116,7 @@ async def create_execution(
         "environment": environment,
         "parameters": _json_to_str(parameters),
         "status": ExecutionStatus.SUBMITTED.value,
+        "parent_execution_id": parent_execution_id,
     }
 
     async with get_connection() as conn:
@@ -146,7 +152,7 @@ async def create_execution(
 
 
 async def get_by_id(execution_id: int) -> ExecutionResponse | None:
-    """Fetch an execution by ID with action name and approval fields (Story 4.1, Story 7.4).
+    """Fetch an execution by ID with action name and approval fields (Story 4.1, Story 7.4, Story 9.2).
 
     Args:
         execution_id: The execution ID to fetch
@@ -159,7 +165,8 @@ async def get_by_id(execution_id: int) -> ExecutionResponse | None:
         SELECT E.ID, E.ACTION_ID, E.USER_ID, E.ENVIRONMENT, E.PARAMETERS,
                E.STATUS, E.SERVICENOW_CHANGE_ID, E.STARTED_AT, E.COMPLETED_AT, E.CREATED_AT,
                A.NAME AS ACTION_NAME,
-               E.APPROVED_BY, E.APPROVED_AT, E.APPROVAL_COMMENT
+               E.APPROVED_BY, E.APPROVED_AT, E.APPROVAL_COMMENT,
+               E.PARENT_EXECUTION_ID
         FROM EXECUTIONS E
         LEFT JOIN ACTIONS_CATALOG A ON A.ID = E.ACTION_ID
         WHERE E.ID = :execution_id
@@ -182,14 +189,14 @@ async def get_by_id(execution_id: int) -> ExecutionResponse | None:
     if row is None:
         return None
 
-    # Row has 14 columns: 0-9 execution fields, 10 action_name, 11-13 approval fields
-    # (Story 8.9: list_all_executions has 15 columns with user_display_name at 11)
+    # Row has 15 columns: 0-9 execution fields, 10 action_name, 11-13 approval fields, 14 parent_execution_id
     return _row_to_execution_response(
         row[:10],
         action_name=row[10],
         approved_by=row[11],
         approved_at=row[12],
         approval_comment=row[13],
+        parent_execution_id=row[14],
     )
 
 
@@ -198,7 +205,7 @@ async def list_by_user(
     limit: int = 50,
     offset: int = 0,
 ) -> list[ExecutionResponse]:
-    """List executions for a user (Story 4.1, Story 7.4 approval fields).
+    """List executions for a user (Story 4.1, Story 7.4 approval fields, Story 9.2 remediation).
 
     Args:
         user_id: User ID to filter by
@@ -213,7 +220,8 @@ async def list_by_user(
         SELECT E.ID, E.ACTION_ID, E.USER_ID, E.ENVIRONMENT, E.PARAMETERS,
                E.STATUS, E.SERVICENOW_CHANGE_ID, E.STARTED_AT, E.COMPLETED_AT, E.CREATED_AT,
                A.NAME AS ACTION_NAME,
-               E.APPROVED_BY, E.APPROVED_AT, E.APPROVAL_COMMENT
+               E.APPROVED_BY, E.APPROVED_AT, E.APPROVAL_COMMENT,
+               E.PARENT_EXECUTION_ID
         FROM EXECUTIONS E
         LEFT JOIN ACTIONS_CATALOG A ON A.ID = E.ACTION_ID
         WHERE E.USER_ID = :user_id
@@ -243,6 +251,7 @@ async def list_by_user(
             approved_by=row[11],
             approved_at=row[12],
             approval_comment=row[13],
+            parent_execution_id=row[14],
         )
         for row in rows
     ]
@@ -266,7 +275,7 @@ async def list_all_executions(
     limit: int = 50,
     offset: int = 0,
 ) -> list[ExecutionResponse]:
-    """List all executions (Story 8.9, DBA/DBOPS only).
+    """List all executions (Story 8.9, DBA/DBOPS only; Story 9.2 remediation).
 
     Args:
         limit: Maximum number of results
@@ -280,7 +289,8 @@ async def list_all_executions(
         SELECT E.ID, E.ACTION_ID, E.USER_ID, E.ENVIRONMENT, E.PARAMETERS,
                E.STATUS, E.SERVICENOW_CHANGE_ID, E.STARTED_AT, E.COMPLETED_AT, E.CREATED_AT,
                A.NAME AS ACTION_NAME, U.DISPLAY_NAME AS USER_DISPLAY_NAME,
-               E.APPROVED_BY, E.APPROVED_AT, E.APPROVAL_COMMENT
+               E.APPROVED_BY, E.APPROVED_AT, E.APPROVAL_COMMENT,
+               E.PARENT_EXECUTION_ID
         FROM EXECUTIONS E
         LEFT JOIN ACTIONS_CATALOG A ON A.ID = E.ACTION_ID
         LEFT JOIN USERS U ON U.ID = E.USER_ID
@@ -312,6 +322,7 @@ async def list_all_executions(
             approved_by=row[12],
             approved_at=row[13],
             approval_comment=row[14],
+            parent_execution_id=row[15],
         )
         for row in rows
     ]
@@ -1133,8 +1144,9 @@ async def create_execution_pending_approval(
     action_id: int,
     environment: str,
     parameters: dict[str, Any] | None,
+    parent_execution_id: int | None = None,
 ) -> ExecutionCreateResponse:
-    """Create execution with PENDING_APPROVAL status (Story 7.4, AC1).
+    """Create execution with PENDING_APPROVAL status (Story 7.4, AC1; Story 9.2 remediation).
 
     Does NOT trigger background execution - waits for DBA approval.
 
@@ -1143,6 +1155,7 @@ async def create_execution_pending_approval(
         action_id: ID of the action to execute
         environment: Target environment (dev, staging, prod)
         parameters: Execution parameters
+        parent_execution_id: Optional parent execution ID for remediation (Story 9.2)
 
     Returns:
         ExecutionCreateResponse with execution_id, status=PENDING_APPROVAL, created_at
@@ -1150,9 +1163,9 @@ async def create_execution_pending_approval(
     start_time = time.perf_counter()
     query = """
         INSERT INTO EXECUTIONS
-        (ACTION_ID, USER_ID, ENVIRONMENT, PARAMETERS, STATUS)
+        (ACTION_ID, USER_ID, ENVIRONMENT, PARAMETERS, STATUS, PARENT_EXECUTION_ID)
         VALUES
-        (:action_id, :user_id, :environment, :parameters, :status)
+        (:action_id, :user_id, :environment, :parameters, :status, :parent_execution_id)
         RETURNING ID, CREATED_AT INTO :out_id, :out_created_at
     """
     params = {
@@ -1161,6 +1174,7 @@ async def create_execution_pending_approval(
         "environment": environment,
         "parameters": _json_to_str(parameters),
         "status": ExecutionStatus.PENDING_APPROVAL.value,
+        "parent_execution_id": parent_execution_id,
     }
 
     async with get_connection() as conn:
@@ -2364,3 +2378,102 @@ async def get_stats_by_environment_for_export(
     )
 
     return result
+
+
+# --- Story 9.2: Remediation Repository Methods ---
+
+
+async def get_children_executions(parent_id: int) -> list[ExecutionResponse]:
+    """Get all child executions for a parent (remediation children) (Story 9.2, AC3).
+
+    Args:
+        parent_id: Parent execution ID
+
+    Returns:
+        List of ExecutionResponse ordered by created_at DESC (most recent first)
+    """
+    start_time = time.perf_counter()
+    query = """
+        SELECT E.ID, E.ACTION_ID, E.USER_ID, E.ENVIRONMENT, E.PARAMETERS,
+               E.STATUS, E.SERVICENOW_CHANGE_ID, E.STARTED_AT, E.COMPLETED_AT, E.CREATED_AT,
+               A.NAME AS ACTION_NAME,
+               E.APPROVED_BY, E.APPROVED_AT, E.APPROVAL_COMMENT,
+               E.PARENT_EXECUTION_ID
+        FROM EXECUTIONS E
+        LEFT JOIN ACTIONS_CATALOG A ON A.ID = E.ACTION_ID
+        WHERE E.PARENT_EXECUTION_ID = :parent_id
+        ORDER BY E.CREATED_AT DESC
+    """
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(query, {"parent_id": parent_id})
+        rows = await cursor.fetchall()
+        cursor.close()
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.info(
+        "execution_repository_get_children_executions",
+        duration_ms=duration_ms,
+        parent_id=parent_id,
+        children_count=len(rows),
+    )
+
+    return [
+        _row_to_execution_response(
+            row[:10],
+            action_name=row[10],
+            approved_by=row[11],
+            approved_at=row[12],
+            approval_comment=row[13],
+            parent_execution_id=row[14],
+        )
+        for row in rows
+    ]
+
+
+async def get_parent_execution(execution_id: int) -> ExecutionResponse | None:
+    """Get parent execution for a child execution (Story 9.2, AC2).
+
+    Args:
+        execution_id: Child execution ID
+
+    Returns:
+        Parent ExecutionResponse if exists, None otherwise
+    """
+    start_time = time.perf_counter()
+
+    # First get the parent_execution_id for the child
+    child_query = """
+        SELECT PARENT_EXECUTION_ID FROM EXECUTIONS WHERE ID = :execution_id
+    """
+
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        await cursor.execute(child_query, {"execution_id": execution_id})
+        row = await cursor.fetchone()
+        cursor.close()
+
+    if row is None or row[0] is None:
+        logger.debug(
+            "execution_repository_get_parent_execution",
+            execution_id=execution_id,
+            parent_found=False,
+        )
+        return None
+
+    parent_id = row[0]
+
+    # Get the parent execution
+    parent = await get_by_id(parent_id)
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    logger.debug(
+        "execution_repository_get_parent_execution",
+        duration_ms=duration_ms,
+        execution_id=execution_id,
+        parent_id=parent_id,
+        parent_found=parent is not None,
+    )
+
+    return parent
