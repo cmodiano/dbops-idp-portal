@@ -789,3 +789,32 @@ export interface ComparisonFilters {
   /** End date of second period (for period dimension). */
   period2End?: string;
 }
+
+// === Scheduled Execution Types (Story 11.5) ===
+
+/** Status for scheduled executions (Story 11.5). */
+export type ScheduledExecutionStatus = 'pending' | 'executed' | 'cancelled';
+
+/** Request to create a scheduled execution (Story 11.5, AC3). */
+export interface ScheduledExecutionCreateRequest {
+  action_id: number;
+  environment: ExecutionEnvironment;
+  parameters?: Record<string, unknown> | null;
+  /** ISO 8601 datetime (UTC) for when to execute. */
+  scheduled_at: string;
+}
+
+/** Response from POST /scheduled-executions (Story 11.5, AC3). */
+export interface ScheduledExecutionResponse {
+  scheduled_execution_id: number;
+  action_id: number;
+  action_name: string;
+  environment: ExecutionEnvironment;
+  status: ScheduledExecutionStatus;
+  /** ISO 8601 datetime (UTC). */
+  scheduled_at: string;
+  parameters: Record<string, unknown> | null;
+  /** ISO 8601 datetime (UTC). */
+  created_at: string;
+  correlation_id: string;
+}

@@ -32,7 +32,9 @@ import {
   Tooltip,
   App,
 } from 'antd';
-import { InfoCircleOutlined, WarningOutlined, ToolOutlined } from '@ant-design/icons';
+import { InfoCircleOutlined, WarningOutlined, ToolOutlined, ClockCircleOutlined } from '@ant-design/icons';
+import dayjs, { Dayjs } from 'dayjs';
+import utc from 'dayjs/plugin/utc';
 import type { CatalogActionDetail } from '../../services/catalog_service';
 import type {
   ExecutionEnvironment,
@@ -41,10 +43,13 @@ import type {
   RemediationSuggestion,
 } from '../../types/api';
 import { submitExecution, fetchInventoryItems } from '../../services/execution_service';
+import { createScheduledExecution } from '../../services/scheduled_execution_service';
 import { ImpactIndicator } from '../shared/ImpactIndicator';
 import { ExecutionTimeline } from '../execution';
 import { STYLE_TOKENS } from '../../theme/styleTokens';
 import { sanitizeDescription } from '../../utils/businessLanguage';
+
+dayjs.extend(utc);
 
 const { Text, Title } = Typography;
 
@@ -207,6 +212,11 @@ export function ExecutionWizard({
   const [selectedEnvironment, setSelectedEnvironment] = useState<ExecutionEnvironment | null>(null);
   const [parameters, setParameters] = useState<Record<string, unknown>>({});
 
+  // Story 11.5: Scheduling state (AC1, AC2)
+  const [isScheduling, setIsScheduling] = useState(false);
+  const [scheduledAt, setScheduledAt] = useState<Dayjs | null>(null);
+  const [schedulingError, setSchedulingError] = useState<string | null>(null);
+
   // Inventory data for dropdowns (with caching)
   const [inventoryData, setInventoryData] = useState<Record<string, InventoryItem[]>>({});
   const [loadingInventory, setLoadingInventory] = useState(false);
@@ -250,6 +260,10 @@ export function ExecutionWizard({
       setParameters({});
       setSubmitError(null);
       form.resetFields();
+      // Story 11.5: Reset scheduling state
+      setIsScheduling(false);
+      setScheduledAt(null);
+      setSchedulingError(null);
 
       // Story 7.2, Task 2.2: Auto-select environment if only one is available
       if (allowedEnvironments.length === 1) {
@@ -450,7 +464,104 @@ export function ExecutionWizard({
     } finally {
       setSubmitting(false);
     }
-  }, [action, selectedEnvironment, parameters, notification, onSuccess]);
+  }, [action, selectedEnvironment, parameters, notification, onSuccess, parentExecutionId]);
+
+  // Story 11.5: Handle scheduled execution error messages (AC6)
+  const getSchedulingErrorMessage = useCallback((error: Error & { code?: string; message?: string }) => {
+    if (error.code === 'INVALID_SCHEDULED_DATE' || error.message?.includes('past')) {
+      return 'La date planifiée doit être dans le futur (vérifiez l\'heure de votre appareil si ce message persiste)';
+    }
+    if (error.code === 'PERMISSION_DENIED' || error.message?.includes('permission') || error.message?.includes('403')) {
+      return "Vous n'avez pas la permission de planifier cette action dans cet environnement";
+    }
+    if (error.code === 'ACTION_NOT_FOUND' || error.message?.includes('not found') || error.message?.includes('404')) {
+      return 'Action introuvable ou non publiée';
+    }
+    if (error.code === 'INVALID_PARAMETERS') {
+      return `Paramètre invalide : ${error.message}`;
+    }
+    return error.message || 'Une erreur est survenue lors de la planification';
+  }, []);
+
+  // Story 11.5: Handle scheduled execution submission (AC3)
+  const handleSubmitScheduled = useCallback(async () => {
+    if (!action || !selectedEnvironment) {
+      notification.warning({
+        message: 'Données incomplètes',
+        description: 'Veuillez compléter toutes les étapes du wizard.',
+      });
+      return;
+    }
+
+    if (!scheduledAt) {
+      setSchedulingError('Veuillez sélectionner une date et heure');
+      return;
+    }
+
+    // Client-side validation: date must be in the future (AC5)
+    // Use same validation as DatePicker disabledDate (current moment, not start of day)
+    if (scheduledAt.isBefore(dayjs())) {
+      setSchedulingError('La date planifiée doit être dans le futur');
+      return;
+    }
+
+    // Edge case: action unpublished while wizard was open (rare but defensive)
+    if (action.status !== 'published') {
+      const message = "Cette action n'est plus publiée et ne peut pas être planifiée.";
+      setSchedulingError(message);
+      notification.error({
+        message: 'Action non disponible',
+        description: message,
+      });
+      return;
+    }
+
+    setSubmitting(true);
+    setSchedulingError(null);
+
+    try {
+      // Convert Dayjs to ISO UTC string
+      const scheduled_at_utc = scheduledAt.utc().toISOString();
+
+      const response = await createScheduledExecution({
+        action_id: action.id,
+        environment: selectedEnvironment,
+        parameters: Object.keys(parameters).length > 0 ? parameters : null,
+        scheduled_at: scheduled_at_utc,
+      });
+
+      if (import.meta.env.DEV) {
+        console.log('[ExecutionWizard] Scheduled execution created:', response.scheduled_execution_id);
+      }
+
+      notification.success({
+        message: 'Exécution planifiée',
+        description: `Exécution planifiée pour le ${scheduledAt.utc().format('DD/MM/YYYY [à] HH:mm')} (UTC)`,
+      });
+
+      // Close wizard after success
+      onCancel();
+      if (onSuccess) onSuccess(response.scheduled_execution_id);
+    } catch (err) {
+      const error = err as Error & { code?: string; correlation_id?: string };
+      const errorMessage = getSchedulingErrorMessage(error);
+
+      if (import.meta.env.DEV) {
+        console.error('[ExecutionWizard] Scheduled execution failed:', error, 'correlation_id:', error.correlation_id);
+      }
+
+      notification.error({
+        message: 'Erreur de planification',
+        description: errorMessage,
+        duration: 5,
+      });
+
+      setSchedulingError(errorMessage);
+      // Wizard stays open for correction (AC6)
+    } finally {
+      setSubmitting(false);
+    }
+  }, [action, selectedEnvironment, parameters, scheduledAt, notification, onCancel, getSchedulingErrorMessage]);
 
   // Handle keyboard shortcuts
   const handleKeyDown = useCallback(
@@ -760,10 +871,54 @@ export function ExecutionWizard({
 
         {submitError && (
           <Alert
-            title="Erreur"
+            message="Erreur"
             description={submitError}
             type="error"
             showIcon
+            style={{ marginTop: 16 }}
+          />
+        )}
+
+        {/* Story 11.5: Scheduling DatePicker (AC2, AC5, AC7) */}
+        {isScheduling && (
+          <div style={{ marginTop: 16 }}>
+            <Form.Item
+              label="Date et heure d'exécution"
+              required
+              validateStatus={schedulingError ? 'error' : undefined}
+              help={schedulingError}
+            >
+              <Space align="start">
+                <DatePicker
+                  showTime={{ format: 'HH:mm' }}
+                  format="DD/MM/YYYY HH:mm"
+                  value={scheduledAt}
+                  onChange={(date) => {
+                    setScheduledAt(date);
+                    setSchedulingError(null);
+                  }}
+                  disabledDate={(current) => current && current.isBefore(dayjs())}
+                  disabled={submitting}
+                  style={{ width: 220 }}
+                  placeholder="Sélectionner une date/heure"
+                  aria-label="Date et heure d'exécution planifiée"
+                />
+                <Tooltip title="Fuseau horaire : UTC (serveur). La date sera convertie automatiquement.">
+                  <InfoCircleOutlined style={{ color: '#8c8c8c', cursor: 'help' }} />
+                </Tooltip>
+              </Space>
+            </Form.Item>
+          </div>
+        )}
+
+        {schedulingError && !submitError && (
+          <Alert
+            message="Erreur de planification"
+            description={schedulingError}
+            type="error"
+            showIcon
+            role="alert"
+            aria-live="assertive"
             style={{ marginTop: 16 }}
           />
         )}
@@ -865,17 +1020,42 @@ export function ExecutionWizard({
                 Suivant
               </Button>
             )}
-            {currentStep === 2 && (
-              <Tooltip title={submitting ? 'Soumission en cours...' : undefined}>
+            {/* Story 11.5: Two execution options (AC1, AC4) */}
+            {currentStep === 2 && !isScheduling && (
+              <>
                 <Button
                   type="primary"
                   onClick={handleSubmit}
                   loading={submitting}
                   style={{ backgroundColor: STYLE_TOKENS.primaryColor }}
                 >
-                  Confirmer l'execution
+                  Exécuter maintenant
                 </Button>
-              </Tooltip>
+                <Button
+                  type="default"
+                  onClick={() => setIsScheduling(true)}
+                  icon={<ClockCircleOutlined />}
+                >
+                  Planifier
+                </Button>
+              </>
+            )}
+            {/* Story 11.5: Scheduling mode buttons (AC3) */}
+            {currentStep === 2 && isScheduling && (
+              <>
+                <Button onClick={() => { setIsScheduling(false); setSchedulingError(null); setScheduledAt(null); }}>
+                  Annuler planification
+                </Button>
+                <Button
+                  type="primary"
+                  onClick={handleSubmitScheduled}
+                  loading={submitting}
+                  disabled={!scheduledAt}
+                  style={{ backgroundColor: STYLE_TOKENS.primaryColor }}
+                >
+                  Confirmer planification
+                </Button>
+              </>
             )}
           </Space>
         </div>

@@ -367,7 +367,8 @@ describe('ExecutionWizard', () => {
   });
 
   describe('Submission', () => {
-    it('shows Confirmer l\'execution button on step 3', async () => {
+    // Story 11.5: Updated to reflect new dual-action buttons (AC1)
+    it('shows Executer maintenant and Planifier buttons on step 3', async () => {
       const user = userEvent.setup();
       render(<ExecutionWizard {...defaultProps} />, { wrapper: TestWrapper });
 
@@ -382,7 +383,8 @@ describe('ExecutionWizard', () => {
       await user.click(screen.getByRole('button', { name: /suivant/i }));
 
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: /confirmer l'execution/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /exécuter maintenant/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /planifier/i })).toBeInTheDocument();
       });
     });
   });
