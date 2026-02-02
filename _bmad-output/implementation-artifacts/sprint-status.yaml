@@ -158,8 +158,8 @@ development_status:
     # APPROCHE: Modèle de données + UI/API complètes, mais pas de scheduler intégré (Celery).
     # Les schedules sont récupérés et exécutés par un scheduler externe (Control-M ou Django scheduler).
     # Pas de seconde base de données, pas de charge backend supplémentaire pour le polling.
-    epic-11: backlog
-    11-1-modele-donnees-scheduled-executions-et-recurrence: backlog # Table scheduled_executions + recurring_patterns (one-time vs recurring) - next_execution_date pour scheduler externe
+    epic-11: in-progress
+    11-1-modele-donnees-scheduled-executions-et-recurrence: done # Table scheduled_executions + recurring_patterns (one-time vs recurring) - next_execution_date pour scheduler externe; code-review 2026-02-02: 7 issues fixed (2 HIGH + 4 MEDIUM + 1 LOW) - index composite optimisé, commentaires enrichis
     11-3-api-creer-execution-planifiee-one-time: backlog # POST /api/v1/scheduled-executions avec date/heure future
     11-5-ui-scheduler-dans-wizard-execution: backlog # Option "Exécuter maintenant" vs "Planifier" dans ExecutionWizard
     11-6-liste-executions-planifiees-et-annulation: backlog # Page admin : voir/annuler les executions scheduled

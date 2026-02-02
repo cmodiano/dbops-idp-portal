@@ -2366,3 +2366,471 @@ So that les echecs mineurs sont corriges sans intervention humaine.
 **And** chaque auto-remediation est tracee dans AUDIT_LOG
 **And** FR38 est satisfaite
 
+---
+
+## Epic 11 : Scheduling & Maintenance Planifiée
+
+Le systeme permet de planifier des executions d'actions pour une date/heure future ou selon des patterns de recurrence. Les executions planifiees sont gerees via un modele de donnees et des APIs, mais l'execution effective est deleguee a un scheduler externe (Control-M ou Django scheduler) pour eviter la charge backend supplementaire.
+
+**Approche technique :** Modele de donnees + UI/API completes, mais pas de scheduler integre (Celery). Les schedules sont recuperes et executes par un scheduler externe. Pas de seconde base de donnees, pas de charge backend supplementaire pour le polling.
+
+### Story 11.1 : Modele de donnees scheduled executions et recurrence
+
+As a systeme,
+I want un modele de donnees pour stocker les executions planifiees avec support des patterns de recurrence,
+So that les executions peuvent etre planifiees pour une date/heure future ou selon des patterns repetitifs.
+
+**Acceptance Criteria:**
+
+**Given** le schema Oracle existe
+**When** une migration SQL est executee
+**Then** la table SCHEDULED_EXECUTIONS est creee avec les colonnes : id, action_id, user_id, parameters (CLOB JSON), scheduled_at (timestamp), status (pending, executed, cancelled), created_at, updated_at
+
+**Given** la table SCHEDULED_EXECUTIONS existe
+**When** une migration SQL est executee
+**Then** la table RECURRING_PATTERNS est creee avec les colonnes : id, scheduled_execution_id, pattern_type (one_time, daily, weekly, cron), pattern_config (CLOB JSON), next_execution_date (timestamp), is_active (boolean)
+
+**Given** une execution planifiee est creee
+**When** elle est de type "one_time"
+**Then** RECURRING_PATTERNS n'a pas d'entree associee
+
+**Given** une execution planifiee est creee
+**When** elle est de type "recurring"
+**Then** RECURRING_PATTERNS a une entree avec pattern_type et pattern_config, et next_execution_date est calcule pour la prochaine execution
+
+**And** next_execution_date est utilise par le scheduler externe pour recuperer les schedules a executer
+**And** le modele de donnees supporte les patterns simples (daily, weekly) et les expressions cron avancees
+
+### Story 11.3 : API creer execution planifiee one-time
+
+As a DBA,
+I want creer une execution planifiee pour une date/heure future via l'API,
+So that je peux programmer des executions sans intervention immediate.
+
+**Acceptance Criteria:**
+
+**Given** un DBA authentifie
+**When** il envoie POST /api/v1/scheduled-executions avec action_id, parameters, scheduled_at (timestamp futur)
+**Then** une entree SCHEDULED_EXECUTIONS est creee avec status="pending"
+
+**Given** scheduled_at est dans le passe
+**When** la requete est envoyee
+**Then** l'API retourne une erreur 400 avec message "scheduled_at must be in the future"
+
+**Given** l'utilisateur n'a pas les permissions pour executer l'action
+**When** la requete est envoyee
+**Then** l'API retourne une erreur 403
+
+**And** l'API valide les parametres de l'action selon le schema defini dans ACTIONS_CATALOG
+**And** l'API retourne l'entree creee avec id, scheduled_at, status
+**And** l'audit trace la creation de l'execution planifiee
+
+### Story 11.5 : UI scheduler dans wizard execution
+
+As a DBA,
+I want choisir entre "Executer maintenant" et "Planifier" dans le wizard d'execution,
+So that je peux soit executer immediatement soit programmer l'execution pour plus tard.
+
+**Acceptance Criteria:**
+
+**Given** le DBA ouvre le wizard d'execution
+**When** il remplit les parametres de l'action
+**Then** il voit deux options : "Executer maintenant" (bouton principal) et "Planifier" (bouton secondaire)
+
+**Given** le DBA clique sur "Planifier"
+**When** le wizard s'etend
+**Then** un selecteur de date/heure apparait pour choisir scheduled_at
+
+**Given** le DBA selectionne une date/heure future
+**When** il confirme
+**Then** l'API POST /api/v1/scheduled-executions est appelee avec les parametres et scheduled_at
+**And** un message de confirmation s'affiche : "Execution planifiee pour le [date/heure]"
+
+**Given** le DBA clique sur "Executer maintenant"
+**When** il confirme
+**Then** l'execution se lance immediatement comme actuellement
+
+**And** le selecteur de date/heure valide que la date est dans le futur
+**And** le selecteur affiche le fuseau horaire utilise
+
+### Story 11.6 : Liste executions planifiees et annulation
+
+As a DBA ou DBOPS,
+I want voir la liste des executions planifiees et pouvoir les annuler,
+So that je peux gerer les executions planifiees et eviter les executions non desirees.
+
+**Acceptance Criteria:**
+
+**Given** un DBA ou DBOPS accede a la page admin
+**When** il clique sur l'onglet "Executions planifiees"
+**Then** une liste des executions planifiees s'affiche avec : action, utilisateur, date/heure planifiee, statut, date de creation
+
+**Given** la liste des executions planifiees
+**When** elle est chargee
+**Then** les executions sont filtrees par utilisateur (DBA voit ses propres executions, DBOPS voit toutes)
+
+**Given** une execution planifiee avec status="pending"
+**When** le DBA clique sur "Annuler"
+**Then** l'API PATCH /api/v1/scheduled-executions/{id} avec status="cancelled" est appelee
+**And** l'execution est marquee comme annulee dans la base de donnees
+**And** l'execution n'apparait plus dans la liste des executions a executer pour le scheduler externe
+
+**Given** une execution planifiee avec status="executed" ou "cancelled"
+**When** le DBA consulte la liste
+**Then** l'action "Annuler" n'est pas disponible
+
+**And** la liste supporte le filtrage par statut, action, date
+**And** la liste affiche un indicateur visuel pour les executions proches (dans les 24h)
+
+### Story 11.7 : Patterns recurrence simples daily weekly
+
+As a DBA,
+I want planifier des executions repetitives avec des patterns simples (tous les jours, toutes les semaines),
+So that je peux automatiser des taches de maintenance regulieres sans configuration complexe.
+
+**Acceptance Criteria:**
+
+**Given** le DBA cree une execution planifiee
+**When** il selectionne "Recurrence" dans le wizard
+**Then** il peut choisir entre "One-time", "Daily", "Weekly"
+
+**Given** le DBA selectionne "Daily"
+**When** il configure la recurrence
+**Then** il peut choisir l'heure d'execution (HH:MM)
+**And** RECURRING_PATTERNS est creee avec pattern_type="daily" et pattern_config={"hour": HH, "minute": MM}
+**And** next_execution_date est calcule pour demain a l'heure specifiee
+
+**Given** le DBA selectionne "Weekly"
+**When** il configure la recurrence
+**Then** il peut choisir le jour de la semaine (lundi-dimanche) et l'heure d'execution
+**And** RECURRING_PATTERNS est creee avec pattern_type="weekly" et pattern_config={"day_of_week": N, "hour": HH, "minute": MM}
+**And** next_execution_date est calcule pour le prochain jour specifie a l'heure specifiee
+
+**Given** une execution recurrente est executee par le scheduler externe
+**When** elle se termine
+**Then** next_execution_date est mis a jour pour la prochaine occurrence selon le pattern
+
+**And** l'API POST /api/v1/scheduled-executions accepte recurring_pattern dans le body pour creer des executions recurrentes
+**And** l'utilisateur peut desactiver une recurrence (is_active=false) sans supprimer l'historique
+
+### Story 11.8 : Cron expressions pour recurrence avancee
+
+As a DBA power user,
+I want utiliser des expressions cron completes pour definir des patterns de recurrence complexes,
+So that je peux planifier des executions avec des frequences avancees (ex: tous les 2 jours, le premier lundi du mois).
+
+**Acceptance Criteria:**
+
+**Given** le DBA cree une execution planifiee
+**When** il selectionne "Recurrence avancee" dans le wizard
+**Then** un champ texte apparait pour saisir une expression cron (ex: "0 2 * * *" pour tous les jours a 2h)
+
+**Given** le DBA saisit une expression cron
+**When** il confirme
+**Then** l'expression est validee (format cron standard : minute hour day month day-of-week)
+**And** si l'expression est invalide, une erreur est affichee avec un message explicatif
+
+**Given** une expression cron valide est saisie
+**When** l'execution planifiee est creee
+**Then** RECURRING_PATTERNS est creee avec pattern_type="cron" et pattern_config={"expression": "..."}
+**And** next_execution_date est calcule en utilisant une bibliotheque de parsing cron (ex: croniter)
+
+**Given** le DBA consulte une execution planifiee avec pattern cron
+**When** il voit les details
+**Then** l'expression cron est affichee avec une description lisible (ex: "Tous les jours a 2h00")
+
+**And** l'API valide les expressions cron avant de creer l'execution planifiee
+**And** un helper/guide est disponible dans l'UI pour aider a construire des expressions cron valides
+
+### Story 11.10 : API integration scheduler externe
+
+As a scheduler externe (Control-M ou Django scheduler),
+I want recuperer la liste des executions planifiees a executer via une API,
+So that je peux executer les schedules au bon moment sans polling continu.
+
+**Acceptance Criteria:**
+
+**Given** un scheduler externe est configure
+**When** il appelle GET /api/v1/scheduled-executions/pending avec un parametre ?before={timestamp}
+**Then** l'API retourne la liste des executions avec status="pending" et next_execution_date <= before
+
+**Given** une execution planifiee est retournee
+**When** le scheduler externe l'execute
+**Then** il peut appeler POST /api/v1/executions avec les parametres de l'execution planifiee
+**And** apres execution, le scheduler peut appeler PATCH /api/v1/scheduled-executions/{id} avec status="executed" et execution_id
+
+**Given** une execution recurrente est executee
+**When** le scheduler met a jour le statut
+**Then** next_execution_date est automatiquement recalcule selon le pattern de recurrence
+
+**Given** aucune execution n'est a executer
+**When** l'API est appelee
+**Then** elle retourne une liste vide []
+
+**And** l'API supporte la pagination pour les environnements avec beaucoup d'executions planifiees
+**And** l'API peut etre securisee avec un token d'API specifique pour le scheduler externe
+**And** l'API retourne les executions triees par next_execution_date (plus urgentes en premier)
+
+---
+
+## Epic M : Migration FastAPI vers Django REST
+
+Migrer le backend du portail IDP de FastAPI + SQL brut (python-oracledb) vers Django + Django REST Framework afin de faciliter l'arrimage a la plateforme hebergeuse (meme stack, meme conventions, maintenance mutualisable). Le frontend React consomme la meme API (contrat preserve).
+
+**Contexte :** Arrimage a la plateforme interne (hebergeur) — stack cible Django + DRF. Reduction de la dette d'arrimage et alignement stack.
+
+**Perimetre :** Backend uniquement (API, couche donnees, auth, config, middleware, tests). Frontend React inchange (cohabitation ou meme API contract).
+
+**Contrainte :** Parite fonctionnelle et contractuelle avec l'API actuelle (OpenAPI / contrats frontend).
+
+### Story M.1 : Bootstrap projet Django et Django REST Framework
+
+As a developpeur de l'equipe IDP,
+I want un projet Django initial avec DRF, structure d'apps et configuration de base,
+So that nous avons une base saine pour migrer les endpoints et la logique metier.
+
+**Acceptance Criteria:**
+
+**Given** un environnement Python dedie a la migration (venv ou equivalent)
+**When** on installe Django, djangorestframework, djangocorsheaders, et les dependances Oracle (cx_Oracle ou oracledb)
+**Then** un projet Django `idp_backend` est cree avec une structure d'apps : `catalog`, `profiles`, `auth`, `integrations`, `core`
+
+**Given** le projet Django
+**When** on configure `settings.py` (DEBUG, ALLOWED_HOSTS, DATABASES Oracle, INSTALLED_APPS avec rest_framework, CORS)
+**Then** `python manage.py runserver` demarre sans erreur
+**And** la structure respecte les conventions du projet hebergeur si documentees (nommage, place des configs)
+**And** un fichier `requirements.txt` ou `pyproject.toml` liste toutes les dependances avec versions
+
+**Given** DRF est installe
+**When** on configure REST_FRAMEWORK dans settings (auth, pagination, format JSON, throttle si requis)
+**Then** une route de test GET /api/v1/health (ou equivalent) renvoie 200 avec un payload minimal
+**And** le format de reponse (enveloppe data/error, snake_case) est aligne avec l'API actuelle pour compatibilite frontend
+
+### Story M.2 : Modeles Django et migrations (schema Oracle existant)
+
+As a developpeur,
+I want les modeles Django mappes sur le schema Oracle actuel (USERS, ACTIONS_CATALOG, PROFILES, etc.),
+So that la couche ORM remplace le SQL brut sans changer le schema en production.
+
+**Acceptance Criteria:**
+
+**Given** le schema Oracle actuel (tables V001–V020+ : users, actions_catalog, execution_steps, profiles, profile_*_permissions, integrations, audit, etc.)
+**When** on cree les modeles Django correspondants (Meta.db_table, champs CLOB/JSONField, relations ForeignKey, enums)
+**Then** chaque table existante a un modele Django avec les memes noms de colonnes et types compatibles
+**And** les champs JSON (parameters_schema, impact_rules, execution_steps, change_type_config) utilisent JSONField ou TextField + serialisation documentee
+**And** les migrations Django initiales sont generees (makemigrations) et documentees pour execution sur un schema existant (--fake initial si tables deja presentes)
+
+**Given** un schema Oracle de dev (ou fixture)
+**When** on execute migrate (ou migrate --fake puis verification)
+**Then** aucune regression sur le schema ; les contraintes et index existants sont respectes ou explicitement decides (nommage Django)
+**And** un README ou ADR decide : migrations Django prennent le relais de Flyway a partir de la version X, ou cohabitation temporaire
+
+### Story M.3 : Couche donnees — conversion des repositories vers l'ORM Django
+
+As a developpeur,
+I want la logique des repositories FastAPI (catalog, profiles, integrations, audit, user) reecrite avec l'ORM Django,
+So que les vues DRF s'appuient sur des QuerySet et services Django au lieu de SQL brut.
+
+**Acceptance Criteria:**
+
+**Given** les repositories actuels (catalog_repository, profile_repository, profile_action_permission_repository, profile_target_permission_repository, integration_repository, user_repository, audit_repository)
+**When** on cree l'equivalent en couche Django (managers personnalises, services dans chaque app, ou repositories encapsulant l'ORM)
+**Then** chaque operation CRUD et requete metier actuelle a un equivalent teste (parite fonctionnelle)
+**And** la gestion des CLOB/JSON (lecture/ecriture) est centralisee et couverte par des tests unitaires
+**And** les transactions et l'audit (ecriture dans audit_log) sont geres (signals Django ou appels explicites) conformement aux NFR d'audit
+**And** aucune requete SQL brute dans les vues DRF (sauf exception documentee et justifiee)
+
+**Given** les tests unitaires existants des repositories (pytest)
+**When** on les reecrit ou duplique pour la couche Django (pytest-django ou unittest)
+**Then** le taux de couverture et les cas limites (pagination, filtres, champs optionnels) sont au moins equivalents
+
+### Story M.4 : API REST — endpoints catalogue et admin (actions, tags)
+
+As a developpeur,
+I want les endpoints admin et catalogue (actions, tags) exposes en DRF avec le meme contrat que l'API FastAPI actuelle,
+So que le frontend Admin et Catalogue continue de fonctionner sans changement (ou avec adaptation minimale documentee).
+
+**Acceptance Criteria:**
+
+**Given** les routes FastAPI actuelles : admin (create/list/get/update action, steps, metadata, tags, status), catalog (list catalog actions), tags (list)
+**When** on implemente les ViewSet ou APIView DRF correspondants avec serializers
+**Then** les URLs et verbes HTTP sont identiques (ex. GET /api/v1/catalog/actions, POST /api/v1/admin/actions, etc.)
+**And** le format des corps de requete et de reponse (champs, types, enveloppe data) est inchange pour le client
+**And** la pagination, filtres et tri du catalogue sont supportes (parametres query et format de reponse alignes)
+**And** les permissions (RBAC) sont appliquees (DRF permissions ou middleware) : seuls les roles autorises accedent aux endpoints admin
+
+**Given** les tests d'integration ou E2E du frontend (Admin, Catalogue)
+**When** on pointe le frontend vers le backend Django
+**Then** les scenarios critiques (liste actions, creation action, edition, tags, statut) passent ; les regressions sont documentees et tracees
+
+### Story M.5 : API REST — endpoints profils et permissions
+
+As a developpeur,
+I want les endpoints profils (list, get, create, update, delete, profile_actions, profile_targets) migres en DRF,
+So que la gestion des profils et des permissions par le frontend reste fonctionnelle.
+
+**Acceptance Criteria:**
+
+**Given** les routes FastAPI profiles (list_profiles, get_profile, create_profile, update_profile, delete_profile, get_profile_actions, get_profile_targets)
+**When** on implemente les vues DRF et serializers correspondants
+**Then** le contrat (query params, body, response shape) est preserve
+**And** les regles metier (cumul multi-profils, resolution AD, validation des permissions) sont respectees (delegation aux services Django)
+**And** l'import/export YAML (si expose via API) reste supporte ou est documente comme evolution separee
+
+**Given** les tests unitaires et d'integration des profils
+**When** on les execute contre le backend Django
+**Then** les cas de succes et d'erreur (validation, 404, 403) sont couverts
+
+### Story M.6 : API REST — auth, health, integrations
+
+As a developpeur,
+I want les endpoints auth (current user, refresh), health et integrations migres en DRF,
+So que l'authentification, le monitoring et la gestion des integrations fonctionnent sur Django.
+
+**Acceptance Criteria:**
+
+**Given** les routes FastAPI : auth (get_current_user_profile), health (GET /api/v1/health), integrations (CRUD)
+**When** on implemente les equivalents DRF
+**Then** GET /api/v1/health renvoie le statut des dependances (DB, optionnellement Vault/ServiceNow) avec codes HTTP 200/503
+**And** les endpoints d'integrations (list, get, create, update, delete) respectent le contrat actuel
+**And** l'endpoint de profil utilisateur courant renvoie le meme format (user, permissions, profils) pour le frontend
+**And** la documentation OpenAPI (schema) est generee (drf-spectacular ou equivalent) et comparee a l'actuelle pour ecarts documentes
+
+### Story M.7 : Authentification SAML et securite (alignement plateforme cible)
+
+As a responsable technique,
+I want l'authentification SAML 2.0 et la gestion des sessions (JWT ou session Django) alignees avec la plateforme hebergeuse,
+So que le portail IDP s'integre a leur infra SSO et politique de securite.
+
+**Acceptance Criteria:**
+
+**Given** la plateforme hebergeuse utilise Django + SSO (SAML ou autre)
+**When** on integre le mecanisme d'auth (django-saml2, python3-saml, ou proxy SSO cote hebergeur)
+**Then** un utilisateur non authentifie est redirige vers l'IdP et revient avec une session valide
+**And** les attributs utilisateur (nom, groupes AD, etc.) sont disponibles pour la resolution des profils IDP (FR25, FR25a-d)
+**And** les tokens ou cookies de session respectent la politique de securite (httpOnly, duree, renouvellement)
+**And** NFR6 (TLS), NFR9 (expiration session), NFR10 (acces non autorise journalise) sont satisfaits
+**And** un document d'architecture ou runbook decrit l'interaction SSO entre le portail IDP et l'infra hebergeur
+
+**Given** des tests d'auth (login, refresh, 401, 403)
+**When** on les execute contre le backend Django
+**Then** les scenarios de succes et d'echec sont couverts
+
+### Story M.8 : Middleware, logging, observabilite
+
+As a DBOPS,
+I want le middleware (CORS, correlation ID, erreurs), le logging structure et l'observabilite alignes sur la plateforme et les NFR,
+So que le portail Django soit monitorable et coherent avec le reste de l'infra.
+
+**Acceptance Criteria:**
+
+**Given** le backend Django
+**When** une requete entre et sort
+**Then** un correlation ID (X-Idp-Request-Id ou equivalent) est genere et propage dans les logs et reponses si applicable
+**And** les logs sont structures (JSON) avec timestamp, level, event, correlation_id, user_id (NFR, convention hebergeur)
+**And** les exceptions sont catchees et renvoyees au client dans le format d'erreur actuel (enveloppe error, codes HTTP)
+**And** CORS est configure pour les origines autorisees (frontend)
+**And** le health check reflete l'etat DB (et optionnellement Vault, ServiceNow) pour le monitoring
+
+### Story M.9 : Tests unitaires et d'integration (parite avec FastAPI)
+
+As a developpeur,
+I want une suite de tests (unitaires + integration) au moins equivalente a celle du backend FastAPI,
+So que la migration n'introduise pas de regressions et que les futures evolutions restent couvertes.
+
+**Acceptance Criteria:**
+
+**Given** la liste des tests pytest actuels (repositories, API, auth, middleware)
+**When** on migre ou reecrit les tests pour Django (pytest-django, client DRF, factories)
+**Then** chaque module critique (catalog, profiles, integrations, auth, health) a des tests unitaires et, si pertinent, des tests d'integration (DB reelle ou test DB)
+**And** les tests d'API (endpoints) valident statut HTTP, corps de reponse et cas d'erreur (400, 403, 404)
+**And** la couverture de code est mesuree et documentee ; objectif : au moins egal a la couverture actuelle
+**And** les tests s'executent dans le CI (GitHub Actions ou equivalent) a chaque push
+
+### Story M.10 : Strategie de bascule et decommissionnement FastAPI
+
+As a chef de projet ou tech lead,
+I want une strategie de bascule (double run, feature flag, ou bascule unique) et un plan de decommissionnement du backend FastAPI,
+So que la mise en production du backend Django soit maîtrisee et sans perte de service.
+
+**Acceptance Criteria:**
+
+**Given** le backend Django est fonctionnel et teste (parite avec FastAPI)
+**When** on definit la strategie de bascule (bascule DNS/route, feature flag backend, ou fenetre de maintenance)
+**Then** un document "Plan de bascule FastAPI → Django" decrit les etapes, les roles, le rollback et la verification post-bascule
+**And** les donnees (Oracle) sont partagees : pas de migration de donnees si meme schema ; si changement de BDD, un script de migration est prevu et teste
+**And** le frontend est configure pour pointer vers le backend Django (env, config) et une checklist de validation (catalogue, admin, profils, auth, health) est executee
+**And** apres validation en production, le code et les deploiements FastAPI sont desactives ou archives ; le depot/documentation indique Django comme backend officiel
+
+**Given** la bascule est effectuee
+**When** on surveille les erreurs et les metriques (logs, health, temps de reponse)
+**Then** les incidents sont traites selon le runbook ; un retour arriere vers FastAPI est possible si documente (snapshot config, rollback DNS/deploy)
+
+---
+
+## Epic 12 : Documentation technique
+
+Documenter l'implementation technique complete du portail IDP apres la migration vers Django pour faciliter la maintenance, l'onboarding des nouveaux developpeurs et la comprehension de l'architecture.
+
+**Contexte :** A realiser apres le passage a Django pour documenter la cible finale.
+
+### Story 12.1 : Documentation backend implementation
+
+As a developpeur rejoignant l'equipe,
+I want une documentation detaillee de l'implementation backend (Django),
+So that je peux comprendre rapidement l'architecture, les patterns utilises et comment contribuer.
+
+**Acceptance Criteria:**
+
+**Given** la migration Django est completee
+**When** la documentation backend est redigee
+**Then** elle inclut : structure des apps Django, modeles et relations, services et managers, endpoints API et serializers, gestion des permissions RBAC, integration SAML, middleware et logging, tests et couverture
+
+**Given** un developpeur consulte la documentation
+**When** il cherche une information specifique (ex: comment ajouter un endpoint)
+**Then** il trouve un guide pas-a-pas avec exemples de code
+
+**And** la documentation inclut des diagrammes d'architecture (couches, flux de donnees)
+**And** la documentation inclut un guide de contribution (setup dev, conventions de code, processus de review)
+**And** la documentation est maintenue a jour avec les changements majeurs
+
+### Story 12.2 : Documentation frontend implementation
+
+As a developpeur frontend rejoignant l'equipe,
+I want une documentation detaillee de l'implementation frontend (React),
+So that je peux comprendre rapidement la structure, les composants et les patterns utilises.
+
+**Acceptance Criteria:**
+
+**Given** le frontend React est en production
+**When** la documentation frontend est redigee
+**Then** elle inclut : structure des dossiers et organisation du code, composants principaux et leurs responsabilites, gestion d'etat (hooks, context), routing et navigation, integration avec l'API backend, theming et design system (Ant Design), tests et couverture
+
+**Given** un developpeur consulte la documentation
+**When** il cherche une information specifique (ex: comment ajouter une nouvelle page)
+**Then** il trouve un guide pas-a-pas avec exemples de code
+
+**And** la documentation inclut des diagrammes de composants et flux de donnees
+**And** la documentation inclut un guide de contribution frontend (setup dev, conventions, processus de review)
+**And** la documentation est maintenue a jour avec les changements majeurs
+
+### Story 12.3 : Schema base de donnees et relations tables
+
+As a developpeur ou DBOPS,
+I want un schema detaille de la base de donnees avec les relations entre les tables,
+So that je peux comprendre la structure des donnees et les dependances.
+
+**Acceptance Criteria:**
+
+**Given** le schema Oracle est stabilise (post-migration Django)
+**When** la documentation du schema est generee
+**Then** elle inclut : diagramme ER (Entity-Relationship) avec toutes les tables et relations, description de chaque table (colonnes, types, contraintes, index), relations ForeignKey et leurs cardinalites, migrations Flyway/Django et leur historique
+
+**Given** un developpeur consulte la documentation
+**When** il cherche une information sur une table specifique
+**Then** il trouve la description complete avec exemples de requetes courantes
+
+**And** la documentation inclut les contraintes metier importantes (ex: RBAC, audit)
+**And** la documentation inclut un guide de migration de schema (comment ajouter une table, modifier une colonne)
+**And** la documentation est generee automatiquement depuis les modeles Django si possible (django-extensions graph_models)
+
