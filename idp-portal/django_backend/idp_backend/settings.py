@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'idp_auth',
     'integrations',
     'core',
+    'executions',
 ]
 
 MIDDLEWARE = [
