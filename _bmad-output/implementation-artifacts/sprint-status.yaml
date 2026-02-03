@@ -168,8 +168,8 @@ development_status:
     11-10-api-integration-scheduler-externe: done # GET /api/v1/scheduled-executions/pending - endpoint pour scheduler externe (Control-M/Django) récupérer schedules à exécuter + PATCH status=executed avec recalcul next_execution_date; 19/19 tests pass
     epic-11-retrospective: optional
     # === Epic M: Migration FastAPI vers Django REST (Arrimage plateforme) ===
-    epic-m: backlog
-    m-1-bootstrap-projet-django-et-drf: backlog
+    epic-m: in-progress
+    m-1-bootstrap-projet-django-et-drf: done # Code review 2026-02-03: 1 CRITICAL + 4 HIGH + 4 MEDIUM fixes applied - format réponse FastAPI corrigé, fichiers manquants créés, tests améliorés
     m-2-modeles-django-et-migrations-schema-oracle: backlog
     m-3-couche-donnees-repositories-vers-orm-django: backlog
     m-4-api-rest-catalogue-et-admin-actions-tags: backlog

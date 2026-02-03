@@ -1,0 +1,23 @@
+# Django Backend - Migration from FastAPI
+# Python 3.12+ required
+
+# Core Django
+Django>=5.1.0,<6.0
+djangorestframework>=3.15.0
+django-cors-headers>=4.3.0
+
+# Oracle Database Driver
+# Using oracledb (successor to cx_Oracle) - Thin mode compatible
+oracledb>=3.4.1
+
+# Environment variables
+python-dotenv>=1.0.0
+
+# Development dependencies
+pytest>=8.0.0
+pytest-django>=4.8.0
+pytest-asyncio>=0.24.0
+httpx>=0.27.0
+ruff>=0.8.0
+mypy>=1.10.0
+pytest-mock>=3.15.0
