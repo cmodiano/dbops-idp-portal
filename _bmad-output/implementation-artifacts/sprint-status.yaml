@@ -174,8 +174,8 @@ development_status:
     m-3-couche-donnees-repositories-vers-orm-django: done # Code review 2026-02-03 (adversarial): 10 fixes applied (1 CRITICAL + 3 HIGH + 4 MEDIUM + 2 LOW) - correlation_id ajouté, types audit PROFILE_*/INTEGRATION_* corrigés avec enum, prefetch_related pour OneToOneField, validation user_id, export CSV JSON formaté, tests README créé, tous types hardcodés remplacés par enum. Code review 2026-02-03 (fourth): 10 additional fixes (2 CRITICAL + 4 HIGH + 4 MEDIUM) - tous types audit hardcodés remplacés par enums, correlation_id ajouté aux méthodes execution, entity_type corrigés, types manquants ajoutés aux enums
     m-4-api-rest-catalogue-et-admin-actions-tags: done # Code review 2026-02-04: 9 issues fixed (5 HIGH + 4 MEDIUM) - remediation-rules endpoint, list_catalog_tags, environment filter, pagination, cache invalidation, N+1 fix, permissions improved. Action items à traiter dans environnement adéquat.
     m-5-api-rest-profils-et-permissions: done # Code review 2026-02-04: 10 issues fixed (2 CRITICAL + 3 HIGH + 4 MEDIUM + 1 LOW) - 403/401 tests added, cache invalidation tested, user parameter fixed, code duplication removed
-    m-6-api-rest-auth-health-integrations: ready-for-dev # Story created 2026-02-04
-    m-7-authentification-saml-et-securite: backlog
+    m-6-api-rest-auth-health-integrations: done # Code review 2026-02-04: 8 fixes applied (2 CRITICAL + 5 HIGH + 1 MEDIUM) - URL routing fixed, enum validation added, error handling improved, tests corrected
+    m-7-authentification-saml-et-securite: done # Code review 2026-02-04: 8 issues fixed (3 CRITICAL + 5 MEDIUM) - decode_token_unsafe security fix, audit entity_id validation, CORS array safety, profile logic simplified, cert file logging, error handling improved - All 10 tasks + code review fixes complete
     m-8-middleware-logging-observabilite: backlog
     m-9-tests-unitaires-et-integration-parite: backlog
     m-10-strategie-bascule-et-decommissionnement-fastapi: backlog
