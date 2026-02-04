@@ -5,6 +5,49 @@ from django.db import models
 logger = logging.getLogger(__name__)
 
 
+class ProfileManager(models.Manager):
+    """
+    Custom manager for Profile model.
+    Provides query methods for common profile queries.
+    """
+    
+    def find_by_ad_groups(self, ad_groups: list[str]):
+        """
+        Find profiles whose AD_GROUP is in the given list.
+        
+        Args:
+            ad_groups: List of AD group names
+        
+        Returns:
+            QuerySet of profiles matching any of the AD groups, ordered by name
+        """
+        if not ad_groups:
+            return self.none()
+        return self.filter(ad_group__in=ad_groups).order_by('name')
+    
+    def list_with_permissions_count(self):
+        """
+        List all profiles with permission count annotation.
+        Counts both action and target permissions.
+        
+        Returns:
+            QuerySet with permissions_count annotation
+        """
+        from django.db.models import Count, Q
+        
+        return self.annotate(
+            permissions_count=Count(
+                'profileactionpermission',
+                filter=Q(profileactionpermission__isnull=False),
+                distinct=True
+            ) + Count(
+                'profiletargetpermission',
+                filter=Q(profiletargetpermission__isnull=False),
+                distinct=True
+            )
+        )
+
+
 class Profile(models.Model):
     """
     Profile model mapping to Oracle PROFILES table (V010).
@@ -18,6 +61,9 @@ class Profile(models.Model):
     is_auditor = models.IntegerField(default=0, db_column='IS_AUDITOR')  # Oracle NUMBER(1) CHECK: 0, 1
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
     updated_at = models.DateTimeField(auto_now=True, db_column='UPDATED_AT')
+    
+    # Custom manager
+    objects = ProfileManager()
 
     class Meta:
         db_table = 'PROFILES'

@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import datetime
 from django.db import models
 from idp_auth.models import User
 from catalog.models import Action
@@ -23,6 +24,62 @@ class ExecutionStatus(models.TextChoices):
     FAILED = 'FAILED', 'Failed'
     CANCELLED = 'CANCELLED', 'Cancelled'
     REJECTED = 'REJECTED', 'Rejected'  # Added in V030
+
+
+class ExecutionManager(models.Manager):
+    """
+    Custom manager for Execution model.
+    Provides query methods for common execution queries.
+    """
+    
+    def list_by_user(self, user_id: int):
+        """
+        List executions for a specific user.
+        
+        Args:
+            user_id: ID of the user
+        
+        Returns:
+            QuerySet of executions for the user, ordered by created_at DESC
+        """
+        return self.filter(user_id=user_id).order_by('-created_at')
+    
+    def list_by_status(self, status: str):
+        """
+        Filter executions by status.
+        
+        Args:
+            status: Status value (SUBMITTED, RUNNING, COMPLETED, etc.)
+        
+        Returns:
+            QuerySet filtered by status
+        """
+        return self.filter(status=status)
+    
+    def get_recent(self, limit: int = 100):
+        """
+        Get recent executions for dashboard.
+        Optimized with select_related to avoid N+1 queries.
+        
+        Args:
+            limit: Maximum number of executions to return
+        
+        Returns:
+            QuerySet of recent executions with action and user prefetched
+        """
+        return self.select_related('action', 'user').order_by('-created_at')[:limit]
+    
+    def with_action(self):
+        """Select related action to avoid N+1 queries."""
+        return self.select_related('action')
+    
+    def with_user(self):
+        """Select related user to avoid N+1 queries."""
+        return self.select_related('user')
+    
+    def with_steps(self):
+        """Prefetch execution steps to avoid N+1 queries."""
+        return self.prefetch_related('executionstep_set')
 
 
 class Execution(models.Model):
@@ -88,6 +145,9 @@ class Execution(models.Model):
     started_at = models.DateTimeField(null=True, blank=True, db_column='STARTED_AT')
     completed_at = models.DateTimeField(null=True, blank=True, db_column='COMPLETED_AT')
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
+    
+    # Custom manager
+    objects = ExecutionManager()
 
     class Meta:
         db_table = 'EXECUTIONS'
@@ -204,6 +264,35 @@ class ScheduledExecutionStatus(models.TextChoices):
     CANCELLED = 'cancelled', 'Cancelled'
 
 
+class ScheduledExecutionManager(models.Manager):
+    """
+    Custom manager for ScheduledExecution model.
+    Provides query methods for common scheduled execution queries.
+    """
+    
+    def list_by_user(self, user_id: int):
+        """List scheduled executions for a specific user."""
+        return self.filter(user_id=user_id).order_by('-created_at')
+    
+    def list_by_status(self, status: str):
+        """Filter scheduled executions by status."""
+        return self.filter(status=status).order_by('-created_at')
+    
+    def list_pending(self, before_datetime: datetime):
+        """
+        List pending scheduled executions for external scheduler.
+        Includes one-time (scheduled_at <= before) and active recurring (next_execution_date <= before).
+        """
+        from django.db.models import Q
+        return self.select_related('recurringpattern').filter(
+            Q(status=ScheduledExecutionStatus.PENDING) &
+            (
+                Q(scheduled_at__lte=before_datetime) |
+                Q(recurringpattern__next_execution_date__lte=before_datetime, recurringpattern__is_active=1)
+            )
+        ).order_by('scheduled_at', 'recurringpattern__next_execution_date')
+
+
 class ScheduledExecution(models.Model):
     """
     ScheduledExecution model mapping to Oracle SCHEDULED_EXECUTIONS table (V038).
@@ -236,6 +325,9 @@ class ScheduledExecution(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
     updated_at = models.DateTimeField(null=True, blank=True, db_column='UPDATED_AT')
+    
+    # Custom manager
+    objects = ScheduledExecutionManager()
 
     class Meta:
         db_table = 'SCHEDULED_EXECUTIONS'

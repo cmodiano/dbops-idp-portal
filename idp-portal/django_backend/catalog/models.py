@@ -43,6 +43,52 @@ class ActionItemType(models.TextChoices):
     WORKFLOW = 'workflow', 'Workflow'
 
 
+class ActionManager(models.Manager):
+    """
+    Custom manager for Action model.
+    Provides query methods for common action queries.
+    """
+    
+    def list_published(self):
+        """Return QuerySet of published actions only."""
+        return self.filter(status=ActionStatus.PUBLISHED)
+    
+    def list_by_status(self, status: str):
+        """
+        Filter actions by status.
+        
+        Args:
+            status: Status value (draft, published, disabled)
+        
+        Returns:
+            QuerySet filtered by status
+        """
+        return self.filter(status=status)
+    
+    def search_by_tags(self, tag_names: list[str]):
+        """
+        Search actions by tags (AND logic - action must have all specified tags).
+        
+        Args:
+            tag_names: List of tag names to search for
+        
+        Returns:
+            QuerySet of actions matching all tags, distinct
+        """
+        queryset = self.filter(status=ActionStatus.PUBLISHED)
+        for tag_name in tag_names:
+            queryset = queryset.filter(actiontag__tag__name=tag_name)
+        return queryset.distinct()
+    
+    def with_tags(self):
+        """Prefetch tags to avoid N+1 queries."""
+        return self.prefetch_related('actiontag_set__tag')
+    
+    def with_creator(self):
+        """Select related creator to avoid N+1 queries."""
+        return self.select_related('created_by')
+
+
 class Action(models.Model):
     """
     Action model mapping to Oracle ACTIONS_CATALOG table (V002, V017, V019, V022, V027, V031, V036).
@@ -69,6 +115,7 @@ class Action(models.Model):
     # CLOB fields - using TextField with JSON serialization helpers
     parameters_schema = models.TextField(null=True, blank=True, db_column='PARAMETERS_SCHEMA')
     impact_rules = models.TextField(null=True, blank=True, db_column='IMPACT_RULES')
+    execution_steps = models.TextField(null=True, blank=True, db_column='EXECUTION_STEPS')  # Story M.3: Added for CRUD operations
     change_type_config = models.TextField(null=True, blank=True, db_column='CHANGE_TYPE_CONFIG')
     documentation_md = models.TextField(null=True, blank=True, db_column='DOCUMENTATION_MD')
     remediation_rules = models.TextField(null=True, blank=True, db_column='REMEDIATION_RULES')
@@ -100,6 +147,9 @@ class Action(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
     updated_at = models.DateTimeField(null=True, blank=True, db_column='UPDATED_AT')
+    
+    # Custom manager
+    objects = ActionManager()
 
     class Meta:
         db_table = 'ACTIONS_CATALOG'
@@ -176,6 +226,23 @@ class Action(models.Model):
             self.remediation_rules = json.dumps(value)
         else:
             self.remediation_rules = None
+    
+    def get_execution_steps(self):
+        """Deserialize JSON from CLOB."""
+        if self.execution_steps:
+            try:
+                return json.loads(self.execution_steps)
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning(f"Failed to deserialize execution_steps for Action {self.id}: {e}")
+                return None
+        return None
+    
+    def set_execution_steps(self, value):
+        """Serialize JSON to CLOB."""
+        if value is not None:
+            self.execution_steps = json.dumps(value)
+        else:
+            self.execution_steps = None
 
 
 class Tag(models.Model):

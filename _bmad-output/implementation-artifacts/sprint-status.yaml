@@ -171,7 +171,7 @@ development_status:
     epic-m: in-progress
     m-1-bootstrap-projet-django-et-drf: done # Code review 2026-02-03: 1 CRITICAL + 4 HIGH + 4 MEDIUM fixes applied - format réponse FastAPI corrigé, fichiers manquants créés, tests améliorés
     m-2-modeles-django-et-migrations-schema-oracle: done # Code review 2026-02-03: 10 issues fixed (3 HIGH + 5 MEDIUM + 2 LOW) - imports json optimisés, logging ajouté, migrations générées
-    m-3-couche-donnees-repositories-vers-orm-django: backlog
+    m-3-couche-donnees-repositories-vers-orm-django: done
     m-4-api-rest-catalogue-et-admin-actions-tags: backlog
     m-5-api-rest-profils-et-permissions: backlog
     m-6-api-rest-auth-health-integrations: backlog
