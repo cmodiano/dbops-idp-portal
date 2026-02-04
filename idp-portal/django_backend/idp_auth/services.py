@@ -9,6 +9,7 @@ from idp_auth.models import User
 from profiles.models import Profile
 from catalog.models import UserFavorite, Action
 from core.services import AuditService
+from core.models import AuditActionType, AuditEntityType
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +46,8 @@ class AuthService:
         # Audit
         AuditService.create_entry(
             user_id=str(user.id),
-            action_type='USER_CREATED' if created else 'USER_UPDATED',
-            entity_type='user',
+            action_type=AuditActionType.USER_CREATED if created else AuditActionType.USER_UPDATED,
+            entity_type=AuditEntityType.USER,
             entity_id=user.id,
             details={'username': user.username, 'profile': user.profile}
         )
@@ -138,8 +139,8 @@ class AuthService:
         if created:
             AuditService.create_entry(
                 user_id=str(user_id),
-                action_type='FAVORITE_ADDED',
-                entity_type='action',
+                action_type=AuditActionType.FAVORITE_ADDED,
+                entity_type=AuditEntityType.ACTION,
                 entity_id=action_id,
                 details={'action_name': action.name}
             )
@@ -166,8 +167,8 @@ class AuthService:
             # Audit
             AuditService.create_entry(
                 user_id=str(user_id),
-                action_type='FAVORITE_REMOVED',
-                entity_type='action',
+                action_type=AuditActionType.FAVORITE_REMOVED,
+                entity_type=AuditEntityType.ACTION,
                 entity_id=action_id,
                 details={'action_name': action_name}
             )

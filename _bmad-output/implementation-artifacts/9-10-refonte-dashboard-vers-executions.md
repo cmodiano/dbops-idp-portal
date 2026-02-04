@@ -887,7 +887,7 @@ Refactoriser la navigation en **consolidant les fonctionnalités opérationnelle
        SELECT
            e.ID, e.ACTION_ID, e.USER_ID, e.ENVIRONMENT, e.STATUS,
            e.SERVICENOW_CHANGE_ID, e.STARTED_AT, e.COMPLETED_AT, e.CREATED_AT,
-           u.NAME AS user_display_name,
+           u.DISPLAY_NAME AS user_display_name,
            ac.NAME AS action_name,
            ac.ENGINE AS action_engine,
            ac.PLATFORM AS action_platform,

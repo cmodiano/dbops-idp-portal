@@ -57,6 +57,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'core.middleware.CorrelationIdMiddleware',  # Story M.7 - correlation ID first
+    'core.middleware.SecurityHeadersMiddleware',  # Story M.7 - security headers
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',  # CORS middleware should be early
     'django.middleware.common.CommonMiddleware',
@@ -64,6 +66,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'idp_auth.middleware.AuditAuthMiddleware',  # Story M.7 - auth audit logging
 ]
 
 ROOT_URLCONF = 'idp_backend.urls'
@@ -149,14 +152,15 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Django REST Framework configuration
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        # Authentication will be migrated from FastAPI SAML/JWT in Story M.7
-        # For now, no authentication required for health check
+        'idp_auth.authentication.JWTAuthentication',  # Story M.7
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny',  # Will be restricted in Story M.7
+        'rest_framework.permissions.IsAuthenticated',  # Story M.7 - default to authenticated
     ],
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 20,
+    'DEFAULT_PAGINATION_CLASS': 'core.pagination.CustomPageNumberPagination',
+    'PAGE_SIZE': 25,
+    # Custom exception handler to match FastAPI error format
+    'EXCEPTION_HANDLER': 'core.exceptions.custom_exception_handler',
     # Format response in snake_case (not camelCase)
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
@@ -173,3 +177,38 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+
+# ============================================================================
+# SAML Configuration (Story M.7 - mirrors FastAPI settings)
+# ============================================================================
+
+# Service Provider (SP) settings
+SAML_SP_ENTITY_ID = os.getenv('SAML_SP_ENTITY_ID', 'https://idp-portal.example.com/metadata')
+SAML_SP_ACS_URL = os.getenv('SAML_SP_ACS_URL', 'http://localhost:8000/api/v1/auth/saml/callback')
+SAML_SP_CERT_PATH = os.getenv('SAML_SP_CERT_PATH', '')
+SAML_SP_KEY_PATH = os.getenv('SAML_SP_KEY_PATH', '')
+
+# Identity Provider (IdP) settings
+SAML_IDP_ENTITY_ID = os.getenv('SAML_IDP_ENTITY_ID', 'https://idp.example.com/entity')
+SAML_IDP_SSO_URL = os.getenv('SAML_IDP_SSO_URL', 'https://idp.example.com/sso')
+SAML_IDP_SLO_URL = os.getenv('SAML_IDP_SLO_URL', 'https://idp.example.com/slo')
+SAML_IDP_CERT_PATH = os.getenv('SAML_IDP_CERT_PATH', '')
+
+# ============================================================================
+# JWT Configuration (Story M.7 - mirrors FastAPI settings)
+# ============================================================================
+
+JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'change-me-in-production')
+JWT_ALGORITHM = os.getenv('JWT_ALGORITHM', 'HS256')
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv('JWT_ACCESS_TOKEN_EXPIRE_MINUTES', '30'))
+JWT_REFRESH_TOKEN_EXPIRE_HOURS = int(os.getenv('JWT_REFRESH_TOKEN_EXPIRE_HOURS', '8'))
+
+# ============================================================================
+# Auth Configuration
+# ============================================================================
+
+# Dev bypass for local development without IdP (Story M.7)
+AUTH_DEV_BYPASS = os.getenv('AUTH_DEV_BYPASS', 'False').lower() == 'true'
+
+# Application environment
+APP_ENV = os.getenv('APP_ENV', 'development')

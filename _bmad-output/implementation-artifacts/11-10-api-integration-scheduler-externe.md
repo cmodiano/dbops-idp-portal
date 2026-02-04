@@ -440,7 +440,7 @@ Source : Extension de `/idp-portal/backend/app/api/v1/scheduled_executions.py`
 # backend/app/api/v1/scheduled_executions.py
 
 from fastapi import APIRouter, Depends, Query, status
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 import structlog
 from app.api.deps import get_current_user
@@ -528,6 +528,7 @@ Source : Extension de `/idp-portal/backend/app/repositories/scheduled_execution_
 ```python
 # backend/app/repositories/scheduled_execution_repository.py
 
+import json
 import structlog
 from datetime import datetime, timezone
 from typing import Optional

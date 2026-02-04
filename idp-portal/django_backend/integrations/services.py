@@ -5,7 +5,11 @@ Handles complex operations like JSON Schema validation for config.
 
 import logging
 import json
+from django.db import transaction
+from django.db import IntegrityError
 from integrations.models import Integration
+from core.services import AuditService
+from core.models import AuditActionType, AuditEntityType
 
 logger = logging.getLogger(__name__)
 
@@ -25,17 +29,13 @@ class IntegrationService:
             integration_type: Type of integration (determines schema)
         
         Returns:
-            True if valid, raises ValueError if invalid
+            True if valid, raises InvalidStateError if invalid
         
         Raises:
-            ValueError: If config doesn't match schema
+            InvalidStateError: If config doesn't match schema (code INVALID_CONFIG)
         """
-        # Basic validation - can be extended with jsonschema library
-        if not isinstance(config, dict):
-            raise ValueError("Config must be a JSON object")
-        
-        # Type-specific validation can be added here
-        # For now, just check it's a valid dict
+        from integrations.validation import validate_integration_config
+        validate_integration_config(config)
         return True
     
     def parse_config(self, integration: Integration) -> dict | None:
@@ -93,8 +93,8 @@ class IntegrationService:
             if user:
                 AuditService.create_entry(
                     user_id=str(user.id),
-                    action_type='ACTION_CREATED',  # Note: Should be INTEGRATION_CREATED if exists
-                    entity_type='action',  # Note: Should be 'integration' if exists
+                    action_type=AuditActionType.INTEGRATION_CREATED,
+                    entity_type=AuditEntityType.INTEGRATION,
                     entity_id=integration.id,
                     details={'name': integration.name, 'type': integration.type}
                 )
@@ -191,20 +191,22 @@ class IntegrationService:
         if user:
             AuditService.create_entry(
                 user_id=str(user.id),
-                action_type='ACTION_UPDATED',  # Note: Should be INTEGRATION_UPDATED if exists
-                entity_type='action',  # Note: Should be 'integration' if exists
+                action_type=AuditActionType.INTEGRATION_UPDATED,
+                entity_type=AuditEntityType.INTEGRATION,
                 entity_id=integration.id,
                 details={'name': integration.name}
             )
         
         return integration
     
-    def delete_integration(self, integration_id: int):
+    @transaction.atomic
+    def delete_integration(self, integration_id: int, user=None):
         """
         Delete integration after checking dependencies.
         
         Args:
             integration_id: ID of the integration
+            user: Optional user instance for audit
         
         Returns:
             True if deleted, False if not found
@@ -224,7 +226,19 @@ class IntegrationService:
         if linked_actions:
             raise ValueError("Impossible de supprimer une intégration avec des actions liées")
         
+        integration_name = integration.name  # Save name before deletion for audit
         integration.delete()
+        
+        # Audit if user provided
+        if user:
+            AuditService.create_entry(
+                user_id=str(user.id),
+                action_type=AuditActionType.INTEGRATION_DELETED,
+                entity_type=AuditEntityType.INTEGRATION,
+                entity_id=integration_id,
+                details={'name': integration_name}
+            )
+        
         return True
     
     def get_by_type(self, integration_type: str):

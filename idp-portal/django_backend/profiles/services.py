@@ -9,6 +9,7 @@ from django.db import IntegrityError
 from django.core.exceptions import ValidationError
 from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
 from core.services import AuditService
+from core.models import AuditActionType, AuditEntityType
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +48,8 @@ class ProfileService:
             if user:
                 AuditService.create_entry(
                     user_id=str(user.id),
-                    action_type='ACTION_CREATED',  # Note: Should be PROFILE_CREATED if exists
-                    entity_type='permission',
+                    action_type=AuditActionType.PROFILE_CREATED,
+                    entity_type=AuditEntityType.PROFILE,
                     entity_id=profile.id,
                     details={'name': profile.name}
                 )
@@ -81,6 +82,21 @@ class ProfileService:
                 'profileactionpermission',
                 'profiletargetpermission'
             ).get(id=profile_id)
+        except Profile.DoesNotExist:
+            return None
+    
+    def get_by_name(self, name: str):
+        """
+        Get profile by name (for YAML import upsert).
+        
+        Args:
+            name: Name of the profile
+        
+        Returns:
+            Profile instance or None
+        """
+        try:
+            return Profile.objects.get(name=name.strip())
         except Profile.DoesNotExist:
             return None
     
@@ -126,8 +142,8 @@ class ProfileService:
         if user:
             AuditService.create_entry(
                 user_id=str(user.id),
-                action_type='ACTION_UPDATED',  # Note: Should be PROFILE_UPDATED if exists
-                entity_type='permission',
+                action_type=AuditActionType.PROFILE_UPDATED,
+                entity_type=AuditEntityType.PROFILE,
                 entity_id=profile.id,
                 details={'name': profile.name}
             )
@@ -135,20 +151,34 @@ class ProfileService:
         return profile
     
     @transaction.atomic
-    def delete_profile(self, profile_id: int):
+    def delete_profile(self, profile_id: int, user=None):
         """
         Delete profile with cascade deletion of permissions.
         
         Args:
             profile_id: ID of the profile
+            user: Optional user instance for audit
         
         Returns:
             True if deleted, False if not found
         """
         try:
             profile = Profile.objects.get(id=profile_id)
+            profile_name = profile.name  # Save name before deletion for audit
+            
             # Permissions will be deleted automatically via CASCADE
             profile.delete()
+            
+            # Audit if user provided
+            if user:
+                AuditService.create_entry(
+                    user_id=str(user.id),
+                    action_type=AuditActionType.PROFILE_DELETED,
+                    entity_type=AuditEntityType.PROFILE,
+                    entity_id=profile_id,
+                    details={'name': profile_name}
+                )
+            
             return True
         except Profile.DoesNotExist:
             return False
@@ -308,10 +338,17 @@ class ProfileService:
         
         Returns:
             Dict with aggregated action and target permissions
+        
+        Raises:
+            ValueError: If user_id is None or invalid
         """
-        # Find profiles matching user's AD groups with select_related to avoid N+1 queries
-        # Note: OneToOneField relations use select_related, not prefetch_related
-        profiles = Profile.objects.find_by_ad_groups(ad_groups).select_related(
+        # Validate user_id
+        if not user_id:
+            raise ValueError("user_id is required and cannot be None")
+        
+        # Find profiles matching user's AD groups
+        # Note: OneToOneField reverse relations require prefetch_related, not select_related
+        profiles = Profile.objects.find_by_ad_groups(ad_groups).prefetch_related(
             'profileactionpermission', 'profiletargetpermission'
         )
         

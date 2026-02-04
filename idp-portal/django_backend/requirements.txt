@@ -13,6 +13,15 @@ oracledb>=3.4.1
 # Environment variables
 python-dotenv>=1.0.0
 
+# YAML support (for profile import/export)
+PyYAML>=6.0.0
+
+# SAML authentication (same as FastAPI for parity)
+python3-saml>=1.16.0
+
+# JWT token generation/validation (same as FastAPI for parity)
+python-jose[cryptography]>=3.3.0
+
 # Development dependencies
 pytest>=8.0.0
 pytest-django>=4.8.0

@@ -283,14 +283,13 @@ import type { ScheduledExecutionCreateRequest, ScheduledExecutionResponse } from
 export async function createScheduledExecution(
   request: ScheduledExecutionCreateRequest
 ): Promise<ScheduledExecutionResponse> {
-  const response = await apiFetch<{ data: ScheduledExecutionResponse }>(
+  return apiFetch<ScheduledExecutionResponse>(
     '/api/v1/scheduled-executions',
     {
       method: 'POST',
       body: JSON.stringify(request),
     }
   );
-  return response.data;
 }
 ```
 

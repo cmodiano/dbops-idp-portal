@@ -9,6 +9,7 @@ from django.db.models import Q, Prefetch
 from django.core.paginator import Paginator
 from catalog.models import Action, ActionStatus, Tag, ActionTag, ActionItemType
 from core.services import AuditService
+from core.models import AuditActionType, AuditEntityType
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,7 @@ class CatalogService:
             item_type=action_data.get('item_type', ActionItemType.ACTION),
             created_by=created_by_user,
             documentation_md=action_data.get('documentation_md'),
+            default_impact_level=action_data.get('default_impact_level'),
         )
         
         # Set JSON fields using helper methods
@@ -110,8 +112,8 @@ class CatalogService:
         # Audit
         AuditService.create_entry(
             user_id=str(created_by_user.id),
-            action_type='ACTION_CREATED',
-            entity_type='action',
+            action_type=AuditActionType.ACTION_CREATED,
+            entity_type=AuditEntityType.ACTION,
             entity_id=action.id,
             details={'name': action.name, 'status': action.status}
         )
@@ -226,6 +228,8 @@ class CatalogService:
             action.platform = action_update_data['platform']
         if 'documentation_md' in action_update_data:
             action.documentation_md = action_update_data.get('documentation_md')
+        if 'default_impact_level' in action_update_data:
+            action.default_impact_level = action_update_data.get('default_impact_level')
         
         # Update JSON fields
         if 'parameters_schema' in action_update_data:
@@ -244,8 +248,8 @@ class CatalogService:
         # Audit
         AuditService.create_entry(
             user_id=str(user.id),
-            action_type='ACTION_UPDATED',
-            entity_type='action',
+            action_type=AuditActionType.ACTION_UPDATED,
+            entity_type=AuditEntityType.ACTION,
             entity_id=action.id,
             details={'name': action.name}
         )
@@ -283,16 +287,16 @@ class CatalogService:
         
         # Map transition to audit action type
         audit_action_map = {
-            'publish': 'ACTION_PUBLISHED',
-            'disable': 'ACTION_DISABLED',
-            'enable': 'ACTION_ENABLED',
+            'publish': AuditActionType.ACTION_PUBLISHED,
+            'disable': AuditActionType.ACTION_DISABLED,
+            'enable': AuditActionType.ACTION_ENABLED,
         }
         
         # Audit
         AuditService.create_entry(
             user_id=str(user.id),
             action_type=audit_action_map[transition],
-            entity_type='action',
+            entity_type=AuditEntityType.ACTION,
             entity_id=action.id,
             details={
                 'previous_status': old_status,
@@ -344,8 +348,8 @@ class CatalogService:
         if user:
             AuditService.create_entry(
                 user_id=str(user.id),
-                action_type='ACTION_DELETED',
-                entity_type='action',
+                action_type=AuditActionType.ACTION_DELETED,
+                entity_type=AuditEntityType.ACTION,
                 entity_id=action_id,
                 details={
                     'name': action_name,
@@ -474,8 +478,8 @@ class CatalogService:
         if user:
             AuditService.create_entry(
                 user_id=str(user.id),
-                action_type='ACTION_UPDATED',
-                entity_type='action',
+                action_type=AuditActionType.ACTION_UPDATED,
+                entity_type=AuditEntityType.ACTION,
                 entity_id=action.id,
                 details={'updated_fields': ['execution_steps', 'change_type_config']}
             )

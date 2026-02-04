@@ -43,6 +43,13 @@ class ActionItemType(models.TextChoices):
     WORKFLOW = 'workflow', 'Workflow'
 
 
+def normalize_tag_name(name: str) -> str:
+    """Normalize tag name: lowercase, strip, replace spaces with nothing."""
+    if not name or not isinstance(name, str):
+        return ""
+    return name.strip().lower().replace(" ", "")
+
+
 class ActionManager(models.Manager):
     """
     Custom manager for Action model.
@@ -119,6 +126,18 @@ class Action(models.Model):
     change_type_config = models.TextField(null=True, blank=True, db_column='CHANGE_TYPE_CONFIG')
     documentation_md = models.TextField(null=True, blank=True, db_column='DOCUMENTATION_MD')
     remediation_rules = models.TextField(null=True, blank=True, db_column='REMEDIATION_RULES')
+    default_impact_level = models.CharField(
+        max_length=20,
+        choices=[
+            ('low', 'Low'),
+            ('medium', 'Medium'),
+            ('high', 'High'),
+            ('critical', 'Critical'),
+        ],
+        null=True,
+        blank=True,
+        db_column='DEFAULT_IMPACT_LEVEL'
+    )
     status = models.CharField(
         max_length=20,
         choices=ActionStatus.choices,

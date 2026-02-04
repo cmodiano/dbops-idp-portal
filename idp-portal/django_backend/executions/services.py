@@ -16,6 +16,7 @@ from executions.models import (
 from catalog.models import Action
 from idp_auth.models import User
 from core.services import AuditService
+from core.models import AuditActionType, AuditEntityType
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,8 @@ class ExecutionService:
     
     @transaction.atomic
     def create_execution(self, user: User, action: Action, environment: str, 
-                       parameters: dict | None = None, parent_execution_id: int | None = None):
+                       parameters: dict | None = None, parent_execution_id: int | None = None,
+                       correlation_id: str | None = None):
         """
         Create an execution atomically.
         
@@ -38,6 +40,7 @@ class ExecutionService:
             environment: Target environment
             parameters: Optional execution parameters dict
             parent_execution_id: Optional parent execution ID (for remediation)
+            correlation_id: Optional correlation ID for tracing
         
         Returns:
             Execution instance
@@ -58,14 +61,15 @@ class ExecutionService:
         # Audit
         AuditService.create_entry(
             user_id=str(user.id),
-            action_type='EXECUTION_SUBMITTED',
-            entity_type='execution',
+            action_type=AuditActionType.EXECUTION_SUBMITTED,
+            entity_type=AuditEntityType.EXECUTION,
             entity_id=execution.id,
             details={
                 'action_id': action.id,
                 'action_name': action.name,
                 'environment': environment,
-            }
+            },
+            correlation_id=correlation_id
         )
         
         return execution
@@ -73,7 +77,7 @@ class ExecutionService:
     @transaction.atomic
     def create_execution_with_steps(self, user: User, action: Action, environment: str,
                                    parameters: dict | None = None, steps_data: list[dict] | None = None,
-                                   parent_execution_id: int | None = None):
+                                   parent_execution_id: int | None = None, correlation_id: str | None = None):
         """
         Create an execution with steps atomically.
         
@@ -84,12 +88,13 @@ class ExecutionService:
             parameters: Optional execution parameters dict
             steps_data: Optional list of step data dicts
             parent_execution_id: Optional parent execution ID (for remediation)
+            correlation_id: Optional correlation ID for tracing
         
         Returns:
             Execution instance with steps created
         """
         # Create the execution
-        execution = self.create_execution(user, action, environment, parameters, parent_execution_id)
+        execution = self.create_execution(user, action, environment, parameters, parent_execution_id, correlation_id)
         
         # Create steps if provided
         if steps_data:
@@ -213,11 +218,26 @@ class ExecutionService:
         
         execution.save()
         
+        # Map status to audit action type enum
+        status_to_audit_type = {
+            ExecutionStatus.SUBMITTED: AuditActionType.EXECUTION_SUBMITTED,
+            ExecutionStatus.RUNNING: AuditActionType.EXECUTION_RUNNING,
+            ExecutionStatus.COMPLETED: AuditActionType.EXECUTION_COMPLETED,
+            ExecutionStatus.FAILED: AuditActionType.EXECUTION_FAILED,
+            ExecutionStatus.CANCELLED: AuditActionType.EXECUTION_CANCELLED,
+            ExecutionStatus.PENDING_APPROVAL: AuditActionType.EXECUTION_PENDING_APPROVAL,
+            ExecutionStatus.REJECTED: AuditActionType.EXECUTION_REJECTED,
+        }
+        audit_action_type = status_to_audit_type.get(new_status)
+        if not audit_action_type:
+            logger.warning(f"Unknown execution status for audit: {new_status}")
+            audit_action_type = AuditActionType.EXECUTION_SUBMITTED  # Fallback
+        
         # Audit
         AuditService.create_entry(
             user_id=user_id,
-            action_type=f'EXECUTION_{new_status}',
-            entity_type='execution',
+            action_type=audit_action_type,
+            entity_type=AuditEntityType.EXECUTION,
             entity_id=execution.id,
             details={
                 'action_id': execution.action_id,
@@ -461,8 +481,8 @@ class SchedulingService:
             )
             AuditService.create_entry(
                 user_id=str(user.id),
-                action_type='SCHEDULED_EXECUTION_RECURRING_CREATED',
-                entity_type='scheduled_execution',
+                action_type=AuditActionType.SCHEDULED_EXECUTION_RECURRING_CREATED,
+                entity_type=AuditEntityType.SCHEDULED_EXECUTION,
                 entity_id=scheduled_execution.id,
                 details={
                     'action_id': action.id,
@@ -474,8 +494,8 @@ class SchedulingService:
         else:
             AuditService.create_entry(
                 user_id=str(user.id),
-                action_type='SCHEDULED_EXECUTION_CREATED',
-                entity_type='scheduled_execution',
+                action_type=AuditActionType.SCHEDULED_EXECUTION_CREATED,
+                entity_type=AuditEntityType.SCHEDULED_EXECUTION,
                 entity_id=scheduled_execution.id,
                 details={
                     'action_id': action.id,
@@ -582,18 +602,25 @@ class SchedulingService:
                 pattern.updated_at = timezone.now()
                 pattern.save()
         
-        AuditService.create_entry(
-            user_id=user_id,
-            action_type=f'SCHEDULED_EXECUTION_{new_status.upper()}',
-            entity_type='scheduled_execution',
-            entity_id=scheduled_execution.id,
-            details={
-                'action_id': scheduled_execution.action_id,
-                'action_name': scheduled_execution.action.name if scheduled_execution.action else None,
-                'previous_status': old_status,
-                'new_status': new_status,
-            }
-        )
+        # Map status to audit action type enum
+        status_to_audit_type = {
+            ScheduledExecutionStatus.EXECUTED: AuditActionType.SCHEDULED_EXECUTION_EXECUTED,
+            ScheduledExecutionStatus.CANCELLED: AuditActionType.SCHEDULED_EXECUTION_CANCELLED,
+        }
+        audit_action_type = status_to_audit_type.get(new_status)
+        if audit_action_type:
+            AuditService.create_entry(
+                user_id=user_id,
+                action_type=audit_action_type,
+                entity_type=AuditEntityType.SCHEDULED_EXECUTION,
+                entity_id=scheduled_execution.id,
+                details={
+                    'action_id': scheduled_execution.action_id,
+                    'action_name': scheduled_execution.action.name if scheduled_execution.action else None,
+                    'previous_status': old_status,
+                    'new_status': new_status,
+                }
+            )
         
         return scheduled_execution
     
@@ -642,8 +669,8 @@ class SchedulingService:
             pattern.save()
             AuditService.create_entry(
                 user_id=user_id,
-                action_type='SCHEDULED_EXECUTION_RECURRING_DISABLED',
-                entity_type='scheduled_execution',
+                action_type=AuditActionType.SCHEDULED_EXECUTION_RECURRING_DISABLED,
+                entity_type=AuditEntityType.SCHEDULED_EXECUTION,
                 entity_id=scheduled_execution.id,
                 details={
                     'action_id': scheduled_execution.action_id,
@@ -654,8 +681,8 @@ class SchedulingService:
         else:
             AuditService.create_entry(
                 user_id=user_id,
-                action_type='SCHEDULED_EXECUTION_CANCELLED',
-                entity_type='scheduled_execution',
+                action_type=AuditActionType.SCHEDULED_EXECUTION_CANCELLED,
+                entity_type=AuditEntityType.SCHEDULED_EXECUTION,
                 entity_id=scheduled_execution.id,
                 details={
                     'action_id': scheduled_execution.action_id,

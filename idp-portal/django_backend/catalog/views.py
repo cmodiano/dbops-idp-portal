@@ -1,3 +1,741 @@
-from django.shortcuts import render
+"""
+DRF ViewSets for catalog app.
+Implements admin, catalog, and tags endpoints matching FastAPI contract.
+"""
 
-# Create your views here.
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from django.db.models import Count, Q
+from django.utils import timezone
+from cachetools import TTLCache
+from catalog.models import Action, Tag, ActionStatus, ActionItemType
+from catalog.serializers import (
+    ActionSerializer, ActionCreateSerializer, ActionListSerializer,
+    ActionTagsUpdateSerializer, StatusUpdateSerializer, TagSerializer
+)
+from catalog.services import CatalogService, InvalidTransitionError
+from core.pagination import CustomPageNumberPagination
+from core.permissions import DBOPSProfilePermission, OptionalUserPermission
+from core.exceptions import NotFoundError, BadRequestError, InvalidStateError
+from executions.models import Execution
+from profiles.services import ProfileService
+
+
+def _filter_by_rbac(actions, cumulative_permissions):
+    """
+    Filter actions by user's RBAC permissions (matches FastAPI _filter_by_rbac).
+
+    Args:
+        actions: List of action dicts or QuerySet (must have prefetched tags via with_tags())
+        cumulative_permissions: Dict with actions_type, action_ids, tag_patterns
+
+    Returns:
+        Filtered list of actions
+    """
+    if cumulative_permissions is None:
+        return actions
+
+    actions_type = cumulative_permissions.get('actions_type', 'all')
+    if actions_type == 'all':
+        return actions
+
+    action_ids = set(cumulative_permissions.get('action_ids', []) or [])
+    tag_patterns = set(cumulative_permissions.get('tag_patterns', []) or [])
+
+    # MEDIUM-2 fix: Pre-build action->tags map to avoid N+1 queries
+    # Tags should already be prefetched via with_tags() manager method
+    action_tags_map = {}
+    for action in actions:
+        if hasattr(action, 'id'):
+            # Use prefetched actiontag_set (already loaded, no extra query)
+            if hasattr(action, '_prefetched_objects_cache') and 'actiontag_set' in action._prefetched_objects_cache:
+                action_tags_map[action.id] = {at.tag.name for at in action.actiontag_set.all()}
+            elif hasattr(action, 'actiontag_set'):
+                # Fallback: tags might be in cache from prefetch_related
+                action_tags_map[action.id] = {at.tag.name for at in action.actiontag_set.all()}
+            else:
+                action_tags_map[action.id] = set()
+        else:
+            action_tags_map[action.get('id')] = set(action.get('tags', []) or [])
+
+    result = []
+    for action in actions:
+        if hasattr(action, 'id'):
+            action_id = action.id
+        else:
+            action_id = action.get('id')
+
+        # Check if action_id is in allowed list
+        if action_id in action_ids:
+            result.append(action)
+            continue
+
+        # Check if any tag matches pattern (using pre-built map)
+        action_tags = action_tags_map.get(action_id, set())
+        if action_tags & tag_patterns:
+            result.append(action)
+
+    return result
+
+
+def _check_rbac_for_action(action, cumulative_permissions):
+    """
+    Check if user has RBAC permission for a specific action (matches FastAPI _check_rbac_for_action).
+    
+    Args:
+        action: Action instance or dict
+        cumulative_permissions: Dict with actions_type, action_ids, tag_patterns
+    
+    Returns:
+        True if user has access, False otherwise
+    """
+    if cumulative_permissions is None:
+        return True
+    
+    actions_type = cumulative_permissions.get('actions_type', 'all')
+    if actions_type == 'all':
+        return True
+    
+    action_ids = set(cumulative_permissions.get('action_ids', []) or [])
+    tag_patterns = set(cumulative_permissions.get('tag_patterns', []) or [])
+    
+    # Get action ID and tags
+    if hasattr(action, 'id'):
+        action_id = action.id
+        if hasattr(action, 'actiontag_set'):
+            action_tags = {at.tag.name for at in action.actiontag_set.all()}
+        else:
+            action_tags = set()
+    else:
+        action_id = action.get('id')
+        action_tags = set(action.get('tags', []) or [])
+    
+    # Check if action_id is in allowed list
+    if action_id in action_ids:
+        return True
+    
+    # Check if any tag matches pattern
+    if action_tags & tag_patterns:
+        return True
+    
+    return False
+
+
+def _get_cumulative_permissions_for_user(user):
+    """
+    Get cumulative permissions for a user (aggregates across all profiles).
+
+    Args:
+        user: User instance
+
+    Returns:
+        Dict with actions_type, action_ids, tag_patterns, environments or None
+    """
+    if not user or not user.is_authenticated:
+        return None
+
+    # MEDIUM-6 fix: Improved AD groups retrieval
+    ad_groups = []
+
+    # Try different methods to get AD groups
+    if hasattr(user, 'get_ad_groups') and callable(user.get_ad_groups):
+        try:
+            ad_groups = user.get_ad_groups() or []
+        except Exception:
+            pass
+    elif hasattr(user, 'ad_groups'):
+        ad_groups_attr = user.ad_groups
+        if isinstance(ad_groups_attr, list):
+            ad_groups = ad_groups_attr
+        elif isinstance(ad_groups_attr, str):
+            # AD groups stored as comma-separated string
+            ad_groups = [g.strip() for g in ad_groups_attr.split(',') if g.strip()]
+        elif hasattr(ad_groups_attr, 'all'):
+            # M2M relationship
+            ad_groups = list(ad_groups_attr.values_list('name', flat=True))
+
+    # Get cumulative permissions from ProfileService
+    try:
+        profile_service = ProfileService()
+        permissions = profile_service.get_cumulative_permissions(user.id, ad_groups)
+    except Exception:
+        # ProfileService not available or error - return None (no RBAC filtering)
+        return None
+    
+    if not permissions or not permissions.get('action_permissions'):
+        return None
+    
+    # Aggregate action permissions (union across profiles)
+    action_ids = set()
+    tag_patterns = set()
+    environments = set()
+    actions_type_all = False
+    
+    for perm in permissions.get('action_permissions', []):
+        if perm.get('actions_type') == 'all':
+            actions_type_all = True
+        else:
+            action_ids.update(perm.get('action_ids', []) or [])
+            tag_patterns.update(perm.get('tag_patterns', []) or [])
+        environments.update(perm.get('environments', []) or [])
+    
+    # Determine final actions_type
+    if actions_type_all:
+        actions_type = 'all'
+    elif tag_patterns:
+        actions_type = 'pattern'
+    else:
+        actions_type = 'list'
+    
+    return {
+        'actions_type': actions_type,
+        'action_ids': sorted(action_ids),
+        'tag_patterns': sorted(tag_patterns),
+        'environments': sorted(environments),
+    }
+
+
+class ActionViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for admin actions (CRUD operations).
+    Matches FastAPI /api/v1/admin/actions endpoints.
+    """
+    queryset = Action.objects.all()
+    serializer_class = ActionSerializer
+    permission_classes = [IsAuthenticated, DBOPSProfilePermission]
+    pagination_class = CustomPageNumberPagination
+    
+    def get_serializer_class(self):
+        """Return appropriate serializer based on action."""
+        if self.action == 'create':
+            return ActionCreateSerializer
+        elif self.action == 'list':
+            return ActionListSerializer
+        return ActionSerializer
+    
+    def get_queryset(self):
+        """Filter queryset based on query parameters."""
+        queryset = Action.objects.with_tags().with_creator()
+        
+        # Annotate execution_count for list view
+        if self.action == 'list':
+            queryset = queryset.annotate(
+                execution_count=Count('executions', distinct=True)
+            )
+        
+        # Filters
+        status_filter = self.request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        
+        engine_filter = self.request.query_params.get('engine')
+        if engine_filter:
+            queryset = queryset.filter(engine=engine_filter)
+        
+        item_type_filter = self.request.query_params.get('item_type')
+        if item_type_filter:
+            queryset = queryset.filter(item_type=item_type_filter)
+        
+        return queryset.order_by('-created_at')
+    
+    def create(self, request, *args, **kwargs):
+        """POST /admin/actions - Create a new action."""
+        serializer = ActionCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        action = CatalogService().create_action(
+            action_data=serializer.validated_data,
+            created_by_user=request.user
+        )
+        
+        # Reload with relations
+        action = CatalogService().get_by_id(action.id)
+        response_serializer = ActionSerializer(action)
+
+        # MEDIUM-1 fix: Invalidate cache after write
+        _catalog_cache.clear()
+
+        return Response({"data": response_serializer.data}, status=status.HTTP_201_CREATED)
+    
+    def list(self, request, *args, **kwargs):
+        """GET /admin/actions - List all actions with pagination."""
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = ActionListSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = ActionListSerializer(queryset, many=True)
+        return Response({"data": serializer.data})
+    
+    def retrieve(self, request, *args, **kwargs):
+        """GET /admin/actions/{id} - Get action details."""
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response({"data": serializer.data})
+    
+    def update(self, request, *args, **kwargs):
+        """PUT /admin/actions/{id} - Update action metadata."""
+        instance = self.get_object()
+        serializer = ActionCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        action = CatalogService().update_action(
+            action_id=instance.id,
+            action_update_data=serializer.validated_data,
+            user=request.user
+        )
+        
+        if action is None:
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message=f"Action {instance.id} introuvable",
+                details={"action_id": instance.id}
+            )
+        
+        # Reload with relations
+        action = CatalogService().get_by_id(action.id)
+        response_serializer = ActionSerializer(action)
+
+        # MEDIUM-1 fix: Invalidate cache after write
+        _catalog_cache.clear()
+
+        return Response({"data": response_serializer.data})
+
+    @action(detail=True, methods=['put'], url_path='tags')
+    def update_tags(self, request, pk=None):
+        """PUT /admin/actions/{id}/tags - Update action tags."""
+        action = self.get_object()
+        serializer = ActionTagsUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        # Handle tag_ids or tag_names
+        tag_names = None
+        if serializer.validated_data.get('tag_names'):
+            tag_names = serializer.validated_data['tag_names']
+        elif serializer.validated_data.get('tag_ids'):
+            # Convert tag_ids to tag_names
+            tags = Tag.objects.filter(id__in=serializer.validated_data['tag_ids'])
+            tag_names = [tag.name for tag in tags]
+        
+        updated_action = CatalogService().sync_tags(action.id, tag_names or [])
+        
+        if updated_action is None:
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message=f"Action {action.id} introuvable",
+                details={"action_id": action.id}
+            )
+        
+        # Reload with relations
+        updated_action = CatalogService().get_by_id(updated_action.id)
+        response_serializer = ActionSerializer(updated_action)
+
+        # MEDIUM-1 fix: Invalidate cache after write
+        _catalog_cache.clear()
+
+        return Response({"data": response_serializer.data})
+
+    @action(detail=True, methods=['patch'], url_path='status')
+    def update_status(self, request, pk=None):
+        """PATCH /admin/actions/{id}/status - Update action status."""
+        action = self.get_object()
+        serializer = StatusUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        try:
+            updated_action = CatalogService().update_status(
+                action_id=action.id,
+                transition=serializer.validated_data['transition'],
+                user=request.user
+            )
+        except InvalidTransitionError as e:
+            raise InvalidStateError(
+                code="INVALID_STATE",
+                message=str(e),
+                details={
+                    "current_status": action.status,
+                    "transition": serializer.validated_data['transition']
+                }
+            )
+        
+        if updated_action is None:
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message=f"Action {action.id} introuvable",
+                details={"action_id": action.id}
+            )
+        
+        # Reload with relations
+        updated_action = CatalogService().get_by_id(updated_action.id)
+        response_serializer = ActionSerializer(updated_action)
+
+        # MEDIUM-1 fix: Invalidate cache after write
+        _catalog_cache.clear()
+
+        return Response({"data": response_serializer.data})
+
+    @action(detail=True, methods=['put'], url_path='execution-steps')
+    def update_execution_steps(self, request, pk=None):
+        """PUT /admin/actions/{id}/execution-steps - Update execution steps."""
+        action = self.get_object()
+        
+        steps = request.data.get('steps')
+        change_type_config = request.data.get('change_type_config')
+        
+        try:
+            updated_action = CatalogService().update_execution_steps(
+                action_id=action.id,
+                steps=steps,
+                change_type_config=change_type_config,
+                user=self.request.user
+            )
+        except ValueError as e:
+            raise InvalidStateError(
+                code="INVALID_STATE",
+                message=str(e),
+                details={
+                    "status": action.status,
+                    "required_status": "draft"
+                }
+            )
+        
+        if updated_action is None:
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message=f"Action {action.id} introuvable",
+                details={"action_id": action.id}
+            )
+        
+        # Reload with relations
+        updated_action = CatalogService().get_by_id(updated_action.id)
+        response_serializer = ActionSerializer(updated_action)
+
+        # MEDIUM-1 fix: Invalidate cache after write
+        _catalog_cache.clear()
+
+        return Response({"data": response_serializer.data})
+
+    @action(detail=False, methods=['get'], url_path='eligible-for-workflow')
+    def list_eligible_for_workflow(self, request):
+        """GET /admin/actions/eligible-for-workflow - List published actions eligible for workflows."""
+        queryset = Action.objects.filter(
+            status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.ACTION
+        ).with_tags().with_creator()
+
+        serializer = ActionSerializer(queryset, many=True)
+        return Response({"data": serializer.data})
+
+    @action(detail=True, methods=['put'], url_path='remediation-rules')
+    def update_remediation_rules(self, request, pk=None):
+        """PUT /admin/actions/{id}/remediation-rules - Update remediation rules."""
+        action = self.get_object()
+
+        remediation_rules = request.data.get('remediation_rules')
+
+        if remediation_rules is None:
+            raise BadRequestError(
+                code="BAD_REQUEST",
+                message="remediation_rules est requis",
+                details={}
+            )
+
+        # Only draft actions can have remediation_rules updated
+        if action.status != ActionStatus.DRAFT:
+            raise InvalidStateError(
+                code="INVALID_STATE",
+                message="Les règles de remédiation ne peuvent être modifiées que pour une action en brouillon",
+                details={
+                    "status": action.status,
+                    "required_status": "draft"
+                }
+            )
+
+        # Update remediation_rules
+        action.set_remediation_rules(remediation_rules)
+        action.save()
+
+        # Invalidate cache
+        _catalog_cache.clear()
+
+        # Reload with relations
+        action = CatalogService().get_by_id(action.id)
+        response_serializer = ActionSerializer(action)
+
+        return Response({"data": response_serializer.data})
+
+
+# Story 3.1 AC10: in-memory cache for catalog, TTL 5 min (300s)
+_catalog_cache: TTLCache[str, list[dict]] = TTLCache(maxsize=1000, ttl=300)
+
+
+def _get_cache_key(user_id, tags_filter, q=None, engine=None, environment=None, impact=None, category=None):
+    """Generate cache key for catalog query (matches FastAPI _get_cache_key)."""
+    user_part = f"user_{user_id}" if user_id else "anon"
+    tags_part = ",".join(sorted(tags_filter)) if tags_filter else "all"
+    q_part = q.strip() if q and q.strip() else ""
+    engine_part = engine or ""
+    env_part = environment or ""
+    impact_part = impact or ""
+    category_part = category or ""
+    return f"{user_part}_{tags_part}_q{q_part}_e{engine_part}_env{env_part}_i{impact_part}_cat{category_part}"
+
+
+class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for catalog actions (read-only, public with RBAC filtering).
+    Matches FastAPI /api/v1/catalog/actions endpoints.
+    """
+    queryset = Action.objects.filter(status=ActionStatus.PUBLISHED)
+    serializer_class = ActionSerializer
+    permission_classes = [OptionalUserPermission]
+    pagination_class = CustomPageNumberPagination  # HIGH-5 fix: Add pagination
+    
+    def get_queryset(self):
+        """Filter queryset based on query parameters and RBAC."""
+        queryset = Action.objects.filter(status=ActionStatus.PUBLISHED).with_tags().with_creator()
+        
+        # Filters
+        tags_filter = self.request.query_params.get('tags')
+        if tags_filter:
+            tag_names = [t.strip() for t in tags_filter.split(',')]
+            queryset = Action.objects.search_by_tags(tag_names)
+            queryset = queryset.filter(status=ActionStatus.PUBLISHED).with_tags().with_creator()
+        
+        category = self.request.query_params.get('category')
+        if category and category.lower() not in ('tout', 'all', 'mes-actions'):
+            # Category maps to tag
+            from catalog.models import normalize_tag_name
+            tag_name = normalize_tag_name(category)
+            if tag_name:
+                queryset = Action.objects.search_by_tags([tag_name])
+                queryset = queryset.filter(status=ActionStatus.PUBLISHED).with_tags().with_creator()
+        
+        q = self.request.query_params.get('q')
+        if q:
+            queryset = queryset.filter(
+                Q(name__icontains=q) | Q(description__icontains=q)
+            )
+        
+        engine = self.request.query_params.get('engine')
+        if engine:
+            queryset = queryset.filter(engine=engine)
+        
+        environment = self.request.query_params.get('environment')
+        if environment:
+            # HIGH-4 fix: Filter by environment in impact_rules using icontains
+            # impact_rules is stored as JSON string in TextField (CLOB)
+            # Match environment pattern in the JSON (e.g., "DEV", "PROD")
+            queryset = queryset.filter(impact_rules__icontains=environment)
+        
+        impact = self.request.query_params.get('impact')
+        if impact:
+            queryset = queryset.filter(default_impact_level=impact)
+        
+        # RBAC filtering (if user authenticated)
+        cumulative_permissions = _get_cumulative_permissions_for_user(self.request.user)
+        if cumulative_permissions:
+            # Convert queryset to list for filtering
+            actions_list = list(queryset)
+            filtered_actions = _filter_by_rbac(actions_list, cumulative_permissions)
+            # Get IDs of filtered actions and filter queryset
+            filtered_ids = [a.id if hasattr(a, 'id') else a.get('id') for a in filtered_actions]
+            queryset = queryset.filter(id__in=filtered_ids)
+        
+        return queryset.order_by('name')
+    
+    def list(self, request, *args, **kwargs):
+        """GET /catalog/actions - List published actions with cache."""
+        # Build cache key
+        user_id = request.user.id if request.user and request.user.is_authenticated else None
+        tags_filter = None
+        tags_param = request.query_params.get('tags')
+        if tags_param:
+            tags_filter = [t.strip() for t in tags_param.split(',')]
+        category = request.query_params.get('category')
+        if category and category.lower() not in ('tout', 'all', 'mes-actions'):
+            from catalog.models import normalize_tag_name
+            tag_name = normalize_tag_name(category)
+            if tag_name:
+                tags_filter = tags_filter or []
+                if tag_name not in tags_filter:
+                    tags_filter.append(tag_name)
+        
+        cache_key = _get_cache_key(
+            user_id=user_id,
+            tags_filter=tags_filter,
+            q=request.query_params.get('q'),
+            engine=request.query_params.get('engine'),
+            environment=request.query_params.get('environment'),
+            impact=request.query_params.get('impact'),
+            category=request.query_params.get('category')
+        )
+        
+        # Check cache
+        if cache_key in _catalog_cache:
+            return Response({"data": _catalog_cache[cache_key]})
+        
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        # Annotate execution_count
+        queryset = queryset.annotate(
+            execution_count=Count('executions', distinct=True)
+        )
+        
+        serializer = self.get_serializer(queryset, many=True)
+        data = serializer.data
+        
+        # Cache result
+        _catalog_cache[cache_key] = data
+        
+        return Response({"data": data})
+    
+    def retrieve(self, request, *args, **kwargs):
+        """GET /catalog/actions/{id} - Get published action details."""
+        # MEDIUM-8 fix: Removed dead code - queryset already filters by PUBLISHED status
+        # get_object() will raise 404 if action is not in queryset (i.e., not published)
+        instance = self.get_object()
+
+        # RBAC check (if user authenticated)
+        cumulative_permissions = _get_cumulative_permissions_for_user(self.request.user)
+        if cumulative_permissions:
+            if not _check_rbac_for_action(instance, cumulative_permissions):
+                raise NotFoundError(
+                    code="NOT_FOUND",
+                    message="Action non trouvée",
+                    details={"action_id": instance.id}
+                )
+        
+        serializer = self.get_serializer(instance)
+        response_data = serializer.data
+        
+        # Add can_execute and allowed_environments (if user authenticated)
+        if cumulative_permissions:
+            allowed_environments = cumulative_permissions.get('environments', [])
+            response_data['can_execute'] = len(allowed_environments) > 0
+            response_data['allowed_environments'] = allowed_environments
+        else:
+            response_data['can_execute'] = False
+            response_data['allowed_environments'] = []
+        
+        return Response({"data": response_data})
+    
+    @action(detail=True, methods=['get'], url_path='stats')
+    def get_stats(self, request, pk=None):
+        """GET /catalog/actions/{id}/stats - Get execution stats."""
+        # MEDIUM-8 fix: Removed dead code - queryset already filters by PUBLISHED
+        action = self.get_object()
+
+        # RBAC check if user is authenticated
+        cumulative_permissions = _get_cumulative_permissions_for_user(self.request.user)
+        if cumulative_permissions:
+            if not _check_rbac_for_action(action, cumulative_permissions):
+                raise NotFoundError(
+                    code="NOT_FOUND",
+                    message="Action non trouvée",
+                    details={"action_id": action.id}
+                )
+        
+        # TODO: Use ExecutionService.get_action_stats() when implemented
+        # For now, return None as per FastAPI contract (AC3: "Pas encore de donnees")
+        from executions.models import Execution, ExecutionStatus
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        # Calculate stats over last 30 days
+        date_from = timezone.now() - timedelta(days=30)
+        executions = Execution.objects.filter(
+            action_id=action.id,
+            created_at__gte=date_from
+        )
+        
+        total = executions.count()
+        if total == 0:
+            return Response({"data": None})
+        
+        completed = executions.filter(status=ExecutionStatus.COMPLETED).count()
+        failed = executions.filter(status=ExecutionStatus.FAILED).count()
+        
+        # Calculate success rate
+        success_rate = (completed / (completed + failed) * 100) if (completed + failed) > 0 else None
+        
+        # Calculate avg execution time (simplified - would need proper calculation)
+        avg_time_ms = None
+        
+        stats = {
+            "success_rate": round(success_rate, 2) if success_rate is not None else None,
+            "avg_execution_time_ms": avg_time_ms,
+            "total_executions": total,
+            "incidents_count": failed
+        }
+        
+        return Response({"data": stats})
+
+
+class TagViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for tags (read-only, public).
+    Matches FastAPI /api/v1/tags and /api/v1/catalog/tags endpoints.
+    """
+    queryset = Tag.objects.all()
+    serializer_class = TagSerializer
+    permission_classes = [OptionalUserPermission]
+    
+    def list(self, request, *args, **kwargs):
+        """GET /tags - List all tags."""
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({"data": serializer.data})
+    
+    @action(detail=False, methods=['get'], url_path='catalog')
+    def list_catalog_tags(self, request):
+        """GET /catalog/tags - List tags with action_count and RBAC filtering."""
+        # HIGH-3 fix: Implement action_count and RBAC filtering
+
+        # Get base queryset of published actions (filtered by RBAC if user authenticated)
+        actions_queryset = Action.objects.filter(status=ActionStatus.PUBLISHED)
+
+        # Apply RBAC filtering if user is authenticated
+        cumulative_permissions = _get_cumulative_permissions_for_user(request.user)
+        if cumulative_permissions and cumulative_permissions.get('actions_type') != 'all':
+            # Get allowed action IDs based on RBAC
+            action_ids = set(cumulative_permissions.get('action_ids', []) or [])
+            tag_patterns = set(cumulative_permissions.get('tag_patterns', []) or [])
+
+            if tag_patterns:
+                # Filter by tag patterns - get actions that have matching tags
+                from catalog.models import ActionTag
+                matching_action_ids = ActionTag.objects.filter(
+                    tag__name__in=tag_patterns,
+                    action__status=ActionStatus.PUBLISHED
+                ).values_list('action_id', flat=True)
+                action_ids = action_ids.union(set(matching_action_ids))
+
+            actions_queryset = actions_queryset.filter(id__in=action_ids)
+
+        # Get tags with action_count for visible actions only
+        from catalog.models import ActionTag
+        visible_action_ids = actions_queryset.values_list('id', flat=True)
+
+        # Annotate tags with action_count from visible actions
+        queryset = Tag.objects.filter(
+            actiontag__action_id__in=visible_action_ids
+        ).annotate(
+            action_count=Count('actiontag', filter=Q(actiontag__action_id__in=visible_action_ids))
+        ).filter(action_count__gt=0).order_by('name')
+
+        # Build response data with action_count
+        data = []
+        for tag in queryset:
+            data.append({
+                'id': tag.id,
+                'name': tag.name,
+                'action_count': tag.action_count,
+                'created_at': tag.created_at.isoformat() if tag.created_at else None
+            })
+
+        return Response({"data": data})

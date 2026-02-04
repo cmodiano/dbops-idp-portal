@@ -4,6 +4,7 @@ Handles creation of immutable audit entries with context enrichment.
 """
 
 import csv
+import json
 import logging
 from datetime import datetime
 from io import StringIO
@@ -151,6 +152,15 @@ class AuditService:
         
         # Write rows
         for entry in queryset:
+            # Deserialize JSON details for better readability
+            details_formatted = ''
+            if entry.details:
+                try:
+                    details_dict = json.loads(entry.details)
+                    details_formatted = json.dumps(details_dict, indent=2)
+                except (json.JSONDecodeError, TypeError):
+                    details_formatted = entry.details
+            
             writer.writerow([
                 entry.timestamp.isoformat(),
                 entry.user_id,
@@ -158,7 +168,7 @@ class AuditService:
                 entry.entity_type,
                 entry.entity_id,
                 entry.ip_address or '',
-                entry.details or '',
+                details_formatted,
             ])
         
         output.seek(0)

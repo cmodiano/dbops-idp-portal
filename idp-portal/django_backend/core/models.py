@@ -13,6 +13,37 @@ class AuditActionType(models.TextChoices):
     ACTION_PUBLISHED = 'ACTION_PUBLISHED', 'Action Published'
     ACTION_DISABLED = 'ACTION_DISABLED', 'Action Disabled'
     ACTION_ENABLED = 'ACTION_ENABLED', 'Action Enabled'
+    ACTION_DELETED = 'ACTION_DELETED', 'Action Deleted'
+    # Profile types (added for ProfileService)
+    PROFILE_CREATED = 'PROFILE_CREATED', 'Profile Created'
+    PROFILE_UPDATED = 'PROFILE_UPDATED', 'Profile Updated'
+    PROFILE_DELETED = 'PROFILE_DELETED', 'Profile Deleted'
+    # Integration types (added for IntegrationService)
+    INTEGRATION_CREATED = 'INTEGRATION_CREATED', 'Integration Created'
+    INTEGRATION_UPDATED = 'INTEGRATION_UPDATED', 'Integration Updated'
+    INTEGRATION_DELETED = 'INTEGRATION_DELETED', 'Integration Deleted'
+    # Execution types (added for ExecutionService)
+    EXECUTION_SUBMITTED = 'EXECUTION_SUBMITTED', 'Execution Submitted'
+    EXECUTION_RUNNING = 'EXECUTION_RUNNING', 'Execution Running'
+    EXECUTION_COMPLETED = 'EXECUTION_COMPLETED', 'Execution Completed'
+    EXECUTION_FAILED = 'EXECUTION_FAILED', 'Execution Failed'
+    EXECUTION_CANCELLED = 'EXECUTION_CANCELLED', 'Execution Cancelled'
+    EXECUTION_PENDING_APPROVAL = 'EXECUTION_PENDING_APPROVAL', 'Execution Pending Approval'
+    EXECUTION_REJECTED = 'EXECUTION_REJECTED', 'Execution Rejected'
+    # Scheduled execution types (added for SchedulingService)
+    SCHEDULED_EXECUTION_CREATED = 'SCHEDULED_EXECUTION_CREATED', 'Scheduled Execution Created'
+    SCHEDULED_EXECUTION_RECURRING_CREATED = 'SCHEDULED_EXECUTION_RECURRING_CREATED', 'Scheduled Execution Recurring Created'
+    SCHEDULED_EXECUTION_EXECUTED = 'SCHEDULED_EXECUTION_EXECUTED', 'Scheduled Execution Executed'
+    SCHEDULED_EXECUTION_CANCELLED = 'SCHEDULED_EXECUTION_CANCELLED', 'Scheduled Execution Cancelled'
+    SCHEDULED_EXECUTION_RECURRING_DISABLED = 'SCHEDULED_EXECUTION_RECURRING_DISABLED', 'Scheduled Execution Recurring Disabled'
+    # User types (added for AuthService)
+    USER_CREATED = 'USER_CREATED', 'User Created'
+    USER_UPDATED = 'USER_UPDATED', 'User Updated'
+    USER_LOGIN = 'USER_LOGIN', 'User Login'
+    USER_LOGOUT = 'USER_LOGOUT', 'User Logout'
+    USER_REFRESH = 'USER_REFRESH', 'User Refresh Token'
+    FAVORITE_ADDED = 'FAVORITE_ADDED', 'Favorite Added'
+    FAVORITE_REMOVED = 'FAVORITE_REMOVED', 'Favorite Removed'
     # Additional types added in later migrations (V028-V035, V039-V041)
     # Note: Full list would include all types from migrations, but base types are sufficient for model
 
@@ -23,6 +54,9 @@ class AuditEntityType(models.TextChoices):
     USER = 'user', 'User'
     PERMISSION = 'permission', 'Permission'
     EXECUTION = 'execution', 'Execution'
+    INTEGRATION = 'integration', 'Integration'
+    SCHEDULED_EXECUTION = 'scheduled_execution', 'Scheduled Execution'
+    PROFILE = 'profile', 'Profile'
     # Additional types may exist in later migrations
 
 
@@ -63,6 +97,7 @@ class AuditLogManager(models.Manager):
             entity_id=entity_id,
             details=details_json,
             ip_address=ip_address,
+            correlation_id=correlation_id,
         )
     
     def list_by_entity(self, entity_type: str, entity_id: int):
@@ -131,6 +166,7 @@ class AuditLog(models.Model):
     # CLOB field - using TextField with JSON serialization helper
     details = models.TextField(null=True, blank=True, db_column='DETAILS')
     ip_address = models.CharField(max_length=45, null=True, blank=True, db_column='IP_ADDRESS')
+    correlation_id = models.CharField(max_length=64, null=True, blank=True, db_column='CORRELATION_ID')
     
     # Custom manager
     objects = AuditLogManager()

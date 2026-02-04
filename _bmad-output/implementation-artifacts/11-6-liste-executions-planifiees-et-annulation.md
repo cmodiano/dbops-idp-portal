@@ -381,7 +381,7 @@ async def list_scheduled_executions(
             se.ACTION_ID,
             ac.NAME AS ACTION_NAME,
             se.USER_ID,
-            u.NAME AS USER_NAME,
+            u.DISPLAY_NAME AS USER_NAME,
             se.ENVIRONMENT,
             se.SCHEDULED_AT,
             se.STATUS,
@@ -510,19 +510,17 @@ export async function listScheduledExecutions(
   const queryString = params.toString();
   const url = `/api/v1/scheduled-executions${queryString ? `?${queryString}` : ''}`;
 
-  const response = await apiFetch<{ data: ScheduledExecutionListItem[] }>(url);
-  return response.data;
+  return apiFetch<ScheduledExecutionListItem[]>(url);
 }
 
 export async function cancelScheduledExecution(id: number): Promise<ScheduledExecutionListItem> {
-  const response = await apiFetch<{ data: ScheduledExecutionListItem }>(
+  return apiFetch<ScheduledExecutionListItem>(
     `/api/v1/scheduled-executions/${id}`,
     {
       method: 'PATCH',
       body: JSON.stringify({ status: 'cancelled' }),
     }
   );
-  return response.data;
 }
 ```
 
@@ -668,8 +666,8 @@ const ScheduledExecutionsPage: React.FC = () => {
       key: 'status',
       render: (status: string) => {
         const statusConfig = {
-          pending: { color: 'blue', text: 'En attente' },
-          executed: { color: 'green', text: 'Exécutée' },
+          pending: { color: 'processing', text: 'En attente' },
+          executed: { color: 'success', text: 'Exécutée' },
           cancelled: { color: 'default', text: 'Annulée' },
         };
         const config = statusConfig[status as keyof typeof statusConfig];
