@@ -309,35 +309,36 @@ class ProfileService:
         Returns:
             Dict with aggregated action and target permissions
         """
-        # Find profiles matching user's AD groups
-        profiles = Profile.objects.find_by_ad_groups(ad_groups)
+        # Find profiles matching user's AD groups with select_related to avoid N+1 queries
+        # Note: OneToOneField relations use select_related, not prefetch_related
+        profiles = Profile.objects.find_by_ad_groups(ad_groups).select_related(
+            'profileactionpermission', 'profiletargetpermission'
+        )
         
         # Aggregate action permissions
         action_permissions = []
         for profile in profiles:
-            try:
-                perm = ProfileActionPermission.objects.get(profile=profile)
+            # Use prefetched permissions instead of .get() to avoid N+1
+            perm = getattr(profile, 'profileactionpermission', None)
+            if perm:
                 action_permissions.append({
                     'actions_type': perm.permission_type.lower(),
                     'action_ids': perm.get_action_ids(),
                     'tag_patterns': perm.get_tag_patterns(),
                     'environments': perm.get_environments(),
                 })
-            except ProfileActionPermission.DoesNotExist:
-                pass
         
         # Aggregate target permissions
         target_permissions = []
         for profile in profiles:
-            try:
-                perm = ProfileTargetPermission.objects.get(profile=profile)
+            # Use prefetched permissions instead of .get() to avoid N+1
+            perm = getattr(profile, 'profiletargetpermission', None)
+            if perm:
                 target_permissions.append({
                     'targets_type': perm.permission_type.lower(),
                     'target_names': perm.get_target_names(),
                     'target_patterns': perm.get_target_patterns(),
                 })
-            except ProfileTargetPermission.DoesNotExist:
-                pass
         
         return {
             'action_permissions': action_permissions,

@@ -243,12 +243,21 @@ class ExecutionService:
             action_id: Optional action ID filter
             date_from: Optional date_from filter
             date_to: Optional date_to filter
-            limit: Optional limit
-            offset: Offset for pagination
+            limit: Optional limit (must be > 0)
+            offset: Offset for pagination (must be >= 0)
         
         Returns:
             QuerySet of executions
+        
+        Raises:
+            ValueError: If limit or offset are invalid
         """
+        # Validate pagination parameters
+        if offset < 0:
+            raise ValueError("offset must be >= 0")
+        if limit is not None and limit <= 0:
+            raise ValueError("limit must be > 0")
+        
         queryset = Execution.objects.list_by_user(user_id).select_related('action', 'user')
         
         if status:

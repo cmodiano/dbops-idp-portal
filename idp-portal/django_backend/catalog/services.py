@@ -303,12 +303,14 @@ class CatalogService:
         
         return action
     
-    def delete_action(self, action_id: int):
+    @transaction.atomic
+    def delete_action(self, action_id: int, user=None):
         """
         Delete an action after checking dependencies.
         
         Args:
             action_id: ID of the action to delete
+            user: Optional user instance for audit
         
         Returns:
             True if deleted, False if not found
@@ -331,7 +333,26 @@ class CatalogService:
         if running_executions:
             raise ValueError("Impossible de supprimer une action avec des exécutions en cours")
         
+        # Store action details for audit before deletion
+        action_name = action.name
+        action_status = action.status
+        
+        # Delete the action
         action.delete()
+        
+        # Audit
+        if user:
+            AuditService.create_entry(
+                user_id=str(user.id),
+                action_type='ACTION_DELETED',
+                entity_type='action',
+                entity_id=action_id,
+                details={
+                    'name': action_name,
+                    'status': action_status,
+                }
+            )
+        
         return True
     
     def add_tags(self, action_id: int, tag_names: list[str]):
