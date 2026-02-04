@@ -171,10 +171,10 @@ development_status:
     epic-m: in-progress
     m-1-bootstrap-projet-django-et-drf: done # Code review 2026-02-03: 1 CRITICAL + 4 HIGH + 4 MEDIUM fixes applied - format réponse FastAPI corrigé, fichiers manquants créés, tests améliorés
     m-2-modeles-django-et-migrations-schema-oracle: done # Code review 2026-02-03: 10 issues fixed (3 HIGH + 5 MEDIUM + 2 LOW) - imports json optimisés, logging ajouté, migrations générées
-    m-3-couche-donnees-repositories-vers-orm-django: done
-    m-4-api-rest-catalogue-et-admin-actions-tags: backlog
-    m-5-api-rest-profils-et-permissions: backlog
-    m-6-api-rest-auth-health-integrations: backlog
+    m-3-couche-donnees-repositories-vers-orm-django: done # Code review 2026-02-03 (adversarial): 10 fixes applied (1 CRITICAL + 3 HIGH + 4 MEDIUM + 2 LOW) - correlation_id ajouté, types audit PROFILE_*/INTEGRATION_* corrigés avec enum, prefetch_related pour OneToOneField, validation user_id, export CSV JSON formaté, tests README créé, tous types hardcodés remplacés par enum. Code review 2026-02-03 (fourth): 10 additional fixes (2 CRITICAL + 4 HIGH + 4 MEDIUM) - tous types audit hardcodés remplacés par enums, correlation_id ajouté aux méthodes execution, entity_type corrigés, types manquants ajoutés aux enums
+    m-4-api-rest-catalogue-et-admin-actions-tags: done # Code review 2026-02-04: 9 issues fixed (5 HIGH + 4 MEDIUM) - remediation-rules endpoint, list_catalog_tags, environment filter, pagination, cache invalidation, N+1 fix, permissions improved. Action items à traiter dans environnement adéquat.
+    m-5-api-rest-profils-et-permissions: done # Code review 2026-02-04: 10 issues fixed (2 CRITICAL + 3 HIGH + 4 MEDIUM + 1 LOW) - 403/401 tests added, cache invalidation tested, user parameter fixed, code duplication removed
+    m-6-api-rest-auth-health-integrations: ready-for-dev # Story created 2026-02-04
     m-7-authentification-saml-et-securite: backlog
     m-8-middleware-logging-observabilite: backlog
     m-9-tests-unitaires-et-integration-parite: backlog
@@ -182,6 +182,7 @@ development_status:
     epic-m-retrospective: optional
     # === Epic 12: Documentation technique (post-Django) ===
     # À réaliser après le passage à Django pour documenter la cible finale.
+    # ⚠️ ATTENTION: Cet epic ne doit être démarré qu'après la complétion de l'Epic M (Migration Django)
     epic-12: backlog
     12-1-documentation-backend-implementation: backlog # Documentation détaillée de l'implémentation backend
     12-2-documentation-frontend-implementation: backlog # Documentation détaillée de l'implémentation frontend
