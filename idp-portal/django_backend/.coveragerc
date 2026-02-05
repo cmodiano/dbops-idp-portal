@@ -1,0 +1,42 @@
+# Coverage.py configuration
+# Story M.9: Tests unitaires et d'intégration (parité avec FastAPI)
+
+[run]
+source = .
+branch = True
+omit =
+    */migrations/*
+    */tests/*
+    */__init__.py
+    */apps.py
+    manage.py
+    idp_backend/settings.py
+    idp_backend/wsgi.py
+    idp_backend/asgi.py
+    tests/*
+    .venv/*
+    venv/*
+
+[report]
+# Minimum coverage percentage required
+fail_under = 80
+precision = 2
+show_missing = True
+skip_covered = False
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if self.debug:
+    if settings.DEBUG
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    class .*\bProtocol\):
+    @(abc\.)?abstractmethod
+
+[html]
+directory = htmlcov
+title = Django Backend Test Coverage
+
+[xml]
+output = coverage.xml
