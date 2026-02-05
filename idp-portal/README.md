@@ -5,8 +5,10 @@ Internal Developer Platform pour les operations base de donnees.
 ## Stack
 
 - **Frontend** : React 19 + Vite + Ant Design 6 + TypeScript
-- **Backend** : FastAPI + python-oracledb (mode Thin) + Pydantic v2
-- **Base de donnees** : Oracle (dev local via Docker)
+- **Backend** : Django 5.1+ / Django REST Framework 3.15+ (officiel depuis février 2026)
+- **Base de donnees** : Oracle 19c+ (dev local via Docker)
+
+> **Note:** Le backend FastAPI (legacy) est archivé dans la branche `legacy/fastapi-final`. Voir [docs/fastapi-to-django-migration.md](docs/fastapi-to-django-migration.md) pour les détails de la migration.
 
 ## Environnement de developpement
 
@@ -60,20 +62,42 @@ Le script appelle `flyway migrate` (CLI ou Docker). Configuration : `flyway.conf
 
 **Installation vierge** : Les migrations sont conçues pour une base vide (ex. Oracle Docker). Pour une base déjà migrée avec l’ancien système (SCHEMA_VERSION, séquences), voir la doc [Flyway baseline](https://documentation.red-gate.com/flyway/configure/baseline) ou contacter l’équipe.
 
-### Backend
+### Backend (Django)
 
-Pour Oracle Docker, definir au minimum `ORACLE_DSN=localhost:1521/FREEPDB1` (voir section Oracle ci-dessus). Copier les cles depuis `.env.example` dans un fichier `.env` a la racine de `idp-portal/`.
+Pour Oracle Docker, définir les variables d'environnement Oracle (voir section Oracle ci-dessus).
 
 ```bash
-cd backend
+cd django_backend
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
-# Optionnel : charger .env (ORACLE_DSN, ORACLE_USER, ORACLE_PASSWORD) si pas deja exporte
-fastapi dev app/main.py
+pip install -r requirements.txt
+
+# Variables d'environnement (ou dans .env)
+export ORACLE_HOST=localhost
+export ORACLE_PORT=1521
+export ORACLE_SERVICE_NAME=FREEPDB1
+export ORACLE_USER=idp_app
+export ORACLE_PASSWORD=changeme
+
+# Démarrer le serveur de développement
+python manage.py runserver
 ```
 
-Le backend lit `oracle_dsn`, `oracle_user`, `oracle_password` (variables d'environnement sans prefix : `ORACLE_DSN`, `ORACLE_USER`, `ORACLE_PASSWORD`). Valeurs par defaut dans `backend/app/core/config.py` : `localhost:1521/FREEPDB1`, `idp_app`, `changeme`. Pour Oracle Docker (image Free), utiliser le service `FREEPDB1` : `localhost:1521/FREEPDB1`.
+Le backend Django utilise le même schéma Oracle que l'ancien backend FastAPI. Pas de migration de données nécessaire.
+
+**Configuration production :** Voir `django_backend/.env.production.template` et `django_backend/deployment/`.
+
+### Backend FastAPI (Legacy - Archivé)
+
+> **ATTENTION:** Le backend FastAPI est archivé. Utiliser Django pour tout nouveau développement.
+
+Le code FastAPI reste disponible dans la branche `legacy/fastapi-final` pour référence :
+
+```bash
+git checkout legacy/fastapi-final
+cd backend
+# ... (voir documentation legacy)
+```
 
 ### Frontend
 
@@ -162,11 +186,20 @@ Le flag `is_business_profile` est retourné par l'API `/auth/me` et conditionne 
 
 ## Structure
 
-- `frontend/` : Application React
-- `backend/` : API FastAPI
-- `database/` : Migrations SQL (`migrations/`), script d'init utilisateur (`init/`)
-- `scripts/` : Scripts utilitaires (`run_migrations.sh`, `seed_dev_data.py`, etc.)
+- `frontend/` : Application React (inchangée)
+- `django_backend/` : API Django REST Framework (officiel)
+- `backend/` : API FastAPI (legacy - archivé dans branche `legacy/fastapi-final`)
+- `database/` : Migrations SQL Flyway (`migrations/`), script d'init utilisateur (`init/`)
+- `scripts/` : Scripts utilitaires (`run_migrations.sh`, `seed_dev_data.py`, `post-switchover-validation.sh`)
+- `docs/` : Documentation technique (migration, déploiement, architecture)
 - `docker-compose.yml` : Service Oracle pour le dev local
+
+### Documentation
+
+- [Plan de bascule FastAPI → Django](docs/migration-switchover-plan.md)
+- [Récapitulatif migration](docs/fastapi-to-django-migration.md)
+- [Parité schéma base de données](docs/schema-differences.md)
+- [Templates de communication](docs/communication-templates.md)
 
 ## API Integrations — champ config
 

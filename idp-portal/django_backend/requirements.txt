@@ -47,3 +47,6 @@ pytest-benchmark>=4.0.0
 
 # Code Coverage (Story M.9)
 coverage[toml]>=7.6.0
+
+# Production Server (Story M.10)
+gunicorn>=22.0.0  # WSGI server for production deployment
