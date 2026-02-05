@@ -327,3 +327,154 @@ class DashboardFilterOptionsView(APIView):
             }
         )
 
+
+def _stats_for_queryset(qs) -> dict:
+    """
+    Compute ComparisonStats for a queryset of executions.
+    """
+    execution_count = qs.count()
+    incident_count = qs.filter(status=ExecutionStatus.FAILED).count()
+
+    finished = qs.filter(status__in=[ExecutionStatus.COMPLETED, ExecutionStatus.FAILED]).count()
+    completed = qs.filter(status=ExecutionStatus.COMPLETED).count()
+    success_rate = round((completed / finished) * 100, 2) if finished > 0 else None
+
+    # Average execution time in seconds for completed executions (only if timestamps are present)
+    durations = []
+    for started_at, completed_at in qs.filter(
+        status=ExecutionStatus.COMPLETED,
+        started_at__isnull=False,
+        completed_at__isnull=False,
+    ).values_list("started_at", "completed_at"):
+        try:
+            delta = (completed_at - started_at).total_seconds()
+            if delta >= 0:
+                durations.append(delta)
+        except Exception:
+            continue
+
+    avg_time = round(sum(durations) / len(durations), 2) if durations else None
+
+    return {
+        "success_rate": success_rate,
+        "avg_time": avg_time,
+        "execution_count": int(execution_count or 0),
+        "incident_count": int(incident_count or 0),
+    }
+
+
+def _delta_pct(v1: float | int | None, v2: float | int | None) -> float | None:
+    if v1 is None or v2 is None:
+        return None
+    try:
+        v1f = float(v1)
+        v2f = float(v2)
+    except (ValueError, TypeError):
+        return None
+    if v1f == 0:
+        return None
+    return round(((v2f - v1f) / v1f) * 100.0, 2)
+
+
+class DashboardCompareView(APIView):
+    """
+    GET /dashboard/compare (Story 8.6)
+
+    Query params:
+    - dimension: technology|environment|period
+    - value1, value2: labels / values
+    - metrics: optional repeated param (ignored for now; we compute all)
+    - days: for technology/environment
+    - period1_start, period1_end, period2_start, period2_end: for period dimension (YYYY-MM-DD)
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        dimension = (request.query_params.get("dimension") or "").strip()
+        value1 = (request.query_params.get("value1") or "").strip()
+        value2 = (request.query_params.get("value2") or "").strip()
+
+        if dimension not in ("technology", "environment", "period"):
+            raise BadRequestError(
+                code="BAD_REQUEST",
+                message="dimension invalide",
+                details={"dimension": dimension},
+            )
+        if not value1 or not value2:
+            raise BadRequestError(
+                code="BAD_REQUEST",
+                message="value1 et value2 sont requis",
+                details={"value1": value1, "value2": value2},
+            )
+
+        qs_base = Execution.objects.select_related("action")
+        if not _is_dba_or_dbops(request.user):
+            qs_base = qs_base.filter(user_id=request.user.id)
+
+        if dimension in ("technology", "environment"):
+            days = _parse_int(request.query_params.get("days"), 14, name="days")
+            if days <= 0 or days > 3650:
+                raise BadRequestError(code="BAD_REQUEST", message="days invalide", details={"days": days})
+            date_from = timezone.now() - timedelta(days=days)
+
+            def _side_qs(value: str):
+                qs = qs_base.filter(created_at__gte=date_from)
+                if dimension == "technology":
+                    qs = qs.filter(action__engine=value)
+                else:
+                    qs = qs.filter(environment=value)
+                return qs
+
+            qs1 = _side_qs(value1)
+            qs2 = _side_qs(value2)
+
+        else:
+            p1s = _parse_date(request.query_params.get("period1_start"), name="period1_start")
+            p1e = _parse_date(request.query_params.get("period1_end"), name="period1_end")
+            p2s = _parse_date(request.query_params.get("period2_start"), name="period2_start")
+            p2e = _parse_date(request.query_params.get("period2_end"), name="period2_end")
+
+            if not (p1s and p1e and p2s and p2e):
+                raise BadRequestError(
+                    code="BAD_REQUEST",
+                    message="period1_start/period1_end/period2_start/period2_end sont requis",
+                    details={
+                        "period1_start": request.query_params.get("period1_start"),
+                        "period1_end": request.query_params.get("period1_end"),
+                        "period2_start": request.query_params.get("period2_start"),
+                        "period2_end": request.query_params.get("period2_end"),
+                    },
+                )
+
+            p1_start_dt = timezone.make_aware(datetime.combine(p1s, datetime.min.time()))
+            p1_end_excl = timezone.make_aware(datetime.combine(p1e + timedelta(days=1), datetime.min.time()))
+            p2_start_dt = timezone.make_aware(datetime.combine(p2s, datetime.min.time()))
+            p2_end_excl = timezone.make_aware(datetime.combine(p2e + timedelta(days=1), datetime.min.time()))
+
+            qs1 = qs_base.filter(created_at__gte=p1_start_dt, created_at__lt=p1_end_excl)
+            qs2 = qs_base.filter(created_at__gte=p2_start_dt, created_at__lt=p2_end_excl)
+
+        v1_stats = _stats_for_queryset(qs1)
+        v2_stats = _stats_for_queryset(qs2)
+
+        deltas = {
+            "success_rate": _delta_pct(v1_stats["success_rate"], v2_stats["success_rate"]),
+            "avg_time": _delta_pct(v1_stats["avg_time"], v2_stats["avg_time"]),
+            "execution_count": _delta_pct(v1_stats["execution_count"], v2_stats["execution_count"]),
+            "incident_count": _delta_pct(v1_stats["incident_count"], v2_stats["incident_count"]),
+        }
+
+        return Response(
+            {
+                "data": {
+                    "dimension": dimension,
+                    "value1": value1,
+                    "value2": value2,
+                    "value1_stats": v1_stats,
+                    "value2_stats": v2_stats,
+                    "deltas": deltas,
+                }
+            }
+        )
+

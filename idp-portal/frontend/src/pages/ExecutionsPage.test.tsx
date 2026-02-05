@@ -714,8 +714,11 @@ describe('ExecutionsPage', () => {
       expect(screen.queryByRole('tab', { name: /Toutes les exécutions/i })).not.toBeInTheDocument();
     });
 
-    it('calls listExecutions with scope=mine by default (AC3)', async () => {
-      renderWithTheme(<ExecutionsPage />);
+    it('calls listExecutions with scope=mine by default for non-DBA (AC3)', async () => {
+      mockAuthSession('CLIENT');
+      await act(async () => {
+        renderWithProviders();
+      });
 
       await waitFor(() => {
         // Story 9.10: listExecutions now also takes filters
@@ -818,19 +821,16 @@ describe('ExecutionsPage', () => {
         expect(screen.getByRole('tab', { name: /Toutes les exécutions/i })).toBeInTheDocument();
       });
 
-      // Initially scope=mine, should NOT have "Utilisateur" column
-      expect(screen.queryByText('Utilisateur')).not.toBeInTheDocument();
+      // DBA default is scope=all, so "Utilisateur" column should be visible
+      expect(screen.getByText('Utilisateur')).toBeInTheDocument();
+      expect(screen.getByText('John Doe')).toBeInTheDocument();
 
-      // Switch to scope=all
-      await user.click(screen.getByRole('tab', { name: /Toutes les exécutions/i }));
+      // Switch to scope=mine — "Utilisateur" column should disappear
+      await user.click(screen.getByRole('tab', { name: /Mes exécutions/i }));
 
       await waitFor(() => {
-        // Now should have "Utilisateur" column header
-        expect(screen.getByText('Utilisateur')).toBeInTheDocument();
+        expect(screen.queryByText('Utilisateur')).not.toBeInTheDocument();
       });
-
-      // And should display user_display_name value
-      expect(screen.getByText('John Doe')).toBeInTheDocument();
     });
 
     it('displays "Utilisateur inconnu" when user_display_name is null (AC9)', async () => {
@@ -884,7 +884,7 @@ describe('ExecutionsPage', () => {
       });
     });
 
-    it('"Mes exécutions" tab is active by default', async () => {
+    it('"Toutes les exécutions" tab is active by default for DBA/DBOPS', async () => {
       mockAuthSession('DBA');
 
       await act(async () => {
@@ -892,8 +892,8 @@ describe('ExecutionsPage', () => {
       });
 
       await waitFor(() => {
-        const mineTab = screen.getByRole('tab', { name: /Mes exécutions/i });
-        expect(mineTab).toHaveAttribute('aria-selected', 'true');
+        const allTab = screen.getByRole('tab', { name: /Toutes les exécutions/i });
+        expect(allTab).toHaveAttribute('aria-selected', 'true');
       });
     });
   });
@@ -923,8 +923,11 @@ describe('ExecutionsPage', () => {
       });
     });
 
-    it('fetchExecutionStats is called with scope=mine by default (AC3)', async () => {
-      renderWithTheme(<ExecutionsPage />);
+    it('fetchExecutionStats is called with scope=mine by default for non-DBA (AC3)', async () => {
+      mockAuthSession('CLIENT');
+      await act(async () => {
+        renderWithProviders();
+      });
 
       await waitFor(() => {
         // Story 9.10: fetchExecutionStats now also takes filters
@@ -932,22 +935,14 @@ describe('ExecutionsPage', () => {
       });
     });
 
-    it('fetchExecutionStats is called with scope=all when tab changes (AC3)', async () => {
+    it('fetchExecutionStats is called with scope=all by default for DBA (AC3)', async () => {
       mockAuthSession('DBA');
-      const user = userEvent.setup();
-
       await act(async () => {
         renderWithProviders();
       });
 
       await waitFor(() => {
-        expect(screen.getByRole('tab', { name: /Toutes les exécutions/i })).toBeInTheDocument();
-      });
-
-      await user.click(screen.getByRole('tab', { name: /Toutes les exécutions/i }));
-
-      await waitFor(() => {
-        // Story 9.10: fetchExecutionStats now also takes filters
+        // Story 9.10: DBA default is "Toutes les exécutions" → scope=all
         expect(executionService.fetchExecutionStats).toHaveBeenCalledWith('all', expect.any(Object));
       });
     });

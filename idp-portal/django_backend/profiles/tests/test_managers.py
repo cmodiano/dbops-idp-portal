@@ -73,9 +73,15 @@ class TestProfileManager(TestCase):
         self.assertEqual(results.count(), 0)
 
     def test_find_by_ad_groups_partial_match(self):
-        """Test find_by_ad_groups() with partial AD group string (no match)."""
-        results = Profile.objects.find_by_ad_groups(['DBA'])  # Not full CN string
-        self.assertEqual(results.count(), 0)
+        """
+        Test find_by_ad_groups() with short group/profile code.
+
+        In production payloads, groups may be provided as short values (e.g. "DBA")
+        rather than full DNs. We accept matching by Profile.name for robustness.
+        """
+        results = Profile.objects.find_by_ad_groups(['DBA'])
+        self.assertEqual(results.count(), 1)
+        self.assertEqual(results[0].name, 'DBA')
 
     def test_list_with_permissions_count_no_permissions(self):
         """Test list_with_permissions_count() when profile has no permissions."""

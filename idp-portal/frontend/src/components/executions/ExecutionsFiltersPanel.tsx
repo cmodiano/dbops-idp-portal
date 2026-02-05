@@ -1,19 +1,19 @@
 /**
  * ExecutionsFiltersPanel - Advanced filters for Executions page (Story 9.10, AC3, AC8).
  *
- * Displays filter controls:
+ * Displays filter controls (apply on change, no Apply button):
  * - Date range (RangePicker with presets)
  * - Action (searchable Select)
  * - Technology/Engine (Select)
  * - Tags (multi-select)
  * - Status (Select)
  * - Environment (Select)
- * - Apply/Reset buttons with active filter count badge
+ * - Reset button with active filter count badge
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, Form, Row, Col, DatePicker, Select, Button, Badge, Space, theme } from 'antd';
-import { FilterOutlined, ClearOutlined, SearchOutlined } from '@ant-design/icons';
+import { FilterOutlined, ClearOutlined } from '@ant-design/icons';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
 import type { ExecutionFilters, ActionListItem } from '../../types/api';
@@ -80,19 +80,18 @@ export function ExecutionsFiltersPanel({
 }: ExecutionsFiltersPanelProps) {
   const { token } = theme.useToken();
 
-  // Local state for form values (before Apply)
-  const [localFilters, setLocalFilters] = useState<ExecutionFilters>(filters);
-
   // Tags and actions for selects
   const [tags, setTags] = useState<string[]>([]);
   const [tagsLoading, setTagsLoading] = useState(false);
   const [actions, setActions] = useState<ActionListItem[]>([]);
   const [actionsLoading, setActionsLoading] = useState(false);
 
-  // Sync local filters when external filters change
-  useEffect(() => {
-    setLocalFilters(filters);
-  }, [filters]);
+  const apply = useCallback(
+    (newFilters: ExecutionFilters) => {
+      onApplyFilters(newFilters);
+    },
+    [onApplyFilters]
+  );
 
   // Load tags on mount
   useEffect(() => {
@@ -134,32 +133,19 @@ export function ExecutionsFiltersPanel({
 
   // Convert date strings to Dayjs for RangePicker
   const dateRangeValue: [Dayjs, Dayjs] | null =
-    localFilters.start_date && localFilters.end_date
-      ? [dayjs(localFilters.start_date), dayjs(localFilters.end_date)]
+    filters.start_date && filters.end_date
+      ? [dayjs(filters.start_date), dayjs(filters.end_date)]
       : null;
 
   const handleDateRangeChange = (dates: [Dayjs | null, Dayjs | null] | null) => {
-    setLocalFilters({
-      ...localFilters,
+    apply({
+      ...filters,
       start_date: dates?.[0]?.format('YYYY-MM-DD') || null,
       end_date: dates?.[1]?.format('YYYY-MM-DD') || null,
     });
   };
 
-  const handleApply = () => {
-    onApplyFilters(localFilters);
-  };
-
   const handleReset = () => {
-    setLocalFilters({
-      start_date: null,
-      end_date: null,
-      action_id: null,
-      engine: null,
-      tags: null,
-      status: null,
-      environment: null,
-    });
     onResetFilters();
   };
 
@@ -207,8 +193,8 @@ export function ExecutionsFiltersPanel({
                 showSearch
                 optionFilterProp="label"
                 loading={actionsLoading}
-                value={localFilters.action_id}
-                onChange={(value) => setLocalFilters({ ...localFilters, action_id: value ?? null })}
+                value={filters.action_id}
+                onChange={(value) => apply({ ...filters, action_id: value ?? null })}
                 options={actions.map((a) => ({ label: a.name, value: a.id }))}
                 disabled={loading}
                 data-testid="filter-action"
@@ -220,8 +206,8 @@ export function ExecutionsFiltersPanel({
               <Select
                 placeholder="Toutes les technologies"
                 allowClear
-                value={localFilters.engine}
-                onChange={(value) => setLocalFilters({ ...localFilters, engine: value ?? null })}
+                value={filters.engine}
+                onChange={(value) => apply({ ...filters, engine: value ?? null })}
                 options={ENGINE_OPTIONS}
                 disabled={loading}
                 data-testid="filter-engine"
@@ -240,9 +226,9 @@ export function ExecutionsFiltersPanel({
                 allowClear
                 maxTagCount={2}
                 loading={tagsLoading}
-                value={localFilters.tags ?? []}
+                value={filters.tags ?? []}
                 onChange={(value) =>
-                  setLocalFilters({ ...localFilters, tags: value.length > 0 ? value : null })
+                  apply({ ...filters, tags: value.length > 0 ? value : null })
                 }
                 options={tags.map((t) => ({ label: t, value: t }))}
                 disabled={loading}
@@ -255,8 +241,8 @@ export function ExecutionsFiltersPanel({
               <Select
                 placeholder="Tous les statuts"
                 allowClear
-                value={localFilters.status}
-                onChange={(value) => setLocalFilters({ ...localFilters, status: value ?? null })}
+                value={filters.status}
+                onChange={(value) => apply({ ...filters, status: value ?? null })}
                 options={STATUS_OPTIONS}
                 disabled={loading}
                 data-testid="filter-status"
@@ -268,9 +254,9 @@ export function ExecutionsFiltersPanel({
               <Select
                 placeholder="Tous les env."
                 allowClear
-                value={localFilters.environment}
+                value={filters.environment}
                 onChange={(value) =>
-                  setLocalFilters({ ...localFilters, environment: value ?? null })
+                  apply({ ...filters, environment: value ?? null })
                 }
                 options={ENVIRONMENT_OPTIONS}
                 disabled={loading}
@@ -280,25 +266,14 @@ export function ExecutionsFiltersPanel({
           </Col>
           <Col xs={24} md={8}>
             <Form.Item label=" " style={{ marginBottom: 12 }}>
-              <Space>
-                <Button
-                  type="primary"
-                  icon={<SearchOutlined />}
-                  onClick={handleApply}
-                  disabled={loading}
-                  data-testid="filter-apply"
-                >
-                  Appliquer
-                </Button>
-                <Button
-                  icon={<ClearOutlined />}
-                  onClick={handleReset}
-                  disabled={activeFilterCount === 0 || loading}
-                  data-testid="filter-reset"
-                >
-                  Réinitialiser
-                </Button>
-              </Space>
+              <Button
+                icon={<ClearOutlined />}
+                onClick={handleReset}
+                disabled={activeFilterCount === 0 || loading}
+                data-testid="filter-reset"
+              >
+                Réinitialiser
+              </Button>
             </Form.Item>
           </Col>
         </Row>

@@ -11,8 +11,7 @@ import type {
   AuditExecutionListResponse,
   PaginationInfo,
 } from '../types/api';
-
-const API_BASE = '/api/v1';
+import { apiFetchBlob, apiFetchRaw } from './api_client';
 
 /**
  * Build query string from filters (Story 6.3, AC6).
@@ -67,23 +66,10 @@ export async function listExecutionAudit(
   filters: AuditExecutionFilters = {},
 ): Promise<{ data: AuditExecutionEntry[]; pagination: PaginationInfo }> {
   const queryString = buildQueryString(filters);
-  const response = await fetch(`${API_BASE}/audit/executions${queryString}`, {
+  // Use shared API client to include Authorization header + auto-refresh on 401.
+  const result = await apiFetchRaw<AuditExecutionListResponse>(`/audit/executions${queryString}`, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    credentials: 'include',
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const message =
-      errorData?.error?.message ||
-      (response.status === 403 ? 'Accès réservé aux auditeurs' : 'Erreur de chargement');
-    throw new Error(message);
-  }
-
-  const result: AuditExecutionListResponse = await response.json();
   return {
     data: result.data,
     pagination: result.pagination,
@@ -123,35 +109,9 @@ export async function exportAuditReport(
     params.set('status', filters.status);
   }
 
-  const response = await fetch(`${API_BASE}/audit/export?${params.toString()}`, {
-    method: 'GET',
-    credentials: 'include',
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const message =
-      errorData?.error?.message ||
-      (response.status === 403
-        ? 'Accès réservé aux auditeurs'
-        : response.status === 400 || response.status === 413
-          ? 'Limite d\'export dépassée (maximum 10 000 lignes). Veuillez appliquer des filtres supplémentaires.'
-          : 'Erreur lors de l\'export');
-    throw new Error(message);
-  }
-
-  // Get filename from Content-Disposition header or generate default
-  const contentDisposition = response.headers.get('Content-Disposition');
-  let filename = `audit-export-${new Date().toISOString().split('T')[0]}.${format}`;
-  if (contentDisposition) {
-    const filenameMatch = contentDisposition.match(/filename="(.+)"/);
-    if (filenameMatch) {
-      filename = filenameMatch[1];
-    }
-  }
-
-  // Download file
-  const blob = await response.blob();
+  // Download file as blob with auth + 401 retry support.
+  const blob = await apiFetchBlob(`/audit/export?${params.toString()}`);
+  const filename = `audit-export-${new Date().toISOString().split('T')[0]}.${format}`;
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;

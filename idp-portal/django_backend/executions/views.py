@@ -5,15 +5,32 @@ from datetime import datetime, timedelta, date
 from django.db.models import Q, Count
 from django.db.models.functions import TruncDate
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from catalog.models import Action
-from core.exceptions import BadRequestError, NotFoundError, ForbiddenError
-from executions.models import Execution, ExecutionStep, ExecutionStatus
-from executions.serializers import ExecutionSerializer, ExecutionStepSerializer
-from executions.services import ExecutionService
+from catalog.models import Action, ActionStatus
+from core.exceptions import BadRequestError, NotFoundError, ForbiddenError, InvalidStateError
+from core.middleware import get_correlation_id
+from executions.models import (
+    Execution,
+    ExecutionStep,
+    ExecutionStatus,
+    ScheduledExecution,
+    ScheduledExecutionStatus,
+    RecurringPattern,
+)
+from executions.serializers import (
+    ExecutionSerializer,
+    ExecutionStepSerializer,
+    ScheduledExecutionSerializer,
+    ScheduledExecutionListItemSerializer,
+    RecurringPatternSerializer,
+)
+from executions.services import ExecutionService, SchedulingService
+
+from croniter import croniter
 
 
 def _parse_int(value: str | None, default: int, *, name: str) -> int:
@@ -389,4 +406,438 @@ class PendingApprovalsView(APIView):
                 },
             }
         )
+
+
+# =============================================================================
+# Scheduled executions (Story 11.5 - 11.8)
+# =============================================================================
+
+
+def _parse_iso_datetime(value: str | None, *, name: str) -> datetime | None:
+    if not value:
+        return None
+    dt = parse_datetime(value)
+    if dt is None:
+        raise BadRequestError(
+            code="BAD_REQUEST",
+            message=f"{name} invalide (ISO 8601)",
+            details={name: value},
+        )
+    if timezone.is_naive(dt):
+        # Assume UTC if no timezone info
+        dt = timezone.make_aware(dt, timezone=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt
+
+
+def _calculate_next_execution_date(pattern_type: str, pattern_config: dict, reference: datetime) -> datetime:
+    """
+    Compute next execution datetime in UTC for daily/weekly/cron patterns.
+    """
+    if timezone.is_naive(reference):
+        reference = timezone.make_aware(reference, timezone=timezone.utc)
+    else:
+        reference = reference.astimezone(timezone.utc)
+
+    pattern_type = (pattern_type or "").lower()
+
+    if pattern_type == "daily":
+        hour = int(pattern_config.get("hour", 0))
+        minute = int(pattern_config.get("minute", 0))
+        candidate = reference.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if candidate <= reference:
+            candidate = candidate + timedelta(days=1)
+        return candidate
+
+    if pattern_type == "weekly":
+        day_of_week = int(pattern_config.get("day_of_week", 1))  # 1=Mon .. 7=Sun
+        hour = int(pattern_config.get("hour", 0))
+        minute = int(pattern_config.get("minute", 0))
+        # ISO weekday: Monday=1..Sunday=7
+        current_dow = reference.isoweekday()
+        days_ahead = (day_of_week - current_dow) % 7
+        candidate = (reference + timedelta(days=days_ahead)).replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if candidate <= reference:
+            candidate = candidate + timedelta(days=7)
+        return candidate
+
+    if pattern_type == "cron":
+        expr = str(pattern_config.get("cron_expression", "")).strip()
+        if not expr or not croniter.is_valid(expr):
+            raise BadRequestError(
+                code="INVALID_CRON_EXPRESSION",
+                message="Expression cron invalide. Format attendu : minute hour day month day_of_week",
+                details={"expression": expr},
+            )
+        it = croniter(expr, reference)
+        nxt = it.get_next(datetime)
+        if timezone.is_naive(nxt):
+            nxt = timezone.make_aware(nxt, timezone=timezone.utc)
+        else:
+            nxt = nxt.astimezone(timezone.utc)
+        return nxt
+
+    raise BadRequestError(
+        code="BAD_REQUEST",
+        message="pattern_type invalide",
+        details={"pattern_type": pattern_type},
+    )
+
+
+class ScheduledExecutionsView(APIView):
+    """
+    GET /scheduled-executions (Story 11.6)
+    POST /scheduled-executions (Story 11.5, 11.7)
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        limit = _parse_int(request.query_params.get("limit"), 50, name="limit")
+        offset = _parse_int(request.query_params.get("offset"), 0, name="offset")
+        if limit <= 0 or offset < 0 or limit > 100:
+            raise BadRequestError(code="BAD_REQUEST", message="Pagination invalide", details={"limit": limit, "offset": offset})
+
+        status_filter = request.query_params.get("status")
+        action_id = request.query_params.get("action_id")
+        scheduled_from = _parse_iso_datetime(request.query_params.get("scheduled_from"), name="scheduled_from")
+        scheduled_to = _parse_iso_datetime(request.query_params.get("scheduled_to"), name="scheduled_to")
+
+        qs = ScheduledExecution.objects.select_related("action", "user").select_related("recurringpattern")
+        # RBAC: DBOPS sees all; others see their own scheduled executions
+        if (getattr(request.user, "profile", "") or "").lower() != "dbops":
+            qs = qs.filter(user_id=request.user.id)
+
+        if status_filter:
+            valid_statuses = {c[0] for c in ScheduledExecutionStatus.choices}
+            if status_filter not in valid_statuses:
+                raise InvalidStateError(
+                    code="INVALID_STATUS",
+                    message=f"Statut invalide: {status_filter}",
+                    details={"status": status_filter, "valid_statuses": sorted(valid_statuses)},
+                )
+            qs = qs.filter(status=status_filter)
+
+        if action_id:
+            qs = qs.filter(action_id=_parse_int(action_id, 0, name="action_id"))
+
+        if scheduled_from:
+            qs = qs.filter(
+                Q(scheduled_at__gte=scheduled_from) | Q(recurringpattern__next_execution_date__gte=scheduled_from)
+            )
+        if scheduled_to:
+            qs = qs.filter(
+                Q(scheduled_at__lte=scheduled_to) | Q(recurringpattern__next_execution_date__lte=scheduled_to)
+            )
+
+        qs = qs.order_by("-created_at")
+        total_count = qs.count()
+        page = (offset // limit) + 1
+        total_pages = (total_count + limit - 1) // limit if total_count > 0 else 1
+
+        items = list(qs[offset: offset + limit])
+        data_items = ScheduledExecutionListItemSerializer(items, many=True).data
+
+        inner = {
+            "data": data_items,
+            "pagination": {
+                "page": page,
+                "page_size": limit,
+                "total_count": total_count,
+                "total_pages": total_pages,
+            },
+        }
+        return Response({"data": inner})
+
+    def post(self, request):
+        payload = request.data or {}
+
+        action_id = payload.get("action_id")
+        environment = payload.get("environment")
+        parameters = payload.get("parameters")
+        scheduled_at_raw = payload.get("scheduled_at")
+        recurring_pattern = payload.get("recurring_pattern")
+
+        if action_id is None or environment is None:
+            raise BadRequestError(
+                code="BAD_REQUEST",
+                message="action_id et environment sont requis",
+                details={"action_id": action_id, "environment": environment},
+            )
+
+        # Validate mutual exclusivity
+        if scheduled_at_raw and recurring_pattern:
+            raise BadRequestError(
+                code="BAD_REQUEST",
+                message="scheduled_at et recurring_pattern sont mutuellement exclusifs",
+                details={},
+            )
+        if not scheduled_at_raw and not recurring_pattern:
+            raise BadRequestError(
+                code="BAD_REQUEST",
+                message="scheduled_at ou recurring_pattern est requis",
+                details={},
+            )
+
+        try:
+            action = Action.objects.get(id=int(action_id), status=ActionStatus.PUBLISHED)
+        except (ValueError, TypeError):
+            raise BadRequestError(code="BAD_REQUEST", message="action_id invalide", details={"action_id": action_id})
+        except Action.DoesNotExist:
+            raise NotFoundError(code="ACTION_NOT_FOUND", message="Action non trouvée", details={"action_id": action_id})
+
+        correlation_id = get_correlation_id()
+
+        scheduled_at = _parse_iso_datetime(scheduled_at_raw, name="scheduled_at") if scheduled_at_raw else None
+        if scheduled_at and scheduled_at <= timezone.now().astimezone(timezone.utc):
+            raise BadRequestError(
+                code="INVALID_SCHEDULED_DATE",
+                message="scheduled_at doit être dans le futur",
+                details={"scheduled_at": scheduled_at_raw},
+            )
+
+        recurring_pattern_data = None
+        if recurring_pattern:
+            pattern_type = (recurring_pattern.get("pattern_type") or "").lower()
+            pattern_config = recurring_pattern.get("pattern_config") or {}
+            next_execution_date = _calculate_next_execution_date(pattern_type, pattern_config, timezone.now())
+            recurring_pattern_data = {
+                "pattern_type": pattern_type,
+                "pattern_config": pattern_config,
+                "next_execution_date": next_execution_date,
+                "is_active": 1,
+            }
+
+        scheduled_execution = SchedulingService().create_scheduled_execution(
+            user=request.user,
+            action=action,
+            environment=environment,
+            parameters=parameters,
+            scheduled_at=scheduled_at,
+            recurring_pattern_data=recurring_pattern_data,
+        )
+
+        # Store correlation id on the scheduled execution for traceability
+        if correlation_id:
+            scheduled_execution.correlation_id = correlation_id
+            scheduled_execution.save(update_fields=["correlation_id"])
+
+        scheduled_execution = ScheduledExecution.objects.select_related("action").select_related("recurringpattern").get(
+            id=scheduled_execution.id
+        )
+
+        return Response({"data": ScheduledExecutionSerializer(scheduled_execution).data}, status=201)
+
+
+class ScheduledExecutionUpdateView(APIView):
+    """PATCH /scheduled-executions/{id} - cancel or mark executed."""
+
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, scheduled_execution_id: int):
+        try:
+            se = ScheduledExecution.objects.select_related("action", "user").select_related("recurringpattern").get(
+                id=scheduled_execution_id
+            )
+        except ScheduledExecution.DoesNotExist:
+            raise NotFoundError(
+                code="SCHEDULED_EXECUTION_NOT_FOUND",
+                message="Exécution planifiée introuvable",
+                details={"scheduled_execution_id": scheduled_execution_id},
+            )
+
+        if (getattr(request.user, "profile", "") or "").lower() != "dbops" and se.user_id != request.user.id:
+            raise ForbiddenError(
+                code="PERMISSION_DENIED",
+                message="Vous n'avez pas la permission de modifier cette exécution planifiée",
+                details={"scheduled_execution_id": scheduled_execution_id},
+            )
+
+        body = request.data if isinstance(request.data, dict) else {}
+        new_status = (body.get("status") or "cancelled").lower()
+        execution_id = body.get("execution_id")
+
+        if se.status != ScheduledExecutionStatus.PENDING:
+            raise InvalidStateError(
+                code="INVALID_STATUS",
+                message="Seules les exécutions planifiées en attente peuvent être modifiées",
+                details={"scheduled_execution_id": scheduled_execution_id, "status": se.status},
+            )
+
+        if new_status == "cancelled":
+            se = SchedulingService().cancel_scheduled_execution(scheduled_execution_id, user_id=str(request.user.id))
+            if se is None:
+                raise NotFoundError(
+                    code="SCHEDULED_EXECUTION_NOT_FOUND",
+                    message="Exécution planifiée introuvable",
+                    details={"scheduled_execution_id": scheduled_execution_id},
+                )
+            se = ScheduledExecution.objects.select_related("action").get(id=scheduled_execution_id)
+            return Response(
+                {
+                    "data": {
+                        "scheduled_execution_id": se.id,
+                        "action_id": se.action_id,
+                        "action_name": se.action.name if se.action else None,
+                        "environment": se.environment,
+                        "status": se.status,
+                        "scheduled_at": se.scheduled_at.isoformat() if se.scheduled_at else None,
+                        "created_at": se.created_at.isoformat() if se.created_at else None,
+                    }
+                }
+            )
+
+        if new_status == "executed":
+            if execution_id is None:
+                raise BadRequestError(
+                    code="VALIDATION_ERROR",
+                    message="execution_id est requis quand status=executed",
+                    details={"scheduled_execution_id": scheduled_execution_id},
+                )
+            try:
+                execution_id_int = int(execution_id)
+            except (ValueError, TypeError):
+                raise BadRequestError(code="BAD_REQUEST", message="execution_id invalide", details={"execution_id": execution_id})
+
+            # If recurring: recalc next date and keep status pending (next occurrence)
+            rp = getattr(se, "recurringpattern", None)
+            if rp is not None and bool(rp.is_active):
+                rp.next_execution_date = _calculate_next_execution_date(
+                    rp.pattern_type, rp.get_pattern_config() or {}, timezone.now()
+                )
+                rp.updated_at = timezone.now()
+                rp.save(update_fields=["next_execution_date", "updated_at"])
+                se.status = ScheduledExecutionStatus.PENDING
+            else:
+                se.status = ScheduledExecutionStatus.EXECUTED
+
+            se.execution_id = execution_id_int
+            se.updated_at = timezone.now()
+            se.save(update_fields=["status", "execution_id", "updated_at"])
+            se = ScheduledExecution.objects.select_related("action").get(id=scheduled_execution_id)
+            return Response(
+                {
+                    "data": {
+                        "scheduled_execution_id": se.id,
+                        "action_id": se.action_id,
+                        "action_name": se.action.name if se.action else None,
+                        "environment": se.environment,
+                        "status": se.status,
+                        "scheduled_at": se.scheduled_at.isoformat() if se.scheduled_at else None,
+                        "created_at": se.created_at.isoformat() if se.created_at else None,
+                    }
+                }
+            )
+
+        raise BadRequestError(code="INVALID_STATUS", message="Statut invalide", details={"status": new_status})
+
+
+class ScheduledExecutionRecurringPatternView(APIView):
+    """PATCH /scheduled-executions/{id}/recurring-pattern - toggle is_active."""
+
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, scheduled_execution_id: int):
+        try:
+            se = ScheduledExecution.objects.select_related("user").select_related("recurringpattern").get(
+                id=scheduled_execution_id
+            )
+        except ScheduledExecution.DoesNotExist:
+            raise NotFoundError(
+                code="SCHEDULED_EXECUTION_NOT_FOUND",
+                message="Exécution planifiée introuvable",
+                details={"scheduled_execution_id": scheduled_execution_id},
+            )
+
+        if (getattr(request.user, "profile", "") or "").lower() != "dbops" and se.user_id != request.user.id:
+            raise ForbiddenError(
+                code="PERMISSION_DENIED",
+                message="Vous n'avez pas la permission de modifier cette récurrence",
+                details={"scheduled_execution_id": scheduled_execution_id},
+            )
+
+        rp = getattr(se, "recurringpattern", None)
+        if rp is None:
+            raise NotFoundError(
+                code="RECURRING_PATTERN_NOT_FOUND",
+                message="Cette exécution planifiée n'a pas de pattern de récurrence",
+                details={"scheduled_execution_id": scheduled_execution_id},
+            )
+
+        body = request.data if isinstance(request.data, dict) else {}
+        if "is_active" not in body:
+            raise BadRequestError(code="BAD_REQUEST", message="is_active est requis", details={})
+
+        is_active = bool(body.get("is_active"))
+        rp.is_active = 1 if is_active else 0
+
+        if is_active:
+            rp.next_execution_date = _calculate_next_execution_date(
+                rp.pattern_type, rp.get_pattern_config() or {}, timezone.now()
+            )
+
+        rp.updated_at = timezone.now()
+        rp.save(update_fields=["is_active", "next_execution_date", "updated_at"])
+
+        return Response({"data": RecurringPatternSerializer(rp).data})
+
+
+class ScheduledExecutionValidateCronView(APIView):
+    """GET /scheduled-executions/validate-cron"""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        expr = (request.query_params.get("expression") or "").strip()
+        if not expr:
+            raise BadRequestError(code="BAD_REQUEST", message="expression est requise", details={})
+
+        try:
+            if not croniter.is_valid(expr):
+                return Response(
+                    {
+                        "data": {
+                            "valid": False,
+                            "error": "Expression cron invalide. Format attendu : minute hour day month day_of_week",
+                        }
+                    }
+                )
+            # semantic check
+            it = croniter(expr, datetime.now(timezone.utc))
+            _ = it.get_next(datetime)
+            return Response({"data": {"valid": True, "error": ""}})
+        except Exception as e:
+            return Response({"data": {"valid": False, "error": f"Expression cron invalide : {str(e)}"}})
+
+
+class ScheduledExecutionCronNextExecutionsView(APIView):
+    """GET /scheduled-executions/cron-next-executions"""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        expr = (request.query_params.get("expression") or "").strip()
+        count = _parse_int(request.query_params.get("count"), 5, name="count")
+        if count < 1 or count > 10:
+            raise BadRequestError(code="BAD_REQUEST", message="count invalide (1-10)", details={"count": count})
+
+        if not expr or not croniter.is_valid(expr):
+            raise BadRequestError(
+                code="INVALID_CRON_EXPRESSION",
+                message="Expression cron invalide. Format attendu : minute hour day month day_of_week",
+                details={"expression": expr},
+            )
+
+        it = croniter(expr, datetime.now(timezone.utc))
+        executions = []
+        for _ in range(count):
+            nxt = it.get_next(datetime)
+            if timezone.is_naive(nxt):
+                nxt = timezone.make_aware(nxt, timezone=timezone.utc)
+            else:
+                nxt = nxt.astimezone(timezone.utc)
+            executions.append(nxt.isoformat())
+
+        return Response({"data": {"executions": executions}})
 

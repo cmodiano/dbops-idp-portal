@@ -186,7 +186,7 @@ development_status:
     epic-12: in-progress
     12-1-documentation-backend-implementation: done # Code review 2026-02-05: 7 fixes (3 HIGH + 4 MEDIUM) - Documentation alignée sur l'implémentation réelle
     12-2-documentation-frontend-implementation: done # Documentation détaillée de l'implémentation frontend (2026-02-05); code-review 2026-02-05
-    12-3-schema-base-donnees-et-relations-tables: backlog # Schéma de base de données et relations entre les tables
+    12-3-schema-base-donnees-et-relations-tables: done # Schéma de base de données et relations entre les tables (2026-02-05); code-review 2026-02-05
     epic-12-retrospective: optional
     # === Epic 13: Sélection de targets à l'exécution et permissions par environnement (inventaire) ===
     # Réf: regles-metier-permissions-par-target-et-environnement.md — Une action, choix de target(s) autorisés, env = propriété du target

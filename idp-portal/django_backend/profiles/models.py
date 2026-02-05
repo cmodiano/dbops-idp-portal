@@ -1,6 +1,7 @@
 import json
 import logging
 from django.db import models
+from django.db.models import Q
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +14,17 @@ class ProfileManager(models.Manager):
     
     def find_by_ad_groups(self, ad_groups: list[str]):
         """
-        Find profiles whose AD_GROUP is in the given list.
+        Find profiles matching the given AD group identifiers.
+
+        Notes:
+        - In real SSO/JWT payloads, groups can be expressed as:
+          - a full DN like "CN=GRP-IDP-DBOPS,OU=...,DC=..."
+          - a short group name like "GRP-IDP-DBOPS"
+          - sometimes a profile code like "dbops"
+        - For robustness (and to match FastAPI behavior), we match against BOTH:
+          - `Profile.ad_group`
+          - `Profile.name`
+        - Matching is case-insensitive.
         
         Args:
             ad_groups: List of AD group names
@@ -23,7 +34,39 @@ class ProfileManager(models.Manager):
         """
         if not ad_groups:
             return self.none()
-        return self.filter(ad_group__in=ad_groups).order_by('name')
+
+        normalized: set[str] = set()
+        for raw in ad_groups:
+            if not raw:
+                continue
+            s = str(raw).strip()
+            if not s:
+                continue
+            normalized.add(s)
+
+            # If DN contains CN=..., also add CN value
+            up = s.upper()
+            if "CN=" in up:
+                try:
+                    start = up.index("CN=") + 3
+                    # Use original string slice to preserve case around separators
+                    # Find comma after CN=...
+                    comma_idx = s.find(",", start)
+                    cn_val = s[start:comma_idx] if comma_idx != -1 else s[start:]
+                    cn_val = cn_val.strip()
+                    if cn_val:
+                        normalized.add(cn_val)
+                except ValueError:
+                    pass
+
+        if not normalized:
+            return self.none()
+
+        q = Q()
+        for val in normalized:
+            q |= Q(ad_group__iexact=val) | Q(name__iexact=val)
+
+        return self.filter(q).order_by("name")
     
     def list_with_permissions_count(self):
         """

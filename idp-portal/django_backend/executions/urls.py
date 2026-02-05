@@ -22,5 +22,28 @@ urlpatterns = [
         views.ExecutionStepLogsView.as_view(),
         name="execution-step-logs",
     ),
+
+    # Scheduled executions (Story 11.5-11.8)
+    path("scheduled-executions", views.ScheduledExecutionsView.as_view(), name="scheduled-executions"),
+    path(
+        "scheduled-executions/<int:scheduled_execution_id>",
+        views.ScheduledExecutionUpdateView.as_view(),
+        name="scheduled-execution-update",
+    ),
+    path(
+        "scheduled-executions/<int:scheduled_execution_id>/recurring-pattern",
+        views.ScheduledExecutionRecurringPatternView.as_view(),
+        name="scheduled-execution-recurring-pattern",
+    ),
+    path(
+        "scheduled-executions/validate-cron",
+        views.ScheduledExecutionValidateCronView.as_view(),
+        name="scheduled-execution-validate-cron",
+    ),
+    path(
+        "scheduled-executions/cron-next-executions",
+        views.ScheduledExecutionCronNextExecutionsView.as_view(),
+        name="scheduled-execution-cron-next-executions",
+    ),
 ]
 

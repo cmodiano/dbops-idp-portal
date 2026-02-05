@@ -41,7 +41,7 @@
  * AC8: Badge nombre de filtres actifs.
  */
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Typography, Table, Drawer, Skeleton, Alert, Card, Space, Row, Col, Tag, theme } from 'antd';
 import {
   SafetyCertificateOutlined,
@@ -125,7 +125,7 @@ function isRunning(status: ExecutionStatusType): boolean {
 
 export default function ExecutionsPage() {
   // Story 8.8 AC9, Story 8.9: Auth context for profile check
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const { token } = theme.useToken();
   // Story 8.9 code-review: Consolidated RBAC logic - DBA/DBOPS can approve AND view all
   const canApprove =
@@ -144,8 +144,25 @@ export default function ExecutionsPage() {
   const [sortField, setSortField] = useState<string>('created_at');
   const [sortOrder, setSortOrder] = useState<'ascend' | 'descend'>('descend');
 
-  // Story 8.9: Scope state for tabs
-  const [activeScope, setActiveScope] = useState<ExecutionScope>('mine');
+  // Story 8.9: Scope state for tabs — default "Toutes les exécutions" for DBA/DBOPS
+  const [activeScope, setActiveScope] = useState<ExecutionScope>('all');
+  const userHasChosenScope = useRef(false);
+
+  // Scope sync: mine while auth loads; all for DBA/DBOPS when ready; mine for others (only before user interaction)
+  useEffect(() => {
+    if (userHasChosenScope.current) return;
+    if (authLoading) {
+      if (activeScope !== 'mine') setActiveScope('mine');
+      return;
+    }
+    if (canViewAll && activeScope === 'mine') {
+      setActiveScope('all');
+      return;
+    }
+    if (!canViewAll && activeScope === 'all') {
+      setActiveScope('mine');
+    }
+  }, [authLoading, canViewAll, activeScope]);
 
   // Story 9.10: Time series data for TrendLineChart
   const [timeSeriesData, setTimeSeriesData] = useState<DashboardTimeSeriesPoint[]>([]);
@@ -186,6 +203,11 @@ export default function ExecutionsPage() {
     fetchData(currentPage, activeScope);
   }, [currentPage, activeScope, fetchData]);
 
+  // Reset to page 1 when filters change (apply-on-change UX)
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters]);
+
   // Story 9.10 AC5: Fetch time series data for TrendLineChart
   useEffect(() => {
     async function loadTimeSeries() {
@@ -206,6 +228,7 @@ export default function ExecutionsPage() {
 
   // Story 8.9 AC4, AC5: Handle scope change - reset pagination, preserve sort
   const handleScopeChange = useCallback((scope: ExecutionScope) => {
+    userHasChosenScope.current = true;
     setActiveScope(scope);
     setCurrentPage(1); // Reset pagination (AC4)
     // Sort is preserved (AC5) - sortField and sortOrder remain unchanged
