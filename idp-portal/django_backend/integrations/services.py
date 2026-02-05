@@ -1,17 +1,20 @@
 """
 IntegrationService for business logic related to integrations.
 Handles complex operations like JSON Schema validation for config.
+Story M.8 - Task 9: Structured logging with structlog.
 """
 
-import logging
 import json
+import structlog
+
 from django.db import transaction
 from django.db import IntegrityError
 from integrations.models import Integration
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
+from core.middleware import get_correlation_id
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class IntegrationService:

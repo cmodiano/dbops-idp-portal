@@ -1,25 +1,14 @@
 """
 Authentication audit middleware.
 Story M.7 - Task 7: Audit auth events.
+Story M.8 - Task 8: Migrate to structlog for structured JSON logging.
 """
 
-import logging
+import structlog
 
-from django.conf import settings
-from core.middleware import get_correlation_id
+from core.middleware import get_correlation_id, get_client_ip
 
-logger = logging.getLogger(__name__)
-
-
-def get_client_ip(request) -> str:
-    """Extract client IP address from request, handling proxies."""
-    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-    if x_forwarded_for:
-        # X-Forwarded-For may contain multiple IPs; first is the client
-        ip = x_forwarded_for.split(',')[0].strip()
-    else:
-        ip = request.META.get('REMOTE_ADDR', '')
-    return ip
+logger = structlog.get_logger(__name__)
 
 
 class AuditAuthMiddleware:
@@ -48,13 +37,11 @@ class AuditAuthMiddleware:
 
             logger.warning(
                 "auth_unauthorized_access",
-                extra={
-                    "path": request.path,
-                    "method": request.method,
-                    "ip_address": ip_address,
-                    "correlation_id": correlation_id,
-                    "user_agent": request.META.get('HTTP_USER_AGENT', ''),
-                }
+                path=request.path,
+                method=request.method,
+                ip_address=ip_address,
+                correlation_id=correlation_id,
+                user_agent=request.META.get('HTTP_USER_AGENT', ''),
             )
 
         return response

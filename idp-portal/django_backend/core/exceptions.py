@@ -1,10 +1,17 @@
 """
 Custom exceptions and exception handler for DRF to match FastAPI error format.
+Story M.8 - Task 5: Enhanced error handling with structured logging.
 """
+
+import structlog
 
 from rest_framework.views import exception_handler
 from rest_framework.response import Response
 from rest_framework import status
+
+from core.middleware import get_correlation_id
+
+logger = structlog.get_logger(__name__)
 
 
 class NotFoundError(Exception):
@@ -52,6 +59,22 @@ class ForbiddenError(Exception):
         super().__init__(self.message)
 
 
+def _get_request_context(context):
+    """Extract request context for logging."""
+    request = context.get('request')
+    if request:
+        user_id = None
+        if hasattr(request, 'user') and request.user.is_authenticated:
+            user_id = str(request.user.id)
+        return {
+            'path': request.path,
+            'method': request.method,
+            'user_id': user_id,
+            'correlation_id': get_correlation_id(),
+        }
+    return {'correlation_id': get_correlation_id()}
+
+
 def custom_exception_handler(exc, context):
     """
     Custom exception handler that formats errors like FastAPI:
@@ -62,13 +85,25 @@ def custom_exception_handler(exc, context):
             "details": {"action_id": 123}
         }
     }
+
+    Story M.8: Also logs unhandled exceptions with full context and traceback.
+    For 500 errors, masks internal details from client but logs full details.
+    Adds correlation_id to error response headers.
     """
     # Call REST framework's default exception handler first
     response = exception_handler(exc, context)
-    
-    # Handle custom exceptions
+    request_context = _get_request_context(context)
+
+    # Handle custom exceptions (these are expected, log at warning level)
     if isinstance(exc, NotFoundError):
-        return Response(
+        logger.warning(
+            "handled_exception",
+            exception_type="NotFoundError",
+            code=exc.code,
+            message=exc.message,
+            **request_context
+        )
+        resp = Response(
             {
                 "error": {
                     "code": exc.code,
@@ -78,9 +113,18 @@ def custom_exception_handler(exc, context):
             },
             status=status.HTTP_404_NOT_FOUND
         )
-    
+        resp['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
+        return resp
+
     if isinstance(exc, BadRequestError):
-        return Response(
+        logger.warning(
+            "handled_exception",
+            exception_type="BadRequestError",
+            code=exc.code,
+            message=exc.message,
+            **request_context
+        )
+        resp = Response(
             {
                 "error": {
                     "code": exc.code,
@@ -90,9 +134,18 @@ def custom_exception_handler(exc, context):
             },
             status=status.HTTP_400_BAD_REQUEST
         )
-    
+        resp['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
+        return resp
+
     if isinstance(exc, InvalidStateError):
-        return Response(
+        logger.warning(
+            "handled_exception",
+            exception_type="InvalidStateError",
+            code=exc.code,
+            message=exc.message,
+            **request_context
+        )
+        resp = Response(
             {
                 "error": {
                     "code": exc.code,
@@ -102,9 +155,18 @@ def custom_exception_handler(exc, context):
             },
             status=status.HTTP_400_BAD_REQUEST
         )
-    
+        resp['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
+        return resp
+
     if isinstance(exc, UnauthorizedError):
-        return Response(
+        logger.warning(
+            "handled_exception",
+            exception_type="UnauthorizedError",
+            code=exc.code,
+            message=exc.message,
+            **request_context
+        )
+        resp = Response(
             {
                 "error": {
                     "code": exc.code,
@@ -114,9 +176,18 @@ def custom_exception_handler(exc, context):
             },
             status=status.HTTP_401_UNAUTHORIZED
         )
-    
+        resp['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
+        return resp
+
     if isinstance(exc, ForbiddenError):
-        return Response(
+        logger.warning(
+            "handled_exception",
+            exception_type="ForbiddenError",
+            code=exc.code,
+            message=exc.message,
+            **request_context
+        )
+        resp = Response(
             {
                 "error": {
                     "code": exc.code,
@@ -126,12 +197,21 @@ def custom_exception_handler(exc, context):
             },
             status=status.HTTP_403_FORBIDDEN
         )
-    
+        resp['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
+        return resp
+
     # Handle DRF exceptions
     if response is not None:
         # Convert DRF error format to FastAPI format
         if 'detail' in response.data:
-            return Response(
+            logger.warning(
+                "handled_exception",
+                exception_type=type(exc).__name__,
+                status_code=response.status_code,
+                detail=str(response.data['detail']),
+                **request_context
+            )
+            resp = Response(
                 {
                     "error": {
                         "code": "VALIDATION_ERROR",
@@ -141,10 +221,19 @@ def custom_exception_handler(exc, context):
                 },
                 status=response.status_code
             )
-        
+            resp['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
+            return resp
+
         # Handle field validation errors
         if isinstance(response.data, dict) and any(isinstance(v, list) for v in response.data.values()):
-            return Response(
+            logger.warning(
+                "handled_exception",
+                exception_type=type(exc).__name__,
+                status_code=response.status_code,
+                validation_errors=response.data,
+                **request_context
+            )
+            resp = Response(
                 {
                     "error": {
                         "code": "VALIDATION_ERROR",
@@ -154,5 +243,32 @@ def custom_exception_handler(exc, context):
                 },
                 status=response.status_code
             )
-    
-    return response
+            resp['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
+            return resp
+
+        # Add correlation_id to any other DRF response
+        response['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
+        return response
+
+    # Unhandled exception - log full details but mask from client
+    logger.error(
+        "unhandled_exception",
+        exception_type=type(exc).__name__,
+        exception_message=str(exc),
+        exc_info=True,
+        **request_context
+    )
+
+    # Return generic error message to client (don't expose internal details)
+    resp = Response(
+        {
+            "error": {
+                "code": "INTERNAL_ERROR",
+                "message": "An unexpected error occurred",
+                "details": {}
+            }
+        },
+        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+    )
+    resp['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
+    return resp

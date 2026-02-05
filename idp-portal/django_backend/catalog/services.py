@@ -1,17 +1,20 @@
 """
 CatalogService for business logic related to actions and workflows.
 Handles complex operations like status transitions, tag management, and validation.
+Story M.8 - Task 9: Structured logging with structlog.
 """
 
-import logging
+import structlog
+
 from django.db import transaction
 from django.db.models import Q, Prefetch
 from django.core.paginator import Paginator
 from catalog.models import Action, ActionStatus, Tag, ActionTag, ActionItemType
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
+from core.middleware import get_correlation_id
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class InvalidTransitionError(Exception):
@@ -66,19 +69,21 @@ class CatalogService:
     def create_action(self, action_data, created_by_user):
         """
         Create a new action with tags and audit.
-        
+
         Args:
             action_data: Dict with action fields (name, description, engine, etc.)
             created_by_user: User instance creating the action
-        
+
         Returns:
             Action instance
         """
+        correlation_id = get_correlation_id()
+
         # Validation: initial status must be draft or published
         status = action_data.get('status', ActionStatus.DRAFT)
         if status not in [ActionStatus.DRAFT, ActionStatus.PUBLISHED]:
             raise ValueError("Statut initial doit être draft ou published")
-        
+
         # Create the action
         action = Action.objects.create(
             name=action_data['name'],
@@ -90,6 +95,16 @@ class CatalogService:
             created_by=created_by_user,
             documentation_md=action_data.get('documentation_md'),
             default_impact_level=action_data.get('default_impact_level'),
+        )
+
+        # Log action creation
+        logger.info(
+            "action_created",
+            action_id=action.id,
+            action_name=action.name,
+            user_id=created_by_user.id,
+            status=status,
+            correlation_id=correlation_id
         )
         
         # Set JSON fields using helper methods
@@ -115,7 +130,8 @@ class CatalogService:
             action_type=AuditActionType.ACTION_CREATED,
             entity_type=AuditEntityType.ACTION,
             entity_id=action.id,
-            details={'name': action.name, 'status': action.status}
+            details={'name': action.name, 'status': action.status},
+            correlation_id=correlation_id
         )
         
         return action

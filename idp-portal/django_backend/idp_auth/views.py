@@ -2,9 +2,10 @@
 Views for authentication endpoints.
 Matches FastAPI /auth/* endpoints.
 Story M.7 - Full SAML and JWT auth implementation.
+Story M.8 - Task 9: Structured logging with structlog.
 """
 
-import logging
+import structlog
 
 from django.conf import settings
 from django.shortcuts import redirect
@@ -23,8 +24,9 @@ from core.rbac import get_user_navigation_permissions, is_business_profile
 from core.exceptions import ForbiddenError, UnauthorizedError
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
+from core.middleware import get_correlation_id
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # Default profile mapping for SAML attributes
 _DEFAULT_PROFILE = "dba_applicatif"
@@ -93,13 +95,23 @@ class SAMLLoginView(APIView):
                 max_age=settings.JWT_REFRESH_TOKEN_EXPIRE_HOURS * 3600,
                 path="/api/v1/auth",
             )
-            logger.info("auth_dev_bypass_login", extra={"redirect_origin": cors_origin})
+            correlation_id = get_correlation_id()
+            logger.info(
+                "auth_dev_bypass_login",
+                redirect_origin=cors_origin,
+                correlation_id=correlation_id
+            )
             return response
 
         # Normal SAML flow
         auth = create_saml_auth(request)
         sso_url = auth.login()
-        logger.info("saml_login_redirect", extra={"sso_url": sso_url})
+        correlation_id = get_correlation_id()
+        logger.info(
+            "saml_login_redirect",
+            sso_url=sso_url,
+            correlation_id=correlation_id
+        )
         return redirect(sso_url)
 
 
@@ -119,9 +131,12 @@ class SAMLCallbackView(APIView):
         errors = auth.get_errors()
 
         if errors:
+            correlation_id = get_correlation_id()
             logger.error(
                 "saml_callback_error",
-                extra={"errors": errors, "reason": auth.get_last_error_reason()}
+                errors=errors,
+                reason=auth.get_last_error_reason(),
+                correlation_id=correlation_id
             )
             raise ForbiddenError(
                 code="SAML_VALIDATION_FAILED",
@@ -151,9 +166,12 @@ class SAMLCallbackView(APIView):
         # Resolve profiles by AD groups (AC1, AC3): no profile -> 403 NO_PROFILE
         profiles = Profile.objects.find_by_ad_groups(ad_groups)
         if not profiles:
+            correlation_id = get_correlation_id()
             logger.warning(
                 "saml_callback_no_profile",
-                extra={"username": username, "ad_groups": ad_groups}
+                username=username,
+                ad_groups=ad_groups,
+                correlation_id=correlation_id
             )
             raise ForbiddenError(
                 code="NO_PROFILE",
@@ -165,9 +183,13 @@ class SAMLCallbackView(APIView):
         # This is the authoritative profile (Story 2.12: multi-profile support)
         profile_for_db = profiles[0].name.lower()
 
+        correlation_id = get_correlation_id()
         logger.info(
             "saml_callback_success",
-            extra={"username": username, "profile": profile, "profile_count": len(profiles)}
+            username=username,
+            profile=profile_for_db,
+            profile_count=len(profiles),
+            correlation_id=correlation_id
         )
 
         # Create or update user in DB
@@ -260,9 +282,12 @@ class CurrentUserProfileView(APIView):
                 cumulative_permissions = profile_service.get_cumulative_permissions(user.id, ad_groups)
             except Exception as e:
                 # Log error but don't fail the request
+                correlation_id = get_correlation_id()
                 logger.error(
                     "failed_to_get_cumulative_permissions",
-                    extra={"user_id": user.id, "error": str(e)}
+                    user_id=user.id,
+                    error=str(e),
+                    correlation_id=correlation_id
                 )
                 cumulative_permissions = None
 
@@ -330,7 +355,12 @@ class RefreshTokenView(APIView):
         try:
             entity_id = int(payload.sub)
         except (ValueError, TypeError):
-            logger.error(f"Invalid user_id in refresh token: {payload.sub}")
+            correlation_id = get_correlation_id()
+            logger.error(
+                "invalid_user_id_in_refresh_token",
+                user_id=payload.sub,
+                correlation_id=correlation_id
+            )
             raise UnauthorizedError(
                 code="INVALID_TOKEN",
                 message="Token payload invalide",
@@ -378,7 +408,13 @@ class LogoutView(APIView):
                     )
                 except (ValueError, TypeError):
                     # Log warning but don't fail logout
-                    logger.warning(f"Could not create audit entry - invalid user_id: {payload.sub}")
+                    correlation_id = get_correlation_id()
+                    logger.warning(
+                        "logout_audit_failed",
+                        user_id=payload.sub,
+                        reason="invalid_user_id",
+                        correlation_id=correlation_id
+                    )
 
         response = Response(
             {'data': {'message': 'Deconnexion reussie'}},

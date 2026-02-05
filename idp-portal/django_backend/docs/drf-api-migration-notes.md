@@ -1,8 +1,8 @@
 # Migration Notes: FastAPI → Django REST Framework
 
-**Story:** M.4, M.5, M.7 - API REST — endpoints catalogue, admin (actions, tags), profils, auth
-**Date:** 2026-02-03, 2026-02-04
-**Status:** Implementation Complete (M.7 Auth added)
+**Story:** M.4, M.5, M.7, M.8 - API REST — endpoints catalogue, admin (actions, tags), profils, auth, observabilité
+**Date:** 2026-02-03, 2026-02-04, 2026-02-05
+**Status:** Implementation Complete (M.8 Observability added)
 
 ## Vue d'ensemble
 
@@ -286,6 +286,93 @@ Pour valider que le frontend fonctionne avec les endpoints DRF:
 - `idp_backend/settings.py` - Configuration pagination et exception handler
 - `profiles/services.py` - Ajout méthode `get_by_name()` pour import YAML
 - `requirements.txt` - Ajout PyYAML>=6.0.0
+
+## Story M.8 - Observabilité et Logging
+
+### Logging structuré JSON
+
+**FastAPI:** Utilise `structlog` avec processors JSON
+**DRF:** Utilise `structlog` avec la même configuration
+
+**Parité:** Le format de log est identique pour permettre l'analyse unifiée dans Splunk.
+
+Format commun:
+```json
+{
+  "timestamp": "2026-02-05T14:30:05.123Z",
+  "level": "info",
+  "event": "request_completed",
+  "correlation_id": "uuid",
+  "user_id": "42",
+  "path": "/api/v1/catalog/actions",
+  "status_code": 200,
+  "duration_ms": 45
+}
+```
+
+### Correlation ID
+
+**FastAPI:** Header `X-Idp-Request-Id` via `CorrelationIdMiddleware`, bind dans `structlog.contextvars`
+**DRF:** Header `X-Idp-Request-Id` via `CorrelationIdMiddleware`, bind dans `structlog.contextvars` + thread-local
+
+**Différence:** Django utilise thread-local en plus de contextvars pour compatibilité avec le code synchrone.
+
+### Health Check étendu
+
+**FastAPI:** Vérifie Oracle + Vault + ServiceNow
+**DRF:** Vérifie Oracle + Vault + ServiceNow
+
+**Parité:** Format de réponse identique:
+```json
+{
+  "data": {
+    "status": "healthy|degraded",
+    "timestamp": "ISO8601Z",
+    "oracle": "connected|disconnected",
+    "vault": "reachable|unreachable",
+    "servicenow": "reachable|unreachable"
+  }
+}
+```
+
+### Request/Response Logging
+
+**FastAPI:** `RequestLoggingMiddleware` avec `request_completed`
+**DRF:** `RequestResponseLoggingMiddleware` avec `request_received` + `request_completed` + `request_failed`
+
+**Différence:** Django log 3 événements au lieu de 1:
+- `request_received`: Quand la requête entre
+- `request_completed`: Quand la réponse sort (niveau selon status_code)
+- `request_failed`: En cas d'exception non gérée
+
+### Exception Handling
+
+**FastAPI:** Utilise `ExceptionHandler` avec logging structuré
+**DRF:** Utilise `custom_exception_handler` avec logging structuré
+
+**Parité:**
+- Même format d'erreur: `{"error": {"code": "...", "message": "...", "details": {...}}}`
+- Logging des exceptions avec contexte complet
+- Masquage des détails internes pour les 500
+
+### CORS
+
+**FastAPI:** Configuration via `CORSMiddleware`
+**DRF:** Configuration via `django-cors-headers`
+
+**Parité:** Mêmes origines autorisées, `credentials=true`, header `X-Idp-Request-Id` exposé.
+
+### Fichiers créés (M.8)
+
+- `core/logging.py` - Configuration structlog
+- `core/middleware.py` - RequestResponseLoggingMiddleware ajouté
+- `core/views.py` - Health check étendu
+- `core/exceptions.py` - Logging des exceptions
+- `core/tests/test_middleware.py` - Tests middleware
+- `core/tests/test_health_check.py` - Tests health check
+- `docs/observability-architecture.md` - Architecture observabilité
+- `docs/observability-runbook.md` - Runbook monitoring
+- `docs/logging-conventions.md` - Conventions de logging
 
 ## Notes techniques
 

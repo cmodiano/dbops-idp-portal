@@ -1,10 +1,12 @@
 """
 ExecutionService for business logic related to executions.
 Handles complex operations like atomic execution creation with steps.
+Story M.8 - Task 9: Structured logging with structlog.
 """
 
 import json
-import logging
+import structlog
+
 from datetime import datetime, timedelta
 from django.db import transaction
 from django.db.models import Q, Count, Avg, Sum
@@ -17,8 +19,9 @@ from catalog.models import Action
 from idp_auth.models import User
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
+from core.middleware import get_correlation_id
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class ExecutionService:
@@ -230,7 +233,11 @@ class ExecutionService:
         }
         audit_action_type = status_to_audit_type.get(new_status)
         if not audit_action_type:
-            logger.warning(f"Unknown execution status for audit: {new_status}")
+            logger.warning(
+                "unknown_execution_status_for_audit",
+                status=new_status,
+                correlation_id=correlation_id
+            )
             audit_action_type = AuditActionType.EXECUTION_SUBMITTED  # Fallback
         
         # Audit

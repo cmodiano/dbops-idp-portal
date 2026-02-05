@@ -22,6 +22,12 @@ python3-saml>=1.16.0
 # JWT token generation/validation (same as FastAPI for parity)
 python-jose[cryptography]>=3.3.0
 
+# Structured logging (same as FastAPI for parity - Story M.8)
+structlog>=24.1.0
+
+# HTTP client for health check external services (Story M.8)
+requests>=2.31.0
+
 # Development dependencies
 pytest>=8.0.0
 pytest-django>=4.8.0

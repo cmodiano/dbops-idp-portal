@@ -1,17 +1,19 @@
 """
 AuditService for audit log business logic.
 Handles creation of immutable audit entries with context enrichment.
+Story M.8 - Task 9: Structured logging with structlog.
 """
 
 import csv
 import json
-import logging
+import structlog
+
 from datetime import datetime
 from io import StringIO
 from django.db.models import Q
 from core.models import AuditLog, AuditActionType, AuditEntityType
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class AuditService:

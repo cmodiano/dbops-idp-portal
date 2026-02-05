@@ -1,17 +1,20 @@
 """
 AuthService for authentication and authorization business logic.
 Handles complex operations like SAML subject lookup and profile resolution.
+Story M.8 - Task 9: Structured logging with structlog.
 """
 
-import logging
+import structlog
+
 from django.db import transaction
 from idp_auth.models import User
 from profiles.models import Profile
 from catalog.models import UserFavorite, Action
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
+from core.middleware import get_correlation_id
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class AuthService:

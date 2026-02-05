@@ -58,6 +58,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'core.middleware.CorrelationIdMiddleware',  # Story M.7 - correlation ID first
+    'core.middleware.RequestResponseLoggingMiddleware',  # Story M.8 - request/response logging
     'core.middleware.SecurityHeadersMiddleware',  # Story M.7 - security headers
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',  # CORS middleware should be early
@@ -170,13 +171,33 @@ REST_FRAMEWORK = {
     ],
 }
 
-# CORS configuration
+# CORS configuration (Story M.8 - Task 7)
 # NOTE: Default value is for development only. MUST be configured via CORS_ORIGIN env var in production.
 CORS_ALLOWED_ORIGINS = [
     os.getenv('CORS_ORIGIN', 'http://localhost:5173'),
 ]
 
+# Allow credentials (cookies) for httpOnly refresh token
 CORS_ALLOW_CREDENTIALS = True
+
+# Expose correlation ID header to frontend for debugging
+CORS_EXPOSE_HEADERS = [
+    'X-Idp-Request-Id',
+]
+
+# Allowed headers from frontend
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+    'x-idp-request-id',  # Allow frontend to pass correlation ID
+]
 
 # ============================================================================
 # SAML Configuration (Story M.7 - mirrors FastAPI settings)
@@ -212,3 +233,48 @@ AUTH_DEV_BYPASS = os.getenv('AUTH_DEV_BYPASS', 'False').lower() == 'true'
 
 # Application environment
 APP_ENV = os.getenv('APP_ENV', 'development')
+
+# ============================================================================
+# Logging Configuration (Story M.8)
+# ============================================================================
+
+# Log level from environment (default INFO for production)
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
+
+# Django LOGGING configuration that works with structlog
+# structlog is configured in core.apps.CoreConfig.ready()
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': LOG_LEVEL,
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': LOG_LEVEL,
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['console'],
+            'level': LOG_LEVEL,
+            'propagate': False,
+        },
+    },
+}
+
+# ============================================================================
+# External Services Configuration (Story M.8 - Health Check)
+# ============================================================================
+
+# Vault configuration for health check
+VAULT_ADDR = os.getenv('VAULT_ADDR', 'http://localhost:8200')
+
+# ServiceNow configuration for health check
+SERVICENOW_INSTANCE_URL = os.getenv('SERVICENOW_INSTANCE_URL', 'https://instance.service-now.com')

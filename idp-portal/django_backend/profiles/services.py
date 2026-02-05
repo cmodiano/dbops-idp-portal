@@ -1,17 +1,20 @@
 """
 ProfileService for business logic related to profiles and permissions.
 Handles complex operations like cumulative permissions across multiple profiles and AD resolution.
+Story M.8 - Task 9: Structured logging with structlog.
 """
 
-import logging
+import structlog
+
 from django.db import transaction
 from django.db import IntegrityError
 from django.core.exceptions import ValidationError
 from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
+from core.middleware import get_correlation_id
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class ProfileService:
@@ -24,17 +27,19 @@ class ProfileService:
     def create_profile(self, profile_data, user=None):
         """
         Create a new profile with validation.
-        
+
         Args:
             profile_data: Dict with profile fields (name, description, ad_group, is_admin, is_auditor)
             user: Optional user instance for audit
-        
+
         Returns:
             Profile instance
-        
+
         Raises:
             IntegrityError: If profile name already exists
         """
+        correlation_id = get_correlation_id()
+
         try:
             profile = Profile.objects.create(
                 name=profile_data['name'],
@@ -43,7 +48,18 @@ class ProfileService:
                 is_admin=1 if profile_data.get('is_admin', False) else 0,
                 is_auditor=1 if profile_data.get('is_auditor', False) else 0,
             )
-            
+
+            # Log profile creation
+            logger.info(
+                "profile_created",
+                profile_id=profile.id,
+                profile_name=profile.name,
+                ad_group=profile.ad_group,
+                is_admin=bool(profile.is_admin),
+                user_id=user.id if user else None,
+                correlation_id=correlation_id
+            )
+
             # Audit if user provided
             if user:
                 AuditService.create_entry(
@@ -51,11 +67,17 @@ class ProfileService:
                     action_type=AuditActionType.PROFILE_CREATED,
                     entity_type=AuditEntityType.PROFILE,
                     entity_id=profile.id,
-                    details={'name': profile.name}
+                    details={'name': profile.name},
+                    correlation_id=correlation_id
                 )
-            
+
             return profile
         except IntegrityError:
+            logger.warning(
+                "profile_creation_failed_duplicate",
+                profile_name=profile_data['name'],
+                correlation_id=correlation_id
+            )
             raise ValueError(f"Un profil avec le nom '{profile_data['name']}' existe déjà")
     
     def list_all(self):
