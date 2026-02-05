@@ -273,6 +273,18 @@ Le systeme detecte les echecs d'execution et propose des actions correctives dep
 **FRs couvertes :** FR36, FR37, FR38
 **Phase :** Growth (Phase 2)
 
+### Epic 13 : Selection de targets a l'execution et permissions par environnement (inventaire)
+Aujourd'hui les actions ne permettent pas de choisir explicitement un target (serveur/base) a l'execution ; l'environnement est associe a l'action alors qu'il doit etre derive du target dans l'inventaire. Cet epic introduit la selection de target(s) dans le wizard d'execution, aligne les permissions sur le modele "environnement = propriete du target" et "une action, des targets autorises par profil (env + pattern/liste)".
+**FRs couvertes :** FR26, FR26a, FR43 (selection target, inventaire, RBAC aligne)
+**Phase :** Growth (Phase 2)
+**Reference :** implementation-artifacts/regles-metier-permissions-par-target-et-environnement.md
+
+### Epic 14 : Moteur Ops “targets-first” + robustesse d'execution + scalabilite (Oracle)
+Construire un moteur ops de niveau production dans `idp-portal` en complement d'Epic 13 : persistance relationnelle des targets (execution + scheduling), validation uniforme via registre, retries/backoff, dependances/mutex, **validation maintenance windows via inventaire (sans stockage portail)**, audit moteur corrélé, et scalabilite Oracle (partitionnement + retention + index).
+**FRs couvertes :** FR15, FR19, FR22, FR30, FR33 (guardrails moteur + traçabilite + perf)
+**Phase :** Growth (Phase 2) -> Scale (Phase 3)
+**Reference :** planning-artifacts/epic-14-moteur-ops-et-scalabilite.md
+
 ---
 
 ## Epic 1 : Bootstrap Projet & Authentification
@@ -2833,4 +2845,124 @@ So that je peux comprendre la structure des donnees et les dependances.
 **And** la documentation inclut les contraintes metier importantes (ex: RBAC, audit)
 **And** la documentation inclut un guide de migration de schema (comment ajouter une table, modifier une colonne)
 **And** la documentation est generee automatiquement depuis les modeles Django si possible (django-extensions graph_models)
+
+---
+
+## Epic 13 : Selection de targets a l'execution et permissions par environnement (inventaire)
+
+Aujourd'hui les actions ne permettent pas de choisir explicitement un target (serveur, base, groupe Ansible) a l'execution ; l'environnement est associe a l'action alors qu'il doit etre derive du target dans l'inventaire. Cet epic introduit la selection de target(s) dans le wizard d'execution, aligne les permissions sur le modele "environnement = propriete du target" et "une action, des targets autorises par profil (env + pattern/liste)".
+
+**Contexte :** Voir regles-metier-permissions-par-target-et-environnement.md pour les regles metier et criteres d'acceptation.
+
+### Story 13.1 : Inventaire — source via integration (API ou DB), association target a un environnement, API targets filtres
+
+As a systeme,
+I want que la source des targets soit une integration (type inventory ou inventory_db) et que chaque target soit associe a un environnement (dev, certif, prod),
+So that l'environnement d'une execution est derive du target choisi et qu'en dev sans API le fallback DBOPS_INVENTORY (synonyme) soit utilise.
+
+**Acceptance Criteria:**
+
+**Given** la source des targets est une **integration** (table INTEGRATIONS) : type `inventory` (API externe, base_url + credential_ref) ou `inventory_db` (lecture depuis schéma BD, config ex. schema DBOPS_INVENTORY). Si aucune integration inventaire n'est configuree (ex. dev), le backend utilise le **fallback** : lecture depuis le schéma DBOPS_INVENTORY (acces via synonyme).
+
+**Given** un target (serveur, base, groupe) est enregistre (API, table inventaire, ou DBOPS_INVENTORY),
+**When** on le consulte,
+**Then** il possede un attribut environnement (dev, certif, prod) et cet attribut est la source de verite pour l'env.
+
+**Given** une API liste les targets (ex. GET /api/v1/inventory/targets ou equivalent),
+**When** elle est appelee avec des filtres (environnement, user/permissions),
+**Then** elle retourne les targets avec leur environnement, filtres par permissions utilisateur (pour usage dans le wizard). La liste est alimentee depuis l'integration inventaire active ou le fallback DBOPS_INVENTORY.
+
+**And** les donnees inventaire alimentant les formulaires (FR43) exposent l'environnement par target.
+
+### Story 13.2 : Wizard d'execution — etape ou integration de selection des targets autorises
+
+As a DBA,
+I want selectionner explicitement le ou les targets (serveurs, bases) sur lesquels executer l'action dans le wizard,
+So que je cible precisement la ressource et que l'environnement soit deduit du target.
+
+**Acceptance Criteria:**
+
+**Given** un DBA ouvre le wizard d'execution pour une action,
+**When** le wizard affiche les etapes,
+**Then** une etape (ou une section) permet de choisir un ou plusieurs targets parmi une liste ; cette liste contient uniquement les targets autorises pour l'utilisateur (environnements + restriction pattern/liste du profil).
+
+**Given** l'utilisateur selectionne un target,
+**When** il passe a l'etape suivante (parametres / confirmation),
+**Then** l'environnement utilise pour l'impact, ServiceNow et l'audit est celui du target selectionne (plus de choix d'environnement separe si le target impose l'env).
+
+**Given** l'action ne requiert pas de target (cas particuliers),
+**When** le wizard est configure pour cette action,
+**Then** l'etape target peut etre masquee ou optionnelle selon la definition de l'action.
+
+**And** le payload d'execution (POST /api/v1/executions) inclut le ou les target_ids (ou target names) et l'environnement est derive cote backend du target.
+
+### Story 13.3 : RBAC — deriver l'environnement du target et filtrer les targets par profil
+
+As a systeme,
+I want calculer les targets autorises pour un utilisateur a partir de ses profils (environnements autorises + restriction pattern/liste),
+So que le wizard et l'API ne proposent que des targets sur lesquels l'utilisateur a le droit.
+
+**Acceptance Criteria:**
+
+**Given** un utilisateur a des droits sur les environnements [DEV, CERTIF] et aucune restriction target (pattern/liste),
+**When** il demande la liste des targets disponibles pour une action,
+**Then** il obtient tous les targets dont l'environnement est DEV ou CERTIF.
+
+**Given** un utilisateur a des droits sur DEV et une restriction target de type pattern (ex. web-*),
+**When** il demande la liste des targets disponibles,
+**Then** il obtient uniquement les targets en DEV dont l'identifiant matche le pattern.
+
+**Given** un utilisateur a des droits sur DEV et une restriction target de type liste explicite [srv1, srv2],
+**When** il demande la liste des targets disponibles,
+**Then** il obtient uniquement srv1 et srv2 s'ils appartiennent a un environnement autorise.
+
+**Given** une requete POST /api/v1/executions avec action_id et target_id(s),
+**When** le backend valide les permissions,
+**Then** il verifie que le target appartient a l'inventaire, qu'il est dans un environnement autorise pour l'utilisateur et qu'il respecte les restrictions target du profil ; sinon 403.
+
+**And** le cumul multi-profils applique l'union des targets autorises (regles metier RM6).
+
+### Story 13.4 : Refactoring — une action unique, validation backend et suppression liaison action-environnement
+
+As a systeme,
+I want qu'une action ne soit plus dupliquee par environnement et que la validation d'execution repose sur le target et les permissions profil,
+So que le modele soit coherent avec "une action, des targets autorises".
+
+**Acceptance Criteria:**
+
+**Given** le catalogue d'actions,
+**When** on consulte les actions disponibles,
+**Then** une action n'existe qu'une seule fois (pas d'instances "action X — dev", "action X — prod").
+
+**Given** des donnees ou configurations existantes lient encore "action" a "environnement" (ex. ancien RBAC ou champs deprecated),
+**When** cet epic est livre,
+**Then** la logique d'autorisation et d'execution utilise exclusivement : action + target(s) + environnement derive du target + permissions profil (env + pattern/liste).
+
+**Given** une execution est creee,
+**When** elle est enregistree (DB, audit),
+**Then** l'environnement enregistre est celui du target (ou des targets) choisi(s), pas une propriete de l'action.
+
+**And** les APIs et le cache RBAC (ex. can_execute) sont adaptes pour accepter action_id + target_id(s) ou target(s) avec environnement derive, et refuser si le target n'est pas autorise.
+
+### Story 13.5 : API self-service standalone — declencher une execution sans frontend et la retrouver dans le portail
+
+As an application cliente (self-service via API),
+I want pouvoir declencher une action via l'API backend sans interface graphique (script, CI/CD, outil interne),
+So that j'automatise des actions en libre service et je retrouve ensuite l'execution dans le portail (historique, timeline, audit).
+
+**Acceptance Criteria:**
+
+**Given** un client dispose d'un jeton d'acces valide (Authorization: Bearer <token>) et des permissions necessaires,
+**When** il appelle `POST /api/v1/executions` avec `action_id`, `target_id(s)` (ou identifiants de targets) et `parameters`,
+**Then** le backend accepte la requete sans dependance au frontend (pas de cookie/session UI requise) et retourne `201` avec `execution_id` (statut initial "soumis") dans le wrapper `{ "data": ... }`.
+
+**Given** une requete API tente de declencher une execution sur un target non autorise (env + pattern/liste) ou inconnu,
+**When** le backend valide la soumission,
+**Then** il refuse explicitement (`403` si non autorise, `404`/`422` si target inexistant ou payload invalide) avec un message d'erreur clair dans `{ "error": ... }`.
+
+**Given** une execution est creee via l'API,
+**When** l'utilisateur ouvre le portail,
+**Then** l'execution apparait dans l'historique (FR22) et la page detail / timeline affiche le meme etat que pour une execution declenchee via le wizard (FR19/FR23), y compris les mises a jour temps reel.
+
+**And** l'audit enregistre l'identite issue du jeton (qui) + action + targets + environnement derive du target + parametres (quoi) + horodatage (quand), de maniere identique aux executions declenchees via UI (FR30).
 

@@ -14,6 +14,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, AllowAny
 
+from idp_auth.models import User
 from idp_auth.serializers import UserProfileSerializer, TokenRefreshResponseSerializer
 from idp_auth.services import AuthService
 from idp_auth.saml_utils import create_saml_auth
@@ -21,10 +22,11 @@ from idp_auth.jwt_utils import create_access_token, create_refresh_token, verify
 from profiles.services import ProfileService
 from profiles.models import Profile
 from core.rbac import get_user_navigation_permissions, is_business_profile
-from core.exceptions import ForbiddenError, UnauthorizedError
+from core.exceptions import ForbiddenError, UnauthorizedError, NotFoundError
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id
+from catalog.models import Action
 
 logger = structlog.get_logger(__name__)
 
@@ -69,8 +71,16 @@ class SAMLLoginView(APIView):
         """Initiate SAML login flow."""
         # Dev bypass mode (for local development without IdP)
         if settings.AUTH_DEV_BYPASS:
+            # Resolve real dev-user id so GET /auth/me finds the user (no user with id=0 in DB)
+            dev_user, _ = User.objects.get_or_create(
+                username="dev-user",
+                defaults={
+                    "display_name": "Dev User",
+                    "profile": "dbops",
+                },
+            )
             token_data = {
-                "sub": "0",
+                "sub": str(dev_user.id),
                 "username": "dev-user",
                 "profile": "dbops",
                 "ad_groups": ["dbops"],
@@ -422,3 +432,46 @@ class LogoutView(APIView):
         )
         response.delete_cookie(key='refresh_token', path='/api/v1/auth')
         return response
+
+
+class UserFavoritesView(APIView):
+    """
+    GET /users/me/favorites - List current user's favorites.
+    Matches frontend expectations (FavoriteEntry: { action_id, created_at }).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        favorites = AuthService().list_favorites(request.user.id)
+        data = [
+            {
+                "action_id": fav.action_id,
+                "created_at": fav.created_at.isoformat() if fav.created_at else None,
+            }
+            for fav in favorites
+        ]
+        return Response({"data": data})
+
+
+class UserFavoriteItemView(APIView):
+    """
+    POST /users/me/favorites/{action_id} - Add favorite (idempotent).
+    DELETE /users/me/favorites/{action_id} - Remove favorite (idempotent).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, action_id: int):
+        try:
+            AuthService().add_favorite(request.user.id, action_id)
+        except Action.DoesNotExist:
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message="Action non trouvée",
+                details={"action_id": action_id},
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def delete(self, request, action_id: int):
+        # Idempotent: removing a non-existing favorite is still 204
+        AuthService().remove_favorite(request.user.id, action_id)
+        return Response(status=status.HTTP_204_NO_CONTENT)

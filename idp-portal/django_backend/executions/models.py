@@ -325,6 +325,10 @@ class ScheduledExecution(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
     updated_at = models.DateTimeField(null=True, blank=True, db_column='UPDATED_AT')
+
+    # Story 11.6/11.10: optional tracing + effective execution link
+    correlation_id = models.CharField(max_length=64, null=True, blank=True, db_column='CORRELATION_ID')
+    execution_id = models.BigIntegerField(null=True, blank=True, db_column='EXECUTION_ID')
     
     # Custom manager
     objects = ScheduledExecutionManager()

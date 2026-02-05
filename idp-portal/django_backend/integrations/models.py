@@ -14,13 +14,16 @@ class AuthFlow(models.TextChoices):
 
 
 class IntegrationType(models.TextChoices):
-    """Integration type enum matching Oracle CHECK constraint."""
+    """Integration type enum. DB allows free-form type (V024); these are suggested values."""
     AAP = 'aap', 'AAP'
     SERVICENOW = 'servicenow', 'ServiceNow'
     TERRAFORM = 'terraform', 'Terraform'
     AZUREDEVOPS = 'azuredevops', 'Azure DevOps'
     JIRA = 'jira', 'Jira'
     GITHUB_ACTIONS = 'github_actions', 'GitHub Actions'
+    # Epic 13: inventory source for targets (serveurs, bases). inventory = API, inventory_db = schema DBOPS_INVENTORY
+    INVENTORY = 'inventory', 'Inventaire (API)'
+    INVENTORY_DB = 'inventory_db', 'Inventaire (schéma BD)'
 
 
 class IntegrationManager(models.Manager):

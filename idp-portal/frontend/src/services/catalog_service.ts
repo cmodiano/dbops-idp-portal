@@ -85,7 +85,8 @@ export async function fetchCatalogActions(filters?: CatalogFilters): Promise<Cat
     params.set('category', filters.category);
   }
   const query = params.toString() ? `?${params.toString()}` : '';
-  return apiFetch<CatalogAction[]>(`/catalog/actions${query}`);
+  // DRF router endpoints are slash-terminated (avoid 301 redirects)
+  return apiFetch<CatalogAction[]>(`/catalog/actions/${query}`);
 }
 
 /**
@@ -149,7 +150,7 @@ export async function fetchCatalogActionById(
     data: CatalogActionDetail;
     can_execute: boolean;
     allowed_environments: string[];
-  }>(`/catalog/actions/${id}`);
+  }>(`/catalog/actions/${id}/`);
   return {
     data: response.data,
     can_execute: response.can_execute ?? false,
@@ -166,6 +167,6 @@ export async function fetchCatalogActionById(
  * @returns ActionStats or null if no data
  */
 export async function fetchActionStats(actionId: number): Promise<ActionStats | null> {
-  const response = await apiFetchRaw<{ data: ActionStats | null }>(`/catalog/actions/${actionId}/stats`);
+  const response = await apiFetchRaw<{ data: ActionStats | null }>(`/catalog/actions/${actionId}/stats/`);
   return response.data;
 }

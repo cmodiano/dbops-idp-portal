@@ -1,8 +1,8 @@
 # Story 12.1: Documentation backend implementation
 
-Status: ready-for-dev
+Status: done
 
-<!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
+<!-- Story context engine analysis completed - comprehensive developer guide created -->
 
 ## Story
 
@@ -26,61 +26,61 @@ So that je peux comprendre rapidement l'architecture, les patterns utilisés et 
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Documenter la structure des apps Django (AC: 1)
-  - [ ] Documenter les apps installées et leurs responsabilités
-  - [ ] Documenter l'organisation des dossiers et fichiers
-  - [ ] Créer un diagramme de dépendances entre apps
-- [ ] Task 2: Documenter les modèles et relations (AC: 1)
-  - [ ] Documenter tous les modèles Django avec leurs champs
-  - [ ] Documenter les relations ForeignKey, OneToOne, ManyToMany
-  - [ ] Documenter les managers personnalisés et leurs méthodes
-  - [ ] Documenter les helpers JSON pour les champs CLOB
-  - [ ] Créer un diagramme ER simplifié
-- [ ] Task 3: Documenter les services et logique métier (AC: 1)
-  - [ ] Documenter CatalogService et ses méthodes
-  - [ ] Documenter ProfileService et gestion RBAC
-  - [ ] Documenter ExecutionService (si existant)
-  - [ ] Documenter AuditService
-  - [ ] Documenter les patterns de transaction et validation
-- [ ] Task 4: Documenter les endpoints API et serializers (AC: 1)
-  - [ ] Documenter tous les ViewSets et leurs actions
-  - [ ] Documenter les serializers et validation
-  - [ ] Documenter la pagination personnalisée
-  - [ ] Documenter le format de réponse (snake_case, wrapper data/error)
-  - [ ] Documenter les codes HTTP et gestion d'erreurs
-- [ ] Task 5: Documenter la gestion des permissions RBAC (AC: 1)
-  - [ ] Documenter le système de profils et permissions
-  - [ ] Documenter les permissions DRF (DBOPSProfilePermission, OptionalUserPermission)
-  - [ ] Documenter le filtrage RBAC dans les ViewSets
-  - [ ] Documenter le cumul des permissions multi-profils
-- [ ] Task 6: Documenter l'intégration SAML (AC: 1)
-  - [ ] Documenter le flow d'authentification SAML (si implémenté)
-  - [ ] Documenter la gestion des sessions JWT
-  - [ ] Documenter la résolution des profils depuis AD groups
-- [ ] Task 7: Documenter le middleware et logging (AC: 1)
-  - [ ] Documenter le middleware CORS
-  - [ ] Documenter le middleware de correlation ID
-  - [ ] Documenter le logging structuré JSON
-  - [ ] Documenter l'intégration avec Splunk
-- [ ] Task 8: Documenter les tests et couverture (AC: 1)
-  - [ ] Documenter la structure des tests (unit, integration)
-  - [ ] Documenter les fixtures et mocks utilisés
-  - [ ] Documenter la couverture de code actuelle
-  - [ ] Documenter comment exécuter les tests
-- [ ] Task 9: Créer des guides pas-à-pas avec exemples (AC: 2)
-  - [ ] Guide: Comment ajouter un nouvel endpoint API
-  - [ ] Guide: Comment ajouter un nouveau modèle
-  - [ ] Guide: Comment ajouter une nouvelle permission RBAC
-  - [ ] Guide: Comment ajouter un nouveau service
-- [ ] Task 10: Créer des diagrammes d'architecture (AC: 3)
-  - [ ] Diagramme des couches (API → Services → Repositories → Models → DB)
-  - [ ] Diagramme de flux de données pour une exécution
-  - [ ] Diagramme de flux d'authentification et RBAC
-- [ ] Task 11: Créer un guide de contribution (AC: 4)
-  - [ ] Setup environnement de développement
-  - [ ] Conventions de code (naming, structure, format)
-  - [ ] Processus de review et validation
-  - [ ] Comment maintenir la documentation à jour
+- [x] Task 1: Documenter la structure des apps Django (AC: 1)
+  - [x] Documenter les apps installées et leurs responsabilités
+  - [x] Documenter l'organisation des dossiers et fichiers
+  - [x] Créer un diagramme de dépendances entre apps
+- [x] Task 2: Documenter les modèles et relations (AC: 1)
+  - [x] Documenter tous les modèles Django avec leurs champs
+  - [x] Documenter les relations ForeignKey, OneToOne, ManyToMany
+  - [x] Documenter les managers personnalisés et leurs méthodes
+  - [x] Documenter les helpers JSON pour les champs CLOB
+  - [x] Créer un diagramme ER simplifié
+- [x] Task 3: Documenter les services et logique métier (AC: 1)
+  - [x] Documenter CatalogService et ses méthodes
+  - [x] Documenter ProfileService et gestion RBAC
+  - [x] Documenter ExecutionService (si existant)
+  - [x] Documenter AuditService
+  - [x] Documenter les patterns de transaction et validation
+- [x] Task 4: Documenter les endpoints API et serializers (AC: 1)
+  - [x] Documenter tous les ViewSets et leurs actions
+  - [x] Documenter les serializers et validation
+  - [x] Documenter la pagination personnalisée
+  - [x] Documenter le format de réponse (snake_case, wrapper data/error)
+  - [x] Documenter les codes HTTP et gestion d'erreurs
+- [x] Task 5: Documenter la gestion des permissions RBAC (AC: 1)
+  - [x] Documenter le système de profils et permissions
+  - [x] Documenter les permissions DRF (DBOPSProfilePermission, OptionalUserPermission)
+  - [x] Documenter le filtrage RBAC dans les ViewSets
+  - [x] Documenter le cumul des permissions multi-profils
+- [x] Task 6: Documenter l'intégration SAML (AC: 1)
+  - [x] Documenter le flow d'authentification SAML (si implémenté)
+  - [x] Documenter la gestion des sessions JWT
+  - [x] Documenter la résolution des profils depuis AD groups
+- [x] Task 7: Documenter le middleware et logging (AC: 1)
+  - [x] Documenter le middleware CORS
+  - [x] Documenter le middleware de correlation ID
+  - [x] Documenter le logging structuré JSON
+  - [x] Documenter l'intégration avec Splunk
+- [x] Task 8: Documenter les tests et couverture (AC: 1)
+  - [x] Documenter la structure des tests (unit, integration)
+  - [x] Documenter les fixtures et mocks utilisés
+  - [x] Documenter la couverture de code actuelle
+  - [x] Documenter comment exécuter les tests
+- [x] Task 9: Créer des guides pas-à-pas avec exemples (AC: 2)
+  - [x] Guide: Comment ajouter un nouvel endpoint API
+  - [x] Guide: Comment ajouter un nouveau modèle
+  - [x] Guide: Comment ajouter une nouvelle permission RBAC
+  - [x] Guide: Comment ajouter un nouveau service
+- [x] Task 10: Créer des diagrammes d'architecture (AC: 3)
+  - [x] Diagramme des couches (API → Services → Repositories → Models → DB)
+  - [x] Diagramme de flux de données pour une exécution
+  - [x] Diagramme de flux d'authentification et RBAC
+- [x] Task 11: Créer un guide de contribution (AC: 4)
+  - [x] Setup environnement de développement
+  - [x] Conventions de code (naming, structure, format)
+  - [x] Processus de review et validation
+  - [x] Comment maintenir la documentation à jour
 
 ## Dev Notes
 
@@ -230,8 +230,53 @@ Chaque app Django suit la structure standard:
 
 **Détections de variances:**
 - Cohabitation Flyway/Django: Temporaire, documentée dans MIGRATION_STRATEGY.md
-- Pas de SAML implémenté encore: Story M.7 prévue pour l'authentification complète
-- Certains services manquants: ExecutionService à documenter si existant, sinon à créer
+- SAML 2.0 implémenté dans Story M-7 (code review complété 2026-02-04)
+- Backend Django déclaré PRODUCTION-READY après Epic M (2026-02-05)
+
+### Contexte Epic M - Rétrospective
+
+L'Epic M (migration FastAPI → Django REST) est terminé avec succès. Points clés de la rétrospective (2026-02-05):
+
+**Métriques:**
+- 10/10 stories complétées en 3 jours
+- 42 endpoints migrés
+- 82% couverture tests (objectif: 85%)
+- ~70 issues code review détectées et corrigées
+
+**Patterns récurrents identifiés (à éviter):**
+| Pattern | Occurrences | Sévérité |
+|---------|-------------|----------|
+| Types d'audit hardcodés vs enums | 4/10 stories | MEDIUM |
+| N+1 queries | 3/10 stories | HIGH |
+| Validation paramètres manquante | 3/10 stories | MEDIUM |
+| Failles sécurité | 2/10 stories | CRITICAL |
+
+**Actions recommandées pour la documentation:**
+1. Créer une checklist standard pour nouveaux endpoints (validations, sécurité)
+2. Documenter les décisions architecturales (ADRs)
+3. Inclure un guide de migration FastAPI → Django pour référence future
+4. Documenter les patterns ORM (éviter N+1 avec select_related/prefetch_related)
+
+### Documentation Existante à Intégrer
+
+Ces documents dans `django_backend/docs/` doivent être référencés et intégrés:
+- `django-orm-migration-notes.md` - Migration SQL brut → ORM (13 KB, détaillé)
+- `drf-api-migration-notes.md` - Migration API FastAPI → DRF (16 KB, détaillé)
+- `TRANSACTION_AUDIT_STRATEGY.md` - Stratégie transactions/audit (8 KB)
+- `sso-architecture.md` / `sso-runbook.md` - Architecture SAML (11 KB / 6 KB)
+- `observability-architecture.md` / `observability-runbook.md` - Logging (9 KB / 5 KB)
+- `logging-conventions.md` - Conventions structlog JSON (5 KB)
+
+### Technical Stack Versions (Février 2026)
+
+| Technologie | Version | Notes |
+|-------------|---------|-------|
+| Django | 5.2.11 | Framework principal |
+| Django REST Framework | 3.15+ | API REST |
+| python-oracledb | 3.4.1 (mode Thin) | Connexion Oracle |
+| structlog | dernière | Logging JSON structuré |
+| pytest-django | dernière | Tests |
+| gunicorn | 23.0.0 | Production WSGI |
 
 ### References
 
@@ -274,16 +319,66 @@ Chaque app Django suit la structure standard:
 
 ### Agent Model Used
 
-[À compléter lors de l'implémentation]
+Claude Opus 4.5 (claude-opus-4-5-20251101)
 
 ### Debug Log References
 
-[À compléter lors de l'implémentation]
-
 ### Completion Notes List
 
-[À compléter lors de l'implémentation]
+- 2026-02-05: All 11 tasks completed - comprehensive Django backend documentation created
+- Created 10 documentation files in `idp-portal/docs/backend/`
+- ASCII diagrams used for architecture, ER, and SAML flow (compatible with all markdown renderers)
+- All acceptance criteria validated:
+  - AC1: All backend components documented (apps, models, services, endpoints, RBAC, SAML, middleware, tests)
+  - AC2: Step-by-step guides with code examples included in contributing.md
+  - AC3: Architecture diagrams included (layers, ER, SAML flow, RBAC flow)
+  - AC4: Contribution guide with dev setup, conventions, and PR process
 
 ### File List
 
-[À compléter lors de l'implémentation]
+**Documentation créée dans `idp-portal/docs/backend/`:**
+- `README.md` - Point d'entrée avec vue d'ensemble et index de navigation
+- `apps-structure.md` - Structure des 6 apps Django et leurs responsabilités
+- `models.md` - Modèles, relations, managers personnalisés, helpers JSON, diagramme ER
+- `services.md` - CatalogService, ProfileService, AuditService, patterns transaction
+- `api-reference.md` - Tous les endpoints, serializers, pagination, codes d'erreur
+- `rbac.md` - Système de profils, permissions DRF, filtrage, cumul multi-profils
+- `authentication.md` - Flow SAML complet, JWT utils, endpoints auth, mode dev bypass
+- `observability.md` - Middleware (ordre, correlation ID, logging), health check, CORS, Splunk
+- `testing.md` - Structure tests, fixtures, factories, markers, couverture
+- `contributing.md` - Setup dev, conventions, 4 guides pas-à-pas (endpoint, modèle, permission, service)
+
+**Diagrammes inclus (format ASCII):**
+- Diagramme des couches backend (README.md, apps-structure.md)
+- Diagramme ER des modèles (models.md)
+- Diagramme de séquence authentification SAML (authentication.md)
+- Diagramme de flux RBAC (rbac.md)
+
+### Change Log
+
+| Date | Changement | Fichiers |
+|------|------------|----------|
+| 2026-02-05 | Initial: 10 fichiers documentation créés | Tous |
+| 2026-02-05 | Code review: 7 fixes (3 HIGH + 4 MEDIUM) | rbac.md, services.md, models.md, api-reference.md, authentication.md, testing.md |
+
+### Code Review Fixes Applied (2026-02-05)
+
+**HIGH-1:** rbac.md - DBOPSProfilePermission documentation complétée avec l'implémentation réelle (multi-méthode: profile attr, M2M, AD groups, superuser fallback)
+
+**HIGH-2:** services.md - Ajout de la méthode `get_by_id()` manquante dans CatalogService
+
+**HIGH-3:** services.md - AuditService.create_entry signature corrigée (enums AuditActionType/AuditEntityType au lieu de strings) + exemple d'utilisation
+
+**MEDIUM-1:** testing.md - Fixtures clarifiées: `force_authenticate()` par défaut + nouvelle fixture `api_client_with_jwt` pour tests d'intégration auth
+
+**MEDIUM-2:** models.md - ProfileManager complété avec méthode `list_with_permissions_count()`
+
+**MEDIUM-3:** api-reference.md - Endpoint `/api/v1/tags/catalog` documenté correctement (action DRF avec url_path)
+
+**MEDIUM-4:** authentication.md - `decode_token_unsafe` warning sécurité renforcé avec tableau cas d'usage
+
+**Issues LOW non corrigées (cosmétiques):**
+- LOW-1: Alignement diagramme ASCII
+- LOW-2: Version ruff non spécifiée
+- LOW-3: Référence settings.py manquante
+- LOW-4: .coveragerc vs pyproject.toml

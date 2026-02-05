@@ -48,7 +48,7 @@ import { submitExecution, fetchInventoryItems } from '../../services/execution_s
 import { createScheduledExecution, validateCronExpression, getCronNextExecutions } from '../../services/scheduled_execution_service';
 import { CRON_PRESETS } from '../../utils/cronHelper';
 import CronExpressionHelper from '../shared/CronExpressionHelper';
-import { debounce } from 'lodash';
+import { debounce } from '../../utils/debounce';
 import { ImpactIndicator } from '../shared/ImpactIndicator';
 import { ExecutionTimeline } from '../execution';
 import { STYLE_TOKENS } from '../../theme/styleTokens';

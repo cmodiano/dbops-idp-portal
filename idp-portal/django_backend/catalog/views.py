@@ -7,7 +7,8 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from django.db.models import Count, Q
+from django.db.models import Count, Q, OuterRef, Subquery, IntegerField, Value
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from cachetools import TTLCache
 from catalog.models import Action, Tag, ActionStatus, ActionItemType
@@ -21,6 +22,22 @@ from core.permissions import DBOPSProfilePermission, OptionalUserPermission
 from core.exceptions import NotFoundError, BadRequestError, InvalidStateError
 from executions.models import Execution
 from profiles.services import ProfileService
+
+
+def _annotate_execution_count(queryset):
+    """
+    Annotate actions with execution_count without GROUP BY on CLOB columns (Oracle limitation).
+    Uses a correlated subquery instead of Count() over a join.
+    """
+    subq = (
+        Execution.objects.filter(action_id=OuterRef('pk'))
+        .values('action_id')
+        .annotate(c=Count('*'))
+        .values('c')
+    )
+    return queryset.annotate(
+        execution_count=Coalesce(Subquery(subq, output_field=IntegerField()), Value(0))
+    )
 
 
 def _filter_by_rbac(actions, cumulative_permissions):
@@ -221,9 +238,7 @@ class ActionViewSet(viewsets.ModelViewSet):
         
         # Annotate execution_count for list view
         if self.action == 'list':
-            queryset = queryset.annotate(
-                execution_count=Count('executions', distinct=True)
-            )
+            queryset = _annotate_execution_count(queryset)
         
         # Filters
         status_filter = self.request.query_params.get('status')
@@ -582,9 +597,7 @@ class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
         queryset = self.filter_queryset(self.get_queryset())
         
         # Annotate execution_count
-        queryset = queryset.annotate(
-            execution_count=Count('executions', distinct=True)
-        )
+        queryset = _annotate_execution_count(queryset)
         
         serializer = self.get_serializer(queryset, many=True)
         data = serializer.data
@@ -698,6 +711,14 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet):
 
         # Get base queryset of published actions (filtered by RBAC if user authenticated)
         actions_queryset = Action.objects.filter(status=ActionStatus.PUBLISHED)
+
+        # Optional category filter (Story 8.7): restrict to actions tagged with the category tag
+        category = request.query_params.get('category')
+        if category and category.lower() not in ('tout', 'all', 'mes-actions'):
+            from catalog.models import normalize_tag_name
+            category_tag = normalize_tag_name(category)
+            if category_tag:
+                actions_queryset = actions_queryset.filter(actiontag__tag__name=category_tag).distinct()
 
         # Apply RBAC filtering if user is authenticated
         cumulative_permissions = _get_cumulative_permissions_for_user(request.user)

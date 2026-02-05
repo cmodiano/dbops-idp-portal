@@ -80,12 +80,14 @@ class ProfileListSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Profile
-        fields = ['id', 'name', 'ad_group', 'permission_count', 'created_at']
+        fields = ['id', 'name', 'ad_group', 'is_admin', 'is_auditor', 'permission_count', 'created_at']
         read_only_fields = ['id', 'permission_count', 'created_at']
     
     def to_representation(self, instance):
         """Convert is_admin/is_auditor from IntegerField (0/1) to boolean."""
         data = super().to_representation(instance)
+        data['is_admin'] = bool(instance.is_admin)
+        data['is_auditor'] = bool(instance.is_auditor)
         return data
 
 

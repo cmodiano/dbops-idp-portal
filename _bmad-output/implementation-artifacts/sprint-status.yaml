@@ -168,7 +168,7 @@ development_status:
     11-10-api-integration-scheduler-externe: done # GET /api/v1/scheduled-executions/pending - endpoint pour scheduler externe (Control-M/Django) récupérer schedules à exécuter + PATCH status=executed avec recalcul next_execution_date; 19/19 tests pass
     epic-11-retrospective: optional
     # === Epic M: Migration FastAPI vers Django REST (Arrimage plateforme) ===
-    epic-m: in-progress
+    epic-m: done
     m-1-bootstrap-projet-django-et-drf: done # Code review 2026-02-03: 1 CRITICAL + 4 HIGH + 4 MEDIUM fixes applied - format réponse FastAPI corrigé, fichiers manquants créés, tests améliorés
     m-2-modeles-django-et-migrations-schema-oracle: done # Code review 2026-02-03: 10 issues fixed (3 HIGH + 5 MEDIUM + 2 LOW) - imports json optimisés, logging ajouté, migrations générées
     m-3-couche-donnees-repositories-vers-orm-django: done # Code review 2026-02-03 (adversarial): 10 fixes applied (1 CRITICAL + 3 HIGH + 4 MEDIUM + 2 LOW) - correlation_id ajouté, types audit PROFILE_*/INTEGRATION_* corrigés avec enum, prefetch_related pour OneToOneField, validation user_id, export CSV JSON formaté, tests README créé, tous types hardcodés remplacés par enum. Code review 2026-02-03 (fourth): 10 additional fixes (2 CRITICAL + 4 HIGH + 4 MEDIUM) - tous types audit hardcodés remplacés par enums, correlation_id ajouté aux méthodes execution, entity_type corrigés, types manquants ajoutés aux enums
@@ -179,12 +179,21 @@ development_status:
     m-8-middleware-logging-observabilite: done # 2026-02-05: Logging structuré JSON (structlog), RequestResponseLoggingMiddleware, health check étendu (DB+Vault+ServiceNow), CORS, propagation correlation_id - Implementation complete
     m-9-tests-unitaires-et-integration-parite: done # 2026-02-05: All 13 tasks completed - fixtures, factories, integration tests, RBAC security tests, performance benchmarks, CI configuration, documentation
     m-10-strategie-bascule-et-decommissionnement-fastapi: done # 2026-02-05: All 10 tasks + code review completed - 10 issues found (2 CRITICAL, 1 HIGH, 4 MEDIUM, 3 LOW), 3 auto-fixed (gunicorn, .env template, plan bascule), 4 documented for follow-up - Backend Django PRODUCTION-READY
-    epic-m-retrospective: optional
+    epic-m-retrospective: done # 2026-02-05
     # === Epic 12: Documentation technique (post-Django) ===
     # À réaliser après le passage à Django pour documenter la cible finale.
     # ⚠️ ATTENTION: Cet epic ne doit être démarré qu'après la complétion de l'Epic M (Migration Django)
-    epic-12: backlog
-    12-1-documentation-backend-implementation: backlog # Documentation détaillée de l'implémentation backend
-    12-2-documentation-frontend-implementation: backlog # Documentation détaillée de l'implémentation frontend
+    epic-12: in-progress
+    12-1-documentation-backend-implementation: done # Code review 2026-02-05: 7 fixes (3 HIGH + 4 MEDIUM) - Documentation alignée sur l'implémentation réelle
+    12-2-documentation-frontend-implementation: done # Documentation détaillée de l'implémentation frontend (2026-02-05); code-review 2026-02-05
     12-3-schema-base-donnees-et-relations-tables: backlog # Schéma de base de données et relations entre les tables
     epic-12-retrospective: optional
+    # === Epic 13: Sélection de targets à l'exécution et permissions par environnement (inventaire) ===
+    # Réf: regles-metier-permissions-par-target-et-environnement.md — Une action, choix de target(s) autorisés, env = propriété du target
+    epic-13: backlog
+    13-1-inventaire-association-target-environnement-api-targets-filtres: backlog
+    13-2-wizard-execution-selection-targets-autorises: backlog
+    13-3-rbac-environnement-du-target-filtre-targets-par-profil: backlog
+    13-4-refactoring-une-action-unique-validation-backend: backlog
+    13-5-api-standalone-execution-sans-frontend-visibilite-portail: backlog
+    epic-13-retrospective: optional

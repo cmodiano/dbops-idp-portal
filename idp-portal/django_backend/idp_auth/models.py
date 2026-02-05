@@ -59,7 +59,11 @@ class User(models.Model):
     saml_subject = models.CharField(max_length=512, null=True, blank=True, db_column='SAML_SUBJECT')
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
     updated_at = models.DateTimeField(auto_now=True, db_column='UPDATED_AT')
-    
+
+    # Compatibility with middleware and exception handler (request.user.is_authenticated).
+    # AnonymousUser has is_authenticated = False; our User instances are always authenticated.
+    is_authenticated = True
+
     # Custom manager
     objects = UserManager()
 

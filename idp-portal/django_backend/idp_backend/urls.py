@@ -21,7 +21,10 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/v1/', include('core.urls')),
     path('api/v1/', include('catalog.urls')),
+    path('api/v1/', include('executions.urls')),
+    path('api/v1/', include('dashboard.urls')),
     path('api/v1/', include('idp_auth.urls')),
     path('api/v1/', include('integrations.urls')),
+    path('api/v1/admin/', include('admin_analytics.urls')),
     path('api/v1/admin/', include('profiles.urls')),
 ]

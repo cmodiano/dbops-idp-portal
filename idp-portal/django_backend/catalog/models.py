@@ -1,6 +1,7 @@
 import json
 import logging
 from django.db import models
+from django.db.models import Count, Subquery
 from idp_auth.models import User
 from integrations.models import Integration
 
@@ -50,16 +51,16 @@ def normalize_tag_name(name: str) -> str:
     return name.strip().lower().replace(" ", "")
 
 
-class ActionManager(models.Manager):
+class ActionQuerySet(models.QuerySet):
     """
-    Custom manager for Action model.
-    Provides query methods for common action queries.
+    Custom QuerySet for Action model.
+    Exposes chainable helpers (works after .filter()).
     """
-    
+
     def list_published(self):
         """Return QuerySet of published actions only."""
         return self.filter(status=ActionStatus.PUBLISHED)
-    
+
     def list_by_status(self, status: str):
         """
         Filter actions by status.
@@ -71,7 +72,7 @@ class ActionManager(models.Manager):
             QuerySet filtered by status
         """
         return self.filter(status=status)
-    
+
     def search_by_tags(self, tag_names: list[str]):
         """
         Search actions by tags (AND logic - action must have all specified tags).
@@ -83,17 +84,44 @@ class ActionManager(models.Manager):
             QuerySet of actions matching all tags, distinct
         """
         queryset = self.filter(status=ActionStatus.PUBLISHED)
-        for tag_name in tag_names:
-            queryset = queryset.filter(actiontag__tag__name=tag_name)
-        return queryset.distinct()
-    
+
+        # Normalize / drop empties
+        tag_names = [t for t in (tag_names or []) if t and str(t).strip()]
+        if not tag_names:
+            return queryset
+
+        # IMPORTANT (Oracle): avoid DISTINCT over Action rows because Action has CLOB columns.
+        # Use a subquery on ACTION_TAGS to get matching action IDs, then filter by id__in.
+        # AND semantics: action must have *all* specified tag names.
+        from catalog.models import ActionTag  # local import (model defined later in this module)
+
+        unique_tag_names = sorted(set(tag_names))
+        action_ids_subq = (
+            ActionTag.objects.filter(
+                tag__name__in=unique_tag_names,
+                action__status=ActionStatus.PUBLISHED,
+            )
+            .values("action_id")
+            .annotate(matched=Count("tag_id", distinct=True))
+            .filter(matched=len(unique_tag_names))
+            .values("action_id")
+        )
+        return queryset.filter(id__in=Subquery(action_ids_subq))
+
     def with_tags(self):
         """Prefetch tags to avoid N+1 queries."""
         return self.prefetch_related('actiontag_set__tag')
-    
+
     def with_creator(self):
         """Select related creator to avoid N+1 queries."""
         return self.select_related('created_by')
+
+
+class ActionManager(models.Manager.from_queryset(ActionQuerySet)):
+    """
+    Custom manager for Action model.
+    Provides query methods for common action queries (and keeps them chainable).
+    """
 
 
 class Action(models.Model):

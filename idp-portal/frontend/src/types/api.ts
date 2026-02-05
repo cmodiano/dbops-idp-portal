@@ -293,6 +293,7 @@ export interface ProfileTargetPermissionsResponse {
 
 /** Story 4.9 AC1: Integration type is now free-form string (not enum).
  * Suggested types for UI autocomplete (legacy types, not enforced). */
+/** Epic 13: inventory = API externe, inventory_db = schéma BD (ex. DBOPS_INVENTORY). */
 export const SUGGESTED_INTEGRATION_TYPES = [
   'aap',
   'servicenow',
@@ -300,6 +301,8 @@ export const SUGGESTED_INTEGRATION_TYPES = [
   'azuredevops',
   'jira',
   'github_actions',
+  'inventory',
+  'inventory_db',
 ] as const;
 
 /** Authentication flow types (Story 4.9 AC2). */
