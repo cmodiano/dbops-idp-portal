@@ -1,4 +1,4 @@
-# Django Backend - Migration from FastAPI
+# Django Backend
 # Python 3.12+ required
 
 # Core Django
@@ -16,17 +16,17 @@ python-dotenv>=1.0.0
 # YAML support (for profile import/export)
 PyYAML>=6.0.0
 
-# SAML authentication (same as FastAPI for parity)
+# SAML authentication
 python3-saml>=1.16.0
 
-# JWT token generation/validation (same as FastAPI for parity)
+# JWT token generation/validation
 python-jose[cryptography]>=3.3.0
 
-# Structured logging (same as FastAPI for parity - Story M.8)
+# Structured logging (Story M.8)
 structlog>=24.1.0
 
 # HTTP client for health check external services (Story M.8)
-requests>=2.31.0
+requests>=2.32.5  # CVE-2024-35195, CVE-2024-47081 fixed (Story 15.4)
 
 # Caching (TTLCache for catalog views)
 cachetools>=5.3.0
@@ -56,3 +56,8 @@ coverage[toml]>=7.6.0
 
 # Production Server (Story M.10)
 gunicorn>=22.0.0  # WSGI server for production deployment
+
+# Security Tools (Story 15.1)
+bandit[toml]>=1.7.5  # SAST Python security analysis
+pip-audit>=2.7.0  # Python dependency vulnerability scanner
+detect-secrets>=1.5.0  # Secret detection in code

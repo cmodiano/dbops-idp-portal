@@ -1,7 +1,7 @@
 """
 Security and RBAC tests.
 
-Story M.9: Tests unitaires et d'intégration (parité avec FastAPI)
+Story M.9: Tests unitaires et d'intégration
 Tests RBAC permissions, authentication, and authorization.
 """
 
@@ -42,18 +42,18 @@ class TestAuthenticationRequired(TestCase):
         )
 
     def test_unauthenticated_request_returns_401(self):
-        """Test that unauthenticated requests return 401."""
-        # Don't authenticate
-        response = self.client.get('/api/v1/catalog/actions')
-        # Without auth middleware, might return 403 or 401
+        """Test that unauthenticated requests to protected endpoints return 401."""
+        # Don't authenticate - test admin endpoint which requires authentication
+        response = self.client.get('/api/v1/admin/actions/')
+        # Admin endpoints require authentication
         self.assertIn(response.status_code, [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN])
 
     def test_authenticated_request_succeeds(self):
-        """Test that authenticated requests succeed."""
+        """Test that authenticated requests to catalog succeed."""
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/catalog/actions')
-        # Should return 200 or data
-        self.assertIn(response.status_code, [status.HTTP_200_OK, status.HTTP_404_NOT_FOUND])
+        response = self.client.get('/api/v1/catalog/actions/')
+        # Catalog endpoint is public but returns data based on RBAC
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
 
 @pytest.mark.django_db
