@@ -185,7 +185,7 @@ export function ProfileWizard({
         environments: values.environments ?? [],
       };
 
-      // Build target permissions payload
+      // Build target permissions payload (validation rules ensure list/pattern have at least one item)
       const targetsType = values.targets_type ?? 'all';
       const targetsPayload: ProfileTargetPermissionsUpdate = {
         targets_type: targetsType,
@@ -331,7 +331,18 @@ export function ProfileWizard({
             </Form.Item>
 
             {targetsType === 'list' && (
-              <Form.Item name="target_names" label="Targets autorisés">
+              <Form.Item
+                name="target_names"
+                label="Targets autorisés"
+                rules={[
+                  {
+                    validator: (_, value) =>
+                      value?.length
+                        ? Promise.resolve()
+                        : Promise.reject(new Error('Sélectionnez au moins un target.')),
+                  },
+                ]}
+              >
                 <Select
                   mode="multiple"
                   placeholder="Sélectionner des targets (ex. assurance-db01)"
@@ -345,7 +356,18 @@ export function ProfileWizard({
             )}
 
             {targetsType === 'pattern' && (
-              <Form.Item name="target_patterns" label="Patterns (ex. assurance-*)">
+              <Form.Item
+                name="target_patterns"
+                label="Patterns (ex. assurance-*)"
+                rules={[
+                  {
+                    validator: (_, value) =>
+                      value?.length
+                        ? Promise.resolve()
+                        : Promise.reject(new Error('Saisissez au moins un pattern.')),
+                  },
+                ]}
+              >
                 <Select
                   mode="tags"
                   placeholder="ex. assurance-*, infra-*"

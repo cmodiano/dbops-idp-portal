@@ -80,20 +80,20 @@ describe('executionRenderers', () => {
   describe('renderEngineIcon (AC4)', () => {
     it('renders Oracle icon (SVG)', () => {
       const { container } = render(<>{renderEngineIcon('Oracle', 'action')}</>);
-      const img = container.querySelector('img[src*="oracle.svg"]');
+      const img = container.querySelector('img[src*="oracle"]');
       expect(img).toBeInTheDocument();
-      expect(img).toHaveAttribute('width', '20');
+      expect(img).toHaveAttribute('width', '44');
     });
 
     it('renders SQL Server icon (SVG)', () => {
       const { container } = render(<>{renderEngineIcon('SQL Server', 'action')}</>);
-      const img = container.querySelector('img[src*="sqlserver.svg"]');
+      const img = container.querySelector('img[src*="microsoft-sql-server"]');
       expect(img).toBeInTheDocument();
     });
 
     it('renders DB2 icon (SVG)', () => {
       const { container } = render(<>{renderEngineIcon('DB2', 'action')}</>);
-      const img = container.querySelector('img[src*="db2.svg"]');
+      const img = container.querySelector('img[src*="db2"]');
       expect(img).toBeInTheDocument();
     });
 

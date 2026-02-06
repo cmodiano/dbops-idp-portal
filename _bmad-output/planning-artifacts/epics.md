@@ -2778,6 +2778,30 @@ So que la mise en production du backend Django soit maîtrisee et sans perte de 
 **When** on surveille les erreurs et les metriques (logs, health, temps de reponse)
 **Then** les incidents sont traites selon le runbook ; un retour arriere vers FastAPI est possible si documente (snapshot config, rollback DNS/deploy)
 
+### Story M.11 : Nettoyage code FastAPI — suppression des references et mise a jour documentation
+
+As a developpeur,
+I want supprimer toutes les references a FastAPI dans le code et mettre a jour la documentation pour refleter que Django est le backend unique,
+So que le codebase soit coherent, sans dette documentaire, et que les nouveaux contributeurs ne soient plus induits en erreur par des mentions de FastAPI.
+
+**Acceptance Criteria:**
+
+**Given** la documentation technique du portail (README, docs/, planning-artifacts)
+**When** on la consulte
+**Then** elle decrit uniquement Django/DRF comme backend
+**And** les mentions de FastAPI sont supprimees ou reformulees en contexte historique uniquement si pertinent
+**And** les guides de demarrage, d'architecture et de contribution ne font plus reference a FastAPI comme option active
+
+**Given** le code source du backend Django (django_backend/)
+**When** on recherche FastAPI ou fastapi dans les fichiers
+**Then** aucune occurrence ne subsiste dans les commentaires, docstrings ou chaines
+**And** les formulations sont adaptees (ex. format d'erreur DRF au lieu de format FastAPI)
+
+**Given** le repertoire backend/ (code FastAPI legacy)
+**When** la story est terminee
+**Then** soit il est supprime de la branche principale, soit une note claire indique qu'il est archive
+**And** les scripts CI/CD et de demarrage ne pointent plus vers le backend FastAPI
+
 ---
 
 ## Epic 12 : Documentation technique

@@ -13,13 +13,14 @@
       "Bash(npm test:*)",
       "Bash(/usr/bin/env python3 -m pytest:*)",
       "Bash(ls:*)",
-      "Bash(/Users/cyrille/Documents/Dev/test/idp-portal/.venv/bin/python -m pytest:*)",
-      "Bash(/Users/cyrille/Documents/Dev/test/idp-portal/django_backend/.venv/bin/python -m pytest:*)",
-      "Bash(/Users/cyrille/Documents/Dev/test/idp-portal/django_backend/.venv/bin/python:*)",
-      "Bash(git -C /Users/cyrille/Documents/Dev/test status --short)",
       "Bash(poetry run pytest:*)",
-      "Bash(source:*)",
-      "Bash(pip show:*)"
+      "Bash(git:*)",
+      "Bash(pip show:*)",
+      "Bash(DJANGO_SETTINGS_MODULE=idp_backend.settings python:*)",
+      "Bash(python manage.py:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

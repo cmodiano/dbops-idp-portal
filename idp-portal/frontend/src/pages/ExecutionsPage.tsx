@@ -416,7 +416,7 @@ export default function ExecutionsPage() {
       {
         title: 'Technologie',
         key: 'engine',
-        width: 100,
+        width: 140,
         align: 'center' as const,
         render: (_: unknown, record: ExecutionResponse) =>
           renderEngineIcon(record.engine, record.item_type),

@@ -1157,7 +1157,7 @@ describe('ExecutionsPage', () => {
       });
 
       // Check for Oracle SVG icon
-      const oracleIcon = container.querySelector('img[src*="oracle.svg"]');
+      const oracleIcon = container.querySelector('img[src*="oracle"]');
       expect(oracleIcon).toBeInTheDocument();
     });
 
@@ -1358,7 +1358,7 @@ describe('ExecutionsPage', () => {
       expect(within(table).getByText('Technologie')).toBeInTheDocument();
 
       // Check for Oracle SVG icon
-      const oracleIcon = document.querySelector('img[src*="oracle.svg"]');
+      const oracleIcon = document.querySelector('img[src*="oracle"]');
       expect(oracleIcon).toBeInTheDocument();
     });
 

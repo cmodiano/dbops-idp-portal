@@ -256,7 +256,18 @@ export function ProfileForm({
             >
               {({ getFieldValue }) =>
                 getFieldValue('targets_type') === 'list' ? (
-                  <Form.Item name="target_names" label="Targets">
+                  <Form.Item
+                    name="target_names"
+                    label="Targets"
+                    rules={[
+                      {
+                        validator: (_, value) =>
+                          value?.length
+                            ? Promise.resolve()
+                            : Promise.reject(new Error('Sélectionnez au moins un target.')),
+                      },
+                    ]}
+                  >
                     <Select
                       mode="multiple"
                       placeholder="Sélectionner des targets (ex. assurance-db01)"
@@ -267,7 +278,18 @@ export function ProfileForm({
                     />
                   </Form.Item>
                 ) : getFieldValue('targets_type') === 'pattern' ? (
-                  <Form.Item name="target_patterns" label="Patterns (ex. assurance-*)">
+                  <Form.Item
+                    name="target_patterns"
+                    label="Patterns (ex. assurance-*)"
+                    rules={[
+                      {
+                        validator: (_, value) =>
+                          value?.length
+                            ? Promise.resolve()
+                            : Promise.reject(new Error('Saisissez au moins un pattern.')),
+                      },
+                    ]}
+                  >
                     <Select
                       mode="tags"
                       placeholder="ex. assurance-*, infra-*"

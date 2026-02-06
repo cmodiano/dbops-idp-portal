@@ -30,13 +30,13 @@ import type { ActionEngine, ActionPlatform, ItemType, ExecutionStatusType } from
 import { STYLE_TOKENS } from '../theme/styleTokens';
 import { getIconUrl } from './iconUrl';
 
-/** Engine icon size in execution tables (px) - smaller than ActionCard for table context. */
-const ENGINE_ICON_SIZE = 20;
+/** Engine icon size in execution tables (px) - clearly visible vendor logos. */
+const ENGINE_ICON_SIZE = 44;
 
-/** SVG paths for database engine icons (real vendor-style icons). */
+/** SVG URLs for database engine icons (real vendor logos from svgrepo.com). */
 const ENGINE_SVG_SOURCES: Partial<Record<ActionEngine, string>> = {
-  Oracle: '/icons/engines/oracle.svg',
-  'SQL Server': '/icons/engines/sqlserver.svg',
+  Oracle: 'https://www.svgrepo.com/show/354152/oracle.svg',
+  'SQL Server': 'https://www.svgrepo.com/show/303229/microsoft-sql-server-logo.svg',
   DB2: '/icons/engines/db2.svg',
 };
 
