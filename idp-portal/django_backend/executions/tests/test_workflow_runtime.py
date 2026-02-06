@@ -494,6 +494,196 @@ class TestWorkflowRuntimeExecution:
 
 
 @pytest.mark.django_db
+class TestWorkflowRuntimeStory412StepParameters:
+    """Story 4.12 AC5/AC6: workflow_step_parameters injection and audit in step output."""
+
+    def setup_method(self):
+        self.user = User.objects.create(username="story412_user")
+
+        # Create referenced actions for workflow steps
+        self.ref_action_1 = Action.objects.create(
+            name="Referenced Action 1",
+            category="Administration",
+            engine="Oracle",
+            platform="AAP",
+            status=ActionStatus.PUBLISHED,
+        )
+        self.ref_action_2 = Action.objects.create(
+            name="Referenced Action 2",
+            category="Administration",
+            engine="Oracle",
+            platform="AAP",
+            status=ActionStatus.PUBLISHED,
+        )
+
+        # Create workflow with steps referencing the actions
+        self.action = Action.objects.create(
+            name="Workflow With Params",
+            category="Administration",
+            engine="Oracle",
+            platform="AAP",
+            status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.WORKFLOW,
+        )
+        self.action.set_execution_steps([
+            {
+                "step_id": "s1",
+                "order": 1,
+                "name": "Step 1",
+                "referenced_action_id": self.ref_action_1.id,
+                "on_success_step_id": "s2",
+            },
+            {
+                "step_id": "s2",
+                "order": 2,
+                "name": "Step 2",
+                "referenced_action_id": self.ref_action_2.id,
+                "on_success_step_id": None,
+            },
+        ])
+        self.action.save()
+
+    def test_get_step_parameters_returns_params_for_step_order(self):
+        """_get_step_parameters returns parameters for the step's order key."""
+        execution = Execution.objects.create(
+            action=self.action,
+            user=self.user,
+            environment="dev",
+            status=ExecutionStatus.SUBMITTED,
+        )
+        execution.set_parameters({
+            "workflow_step_parameters": {
+                "1": {"parameters": {"a": "one"}},
+                "2": {"parameters": {"b": "two"}},
+            }
+        })
+        execution.save()
+
+        runtime = WorkflowRuntime(execution)
+        step1 = {"step_id": "s1", "order": 1, "name": "Step 1"}
+        step2 = {"step_id": "s2", "order": 2, "name": "Step 2"}
+
+        assert runtime._get_step_parameters(step1) == {"a": "one"}
+        assert runtime._get_step_parameters(step2) == {"b": "two"}
+
+    def test_get_step_parameters_returns_empty_when_no_wsp(self):
+        """_get_step_parameters returns {} when execution has no workflow_step_parameters."""
+        execution = Execution.objects.create(
+            action=self.action,
+            user=self.user,
+            environment="dev",
+            status=ExecutionStatus.SUBMITTED,
+        )
+        runtime = WorkflowRuntime(execution)
+        step1 = {"step_id": "s1", "order": 1, "name": "Step 1"}
+        assert runtime._get_step_parameters(step1) == {}
+
+    def test_step_output_includes_parameters_used_and_delegated_from_workflow(self):
+        """AC5/AC6: Step output contains parameters_used and delegated_from_workflow."""
+        execution = Execution.objects.create(
+            action=self.action,
+            user=self.user,
+            environment="dev",
+            status=ExecutionStatus.SUBMITTED,
+        )
+        execution.set_parameters({
+            "workflow_step_parameters": {
+                "1": {"parameters": {"x": "step1_val"}},
+                "2": {"parameters": {"y": "step2_val"}},
+            }
+        })
+        execution.save()
+
+        runtime = WorkflowRuntime(execution)
+        with patch("executions.workflow_runtime.AuditService.create_entry"):
+            runtime.run()
+
+        steps = ExecutionStep.objects.filter(execution=execution).order_by("step_order")
+        assert steps.count() == 2
+        out1 = steps[0].get_output() or {}
+        out2 = steps[1].get_output() or {}
+        assert out1.get("parameters_used") == {"x": "step1_val"}
+        assert out1.get("delegated_from_workflow") is True
+        assert out2.get("parameters_used") == {"y": "step2_val"}
+        assert out2.get("delegated_from_workflow") is True
+
+    def test_step_loads_referenced_action_and_prepares_adapter_payload(self):
+        """AC5 COMPLETE: Step loads referenced action and prepares full adapter payload."""
+        # Create a referenced action with platform AAP
+        ref_action = Action.objects.create(
+            name="Referenced AAP Action",
+            category="Administration",
+            engine="Oracle",
+            platform="AAP",
+            status=ActionStatus.PUBLISHED,
+        )
+
+        # Create workflow with step referencing the action
+        workflow = Action.objects.create(
+            name="Workflow AC5 Test",
+            category="Administration",
+            engine="Oracle",
+            platform="AAP",
+            status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.WORKFLOW,
+        )
+        workflow.set_execution_steps([
+            {
+                "step_id": "s1",
+                "order": 1,
+                "name": "Run AAP Action",
+                "referenced_action_id": ref_action.id,
+                "on_success_step_id": None,
+            }
+        ])
+        workflow.save()
+
+        # Create execution with step parameters
+        user = User.objects.create(username="ac5_test_user")
+        execution = Execution.objects.create(
+            action=workflow,
+            user=user,
+            environment="dev",
+            status=ExecutionStatus.SUBMITTED,
+        )
+        execution.set_parameters({
+            "workflow_step_parameters": {
+                "1": {"parameters": {"database": "PROD01", "action": "restart"}},
+            }
+        })
+        execution.save()
+
+        # Run workflow
+        runtime = WorkflowRuntime(execution)
+        with patch("executions.workflow_runtime.AuditService.create_entry"):
+            runtime.run()
+
+        # Verify step output
+        step = ExecutionStep.objects.filter(execution=execution).first()
+        assert step is not None
+        output = step.get_output() or {}
+
+        # AC5: Verify adapter payload was prepared
+        assert output.get("adapter_ready") is True
+        assert "adapter_payload_prepared" in output
+
+        payload = output["adapter_payload_prepared"]
+        assert payload["action_id"] == ref_action.id
+        assert payload["action_name"] == "Referenced AAP Action"
+        assert payload["platform"] == "AAP"
+        assert payload["environment"] == "dev"
+        assert payload["parameters"] == {"database": "PROD01", "action": "restart"}
+        assert "correlation_id" in payload
+        assert payload["execution_id"] == execution.id
+
+        # AC6: Verify audit trail
+        assert output.get("parameters_used") == {"database": "PROD01", "action": "restart"}
+        assert output.get("delegated_from_workflow") is True
+        assert output.get("referenced_action_id") == ref_action.id
+        assert output.get("referenced_action_name") == "Referenced AAP Action"
+
+
+@pytest.mark.django_db
 class TestStepResult:
     """Test StepResult dataclass."""
 

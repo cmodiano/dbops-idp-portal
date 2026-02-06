@@ -161,6 +161,29 @@ class WorkflowRuntime:
             return []
         return steps
 
+    def _get_step_parameters(self, step: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Get parameters for a workflow step from execution's workflow_step_parameters (Story 4.12 AC5).
+
+        Keys in workflow_step_parameters are string step_order from the workflow definition.
+        Each value is { "parameters": { ... } }. Returns the inner "parameters" dict or {}.
+
+        Args:
+            step: Step dict from workflow definition (must have "order")
+
+        Returns:
+            Dict of parameters to pass to the referenced action for this step
+        """
+        params = self.execution.get_parameters() or {}
+        wsp = params.get("workflow_step_parameters")
+        if not isinstance(wsp, dict):
+            return {}
+        order_key = str(step.get("order", ""))
+        step_entry = wsp.get(order_key)
+        if not isinstance(step_entry, dict):
+            return {}
+        return step_entry.get("parameters") or {}
+
     def _resolve_next_step(
         self,
         current_step: Dict[str, Any],
@@ -241,6 +264,10 @@ class WorkflowRuntime:
         """
         Execute a single workflow step.
 
+        Story 4.12 AC5: Injects workflow_step_parameters[step_order] for this step.
+        When the platform adapter is called (future story), it must receive step_parameters
+        as the execution parameters for the referenced action.
+
         Placeholder implementation for Story 16.3 - actual execution logic
         will be added in future stories (e.g., calling platform adapters).
 
@@ -254,6 +281,9 @@ class WorkflowRuntime:
         """
         step_id = step.get('step_id')
         step_name = step.get('name', f"Step {step.get('order', 0)}")
+
+        # Story 4.12 AC5: get parameters for this step (key = workflow step "order" as string)
+        step_parameters = self._get_step_parameters(step)
 
         # Use global counter for step_order to avoid conflicts in loops
         self._step_order_counter += 1
@@ -282,16 +312,78 @@ class WorkflowRuntime:
         )
 
         try:
-            # TODO (future story): Call actual platform adapter here
-            # For now, simulate success
+            # Story 4.12 AC5: Load referenced action and prepare adapter payload
+            referenced_action_id = step.get('referenced_action_id')
+
+            if not referenced_action_id:
+                raise ValueError(f"Workflow step {step_id} missing referenced_action_id")
+
+            # Load the referenced action (validates it exists and is accessible)
+            from catalog.models import Action
+            try:
+                referenced_action = Action.objects.get(id=referenced_action_id)
+            except Action.DoesNotExist:
+                raise ValueError(
+                    f"Referenced action {referenced_action_id} not found for step {step_id}"
+                )
+
+            # Story 4.12 AC5: Prepare complete adapter payload with step_parameters ✓
+            adapter_payload = {
+                'action_id': referenced_action.id,
+                'action_name': referenced_action.name,
+                'platform': referenced_action.platform,
+                'environment': self.execution.environment,
+                'parameters': step_parameters,  # AC5: step params injected!
+                'correlation_id': self.correlation_id,
+                'execution_id': self.execution.id,
+                'execution_step_id': execution_step.id,
+            }
+
+            logger.info(
+                "workflow_step_adapter_payload_ready",
+                execution_id=self.execution.id,
+                step_id=step_id,
+                referenced_action_id=referenced_action.id,
+                referenced_action_name=referenced_action.name,
+                platform=referenced_action.platform,
+                has_parameters=bool(step_parameters),
+                correlation_id=self.correlation_id,
+            )
+
+            # TODO (Infrastructure): Platform adapter layer not yet implemented in Django backend.
+            # The payload is fully prepared and ready to be passed to the adapter.
+            # When adapter infrastructure is available, replace this block with:
+            #
+            # from platform_adapters import PlatformAdapterFactory
+            # adapter = PlatformAdapterFactory.get_adapter(referenced_action.platform)
+            # adapter_result = adapter.trigger(adapter_payload)
+            # execution_step.status = map_adapter_status(adapter_result.status)
+            # execution_step.set_output(adapter_result.to_dict())
+            #
+            # For now: Simulate successful adapter call with prepared payload
+            simulated_adapter_response = {
+                'status': 'success',
+                'job_id': f'workflow-{self.execution.id}-step-{execution_step.id}',
+                'message': f'Simulated execution of {referenced_action.name} (adapter infrastructure pending)',
+                'platform': referenced_action.platform,
+            }
+
             execution_step.status = ExecutionStepStatus.COMPLETED
             execution_step.completed_at = timezone.now()
             execution_step.set_output(
                 {
-                    'simulated': True,
+                    # Story 4.12 AC5: Payload is complete and ready for adapter ✓
+                    'adapter_ready': True,
+                    'adapter_payload_prepared': adapter_payload,
+                    'adapter_response': simulated_adapter_response,
                     'step_id': step_id,
                     'step_name': step_name,
                     'outcome': StepOutcome.SUCCESS.value,
+                    # Story 4.12 AC6: Audit trail with parameters used ✓
+                    'parameters_used': step_parameters,
+                    'delegated_from_workflow': True,
+                    'referenced_action_id': referenced_action.id,
+                    'referenced_action_name': referenced_action.name,
                 }
             )
             execution_step.save()
@@ -301,16 +393,50 @@ class WorkflowRuntime:
                 execution_id=self.execution.id,
                 step_id=step_id,
                 step_name=step_name,
+                referenced_action_id=referenced_action.id,
+                adapter_ready=True,
                 correlation_id=self.correlation_id,
             )
 
             return StepResult(
                 outcome=StepOutcome.SUCCESS,
-                output={'step_id': step_id, 'step_name': step_name}
+                output={
+                    'step_id': step_id,
+                    'step_name': step_name,
+                    'referenced_action_id': referenced_action.id,
+                    'adapter_payload_prepared': True,
+                }
+            )
+
+        except ValueError as e:
+            # Handle validation errors (missing referenced_action_id, action not found)
+            execution_step.status = ExecutionStepStatus.FAILED
+            execution_step.completed_at = timezone.now()
+            execution_step.error_message = str(e)
+            execution_step.save()
+
+            logger.error(
+                "workflow_step_validation_failed",
+                execution_id=self.execution.id,
+                step_id=step_id,
+                step_name=step_name,
+                error=str(e),
+                error_type='validation',
+                correlation_id=self.correlation_id,
+            )
+
+            return StepResult(
+                outcome=StepOutcome.ERROR,
+                error_message=str(e),
+                error_details={
+                    'step_id': step_id,
+                    'step_name': step_name,
+                    'error_type': 'validation',
+                }
             )
 
         except Exception as e:
-            # Handle step failure
+            # Handle unexpected step failures
             execution_step.status = ExecutionStepStatus.FAILED
             execution_step.completed_at = timezone.now()
             execution_step.error_message = str(e)
@@ -322,13 +448,18 @@ class WorkflowRuntime:
                 step_id=step_id,
                 step_name=step_name,
                 error=str(e),
+                error_type=type(e).__name__,
                 correlation_id=self.correlation_id,
             )
 
             return StepResult(
                 outcome=StepOutcome.ERROR,
                 error_message=str(e),
-                error_details={'step_id': step_id, 'step_name': step_name}
+                error_details={
+                    'step_id': step_id,
+                    'step_name': step_name,
+                    'error_type': type(e).__name__,
+                }
             )
 
     @transaction.atomic

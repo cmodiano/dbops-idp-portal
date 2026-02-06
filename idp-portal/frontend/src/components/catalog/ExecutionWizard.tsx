@@ -44,6 +44,7 @@ import type {
   RemediationSuggestion,
   RecurringPatternRequest,
 } from '../../types/api';
+import { fetchCatalogActionById } from '../../services/catalog_service';
 import { submitExecution, fetchInventoryItems, fetchInventoryTargets } from '../../services/execution_service';
 import { createScheduledExecution, validateCronExpression, getCronNextExecutions } from '../../services/scheduled_execution_service';
 import { CRON_PRESETS } from '../../utils/cronHelper';
@@ -195,6 +196,29 @@ function evaluateImpact(
   return defaultImpact;
 }
 
+/**
+ * Extract invalid workflow step orders from Form errors (Story 4.12, Code Review Fix).
+ * Parses Form field names to find workflow_step_parameters errors and extracts step orders.
+ * @param form - Ant Design Form instance
+ * @returns Sorted array of invalid step orders
+ */
+function getInvalidWorkflowStepOrders(form: ReturnType<typeof Form.useForm>[0]): number[] {
+  const allErrors = form.getFieldsError();
+  const invalid = new Set<number>();
+
+  for (const fe of allErrors) {
+    if (!fe.errors?.length) continue;
+    const name = fe.name as (string | number)[];
+    // Match: ['workflow_step_parameters', '<step_order>', 'parameters', '<field>']
+    if (name?.[0] !== 'workflow_step_parameters') continue;
+    const stepOrderStr = name?.[1];
+    const stepOrderNum = typeof stepOrderStr === 'string' ? Number(stepOrderStr) : Number.NaN;
+    if (Number.isFinite(stepOrderNum)) invalid.add(stepOrderNum);
+  }
+
+  return Array.from(invalid).sort((a, b) => a - b);
+}
+
 export function ExecutionWizard({
   open,
   action,
@@ -228,6 +252,12 @@ export function ExecutionWizard({
   // Legacy: keep selectedEnvironment for backward compatibility (actions without targets)
   const [selectedEnvironment, setSelectedEnvironment] = useState<ExecutionEnvironment | null>(null);
   const [parameters, setParameters] = useState<Record<string, unknown>>({});
+  const [workflowStepActions, setWorkflowStepActions] = useState<Record<number, CatalogActionDetail>>({});
+  const [loadingWorkflowStepActions, setLoadingWorkflowStepActions] = useState(false);
+  const [workflowStepActionsError, setWorkflowStepActionsError] = useState<string | null>(null);
+  const isWorkflow = action?.item_type === 'workflow';
+  const [workflowInvalidStepOrders, setWorkflowInvalidStepOrders] = useState<number[]>([]);
+  const [workflowValidationSummary, setWorkflowValidationSummary] = useState<string | null>(null);
 
   // Multi-target: effective target names for submit (list, pattern, manual)
   const effectiveTargetNames = useMemo((): string[] => {
@@ -306,6 +336,18 @@ export function ExecutionWizard({
     [action?.parameters_schema]
   );
 
+  const workflowSteps = useMemo(() => {
+    const steps = action?.workflow_steps ?? null;
+    if (!isWorkflow || !steps || !Array.isArray(steps)) return [];
+    return [...steps].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  }, [action?.workflow_steps, isWorkflow]);
+
+  const isWorkflowStep2Valid = useMemo(() => {
+    if (!isWorkflow) return true;
+    if (!workflowSteps.length) return true;
+    return workflowInvalidStepOrders.length === 0;
+  }, [isWorkflow, workflowSteps.length, workflowInvalidStepOrders.length]);
+
   // Evaluate impact for selected environment (Story 13.2: use derivedEnvironment)
   const currentImpact = useMemo(() => {
     if (!derivedEnvironment || !action) return null;
@@ -331,6 +373,10 @@ export function ExecutionWizard({
       setCurrentStep(0);
       setParameters({});
       setSubmitError(null);
+      setWorkflowStepActions({});
+      setWorkflowStepActionsError(null);
+      setWorkflowInvalidStepOrders([]);
+      setWorkflowValidationSummary(null);
       form.resetFields();
       // Story 13.2: Reset targets state
       setSelectedTargets([]);
@@ -363,6 +409,93 @@ export function ExecutionWizard({
       }
     }
   }, [open, action, form, notification, onCancel, allowedEnvironments]);
+
+  // Story 4.12 (Task 1): Load referenced actions for workflow steps (id, name, parameters_schema)
+  useEffect(() => {
+    if (!open || !action || !isWorkflow) return;
+    if (currentStep !== 1) return; // load only when entering Parameters step
+    if (!workflowSteps || workflowSteps.length === 0) return;
+
+    const referencedIds = Array.from(
+      new Set(
+        workflowSteps
+          .map((s) => s.referenced_action_id)
+          .filter((id): id is number => typeof id === 'number' && Number.isFinite(id))
+      )
+    );
+    if (referencedIds.length === 0) return;
+
+    let cancelled = false;
+    setLoadingWorkflowStepActions(true);
+    setWorkflowStepActionsError(null);
+
+    Promise.all(
+      referencedIds.map(async (id) => {
+        // Local cache: skip fetch if already loaded
+        if (workflowStepActions[id]) return workflowStepActions[id];
+        const res = await fetchCatalogActionById(id);
+        return res.data;
+      })
+    )
+      .then((actions) => {
+        if (cancelled) return;
+        const map: Record<number, CatalogActionDetail> = { ...workflowStepActions };
+        actions.forEach((a) => {
+          map[a.id] = a;
+        });
+        setWorkflowStepActions(map);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : 'Erreur lors du chargement des actions du workflow';
+        setWorkflowStepActionsError(message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingWorkflowStepActions(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // Intentionally omit workflowStepActions from deps to avoid refetch loop; we merge results locally.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, action?.id, isWorkflow, currentStep, workflowSteps]);
+
+  // Story 4.12 (Task 2): Validate workflow step parameters continuously (disable Next while invalid)
+  useEffect(() => {
+    if (!open || !isWorkflow) return;
+    if (currentStep !== 1) return;
+    if (!workflowSteps.length) return;
+    if (loadingWorkflowStepActions) return;
+
+    let cancelled = false;
+    const run = async () => {
+      try {
+        // Validate to populate field errors (needed to disable Next)
+        await form.validateFields();
+        if (!cancelled) {
+          setWorkflowInvalidStepOrders([]);
+          setWorkflowValidationSummary(null);
+        }
+      } catch {
+        if (cancelled) return;
+        // Story 4.12: Extract invalid workflow step orders using refactored utility
+        const invalidOrders = getInvalidWorkflowStepOrders(form);
+        setWorkflowInvalidStepOrders(invalidOrders);
+        if (invalidOrders.length > 0) {
+          setWorkflowValidationSummary(`Étapes invalides : ${invalidOrders.join(', ')}`);
+        } else {
+          setWorkflowValidationSummary(null);
+        }
+      }
+    };
+
+    // Fire and forget; state updates are guarded by cancelled flag
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, isWorkflow, currentStep, workflowSteps, loadingWorkflowStepActions, workflowStepActions, form, parameters]);
 
   // Load environments from inventory (cached, loaded once)
   useEffect(() => {
@@ -465,6 +598,20 @@ export function ExecutionWizard({
     }
   }, [open, currentStep]);
 
+  // Story 4.12 (AC2): When returning to step 2, re-apply persisted values.
+  useEffect(() => {
+    if (!open) return;
+    if (currentStep !== 1) return;
+    if (!parameters || Object.keys(parameters).length === 0) return;
+    if (isWorkflow && loadingWorkflowStepActions) return;
+    if (isWorkflow && workflowSteps.length > 0 && Object.keys(workflowStepActions || {}).length === 0) return;
+    try {
+      form.setFieldsValue(parameters);
+    } catch {
+      // ignore
+    }
+  }, [open, currentStep, parameters, form, isWorkflow, loadingWorkflowStepActions, workflowSteps.length, workflowStepActions]);
+
   // Multi-target: resolve pattern when targetPattern changes (debounced)
   const debouncedTargetPattern = useDebounce(targetPattern.trim(), 400);
   useEffect(() => {
@@ -524,16 +671,34 @@ export function ExecutionWizard({
         }
       }
     } else if (currentStep === 1) {
-      // Validate form fields
+      // Validate form fields (single action or workflow multi-sections)
       try {
         const values = await form.validateFields();
         setParameters(values);
+        setWorkflowValidationSummary(null);
       } catch {
+        if (isWorkflow) {
+          // Story 4.12: Build error summary + scroll to first error using refactored utility
+          const invalidOrders = getInvalidWorkflowStepOrders(form);
+          setWorkflowInvalidStepOrders(invalidOrders);
+          if (invalidOrders.length > 0) setWorkflowValidationSummary(`Étapes invalides : ${invalidOrders.join(', ')}`);
+
+          const first = allErrors[0];
+          if (first?.name) {
+            try {
+              // Scroll/focus to first error field
+              // @ts-expect-error scrollToField options exist at runtime
+              form.scrollToField(first.name, { block: 'center' });
+            } catch {
+              // ignore
+            }
+          }
+        }
         return;
       }
     }
     setCurrentStep((s) => Math.min(s + 1, 2));
-  }, [currentStep, selectedEnvironment, effectiveTargetNames, targetInputMode, requiresTarget, hasMixedEnvironments, form, notification]);
+  }, [currentStep, selectedEnvironment, effectiveTargetNames, targetInputMode, requiresTarget, hasMixedEnvironments, form, notification, isWorkflow]);
 
   const handlePrev = useCallback(() => {
     setCurrentStep((s) => Math.max(s - 1, 0));
@@ -632,13 +797,29 @@ export function ExecutionWizard({
     try {
       // Story 13.2, Task 4: Submit with target_names (list, pattern, or manual)
       const targetNames = effectiveTargetNames.length > 0 ? effectiveTargetNames : undefined;
+      const rawWorkflowStepParameters = (parameters as Record<string, unknown>)?.workflow_step_parameters as
+        | Record<string, { parameters?: Record<string, unknown> }>
+        | undefined;
+      const workflowStepParameters = (() => {
+        if (!isWorkflow) return undefined;
+        if (!rawWorkflowStepParameters || typeof rawWorkflowStepParameters !== 'object') return undefined;
+        const out: Record<string, { parameters: Record<string, unknown> }> = {};
+        for (const [order, entry] of Object.entries(rawWorkflowStepParameters)) {
+          const params = entry?.parameters ?? {};
+          if (params && typeof params === 'object' && Object.keys(params).length > 0) {
+            out[String(order)] = { parameters: params };
+          }
+        }
+        return Object.keys(out).length > 0 ? out : undefined;
+      })();
 
       const response = await submitExecution({
         action_id: action.id,
         // Story 13.2, AC4: If targets provided, backend derives environment; else use derivedEnvironment
         environment: targetNames ? undefined : derivedEnvironment,
         target_names: targetNames,
-        parameters: Object.keys(parameters).length > 0 ? parameters : null,
+        parameters: isWorkflow ? null : (Object.keys(parameters).length > 0 ? parameters : null),
+        workflow_step_parameters: workflowStepParameters,
         // Story 9.2, Task 14: Include parent_execution_id for remediation
         parent_execution_id: parentExecutionId ?? null,
       });
@@ -671,7 +852,7 @@ export function ExecutionWizard({
     } finally {
       setSubmitting(false);
     }
-  }, [action, derivedEnvironment, effectiveTargetNames, parameters, notification, onSuccess, parentExecutionId]);
+  }, [action, derivedEnvironment, effectiveTargetNames, parameters, notification, onSuccess, parentExecutionId, isWorkflow]);
 
   // Story 11.5: Handle scheduled execution error messages (AC6)
   const getSchedulingErrorMessage = useCallback((error: Error & { code?: string; message?: string }) => {
@@ -773,10 +954,30 @@ export function ExecutionWizard({
       }
 
       // Story 13.2: scheduled executions also use derivedEnvironment
+      const rawWorkflowStepParameters = (parameters as Record<string, unknown>)?.workflow_step_parameters as
+        | Record<string, { parameters?: Record<string, unknown> }>
+        | undefined;
+      const workflowStepParameters = (() => {
+        if (!isWorkflow) return undefined;
+        if (!rawWorkflowStepParameters || typeof rawWorkflowStepParameters !== 'object') return undefined;
+        const out: Record<string, { parameters: Record<string, unknown> }> = {};
+        for (const [order, entry] of Object.entries(rawWorkflowStepParameters)) {
+          const params = entry?.parameters ?? {};
+          if (params && typeof params === 'object' && Object.keys(params).length > 0) {
+            out[String(order)] = { parameters: params };
+          }
+        }
+        return Object.keys(out).length > 0 ? out : undefined;
+      })();
+
       const response = await createScheduledExecution({
         action_id: action.id,
         environment: derivedEnvironment,
-        parameters: Object.keys(parameters).length > 0 ? parameters : null,
+        parameters: isWorkflow ? null : (Object.keys(parameters).length > 0 ? parameters : null),
+        // Story 4.12 (follow-up): keep payload aligned with executions
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore - backend may ignore this until Story 4.12 backend is implemented
+        workflow_step_parameters: workflowStepParameters,
         scheduled_at: schedulingType === 'one-time' ? scheduledAt?.utc().toISOString() : null,
         recurring_pattern: recurringPattern,
         // Story 13.2: Include target_names for scheduled executions
@@ -1056,8 +1257,12 @@ export function ExecutionWizard({
     <Form
       form={form}
       layout="vertical"
+      clearOnDestroy={false}
       initialValues={parameters}
-      onValuesChange={(_, allValues) => setParameters(allValues)}
+      onValuesChange={(_, allValues) => {
+        // Keep persisted values even when some fields are temporarily unmounted (workflow step reload/back navigation)
+        setParameters((prev) => ({ ...(prev || {}), ...(allValues || {}) }));
+      }}
     >
       {/* Story 7.2, Task 1.3: Contextual help description for simplified variant */}
       {variant === 'simplified' && (
@@ -1068,127 +1273,291 @@ export function ExecutionWizard({
           style={{ marginBottom: 16 }}
         />
       )}
-      {parameterFields.length === 0 ? (
-        <Alert
-          title="Aucun parametre requis"
-          description={variant === 'simplified'
-            ? 'Aucune information supplementaire n\'est necessaire.'
-            : 'Cette action ne necessite pas de parametres.'}
-          type="info"
-          showIcon
-        />
+      {/* Story 4.12: Workflow = one section per step; action = legacy single form */}
+      {isWorkflow ? (
+        <div>
+          {workflowValidationSummary && (
+            <Alert
+              type="error"
+              showIcon
+              message="Certaines étapes sont invalides"
+              description={workflowValidationSummary}
+              style={{ marginBottom: 16 }}
+            />
+          )}
+          {workflowStepActionsError && (
+            <Alert
+              type="error"
+              showIcon
+              message="Impossible de charger les actions du workflow"
+              description={workflowStepActionsError}
+              style={{ marginBottom: 16 }}
+            />
+          )}
+          {loadingWorkflowStepActions && (
+            <Alert
+              type="info"
+              showIcon
+              message="Chargement des étapes du workflow..."
+              style={{ marginBottom: 16 }}
+            />
+          )}
+
+          {workflowSteps.map((step, stepIndex) => {
+            const refAction = workflowStepActions[step.referenced_action_id];
+            const actionName = refAction?.name || `Action #${step.referenced_action_id}`;
+            const schema = refAction?.parameters_schema ?? null;
+            const fields = extractParameterFields(schema as Record<string, unknown> | null);
+            const stepKey = String(step.order);
+
+            return (
+              <div
+                key={`${step.order}-${step.referenced_action_id}`}
+                style={{
+                  border: `1px solid ${STYLE_TOKENS.borderColor}`,
+                  borderRadius: 8,
+                  padding: 12,
+                  marginBottom: 12,
+                  background: STYLE_TOKENS.surfaceColor,
+                }}
+              >
+                <Title level={5} style={{ marginTop: 0, marginBottom: 8 }}>
+                  Étape {step.order} — {actionName}
+                </Title>
+
+                {fields.length === 0 ? (
+                  <Alert
+                    type="info"
+                    showIcon
+                    description="Cette action n'a pas de paramètres"
+                  />
+                ) : (
+                  fields.map((field, index) => {
+                    const rules: unknown[] = [];
+                    if (field.required) rules.push({ required: true, message: `${field.label} est requis` });
+                    if (field.pattern) rules.push({ pattern: new RegExp(field.pattern), message: 'Format invalide' });
+                    if (field.minimum !== undefined) rules.push({ type: 'number', min: field.minimum, message: `Minimum: ${field.minimum}` });
+                    if (field.maximum !== undefined) rules.push({ type: 'number', max: field.maximum, message: `Maximum: ${field.maximum}` });
+
+                    const displayDescription = variant === 'simplified' && field.description
+                      ? sanitizeDescription(field.description)
+                      : field.description;
+
+                    const getFieldInput = () => {
+                      if (field.inventorySource && inventoryData[field.inventorySource]) {
+                        const hasWarning = inventoryWarnings[field.inventorySource];
+                        return (
+                          <div>
+                            <Select
+                              placeholder={`Selectionnez ${field.label.toLowerCase()}`}
+                              aria-label={field.label}
+                              loading={loadingInventory}
+                              options={inventoryData[field.inventorySource].map((item) => ({
+                                value: item.id,
+                                label: item.name,
+                              }))}
+                            />
+                            {hasWarning && (
+                              <Badge
+                                status="warning"
+                                text="Données inventaire temporairement indisponibles — dernières valeurs en cache"
+                                style={{ marginTop: 4, fontSize: '12px', color: '#faad14' }}
+                              />
+                            )}
+                          </div>
+                        );
+                      }
+                      switch (field.type) {
+                        case 'select':
+                          return (
+                            <Select
+                              placeholder={`Selectionnez ${field.label.toLowerCase()}`}
+                              aria-label={field.label}
+                              options={(field.enum || []).map((v) => ({ value: v, label: v }))}
+                            />
+                          );
+                        case 'number':
+                        case 'integer':
+                          return (
+                            <InputNumber
+                              style={{ width: '100%' }}
+                              aria-label={field.label}
+                              min={field.minimum}
+                              max={field.maximum}
+                              precision={field.type === 'integer' ? 0 : undefined}
+                            />
+                          );
+                        case 'boolean':
+                          return <Switch aria-label={field.label} />;
+                        case 'date':
+                        case 'date-time':
+                          return (
+                            <DatePicker
+                              style={{ width: '100%' }}
+                              showTime={field.type === 'date-time'}
+                              aria-label={field.label}
+                            />
+                          );
+                        case 'array':
+                          return (
+                            <Select
+                              mode="tags"
+                              placeholder={`Entrez ${field.label.toLowerCase()}`}
+                              aria-label={field.label}
+                            />
+                          );
+                        default:
+                          return <Input aria-label={field.label} />;
+                      }
+                    };
+
+                    return (
+                      <Form.Item
+                        key={`${step.order}-${field.name}`}
+                        name={['workflow_step_parameters', stepKey, 'parameters', field.name]}
+                        label={field.label}
+                        rules={rules}
+                        tooltip={displayDescription ? { title: displayDescription, icon: <InfoCircleOutlined /> } : undefined}
+                        style={{ marginBottom: 12 }}
+                      >
+                        {(stepIndex === 0 && index === 0) ? (
+                          <div ref={(ref) => { firstFieldRef.current = ref?.querySelector('input, select, [role="combobox"]') as HTMLElement; }}>
+                            {getFieldInput()}
+                          </div>
+                        ) : (
+                          getFieldInput()
+                        )}
+                      </Form.Item>
+                    );
+                  })
+                )}
+              </div>
+            );
+          })}
+        </div>
       ) : (
-        parameterFields.map((field, index) => {
-          const rules: unknown[] = [];
-          if (field.required) {
-            rules.push({ required: true, message: `${field.label} est requis` });
-          }
-          if (field.pattern) {
-            rules.push({ pattern: new RegExp(field.pattern), message: `Format invalide` });
-          }
-          if (field.minimum !== undefined) {
-            rules.push({ type: 'number', min: field.minimum, message: `Minimum: ${field.minimum}` });
-          }
-          if (field.maximum !== undefined) {
-            rules.push({ type: 'number', max: field.maximum, message: `Maximum: ${field.maximum}` });
-          }
+        parameterFields.length === 0 ? (
+          <Alert
+            title="Aucun parametre requis"
+            description={variant === 'simplified'
+              ? 'Aucune information supplementaire n\'est necessaire.'
+              : 'Cette action ne necessite pas de parametres.'}
+            type="info"
+            showIcon
+          />
+        ) : (
+          parameterFields.map((field, index) => {
+            const rules: unknown[] = [];
+            if (field.required) {
+              rules.push({ required: true, message: `${field.label} est requis` });
+            }
+            if (field.pattern) {
+              rules.push({ pattern: new RegExp(field.pattern), message: `Format invalide` });
+            }
+            if (field.minimum !== undefined) {
+              rules.push({ type: 'number', min: field.minimum, message: `Minimum: ${field.minimum}` });
+            }
+            if (field.maximum !== undefined) {
+              rules.push({ type: 'number', max: field.maximum, message: `Maximum: ${field.maximum}` });
+            }
 
-          // Story 7.2, Task 1.4: Apply sanitizeDescription() in simplified mode
-          const displayDescription = variant === 'simplified' && field.description
-            ? sanitizeDescription(field.description)
-            : field.description;
+            // Story 7.2, Task 1.4: Apply sanitizeDescription() in simplified mode
+            const displayDescription = variant === 'simplified' && field.description
+              ? sanitizeDescription(field.description)
+              : field.description;
 
-          const getFieldInput = () => {
-            if (field.inventorySource && inventoryData[field.inventorySource]) {
-              const hasWarning = inventoryWarnings[field.inventorySource];
-              return (
-                <div>
-                  <Select
-                    placeholder={`Selectionnez ${field.label.toLowerCase()}`}
-                    aria-label={field.label}
-                    loading={loadingInventory}
-                    options={inventoryData[field.inventorySource].map((item) => ({
-                      value: item.id,
-                      label: item.name,
-                    }))}
-                  />
-                  {hasWarning && (
-                    <Badge
-                      status="warning"
-                      text="Données inventaire temporairement indisponibles — dernières valeurs en cache"
-                      style={{
-                        marginTop: 4,
-                        fontSize: '12px',
-                        color: '#faad14',
-                      }}
+            const getFieldInput = () => {
+              if (field.inventorySource && inventoryData[field.inventorySource]) {
+                const hasWarning = inventoryWarnings[field.inventorySource];
+                return (
+                  <div>
+                    <Select
+                      placeholder={`Selectionnez ${field.label.toLowerCase()}`}
+                      aria-label={field.label}
+                      loading={loadingInventory}
+                      options={inventoryData[field.inventorySource].map((item) => ({
+                        value: item.id,
+                        label: item.name,
+                      }))}
                     />
-                  )}
-                </div>
-              );
-            }
+                    {hasWarning && (
+                      <Badge
+                        status="warning"
+                        text="Données inventaire temporairement indisponibles — dernières valeurs en cache"
+                        style={{
+                          marginTop: 4,
+                          fontSize: '12px',
+                          color: '#faad14',
+                        }}
+                      />
+                    )}
+                  </div>
+                );
+              }
 
-            switch (field.type) {
-              case 'select':
-                return (
-                  <Select
-                    placeholder={`Selectionnez ${field.label.toLowerCase()}`}
-                    aria-label={field.label}
-                    options={(field.enum || []).map((v) => ({ value: v, label: v }))}
-                  />
-                );
-              case 'number':
-              case 'integer':
-                return (
-                  <InputNumber
-                    style={{ width: '100%' }}
-                    aria-label={field.label}
-                    min={field.minimum}
-                    max={field.maximum}
-                    precision={field.type === 'integer' ? 0 : undefined}
-                  />
-                );
-              case 'boolean':
-                return <Switch aria-label={field.label} />;
-              case 'date':
-              case 'date-time':
-                return (
-                  <DatePicker
-                    style={{ width: '100%' }}
-                    showTime={field.type === 'date-time'}
-                    aria-label={field.label}
-                  />
-                );
-              case 'array':
-                return (
-                  <Select
-                    mode="tags"
-                    placeholder={`Entrez ${field.label.toLowerCase()}`}
-                    aria-label={field.label}
-                  />
-                );
-              default:
-                return <Input aria-label={field.label} />;
-            }
-          };
+              switch (field.type) {
+                case 'select':
+                  return (
+                    <Select
+                      placeholder={`Selectionnez ${field.label.toLowerCase()}`}
+                      aria-label={field.label}
+                      options={(field.enum || []).map((v) => ({ value: v, label: v }))}
+                    />
+                  );
+                case 'number':
+                case 'integer':
+                  return (
+                    <InputNumber
+                      style={{ width: '100%' }}
+                      aria-label={field.label}
+                      min={field.minimum}
+                      max={field.maximum}
+                      precision={field.type === 'integer' ? 0 : undefined}
+                    />
+                  );
+                case 'boolean':
+                  return <Switch aria-label={field.label} />;
+                case 'date':
+                case 'date-time':
+                  return (
+                    <DatePicker
+                      style={{ width: '100%' }}
+                      showTime={field.type === 'date-time'}
+                      aria-label={field.label}
+                    />
+                  );
+                case 'array':
+                  return (
+                    <Select
+                      mode="tags"
+                      placeholder={`Entrez ${field.label.toLowerCase()}`}
+                      aria-label={field.label}
+                    />
+                  );
+                default:
+                  return <Input aria-label={field.label} />;
+              }
+            };
 
-          return (
-            <Form.Item
-              key={field.name}
-              name={field.name}
-              label={field.label}
-              rules={rules}
-              tooltip={displayDescription ? { title: displayDescription, icon: <InfoCircleOutlined /> } : undefined}
-            >
-              {index === 0 ? (
-                <div ref={(ref) => { firstFieldRef.current = ref?.querySelector('input, select, [role="combobox"]') as HTMLElement; }}>
-                  {getFieldInput()}
-                </div>
-              ) : (
-                getFieldInput()
-              )}
-            </Form.Item>
-          );
-        })
+            return (
+              <Form.Item
+                key={field.name}
+                name={field.name}
+                label={field.label}
+                rules={rules}
+                tooltip={displayDescription ? { title: displayDescription, icon: <InfoCircleOutlined /> } : undefined}
+              >
+                {index === 0 ? (
+                  <div ref={(ref) => { firstFieldRef.current = ref?.querySelector('input, select, [role="combobox"]') as HTMLElement; }}>
+                    {getFieldInput()}
+                  </div>
+                ) : (
+                  getFieldInput()
+                )}
+              </Form.Item>
+            );
+          })
+        )
       )}
     </Form>
   );
@@ -1585,7 +1954,9 @@ export function ExecutionWizard({
 
         <div style={{ minHeight: 200, padding: '0 8px' }}>
           {currentStep === 0 && renderTargetStep()}
-          {currentStep === 1 && renderParametersStep()}
+          <div style={{ display: currentStep === 1 ? 'block' : 'none' }}>
+            {renderParametersStep()}
+          </div>
           {currentStep === 2 && renderConfirmationStep()}
         </div>
 
@@ -1601,7 +1972,10 @@ export function ExecutionWizard({
               <Button
                 type="primary"
                 onClick={handleNext}
-                disabled={currentStep === 0 && (requiresTarget ? selectedTargets.length === 0 : !selectedEnvironment)}
+                disabled={
+                  (currentStep === 0 && (requiresTarget ? selectedTargets.length === 0 : !selectedEnvironment))
+                  || (currentStep === 1 && isWorkflow && !isWorkflowStep2Valid)
+                }
               >
                 Suivant
               </Button>

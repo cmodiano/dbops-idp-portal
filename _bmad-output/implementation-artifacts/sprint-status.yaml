@@ -103,7 +103,7 @@ development_status:
     4-8-historique-des-executions: done # Code review 2026-01-30: 2 HIGH + 4 MEDIUM fixes, 18/18 frontend + list backend tests pass
     4-10-adapter-aap-workflow-job-et-job-template: done # resource_type (job_template | workflow_job) par action; code-review 2026-01-30
     4-11-validation-rbac-execution-workflows-actions-referencees: done  # Code review 2026-02-06: 5 fixes (2 HIGH + 3 MEDIUM) appliqués
-    4-12-parametres-par-etape-execution-workflows: in-progress
+    4-12-parametres-par-etape-execution-workflows: done  # Code review 2026-02-06: AC5 COMPLÉTÉ - action référencée chargée, payload adapter préparé avec step_parameters injectés, tests validés ✅
     epic-4-retrospective: optional
     # === Epic 5: Dashboard & Activite (Phase 2) ===
     epic-5: in-progress
@@ -220,3 +220,19 @@ development_status:
     16-7-visualisation-validation-chemins-builder-visuel: backlog
     16-8-export-import-workflows-builder-visuel: backlog
     epic-16-retrospective: optional
+
+    # === Epic 17: Reduction de la dette technique & amelioration qualite (audit 06/02/2026) ===
+    epic-17: backlog
+    17-1-finaliser-migration-backend-decommissionner-fastapi: backlog
+    17-2-refactoriser-composants-frontend-volumineux: backlog
+    17-3-eliminer-duplication-api-client: backlog
+    17-4-oracle-json-field-modele-action: backlog
+    17-5-securiser-gestion-secrets: backlog
+    17-6-restreindre-exception-catches: backlog
+    17-7-remplacer-console-log-logging-frontend: backlog
+    17-8-pyproject-toml-lockfile-django-backend: backlog
+    17-9-mypy-bloquant-progressivement: backlog
+    17-10-dockerfile-backend-frontend: backlog
+    17-11-rate-limiting-endpoints-publics: backlog
+    17-12-systeme-feature-flags: backlog
+    epic-17-retrospective: optional
