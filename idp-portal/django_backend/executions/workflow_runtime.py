@@ -12,14 +12,13 @@ Architecture:
 
 import structlog
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List
 from enum import Enum
 
 from django.db import transaction
 from django.utils import timezone
 
 from executions.models import Execution, ExecutionStep, ExecutionStatus, ExecutionStepStatus
-from catalog.models import Action
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id
@@ -85,6 +84,8 @@ class WorkflowExecutionState:
     transition_count: int = 0
     last_step_outcome: Optional[StepOutcome] = None
     last_error: Optional[Dict[str, Any]] = None
+    # Trace of the execution path for audit/debug (AC4)
+    path_trace: List[Dict[str, Any]] = field(default_factory=list)
 
     def visit_step(self, step_id: str) -> None:
         """
@@ -183,13 +184,25 @@ class WorkflowRuntime:
         Returns:
             Next step_id to execute, or None if workflow should terminate
         """
-        if outcome == StepOutcome.SUCCESS:
-            next_step_id = current_step.get('on_success_step_id')
-        else:  # ERROR
-            next_step_id = current_step.get('on_error_step_id')
+        is_success = outcome == StepOutcome.SUCCESS
 
-        # If next_step_id is explicitly set (even to None), use it
-        if 'on_success_step_id' in current_step or 'on_error_step_id' in current_step:
+        # Branching logic (Story 16.2 fields):
+        # Only treat the relevant branch key as "explicit" for the outcome.
+        # This avoids a subtle retro-compat bug where having ONLY on_error_step_id would
+        # incorrectly terminate a success path (AC1).
+        if is_success and 'on_success_step_id' in current_step:
+            next_step_id = current_step.get('on_success_step_id')
+            logger.debug(
+                "workflow_branch_resolution",
+                current_step_id=current_step.get('step_id'),
+                outcome=outcome.value,
+                next_step_id=next_step_id,
+                correlation_id=self.correlation_id,
+            )
+            return next_step_id
+
+        if (not is_success) and 'on_error_step_id' in current_step:
+            next_step_id = current_step.get('on_error_step_id')
             logger.debug(
                 "workflow_branch_resolution",
                 current_step_id=current_step.get('step_id'),
@@ -255,6 +268,9 @@ class WorkflowRuntime:
             correlation_id=self.correlation_id,
         )
 
+        # Note (AC3): this runtime is strictly sequential in V1.
+        # Parallel execution is intentionally NOT supported yet; this is a future enhancement.
+
         # Create ExecutionStep record
         execution_step = ExecutionStep.objects.create(
             execution=self.execution,
@@ -270,7 +286,14 @@ class WorkflowRuntime:
             # For now, simulate success
             execution_step.status = ExecutionStepStatus.COMPLETED
             execution_step.completed_at = timezone.now()
-            execution_step.set_output({'simulated': True, 'step_id': step_id})
+            execution_step.set_output(
+                {
+                    'simulated': True,
+                    'step_id': step_id,
+                    'step_name': step_name,
+                    'outcome': StepOutcome.SUCCESS.value,
+                }
+            )
             execution_step.save()
 
             logger.info(
@@ -430,6 +453,15 @@ class WorkflowRuntime:
             # Resolve next step based on outcome
             next_step_id = self._resolve_next_step(current_step, result.outcome)
 
+            # AC4: record the path taken (success/error) and transition info
+            self.state.path_trace.append(
+                {
+                    'step_id': self.state.current_step_id,
+                    'outcome': result.outcome.value,
+                    'next_step_id': next_step_id,
+                }
+            )
+
             # AC1, AC2: If next_step_id is None, workflow terminates
             if next_step_id is None:
                 logger.info(
@@ -463,6 +495,8 @@ class WorkflowRuntime:
             'action_name': self.action.name,
             'transition_count': self.state.transition_count,
             'final_outcome': self.state.last_step_outcome.value if self.state.last_step_outcome else None,
+            # AC4: minimal audit proof of the path taken
+            'path_trace': self.state.path_trace,
         }
 
         if self.state.last_error:

@@ -14,7 +14,7 @@ Test structure follows red-green-refactor:
 """
 
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 from django.utils import timezone
 
 from executions.workflow_runtime import (
@@ -208,6 +208,40 @@ class TestWorkflowRuntimeResolveNextStep:
         next_id = linear_runtime._resolve_next_step(step_c, StepOutcome.SUCCESS)
         assert next_id is None  # End of workflow
 
+    def test_resolve_next_step_partial_branches_falls_back_on_success(self):
+        """
+        Regression: if only on_error_step_id exists, a SUCCESS outcome must NOT terminate.
+
+        This catches a subtle retro-compat bug where the presence of only one branch key
+        caused success-path resolution to incorrectly return None (AC1).
+        """
+        action = Action.objects.create(
+            name="Partial Branch Workflow",
+            category="Administration",
+            engine="Oracle",
+            platform="AAP",
+            status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.WORKFLOW,
+        )
+
+        steps = [
+            {"step_id": "step-1", "order": 1, "name": "Step 1", "on_error_step_id": "step-err"},
+            {"step_id": "step-2", "order": 2, "name": "Step 2"},  # linear continuation expected
+            {"step_id": "step-err", "order": 99, "name": "Err"},
+        ]
+        action.set_execution_steps(steps)
+        action.save()
+
+        execution = Execution.objects.create(
+            action=action,
+            user=self.user,
+            environment="dev",
+            status=ExecutionStatus.SUBMITTED,
+        )
+        runtime = WorkflowRuntime(execution)
+
+        next_step_id = runtime._resolve_next_step(runtime.steps_by_id["step-1"], StepOutcome.SUCCESS)
+        assert next_step_id == "step-2"
 
 @pytest.mark.django_db
 class TestWorkflowRuntimeExecution:
@@ -258,7 +292,8 @@ class TestWorkflowRuntimeExecution:
         )
 
         runtime = WorkflowRuntime(execution)
-        final_status = runtime.run()
+        with patch("executions.workflow_runtime.AuditService.create_entry") as create_entry:
+            final_status = runtime.run()
 
         # Verify final status
         assert final_status == ExecutionStatus.COMPLETED
@@ -274,6 +309,12 @@ class TestWorkflowRuntimeExecution:
         assert steps.count() == 2
         assert steps[0].step_name == "First Step"
         assert steps[1].step_name == "Second Step"
+
+        # AC4: path trace recorded in audit
+        assert create_entry.called
+        details = create_entry.call_args.kwargs["details"]
+        assert "path_trace" in details
+        assert isinstance(details["path_trace"], list)
 
     def test_workflow_execution_error_path(self):
         """Test workflow execution following error path."""
@@ -346,7 +387,8 @@ class TestWorkflowRuntimeExecution:
 
         runtime._execute_step = mock_execute
 
-        final_status = runtime.run()
+        with patch("executions.workflow_runtime.AuditService.create_entry") as create_entry:
+            final_status = runtime.run()
 
         # Should complete (error handler ran successfully)
         assert final_status == ExecutionStatus.COMPLETED
@@ -357,6 +399,10 @@ class TestWorkflowRuntimeExecution:
         assert "Failing Step" in step_names
         assert "Error Handler" in step_names
         assert "Success Step (skipped)" not in step_names  # Should be skipped
+
+        # AC4: path trace includes an error outcome for step-1
+        details = create_entry.call_args.kwargs["details"]
+        assert any(t["step_id"] == "step-1" and t["outcome"] == StepOutcome.ERROR.value for t in details["path_trace"])
 
     def test_workflow_loop_detection(self):
         """AC5: Detect infinite loop and fail after 100 transitions."""
@@ -397,7 +443,8 @@ class TestWorkflowRuntimeExecution:
         )
 
         runtime = WorkflowRuntime(execution)
-        final_status = runtime.run()
+        with patch("executions.workflow_runtime.AuditService.create_entry"):
+            final_status = runtime.run()
 
         # Should fail due to loop detection
         assert final_status == ExecutionStatus.FAILED
@@ -436,7 +483,8 @@ class TestWorkflowRuntimeExecution:
         )
 
         runtime = WorkflowRuntime(execution)
-        final_status = runtime.run()
+        with patch("executions.workflow_runtime.AuditService.create_entry"):
+            final_status = runtime.run()
 
         # Should fail
         assert final_status == ExecutionStatus.FAILED
