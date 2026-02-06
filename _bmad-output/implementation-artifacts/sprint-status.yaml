@@ -213,7 +213,7 @@ development_status:
     # === Epic 16: Builder de Workflow Visuel avec Branches Conditionnelles et Retry (Phase 2) ===
     epic-16: in-progress
     16-2-modele-donnees-workflows-branches-et-retry: done  # 2026-02-06: Code review fixes applied (validation + UI + tests) ✅
-    16-3-moteur-execution-branches-conditionnelles: ready-for-dev
+    16-3-moteur-execution-branches-conditionnelles: review  # 2026-02-06: WorkflowRuntime orchestrator + branching + loop detection + 14 tests ✅
     16-4-moteur-retry-backoff-exponentiel: backlog
     16-5-interface-builder-visuel-workflow: backlog
     16-6-configuration-options-retry-builder-visuel: backlog
