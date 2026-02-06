@@ -3515,6 +3515,7 @@ afin de **reduire durablement la dette technique, diminuer la surface d'attaque,
   - Refactoriser les fichiers surdimensionnes (en priorite `ExecutionWizard.tsx`) en sous-composants et hooks dedies
   - Extraire un **wrapper HTTP commun** dans `api_client.ts` pour eliminer la duplication (auth, retry 401, parsing erreurs)
   - Remplacer `console.*` par un service de logging frontend + regle linter/CI
+  - **UX vue Executions** : densifier la table (reduire hauteur des lignes), permettre a l'utilisateur initiateur d'annuler une operation (Soumise/En cours), permettre de relancer une execution passee avec les memes parametres sans ressaisie
 - **Securite & Tooling**
   - Supprimer les secrets par defaut risquant de fuiter en prod et appliquer un **fail-fast** en environnement non-dev si variables manquantes
   - Ajouter `pyproject.toml` + lockfile pour le Django backend (build reproductible)
@@ -3534,3 +3535,61 @@ afin de **reduire durablement la dette technique, diminuer la surface d'attaque,
 - Les `except Exception` non justifies sont supprimes ou documentes ; les erreurs inattendues sont logguees
 - Un lockfile est present pour le Django backend ; le durcissement mypy est enclenche
 - Les Dockerfile(s) buildent ; rate limiting et feature flags sont disponibles (si retenus)
+
+### Story 17.13 : Densite table Executions
+
+As a DBA,
+I want que les lignes de la table Executions soient plus compactes,
+So that je puisse afficher plus d'executions a l'ecran sans scroller.
+
+**Acceptance Criteria:**
+
+**Given** un DBA accede a la vue Executions
+**When** la table se charge
+**Then** les lignes ont une hauteur reduite (padding vertical, badges, icones compacts) tout en restant lisibles
+
+**Given** la table affiche les colonnes Action, Statut, Technologie, Plateforme, Utilisateur, Environnement, Date
+**When** le DBA consulte la liste
+**Then** plus de lignes sont visibles dans le viewport sans scroll qu'avant
+
+### Story 17.14 : Annuler une operation par l'utilisateur initiateur
+
+As a DBA,
+I want annuler une operation que j'ai declenchee (statut Soumise ou En cours),
+So that je puisse corriger rapidement une erreur de parametrage ou une operation lancee par erreur.
+
+**Acceptance Criteria:**
+
+**Given** un DBA a declenche une operation (statut Soumise ou En cours)
+**When** il consulte la vue Executions
+**Then** un bouton ou action "Annuler" est visible sur la ligne pour les operations qu'il a initiees
+
+**Given** le DBA clique sur "Annuler" pour une operation Soumise ou En cours
+**When** il confirme l'annulation
+**Then** l'operation est annulee et le statut est mis a jour (ex. Annulee)
+**And** seuls les utilisateurs ayant declenche l'operation peuvent l'annuler (RBAC)
+
+**Given** une operation est en cours d'execution sur le moteur distant
+**When** le DBA annule
+**Then** le backend tente d'annuler l'execution cote AAP/moteur si supporte, ou marque comme annulee
+
+### Story 17.15 : Relancer une execution avec les memes parametres
+
+As a DBA,
+I want relancer une execution passee avec exactement les memes parametres,
+So that je n'aie pas a ressaisir les parametres manuellement (gain de temps, moins d'erreurs).
+
+**Acceptance Criteria:**
+
+**Given** un DBA consulte la vue Executions
+**When** il selectionne une execution passee (terminee, echouee ou annulee)
+**Then** un bouton ou action "Relancer" est disponible
+
+**Given** le DBA clique sur "Relancer" pour une execution
+**When** il confirme
+**Then** une nouvelle execution est creee avec les memes parametres (action, target, environnement, parametres dynamiques)
+**And** le wizard n'est pas affiche ; l'execution demarre directement
+
+**Given** le DBA n'a plus les permissions pour l'action ou l'environnement
+**When** il tente de relancer
+**Then** une erreur explicite est affichee et l'execution n'est pas creee

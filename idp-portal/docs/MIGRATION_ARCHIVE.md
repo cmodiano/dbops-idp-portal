@@ -32,6 +32,13 @@ Pour les détails de la migration et l'historique technique :
 - [migration-switchover-plan.md](migration-switchover-plan.md) — Plan de bascule production
 - [epic-m-final-report.md](epic-m-final-report.md) — Rapport final de l'Epic M
 
+## Validation finale du décommissionnement (Story 17.1 — 2026-02-06)
+
+Le décommissionnement FastAPI a été **validé exhaustivement** par la story 17.1. Audit complet du dépôt : aucune référence FastAPI active ne subsiste dans le code, la configuration, ou les pipelines CI/CD.
+
+- [Rapport de validation](fastapi-decommissioning-validation-report.md) — Résultats détaillés de l'audit
+- [fastapi-decommissioning-runbook.md](fastapi-decommissioning-runbook.md) — Runbook de décommissionnement
+
 ## Note importante
 
 **Ne pas supprimer** la branche `legacy/fastapi-final` ni le tag `v1.0.0-fastapi`. Ils sont conservés pour :

@@ -1,5 +1,9 @@
 # Notes de Migration : SQL Brut vers Django ORM
 
+> **📦 Document d'archivage — Migration terminée**
+> Ce document est conservé pour référence historique. La migration FastAPI→Django est complète (février 2026).
+> Voir [MIGRATION_ARCHIVE.md](../../docs/MIGRATION_ARCHIVE.md) pour accéder au code FastAPI archivé.
+
 ## Vue d'ensemble
 
 Ce document décrit les différences entre l'implémentation FastAPI avec SQL brut et l'implémentation Django ORM, ainsi que les décisions techniques prises lors de la migration.
