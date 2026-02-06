@@ -16,7 +16,7 @@ from rest_framework.views import APIView
 from catalog.models import Action, ActionStatus
 from core.auth_utils import get_user_ad_groups
 from core.exceptions import BadRequestError, NotFoundError, ForbiddenError, InvalidStateError
-from core.middleware import get_correlation_id
+from core.middleware import get_correlation_id, get_client_ip
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from executions.models import (
@@ -64,6 +64,35 @@ def _parse_date(value: str | None, *, name: str) -> date | None:
 def _is_dba_or_dbops(user) -> bool:
     profile = (getattr(user, "profile", "") or "").lower()
     return profile == "dbops" or profile == "dba" or profile.startswith("dba")
+
+
+def _detect_request_source(request) -> str:
+    """
+    Detect if request comes from UI (frontend) or API (standalone).
+
+    Story 13.5, Subtask 3.2: Distinguish UI vs API requests for audit.
+
+    Heuristics:
+    - If Referer or Origin header contains known frontend origin → "ui"
+    - If X-Requested-With: XMLHttpRequest (common for frontend AJAX) → "ui"
+    - Otherwise → "api"
+    """
+    referer = request.META.get('HTTP_REFERER', '')
+    origin = request.META.get('HTTP_ORIGIN', '')
+    x_requested_with = request.META.get('HTTP_X_REQUESTED_WITH', '')
+
+    # Check for frontend indicators
+    if x_requested_with.lower() == 'xmlhttprequest':
+        return 'ui'
+
+    # Check if referer/origin looks like a browser frontend URL
+    # (not a direct API call from curl/script)
+    if referer or origin:
+        # If there's a referer or origin, it's likely from a browser
+        return 'ui'
+
+    # Default: API standalone call
+    return 'api'
 
 
 def _apply_scope_filter(qs, *, user, scope: str) -> tuple[object, str]:
@@ -358,6 +387,10 @@ class ExecutionsView(APIView):
             'impact_level': impact_level,
         }
 
+        # Story 13.5: Detect source and capture IP for audit traceability
+        source = _detect_request_source(request)
+        ip_address = get_client_ip(request)
+
         execution = ExecutionService().create_execution(
             user=request.user,
             action=action,
@@ -365,6 +398,9 @@ class ExecutionsView(APIView):
             parameters=parameters if parameters else None,
             parent_execution_id=parent_execution_id,
             correlation_id=correlation_id,
+            source=source,
+            ip_address=ip_address,
+            targets=target_names if target_names else None,
         )
 
         return Response(
@@ -718,6 +754,16 @@ class ScheduledExecutionsView(APIView):
         items = list(qs[offset: offset + limit])
         data_items = ScheduledExecutionListItemSerializer(items, many=True).data
 
+        # AC8: Available actions (all that have scheduled executions, respecting RBAC)
+        actions_qs = ScheduledExecution.objects.values("action_id", "action__name")
+        if (getattr(request.user, "profile", "") or "").lower() != "dbops":
+            actions_qs = actions_qs.filter(user_id=request.user.id)
+        actions_qs = actions_qs.distinct().order_by("action__name")
+        available_actions = [
+            {"action_id": r["action_id"], "action_name": r["action__name"] or ""}
+            for r in actions_qs
+        ]
+
         inner = {
             "data": data_items,
             "pagination": {
@@ -726,6 +772,7 @@ class ScheduledExecutionsView(APIView):
                 "total_count": total_count,
                 "total_pages": total_pages,
             },
+            "available_actions": available_actions,
         }
         return Response({"data": inner})
 

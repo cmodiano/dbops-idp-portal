@@ -31,12 +31,14 @@ class ExecutionService:
     """
     
     @transaction.atomic
-    def create_execution(self, user: User, action: Action, environment: str, 
+    def create_execution(self, user: User, action: Action, environment: str,
                        parameters: dict | None = None, parent_execution_id: int | None = None,
-                       correlation_id: str | None = None):
+                       correlation_id: str | None = None,
+                       source: str | None = None, ip_address: str | None = None,
+                       targets: list[str] | None = None):
         """
         Create an execution atomically.
-        
+
         Args:
             user: User instance creating the execution
             action: Action instance to execute
@@ -44,7 +46,10 @@ class ExecutionService:
             parameters: Optional execution parameters dict
             parent_execution_id: Optional parent execution ID (for remediation)
             correlation_id: Optional correlation ID for tracing
-        
+            source: Optional source identifier ('api' or 'ui') for audit (Story 13.5)
+            ip_address: Optional IP address of the client for audit (Story 13.5)
+            targets: Optional list of target names for audit (Story 13.5)
+
         Returns:
             Execution instance
         """
@@ -55,26 +60,36 @@ class ExecutionService:
             status=ExecutionStatus.SUBMITTED,
             parent_execution_id=parent_execution_id,
         )
-        
+
         # Set parameters if provided
         if parameters:
             execution.set_parameters(parameters)
             execution.save()
-        
+
+        # Build audit details (Story 13.5: include source, ip_address, targets)
+        audit_details = {
+            'action_id': action.id,
+            'action_name': action.name,
+            'environment': environment,
+        }
+        if source:
+            audit_details['source'] = source
+        if ip_address:
+            audit_details['ip_address'] = ip_address
+        if targets:
+            audit_details['targets'] = targets
+
         # Audit
         AuditService.create_entry(
             user_id=str(user.id),
             action_type=AuditActionType.EXECUTION_SUBMITTED,
             entity_type=AuditEntityType.EXECUTION,
             entity_id=execution.id,
-            details={
-                'action_id': action.id,
-                'action_name': action.name,
-                'environment': environment,
-            },
+            details=audit_details,
+            ip_address=ip_address,
             correlation_id=correlation_id
         )
-        
+
         return execution
     
     @transaction.atomic

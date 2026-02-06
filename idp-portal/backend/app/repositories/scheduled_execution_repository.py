@@ -205,12 +205,15 @@ async def get_by_id(scheduled_execution_id: int) -> ScheduledExecutionWithAction
 
     # Row columns: 0:ID, 1:ACTION_ID, 2:USER_ID, 3:ENVIRONMENT, 4:PARAMETERS,
     # 5:SCHEDULED_AT, 6:STATUS, 7:CREATED_AT, 8:UPDATED_AT, 9:ACTION_NAME, 10:ACTION_DESCRIPTION
+    params_raw = row[4]
+    if hasattr(params_raw, "read"):
+        params_raw = params_raw.read()
     return ScheduledExecutionWithAction(
         id=row[0],
         action_id=row[1],
         user_id=row[2],
         environment=row[3],
-        parameters=_str_to_json(row[4]),
+        parameters=_str_to_json(params_raw),
         scheduled_at=row[5],
         status=ScheduledExecutionStatus(row[6]),
         created_at=row[7],
@@ -369,7 +372,9 @@ async def list_scheduled_executions(
 
     # Story 11.7: Order by effective date (scheduled_at or next_execution_date)
     query += " ORDER BY COALESCE(SE.SCHEDULED_AT, RP.NEXT_EXECUTION_DATE) ASC"
-    query += f" OFFSET {offset} ROWS FETCH NEXT {limit} ROWS ONLY"
+    query += " OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY"
+    params["offset"] = offset
+    params["limit"] = limit
 
     async with get_connection() as conn:
         cursor = conn.cursor()
@@ -409,6 +414,12 @@ async def list_scheduled_executions(
                 is_active=bool(row[15]) if row[15] is not None else True,
             )
 
+        # Parse parameters CLOB (handle Oracle LOB objects for large JSON)
+        params_raw = row[9]
+        if hasattr(params_raw, "read"):
+            params_raw = params_raw.read()
+        parameters = _str_to_json(params_raw)
+
         results.append(
             ScheduledExecutionListItem(
                 scheduled_execution_id=row[0],
@@ -420,7 +431,7 @@ async def list_scheduled_executions(
                 scheduled_at=row[6],  # NULL for recurring (Story 11.7)
                 status=ScheduledExecutionStatus(row[7]),
                 created_at=row[8],
-                parameters=_str_to_json(row[9]),
+                parameters=parameters,
                 correlation_id=row[10],  # HIGH-1 FIX: AC10 requires correlation_id
                 execution_id=row[11],  # HIGH-2 FIX: AC10 link to effective execution
                 recurring_pattern=recurring_pattern,  # Story 11.7
@@ -630,7 +641,7 @@ async def list_pending_executions(
             SE.ACTION_ID,
             AC.NAME AS ACTION_NAME,
             SE.USER_ID,
-            U.USERNAME AS USER_NAME,
+            U.DISPLAY_NAME AS USER_NAME,
             SE.ENVIRONMENT,
             SE.PARAMETERS,
             SE.SCHEDULED_AT,

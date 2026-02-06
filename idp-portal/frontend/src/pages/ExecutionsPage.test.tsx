@@ -37,6 +37,9 @@ import * as executionService from '../services/execution_service';
 import type { ExecutionResponse, ExecutionStepResponse, DashboardStats } from '../types/api';
 
 vi.mock('../services/execution_service');
+vi.mock('../services/integrations_service', () => ({
+  getIntegrations: vi.fn().mockResolvedValue([]),
+}));
 vi.mock('../hooks/useWebSocket', () => ({
   useWebSocket: () => ({ steps: [], execution: null, loading: false, error: null }),
 }));
@@ -1153,9 +1156,9 @@ describe('ExecutionsPage', () => {
         expect(screen.getByText('Create PDB')).toBeInTheDocument();
       });
 
-      // Check for DatabaseOutlined icon (Oracle)
-      const databaseIcon = container.querySelector('[class*="anticon-database"]');
-      expect(databaseIcon).toBeInTheDocument();
+      // Check for Oracle SVG icon
+      const oracleIcon = container.querySelector('img[src*="oracle.svg"]');
+      expect(oracleIcon).toBeInTheDocument();
     });
 
     it('renders workflow icon when item_type is workflow (AC4)', async () => {
@@ -1354,10 +1357,9 @@ describe('ExecutionsPage', () => {
       const table = screen.getByRole('table');
       expect(within(table).getByText('Technologie')).toBeInTheDocument();
 
-      // Check for Oracle icon (DatabaseOutlined) - query by class name
-      const oracleIcon = document.querySelector('[class*="anticon-database"]');
+      // Check for Oracle SVG icon
+      const oracleIcon = document.querySelector('img[src*="oracle.svg"]');
       expect(oracleIcon).toBeInTheDocument();
-      expect(oracleIcon).toHaveStyle({ color: '#EF4444' });
     });
 
     it('renders workflow icon for workflow item_type (AC4)', async () => {

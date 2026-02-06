@@ -92,6 +92,7 @@ export async function cancelScheduledExecution(
     `/scheduled-executions/${scheduledExecutionId}`,
     {
       method: 'PATCH',
+      body: JSON.stringify({ status: 'cancelled' }),
     }
   );
 }

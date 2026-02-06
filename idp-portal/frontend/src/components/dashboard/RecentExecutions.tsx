@@ -21,6 +21,7 @@ import {
   STATUS_CONFIG,
   ENGINE_ICONS_CONFIG,
   ENGINE_ICON_SIZE_VALUE,
+  ENGINE_SVG_SOURCES,
 } from '../../utils/executionRenderers';
 import { getIconUrl } from '../../utils/iconUrl';
 
@@ -58,21 +59,34 @@ export interface RecentExecutionsProps {
 }
 
 /** Render Technologie column: engine icon + name (Oracle, SQL Server, DB2).
- * Story 9.9 AC8: Uses ENGINE_ICONS_CONFIG from shared executionRenderers. */
+ * Story 9.9 AC8: Uses ENGINE_ICONS_CONFIG and ENGINE_SVG_SOURCES from shared executionRenderers. */
 function EngineIconCell({ engine }: { engine: string | null | undefined }) {
   if (!engine) {
     return <span style={{ opacity: 0.4 }}>—</span>;
   }
   const config = ENGINE_ICONS_CONFIG[engine as ActionEngine];
+  const svgSrc = ENGINE_SVG_SOURCES[engine as ActionEngine];
   if (!config) {
     return <span title={engine} style={{ fontSize: 12, opacity: 0.6 }}>{engine}</span>;
   }
+  const iconNode = svgSrc ? (
+    <img
+      src={svgSrc}
+      alt=""
+      width={ENGINE_ICON_SIZE}
+      height={ENGINE_ICON_SIZE}
+      style={{ flexShrink: 0 }}
+      aria-hidden
+    />
+  ) : (
+    <config.Icon style={{ fontSize: ENGINE_ICON_SIZE, color: config.color, flexShrink: 0 }} aria-hidden />
+  );
   return (
     <span
       title={engine}
       style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}
     >
-      <config.Icon style={{ fontSize: ENGINE_ICON_SIZE, color: config.color, flexShrink: 0 }} aria-hidden />
+      {iconNode}
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{engine}</span>
     </span>
   );

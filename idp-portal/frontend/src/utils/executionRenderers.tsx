@@ -33,7 +33,14 @@ import { getIconUrl } from './iconUrl';
 /** Engine icon size in execution tables (px) - smaller than ActionCard for table context. */
 const ENGINE_ICON_SIZE = 20;
 
-/** Engine icons mapping: engine name → Icon component + color (Story 9.9 AC4). */
+/** SVG paths for database engine icons (real vendor-style icons). */
+const ENGINE_SVG_SOURCES: Partial<Record<ActionEngine, string>> = {
+  Oracle: '/icons/engines/oracle.svg',
+  'SQL Server': '/icons/engines/sqlserver.svg',
+  DB2: '/icons/engines/db2.svg',
+};
+
+/** Engine icons mapping: engine name → Icon component + color (Story 9.9 AC4). Fallback when SVG not used. */
 const ENGINE_ICONS: Record<ActionEngine, { Icon: React.ComponentType<{ style?: React.CSSProperties }>; color: string }> = {
   Oracle: { Icon: DatabaseOutlined, color: STYLE_TOKENS.engineIconColor.Oracle },
   'SQL Server': { Icon: CloudServerOutlined, color: STYLE_TOKENS.engineIconColor['SQL Server'] },
@@ -78,23 +85,48 @@ export function renderPlatformIcon(platform: ActionPlatform | string | null | un
   );
 }
 
+/** Map integration name or type → icon URL. Used as fallback when execution has no integration_icon. */
+export type IntegrationIconsMap = Record<string, string | null | undefined>;
+
 /**
  * Render Plateforme column icon (AC5).
- * Prefers integration icon when defined; otherwise falls back to execution platform icon.
+ * Prefers integration icon when defined; otherwise falls back to integrationIconsMap (from integrations list)
+ * when provided, then to execution platform icon.
  *
  * @param integrationName - Integration name (from action.integration)
  * @param integrationIcon - Integration icon URL (user-defined in integration)
  * @param platform - Execution platform from Action (fallback when no integration icon)
+ * @param integrationIconsMap - Optional map name/type → icon URL (from GET /admin/integrations) for fallback
  */
 export function renderPlateformeIcon(
   integrationName: string | null | undefined,
   integrationIcon: string | null | undefined,
   platform?: ActionPlatform | string | null,
+  integrationIconsMap?: IntegrationIconsMap | null,
 ): React.ReactNode {
   // Prefer integration icon when available (user-defined in integration)
-  const hasIntegration = integrationName || integrationIcon;
-  if (hasIntegration) {
+  const iconFromApi = getIconUrl(integrationIcon);
+  if (iconFromApi) {
     return renderIntegrationIcon(integrationName, integrationIcon, platform);
+  }
+  // Fallback: look up in integrationIconsMap by integration name or platform (matches integration page)
+  if (integrationIconsMap) {
+    const fallbackIcon = (integrationName && getIconUrl(integrationIconsMap[integrationName]))
+      || (platform && getIconUrl(integrationIconsMap[platform]));
+    if (fallbackIcon) {
+      const label = integrationName || platform;
+      return (
+        <Tooltip title={label ?? undefined}>
+          <Avatar
+            src={fallbackIcon}
+            shape="square"
+            size={ENGINE_ICON_SIZE}
+            icon={<ApiOutlined />}
+            style={{ flexShrink: 0 }}
+          />
+        </Tooltip>
+      );
+    }
   }
   return renderPlatformIcon(platform);
 }
@@ -125,12 +157,27 @@ export function renderEngineIcon(
   }
 
   // Known engine
-  const config = ENGINE_ICONS[engine];
+  const config = ENGINE_ICONS[engine as ActionEngine];
+  const svgSrc = ENGINE_SVG_SOURCES[engine as ActionEngine];
   if (!config) {
     // Unknown engine - show text
     return <span title={engine} style={{ fontSize: 12, opacity: 0.6 }}>{engine}</span>;
   }
 
+  if (svgSrc) {
+    return (
+      <Tooltip title={engine}>
+        <img
+          src={svgSrc}
+          alt=""
+          width={ENGINE_ICON_SIZE}
+          height={ENGINE_ICON_SIZE}
+          style={{ flexShrink: 0, verticalAlign: 'middle' }}
+          aria-hidden
+        />
+      </Tooltip>
+    );
+  }
   return (
     <Tooltip title={engine}>
       <config.Icon style={{ fontSize: ENGINE_ICON_SIZE, color: config.color }} />
@@ -231,6 +278,8 @@ export const STATUS_CONFIG: Record<
 
 /** Engine icons config for RecentExecutions component (legacy compatibility). */
 export const ENGINE_ICONS_CONFIG = ENGINE_ICONS;
+/** Engine SVG sources for custom icons (Oracle, SQL Server, DB2). */
+export { ENGINE_SVG_SOURCES };
 /** Platform icons config for tests. */
 export const PLATFORM_ICONS_CONFIG = PLATFORM_ICONS;
 export const ENGINE_ICON_SIZE_VALUE = ENGINE_ICON_SIZE;

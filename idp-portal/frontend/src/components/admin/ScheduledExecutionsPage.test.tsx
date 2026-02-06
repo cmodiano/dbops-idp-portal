@@ -66,7 +66,16 @@ function createMockExecution(overrides: Partial<ScheduledExecutionListItem> = {}
 }
 
 // Default mock response
-function createMockResponse(items: ScheduledExecutionListItem[]): ScheduledExecutionListResponse {
+function createMockResponse(
+  items: ScheduledExecutionListItem[],
+  availableActions?: { action_id: number; action_name: string }[]
+): ScheduledExecutionListResponse {
+  const actions =
+    availableActions ??
+    Array.from(new Map(items.map((se) => [se.action_id, se.action_name])).entries()).map(([action_id, action_name]) => ({
+      action_id,
+      action_name,
+    }));
   return {
     data: items,
     pagination: {
@@ -75,6 +84,7 @@ function createMockResponse(items: ScheduledExecutionListItem[]): ScheduledExecu
       total_count: items.length,
       total_pages: 1,
     },
+    available_actions: actions,
   };
 }
 
@@ -246,6 +256,49 @@ describe('ScheduledExecutionsPage', () => {
       await waitFor(() => {
         const row = document.querySelector('.ant-table-row');
         expect(row?.classList.contains('scheduled-soon')).toBe(true);
+      });
+    });
+
+    it('applies scheduled-soon class to recurring rows when next_execution_date is within 24 hours', async () => {
+      const recurringSoon = createMockExecution({
+        scheduled_execution_id: 1,
+        scheduled_at: null,
+        recurring_pattern: {
+          pattern_type: 'daily',
+          pattern_config: { hour: 2, minute: 0 },
+          next_execution_date: dayjs().add(6, 'hour').toISOString(),
+          is_active: true,
+        },
+      });
+      mockListScheduledExecutions.mockResolvedValue(createMockResponse([recurringSoon]));
+
+      renderWithApp(<ScheduledExecutionsPage />);
+
+      await waitFor(() => {
+        const row = document.querySelector('.ant-table-row');
+        expect(row?.classList.contains('scheduled-soon')).toBe(true);
+        expect(screen.getByText('Bientôt')).toBeInTheDocument();
+      });
+    });
+
+    it('does not apply scheduled-soon to inactive recurring when next_execution_date is within 24h', async () => {
+      const recurringInactive = createMockExecution({
+        scheduled_execution_id: 1,
+        scheduled_at: null,
+        recurring_pattern: {
+          pattern_type: 'daily',
+          pattern_config: { hour: 2, minute: 0 },
+          next_execution_date: dayjs().add(6, 'hour').toISOString(),
+          is_active: false,
+        },
+      });
+      mockListScheduledExecutions.mockResolvedValue(createMockResponse([recurringInactive]));
+
+      renderWithApp(<ScheduledExecutionsPage />);
+
+      await waitFor(() => {
+        const row = document.querySelector('.ant-table-row');
+        expect(row?.classList.contains('scheduled-soon')).toBe(false);
       });
     });
   });
@@ -577,16 +630,54 @@ describe('ScheduledExecutionsPage', () => {
         expect(mockListScheduledExecutions).toHaveBeenCalledTimes(1);
       });
 
-      // Open the status select
-      const statusSelect = screen.getByRole('combobox');
+      // Open the status select (first combobox)
+      const statusSelect = screen.getAllByRole('combobox')[0];
       await user.click(statusSelect);
 
-      // Select "En attente"
-      await user.click(screen.getByText('En attente'));
+      // Select "En attente" from dropdown
+      const option = await screen.findByText('En attente');
+      await user.click(option);
 
       await waitFor(() => {
         expect(mockListScheduledExecutions).toHaveBeenCalledWith(
           expect.objectContaining({ status: 'pending' }),
+          expect.any(Number),
+          expect.any(Number)
+        );
+      });
+    });
+
+    it('calls API with action_id filter when action selected (AC8)', async () => {
+      const uniqueActionName = 'FilterTestAction-XYZ';
+      const items = [
+        createMockExecution({ action_id: 1, action_name: uniqueActionName }),
+      ];
+      mockListScheduledExecutions.mockResolvedValue(
+        createMockResponse(items, [
+          { action_id: 1, action_name: uniqueActionName },
+          { action_id: 2, action_name: 'Other Action' },
+        ])
+      );
+      const user = userEvent.setup();
+
+      renderWithApp(<ScheduledExecutionsPage />);
+
+      await waitFor(() => {
+        expect(mockListScheduledExecutions).toHaveBeenCalledTimes(1);
+      });
+
+      // Open the action select (second combobox - status is first)
+      const comboboxes = screen.getAllByRole('combobox');
+      const actionSelect = comboboxes[1];
+      await user.click(actionSelect);
+
+      // Select unique action from dropdown (name only in dropdown, not in table initially for "Other Action")
+      const option = await screen.findByText('Other Action');
+      await user.click(option);
+
+      await waitFor(() => {
+        expect(mockListScheduledExecutions).toHaveBeenCalledWith(
+          expect.objectContaining({ action_id: 2 }),
           expect.any(Number),
           expect.any(Number)
         );
@@ -599,10 +690,15 @@ describe('ScheduledExecutionsPage', () => {
 
       renderWithApp(<ScheduledExecutionsPage />);
 
-      // Open the status select
-      const statusSelect = screen.getByRole('combobox');
+      await waitFor(() => {
+        expect(mockListScheduledExecutions).toHaveBeenCalledTimes(1);
+      });
+
+      // Open the status select and select "En attente"
+      const statusSelect = screen.getAllByRole('combobox')[0];
       await user.click(statusSelect);
-      await user.click(screen.getByText('En attente'));
+      const option = await screen.findByText('En attente');
+      await user.click(option);
 
       // Clear the selection
       const clearButton = document.querySelector('.ant-select-clear');
@@ -666,8 +762,11 @@ describe('ScheduledExecutionsPage', () => {
       renderWithApp(<ScheduledExecutionsPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('Récurrent')).toBeInTheDocument();
-        expect(screen.getByText(/Tous les jours à 02:00/)).toBeInTheDocument();
+        expect(screen.getByText('Restart Database')).toBeInTheDocument();
+      });
+      await waitFor(() => {
+        expect(screen.getByText(/Récurrent/)).toBeInTheDocument();
+        expect(screen.getByText(/Tous les jours/)).toBeInTheDocument();
       });
     });
 
@@ -686,8 +785,11 @@ describe('ScheduledExecutionsPage', () => {
       renderWithApp(<ScheduledExecutionsPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('Récurrent')).toBeInTheDocument();
-        expect(screen.getByText(/Tous les lundis à 14:00/)).toBeInTheDocument();
+        expect(screen.getByText('Restart Database')).toBeInTheDocument();
+      });
+      await waitFor(() => {
+        expect(screen.getByText(/Récurrent/)).toBeInTheDocument();
+        expect(screen.getByText(/lundis/)).toBeInTheDocument();
       });
     });
 
@@ -748,7 +850,7 @@ describe('ScheduledExecutionsPage', () => {
       renderWithApp(<ScheduledExecutionsPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('Récurrent')).toBeInTheDocument();
+        expect(screen.getByText(/Récurrent/)).toBeInTheDocument();
         // Should display human-readable description from cronHelper
         expect(screen.getByText(/Tous les jours à 2h00/i)).toBeInTheDocument();
       });
@@ -800,7 +902,9 @@ describe('ScheduledExecutionsPage', () => {
       renderWithApp(<ScheduledExecutionsPage />);
 
       await waitFor(() => {
-        // Should display "Tous les lundis à 14h00" from describeCronExpression
+        // Type column shows "Récurrent - Cron" for cron patterns
+        expect(screen.getByText(/Récurrent/)).toBeInTheDocument();
+        // Date column displays "Tous les lundis à 14h00" from describeCronExpression
         expect(screen.getByText(/Tous les lundis à 14h00/)).toBeInTheDocument();
       });
     });

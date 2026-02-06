@@ -915,7 +915,7 @@ export interface ScheduledExecutionListItem {
   recurring_pattern?: RecurringPatternResponse | null;
 }
 
-/** Response from GET /scheduled-executions (Story 11.6, AC3). */
+/** Response from GET /scheduled-executions (Story 11.6, AC3, AC8). */
 export interface ScheduledExecutionListResponse {
   data: ScheduledExecutionListItem[];
   pagination: {
@@ -924,6 +924,8 @@ export interface ScheduledExecutionListResponse {
     total_count: number;
     total_pages: number;
   };
+  /** AC8: All actions that have scheduled executions (for filter dropdown). */
+  available_actions?: { action_id: number; action_name: string }[];
 }
 
 /** Response from PATCH /scheduled-executions/{id} (Story 11.6, AC5). */

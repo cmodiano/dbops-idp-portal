@@ -523,6 +523,8 @@ async def get_pending_executions(
 
 **Pattern 2 : Repository list_pending_executions avec JOIN**
 
+`user_name` doit être `U.DISPLAY_NAME` (aligné avec `list_scheduled_executions` en 11-6) pour cohérence des APIs.
+
 Source : Extension de `/idp-portal/backend/app/repositories/scheduled_execution_repository.py`
 
 ```python
@@ -564,7 +566,7 @@ async def list_pending_executions(
             SE.ACTION_ID,
             AC.NAME AS action_name,
             SE.USER_ID,
-            U.USERNAME AS user_name,
+            U.DISPLAY_NAME AS user_name,
             SE.ENVIRONMENT,
             SE.PARAMETERS,
             SE.SCHEDULED_AT,

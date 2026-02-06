@@ -78,25 +78,23 @@ describe('executionRenderers', () => {
   });
 
   describe('renderEngineIcon (AC4)', () => {
-    it('renders Oracle icon with red color', () => {
+    it('renders Oracle icon (SVG)', () => {
       const { container } = render(<>{renderEngineIcon('Oracle', 'action')}</>);
-      const icon = container.querySelector('[class*="anticon-database"]');
-      expect(icon).toBeInTheDocument();
-      expect(icon).toHaveStyle({ color: '#EF4444' });
+      const img = container.querySelector('img[src*="oracle.svg"]');
+      expect(img).toBeInTheDocument();
+      expect(img).toHaveAttribute('width', '20');
     });
 
-    it('renders SQL Server icon with blue color', () => {
+    it('renders SQL Server icon (SVG)', () => {
       const { container } = render(<>{renderEngineIcon('SQL Server', 'action')}</>);
-      const icon = container.querySelector('[class*="anticon-cloud-server"]');
-      expect(icon).toBeInTheDocument();
-      expect(icon).toHaveStyle({ color: '#3B82F6' });
+      const img = container.querySelector('img[src*="sqlserver.svg"]');
+      expect(img).toBeInTheDocument();
     });
 
-    it('renders DB2 icon with green color', () => {
+    it('renders DB2 icon (SVG)', () => {
       const { container } = render(<>{renderEngineIcon('DB2', 'action')}</>);
-      const icon = container.querySelector('[class*="anticon-hdd"]');
-      expect(icon).toBeInTheDocument();
-      expect(icon).toHaveStyle({ color: '#10B981' });
+      const img = container.querySelector('img[src*="db2.svg"]');
+      expect(img).toBeInTheDocument();
     });
 
     it('renders workflow icon with purple color when item_type is workflow', () => {
@@ -182,9 +180,26 @@ describe('executionRenderers', () => {
       const { container } = render(
         <>{renderPlateformeIcon('AAP Prod', null, 'AAP')}</>
       );
-      // hasIntegration is true (integration_name present) → Avatar with ApiOutlined fallback
+      // No integration_icon, no integrationIconsMap → platform icon (Rocket)
+      const icon = container.querySelector('[class*="anticon-rocket"]');
+      expect(icon).toBeInTheDocument();
+    });
+
+    it('uses integrationIconsMap fallback when integration has name but no icon', () => {
+      const { container } = render(
+        <>{
+          renderPlateformeIcon(
+            'AAP Prod',
+            null,
+            'AAP',
+            { 'AAP Prod': '/icons/aap-custom.png' },
+          )
+        }</>
+      );
       const avatar = container.querySelector('.ant-avatar');
       expect(avatar).toBeInTheDocument();
+      const img = container.querySelector('img');
+      expect(img).toHaveAttribute('src', expect.stringContaining('aap-custom.png'));
     });
   });
 

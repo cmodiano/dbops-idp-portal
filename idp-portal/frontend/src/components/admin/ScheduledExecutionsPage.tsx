@@ -30,6 +30,8 @@ import type { TableProps } from 'antd';
 import { ClockCircleOutlined, ReloadOutlined, SyncOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
+import isoWeek from 'dayjs/plugin/isoWeek';
+import { Link } from 'react-router';
 import {
   listScheduledExecutions,
   cancelScheduledExecution,
@@ -44,6 +46,7 @@ import type {
 } from '../../types/api';
 
 dayjs.extend(utc);
+dayjs.extend(isoWeek);
 const { RangePicker } = DatePicker;
 
 /** Check if a date is within the next 24 hours and in the future. */
@@ -117,6 +120,7 @@ const ENV_COLORS: Record<string, string> = {
 export default function ScheduledExecutionsPage() {
   const { notification } = App.useApp();
   const [scheduledExecutions, setScheduledExecutions] = useState<ScheduledExecutionListItem[]>([]);
+  const [availableActions, setAvailableActions] = useState<{ action_id: number; action_name: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState<ScheduledExecutionFilters>({});
   const [pagination, setPagination] = useState({ current: 1, pageSize: 10, total: 0 });
@@ -139,6 +143,7 @@ export default function ScheduledExecutionsPage() {
         const offset = (page - 1) * pageSize;
         const response = await listScheduledExecutions(filters, pageSize, offset);
         setScheduledExecutions(response.data);
+        setAvailableActions(response.available_actions ?? []);
         setPagination({
           current: response.pagination.page,
           pageSize: response.pagination.page_size,
@@ -158,6 +163,7 @@ export default function ScheduledExecutionsPage() {
 
   useEffect(() => {
     loadScheduledExecutions(1, pagination.pageSize);
+    // Intentionally run only when filters change; pagination changes trigger handleTableChange.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 
@@ -339,7 +345,7 @@ export default function ScheduledExecutionsPage() {
               <div style={{ color: isActive ? 'inherit' : '#999' }}>{recurrenceText}</div>
               {nextExecution && isActive && (
                 <div style={{ fontSize: '12px', color: '#888' }}>
-                  Prochaine : {nextExecution.format('DD/MM/YYYY à HH:mm')}
+                  Prochaine : {dayjs.utc(record.recurring_pattern.next_execution_date).format('DD/MM/YYYY à HH:mm')} (UTC)
                   {isWithin24Hours(record.recurring_pattern.next_execution_date) && (
                     <Tag color="orange" style={{ marginLeft: 8 }}>
                       Bientôt
@@ -356,14 +362,14 @@ export default function ScheduledExecutionsPage() {
           );
         }
 
-        // One-time execution
+        // One-time execution (AC3: DD/MM/YYYY HH:mm UTC)
         const scheduledAt = record.scheduled_at;
         if (!scheduledAt) return '—';
-        const scheduledDate = dayjs(scheduledAt);
+        const scheduledDate = dayjs.utc(scheduledAt);
         const soon = isWithin24Hours(scheduledAt);
         return (
           <Space>
-            <span>{scheduledDate.format('DD/MM/YYYY HH:mm')} (heure locale)</span>
+            <span>{scheduledDate.format('DD/MM/YYYY HH:mm')} (UTC)</span>
             {soon && (
               <Tag color="orange" icon={<ClockCircleOutlined />}>
                 Bientôt
@@ -423,8 +429,12 @@ export default function ScheduledExecutionsPage() {
     },
   ];
 
+  // Use same effective date as column renderer: next_execution_date for recurring (when active), scheduled_at for one-time
   const rowClassName = (record: ScheduledExecutionListItem) => {
-    return isWithin24Hours(record.scheduled_at) ? 'scheduled-soon' : '';
+    const effectiveDate = record.recurring_pattern
+      ? (record.recurring_pattern.is_active ? record.recurring_pattern.next_execution_date : null)
+      : record.scheduled_at;
+    return isWithin24Hours(effectiveDate) ? 'scheduled-soon' : '';
   };
 
   return (
@@ -461,7 +471,7 @@ export default function ScheduledExecutionsPage() {
               { value: 'cancelled', label: 'Annulées' },
             ]}
           />
-          {/* HIGH-3 FIX: AC8 requires filtering by action */}
+          {/* AC8: All actions that have scheduled executions (from API) */}
           <Select
             placeholder="Filtrer par action"
             style={{ width: 220 }}
@@ -469,11 +479,7 @@ export default function ScheduledExecutionsPage() {
             showSearch
             value={filters.action_id}
             onChange={(value) => setFilters((prev) => ({ ...prev, action_id: value }))}
-            options={Array.from(
-              new Map(
-                scheduledExecutions.map((se) => [se.action_id, se.action_name])
-              ).entries()
-            ).map(([id, name]) => ({ value: id, label: name }))}
+            options={availableActions.map((a) => ({ value: a.action_id, label: a.action_name }))}
             filterOption={(input, option) =>
               (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
             }
@@ -515,7 +521,7 @@ export default function ScheduledExecutionsPage() {
         }}
         okText="Confirmer l'annulation"
         cancelText="Annuler"
-        okButtonProps={{ danger: true, loading: cancelLoading }}
+        okButtonProps={{ danger: true }}
         confirmLoading={cancelLoading}
       >
         <p>Êtes-vous sûr de vouloir annuler cette exécution planifiée ?</p>
@@ -523,7 +529,7 @@ export default function ScheduledExecutionsPage() {
           <Descriptions column={1} size="small" bordered>
             <Descriptions.Item label="Action">{selectedExecution.action_name}</Descriptions.Item>
             <Descriptions.Item label="Planifiée pour">
-              {dayjs(selectedExecution.scheduled_at).format('DD/MM/YYYY à HH:mm')} (heure locale)
+              {dayjs.utc(selectedExecution.scheduled_at).format('DD/MM/YYYY à HH:mm')} (UTC)
             </Descriptions.Item>
             <Descriptions.Item label="Utilisateur">{selectedExecution.user_name}</Descriptions.Item>
           </Descriptions>
@@ -630,7 +636,7 @@ export default function ScheduledExecutionsPage() {
                 </Descriptions.Item>
                 <Descriptions.Item label="Prochaine exécution">
                   {selectedExecution.recurring_pattern.next_execution_date
-                    ? dayjs(selectedExecution.recurring_pattern.next_execution_date).format('DD/MM/YYYY à HH:mm') + ' (heure locale)'
+                    ? dayjs.utc(selectedExecution.recurring_pattern.next_execution_date).format('DD/MM/YYYY à HH:mm') + ' (UTC)'
                     : '—'}
                 </Descriptions.Item>
                 <Descriptions.Item label="Statut récurrence">
@@ -643,7 +649,7 @@ export default function ScheduledExecutionsPage() {
               </>
             ) : (
               <Descriptions.Item label="Date/heure planifiée">
-                {dayjs(selectedExecution.scheduled_at).format('DD/MM/YYYY à HH:mm')} (heure locale)
+                {dayjs.utc(selectedExecution.scheduled_at).format('DD/MM/YYYY à HH:mm')} (UTC)
               </Descriptions.Item>
             )}
             <Descriptions.Item label="Statut exécution">
@@ -662,9 +668,9 @@ export default function ScheduledExecutionsPage() {
             {/* HIGH-2 FIX: AC10 requires link to effective execution if status=executed */}
             {selectedExecution.status === 'executed' && selectedExecution.execution_id && (
               <Descriptions.Item label="Exécution effective">
-                <a href={`/executions/${selectedExecution.execution_id}`}>
+                <Link to={`/executions/${selectedExecution.execution_id}`}>
                   Voir l'exécution #{selectedExecution.execution_id}
-                </a>
+                </Link>
               </Descriptions.Item>
             )}
           </Descriptions>

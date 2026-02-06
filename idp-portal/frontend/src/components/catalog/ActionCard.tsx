@@ -33,6 +33,7 @@ import { IMPACT_LABELS } from '../shared/impactLabels';
 import { STYLE_TOKENS } from '../../theme/styleTokens';
 import { getTagStyle } from '../../utils/tagStyles';
 import { sanitizeDescription } from '../../utils/businessLanguage';
+import { ENGINE_SVG_SOURCES } from '../../utils/executionRenderers';
 
 const { Text, Paragraph } = Typography;
 
@@ -49,7 +50,7 @@ export interface ActionCardProps {
   showFavoriteButton?: boolean;
 }
 
-const ENGINE_ICONS: Record<ActionEngine, React.ReactNode> = {
+const ENGINE_ICON_FALLBACKS: Record<ActionEngine, React.ReactNode> = {
   Oracle: (
     <DatabaseOutlined
       style={{ fontSize: STYLE_TOKENS.engineIconSize, color: STYLE_TOKENS.engineIconColor.Oracle }}
@@ -66,6 +67,23 @@ const ENGINE_ICONS: Record<ActionEngine, React.ReactNode> = {
     />
   ),
 };
+
+function getEngineIcon(engine: ActionEngine): React.ReactNode {
+  const svgSrc = ENGINE_SVG_SOURCES[engine];
+  if (svgSrc) {
+    return (
+      <img
+        src={svgSrc}
+        alt=""
+        width={STYLE_TOKENS.engineIconSize}
+        height={STYLE_TOKENS.engineIconSize}
+        style={{ flexShrink: 0 }}
+        aria-hidden
+      />
+    );
+  }
+  return ENGINE_ICON_FALLBACKS[engine];
+}
 
 /** Workflow icon - distinct from action icons (Story 5.7, AC3). */
 const WORKFLOW_ICON = (
@@ -101,7 +119,7 @@ export function ActionCard({
   // Story 5.7, AC3: Use workflow icon for workflows, engine icon for actions
   const icon = isWorkflow
     ? WORKFLOW_ICON
-    : (action.engine ? ENGINE_ICONS[action.engine] : null);
+    : (action.engine ? getEngineIcon(action.engine) : null);
 
   const visibleTags = action.tags?.slice(0, MAX_VISIBLE_TAGS) || [];
   const hiddenTagsCount = (action.tags?.length || 0) - MAX_VISIBLE_TAGS;

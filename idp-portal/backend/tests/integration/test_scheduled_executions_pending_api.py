@@ -321,7 +321,7 @@ class TestGetPendingExecutions:
 
     @pytest.mark.asyncio
     async def test_get_pending_executions_includes_user_name(self, client, mock_auth_dbops):
-        """GET /pending includes user_name from JOIN with USERS (AC1)."""
+        """GET /pending includes user_name (display name) from JOIN with USERS (AC1)."""
         before = datetime.now(timezone.utc) + timedelta(hours=1)
 
         with patch("app.api.v1.scheduled_executions.scheduled_execution_repository.list_pending_executions", new_callable=AsyncMock) as mock_list, \
@@ -333,7 +333,7 @@ class TestGetPendingExecutions:
                     action_id=10,
                     action_name="Test Action",
                     user_id=123,
-                    user_name="marc.dubois",
+                    user_name="Marc Dubois",
                     environment="prod",
                     parameters={},
                     scheduled_at=datetime.now(timezone.utc),
@@ -350,7 +350,7 @@ class TestGetPendingExecutions:
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()["data"][0]
-        assert data["user_name"] == "marc.dubois"
+        assert data["user_name"] == "Marc Dubois"
         assert data["user_id"] == 123
 
 

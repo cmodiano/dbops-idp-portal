@@ -150,41 +150,41 @@ Utilisateur : Marc Dubois
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Créer l'API GET /api/v1/scheduled-executions avec filtrage et RBAC (AC2, AC7, AC8, AC9)
-  - [ ] Subtask 1.1: Créer endpoint `GET /api/v1/scheduled-executions` dans `backend/app/api/v1/scheduled_executions.py`
-  - [ ] Subtask 1.2: Implémenter query params : `status`, `action_id`, `scheduled_from`, `scheduled_to`
-  - [ ] Subtask 1.3: Implémenter RBAC : DBA voit ses propres exécutions, DBOPS voit toutes
-  - [ ] Subtask 1.4: Enrichir la réponse avec `action_name`, `user_name` (JOIN avec ACTIONS_CATALOG et USERS)
-  - [ ] Subtask 1.5: Retourner format JSON : `{ "data": [{ scheduled_execution_id, action_id, action_name, user_id, user_name, environment, scheduled_at, status, created_at, correlation_id }] }`
-  - [ ] Subtask 1.6: Ajouter pagination (limit, offset) si nécessaire
-  - [ ] Subtask 1.7: Créer tests backend pour filtres et RBAC (10+ tests)
+- [x] Task 1: Créer l'API GET /api/v1/scheduled-executions avec filtrage et RBAC (AC2, AC7, AC8, AC9)
+  - [x] Subtask 1.1: Créer endpoint `GET /api/v1/scheduled-executions` dans `backend/app/api/v1/scheduled_executions.py`
+  - [x] Subtask 1.2: Implémenter query params : `status`, `action_id`, `scheduled_from`, `scheduled_to`
+  - [x] Subtask 1.3: Implémenter RBAC : DBA voit ses propres exécutions, DBOPS voit toutes
+  - [x] Subtask 1.4: Enrichir la réponse avec `action_name`, `user_name` (JOIN avec ACTIONS_CATALOG et USERS)
+  - [x] Subtask 1.5: Retourner format JSON : `{ "data": [{ scheduled_execution_id, action_id, action_name, user_id, user_name, environment, scheduled_at, status, created_at, correlation_id }] }`
+  - [x] Subtask 1.6: Ajouter pagination (limit, offset) si nécessaire
+  - [x] Subtask 1.7: Créer tests backend pour filtres et RBAC (10+ tests)
 
-- [ ] Task 2: Créer l'API PATCH /api/v1/scheduled-executions/{id} pour annulation (AC5)
-  - [ ] Subtask 2.1: Créer endpoint `PATCH /api/v1/scheduled-executions/{id}` dans `backend/app/api/v1/scheduled_executions.py`
-  - [ ] Subtask 2.2: Accepter payload : `{ "status": "cancelled" }`
-  - [ ] Subtask 2.3: Valider que status actuel est "pending" (erreur 400 si déjà executed/cancelled)
-  - [ ] Subtask 2.4: Valider RBAC : DBA peut annuler ses propres exécutions, DBOPS peut annuler toutes
-  - [ ] Subtask 2.5: Mettre à jour le statut en base : `UPDATE SCHEDULED_EXECUTIONS SET STATUS = 'cancelled' WHERE ID = ?`
-  - [ ] Subtask 2.6: Tracer dans audit_log : `ACTION_CANCELLED_SCHEDULED_EXECUTION`
-  - [ ] Subtask 2.7: Retourner la scheduled execution mise à jour : `{ "data": { scheduled_execution_id, status, ... } }`
-  - [ ] Subtask 2.8: Créer tests backend pour annulation et erreurs (8+ tests)
+- [x] Task 2: Créer l'API PATCH /api/v1/scheduled-executions/{id} pour annulation (AC5)
+  - [x] Subtask 2.1: Créer endpoint `PATCH /api/v1/scheduled-executions/{id}` dans `backend/app/api/v1/scheduled_executions.py`
+  - [x] Subtask 2.2: Accepter payload : `{ "status": "cancelled" }`
+  - [x] Subtask 2.3: Valider que status actuel est "pending" (erreur 400 si déjà executed/cancelled)
+  - [x] Subtask 2.4: Valider RBAC : DBA peut annuler ses propres exécutions, DBOPS peut annuler toutes
+  - [x] Subtask 2.5: Mettre à jour le statut en base : `UPDATE SCHEDULED_EXECUTIONS SET STATUS = 'cancelled' WHERE ID = ?`
+  - [x] Subtask 2.6: Tracer dans audit_log : `ACTION_CANCELLED_SCHEDULED_EXECUTION`
+  - [x] Subtask 2.7: Retourner la scheduled execution mise à jour : `{ "data": { scheduled_execution_id, status, ... } }`
+  - [x] Subtask 2.8: Créer tests backend pour annulation et erreurs (8+ tests)
 
-- [ ] Task 3: Créer le service frontend pour scheduled executions (AC1, AC3, AC5)
-  - [ ] Subtask 3.1: Créer `frontend/src/services/scheduled_execution_service.ts` (s'il n'existe pas encore)
-  - [ ] Subtask 3.2: Implémenter `listScheduledExecutions(filters: ScheduledExecutionFilters): Promise<ScheduledExecutionResponse[]>`
-  - [ ] Subtask 3.3: Implémenter `cancelScheduledExecution(id: number): Promise<ScheduledExecutionResponse>`
-  - [ ] Subtask 3.4: Ajouter types TypeScript dans `frontend/src/types/api.ts` :
+- [x] Task 3: Créer le service frontend pour scheduled executions (AC1, AC3, AC5)
+  - [x] Subtask 3.1: Créer `frontend/src/services/scheduled_execution_service.ts` (s'il n'existe pas encore)
+  - [x] Subtask 3.2: Implémenter `listScheduledExecutions(filters: ScheduledExecutionFilters): Promise<ScheduledExecutionResponse[]>`
+  - [x] Subtask 3.3: Implémenter `cancelScheduledExecution(id: number): Promise<ScheduledExecutionResponse>`
+  - [x] Subtask 3.4: Ajouter types TypeScript dans `frontend/src/types/api.ts` :
     - `ScheduledExecutionFilters` (status, action_id, scheduled_from, scheduled_to)
     - `ScheduledExecutionListItem` (scheduled_execution_id, action_id, action_name, user_id, user_name, environment, scheduled_at, status, created_at)
 
-- [ ] Task 4: Créer la page ScheduledExecutionsPage avec navigation Admin (AC1)
-  - [ ] Subtask 4.1: Créer composant `frontend/src/components/admin/ScheduledExecutionsPage.tsx`
-  - [ ] Subtask 4.2: Ajouter route dans `frontend/src/App.tsx` : `/admin/scheduled-executions`
-  - [ ] Subtask 4.3: Modifier `frontend/src/components/admin/AdminPage.tsx` pour ajouter onglet "Exécutions planifiées"
-  - [ ] Subtask 4.4: Utiliser Tabs Ant Design avec clé "scheduled-executions"
+- [x] Task 4: Créer la page ScheduledExecutionsPage avec navigation Admin (AC1)
+  - [x] Subtask 4.1: Créer composant `frontend/src/components/admin/ScheduledExecutionsPage.tsx`
+  - [x] Subtask 4.2: Ajouter route dans `frontend/src/App.tsx` : `/admin/scheduled-executions`
+  - [x] Subtask 4.3: Modifier `frontend/src/components/admin/AdminPage.tsx` pour ajouter onglet "Exécutions planifiées"
+  - [x] Subtask 4.4: Utiliser Tabs Ant Design avec clé "scheduled-executions"
 
-- [ ] Task 5: Implémenter la liste des exécutions planifiées avec Table (AC3, AC4)
-  - [ ] Subtask 5.1: Utiliser composant Table Ant Design avec colonnes :
+- [x] Task 5: Implémenter la liste des exécutions planifiées avec Table (AC3, AC4)
+  - [x] Subtask 5.1: Utiliser composant Table Ant Design avec colonnes :
     - Action (title, dataIndex: 'action_name')
     - Utilisateur (title, dataIndex: 'user_name')
     - Date/heure planifiée (render avec dayjs format + indicateur 24h)
@@ -192,66 +192,66 @@ Utilisateur : Marc Dubois
     - Environnement (render avec Tag)
     - Date de création (render avec dayjs format)
     - Actions (render avec Space : bouton Annuler + bouton Voir détails)
-  - [ ] Subtask 5.2: Implémenter hook `useScheduledExecutions()` pour charger les données
-  - [ ] Subtask 5.3: Ajouter state `loading` pendant le chargement
-  - [ ] Subtask 5.4: Gérer les erreurs API avec notification error
+  - [x] Subtask 5.2: Implémenter hook `useScheduledExecutions()` pour charger les données
+  - [x] Subtask 5.3: Ajouter state `loading` pendant le chargement
+  - [x] Subtask 5.4: Gérer les erreurs API avec notification error
 
-- [ ] Task 6: Implémenter l'indicateur visuel pour exécutions proches (AC4)
-  - [ ] Subtask 6.1: Calculer `isWithin24Hours = dayjs(scheduled_at).diff(dayjs(), 'hour') <= 24 && dayjs(scheduled_at).isAfter(dayjs())`
-  - [ ] Subtask 6.2: Si isWithin24Hours, afficher badge "Bientôt" orange à côté de la date
-  - [ ] Subtask 6.3: Ajouter className conditionnelle pour row background : `rowClassName={(record) => isWithin24Hours(record.scheduled_at) ? 'scheduled-soon' : ''}`
-  - [ ] Subtask 6.4: Ajouter CSS : `.scheduled-soon { background-color: rgba(250, 173, 20, 0.1); }`
+- [x] Task 6: Implémenter l'indicateur visuel pour exécutions proches (AC4)
+  - [x] Subtask 6.1: Calculer `isWithin24Hours = dayjs(scheduled_at).diff(dayjs(), 'hour') <= 24 && dayjs(scheduled_at).isAfter(dayjs())`
+  - [x] Subtask 6.2: Si isWithin24Hours, afficher badge "Bientôt" orange à côté de la date
+  - [x] Subtask 6.3: Ajouter className conditionnelle pour row background. Utiliser la même date effective que la colonne : pour les récurrences actives `recurring_pattern.next_execution_date`, pour one-time `scheduled_at`. Exemple : `rowClassName={(record) => { const effectiveDate = record.recurring_pattern ? (record.recurring_pattern.is_active ? record.recurring_pattern.next_execution_date : null) : record.scheduled_at; return isWithin24Hours(effectiveDate) ? 'scheduled-soon' : ''; }}`
+  - [x] Subtask 6.4: Ajouter CSS : `.scheduled-soon { background-color: rgba(250, 173, 20, 0.1); }`
 
-- [ ] Task 7: Implémenter les filtres (AC7, AC8, AC9)
-  - [ ] Subtask 7.1: Créer section FilterBar avec Space direction="horizontal"
-  - [ ] Subtask 7.2: Ajouter Select "Statut" avec options : Tous, En attente (pending), Exécutées (executed), Annulées (cancelled)
-  - [ ] Subtask 7.3: Ajouter Select "Action" avec liste des actions (charger via API ou extraire de la liste)
-  - [ ] Subtask 7.4: Ajouter RangePicker "Date planifiée" (showTime=false, format="DD/MM/YYYY")
-  - [ ] Subtask 7.5: Implémenter state `filters` et `setFilters`
-  - [ ] Subtask 7.6: Déclencher rechargement de la liste quand filters changent (useEffect)
+- [x] Task 7: Implémenter les filtres (AC7, AC8, AC9)
+  - [x] Subtask 7.1: Créer section FilterBar avec Space direction="horizontal"
+  - [x] Subtask 7.2: Ajouter Select "Statut" avec options : Tous, En attente (pending), Exécutées (executed), Annulées (cancelled)
+  - [x] Subtask 7.3: Ajouter Select "Action" avec liste des actions (charger via API ou extraire de la liste)
+  - [x] Subtask 7.4: Ajouter RangePicker "Date planifiée" (showTime=false, format="DD/MM/YYYY")
+  - [x] Subtask 7.5: Implémenter state `filters` et `setFilters`
+  - [x] Subtask 7.6: Déclencher rechargement de la liste quand filters changent (useEffect)
 
-- [ ] Task 8: Implémenter la modal de confirmation d'annulation (AC5)
-  - [ ] Subtask 8.1: Créer state `cancelModalVisible` et `selectedExecution`
-  - [ ] Subtask 8.2: Créer Modal Ant Design avec title="Confirmer l'annulation"
-  - [ ] Subtask 8.3: Afficher détails de l'exécution à annuler (action, date planifiée, utilisateur)
-  - [ ] Subtask 8.4: Footer avec boutons : Annuler (ferme modal) et "Confirmer l'annulation" (appelle API)
-  - [ ] Subtask 8.5: Implémenter handler `handleCancelExecution(id)` qui appelle `cancelScheduledExecution(id)`
-  - [ ] Subtask 8.6: En cas de succès, afficher notification success et recharger la liste
-  - [ ] Subtask 8.7: En cas d'erreur 400 (déjà annulée/executed), afficher erreur spécifique
-  - [ ] Subtask 8.8: En cas d'erreur 403 (permission), afficher erreur permission
+- [x] Task 8: Implémenter la modal de confirmation d'annulation (AC5)
+  - [x] Subtask 8.1: Créer state `cancelModalVisible` et `selectedExecution`
+  - [x] Subtask 8.2: Créer Modal Ant Design avec title="Confirmer l'annulation"
+  - [x] Subtask 8.3: Afficher détails de l'exécution à annuler (action, date planifiée, utilisateur)
+  - [x] Subtask 8.4: Footer avec boutons : Annuler (ferme modal) et "Confirmer l'annulation" (appelle API)
+  - [x] Subtask 8.5: Implémenter handler `handleCancelExecution(id)` qui appelle `cancelScheduledExecution(id)`
+  - [x] Subtask 8.6: En cas de succès, afficher notification success et recharger la liste
+  - [x] Subtask 8.7: En cas d'erreur 400 (déjà annulée/executed), afficher erreur spécifique
+  - [x] Subtask 8.8: En cas d'erreur 403 (permission), afficher erreur permission
 
-- [ ] Task 9: Implémenter la modal de détails (AC10)
-  - [ ] Subtask 9.1: Créer state `detailsModalVisible` et `selectedExecutionDetails`
-  - [ ] Subtask 9.2: Créer Modal Ant Design avec title="Détails de l'exécution planifiée"
-  - [ ] Subtask 9.3: Afficher Descriptions Ant Design avec :
+- [x] Task 9: Implémenter la modal de détails (AC10)
+  - [x] Subtask 9.1: Créer state `detailsModalVisible` et `selectedExecutionDetails`
+  - [x] Subtask 9.2: Créer Modal Ant Design avec title="Détails de l'exécution planifiée"
+  - [x] Subtask 9.3: Afficher Descriptions Ant Design avec :
     - ID, Action (nom + ID), Utilisateur (nom + ID), Environnement
     - Paramètres (JSON formaté avec <pre>), Date planifiée, Statut, Date de création, Correlation ID
     - Si executed : Lien vers l'exécution effective (router Link vers /executions/{execution_id})
-  - [ ] Subtask 9.4: Footer avec bouton "Fermer"
+  - [x] Subtask 9.4: Footer avec bouton "Fermer"
 
-- [ ] Task 10: Gérer l'affichage conditionnel du bouton Annuler (AC6)
-  - [ ] Subtask 10.1: Dans la colonne Actions, render conditionnel :
+- [x] Task 10: Gérer l'affichage conditionnel du bouton Annuler (AC6)
+  - [x] Subtask 10.1: Dans la colonne Actions, render conditionnel :
     ```tsx
     {record.status === 'pending' && (
       <Button size="small" danger onClick={() => handleShowCancelModal(record)}>Annuler</Button>
     )}
     <Button size="small" onClick={() => handleShowDetailsModal(record)}>Voir détails</Button>
     ```
-  - [ ] Subtask 10.2: Désactiver bouton Annuler si utilisateur n'a pas permission (DBA peut annuler ses propres, DBOPS peut annuler toutes)
+  - [x] Subtask 10.2: Désactiver bouton Annuler si utilisateur n'a pas permission (DBA peut annuler ses propres, DBOPS peut annuler toutes)
 
-- [ ] Task 11: Tests frontend pour ScheduledExecutionsPage (AC1-AC10)
-  - [ ] Subtask 11.1: Créer `ScheduledExecutionsPage.test.tsx`
-  - [ ] Subtask 11.2: Test `test_scheduled_executions_page_renders_table` - Vérifie table affichée
-  - [ ] Subtask 11.3: Test `test_list_scheduled_executions_success` - Mock API, vérifie données affichées
-  - [ ] Subtask 11.4: Test `test_filter_by_status` - Sélectionner "En attente", vérifie API appelée avec status=pending
-  - [ ] Subtask 11.5: Test `test_filter_by_action` - Sélectionner action, vérifie filtre appliqué
-  - [ ] Subtask 11.6: Test `test_filter_by_date_range` - Sélectionner plage de dates, vérifie API appelée
-  - [ ] Subtask 11.7: Test `test_cancel_button_visible_for_pending` - Vérifie bouton Annuler présent si status=pending
-  - [ ] Subtask 11.8: Test `test_cancel_button_hidden_for_executed` - Vérifie bouton Annuler absent si status=executed
-  - [ ] Subtask 11.9: Test `test_cancel_execution_success` - Mock API 200, vérifie notification + reload
-  - [ ] Subtask 11.10: Test `test_cancel_execution_error_400` - Mock API 400, vérifie erreur affichée
-  - [ ] Subtask 11.11: Test `test_details_modal_displays_all_info` - Vérifie modal détails affiche toutes les infos
-  - [ ] Subtask 11.12: Test `test_indicator_for_executions_within_24h` - Vérifie badge "Bientôt" affiché
+- [x] Task 11: Tests frontend pour ScheduledExecutionsPage (AC1-AC10)
+  - [x] Subtask 11.1: Créer `ScheduledExecutionsPage.test.tsx`
+  - [x] Subtask 11.2: Test `test_scheduled_executions_page_renders_table` - Vérifie table affichée
+  - [x] Subtask 11.3: Test `test_list_scheduled_executions_success` - Mock API, vérifie données affichées
+  - [x] Subtask 11.4: Test `test_filter_by_status` - Sélectionner "En attente", vérifie API appelée avec status=pending
+  - [x] Subtask 11.5: Test `test_filter_by_action` - Sélectionner action, vérifie filtre appliqué
+  - [x] Subtask 11.6: Test `test_filter_by_date_range` - Sélectionner plage de dates, vérifie API appelée
+  - [x] Subtask 11.7: Test `test_cancel_button_visible_for_pending` - Vérifie bouton Annuler présent si status=pending
+  - [x] Subtask 11.8: Test `test_cancel_button_hidden_for_executed` - Vérifie bouton Annuler absent si status=executed
+  - [x] Subtask 11.9: Test `test_cancel_execution_success` - Mock API 200, vérifie notification + reload
+  - [x] Subtask 11.10: Test `test_cancel_execution_error_400` - Mock API 400, vérifie erreur affichée
+  - [x] Subtask 11.11: Test `test_details_modal_displays_all_info` - Vérifie modal détails affiche toutes les infos
+  - [x] Subtask 11.12: Test `test_indicator_for_executions_within_24h` - Vérifie badge "Bientôt" affiché
 
 ## Dev Notes
 
@@ -1067,6 +1067,36 @@ N/A - Code review session
 - ⚠️ LOW-1 remains (test coverage gap, non-blocking)
 - ✅ All ACs validated against implementation
 
+**Code Review Session - 2026-02-05 (Adversarial)**
+
+**Issues Found:** 10 total (1 CRITICAL, 3 HIGH, 4 MEDIUM, 3 LOW)
+**Issues Fixed:** 9 (all CRITICAL, HIGH, MEDIUM + LOW-1)
+
+**CRIT-1 FIXED:** Tasks marked [ ] but story Status done → All 11 tasks + subtasks marked [x]
+
+**HIGH-1 FIXED:** SQL injection risk - OFFSET/limit f-string in scheduled_execution_repository.py → Replaced with bind variables :offset, :limit
+
+**HIGH-2 FIXED:** AC3 date format - "(heure locale)" → "(UTC)" with dayjs.utc() for all date displays (table, modals)
+
+**HIGH-3 FIXED:** AC8 action filter - options from current page only → Backend returns available_actions; frontend uses API-provided list
+
+**MEDIUM-1:** File List updated to include django_backend files (see below)
+
+**MEDIUM-2 FIXED:** Link to execution - <a href> → React Router <Link> for SPA navigation
+
+**MEDIUM-3 FIXED:** cancelScheduledExecution - Added body: JSON.stringify({ status: 'cancelled' }) per AC5
+
+**MEDIUM-4 FIXED:** Modal duplicate loading - Removed loading from okButtonProps, kept confirmLoading only
+
+**LOW-1 FIXED:** Added test_filter_by_action (calls API with action_id when action selected)
+
+**LOW-2:** useEffect eslint-disable - Added clarifying comment (intentional)
+
+**Files Modified (Code Review Fixes):**
+- backend/app/repositories/scheduled_execution_repository.py (bind vars)
+- django_backend/executions/views.py (available_actions in GET response)
+- frontend: ScheduledExecutionsPage.tsx, scheduled_execution_service.ts, types/api.ts, ScheduledExecutionsPage.test.tsx
+
 ### File List
 
 **Backend - Modified:**
@@ -1088,3 +1118,7 @@ N/A - Code review session
 **Database - Created:**
 - idp-portal/database/migrations/V040__add_scheduled_execution_cancelled_audit_type.sql (audit type for cancellation)
 - idp-portal/database/migrations/V041__add_correlation_id_execution_id_to_scheduled_executions.sql (HIGH-1 & HIGH-2 fixes: added CORRELATION_ID and EXECUTION_ID columns)
+
+**Django Backend - Modified (Story 11.6, 11.7, 11.10):**
+- idp-portal/django_backend/executions/views.py (ScheduledExecutionsView, available_actions AC8; ScheduledExecutionUpdateView, RecurringPatternView)
+- idp-portal/django_backend/executions/services.py (SchedulingService list/cancel/toggle)

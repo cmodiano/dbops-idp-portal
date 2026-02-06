@@ -76,7 +76,9 @@ import {
   fetchExecutionStats,
   fetchExecutionTimeSeries,
 } from '../services/execution_service';
+import { getIntegrations } from '../services/integrations_service';
 import { useAuth } from '../contexts/AuthContext';
+import type { IntegrationIconsMap } from '../utils/executionRenderers';
 import type {
   ExecutionResponse,
   ExecutionStepResponse,
@@ -135,6 +137,9 @@ export default function ExecutionsPage() {
 
   // Story 9.10: URL-synced filters
   const { filters, applyFilters, resetFilters, activeFilterCount } = useExecutionFilters();
+
+  // Integration icons for Plateforme column fallback (icons set in integration page)
+  const [integrationIconsMap, setIntegrationIconsMap] = useState<IntegrationIconsMap | null>(null);
 
   const [executions, setExecutions] = useState<ExecutionResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -251,6 +256,35 @@ export default function ExecutionsPage() {
   useEffect(() => {
     loadPendingApprovals();
   }, [loadPendingApprovals]);
+
+  // Load integrations for Plateforme column icons (fallback when execution has no integration_icon)
+  useEffect(() => {
+    let cancelled = false;
+    getIntegrations()
+      .then((list) => {
+        if (cancelled) return;
+        const map: IntegrationIconsMap = {};
+        const typeToPlatform: Record<string, string> = {
+          aap: 'AAP',
+          terraform: 'Terraform',
+          azuredevops: 'Azure DevOps',
+          github_actions: 'GitHub Actions',
+        };
+        for (const i of list) {
+          if (i.name) map[i.name] = i.icon ?? null;
+          if (i.type) {
+            map[i.type] = i.icon ?? null;
+            const platform = typeToPlatform[i.type.toLowerCase()];
+            if (platform) map[platform] = i.icon ?? null;
+          }
+        }
+        setIntegrationIconsMap(map);
+      })
+      .catch(() => {
+        if (!cancelled) setIntegrationIconsMap(null);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   // Story 9.4 AC3, Story 9.10 AC6: Load stats when scope or filters change
   useEffect(() => {
@@ -395,7 +429,12 @@ export default function ExecutionsPage() {
         width: 120,
         align: 'center' as const,
         render: (_: unknown, record: ExecutionResponse) =>
-          renderPlateformeIcon(record.integration_name, record.integration_icon, record.platform),
+          renderPlateformeIcon(
+            record.integration_name,
+            record.integration_icon,
+            record.platform,
+            integrationIconsMap,
+          ),
         sorter: false, // Story 9.9 AC7: Plateforme not sortable
       },
     ];
@@ -438,7 +477,7 @@ export default function ExecutionsPage() {
     );
 
     return baseColumns;
-  }, [activeScope, sortField, sortOrder]);
+  }, [activeScope, sortField, sortOrder, integrationIconsMap]);
 
   // Skeleton table during loading (AC4, Task 1.4: skeleton rows; Story 9.9: updated column order)
   if (loading && executions.length === 0) {
