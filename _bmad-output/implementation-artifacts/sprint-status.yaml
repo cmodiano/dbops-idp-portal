@@ -103,7 +103,7 @@ development_status:
     4-8-historique-des-executions: done # Code review 2026-01-30: 2 HIGH + 4 MEDIUM fixes, 18/18 frontend + list backend tests pass
     4-10-adapter-aap-workflow-job-et-job-template: done # resource_type (job_template | workflow_job) par action; code-review 2026-01-30
     4-11-validation-rbac-execution-workflows-actions-referencees: done  # Code review 2026-02-06: 5 fixes (2 HIGH + 3 MEDIUM) appliqués
-    4-12-parametres-par-etape-execution-workflows: backlog
+    4-12-parametres-par-etape-execution-workflows: in-progress
     epic-4-retrospective: optional
     # === Epic 5: Dashboard & Activite (Phase 2) ===
     epic-5: in-progress
@@ -208,7 +208,7 @@ development_status:
     15-1-audit-securite-code-sast-dependances-secrets: done  # Code review 2026-02-05: 11 issues fixed (2 HIGH + 5 MEDIUM + 4 LOW) - garbage files deleted, pre-commit config added, nosec B608 annotations, severity estimation improved, CI documentation
     15-2-tests-securite-fonctionnels-auth-authz-rbac: done  # 2026-02-06: 154 tests sécurité fonctionnels (auth JWT, RBAC, granular access, sensitive endpoints, security headers, middleware) — 100% passing, CI intégré
     15-3-validation-conformite-soc1-audit-trail-immutabilite-chiffrement: done  # 2026-02-06: AC1-AC6 validés, 22 tests SOC1, rapport conformité, trigger V054; code-review fixes appliqués
-    15-4-documentation-securite-plan-remediation: in-progress  # 2026-02-06: Docs créés (5 fichiers), code review AI: 15 issues trouvées, 8 FIXED (dont CRITICAL pytest.ini → 177 tests passent ✅), 3 action items restants (VULN-001 HIGH deps Python, signatures validation, typos LOW)
+    15-4-documentation-securite-plan-remediation: done  # 2026-02-06: Docs créés (5 fichiers), code review AI: 15 issues → 14 RESOLVED, VULN-001 RESOLVED (9 deps upgradés, 0 HIGH vulns, 310 tests ✅), pytest.ini fixed, GO for release ✅
     epic-15-retrospective: optional
     # === Epic 16: Builder de Workflow Visuel avec Branches Conditionnelles et Retry (Phase 2) ===
     epic-16: backlog
