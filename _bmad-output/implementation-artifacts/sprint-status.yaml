@@ -76,8 +76,8 @@ development_status:
     2-26-visualisation-format-yaml-import-profils: done # UX - Exemple YAML + template telecharger (code-review 2026-01-29)
     2-27-backend-integrations-plateformes-distantes: done # Config plateformes distantes (AAP, Terraform, etc.) — type, URL, credential_ref, icon (code-review 2026-01-29)
     2-28-frontend-admin-integrations-liste-formulaire-icone: done # Onglet Admin Integrations + liste, formulaire, icone (code-review 2026-01-29)
+    2-29-separation-boutons-creation-action-et-workflow-admin: done  # 2026-02-06: Code review — 1 HIGH + 3 MEDIUM + 3 LOW fixes applied, tests 21/26 ActionWizard + 5/5 AdminPage pass
     epic-2-retrospective: optional
-    # === Epic 2: TERMINÉ ===
 
     # === Epic 3: Decouverte du Catalogue - Marc (MVP) ===
     epic-3: in-progress
@@ -102,6 +102,8 @@ development_status:
     4-7-resultat-execution-logs-et-gestion-erreur: done # Code review 2026-01-30: 4 MEDIUM fixes applied
     4-8-historique-des-executions: done # Code review 2026-01-30: 2 HIGH + 4 MEDIUM fixes, 18/18 frontend + list backend tests pass
     4-10-adapter-aap-workflow-job-et-job-template: done # resource_type (job_template | workflow_job) par action; code-review 2026-01-30
+    4-11-validation-rbac-execution-workflows-actions-referencees: done  # Code review 2026-02-06: 5 fixes (2 HIGH + 3 MEDIUM) appliqués
+    4-12-parametres-par-etape-execution-workflows: backlog
     epic-4-retrospective: optional
     # === Epic 5: Dashboard & Activite (Phase 2) ===
     epic-5: in-progress
@@ -179,7 +181,7 @@ development_status:
     m-8-middleware-logging-observabilite: done # 2026-02-05: Logging structuré JSON (structlog), RequestResponseLoggingMiddleware, health check étendu (DB+Vault+ServiceNow), CORS, propagation correlation_id - Implementation complete
     m-9-tests-unitaires-et-integration-parite: done # 2026-02-05: All 13 tasks completed - fixtures, factories, integration tests, RBAC security tests, performance benchmarks, CI configuration, documentation
     m-10-strategie-bascule-et-decommissionnement-fastapi: done # 2026-02-05: All 10 tasks + code review completed - 10 issues found (2 CRITICAL, 1 HIGH, 4 MEDIUM, 3 LOW), 3 auto-fixed (gunicorn, .env template, plan bascule), 4 documented for follow-up - Backend Django PRODUCTION-READY
-    m-11-nettoyage-code-fastapi-suppression-references: backlog  # Ménage : doc à jour, supprimer toutes les références FastAPI dans le code
+    m-11-nettoyage-code-fastapi-suppression-references: done  # Ménage : doc à jour, références FastAPI supprimées ; code-review 2026-02-05
     epic-m-retrospective: done # 2026-02-05
     # === Epic 12: Documentation technique (post-Django) ===
     # À réaliser après le passage à Django pour documenter la cible finale.
@@ -198,5 +200,23 @@ development_status:
     13-4-refactoring-une-action-unique-validation-backend: done # 2026-02-05: target_names REQUIRED, env from targets, _env_config added; code-review fixes: warning assert, dedup tests, 8 tests
     13-5-api-standalone-execution-sans-frontend-visibilite-portail: done # 2026-02-05: Code review fixes appliqués (401 UNAUTHORIZED, tests 415/MIXED_ENVIRONMENTS, audit source, doc)
     13-6-menu-calendrier-vue-calendrier-executions-planifiees-dba: done  # Vue calendrier réelle + filtres action/env/plateforme/techno (alignés Exécutions); code-review 2026-02-06: 2 HIGH + 3 MEDIUM corrigés
-    13-7-ref-environnements-et-technologies-via-tables: backlog  # Env = inventaire ; technos/plateformes = tables REF ; plus de listes en dur (13-ref-environnements-et-technologies-via-tables.md)
+    13-7-ref-environnements-et-technologies-via-tables: done  # 2026-02-05: REF_ENGINES/REF_PLATFORMS tables créées, APIs GET /api/v1/reference/engines|platforms, GET /api/v1/inventory/environments, validation applicative, hooks useEngines/usePlatforms/useEnvironments, tests créés - Documentation API optionnelle reste
+    13-8-amelioration-calendrier-details-enrichis-annulation-decommission-admin: done  # 2026-02-06: AC4 + code-review adversarial (6 fixes: 400 details, RBAC _targets, target_names=[], tests)
     epic-13-retrospective: optional
+    # === Epic 15: Audit de Sécurité et Conformité SOC1 (première release) ===
+    epic-15: in-progress
+    15-1-audit-securite-code-sast-dependances-secrets: done  # Code review 2026-02-05: 11 issues fixed (2 HIGH + 5 MEDIUM + 4 LOW) - garbage files deleted, pre-commit config added, nosec B608 annotations, severity estimation improved, CI documentation
+    15-2-tests-securite-fonctionnels-auth-authz-rbac: done  # 2026-02-06: 154 tests sécurité fonctionnels (auth JWT, RBAC, granular access, sensitive endpoints, security headers, middleware) — 100% passing, CI intégré
+    15-3-validation-conformite-soc1-audit-trail-immutabilite-chiffrement: done  # 2026-02-06: AC1-AC6 validés, 22 tests SOC1, rapport conformité, trigger V054; code-review fixes appliqués
+    15-4-documentation-securite-plan-remediation: in-progress  # 2026-02-06: Docs créés (5 fichiers), code review AI: 15 issues trouvées, 8 FIXED (dont CRITICAL pytest.ini → 177 tests passent ✅), 3 action items restants (VULN-001 HIGH deps Python, signatures validation, typos LOW)
+    epic-15-retrospective: optional
+    # === Epic 16: Builder de Workflow Visuel avec Branches Conditionnelles et Retry (Phase 2) ===
+    epic-16: backlog
+    16-2-modele-donnees-workflows-branches-et-retry: backlog
+    16-3-moteur-execution-branches-conditionnelles: backlog
+    16-4-moteur-retry-backoff-exponentiel: backlog
+    16-5-interface-builder-visuel-workflow: backlog
+    16-6-configuration-options-retry-builder-visuel: backlog
+    16-7-visualisation-validation-chemins-builder-visuel: backlog
+    16-8-export-import-workflows-builder-visuel: backlog
+    epic-16-retrospective: optional
