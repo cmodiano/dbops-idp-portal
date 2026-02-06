@@ -30,8 +30,10 @@ import { ParametersEditor } from './ParametersEditor';
 import { ImpactRulesEditor } from './ImpactRulesEditor';
 import { ChangeTypeConfig } from './ChangeTypeConfig';
 import { WorkflowStepsEditor } from './WorkflowStepsEditor';
-import { getTags, updateActionTags, updateActionSteps, updateWorkflowSteps } from '../../services/admin_service';
-import { ENGINE_OPTIONS, PLATFORM_OPTIONS } from '../../utils/actionOptions';
+import { WorkflowBuilderCanvas } from './WorkflowBuilderCanvas';
+import { getTags, updateActionTags, updateActionSteps, updateWorkflowSteps, checkActionNameAvailable } from '../../services/admin_service';
+import { useEngines } from '../../hooks/useEngines';
+import { usePlatforms } from '../../hooks/usePlatforms';
 
 const { TextArea } = Input;
 
@@ -60,6 +62,7 @@ export interface ActionWizardProps {
   error?: string | null;
   editAction?: ActionDetail | null;
   onSuccess?: (action: ActionDetail | ActionResponse) => void;
+  initialItemType?: 'action' | 'workflow';
 }
 
 export function ActionWizard({
@@ -70,6 +73,7 @@ export function ActionWizard({
   error,
   editAction,
   onSuccess,
+  initialItemType,
 }: ActionWizardProps) {
   const { notification } = App.useApp();
   const [form] = Form.useForm();
@@ -88,12 +92,22 @@ export function ActionWizard({
   const [aapTemplateId, setAapTemplateId] = useState<number | undefined>(undefined);
   /** Story 9.5: Workflow steps for item_type='workflow'. */
   const [workflowSteps, setWorkflowSteps] = useState<WorkflowStep[]>([]);
+  /** Story 16.5: Toggle between list and visual mode for workflow steps. */
+  const [workflowViewMode, setWorkflowViewMode] = useState<'list' | 'visual'>('list');
 
   const isEditMode = !!editAction;
+  // Read-only if editing a published action (draft and disabled actions can be edited)
+  const isReadOnly = isEditMode && editAction?.status === 'published';
   const platform = Form.useWatch<ActionPlatform>('platform', form);
   const itemType = Form.useWatch<ItemType>('item_type', form);
   const isPlatformAAP = platform === 'AAP';
-  const isWorkflow = itemType === 'workflow';
+  const isWorkflow = itemType === 'workflow' || (!isEditMode && initialItemType === 'workflow' && itemType == null);
+  const showTypeSelector = !initialItemType && !isEditMode;
+
+  // Story 13.7: Load engines from REF_ENGINES table
+  const { engineOptions, loading: enginesLoading } = useEngines();
+  // Story 13.7: Load platforms from REF_PLATFORMS table
+  const { platformOptions, loading: platformsLoading } = usePlatforms();
 
   useEffect(() => {
     if (!open) return;
@@ -265,15 +279,16 @@ export function ActionWizard({
         name: values.name,
         description: values.description,
         item_type: currentItemType,
-        // Only include engine/platform for actions
+        // impact_rules and default_impact_level apply to both actions and workflows
+        impact_rules: listToImpactRules(impactRulesList),
+        default_impact_level: defaultImpactLevel,
+        // Only include engine/platform/parameters_schema for actions
         ...(isWorkflowSave
           ? {}
           : {
               engine: values.engine,
               platform: values.platform,
               parameters_schema: parameterListToSchema(parameterList),
-              impact_rules: listToImpactRules(impactRulesList),
-              default_impact_level: defaultImpactLevel,
             }),
       };
 
@@ -296,23 +311,36 @@ export function ActionWizard({
       }
 
       if (actionId) {
+        // Only save steps if action is in draft or disabled status
+        const canEditSteps = editAction?.status === 'draft' || editAction?.status === 'disabled';
+        
         if (isWorkflowSave) {
-          // Story 9.5: Save workflow steps
-          try {
-            await updateWorkflowSteps(actionId, { steps: workflowSteps });
-          } catch (workflowErr) {
-            // Handle WORKFLOW_LOOP error from backend
-            const errorMessage = workflowErr instanceof Error ? workflowErr.message : 'Erreur lors de la sauvegarde des étapes du workflow';
-            if (errorMessage.includes('WORKFLOW_LOOP') || errorMessage.toLowerCase().includes('boucle') || errorMessage.toLowerCase().includes('cycle')) {
-              setSubmitError('Boucle circulaire détectée dans les étapes du workflow. Vérifiez que les actions référencées ne créent pas de cycle.');
-            } else {
-              setSubmitError(errorMessage);
+          // Story 9.5: Save workflow steps (only if draft or disabled)
+          if (canEditSteps) {
+            try {
+              await updateWorkflowSteps(actionId, { steps: workflowSteps });
+            } catch (workflowErr) {
+              // Handle WORKFLOW_LOOP error from backend
+              const errorMessage = workflowErr instanceof Error ? workflowErr.message : 'Erreur lors de la sauvegarde des étapes du workflow';
+              if (errorMessage.includes('WORKFLOW_LOOP') || errorMessage.toLowerCase().includes('boucle') || errorMessage.toLowerCase().includes('cycle')) {
+                setSubmitError('Boucle circulaire détectée dans les étapes du workflow. Vérifiez que les actions référencées ne créent pas de cycle.');
+              } else if (errorMessage.includes('brouillon') || errorMessage.includes('draft') || errorMessage.includes('désactivée')) {
+                setSubmitError('Les étapes ne peuvent être modifiées que pour un workflow en brouillon ou désactivé. Le workflow a été mis à jour mais les étapes n\'ont pas été modifiées.');
+              } else {
+                setSubmitError(errorMessage);
+              }
+              setSaving(false);
+              return;
             }
-            setSaving(false);
-            return;
+          } else {
+            // Notify user that steps were not saved
+            notification.info({
+              message: 'Étapes non modifiées',
+              description: 'Les étapes ne peuvent être modifiées que pour un workflow en brouillon ou désactivé. Les autres modifications ont été enregistrées.',
+            });
           }
         } else {
-          // Save execution steps and change config for actions
+          // Save execution steps and change config for actions (only if draft or disabled)
           const change_type_config = Object.keys(changeTypeConfig).length > 0
             ? Object.fromEntries(
                 Object.entries(changeTypeConfig).map(([env, e]) => [
@@ -321,22 +349,42 @@ export function ActionWizard({
                 ])
               )
             : null;
-          const connector = platformToConnector(values.platform!);
-          const connector_config =
-            connector === 'aap' && aapTemplateId != null && aapTemplateId >= 1
-              ? aapResourceType === 'workflow_job'
-                ? { resource_type: 'workflow_job' as const, workflow_job_template_id: aapTemplateId }
-                : { resource_type: 'job_template' as const, job_template_id: aapTemplateId }
-              : null;
-          const singleStep: ExecutionStep = {
-            order: 1,
-            name: 'Exécution',
-            type: 'execution',
-            connector_type: connector,
-            connector_config: connector_config ?? undefined,
-            conditional_environments: null,
-          };
-          await updateActionSteps(actionId, { steps: [singleStep], change_type_config });
+          
+          if (canEditSteps) {
+            const connector = platformToConnector(values.platform!);
+            const connector_config =
+              connector === 'aap' && aapTemplateId != null && aapTemplateId >= 1
+                ? aapResourceType === 'workflow_job'
+                  ? { resource_type: 'workflow_job' as const, workflow_job_template_id: aapTemplateId }
+                  : { resource_type: 'job_template' as const, job_template_id: aapTemplateId }
+                : null;
+            const singleStep: ExecutionStep = {
+              order: 1,
+              name: 'Exécution',
+              type: 'execution',
+              connector_type: connector,
+              connector_config: connector_config ?? undefined,
+              conditional_environments: null,
+            };
+            try {
+              await updateActionSteps(actionId, { steps: [singleStep], change_type_config });
+            } catch (stepsErr) {
+              const errorMessage = stepsErr instanceof Error ? stepsErr.message : 'Erreur lors de la sauvegarde des étapes';
+              if (errorMessage.includes('brouillon') || errorMessage.includes('draft') || errorMessage.includes('désactivée')) {
+                setSubmitError('Les étapes ne peuvent être modifiées que pour une action en brouillon ou désactivée. L\'action a été mise à jour mais les étapes n\'ont pas été modifiées.');
+              } else {
+                setSubmitError(errorMessage);
+              }
+              setSaving(false);
+              return;
+            }
+          } else if (change_type_config !== null) {
+            // Notify user that steps were not saved
+            notification.info({
+              message: 'Étapes non modifiées',
+              description: 'Les étapes ne peuvent être modifiées que pour une action en brouillon ou désactivée. Les autres modifications ont été enregistrées.',
+            });
+          }
         }
       }
 
@@ -353,16 +401,17 @@ export function ActionWizard({
       <Form
         form={form}
         layout="vertical"
-        initialValues={{ item_type: 'action', name: '', description: '', engine: undefined, platform: undefined }}
+        initialValues={{ item_type: initialItemType ?? 'action', name: '', description: '', engine: undefined, platform: undefined }}
       >
         <div style={{ display: currentStep === 0 ? 'block' : 'none' }}>
-          {/* Story 9.5: Type selector (action vs workflow) */}
+          {/* Story 9.5 / 2.29: Type selector — hidden when initialItemType is set or in edit mode */}
           <Form.Item
             name="item_type"
             label="Type"
-            rules={[{ required: true, message: 'Le type est requis' }]}
+            rules={showTypeSelector ? [{ required: true, message: 'Le type est requis' }] : undefined}
+            hidden={!showTypeSelector}
           >
-            <Radio.Group disabled={isEditMode} aria-label="Type d'élément">
+            <Radio.Group aria-label="Type d'élément" disabled={isReadOnly}>
               <Radio value="action">Action</Radio>
               <Radio value="workflow">Workflow</Radio>
             </Radio.Group>
@@ -370,24 +419,47 @@ export function ActionWizard({
           <Form.Item
             name="name"
             label={isWorkflow ? 'Nom du workflow' : 'Nom de l\'action'}
+            validateTrigger={['onBlur', 'onFinish']}
             rules={[
               { required: true, message: 'Le nom est requis' },
               { min: 1, max: 255, message: 'Le nom doit faire entre 1 et 255 caractères' },
+              {
+                validator: async (_, value) => {
+                  const name = value ? String(value).trim() : '';
+                  if (!name) return;
+                  const available = await checkActionNameAvailable(name, editAction?.id);
+                  if (!available) {
+                    return Promise.reject(new Error('Une action ou un workflow avec ce nom existe déjà.'));
+                  }
+                },
+              },
             ]}
           >
-            <Input placeholder={isWorkflow ? 'Ex: Provisionner environnement' : 'Ex: Créer PDB Oracle'} aria-label={isWorkflow ? 'Nom du workflow' : 'Nom de l\'action'} />
+            <Input placeholder={isWorkflow ? 'Ex: Provisionner environnement' : 'Ex: Créer PDB Oracle'} aria-label={isWorkflow ? 'Nom du workflow' : 'Nom de l\'action'} disabled={isReadOnly} />
           </Form.Item>
-          <Form.Item name="description" label="Description" rules={[{ max: 4000, message: 'La description ne peut pas dépasser 4000 caractères' }]}>
-            <TextArea rows={3} placeholder="Description..." aria-label="Description" showCount maxLength={4000} />
+          <Form.Item name="description" label="Description" rules={[{ required: true, message: 'La description est requise' }, { max: 4000, message: 'La description ne peut pas dépasser 4000 caractères' }]}>
+            <TextArea rows={3} placeholder="Description..." aria-label="Description" showCount maxLength={4000} disabled={isReadOnly} />
           </Form.Item>
           {/* Only show engine/platform for actions, not workflows */}
           {!isWorkflow && (
             <>
               <Form.Item name="engine" label="Moteur de base de données" rules={[{ required: true, message: 'Le moteur est requis' }]}>
-                <Select options={ENGINE_OPTIONS} placeholder="Sélectionnez un moteur" aria-label="Moteur" />
+                <Select 
+                  options={engineOptions} 
+                  placeholder={enginesLoading ? "Chargement..." : "Sélectionnez un moteur"} 
+                  aria-label="Moteur"
+                  loading={enginesLoading}
+                  disabled={isReadOnly}
+                />
               </Form.Item>
               <Form.Item name="platform" label="Plateforme d'exécution" rules={[{ required: true, message: 'La plateforme est requise' }]}>
-                <Select options={PLATFORM_OPTIONS} placeholder="Sélectionnez une plateforme" aria-label="Plateforme" />
+                <Select 
+                  options={platformOptions} 
+                  placeholder={platformsLoading ? "Chargement..." : "Sélectionnez une plateforme"} 
+                  aria-label="Plateforme"
+                  loading={platformsLoading}
+                  disabled={isReadOnly}
+                />
               </Form.Item>
             </>
           )}
@@ -401,19 +473,40 @@ export function ActionWizard({
               aria-label="Tags"
               style={{ width: '100%' }}
               tokenSeparators={[',']}
+              disabled={isReadOnly}
             />
           </Form.Item>
         </div>
         {currentStep === 1 && (
           <Space orientation="vertical" style={{ width: '100%' }} size="middle">
-            {/* Story 9.5: Show WorkflowStepsEditor for workflows */}
+            {/* Story 9.5 / 16.5: Show WorkflowStepsEditor or WorkflowBuilderCanvas for workflows */}
             {isWorkflow ? (
               <Form.Item label="Étapes du workflow" tooltip="Définissez les actions qui composent ce workflow, dans l'ordre d'exécution.">
-                <WorkflowStepsEditor
-                  steps={workflowSteps}
-                  onChange={setWorkflowSteps}
-                  loading={false}
-                />
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  <Radio.Group
+                    value={workflowViewMode}
+                    onChange={(e) => setWorkflowViewMode(e.target.value)}
+                    size="small"
+                    aria-label="Mode d'édition du workflow"
+                  >
+                    <Radio.Button value="list">Mode liste</Radio.Button>
+                    <Radio.Button value="visual">Mode visuel</Radio.Button>
+                  </Radio.Group>
+                  {workflowViewMode === 'list' ? (
+                    <WorkflowStepsEditor
+                      steps={workflowSteps}
+                      onChange={setWorkflowSteps}
+                      loading={false}
+                      disabled={isReadOnly}
+                    />
+                  ) : (
+                    <WorkflowBuilderCanvas
+                      steps={workflowSteps}
+                      onChange={setWorkflowSteps}
+                      disabled={isReadOnly}
+                    />
+                  )}
+                </Space>
               </Form.Item>
             ) : (
               <>
@@ -431,6 +524,7 @@ export function ActionWizard({
                             ]}
                             style={{ width: 160 }}
                             aria-label="Type ressource AAP"
+                            disabled={isReadOnly}
                           />
                         </Form.Item>
                         <Form.Item
@@ -448,6 +542,7 @@ export function ActionWizard({
                             placeholder="ID template AAP"
                             style={{ width: 120 }}
                             aria-label="ID template AAP"
+                            disabled={isReadOnly}
                           />
                         </Form.Item>
                       </Space>
@@ -455,7 +550,8 @@ export function ActionWizard({
                   </>
                 )}
                 <Form.Item label="Paramètres" tooltip="Définissez les paramètres de l'action (extra_vars, etc.).">
-                  <ParametersEditor value={parameterList} onChange={setParameterList} />
+                  {/* TODO: Add disabled prop to ParametersEditor */}
+                  <ParametersEditor value={parameterList} onChange={isReadOnly ? () => {} : setParameterList} />
                 </Form.Item>
               </>
             )}
@@ -465,7 +561,8 @@ export function ActionWizard({
           <Space orientation="vertical" style={{ width: '100%' }} size="middle">
             {/* Impact rules and change config for both actions and workflows */}
             <Form.Item label="Règles d'impact" tooltip="Définissez les règles d'impact par environnement.">
-              <ImpactRulesEditor value={impactRulesList} onChange={setImpactRulesList} />
+              {/* TODO: Add disabled prop to ImpactRulesEditor */}
+              <ImpactRulesEditor value={impactRulesList} onChange={isReadOnly ? () => {} : setImpactRulesList} />
             </Form.Item>
             <Form.Item label="Niveau d'impact par défaut" tooltip="Niveau appliqué quand aucune règle ne correspond à l'environnement.">
               <Select
@@ -475,6 +572,7 @@ export function ActionWizard({
                 placeholder="Sélectionnez un niveau par défaut"
                 style={{ width: 220 }}
                 aria-label="Niveau d'impact par défaut"
+                disabled={isReadOnly}
                 options={[
                   { value: 'low', label: 'Faible (vert)' },
                   { value: 'medium', label: 'Moyen (orange)' },
@@ -489,7 +587,8 @@ export function ActionWizard({
                 label="Changement ServiceNow par environnement"
                 tooltip="Pour chaque environnement : activer « Changement requis » et, si actif, saisir le code modèle (alphanumérique, max 50). Story 2.24."
               >
-                <ChangeTypeConfig value={changeTypeConfig} onChange={setChangeTypeConfig} />
+                {/* TODO: Add disabled prop to ChangeTypeConfig */}
+                <ChangeTypeConfig value={changeTypeConfig} onChange={isReadOnly ? () => {} : setChangeTypeConfig} />
               </Form.Item>
             )}
           </Space>
@@ -498,11 +597,9 @@ export function ActionWizard({
     );
   };
 
-  // Dynamic modal title based on item type
+  // Dynamic modal title based on item type (Story 2.29: initialItemType fallback, editAction.item_type for edit)
   const modalTitle = isEditMode
-    ? isWorkflow
-      ? 'Modifier le workflow'
-      : 'Modifier l\'action'
+    ? (editAction?.item_type === 'workflow' ? 'Modifier le workflow' : 'Modifier l\'action')
     : isWorkflow
       ? 'Nouveau workflow'
       : 'Nouvelle action';
@@ -513,7 +610,7 @@ export function ActionWizard({
       open={open}
       onCancel={onCancel}
       footer={null}
-      width={640}
+      width={isWorkflow && workflowViewMode === 'visual' ? 1100 : 640}
       destroyOnHidden
       styles={{ body: { maxHeight: 'calc(100vh - 220px)', overflowY: 'auto' } }}
       aria-label={modalTitle}
@@ -548,7 +645,7 @@ export function ActionWizard({
             </Button>
           )}
           {currentStep === 2 && (
-            <Button type="primary" onClick={handleSave} loading={!!(loading || saving)}>
+            <Button type="primary" onClick={handleSave} loading={!!(loading || saving)} disabled={isReadOnly}>
               Enregistrer
             </Button>
           )}
