@@ -31,9 +31,24 @@ import {
   useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Alert, App, Button, Modal, Space, theme, Typography, List } from 'antd';
-import { CheckCircleOutlined, CloseCircleOutlined, WarningOutlined } from '@ant-design/icons';
+import { Alert, App, Button, Dropdown, Modal, Space, theme, Typography, List } from 'antd';
+import {
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  ExportOutlined,
+  FileTextOutlined,
+  ImportOutlined,
+  PictureOutlined,
+  WarningOutlined,
+} from '@ant-design/icons';
 import type { WorkflowStep, ActionListItem } from '../../types/api';
+import {
+  exportWorkflowAsJSON,
+  exportWorkflowAsYAML,
+  exportWorkflowAsImage,
+  parseWorkflowFile,
+  type WorkflowMetadata,
+} from '../../utils/workflowExport';
 import WorkflowStepNode, { type WorkflowStepNodeData } from './WorkflowStepNode';
 import StartNode from './StartNode';
 import EndNode from './EndNode';
@@ -358,17 +373,25 @@ export interface WorkflowBuilderCanvasProps {
   steps: WorkflowStep[];
   onChange: (steps: WorkflowStep[]) => void;
   disabled?: boolean;
+  /** Workflow metadata for export (name, description, tags). Story 16.8. */
+  workflowMetadata?: WorkflowMetadata;
+  /** Callback when import replaces metadata (name, description, tags). Story 16.8. */
+  onMetadataImport?: (metadata: WorkflowMetadata) => void;
 }
 
 function WorkflowBuilderCanvasInner({
   steps,
   onChange,
   disabled = false,
+  workflowMetadata,
+  onMetadataImport,
 }: WorkflowBuilderCanvasProps) {
   const { token } = theme.useToken();
   const { notification } = App.useApp();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition } = useReactFlow();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { screenToFlowPosition, fitView } = useReactFlow();
+  const [exporting, setExporting] = useState(false);
 
   // Convert initial steps to React Flow format
   const initial = useMemo(() => workflowStepsToReactFlow(steps), []);
@@ -598,6 +621,160 @@ function WorkflowBuilderCanvasInner({
     );
   }, [setNodes]);
 
+  // ── Story 16.8: Export/Import handlers ─────────────────────────────────
+
+  const getMetadata = useCallback((): WorkflowMetadata => {
+    return workflowMetadata ?? { name: 'workflow', description: null, tags: [] };
+  }, [workflowMetadata]);
+
+  const handleExportJSON = useCallback(() => {
+    const currentSteps = reactFlowToWorkflowSteps(nodes, edges);
+    // MEDIUM-2 FIX: Add debug logging for troubleshooting
+    console.debug('[Export JSON]', currentSteps.length, 'steps exported:', getMetadata().name);
+    exportWorkflowAsJSON(currentSteps, getMetadata());
+    notification.success({ message: 'Export JSON réussi', duration: 3 });
+  }, [nodes, edges, getMetadata, notification]);
+
+  const handleExportYAML = useCallback(() => {
+    const currentSteps = reactFlowToWorkflowSteps(nodes, edges);
+    // MEDIUM-2 FIX: Add debug logging for troubleshooting
+    console.debug('[Export YAML]', currentSteps.length, 'steps exported:', getMetadata().name);
+    exportWorkflowAsYAML(currentSteps, getMetadata());
+    notification.success({ message: 'Export YAML réussi', duration: 3 });
+  }, [nodes, edges, getMetadata, notification]);
+
+  const handleExportImage = useCallback(async () => {
+    if (!reactFlowWrapper.current) return;
+    setExporting(true);
+    try {
+      await exportWorkflowAsImage(reactFlowWrapper.current, getMetadata().name);
+      notification.success({ message: 'Export image réussi', duration: 3 });
+    } catch (err) {
+      // MEDIUM-3 FIX: Include error details for better troubleshooting
+      const errorMessage = err instanceof Error ? err.message : 'Erreur inconnue';
+      notification.error({
+        message: 'Erreur lors de l\'export image',
+        description: errorMessage,
+        duration: 5,
+      });
+      console.error('[Export Image] Error:', err);
+    } finally {
+      setExporting(false);
+    }
+  }, [getMetadata, notification]);
+
+  const exportMenuItems = useMemo(() => [
+    { key: 'json', label: 'Exporter en JSON', icon: <ExportOutlined />, onClick: handleExportJSON },
+    { key: 'yaml', label: 'Exporter en YAML', icon: <FileTextOutlined />, onClick: handleExportYAML },
+    { key: 'image', label: 'Exporter l\'image', icon: <PictureOutlined />, onClick: handleExportImage },
+  ], [handleExportJSON, handleExportYAML, handleExportImage]);
+
+  const loadImportedWorkflow = useCallback((importData: NonNullable<ReturnType<typeof parseWorkflowFile>['data']>) => {
+    const { nodes: newNodes, edges: newEdges } = workflowStepsToReactFlow(importData.workflow.steps);
+
+    // MEDIUM-2 FIX: Add debug logging for troubleshooting
+    console.debug('[Import]', importData.workflow.steps.length, 'steps imported:', importData.workflow.name);
+
+    // HIGH-5 FIX: Use setState callback to ensure fitView runs after render
+    // HIGH-6 FIX: Clear validation state when importing new workflow
+    setValidation(null);
+    setValidationReportOpen(false);
+
+    setNodes(newNodes);
+    setEdges(newEdges);
+
+    // Use requestAnimationFrame to ensure React Flow has rendered nodes before fitView
+    requestAnimationFrame(() => {
+      fitView({ padding: 0.2, duration: 500 });
+    });
+
+    if (onMetadataImport) {
+      onMetadataImport({
+        name: importData.workflow.name,
+        description: importData.workflow.description,
+        tags: importData.workflow.tags,
+      });
+    }
+    notification.success({ message: 'Workflow importé avec succès', duration: 3 });
+  }, [setNodes, setEdges, fitView, onMetadataImport, notification, setValidation, setValidationReportOpen]);
+
+  const handleImportFile = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // HIGH-2 FIX: Validate file size (max 5MB)
+    const maxSizeBytes = 5 * 1024 * 1024; // 5MB
+    if (file.size > maxSizeBytes) {
+      notification.error({
+        message: 'Fichier trop volumineux',
+        description: `La taille maximale autorisée est de 5 MB. Votre fichier fait ${(file.size / 1024 / 1024).toFixed(2)} MB.`,
+        duration: 5,
+      });
+      event.target.value = ''; // Reset input
+      return;
+    }
+
+    const extension = '.' + file.name.split('.').pop()?.toLowerCase();
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      const content = e.target?.result as string;
+      if (!content) {
+        notification.error({ message: 'Le fichier est vide', duration: 5 });
+        return;
+      }
+
+      const result = parseWorkflowFile(content, extension);
+      if (!result.valid || !result.data) {
+        Modal.error({
+          title: 'Format de fichier invalide',
+          width: 600,
+          content: (
+            <List
+              size="small"
+              dataSource={result.errors}
+              renderItem={(err) => (
+                <List.Item>
+                  <CloseCircleOutlined style={{ color: '#ff4d4f', marginRight: 8 }} />
+                  {err}
+                </List.Item>
+              )}
+            />
+          ),
+          okText: 'Compris',
+        });
+        return;
+      }
+
+      const importData = result.data;
+
+      // Check if current workflow has nodes → confirm replacement
+      const currentWorkflowNodes = nodes.filter(
+        (n) => n.id !== START_NODE_ID && n.id !== END_NODE_ID
+      );
+      if (currentWorkflowNodes.length > 0) {
+        Modal.confirm({
+          title: 'Remplacer le workflow actuel ?',
+          content: 'Le workflow actuel sera remplacé par le workflow importé. Cette action est irréversible.',
+          okText: 'Remplacer',
+          okButtonProps: { danger: true },
+          cancelText: 'Annuler',
+          onOk: () => loadImportedWorkflow(importData),
+        });
+      } else {
+        loadImportedWorkflow(importData);
+      }
+    };
+
+    reader.onerror = () => {
+      notification.error({ message: 'Erreur lors de la lecture du fichier', duration: 5 });
+    };
+
+    reader.readAsText(file);
+    // Reset input so the same file can be re-imported
+    event.target.value = '';
+  }, [nodes, notification, loadImportedWorkflow]);
+
   // Navigate to a specific node (for validation report)
   const { getNode, setCenter } = useReactFlow();
   const goToNode = useCallback(
@@ -620,6 +797,29 @@ function WorkflowBuilderCanvasInner({
             Glissez des actions depuis la palette. Connectez les ports pour créer des branches.
           </Text>
           <Space size="small">
+            <Button
+              size="small"
+              icon={<ImportOutlined />}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={disabled}
+              aria-label="Importer un workflow"
+            >
+              Importer
+            </Button>
+            <Dropdown
+              menu={{ items: exportMenuItems }}
+              trigger={['click']}
+              disabled={disabled || exporting}
+            >
+              <Button
+                size="small"
+                icon={<ExportOutlined />}
+                loading={exporting}
+                aria-label="Exporter le workflow"
+              >
+                Exporter
+              </Button>
+            </Dropdown>
             <Button size="small" onClick={handleValidate} icon={<CheckCircleOutlined />}>
               Valider le workflow
             </Button>
@@ -700,6 +900,16 @@ function WorkflowBuilderCanvasInner({
         open={validationReportOpen}
         onClose={() => setValidationReportOpen(false)}
         onGoToNode={goToNode}
+      />
+
+      {/* Story 16.8: Hidden file input for import */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json,.yaml,.yml"
+        onChange={handleImportFile}
+        style={{ display: 'none' }}
+        aria-label="Sélectionner un fichier workflow à importer"
       />
     </div>
   );

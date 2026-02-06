@@ -1,5 +1,5 @@
 /**
- * WorkflowBuilderCanvas tests (Story 16.5, Tasks 8.1-8.4; Story 16.7).
+ * WorkflowBuilderCanvas tests (Story 16.5, Tasks 8.1-8.4; Story 16.7; Story 16.8).
  *
  * Tests:
  * - Unit: WorkflowStep[] ↔ React Flow conversion (with start/end nodes)
@@ -7,6 +7,7 @@
  * - Integration: Component rendering, drag-and-drop, connections, deletion
  * - Accessibility: ARIA labels, keyboard navigation
  * - Story 16.7: Start/End nodes, custom edges, validation report, save blocking
+ * - Story 16.8: Export/Import buttons, dropdown menu, file import dialog
  */
 
 import React from 'react';
@@ -537,6 +538,7 @@ vi.mock('@xyflow/react', async () => {
       getNode: () => ({ position: { x: 0, y: 0 } }),
       setCenter: vi.fn(),
       setEdges: vi.fn(),
+      fitView: vi.fn(),
     }),
     Position: { Top: 'top', Bottom: 'bottom', Left: 'left', Right: 'right' },
   };
@@ -697,5 +699,123 @@ describe('Accessibility', () => {
     });
 
     expect(screen.getByLabelText('Rechercher une action')).toBeInTheDocument();
+  });
+
+  // HIGH-4 FIX: Test file input ARIA label
+  it('file input has aria-label for screen readers', async () => {
+    const { WorkflowBuilderCanvas } = await import('./WorkflowBuilderCanvas');
+    const onChange = vi.fn();
+
+    await act(async () => {
+      render(<WorkflowBuilderCanvas steps={[]} onChange={onChange} />);
+    });
+
+    // File input is hidden but should have aria-label
+    const fileInput = document.querySelector('input[type="file"]');
+    expect(fileInput).toHaveAttribute('aria-label', 'Sélectionner un fichier workflow à importer');
+  });
+});
+
+// ── Story 16.8: Export/Import Tests ─────────────────────────────────────────
+
+describe('Story 16.8 — Export/Import', () => {
+  let WorkflowBuilderCanvas: React.FC<{
+    steps: WorkflowStep[];
+    onChange: (steps: WorkflowStep[]) => void;
+    disabled?: boolean;
+    workflowMetadata?: { name: string; description: string | null; tags: string[] };
+    onMetadataImport?: (metadata: { name: string; description: string | null; tags: string[] }) => void;
+  }>;
+
+  beforeAll(async () => {
+    const mod = await import('./WorkflowBuilderCanvas');
+    WorkflowBuilderCanvas = mod.WorkflowBuilderCanvas;
+  });
+
+  it('renders Import and Export buttons in toolbar', async () => {
+    const onChange = vi.fn();
+
+    await act(async () => {
+      render(<WorkflowBuilderCanvas steps={[]} onChange={onChange} />);
+    });
+
+    expect(screen.getByLabelText('Importer un workflow')).toBeInTheDocument();
+    expect(screen.getByLabelText('Exporter le workflow')).toBeInTheDocument();
+  });
+
+  it('renders Import button with "Importer" text', async () => {
+    const onChange = vi.fn();
+
+    await act(async () => {
+      render(<WorkflowBuilderCanvas steps={[]} onChange={onChange} />);
+    });
+
+    expect(screen.getByText('Importer')).toBeInTheDocument();
+  });
+
+  it('renders Export button with "Exporter" text', async () => {
+    const onChange = vi.fn();
+
+    await act(async () => {
+      render(<WorkflowBuilderCanvas steps={[]} onChange={onChange} />);
+    });
+
+    expect(screen.getByText('Exporter')).toBeInTheDocument();
+  });
+
+  it('renders hidden file input for import', async () => {
+    const onChange = vi.fn();
+
+    await act(async () => {
+      render(<WorkflowBuilderCanvas steps={[]} onChange={onChange} />);
+    });
+
+    const fileInput = screen.getByLabelText('Sélectionner un fichier workflow à importer');
+    expect(fileInput).toBeInTheDocument();
+    expect(fileInput).toHaveStyle({ display: 'none' });
+    expect(fileInput).toHaveAttribute('accept', '.json,.yaml,.yml');
+  });
+
+  it('disables Import and Export buttons when disabled prop is true', async () => {
+    const onChange = vi.fn();
+
+    await act(async () => {
+      render(<WorkflowBuilderCanvas steps={[]} onChange={onChange} disabled />);
+    });
+
+    const importBtn = screen.getByLabelText('Importer un workflow');
+    const exportBtn = screen.getByLabelText('Exporter le workflow');
+    expect(importBtn).toBeDisabled();
+    expect(exportBtn).toBeDisabled();
+  });
+
+  it('Export and Import buttons have proper ARIA labels', async () => {
+    const onChange = vi.fn();
+
+    await act(async () => {
+      render(<WorkflowBuilderCanvas steps={[]} onChange={onChange} />);
+    });
+
+    expect(screen.getByLabelText('Importer un workflow')).toBeInTheDocument();
+    expect(screen.getByLabelText('Exporter le workflow')).toBeInTheDocument();
+  });
+
+  it('opens dropdown when Export button is clicked', async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+
+    await act(async () => {
+      render(<WorkflowBuilderCanvas steps={[]} onChange={onChange} />);
+    });
+
+    const exportBtn = screen.getByLabelText('Exporter le workflow');
+    await user.click(exportBtn);
+
+    // Dropdown menu items should appear
+    await waitFor(() => {
+      expect(screen.getByText('Exporter en JSON')).toBeInTheDocument();
+      expect(screen.getByText('Exporter en YAML')).toBeInTheDocument();
+      expect(screen.getByText("Exporter l'image")).toBeInTheDocument();
+    });
   });
 });
