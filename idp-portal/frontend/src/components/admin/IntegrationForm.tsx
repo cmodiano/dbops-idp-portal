@@ -1,15 +1,17 @@
 /**
- * IntegrationForm — création/édition d'intégration (Story 2.28, 4.9).
+ * IntegrationForm — création/édition d'intégration (Story 2.28, 4.9, 13.1).
  * Story 4.9: Type libre (AutoComplete), auth_flow (Select), Upload icône.
- * Champs : Type (libre), Nom, URL de base, Référence credentials, Auth flow, Icône (upload ou URL).
+ * Story 13.1: Si type = inventory_db, champs Schéma et Table (config) pour inventaire BD.
  */
 
 import { useEffect, useState } from 'react';
 import { Form, Input, Modal, Alert, Select, Avatar, Space, Button, AutoComplete, Upload, App } from 'antd';
+import { useAuth } from '../../contexts/AuthContext';
 import type { UploadFile } from 'antd';
 import { UploadOutlined, ApiOutlined } from '@ant-design/icons';
 import type { AuthFlow, IntegrationCreate, IntegrationUpdate, IntegrationResponse } from '../../types/api';
 import { SUGGESTED_INTEGRATION_TYPES, AUTH_FLOW_LABELS } from '../../types/api';
+import { getIconUrl } from '../../utils/iconUrl';
 
 /** Type suggestions for AutoComplete (Story 4.9 AC1). */
 const TYPE_SUGGESTIONS = SUGGESTED_INTEGRATION_TYPES.map((t) => ({ value: t }));
@@ -26,6 +28,8 @@ export interface IntegrationFormValues {
   credential_ref?: string | null;
   icon?: string | null;
   auth_flow?: AuthFlow | null; // Story 4.9 AC2: authentication flow
+  schema?: string | null; // Story 13.1: inventory_db config
+  table?: string | null; // Story 13.1: inventory_db config
 }
 
 export interface IntegrationFormProps {
@@ -51,14 +55,18 @@ export function IntegrationForm({
   onSuccess,
 }: IntegrationFormProps) {
   const { message } = App.useApp();
+  const { accessToken } = useAuth();
   const [form] = Form.useForm<IntegrationFormValues>();
   const isEdit = !!editIntegration;
   const [uploadedIconUrl, setUploadedIconUrl] = useState<string | null>(null);
   const [fileList, setFileList] = useState<UploadFile[]>([]);
 
   const watchIcon = Form.useWatch('icon', form);
+  const watchType = Form.useWatch('type', form);
+  const isInventoryDb = (watchType ?? '').trim().toLowerCase() === 'inventory_db';
 
   // Valeurs pour préremplir en édition (stable pour initialValues / key)
+  const editConfig = editIntegration?.config as { schema?: string; table?: string } | undefined;
   const editValues =
     open && editIntegration
       ? {
@@ -68,6 +76,8 @@ export function IntegrationForm({
           credential_ref: editIntegration.credential_ref ?? undefined,
           icon: editIntegration.icon ?? undefined,
           auth_flow: editIntegration.auth_flow ?? undefined,
+          schema: editConfig?.schema ?? undefined,
+          table: editConfig?.table ?? undefined,
         }
       : null;
 
@@ -78,6 +88,7 @@ export function IntegrationForm({
       setFileList([]);
       // Appliquer après le rendu des champs (évite que la modal n'ait pas encore monté les inputs)
       const t = setTimeout(() => {
+        const cfg = editIntegration.config as { schema?: string; table?: string } | undefined;
         form.setFieldsValue({
           type: editIntegration.type,
           name: editIntegration.name,
@@ -85,6 +96,8 @@ export function IntegrationForm({
           credential_ref: editIntegration.credential_ref ?? undefined,
           icon: editIntegration.icon ?? undefined,
           auth_flow: editIntegration.auth_flow ?? undefined,
+          schema: cfg?.schema ?? undefined,
+          table: cfg?.table ?? undefined,
         });
       }, 0);
       return () => clearTimeout(t);
@@ -101,6 +114,8 @@ export function IntegrationForm({
         credential_ref: undefined,
         icon: undefined,
         auth_flow: undefined,
+        schema: undefined,
+        table: undefined,
       });
     }
   }, [open, editIntegration, form]);
@@ -116,6 +131,12 @@ export function IntegrationForm({
         icon: uploadedIconUrl || values.icon?.trim() || null, // Prioritize uploaded icon
         auth_flow: values.auth_flow || null,
       };
+      if (isInventoryDb && (values.schema?.trim() || values.table?.trim())) {
+        (payload as IntegrationCreate).config = {
+          schema: values.schema?.trim() || null,
+          table: values.table?.trim() || null,
+        };
+      }
       const res = await onSubmit(payload);
       if (res && onSuccess) onSuccess(res);
     } catch (e) {
@@ -129,15 +150,15 @@ export function IntegrationForm({
     const formData = new FormData();
     formData.append('file', file);
 
-    // Get JWT token from localStorage (Story 4.9 fix: add Authorization header)
-    const token = localStorage.getItem('access_token');
-
     try {
+      const headers: Record<string, string> = {};
+      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+
       const response = await fetch('/api/v1/admin/integrations/upload-icon', {
         method: 'POST',
         body: formData,
         credentials: 'include',
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        headers,
       });
 
       if (!response.ok) {
@@ -158,13 +179,9 @@ export function IntegrationForm({
     }
   };
 
-  const iconPreview = watchIcon ? (
-    <Avatar
-      src={watchIcon.startsWith('/') ? watchIcon : watchIcon}
-      shape="square"
-      size={32}
-      icon={<ApiOutlined />}
-    />
+  const iconSrc = getIconUrl(uploadedIconUrl || watchIcon);
+  const iconPreview = iconSrc ? (
+    <Avatar src={iconSrc} shape="square" size={32} icon={<ApiOutlined />} />
   ) : (
     <Avatar shape="square" size={32} icon={<ApiOutlined />} />
   );
@@ -224,6 +241,26 @@ export function IntegrationForm({
         >
           <Input placeholder="Nom de l'intégration" aria-label="Nom" />
         </Form.Item>
+        {isInventoryDb && (
+          <>
+            <Form.Item
+              name="schema"
+              label="Schéma BD"
+              tooltip="Nom du schéma Oracle contenant la table/vue d'inventaire (ex: DBOPS_INVENTORY). Vide = défaut backend."
+              rules={[{ pattern: /^$|^[A-Za-z_][A-Za-z0-9_]*$/, message: 'Alphanumérique et underscore uniquement' }]}
+            >
+              <Input placeholder="ex: DBOPS_INVENTORY" aria-label="Schéma BD" />
+            </Form.Item>
+            <Form.Item
+              name="table"
+              label="Table ou vue"
+              tooltip="Nom de la table ou vue avec colonnes NAME, ENVIRONMENT, TYPE. Vide = défaut backend."
+              rules={[{ pattern: /^$|^[A-Za-z_][A-Za-z0-9_]*$/, message: 'Alphanumérique et underscore uniquement' }]}
+            >
+              <Input placeholder="ex: INVENTORY_TARGETS" aria-label="Table ou vue" />
+            </Form.Item>
+          </>
+        )}
         <Form.Item
           name="base_url"
           label="URL de base"

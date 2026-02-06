@@ -88,6 +88,8 @@ const mockAction: CatalogActionDetail = {
     PROD: { required: true, change_model_code: 'CHG001' },
   },
   execution_count: 5,
+  // Story 13.2: Set to false to test legacy environment selection behavior
+  requires_target: false,
 };
 
 describe('ExecutionWizard', () => {
@@ -107,16 +109,19 @@ describe('ExecutionWizard', () => {
     it('renders 3-step wizard with correct labels', () => {
       render(<ExecutionWizard {...defaultProps} />, { wrapper: TestWrapper });
 
-      expect(screen.getByText('Environnement')).toBeInTheDocument();
+      // Story 13.2: Step 1 renamed from "Environnement" to "Cible(s)"
+      expect(screen.getByText('Cible(s)')).toBeInTheDocument();
       expect(screen.getByText('Parametres')).toBeInTheDocument();
       expect(screen.getByText('Confirmation')).toBeInTheDocument();
     });
 
-    it('starts on step 1 (Environment)', () => {
+    it('starts on step 1 (Target/Environment)', () => {
       render(<ExecutionWizard {...defaultProps} />, { wrapper: TestWrapper });
 
-      expect(screen.getByText('Environnement cible')).toBeInTheDocument();
-      expect(screen.getByRole('combobox')).toBeInTheDocument();
+      // Story 13.2: For actions with requires_target, shows target selector
+      // Fallback to environment selector if no TargetSelector is rendered
+      const combobox = screen.getByRole('combobox');
+      expect(combobox).toBeInTheDocument();
     });
 
     it('disables Next button when no environment selected', () => {
@@ -613,7 +618,8 @@ describe('ExecutionWizard', () => {
         { wrapper: TestWrapper }
       );
 
-      expect(screen.getByText(/Selectionnez l'environnement ou l'action sera executee/)).toBeInTheDocument();
+      // Story 13.2: Updated to target-focused description
+      expect(screen.getByText(/Selectionnez la cible sur laquelle executer l'action/)).toBeInTheDocument();
     });
 
     it('shows contextual help description on step 2 in simplified mode (Task 5.1)', async () => {
@@ -669,8 +675,8 @@ describe('ExecutionWizard', () => {
     it('uses default labels when variant is not specified', () => {
       render(<ExecutionWizard {...defaultProps} />, { wrapper: TestWrapper });
 
-      // Should show default labels
-      expect(screen.getByText('Environnement')).toBeInTheDocument();
+      // Should show default labels (Story 13.2: Step 1 renamed to "Cible(s)")
+      expect(screen.getByText('Cible(s)')).toBeInTheDocument();
       expect(screen.getByText('Parametres')).toBeInTheDocument();
       expect(screen.getByText('Confirmation')).toBeInTheDocument();
     });

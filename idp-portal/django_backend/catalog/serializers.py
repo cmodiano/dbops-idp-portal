@@ -79,7 +79,9 @@ class ActionSerializer(serializers.ModelSerializer):
             'parameters_schema', 'impact_rules', 'default_impact_level',
             'status', 'created_by', 'created_at', 'updated_at',
             'tags', 'documentation_md', 'remediation_rules',
-            'execution_steps', 'change_type_config'
+            'execution_steps', 'change_type_config',
+            # Story 13.2, AC3: requires_target field
+            'requires_target'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'created_by']
     

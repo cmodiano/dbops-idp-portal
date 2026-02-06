@@ -126,7 +126,7 @@ class ActionManager(models.Manager.from_queryset(ActionQuerySet)):
 
 class Action(models.Model):
     """
-    Action model mapping to Oracle ACTIONS_CATALOG table (V002, V017, V019, V022, V027, V031, V036).
+    Action model mapping to Oracle ACTIONS_CATALOG table (V002, V017, V019, V022, V027, V031, V036, V046).
     Represents an action or workflow in the catalog.
     """
     id = models.BigAutoField(primary_key=True, db_column='ID')
@@ -178,6 +178,8 @@ class Action(models.Model):
         default=ActionItemType.ACTION,
         db_column='ITEM_TYPE'
     )
+    # Story 13.2, AC3: Whether action requires target selection (V046)
+    requires_target = models.BooleanField(default=True, db_column='REQUIRES_TARGET')
     created_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,

@@ -316,6 +316,12 @@ export const AUTH_FLOW_LABELS: Record<AuthFlow, string> = {
   pat: 'PAT (Personal Access Token)',
 };
 
+/** Story 13.1: config for inventory_db (schema + table). */
+export interface IntegrationConfigInventoryDb {
+  schema?: string | null;
+  table?: string | null;
+}
+
 export interface IntegrationCreate {
   type: string; // Story 4.9 AC1: free-form platform name (1-100 chars)
   name: string;
@@ -323,6 +329,7 @@ export interface IntegrationCreate {
   credential_ref?: string | null;
   icon?: string | null;
   auth_flow?: AuthFlow | null; // Story 4.9 AC2: authentication flow
+  config?: IntegrationConfigInventoryDb | Record<string, unknown> | null; // Story 13.1: inventory_db schema/table
 }
 
 export interface IntegrationUpdate {
@@ -332,6 +339,7 @@ export interface IntegrationUpdate {
   credential_ref?: string | null;
   icon?: string | null;
   auth_flow?: AuthFlow | null; // Story 4.9 AC2: authentication flow
+  config?: IntegrationConfigInventoryDb | Record<string, unknown> | null; // Story 13.1: inventory_db schema/table
 }
 
 export interface IntegrationResponse {
@@ -342,6 +350,7 @@ export interface IntegrationResponse {
   credential_ref: string | null;
   icon: string | null;
   auth_flow: AuthFlow | null; // Story 4.9 AC2: authentication flow
+  config?: IntegrationConfigInventoryDb | Record<string, unknown> | null; // Story 13.1: inventory_db schema/table
   created_at: string;
   updated_at: string;
 }
@@ -398,10 +407,13 @@ export type ExecutionStatusType = 'SUBMITTED' | 'PENDING_APPROVAL' | 'RUNNING' |
 /** Execution scope for filtering (Story 8.9). */
 export type ExecutionScope = 'all' | 'mine';
 
-/** Request to create a new execution (Story 4.1, Task 1.1; Story 9.2 remediation). */
+/** Request to create a new execution (Story 4.1, Task 1.1; Story 9.2 remediation; Story 13.2 targets). */
 export interface ExecutionCreateRequest {
   action_id: number;
-  environment: ExecutionEnvironment;
+  /** Environment is optional when target_names is provided (backend derives it). */
+  environment?: ExecutionEnvironment;
+  /** Story 13.2, AC4: Target names for target-based execution. */
+  target_names?: string[];
   parameters?: Record<string, unknown> | null;
   /** Story 9.2: Parent execution ID for remediation (optional). */
   parent_execution_id?: number | null;
@@ -835,7 +847,7 @@ export interface RecurringPatternResponse {
   is_active: boolean;
 }
 
-/** Request to create a scheduled execution (Story 11.5, 11.7). */
+/** Request to create a scheduled execution (Story 11.5, 11.7; Story 13.2 targets). */
 export interface ScheduledExecutionCreateRequest {
   action_id: number;
   environment: ExecutionEnvironment;
@@ -844,6 +856,8 @@ export interface ScheduledExecutionCreateRequest {
   scheduled_at?: string | null;
   /** Recurring pattern configuration (Story 11.7, mutually exclusive with scheduled_at). */
   recurring_pattern?: RecurringPatternRequest | null;
+  /** Story 13.2: Target names for target-based execution. */
+  target_names?: string[];
 }
 
 /** Response from POST /scheduled-executions (Story 11.5, 11.7). */

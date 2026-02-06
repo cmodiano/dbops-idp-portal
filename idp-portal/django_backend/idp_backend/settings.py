@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'integrations',
     'core',
     'executions',
+    'inventory',
 ]
 
 MIDDLEWARE = [
@@ -143,7 +144,11 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+
+# Include BASE_DIR/static for uploaded icons (integration icons in static/icons/)
+# Directory is created by upload endpoint on first icon upload
+STATICFILES_DIRS = [BASE_DIR / 'static'] if (BASE_DIR / 'static').exists() else []
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

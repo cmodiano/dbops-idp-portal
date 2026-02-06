@@ -190,10 +190,12 @@ development_status:
     epic-12-retrospective: optional
     # === Epic 13: Sélection de targets à l'exécution et permissions par environnement (inventaire) ===
     # Réf: regles-metier-permissions-par-target-et-environnement.md — Une action, choix de target(s) autorisés, env = propriété du target
-    epic-13: backlog
-    13-1-inventaire-association-target-environnement-api-targets-filtres: backlog
-    13-2-wizard-execution-selection-targets-autorises: backlog
+    epic-13: in-progress
+    13-1-inventaire-association-target-environnement-api-targets-filtres: done # Code review 2026-02-05: 9 issues fixed (2 CRIT + 3 HIGH + 3 MED + 1 LOW) - SQL injection, admin permission, env normalization
+    13-2-wizard-execution-selection-targets-autorises: done # Code review 2026-02-05: fixes applied (audit trail V047, TargetSelector server-side search, backend test target_names success)
     13-3-rbac-environnement-du-target-filtre-targets-par-profil: backlog
     13-4-refactoring-une-action-unique-validation-backend: backlog
     13-5-api-standalone-execution-sans-frontend-visibilite-portail: backlog
+    13-6-menu-calendrier-vue-calendrier-executions-planifiees-dba: backlog  # Vue calendrier réelle + filtres action/env/plateforme/techno (alignés Exécutions)
+    13-7-ref-environnements-et-technologies-via-tables: backlog  # Env = inventaire ; technos/plateformes = tables REF ; plus de listes en dur (13-ref-environnements-et-technologies-via-tables.md)
     epic-13-retrospective: optional

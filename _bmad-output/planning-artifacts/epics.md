@@ -2966,3 +2966,59 @@ So that j'automatise des actions en libre service et je retrouve ensuite l'execu
 
 **And** l'audit enregistre l'identite issue du jeton (qui) + action + targets + environnement derive du target + parametres (quoi) + horodatage (quand), de maniere identique aux executions declenchees via UI (FR30).
 
+### Story 13.6 : Menu Calendrier — vue calendrier et exécutions planifiées pour les DBA
+
+As a DBA,
+I want accéder à un menu Calendrier qui affiche les exécutions planifiées dans une vraie vue calendrier (semaine/mois) avec des filtres alignés sur la page Exécutions (action, environnement, plateforme, technologie),
+So que je consulte l'ensemble des tâches planifiées sans passer par l'interface Admin (réservée à DBOPS) et que je retrouve la même logique de filtrage qu'en Exécutions.
+
+**Contexte :** Les exécutions planifiées sont aujourd'hui dans l'Admin ; les DBA doivent pouvoir les consulter. Un menu dédié « Calendrier » évite de donner l'accès Admin aux DBA et offre un point d'entrée clair pour « ce qui est prévu ».
+
+**Acceptance Criteria:**
+
+**Given** un utilisateur avec un profil DBA (ou DBOPS) accède au portail,
+**When** il consulte la navigation principale,
+**Then** un menu (ou onglet) **Calendrier** est visible et mène à une page dédiée aux exécutions planifiées (hors Admin).
+
+**Given** un utilisateur ouvre la page Calendrier,
+**When** la page est chargée,
+**Then** une **vue calendrier** réelle est affichée (affichage type semaine et/ou mois, avec les exécutions planifiées positionnées sur les créneaux date/heure). Chaque événement affiche au minimum : action, environnement, date/heure ; au clic ou au survol : détail (action, environnement, plateforme, technologie, utilisateur, etc.).
+
+**Given** la page Calendrier,
+**When** l'utilisateur souhaite filtrer les planifications affichées,
+**Then** un panneau (ou barre) de **filtres** propose les mêmes dimensions que la page Exécutions : **Action** (select searchable), **Environnement** (dev, staging, prod), **Plateforme** (plateforme d'exécution), **Technologie** (Oracle, SQL Server, Workflow, etc.). Optionnel : plage de dates, tags, utilisateur. Les options et la sémantique sont alignées sur ExecutionsFiltersPanel / API Exécutions.
+
+**Given** des filtres sont appliqués,
+**When** l'utilisateur consulte le calendrier,
+**Then** seules les exécutions planifiées qui matchent les filtres sont affichées. Idéalement les filtres sont persistés en URL (comme Story 9.10) et un badge indique le nombre de filtres actifs avec un bouton pour réinitialiser.
+
+**Given** un DBA a planifié une exécution (choix « à une date précise » dans le wizard),
+**When** il ouvre le Calendrier,
+**Then** cette planification apparaît dans la vue et dans l'ensemble des tâches planifiées.
+
+**And** la page Calendrier est accessible en lecture aux DBA (et DBOPS si pertinent) ; la gestion technique des planifications (scheduler, intégrations) reste côté Admin pour DBOPS.
+
+### Story 13.7 : Référentiels — environnements et technologies pilotés par tables (aucune valeur en dur)
+
+As a DBOPS,
+I want que les environnements valides proviennent de l'inventaire et que les technologies (moteurs) et plateformes soient gérées via des tables de référence dans le portail,
+So que je puisse contrôler ces listes sans toucher au code et que la source de vérité pour les environnements soit l'inventaire.
+
+**Contexte :** Aujourd'hui environnements (dev, staging, prod) et technologies (Oracle, SQL Server, DB2) sont en CHECK + listes en dur. Objectif : tout piloter par des tables ; pour les environnements, la source = inventaire. Voir implementation-artifacts/13-ref-environnements-et-technologies-via-tables.md.
+
+**Acceptance Criteria:**
+
+**Given** les technologies (moteurs) et plateformes,
+**When** on consulte ou configure une action ou un filtre,
+**Then** les listes proviennent de tables de référence (REF_ENGINES, REF_PLATFORMS) exposées via une API (ex. GET /api/v1/reference/engines, GET /api/v1/reference/platforms). Aucune liste en dur dans le code (backend et frontend). ACTIONS_CATALOG.ENGINE et PLATFORM référencent ces tables (code ou FK) ; les contraintes CHECK fixes sont supprimées.
+
+**Given** les environnements valides,
+**When** on en a besoin (filtres, profils, validation d'exécution),
+**Then** la liste provient de l'inventaire : un endpoint (ex. GET /api/v1/inventory/environments) retourne les environnements exposés par l'inventaire (API externe ou distinct des targets). Aucune liste d'environnements en dur dans le code. EXECUTIONS.ENVIRONMENT et SCHEDULED_EXECUTIONS.ENVIRONMENT ne sont plus contraintes par un CHECK fixe ; la validation applicative vérifie que la valeur appartient à la liste retournée par l'inventaire (ou dérivée du target en Epic 13).
+
+**Given** un DBOPS configure un profil (environnements autorisés),
+**When** il sélectionne les environnements,
+**Then** les options proposées viennent de l'API inventaire/environments (ou reference/environments si option table cache), pas d'une liste en dur.
+
+**And** la normalisation des alias (ex. certif → staging) peut rester côté inventaire ou dans le service portail qui agrège les environnements ; le portail n'impose plus un jeu fixe de valeurs en dur.
+

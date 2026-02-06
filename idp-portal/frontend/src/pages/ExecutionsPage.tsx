@@ -28,7 +28,7 @@
  * AC1: Colonne Statut déplacée en première position avec indicateur visuel.
  * AC2-AC3: Indicateurs pulsants (running) vs fixes (terminal).
  * AC4: Colonne Technologie avec icône engine/workflow.
- * AC5: Colonne Plateforme avec icône integration.
+ * AC5: Colonne Plateforme avec icône plateforme d'exécution (action.platform).
  * AC7: Ordre colonnes: Statut, Action, Technologie, Plateforme, [Utilisateur], Environnement, Date, Durée.
  *
  * Story 9.10:
@@ -54,7 +54,7 @@ import type { TableProps, TablePaginationConfig } from 'antd';
 import {
   renderStatusIndicator,
   renderEngineIcon,
-  renderIntegrationIcon,
+  renderPlateformeIcon,
 } from '../utils/executionRenderers';
 
 // Ant Design 6.2: Extract table event types from public API
@@ -388,14 +388,14 @@ export default function ExecutionsPage() {
           renderEngineIcon(record.engine, record.item_type),
         sorter: false, // Story 9.9 AC7: Technologie not sortable
       },
-      // Story 9.9 AC5: Colonne Plateforme avec icône integration
+      // Story 9.9 AC5: Colonne Plateforme = icône intégration si définie, sinon plateforme d'exécution
       {
         title: 'Plateforme',
         key: 'integration',
         width: 120,
         align: 'center' as const,
         render: (_: unknown, record: ExecutionResponse) =>
-          renderIntegrationIcon(record.integration_name, record.integration_icon),
+          renderPlateformeIcon(record.integration_name, record.integration_icon, record.platform),
         sorter: false, // Story 9.9 AC7: Plateforme not sortable
       },
     ];

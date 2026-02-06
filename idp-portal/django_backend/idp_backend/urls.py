@@ -14,6 +14,7 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+from django.conf import settings
 from django.contrib import admin
 from django.urls import path, include
 
@@ -28,4 +29,14 @@ urlpatterns = [
     path('api/v1/', include('integrations.urls')),
     path('api/v1/admin/', include('admin_analytics.urls')),
     path('api/v1/admin/', include('profiles.urls')),
+    path('api/v1/inventory/', include('inventory.urls')),
 ]
+
+# Serve uploaded integration icons in development
+if settings.DEBUG:
+    from django.views.static import serve
+    from pathlib import Path
+    _icons_root = Path(settings.BASE_DIR) / 'static' / 'icons'
+    urlpatterns += [
+        path('static/icons/<path:path>', serve, {'document_root': _icons_root}),
+    ]

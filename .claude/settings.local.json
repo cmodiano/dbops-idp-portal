@@ -3,7 +3,14 @@
     "allow": [
       "Bash(python -m pytest:*)",
       "Bash(python -c:*)",
-      "Bash(python -m py_compile:*)"
+      "Bash(python -m py_compile:*)",
+      "Bash(tree:*)",
+      "Bash(find:*)",
+      "Bash(python3 -m pytest:*)",
+      "Bash(python3 manage.py test:*)",
+      "Bash(python3 -m py_compile:*)",
+      "Bash(npm run test:*)",
+      "Bash(npm test:*)"
     ]
   }
 }

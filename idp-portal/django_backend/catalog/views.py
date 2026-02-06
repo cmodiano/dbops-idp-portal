@@ -20,7 +20,9 @@ from catalog.services import CatalogService, InvalidTransitionError
 from core.pagination import CustomPageNumberPagination
 from core.permissions import DBOPSProfilePermission, OptionalUserPermission
 from core.exceptions import NotFoundError, BadRequestError, InvalidStateError
+from core.auth_utils import get_user_ad_groups
 from executions.models import Execution
+from inventory.models import TargetEnvironment
 from profiles.services import ProfileService
 
 
@@ -153,27 +155,7 @@ def _get_cumulative_permissions_for_user(user):
     if not user or not user.is_authenticated:
         return None
 
-    # MEDIUM-6 fix: Improved AD groups retrieval
-    ad_groups = []
-
-    # Try different methods to get AD groups
-    if hasattr(user, 'get_ad_groups') and callable(user.get_ad_groups):
-        try:
-            ad_groups = user.get_ad_groups() or []
-        except Exception:
-            pass
-    elif hasattr(user, 'ad_groups'):
-        ad_groups_attr = user.ad_groups
-        if isinstance(ad_groups_attr, list):
-            ad_groups = ad_groups_attr
-        elif isinstance(ad_groups_attr, str):
-            # AD groups stored as comma-separated string
-            ad_groups = [g.strip() for g in ad_groups_attr.split(',') if g.strip()]
-        elif hasattr(ad_groups_attr, 'all'):
-            # M2M relationship
-            ad_groups = list(ad_groups_attr.values_list('name', flat=True))
-
-    # Get cumulative permissions from ProfileService
+    ad_groups = get_user_ad_groups(user)
     try:
         profile_service = ProfileService()
         permissions = profile_service.get_cumulative_permissions(user.id, ad_groups)
@@ -205,7 +187,12 @@ def _get_cumulative_permissions_for_user(user):
         actions_type = 'pattern'
     else:
         actions_type = 'list'
-    
+
+    # When profile has full action access (all) but no explicit environments,
+    # default to all standard environments (DBA/DBOPS typical setup).
+    if not environments and actions_type_all:
+        environments = set(TargetEnvironment.VALUES)
+
     return {
         'actions_type': actions_type,
         'action_ids': sorted(action_ids),

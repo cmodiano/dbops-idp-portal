@@ -22,6 +22,7 @@ import {
   ENGINE_ICONS_CONFIG,
   ENGINE_ICON_SIZE_VALUE,
 } from '../../utils/executionRenderers';
+import { getIconUrl } from '../../utils/iconUrl';
 
 const { Text } = Typography;
 
@@ -87,15 +88,16 @@ function IntegrationIconCell({
   title?: string;
   integrationIconsByType?: IntegrationIconsByType;
 }) {
-  const iconUrl = type ? integrationIconsByType?.[type] : undefined;
+  const rawIconUrl = type ? integrationIconsByType?.[type] : undefined;
+  const iconSrc = getIconUrl(rawIconUrl);
   const label = type ?? '—';
   return (
     <span
       title={title ?? label}
       style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}
     >
-      {iconUrl ? (
-        <Avatar src={iconUrl} shape="square" size={20} icon={<ApiOutlined />} style={{ flexShrink: 0 }} />
+      {iconSrc ? (
+        <Avatar src={iconSrc} shape="square" size={20} icon={<ApiOutlined />} style={{ flexShrink: 0 }} />
       ) : (
         <Avatar shape="square" size={20} icon={<ApiOutlined />} style={{ opacity: type ? 0.7 : 0.4, flexShrink: 0 }} />
       )}

@@ -11,8 +11,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from catalog.models import Action, ActionStatus
+from core.auth_utils import get_user_ad_groups
 from core.exceptions import BadRequestError, NotFoundError, ForbiddenError, InvalidStateError
 from core.middleware import get_correlation_id
+from core.services import AuditService
+from core.models import AuditActionType, AuditEntityType
 from executions.models import (
     Execution,
     ExecutionStep,
@@ -29,8 +32,12 @@ from executions.serializers import (
     RecurringPatternSerializer,
 )
 from executions.services import ExecutionService, SchedulingService
+from inventory.services import InventoryService, InventoryServiceError
 
 from croniter import croniter
+import structlog
+
+exec_logger = structlog.get_logger(__name__)
 
 
 def _parse_int(value: str | None, default: int, *, name: str) -> int:
@@ -158,17 +165,33 @@ class ExecutionsView(APIView):
         )
 
     def post(self, request):
+        """
+        Create a new execution.
+        Story 13.2: Supports target_names parameter for target-based execution.
+        If target_names is provided, environment is derived from targets (RBAC validated).
+        """
         payload = request.data or {}
         action_id = payload.get("action_id")
         environment = payload.get("environment")
-        parameters = payload.get("parameters")
+        target_names = payload.get("target_names")
+        parameters = payload.get("parameters") or {}
         parent_execution_id = payload.get("parent_execution_id")
 
-        if not action_id or not environment:
+        correlation_id = request.headers.get("X-Idp-Request-Id") or get_correlation_id()
+
+        # Story 13.2, AC4: Either environment or target_names required
+        if not action_id:
             raise BadRequestError(
                 code="BAD_REQUEST",
-                message="action_id et environment sont requis",
-                details={"action_id": action_id, "environment": environment},
+                message="action_id est requis",
+                details={"action_id": action_id},
+            )
+
+        if not environment and not target_names:
+            raise BadRequestError(
+                code="BAD_REQUEST",
+                message="environment ou target_names est requis",
+                details={"environment": environment, "target_names": target_names},
             )
 
         try:
@@ -178,12 +201,107 @@ class ExecutionsView(APIView):
         except Action.DoesNotExist:
             raise NotFoundError(code="ACTION_NOT_FOUND", message="Action non trouvée", details={"action_id": action_id})
 
-        correlation_id = request.headers.get("X-Idp-Request-Id")
+        # Story 13.2, Task 5 & 6: Handle target_names with RBAC validation
+        if target_names:
+            if not isinstance(target_names, list) or len(target_names) == 0:
+                raise BadRequestError(
+                    code="BAD_REQUEST",
+                    message="target_names doit être une liste non vide",
+                    details={"target_names": target_names},
+                )
+
+            # Get user's AD groups for RBAC (with profile fallback)
+            ad_groups = get_user_ad_groups(request.user)
+
+            # Validate targets via InventoryService (RBAC filtered)
+            inventory_service = InventoryService()
+            try:
+                # Get all targets user can access
+                allowed_targets, _total = inventory_service.list_targets_for_user(
+                    user_id=request.user.id,
+                    ad_groups=ad_groups,
+                    page=1,
+                    page_size=5000  # Load enough to validate
+                )
+            except InventoryServiceError as e:
+                exec_logger.error(
+                    "inventory_service_error_during_execution",
+                    error=str(e),
+                    user_id=request.user.id,
+                    correlation_id=correlation_id
+                )
+                raise BadRequestError(
+                    code="INVENTORY_UNAVAILABLE",
+                    message="Service inventaire indisponible",
+                    details={"error": str(e)},
+                )
+
+            # Build map of allowed targets by name
+            allowed_targets_map = {t['name']: t for t in allowed_targets}
+
+            # Validate all requested targets exist and are allowed
+            validated_targets = []
+            environments_found = set()
+            for name in target_names:
+                if name not in allowed_targets_map:
+                    # Task 6.3: Log audit for unauthorized target attempt (SOC1 traceability)
+                    exec_logger.warning(
+                        "unauthorized_target_attempt",
+                        user_id=request.user.id,
+                        target_name=name,
+                        action_id=action_id,
+                        correlation_id=correlation_id
+                    )
+                    AuditService.create_entry(
+                        user_id=str(request.user.id),
+                        action_type=AuditActionType.EXECUTION_TARGET_FORBIDDEN,
+                        entity_type=AuditEntityType.ACTION,
+                        entity_id=int(action_id),
+                        details={
+                            "target_name": name,
+                            "action_id": action_id,
+                            "message": "Cible non autorisée pour cette action",
+                        },
+                        correlation_id=correlation_id,
+                    )
+                    raise ForbiddenError(
+                        code="FORBIDDEN",
+                        message=f"Cible non autorisée: {name}",
+                        details={"target_name": name},
+                    )
+                target = allowed_targets_map[name]
+                validated_targets.append(target)
+                environments_found.add(target['environment'])
+
+            # Task 5.5: Validate all targets have the same environment
+            if len(environments_found) > 1:
+                raise BadRequestError(
+                    code="MIXED_ENVIRONMENTS",
+                    message="Les cibles doivent appartenir au même environnement",
+                    details={"environments": list(environments_found)},
+                )
+
+            # Derive environment from targets
+            environment = list(environments_found)[0]
+
+            # Task 5.6: Store target_names in parameters
+            parameters = parameters.copy() if parameters else {}
+            parameters['_targets'] = target_names
+
+            exec_logger.info(
+                "execution_with_targets",
+                user_id=request.user.id,
+                action_id=action_id,
+                target_count=len(target_names),
+                derived_environment=environment,
+                correlation_id=correlation_id
+            )
+
         execution = ExecutionService().create_execution(
             user=request.user,
             action=action,
             environment=environment,
-            parameters=parameters,
+            parameters=parameters if parameters else None,
             parent_execution_id=parent_execution_id,
             correlation_id=correlation_id,
         )

@@ -9,6 +9,7 @@ import type { TableProps } from 'antd';
 import { ReloadOutlined, ApiOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import type { IntegrationListItem } from '../../types/api';
 import { AUTH_FLOW_LABELS } from '../../types/api';
+import { getIconUrl } from '../../utils/iconUrl';
 
 export interface IntegrationsTableProps {
   dataSource: IntegrationListItem[];
@@ -26,12 +27,10 @@ function truncateUrl(url: string, max = 40): string {
 
 /** Render icon: uploaded icon (/static/...), URL (http...), or fallback (Story 4.9 AC3). */
 function renderIcon(record: IntegrationListItem) {
-  const icon = record.icon;
-  if (icon) {
-    // Uploaded icon (starts with /) or external URL
-    return <Avatar src={icon} shape="square" size="small" icon={<ApiOutlined />} />;
+  const iconSrc = getIconUrl(record.icon);
+  if (iconSrc) {
+    return <Avatar src={iconSrc} shape="square" size="small" icon={<ApiOutlined />} />;
   }
-  // Fallback: generic API icon
   return <Avatar shape="square" size="small" icon={<ApiOutlined />} />;
 }
 

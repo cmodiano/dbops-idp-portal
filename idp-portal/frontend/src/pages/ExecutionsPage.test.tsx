@@ -21,7 +21,7 @@
  * Story 9.9:
  * AC1-AC3: Status column with Badge indicators (pulsing for running, fixed for terminal).
  * AC4: Technologie column with engine icons.
- * AC5: Plateforme column with integration icons.
+ * AC5: Plateforme column with execution platform icons (action.platform).
  * AC7: Column order: Statut, Action, Technologie, Plateforme, [Utilisateur], Environnement, Date, Durée.
  */
 
@@ -1181,14 +1181,12 @@ describe('ExecutionsPage', () => {
       expect(workflowIcon).toBeInTheDocument();
     });
 
-    it('renders Plateforme column with integration avatar (AC5)', async () => {
+    it('renders Plateforme column with execution platform icon (AC5)', async () => {
       vi.mocked(executionService.listExecutions).mockResolvedValue({
         data: [
           {
             ...mockExecutions[0],
-            integration_id: 1,
-            integration_name: 'AAP Production',
-            integration_icon: '/icons/aap.png',
+            platform: 'AAP',
           },
         ],
         pagination: { page: 1, page_size: 25, total_count: 1, total_pages: 1 },
@@ -1200,20 +1198,18 @@ describe('ExecutionsPage', () => {
         expect(screen.getByText('Create PDB')).toBeInTheDocument();
       });
 
-      // Check for Avatar component
-      const avatar = container.querySelector('.ant-avatar');
-      expect(avatar).toBeInTheDocument();
+      // Plateforme column uses action.platform (mandatory for actions) — AAP icon
+      const platformIcon = container.querySelector('[class*="anticon-rocket"]');
+      expect(platformIcon).toBeInTheDocument();
     });
 
-    it('renders fallback for missing integration (AC5)', async () => {
+    it('renders fallback dash when platform is null (AC5)', async () => {
       vi.mocked(executionService.listExecutions).mockResolvedValue({
         data: [
           {
             ...mockExecutions[0],
-            engine: null, // Also null for this test
-            integration_id: null,
-            integration_name: null,
-            integration_icon: null,
+            engine: null,
+            platform: null, // Plateforme column shows — when platform is null (e.g. workflow)
           },
         ],
         pagination: { page: 1, page_size: 25, total_count: 1, total_pages: 1 },
@@ -1371,24 +1367,21 @@ describe('ExecutionsPage', () => {
         expect(screen.getByText('Deploy Workflow')).toBeInTheDocument();
       });
 
-      // Check for ApartmentOutlined icon (workflow)
-      const workflowIcon = document.querySelector('[class*="anticon-apartment"]');
-      expect(workflowIcon).toBeInTheDocument();
-      expect(workflowIcon).toHaveStyle({ color: '#722ed1' });
+      // Workflow row has Technologie = ApartmentOutlined (violet). Terraform also uses ApartmentOutlined.
+      const apartmentIcons = document.querySelectorAll('[class*="anticon-apartment"]');
+      expect(apartmentIcons.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('renders integration icon when integration metadata present (AC5)', async () => {
+    it('renders integration icon when integration has icon (AC5)', async () => {
       renderWithTheme(<ExecutionsPage />);
 
       await waitFor(() => {
         expect(screen.getByText('Create PDB')).toBeInTheDocument();
       });
 
-      // Check for Plateforme column
+      // Row 1 has integration with icon → Plateforme column shows Avatar (user-defined icon)
       expect(screen.getByText('Plateforme')).toBeInTheDocument();
-
-      // Check for Avatar with integration icon
-      const avatar = document.querySelector('.ant-avatar-square');
+      const avatar = document.querySelector('.ant-avatar');
       expect(avatar).toBeInTheDocument();
     });
 

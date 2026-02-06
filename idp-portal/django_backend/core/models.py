@@ -30,6 +30,8 @@ class AuditActionType(models.TextChoices):
     EXECUTION_CANCELLED = 'EXECUTION_CANCELLED', 'Execution Cancelled'
     EXECUTION_PENDING_APPROVAL = 'EXECUTION_PENDING_APPROVAL', 'Execution Pending Approval'
     EXECUTION_REJECTED = 'EXECUTION_REJECTED', 'Execution Rejected'
+    # Story 13.2, Task 6.3: Unauthorized target attempt (audit trail for SOC1)
+    EXECUTION_TARGET_FORBIDDEN = 'EXECUTION_TARGET_FORBIDDEN', 'Execution Target Forbidden'
     # Scheduled execution types (added for SchedulingService)
     SCHEDULED_EXECUTION_CREATED = 'SCHEDULED_EXECUTION_CREATED', 'Scheduled Execution Created'
     SCHEDULED_EXECUTION_RECURRING_CREATED = 'SCHEDULED_EXECUTION_RECURRING_CREATED', 'Scheduled Execution Recurring Created'

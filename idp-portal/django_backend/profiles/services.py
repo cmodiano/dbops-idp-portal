@@ -386,6 +386,15 @@ class ProfileService:
                     'tag_patterns': perm.get_tag_patterns(),
                     'environments': perm.get_environments(),
                 })
+            elif getattr(profile, 'is_admin', 0) == 1:
+                # Admin profiles (DBOPS, DBA) without explicit ProfileActionPermission
+                # get full access (actions=all, environments=all)
+                action_permissions.append({
+                    'actions_type': 'all',
+                    'action_ids': [],
+                    'tag_patterns': [],
+                    'environments': [],
+                })
         
         # Aggregate target permissions
         target_permissions = []
@@ -397,6 +406,14 @@ class ProfileService:
                     'targets_type': perm.permission_type.lower(),
                     'target_names': perm.get_target_names(),
                     'target_patterns': perm.get_target_patterns(),
+                })
+            elif getattr(profile, 'is_admin', 0) == 1:
+                # Admin profiles (DBOPS, DBA) without explicit ProfileTargetPermission
+                # get full access (targets=all)
+                target_permissions.append({
+                    'targets_type': 'all',
+                    'target_names': [],
+                    'target_patterns': [],
                 })
         
         return {

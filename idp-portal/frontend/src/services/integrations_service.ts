@@ -11,16 +11,16 @@ import type {
 } from '../types/api';
 
 export async function getIntegrations(): Promise<IntegrationResponse[]> {
-  const res = await apiFetch<IntegrationResponse[]>('/admin/integrations');
+  const res = await apiFetch<IntegrationResponse[]>('/admin/integrations/');
   return res ?? [];
 }
 
 export async function getIntegration(id: number): Promise<IntegrationResponse> {
-  return apiFetch<IntegrationResponse>(`/admin/integrations/${id}`);
+  return apiFetch<IntegrationResponse>(`/admin/integrations/${id}/`);
 }
 
 export async function createIntegration(payload: IntegrationCreate): Promise<IntegrationResponse> {
-  return apiFetch<IntegrationResponse>('/admin/integrations', {
+  return apiFetch<IntegrationResponse>('/admin/integrations/', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -30,12 +30,12 @@ export async function updateIntegration(
   id: number,
   payload: IntegrationUpdate,
 ): Promise<IntegrationResponse> {
-  return apiFetch<IntegrationResponse>(`/admin/integrations/${id}`, {
+  return apiFetch<IntegrationResponse>(`/admin/integrations/${id}/`, {
     method: 'PUT',
     body: JSON.stringify(payload),
   });
 }
 
 export async function deleteIntegration(id: number): Promise<void> {
-  await apiFetch<void>(`/admin/integrations/${id}`, { method: 'DELETE' });
+  await apiFetch<void>(`/admin/integrations/${id}/`, { method: 'DELETE' });
 }

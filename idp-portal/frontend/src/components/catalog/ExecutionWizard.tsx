@@ -53,28 +53,29 @@ import { ImpactIndicator } from '../shared/ImpactIndicator';
 import { ExecutionTimeline } from '../execution';
 import { STYLE_TOKENS } from '../../theme/styleTokens';
 import { sanitizeDescription } from '../../utils/businessLanguage';
+import { TargetSelector, type Target } from './TargetSelector';
 
 dayjs.extend(utc);
 
 const { Text, Title } = Typography;
 
-/** Step items for default variant (technical users). */
+/** Step items for default variant (technical users). Story 13.2: renamed Environnement → Cible(s). */
 const STEP_ITEMS_DEFAULT = [
-  { title: 'Environnement', content: 'Choisir la cible' },
+  { title: 'Cible(s)', content: 'Choisir la cible' },
   { title: 'Parametres', content: 'Configurer l\'action' },
   { title: 'Confirmation', content: 'Verifier et executer' },
 ];
 
-/** Step items for simplified variant (business users) — Story 7.2, Task 1.2. */
+/** Step items for simplified variant (business users) — Story 7.2, Task 1.2; Story 13.2: renamed. */
 const STEP_ITEMS_SIMPLIFIED = [
-  { title: 'Ou executer?', content: 'Selectionnez l\'environnement' },
+  { title: 'Ou executer?', content: 'Selectionnez la cible' },
   { title: 'Informations requises', content: 'Remplissez les champs' },
   { title: 'Verifier et lancer', content: 'Tout est pret?' },
 ];
 
-/** Step descriptions for simplified variant (business users) — Story 7.2, Task 1.3. */
+/** Step descriptions for simplified variant (business users) — Story 7.2, Task 1.3; Story 13.2: updated. */
 const STEP_DESCRIPTIONS_SIMPLIFIED = [
-  'Selectionnez l\'environnement ou l\'action sera executee. Si un seul est disponible, il est deja selectionne pour vous.',
+  'Selectionnez la cible sur laquelle executer l\'action. L\'environnement sera derive automatiquement.',
   'Remplissez les informations necessaires. Tous les champs marques sont obligatoires.',
   'Verifiez que tout est correct avant de lancer l\'action.',
 ];
@@ -214,8 +215,32 @@ export function ExecutionWizard({
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Persisted state across steps
+  // Story 13.2: Replace selectedEnvironment with selectedTargets
+  const [selectedTargets, setSelectedTargets] = useState<Target[]>([]);
+  // Legacy: keep selectedEnvironment for backward compatibility (actions without targets)
   const [selectedEnvironment, setSelectedEnvironment] = useState<ExecutionEnvironment | null>(null);
   const [parameters, setParameters] = useState<Record<string, unknown>>({});
+
+  // Story 13.2, Task 2: Derive environment from selected targets (AC2)
+  const derivedEnvironment = useMemo((): ExecutionEnvironment | null => {
+    if (selectedTargets.length === 0) {
+      // Fallback to legacy selectedEnvironment if no targets
+      return selectedEnvironment;
+    }
+    // All targets should have the same environment (enforced by RBAC profile)
+    const firstEnv = selectedTargets[0]?.environment as ExecutionEnvironment;
+    return firstEnv ?? null;
+  }, [selectedTargets, selectedEnvironment]);
+
+  // Story 13.2, Task 2.3: Check if targets have mixed environments
+  const hasMixedEnvironments = useMemo((): boolean => {
+    if (selectedTargets.length <= 1) return false;
+    const environments = new Set(selectedTargets.map((t) => t.environment));
+    return environments.size > 1;
+  }, [selectedTargets]);
+
+  // Story 13.2, Task 3: Check if action requires targets
+  const requiresTarget = action?.requires_target !== false;
 
   // Story 11.5: Scheduling state (AC1, AC2)
   const [isScheduling, setIsScheduling] = useState(false);
@@ -254,15 +279,15 @@ export function ExecutionWizard({
     [action?.parameters_schema]
   );
 
-  // Evaluate impact for selected environment
+  // Evaluate impact for selected environment (Story 13.2: use derivedEnvironment)
   const currentImpact = useMemo(() => {
-    if (!selectedEnvironment || !action) return null;
+    if (!derivedEnvironment || !action) return null;
     return evaluateImpact(
       action.impact_rules,
       action.default_impact_level,
-      selectedEnvironment
+      derivedEnvironment
     );
-  }, [selectedEnvironment, action]);
+  }, [derivedEnvironment, action]);
 
   // Reset state when modal opens/closes or action changes
   useEffect(() => {
@@ -280,6 +305,8 @@ export function ExecutionWizard({
       setParameters({});
       setSubmitError(null);
       form.resetFields();
+      // Story 13.2: Reset targets state
+      setSelectedTargets([]);
       // Story 11.5, 11.7: Reset scheduling state
       setIsScheduling(false);
       setScheduledAt(null);
@@ -296,8 +323,9 @@ export function ExecutionWizard({
       setCronError('');
       setCronNextExecutions([]);
 
-      // Story 7.2, Task 2.2: Auto-select environment if only one is available
-      if (allowedEnvironments.length === 1) {
+      // Story 13.2: For actions without required targets, auto-select environment if only one available
+      // For actions with targets, environment is derived from target selection
+      if (action.requires_target === false && allowedEnvironments.length === 1) {
         setSelectedEnvironment(allowedEnvironments[0] as ExecutionEnvironment);
       } else {
         setSelectedEnvironment(null);
@@ -413,10 +441,26 @@ export function ExecutionWizard({
   // Handle step navigation
   const handleNext = useCallback(async () => {
     if (currentStep === 0) {
-      // Validate environment selected
-      if (!selectedEnvironment) {
-        notification.warning({ title: 'Veuillez selectionner un environnement.' });
-        return;
+      // Story 13.2: Validate target or environment selection
+      if (requiresTarget) {
+        // Target-based: validate targets selected
+        if (selectedTargets.length === 0) {
+          notification.warning({ message: 'Veuillez selectionner au moins une cible.' });
+          return;
+        }
+        // Story 13.2, Task 2.3: Warn if mixed environments
+        if (hasMixedEnvironments) {
+          notification.warning({
+            message: 'Attention',
+            description: 'Les cibles selectionnees appartiennent a des environnements differents.',
+          });
+        }
+      } else {
+        // Legacy: environment-based selection
+        if (!selectedEnvironment) {
+          notification.warning({ message: 'Veuillez selectionner un environnement.' });
+          return;
+        }
       }
     } else if (currentStep === 1) {
       // Validate form fields
@@ -428,7 +472,7 @@ export function ExecutionWizard({
       }
     }
     setCurrentStep((s) => Math.min(s + 1, 2));
-  }, [currentStep, selectedEnvironment, form, notification]);
+  }, [currentStep, selectedEnvironment, selectedTargets, requiresTarget, hasMixedEnvironments, form, notification]);
 
   const handlePrev = useCallback(() => {
     setCurrentStep((s) => Math.max(s - 1, 0));
@@ -501,9 +545,10 @@ export function ExecutionWizard({
 
   // Handle submission
   const handleSubmit = useCallback(async () => {
-    if (!action || !selectedEnvironment) {
+    // Story 13.2: Use derivedEnvironment (from targets or legacy selection)
+    if (!action || !derivedEnvironment) {
       notification.warning({
-        title: 'Donnees incompletes',
+        message: 'Donnees incompletes',
         description: 'Veuillez completer toutes les etapes du wizard.',
       });
       return;
@@ -524,9 +569,14 @@ export function ExecutionWizard({
     setSubmitError(null);
 
     try {
+      // Story 13.2, Task 4: Submit with target_names if targets selected
+      const targetNames = selectedTargets.length > 0 ? selectedTargets.map((t) => t.name) : undefined;
+
       const response = await submitExecution({
         action_id: action.id,
-        environment: selectedEnvironment,
+        // Story 13.2, AC4: If targets provided, backend derives environment; else use derivedEnvironment
+        environment: targetNames ? undefined : derivedEnvironment,
+        target_names: targetNames,
         parameters: Object.keys(parameters).length > 0 ? parameters : null,
         // Story 9.2, Task 14: Include parent_execution_id for remediation
         parent_execution_id: parentExecutionId ?? null,
@@ -560,7 +610,7 @@ export function ExecutionWizard({
     } finally {
       setSubmitting(false);
     }
-  }, [action, selectedEnvironment, parameters, notification, onSuccess, parentExecutionId]);
+  }, [action, derivedEnvironment, selectedTargets, parameters, notification, onSuccess, parentExecutionId]);
 
   // Story 11.5: Handle scheduled execution error messages (AC6)
   const getSchedulingErrorMessage = useCallback((error: Error & { code?: string; message?: string }) => {
@@ -581,7 +631,8 @@ export function ExecutionWizard({
 
   // Story 11.5, 11.7: Handle scheduled execution submission (AC3)
   const handleSubmitScheduled = useCallback(async () => {
-    if (!action || !selectedEnvironment) {
+    // Story 13.2: Use derivedEnvironment (from targets or legacy selection)
+    if (!action || !derivedEnvironment) {
       notification.warning({
         message: 'Données incomplètes',
         description: 'Veuillez compléter toutes les étapes du wizard.',
@@ -654,12 +705,15 @@ export function ExecutionWizard({
         };
       }
 
+      // Story 13.2: scheduled executions also use derivedEnvironment
       const response = await createScheduledExecution({
         action_id: action.id,
-        environment: selectedEnvironment,
+        environment: derivedEnvironment,
         parameters: Object.keys(parameters).length > 0 ? parameters : null,
         scheduled_at: schedulingType === 'one-time' ? scheduledAt?.utc().toISOString() : null,
         recurring_pattern: recurringPattern,
+        // Story 13.2: Include target_names for scheduled executions
+        target_names: selectedTargets.length > 0 ? selectedTargets.map((t) => t.name) : undefined,
       });
 
       if (import.meta.env.DEV) {
@@ -710,7 +764,7 @@ export function ExecutionWizard({
     } finally {
       setSubmitting(false);
     }
-  }, [action, selectedEnvironment, parameters, scheduledAt, schedulingType, dailyHour, dailyMinute, weeklyDayOfWeek, weeklyHour, weeklyMinute, cronExpression, cronIsValid, notification, onCancel, onSuccess, getSchedulingErrorMessage]);
+  }, [action, derivedEnvironment, selectedTargets, parameters, scheduledAt, schedulingType, dailyHour, dailyMinute, weeklyDayOfWeek, weeklyHour, weeklyMinute, cronExpression, cronIsValid, notification, onCancel, onSuccess, getSchedulingErrorMessage]);
 
   // Handle keyboard shortcuts
   const handleKeyDown = useCallback(
@@ -729,8 +783,8 @@ export function ExecutionWizard({
     [onCancel, currentStep, handleNext]
   );
 
-  // Render Step 1: Environment selection
-  const renderEnvironmentStep = () => (
+  // Render Step 1: Target selection (Story 13.2) or Environment selection (fallback)
+  const renderTargetStep = () => (
     <div>
       {/* Story 7.2, Task 1.3: Contextual help description for simplified variant */}
       {variant === 'simplified' && (
@@ -741,67 +795,114 @@ export function ExecutionWizard({
           style={{ marginBottom: 16 }}
         />
       )}
-      <Form.Item
-        label={variant === 'simplified' ? 'Environnement' : 'Environnement cible'}
-        required
-        tooltip={variant === 'simplified' ? undefined : 'Selectionnez l\'environnement sur lequel executer l\'action.'}
-      >
-        <Select
-          ref={(ref) => {
-            firstFieldRef.current = ref as unknown as HTMLElement;
-          }}
-          value={selectedEnvironment ?? undefined}
-          onChange={handleEnvironmentChange}
-          placeholder="Selectionnez un environnement"
-          aria-label="Environnement cible"
-          style={{ width: '100%' }}
-          loading={environmentsCache === null}
-          options={
-            environmentsCache && environmentsCache.length > 0
-              ? environmentsCache
-                  .filter((env) => allowedEnvironments.includes(env.id) || allowedEnvironments.includes(env.id.toUpperCase()))
-                  .map((env) => ({
-                    value: env.id as ExecutionEnvironment,
-                    label: env.name,
-                    disabled: false,
-                  }))
-              : (['dev', 'staging', 'prod'] as ExecutionEnvironment[])
-                  .filter((env) => allowedEnvironments.includes(env) || allowedEnvironments.includes(env.toUpperCase()))
-                  .map((env) => ({
-                    value: env,
-                    label: ENVIRONMENT_LABELS[env],
-                    disabled: false,
-                  }))
-          }
-        />
-      </Form.Item>
 
-      {inventoryWarnings.environments && (
-        <Badge
-          status="warning"
-          text="Données inventaire temporairement indisponibles — dernières valeurs en cache"
-          style={{
-            marginBottom: 8,
-            fontSize: '12px',
-            color: '#faad14',
-            display: 'block',
-          }}
-        />
+      {/* Story 13.2: Target-based selection for actions that require targets */}
+      {requiresTarget ? (
+        <>
+          <Form.Item
+            label={variant === 'simplified' ? 'Cible' : 'Cible(s)'}
+            required
+            tooltip={variant === 'simplified' ? undefined : 'Selectionnez la ou les cibles sur lesquelles executer l\'action.'}
+          >
+            <TargetSelector
+              inputRef={firstFieldRef as React.Ref<HTMLElement>}
+              multiple={false} // Single selection by default; can be extended to support multiple
+              value={selectedTargets}
+              onChange={setSelectedTargets}
+              placeholder="Selectionnez une cible"
+              ariaLabel="Selection de cible"
+            />
+          </Form.Item>
+
+          {/* Story 13.2, Task 2.3: Warning if targets have mixed environments */}
+          {hasMixedEnvironments && (
+            <Alert
+              type="warning"
+              showIcon
+              icon={<WarningOutlined />}
+              message="Attention"
+              description="Les cibles selectionnees appartiennent a des environnements differents. Cela peut causer des problemes."
+              style={{ marginBottom: 16 }}
+            />
+          )}
+
+          {/* Show derived environment */}
+          {derivedEnvironment && (
+            <Alert
+              type="info"
+              showIcon
+              description={`Environnement derive : ${ENVIRONMENT_LABELS[derivedEnvironment] || derivedEnvironment}`}
+              style={{ marginBottom: 16 }}
+            />
+          )}
+        </>
+      ) : (
+        /* Story 13.2, Task 3: Fallback to environment selection for actions without required targets */
+        <>
+          <Form.Item
+            label={variant === 'simplified' ? 'Environnement' : 'Environnement cible'}
+            required
+            tooltip={variant === 'simplified' ? undefined : 'Selectionnez l\'environnement sur lequel executer l\'action.'}
+          >
+            <Select
+              ref={(ref) => {
+                firstFieldRef.current = ref as unknown as HTMLElement;
+              }}
+              value={selectedEnvironment ?? undefined}
+              onChange={handleEnvironmentChange}
+              placeholder="Selectionnez un environnement"
+              aria-label="Environnement cible"
+              style={{ width: '100%' }}
+              loading={environmentsCache === null}
+              options={
+                environmentsCache && environmentsCache.length > 0
+                  ? environmentsCache
+                      .filter((env) => allowedEnvironments.includes(env.id) || allowedEnvironments.includes(env.id.toUpperCase()))
+                      .map((env) => ({
+                        value: env.id as ExecutionEnvironment,
+                        label: env.name,
+                        disabled: false,
+                      }))
+                  : (['dev', 'staging', 'prod'] as ExecutionEnvironment[])
+                      .filter((env) => allowedEnvironments.includes(env) || allowedEnvironments.includes(env.toUpperCase()))
+                      .map((env) => ({
+                        value: env,
+                        label: ENVIRONMENT_LABELS[env],
+                        disabled: false,
+                      }))
+              }
+            />
+          </Form.Item>
+
+          {inventoryWarnings.environments && (
+            <Badge
+              status="warning"
+              text="Données inventaire temporairement indisponibles — dernières valeurs en cache"
+              style={{
+                marginBottom: 8,
+                fontSize: '12px',
+                color: '#faad14',
+                display: 'block',
+              }}
+            />
+          )}
+
+          {/* Story 7.2, Task 2.3: Informative message when environment is auto-selected */}
+          {allowedEnvironments.length === 1 && selectedEnvironment && (
+            <Alert
+              type="success"
+              showIcon
+              description="Environnement selectionne automatiquement car c'est le seul disponible pour vous."
+              style={{ marginBottom: 16 }}
+            />
+          )}
+        </>
       )}
 
-      {/* Story 7.2, Task 2.3: Informative message when environment is auto-selected */}
-      {allowedEnvironments.length === 1 && selectedEnvironment && (
+      {/* Production warning (applies to both modes) */}
+      {derivedEnvironment === 'prod' && (
         <Alert
-          type="success"
-          showIcon
-          description="Environnement selectionne automatiquement car c'est le seul disponible pour vous."
-          style={{ marginBottom: 16 }}
-        />
-      )}
-
-      {selectedEnvironment === 'prod' && (
-        <Alert
-          title="Avertissement - Environnement Production"
+          message="Avertissement - Environnement Production"
           description="Vous etes sur le point d'executer une action en production. Verifiez attentivement les parametres."
           type="warning"
           showIcon
@@ -810,6 +911,7 @@ export function ExecutionWizard({
         />
       )}
 
+      {/* Impact indicator (applies to both modes) */}
       {currentImpact !== null && (
         <div style={{ marginTop: 16 }}>
           <Text strong>Niveau d'impact: </Text>
@@ -963,13 +1065,14 @@ export function ExecutionWizard({
 
   // Render Step 3: Confirmation
   const renderConfirmationStep = () => {
-    const changeConfig = action?.change_type_config?.[selectedEnvironment?.toUpperCase() ?? ''];
+    // Story 13.2: Use derivedEnvironment for change config lookup
+    const changeConfig = action?.change_type_config?.[derivedEnvironment?.toUpperCase() ?? ''];
     const isChangeRequired = changeConfig?.required ?? false;
 
     // Get environment display name from inventory cache or fallback to labels
-    const environmentName = environmentsCache?.find((env) => env.id === selectedEnvironment)?.name
-      ?? ENVIRONMENT_LABELS[selectedEnvironment!]
-      ?? selectedEnvironment;
+    const environmentName = environmentsCache?.find((env) => env.id === derivedEnvironment)?.name
+      ?? ENVIRONMENT_LABELS[derivedEnvironment!]
+      ?? derivedEnvironment;
 
     return (
       <div>
@@ -985,9 +1088,22 @@ export function ExecutionWizard({
         <Title level={5}>{action?.name}</Title>
 
         <Descriptions column={1} size="small" bordered style={{ marginBottom: 16 }}>
+          {/* Story 13.2: Show targets if selected */}
+          {selectedTargets.length > 0 && (
+            <Descriptions.Item label="Cible(s)">
+              {selectedTargets.map((t, i) => (
+                <Badge
+                  key={t.name}
+                  status="processing"
+                  text={t.name}
+                  style={{ marginRight: i < selectedTargets.length - 1 ? 8 : 0 }}
+                />
+              ))}
+            </Descriptions.Item>
+          )}
           <Descriptions.Item label="Environnement">
             <Badge
-              status={selectedEnvironment === 'prod' ? 'warning' : 'processing'}
+              status={derivedEnvironment === 'prod' ? 'warning' : 'processing'}
               text={environmentName}
             />
           </Descriptions.Item>
@@ -1338,7 +1454,7 @@ export function ExecutionWizard({
         </div>
 
         <div style={{ minHeight: 200, padding: '0 8px' }}>
-          {currentStep === 0 && renderEnvironmentStep()}
+          {currentStep === 0 && renderTargetStep()}
           {currentStep === 1 && renderParametersStep()}
           {currentStep === 2 && renderConfirmationStep()}
         </div>
@@ -1352,7 +1468,11 @@ export function ExecutionWizard({
               </Button>
             )}
             {currentStep < 2 && (
-              <Button type="primary" onClick={handleNext} disabled={currentStep === 0 && !selectedEnvironment}>
+              <Button
+                type="primary"
+                onClick={handleNext}
+                disabled={currentStep === 0 && (requiresTarget ? selectedTargets.length === 0 : !selectedEnvironment)}
+              >
                 Suivant
               </Button>
             )}

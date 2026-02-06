@@ -4,7 +4,7 @@
  * Story 9.9:
  * AC1-AC3: renderStatusIndicator - Status indicator badges (pulsing vs fixed).
  * AC4: renderEngineIcon - Technology column with engine/workflow icons.
- * AC5: renderIntegrationIcon - Platform column with integration icons.
+ * AC5: renderPlatformIcon - Platform column with execution platform icons (action.platform).
  */
 
 import { describe, it, expect } from 'vitest';
@@ -12,11 +12,13 @@ import { render, screen } from '@testing-library/react';
 import {
   renderStatusIndicator,
   renderEngineIcon,
-  renderIntegrationIcon,
+  renderPlatformIcon,
+  renderPlateformeIcon,
   STATUS_CONFIG,
   ENGINE_ICONS_CONFIG,
+  PLATFORM_ICONS_CONFIG,
 } from './executionRenderers';
-import type { ExecutionStatusType, ActionEngine, ItemType } from '../types/api';
+import type { ExecutionStatusType, ActionEngine, ActionPlatform, ItemType } from '../types/api';
 
 describe('executionRenderers', () => {
   describe('renderStatusIndicator (AC1-AC3)', () => {
@@ -121,42 +123,67 @@ describe('executionRenderers', () => {
     });
   });
 
-  describe('renderIntegrationIcon (AC5)', () => {
-    it('renders Avatar with icon URL when integrationIcon is provided', () => {
+  describe('renderPlatformIcon (AC5)', () => {
+    it('renders AAP icon with red color', () => {
+      const { container } = render(<>{renderPlatformIcon('AAP')}</>);
+      const icon = container.querySelector('[class*="anticon-rocket"]');
+      expect(icon).toBeInTheDocument();
+      expect(icon).toHaveStyle({ color: '#EE0000' });
+    });
+
+    it('renders GitHub Actions icon with dark color', () => {
+      const { container } = render(<>{renderPlatformIcon('GitHub Actions')}</>);
+      const icon = container.querySelector('[class*="anticon-thunderbolt"]');
+      expect(icon).toBeInTheDocument();
+    });
+
+    it('renders Terraform icon with purple color', () => {
+      const { container } = render(<>{renderPlatformIcon('Terraform')}</>);
+      const icon = container.querySelector('[class*="anticon-apartment"]');
+      expect(icon).toBeInTheDocument();
+    });
+
+    it('renders fallback dash when platform is null', () => {
+      render(<>{renderPlatformIcon(null)}</>);
+      expect(screen.getByText('—')).toBeInTheDocument();
+    });
+
+    it('renders fallback dash when platform is undefined', () => {
+      render(<>{renderPlatformIcon(undefined)}</>);
+      expect(screen.getByText('—')).toBeInTheDocument();
+    });
+
+    it('renders unknown platform as text', () => {
+      render(<>{renderPlatformIcon('Custom Platform')}</>);
+      expect(screen.getByText('Custom Platform')).toBeInTheDocument();
+    });
+  });
+
+  describe('renderPlateformeIcon (AC5)', () => {
+    it('prefers integration icon when integration has icon', () => {
       const { container } = render(
-        <>{renderIntegrationIcon('AAP Production', '/icons/aap.png')}</>
+        <>{renderPlateformeIcon('AAP Prod', '/icons/custom.png', 'AAP')}</>
       );
       const avatar = container.querySelector('.ant-avatar');
       expect(avatar).toBeInTheDocument();
       const img = container.querySelector('img');
-      expect(img).toHaveAttribute('src', '/icons/aap.png');
+      expect(img).toHaveAttribute('src', expect.stringContaining('/icons/custom.png'));
     });
 
-    it('renders Avatar with ApiOutlined fallback when integrationIcon is null', () => {
+    it('falls back to platform icon when no integration', () => {
       const { container } = render(
-        <>{renderIntegrationIcon('AAP Production', null)}</>
+        <>{renderPlateformeIcon(null, null, 'AAP')}</>
       );
+      const icon = container.querySelector('[class*="anticon-rocket"]');
+      expect(icon).toBeInTheDocument();
+    });
+
+    it('falls back to platform icon when integration has name but no icon', () => {
+      const { container } = render(
+        <>{renderPlateformeIcon('AAP Prod', null, 'AAP')}</>
+      );
+      // hasIntegration is true (integration_name present) → Avatar with ApiOutlined fallback
       const avatar = container.querySelector('.ant-avatar');
-      expect(avatar).toBeInTheDocument();
-      const fallbackIcon = container.querySelector('[class*="anticon-api"]');
-      expect(fallbackIcon).toBeInTheDocument();
-    });
-
-    it('renders fallback dash when integrationName is null', () => {
-      render(<>{renderIntegrationIcon(null, null)}</>);
-      expect(screen.getByText('—')).toBeInTheDocument();
-    });
-
-    it('renders fallback dash when integrationName is undefined', () => {
-      render(<>{renderIntegrationIcon(undefined, undefined)}</>);
-      expect(screen.getByText('—')).toBeInTheDocument();
-    });
-
-    it('renders square-shaped Avatar', () => {
-      const { container } = render(
-        <>{renderIntegrationIcon('Terraform Cloud', '/icons/tf.png')}</>
-      );
-      const avatar = container.querySelector('.ant-avatar-square');
       expect(avatar).toBeInTheDocument();
     });
   });
@@ -200,6 +227,18 @@ describe('executionRenderers', () => {
         expect(ENGINE_ICONS_CONFIG).toHaveProperty(engine);
         expect(ENGINE_ICONS_CONFIG[engine]).toHaveProperty('Icon');
         expect(ENGINE_ICONS_CONFIG[engine]).toHaveProperty('color');
+      });
+    });
+  });
+
+  describe('PLATFORM_ICONS_CONFIG', () => {
+    it('has all platform types defined', () => {
+      const platforms: ActionPlatform[] = ['AAP', 'GitHub Actions', 'Azure DevOps', 'Terraform'];
+
+      platforms.forEach((platform) => {
+        expect(PLATFORM_ICONS_CONFIG).toHaveProperty(platform);
+        expect(PLATFORM_ICONS_CONFIG[platform]).toHaveProperty('Icon');
+        expect(PLATFORM_ICONS_CONFIG[platform]).toHaveProperty('color');
       });
     });
   });

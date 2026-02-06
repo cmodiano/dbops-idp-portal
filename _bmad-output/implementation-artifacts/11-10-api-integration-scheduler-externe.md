@@ -732,7 +732,15 @@ async def update_scheduled_execution(
     - status="cancelled" : Annuler l'exécution (Story 11.6)
     - status="executed" : Marquer comme exécutée après lancement par scheduler externe (Story 11.10)
     """
-    correlation_id = str(uuid.uuid4())
+    # Get scheduled execution first (required for AC8: use its correlation_id for audit/tracing)
+    scheduled_execution = await scheduled_execution_repository.get_by_id(scheduled_execution_id)
+    if not scheduled_execution:
+        raise NotFoundError(
+            message=f"Exécution planifiée introuvable avec ID {scheduled_execution_id}",
+            code="SCHEDULED_EXECUTION_NOT_FOUND",
+        )
+
+    correlation_id = scheduled_execution.correlation_id
     structlog.contextvars.bind_contextvars(correlation_id=correlation_id)
 
     logger.info(
@@ -741,14 +749,6 @@ async def update_scheduled_execution(
         new_status=request.status,
         execution_id=request.execution_id,
     )
-
-    # Get scheduled execution
-    scheduled_execution = await scheduled_execution_repository.get_by_id(scheduled_execution_id)
-    if not scheduled_execution:
-        raise NotFoundError(
-            message=f"Exécution planifiée introuvable avec ID {scheduled_execution_id}",
-            code="SCHEDULED_EXECUTION_NOT_FOUND",
-        )
 
     # Verify current status is "pending"
     if scheduled_execution.status != "pending":

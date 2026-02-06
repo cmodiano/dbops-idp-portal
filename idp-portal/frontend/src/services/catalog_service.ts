@@ -46,10 +46,12 @@ export interface CatalogTagWithCount {
   action_count: number;
 }
 
-/** Full action detail from GET /catalog/actions/{id} (Story 3.2). */
+/** Full action detail from GET /catalog/actions/{id} (Story 3.2; Story 13.2: requires_target). */
 export interface CatalogActionDetail extends CatalogAction {
   execution_steps?: unknown[];
   change_type_config?: Record<string, unknown>;
+  /** Story 13.2, AC3: Whether action requires target selection (default true). */
+  requires_target?: boolean;
 }
 
 /** Response from GET /catalog/actions/{id} (Story 3.2, AC3). */

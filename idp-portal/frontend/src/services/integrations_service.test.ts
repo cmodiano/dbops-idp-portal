@@ -40,7 +40,7 @@ describe('integrations_service', () => {
     const result = await getIntegrations();
     expect(result).toEqual([base]);
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/admin/integrations',
+      '/api/v1/admin/integrations/',
       expect.objectContaining({ headers: expect.any(Object) })
     );
   });
@@ -68,7 +68,7 @@ describe('integrations_service', () => {
     const result = await getIntegration(1);
     expect(result).toEqual(base);
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/admin/integrations/1',
+      '/api/v1/admin/integrations/1/',
       expect.any(Object)
     );
   });
@@ -91,7 +91,7 @@ describe('integrations_service', () => {
     const result = await createIntegration(payload);
     expect(result).toEqual(base);
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/admin/integrations',
+      '/api/v1/admin/integrations/',
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify(payload),
@@ -111,7 +111,7 @@ describe('integrations_service', () => {
     const result = await updateIntegration(1, payload);
     expect(result.name).toBe('AAP Updated');
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/admin/integrations/1',
+      '/api/v1/admin/integrations/1/',
       expect.objectContaining({
         method: 'PUT',
         body: JSON.stringify(payload),
@@ -129,7 +129,7 @@ describe('integrations_service', () => {
 
     await deleteIntegration(1);
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/admin/integrations/1',
+      '/api/v1/admin/integrations/1/',
       expect.objectContaining({ method: 'DELETE' })
     );
   });

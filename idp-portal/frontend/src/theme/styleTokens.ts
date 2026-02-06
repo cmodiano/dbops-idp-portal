@@ -18,6 +18,13 @@ export const STYLE_TOKENS = {
     'SQL Server': '#3B82F6',
     DB2: '#10B981',
   } as const,
+  /** Platform (execution) icon colors. */
+  platformIconColor: {
+    AAP: '#EE0000',
+    'GitHub Actions': '#24292f',
+    'Azure DevOps': '#0078D4',
+    Terraform: '#7B42BC',
+  } as const,
   /** Impact indicator colors (triple coding, UX spec). */
   impactColor: {
     low: '#10B981',

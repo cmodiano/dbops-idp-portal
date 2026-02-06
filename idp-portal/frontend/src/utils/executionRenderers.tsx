@@ -15,6 +15,9 @@ import {
   HddOutlined,
   ApartmentOutlined,
   ApiOutlined,
+  RocketOutlined,
+  ThunderboltOutlined,
+  CloudOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
   ClockCircleOutlined,
@@ -23,8 +26,9 @@ import {
   StopOutlined,
   MinusCircleOutlined,
 } from '@ant-design/icons';
-import type { ActionEngine, ItemType, ExecutionStatusType } from '../types/api';
+import type { ActionEngine, ActionPlatform, ItemType, ExecutionStatusType } from '../types/api';
 import { STYLE_TOKENS } from '../theme/styleTokens';
+import { getIconUrl } from './iconUrl';
 
 /** Engine icon size in execution tables (px) - smaller than ActionCard for table context. */
 const ENGINE_ICON_SIZE = 20;
@@ -38,6 +42,62 @@ const ENGINE_ICONS: Record<ActionEngine, { Icon: React.ComponentType<{ style?: R
 
 /** Workflow icon color (violet). */
 const WORKFLOW_ICON_COLOR = '#722ed1';
+
+/** Platform (execution) icons: platform name → Icon + color. Action.platform is mandatory for actions. */
+const PLATFORM_ICONS: Record<ActionPlatform, { Icon: React.ComponentType<{ style?: React.CSSProperties }>; color: string }> = {
+  AAP: { Icon: RocketOutlined, color: STYLE_TOKENS.platformIconColor.AAP },
+  'GitHub Actions': { Icon: ThunderboltOutlined, color: STYLE_TOKENS.platformIconColor['GitHub Actions'] },
+  'Azure DevOps': { Icon: CloudOutlined, color: STYLE_TOKENS.platformIconColor['Azure DevOps'] },
+  Terraform: { Icon: ApartmentOutlined, color: STYLE_TOKENS.platformIconColor.Terraform },
+};
+
+/**
+ * Render execution platform icon for Plateforme column (AC5).
+ * Uses action.platform (mandatory for actions) — distinct from integration, which may not be a platform.
+ *
+ * @param platform - Execution platform from Action (AAP, GitHub Actions, Azure DevOps, Terraform)
+ */
+export function renderPlatformIcon(platform: ActionPlatform | string | null | undefined): React.ReactNode {
+  if (!platform) {
+    return <span style={{ color: '#d9d9d9' }}>—</span>;
+  }
+
+  const config = PLATFORM_ICONS[platform as ActionPlatform];
+  if (!config) {
+    return (
+      <Tooltip title={platform}>
+        <span title={platform} style={{ fontSize: 12, opacity: 0.6 }}>{platform}</span>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <Tooltip title={platform}>
+      <config.Icon style={{ fontSize: ENGINE_ICON_SIZE, color: config.color }} />
+    </Tooltip>
+  );
+}
+
+/**
+ * Render Plateforme column icon (AC5).
+ * Prefers integration icon when defined; otherwise falls back to execution platform icon.
+ *
+ * @param integrationName - Integration name (from action.integration)
+ * @param integrationIcon - Integration icon URL (user-defined in integration)
+ * @param platform - Execution platform from Action (fallback when no integration icon)
+ */
+export function renderPlateformeIcon(
+  integrationName: string | null | undefined,
+  integrationIcon: string | null | undefined,
+  platform?: ActionPlatform | string | null,
+): React.ReactNode {
+  // Prefer integration icon when available (user-defined in integration)
+  const hasIntegration = integrationName || integrationIcon;
+  if (hasIntegration) {
+    return renderIntegrationIcon(integrationName, integrationIcon, platform);
+  }
+  return renderPlatformIcon(platform);
+}
 
 /**
  * Render engine icon for Technologie column (AC4).
@@ -80,24 +140,28 @@ export function renderEngineIcon(
 
 /**
  * Render integration icon for Plateforme column (AC5).
+ * Uses integration when available, falls back to action.platform when integration is null.
  *
- * @param integrationName - Integration name for tooltip
+ * @param integrationName - Integration name for tooltip (from INTEGRATIONS)
  * @param integrationIcon - Integration icon URL (from INTEGRATIONS.ICON)
- * @returns React node with Avatar + tooltip
+ * @param platform - Action platform (AAP, GitHub Actions, etc.) - fallback when no integration
  */
 export function renderIntegrationIcon(
   integrationName: string | null | undefined,
   integrationIcon: string | null | undefined,
+  platform?: string | null,
 ): React.ReactNode {
-  // No integration - fallback
-  if (!integrationName) {
+  const label = integrationName || platform;
+  if (!label) {
     return <span style={{ color: '#d9d9d9' }}>—</span>;
   }
 
+  const iconSrc = getIconUrl(integrationIcon);
+
   return (
-    <Tooltip title={integrationName}>
+    <Tooltip title={label}>
       <Avatar
-        src={integrationIcon || undefined}
+        src={iconSrc}
         shape="square"
         size={ENGINE_ICON_SIZE}
         icon={<ApiOutlined />}
@@ -167,4 +231,6 @@ export const STATUS_CONFIG: Record<
 
 /** Engine icons config for RecentExecutions component (legacy compatibility). */
 export const ENGINE_ICONS_CONFIG = ENGINE_ICONS;
+/** Platform icons config for tests. */
+export const PLATFORM_ICONS_CONFIG = PLATFORM_ICONS;
 export const ENGINE_ICON_SIZE_VALUE = ENGINE_ICON_SIZE;
