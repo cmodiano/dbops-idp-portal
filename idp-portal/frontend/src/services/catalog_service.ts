@@ -149,14 +149,17 @@ export async function fetchCatalogActionById(
   id: number
 ): Promise<CatalogActionDetailResponse> {
   const response = await apiFetchRaw<{
-    data: CatalogActionDetail;
-    can_execute: boolean;
-    allowed_environments: string[];
+    data: CatalogActionDetail & { can_execute?: boolean; allowed_environments?: string[] };
+    can_execute?: boolean;
+    allowed_environments?: string[];
   }>(`/catalog/actions/${id}/`);
+  // API returns can_execute/allowed_environments inside data
+  const canExecute = response.can_execute ?? response.data?.can_execute ?? false;
+  const allowedEnvs = response.allowed_environments ?? response.data?.allowed_environments ?? [];
   return {
     data: response.data,
-    can_execute: response.can_execute ?? false,
-    allowed_environments: response.allowed_environments ?? [],
+    can_execute: canExecute,
+    allowed_environments: allowedEnvs,
   };
 }
 

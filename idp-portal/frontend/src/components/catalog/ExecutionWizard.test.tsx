@@ -30,7 +30,6 @@ const mockEnvironments: InventoryItem[] = [
 // Mock the execution service
 vi.mock('../../services/execution_service', () => ({
   submitExecution: vi.fn(),
-  // Default: return environments for environment selector (French labels), empty for others
   fetchInventoryItems: vi.fn().mockImplementation(async (type: string) => {
     if (type === 'environments') {
       return [
@@ -41,6 +40,7 @@ vi.mock('../../services/execution_service', () => ({
     }
     return [];
   }),
+  fetchInventoryTargets: vi.fn().mockResolvedValue([]),
 }));
 
 // Wrapper with Ant Design App context

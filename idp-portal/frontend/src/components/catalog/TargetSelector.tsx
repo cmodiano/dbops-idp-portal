@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Select, Badge, Alert, Spin, Empty } from 'antd';
 import type { DefaultOptionType } from 'antd/es/select';
-import { apiFetch } from '../../services/api_client';
+import { apiFetchRaw } from '../../services/api_client';
 import { useDebounce } from '../../hooks/useDebounce';
 
 /** Target from inventory API */
@@ -78,7 +78,8 @@ async function fetchTargets(search?: string): Promise<TargetsResponse> {
     params.set('search', search);
   }
 
-  return apiFetch<TargetsResponse>(`/inventory/targets?${params.toString()}`);
+  // Inventory API returns { items, total, page, ... } directly (no data wrapper)
+  return apiFetchRaw<TargetsResponse>(`/inventory/targets?${params.toString()}`);
 }
 
 export function TargetSelector({
@@ -105,7 +106,7 @@ export function TargetSelector({
     fetchTargets(debouncedSearch || undefined)
       .then((response) => {
         if (!cancelled) {
-          setTargets(response.items || []);
+          setTargets(response?.items ?? []);
         }
       })
       .catch((err) => {

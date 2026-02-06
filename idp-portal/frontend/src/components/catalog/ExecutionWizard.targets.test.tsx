@@ -38,14 +38,15 @@ const mockEnvironmentsResponse = [
   { id: 'prod', name: 'Production', environment: null },
 ];
 
-// Mock the API client
+// Mock the API client (TargetSelector and fetchInventoryTargets use apiFetchRaw)
 vi.mock('../../services/api_client', () => ({
   apiFetch: vi.fn(),
+  apiFetchRaw: vi.fn(),
 }));
 
-import { apiFetch } from '../../services/api_client';
+import { apiFetchRaw } from '../../services/api_client';
 
-const mockApiFetch = apiFetch as ReturnType<typeof vi.fn>;
+const mockApiFetchRaw = apiFetchRaw as ReturnType<typeof vi.fn>;
 
 // Mock the execution service
 vi.mock('../../services/execution_service', () => ({
@@ -60,6 +61,12 @@ vi.mock('../../services/execution_service', () => ({
     }
     return [];
   }),
+  fetchInventoryTargets: vi.fn().mockResolvedValue([
+    { name: 'srv-dev-01', environment: 'dev', target_type: 'server', metadata: null },
+    { name: 'srv-dev-02', environment: 'dev', target_type: 'server', metadata: null },
+    { name: 'srv-staging-01', environment: 'staging', target_type: 'server', metadata: null },
+    { name: 'db-prod-01', environment: 'prod', target_type: 'database', metadata: null },
+  ]),
 }));
 
 // Wrapper with Ant Design App context
@@ -110,12 +117,11 @@ describe('ExecutionWizard - Target Selection (Story 13.2)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Re-establish the mock implementation after clearAllMocks
-    mockApiFetch.mockImplementation(async (url: string) => {
+    mockApiFetchRaw.mockImplementation(async (url: string) => {
       if (url.includes('/inventory/targets')) {
         return mockTargetsResponse;
       }
-      return [];
+      return { items: [], total: 0, page: 1, page_size: 100, total_pages: 0 };
     });
   });
 
@@ -143,7 +149,7 @@ describe('ExecutionWizard - Target Selection (Story 13.2)', () => {
       render(<ExecutionWizard {...defaultProps} />, { wrapper: TestWrapper });
 
       await waitFor(() => {
-        expect(screen.getByText('Selectionnez une cible')).toBeInTheDocument();
+        expect(screen.getByText('Selectionnez une ou plusieurs cibles')).toBeInTheDocument();
       });
     });
 
@@ -151,7 +157,7 @@ describe('ExecutionWizard - Target Selection (Story 13.2)', () => {
       render(<ExecutionWizard {...defaultProps} />, { wrapper: TestWrapper });
 
       await waitFor(() => {
-        expect(screen.getByText('Selectionnez une cible')).toBeInTheDocument();
+        expect(screen.getByText('Selectionnez une ou plusieurs cibles')).toBeInTheDocument();
       });
 
       const nextButton = screen.getByRole('button', { name: /suivant/i });
@@ -161,9 +167,9 @@ describe('ExecutionWizard - Target Selection (Story 13.2)', () => {
     it('loads targets and renders options in dropdown', async () => {
       render(<ExecutionWizard {...defaultProps} />, { wrapper: TestWrapper });
 
-      // Wait for targets to load (API call)
+      // Wait for targets to load (API call via apiFetchRaw)
       await waitFor(() => {
-        expect(mockApiFetch).toHaveBeenCalledWith(
+        expect(mockApiFetchRaw).toHaveBeenCalledWith(
           expect.stringContaining('/inventory/targets')
         );
       });
@@ -192,7 +198,7 @@ describe('ExecutionWizard - Target Selection (Story 13.2)', () => {
 
       // Wait for targets to load
       await waitFor(() => {
-        expect(mockApiFetch).toHaveBeenCalledWith(
+        expect(mockApiFetchRaw).toHaveBeenCalledWith(
           expect.stringContaining('/inventory/targets')
         );
       });
@@ -221,7 +227,7 @@ describe('ExecutionWizard - Target Selection (Story 13.2)', () => {
 
       // Wait for targets to load
       await waitFor(() => {
-        expect(mockApiFetch).toHaveBeenCalledWith(
+        expect(mockApiFetchRaw).toHaveBeenCalledWith(
           expect.stringContaining('/inventory/targets')
         );
       });
@@ -267,14 +273,14 @@ describe('ExecutionWizard - Target Selection (Story 13.2)', () => {
 
       // Wait for targets to load via API
       await waitFor(() => {
-        expect(mockApiFetch).toHaveBeenCalledWith(
+        expect(mockApiFetchRaw).toHaveBeenCalledWith(
           expect.stringContaining('/inventory/targets')
         );
       });
 
       // Verify the API was called with correct parameters
-      expect(mockApiFetch).toHaveBeenCalledWith(
-        expect.stringMatching(/\/inventory\/targets\?page=1&page_size=100/)
+      expect(mockApiFetchRaw).toHaveBeenCalledWith(
+        expect.stringMatching(/\/inventory\/targets\?page=1&page_size=/)
       );
     });
   });
@@ -285,7 +291,7 @@ describe('ExecutionWizard - Target Selection (Story 13.2)', () => {
 
       // Wait for targets to load
       await waitFor(() => {
-        expect(mockApiFetch).toHaveBeenCalledWith(
+        expect(mockApiFetchRaw).toHaveBeenCalledWith(
           expect.stringContaining('/inventory/targets')
         );
       });

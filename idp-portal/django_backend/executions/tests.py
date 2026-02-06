@@ -668,3 +668,6 @@ class ExecutionRBACMultiProfileTests(TestCase):
             }, format='json')
 
         self.assertEqual(response.status_code, 201)
+
+
+# Story 13.4 tests: see executions/tests/test_story_13_4.py (single source of truth)

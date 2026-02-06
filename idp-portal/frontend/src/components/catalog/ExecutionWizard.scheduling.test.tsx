@@ -39,6 +39,7 @@ vi.mock('../../services/execution_service', () => ({
     }
     return [];
   }),
+  fetchInventoryTargets: vi.fn().mockResolvedValue([]),
 }));
 
 // Mock the scheduled execution service
@@ -79,6 +80,7 @@ const mockAction: CatalogActionDetail = {
   created_at: '2026-01-29T00:00:00Z',
   updated_at: null,
   tags: ['oracle', 'provisioning'],
+  requires_target: false,
   change_type_config: {
     DEV: { required: false, change_model_code: null },
     STAGING: { required: false, change_model_code: null },

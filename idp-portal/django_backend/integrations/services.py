@@ -37,6 +37,24 @@ class IntegrationService:
         Raises:
             InvalidStateError: If config doesn't match schema (code INVALID_CONFIG)
         """
+        # inventory_db uses schema/table for DB inventory - skip strict auth schema
+        if (integration_type or '').lower() == 'inventory_db':
+            if not isinstance(config, dict):
+                raise InvalidStateError(
+                    code="INVALID_CONFIG",
+                    message="Config must be a JSON object",
+                    details={"field": "root", "error": "Config must be a JSON object"}
+                )
+            for key in ('schema', 'table'):
+                val = config.get(key)
+                if val is not None and not isinstance(val, str):
+                    raise InvalidStateError(
+                        code="INVALID_CONFIG",
+                        message=f"{key} must be a string",
+                        details={"field": key}
+                    )
+            return True
+
         from integrations.validation import validate_integration_config
         validate_integration_config(config)
         return True

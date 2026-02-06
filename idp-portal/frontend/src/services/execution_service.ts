@@ -6,6 +6,36 @@
  */
 
 import { apiFetch, apiFetchRaw } from './api_client';
+
+/** Target from inventory API (for pattern/manual resolution). */
+export interface InventoryTarget {
+  name: string;
+  environment: string;
+  target_type: string;
+  metadata: Record<string, unknown> | null;
+}
+
+/** Response from GET /inventory/targets */
+interface TargetsResponse {
+  items: InventoryTarget[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+/**
+ * Fetch targets from inventory API (RBAC filtered).
+ * Used for pattern resolution and manual target validation.
+ */
+export async function fetchInventoryTargets(search?: string): Promise<InventoryTarget[]> {
+  const params = new URLSearchParams();
+  params.set('page', '1');
+  params.set('page_size', '5000');
+  if (search) params.set('search', search);
+  const response = await apiFetchRaw<TargetsResponse>(`/inventory/targets?${params.toString()}`);
+  return response?.items ?? [];
+}
 import type {
   ExecutionCreateRequest,
   ExecutionCreateResponse,

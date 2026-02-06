@@ -9,7 +9,7 @@
  * Features:
  * - Engine icon (Oracle, SQL Server, DB2) for actions
  * - Workflow icon (ApartmentOutlined) for workflows (Story 5.7, AC3)
- * - Title (1 line, truncated)
+ * - Title (2 lines, truncated)
  * - Description (2 lines, truncated) - sanitized in business variant
  * - ImpactIndicator (triple coding)
  * - Tags (max 3 visible + "+N more")
@@ -149,11 +149,15 @@ export function ActionCard({
             overflow: 'hidden',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, minWidth: 0, flex: 1 }}>
             {icon}
-            <Text strong style={{ fontSize: 16 }} ellipsis={{ tooltip: action.name }}>
+            <Paragraph
+              strong
+              style={{ margin: 0, fontSize: 16, lineHeight: 1.4 }}
+              ellipsis={{ rows: 2, tooltip: action.name }}
+            >
               {action.name || 'Sans nom'}
-            </Text>
+            </Paragraph>
           </div>
           {action.impact_level && (
             <span style={{ flexShrink: 0 }}>

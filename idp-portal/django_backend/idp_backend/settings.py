@@ -96,6 +96,8 @@ WSGI_APPLICATION = 'idp_backend.wsgi.application'
 
 # Oracle Database configuration
 # Uses same environment variables as FastAPI backend
+# ORACLE_CLIENT_LIB: path to Oracle Instant Client dir (enables thick mode, required for
+#   TIMESTAMP WITH TIME ZONE / DPY-3022 "named time zones not supported in thin mode")
 ORACLE_DSN = os.getenv('ORACLE_DSN', 'localhost:1521/FREEPDB1')
 ORACLE_USER = os.getenv('ORACLE_USER', 'idp_app')
 ORACLE_PASSWORD = os.getenv('ORACLE_PASSWORD', 'changeme')

@@ -44,16 +44,18 @@ import type {
   RemediationSuggestion,
   RecurringPatternRequest,
 } from '../../types/api';
-import { submitExecution, fetchInventoryItems } from '../../services/execution_service';
+import { submitExecution, fetchInventoryItems, fetchInventoryTargets } from '../../services/execution_service';
 import { createScheduledExecution, validateCronExpression, getCronNextExecutions } from '../../services/scheduled_execution_service';
 import { CRON_PRESETS } from '../../utils/cronHelper';
 import CronExpressionHelper from '../shared/CronExpressionHelper';
 import { debounce } from '../../utils/debounce';
+import { useDebounce } from '../../hooks/useDebounce';
 import { ImpactIndicator } from '../shared/ImpactIndicator';
 import { ExecutionTimeline } from '../execution';
 import { STYLE_TOKENS } from '../../theme/styleTokens';
 import { sanitizeDescription } from '../../utils/businessLanguage';
 import { TargetSelector, type Target } from './TargetSelector';
+import { matchGlob } from '../../utils/globMatch';
 
 dayjs.extend(utc);
 
@@ -217,27 +219,52 @@ export function ExecutionWizard({
   // Persisted state across steps
   // Story 13.2: Replace selectedEnvironment with selectedTargets
   const [selectedTargets, setSelectedTargets] = useState<Target[]>([]);
+  // Multi-target: input mode (list, pattern, manual)
+  const [targetInputMode, setTargetInputMode] = useState<'list' | 'pattern' | 'manual'>('list');
+  const [targetPattern, setTargetPattern] = useState('');
+  const [manualTargetInput, setManualTargetInput] = useState('');
+  const [resolvedPatternTargets, setResolvedPatternTargets] = useState<Target[]>([]);
+  const [patternResolving, setPatternResolving] = useState(false);
   // Legacy: keep selectedEnvironment for backward compatibility (actions without targets)
   const [selectedEnvironment, setSelectedEnvironment] = useState<ExecutionEnvironment | null>(null);
   const [parameters, setParameters] = useState<Record<string, unknown>>({});
 
+  // Multi-target: effective target names for submit (list, pattern, manual)
+  const effectiveTargetNames = useMemo((): string[] => {
+    if (targetInputMode === 'list') return selectedTargets.map((t) => t.name);
+    if (targetInputMode === 'pattern') return resolvedPatternTargets.map((t) => t.name);
+    if (targetInputMode === 'manual') {
+      return manualTargetInput
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+    return [];
+  }, [targetInputMode, selectedTargets, resolvedPatternTargets, manualTargetInput]);
+
   // Story 13.2, Task 2: Derive environment from selected targets (AC2)
   const derivedEnvironment = useMemo((): ExecutionEnvironment | null => {
-    if (selectedTargets.length === 0) {
-      // Fallback to legacy selectedEnvironment if no targets
-      return selectedEnvironment;
+    if (targetInputMode === 'list' && selectedTargets.length > 0) {
+      const firstEnv = selectedTargets[0]?.environment as ExecutionEnvironment;
+      return firstEnv ?? null;
     }
-    // All targets should have the same environment (enforced by RBAC profile)
-    const firstEnv = selectedTargets[0]?.environment as ExecutionEnvironment;
-    return firstEnv ?? null;
-  }, [selectedTargets, selectedEnvironment]);
+    if (targetInputMode === 'pattern' && resolvedPatternTargets.length > 0) {
+      const firstEnv = resolvedPatternTargets[0]?.environment as ExecutionEnvironment;
+      return firstEnv ?? null;
+    }
+    if (targetInputMode === 'manual' || targetInputMode === 'list') {
+      if (selectedTargets.length === 0) return selectedEnvironment;
+    }
+    return selectedEnvironment;
+  }, [targetInputMode, selectedTargets, resolvedPatternTargets, selectedEnvironment]);
 
   // Story 13.2, Task 2.3: Check if targets have mixed environments
+  const targetsToCheck = targetInputMode === 'pattern' ? resolvedPatternTargets : selectedTargets;
   const hasMixedEnvironments = useMemo((): boolean => {
-    if (selectedTargets.length <= 1) return false;
-    const environments = new Set(selectedTargets.map((t) => t.environment));
+    if (targetsToCheck.length <= 1) return false;
+    const environments = new Set(targetsToCheck.map((t) => t.environment));
     return environments.size > 1;
-  }, [selectedTargets]);
+  }, [targetsToCheck]);
 
   // Story 13.2, Task 3: Check if action requires targets
   const requiresTarget = action?.requires_target !== false;
@@ -307,6 +334,10 @@ export function ExecutionWizard({
       form.resetFields();
       // Story 13.2: Reset targets state
       setSelectedTargets([]);
+      setTargetInputMode('list');
+      setTargetPattern('');
+      setManualTargetInput('');
+      setResolvedPatternTargets([]);
       // Story 11.5, 11.7: Reset scheduling state
       setIsScheduling(false);
       setScheduledAt(null);
@@ -358,12 +389,13 @@ export function ExecutionWizard({
   const lastInventoryEnvRef = useRef<string | null>(null);
 
   // Load inventory data for fields that need it (only on step 2 with environment selected)
+  const envForInventory = selectedEnvironment || derivedEnvironment;
   useEffect(() => {
     // Only load inventory when:
     // 1. Modal is open with an action
     // 2. User is on step 2 (parameters step, index 1)
-    // 3. Environment has been selected
-    if (!open || !action || currentStep !== 1 || !selectedEnvironment) return;
+    // 3. Environment has been selected or derived from targets
+    if (!open || !action || currentStep !== 1 || !envForInventory) return;
 
     const sourcesToLoad = new Set<'databases' | 'servers'>();
     parameterFields.forEach((field) => {
@@ -375,9 +407,9 @@ export function ExecutionWizard({
     if (sourcesToLoad.size === 0) return;
 
     // Check if environment changed - if so, clear cache and re-fetch
-    const envChanged = lastInventoryEnvRef.current !== selectedEnvironment;
+    const envChanged = lastInventoryEnvRef.current !== envForInventory;
     if (envChanged) {
-      lastInventoryEnvRef.current = selectedEnvironment;
+      lastInventoryEnvRef.current = envForInventory;
     }
 
     // Check cache first (skip if environment changed)
@@ -401,7 +433,7 @@ export function ExecutionWizard({
     Promise.all(
       toFetch.map(async (source) => {
         try {
-          const items = await fetchInventoryItems(source, selectedEnvironment);
+          const items = await fetchInventoryItems(source, envForInventory);
           setInventoryWarnings((prev) => ({ ...prev, [source]: false }));
           return [source, items] as const;
         } catch (err: unknown) {
@@ -424,7 +456,7 @@ export function ExecutionWizard({
         setInventoryData(data);
       })
       .finally(() => setLoadingInventory(false));
-  }, [open, action, currentStep, parameterFields, selectedEnvironment, inventoryData]);
+  }, [open, action, currentStep, parameterFields, envForInventory, inventoryData]);
 
   // Focus first field when step changes
   useEffect(() => {
@@ -432,6 +464,30 @@ export function ExecutionWizard({
       setTimeout(() => firstFieldRef.current?.focus(), 100);
     }
   }, [open, currentStep]);
+
+  // Multi-target: resolve pattern when targetPattern changes (debounced)
+  const debouncedTargetPattern = useDebounce(targetPattern.trim(), 400);
+  useEffect(() => {
+    if (!open || targetInputMode !== 'pattern' || !debouncedTargetPattern) {
+      setResolvedPatternTargets([]);
+      return;
+    }
+    let cancelled = false;
+    setPatternResolving(true);
+    fetchInventoryTargets()
+      .then((targets) => {
+        if (cancelled) return;
+        const matched = targets.filter((t) => matchGlob(debouncedTargetPattern, t.name));
+        setResolvedPatternTargets(matched as Target[]);
+      })
+      .catch(() => {
+        if (!cancelled) setResolvedPatternTargets([]);
+      })
+      .finally(() => {
+        if (!cancelled) setPatternResolving(false);
+      });
+    return () => { cancelled = true; };
+  }, [open, targetInputMode, debouncedTargetPattern]);
 
   // Handle environment selection
   const handleEnvironmentChange = useCallback((env: ExecutionEnvironment) => {
@@ -443,9 +499,14 @@ export function ExecutionWizard({
     if (currentStep === 0) {
       // Story 13.2: Validate target or environment selection
       if (requiresTarget) {
-        // Target-based: validate targets selected
-        if (selectedTargets.length === 0) {
-          notification.warning({ message: 'Veuillez selectionner au moins une cible.' });
+        // Target-based: validate targets (list, pattern, or manual)
+        if (effectiveTargetNames.length === 0) {
+          const msg = targetInputMode === 'pattern'
+            ? 'Entrez un pattern (ex: srv-dev-*) et attendez la resolution.'
+            : targetInputMode === 'manual'
+              ? 'Entrez une ou plusieurs cibles, separees par des virgules.'
+              : 'Veuillez selectionner au moins une cible.';
+          notification.warning({ message: msg });
           return;
         }
         // Story 13.2, Task 2.3: Warn if mixed environments
@@ -472,7 +533,7 @@ export function ExecutionWizard({
       }
     }
     setCurrentStep((s) => Math.min(s + 1, 2));
-  }, [currentStep, selectedEnvironment, selectedTargets, requiresTarget, hasMixedEnvironments, form, notification]);
+  }, [currentStep, selectedEnvironment, effectiveTargetNames, targetInputMode, requiresTarget, hasMixedEnvironments, form, notification]);
 
   const handlePrev = useCallback(() => {
     setCurrentStep((s) => Math.max(s - 1, 0));
@@ -545,8 +606,8 @@ export function ExecutionWizard({
 
   // Handle submission
   const handleSubmit = useCallback(async () => {
-    // Story 13.2: Use derivedEnvironment (from targets or legacy selection)
-    if (!action || !derivedEnvironment) {
+    // Story 13.2: Use derivedEnvironment or target_names (backend derives env from targets)
+    if (!action || (!derivedEnvironment && effectiveTargetNames.length === 0)) {
       notification.warning({
         message: 'Donnees incompletes',
         description: 'Veuillez completer toutes les etapes du wizard.',
@@ -569,8 +630,8 @@ export function ExecutionWizard({
     setSubmitError(null);
 
     try {
-      // Story 13.2, Task 4: Submit with target_names if targets selected
-      const targetNames = selectedTargets.length > 0 ? selectedTargets.map((t) => t.name) : undefined;
+      // Story 13.2, Task 4: Submit with target_names (list, pattern, or manual)
+      const targetNames = effectiveTargetNames.length > 0 ? effectiveTargetNames : undefined;
 
       const response = await submitExecution({
         action_id: action.id,
@@ -610,7 +671,7 @@ export function ExecutionWizard({
     } finally {
       setSubmitting(false);
     }
-  }, [action, derivedEnvironment, selectedTargets, parameters, notification, onSuccess, parentExecutionId]);
+  }, [action, derivedEnvironment, effectiveTargetNames, parameters, notification, onSuccess, parentExecutionId]);
 
   // Story 11.5: Handle scheduled execution error messages (AC6)
   const getSchedulingErrorMessage = useCallback((error: Error & { code?: string; message?: string }) => {
@@ -679,20 +740,26 @@ export function ExecutionWizard({
       let recurringPattern: RecurringPatternRequest | undefined;
 
       if (schedulingType === 'daily') {
+        // User enters local time → convert to UTC for storage
+        const localMoment = dayjs().hour(dailyHour).minute(dailyMinute).second(0).millisecond(0);
+        const utcMoment = localMoment.utc();
         recurringPattern = {
           pattern_type: 'daily',
           pattern_config: {
-            hour: dailyHour,
-            minute: dailyMinute,
+            hour: utcMoment.hour(),
+            minute: utcMoment.minute(),
           },
         };
       } else if (schedulingType === 'weekly') {
+        // User enters local time → convert to UTC for storage (day_of_week can change across TZ boundary)
+        const localMoment = dayjs().isoWeekday(weeklyDayOfWeek).hour(weeklyHour).minute(weeklyMinute).second(0).millisecond(0);
+        const utcMoment = localMoment.utc();
         recurringPattern = {
           pattern_type: 'weekly',
           pattern_config: {
-            day_of_week: weeklyDayOfWeek,
-            hour: weeklyHour,
-            minute: weeklyMinute,
+            day_of_week: utcMoment.isoWeekday(),
+            hour: utcMoment.hour(),
+            minute: utcMoment.minute(),
           },
         };
       } else if (schedulingType === 'cron') {
@@ -724,9 +791,9 @@ export function ExecutionWizard({
       if (recurringPattern) {
         let scheduleText = '';
         if (schedulingType === 'daily') {
-          scheduleText = `Tous les jours à ${String(dailyHour).padStart(2, '0')}:${String(dailyMinute).padStart(2, '0')} (UTC)`;
+          scheduleText = `Tous les jours à ${String(dailyHour).padStart(2, '0')}:${String(dailyMinute).padStart(2, '0')} (heure locale)`;
         } else if (schedulingType === 'weekly') {
-          scheduleText = `Tous les ${['', 'lundis', 'mardis', 'mercredis', 'jeudis', 'vendredis', 'samedis', 'dimanches'][weeklyDayOfWeek]} à ${String(weeklyHour).padStart(2, '0')}:${String(weeklyMinute).padStart(2, '0')} (UTC)`;
+          scheduleText = `Tous les ${['', 'lundis', 'mardis', 'mercredis', 'jeudis', 'vendredis', 'samedis', 'dimanches'][weeklyDayOfWeek]} à ${String(weeklyHour).padStart(2, '0')}:${String(weeklyMinute).padStart(2, '0')} (heure locale)`;
         } else if (schedulingType === 'cron') {
           scheduleText = `Expression cron : ${cronExpression}`;
         }
@@ -738,7 +805,7 @@ export function ExecutionWizard({
       } else {
         notification.success({
           message: 'Exécution planifiée',
-          description: `Exécution planifiée pour le ${scheduledAt?.utc().format('DD/MM/YYYY [à] HH:mm')} (UTC)`,
+          description: `Exécution planifiée pour le ${scheduledAt?.format('DD/MM/YYYY [à] HH:mm')} (heure locale)`,
         });
       }
 
@@ -800,19 +867,82 @@ export function ExecutionWizard({
       {requiresTarget ? (
         <>
           <Form.Item
-            label={variant === 'simplified' ? 'Cible' : 'Cible(s)'}
+            label={variant === 'simplified' ? 'Mode de selection' : 'Comment choisir les cibles?'}
             required
-            tooltip={variant === 'simplified' ? undefined : 'Selectionnez la ou les cibles sur lesquelles executer l\'action.'}
           >
-            <TargetSelector
-              inputRef={firstFieldRef as React.Ref<HTMLElement>}
-              multiple={false} // Single selection by default; can be extended to support multiple
-              value={selectedTargets}
-              onChange={setSelectedTargets}
-              placeholder="Selectionnez une cible"
-              ariaLabel="Selection de cible"
-            />
+            <Radio.Group
+              value={targetInputMode}
+              onChange={(e) => setTargetInputMode(e.target.value)}
+              optionType="button"
+              buttonStyle="solid"
+            >
+              <Radio.Button value="list">Liste</Radio.Button>
+              <Radio.Button value="pattern">Pattern</Radio.Button>
+              <Radio.Button value="manual">Saisie manuelle</Radio.Button>
+            </Radio.Group>
           </Form.Item>
+
+          {targetInputMode === 'list' && (
+            <Form.Item
+              label={variant === 'simplified' ? 'Cible(s)' : 'Cible(s)'}
+              required
+              tooltip={variant === 'simplified' ? undefined : 'Selectionnez une ou plusieurs cibles dans la liste.'}
+            >
+              <TargetSelector
+                inputRef={firstFieldRef as React.Ref<HTMLElement>}
+                multiple
+                value={selectedTargets}
+                onChange={setSelectedTargets}
+                placeholder="Selectionnez une ou plusieurs cibles"
+                ariaLabel="Selection de cibles"
+              />
+            </Form.Item>
+          )}
+
+          {targetInputMode === 'pattern' && (
+            <Form.Item
+              label="Pattern"
+              required
+              tooltip="Utilisez * pour tout correspondre et ? pour un caractere (ex: srv-dev-*, assurance-*)"
+            >
+              <Input
+                ref={firstFieldRef as React.Ref<HTMLInputElement>}
+                value={targetPattern}
+                onChange={(e) => setTargetPattern(e.target.value)}
+                placeholder="ex: srv-dev-* ou assurance-*"
+                aria-label="Pattern de cibles"
+                suffix={patternResolving ? <LoadingOutlined spin /> : null}
+              />
+              {targetPattern && !patternResolving && (
+                <Text type="secondary" style={{ fontSize: 12, marginTop: 4, display: 'block' }}>
+                  {resolvedPatternTargets.length} cible(s) correspondante(s)
+                  {resolvedPatternTargets.length > 0 && `: ${resolvedPatternTargets.map((t) => t.name).slice(0, 5).join(', ')}${resolvedPatternTargets.length > 5 ? '...' : ''}`}
+                </Text>
+              )}
+            </Form.Item>
+          )}
+
+          {targetInputMode === 'manual' && (
+            <Form.Item
+              label="Cibles (séparees par des virgules)"
+              required
+              tooltip="Entrez les noms des cibles, separes par des virgules (ex: srv-01, srv-02, srv-03)"
+            >
+              <Input.TextArea
+                ref={firstFieldRef as React.Ref<any>}
+                value={manualTargetInput}
+                onChange={(e) => setManualTargetInput(e.target.value)}
+                placeholder="ex: srv-dev-01, srv-dev-02, srv-dev-03"
+                aria-label="Liste des cibles"
+                rows={3}
+              />
+              {manualTargetInput && (
+                <Text type="secondary" style={{ fontSize: 12, marginTop: 4, display: 'block' }}>
+                  {manualTargetInput.split(',').map((s) => s.trim()).filter(Boolean).length} cible(s) detectee(s)
+                </Text>
+              )}
+            </Form.Item>
+          )}
 
           {/* Story 13.2, Task 2.3: Warning if targets have mixed environments */}
           {hasMixedEnvironments && (
@@ -1187,7 +1317,7 @@ export function ExecutionWizard({
                     placeholder="Sélectionner une date/heure"
                     aria-label="Date et heure d'exécution planifiée"
                   />
-                  <Tooltip title="Fuseau horaire : UTC (serveur). La date sera convertie automatiquement.">
+                  <Tooltip title="Heure locale. Convertie automatiquement en UTC pour le stockage.">
                     <InfoCircleOutlined style={{ color: '#8c8c8c', cursor: 'help' }} />
                   </Tooltip>
                 </Space>
@@ -1196,7 +1326,7 @@ export function ExecutionWizard({
 
             {/* Daily: Hour and Minute selects (Story 11.7, AC2) */}
             {schedulingType === 'daily' && (
-              <Form.Item label="Heure d'exécution (UTC)" required>
+              <Form.Item label="Heure d'exécution (heure locale)" required>
                 <Space>
                   <Select
                     value={dailyHour}
@@ -1224,7 +1354,7 @@ export function ExecutionWizard({
                       </Select.Option>
                     ))}
                   </Select>
-                  <Tooltip title="Fuseau horaire : UTC (serveur).">
+                  <Tooltip title="Heure locale. Convertie en UTC pour le stockage.">
                     <InfoCircleOutlined style={{ color: '#8c8c8c', cursor: 'help' }} />
                   </Tooltip>
                 </Space>
@@ -1233,7 +1363,7 @@ export function ExecutionWizard({
 
             {/* Weekly: Day, Hour and Minute selects (Story 11.7, AC3) */}
             {schedulingType === 'weekly' && (
-              <Form.Item label="Jour et heure d'exécution (UTC)" required>
+              <Form.Item label="Jour et heure (heure locale)" required>
                 <Space>
                   <Select
                     value={weeklyDayOfWeek}
@@ -1276,7 +1406,7 @@ export function ExecutionWizard({
                       </Select.Option>
                     ))}
                   </Select>
-                  <Tooltip title="Fuseau horaire : UTC (serveur).">
+                  <Tooltip title="Heure locale. Convertie en UTC pour le stockage.">
                     <InfoCircleOutlined style={{ color: '#8c8c8c', cursor: 'help' }} />
                   </Tooltip>
                 </Space>

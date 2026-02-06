@@ -171,7 +171,8 @@ class ExecutionsView(APIView):
         """
         Create a new execution.
         Story 13.2: Supports target_names parameter for target-based execution.
-        If target_names is provided, environment is derived from targets (RBAC validated).
+        Story 13.4: target_names is REQUIRED for actions with requires_target=True.
+                   environment is ALWAYS derived from target(s), never passed directly.
         """
         payload = request.data or {}
         action_id = payload.get("action_id")
@@ -182,19 +183,11 @@ class ExecutionsView(APIView):
 
         correlation_id = request.headers.get("X-Idp-Request-Id") or get_correlation_id()
 
-        # Story 13.2, AC4: Either environment or target_names required
         if not action_id:
             raise BadRequestError(
                 code="BAD_REQUEST",
                 message="action_id est requis",
                 details={"action_id": action_id},
-            )
-
-        if not environment and not target_names:
-            raise BadRequestError(
-                code="BAD_REQUEST",
-                message="environment ou target_names est requis",
-                details={"environment": environment, "target_names": target_names},
             )
 
         try:
@@ -203,6 +196,35 @@ class ExecutionsView(APIView):
             raise BadRequestError(code="BAD_REQUEST", message="action_id invalide", details={"action_id": action_id})
         except Action.DoesNotExist:
             raise NotFoundError(code="ACTION_NOT_FOUND", message="Action non trouvée", details={"action_id": action_id})
+
+        # Story 13.4, AC2: Validate target_names vs requires_target
+        requires_target = getattr(action, 'requires_target', True)
+
+        if requires_target:
+            # Story 13.4, Subtask 2.2: target_names REQUIRED for actions requiring targets
+            if not target_names:
+                raise BadRequestError(
+                    code="BAD_REQUEST",
+                    message="target_names est requis pour cette action",
+                    details={"action_id": action_id, "requires_target": True},
+                )
+            # Story 13.4: Warn if environment passed with target_names (deprecated usage)
+            if environment:
+                exec_logger.warning(
+                    "deprecated_environment_with_targets",
+                    message="environment fourni avec target_names sera ignoré (dérivé du target)",
+                    action_id=action_id,
+                    environment=environment,
+                    correlation_id=correlation_id
+                )
+        else:
+            # Action does not require targets - environment OR target_names required
+            if not environment and not target_names:
+                raise BadRequestError(
+                    code="BAD_REQUEST",
+                    message="environment ou target_names est requis",
+                    details={"environment": environment, "target_names": target_names},
+                )
 
         # Story 13.2, Task 5 & 6: Handle target_names with RBAC validation
         if target_names:
@@ -303,6 +325,38 @@ class ExecutionsView(APIView):
                 derived_environment=environment,
                 correlation_id=correlation_id
             )
+
+        # Story 13.4, AC3: Get environment-specific config from action
+        env_upper = (environment or "").upper()
+
+        # Subtask 2.3: Get change_type_config for this environment
+        change_type_config = action.get_change_type_config() or {}
+        env_change_config = change_type_config.get(env_upper, {})
+        change_required = env_change_config.get("required", False)
+        change_model_code = env_change_config.get("change_model_code")
+
+        # Subtask 2.4: Get impact_rules for this environment
+        impact_rules = action.get_impact_rules() or {}
+        env_impact_config = impact_rules.get(env_upper, {})
+        impact_level = env_impact_config.get("impact_level") or env_impact_config.get("level") or action.default_impact_level
+
+        exec_logger.info(
+            "execution_environment_config",
+            action_id=action_id,
+            environment=environment,
+            change_required=change_required,
+            change_model_code=change_model_code,
+            impact_level=impact_level,
+            correlation_id=correlation_id
+        )
+
+        # Store environment config in parameters for downstream use
+        parameters = parameters.copy() if parameters else {}
+        parameters['_env_config'] = {
+            'change_required': change_required,
+            'change_model_code': change_model_code,
+            'impact_level': impact_level,
+        }
 
         execution = ExecutionService().create_execution(
             user=request.user,

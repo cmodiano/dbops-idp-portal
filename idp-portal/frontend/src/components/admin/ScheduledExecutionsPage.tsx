@@ -29,6 +29,7 @@ import {
 import type { TableProps } from 'antd';
 import { ClockCircleOutlined, ReloadOutlined, SyncOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
 import {
   listScheduledExecutions,
   cancelScheduledExecution,
@@ -42,6 +43,7 @@ import type {
   RecurringPatternResponse,
 } from '../../types/api';
 
+dayjs.extend(utc);
 const { RangePicker } = DatePicker;
 
 /** Check if a date is within the next 24 hours and in the future. */
@@ -76,15 +78,21 @@ function formatRecurrenceDisplay(recurringPattern: RecurringPatternResponse): st
     return 'Expression cron';
   }
 
-  const hour = String('hour' in pattern_config ? pattern_config.hour : 0).padStart(2, '0');
-  const minute = String('minute' in pattern_config ? pattern_config.minute : 0).padStart(2, '0');
+  // pattern_config stores UTC; convert to local for display
+  const utcHour = 'hour' in pattern_config ? pattern_config.hour : 0;
+  const utcMinute = 'minute' in pattern_config ? pattern_config.minute : 0;
+  const utcDow = 'day_of_week' in pattern_config ? pattern_config.day_of_week : 1;
+  const utcMoment = dayjs.utc().hour(utcHour).minute(utcMinute).second(0).millisecond(0).isoWeekday(utcDow);
+  const localMoment = utcMoment.local();
+  const hour = localMoment.format('HH');
+  const minute = localMoment.format('mm');
+  const dayOfWeek = localMoment.isoWeekday();
 
   if (pattern_type === 'daily') {
-    return `Tous les jours à ${hour}:${minute} (UTC)`;
+    return `Tous les jours à ${hour}:${minute} (heure locale)`;
   } else if (pattern_type === 'weekly') {
-    const dayOfWeek = 'day_of_week' in pattern_config ? pattern_config.day_of_week : 1;
-    const dayName = DAY_NAMES[dayOfWeek as number] || 'jours';
-    return `Tous les ${dayName} à ${hour}:${minute} (UTC)`;
+    const dayName = DAY_NAMES[dayOfWeek] || 'jours';
+    return `Tous les ${dayName} à ${hour}:${minute} (heure locale)`;
   }
   return '';
 }
@@ -355,7 +363,7 @@ export default function ScheduledExecutionsPage() {
         const soon = isWithin24Hours(scheduledAt);
         return (
           <Space>
-            <span>{scheduledDate.format('DD/MM/YYYY HH:mm')} (UTC)</span>
+            <span>{scheduledDate.format('DD/MM/YYYY HH:mm')} (heure locale)</span>
             {soon && (
               <Tag color="orange" icon={<ClockCircleOutlined />}>
                 Bientôt
@@ -515,7 +523,7 @@ export default function ScheduledExecutionsPage() {
           <Descriptions column={1} size="small" bordered>
             <Descriptions.Item label="Action">{selectedExecution.action_name}</Descriptions.Item>
             <Descriptions.Item label="Planifiée pour">
-              {dayjs(selectedExecution.scheduled_at).format('DD/MM/YYYY à HH:mm')} (UTC)
+              {dayjs(selectedExecution.scheduled_at).format('DD/MM/YYYY à HH:mm')} (heure locale)
             </Descriptions.Item>
             <Descriptions.Item label="Utilisateur">{selectedExecution.user_name}</Descriptions.Item>
           </Descriptions>
@@ -622,7 +630,7 @@ export default function ScheduledExecutionsPage() {
                 </Descriptions.Item>
                 <Descriptions.Item label="Prochaine exécution">
                   {selectedExecution.recurring_pattern.next_execution_date
-                    ? dayjs(selectedExecution.recurring_pattern.next_execution_date).format('DD/MM/YYYY à HH:mm') + ' (UTC)'
+                    ? dayjs(selectedExecution.recurring_pattern.next_execution_date).format('DD/MM/YYYY à HH:mm') + ' (heure locale)'
                     : '—'}
                 </Descriptions.Item>
                 <Descriptions.Item label="Statut récurrence">
@@ -635,7 +643,7 @@ export default function ScheduledExecutionsPage() {
               </>
             ) : (
               <Descriptions.Item label="Date/heure planifiée">
-                {dayjs(selectedExecution.scheduled_at).format('DD/MM/YYYY à HH:mm')} (UTC)
+                {dayjs(selectedExecution.scheduled_at).format('DD/MM/YYYY à HH:mm')} (heure locale)
               </Descriptions.Item>
             )}
             <Descriptions.Item label="Statut exécution">

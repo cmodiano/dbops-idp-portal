@@ -194,8 +194,8 @@ development_status:
     13-1-inventaire-association-target-environnement-api-targets-filtres: done # Code review 2026-02-05: 9 issues fixed (2 CRIT + 3 HIGH + 3 MED + 1 LOW) - SQL injection, admin permission, env normalization
     13-2-wizard-execution-selection-targets-autorises: done # Code review 2026-02-05: fixes applied (audit trail V047, TargetSelector server-side search, backend test target_names success)
     13-3-rbac-environnement-du-target-filtre-targets-par-profil: done # 2026-02-05: Code review + auto-fixes (normalisation env certif→staging, audit EXECUTION/0, inventory_truncated 403, tests rbac_truncated/certif)
-    13-4-refactoring-une-action-unique-validation-backend: backlog
-    13-5-api-standalone-execution-sans-frontend-visibilite-portail: backlog
+    13-4-refactoring-une-action-unique-validation-backend: done # 2026-02-05: target_names REQUIRED, env from targets, _env_config added; code-review fixes: warning assert, dedup tests, 8 tests
+    13-5-api-standalone-execution-sans-frontend-visibilite-portail: in-progress # 2026-02-05: Story créée
     13-6-menu-calendrier-vue-calendrier-executions-planifiees-dba: backlog  # Vue calendrier réelle + filtres action/env/plateforme/techno (alignés Exécutions)
     13-7-ref-environnements-et-technologies-via-tables: backlog  # Env = inventaire ; technos/plateformes = tables REF ; plus de listes en dur (13-ref-environnements-et-technologies-via-tables.md)
     epic-13-retrospective: optional

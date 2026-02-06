@@ -180,5 +180,23 @@ describe('catalog_service', () => {
       expect(result.can_execute).toBe(false);
       expect(result.allowed_environments).toEqual([]);
     });
+
+    it('reads can_execute and allowed_environments from data when not at root', async () => {
+      const mockResponse = {
+        data: {
+          id: 1,
+          name: 'Test Action',
+          can_execute: true,
+          allowed_environments: ['dev', 'prod', 'staging'],
+        },
+      };
+
+      vi.mocked(apiClient.apiFetchRaw).mockResolvedValue(mockResponse);
+
+      const result = await catalogService.fetchCatalogActionById(1);
+
+      expect(result.can_execute).toBe(true);
+      expect(result.allowed_environments).toEqual(['dev', 'prod', 'staging']);
+    });
   });
 });
