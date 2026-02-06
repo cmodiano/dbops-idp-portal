@@ -7,6 +7,7 @@ Tests for:
 - AC3: Visibilité portail des exécutions API (GET /executions shows API-created executions)
 - AC4: Traçabilité audit SOC1 pour exécutions API (source, ip_address, correlation_id)
 """
+import json
 import pytest
 from django.test import TestCase
 from rest_framework.test import APIClient
@@ -130,6 +131,7 @@ class APIStandaloneExecutionTests(TestCase):
 
         self.assertEqual(response.status_code, 401)
         self.assertIn('error', response.data)
+        self.assertEqual(response.data['error']['code'], 'UNAUTHORIZED')
 
     def test_api_execution_invalid_token_returns_401(self):
         """
@@ -147,6 +149,7 @@ class APIStandaloneExecutionTests(TestCase):
 
         self.assertEqual(response.status_code, 401)
         self.assertIn('error', response.data)
+        self.assertEqual(response.data['error']['code'], 'UNAUTHORIZED')
 
     # =========================================================================
     # AC2: Refus explicite pour targets non autorisés ou payload invalide
@@ -215,6 +218,45 @@ class APIStandaloneExecutionTests(TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertIn('error', response.data)
         self.assertIn('ACTION_NOT_FOUND', response.data['error']['code'])
+
+    def test_api_execution_content_type_non_json_returns_415(self):
+        """
+        Task 2 Subtask 2.3: POST with non-JSON Content-Type → 415 Unsupported Media Type.
+        """
+        token = self._get_valid_token()
+        response = self.client.post(
+            '/api/v1/executions',
+            'action_id=1&target_names=srv-dev-01',
+            content_type='application/x-www-form-urlencoded',
+            HTTP_AUTHORIZATION=f'Bearer {token}',
+        )
+        self.assertEqual(response.status_code, 415)
+        self.assertIn('error', response.data)
+
+    def test_api_execution_mixed_environments_returns_400(self):
+        """
+        AC2: POST with targets from different environments → 400 MIXED_ENVIRONMENTS.
+        """
+        token = self._get_valid_token()
+        allowed_targets = [
+            {'name': 'srv-dev-01', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
+            {'name': 'srv-prod-01', 'environment': 'prod', 'target_type': 'server', 'metadata': None},
+        ]
+        with patch('executions.views.InventoryService') as MockInventoryService:
+            MockInventoryService.return_value = self._mock_inventory_service(allowed_targets)
+            response = self.client.post(
+                '/api/v1/executions',
+                {
+                    'action_id': self.action.id,
+                    'target_names': ['srv-dev-01', 'srv-prod-01'],
+                },
+                format='json',
+                HTTP_AUTHORIZATION=f'Bearer {token}',
+            )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('error', response.data)
+        self.assertEqual(response.data['error']['code'], 'MIXED_ENVIRONMENTS')
+        self.assertIn('environments', response.data['error']['details'])
 
     def test_api_execution_missing_target_names_returns_400(self):
         """
@@ -378,7 +420,6 @@ class APIStandaloneExecutionTests(TestCase):
         self.assertEqual(audit_entry.correlation_id, correlation_id)
 
         # Verify source and ip_address in details
-        import json
         details = json.loads(audit_entry.details) if isinstance(audit_entry.details, str) else audit_entry.details
         self.assertEqual(details.get('source'), 'api')
         self.assertIn('ip_address', details)
@@ -418,7 +459,6 @@ class APIStandaloneExecutionTests(TestCase):
 
         self.assertIsNotNone(audit_entry)
 
-        import json
         details = json.loads(audit_entry.details) if isinstance(audit_entry.details, str) else audit_entry.details
         self.assertEqual(details.get('action_id'), self.action.id)
         self.assertEqual(details.get('action_name'), self.action.name)
@@ -506,6 +546,5 @@ class APIExecutionNoTargetTests(TestCase):
         ).first()
 
         self.assertIsNotNone(audit_entry)
-        import json
         details = json.loads(audit_entry.details) if isinstance(audit_entry.details, str) else audit_entry.details
         self.assertEqual(details.get('source'), 'api')

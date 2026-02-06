@@ -34,7 +34,7 @@ curl -s -I http://localhost:8000/api/v1/auth/saml/login
 
 #### 3. Token long-lived (à venir)
 
-Pour l'automatisation en production, un mécanisme de tokens long-lived ou API keys sera implémenté dans une future story.
+Pour l'automatisation en production, un mécanisme de tokens long-lived ou API keys sera implémenté (voir backlog / roadmap).
 
 ### Utilisation du token
 
@@ -113,7 +113,7 @@ X-Idp-Request-Id: <correlation_id_optionnel>
 ```json
 {
   "error": {
-    "code": "VALIDATION_ERROR",
+    "code": "UNAUTHORIZED",
     "message": "Token invalide ou expire",
     "details": {}
   }
@@ -327,6 +327,8 @@ Chaque exécution créée via l'API est tracée dans l'audit avec :
 
 ## Voir aussi
 
-- [Documentation API complète (OpenAPI/Swagger)](/api/docs)
-- [Guide d'administration des actions](/docs/admin-actions.md)
-- [Architecture RBAC et permissions](/docs/rbac.md)
+Liens relatifs à la base URL du portail (ex. `https://portail.example.com`) :
+
+- Documentation API complète (OpenAPI/Swagger) : `/api/docs`
+- Guide d'administration des actions : `/docs/admin-actions.md`
+- Architecture RBAC et permissions : `/docs/rbac.md`

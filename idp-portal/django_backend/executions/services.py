@@ -95,7 +95,9 @@ class ExecutionService:
     @transaction.atomic
     def create_execution_with_steps(self, user: User, action: Action, environment: str,
                                    parameters: dict | None = None, steps_data: list[dict] | None = None,
-                                   parent_execution_id: int | None = None, correlation_id: str | None = None):
+                                   parent_execution_id: int | None = None, correlation_id: str | None = None,
+                                   source: str | None = None, ip_address: str | None = None,
+                                   targets: list[str] | None = None):
         """
         Create an execution with steps atomically.
         
@@ -107,12 +109,18 @@ class ExecutionService:
             steps_data: Optional list of step data dicts
             parent_execution_id: Optional parent execution ID (for remediation)
             correlation_id: Optional correlation ID for tracing
+            source: Optional source ('api' or 'ui') for audit (Story 13.5)
+            ip_address: Optional client IP for audit (Story 13.5)
+            targets: Optional target names for audit (Story 13.5)
         
         Returns:
             Execution instance with steps created
         """
-        # Create the execution
-        execution = self.create_execution(user, action, environment, parameters, parent_execution_id, correlation_id)
+        # Create the execution (pass audit fields for SOC1 traceability)
+        execution = self.create_execution(
+            user, action, environment, parameters, parent_execution_id, correlation_id,
+            source=source, ip_address=ip_address, targets=targets,
+        )
         
         # Create steps if provided
         if steps_data:

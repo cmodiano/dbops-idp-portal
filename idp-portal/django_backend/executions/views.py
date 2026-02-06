@@ -73,25 +73,24 @@ def _detect_request_source(request) -> str:
     Story 13.5, Subtask 3.2: Distinguish UI vs API requests for audit.
 
     Heuristics:
-    - If Referer or Origin header contains known frontend origin → "ui"
-    - If X-Requested-With: XMLHttpRequest (common for frontend AJAX) → "ui"
+    - If Authorization: Bearer is present → "api" (API clients always send it)
+    - Else if X-Requested-With: XMLHttpRequest → "ui"
+    - Else if Referer or Origin present → "ui" (browser navigation)
     - Otherwise → "api"
     """
-    referer = request.META.get('HTTP_REFERER', '')
-    origin = request.META.get('HTTP_ORIGIN', '')
-    x_requested_with = request.META.get('HTTP_X_REQUESTED_WITH', '')
+    auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+    if auth_header.strip().upper().startswith('BEARER '):
+        return 'api'
 
-    # Check for frontend indicators
+    x_requested_with = request.META.get('HTTP_X_REQUESTED_WITH', '')
     if x_requested_with.lower() == 'xmlhttprequest':
         return 'ui'
 
-    # Check if referer/origin looks like a browser frontend URL
-    # (not a direct API call from curl/script)
+    referer = request.META.get('HTTP_REFERER', '')
+    origin = request.META.get('HTTP_ORIGIN', '')
     if referer or origin:
-        # If there's a referer or origin, it's likely from a browser
         return 'ui'
 
-    # Default: API standalone call
     return 'api'
 
 
@@ -210,7 +209,7 @@ class ExecutionsView(APIView):
         parameters = payload.get("parameters") or {}
         parent_execution_id = payload.get("parent_execution_id")
 
-        correlation_id = request.headers.get("X-Idp-Request-Id") or get_correlation_id()
+        correlation_id = request.META.get("HTTP_X_IDP_REQUEST_ID") or get_correlation_id()
 
         if not action_id:
             raise BadRequestError(

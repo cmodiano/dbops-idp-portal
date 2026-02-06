@@ -1,6 +1,6 @@
 # Story 13.5 : API self-service standalone — déclencher une exécution sans frontend et la retrouver dans le portail
 
-Status: review
+Status: done
 
 ## Story
 
@@ -326,6 +326,7 @@ Claude Opus 4.5 (claude-opus-4-5-20251101)
    - `ExecutionService.create_execution()` accepte nouveaux paramètres
 4. **Task 4-7** — Documentation complète créée dans `docs/api-self-service.md`
 5. **Task 5** — 14 tests d'intégration créés couvrant AC1-AC4
+6. **Code review 2026-02-05** — 10 issues corrigés : 401→UNAUTHORIZED (core/exceptions), tests 415 + MIXED_ENVIRONMENTS + assert UNAUTHORIZED, create_execution_with_steps(source, ip_address, targets), _detect_request_source (Bearer→api), doc 401 + liens + token, import json centralisé
 
 ### Change Log
 
@@ -333,10 +334,12 @@ Claude Opus 4.5 (claude-opus-4-5-20251101)
 - 2026-02-05: Task 1-3 implémentées — analyse JWT, validation endpoint, enrichissement audit (source + ip_address)
 - 2026-02-05: Task 5 tests créés — 14 tests d'intégration API standalone
 - 2026-02-05: Task 4+7 documentation — docs/api-self-service.md avec exemples curl et Python
+- 2026-02-05: Code review — correctifs appliqués (401 UNAUTHORIZED, tests 415/MIXED_ENVIRONMENTS, audit source priorité Bearer, create_execution_with_steps enrichi, doc alignée)
 
 ### File List
 
-- `idp-portal/django_backend/executions/views.py` — MODIFIED (import get_client_ip, _detect_request_source(), passage params audit)
-- `idp-portal/django_backend/executions/services.py` — MODIFIED (ExecutionService.create_execution: source, ip_address, targets)
-- `idp-portal/django_backend/executions/tests/test_story_13_5.py` — CREATED (14 tests API standalone)
-- `idp-portal/docs/api-self-service.md` — CREATED (documentation API self-service)
+- `idp-portal/django_backend/executions/views.py` — MODIFIED (_detect_request_source Bearer→api, correlation_id via META)
+- `idp-portal/django_backend/executions/services.py` — MODIFIED (create_execution: source, ip_address, targets ; create_execution_with_steps idem)
+- `idp-portal/django_backend/executions/tests/test_story_13_5.py` — MODIFIED (16 tests : +415 content-type, +MIXED_ENVIRONMENTS, assert UNAUTHORIZED, import json)
+- `idp-portal/django_backend/core/exceptions.py` — MODIFIED (401 → code UNAUTHORIZED)
+- `idp-portal/docs/api-self-service.md` — MODIFIED (401 UNAUTHORIZED, liens base URL, token backlog)

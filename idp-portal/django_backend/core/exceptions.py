@@ -211,10 +211,12 @@ def custom_exception_handler(exc, context):
                 detail=str(response.data['detail']),
                 **request_context
             )
+            # Story 13.5: 401 auth failures must use UNAUTHORIZED, not VALIDATION_ERROR
+            error_code = "UNAUTHORIZED" if response.status_code == status.HTTP_401_UNAUTHORIZED else "VALIDATION_ERROR"
             resp = Response(
                 {
                     "error": {
-                        "code": "VALIDATION_ERROR",
+                        "code": error_code,
                         "message": str(response.data['detail']),
                         "details": {}
                     }
