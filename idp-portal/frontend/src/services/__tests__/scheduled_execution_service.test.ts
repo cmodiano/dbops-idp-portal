@@ -144,9 +144,7 @@ describe('scheduled_execution_service', () => {
             scheduled_at: '2026-03-15T14:30:00Z',
           },
         ],
-        total: 1,
-        limit: 50,
-        offset: 0,
+        pagination: { page: 1, page_size: 50, total_count: 1, total_pages: 1 },
       };
 
       vi.mocked(apiClient.apiFetch).mockResolvedValue(mockResponse);
@@ -162,9 +160,7 @@ describe('scheduled_execution_service', () => {
     it('lists scheduled executions with filters', async () => {
       const mockResponse = {
         data: [],
-        total: 0,
-        limit: 50,
-        offset: 0,
+        pagination: { page: 1, page_size: 50, total_count: 0, total_pages: 1 },
       };
 
       vi.mocked(apiClient.apiFetch).mockResolvedValue(mockResponse);
@@ -224,7 +220,7 @@ describe('scheduled_execution_service', () => {
 
       expect(apiClient.apiFetch).toHaveBeenCalledWith(
         '/scheduled-executions/1',
-        { method: 'PATCH' }
+        { method: 'PATCH', body: JSON.stringify({ status: 'cancelled' }) }
       );
       expect(result.status).toBe('cancelled');
     });

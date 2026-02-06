@@ -1,5 +1,5 @@
 """
-Custom permissions for DRF to match FastAPI RBAC.
+Custom permissions for DRF RBAC.
 """
 
 from rest_framework import permissions
@@ -7,7 +7,7 @@ from rest_framework import permissions
 
 class DBOPSProfilePermission(permissions.BasePermission):
     """
-    Permission class that requires DBOPS profile (equivalent to require_profile("dbops") in FastAPI).
+    Permission class that requires DBOPS profile.
     MEDIUM-5 fix: Improved profile checking logic.
     """
 
@@ -57,7 +57,7 @@ class DBOPSProfilePermission(permissions.BasePermission):
 
 class OptionalUserPermission(permissions.BasePermission):
     """
-    Permission class that allows both authenticated and anonymous users (equivalent to get_optional_user in FastAPI).
+    Permission class that allows both authenticated and anonymous users.
     """
     
     def has_permission(self, request, view):

@@ -57,6 +57,6 @@ class TargetFilterParamsSerializer(serializers.Serializer):
         required=False,
         default=25,
         min_value=1,
-        max_value=100,
-        help_text="Items per page"
+        max_value=5000,
+        help_text="Items per page (max 5000 for dropdown/select use)"
     )

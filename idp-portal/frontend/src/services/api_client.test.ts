@@ -46,7 +46,9 @@ describe('apiFetch', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 500,
+      headers: { get: () => 'application/json' },
       json: async () => ({ error: { message: 'Server error' } }),
+      text: async () => '',
     });
 
     await expect(apiFetch('/fail')).rejects.toThrow('Server error');
@@ -56,8 +58,8 @@ describe('apiFetch', () => {
     setAuthAccessors(() => 'expired-token', async () => 'refreshed-token');
 
     global.fetch = vi.fn()
-      .mockResolvedValueOnce({ ok: false, status: 401 })
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ data: 'ok' }) });
+      .mockResolvedValueOnce({ ok: false, status: 401, headers: { get: () => null }, json: async () => ({}), text: async () => '' })
+      .mockResolvedValueOnce({ ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => ({ data: 'ok' }), text: async () => '' });
 
     const result = await apiFetch('/protected');
     expect(global.fetch).toHaveBeenCalledTimes(2);
@@ -73,7 +75,9 @@ describe('apiFetch', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 401,
+      headers: { get: () => 'application/json' },
       json: async () => ({ error: { message: 'Unauthorized' } }),
+      text: async () => '',
     });
 
     await expect(apiFetch('/no-token')).rejects.toThrow('Unauthorized');

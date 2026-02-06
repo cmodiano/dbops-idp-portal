@@ -1,11 +1,16 @@
 # Stratégie de Migration Flyway → Django
 
+> **📦 Document d'archivage — Migration terminée**  
+> Ce document est conservé pour référence historique. La migration FastAPI→Django est complète (février 2026).  
+> Voir [MIGRATION_ARCHIVE.md](../docs/MIGRATION_ARCHIVE.md) pour accéder au code FastAPI archivé.
+
 ## Contexte
 
 Cette documentation décrit la stratégie de migration des migrations Flyway vers Django migrations pour le projet IDP Portal.
 
 **Date:** 2026-02-03  
 **Story:** m-2-modeles-django-et-migrations-schema-oracle
+**Status:** Migration terminée — Document historique conservé
 
 ## État Actuel
 

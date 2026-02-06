@@ -359,71 +359,118 @@ export async function fetchRemediationContext(
  * @returns Array of InventoryItem
  * @throws Error with code 'INVENTORY_UNAVAILABLE' if inventory unavailable (HTTP 503)
  */
+// Shared cache for inventory items to prevent duplicate API calls
+const inventoryCache = new Map<string, { data: InventoryItem[]; timestamp: number }>();
+const loadingPromises = new Map<string, Promise<InventoryItem[]>>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 export async function fetchInventoryItems(
   type: 'databases' | 'servers' | 'environments',
   environment?: string
 ): Promise<InventoryItem[]> {
   const params = environment ? `?environment=${encodeURIComponent(environment)}` : '';
   const cacheKey = `inventory_cache_${type}${environment ? `_${environment}` : ''}`;
+  const apiKey = `${type}${params}`;
 
-  try {
-    const response = await fetch(`/api/v1/inventory/${type}${params}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-    });
-
-    if (!response.ok) {
-      if (response.status === 503) {
-        // Inventory unavailable - try to use localStorage cache if available (Task 4.2, 4.3)
-        const cached = localStorage.getItem(cacheKey);
-        if (cached) {
-          try {
-            const cachedData = JSON.parse(cached);
-            const cacheTime = cachedData.timestamp;
-            const now = Date.now();
-            // Use cache if less than 5 minutes old (Task 4.3)
-            if (now - cacheTime < 5 * 60 * 1000) {
-              const error = new Error('Inventaire temporairement indisponible — dernières valeurs en cache');
-              (error as Error & { code: string }).code = 'INVENTORY_UNAVAILABLE';
-              (error as Error & { useCache: boolean }).useCache = true;
-              (error as Error & { cachedItems: InventoryItem[] }).cachedItems = cachedData.items;
-              throw error;
-            }
-          } catch (parseError) {
-            // Invalid cache JSON or missing timestamp - log and continue to throw original error
-            console.warn('Invalid inventory cache format', parseError);
-          }
-        }
-        const error = new Error('Inventaire temporairement indisponible — dernières valeurs en cache');
-        (error as Error & { code: string }).code = 'INVENTORY_UNAVAILABLE';
-        throw error;
-      }
-      throw new Error(`Failed to fetch inventory: ${response.statusText}`);
+  // Special handling for environments: share cache with fetchEnvironments
+  if (type === 'environments' && !environment) {
+    if (import.meta.env.DEV) {
+      console.log('[SHARED CACHE] fetchInventoryItems(environments) - using fetchEnvironments cache');
     }
-
-    const data = await response.json();
-    const items = data.data || [];
-
-    // Cache successful response in localStorage (Task 4.3)
-    if (items.length > 0) {
-      localStorage.setItem(
-        cacheKey,
-        JSON.stringify({
-          items,
-          timestamp: Date.now(),
-        })
-      );
-    }
-
+    const { fetchEnvironments } = await import('./reference_service');
+    const envStrings = await fetchEnvironments();
+    // Convert string[] to InventoryItem[] format
+    const items: InventoryItem[] = envStrings.map((env) => ({
+      id: env,
+      name: env.charAt(0).toUpperCase() + env.slice(1),
+      environment: null,
+    }));
+    // Cache in inventoryCache for consistency
+    inventoryCache.set(apiKey, { data: items, timestamp: Date.now() });
     return items;
-  } catch (err) {
-    // Re-throw with cache info if available
-    if (err instanceof Error && (err as Error & { useCache?: boolean }).useCache) {
+  }
+
+  // Check memory cache first
+  const cached = inventoryCache.get(apiKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.data;
+  }
+
+  // Check if request is already in progress
+  const existingPromise = loadingPromises.get(apiKey);
+  if (existingPromise) {
+    return existingPromise;
+  }
+
+  // Start new request
+  const promise = (async () => {
+    try {
+      const response = await fetch(`/api/v1/inventory/${type}${params}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        if (response.status === 503) {
+          // Inventory unavailable - try to use localStorage cache if available (Task 4.2, 4.3)
+          const cached = localStorage.getItem(cacheKey);
+          if (cached) {
+            try {
+              const cachedData = JSON.parse(cached);
+              const cacheTime = cachedData.timestamp;
+              const now = Date.now();
+              // Use cache if less than 5 minutes old (Task 4.3)
+              if (now - cacheTime < 5 * 60 * 1000) {
+                const error = new Error('Inventaire temporairement indisponible — dernières valeurs en cache');
+                (error as Error & { code: string }).code = 'INVENTORY_UNAVAILABLE';
+                (error as Error & { useCache: boolean }).useCache = true;
+                (error as Error & { cachedItems: InventoryItem[] }).cachedItems = cachedData.items;
+                throw error;
+              }
+            } catch (parseError) {
+              // Invalid cache JSON or missing timestamp - log and continue to throw original error
+              console.warn('Invalid inventory cache format', parseError);
+            }
+          }
+          const error = new Error('Inventaire temporairement indisponible — dernières valeurs en cache');
+          (error as Error & { code: string }).code = 'INVENTORY_UNAVAILABLE';
+          throw error;
+        }
+        throw new Error(`Failed to fetch inventory: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const items = data.data || [];
+
+      // Update memory cache
+      inventoryCache.set(apiKey, { data: items, timestamp: Date.now() });
+      loadingPromises.delete(apiKey);
+
+      // Cache successful response in localStorage (Task 4.3)
+      if (items.length > 0) {
+        localStorage.setItem(
+          cacheKey,
+          JSON.stringify({
+            items,
+            timestamp: Date.now(),
+          })
+        );
+      }
+
+      return items;
+    } catch (err) {
+      loadingPromises.delete(apiKey);
+      // Re-throw with cache info if available
+      if (err instanceof Error && (err as Error & { useCache?: boolean }).useCache) {
+        throw err;
+      }
       throw err;
     }
-    throw err;
-  }
+  })();
+
+  loadingPromises.set(apiKey, promise);
+  return promise;
 }

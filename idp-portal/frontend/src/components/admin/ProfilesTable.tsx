@@ -37,11 +37,29 @@ export function ProfilesTable({ dataSource, loading, onEdit, onDelete, onNew, on
     { title: 'Nom', dataIndex: 'name', key: 'name', sorter: (a, b) => a.name.localeCompare(b.name) },
     { title: 'Groupe AD', dataIndex: 'ad_group', key: 'ad_group' },
     {
+      title: 'Admin',
+      dataIndex: 'is_admin',
+      key: 'is_admin',
+      width: 80,
+      align: 'center',
+      sorter: (a, b) => Number(a.is_admin) - Number(b.is_admin),
+      render: (v: boolean) => (v ? 'Oui' : 'Non'),
+    },
+    {
+      title: 'Auditeur',
+      dataIndex: 'is_auditor',
+      key: 'is_auditor',
+      width: 90,
+      align: 'center',
+      sorter: (a, b) => Number(a.is_auditor) - Number(b.is_auditor),
+      render: (v: boolean) => (v ? 'Oui' : 'Non'),
+    },
+    {
       title: 'Permissions',
       dataIndex: 'permission_count',
       key: 'permission_count',
       width: 120,
-      sorter: (a, b) => a.permission_count - b.permission_count,
+      sorter: (a, b) => (a.permission_count ?? 0) - (b.permission_count ?? 0),
       render: (n: number) => (n != null ? n : 0),
     },
     {
@@ -55,7 +73,7 @@ export function ProfilesTable({ dataSource, loading, onEdit, onDelete, onNew, on
     {
       title: '',
       key: 'actions',
-      width: 220,
+      width: 280,
       render: (_: unknown, record: ProfileListItem) => (
         <Space size="small" style={{ whiteSpace: 'nowrap' }}>
           <Button type="link" size="small" icon={<EditOutlined />} onClick={() => onEdit(record)}>

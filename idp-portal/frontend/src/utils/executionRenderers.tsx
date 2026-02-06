@@ -8,7 +8,7 @@
  * AC8: Same mapping engine → icon + color, same integration → Avatar, same tooltips/fallbacks.
  */
 
-import { Badge, Tooltip, Avatar } from 'antd';
+import { Badge, Tooltip, Avatar, Tag } from 'antd';
 import {
   DatabaseOutlined,
   CloudServerOutlined,
@@ -30,8 +30,10 @@ import type { ActionEngine, ActionPlatform, ItemType, ExecutionStatusType } from
 import { STYLE_TOKENS } from '../theme/styleTokens';
 import { getIconUrl } from './iconUrl';
 
-/** Engine icon size in execution tables (px) - clearly visible vendor logos. */
-const ENGINE_ICON_SIZE = 44;
+/** Engine icon size in execution tables (px) - clearly visible vendor logos.
+ * Increased from 44px to 56px for better visibility and proportion with platform icons.
+ */
+const ENGINE_ICON_SIZE = 56;
 
 /** SVG URLs for database engine icons (real vendor logos from svgrepo.com). */
 const ENGINE_SVG_SOURCES: Partial<Record<ActionEngine, string>> = {
@@ -80,7 +82,9 @@ export function renderPlatformIcon(platform: ActionPlatform | string | null | un
 
   return (
     <Tooltip title={platform}>
-      <config.Icon style={{ fontSize: ENGINE_ICON_SIZE, color: config.color }} />
+      <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+        <config.Icon style={{ fontSize: ENGINE_ICON_SIZE, color: config.color }} />
+      </div>
     </Tooltip>
   );
 }
@@ -117,13 +121,15 @@ export function renderPlateformeIcon(
       const label = integrationName || platform;
       return (
         <Tooltip title={label ?? undefined}>
-          <Avatar
-            src={fallbackIcon}
-            shape="square"
-            size={ENGINE_ICON_SIZE}
-            icon={<ApiOutlined />}
-            style={{ flexShrink: 0 }}
-          />
+          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Avatar
+              src={fallbackIcon}
+              shape="square"
+              size={ENGINE_ICON_SIZE}
+              icon={<ApiOutlined />}
+              style={{ flexShrink: 0 }}
+            />
+          </div>
         </Tooltip>
       );
     }
@@ -146,7 +152,9 @@ export function renderEngineIcon(
   if (itemType === 'workflow') {
     return (
       <Tooltip title="Workflow (chaîne d'actions)">
-        <ApartmentOutlined style={{ fontSize: ENGINE_ICON_SIZE, color: WORKFLOW_ICON_COLOR }} />
+        <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+          <ApartmentOutlined style={{ fontSize: ENGINE_ICON_SIZE, color: WORKFLOW_ICON_COLOR }} />
+        </div>
       </Tooltip>
     );
   }
@@ -165,22 +173,50 @@ export function renderEngineIcon(
   }
 
   if (svgSrc) {
+    // Dark theme: Use dark semi-transparent background instead of white for better integration
+    const needsBackground = engine === 'SQL Server' || engine === 'Oracle';
+    // SQL Server has black text that needs to be inverted/lightened for dark theme
+    const isSqlServer = engine === 'SQL Server';
     return (
       <Tooltip title={engine}>
-        <img
-          src={svgSrc}
-          alt=""
-          width={ENGINE_ICON_SIZE}
-          height={ENGINE_ICON_SIZE}
-          style={{ flexShrink: 0, verticalAlign: 'middle' }}
-          aria-hidden
-        />
+        <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: needsBackground ? '6px' : '0',
+              backgroundColor: needsBackground ? 'rgba(26, 26, 36, 0.6)' : 'transparent',
+              borderRadius: needsBackground ? '4px' : '0',
+              border: needsBackground ? '1px solid rgba(255, 255, 255, 0.1)' : 'none',
+            }}
+          >
+            <img
+              src={svgSrc}
+              alt=""
+              width={ENGINE_ICON_SIZE}
+              height={ENGINE_ICON_SIZE}
+              style={{ 
+                flexShrink: 0, 
+                verticalAlign: 'middle',
+                filter: isSqlServer 
+                  ? 'brightness(0) invert(1) contrast(1.2)' // Invert black text to white for SQL Server
+                  : needsBackground 
+                    ? 'brightness(1.1) contrast(1.1)' // Light enhancement for Oracle
+                    : 'none',
+              }}
+              aria-hidden
+            />
+          </div>
+        </div>
       </Tooltip>
     );
   }
   return (
     <Tooltip title={engine}>
-      <config.Icon style={{ fontSize: ENGINE_ICON_SIZE, color: config.color }} />
+      <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+        <config.Icon style={{ fontSize: ENGINE_ICON_SIZE, color: config.color }} />
+      </div>
     </Tooltip>
   );
 }
@@ -207,13 +243,15 @@ export function renderIntegrationIcon(
 
   return (
     <Tooltip title={label}>
-      <Avatar
-        src={iconSrc}
-        shape="square"
-        size={ENGINE_ICON_SIZE}
-        icon={<ApiOutlined />}
-        style={{ flexShrink: 0 }}
-      />
+      <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Avatar
+          src={iconSrc}
+          shape="square"
+          size={ENGINE_ICON_SIZE}
+          icon={<ApiOutlined />}
+          style={{ flexShrink: 0 }}
+        />
+      </div>
     </Tooltip>
   );
 }
@@ -224,40 +262,72 @@ export function renderIntegrationIcon(
  */
 const STATUS_BADGE_CONFIG: Record<
   ExecutionStatusType,
-  { status: 'processing' | 'success' | 'error' | 'default' | 'warning'; label: string }
+  { 
+    status: 'processing' | 'success' | 'error' | 'default' | 'warning'; 
+    label: string;
+    color: string;
+  }
 > = {
-  SUBMITTED: { status: 'processing', label: 'Soumise' },
-  PENDING_APPROVAL: { status: 'processing', label: 'En attente' },
-  RUNNING: { status: 'processing', label: 'En cours' },
-  COMPLETED: { status: 'success', label: 'Terminée' },
-  FAILED: { status: 'error', label: 'Échouée' },
-  CANCELLED: { status: 'default', label: 'Annulée' },
-  REJECTED: { status: 'warning', label: 'Rejetée' },
+  SUBMITTED: { status: 'processing', label: 'Soumise', color: '#3B82F6' },
+  PENDING_APPROVAL: { status: 'processing', label: 'En attente', color: '#F59E0B' },
+  RUNNING: { status: 'processing', label: 'En cours', color: '#3B82F6' },
+  COMPLETED: { status: 'success', label: 'Terminée', color: '#10B981' },
+  FAILED: { status: 'error', label: 'Échouée', color: '#EF4444' },
+  CANCELLED: { status: 'default', label: 'Annulée', color: '#9CA3AF' },
+  REJECTED: { status: 'warning', label: 'Rejetée', color: '#F59E0B' },
 };
 
 /**
  * Render status indicator badge for Statut column (AC1, AC2, AC3).
- *
- * - Running states (SUBMITTED, PENDING_APPROVAL, RUNNING): Pulsing blue badge (12-16px)
- * - Terminal states (COMPLETED, FAILED, CANCELLED, REJECTED): Fixed colored badge (10-12px)
+ * 
+ * Dark theme optimized: Uses dark background with colored border and text for better integration.
+ * - Running states (SUBMITTED, PENDING_APPROVAL, RUNNING): Tag with pulsing dot indicator
+ * - Terminal states (COMPLETED, FAILED, CANCELLED, REJECTED): Tag with colored dot
  *
  * @param status - Execution status
- * @returns React node with Badge + tooltip
+ * @returns React node with Tag containing badge dot + text label
  */
 export function renderStatusIndicator(status: ExecutionStatusType): React.ReactNode {
-  const config = STATUS_BADGE_CONFIG[status] || { status: 'default' as const, label: 'Inconnu' };
+  const config = STATUS_BADGE_CONFIG[status] || { 
+    status: 'default' as const, 
+    label: 'Inconnu',
+    color: '#9CA3AF'
+  };
   const isRunning = config.status === 'processing';
 
+  // Dark theme colors: semi-transparent dark background with colored border
+  const bgColor = `rgba(26, 26, 36, 0.8)`;
+  const borderColor = config.color;
+  const textColor = config.status === 'error' ? '#EF4444' : 
+                    config.status === 'success' ? '#10B981' :
+                    config.status === 'warning' ? '#F59E0B' :
+                    config.status === 'processing' ? config.color : '#f0f0f2';
+
   return (
-    <Tooltip title={config.label}>
+    <Tag
+      style={{
+        margin: 0,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 8,
+        border: `1px solid ${borderColor}`,
+        backgroundColor: bgColor,
+        color: textColor,
+        padding: '2px 8px',
+        fontSize: '12px',
+        lineHeight: '20px',
+        backdropFilter: 'blur(8px)',
+      }}
+    >
       <Badge
         status={config.status}
         style={{
-          transform: isRunning ? 'scale(1.4)' : 'scale(1.2)',
+          transform: isRunning ? 'scale(2.0)' : 'scale(1.3)',
           display: 'inline-block',
         }}
       />
-    </Tooltip>
+      <span style={{ fontWeight: 500 }}>{config.label}</span>
+    </Tag>
   );
 }
 

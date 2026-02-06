@@ -11,7 +11,9 @@
 import { Space, Tag, Button } from 'antd';
 import { CloseOutlined } from '@ant-design/icons';
 import type { CategoryKey } from './CategoryTabs';
-import { ENGINE_OPTIONS, ENVIRONMENT_OPTIONS, IMPACT_OPTIONS } from './HorizontalFilters';
+import { IMPACT_OPTIONS } from './HorizontalFilters';
+import { useEngines } from '../../hooks/useEngines';
+import { useEnvironments } from '../../hooks/useEnvironments';
 import { STYLE_TOKENS } from '../../theme/styleTokens';
 
 export interface ActiveFiltersChipsProps {
@@ -40,8 +42,8 @@ export interface ActiveFiltersChipsProps {
 }
 
 /** Get display label for engine value. */
-function getEngineLabel(value: string): string {
-  return ENGINE_OPTIONS.find((o) => o.value === value)?.label ?? value;
+function getEngineLabel(value: string, engineOptions: { value: string; label: string }[]): string {
+  return engineOptions.find((o) => o.value === value)?.label ?? value;
 }
 
 /** Get display label for impact value. */
@@ -71,6 +73,11 @@ export function ActiveFiltersChips({
   onRemoveImpact,
   onClearAll,
 }: ActiveFiltersChipsProps) {
+  // Story 13.7: Load engines from REF_ENGINES table
+  const { engineOptions } = useEngines();
+  // Story 13.7: Load environments from inventory
+  const { environmentOptions } = useEnvironments();
+
   // Check if any filters are active (Story 8.7: exclude "mes-actions" from category filter)
   const hasFilters =
     (activeCategory !== 'tout' && activeCategory !== 'mes-actions') ||
@@ -114,16 +121,19 @@ export function ActiveFiltersChips({
       {/* Engine chips */}
       {selectedEngines.map((engine) => (
         <Tag key={`engine-${engine}`} closable onClose={() => onRemoveEngine(engine)}>
-          Moteur: {getEngineLabel(engine)}
+          Moteur: {getEngineLabel(engine, engineOptions)}
         </Tag>
       ))}
 
       {/* Environment chips */}
-      {selectedEnvironments.map((env) => (
-        <Tag key={`env-${env}`} closable onClose={() => onRemoveEnvironment(env)}>
-          Env: {env}
-        </Tag>
-      ))}
+      {selectedEnvironments.map((env) => {
+        const envLabel = environmentOptions.find((o) => o.value === env)?.label || env;
+        return (
+          <Tag key={`env-${env}`} closable onClose={() => onRemoveEnvironment(env)}>
+            Env: {envLabel}
+          </Tag>
+        );
+      })}
 
       {/* Impact chips */}
       {selectedImpacts.map((impact) => (

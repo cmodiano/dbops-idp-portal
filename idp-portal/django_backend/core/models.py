@@ -1,6 +1,7 @@
 import json
 import logging
 from django.db import models
+from django.db import IntegrityError
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,11 @@ class AuditActionType(models.TextChoices):
     USER_REFRESH = 'USER_REFRESH', 'User Refresh Token'
     FAVORITE_ADDED = 'FAVORITE_ADDED', 'Favorite Added'
     FAVORITE_REMOVED = 'FAVORITE_REMOVED', 'Favorite Removed'
+    # Story 16.4: Retry audit types
+    EXECUTION_STEP_RETRY_ATTEMPT = 'EXECUTION_STEP_RETRY_ATTEMPT', 'Execution Step Retry Attempt'
+    EXECUTION_STEP_RETRY_SUCCESS = 'EXECUTION_STEP_RETRY_SUCCESS', 'Execution Step Retry Success'
+    EXECUTION_STEP_RETRY_EXHAUSTED = 'EXECUTION_STEP_RETRY_EXHAUSTED', 'Execution Step Retry Exhausted'
+    EXECUTION_STEP_RETRY_ABORTED = 'EXECUTION_STEP_RETRY_ABORTED', 'Execution Step Retry Aborted'
     # Additional types added in later migrations (V028-V035, V039-V041)
     # Note: Full list would include all types from migrations, but base types are sufficient for model
 
@@ -62,14 +68,28 @@ class AuditEntityType(models.TextChoices):
     # Additional types may exist in later migrations
 
 
+class ImmutableQuerySet(models.QuerySet):
+    """QuerySet that forbids update() and delete() for immutable audit logs (SOC1/NFR8)."""
+
+    def update(self, **kwargs):
+        raise IntegrityError("AUDIT_LOG is immutable - bulk updates are forbidden (SOC1/NFR8)")
+
+    def delete(self):
+        raise IntegrityError("AUDIT_LOG is immutable - bulk deletions are forbidden (SOC1/NFR8)")
+
+
 class AuditLogManager(models.Manager):
     """
     Custom manager for AuditLog model.
     Provides query methods for common audit log queries.
+    Uses ImmutableQuerySet to prevent bulk update/delete.
     """
-    
-    def create_entry(self, user_id: str, action_type: str, entity_type: str, 
-                     entity_id: int, details: dict | None = None, 
+
+    def get_queryset(self):
+        return ImmutableQuerySet(self.model, using=self._db)
+
+    def create_entry(self, user_id: str, action_type: str, entity_type: str,
+                     entity_id: int, details: dict | None = None,
                      ip_address: str | None = None, correlation_id: str | None = None):
         """
         Create a new audit log entry.
@@ -177,10 +197,17 @@ class AuditLog(models.Model):
         db_table = 'AUDIT_LOG'
         ordering = ['-timestamp']
 
+    def save(self, *args, **kwargs):
+        if self.pk:
+            raise IntegrityError("AUDIT_LOG is immutable - updates are forbidden (SOC1/NFR8)")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise IntegrityError("AUDIT_LOG is immutable - deletions are forbidden (SOC1/NFR8)")
+
     def __str__(self):
         return f"Audit {self.id} - {self.action_type} ({self.entity_type}:{self.entity_id})"
 
-    # JSON field helper
     def get_details(self):
         """Deserialize JSON from CLOB."""
         if self.details:

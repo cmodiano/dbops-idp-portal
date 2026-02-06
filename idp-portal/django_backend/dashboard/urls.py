@@ -1,6 +1,5 @@
 """
 URL configuration for dashboard endpoints.
-Matches FastAPI /api/v1/dashboard/* routes used by the frontend.
 """
 
 from django.urls import path

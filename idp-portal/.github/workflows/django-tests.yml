@@ -1,5 +1,5 @@
 # Django Backend Tests
-# Story M.9: Tests unitaires et d'intégration (parité avec FastAPI)
+# Story M.9: Tests unitaires et d'intégration
 #
 # This workflow runs Django tests on every push and PR.
 

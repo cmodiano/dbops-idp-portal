@@ -1,7 +1,7 @@
 """
 Integration tests for action lifecycle.
 
-Story M.9: Tests unitaires et d'intégration (parité avec FastAPI)
+Story M.9: Tests unitaires et d'intégration
 Tests: création → publication → exécution → audit d'une action
 """
 

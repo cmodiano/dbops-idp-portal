@@ -1,7 +1,7 @@
 """
 Factory classes for generating test data using factory-boy.
 
-Story M.9: Tests unitaires et d'intégration (parité avec FastAPI)
+Story M.9: Tests unitaires et d'intégration
 This module provides DjangoModelFactory subclasses for all Django models.
 """
 

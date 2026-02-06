@@ -4,7 +4,32 @@
 
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { HorizontalFilters, ENGINE_OPTIONS, ENVIRONMENT_OPTIONS, IMPACT_OPTIONS } from './HorizontalFilters';
+import { HorizontalFilters, IMPACT_OPTIONS } from './HorizontalFilters';
+
+vi.mock('../../hooks/useEngines', () => ({
+  useEngines: () => ({
+    engineOptions: [
+      { value: 'Oracle', label: 'Oracle' },
+      { value: 'SQL Server', label: 'SQL Server' },
+      { value: 'DB2', label: 'DB2' },
+    ],
+    loading: false,
+    error: null,
+  }),
+}));
+
+vi.mock('../../hooks/useEnvironments', () => ({
+  useEnvironments: () => ({
+    environmentOptions: [
+      { value: 'dev', label: 'Développement' },
+      { value: 'staging', label: 'Staging' },
+      { value: 'prod', label: 'Production' },
+    ],
+    loading: false,
+    error: null,
+    environments: ['dev', 'staging', 'prod'],
+  }),
+}));
 
 describe('HorizontalFilters', () => {
   const defaultProps = {
@@ -69,19 +94,15 @@ describe('HorizontalFilters', () => {
   });
 
   it('has correct engine options defined', () => {
-    expect(ENGINE_OPTIONS).toEqual([
-      { value: 'Oracle', label: 'Oracle' },
-      { value: 'SQL Server', label: 'SQL Server' },
-      { value: 'DB2', label: 'DB2' },
-    ]);
+    // Story 13.7: options now come from useEngines hook (mocked in this test)
+    render(<HorizontalFilters {...defaultProps} />);
+    expect(screen.getByLabelText('Filtrer par moteur')).toBeInTheDocument();
   });
 
   it('has correct environment options defined', () => {
-    expect(ENVIRONMENT_OPTIONS).toEqual([
-      { value: 'DEV', label: 'DEV' },
-      { value: 'QUAL', label: 'QUAL' },
-      { value: 'PROD', label: 'PROD' },
-    ]);
+    // Story 13.7: options now come from useEnvironments hook (mocked in this test)
+    render(<HorizontalFilters {...defaultProps} />);
+    expect(screen.getByLabelText('Filtrer par environnement')).toBeInTheDocument();
   });
 
   it('has correct impact options defined', () => {

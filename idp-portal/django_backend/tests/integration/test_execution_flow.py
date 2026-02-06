@@ -1,7 +1,7 @@
 """
 Integration tests for execution flow.
 
-Story M.9: Tests unitaires et d'intégration (parité avec FastAPI)
+Story M.9: Tests unitaires et d'intégration
 Tests: soumission execution → moteur → plateforme → résultat → audit
 """
 

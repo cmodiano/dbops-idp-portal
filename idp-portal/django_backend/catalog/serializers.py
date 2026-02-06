@@ -1,6 +1,6 @@
 """
 DRF Serializers for catalog app.
-Maps Django models to FastAPI-compatible JSON responses.
+Maps Django models to JSON responses.
 """
 
 from rest_framework import serializers
@@ -8,6 +8,7 @@ from catalog.models import (
     Action, Tag, ActionTag,
     ActionStatus, ActionEngine, ActionPlatform, ActionItemType
 )
+from reference.models import RefEngine, RefPlatform
 
 
 class TagSerializer(serializers.ModelSerializer):
@@ -61,6 +62,8 @@ class ActionSerializer(serializers.ModelSerializer):
     execution_steps = serializers.SerializerMethodField()
     change_type_config = serializers.SerializerMethodField()
     remediation_rules = serializers.SerializerMethodField()
+    # Story 5.7: workflow_steps for workflows (converted from execution_steps)
+    workflow_steps = serializers.SerializerMethodField()
     
     # Relations
     tags = serializers.SerializerMethodField()
@@ -68,9 +71,33 @@ class ActionSerializer(serializers.ModelSerializer):
     
     # Enums
     status = serializers.ChoiceField(choices=ActionStatus.choices)
-    engine = serializers.ChoiceField(choices=ActionEngine.choices, allow_null=True)
-    platform = serializers.ChoiceField(choices=ActionPlatform.choices, allow_null=True)
+    engine = serializers.CharField(max_length=50, allow_null=True, required=False)
+    platform = serializers.CharField(max_length=50, allow_null=True, required=False)
     item_type = serializers.ChoiceField(choices=ActionItemType.choices, default=ActionItemType.ACTION)
+    
+    def validate_engine(self, value):
+        """Validate engine against REF_ENGINES table."""
+        if value is None:
+            return value
+        # Check if engine exists in REF_ENGINES
+        if not RefEngine.objects.filter(code=value, is_active=1).exists():
+            active_engines = list(RefEngine.objects.active().values_list('code', flat=True))
+            raise serializers.ValidationError(
+                f"Invalid engine '{value}'. Must be one of: {', '.join(active_engines)}"
+            )
+        return value
+    
+    def validate_platform(self, value):
+        """Validate platform against REF_PLATFORMS table."""
+        if value is None:
+            return value
+        # Check if platform exists in REF_PLATFORMS
+        if not RefPlatform.objects.filter(code=value, is_active=1).exists():
+            active_platforms = list(RefPlatform.objects.active().values_list('code', flat=True))
+            raise serializers.ValidationError(
+                f"Invalid platform '{value}'. Must be one of: {', '.join(active_platforms)}"
+            )
+        return value
     
     class Meta:
         model = Action
@@ -79,7 +106,7 @@ class ActionSerializer(serializers.ModelSerializer):
             'parameters_schema', 'impact_rules', 'default_impact_level',
             'status', 'created_by', 'created_at', 'updated_at',
             'tags', 'documentation_md', 'remediation_rules',
-            'execution_steps', 'change_type_config',
+            'execution_steps', 'change_type_config', 'workflow_steps',
             # Story 13.2, AC3: requires_target field
             'requires_target'
         ]
@@ -104,6 +131,52 @@ class ActionSerializer(serializers.ModelSerializer):
     def get_remediation_rules(self, obj):
         """Deserialize JSON from CLOB using model helper."""
         return obj.get_remediation_rules()
+    
+    def get_workflow_steps(self, obj):
+        """
+        Convert execution_steps to workflow_steps format for workflows.
+        Story 16.2: Include branch conditional and retry fields.
+        """
+        if obj.item_type != ActionItemType.WORKFLOW:
+            return None
+
+        execution_steps = obj.get_execution_steps()
+        if not execution_steps:
+            return None
+
+        # Convert execution_steps to workflow_steps format
+        # Story 16.2: Include step_id, branches (on_success/on_error), and retry config
+        workflow_steps = []
+        for step in execution_steps:
+            if isinstance(step, dict) and 'referenced_action_id' in step:
+                workflow_step = {
+                    'order': step.get('order', 0),
+                    'name': step.get('name'),
+                    'referenced_action_id': step['referenced_action_id'],
+                }
+
+                # Story 16.2: Add optional branch and retry fields
+                if 'step_id' in step:
+                    workflow_step['step_id'] = step['step_id']
+                if 'on_success_step_id' in step:
+                    workflow_step['on_success_step_id'] = step['on_success_step_id']
+                if 'on_error_step_id' in step:
+                    workflow_step['on_error_step_id'] = step['on_error_step_id']
+                if 'retry_enabled' in step:
+                    workflow_step['retry_enabled'] = step['retry_enabled']
+                if 'retry_max_attempts' in step:
+                    workflow_step['retry_max_attempts'] = step['retry_max_attempts']
+                if 'retry_interval_seconds' in step:
+                    workflow_step['retry_interval_seconds'] = step['retry_interval_seconds']
+                if 'retry_backoff_multiplier' in step:
+                    workflow_step['retry_backoff_multiplier'] = step['retry_backoff_multiplier']
+
+                workflow_steps.append(workflow_step)
+
+        # Sort by order to ensure consistent ordering
+        workflow_steps.sort(key=lambda x: x['order'])
+
+        return workflow_steps if workflow_steps else None
     
     def get_tags(self, obj):
         """Get tag names from ActionTag relations."""
@@ -150,8 +223,32 @@ class ActionCreateSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=255, min_length=1)
     description = serializers.CharField(max_length=4000, required=False, allow_null=True)
     item_type = serializers.ChoiceField(choices=ActionItemType.choices, default=ActionItemType.ACTION)
-    engine = serializers.ChoiceField(choices=ActionEngine.choices, required=False, allow_null=True)
-    platform = serializers.ChoiceField(choices=ActionPlatform.choices, required=False, allow_null=True)
+    engine = serializers.CharField(max_length=50, required=False, allow_null=True)
+    platform = serializers.CharField(max_length=50, required=False, allow_null=True)
+    
+    def validate_engine(self, value):
+        """Validate engine against REF_ENGINES table."""
+        if value is None:
+            return value
+        # Check if engine exists in REF_ENGINES
+        if not RefEngine.objects.filter(code=value, is_active=1).exists():
+            active_engines = list(RefEngine.objects.active().values_list('code', flat=True))
+            raise serializers.ValidationError(
+                f"Invalid engine '{value}'. Must be one of: {', '.join(active_engines)}"
+            )
+        return value
+    
+    def validate_platform(self, value):
+        """Validate platform against REF_PLATFORMS table."""
+        if value is None:
+            return value
+        # Check if platform exists in REF_PLATFORMS
+        if not RefPlatform.objects.filter(code=value, is_active=1).exists():
+            active_platforms = list(RefPlatform.objects.active().values_list('code', flat=True))
+            raise serializers.ValidationError(
+                f"Invalid platform '{value}'. Must be one of: {', '.join(active_platforms)}"
+            )
+        return value
     parameters_schema = serializers.DictField(required=False, allow_null=True)
     impact_rules = serializers.DictField(required=False, allow_null=True)
     default_impact_level = serializers.ChoiceField(

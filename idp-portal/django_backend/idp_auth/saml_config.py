@@ -1,6 +1,5 @@
 """
 SAML 2.0 SP configuration for python3-saml.
-Mirrors FastAPI implementation for contract parity.
 """
 
 from pathlib import Path

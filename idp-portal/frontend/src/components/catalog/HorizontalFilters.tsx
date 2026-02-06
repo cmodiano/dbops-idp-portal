@@ -9,18 +9,22 @@
  */
 
 import { Row, Col, Select, Typography } from 'antd';
+import { useEngines } from '../../hooks/useEngines';
+import { useEnvironments } from '../../hooks/useEnvironments';
 
 const { Text } = Typography;
 
-/** Engine filter options. */
-export const ENGINE_OPTIONS = [
+// Story 13.7: ENGINE_OPTIONS removed - use useEngines hook instead
+// Kept for backward compatibility but should not be used
+export const ENGINE_OPTIONS_DEPRECATED = [
   { value: 'Oracle', label: 'Oracle' },
   { value: 'SQL Server', label: 'SQL Server' },
   { value: 'DB2', label: 'DB2' },
 ];
 
-/** Environment filter options. */
-export const ENVIRONMENT_OPTIONS = [
+// Story 13.7: ENVIRONMENT_OPTIONS removed - use useEnvironments hook instead
+// Kept for backward compatibility but should not be used
+export const ENVIRONMENT_OPTIONS_DEPRECATED = [
   { value: 'DEV', label: 'DEV' },
   { value: 'QUAL', label: 'QUAL' },
   { value: 'PROD', label: 'PROD' },
@@ -60,6 +64,11 @@ export function HorizontalFilters({
   onEnvironmentsChange,
   onImpactsChange,
 }: HorizontalFiltersProps) {
+  // Story 13.7: Load engines from REF_ENGINES table
+  const { engineOptions, loading: enginesLoading } = useEngines();
+  // Story 13.7: Load environments from inventory
+  const { environmentOptions, loading: environmentsLoading } = useEnvironments();
+
   return (
     <Row gutter={16} style={{ marginBottom: 16 }} align="middle">
       <Col xs={24} sm={8}>
@@ -69,13 +78,14 @@ export function HorizontalFilters({
         <Select
           mode="multiple"
           style={{ width: '100%' }}
-          placeholder="Tous les moteurs"
+          placeholder={enginesLoading ? "Chargement..." : "Tous les moteurs"}
           value={selectedEngines}
           onChange={onEnginesChange}
-          options={ENGINE_OPTIONS}
+          options={engineOptions}
           allowClear
           maxTagCount="responsive"
           aria-label="Filtrer par moteur"
+          loading={enginesLoading}
         />
       </Col>
       <Col xs={24} sm={8}>
@@ -85,13 +95,14 @@ export function HorizontalFilters({
         <Select
           mode="multiple"
           style={{ width: '100%' }}
-          placeholder="Tous les environnements"
+          placeholder={environmentsLoading ? "Chargement..." : "Tous les environnements"}
           value={selectedEnvironments}
           onChange={onEnvironmentsChange}
-          options={ENVIRONMENT_OPTIONS}
+          options={environmentOptions}
           allowClear
           maxTagCount="responsive"
           aria-label="Filtrer par environnement"
+          loading={environmentsLoading}
         />
       </Col>
       <Col xs={24} sm={8}>

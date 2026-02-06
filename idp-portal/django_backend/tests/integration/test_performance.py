@@ -1,7 +1,7 @@
 """
 Performance and benchmark tests.
 
-Story M.9: Tests unitaires et d'intégration (parité avec FastAPI)
+Story M.9: Tests unitaires et d'intégration
 Uses pytest-benchmark for performance measurement.
 """
 

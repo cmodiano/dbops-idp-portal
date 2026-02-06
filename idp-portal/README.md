@@ -8,7 +8,7 @@ Internal Developer Platform pour les operations base de donnees.
 - **Backend** : Django 5.1+ / Django REST Framework 3.15+ (officiel depuis février 2026)
 - **Base de donnees** : Oracle 19c+ (dev local via Docker)
 
-> **Note:** Le backend FastAPI (legacy) est archivé dans la branche `legacy/fastapi-final`. Voir [docs/fastapi-to-django-migration.md](docs/fastapi-to-django-migration.md) pour les détails de la migration.
+> **Note:** Migration FastAPI→Django terminée. Le code FastAPI est archivé dans la branche `legacy/fastapi-final` et le tag `v1.0.0-fastapi`. Voir [docs/MIGRATION_ARCHIVE.md](docs/MIGRATION_ARCHIVE.md) pour référence historique.
 
 ## Environnement de developpement
 
@@ -41,7 +41,7 @@ Les migrations sont gerees par **Flyway** (Community). Format des fichiers : `V0
 - **CLI** : [Download Flyway](https://flywaydb.org/download) et placer `flyway` dans le PATH, ou  
 - **Sans install** : le script `run_migrations.sh` utilise l’image Docker `flyway/flyway` si la CLI n’est pas disponible.
 
-**Variables** (identiques au backend) : `ORACLE_DSN`, `ORACLE_USER`, `ORACLE_PASSWORD`. Ex. `ORACLE_DSN=localhost:1521/FREEPDB1`.
+**Variables** (identiques au backend Django) : `ORACLE_DSN`, `ORACLE_USER`, `ORACLE_PASSWORD`. Ex. `ORACLE_DSN=localhost:1521/FREEPDB1`.
 
 **Appliquer les migrations** (depuis la racine `idp-portal/`) :
 
@@ -83,21 +83,9 @@ export ORACLE_PASSWORD=changeme
 python manage.py runserver
 ```
 
-Le backend Django utilise le même schéma Oracle que l'ancien backend FastAPI. Pas de migration de données nécessaire.
+Le backend Django utilise le schéma Oracle existant. Pas de migration de données nécessaire.
 
 **Configuration production :** Voir `django_backend/.env.production.template` et `django_backend/deployment/`.
-
-### Backend FastAPI (Legacy - Archivé)
-
-> **ATTENTION:** Le backend FastAPI est archivé. Utiliser Django pour tout nouveau développement.
-
-Le code FastAPI reste disponible dans la branche `legacy/fastapi-final` pour référence :
-
-```bash
-git checkout legacy/fastapi-final
-cd backend
-# ... (voir documentation legacy)
-```
 
 ### Frontend
 
@@ -114,14 +102,14 @@ Pour lancer les tests d'integration contre le container Oracle (depuis la racine
 ```bash
 docker compose up -d oracle
 # Attendre ~1-2 min
-cd backend && ORACLE_DSN=localhost:1521/FREEPDB1 ORACLE_USER=idp_app ORACLE_PASSWORD=changeme python3 -m pytest tests/unit tests/integration -v
+cd django_backend && ORACLE_DSN=localhost:1521/FREEPDB1 ORACLE_USER=idp_app ORACLE_PASSWORD=changeme python3 -m pytest tests/ -v
 ```
 
 Sans Oracle configure (ORACLE_DSN non defini), les tests d'integration sont ignores (skip).
 
 ## Seed de données de test (développement)
 
-Un script de seed insère des données de test pour valider le frontend. Il utilise les mêmes variables d'environnement que le backend (`ORACLE_DSN`, `ORACLE_USER`, `ORACLE_PASSWORD` — voir `backend/app/core/config.py`). À lancer une seule fois sur base vide, ou avec `--reset` pour réinsérer.
+Un script de seed insère des données de test pour valider le frontend. Il utilise les mêmes variables d'environnement que le backend Django (`ORACLE_DSN`, `ORACLE_USER`, `ORACLE_PASSWORD`). À lancer une seule fois sur base vide, ou avec `--reset` pour réinsérer.
 
 **Depuis la racine idp-portal/** (variables Oracle dans l'environnement ou dans un `.env` à la racine) :
 
@@ -129,10 +117,10 @@ Un script de seed insère des données de test pour valider le frontend. Il util
 python scripts/seed_dev_data.py --env=dev
 ```
 
-**Depuis le backend** (avec venv et variables Oracle déjà chargées) :
+**Depuis le backend Django** (avec venv et variables Oracle déjà chargées) :
 
 ```bash
-cd backend
+cd django_backend
 source .venv/bin/activate
 python ../scripts/seed_dev_data.py --env=dev
 ```
@@ -186,9 +174,8 @@ Le flag `is_business_profile` est retourné par l'API `/auth/me` et conditionne 
 
 ## Structure
 
-- `frontend/` : Application React (inchangée)
-- `django_backend/` : API Django REST Framework (officiel)
-- `backend/` : API FastAPI (legacy - archivé dans branche `legacy/fastapi-final`)
+- `frontend/` : Application React
+- `django_backend/` : API Django REST Framework
 - `database/` : Migrations SQL Flyway (`migrations/`), script d'init utilisateur (`init/`)
 - `scripts/` : Scripts utilitaires (`run_migrations.sh`, `seed_dev_data.py`, `post-switchover-validation.sh`)
 - `docs/` : Documentation technique (migration, déploiement, architecture)
@@ -205,7 +192,7 @@ Le flag `is_business_profile` est retourné par l'API `/auth/me` et conditionne 
 
 Lors de la création ou mise à jour d'une intégration (POST/PUT `/admin/integrations`), le champ optionnel `config` décrit le flow d'authentification par étapes. Il est validé côté backend contre un **JSON Schema** (draft-07).
 
-- **Schéma** : `backend/app/schemas/integration_config_schema.json`
+- **Schéma** : `django_backend/catalog/schemas/integration_config_schema.json`
 - **Règles** : `auth_flow` est un tableau d'étapes ; chaque étape a `step` ∈ `obtain_token` | `call_api`, optionnellement `url_ref` ∈ `base_url` | `token_url`, et `credentials` (référence `credential_ref` de l'intégration, pas de chemin Vault arbitraire). En cas de config invalide, l'API retourne **400** avec `code: "INVALID_CONFIG"` et détails (champ, message).
 
 Exemple de config valide :

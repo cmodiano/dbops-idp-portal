@@ -23,7 +23,7 @@ describe('catalog_service', () => {
 
       const result = await catalogService.fetchCatalogActions();
 
-      expect(apiClient.apiFetch).toHaveBeenCalledWith('/catalog/actions');
+      expect(apiClient.apiFetch).toHaveBeenCalledWith('/catalog/actions/');
       expect(result).toEqual(mockActions);
     });
 
@@ -32,7 +32,7 @@ describe('catalog_service', () => {
 
       await catalogService.fetchCatalogActions({ tags: ['rac', 'dataguard'] });
 
-      expect(apiClient.apiFetch).toHaveBeenCalledWith('/catalog/actions?tags=rac%2Cdataguard');
+      expect(apiClient.apiFetch).toHaveBeenCalledWith('/catalog/actions/?tags=rac%2Cdataguard');
     });
 
     it('fetches catalog actions with q, engine, environment, impact (Story 3.3, AC9)', async () => {
@@ -46,7 +46,7 @@ describe('catalog_service', () => {
       });
 
       expect(apiClient.apiFetch).toHaveBeenCalledWith(
-        '/catalog/actions?q=oracle&engine=Oracle&environment=PROD&impact=high'
+        '/catalog/actions/?q=oracle&engine=Oracle&environment=PROD&impact=high'
       );
     });
   });
@@ -140,7 +140,7 @@ describe('catalog_service', () => {
 
       const result = await catalogService.fetchCatalogActionById(1);
 
-      expect(apiClient.apiFetchRaw).toHaveBeenCalledWith('/catalog/actions/1');
+      expect(apiClient.apiFetchRaw).toHaveBeenCalledWith('/catalog/actions/1/');
       expect(result.data.id).toBe(1);
       expect(result.can_execute).toBe(true);
       expect(result.allowed_environments).toEqual(['DEV', 'QUAL']);

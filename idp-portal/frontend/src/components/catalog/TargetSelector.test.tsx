@@ -7,14 +7,15 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { App } from 'antd';
 import { TargetSelector, type Target } from './TargetSelector';
 
-// Mock the api_client
+// Mock the api_client (TargetSelector uses apiFetchRaw)
 vi.mock('../../services/api_client', () => ({
   apiFetch: vi.fn(),
+  apiFetchRaw: vi.fn(),
 }));
 
-import { apiFetch } from '../../services/api_client';
+import { apiFetchRaw } from '../../services/api_client';
 
-const mockApiFetch = apiFetch as ReturnType<typeof vi.fn>;
+const mockApiFetchRaw = apiFetchRaw as ReturnType<typeof vi.fn>;
 
 // Test data
 const mockTargets: Target[] = [
@@ -41,7 +42,7 @@ function TestWrapper({ children }: { children: React.ReactNode }) {
 describe('TargetSelector', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockApiFetch.mockResolvedValue(mockTargetsResponse);
+    mockApiFetchRaw.mockResolvedValue(mockTargetsResponse);
   });
 
   afterEach(() => {
@@ -60,7 +61,7 @@ describe('TargetSelector', () => {
 
       // Wait for targets to load
       await waitFor(() => {
-        expect(mockApiFetch).toHaveBeenCalledWith(
+        expect(mockApiFetchRaw).toHaveBeenCalledWith(
           expect.stringContaining('/inventory/targets')
         );
       });
@@ -70,7 +71,7 @@ describe('TargetSelector', () => {
 
     it('renders loading state while fetching targets', async () => {
       // Delay the response
-      mockApiFetch.mockImplementation(
+      mockApiFetchRaw.mockImplementation(
         () =>
           new Promise((resolve) =>
             setTimeout(() => resolve(mockTargetsResponse), 100)
@@ -90,7 +91,7 @@ describe('TargetSelector', () => {
     });
 
     it('displays error message when fetch fails', async () => {
-      mockApiFetch.mockRejectedValue(new Error('Network error'));
+      mockApiFetchRaw.mockRejectedValue(new Error('Network error'));
 
       const onChange = vi.fn();
 
@@ -120,7 +121,7 @@ describe('TargetSelector', () => {
 
       // Wait for targets to load
       await waitFor(() => {
-        expect(mockApiFetch).toHaveBeenCalled();
+        expect(mockApiFetchRaw).toHaveBeenCalled();
       });
 
       // Open dropdown
@@ -151,7 +152,7 @@ describe('TargetSelector', () => {
       );
 
       await waitFor(() => {
-        expect(mockApiFetch).toHaveBeenCalled();
+        expect(mockApiFetchRaw).toHaveBeenCalled();
       });
 
       // Verify the combobox is rendered
@@ -171,7 +172,7 @@ describe('TargetSelector', () => {
       );
 
       await waitFor(() => {
-        expect(mockApiFetch).toHaveBeenCalled();
+        expect(mockApiFetchRaw).toHaveBeenCalled();
       });
 
       // Open dropdown
@@ -199,7 +200,7 @@ describe('TargetSelector', () => {
       );
 
       await waitFor(() => {
-        expect(mockApiFetch).toHaveBeenCalled();
+        expect(mockApiFetchRaw).toHaveBeenCalled();
       });
 
       // Open dropdown and type to search
@@ -226,7 +227,7 @@ describe('TargetSelector', () => {
       );
 
       await waitFor(() => {
-        expect(mockApiFetch).toHaveBeenCalled();
+        expect(mockApiFetchRaw).toHaveBeenCalled();
       });
 
       // Ant Design adds disabled class to the wrapper div, not the combobox itself
@@ -250,7 +251,7 @@ describe('TargetSelector', () => {
       );
 
       await waitFor(() => {
-        expect(mockApiFetch).toHaveBeenCalled();
+        expect(mockApiFetchRaw).toHaveBeenCalled();
       });
 
       expect(screen.getByLabelText('Custom aria label')).toBeInTheDocument();

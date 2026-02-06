@@ -1,10 +1,10 @@
 # Django Backend Tests
 
-**Story M.9: Tests unitaires et d'intégration (parité avec FastAPI)**
+**Story M.9: Tests unitaires et d'intégration**
 
 ## Vue d'ensemble
 
-Cette suite de tests fournit une couverture complète pour le backend Django, atteignant la parité avec la suite de tests FastAPI. Les tests sont organisés pour être maintenables, rapides et donner confiance dans le code.
+Cette suite de tests fournit une couverture complète pour le backend Django. Les tests sont organisés pour être maintenables, rapides et donner confiance dans le code.
 
 ## Stratégie de Tests & Patterns
 

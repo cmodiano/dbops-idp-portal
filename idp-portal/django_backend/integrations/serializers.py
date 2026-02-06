@@ -1,6 +1,5 @@
 """
 Serializers for integrations endpoints.
-Matches FastAPI IntegrationCreate, IntegrationUpdate, IntegrationResponse models.
 """
 
 from rest_framework import serializers
@@ -19,7 +18,6 @@ def validate_url(value):
 class IntegrationSerializer(serializers.ModelSerializer):
     """
     Serializer for integration read operations (GET /admin/integrations/{id}).
-    Matches FastAPI IntegrationResponse model.
     """
     config = serializers.SerializerMethodField()
     auth_flow = serializers.CharField(required=False, allow_null=True)
@@ -40,7 +38,6 @@ class IntegrationSerializer(serializers.ModelSerializer):
 class IntegrationCreateSerializer(serializers.Serializer):
     """
     Serializer for creating integrations (POST /admin/integrations).
-    Matches FastAPI IntegrationCreate model.
     """
     type = serializers.ChoiceField(
         choices=IntegrationType.choices,
@@ -126,7 +123,6 @@ class IntegrationCreateSerializer(serializers.Serializer):
 class IntegrationUpdateSerializer(serializers.Serializer):
     """
     Serializer for updating integrations (PUT /admin/integrations/{id}).
-    Matches FastAPI IntegrationUpdate model.
     All fields optional for partial update.
     """
     type = serializers.ChoiceField(

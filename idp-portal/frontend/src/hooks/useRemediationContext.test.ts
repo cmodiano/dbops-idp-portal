@@ -178,7 +178,7 @@ describe('useRemediationContext', () => {
     });
 
     expect(result.current.error).toBeInstanceOf(Error);
-    expect(result.current.error?.message).toBe('Unknown error');
+    expect(result.current.error?.message).toBe('Erreur inconnue');
   });
 
   it('returns context with no remediation when API returns empty', async () => {

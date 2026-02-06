@@ -1,7 +1,7 @@
 """
 Integration tests for Django backend.
 
-Story M.9: Tests unitaires et d'intégration (parité avec FastAPI)
+Story M.9: Tests unitaires et d'intégration
 
 This package contains end-to-end integration tests that verify:
 - Complete workflows (action lifecycle, execution flow, audit trail)

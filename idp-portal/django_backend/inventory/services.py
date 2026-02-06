@@ -7,6 +7,7 @@ No local DB table - reads directly from external sources.
 import fnmatch
 import re
 import structlog
+from cachetools import TTLCache
 
 from django.db import connection
 
@@ -16,6 +17,9 @@ from profiles.models import Profile
 from core.middleware import get_correlation_id
 
 logger = structlog.get_logger(__name__)
+
+# Cache for environments list (TTL 5 minutes to match catalog cache)
+_environments_cache: TTLCache[str, list[str]] = TTLCache(maxsize=1, ttl=300)
 
 # Maximum targets to load for in-memory RBAC filtering
 MAX_TARGETS_FOR_RBAC_FILTER = 5000
@@ -272,6 +276,7 @@ class InventoryService:
             where_clause = "WHERE " + " AND ".join(conditions)
 
         # Count query
+        # nosec B608 - table_or_synonym validated by SAFE_TABLE_NAME_PATTERN above
         count_sql = f"SELECT COUNT(*) FROM {table_or_synonym} {where_clause}"
 
         # Data query with pagination
@@ -279,6 +284,7 @@ class InventoryService:
         params['offset'] = offset
         params['limit'] = page_size
 
+        # nosec B608 - table_or_synonym validated by SAFE_TABLE_NAME_PATTERN above
         data_sql = f"""
             SELECT NAME, ENVIRONMENT, TYPE
             FROM {table_or_synonym}
@@ -395,7 +401,12 @@ class InventoryService:
                             allowed_environments.add(self._normalize_environment(e))
             elif is_admin:
                 # Admin profiles without ProfileActionPermission: full environment access
-                allowed_environments.update(TargetEnvironment.VALUES)
+                # Story 13.7: Get environments from inventory instead of hardcoded list
+                try:
+                    allowed_environments.update(self.list_environments())
+                except InventoryServiceError:
+                    # Fallback to default environments if inventory unavailable
+                    allowed_environments.update(self.get_default_environments())
 
             # Get target permissions
             target_perm = getattr(profile, 'profiletargetpermission', None)
@@ -417,7 +428,12 @@ class InventoryService:
 
         # When admin profiles have actions_type=ALL but empty environments
         if not allowed_environments and any(getattr(p, 'is_admin', 0) == 1 for p in profiles):
-            allowed_environments = set(TargetEnvironment.VALUES)
+            # Story 13.7: Get environments from inventory instead of hardcoded list
+            try:
+                allowed_environments = set(self.list_environments())
+            except InventoryServiceError:
+                # Fallback to default environments if inventory unavailable
+                allowed_environments = set(self.get_default_environments())
 
         # Apply environment filter if provided (normalize query param to match allowed set)
         if environment:
@@ -558,20 +574,35 @@ class InventoryService:
             'production': TargetEnvironment.PROD,
         }
 
-        if raw_env in TargetEnvironment.VALUES:
-            return raw_env
-        if raw_env in env_aliases:
-            return env_aliases[raw_env]
+        # Story 13.7: Check against inventory environments instead of hardcoded VALUES
+        # First check standard values (for backward compatibility)
+        standard_values = ['dev', 'staging', 'prod']
+        if raw_env.lower() in [v.lower() for v in standard_values]:
+            return raw_env.lower()
+        if raw_env.lower() in env_aliases:
+            return env_aliases[raw_env.lower()]
+
+        # Try to validate against inventory (if available)
+        try:
+            valid_environments = self.list_environments()
+            if raw_env.lower() in [e.lower() for e in valid_environments]:
+                # Find matching environment with correct case
+                for env in valid_environments:
+                    if env.lower() == raw_env.lower():
+                        return env
+        except InventoryServiceError:
+            # Inventory unavailable - use fallback logic
+            pass
 
         # Default to dev for unknown values, but log warning
         if raw_env:
             logger.warning(
                 "unknown_environment_value_defaulted",
                 raw_value=raw_env,
-                defaulted_to=TargetEnvironment.DEV,
+                defaulted_to='dev',
                 correlation_id=get_correlation_id()
             )
-        return TargetEnvironment.DEV
+        return 'dev'
 
     def get_allowed_environments_for_user(self, ad_groups: list[str]) -> set[str]:
         """
@@ -598,3 +629,70 @@ class InventoryService:
                             allowed_environments.add(self._normalize_environment(e))
 
         return allowed_environments
+
+    def list_environments(self) -> list[str]:
+        """
+        List distinct environments from inventory.
+        Returns normalized environment values (dev, staging, prod).
+        Story 13.7 - AC2: Source of truth for environments is inventory.
+        Uses cache to prevent duplicate Oracle queries.
+
+        Returns:
+            List of distinct environment values (normalized)
+        """
+        correlation_id = get_correlation_id()
+        
+        # Check cache first
+        cache_key = 'environments_list'
+        if cache_key in _environments_cache:
+            cached_result = _environments_cache[cache_key]
+            logger.info(
+                "environments_listed_cached",
+                count=len(cached_result),
+                environments=cached_result,
+                correlation_id=correlation_id
+            )
+            return cached_result
+        
+        integration = self.get_active_inventory_integration()
+
+        # Get targets without filters to extract all environments
+        targets, _ = self.list_targets(
+            environment=None,
+            search=None,
+            target_type=None,
+            page=1,
+            page_size=10000  # Large page size to get all targets
+        )
+
+        # Extract distinct environments (normalized)
+        environments = set()
+        for target in targets:
+            env = target.get('environment')
+            if env:
+                environments.add(env)
+
+        # Sort for consistent ordering
+        result = sorted(environments)
+
+        # Cache result
+        _environments_cache[cache_key] = result
+
+        logger.info(
+            "environments_listed",
+            count=len(result),
+            environments=result,
+            correlation_id=correlation_id
+        )
+
+        return result
+
+    def get_default_environments(self) -> list[str]:
+        """
+        Get default environment values as fallback when inventory is unavailable.
+        Story 13.7 - Fallback to standard values if inventory service fails.
+        
+        Returns:
+            List of default environment values (dev, staging, prod)
+        """
+        return ['dev', 'staging', 'prod']

@@ -1,5 +1,5 @@
 """
-Custom exceptions and exception handler for DRF to match FastAPI error format.
+Custom exceptions and exception handler for DRF.
 Story M.8 - Task 5: Enhanced error handling with structured logging.
 """
 
@@ -77,7 +77,7 @@ def _get_request_context(context):
 
 def custom_exception_handler(exc, context):
     """
-    Custom exception handler that formats errors like FastAPI:
+    Custom exception handler that formats errors:
     {
         "error": {
             "code": "NOT_FOUND",
@@ -202,7 +202,7 @@ def custom_exception_handler(exc, context):
 
     # Handle DRF exceptions
     if response is not None:
-        # Convert DRF error format to FastAPI format
+        # Convert DRF error format to standard error format
         if 'detail' in response.data:
             logger.warning(
                 "handled_exception",

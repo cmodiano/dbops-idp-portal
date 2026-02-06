@@ -1,6 +1,5 @@
 """
 JWT token generation and validation utilities.
-Mirrors FastAPI implementation for contract parity.
 Story M.7 - Task 4
 """
 
@@ -12,7 +11,7 @@ from jose import jwt, JWTError
 
 
 class TokenPayload:
-    """Token payload data class matching FastAPI TokenPayload model."""
+    """Token payload data class."""
 
     def __init__(
         self,

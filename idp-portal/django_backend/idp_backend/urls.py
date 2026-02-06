@@ -30,6 +30,7 @@ urlpatterns = [
     path('api/v1/admin/', include('admin_analytics.urls')),
     path('api/v1/admin/', include('profiles.urls')),
     path('api/v1/inventory/', include('inventory.urls')),
+    path('api/v1/reference/', include('reference.urls')),
 ]
 
 # Serve uploaded integration icons in development

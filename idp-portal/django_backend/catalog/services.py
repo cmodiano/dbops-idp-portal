@@ -453,43 +453,52 @@ class CatalogService:
         return queryset.with_tags().with_creator()
     
     @transaction.atomic
-    def update_execution_steps(self, action_id: int, steps: list[dict], 
+    def update_execution_steps(self, action_id: int, steps: list[dict],
                                change_type_config: dict | None = None, user=None):
         """
         Update execution steps and change type config for an action.
-        Only allowed for actions in draft status.
-        
+        Only allowed for actions in draft or disabled status.
+
+        Story 16.2: Validates workflow steps with branches and retry configuration.
+
         Args:
             action_id: ID of the action
             steps: List of execution step dicts
             change_type_config: Optional change type config dict
             user: User instance (for audit)
-        
+
         Returns:
             Updated Action instance or None if not found
-        
+
         Raises:
             ValueError: If action is not in draft status
+            serializers.ValidationError: If workflow steps validation fails
         """
+        from catalog.validation import validate_workflow_steps
+
         try:
             action = Action.objects.get(id=action_id)
         except Action.DoesNotExist:
             return None
-        
-        # Check status: only draft actions can have execution steps updated
-        if action.status != ActionStatus.DRAFT:
-            raise ValueError("Les étapes ne peuvent être modifiées que pour une action en brouillon")
-        
+
+        # Check status: only draft or disabled actions can have execution steps updated
+        if action.status not in [ActionStatus.DRAFT, ActionStatus.DISABLED]:
+            raise ValueError("Les étapes ne peuvent être modifiées que pour une action en brouillon ou désactivée")
+
         # Update execution_steps if provided
         if steps is not None:
+            # Story 16.2: Validate workflow steps if item_type is workflow
+            if action.item_type == ActionItemType.WORKFLOW:
+                steps = validate_workflow_steps(steps, action_id=action.id)
+
             action.set_execution_steps(steps)
-        
+
         # Update change_type_config if provided
         if change_type_config is not None:
             action.set_change_type_config(change_type_config)
-        
+
         action.save()
-        
+
         # Audit if user provided
         if user:
             AuditService.create_entry(
@@ -499,5 +508,5 @@ class CatalogService:
                 entity_id=action.id,
                 details={'updated_fields': ['execution_steps', 'change_type_config']}
             )
-        
+
         return action

@@ -382,13 +382,17 @@ describe('ProfileWizard', () => {
       const patternRadio = screen.getByLabelText(/Pattern/i);
       await user.click(patternRadio);
 
+      // Provide at least one pattern (required by validation)
+      const patternsInput = screen.getByLabelText(/Target patterns/i);
+      await user.type(patternsInput, 'assurance-*{enter}');
+
       await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
 
       await waitFor(() => {
         expect(mockProfilesService.putProfileTargets).toHaveBeenCalledWith(1, {
           targets_type: 'pattern',
           target_names: [],
-          target_patterns: [],
+          target_patterns: ['assurance-*'],
         });
       });
     });

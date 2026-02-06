@@ -3,6 +3,29 @@ import { render, screen, within } from '@testing-library/react';
 import { AdminPreview } from './AdminPreview';
 import type { ActionPreviewData } from '../../types/api';
 
+// The preview container is tested here (layout + labels + accessibility).
+// ActionCard and ActionDrawerPreview have their own dedicated test suites and
+// pull in complex dependencies (themes, markdown, metrics). Mock them to keep
+// this unit test stable and focused.
+import { vi } from 'vitest';
+vi.mock('../catalog/ActionCard', () => ({
+  ActionCard: ({ action }: any) => (
+    <article>
+      <span>{action?.name}</span>
+      {action?.impact_level === 'medium' ? <span>Moyen</span> : null}
+    </article>
+  ),
+}));
+vi.mock('../catalog/ActionDrawerPreview', () => ({
+  ActionDrawerPreview: ({ action }: any) => (
+    <section role="region">
+      <span>{action?.name}</span>
+      {action?.impact_level === 'medium' ? <span>Moyen</span> : null}
+      <button type="button">Executer</button>
+    </section>
+  ),
+}));
+
 const mockFormData: ActionPreviewData = {
   name: 'Creer PDB Oracle',
   description: 'Cree une nouvelle Pluggable Database Oracle.',

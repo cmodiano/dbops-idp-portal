@@ -35,7 +35,8 @@ class ExecutionService:
                        parameters: dict | None = None, parent_execution_id: int | None = None,
                        correlation_id: str | None = None,
                        source: str | None = None, ip_address: str | None = None,
-                       targets: list[str] | None = None):
+                       targets: list[str] | None = None,
+                       delegated_referenced_action_ids: list[int] | None = None):
         """
         Create an execution atomically.
 
@@ -49,6 +50,8 @@ class ExecutionService:
             source: Optional source identifier ('api' or 'ui') for audit (Story 13.5)
             ip_address: Optional IP address of the client for audit (Story 13.5)
             targets: Optional list of target names for audit (Story 13.5)
+            delegated_referenced_action_ids: Story 4.11 - when set, merge workflow delegation
+                into the single audit entry (avoids duplicate EXECUTION_SUBMITTED).
 
         Returns:
             Execution instance
@@ -72,12 +75,22 @@ class ExecutionService:
             'action_name': action.name,
             'environment': environment,
         }
+        # Story 4.12 (AC6): include workflow_step_parameters when provided
+        if isinstance(parameters, dict) and isinstance(parameters.get("workflow_step_parameters"), dict):
+            audit_details["workflow_step_parameters"] = parameters.get("workflow_step_parameters")
         if source:
             audit_details['source'] = source
         if ip_address:
             audit_details['ip_address'] = ip_address
         if targets:
             audit_details['targets'] = targets
+        # Story 4.11: single audit entry with delegation info (avoids duplicate)
+        if delegated_referenced_action_ids is not None:
+            audit_details['delegated'] = True
+            audit_details['workflow_action_id'] = action.id
+            audit_details['workflow_action_name'] = action.name
+            audit_details['referenced_action_ids'] = delegated_referenced_action_ids
+            audit_details['validation_result'] = 'success'
 
         # Audit
         AuditService.create_entry(
@@ -259,7 +272,7 @@ class ExecutionService:
             logger.warning(
                 "unknown_execution_status_for_audit",
                 status=new_status,
-                correlation_id=correlation_id
+                correlation_id=get_correlation_id()
             )
             audit_action_type = AuditActionType.EXECUTION_SUBMITTED  # Fallback
         

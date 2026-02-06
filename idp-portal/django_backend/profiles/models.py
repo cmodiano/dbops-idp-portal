@@ -21,7 +21,7 @@ class ProfileManager(models.Manager):
           - a full DN like "CN=GRP-IDP-DBOPS,OU=...,DC=..."
           - a short group name like "GRP-IDP-DBOPS"
           - sometimes a profile code like "dbops"
-        - For robustness (and to match FastAPI behavior), we match against BOTH:
+        - For robustness, we match against BOTH:
           - `Profile.ad_group`
           - `Profile.name`
         - Matching is case-insensitive.
@@ -74,12 +74,12 @@ class ProfileManager(models.Manager):
         Counts both action and target permissions.
         
         Returns:
-            QuerySet with permissions_count annotation
+            QuerySet with permission_count annotation (used by ProfileListSerializer).
         """
         from django.db.models import Count, Q
         
         return self.annotate(
-            permissions_count=Count(
+            permission_count=Count(
                 'profileactionpermission',
                 filter=Q(profileactionpermission__isnull=False),
                 distinct=True

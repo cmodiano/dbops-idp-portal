@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 
 
 class AuthFlow(models.TextChoices):
-    """Authentication flow enum matching FastAPI model."""
+    """Authentication flow enum."""
     TOKEN = 'token', 'Token'
     BASIC = 'basic', 'Basic'
     BASIC_THEN_TOKEN = 'basic_then_token', 'Basic Then Token'

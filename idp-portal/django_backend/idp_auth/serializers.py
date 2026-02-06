@@ -1,6 +1,5 @@
 """
 Serializers for authentication endpoints.
-Matches FastAPI UserProfile and TokenRefreshResponse models.
 """
 
 from rest_framework import serializers
@@ -9,7 +8,7 @@ from rest_framework import serializers
 class UserProfileSerializer(serializers.Serializer):
     """
     Serializer for user profile (GET /auth/me response).
-    Read-only serializer matching FastAPI UserProfile model.
+    Read-only serializer.
     """
     id = serializers.IntegerField(read_only=True)
     username = serializers.CharField(read_only=True)
@@ -38,7 +37,6 @@ class UserProfileSerializer(serializers.Serializer):
 class TokenRefreshResponseSerializer(serializers.Serializer):
     """
     Serializer for token refresh response (POST /auth/refresh response).
-    Matches FastAPI TokenRefreshResponse model.
     """
     access_token = serializers.CharField(read_only=True)
     token_type = serializers.CharField(read_only=True, default="bearer")

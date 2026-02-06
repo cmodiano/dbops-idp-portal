@@ -1,11 +1,10 @@
 #!/bin/bash
 # ============================================================================
 # Post-Switchover Validation Script
-# IDP Portal - FastAPI → Django Migration
+# IDP Portal - Django Backend Validation
 # ============================================================================
 #
-# This script validates that the Django backend is functioning correctly
-# after the switchover from FastAPI.
+# This script validates that the Django backend is functioning correctly.
 #
 # Usage:
 #   ./post-switchover-validation.sh [--api-url URL] [--jwt-token TOKEN]
@@ -323,12 +322,10 @@ main() {
     echo ""
 
     if [[ "$FAILED" -eq 0 ]]; then
-        echo -e "${GREEN}✓ ALL TESTS PASSED - Django backend is operational${NC}"
+        echo -e "${GREEN}✓ ALL TESTS PASSED - Backend is operational${NC}"
         exit 0
     else
         echo -e "${RED}✗ SOME TESTS FAILED - Review errors above${NC}"
-        echo ""
-        echo "Recommendation: If critical tests failed, consider rollback."
         exit 1
     fi
 }

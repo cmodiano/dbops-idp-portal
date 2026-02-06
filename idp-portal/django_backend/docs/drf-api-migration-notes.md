@@ -1,8 +1,12 @@
 # Migration Notes: FastAPI → Django REST Framework
 
+> **📦 Document d'archivage — Migration terminée**  
+> Ce document est conservé pour référence historique. La migration FastAPI→Django est complète (février 2026).  
+> Voir [MIGRATION_ARCHIVE.md](../../docs/MIGRATION_ARCHIVE.md) pour accéder au code FastAPI archivé.
+
 **Story:** M.4, M.5, M.7, M.8 - API REST — endpoints catalogue, admin (actions, tags), profils, auth, observabilité
 **Date:** 2026-02-03, 2026-02-04, 2026-02-05
-**Status:** Implementation Complete (M.8 Observability added)
+**Status:** Migration terminée — Document historique conservé
 
 ## Vue d'ensemble
 

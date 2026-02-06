@@ -1,7 +1,7 @@
 """
 Transaction and rollback tests.
 
-Story M.9: Tests unitaires et d'intégration (parité avec FastAPI)
+Story M.9: Tests unitaires et d'intégration
 Tests atomic transactions in services and rollback behavior.
 """
 

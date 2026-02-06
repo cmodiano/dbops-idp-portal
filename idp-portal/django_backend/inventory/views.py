@@ -171,12 +171,22 @@ def list_all_targets(request):
     search = request.query_params.get('search')
     target_type = request.query_params.get('target_type')
 
-    # Validate environment if provided
-    if environment and environment not in TargetEnvironment.VALUES:
-        return Response(
-            {'detail': f'Invalid environment. Must be one of: {TargetEnvironment.VALUES}'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+    # Story 13.7: Validate environment against inventory instead of hardcoded list
+    if environment:
+        try:
+            valid_environments = inventory_service.list_environments()
+            if environment.lower() not in [e.lower() for e in valid_environments]:
+                return Response(
+                    {'detail': f'Invalid environment. Must be one of: {sorted(valid_environments)}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except InventoryServiceError:
+            # If inventory service fails, allow but log warning
+            logger.warning(
+                "inventory_validation_failed_list_all",
+                environment=environment,
+                correlation_id=correlation_id
+            )
 
     logger.info(
         "listing_all_targets",
@@ -219,3 +229,39 @@ def list_all_targets(request):
         'page_size': page_size,
         'total_pages': (total_count + page_size - 1) // page_size if page_size > 0 else 0
     })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def list_environments(request):
+    """
+    List distinct environments from inventory.
+    Story 13.7 - AC2: Source of truth for environments is inventory.
+    Returns normalized environment values (dev, staging, prod).
+
+    This endpoint replaces hardcoded environment lists.
+    """
+    correlation_id = get_correlation_id()
+    inventory_service = InventoryService()
+
+    logger.info(
+        "listing_environments",
+        user_id=request.user.id,
+        correlation_id=correlation_id
+    )
+
+    try:
+        environments = inventory_service.list_environments()
+    except InventoryServiceError as e:
+        logger.error(
+            "inventory_service_error",
+            error=str(e),
+            user_id=request.user.id,
+            correlation_id=correlation_id
+        )
+        return Response(
+            {'detail': str(e)},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE
+        )
+
+    return Response(environments)

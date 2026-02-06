@@ -1,5 +1,18 @@
 const API_BASE = '/api/v1';
 
+/** Error thrown by apiFetch when response is not ok. Carries HTTP status for 403/400 handling. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    /** Optional parsed JSON body (e.g. { error: { code, message, details } }) for 400 validation details. */
+    public responseBody?: { error?: { code?: string; message?: string; details?: Record<string, unknown> } },
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 /** Token accessor set by AuthProvider. Avoids circular dependency. */
 let _getAccessToken: (() => string | null) = () => null;
 let _onRefreshNeeded: (() => Promise<string | null>) = async () => null;
@@ -35,12 +48,14 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 
   if (!response.ok) {
     let errorMessage = 'Unknown error';
+    let responseBody: ApiError['responseBody'];
     const contentType = response.headers.get('content-type');
     const isJson = contentType?.includes('application/json');
-    
+
     if (isJson) {
       try {
         const body = await response.json();
+        responseBody = body;
         errorMessage = body.error?.message ?? `Erreur HTTP ${response.status}`;
       } catch {
         errorMessage = `Erreur HTTP ${response.status}: ${response.statusText}`;
@@ -53,7 +68,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
         errorMessage = `Erreur HTTP ${response.status}: ${response.statusText}`;
       }
     }
-    throw new Error(errorMessage);
+    throw new ApiError(errorMessage, response.status, responseBody);
   }
   if (response.status === 204) return undefined as T;
   const body = await response.json();
@@ -106,7 +121,7 @@ export async function apiFetchRaw<T>(path: string, init?: RequestInit): Promise<
         errorMessage = `Erreur HTTP ${response.status}: ${response.statusText}`;
       }
     }
-    throw new Error(errorMessage);
+    throw new ApiError(errorMessage, response.status);
   }
   if (response.status === 204) return undefined as T;
   return await response.json() as T;
@@ -146,7 +161,7 @@ export async function apiFetchBlob(path: string): Promise<Blob> {
         errorMessage = `Erreur HTTP ${response.status}: ${response.statusText}`;
       }
     }
-    throw new Error(errorMessage);
+    throw new ApiError(errorMessage, response.status);
   }
   return response.blob();
 }
@@ -185,7 +200,7 @@ export async function apiPostFormData<T>(path: string, formData: FormData): Prom
         errorMessage = `Erreur HTTP ${response.status}: ${response.statusText}`;
       }
     }
-    throw new Error(errorMessage);
+    throw new ApiError(errorMessage, response.status);
   }
   const body = await response.json();
   return body as { data: T };

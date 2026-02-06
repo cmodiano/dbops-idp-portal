@@ -1,12 +1,14 @@
 """
 DRF ViewSets for catalog app.
-Implements admin, catalog, and tags endpoints matching FastAPI contract.
+Implements admin, catalog, and tags endpoints.
 """
 
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.serializers import ValidationError as DRFValidationError
+from django.db import IntegrityError
 from django.db.models import Count, Q, OuterRef, Subquery, IntegerField, Value
 from django.db.models.functions import Coalesce
 from django.utils import timezone
@@ -44,7 +46,7 @@ def _annotate_execution_count(queryset):
 
 def _filter_by_rbac(actions, cumulative_permissions):
     """
-    Filter actions by user's RBAC permissions (matches FastAPI _filter_by_rbac).
+    Filter actions by user's RBAC permissions.
 
     Args:
         actions: List of action dicts or QuerySet (must have prefetched tags via with_tags())
@@ -101,7 +103,7 @@ def _filter_by_rbac(actions, cumulative_permissions):
 
 def _check_rbac_for_action(action, cumulative_permissions):
     """
-    Check if user has RBAC permission for a specific action (matches FastAPI _check_rbac_for_action).
+    Check if user has RBAC permission for a specific action.
     
     Args:
         action: Action instance or dict
@@ -189,9 +191,15 @@ def _get_cumulative_permissions_for_user(user):
         actions_type = 'list'
 
     # When profile has full action access (all) but no explicit environments,
-    # default to all standard environments (DBA/DBOPS typical setup).
+    # default to all environments from inventory (Story 13.7).
     if not environments and actions_type_all:
-        environments = set(TargetEnvironment.VALUES)
+        from inventory.services import InventoryService
+        try:
+            inventory_service = InventoryService()
+            environments = set(inventory_service.list_environments())
+        except Exception:
+            # Fallback to default environments if inventory unavailable
+            environments = {'dev', 'staging', 'prod'}
 
     return {
         'actions_type': actions_type,
@@ -204,7 +212,6 @@ def _get_cumulative_permissions_for_user(user):
 class ActionViewSet(viewsets.ModelViewSet):
     """
     ViewSet for admin actions (CRUD operations).
-    Matches FastAPI /api/v1/admin/actions endpoints.
     """
     queryset = Action.objects.all()
     serializer_class = ActionSerializer
@@ -246,12 +253,16 @@ class ActionViewSet(viewsets.ModelViewSet):
         """POST /admin/actions - Create a new action."""
         serializer = ActionCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
-        action = CatalogService().create_action(
-            action_data=serializer.validated_data,
-            created_by_user=request.user
-        )
-        
+        try:
+            action = CatalogService().create_action(
+                action_data=serializer.validated_data,
+                created_by_user=request.user
+            )
+        except IntegrityError as e:
+            err_msg = str(e).upper()
+            if 'UK_ACTIONS_CATALOG_NAME' in err_msg or ('UNIQUE' in err_msg and 'NAME' in err_msg):
+                raise DRFValidationError({'name': ['Une action avec ce nom existe déjà.']})
+            raise
         # Reload with relations
         action = CatalogService().get_by_id(action.id)
         response_serializer = ActionSerializer(action)
@@ -284,13 +295,17 @@ class ActionViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         serializer = ActionCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
-        action = CatalogService().update_action(
-            action_id=instance.id,
-            action_update_data=serializer.validated_data,
-            user=request.user
-        )
-        
+        try:
+            action = CatalogService().update_action(
+                action_id=instance.id,
+                action_update_data=serializer.validated_data,
+                user=request.user
+            )
+        except IntegrityError as e:
+            err_msg = str(e).upper()
+            if 'UK_ACTIONS_CATALOG_NAME' in err_msg or ('UNIQUE' in err_msg and 'NAME' in err_msg):
+                raise DRFValidationError({'name': ['Une action avec ce nom existe déjà.']})
+            raise
         if action is None:
             raise NotFoundError(
                 code="NOT_FOUND",
@@ -401,7 +416,7 @@ class ActionViewSet(viewsets.ModelViewSet):
                 message=str(e),
                 details={
                     "status": action.status,
-                    "required_status": "draft"
+                    "required_status": "draft or disabled"
                 }
             )
         
@@ -420,6 +435,21 @@ class ActionViewSet(viewsets.ModelViewSet):
         _catalog_cache.clear()
 
         return Response({"data": response_serializer.data})
+
+    @action(detail=False, methods=['get'], url_path='name-available')
+    def name_available(self, request):
+        """GET /admin/actions/name-available/?name=...&exclude_id=... - Check if action name is available."""
+        name = (request.query_params.get('name') or '').strip()
+        if not name:
+            return Response({"available": True})
+        qs = Action.objects.filter(name__iexact=name)
+        exclude_id = request.query_params.get('exclude_id')
+        if exclude_id is not None:
+            try:
+                qs = qs.exclude(id=int(exclude_id))
+            except (ValueError, TypeError):
+                pass
+        return Response({"available": not qs.exists()})
 
     @action(detail=False, methods=['get'], url_path='eligible-for-workflow')
     def list_eligible_for_workflow(self, request):
@@ -476,7 +506,7 @@ _catalog_cache: TTLCache[str, list[dict]] = TTLCache(maxsize=1000, ttl=300)
 
 
 def _get_cache_key(user_id, tags_filter, q=None, engine=None, environment=None, impact=None, category=None):
-    """Generate cache key for catalog query (matches FastAPI _get_cache_key)."""
+    """Generate cache key for catalog query."""
     user_part = f"user_{user_id}" if user_id else "anon"
     tags_part = ",".join(sorted(tags_filter)) if tags_filter else "all"
     q_part = q.strip() if q and q.strip() else ""
@@ -490,7 +520,6 @@ def _get_cache_key(user_id, tags_filter, q=None, engine=None, environment=None, 
 class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for catalog actions (read-only, public with RBAC filtering).
-    Matches FastAPI /api/v1/catalog/actions endpoints.
     """
     queryset = Action.objects.filter(status=ActionStatus.PUBLISHED)
     serializer_class = ActionSerializer
@@ -641,7 +670,7 @@ class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
                 )
         
         # TODO: Use ExecutionService.get_action_stats() when implemented
-        # For now, return None as per FastAPI contract (AC3: "Pas encore de donnees")
+        # For now, return None (AC3: "Pas encore de donnees")
         from executions.models import Execution, ExecutionStatus
         from django.utils import timezone
         from datetime import timedelta
@@ -679,7 +708,6 @@ class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
 class TagViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for tags (read-only, public).
-    Matches FastAPI /api/v1/tags and /api/v1/catalog/tags endpoints.
     """
     queryset = Tag.objects.all()
     serializer_class = TagSerializer

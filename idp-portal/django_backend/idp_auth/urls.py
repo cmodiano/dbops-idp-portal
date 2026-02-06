@@ -1,6 +1,5 @@
 """
 URL configuration for authentication endpoints.
-Matches FastAPI /auth/* routes.
 Story M.7 - Full SAML and JWT auth endpoints.
 """
 

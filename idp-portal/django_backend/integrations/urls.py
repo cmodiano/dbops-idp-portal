@@ -1,6 +1,5 @@
 """
 URL configuration for integrations endpoints.
-Matches FastAPI /admin/integrations routes.
 """
 
 from django.urls import path, include

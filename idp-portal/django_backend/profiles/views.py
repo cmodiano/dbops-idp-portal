@@ -1,6 +1,6 @@
 """
 DRF ViewSets and APIViews for profiles app.
-Implements admin profiles endpoints matching FastAPI contract (Story M.5).
+Implements admin profiles endpoints (Story M.5).
 """
 
 from rest_framework import viewsets, status
@@ -37,7 +37,6 @@ def invalidate_permissions_cache():
 class ProfileViewSet(viewsets.ViewSet):
     """
     ViewSet for admin profiles CRUD operations.
-    Matches FastAPI /api/v1/admin/profiles endpoints.
     """
     permission_classes = [IsAuthenticated, DBOPSProfilePermission]
     

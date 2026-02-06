@@ -285,6 +285,13 @@ Construire un moteur ops de niveau production dans `idp-portal` en complement d'
 **Phase :** Growth (Phase 2) -> Scale (Phase 3)
 **Reference :** planning-artifacts/epic-14-moteur-ops-et-scalabilite.md
 
+### Epic 15 : Audit de Securite et Conformite SOC1 (premiere release)
+Le specialiste securite et l'equipe technique valident que le portail respecte les exigences de securite (NFR6-NFR11) et la conformite SOC1 avant la premiere release en production. Un audit complet du code, des configurations, des tests de securite et de la documentation est realise avec un plan de remédiation pour les vulnerabilites identifiees.
+**FRs couvertes :** FR24, FR25, FR26, FR29, FR30, FR33 (securite + audit)
+**NFRs couvertes :** NFR6, NFR7, NFR8, NFR9, NFR10, NFR11
+**Phase :** Release (pre-production)
+**Reference :** Compliance SOC1, exigences securite premiere release
+
 ---
 
 ## Epic 1 : Bootstrap Projet & Authentification
@@ -1160,6 +1167,45 @@ So that je configure les instances AAP, Terraform, etc. et leur representation v
 **And** UX coherente avec les onglets Actions et Profils (Ant Design, formulaires, notifications succes/erreur)
 **And** les libelles sont en francais
 
+### Story 2.29 : Separation boutons creation action et workflow dans admin
+
+As a DBOPS,
+I want avoir deux boutons distincts "Nouvelle action" et "Nouveau workflow" dans l'admin,
+So que la distinction entre action et workflow soit plus claire et que je n'aie pas a choisir le type dans le wizard.
+
+**Contexte :** Actuellement, un seul bouton "Nouvelle action" ouvre ActionWizard avec un Radio.Group pour choisir entre "Action" et "Workflow". Cette separation ameliore la clarte de l'interface.
+
+**Acceptance Criteria:**
+
+**Given** un DBOPS accede a l'onglet Admin > Actions,
+**When** il consulte la barre d'actions,
+**Then** il voit deux boutons distincts :
+- **"Nouvelle action"** (primary, bleu) avec icone `PlusOutlined`
+- **"Nouveau workflow"** (secondary, outlined) avec icone `ApartmentOutlined` ou `DeploymentUnitOutlined`
+
+**Given** un DBOPS clique sur "Nouvelle action",
+**When** le wizard ActionWizard s'ouvre,
+**Then** le type `item_type` est pre-selectionne a "action"
+**And** le Radio.Group pour choisir le type est masque ou desactive (non modifiable)
+**And** les champs specifiques aux workflows (WorkflowStepsEditor) ne sont pas affiches
+
+**Given** un DBOPS clique sur "Nouveau workflow",
+**When** le wizard ActionWizard s'ouvre,
+**Then** le type `item_type` est pre-selectionne a "workflow"
+**And** le Radio.Group pour choisir le type est masque ou desactive (non modifiable)
+**And** les champs specifiques aux actions (engine, platform) ne sont pas affiches
+**And** le WorkflowStepsEditor est affiche a l'etape 2
+
+**Given** un DBOPS edite une action existante,
+**When** le wizard s'ouvre en mode edition,
+**Then** le Radio.Group reste masque/desactive (le type ne peut pas etre modifie apres creation)
+**And** les champs affiches correspondent au type de l'action (action ou workflow)
+
+**And** ActionWizard accepte un prop optionnel `initialItemType?: 'action' | 'workflow'` pour pre-selectionner le type
+**And** si `initialItemType` est fourni, le Radio.Group est masque et le type est fixe
+**And** si `initialItemType` n'est pas fourni (compatibilite retroactive), le Radio.Group reste visible comme avant
+**And** AdminPage passe `initialItemType="action"` pour "Nouvelle action" et `initialItemType="workflow"` pour "Nouveau workflow"
+
 ---
 
 ## Epic 3 : Decouverte du Catalogue (Marc)
@@ -1336,6 +1382,59 @@ So that je navigue dans un catalogue avec beaucoup de tags sans multiplication d
 
 **And** l'onglet « Mes actions » (favoris + recents) reste inchange : un seul onglet dedie, pas de modification de son comportement.
 **And** FR11 et FR11b sont affines.
+
+### Story 5.8 : Visualiseur de workflow (flowchart)
+
+As a DBA ou DBOPS,
+I want visualiser un workflow comme un diagramme de flux avec les etapes et les conditions de passage,
+So que je comprenne rapidement la structure et le flux d'execution d'un workflow complexe.
+
+**Contexte :** Les workflows peuvent contenir plusieurs etapes. Actuellement, les workflows sont lineaires (etapes sequentielles), mais a l'avenir ils pourront avoir des branches conditionnelles (succes/erreur). Un visualiseur simple et lisible aide a comprendre rapidement la structure d'un workflow.
+
+**Acceptance Criteria:**
+
+**Given** un DBA ou DBOPS consulte un workflow dans le catalogue ou l'admin,
+**When** il ouvre le drawer de detail ou la page d'edition,
+**Then** un onglet ou section "Visualisation" affiche un diagramme de flux du workflow
+**And** le diagramme montre :
+  - Les etapes du workflow comme des noeuds (avec nom de l'action referencee)
+  - Les connexions entre etapes comme des fleches
+  - L'ordre d'execution (de gauche a droite ou de haut en bas)
+  - Les conditions de passage si disponibles (fleche verte pour succes, fleche rouge pour erreur)
+
+**Given** un workflow lineaire (etapes sequentielles),
+**When** le visualiseur affiche le workflow,
+**Then** les etapes sont affichees en sequence avec des fleches simples entre elles
+**And** chaque noeud affiche : numero d'ordre, nom de l'action referencee, icone de la technologie
+
+**Given** un workflow avec branches conditionnelles (futur),
+**When** le visualiseur affiche le workflow,
+**Then** les branches sont affichees avec des fleches colorees :
+  - Fleche verte pour le chemin de succes
+  - Fleche rouge pour le chemin d'erreur
+  - Fleche bleue pour le chemin "toujours" (si applicable)
+
+**Given** le visualiseur affiche un workflow,
+**When** le workflow contient beaucoup d'etapes (10+),
+**Then** le diagramme est zoomable et pannable pour naviguer
+**And** un bouton "Vue d'ensemble" permet de voir tout le workflow en une seule vue
+
+**Given** le visualiseur affiche un workflow,
+**When** un utilisateur survole ou clique sur un noeud d'etape,
+**Then** un tooltip ou panneau affiche les details de l'action referencee :
+  - Nom complet de l'action
+  - Description
+  - Moteur et plateforme
+  - Parametres requis (si disponibles)
+
+**Given** le visualiseur affiche un workflow,
+**When** le workflow est en cours d'execution,
+**Then** les etapes executees sont mises en evidence (couleur verte pour succes, rouge pour echec)
+**And** l'etape en cours est mise en evidence avec une animation ou couleur distincte
+
+**And** le visualiseur utilise une bibliotheque legere (ex: Mermaid, React Flow, ou diagramme SVG custom)
+**And** le format est simple et lisible (eviter la complexite visuelle d'AAP qui peut devenir "un mess")
+**And** le visualiseur est accessible : navigation clavier, labels ARIA, contraste suffisant
 
 ---
 
@@ -1581,6 +1680,99 @@ So that je retrouve facilement les actions que j'ai lancees et leur resultat.
 **And** la pagination est de 25 lignes par page
 **And** les skeleton rows s'affichent pendant le chargement
 **And** FR22 est satisfaite
+
+### Story 4.11 : Delegation d'autorisation pour execution de workflows (actions referencees)
+
+As a systeme,
+I want permettre l'execution de workflows contenant des actions referencees meme si l'utilisateur n'a pas acces direct a ces actions,
+So que les workflows multitechnologies puissent etre executes par delegation d'autorisation.
+
+**Contexte :** Les workflows peuvent contenir des actions de plusieurs technologies (Oracle, SQL Server, etc.). Un utilisateur peut voir un workflow s'il a acces au workflow lui-meme (via tags/ID). **Lors de l'execution, le workflow delegue l'autorisation d'executer les actions referencees** : si l'utilisateur a acces au workflow, il peut executer toutes les actions referencees meme s'il n'a pas acces direct a ces actions.
+
+**Regles metier :**
+- **Visibilite** : Un utilisateur voit un workflow s'il a acces au workflow lui-meme (comportement actuel, pas de changement)
+- **Execution** : Un utilisateur peut executer un workflow s'il a acces au workflow. Les actions referencees sont executees avec les permissions du workflow (delegation d'autorisation). **Pas besoin de verifier les permissions individuelles sur chaque action referencee.**
+- **Affichage** : Pas d'avertissement dans le catalogue si l'utilisateur n'a pas acces a toutes les actions referencees
+
+**Cas d'usage :** Un utilisateur Oracle peut executer un workflow contenant des actions SQL Server s'il a acces au workflow. C'est une delegation : le workflow "delegue" l'autorisation d'executer les actions referencees.
+
+**Acceptance Criteria:**
+
+**Given** un utilisateur tente d'executer un workflow,
+**When** l'execution est soumise (POST /api/v1/executions),
+**Then** le backend charge les etapes du workflow (workflow_steps avec referenced_action_id)
+**And** pour chaque action referencee, le backend verifie seulement :
+  - Que l'action existe (404 si non trouvee)
+  - Que l'action est publiee (400 si status != 'published')
+**And** **PAS de verification des permissions RBAC individuelles** sur les actions referencees (delegation)
+
+**Given** un utilisateur tente d'executer un workflow contenant des actions referencees,
+**When** toutes les actions referencees sont validees avec succes (existence + statut publie),
+**Then** l'execution du workflow peut proceder normalement
+**And** chaque action referencee est executee dans l'ordre **avec les permissions du workflow** (delegation)
+**And** **aucune verification RBAC supplementaire** n'est effectuee lors de l'execution de chaque action referencee
+
+**Given** un utilisateur Oracle exécute un workflow contenant des actions SQL Server,
+**When** l'utilisateur a acces au workflow (mais pas aux actions SQL Server individuelles),
+**Then** le workflow peut etre execute avec succes
+**And** les actions SQL Server referencees sont executees grace a la delegation du workflow
+
+**Given** un utilisateur consulte un workflow dans le catalogue,
+**When** il voit le workflow (acces via tags/ID du workflow),
+**Then** aucune verification supplementaire n'est effectuee sur les actions referencees
+**And** aucun avertissement n'est affiche concernant les permissions sur les actions referencees
+
+**Given** un utilisateur tente d'executer un workflow,
+**When** une action referencee n'existe plus (supprimee),
+**Then** l'execution est rejetee avec HTTP 404
+**And** le message d'erreur indique : "L'action referencee '{action_id}' n'existe plus ou n'est plus disponible"
+
+**Given** un utilisateur tente d'executer un workflow,
+**When** une action referencee n'est plus publiee (status != 'published'),
+**Then** l'execution est rejetee avec HTTP 400
+**And** le message d'erreur indique : "L'action referencee '{action_name}' n'est plus publiee (statut: {status})"
+
+**And** la validation est effectuee avant la creation de l'execution (pas apres le debut de l'execution)
+**And** l'audit log enregistre la tentative d'execution avec le resultat de la validation (succes ou echec avec raison)
+**And** l'audit log indique que les actions referencees sont executees avec delegation (permissions du workflow)
+**And** les tests couvrent les scenarios : workflow multitechnologie avec delegation, action supprimee, action non publiee
+
+### Story 4.12 : Parametres par etape lors de l'execution de workflows
+
+As a DBA,
+I want specifier les parametres pour chaque action referencee dans un workflow lors de l'execution,
+So que chaque action du workflow recoive ses parametres specifiques.
+
+**Contexte :** Les workflows n'ont pas de parametres directement car ce sont les actions referencees qui ont des parametres. Lors de l'execution d'un workflow, il faut pouvoir specifier les parametres pour chaque action referencee.
+
+**Acceptance Criteria:**
+
+**Given** un DBA execute un workflow (item_type='workflow'),
+**When** le wizard d'execution s'ouvre,
+**Then** l'etape 2 (Parametres) affiche une section pour chaque etape du workflow
+**And** chaque section affiche le nom de l'action referencee et son formulaire de parametres dynamique (depuis parameters_schema de l'action referencee)
+
+**Given** le DBA remplit les parametres pour chaque etape du workflow,
+**When** il valide l'etape 2,
+**Then** les parametres sont valides selon le schema de chaque action referencee
+**And** le bouton "Suivant" est active seulement si tous les formulaires sont valides
+
+**Given** le DBA confirme l'execution du workflow,
+**When** l'execution est soumise (POST /api/v1/executions),
+**Then** le backend recoit les parametres par etape dans le format : `workflow_step_parameters: { step_order: { parameters: {...} } }`
+**And** chaque action referencee est executee avec ses parametres specifiques
+
+**Given** une action referencee dans le workflow n'a pas de parametres (parameters_schema null ou vide),
+**When** le wizard affiche l'etape correspondante,
+**Then** aucun formulaire n'est affiche pour cette etape (message informatif : "Cette action n'a pas de parametres")
+
+**Given** le DBA navigue entre les etapes du wizard,
+**When** il revient a l'etape 2 (Parametres),
+**Then** tous les parametres saisis pour chaque etape du workflow sont conserves
+
+**And** l'API POST /api/v1/executions accepte le champ optionnel `workflow_step_parameters` pour les workflows
+**And** le moteur d'execution passe les bons parametres a chaque action referencee lors de l'execution du workflow
+**And** les parametres sont traces dans l'audit log pour chaque action referencee executee
 
 ---
 
@@ -3046,3 +3238,299 @@ So que je puisse contrôler ces listes sans toucher au code et que la source de 
 
 **And** la normalisation des alias (ex. certif → staging) peut rester côté inventaire ou dans le service portail qui agrège les environnements ; le portail n'impose plus un jeu fixe de valeurs en dur.
 
+### Story 13.8 : Amélioration calendrier — détails enrichis (targets, paramètres), annulation, modification, décommission admin
+
+As a DBA ou DBOPS,
+I want que le calendrier affiche tous les détails nécessaires (targets, paramètres) et permette l'annulation et la modification des exécutions planifiées,
+So que je n'ai plus besoin de passer par l'admin pour consulter ou gérer les exécutions planifiées et que l'interface soit unifiée dans le calendrier.
+
+**Contexte :** La story 13.6 a créé le menu Calendrier avec vue calendrier. L'onglet Admin "Exécutions planifiées" (ScheduledExecutionsPage) devient redondant. Cette story enrichit le calendrier avec les fonctionnalités manquantes et retire l'onglet admin.
+
+**Acceptance Criteria:**
+
+**Given** un utilisateur consulte le calendrier et clique ou survole un événement,
+**When** le popover de détails s'affiche,
+**Then** il inclut tous les champs suivants :
+- Action (nom + ID)
+- Environnement (badge coloré)
+- **Targets** : liste des targets sélectionnés (depuis `parameters._targets` si présent)
+- **Paramètres** : affichage formaté des paramètres d'exécution (JSON formaté avec indentation, masquage des champs techniques `_targets`, `_env_config`)
+- Utilisateur (nom + ID)
+- Date/heure planifiée (UTC)
+- Type (unique / récurrent avec pattern)
+- Plateforme et Technologie
+- Statut (En attente, Exécutée, Annulée)
+- Si exécutée : lien vers l'exécution effective (`execution_id`)
+
+**Given** un utilisateur consulte le calendrier,
+**When** il clique sur un événement d'exécution planifiée en statut "pending",
+**Then** le popover affiche un bouton "Annuler" si :
+- L'utilisateur est le créateur de l'exécution planifiée (`user_id` correspond), OU
+- L'utilisateur a le profil DBOPS (admin)
+
+**Given** un utilisateur DBA consulte le calendrier,
+**When** il clique sur une exécution planifiée créée par un autre utilisateur,
+**Then** le bouton "Annuler" n'est pas affiché (pas de permission)
+
+**Given** un utilisateur clique sur "Annuler" dans le popover du calendrier,
+**When** il confirme l'annulation,
+**Then** une modal de confirmation s'affiche avec les détails de l'exécution à annuler
+**And** l'appel API `PATCH /scheduled-executions/{id}` avec `status=cancelled` est effectué
+**And** en cas de succès, une notification de succès s'affiche et le calendrier est rafraîchi
+**And** en cas d'erreur (déjà annulée, permission refusée), un message d'erreur approprié s'affiche
+
+**Given** un utilisateur clique sur "Modifier" dans le popover du calendrier,
+**When** la modal de modification s'ouvre,
+**Then** elle permet de modifier la date planifiée, les paramètres, les targets, l'environnement, et le pattern de récurrence (selon le type)
+**And** l'appel API `PUT /api/v1/scheduled-executions/{id}` met à jour les champs modifiés
+**And** en cas de succès, une notification de succès s'affiche et le calendrier est rafraîchi
+**And** en cas d'erreur (validation, permission refusée), un message d'erreur approprié s'affiche
+
+**Given** un utilisateur DBOPS consulte le calendrier,
+**When** il clique sur un événement récurrent en statut "pending",
+**Then** le popover affiche un toggle pour activer/désactiver la récurrence (si `recurring_pattern` présent)
+**And** le toggle appelle `PATCH /scheduled-executions/{id}/recurring-pattern` avec `is_active` inversé
+**And** une notification de succès/erreur s'affiche selon le résultat
+
+**Given** l'onglet Admin "Exécutions planifiées" existe dans AdminPage,
+**When** on retire cet onglet,
+**Then** l'import de `ScheduledExecutionsPage` est supprimé de `AdminPage.tsx`
+**And** l'onglet avec `key: 'scheduled-executions'` est retiré du composant Tabs
+**And** le composant `ScheduledExecutionsPage.tsx` peut être supprimé (ou conservé pour référence historique)
+**And** les tests associés à `ScheduledExecutionsPage` sont mis à jour ou supprimés
+
+**Given** un utilisateur DBOPS accède à la page Admin,
+**When** il consulte les onglets disponibles,
+**Then** l'onglet "Exécutions planifiées" n'est plus présent
+**And** seuls les onglets Actions, Profils, Intégrations et Métriques sont disponibles
+
+**And** toutes les fonctionnalités de gestion des exécutions planifiées (consultation, annulation, toggle récurrence) sont désormais disponibles uniquement via le menu Calendrier.
+
+---
+
+## Epic 16 : Builder de Workflow Visuel avec Branches Conditionnelles et Retry
+
+En tant que **DBOPS créant des workflows complexes**,
+je veux **un éditeur visuel de workflow avec branches conditionnelles (succès/erreur) et options de retry configurables**,
+afin que **je puisse créer des workflows robustes avec gestion d'erreurs et réessais automatiques sans avoir à écrire du code complexe**.
+
+**Contexte :** Les workflows actuels sont des séquences linéaires d'actions. Cet épic ajoute un éditeur graphique avec drag-and-drop, branches conditionnelles (succès/erreur), options de retry avec backoff exponentiel, et validation visuelle des chemins d'exécution.
+
+**Note :** Voir `epic-16-builder-workflow-visuel.md` pour les détails complets des stories.
+
+---
+
+## Epic 15 : Audit de Securite et Conformite SOC1 (premiere release)
+
+Le specialiste securite et l'equipe technique valident que le portail respecte les exigences de securite (NFR6-NFR11) et la conformite SOC1 avant la premiere release en production. Un audit complet du code, des configurations, des tests de securite et de la documentation est realise avec un plan de remédiation pour les vulnerabilites identifiees.
+
+### Story 15.1 : Audit de securite du code (SAST, dependances, secrets)
+
+As a specialiste securite,
+I want un audit complet du code source pour identifier les vulnerabilites de securite, les dependances obsolètes ou vulnerables, et les fuites potentielles de secrets,
+So que je puisse valider que le code respecte les standards de securite avant la release et documenter les risques identifies.
+
+**Acceptance Criteria:**
+
+**Given** le codebase du portail (frontend React + backend Django),
+**When** on execute un audit de securite statique (SAST),
+**Then** un outil d'analyse (ex. SonarQube, Bandit pour Python, ESLint security pour JS) scanne tout le code source
+**And** un rapport liste toutes les vulnerabilites identifiees avec leur niveau de severite (CRITICAL, HIGH, MEDIUM, LOW)
+**And** les vulnerabilites sont categorisees : injection SQL, XSS, CSRF, authentification faible, gestion d'erreurs exposant des informations, etc.
+**And** chaque vulnerabilite inclut la localisation exacte (fichier, ligne) et une recommandation de correction
+
+**Given** les dependances du projet (requirements.txt, package.json),
+**When** on execute un scan de vulnerabilites des dependances,
+**Then** un outil (ex. Snyk, Dependabot, Safety) analyse toutes les dependances Python et npm
+**And** un rapport liste les packages vulnerables avec leur version actuelle, la version corrigee disponible, et le CVE associe
+**And** les vulnerabilites sont triees par severite et impact sur le projet
+**And** un plan de mise a jour est propose pour les vulnerabilites critiques et elevees
+
+**Given** le codebase et les fichiers de configuration,
+**When** on execute un scan de detection de secrets,
+**Then** un outil (ex. GitGuardian, TruffleHog, detect-secrets) scanne le code et les commits Git
+**And** aucun secret (API keys, tokens, mots de passe, certificats) n'est detecte dans le code source ou l'historique Git
+**And** si des secrets sont detectes, ils sont immediatement revoques et remplaces par des references a Vault ou des variables d'environnement
+**And** NFR7 est verifiee : aucun secret stocke dans le portail
+
+**Given** les resultats des audits,
+**When** on consolide les rapports,
+**Then** un document d'audit de securite est genere avec un resume executif, la liste complete des vulnerabilites, et leur priorisation
+**And** chaque vulnerabilite est documentee avec son impact potentiel, sa probabilite d'exploitation, et son statut (ouvert, en cours, corrige)
+
+### Story 15.2 : Tests de securite fonctionnels (authentification, autorisation, RBAC)
+
+As a specialiste securite,
+I want des tests de securite fonctionnels qui valident l'authentification, l'autorisation RBAC, et la protection des endpoints,
+So que je puisse prouver que les mecanismes de securite fonctionnent correctement et respectent les exigences NFR6, NFR9, NFR10.
+
+**Acceptance Criteria:**
+
+**Given** les endpoints API du portail,
+**When** on execute des tests d'authentification,
+**Then** tous les endpoints proteges renvoient HTTP 401 pour les requetes non authentifiees
+**And** les tokens JWT expires renvoient HTTP 401 avec un message d'erreur approprie
+**And** les tokens JWT invalides ou malformes sont rejetes avec HTTP 401
+**And** le mecanisme de refresh token fonctionne correctement et les tokens expires sont renouveles automatiquement
+**And** NFR9 est verifiee : les sessions expirent apres la periode d'inactivite configuree
+
+**Given** les regles RBAC du portail (profils, permissions actions/targets/environnements),
+**When** on execute des tests d'autorisation,
+**Then** un utilisateur avec un profil DBA ne peut acceder qu'aux endpoints autorises pour son profil
+**And** un utilisateur avec un profil DBOPS peut acceder aux endpoints Admin
+**And** un utilisateur avec un profil Client Business ne peut executer que les actions deleguees a son profil
+**And** toute tentative d'acces non autorise renvoie HTTP 403 avec un message d'erreur approprie
+**And** NFR10 est verifiee : toutes les tentatives d'acces non autorise sont journalisees dans AUDIT_LOG avec le type d'action APPROVAL_DENIED ou EXECUTION_DENIED
+
+**Given** les endpoints sensibles (execution d'actions, modification de profils, acces aux logs),
+**When** on execute des tests de controle d'acces,
+**Then** un utilisateur ne peut executer une action que si son profil a la permission pour cette action ET ce target ET cet environnement
+**And** un utilisateur ne peut modifier un profil que s'il a le role DBOPS
+**And** un utilisateur ne peut consulter les logs d'execution que pour ses propres executions (sauf DBOPS qui peut tout voir)
+**And** les validations RBAC sont appliquees a la fois au niveau API et au niveau service/metier
+
+**Given** les tests de securite fonctionnels,
+**When** on les execute dans un environnement de test,
+**Then** tous les tests passent et un rapport de tests est genere
+**And** le rapport documente chaque scenario teste avec le resultat attendu et obtenu
+**And** les tests sont integres dans le pipeline CI/CD pour validation automatique a chaque commit
+
+### Story 15.3 : Validation conformite SOC1 (audit trail, immutabilite, chiffrement)
+
+As a specialiste securite / auditeur SOC1,
+I want valider que le portail respecte les exigences SOC1 pour l'audit trail, l'immutabilite des logs, et le chiffrement des communications,
+So que je puisse certifier la conformite avant la release et documenter les controles de securite.
+
+**Acceptance Criteria:**
+
+**Given** le systeme d'audit du portail (table AUDIT_LOG),
+**When** on valide l'immutabilite des logs d'audit,
+**Then** aucune operation UPDATE ou DELETE n'est possible sur la table AUDIT_LOG (contraintes DB ou permissions)
+**And** les logs d'audit sont ecrits une seule fois et ne peuvent etre modifies apres ecriture
+**And** NFR8 est verifiee : les logs d'audit sont immutables
+**And** un test demontre qu'une tentative de modification d'un log d'audit echoue avec une erreur appropriee
+
+**Given** chaque execution d'action dans le portail,
+**When** on valide la tracabilite complete,
+**Then** une entree dans AUDIT_LOG est creee avec : utilisateur (qui), action executee (quoi), timestamp precis (quand), parametres de l'execution, resultat (succes/echec), autorisation RBAC appliquee
+**And** FR30 est verifiee : trace d'audit immutable pour chaque execution
+**And** les logs d'audit incluent un correlation_id pour tracer une execution complete de bout en bout
+**And** les logs d'audit sont consultables via l'API /api/v1/audit avec filtres par environnement, periode, type d'action (FR33)
+
+**Given** les communications entre le portail et les systemes integres (Vault, ServiceNow, plateformes d'execution),
+**When** on valide le chiffrement en transit,
+**Then** toutes les communications utilisent TLS 1.2 ou superieur
+**And** les certificats SSL/TLS sont valides et non expires
+**And** NFR6 est verifiee : toutes les communications sont chiffrees en transit
+**And** un test demontre qu'une connexion non chiffree est rejetee
+
+**Given** les secrets et credentials utilises par le portail,
+**When** on valide la gestion des secrets,
+**Then** aucun secret n'est stocke dans le code source, les fichiers de configuration, ou la base de donnees
+**And** tous les secrets sont recuperes depuis HashiCorp Vault au moment de l'execution
+**And** NFR7 est verifiee : aucun secret stocke dans le portail
+**And** FR29 est verifiee : tous les secrets sont recuperes depuis Vault a l'execution
+**And** un test demontre qu'une execution echoue avec un message explicite si Vault est indisponible (NFR21)
+
+**Given** les donnees sensibles stockees dans le portail,
+**When** on valide la protection des donnees,
+**Then** le portail ne stocke que les metadonnees de l'inventaire (noms de bases, environnements, technologies)
+**And** aucune donnee sensible des bases de donnees gerees n'est stockee (pas de mots de passe, donnees utilisateurs, etc.)
+**And** NFR11 est verifiee : le portail ne conserve aucune donnee sensible
+**And** un audit de la base de donnees confirme qu'aucune donnee sensible n'est presente
+
+**Given** les exigences SOC1,
+**When** on consolide la validation,
+**Then** un document de conformite SOC1 est genere avec la liste des controles valides et les preuves associees
+**And** chaque controle SOC1 est documente avec son implementation, sa validation, et les tests associes
+**And** les ecarts identifies sont documentes avec un plan de correction et une date cible
+
+### Story 15.4 : Documentation de securite et plan de remédiation
+
+As a responsable technique / specialiste securite,
+I want une documentation complete de securite et un plan de remédiation pour toutes les vulnerabilites identifiees,
+So que l'equipe puisse corriger les problemes avant la release et que la documentation serve de reference pour les audits futurs.
+
+**Acceptance Criteria:**
+
+**Given** les resultats des audits de securite (Story 15.1, 15.2, 15.3),
+**When** on consolide la documentation,
+**Then** un document de securite est cree avec :
+- Resume executif des vulnerabilites identifiees
+- Liste complete des vulnerabilites avec priorisation (CRITICAL, HIGH, MEDIUM, LOW)
+- Plan de remédiation avec affectation, estimation, et date cible pour chaque vulnerabilite
+- Statut de chaque vulnerabilite (ouvert, en cours, corrige, verifie)
+- Preuves de correction (tests, code review, validation)
+
+**Given** les vulnerabilites critiques et elevees identifiees,
+**When** on cree le plan de remédiation,
+**Then** chaque vulnerabilite CRITICAL et HIGH a une story ou ticket associe avec :
+- Description detaillee du probleme
+- Impact potentiel et risque associe
+- Solution proposee avec estimation
+- Criteres d'acceptation pour la correction
+- Date cible de correction (avant release si blocker)
+
+**Given** les vulnerabilites non critiques (MEDIUM, LOW),
+**When** on les documente,
+**Then** elles sont classees en deux categories :
+- A corriger avant release (si impact utilisateur ou compliance)
+- A corriger post-release (amelioration continue, pas de blocker)
+
+**Given** la documentation de securite,
+**When** on la finalise,
+**Then** elle inclut :
+- Architecture de securite du portail (authentification, autorisation, chiffrement)
+- Liste des controles de securite implementes et valides
+- Procedures de reponse aux incidents de securite
+- Guide de bonnes pratiques pour les developpeurs
+- References aux standards et frameworks utilises (SOC1, OWASP Top 10, etc.)
+
+**Given** toutes les vulnerabilites critiques et elevees sont corrigees,
+**When** on valide la release,
+**Then** un rapport de validation de securite est genere confirmant que :
+- Toutes les vulnerabilites CRITICAL et HIGH sont corrigees et verifiees
+- Tous les tests de securite fonctionnels passent
+- La conformite SOC1 est validee
+- Le portail est pret pour la release en production
+**And** ce rapport est approuve par le specialiste securite et le responsable technique avant la release
+
+---
+
+## Epic 17 : Reduction de la dette technique & amelioration qualite (audit 06/02/2026)
+
+En tant que **equipe securite (beneficiaire principal) et equipe de developpement**,
+je veux **traiter l'ensemble des constats de l'audit qualite du 6 fevrier 2026**,
+afin de **reduire durablement la dette technique, diminuer la surface d'attaque, et accelerer la delivery sans regression**.
+
+**Contexte :** Un audit complet du depot `idp-portal` a mis en evidence une dette technique majeure (double backend FastAPI + Django), des opportunites de refactor frontend (composants surdimensionnes), de la duplication dans le client HTTP, ainsi que des axes d'amelioration securite et DevOps (secrets, lockfile, Dockerfile, rate limiting, feature flags).
+
+### Portee (scope)
+
+- **Backend**
+  - Finaliser le **decommissionnement FastAPI** (suppression du dossier `backend/` legacy) une fois la migration validee
+  - Ameliorer la robustesse de la gestion d'erreurs (restreindre les `except Exception` non justifies)
+  - Remplacer les getter/setter JSON repetitifs du modele `Action` par un **OracleJSONField** (ou abstraction equivalente) avec validation
+- **Frontend**
+  - Refactoriser les fichiers surdimensionnes (en priorite `ExecutionWizard.tsx`) en sous-composants et hooks dedies
+  - Extraire un **wrapper HTTP commun** dans `api_client.ts` pour eliminer la duplication (auth, retry 401, parsing erreurs)
+  - Remplacer `console.*` par un service de logging frontend + regle linter/CI
+- **Securite & Tooling**
+  - Supprimer les secrets par defaut risquant de fuiter en prod et appliquer un **fail-fast** en environnement non-dev si variables manquantes
+  - Ajouter `pyproject.toml` + lockfile pour le Django backend (build reproductible)
+  - Durcir progressivement le type checking (mypy) jusqu'a le rendre bloquant
+- **DevOps**
+  - Ajouter des Dockerfile pour backend et frontend (build reproductible)
+  - Implementer du rate limiting sur les endpoints exposes
+  - Mettre en place un systeme de feature flags (deploiements progressifs)
+
+### Definition of Done (criteres d'acceptation de l'epic)
+
+- Le depot ne contient plus de backend FastAPI legacy (un seul backend cible), et la doc/CI/deploiement sont alignes
+- Aucun secret "par defaut" exploitable n'est present ; demarrage refuse en non-dev si secrets non configures
+- Les gros composants/pages frontend sont decoupes et testes, sans regression fonctionnelle
+- Le client HTTP a une logique commune (auth/retry/errors) sans duplication
+- Le JSON Oracle est centralise (champ/abstraction unique) avec validation
+- Les `except Exception` non justifies sont supprimes ou documentes ; les erreurs inattendues sont logguees
+- Un lockfile est present pour le Django backend ; le durcissement mypy est enclenche
+- Les Dockerfile(s) buildent ; rate limiting et feature flags sont disponibles (si retenus)

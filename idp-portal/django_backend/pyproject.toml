@@ -1,0 +1,17 @@
+# Django Backend Configuration
+# Story 15.1: Security audit configuration
+
+[tool.bandit]
+# Directories to exclude from analysis
+exclude_dirs = ["tests", "migrations", "__pycache__", ".git", ".venv", "venv"]
+
+# Tests to skip (known false positives for this codebase)
+# B104: hardcoded_bind_all_interfaces - Development settings only (DEBUG=True binds to 0.0.0.0)
+skips = ["B104"]
+
+# Severity targets
+# Configured via CLI: --severity-level medium for CI blocking
+
+[tool.bandit.assert_used]
+# Allow assert in test files only (already excluded via exclude_dirs)
+skips = ["*_test.py", "test_*.py"]

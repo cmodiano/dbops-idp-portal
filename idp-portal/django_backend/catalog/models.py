@@ -139,13 +139,13 @@ class Action(models.Model):
     )
     engine = models.CharField(
         max_length=50,
-        choices=ActionEngine.choices,
-        db_column='ENGINE'
+        db_column='ENGINE',
+        help_text='Engine code (must exist in REF_ENGINES.CODE). Validated by application logic.'
     )
     platform = models.CharField(
         max_length=50,
-        choices=ActionPlatform.choices,
-        db_column='PLATFORM'
+        db_column='PLATFORM',
+        help_text='Platform code (must exist in REF_PLATFORMS.CODE). Validated by application logic.'
     )
     # CLOB fields - using TextField with JSON serialization helpers
     parameters_schema = models.TextField(null=True, blank=True, db_column='PARAMETERS_SCHEMA')

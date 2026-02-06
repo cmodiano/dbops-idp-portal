@@ -1,6 +1,5 @@
 """
 Views for integrations CRUD endpoints.
-Matches FastAPI /admin/integrations endpoints.
 """
 
 from rest_framework import viewsets, status
@@ -19,14 +18,12 @@ from core.exceptions import NotFoundError, InvalidStateError
 class IntegrationViewSet(viewsets.ViewSet):
     """
     ViewSet for integrations CRUD operations.
-    Matches FastAPI /admin/integrations endpoints.
     """
     permission_classes = [IsAuthenticated, DBOPSProfilePermission]
     
     def list(self, request):
         """
         GET /admin/integrations - List all integrations.
-        Matches FastAPI list_integrations endpoint.
         """
         service = IntegrationService()
         integrations = service.list_all()
@@ -36,7 +33,6 @@ class IntegrationViewSet(viewsets.ViewSet):
     def retrieve(self, request, pk=None):
         """
         GET /admin/integrations/{id} - Get integration by ID.
-        Matches FastAPI get_integration endpoint.
         """
         try:
             integration_id = int(pk)
@@ -63,7 +59,6 @@ class IntegrationViewSet(viewsets.ViewSet):
     def create(self, request):
         """
         POST /admin/integrations - Create integration.
-        Matches FastAPI create_integration endpoint.
         Returns 201 Created.
         """
         serializer = IntegrationCreateSerializer(data=request.data)
@@ -102,7 +97,6 @@ class IntegrationViewSet(viewsets.ViewSet):
     def update(self, request, pk=None):
         """
         PUT /admin/integrations/{id} - Update integration.
-        Matches FastAPI update_integration endpoint.
         """
         try:
             integration_id = int(pk)
@@ -154,7 +148,6 @@ class IntegrationViewSet(viewsets.ViewSet):
     def destroy(self, request, pk=None):
         """
         DELETE /admin/integrations/{id} - Delete integration.
-        Matches FastAPI delete_integration endpoint.
         Returns 204 No Content.
         """
         try:

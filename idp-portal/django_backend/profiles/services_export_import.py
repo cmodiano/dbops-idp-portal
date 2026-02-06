@@ -1,6 +1,5 @@
 """
 Profile YAML export/import service (Story M.5).
-Equivalent Django implementation of FastAPI profile_export_import_service.
 """
 
 import io

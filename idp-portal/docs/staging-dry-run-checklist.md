@@ -1,7 +1,12 @@
 # Staging Dry Run Checklist - Répétition Générale
 
+> **📦 Document d'archivage — Migration terminée**  
+> Ce document est conservé pour référence historique. La migration FastAPI→Django est complète (février 2026).  
+> Voir [MIGRATION_ARCHIVE.md](MIGRATION_ARCHIVE.md) pour accéder au code FastAPI archivé.
+
 **Date de préparation:** 2026-02-05
 **Objectif:** Valider le plan de bascule dans un environnement staging avant la production
+**Statut:** Migration terminée — Checklist historique conservée
 
 ---
 

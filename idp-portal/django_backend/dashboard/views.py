@@ -64,7 +64,7 @@ def _apply_common_filters(qs, *, request, include_status: bool) -> object:
     - engine (Action.engine)
     - environment (Execution.environment)
     - tags (multi query params, OR semantics)
-    - status (Execution.status) (optional; FastAPI historically ignores it for dashboard stats)
+    - status (Execution.status) (optional; historically ignored for dashboard stats)
     """
     engine = request.query_params.get("engine")
     if engine:
@@ -98,7 +98,7 @@ class DashboardStatsView(APIView):
         if not _is_dba_or_dbops(request.user):
             qs_base = qs_base.filter(user_id=request.user.id)
 
-        # For dashboard stats, mimic FastAPI behavior: ignore status filter for consistency
+        # For dashboard stats, ignore status filter for consistency
         qs_base = _apply_common_filters(qs_base, request=request, include_status=False)
 
         period_start, period_end_exclusive = _get_period_bounds(request)

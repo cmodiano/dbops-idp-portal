@@ -1,5 +1,5 @@
 # Coverage.py configuration
-# Story M.9: Tests unitaires et d'intégration (parité avec FastAPI)
+# Story M.9: Tests unitaires et d'intégration
 
 [run]
 source = .

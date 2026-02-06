@@ -1,6 +1,5 @@
 """
 URL configuration for executions endpoints.
-Matches FastAPI /api/v1/executions* routes used by the frontend.
 """
 
 from django.urls import path

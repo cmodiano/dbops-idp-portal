@@ -1,7 +1,7 @@
 """
 Integration tests for audit trail.
 
-Story M.9: Tests unitaires et d'intégration (parité avec FastAPI)
+Story M.9: Tests unitaires et d'intégration
 Tests: génération audit pour tous les event types (CRUD, executions)
 """
 

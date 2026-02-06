@@ -6,6 +6,7 @@
 
 import { apiFetch, apiFetchRaw } from './api_client';
 import type { ActionPreviewData, ActionStats } from '../types/api';
+import type { ItemType, WorkflowStep } from '../types/api';
 
 /** Action with execution_count for catalog display. */
 export interface CatalogAction extends ActionPreviewData {
@@ -52,6 +53,10 @@ export interface CatalogActionDetail extends CatalogAction {
   change_type_config?: Record<string, unknown>;
   /** Story 13.2, AC3: Whether action requires target selection (default true). */
   requires_target?: boolean;
+  /** Story 5.7: item_type is required for workflow execution UX. */
+  item_type?: ItemType;
+  /** Story 5.7: workflow steps for workflows (action references). */
+  workflow_steps?: WorkflowStep[] | null;
 }
 
 /** Response from GET /catalog/actions/{id} (Story 3.2, AC3). */

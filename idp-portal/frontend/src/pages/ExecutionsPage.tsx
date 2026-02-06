@@ -397,7 +397,7 @@ export default function ExecutionsPage() {
         title: 'Statut',
         dataIndex: 'status',
         key: 'status',
-        width: 80,
+        width: 120,
         align: 'center' as const,
         render: (status: ExecutionStatusType) => renderStatusIndicator(status),
         sorter: false, // Story 9.9 AC7: Statut not sortable
@@ -482,7 +482,7 @@ export default function ExecutionsPage() {
   // Skeleton table during loading (AC4, Task 1.4: skeleton rows; Story 9.9: updated column order)
   if (loading && executions.length === 0) {
     const skeletonColumns = [
-      { title: 'Statut', key: 'status', width: 80, render: () => <Skeleton.Button active size="small" shape="circle" /> },
+      { title: 'Statut', key: 'status', width: 120, render: () => <Skeleton.Button active size="small" /> },
       { title: 'Action', key: 'action', width: 200, render: () => <Skeleton active title={false} paragraph={{ rows: 1 }} /> },
       { title: 'Technologie', key: 'engine', width: 100, render: () => <Skeleton.Button active size="small" /> },
       { title: 'Plateforme', key: 'integration', width: 120, render: () => <Skeleton.Button active size="small" /> },

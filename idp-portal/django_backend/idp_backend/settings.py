@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     'core',
     'executions',
     'inventory',
+    'reference',
 ]
 
 MIDDLEWARE = [
@@ -95,7 +96,7 @@ WSGI_APPLICATION = 'idp_backend.wsgi.application'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 # Oracle Database configuration
-# Uses same environment variables as FastAPI backend
+# Uses standard Oracle environment variables
 # ORACLE_CLIENT_LIB: path to Oracle Instant Client dir (enables thick mode, required for
 #   TIMESTAMP WITH TIME ZONE / DPY-3022 "named time zones not supported in thin mode")
 ORACLE_DSN = os.getenv('ORACLE_DSN', 'localhost:1521/FREEPDB1')
@@ -167,7 +168,7 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PAGINATION_CLASS': 'core.pagination.CustomPageNumberPagination',
     'PAGE_SIZE': 25,
-    # Custom exception handler to match FastAPI error format
+    # Custom exception handler for standardized error format
     'EXCEPTION_HANDLER': 'core.exceptions.custom_exception_handler',
     # Format response in snake_case (not camelCase)
     'DEFAULT_RENDERER_CLASSES': [
@@ -207,7 +208,7 @@ CORS_ALLOW_HEADERS = [
 ]
 
 # ============================================================================
-# SAML Configuration (Story M.7 - mirrors FastAPI settings)
+# SAML Configuration (Story M.7)
 # ============================================================================
 
 # Service Provider (SP) settings
@@ -223,7 +224,7 @@ SAML_IDP_SLO_URL = os.getenv('SAML_IDP_SLO_URL', 'https://idp.example.com/slo')
 SAML_IDP_CERT_PATH = os.getenv('SAML_IDP_CERT_PATH', '')
 
 # ============================================================================
-# JWT Configuration (Story M.7 - mirrors FastAPI settings)
+# JWT Configuration (Story M.7)
 # ============================================================================
 
 JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'change-me-in-production')
@@ -275,6 +276,20 @@ LOGGING = {
         },
     },
 }
+
+# ============================================================================
+# Production Security Settings (Story 15.3 - SOC1/NFR6)
+# ============================================================================
+# These settings enforce TLS/HTTPS in production (when DEBUG=False).
+
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # ============================================================================
 # External Services Configuration (Story M.8 - Health Check)

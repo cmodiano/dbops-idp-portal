@@ -23,8 +23,11 @@ export interface ApiError {
 // === Catalog Action Types (Story 2.1) ===
 // Story 2.23: ActionCategory removed — use tags for categorization.
 
-export type ActionEngine = 'Oracle' | 'SQL Server' | 'DB2';
-export type ActionPlatform = 'AAP' | 'GitHub Actions' | 'Azure DevOps' | 'Terraform';
+// Story 13.7: These types are now dynamic (loaded from REF_ENGINES and REF_PLATFORMS tables).
+// The union types below are kept for backward compatibility, but values come from API.
+// Consider using `string` instead for new code.
+export type ActionEngine = 'Oracle' | 'SQL Server' | 'DB2' | string;
+export type ActionPlatform = 'AAP' | 'GitHub Actions' | 'Azure DevOps' | 'Terraform' | string;
 export type ActionStatus = 'draft' | 'published' | 'disabled';
 /** Impact level for actions (Story 2.5, 2.18). */
 export type ImpactLevel = 'low' | 'medium' | 'high' | 'critical';
@@ -81,11 +84,25 @@ export interface ChangeTypeConfigEntry {
   change_model_code?: string | null;
 }
 
-/** Workflow step - reference to an existing action (Story 5.7, AC2). */
+/** Workflow step - reference to an existing action (Story 5.7, AC2; Story 16.2 branches & retry). */
 export interface WorkflowStep {
   order: number;
   name: string | null;
   referenced_action_id: number;
+  /** Story 16.2: Stable ID for referencing in branches (optional for backward compatibility). */
+  step_id?: string | null;
+  /** Story 16.2: Next step ID on success (nullable = exit or continue to next by order). */
+  on_success_step_id?: string | null;
+  /** Story 16.2: Next step ID on error (nullable = workflow fails). */
+  on_error_step_id?: string | null;
+  /** Story 16.2: Enable retry for this step. */
+  retry_enabled?: boolean;
+  /** Story 16.2: Max retry attempts (default: 3). */
+  retry_max_attempts?: number | null;
+  /** Story 16.2: Retry interval in seconds (default: 60). */
+  retry_interval_seconds?: number | null;
+  /** Story 16.2: Backoff multiplier for exponential backoff (default: 2.0). */
+  retry_backoff_multiplier?: number | null;
 }
 
 /** Request to update workflow steps (Story 5.7, AC2). */
@@ -253,6 +270,8 @@ export interface ProfileListItem {
   id: number;
   name: string;
   ad_group: string;
+  is_admin: boolean;
+  is_auditor: boolean;
   permission_count: number;
   created_at: string;
 }
@@ -415,6 +434,8 @@ export interface ExecutionCreateRequest {
   /** Story 13.2, AC4: Target names for target-based execution. */
   target_names?: string[];
   parameters?: Record<string, unknown> | null;
+  /** Story 4.12 (AC3): Per-workflow-step parameters keyed by step order (string). */
+  workflow_step_parameters?: Record<string, { parameters: Record<string, unknown> }>;
   /** Story 9.2: Parent execution ID for remediation (optional). */
   parent_execution_id?: number | null;
 }
@@ -858,6 +879,20 @@ export interface ScheduledExecutionCreateRequest {
   recurring_pattern?: RecurringPatternRequest | null;
   /** Story 13.2: Target names for target-based execution. */
   target_names?: string[];
+}
+
+/** Request to update a scheduled execution (Story 13.8, AC4). */
+export interface ScheduledExecutionUpdateRequest {
+  /** ISO 8601 datetime (UTC) for one-time executions. */
+  scheduled_at?: string | null;
+  /** Execution parameters (merged with existing; include _targets if targets changed). */
+  parameters?: Record<string, unknown> | null;
+  /** Environment (when not using targets). */
+  environment?: ExecutionEnvironment;
+  /** Target names (validated against RBAC; stored in parameters._targets). */
+  target_names?: string[];
+  /** Recurring pattern (for recurring executions). */
+  recurring_pattern?: RecurringPatternRequest | null;
 }
 
 /** Response from POST /scheduled-executions (Story 11.5, 11.7). */

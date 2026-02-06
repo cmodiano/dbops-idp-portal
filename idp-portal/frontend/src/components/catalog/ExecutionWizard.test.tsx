@@ -19,6 +19,7 @@ import { ExecutionWizard } from './ExecutionWizard';
 import type { CatalogActionDetail } from '../../services/catalog_service';
 import type { InventoryItem } from '../../types/api';
 import { fetchInventoryItems } from '../../services/execution_service';
+import { fetchCatalogActionById } from '../../services/catalog_service';
 
 // Mock environments data (always needed for environment selector) - use French labels to match UI
 const mockEnvironments: InventoryItem[] = [
@@ -42,6 +43,16 @@ vi.mock('../../services/execution_service', () => ({
   }),
   fetchInventoryTargets: vi.fn().mockResolvedValue([]),
 }));
+
+vi.mock('../../services/catalog_service', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../services/catalog_service')>();
+  return {
+    ...original,
+    fetchCatalogActionById: vi.fn(),
+  };
+});
+
+const mockFetchCatalogActionById = fetchCatalogActionById as unknown as ReturnType<typeof vi.fn>;
 
 // Wrapper with Ant Design App context
 const TestWrapper = ({ children }: { children: React.ReactNode }) => (
@@ -103,6 +114,7 @@ describe('ExecutionWizard', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFetchCatalogActionById.mockReset();
   });
 
   describe('Step Navigation', () => {
@@ -278,6 +290,137 @@ describe('ExecutionWizard', () => {
 
       await waitFor(() => {
         expect(screen.getByText(/Aucun parametre requis/)).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Workflow step parameters (Story 4.12)', () => {
+    it('disables Next while any workflow step has validation errors (AC2)', async () => {
+      const user = userEvent.setup();
+      const workflowAction: CatalogActionDetail = {
+        ...mockAction,
+        id: 99,
+        name: 'Workflow test',
+        item_type: 'workflow',
+        requires_target: false,
+        workflow_steps: [
+          { order: 1, name: null, referenced_action_id: 10 },
+          { order: 2, name: null, referenced_action_id: 11 },
+        ],
+        parameters_schema: null, // workflow has no own schema
+      } as any;
+
+      mockFetchCatalogActionById
+        .mockResolvedValueOnce({
+          data: {
+            id: 10,
+            name: 'Step Action 1',
+            parameters_schema: {
+              type: 'object',
+              properties: { foo: { type: 'string', title: 'Foo' } },
+              required: ['foo'],
+            },
+            status: 'published',
+          },
+          can_execute: true,
+          allowed_environments: ['dev'],
+        })
+        .mockResolvedValueOnce({
+          data: {
+            id: 11,
+            name: 'Step Action 2',
+            parameters_schema: null,
+            status: 'published',
+          },
+          can_execute: true,
+          allowed_environments: ['dev'],
+        });
+
+      render(
+        <ExecutionWizard
+          {...defaultProps}
+          action={workflowAction}
+          allowedEnvironments={['dev']}
+        />,
+        { wrapper: TestWrapper }
+      );
+
+      // Step 1: select env and proceed
+      fireEvent.mouseDown(screen.getByLabelText('Environnement cible'));
+      fireEvent.click(screen.getAllByText('Developpement')[0]);
+      await user.click(screen.getByRole('button', { name: 'Suivant' }));
+
+      // Step 2: wait for referenced action form to render
+      await waitFor(() => {
+        expect(screen.getByLabelText('Foo')).toBeInTheDocument();
+      });
+
+      // Next should become disabled due to missing required foo in step 1
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Suivant' })).toBeDisabled();
+      });
+
+      // Fill required field for step 1
+      await user.type(screen.getByLabelText('Foo'), 'bar');
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Suivant' })).not.toBeDisabled();
+      });
+    });
+
+    it('persists workflow step parameters when navigating back and forth (AC2)', async () => {
+      const user = userEvent.setup();
+      const workflowAction: CatalogActionDetail = {
+        ...mockAction,
+        id: 100,
+        name: 'Workflow persist',
+        item_type: 'workflow',
+        requires_target: false,
+        workflow_steps: [{ order: 1, name: null, referenced_action_id: 10 }],
+        parameters_schema: null,
+      } as any;
+
+      mockFetchCatalogActionById.mockResolvedValueOnce({
+        data: {
+          id: 10,
+          name: 'Step Action 1',
+          parameters_schema: {
+            type: 'object',
+            properties: { foo: { type: 'string', title: 'Foo' } },
+            required: ['foo'],
+          },
+          status: 'published',
+        },
+        can_execute: true,
+        allowed_environments: ['dev'],
+      });
+
+      render(
+        <ExecutionWizard
+          {...defaultProps}
+          action={workflowAction}
+          allowedEnvironments={['dev']}
+        />,
+        { wrapper: TestWrapper }
+      );
+
+      fireEvent.mouseDown(screen.getByLabelText('Environnement cible'));
+      fireEvent.click(screen.getAllByText('Developpement')[0]);
+      await user.click(screen.getByRole('button', { name: 'Suivant' }));
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('Foo')).toBeInTheDocument();
+      });
+
+      await user.type(screen.getByLabelText('Foo'), 'bar');
+      await user.click(screen.getByRole('button', { name: 'Suivant' }));
+
+      // Now on confirmation step, go back
+      await user.click(screen.getByRole('button', { name: 'Precedent' }));
+
+      // Value should still be present (allow async re-hydration)
+      await waitFor(() => {
+        expect((screen.getByLabelText('Foo') as HTMLInputElement).value).toBe('bar');
       });
     });
   });

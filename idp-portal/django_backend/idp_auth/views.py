@@ -1,6 +1,5 @@
 """
 Views for authentication endpoints.
-Matches FastAPI /auth/* endpoints.
 Story M.7 - Full SAML and JWT auth implementation.
 Story M.8 - Task 9: Structured logging with structlog.
 """
@@ -254,7 +253,6 @@ class SAMLCallbackView(APIView):
 class CurrentUserProfileView(APIView):
     """
     GET /auth/me - Return current user profile with navigation permissions.
-    Matches FastAPI get_current_user_profile endpoint.
     """
     permission_classes = [IsAuthenticated]
 

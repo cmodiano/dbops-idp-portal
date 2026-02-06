@@ -60,8 +60,8 @@ class TestProfileManager(TestCase):
         
         profiles = Profile.objects.list_with_permissions_count()
         profile1_result = profiles.get(id=self.profile1.id)
-        self.assertIsNotNone(profile1_result.permissions_count)
-        self.assertGreaterEqual(profile1_result.permissions_count, 1)
+        self.assertIsNotNone(profile1_result.permission_count)
+        self.assertGreaterEqual(profile1_result.permission_count, 1)
 
     # =========================================================================
     # Story M.9: Additional manager tests for edge cases and multi-profile
@@ -95,7 +95,7 @@ class TestProfileManager(TestCase):
 
         profiles = Profile.objects.list_with_permissions_count()
         no_perm_result = profiles.get(id=profile_no_perm.id)
-        self.assertEqual(no_perm_result.permissions_count, 0)
+        self.assertEqual(no_perm_result.permission_count, 0)
 
     def test_list_with_permissions_count_both_permission_types(self):
         """Test list_with_permissions_count() counts both action and target permissions."""
@@ -121,7 +121,7 @@ class TestProfileManager(TestCase):
         profiles = Profile.objects.list_with_permissions_count()
         both_perm_result = profiles.get(id=profile.id)
         # Should have at least 2 (one action, one target permission)
-        self.assertGreaterEqual(both_perm_result.permissions_count, 2)
+        self.assertGreaterEqual(both_perm_result.permission_count, 2)
 
 
 @pytest.mark.django_db

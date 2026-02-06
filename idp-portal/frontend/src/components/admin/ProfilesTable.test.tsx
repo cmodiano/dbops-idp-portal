@@ -13,6 +13,8 @@ const items: ProfileListItem[] = [
     id: 1,
     name: 'Assurance',
     ad_group: 'GRP-IDP-ASSURANCE',
+    is_admin: false,
+    is_auditor: false,
     permission_count: 0,
     created_at: '2026-01-28T10:00:00Z',
   },
@@ -31,10 +33,12 @@ const defaultProps = {
 };
 
 describe('ProfilesTable', () => {
-  it('renders table with columns Nom, Groupe AD, Permissions, Date de création', () => {
+  it('renders table with columns Nom, Groupe AD, Admin, Auditeur, Permissions, Date de création', () => {
     render(<ProfilesTable {...defaultProps} />);
     expect(screen.getByText('Nom')).toBeInTheDocument();
     expect(screen.getByText('Groupe AD')).toBeInTheDocument();
+    expect(screen.getByText('Admin')).toBeInTheDocument();
+    expect(screen.getByText('Auditeur')).toBeInTheDocument();
     expect(screen.getByText('Permissions')).toBeInTheDocument();
     expect(screen.getByText('Date de création')).toBeInTheDocument();
   });

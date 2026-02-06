@@ -14,7 +14,7 @@ const DEV_MOCK_USER: User = {
   username: 'dev.dbops',
   display_name: 'Dev DBOPS User',
   profile: 'dbops',
-  navigation_tabs: ['catalog', 'executions', 'dashboard', 'admin', 'audit'],
+  navigation_tabs: ['catalog', 'executions', 'calendar', 'dashboard', 'admin', 'audit'],
   is_auditor: true, // Story 6.3: enable audit tab in dev mode
 };
 
@@ -82,9 +82,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Wire api_client to use current token and refresh function
+  // Update whenever token or refresh function changes
   useEffect(() => {
     setAuthAccessors(() => tokenRef.current, refreshTokenFn);
-  }, [refreshTokenFn]);
+  }, [accessToken, refreshTokenFn]);
 
   // Silent refresh on mount to restore session from httpOnly cookie
   // In DEV_AUTH mode, skip API calls and use mock user

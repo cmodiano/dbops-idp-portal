@@ -18,7 +18,8 @@ import type {
 } from '../../types/api';
 import { getProfileActions, putProfileActions, getProfileTargets, putProfileTargets } from '../../services/profiles_service';
 import { listActions, getTags } from '../../services/admin_service';
-import { ENVIRONMENT_OPTIONS, MOCK_TARGET_OPTIONS } from '../../utils/profileOptions';
+import { MOCK_TARGET_OPTIONS } from '../../utils/profileOptions';
+import { useEnvironments } from '../../hooks/useEnvironments';
 
 const { TextArea } = Input;
 
@@ -61,6 +62,9 @@ export function ProfileForm({
   const [actionsOptions, setActionsOptions] = useState<{ id: number; name: string }[]>([]);
   const [tagsOptions, setTagsOptions] = useState<string[]>([]);
   const [loadingActions, setLoadingActions] = useState(false);
+  
+  // Story 13.7: Load environments from inventory
+  const { environmentOptions, loading: environmentsLoading } = useEnvironments();
 
   useEffect(() => {
     if (!open) return;
@@ -237,8 +241,9 @@ export function ProfileForm({
             <Form.Item name="environments" label="Environnements autorisés">
               <Select
                 mode="multiple"
-                placeholder="DEV, STAGING, PROD..."
-                options={ENVIRONMENT_OPTIONS.map((e) => ({ value: e, label: e }))}
+                placeholder={environmentsLoading ? "Chargement..." : "Sélectionnez les environnements"}
+                options={environmentOptions.map((e) => ({ value: e.value.toUpperCase(), label: e.label }))}
+                loading={environmentsLoading}
               />
             </Form.Item>
 

@@ -85,7 +85,7 @@ class ProfileService:
         List all profiles with permission count.
         
         Returns:
-            QuerySet of profiles with permissions_count annotation
+            QuerySet of profiles with permission_count annotation
         """
         return Profile.objects.list_with_permissions_count()
     

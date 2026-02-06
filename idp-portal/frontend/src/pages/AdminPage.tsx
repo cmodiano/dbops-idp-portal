@@ -19,6 +19,7 @@ import {
   EyeOutlined,
   StopOutlined,
   PlayCircleOutlined,
+  ApartmentOutlined,
 } from '@ant-design/icons';
 import { ActionWizard } from '../components/admin/ActionWizard';
 import { ActionStatusBadge } from '../components/admin/ActionStatusBadge';
@@ -28,7 +29,6 @@ import { ProfileImportModal } from '../components/admin/ProfileImportModal';
 import { IntegrationsTable } from '../components/admin/IntegrationsTable';
 import { IntegrationForm } from '../components/admin/IntegrationForm';
 import { AdminAnalyticsDashboard } from '../components/admin/analytics';
-import ScheduledExecutionsPage from '../components/admin/ScheduledExecutionsPage';
 import { createAction, getAction, getAdminActions, updateAction, updateActionStatus } from '../services/admin_service';
 import { getProfiles, getProfile, deleteProfile, exportProfilesYaml } from '../services/profiles_service';
 import { getIntegrations, getIntegration, createIntegration, updateIntegration, deleteIntegration } from '../services/integrations_service';
@@ -140,8 +140,8 @@ const getColumns = (
         )}
         {record.status === 'disabled' && (
           <>
-            <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => onEdit(record)}>
-              Voir
+            <Button type="link" size="small" icon={<EditOutlined />} onClick={() => onEdit(record)}>
+              Modifier
             </Button>
             <Button
               type="link"
@@ -167,6 +167,7 @@ export default function AdminPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [editAction, setEditAction] = useState<ActionDetail | null>(null);
+  const [wizardInitialItemType, setWizardInitialItemType] = useState<'action' | 'workflow' | null>(null);
 
   const [profiles, setProfiles] = useState<ProfileListItem[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(false);
@@ -274,6 +275,7 @@ export default function AdminPage() {
     setSubmitting(false);
     setModalOpen(false);
     setEditAction(null);
+    setWizardInitialItemType(null);
     setSubmitError(null);
     const name = 'name' in action ? action.name : '';
     notification.success({
@@ -286,6 +288,7 @@ export default function AdminPage() {
   const handleCancel = () => {
     setModalOpen(false);
     setEditAction(null);
+    setWizardInitialItemType(null);
     setSubmitError(null);
   };
 
@@ -473,10 +476,21 @@ export default function AdminPage() {
                         icon={<PlusOutlined />}
                         onClick={() => {
                           setEditAction(null);
+                          setWizardInitialItemType('action');
                           setModalOpen(true);
                         }}
                       >
                         Nouvelle action
+                      </Button>
+                      <Button
+                        icon={<ApartmentOutlined />}
+                        onClick={() => {
+                          setEditAction(null);
+                          setWizardInitialItemType('workflow');
+                          setModalOpen(true);
+                        }}
+                      >
+                        Nouveau workflow
                       </Button>
                     </Space>
                   </Space>
@@ -545,11 +559,6 @@ export default function AdminPage() {
               </Card>
             ),
           },
-          {
-            key: 'scheduled-executions',
-            label: 'Exécutions planifiées',
-            children: <ScheduledExecutionsPage />,
-          },
         ]}
       />
 
@@ -561,6 +570,7 @@ export default function AdminPage() {
         error={submitError}
         editAction={editAction}
         onSuccess={handleSuccess}
+        initialItemType={editAction ? undefined : wizardInitialItemType ?? undefined}
       />
 
       <ProfileWizard

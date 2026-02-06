@@ -35,7 +35,7 @@ def health_check(request):
     - ServiceNow service reachability (optional)
 
     Returns:
-        Response matching FastAPI format:
+        Response format:
         {
             "data": {
                 "status": "healthy" | "degraded",
@@ -120,7 +120,7 @@ def health_check(request):
         # ServiceNow not configured - mark as reachable to not fail health check
         health_data["servicenow"] = "reachable"
 
-    # Format response with envelope (matching FastAPI format exactly)
+    # Format response with envelope
     response_data = {"data": health_data}
 
     http_status = (

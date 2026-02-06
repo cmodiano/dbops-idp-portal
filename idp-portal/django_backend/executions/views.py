@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, date, timezone
 # Fixed-offset UTC (no name): Oracle Thin Mode does not support named timezones (DPY-3022)
 UTC = timezone(timedelta(0))
 
+from django.db import transaction
 from django.db.models import Q, Count
 from django.db.models.functions import TruncDate
 from django.utils import timezone
@@ -37,11 +38,352 @@ from executions.serializers import (
 from executions.services import ExecutionService, SchedulingService
 from inventory.services import InventoryService, InventoryServiceError, MAX_TARGETS_FOR_RBAC_FILTER
 from profiles.services import ProfileService
+from utils.json_helpers import validate_json_schema
+
+try:
+    import jsonschema  # type: ignore
+    JSONSCHEMA_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    JSONSCHEMA_AVAILABLE = False
+
+
+def _validate_environment_against_inventory(environment: str) -> None:
+    """
+    Validate environment against inventory (Story 13.7, AC2).
+    Raises BadRequestError if environment is not in inventory.
+    """
+    if not environment:
+        return
+    
+    try:
+        inventory_service = InventoryService()
+        valid_environments = inventory_service.list_environments()
+        
+        if environment.lower() not in [e.lower() for e in valid_environments]:
+            raise BadRequestError(
+                code="INVALID_ENVIRONMENT",
+                message=f"Environnement invalide: {environment}",
+                details={
+                    "environment": environment,
+                    "valid_environments": sorted(valid_environments)
+                },
+            )
+    except InventoryServiceError as e:
+        # If inventory service fails, log warning but don't block execution
+        # (fallback behavior - allow execution with warning)
+        exec_logger.warning(
+            "inventory_validation_failed",
+            environment=environment,
+            error=str(e),
+            correlation_id=get_correlation_id(),
+            message="Failed to validate environment against inventory - allowing execution with warning"
+        )
 
 from croniter import croniter
 import structlog
 
 exec_logger = structlog.get_logger(__name__)
+
+
+def _extract_workflow_referenced_action_ids(workflow_action: Action) -> list[int]:
+    """
+    Extract referenced_action_id list from a workflow's execution_steps.
+
+    Expected format (Story 5.7 / 4.11):
+        [
+          {"order": 1, "name": "...", "referenced_action_id": 5},
+          ...
+        ]
+    Returns IDs in step order, skipping invalid/missing entries.
+    """
+    steps = workflow_action.get_execution_steps() or []
+    if not isinstance(steps, list):
+        return []
+
+    # Ensure deterministic ordering: use 'order' if present, else keep input order
+    def _order_key(step: object, idx: int) -> int:
+        if isinstance(step, dict):
+            try:
+                return int(step.get("order", idx))
+            except (ValueError, TypeError):
+                return idx
+        return idx
+
+    sorted_steps = sorted(list(enumerate(steps)), key=lambda t: _order_key(t[1], t[0]))
+    ids: list[int] = []
+    for idx, step in sorted_steps:
+        if not isinstance(step, dict):
+            continue
+        if "referenced_action_id" not in step:
+            continue
+        try:
+            ids.append(int(step["referenced_action_id"]))
+        except (ValueError, TypeError):
+            exec_logger.warning(
+                "invalid_referenced_action_id_in_workflow_steps",
+                workflow_action_id=workflow_action.id,
+                referenced_action_id=step.get("referenced_action_id"),
+                step_index=idx,
+                correlation_id=get_correlation_id(),
+            )
+            continue
+    return ids
+
+
+def _extract_workflow_step_map(workflow_action: Action) -> dict[int, int]:
+    """
+    Build mapping step_order -> referenced_action_id for a workflow.
+    """
+    steps = workflow_action.get_execution_steps() or []
+    if not isinstance(steps, list):
+        return {}
+    out: dict[int, int] = {}
+    for idx, step in enumerate(steps):
+        if not isinstance(step, dict):
+            continue
+        try:
+            order = int(step.get("order", idx + 1))
+            ref_id = int(step["referenced_action_id"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        out[order] = ref_id
+    return out
+
+
+def _validate_workflow_step_parameters(
+    *,
+    workflow_action: Action,
+    workflow_step_parameters: object,
+) -> dict:
+    """
+    Story 4.12 (AC4):
+      - Reject unknown step_order keys
+      - Validate each step parameters against referenced action parameters_schema
+    Returns normalized dict suitable for storage (keys as strings).
+    """
+    if workflow_step_parameters is None:
+        return {}
+    if not isinstance(workflow_step_parameters, dict):
+        raise BadRequestError(
+            code="INVALID_WORKFLOW_STEP_PARAMETERS",
+            message="workflow_step_parameters doit être un objet",
+            details={"workflow_step_parameters": workflow_step_parameters},
+        )
+
+    step_map = _extract_workflow_step_map(workflow_action)
+    valid_orders = sorted(step_map.keys())
+
+    invalid_orders: list[str] = []
+    normalized: dict[str, dict] = {}
+    for key, value in workflow_step_parameters.items():
+        # Keys are expected to be strings in API contract
+        try:
+            order_int = int(key)
+        except (TypeError, ValueError):
+            invalid_orders.append(str(key))
+            continue
+
+        if order_int not in step_map:
+            invalid_orders.append(str(key))
+            continue
+
+        entry = value if isinstance(value, dict) else {}
+        params = entry.get("parameters") if isinstance(entry, dict) else None
+        if params is None:
+            params = {}
+        if not isinstance(params, dict):
+            raise BadRequestError(
+                code="INVALID_PARAMETERS",
+                message="Paramètres invalides (doivent être un objet)",
+                details={"step_order": order_int, "field": "parameters"},
+            )
+
+        # Validate against referenced action schema (if any)
+        ref_action_id = step_map[order_int]
+        try:
+            ref_action = Action.objects.get(id=int(ref_action_id))
+        except Action.DoesNotExist:
+            # Should be prevented by Story 4.11 delegation validation, but keep defensive.
+            raise NotFoundError(
+                code="REFERENCED_ACTION_NOT_FOUND",
+                message="Action référencée introuvable",
+                details={"step_order": order_int, "referenced_action_id": ref_action_id},
+            )
+
+        schema = ref_action.get_parameters_schema() or {}
+        if not schema:
+            # No schema: accept only empty params
+            if params:
+                raise BadRequestError(
+                    code="INVALID_PARAMETERS",
+                    message="Cette étape n'accepte pas de paramètres",
+                    details={"step_order": order_int},
+                )
+            normalized[str(order_int)] = {"parameters": {}}
+            continue
+
+        if JSONSCHEMA_AVAILABLE:
+            try:
+                jsonschema.validate(instance=params, schema=schema)  # type: ignore[attr-defined]
+            except jsonschema.ValidationError as e:  # type: ignore[attr-defined]
+                field_path = ".".join(str(p) for p in e.absolute_path) if e.absolute_path else "root"
+                raise BadRequestError(
+                    code="INVALID_PARAMETERS",
+                    message=f"Paramètres invalides (étape {order_int}): {e.message}",
+                    details={"step_order": order_int, "field": field_path, "error": e.message},
+                ) from e
+            except jsonschema.SchemaError as e:  # type: ignore[attr-defined]
+                raise BadRequestError(
+                    code="INVALID_SCHEMA",
+                    message="Schema de paramètres invalide pour une action référencée",
+                    details={"step_order": order_int, "referenced_action_id": ref_action_id, "error": str(e)},
+                ) from e
+        else:
+            ok, err = validate_json_schema(params, schema)
+            if not ok:
+                raise BadRequestError(
+                    code="INVALID_PARAMETERS",
+                    message=f"Paramètres invalides (étape {order_int}): {err}",
+                    details={"step_order": order_int, "error": err},
+                )
+
+        normalized[str(order_int)] = {"parameters": params}
+
+    if invalid_orders:
+        raise BadRequestError(
+            code="INVALID_WORKFLOW_STEP_ORDER",
+            message="workflow_step_parameters contient des step_order inconnus",
+            details={"invalid_step_orders": sorted(invalid_orders), "valid_step_orders": valid_orders},
+        )
+
+    return normalized
+
+
+def _validate_workflow_referenced_actions(
+    *,
+    workflow_action: Action,
+    correlation_id: str | None,
+    user_id: int,
+    ip_address: str | None,
+) -> list[int]:
+    """
+    Story 4.11:
+    - Validate referenced actions EXIST and are PUBLISHED.
+    - Do NOT perform per-action RBAC checks (delegation).
+    - Validation must happen BEFORE creating an execution (no partial execution).
+
+    Returns the ordered list of referenced_action_ids.
+    Raises:
+      - NotFoundError if any referenced action is missing
+      - BadRequestError if any referenced action is not published
+    """
+    referenced_action_ids = _extract_workflow_referenced_action_ids(workflow_action)
+
+    # MEDIUM: Reject workflow with no referenced actions (Story 4.11 edge case)
+    if not referenced_action_ids:
+        raise BadRequestError(
+            code="WORKFLOW_EMPTY",
+            message="Le workflow ne contient aucune action référencée",
+            details={
+                "workflow_action_id": workflow_action.id,
+                "workflow_action_name": workflow_action.name,
+            },
+        )
+
+    missing_ids: list[int] = []
+    not_published: list[dict] = []
+
+    for ref_id in referenced_action_ids:
+        try:
+            ref_action = Action.objects.get(id=int(ref_id))
+        except Action.DoesNotExist:
+            missing_ids.append(int(ref_id))
+            continue
+
+        if ref_action.status != ActionStatus.PUBLISHED:
+            not_published.append(
+                {
+                    "referenced_action_id": int(ref_id),
+                    "action_name": ref_action.name,
+                    "status": ref_action.status,
+                }
+            )
+
+    if missing_ids:
+        # Audit attempt (no execution created yet)
+        AuditService.create_entry(
+            user_id=str(user_id),
+            action_type=AuditActionType.EXECUTION_SUBMITTED,
+            entity_type=AuditEntityType.EXECUTION,
+            entity_id=0,
+            details={
+                "delegated": True,
+                "workflow_action_id": workflow_action.id,
+                "workflow_action_name": workflow_action.name,
+                "referenced_action_ids": referenced_action_ids,
+                "validation_result": "failed",
+                "reason": "missing_referenced_action",
+                "missing_referenced_action_ids": missing_ids,
+            },
+            ip_address=ip_address,
+            correlation_id=correlation_id,
+        )
+        # AC4: list all missing actions in message
+        if len(missing_ids) == 1:
+            message = f"L'action référencée '{missing_ids[0]}' n'existe plus ou n'est plus disponible"
+        else:
+            ids_str = "', '".join(str(i) for i in missing_ids)
+            message = f"Les actions référencées suivantes n'existent plus : '{ids_str}'"
+        raise NotFoundError(
+            code="REFERENCED_ACTION_NOT_FOUND",
+            message=message,
+            details={
+                "workflow_action_id": workflow_action.id,
+                "workflow_action_name": workflow_action.name,
+                "referenced_action_id": missing_ids[0],
+                "missing_referenced_action_ids": missing_ids,
+            },
+        )
+
+    if not_published:
+        AuditService.create_entry(
+            user_id=str(user_id),
+            action_type=AuditActionType.EXECUTION_SUBMITTED,
+            entity_type=AuditEntityType.EXECUTION,
+            entity_id=0,
+            details={
+                "delegated": True,
+                "workflow_action_id": workflow_action.id,
+                "workflow_action_name": workflow_action.name,
+                "referenced_action_ids": referenced_action_ids,
+                "validation_result": "failed",
+                "reason": "referenced_action_not_published",
+                "not_published": not_published,
+            },
+            ip_address=ip_address,
+            correlation_id=correlation_id,
+        )
+        first = not_published[0]
+        # AC4: list all not-published actions in message
+        if len(not_published) == 1:
+            message = f"L'action référencée '{first['action_name']}' n'est plus publiée (statut: {first['status']})"
+        else:
+            parts = [f"'{p['action_name']}' (statut: {p['status']})" for p in not_published]
+            message = f"Les actions référencées suivantes ne sont plus publiées : {', '.join(parts)}"
+        raise BadRequestError(
+            code="REFERENCED_ACTION_NOT_PUBLISHED",
+            message=message,
+            details={
+                "workflow_action_id": workflow_action.id,
+                "workflow_action_name": workflow_action.name,
+                "referenced_action_id": first["referenced_action_id"],
+                "action_name": first["action_name"],
+                "status": first["status"],
+                "not_published": not_published,
+            },
+        )
+
+    return referenced_action_ids
 
 
 def _parse_int(value: str | None, default: int, *, name: str) -> int:
@@ -143,7 +485,7 @@ def _detect_request_source(request) -> str:
 
 def _apply_scope_filter(qs, *, user, scope: str) -> tuple[object, str]:
     """
-    Return (qs, effective_scope) following FastAPI behavior:
+    Return (qs, effective_scope):
     - scope defaults to mine
     - scope=all only if user is DBA/DBOPS, else fallback to mine
     """
@@ -254,6 +596,7 @@ class ExecutionsView(APIView):
         environment = payload.get("environment")
         target_names = payload.get("target_names")
         parameters = payload.get("parameters") or {}
+        workflow_step_parameters = payload.get("workflow_step_parameters")
         parent_execution_id = payload.get("parent_execution_id")
 
         correlation_id = request.META.get("HTTP_X_IDP_REQUEST_ID") or get_correlation_id()
@@ -300,6 +643,10 @@ class ExecutionsView(APIView):
                     message="environment ou target_names est requis",
                     details={"environment": environment, "target_names": target_names},
                 )
+            
+            # Story 13.7, AC2: Validate environment against inventory
+            if environment:
+                _validate_environment_against_inventory(environment)
 
         # Story 13.2, Task 5 & 6: Handle target_names with RBAC validation
         if target_names:
@@ -437,6 +784,33 @@ class ExecutionsView(APIView):
         source = _detect_request_source(request)
         ip_address = get_client_ip(request)
 
+        delegated_referenced_action_ids: list[int] | None = None
+        if action.item_type == "workflow":
+            # Story 4.11: delegation validation on workflow referenced actions
+            delegated_referenced_action_ids = _validate_workflow_referenced_actions(
+                workflow_action=action,
+                correlation_id=correlation_id,
+                user_id=request.user.id,
+                ip_address=ip_address,
+            )
+        else:
+            # Story 4.12: reject workflow_step_parameters on non-workflow actions
+            if workflow_step_parameters is not None:
+                raise BadRequestError(
+                    code="INVALID_WORKFLOW_STEP_PARAMETERS",
+                    message="workflow_step_parameters n'est autorisé que pour les workflows",
+                    details={"action_id": action.id, "item_type": action.item_type},
+                )
+
+        if action.item_type == "workflow" and workflow_step_parameters is not None:
+            normalized_wsp = _validate_workflow_step_parameters(
+                workflow_action=action,
+                workflow_step_parameters=workflow_step_parameters,
+            )
+            # Store for runtime (Story 4.12 AC5 will consume it)
+            parameters = parameters.copy() if parameters else {}
+            parameters["workflow_step_parameters"] = normalized_wsp
+
         execution = ExecutionService().create_execution(
             user=request.user,
             action=action,
@@ -447,6 +821,7 @@ class ExecutionsView(APIView):
             source=source,
             ip_address=ip_address,
             targets=target_names if target_names else None,
+            delegated_referenced_action_ids=delegated_referenced_action_ids,
         )
 
         return Response(
@@ -790,14 +1165,9 @@ class ScheduledExecutionsView(APIView):
             qs = qs.filter(action_id=_parse_int(action_id, 0, name="action_id"))
 
         # Story 13.6: Filter by environment (from scheduled execution)
+        # Story 13.7, AC2: Validate against inventory instead of hardcoded list
         if environment_filter:
-            valid_envs = {'dev', 'staging', 'prod'}
-            if environment_filter.lower() not in valid_envs:
-                raise BadRequestError(
-                    code="INVALID_ENVIRONMENT",
-                    message=f"Environnement invalide: {environment_filter}",
-                    details={"environment": environment_filter, "valid_environments": sorted(valid_envs)},
-                )
+            _validate_environment_against_inventory(environment_filter)
             qs = qs.filter(environment=environment_filter.lower())
 
         # Story 13.6: Filter by engine (from action)
@@ -862,6 +1232,9 @@ class ScheduledExecutionsView(APIView):
                 message="action_id et environment sont requis",
                 details={"action_id": action_id, "environment": environment},
             )
+        
+        # Story 13.7, AC2: Validate environment against inventory
+        _validate_environment_against_inventory(environment)
 
         # Validate mutual exclusivity
         if scheduled_at_raw and recurring_pattern:
@@ -998,20 +1371,22 @@ class ScheduledExecutionUpdateView(APIView):
                 raise BadRequestError(code="BAD_REQUEST", message="execution_id invalide", details={"execution_id": execution_id})
 
             # If recurring: recalc next date and keep status pending (next occurrence)
-            rp = getattr(se, "recurringpattern", None)
-            if rp is not None and bool(rp.is_active):
-                rp.next_execution_date = _calculate_next_execution_date(
-                    rp.pattern_type, rp.get_pattern_config() or {}, timezone.now()
-                )
-                rp.updated_at = timezone.now()
-                rp.save(update_fields=["next_execution_date", "updated_at"])
-                se.status = ScheduledExecutionStatus.PENDING
-            else:
-                se.status = ScheduledExecutionStatus.EXECUTED
+            # Wrap both operations in a single transaction to ensure atomicity
+            with transaction.atomic():
+                rp = getattr(se, "recurringpattern", None)
+                if rp is not None and bool(rp.is_active):
+                    rp.next_execution_date = _calculate_next_execution_date(
+                        rp.pattern_type, rp.get_pattern_config() or {}, timezone.now()
+                    )
+                    rp.updated_at = timezone.now()
+                    rp.save(update_fields=["next_execution_date", "updated_at"])
+                    se.status = ScheduledExecutionStatus.PENDING
+                else:
+                    se.status = ScheduledExecutionStatus.EXECUTED
 
-            se.execution_id = execution_id_int
-            se.updated_at = timezone.now()
-            se.save(update_fields=["status", "execution_id", "updated_at"])
+                se.execution_id = execution_id_int
+                se.updated_at = timezone.now()
+                se.save(update_fields=["status", "execution_id", "updated_at"])
             se = ScheduledExecution.objects.select_related("action").get(id=scheduled_execution_id)
             return Response(
                 {
@@ -1028,6 +1403,165 @@ class ScheduledExecutionUpdateView(APIView):
             )
 
         raise BadRequestError(code="INVALID_STATUS", message="Statut invalide", details={"status": new_status})
+
+    def put(self, request, scheduled_execution_id: int):
+        """PUT /scheduled-executions/{id} - update pending scheduled execution (Story 13.8, AC4)."""
+        try:
+            se = ScheduledExecution.objects.select_related("action", "user").select_related("recurringpattern").get(
+                id=scheduled_execution_id
+            )
+        except ScheduledExecution.DoesNotExist:
+            raise NotFoundError(
+                code="SCHEDULED_EXECUTION_NOT_FOUND",
+                message="Exécution planifiée introuvable",
+                details={"scheduled_execution_id": scheduled_execution_id},
+            )
+
+        if (getattr(request.user, "profile", "") or "").lower() != "dbops" and se.user_id != request.user.id:
+            raise ForbiddenError(
+                code="PERMISSION_DENIED",
+                message="Vous n'avez pas la permission de modifier cette exécution planifiée",
+                details={"scheduled_execution_id": scheduled_execution_id},
+            )
+
+        if se.status != ScheduledExecutionStatus.PENDING:
+            raise InvalidStateError(
+                code="INVALID_STATUS",
+                message="Seules les exécutions planifiées en attente peuvent être modifiées",
+                details={"scheduled_execution_id": scheduled_execution_id, "status": se.status},
+            )
+
+        body = request.data if isinstance(request.data, dict) else {}
+        action = se.action
+        if not action:
+            raise NotFoundError(
+                code="ACTION_NOT_FOUND",
+                message="Action introuvable",
+                details={"action_id": se.action_id},
+            )
+
+        scheduled_at_raw = body.get("scheduled_at")
+        parameters = body.get("parameters")
+        environment = body.get("environment")
+        target_names = body.get("target_names")
+        recurring_pattern_payload = body.get("recurring_pattern")
+        now = timezone.now()
+        se.updated_at = now
+
+        # One-time: allow updating scheduled_at
+        rp = getattr(se, "recurringpattern", None)
+        if scheduled_at_raw is not None and rp is None:
+            scheduled_at = _parse_iso_datetime(scheduled_at_raw, name="scheduled_at")
+            if scheduled_at <= timezone.now().astimezone(UTC):
+                raise BadRequestError(
+                    code="INVALID_SCHEDULED_DATE",
+                    message="scheduled_at doit être dans le futur",
+                    details={"scheduled_at": scheduled_at_raw},
+                )
+            se.scheduled_at = scheduled_at
+
+        # Environment (validate against inventory)
+        if environment is not None:
+            _validate_environment_against_inventory(environment)
+            se.environment = environment.lower()
+
+        # Target names: RBAC validation and merge into parameters (empty list allowed = clear targets)
+        if target_names is not None:
+            if not isinstance(target_names, list):
+                raise BadRequestError(
+                    code="BAD_REQUEST",
+                    message="target_names doit être une liste",
+                    details={"target_names": target_names},
+                )
+            if len(target_names) == 0:
+                current_params = se.get_parameters() or {}
+                if not isinstance(current_params, dict):
+                    current_params = {}
+                new_params = {k: v for k, v in current_params.items() if k != "_targets"}
+                new_params["_targets"] = []
+                se.set_parameters(new_params)
+                if environment is not None:
+                    _validate_environment_against_inventory(environment)
+                    se.environment = environment.lower()
+            else:
+                ad_groups = get_user_ad_groups(request.user)
+                inventory_service = InventoryService()
+                try:
+                    allowed_targets, _total, inventory_truncated = inventory_service.list_targets_for_user(
+                        user_id=request.user.id,
+                        ad_groups=ad_groups,
+                        page=1,
+                        page_size=MAX_TARGETS_FOR_RBAC_FILTER,
+                    )
+                except InventoryServiceError as e:
+                    exec_logger.error(
+                        "inventory_service_error_during_scheduled_update",
+                        error=str(e),
+                        user_id=request.user.id,
+                    )
+                    raise BadRequestError(
+                        code="INVENTORY_UNAVAILABLE",
+                        message="Service inventaire indisponible",
+                        details={"error": str(e)},
+                    )
+                allowed_targets_map = {t["name"]: t for t in allowed_targets}
+                environments_found = set()
+                for name in target_names:
+                    if name not in allowed_targets_map:
+                        raise ForbiddenError(
+                            code="FORBIDDEN",
+                            message=f"Cible non autorisée: {name}",
+                            details={"target_name": name, "inventory_truncated": inventory_truncated},
+                        )
+                    environments_found.add(allowed_targets_map[name]["environment"])
+                if len(environments_found) > 1:
+                    raise BadRequestError(
+                        code="MIXED_ENVIRONMENTS",
+                        message="Les cibles doivent appartenir au même environnement",
+                        details={"environments": list(environments_found)},
+                    )
+                se.environment = list(environments_found)[0].lower()
+                current_params = se.get_parameters() or {}
+                if not isinstance(current_params, dict):
+                    current_params = {}
+                new_params = {**current_params, "_targets": target_names}
+                se.set_parameters(new_params)
+        elif parameters is not None:
+            current_params = se.get_parameters() or {}
+            if not isinstance(current_params, dict):
+                current_params = {}
+            # Security: do not allow client to set _targets via parameters; only via validated target_names
+            incoming = parameters if isinstance(parameters, dict) else {}
+            sanitized = {k: v for k, v in incoming.items() if not k.startswith("_")}
+            merged = {**current_params, **sanitized}
+            se.set_parameters(merged)
+
+        # Recurring pattern update
+        if recurring_pattern_payload is not None and rp is not None:
+            pattern_type = (recurring_pattern_payload.get("pattern_type") or "").lower()
+            pattern_config = recurring_pattern_payload.get("pattern_config") or {}
+            next_execution_date = _calculate_next_execution_date(
+                pattern_type, pattern_config, timezone.now()
+            )
+            rp.pattern_type = pattern_type
+            rp.set_pattern_config(pattern_config)
+            rp.next_execution_date = next_execution_date
+            rp.updated_at = now
+            rp.save(update_fields=["pattern_type", "pattern_config", "next_execution_date", "updated_at"])
+
+        update_fields = ["updated_at"]
+        if scheduled_at_raw is not None and rp is None:
+            update_fields.append("scheduled_at")
+        if environment is not None or target_names is not None:
+            update_fields.extend(["environment", "parameters"])
+        elif parameters is not None:
+            update_fields.append("parameters")
+        se.save(update_fields=list(dict.fromkeys(update_fields)))
+
+        se = ScheduledExecution.objects.select_related("action").select_related("recurringpattern").get(
+            id=scheduled_execution_id
+        )
+        return Response({"data": ScheduledExecutionSerializer(se).data})
 
 
 class ScheduledExecutionRecurringPatternView(APIView):

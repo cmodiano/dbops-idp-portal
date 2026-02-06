@@ -759,6 +759,9 @@ async def update_scheduled_execution(
             code="INVALID_STATE",
         )
 
+    # Track the actual database status that will be set (may differ from request.status for recurring)
+    actual_status = request.status
+
     # Handle status="executed" with recalculation for recurring
     if request.status == "executed":
         # Check if recurring pattern exists
@@ -786,6 +789,7 @@ async def update_scheduled_execution(
                 new_status="pending",
                 execution_id=request.execution_id,
             )
+            actual_status = "pending"
 
             logger.info(
                 "recurring_pattern_next_execution_recalculated",
@@ -815,6 +819,7 @@ async def update_scheduled_execution(
                 new_status="executed",
                 execution_id=request.execution_id,
             )
+            actual_status = "executed"
 
             # Audit log
             await audit_repository.create_audit_log(
@@ -836,6 +841,7 @@ async def update_scheduled_execution(
             new_status="cancelled",
             execution_id=None,
         )
+        actual_status = "cancelled"
 
         # Audit log (existing)
         await audit_repository.create_audit_log(
@@ -850,7 +856,7 @@ async def update_scheduled_execution(
     logger.info(
         "scheduled_execution_updated",
         scheduled_execution_id=scheduled_execution_id,
-        new_status=request.status,
+        new_status=actual_status,
     )
 
     return {"message": "Exécution planifiée mise à jour avec succès"}

@@ -1,6 +1,5 @@
 """
 SAML utilities for Django - request conversion and auth creation.
-Mirrors FastAPI implementation for contract parity.
 """
 
 from django.http import HttpRequest
