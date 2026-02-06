@@ -168,7 +168,7 @@ development_status:
     11-10-api-integration-scheduler-externe: done # GET /api/v1/scheduled-executions/pending - endpoint pour scheduler externe (Control-M/Django) récupérer schedules à exécuter + PATCH status=executed avec recalcul next_execution_date; 19/19 tests pass
     epic-11-retrospective: optional
     # === Epic M: Migration FastAPI vers Django REST (Arrimage plateforme) ===
-    epic-m: done
+    epic-m: in-progress  # m-11 nettoyage en backlog
     m-1-bootstrap-projet-django-et-drf: done # Code review 2026-02-03: 1 CRITICAL + 4 HIGH + 4 MEDIUM fixes applied - format réponse FastAPI corrigé, fichiers manquants créés, tests améliorés
     m-2-modeles-django-et-migrations-schema-oracle: done # Code review 2026-02-03: 10 issues fixed (3 HIGH + 5 MEDIUM + 2 LOW) - imports json optimisés, logging ajouté, migrations générées
     m-3-couche-donnees-repositories-vers-orm-django: done # Code review 2026-02-03 (adversarial): 10 fixes applied (1 CRITICAL + 3 HIGH + 4 MEDIUM + 2 LOW) - correlation_id ajouté, types audit PROFILE_*/INTEGRATION_* corrigés avec enum, prefetch_related pour OneToOneField, validation user_id, export CSV JSON formaté, tests README créé, tous types hardcodés remplacés par enum. Code review 2026-02-03 (fourth): 10 additional fixes (2 CRITICAL + 4 HIGH + 4 MEDIUM) - tous types audit hardcodés remplacés par enums, correlation_id ajouté aux méthodes execution, entity_type corrigés, types manquants ajoutés aux enums
@@ -179,6 +179,7 @@ development_status:
     m-8-middleware-logging-observabilite: done # 2026-02-05: Logging structuré JSON (structlog), RequestResponseLoggingMiddleware, health check étendu (DB+Vault+ServiceNow), CORS, propagation correlation_id - Implementation complete
     m-9-tests-unitaires-et-integration-parite: done # 2026-02-05: All 13 tasks completed - fixtures, factories, integration tests, RBAC security tests, performance benchmarks, CI configuration, documentation
     m-10-strategie-bascule-et-decommissionnement-fastapi: done # 2026-02-05: All 10 tasks + code review completed - 10 issues found (2 CRITICAL, 1 HIGH, 4 MEDIUM, 3 LOW), 3 auto-fixed (gunicorn, .env template, plan bascule), 4 documented for follow-up - Backend Django PRODUCTION-READY
+    m-11-nettoyage-code-fastapi-suppression-references: backlog  # Ménage : doc à jour, supprimer toutes les références FastAPI dans le code
     epic-m-retrospective: done # 2026-02-05
     # === Epic 12: Documentation technique (post-Django) ===
     # À réaliser après le passage à Django pour documenter la cible finale.
@@ -196,6 +197,6 @@ development_status:
     13-3-rbac-environnement-du-target-filtre-targets-par-profil: done # 2026-02-05: Code review + auto-fixes (normalisation env certif→staging, audit EXECUTION/0, inventory_truncated 403, tests rbac_truncated/certif)
     13-4-refactoring-une-action-unique-validation-backend: done # 2026-02-05: target_names REQUIRED, env from targets, _env_config added; code-review fixes: warning assert, dedup tests, 8 tests
     13-5-api-standalone-execution-sans-frontend-visibilite-portail: done # 2026-02-05: Code review fixes appliqués (401 UNAUTHORIZED, tests 415/MIXED_ENVIRONMENTS, audit source, doc)
-    13-6-menu-calendrier-vue-calendrier-executions-planifiees-dba: backlog  # Vue calendrier réelle + filtres action/env/plateforme/techno (alignés Exécutions)
+    13-6-menu-calendrier-vue-calendrier-executions-planifiees-dba: done  # Vue calendrier réelle + filtres action/env/plateforme/techno (alignés Exécutions); code-review 2026-02-06: 2 HIGH + 3 MEDIUM corrigés
     13-7-ref-environnements-et-technologies-via-tables: backlog  # Env = inventaire ; technos/plateformes = tables REF ; plus de listes en dur (13-ref-environnements-et-technologies-via-tables.md)
     epic-13-retrospective: optional

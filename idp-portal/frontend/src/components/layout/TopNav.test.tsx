@@ -49,6 +49,8 @@ function renderTopNav(initialPath = '/catalog', withUnseenError = false) {
       { path: '/', element: <Nav />, children: [] },
       { path: '/catalog', element: <Nav /> },
       { path: '/executions', element: <Nav /> },
+      // Story 13.6: Calendar page for scheduled executions
+      { path: '/calendar', element: <Nav /> },
       // Story 9.10: Dashboard renamed to Analytics
       { path: '/analytics', element: <Nav /> },
       { path: '/admin', element: <Nav /> },
@@ -77,14 +79,17 @@ describe('TopNav', () => {
   });
 
   describe('AC1 — DBOPS Navigation', () => {
-    it('DBOPS user sees 4 tabs including Admin', async () => {
-      mockAuthSession('dbops', ['catalog', 'executions', 'dashboard', 'admin']);
+    it('DBOPS user sees 5 tabs including Calendar and Admin', async () => {
+      // Story 13.6: DBOPS sees Calendar menu
+      mockAuthSession('dbops', ['catalog', 'executions', 'calendar', 'dashboard', 'admin']);
       renderTopNav();
 
       await waitFor(() => {
         expect(screen.getByText('Catalogue')).toBeInTheDocument();
       });
       expect(screen.getByText('Exécutions')).toBeInTheDocument();
+      // Story 13.6: Calendar menu visible for DBOPS
+      expect(screen.getByText('Calendrier')).toBeInTheDocument();
       // Story 9.10: Dashboard renamed to Analytics
       expect(screen.getByText('Analytics')).toBeInTheDocument();
       expect(screen.getByText('Admin')).toBeInTheDocument();
@@ -92,27 +97,85 @@ describe('TopNav', () => {
   });
 
   describe('AC2 — DBA Navigation', () => {
-    it('DBA user sees 3 tabs without Admin', async () => {
-      mockAuthSession('dba_applicatif', ['catalog', 'executions', 'dashboard']);
+    it('DBA user sees 4 tabs including Calendar but without Admin', async () => {
+      // Story 13.6: DBA sees Calendar menu
+      mockAuthSession('dba_applicatif', ['catalog', 'executions', 'calendar', 'dashboard']);
       renderTopNav();
 
       await waitFor(() => {
         expect(screen.getByText('Catalogue')).toBeInTheDocument();
       });
       expect(screen.getByText('Exécutions')).toBeInTheDocument();
+      // Story 13.6: Calendar menu visible for DBA
+      expect(screen.getByText('Calendrier')).toBeInTheDocument();
       // Story 9.10: Dashboard renamed to Analytics
       expect(screen.getByText('Analytics')).toBeInTheDocument();
       expect(screen.queryByText('Admin')).not.toBeInTheDocument();
     });
 
-    it('DBA Infrastructure user also sees 3 tabs', async () => {
-      mockAuthSession('dba_infrastructure', ['catalog', 'executions', 'dashboard']);
+    it('DBA Infrastructure user also sees 4 tabs with Calendar', async () => {
+      // Story 13.6: DBA sees Calendar menu
+      mockAuthSession('dba_infrastructure', ['catalog', 'executions', 'calendar', 'dashboard']);
       renderTopNav();
 
       await waitFor(() => {
         expect(screen.getByText('Catalogue')).toBeInTheDocument();
       });
+      // Story 13.6: Calendar menu visible
+      expect(screen.getByText('Calendrier')).toBeInTheDocument();
       expect(screen.queryByText('Admin')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Story 13.6 — Calendar Menu (AC1)', () => {
+    it('Calendar menu visible for DBA profile', async () => {
+      mockAuthSession('dba_applicatif', ['catalog', 'executions', 'calendar', 'dashboard']);
+      renderTopNav();
+
+      await waitFor(() => {
+        expect(screen.getByText('Calendrier')).toBeInTheDocument();
+      });
+    });
+
+    it('Calendar menu visible for DBOPS profile', async () => {
+      mockAuthSession('dbops', ['catalog', 'executions', 'calendar', 'dashboard', 'admin']);
+      renderTopNav();
+
+      await waitFor(() => {
+        expect(screen.getByText('Calendrier')).toBeInTheDocument();
+      });
+    });
+
+    it('Calendar menu NOT visible for Business profile', async () => {
+      // Business profile does not have calendar in navigation_tabs
+      mockAuthSession('client_business', ['catalog', 'executions']);
+      renderTopNav();
+
+      await waitFor(() => {
+        expect(screen.getByText('Catalogue')).toBeInTheDocument();
+      });
+      expect(screen.queryByText('Calendrier')).not.toBeInTheDocument();
+    });
+
+    it('Calendar menu navigates to /calendar route', async () => {
+      const user = userEvent.setup();
+      mockAuthSession('dba_applicatif', ['catalog', 'executions', 'calendar', 'dashboard']);
+      renderTopNav('/catalog');
+
+      await waitFor(() => {
+        expect(screen.getByText('Calendrier')).toBeInTheDocument();
+      });
+
+      // Click calendar button
+      const calendarButton = screen.getByText('Calendrier').closest('button');
+      expect(calendarButton).toBeInTheDocument();
+      await user.click(calendarButton!);
+
+      // Verify the button becomes active (indicates route changed in memory router)
+      await waitFor(() => {
+        const activeButton = screen.getByText('Calendrier').closest('button');
+        expect(activeButton).toHaveClass('nav-pill-active');
+      });
     });
   });
 

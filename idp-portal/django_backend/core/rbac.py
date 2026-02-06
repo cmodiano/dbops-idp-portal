@@ -4,8 +4,12 @@ Matches FastAPI rbac_service functionality for navigation permissions and busine
 """
 
 # Navigation tabs by profile — DBOPS sees Admin, others do not
+# Story 13.6: DBA and DBOPS see Calendar menu for scheduled executions
 _NAVIGATION_MAP: dict[str, list[str]] = {
-    "dbops": ["catalog", "executions", "dashboard", "admin"],
+    "dbops": ["catalog", "executions", "calendar", "dashboard", "admin"],
+    "dba": ["catalog", "executions", "calendar", "dashboard"],
+    "dba_applicatif": ["catalog", "executions", "calendar", "dashboard"],
+    "dba_infrastructure": ["catalog", "executions", "calendar", "dashboard"],
 }
 
 _DEFAULT_TABS: list[str] = ["catalog", "executions", "dashboard"]

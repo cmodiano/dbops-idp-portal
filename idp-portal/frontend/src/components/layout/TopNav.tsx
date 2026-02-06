@@ -3,6 +3,7 @@ import { Dropdown, Avatar, Space, Typography, theme, Badge, Tooltip } from 'antd
 import {
   AppstoreOutlined,
   PlayCircleOutlined,
+  CalendarOutlined,
   BarChartOutlined,
   SettingOutlined,
   LogoutOutlined,
@@ -23,18 +24,22 @@ import type { MenuProps } from 'antd';
 const { Text } = Typography;
 
 // Story 9.10: Dashboard renamed to Analytics (DBOPS only for advanced reporting)
+// Story 13.6: Calendar menu for DBA/DBOPS to view scheduled executions
 const TAB_CONFIG: Record<NavigationTabKey, { label: string; icon: React.ReactNode }> = {
   catalog: { label: 'Catalogue', icon: <AppstoreOutlined /> },
   executions: { label: 'Exécutions', icon: <PlayCircleOutlined /> },
+  calendar: { label: 'Calendrier', icon: <CalendarOutlined /> },
   dashboard: { label: 'Analytics', icon: <BarChartOutlined /> },
   admin: { label: 'Admin', icon: <SettingOutlined /> },
   audit: { label: 'Audit', icon: <AuditOutlined /> },
 };
 
 // Story 9.10: Dashboard route renamed to /analytics
+// Story 13.6: Calendar route for scheduled executions view
 const TAB_ROUTES: Record<NavigationTabKey, string> = {
   catalog: '/catalog',
   executions: '/executions',
+  calendar: '/calendar',
   dashboard: '/analytics',
   admin: '/admin',
   audit: '/audit',

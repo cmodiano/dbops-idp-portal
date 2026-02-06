@@ -123,6 +123,9 @@ class ScheduledExecutionListItemSerializer(serializers.Serializer):
             "parameters": obj.get_parameters() if hasattr(obj, "get_parameters") else None,
             "correlation_id": getattr(obj, "correlation_id", None),
             "execution_id": getattr(obj, "execution_id", None),
+            # Story 13.6 AC3: Plateforme et Technologie pour le popover détail
+            "engine": getattr(action, "engine", None) if action else None,
+            "platform": getattr(action, "platform", None) if action else None,
         }
 
         if recurring_pattern is not None:

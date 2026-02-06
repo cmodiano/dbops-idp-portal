@@ -60,6 +60,10 @@ export async function listScheduledExecutions(
   if (filters.action_id) params.append('action_id', filters.action_id.toString());
   if (filters.scheduled_from) params.append('scheduled_from', filters.scheduled_from);
   if (filters.scheduled_to) params.append('scheduled_to', filters.scheduled_to);
+  // Story 13.6: Extended filters for calendar view
+  if (filters.environment) params.append('environment', filters.environment);
+  if (filters.engine) params.append('engine', filters.engine);
+  if (filters.platform) params.append('platform', filters.platform);
   params.append('limit', limit.toString());
   params.append('offset', offset.toString());
 

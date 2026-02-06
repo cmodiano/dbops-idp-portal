@@ -36,6 +36,7 @@ from executions.serializers import (
 )
 from executions.services import ExecutionService, SchedulingService
 from inventory.services import InventoryService, InventoryServiceError, MAX_TARGETS_FOR_RBAC_FILTER
+from profiles.services import ProfileService
 
 from croniter import croniter
 import structlog
@@ -64,6 +65,52 @@ def _parse_date(value: str | None, *, name: str) -> date | None:
 def _is_dba_or_dbops(user) -> bool:
     profile = (getattr(user, "profile", "") or "").lower()
     return profile == "dbops" or profile == "dba" or profile.startswith("dba")
+
+
+def _get_allowed_action_ids_for_user(user) -> set[int] | None:
+    """
+    Get action IDs the user has access to based on their profile permissions.
+
+    Story 13.6: DBA sees scheduled executions for actions their profile gives access to.
+
+    Returns:
+        Set of action IDs, or None if user has 'all' access (no filtering needed).
+    """
+    if not user or not user.is_authenticated:
+        return set()
+
+    ad_groups = get_user_ad_groups(user)
+    try:
+        profile_service = ProfileService()
+        permissions = profile_service.get_cumulative_permissions(user.id, ad_groups)
+    except Exception:
+        # ProfileService not available or error - no access
+        return set()
+
+    if not permissions or not permissions.get('action_permissions'):
+        return set()
+
+    # Aggregate action permissions (union across profiles)
+    action_ids = set()
+    tag_patterns = set()
+
+    for perm in permissions.get('action_permissions', []):
+        if perm.get('actions_type') == 'all':
+            # User has full access - no filtering needed
+            return None
+        action_ids.update(perm.get('action_ids', []) or [])
+        tag_patterns.update(perm.get('tag_patterns', []) or [])
+
+    # If there are tag patterns, we need to resolve them to action IDs
+    if tag_patterns:
+        from catalog.models import ActionTag
+        tag_action_ids = ActionTag.objects.filter(
+            tag__name__in=tag_patterns,
+            action__status=ActionStatus.PUBLISHED
+        ).values_list('action_id', flat=True)
+        action_ids.update(tag_action_ids)
+
+    return action_ids
 
 
 def _detect_request_source(request) -> str:
@@ -717,11 +764,17 @@ class ScheduledExecutionsView(APIView):
         action_id = request.query_params.get("action_id")
         scheduled_from = _parse_iso_datetime(request.query_params.get("scheduled_from"), name="scheduled_from")
         scheduled_to = _parse_iso_datetime(request.query_params.get("scheduled_to"), name="scheduled_to")
+        # Story 13.6: Additional filters for calendar view
+        environment_filter = request.query_params.get("environment")
+        engine_filter = request.query_params.get("engine")
+        platform_filter = request.query_params.get("platform")
 
         qs = ScheduledExecution.objects.select_related("action", "user").select_related("recurringpattern")
-        # RBAC: DBOPS sees all; others see their own scheduled executions
+        # Story 13.6: RBAC - DBOPS sees all; others see scheduled executions for actions their profile gives access to
         if (getattr(request.user, "profile", "") or "").lower() != "dbops":
-            qs = qs.filter(user_id=request.user.id)
+            allowed_action_ids = _get_allowed_action_ids_for_user(request.user)
+            if allowed_action_ids is not None:  # None means 'all' access
+                qs = qs.filter(action_id__in=allowed_action_ids)
 
         if status_filter:
             valid_statuses = {c[0] for c in ScheduledExecutionStatus.choices}
@@ -735,6 +788,25 @@ class ScheduledExecutionsView(APIView):
 
         if action_id:
             qs = qs.filter(action_id=_parse_int(action_id, 0, name="action_id"))
+
+        # Story 13.6: Filter by environment (from scheduled execution)
+        if environment_filter:
+            valid_envs = {'dev', 'staging', 'prod'}
+            if environment_filter.lower() not in valid_envs:
+                raise BadRequestError(
+                    code="INVALID_ENVIRONMENT",
+                    message=f"Environnement invalide: {environment_filter}",
+                    details={"environment": environment_filter, "valid_environments": sorted(valid_envs)},
+                )
+            qs = qs.filter(environment=environment_filter.lower())
+
+        # Story 13.6: Filter by engine (from action)
+        if engine_filter:
+            qs = qs.filter(action__engine__iexact=engine_filter)
+
+        # Story 13.6: Filter by platform (from action)
+        if platform_filter:
+            qs = qs.filter(action__platform__iexact=platform_filter)
 
         if scheduled_from:
             qs = qs.filter(

@@ -1,6 +1,6 @@
 export type UserProfileType = 'dba_applicatif' | 'dba_infrastructure' | 'client_business' | 'business' | 'dbops' | 'securite';
 
-export type NavigationTabKey = 'catalog' | 'executions' | 'dashboard' | 'admin' | 'audit';
+export type NavigationTabKey = 'catalog' | 'executions' | 'calendar' | 'dashboard' | 'admin' | 'audit';
 
 /** Profile types considered "business" for simplified UI (Story 7.1). */
 export const BUSINESS_PROFILES: UserProfileType[] = ['client_business', 'business'];

@@ -11,6 +11,7 @@ import './styles/glass.css';
 
 const CatalogPage = lazy(() => import('./pages/CatalogPage'));
 const ExecutionsPage = lazy(() => import('./pages/ExecutionsPage'));
+const CalendarPage = lazy(() => import('./pages/CalendarPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const AuditPage = lazy(() => import('./pages/AuditPage'));
@@ -42,6 +43,16 @@ function AnalyticsGuard({ children }: { children: React.ReactNode }) {
   const isDbops = user?.profile?.toLowerCase() === 'dbops';
   if (!isDbops) {
     return <Navigate to="/executions" replace />;
+  }
+  return <>{children}</>;
+}
+
+// Story 13.6 AC1: Calendar restricted to DBA and DBOPS profiles
+function CalendarGuard({ children }: { children: React.ReactNode }) {
+  const { hasTab } = useAuth();
+  // Only DBA and DBOPS profiles have 'calendar' in their navigation_tabs
+  if (!hasTab('calendar')) {
+    return <Navigate to="/catalog" replace />;
   }
   return <>{children}</>;
 }
@@ -95,6 +106,8 @@ function ThemedApp() {
                   <Route index element={<Navigate to="/catalog" replace />} />
                   <Route path="/catalog" element={<CatalogPage />} />
                   <Route path="/executions" element={<ExecutionsPage />} />
+                  {/* Story 13.6: Calendar for DBA/DBOPS to view scheduled executions */}
+                  <Route path="/calendar" element={<CalendarGuard><CalendarPage /></CalendarGuard>} />
                   {/* Story 9.10: Dashboard renamed to Analytics, RBAC restricted to DBOPS */}
                   <Route path="/analytics" element={<AnalyticsGuard><DashboardPage /></AnalyticsGuard>} />
                   {/* Backward compatibility: redirect /dashboard to /analytics */}

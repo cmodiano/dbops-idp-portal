@@ -877,7 +877,7 @@ export interface ScheduledExecutionResponse {
   recurring_pattern?: RecurringPatternResponse | null;
 }
 
-/** Filters for GET /scheduled-executions (Story 11.6, AC7-AC9). */
+/** Filters for GET /scheduled-executions (Story 11.6, AC7-AC9; Story 13.6 extended filters). */
 export interface ScheduledExecutionFilters {
   /** Filter by status (pending, executed, cancelled). */
   status?: ScheduledExecutionStatus;
@@ -887,6 +887,12 @@ export interface ScheduledExecutionFilters {
   scheduled_from?: string;
   /** Filter by maximum scheduled_at date (ISO 8601). */
   scheduled_to?: string;
+  /** Story 13.6: Filter by environment (dev, staging, prod). */
+  environment?: ExecutionEnvironment;
+  /** Story 13.6: Filter by engine/technology. */
+  engine?: string;
+  /** Story 13.6: Filter by platform. */
+  platform?: string;
 }
 
 /** List item for scheduled executions with enriched user info (Story 11.6, 11.7).
@@ -913,6 +919,10 @@ export interface ScheduledExecutionListItem {
   execution_id?: number | null;
   /** Story 11.7: Recurring pattern info for recurring executions. */
   recurring_pattern?: RecurringPatternResponse | null;
+  /** Story 13.6 AC3: Technologie (engine) pour le popover détail. */
+  engine?: string | null;
+  /** Story 13.6 AC3: Plateforme d'exécution pour le popover détail. */
+  platform?: string | null;
 }
 
 /** Response from GET /scheduled-executions (Story 11.6, AC3, AC8). */
