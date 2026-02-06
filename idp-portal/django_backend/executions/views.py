@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
+
+# Fixed-offset UTC (no name): Oracle Thin Mode does not support named timezones (DPY-3022)
+UTC = timezone(timedelta(0))
 
 from django.db.models import Q, Count
 from django.db.models.functions import TruncDate
@@ -32,7 +35,7 @@ from executions.serializers import (
     RecurringPatternSerializer,
 )
 from executions.services import ExecutionService, SchedulingService
-from inventory.services import InventoryService, InventoryServiceError
+from inventory.services import InventoryService, InventoryServiceError, MAX_TARGETS_FOR_RBAC_FILTER
 
 from croniter import croniter
 import structlog
@@ -216,12 +219,12 @@ class ExecutionsView(APIView):
             # Validate targets via InventoryService (RBAC filtered)
             inventory_service = InventoryService()
             try:
-                # Get all targets user can access
-                allowed_targets, _total = inventory_service.list_targets_for_user(
+                # Get all targets user can access (no environment filter - validate against full allowed set)
+                allowed_targets, _total, inventory_truncated = inventory_service.list_targets_for_user(
                     user_id=request.user.id,
                     ad_groups=ad_groups,
                     page=1,
-                    page_size=5000  # Load enough to validate
+                    page_size=MAX_TARGETS_FOR_RBAC_FILTER
                 )
             except InventoryServiceError as e:
                 exec_logger.error(
@@ -252,11 +255,12 @@ class ExecutionsView(APIView):
                         action_id=action_id,
                         correlation_id=correlation_id
                     )
+                    # entity_type=EXECUTION, entity_id=0: no execution created (attempt forbidden)
                     AuditService.create_entry(
                         user_id=str(request.user.id),
                         action_type=AuditActionType.EXECUTION_TARGET_FORBIDDEN,
-                        entity_type=AuditEntityType.ACTION,
-                        entity_id=int(action_id),
+                        entity_type=AuditEntityType.EXECUTION,
+                        entity_id=0,
                         details={
                             "target_name": name,
                             "action_id": action_id,
@@ -264,10 +268,13 @@ class ExecutionsView(APIView):
                         },
                         correlation_id=correlation_id,
                     )
+                    details_403 = {"target_name": name}
+                    if inventory_truncated:
+                        details_403["inventory_truncated"] = True
                     raise ForbiddenError(
                         code="FORBIDDEN",
                         message=f"Cible non autorisée: {name}",
-                        details={"target_name": name},
+                        details=details_403,
                     )
                 target = allowed_targets_map[name]
                 validated_targets.append(target)
@@ -543,9 +550,9 @@ def _parse_iso_datetime(value: str | None, *, name: str) -> datetime | None:
         )
     if timezone.is_naive(dt):
         # Assume UTC if no timezone info
-        dt = timezone.make_aware(dt, timezone=timezone.utc)
+        dt = timezone.make_aware(dt, timezone=UTC)
     else:
-        dt = dt.astimezone(timezone.utc)
+        dt = dt.astimezone(UTC)
     return dt
 
 
@@ -554,9 +561,9 @@ def _calculate_next_execution_date(pattern_type: str, pattern_config: dict, refe
     Compute next execution datetime in UTC for daily/weekly/cron patterns.
     """
     if timezone.is_naive(reference):
-        reference = timezone.make_aware(reference, timezone=timezone.utc)
+        reference = timezone.make_aware(reference, timezone=UTC)
     else:
-        reference = reference.astimezone(timezone.utc)
+        reference = reference.astimezone(UTC)
 
     pattern_type = (pattern_type or "").lower()
 
@@ -591,9 +598,9 @@ def _calculate_next_execution_date(pattern_type: str, pattern_config: dict, refe
         it = croniter(expr, reference)
         nxt = it.get_next(datetime)
         if timezone.is_naive(nxt):
-            nxt = timezone.make_aware(nxt, timezone=timezone.utc)
+            nxt = timezone.make_aware(nxt, timezone=UTC)
         else:
-            nxt = nxt.astimezone(timezone.utc)
+            nxt = nxt.astimezone(UTC)
         return nxt
 
     raise BadRequestError(
@@ -708,7 +715,7 @@ class ScheduledExecutionsView(APIView):
         correlation_id = get_correlation_id()
 
         scheduled_at = _parse_iso_datetime(scheduled_at_raw, name="scheduled_at") if scheduled_at_raw else None
-        if scheduled_at and scheduled_at <= timezone.now().astimezone(timezone.utc):
+        if scheduled_at and scheduled_at <= timezone.now().astimezone(UTC):
             raise BadRequestError(
                 code="INVALID_SCHEDULED_DATE",
                 message="scheduled_at doit être dans le futur",
@@ -922,7 +929,7 @@ class ScheduledExecutionValidateCronView(APIView):
                     }
                 )
             # semantic check
-            it = croniter(expr, datetime.now(timezone.utc))
+            it = croniter(expr, datetime.now(UTC))
             _ = it.get_next(datetime)
             return Response({"data": {"valid": True, "error": ""}})
         except Exception as e:
@@ -947,14 +954,14 @@ class ScheduledExecutionCronNextExecutionsView(APIView):
                 details={"expression": expr},
             )
 
-        it = croniter(expr, datetime.now(timezone.utc))
+        it = croniter(expr, datetime.now(UTC))
         executions = []
         for _ in range(count):
             nxt = it.get_next(datetime)
             if timezone.is_naive(nxt):
-                nxt = timezone.make_aware(nxt, timezone=timezone.utc)
+                nxt = timezone.make_aware(nxt, timezone=UTC)
             else:
-                nxt = nxt.astimezone(timezone.utc)
+                nxt = nxt.astimezone(UTC)
             executions.append(nxt.isoformat())
 
         return Response({"data": {"executions": executions}})

@@ -69,6 +69,8 @@ class TargetListViewTests(TestCase):
         data = response.json()
         self.assertIn('items', data)
         self.assertIn('total', data)
+        self.assertIn('rbac_truncated', data)
+        self.assertFalse(data['rbac_truncated'])
 
     @patch('inventory.services.connection')
     def test_list_targets_with_environment_filter(self, mock_connection):
@@ -104,6 +106,25 @@ class TargetListViewTests(TestCase):
         self.assertIn('page', data)
         self.assertIn('page_size', data)
         self.assertIn('total_pages', data)
+        self.assertIn('rbac_truncated', data)
+
+    @patch('inventory.views.InventoryService')
+    def test_list_targets_response_includes_rbac_truncated_true_when_truncated(self, mock_service_class):
+        """Story 13.3: Response must include rbac_truncated; when True, client knows results may be incomplete."""
+        mock_service = MagicMock()
+        mock_service.list_targets_for_user.return_value = (
+            [{'name': 'srv-01', 'environment': 'dev', 'target_type': 'server', 'metadata': None}],
+            1,
+            True,
+        )
+        mock_service_class.return_value = mock_service
+
+        self._authenticate()
+        response = self.client.get('/api/v1/inventory/targets')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        self.assertIn('rbac_truncated', data)
+        self.assertTrue(data['rbac_truncated'])
 
     def test_list_targets_invalid_environment(self):
         """Test invalid environment parameter."""

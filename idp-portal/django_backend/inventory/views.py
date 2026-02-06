@@ -106,7 +106,7 @@ def list_targets(request):
 
     try:
         # Get targets with RBAC filtering
-        targets, total_count = inventory_service.list_targets_for_user(
+        targets, total_count, rbac_truncated = inventory_service.list_targets_for_user(
             user_id=user.id,
             ad_groups=ad_groups,
             environment=environment,
@@ -135,7 +135,8 @@ def list_targets(request):
         'total': total_count,
         'page': page,
         'page_size': page_size,
-        'total_pages': (total_count + page_size - 1) // page_size if page_size > 0 else 0
+        'total_pages': (total_count + page_size - 1) // page_size if page_size > 0 else 0,
+        'rbac_truncated': rbac_truncated,
     })
 
 

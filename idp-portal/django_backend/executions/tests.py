@@ -264,7 +264,7 @@ class ExecutionWithTargetsTest(TestCase):
         ProfileActionPermission.objects.create(
             profile=self.profile,
             permission_type='ALL',
-            environments='["dev", "staging", "prod"]'
+            environments_json='["dev", "staging", "prod"]'
         )
         # Add target permissions (all targets)
         ProfileTargetPermission.objects.create(
@@ -398,7 +398,7 @@ class ExecutionViewTargetsTest(TestCase):
         ]
         with patch('executions.views.InventoryService') as MockInventoryService:
             mock_instance = MagicMock()
-            mock_instance.list_targets_for_user.return_value = (allowed_targets, 2)
+            mock_instance.list_targets_for_user.return_value = (allowed_targets, 2, False)
             MockInventoryService.return_value = mock_instance
 
             response = self.client.post('/api/v1/executions', {
@@ -418,3 +418,253 @@ class ExecutionViewTargetsTest(TestCase):
         params = execution.get_parameters()
         self.assertIsNotNone(params)
         self.assertEqual(params.get('_targets'), ['srv-dev-01'])
+
+
+# =============================================================================
+# Story 13.3: RBAC validation tests for POST /executions with targets
+# =============================================================================
+
+@pytest.mark.django_db
+class ExecutionRBACValidationTests(TestCase):
+    """
+    Story 13.3, AC4: Tests for RBAC validation in POST /executions.
+    Tests that unauthorized targets are rejected with 403.
+    """
+
+    def setUp(self):
+        """Set up test data."""
+        from rest_framework.test import APIClient
+
+        self.client = APIClient()
+        self.user = User.objects.create(
+            username='rbac_testuser',
+            profile='DEV'  # Non-admin profile
+        )
+        self.user.groups = ['DEV_GROUP']
+        self.client.force_authenticate(user=self.user)
+
+        self.action = Action.objects.create(
+            name='RBAC Test Action',
+            category='Provisioning',
+            engine='Oracle',
+            platform='AAP',
+            status='published',
+            requires_target=True
+        )
+
+    def test_post_execution_forbidden_target(self):
+        """
+        AC4/Task 3.5: Target not in allowed list should return 403.
+        """
+        from unittest.mock import patch, MagicMock
+
+        # User only has access to dev targets
+        allowed_targets = [
+            {'name': 'srv-dev-01', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
+        ]
+        with patch('executions.views.InventoryService') as MockInventoryService:
+            mock_instance = MagicMock()
+            mock_instance.list_targets_for_user.return_value = (allowed_targets, 1, False)
+            MockInventoryService.return_value = mock_instance
+
+            # Try to execute on a target not in the allowed list
+            response = self.client.post('/api/v1/executions', {
+                'action_id': self.action.id,
+                'target_names': ['srv-prod-01'],  # Not in allowed list
+            }, format='json')
+
+        self.assertEqual(response.status_code, 403)
+        self.assertIn('srv-prod-01', str(response.data))
+
+    def test_post_execution_pattern_mismatch(self):
+        """
+        AC4/Task 3.6: Target not matching pattern should return 403.
+        User has pattern web-* but tries to access db-* target.
+        """
+        from unittest.mock import patch, MagicMock
+
+        # User only has access to web-* pattern (filtered by InventoryService)
+        allowed_targets = [
+            {'name': 'web-dev-01', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
+            {'name': 'web-dev-02', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
+        ]
+        with patch('executions.views.InventoryService') as MockInventoryService:
+            mock_instance = MagicMock()
+            mock_instance.list_targets_for_user.return_value = (allowed_targets, 2, False)
+            MockInventoryService.return_value = mock_instance
+
+            # Try to execute on a db-* target (not matching web-* pattern)
+            response = self.client.post('/api/v1/executions', {
+                'action_id': self.action.id,
+                'target_names': ['db-dev-01'],  # Doesn't match web-* pattern
+            }, format='json')
+
+        self.assertEqual(response.status_code, 403)
+        self.assertIn('db-dev-01', str(response.data))
+
+    def test_post_execution_allowed_target(self):
+        """
+        AC4/Task 3.7: Target in allowed list should return 201.
+        """
+        from unittest.mock import patch, MagicMock
+
+        allowed_targets = [
+            {'name': 'srv-dev-01', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
+            {'name': 'srv-dev-02', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
+        ]
+        with patch('executions.views.InventoryService') as MockInventoryService:
+            mock_instance = MagicMock()
+            mock_instance.list_targets_for_user.return_value = (allowed_targets, 2, False)
+            MockInventoryService.return_value = mock_instance
+
+            response = self.client.post('/api/v1/executions', {
+                'action_id': self.action.id,
+                'target_names': ['srv-dev-01'],  # In allowed list
+            }, format='json')
+
+        self.assertEqual(response.status_code, 201)
+        data = response.data.get('data', {})
+        self.assertIn('execution_id', data)
+
+    def test_post_execution_multiple_targets_one_forbidden(self):
+        """
+        AC4: If any target in the list is forbidden, reject the whole request.
+        """
+        from unittest.mock import patch, MagicMock
+
+        allowed_targets = [
+            {'name': 'srv-dev-01', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
+        ]
+        with patch('executions.views.InventoryService') as MockInventoryService:
+            mock_instance = MagicMock()
+            mock_instance.list_targets_for_user.return_value = (allowed_targets, 1, False)
+            MockInventoryService.return_value = mock_instance
+
+            # One allowed, one forbidden
+            response = self.client.post('/api/v1/executions', {
+                'action_id': self.action.id,
+                'target_names': ['srv-dev-01', 'srv-prod-01'],  # srv-prod-01 not allowed
+            }, format='json')
+
+        self.assertEqual(response.status_code, 403)
+        self.assertIn('srv-prod-01', str(response.data))
+
+    def test_post_execution_mixed_environments_rejected(self):
+        """
+        AC4/Subtask 2.3: Targets from different environments should be rejected.
+        """
+        from unittest.mock import patch, MagicMock
+
+        # User has access to both DEV and STAGING
+        allowed_targets = [
+            {'name': 'srv-dev-01', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
+            {'name': 'srv-stg-01', 'environment': 'staging', 'target_type': 'server', 'metadata': None},
+        ]
+        with patch('executions.views.InventoryService') as MockInventoryService:
+            mock_instance = MagicMock()
+            mock_instance.list_targets_for_user.return_value = (allowed_targets, 2, False)
+            MockInventoryService.return_value = mock_instance
+
+            # Try to mix DEV and STAGING targets in same execution
+            response = self.client.post('/api/v1/executions', {
+                'action_id': self.action.id,
+                'target_names': ['srv-dev-01', 'srv-stg-01'],  # Different environments
+            }, format='json')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('environnement', str(response.data).lower())
+
+    def test_post_execution_audit_log_on_forbidden(self):
+        """
+        AC4/Subtask 2.2: Forbidden target should create audit log entry.
+        """
+        from unittest.mock import patch, MagicMock
+
+        allowed_targets = []  # User has no access
+        with patch('executions.views.InventoryService') as MockInventoryService:
+            mock_instance = MagicMock()
+            mock_instance.list_targets_for_user.return_value = (allowed_targets, 0, False)
+            MockInventoryService.return_value = mock_instance
+
+            with patch('executions.views.AuditService.create_entry') as mock_audit:
+                response = self.client.post('/api/v1/executions', {
+                    'action_id': self.action.id,
+                    'target_names': ['forbidden-target'],
+                }, format='json')
+
+        self.assertEqual(response.status_code, 403)
+        # Verify audit was called with correct entity type (no execution created)
+        mock_audit.assert_called_once()
+        call_kwargs = mock_audit.call_args[1]
+        self.assertEqual(call_kwargs['action_type'].value, 'EXECUTION_TARGET_FORBIDDEN')
+        self.assertEqual(call_kwargs['entity_type'].value, 'execution')
+        self.assertEqual(call_kwargs['entity_id'], 0)
+        self.assertIn('forbidden-target', str(call_kwargs['details']))
+
+
+@pytest.mark.django_db
+class ExecutionRBACMultiProfileTests(TestCase):
+    """
+    Story 13.3, AC5: Tests for multi-profile RBAC validation.
+    """
+
+    def setUp(self):
+        """Set up test data with multiple profiles."""
+        from rest_framework.test import APIClient
+        from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
+
+        self.client = APIClient()
+        self.user = User.objects.create(
+            username='multi_profile_user',
+            profile='MULTI'
+        )
+        self.client.force_authenticate(user=self.user)
+
+        self.action = Action.objects.create(
+            name='Multi Profile Action',
+            category='Provisioning',
+            engine='Oracle',
+            platform='AAP',
+            status='published',
+            requires_target=True
+        )
+
+    def test_post_execution_with_union_permissions(self):
+        """
+        AC5: User with multiple profiles should have union of permissions.
+        Profile A grants DEV, Profile B grants STAGING.
+        User should be able to execute on both DEV and STAGING targets.
+        """
+        from unittest.mock import patch, MagicMock
+
+        # InventoryService already applies union of permissions
+        # So allowed_targets will include both DEV and STAGING
+        allowed_targets = [
+            {'name': 'srv-dev-01', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
+            {'name': 'srv-stg-01', 'environment': 'staging', 'target_type': 'server', 'metadata': None},
+        ]
+        with patch('executions.views.InventoryService') as MockInventoryService:
+            mock_instance = MagicMock()
+            mock_instance.list_targets_for_user.return_value = (allowed_targets, 2, False)
+            MockInventoryService.return_value = mock_instance
+
+            # Execute on DEV target
+            response = self.client.post('/api/v1/executions', {
+                'action_id': self.action.id,
+                'target_names': ['srv-dev-01'],
+            }, format='json')
+
+        self.assertEqual(response.status_code, 201)
+
+        with patch('executions.views.InventoryService') as MockInventoryService:
+            mock_instance = MagicMock()
+            mock_instance.list_targets_for_user.return_value = (allowed_targets, 2, False)
+            MockInventoryService.return_value = mock_instance
+
+            # Execute on STAGING target
+            response = self.client.post('/api/v1/executions', {
+                'action_id': self.action.id,
+                'target_names': ['srv-stg-01'],
+            }, format='json')
+
+        self.assertEqual(response.status_code, 201)

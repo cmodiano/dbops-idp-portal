@@ -177,8 +177,8 @@ class InventoryService:
         """
         correlation_id = get_correlation_id()
         config = integration.get_config() or {}
-        schema_name = config.get('schema', 'DBOPS_INVENTORY')
-        table_name = config.get('table', 'INVENTORY_TABLE')
+        schema_name = config.get('schema') or config.get('db_schema') or 'DBOPS_INVENTORY'
+        table_name = config.get('table') or config.get('table_view') or 'INVENTORY_TABLE'
 
         logger.info(
             "reading_db_schema_inventory",
@@ -344,7 +344,7 @@ class InventoryService:
                               search: str | None = None,
                               target_type: str | None = None,
                               page: int = 1,
-                              page_size: int = 25) -> tuple[list[dict], int]:
+                              page_size: int = 25) -> tuple[list[dict], int, bool]:
         """
         List targets filtered by user permissions (RBAC).
         Implements RM2-RM6 from business rules.
@@ -359,7 +359,8 @@ class InventoryService:
             page_size: Items per page
 
         Returns:
-            Tuple of (list of target dicts, total count)
+            Tuple of (list of target dicts, total count, rbac_truncated).
+            rbac_truncated is True when inventory exceeds MAX_TARGETS_FOR_RBAC_FILTER (results may be incomplete).
         """
         correlation_id = get_correlation_id()
 
@@ -374,7 +375,7 @@ class InventoryService:
                 user_id=user_id,
                 correlation_id=correlation_id
             )
-            return [], 0
+            return [], 0, False
 
         # Aggregate permissions from all profiles (RM6: cumul multi-profils)
         allowed_environments: set[str] = set()
@@ -382,12 +383,19 @@ class InventoryService:
         has_all_access = False
 
         for profile in profiles:
-            # Get action permissions for environments
+            is_admin = getattr(profile, 'is_admin', 0) == 1
+
+            # Get action permissions for environments (normalize so certif/certification match staging)
             action_perm = getattr(profile, 'profileactionpermission', None)
             if action_perm:
                 envs = action_perm.get_environments()
                 if envs:
-                    allowed_environments.update(envs)
+                    for e in envs:
+                        if isinstance(e, str):
+                            allowed_environments.add(self._normalize_environment(e))
+            elif is_admin:
+                # Admin profiles without ProfileActionPermission: full environment access
+                allowed_environments.update(TargetEnvironment.VALUES)
 
             # Get target permissions
             target_perm = getattr(profile, 'profiletargetpermission', None)
@@ -403,13 +411,21 @@ class InventoryService:
                     names = target_perm.get_target_names()
                     if names:
                         target_restrictions.append(('LIST', names))
+            elif is_admin:
+                # Admin profiles without ProfileTargetPermission: full target access
+                has_all_access = True
 
-        # Apply environment filter if provided
+        # When admin profiles have actions_type=ALL but empty environments
+        if not allowed_environments and any(getattr(p, 'is_admin', 0) == 1 for p in profiles):
+            allowed_environments = set(TargetEnvironment.VALUES)
+
+        # Apply environment filter if provided (normalize query param to match allowed set)
         if environment:
-            if environment not in allowed_environments:
+            env_normalized = self._normalize_environment(environment) if isinstance(environment, str) else environment
+            if env_normalized not in allowed_environments:
                 # User doesn't have access to this environment
-                return [], 0
-            allowed_environments = {environment}
+                return [], 0, False
+            allowed_environments = {env_normalized}
 
         if not allowed_environments:
             logger.info(
@@ -417,7 +433,7 @@ class InventoryService:
                 user_id=user_id,
                 correlation_id=correlation_id
             )
-            return [], 0
+            return [], 0, False
 
         # Get targets from source for RBAC filtering
         # NOTE: RBAC filtering is done in-memory. For large inventories (>5000),
@@ -445,8 +461,12 @@ class InventoryService:
             t for t in all_targets
             if t['environment'] in allowed_environments
         ]
+        env_filtered_count = len(filtered_targets)
 
         # Filter by target restrictions (union of all profile permissions)
+        restriction_type = 'ALL' if has_all_access else (
+            'MIXED' if target_restrictions else 'NONE'
+        )
         if not has_all_access and target_restrictions:
             filtered_targets = self._apply_target_restrictions(
                 filtered_targets, target_restrictions
@@ -457,18 +477,26 @@ class InventoryService:
         start_index = (page - 1) * page_size
         end_index = start_index + page_size
         page_results = filtered_targets[start_index:end_index]
+        rbac_truncated = total_available > MAX_TARGETS_FOR_RBAC_FILTER
 
+        # RBAC traceability log (Story 13.3, Subtask 1.5) - single consolidated log
         logger.info(
-            "targets_filtered_for_user",
+            "rbac_targets_filtered",
             user_id=user_id,
+            allowed_environments=sorted(allowed_environments),
+            restriction_type=restriction_type,
+            restriction_count=len(target_restrictions) if target_restrictions else 0,
+            has_all_access=has_all_access,
+            total_before_filter=len(all_targets),
+            after_env_filter=env_filtered_count,
+            after_target_filter=len(filtered_targets),
             total_count=total_count,
             returned_count=len(page_results),
-            allowed_environments=list(allowed_environments),
-            has_all_access=has_all_access,
+            rbac_truncated=rbac_truncated,
             correlation_id=correlation_id
         )
 
-        return page_results, total_count
+        return page_results, total_count, rbac_truncated
 
     def _apply_target_restrictions(self, targets: list[dict],
                                    restrictions: list[tuple[str, list[str] | None]]) -> list[dict]:
@@ -492,7 +520,9 @@ class InventoryService:
                     continue
 
                 if perm_type == 'LIST':
-                    if target_name in values:
+                    # Case-insensitive match for consistency with PATTERN (AC3)
+                    values_lower = [v.lower() for v in values if isinstance(v, str)]
+                    if target_name.lower() in values_lower:
                         matches = True
                         break
                 elif perm_type == 'PATTERN':
@@ -563,6 +593,8 @@ class InventoryService:
             if action_perm:
                 envs = action_perm.get_environments()
                 if envs:
-                    allowed_environments.update(envs)
+                    for e in envs:
+                        if isinstance(e, str):
+                            allowed_environments.add(self._normalize_environment(e))
 
         return allowed_environments
