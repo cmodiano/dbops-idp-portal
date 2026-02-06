@@ -211,9 +211,9 @@ development_status:
     15-4-documentation-securite-plan-remediation: done  # 2026-02-06: Docs créés (5 fichiers), code review AI: 15 issues → 14 RESOLVED, VULN-001 RESOLVED (9 deps upgradés, 0 HIGH vulns, 310 tests ✅), pytest.ini fixed, GO for release ✅
     epic-15-retrospective: optional
     # === Epic 16: Builder de Workflow Visuel avec Branches Conditionnelles et Retry (Phase 2) ===
-    epic-16: backlog
-    16-2-modele-donnees-workflows-branches-et-retry: backlog
-    16-3-moteur-execution-branches-conditionnelles: backlog
+    epic-16: in-progress
+    16-2-modele-donnees-workflows-branches-et-retry: done  # 2026-02-06: Code review fixes applied (validation + UI + tests) ✅
+    16-3-moteur-execution-branches-conditionnelles: ready-for-dev
     16-4-moteur-retry-backoff-exponentiel: backlog
     16-5-interface-builder-visuel-workflow: backlog
     16-6-configuration-options-retry-builder-visuel: backlog

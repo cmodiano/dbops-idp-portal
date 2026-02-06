@@ -164,6 +164,33 @@ describe('WorkflowStepsEditor', () => {
     });
   });
 
+  describe('Story 16.2 — champs branches & retry', () => {
+    it('activer retry applique les défauts (3, 60, 2.0) et les remonte via onChange', async () => {
+      const user = userEvent.setup();
+      const initialSteps: WorkflowStep[] = [{ order: 1, name: 'Step 1', referenced_action_id: 1 }];
+      await act(async () => {
+        render(<WorkflowStepsEditor {...defaultProps} steps={initialSteps} />);
+      });
+      await waitFor(() => {
+        expect(screen.getByLabelText(/retry_enabled de l'étape 1/i)).toBeInTheDocument();
+      });
+
+      // Toggle retry ON
+      await user.click(screen.getByLabelText(/retry_enabled de l'étape 1/i));
+
+      await waitFor(() => {
+        expect(mockOnChange).toHaveBeenLastCalledWith([
+          expect.objectContaining({
+            retry_enabled: true,
+            retry_max_attempts: 3,
+            retry_interval_seconds: 60,
+            retry_backoff_multiplier: 2.0,
+          }),
+        ]);
+      });
+    });
+  });
+
   describe('Validation', () => {
     it('affiche validateStatus=error sur AutoComplete quand action non sélectionnée', async () => {
       const user = userEvent.setup();
