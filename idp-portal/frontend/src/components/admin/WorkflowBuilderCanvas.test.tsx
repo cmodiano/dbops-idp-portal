@@ -1,11 +1,12 @@
 /**
- * WorkflowBuilderCanvas tests (Story 16.5, Tasks 8.1-8.4).
+ * WorkflowBuilderCanvas tests (Story 16.5, Tasks 8.1-8.4; Story 16.7).
  *
  * Tests:
- * - Unit: WorkflowStep[] ↔ React Flow conversion
+ * - Unit: WorkflowStep[] ↔ React Flow conversion (with start/end nodes)
  * - Unit: Workflow graph validation (orphans, cycles, missing outputs)
  * - Integration: Component rendering, drag-and-drop, connections, deletion
  * - Accessibility: ARIA labels, keyboard navigation
+ * - Story 16.7: Start/End nodes, custom edges, validation report, save blocking
  */
 
 import React from 'react';
@@ -18,6 +19,8 @@ import {
   workflowStepsToReactFlow,
   reactFlowToWorkflowSteps,
   validateWorkflowGraph,
+  START_NODE_ID,
+  END_NODE_ID,
 } from './WorkflowBuilderCanvas';
 
 // Mock admin service
@@ -32,13 +35,16 @@ vi.mock('../../services/admin_service', () => ({
 // ── Unit Tests: Conversion Functions ───────────────────────────────────────
 
 describe('workflowStepsToReactFlow', () => {
-  it('converts empty steps to empty nodes and edges', () => {
+  it('converts empty steps to start+end nodes only', () => {
     const result = workflowStepsToReactFlow([]);
-    expect(result.nodes).toHaveLength(0);
-    expect(result.edges).toHaveLength(0);
+    // Start + End nodes are always present
+    expect(result.nodes).toHaveLength(2);
+    expect(result.nodes[0].id).toBe(START_NODE_ID);
+    expect(result.nodes[1].id).toBe(END_NODE_ID);
+    expect(result.edges).toHaveLength(0); // no workflow edges
   });
 
-  it('converts steps to nodes with correct data', () => {
+  it('converts steps to nodes with correct data (plus start/end)', () => {
     const steps: WorkflowStep[] = [
       {
         order: 1,
@@ -56,13 +62,18 @@ describe('workflowStepsToReactFlow', () => {
 
     const { nodes, edges } = workflowStepsToReactFlow(steps);
 
-    expect(nodes).toHaveLength(1);
-    expect(nodes[0].id).toBe('step-a');
-    expect(nodes[0].type).toBe('workflowStep');
-    expect((nodes[0].data as Record<string, unknown>).action_id).toBe(100);
-    expect((nodes[0].data as Record<string, unknown>).retry_enabled).toBe(true);
-    expect((nodes[0].data as Record<string, unknown>).retry_max_attempts).toBe(3);
-    expect(edges).toHaveLength(0);
+    // Start + 1 workflow node + End = 3
+    expect(nodes).toHaveLength(3);
+    // Workflow node is at index 1 (between start and end)
+    const workflowNode = nodes[1];
+    expect(workflowNode.id).toBe('step-a');
+    expect(workflowNode.type).toBe('workflowStep');
+    expect((workflowNode.data as Record<string, unknown>).action_id).toBe(100);
+    expect((workflowNode.data as Record<string, unknown>).retry_enabled).toBe(true);
+    expect((workflowNode.data as Record<string, unknown>).retry_max_attempts).toBe(3);
+    // Should have start→first edge and first→end edge (since no outputs)
+    expect(edges.some((e) => e.source === START_NODE_ID && e.target === 'step-a')).toBe(true);
+    expect(edges.some((e) => e.source === 'step-a' && e.target === END_NODE_ID)).toBe(true);
   });
 
   it('generates fallback step_id when missing', () => {
@@ -71,10 +82,11 @@ describe('workflowStepsToReactFlow', () => {
     ];
 
     const { nodes } = workflowStepsToReactFlow(steps);
-    expect(nodes[0].id).toBe('step-0');
+    // Workflow node is at index 1
+    expect(nodes[1].id).toBe('step-0');
   });
 
-  it('creates success edges with green style', () => {
+  it('creates success edges with green style and customEdge type', () => {
     const steps: WorkflowStep[] = [
       { order: 1, step_id: 'a', name: null, referenced_action_id: 100, on_success_step_id: 'b' },
       { order: 2, step_id: 'b', name: null, referenced_action_id: 101 },
@@ -82,12 +94,11 @@ describe('workflowStepsToReactFlow', () => {
 
     const { edges } = workflowStepsToReactFlow(steps);
 
-    expect(edges).toHaveLength(1);
-    expect(edges[0].source).toBe('a');
-    expect(edges[0].target).toBe('b');
-    expect(edges[0].sourceHandle).toBe('success');
-    expect(edges[0].style?.stroke).toBe('#52c41a');
-    expect(edges[0].label).toBe('succès');
+    const successEdge = edges.find((e) => e.source === 'a' && e.sourceHandle === 'success' && e.target === 'b');
+    expect(successEdge).toBeDefined();
+    expect(successEdge!.style?.stroke).toBe('#52c41a');
+    expect(successEdge!.label).toBe('succès');
+    expect(successEdge!.type).toBe('customEdge');
   });
 
   it('creates error edges with red style', () => {
@@ -98,12 +109,10 @@ describe('workflowStepsToReactFlow', () => {
 
     const { edges } = workflowStepsToReactFlow(steps);
 
-    expect(edges).toHaveLength(1);
-    expect(edges[0].source).toBe('a');
-    expect(edges[0].target).toBe('c');
-    expect(edges[0].sourceHandle).toBe('error');
-    expect(edges[0].style?.stroke).toBe('#ff4d4f');
-    expect(edges[0].label).toBe('erreur');
+    const errorEdge = edges.find((e) => e.source === 'a' && e.sourceHandle === 'error' && e.target === 'c');
+    expect(errorEdge).toBeDefined();
+    expect(errorEdge!.style?.stroke).toBe('#ff4d4f');
+    expect(errorEdge!.label).toBe('erreur');
   });
 
   it('creates both success and error edges for branching step', () => {
@@ -115,14 +124,13 @@ describe('workflowStepsToReactFlow', () => {
 
     const { edges } = workflowStepsToReactFlow(steps);
 
-    expect(edges).toHaveLength(2);
-    const successEdge = edges.find((e) => e.sourceHandle === 'success');
-    const errorEdge = edges.find((e) => e.sourceHandle === 'error');
+    const successEdge = edges.find((e) => e.source === 'a' && e.sourceHandle === 'success');
+    const errorEdge = edges.find((e) => e.source === 'a' && e.sourceHandle === 'error');
     expect(successEdge?.target).toBe('b');
     expect(errorEdge?.target).toBe('c');
   });
 
-  it('positions nodes in a grid layout', () => {
+  it('positions workflow nodes in a grid layout with Y offset for start node', () => {
     const steps: WorkflowStep[] = Array.from({ length: 5 }, (_, i) => ({
       order: i + 1,
       step_id: `s${i}`,
@@ -132,15 +140,68 @@ describe('workflowStepsToReactFlow', () => {
 
     const { nodes } = workflowStepsToReactFlow(steps);
 
-    // First row: 4 nodes at y=0
-    expect(nodes[0].position.x).toBe(0);
-    expect(nodes[0].position.y).toBe(0);
-    expect(nodes[3].position.x).toBe(840); // 3 * 280
-    expect(nodes[3].position.y).toBe(0);
+    // Workflow nodes start at index 1 (after start node), with Y offset of 120
+    const wfNodes = nodes.filter((n) => n.id !== START_NODE_ID && n.id !== END_NODE_ID);
+    expect(wfNodes[0].position.x).toBe(0);
+    expect(wfNodes[0].position.y).toBe(120); // Y offset for start node
+    expect(wfNodes[3].position.x).toBe(840); // 3 * 280
+    expect(wfNodes[3].position.y).toBe(120);
+    expect(wfNodes[4].position.x).toBe(0);
+    expect(wfNodes[4].position.y).toBe(320); // 120 + 200
+  });
 
-    // Second row: 1 node at y=200
-    expect(nodes[4].position.x).toBe(0);
-    expect(nodes[4].position.y).toBe(200);
+  // Story 16.7: Start/End node injection
+  it('injects start node as first node', () => {
+    const steps: WorkflowStep[] = [
+      { order: 1, step_id: 'a', name: null, referenced_action_id: 100 },
+    ];
+    const { nodes } = workflowStepsToReactFlow(steps);
+    expect(nodes[0].id).toBe(START_NODE_ID);
+    expect(nodes[0].type).toBe('start');
+    expect(nodes[0].data).toEqual({ isStartNode: true });
+  });
+
+  it('injects end node as last node', () => {
+    const steps: WorkflowStep[] = [
+      { order: 1, step_id: 'a', name: null, referenced_action_id: 100 },
+    ];
+    const { nodes } = workflowStepsToReactFlow(steps);
+    expect(nodes[nodes.length - 1].id).toBe(END_NODE_ID);
+    expect(nodes[nodes.length - 1].type).toBe('end');
+    expect(nodes[nodes.length - 1].data).toEqual({ isEndNode: true });
+  });
+
+  it('connects start to first workflow node', () => {
+    const steps: WorkflowStep[] = [
+      { order: 1, step_id: 'a', name: null, referenced_action_id: 100 },
+    ];
+    const { edges } = workflowStepsToReactFlow(steps);
+    const startEdge = edges.find((e) => e.source === START_NODE_ID);
+    expect(startEdge).toBeDefined();
+    expect(startEdge!.target).toBe('a');
+  });
+
+  it('connects nodes without output to end node', () => {
+    const steps: WorkflowStep[] = [
+      { order: 1, step_id: 'a', name: null, referenced_action_id: 100, on_success_step_id: 'b' },
+      { order: 2, step_id: 'b', name: null, referenced_action_id: 101 }, // no output
+    ];
+    const { edges } = workflowStepsToReactFlow(steps);
+    // 'b' has no output so should connect to end
+    const endEdge = edges.find((e) => e.source === 'b' && e.target === END_NODE_ID);
+    expect(endEdge).toBeDefined();
+  });
+
+  it('populates on_success_step_id and on_error_step_id in node data for tooltip', () => {
+    const steps: WorkflowStep[] = [
+      { order: 1, step_id: 'a', name: 'Step A', referenced_action_id: 100, on_success_step_id: 'b', on_error_step_id: 'c' },
+      { order: 2, step_id: 'b', name: null, referenced_action_id: 101 },
+      { order: 3, step_id: 'c', name: null, referenced_action_id: 102 },
+    ];
+    const { nodes } = workflowStepsToReactFlow(steps);
+    const nodeA = nodes.find((n) => n.id === 'a')!;
+    expect((nodeA.data as Record<string, unknown>).on_success_step_id).toBe('b');
+    expect((nodeA.data as Record<string, unknown>).on_error_step_id).toBe('c');
   });
 });
 
@@ -245,6 +306,26 @@ describe('reactFlowToWorkflowSteps', () => {
     expect(roundTripped[1].step_id).toBe('step-2');
     expect(roundTripped[1].on_success_step_id).toBeNull();
     expect(roundTripped[1].retry_enabled).toBe(false);
+  });
+
+  // Story 16.7: Start/End exclusion
+  it('excludes start and end nodes from conversion', () => {
+    const nodes: Node[] = [
+      { id: START_NODE_ID, type: 'start', position: { x: 0, y: 0 }, data: { isStartNode: true } },
+      { id: 'step-1', type: 'workflowStep', position: { x: 0, y: 120 }, data: { action_id: 100, name: null, retry_enabled: false } },
+      { id: END_NODE_ID, type: 'end', position: { x: 0, y: 320 }, data: { isEndNode: true } },
+    ];
+    const edges: Edge[] = [
+      { id: 'start-to-1', source: START_NODE_ID, sourceHandle: 'output', target: 'step-1', targetHandle: 'input' },
+      { id: '1-to-end', source: 'step-1', sourceHandle: 'success', target: END_NODE_ID, targetHandle: 'input' },
+    ];
+
+    const steps = reactFlowToWorkflowSteps(nodes, edges);
+
+    expect(steps).toHaveLength(1);
+    expect(steps[0].step_id).toBe('step-1');
+    // Edge to END_NODE_ID should be excluded → on_success_step_id = null
+    expect(steps[0].on_success_step_id).toBeNull();
   });
 });
 
@@ -373,6 +454,25 @@ describe('validateWorkflowGraph', () => {
     expect(errors).toHaveLength(0);
     expect(result.valid).toBe(true);
   });
+
+  // Story 16.7: Validation ignores start/end visual nodes
+  it('ignores start and end visual nodes in validation', () => {
+    const startNode: Node = { id: START_NODE_ID, type: 'start', position: { x: 0, y: 0 }, data: { isStartNode: true } };
+    const endNode: Node = { id: END_NODE_ID, type: 'end', position: { x: 0, y: 400 }, data: { isEndNode: true } };
+    const wfNode = makeNode('a');
+
+    const nodes = [startNode, wfNode, endNode];
+    const edges: Edge[] = [
+      { id: 'start-to-a', source: START_NODE_ID, target: 'a', sourceHandle: 'output' },
+      { id: 'a-to-end', source: 'a', target: END_NODE_ID, sourceHandle: 'success' },
+    ];
+
+    const result = validateWorkflowGraph(nodes, edges);
+    // Should validate only 'a'. 'a' has no workflow edges (only to END), so warning
+    expect(result.valid).toBe(true);
+    // Should not have any errors related to start/end
+    expect(result.errors.every((e) => e.nodeId !== START_NODE_ID && e.nodeId !== END_NODE_ID)).toBe(true);
+  });
 });
 
 // ── Integration Tests: Component Rendering ─────────────────────────────────
@@ -419,6 +519,10 @@ vi.mock('@xyflow/react', async () => {
     Background: () => null,
     Handle: ({ id, type, position }: { id: string; type: string; position: string }) =>
       actualReact.createElement('div', { 'data-testid': `handle-${id}`, 'data-handle-type': type, 'data-position': position }),
+    BaseEdge: () => null,
+    EdgeLabelRenderer: ({ children }: { children: React.ReactNode }) =>
+      actualReact.createElement('div', { 'data-testid': 'edge-label-renderer' }, children),
+    getSmoothStepPath: () => ['M0 0', 0, 0],
     addEdge: (edge: Edge, edges: Edge[]) => [...edges, edge],
     useNodesState: (initial: Node[]) => {
       const [nodes, setNodes] = actualReact.useState(initial);
@@ -430,6 +534,9 @@ vi.mock('@xyflow/react', async () => {
     },
     useReactFlow: () => ({
       screenToFlowPosition: ({ x, y }: { x: number; y: number }) => ({ x, y }),
+      getNode: () => ({ position: { x: 0, y: 0 } }),
+      setCenter: vi.fn(),
+      setEdges: vi.fn(),
     }),
     Position: { Top: 'top', Bottom: 'bottom', Left: 'left', Right: 'right' },
   };
@@ -460,7 +567,7 @@ describe('WorkflowBuilderCanvas Component', () => {
     expect(screen.getByTestId('rf-minimap')).toBeInTheDocument();
   });
 
-  it('renders existing workflow steps as nodes', async () => {
+  it('renders existing workflow steps as nodes (plus start/end)', async () => {
     const steps: WorkflowStep[] = [
       { order: 1, step_id: 'step-1', name: 'Étape A', referenced_action_id: 100, on_success_step_id: 'step-2' },
       { order: 2, step_id: 'step-2', name: 'Étape B', referenced_action_id: 101 },
@@ -473,6 +580,9 @@ describe('WorkflowBuilderCanvas Component', () => {
 
     expect(screen.getByTestId('rf-node-step-1')).toBeInTheDocument();
     expect(screen.getByTestId('rf-node-step-2')).toBeInTheDocument();
+    // Start/end visual nodes
+    expect(screen.getByTestId(`rf-node-${START_NODE_ID}`)).toBeInTheDocument();
+    expect(screen.getByTestId(`rf-node-${END_NODE_ID}`)).toBeInTheDocument();
   });
 
   it('renders edges between connected steps', async () => {
@@ -491,14 +601,14 @@ describe('WorkflowBuilderCanvas Component', () => {
     expect(screen.getByTestId('rf-edge-a_error_c')).toBeInTheDocument();
   });
 
-  it('shows validate button and can trigger validation', async () => {
+  it('shows validate button with updated label', async () => {
     const onChange = vi.fn();
 
     await act(async () => {
       render(<WorkflowBuilderCanvas steps={[]} onChange={onChange} />);
     });
 
-    const validateBtn = screen.getByText('Valider');
+    const validateBtn = screen.getByText('Valider le workflow');
     expect(validateBtn).toBeInTheDocument();
   });
 
@@ -541,6 +651,20 @@ describe('WorkflowBuilderCanvas Component', () => {
     // Palette search should be disabled
     const searchInput = screen.getByLabelText('Rechercher une action');
     expect(searchInput).toBeDisabled();
+  });
+
+  // Story 16.7: Start edge from start to first node
+  it('renders start-to-first-node edge', async () => {
+    const steps: WorkflowStep[] = [
+      { order: 1, step_id: 'a', name: null, referenced_action_id: 100 },
+    ];
+    const onChange = vi.fn();
+
+    await act(async () => {
+      render(<WorkflowBuilderCanvas steps={steps} onChange={onChange} />);
+    });
+
+    expect(screen.getByTestId(`rf-edge-${START_NODE_ID}_to_a`)).toBeInTheDocument();
   });
 });
 

@@ -1,5 +1,5 @@
 /**
- * WorkflowBuilderCanvas — Visual workflow builder using React Flow (Story 16.5).
+ * WorkflowBuilderCanvas — Visual workflow builder using React Flow (Story 16.5, 16.7).
  *
  * Features:
  * - Zoomable/pannable canvas (AC1)
@@ -9,6 +9,10 @@
  * - Node and edge deletion (AC6, AC7)
  * - Workflow validation with visual feedback (AC8)
  * - Bidirectional sync with WorkflowStep[] (Task 7)
+ * - Start/End visual nodes (Story 16.7, AC1)
+ * - Interactive edges with context menu (Story 16.7, AC5)
+ * - Validation report panel (Story 16.7, AC7)
+ * - Save blocking on validation errors (Story 16.7, AC8)
  */
 
 import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react';
@@ -27,12 +31,16 @@ import {
   useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Alert, Button, Space, theme, Typography } from 'antd';
-import { CheckCircleOutlined, WarningOutlined } from '@ant-design/icons';
+import { Alert, App, Button, Modal, Space, theme, Typography, List } from 'antd';
+import { CheckCircleOutlined, CloseCircleOutlined, WarningOutlined } from '@ant-design/icons';
 import type { WorkflowStep, ActionListItem } from '../../types/api';
 import WorkflowStepNode, { type WorkflowStepNodeData } from './WorkflowStepNode';
+import StartNode from './StartNode';
+import EndNode from './EndNode';
+import CustomEdge from './CustomEdge';
 import { ActionPalette } from './ActionPalette';
 import { StepConfigPanel } from './StepConfigPanel';
+import ValidationReportPanel from './ValidationReportPanel';
 
 const { Text } = Typography;
 
@@ -45,14 +53,18 @@ function generateStepId(): string {
   return `step-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-/** Convert WorkflowStep[] → React Flow nodes + edges */
+// IDs for visual-only start/end nodes
+export const START_NODE_ID = '__start__';
+export const END_NODE_ID = '__end__';
+
+/** Convert WorkflowStep[] → React Flow nodes + edges (with start/end visual nodes) */
 export function workflowStepsToReactFlow(
   steps: WorkflowStep[],
 ): { nodes: Node[]; edges: Edge[] } {
-  const nodes: Node[] = steps.map((step, index) => ({
+  const workflowNodes: Node[] = steps.map((step, index) => ({
     id: step.step_id ?? `step-${index}`,
     type: 'workflowStep',
-    position: { x: (index % 4) * 280, y: Math.floor(index / 4) * 200 },
+    position: { x: (index % 4) * 280, y: Math.floor(index / 4) * 200 + 120 },
     data: {
       action_id: step.referenced_action_id,
       action_name: step.name ?? `Action #${step.referenced_action_id}`,
@@ -63,6 +75,16 @@ export function workflowStepsToReactFlow(
       retry_max_attempts: step.retry_max_attempts ?? null,
       retry_interval_seconds: step.retry_interval_seconds ?? null,
       retry_backoff_multiplier: step.retry_backoff_multiplier ?? null,
+      on_success_step_id: step.on_success_step_id ?? null,
+      on_error_step_id: step.on_error_step_id ?? null,
+      on_success_step_name: step.on_success_step_id
+        ? steps.find((s) => s.step_id === step.on_success_step_id)?.name ?? null
+        : null,
+      on_error_step_name: step.on_error_step_id
+        ? steps.find((s) => s.step_id === step.on_error_step_id)?.name ?? null
+        : null,
+      isStartNode: false,
+      isEndNode: false,
     } satisfies WorkflowStepNodeData,
   }));
 
@@ -78,7 +100,7 @@ export function workflowStepsToReactFlow(
         target: step.on_success_step_id,
         sourceHandle: 'success',
         targetHandle: 'input',
-        type: 'smoothstep',
+        type: 'customEdge',
         animated: false,
         style: { stroke: '#52c41a', strokeWidth: 2 },
         label: 'succès',
@@ -92,7 +114,7 @@ export function workflowStepsToReactFlow(
         target: step.on_error_step_id,
         sourceHandle: 'error',
         targetHandle: 'input',
-        type: 'smoothstep',
+        type: 'customEdge',
         animated: false,
         style: { stroke: '#ff4d4f', strokeWidth: 2 },
         label: 'erreur',
@@ -101,21 +123,86 @@ export function workflowStepsToReactFlow(
     }
   });
 
-  return { nodes, edges };
+  // Inject visual start node
+  const startNode: Node = {
+    id: START_NODE_ID,
+    type: 'start',
+    position: { x: 0, y: 0 },
+    data: { isStartNode: true },
+    draggable: false,
+    selectable: false,
+    deletable: false,
+  };
+
+  // Compute end node position below all workflow nodes
+  const maxY = workflowNodes.length > 0
+    ? Math.max(...workflowNodes.map((n) => n.position.y)) + 200
+    : 120;
+  const endNode: Node = {
+    id: END_NODE_ID,
+    type: 'end',
+    position: { x: 0, y: maxY },
+    data: { isEndNode: true },
+    draggable: false,
+    selectable: false,
+    deletable: false,
+  };
+
+  // Connect start → first workflow node
+  if (workflowNodes.length > 0) {
+    edges.push({
+      id: `${START_NODE_ID}_to_${workflowNodes[0].id}`,
+      source: START_NODE_ID,
+      sourceHandle: 'output',
+      target: workflowNodes[0].id,
+      targetHandle: 'input',
+      type: 'customEdge',
+      animated: false,
+      style: { stroke: '#52c41a', strokeWidth: 2, strokeDasharray: '5,5' },
+      deletable: false,
+      selectable: false,
+    });
+  }
+
+  // Connect nodes without any output to end node
+  const nodesWithOutput = new Set(edges.map((e) => e.source));
+  workflowNodes.forEach((node) => {
+    if (!nodesWithOutput.has(node.id)) {
+      edges.push({
+        id: `${node.id}_to_${END_NODE_ID}`,
+        source: node.id,
+        sourceHandle: 'success',
+        target: END_NODE_ID,
+        targetHandle: 'input',
+        type: 'customEdge',
+        animated: false,
+        style: { stroke: '#8c8c8c', strokeWidth: 1, strokeDasharray: '5,5' },
+        deletable: false,
+        selectable: false,
+      });
+    }
+  });
+
+  return { nodes: [startNode, ...workflowNodes, endNode], edges };
 }
 
-/** Convert React Flow nodes + edges → WorkflowStep[] */
+/** Convert React Flow nodes + edges → WorkflowStep[] (excludes start/end visual nodes) */
 export function reactFlowToWorkflowSteps(
   nodes: Node[],
   edges: Edge[],
 ): WorkflowStep[] {
-  return nodes.map((node, index) => {
+  // Filter out start/end visual nodes
+  const workflowNodes = nodes.filter(
+    (n) => n.id !== START_NODE_ID && n.id !== END_NODE_ID
+  );
+
+  return workflowNodes.map((node, index) => {
     const data = node.data as unknown as WorkflowStepNodeData;
     const successEdge = edges.find(
-      (e) => e.source === node.id && e.sourceHandle === 'success'
+      (e) => e.source === node.id && e.sourceHandle === 'success' && e.target !== END_NODE_ID
     );
     const errorEdge = edges.find(
-      (e) => e.source === node.id && e.sourceHandle === 'error'
+      (e) => e.source === node.id && e.sourceHandle === 'error' && e.target !== END_NODE_ID
     );
 
     return {
@@ -147,16 +234,25 @@ export interface ValidationResult {
 }
 
 export function validateWorkflowGraph(nodes: Node[], edges: Edge[]): ValidationResult {
+  // Filter out start/end visual nodes for validation
+  const workflowNodes = nodes.filter(
+    (n) => n.id !== START_NODE_ID && n.id !== END_NODE_ID
+  );
+  const workflowEdges = edges.filter(
+    (e) => e.source !== START_NODE_ID && e.target !== END_NODE_ID &&
+          e.source !== END_NODE_ID && e.target !== START_NODE_ID
+  );
+
   const errors: ValidationError[] = [];
 
-  if (nodes.length === 0) {
+  if (workflowNodes.length === 0) {
     return { valid: false, errors: [{ nodeId: '', type: 'error', message: 'Au moins une étape est requise' }] };
   }
 
   // 1. Check every node has at least one output connection
-  nodes.forEach((node) => {
-    const hasSuccessEdge = edges.some((e) => e.source === node.id && e.sourceHandle === 'success');
-    const hasErrorEdge = edges.some((e) => e.source === node.id && e.sourceHandle === 'error');
+  workflowNodes.forEach((node) => {
+    const hasSuccessEdge = workflowEdges.some((e) => e.source === node.id && e.sourceHandle === 'success');
+    const hasErrorEdge = workflowEdges.some((e) => e.source === node.id && e.sourceHandle === 'error');
 
     if (!hasSuccessEdge && !hasErrorEdge) {
       errors.push({
@@ -168,9 +264,9 @@ export function validateWorkflowGraph(nodes: Node[], edges: Edge[]): ValidationR
   });
 
   // 2. Detect orphan nodes (not reachable from start)
-  if (nodes.length > 1) {
+  if (workflowNodes.length > 1) {
     const reachableNodes = new Set<string>();
-    const startNode = nodes[0];
+    const startNode = workflowNodes[0];
     const queue = [startNode.id];
 
     while (queue.length > 0) {
@@ -178,7 +274,7 @@ export function validateWorkflowGraph(nodes: Node[], edges: Edge[]): ValidationR
       if (reachableNodes.has(current)) continue;
       reachableNodes.add(current);
 
-      edges
+      workflowEdges
         .filter((e) => e.source === current)
         .forEach((e) => {
           if (!reachableNodes.has(e.target)) {
@@ -187,7 +283,7 @@ export function validateWorkflowGraph(nodes: Node[], edges: Edge[]): ValidationR
         });
     }
 
-    nodes.forEach((node) => {
+    workflowNodes.forEach((node) => {
       if (!reachableNodes.has(node.id)) {
         errors.push({
           nodeId: node.id,
@@ -213,7 +309,7 @@ export function validateWorkflowGraph(nodes: Node[], edges: Edge[]): ValidationR
     visited.add(nodeId);
     inStack.add(nodeId);
 
-    const outEdges = edges.filter((e) => e.source === nodeId);
+    const outEdges = workflowEdges.filter((e) => e.source === nodeId);
     for (const edge of outEdges) {
       if (dfs(edge.target)) {
         loopNodes.add(nodeId);
@@ -224,7 +320,7 @@ export function validateWorkflowGraph(nodes: Node[], edges: Edge[]): ValidationR
     return false;
   }
 
-  nodes.forEach((node) => {
+  workflowNodes.forEach((node) => {
     if (!visited.has(node.id)) {
       dfs(node.id);
     }
@@ -244,10 +340,16 @@ export function validateWorkflowGraph(nodes: Node[], edges: Edge[]): ValidationR
   };
 }
 
-// ── Node types registration ────────────────────────────────────────────────
+// ── Node & edge types registration ──────────────────────────────────────────
 
 const nodeTypes = {
   workflowStep: WorkflowStepNode,
+  start: StartNode,
+  end: EndNode,
+};
+
+const edgeTypes = {
+  customEdge: CustomEdge,
 };
 
 // ── Main component ─────────────────────────────────────────────────────────
@@ -264,6 +366,7 @@ function WorkflowBuilderCanvasInner({
   disabled = false,
 }: WorkflowBuilderCanvasProps) {
   const { token } = theme.useToken();
+  const { notification } = App.useApp();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition } = useReactFlow();
 
@@ -274,6 +377,7 @@ function WorkflowBuilderCanvasInner({
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [configPanelOpen, setConfigPanelOpen] = useState(false);
   const [validation, setValidation] = useState<ValidationResult | null>(null);
+  const [validationReportOpen, setValidationReportOpen] = useState(false);
 
   // Sync changes back to parent
   const syncToParent = useCallback(
@@ -322,7 +426,12 @@ function WorkflowBuilderCanvasInner({
       if (disabled) return;
       // CRITICAL FIX: Block self-referencing loops (AC8: infinite loops)
       if (params.source === params.target) {
-        return; // Silently ignore self-connections
+        notification.warning({
+          message: 'Connexion invalide',
+          description: 'Une étape ne peut pas se connecter à elle-même.',
+          duration: 3,
+        });
+        return;
       }
       const sourceHandle = params.sourceHandle as string;
       const isSuccess = sourceHandle === 'success';
@@ -335,7 +444,7 @@ function WorkflowBuilderCanvasInner({
         const newEdge: Edge = {
           ...params,
           id: `${params.source}_${sourceHandle}_${params.target}`,
-          type: 'smoothstep',
+          type: 'customEdge',
           animated: false,
           style: { stroke: isSuccess ? '#52c41a' : '#ff4d4f', strokeWidth: 2 },
           label: isSuccess ? 'succès' : 'erreur',
@@ -344,7 +453,7 @@ function WorkflowBuilderCanvasInner({
         return addEdge(newEdge, filtered);
       });
     },
-    [disabled, setEdges]
+    [disabled, notification, setEdges]
   );
 
   // Handle drop from palette
@@ -381,6 +490,10 @@ function WorkflowBuilderCanvasInner({
           retry_max_attempts: null,
           retry_interval_seconds: null,
           retry_backoff_multiplier: null,
+          on_success_step_id: null,
+          on_error_step_id: null,
+          isStartNode: false,
+          isEndNode: false,
         } satisfies WorkflowStepNodeData,
       };
 
@@ -418,28 +531,38 @@ function WorkflowBuilderCanvasInner({
     [setNodes]
   );
 
-  // Delete node
+  // Delete node (exclude start/end from count)
+  const workflowNodeCount = useMemo(
+    () => nodes.filter((n) => n.id !== START_NODE_ID && n.id !== END_NODE_ID).length,
+    [nodes]
+  );
+
   const handleNodeDelete = useCallback(
     (nodeId: string) => {
       if (disabled) return;
-      // Prevent deleting the last node
-      if (nodes.length <= 1) return;
+      // Prevent deleting start/end nodes
+      if (nodeId === START_NODE_ID || nodeId === END_NODE_ID) return;
+      // Prevent deleting the last workflow node
+      if (workflowNodeCount <= 1) return;
 
       setNodes((nds) => nds.filter((n) => n.id !== nodeId));
       setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
     },
-    [disabled, nodes.length, setNodes, setEdges]
+    [disabled, workflowNodeCount, setNodes, setEdges]
   );
 
   // Handle nodes delete (keyboard Delete key)
   const onNodesDelete = useCallback(
     (deletedNodes: Node[]) => {
       if (disabled) return;
-      // Block if it would remove all nodes
-      const remaining = nodes.length - deletedNodes.length;
+      // Filter out start/end from deletion candidates
+      const actualDeleted = deletedNodes.filter(
+        (n) => n.id !== START_NODE_ID && n.id !== END_NODE_ID
+      );
+      const remaining = workflowNodeCount - actualDeleted.length;
       if (remaining < 1) return;
     },
-    [disabled, nodes.length]
+    [disabled, workflowNodeCount]
   );
 
   // Handle edges delete
@@ -451,16 +574,18 @@ function WorkflowBuilderCanvasInner({
     [disabled]
   );
 
-  // Run validation
+  // Run validation and open report panel
   const handleValidate = useCallback(() => {
     const result = validateWorkflowGraph(nodes, edges);
     setValidation(result);
     applyValidation(result);
+    setValidationReportOpen(true);
   }, [nodes, edges, applyValidation]);
 
   // Clear validation highlights
   const clearValidation = useCallback(() => {
     setValidation(null);
+    setValidationReportOpen(false);
     setNodes((nds) =>
       nds.map((node) => ({
         ...node,
@@ -473,6 +598,18 @@ function WorkflowBuilderCanvasInner({
     );
   }, [setNodes]);
 
+  // Navigate to a specific node (for validation report)
+  const { getNode, setCenter } = useReactFlow();
+  const goToNode = useCallback(
+    (nodeId: string) => {
+      const node = getNode(nodeId);
+      if (!node) return;
+      setCenter(node.position.x + 100, node.position.y + 50, { zoom: 1.2, duration: 800 });
+      setNodes((nds) => nds.map((n) => ({ ...n, selected: n.id === nodeId })));
+    },
+    [getNode, setCenter, setNodes]
+  );
+
   return (
     <div style={{ display: 'flex', height: 600, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, overflow: 'hidden' }}>
       <ActionPalette disabled={disabled} />
@@ -484,12 +621,17 @@ function WorkflowBuilderCanvasInner({
           </Text>
           <Space size="small">
             <Button size="small" onClick={handleValidate} icon={<CheckCircleOutlined />}>
-              Valider
+              Valider le workflow
             </Button>
             {validation && (
-              <Button size="small" onClick={clearValidation} type="text">
-                Effacer validation
-              </Button>
+              <>
+                <Button size="small" onClick={() => setValidationReportOpen(true)} type="default">
+                  Voir le rapport
+                </Button>
+                <Button size="small" onClick={clearValidation} type="text">
+                  Effacer validation
+                </Button>
+              </>
             )}
           </Space>
         </div>
@@ -525,6 +667,7 @@ function WorkflowBuilderCanvasInner({
             onNodesDelete={onNodesDelete}
             onEdgesDelete={onEdgesDelete}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             fitView
             nodesDraggable={!disabled}
             nodesConnectable={!disabled}
@@ -550,6 +693,13 @@ function WorkflowBuilderCanvasInner({
         onNodeUpdate={handleNodeUpdate}
         onNodeDelete={handleNodeDelete}
         disabled={disabled}
+      />
+
+      <ValidationReportPanel
+        validation={validation}
+        open={validationReportOpen}
+        onClose={() => setValidationReportOpen(false)}
+        onGoToNode={goToNode}
       />
     </div>
   );

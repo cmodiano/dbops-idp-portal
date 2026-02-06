@@ -1,13 +1,15 @@
 /**
- * WorkflowStepNode — Custom React Flow node for workflow steps (Story 16.5, AC2; Story 16.6).
+ * WorkflowStepNode — Custom React Flow node for workflow steps (Story 16.5, AC2; Story 16.6; Story 16.7).
  *
- * Displays action name, engine/platform icon, retry badge + detailed tooltip,
- * and 3 handles: input (top), success output (bottom-left, green), error output (bottom-right, red).
+ * Displays action name, engine/platform icon, retry badge + detailed tooltip
+ * with exit paths (success/error), and 3 handles: input (top), success output
+ * (bottom-left, green), error output (bottom-right, red).
  */
 
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { Badge, Tooltip, theme } from 'antd';
+import { Badge, Divider, Tooltip, theme } from 'antd';
+import { CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 
 export interface WorkflowStepNodeData {
   action_id: number;
@@ -22,6 +24,16 @@ export interface WorkflowStepNodeData {
   /** Validation error/warning for this node */
   validationStatus?: 'error' | 'warning' | null;
   validationMessage?: string | null;
+  /** Exit paths for tooltip (Story 16.7, AC6) */
+  on_success_step_id?: string | null;
+  on_error_step_id?: string | null;
+  /** Step names for tooltip (Story 16.7 code review) */
+  on_success_step_name?: string | null;
+  on_error_step_name?: string | null;
+
+  /** Visual-only flags (Story 16.7, AC1) */
+  isStartNode?: boolean;
+  isEndNode?: boolean;
 }
 
 const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
@@ -37,16 +49,44 @@ const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
           ? token.colorPrimary
           : token.colorBorderSecondary;
 
-  const retryTooltipContent = nodeData.retry_enabled ? (
-    <div>
-      <div>Réessai : {nodeData.retry_max_attempts || 3} tentatives max</div>
-      <div>Intervalle : {nodeData.retry_interval_seconds || 60} secondes</div>
-      <div>Backoff : {nodeData.retry_backoff_multiplier || 2.0}x</div>
-    </div>
-  ) : null;
+  // Story 16.7, AC6: Extended tooltip with exit paths + retry info
+  const tooltipContent = useMemo(() => {
+    const hasExitPaths = nodeData.on_success_step_id !== undefined;
+    const hasRetry = nodeData.retry_enabled;
+
+    if (!hasExitPaths && !hasRetry) return null;
+
+    return (
+      <div style={{ fontSize: 12 }}>
+        {/* Exit paths section */}
+        {hasExitPaths && (
+          <>
+            <div style={{ marginBottom: 4, fontWeight: 600 }}>{nodeData.name ?? nodeData.action_name}</div>
+            <div>
+              <CheckCircleOutlined style={{ color: '#52c41a', marginRight: 4 }} />
+              Succès → {nodeData.on_success_step_name || nodeData.on_success_step_id || 'Fin'}
+            </div>
+            <div>
+              <CloseCircleOutlined style={{ color: '#ff4d4f', marginRight: 4 }} />
+              Erreur → {nodeData.on_error_step_name || nodeData.on_error_step_id || 'Fin'}
+            </div>
+          </>
+        )}
+        {/* Retry section (Story 16.6) */}
+        {hasRetry && (
+          <>
+            {hasExitPaths && <Divider style={{ margin: '6px 0' }} />}
+            <div>Réessai : {nodeData.retry_max_attempts || 3} tentatives max</div>
+            <div>Intervalle : {nodeData.retry_interval_seconds || 60} secondes</div>
+            <div>Backoff : {nodeData.retry_backoff_multiplier || 2.0}x</div>
+          </>
+        )}
+      </div>
+    );
+  }, [nodeData]);
 
   return (
-    <Tooltip title={retryTooltipContent} placement="top">
+    <Tooltip title={tooltipContent} placement="top">
       <div
         style={{
           border: `2px solid ${borderColor}`,

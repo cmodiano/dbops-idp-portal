@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Modal, Steps, Button, Form, Input, Select, Alert, Space, App, Radio } from 'antd';
+import { Modal, Steps, Button, Form, Input, Select, Alert, Space, App, Radio, List } from 'antd';
 import type {
   ActionCreate,
   ActionDetail,
@@ -30,7 +30,7 @@ import { ParametersEditor } from './ParametersEditor';
 import { ImpactRulesEditor } from './ImpactRulesEditor';
 import { ChangeTypeConfig } from './ChangeTypeConfig';
 import { WorkflowStepsEditor } from './WorkflowStepsEditor';
-import { WorkflowBuilderCanvas } from './WorkflowBuilderCanvas';
+import { WorkflowBuilderCanvas, validateWorkflowGraph, workflowStepsToReactFlow } from './WorkflowBuilderCanvas';
 import { getTags, updateActionTags, updateActionSteps, updateWorkflowSteps, checkActionNameAvailable } from '../../services/admin_service';
 import { useEngines } from '../../hooks/useEngines';
 import { usePlatforms } from '../../hooks/usePlatforms';
@@ -179,6 +179,33 @@ export function ActionWizard({
     const missingAction = workflowSteps.some((s) => !s.referenced_action_id);
     if (missingAction) {
       setSubmitError('Chaque étape doit avoir une action sélectionnée.');
+      return false;
+    }
+    // Story 16.7, AC8: Graph validation — block save on critical errors
+    const { nodes, edges } = workflowStepsToReactFlow(workflowSteps);
+    const graphValidation = validateWorkflowGraph(nodes, edges);
+    if (!graphValidation.valid) {
+      const errors = graphValidation.errors.filter((e) => e.type === 'error');
+      Modal.error({
+        title: 'Impossible de sauvegarder le workflow',
+        width: 600,
+        content: (
+          <>
+            <p>Le workflow contient <strong>{errors.length} erreur(s)</strong> qui doivent être corrigées avant la sauvegarde.</p>
+            <List
+              size="small"
+              dataSource={errors}
+              renderItem={(error) => (
+                <List.Item>
+                  <CloseCircleOutlined style={{ color: '#ff4d4f', marginRight: 8 }} />
+                  {error.message} {error.nodeId && `(Nœud: ${error.nodeId})`}
+                </List.Item>
+              )}
+            />
+          </>
+        ),
+        okText: 'Compris',
+      });
       return false;
     }
     return true;
