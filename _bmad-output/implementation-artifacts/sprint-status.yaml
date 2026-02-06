@@ -215,7 +215,7 @@ development_status:
     16-3-moteur-execution-branches-conditionnelles: done # 2026-02-06: Code review fixes applied + 15 tests ✅
     16-4-moteur-retry-backoff-exponentiel: done # 2026-02-06: Code review — 8 HIGH + 3 MEDIUM + 2 LOW issues found, 6 auto-fixes applied (H2, H3, H6, H8, M2, L2), 4 documented as Known Limitations (H4 time.sleep DoS, H5 test mocking, H7 doc ambiguity, M1 DB performance, M3 edge cases). Critical remaining: H4 requires Celery migration (out of scope, high tech debt).
     16-5-interface-builder-visuel-workflow: done # 2026-02-06: Code review — 8 CRITICAL + 7 MEDIUM fixes auto-applied + commit created, 28/28 tests pass ✅
-    16-6-configuration-options-retry-builder-visuel: backlog
+    16-6-configuration-options-retry-builder-visuel: done # Code review 2026-02-06: 9 issues (3 HIGH + 4 MEDIUM + 2 LOW) auto-corrigés — Ant Design props, null-safety tooltip, tests sync bidirectionnelle, badge FR, validation bloquante — 45 tests ✅
     16-7-visualisation-validation-chemins-builder-visuel: backlog
     16-8-export-import-workflows-builder-visuel: backlog
     epic-16-retrospective: optional
