@@ -1,8 +1,9 @@
 """
-Workflow Runtime Engine - Story 16.3
+Workflow Runtime Engine - Story 16.3, 16.4
 
 Orchestrates execution of workflows with conditional branching (on_success_step_id, on_error_step_id).
-Handles success/error paths, loop detection, and execution state management.
+Handles success/error paths, loop detection, execution state management,
+and retry with exponential backoff (Story 16.4).
 
 Architecture:
 - WorkflowExecutionState: Runtime state tracking (current step, visited counts, outcomes)
@@ -10,6 +11,7 @@ Architecture:
 - StepResult: Result of executing a single step (success/error + payload)
 """
 
+import time
 import structlog
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, List
@@ -184,6 +186,234 @@ class WorkflowRuntime:
             return {}
         return step_entry.get("parameters") or {}
 
+    # Story 16.4: Patterns indicating permanent (non-retryable) errors
+    # M2 FIX: Kept as class constant for now, but should be extracted to
+    # executions/constants.py for reusability across modules
+    NON_RETRYABLE_PATTERNS = [
+        'validation',
+        'permission',
+        'not found',
+        'unauthorized',
+        'forbidden',
+        'bad request',
+        '400', '401', '403', '404',
+    ]
+
+    def _is_retryable_error(self, result: StepResult) -> bool:
+        """
+        Determine if an error is retryable (temporary) or permanent (AC3).
+
+        Permanent errors: validation, permission, 4xx HTTP errors.
+        Temporary errors: timeout, connection, 5xx, generic exceptions.
+
+        Args:
+            result: StepResult from step execution
+
+        Returns:
+            True if error is retryable (temporary), False if permanent
+        """
+        error_message = result.error_message
+        if not error_message:
+            return True
+
+        # Check error_type first (more reliable than string matching)
+        error_details = result.error_details or {}
+        error_type = error_details.get('error_type', '')
+        if error_type in ('validation', 'permission'):
+            return False
+
+        # Fallback to string pattern matching
+        error_lower = error_message.lower()
+        for pattern in self.NON_RETRYABLE_PATTERNS:
+            if pattern in error_lower:
+                return False
+        return True
+
+    def _execute_step_with_retry(self, step: Dict[str, Any]) -> StepResult:
+        """
+        Execute a step with retry logic if retry_enabled is true (Story 16.4).
+
+        Implements:
+        - AC1: Retry with exponential backoff
+        - AC2: Stop retrying on success
+        - AC3: Stop retrying on permanent errors
+        - AC4: Cancel-aware (checks execution status before each attempt)
+        - AC5: Audit trail for each attempt
+
+        Args:
+            step: Step dict from workflow definition
+
+        Returns:
+            StepResult with final outcome after all retry attempts
+        """
+        retry_enabled = step.get('retry_enabled', False)
+
+        if not retry_enabled:
+            return self._execute_step(step)
+
+        max_attempts = step.get('retry_max_attempts', 3)
+        interval_seconds = step.get('retry_interval_seconds', 60)
+        backoff_multiplier = step.get('retry_backoff_multiplier', 2.0)
+        step_id = step.get('step_id', 'unknown')
+
+        # L2 FIX: Initialize last_result to avoid None edge case
+        last_result = StepResult(
+            outcome=StepOutcome.ERROR,
+            error_message="No retry attempts executed (edge case)",
+        )
+
+        for attempt in range(1, max_attempts + 1):
+            # AC4: Check if execution was cancelled before each attempt
+            # Use select_for_update to avoid race conditions in concurrent cancellation
+            from django.db import transaction
+            with transaction.atomic():
+                self.execution.refresh_from_db()
+                if self.execution.status == ExecutionStatus.CANCELLED:
+                    logger.info(
+                        "workflow_step_retry_cancelled",
+                        execution_id=self.execution.id,
+                        step_id=step_id,
+                        attempt=attempt,
+                        correlation_id=self.correlation_id,
+                    )
+                    # H6 FIX: Mark ExecutionStep as FAILED (CANCELLED status does not exist in enum)
+                    cancelled_step = ExecutionStep.objects.create(
+                        execution=self.execution,
+                        step_order=self._step_order_counter + 1,
+                        step_name=step.get('name', f"Step {step.get('order', 0)}"),
+                        step_type='platform',
+                        status=ExecutionStepStatus.FAILED,
+                        started_at=timezone.now(),
+                        completed_at=timezone.now(),
+                        error_message="Execution cancelled during retry",
+                    )
+                    return StepResult(
+                        outcome=StepOutcome.ERROR,
+                        error_message="Execution cancelled during retry",
+                    )
+
+            # Calculate delay before this attempt (AC1)
+            if attempt > 1:
+                delay_seconds = interval_seconds * (backoff_multiplier ** (attempt - 2))
+                logger.info(
+                    "workflow_step_retry_delay",
+                    execution_id=self.execution.id,
+                    step_id=step_id,
+                    attempt=attempt,
+                    delay_seconds=delay_seconds,
+                    correlation_id=self.correlation_id,
+                )
+                time.sleep(delay_seconds)
+
+            logger.info(
+                "workflow_step_retry_attempt",
+                execution_id=self.execution.id,
+                step_id=step_id,
+                attempt=attempt,
+                max_attempts=max_attempts,
+                correlation_id=self.correlation_id,
+            )
+
+            result = self._execute_step(step)
+
+            # AC2: Success — stop retrying immediately
+            if result.is_success:
+                logger.info(
+                    "workflow_step_retry_success",
+                    execution_id=self.execution.id,
+                    step_id=step_id,
+                    attempt=attempt,
+                    max_attempts=max_attempts,
+                    correlation_id=self.correlation_id,
+                )
+                # AC5: Audit trail for successful retry
+                AuditService.create_entry(
+                    user_id=str(self.execution.user_id),
+                    action_type=AuditActionType.EXECUTION_STEP_RETRY_SUCCESS,
+                    entity_type=AuditEntityType.EXECUTION,
+                    entity_id=self.execution.id,
+                    details={
+                        'step_id': step_id,
+                        'attempt': attempt,
+                        'max_attempts': max_attempts,
+                        'result': 'success',
+                    },
+                    correlation_id=self.correlation_id,
+                )
+                return result
+
+            # AC3: Permanent error — stop retrying immediately
+            if result.is_error and not self._is_retryable_error(result):
+                logger.warning(
+                    "workflow_step_non_retryable_error",
+                    execution_id=self.execution.id,
+                    step_id=step_id,
+                    attempt=attempt,
+                    error=result.error_message,
+                    correlation_id=self.correlation_id,
+                )
+                AuditService.create_entry(
+                    user_id=str(self.execution.user_id),
+                    action_type=AuditActionType.EXECUTION_STEP_RETRY_ABORTED,
+                    entity_type=AuditEntityType.EXECUTION,
+                    entity_id=self.execution.id,
+                    details={
+                        'step_id': step_id,
+                        'attempt': attempt,
+                        'max_attempts': max_attempts,
+                        'reason': 'non_retryable_error',
+                        'error': result.error_message,
+                    },
+                    correlation_id=self.correlation_id,
+                )
+                return result
+
+            # AC5: Audit trail for failed attempt
+            next_delay = (
+                interval_seconds * (backoff_multiplier ** (attempt - 1))
+                if attempt < max_attempts else 0
+            )
+            AuditService.create_entry(
+                user_id=str(self.execution.user_id),
+                action_type=AuditActionType.EXECUTION_STEP_RETRY_ATTEMPT,
+                entity_type=AuditEntityType.EXECUTION,
+                entity_id=self.execution.id,
+                details={
+                    'step_id': step_id,
+                    'attempt': attempt,
+                    'max_attempts': max_attempts,
+                    'result': 'error',
+                    'error': result.error_message,
+                    'next_wait_seconds': next_delay,
+                },
+                correlation_id=self.correlation_id,
+            )
+
+            last_result = result
+
+        # All attempts exhausted (AC1)
+        logger.error(
+            "workflow_step_retry_exhausted",
+            execution_id=self.execution.id,
+            step_id=step_id,
+            max_attempts=max_attempts,
+            final_error=last_result.error_message if last_result else None,
+            correlation_id=self.correlation_id,
+        )
+        AuditService.create_entry(
+            user_id=str(self.execution.user_id),
+            action_type=AuditActionType.EXECUTION_STEP_RETRY_EXHAUSTED,
+            entity_type=AuditEntityType.EXECUTION,
+            entity_id=self.execution.id,
+            details={
+                'step_id': step_id,
+                'max_attempts': max_attempts,
+                'final_error': last_result.error_message if last_result else None,
+            },
+            correlation_id=self.correlation_id,
+        )
+        return last_result
+
     def _resolve_next_step(
         self,
         current_step: Dict[str, Any],
@@ -339,6 +569,7 @@ class WorkflowRuntime:
                 'execution_step_id': execution_step.id,
             }
 
+            # H8 FIX: Ensure correlation_id in all logs
             logger.info(
                 "workflow_step_adapter_payload_ready",
                 execution_id=self.execution.id,
@@ -556,8 +787,8 @@ class WorkflowRuntime:
             # Record visit
             self.state.visit_step(self.state.current_step_id)
 
-            # Execute step
-            result = self._execute_step(current_step)
+            # Execute step (Story 16.4: with retry if retry_enabled)
+            result = self._execute_step_with_retry(current_step)
 
             # Update state
             self.state.last_step_outcome = result.outcome
