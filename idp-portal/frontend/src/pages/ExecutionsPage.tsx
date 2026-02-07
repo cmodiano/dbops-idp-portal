@@ -45,13 +45,14 @@
  */
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Typography, Table, Drawer, Skeleton, Alert, Card, Space, Row, Col, Tag, theme } from 'antd';
+import { Typography, Table, Drawer, Skeleton, Alert, Card, Space, Row, Col, Tag, theme, Button, Modal, notification, Tooltip } from 'antd';
 import {
   SafetyCertificateOutlined,
   RocketOutlined,
   CheckCircleOutlined,
   SyncOutlined,
   ExclamationCircleOutlined,
+  CloseCircleOutlined,
 } from '@ant-design/icons';
 import type { TableProps, TablePaginationConfig } from 'antd';
 import {
@@ -78,6 +79,7 @@ import {
   listPendingApprovals,
   fetchExecutionStats,
   fetchExecutionTimeSeries,
+  cancelExecution,
 } from '../services/execution_service';
 import { getIntegrations } from '../services/integrations_service';
 import { useAuth } from '../contexts/AuthContext';
@@ -95,6 +97,17 @@ import logger from '../services/logger';
 const { Title } = Typography;
 
 const PAGE_SIZE = 25;
+
+// MEDIUM-2 fix: Extract notification messages to constants
+const MESSAGES = {
+  CANCEL_SUCCESS: 'Exécution annulée avec succès',
+  CANCEL_ERROR_TITLE: 'Erreur d\'annulation',
+  CANCEL_ERROR_FALLBACK: 'Erreur lors de l\'annulation',
+  CANCEL_CONFIRM_TITLE: 'Confirmer l\'annulation',
+  CANCEL_CONFIRM_CONTENT: 'Êtes-vous sûr de vouloir annuler cette exécution ? Cette action est irréversible.',
+  CANCEL_CONFIRM_OK: 'Confirmer',
+  CANCEL_CONFIRM_CANCEL: 'Annuler',
+} as const;
 
 /** Running statuses that appear first with visual indicator (AC3, Story 9.9 AC2). */
 const RUNNING_STATUSES: ExecutionStatusType[] = ['RUNNING', 'SUBMITTED', 'PENDING_APPROVAL'];
@@ -134,9 +147,12 @@ export default function ExecutionsPage() {
   const { user, isLoading: authLoading } = useAuth();
   const { token } = theme.useToken();
   // Story 8.9 code-review: Consolidated RBAC logic - DBA/DBOPS can approve AND view all
-  const canApprove =
+  // HIGH-4 fix: Memoize RBAC checks to react to user context changes
+  const canApprove = useMemo(() =>
     user?.profile?.toLowerCase() === 'dba' ||
-    user?.profile?.toLowerCase() === 'dbops';
+    user?.profile?.toLowerCase() === 'dbops',
+    [user?.profile]
+  );
   const canViewAll = canApprove; // Same RBAC for both (Story 8.9)
 
   // Story 9.10: URL-synced filters
@@ -314,6 +330,34 @@ export default function ExecutionsPage() {
     loadStats();
   }, [activeScope, filters]);
 
+  // Story 17.14: Cancel execution state
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
+
+  // Story 17.14 AC3: Handle cancel execution with confirmation modal
+  const handleCancelExecution = useCallback((executionId: number) => {
+    Modal.confirm({
+      title: MESSAGES.CANCEL_CONFIRM_TITLE,
+      content: MESSAGES.CANCEL_CONFIRM_CONTENT,
+      okText: MESSAGES.CANCEL_CONFIRM_OK,
+      cancelText: MESSAGES.CANCEL_CONFIRM_CANCEL,
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        setCancellingId(executionId);
+        try {
+          await cancelExecution(executionId);
+          notification.success({ message: MESSAGES.CANCEL_SUCCESS });
+          fetchData(currentPage, activeScope);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : MESSAGES.CANCEL_ERROR_FALLBACK;
+          notification.error({ message: MESSAGES.CANCEL_ERROR_TITLE, description: message });
+          logger.error('Cancel execution failed', { executionId, error: message });
+        } finally {
+          setCancellingId(null);
+        }
+      },
+    });
+  }, [fetchData, currentPage, activeScope]);
+
   // Story 8.8: Callback after approval/rejection - refresh both lists
   const handleApprovalComplete = useCallback(() => {
     loadPendingApprovals();
@@ -478,10 +522,37 @@ export default function ExecutionsPage() {
         render: (_: unknown, record: ExecutionResponse) =>
           formatDuration(record.started_at, record.completed_at),
       },
+      // Story 17.14 AC1, AC2: Colonne Actions avec bouton Annuler
+      {
+        title: 'Actions',
+        key: 'actions',
+        width: 70,
+        align: 'center' as const,
+        render: (_: unknown, record: ExecutionResponse) => {
+          const isCancellable = record.status === 'SUBMITTED' || record.status === 'RUNNING';
+          const canCancel = isCancellable && (
+            record.user_id === user?.id || canViewAll
+          );
+          if (!canCancel) return null;
+          return (
+            <Tooltip title="Annuler l'exécution">
+              <Button
+                type="text"
+                danger
+                size="small"
+                icon={<CloseCircleOutlined />}
+                aria-label="Annuler"
+                loading={cancellingId === record.id}
+                onClick={(e) => { e.stopPropagation(); handleCancelExecution(record.id); }}
+              />
+            </Tooltip>
+          );
+        },
+      },
     );
 
     return baseColumns;
-  }, [activeScope, sortField, sortOrder, integrationIconsMap]);
+  }, [activeScope, sortField, sortOrder, integrationIconsMap, user, canViewAll, cancellingId, handleCancelExecution]);
 
   // Skeleton table during loading (AC4, Task 1.4: skeleton rows; Story 9.9: updated column order)
   if (loading && executions.length === 0) {

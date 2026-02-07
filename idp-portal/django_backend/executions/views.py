@@ -83,6 +83,9 @@ def _validate_environment_against_inventory(environment: str) -> None:
 from croniter import croniter, CroniterBadCronError, CroniterBadDateError
 import structlog
 
+# Story 17.14: Import adapter at module level (HIGH-3 fix)
+from adapters.aap_adapter import AAPAdapter
+
 exec_logger = structlog.get_logger(__name__)
 
 
@@ -862,6 +865,106 @@ class ExecutionDetailView(APIView):
             raise ForbiddenError(code="FORBIDDEN", message="Accès interdit", details={"execution_id": execution_id})
 
         return Response({"data": ExecutionSerializer(execution).data})
+
+
+class ExecutionCancelView(APIView):
+    """PATCH /executions/{id}/cancel/ -> cancel an execution (AC3, AC4, AC5)"""
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [GeneralAPIThrottle]  # MEDIUM-1 fix: Add rate limiting
+
+    def patch(self, request, execution_id: int):
+        try:
+            execution = Execution.objects.select_related("action", "user", "action__integration").get(id=execution_id)
+        except Execution.DoesNotExist:
+            raise NotFoundError(code="NOT_FOUND", message="Execution non trouvée", details={"execution_id": execution_id})
+
+        # RBAC: owner or DBA/DBOPS (AC3)
+        if execution.user_id != request.user.id and not _is_dba_or_dbops(request.user):
+            raise ForbiddenError(code="FORBIDDEN", message="Accès interdit", details={"execution_id": execution_id})
+
+        # Validate status is cancellable (AC5)
+        if execution.status not in (ExecutionStatus.SUBMITTED, ExecutionStatus.RUNNING):
+            raise BadRequestError(
+                code="INVALID_STATUS",
+                message=f"Impossible d'annuler une opération dans le statut {execution.status}",
+                details={"execution_id": execution_id, "current_status": execution.status},
+            )
+
+        # HIGH-2 fix: Wrap in transaction for ACID guarantees
+        with transaction.atomic():
+            # AC4: Attempt remote cancellation for RUNNING executions
+            if execution.status == ExecutionStatus.RUNNING:
+                self._attempt_remote_cancellation(execution)
+
+            # Use ExecutionService.update_status() for state machine validation + audit (AC3)
+            cancelled_by_admin = execution.user_id != request.user.id
+            try:
+                updated = ExecutionService().update_status(execution_id, ExecutionStatus.CANCELLED, str(request.user.id))
+            except ValueError as e:
+                raise BadRequestError(
+                    code="INVALID_STATUS",
+                    message=str(e),
+                    details={"execution_id": execution_id},
+                )
+
+            if updated is None:
+                raise NotFoundError(code="NOT_FOUND", message="Execution non trouvée", details={"execution_id": execution_id})
+
+            exec_logger.info(
+                "execution_cancelled",
+                execution_id=execution_id,
+                cancelled_by=request.user.id,
+                cancelled_by_admin=cancelled_by_admin,
+                previous_status=execution.status,
+                correlation_id=get_correlation_id(),
+            )
+
+            return Response({"data": ExecutionSerializer(updated).data})
+
+    def _attempt_remote_cancellation(self, execution: Execution) -> None:
+        """AC4: Best-effort remote cancellation on execution engine."""
+        platform_job_id = None
+        if execution.action and execution.action.integration:
+            params = execution.get_parameters() if hasattr(execution, 'get_parameters') else {}
+            platform_job_id = (params or {}).get('platform_job_id')
+
+        if not platform_job_id:
+            exec_logger.debug(
+                "remote_cancellation_skipped_no_job_id",
+                execution_id=execution.id,
+                correlation_id=get_correlation_id(),
+            )
+            return
+
+        try:
+            # HIGH-3 fix: Use module-level import
+            adapter = AAPAdapter()
+            adapter.cancel_execution(platform_job_id)
+            exec_logger.info(
+                "remote_cancellation_success",
+                execution_id=execution.id,
+                platform_job_id=platform_job_id,
+                correlation_id=get_correlation_id(),
+            )
+        except NotImplementedError:
+            exec_logger.warning(
+                "remote_cancellation_not_supported",
+                execution_id=execution.id,
+                platform_job_id=platform_job_id,
+                correlation_id=get_correlation_id(),
+            )
+        except Exception as e:
+            # Story 17.6: Justified broad catch - adapter may raise various exceptions
+            exec_logger.warning(
+                "remote_cancellation_failed",
+                execution_id=execution.id,
+                platform_job_id=platform_job_id,
+                error=str(e),
+                error_type=type(e).__name__,
+                correlation_id=get_correlation_id(),
+                exc_info=True,
+            )
 
 
 class ExecutionStepsView(APIView):

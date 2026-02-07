@@ -316,6 +316,23 @@ export async function fetchExecutionTags(): Promise<string[]> {
   return apiFetch<string[]>('/executions/tags');
 }
 
+// === Story 17.14: Cancel Execution ===
+
+/**
+ * Cancel an execution (Story 17.14, AC3).
+ *
+ * @param executionId - Execution ID to cancel
+ * @returns ExecutionResponse with updated status (CANCELLED)
+ * @throws Error if user cannot cancel (403), invalid status (400), or not found (404)
+ */
+export async function cancelExecution(
+  executionId: number
+): Promise<ExecutionResponse> {
+  return apiFetch<ExecutionResponse>(`/executions/${executionId}/cancel`, {
+    method: 'PATCH',
+  });
+}
+
 // === Story 9.1: Remediation Suggestions (FR36) ===
 
 /**

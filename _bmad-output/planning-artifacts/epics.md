@@ -3775,11 +3775,11 @@ afin de corriger rapidement une erreur de parametrage ou une operation lancee pa
 **When** le DBA ou l'admin annule
 **Then** le backend tente d'annuler l'execution cote AAP/moteur si supporte, ou marque comme annulee
 
-### Story 17.15 : Relancer une execution avec les memes parametres (initiateur ou admin)
+### Story 17.15 : Relancer une execution (parametres pre remplis, modifiables)
 
 As a DBA ou admin,
-je veux relancer une execution passee avec exactement les memes parametres (que j'ai initiee, ou n'importe laquelle si je suis admin),
-afin de ne pas ressaisir les parametres manuellement (gain de temps, moins d'erreurs).
+je veux relancer une execution passee en partant des memes parametres (que j'ai initiee, ou n'importe laquelle si je suis admin),
+afin de gagner du temps tout en pouvant ajuster les parametres avant de reexecuter.
 
 **Privileges :** L'utilisateur qui a declenche l'execution peut la relancer ; les **admins** peuvent relancer **n'importe quelle** execution.
 
@@ -3794,11 +3794,52 @@ afin de ne pas ressaisir les parametres manuellement (gain de temps, moins d'err
 **Then** un bouton ou action "Relancer" est disponible ; l'admin peut relancer n'importe quelle execution
 
 **Given** le DBA ou l'admin clique sur "Relancer" pour une execution
-**When** il confirme
-**Then** une nouvelle execution est creee avec les memes parametres (action, target, environnement, parametres dynamiques)
-**And** le wizard n'est pas affiche ; l'execution demarre directement
+**When** l'action est declenchee
+**Then** le wizard d'execution s'ouvre avec les parametres pre remplis (action, target(s), environnement, parametres dynamiques) issus de l'execution passee
+**And** l'utilisateur peut modifier tout ou partie de ces parametres avant de soumettre
+**And** a la soumission du wizard, une nouvelle execution est creee avec les parametres affiches (pre remplis ou modifies)
 **And** les privileges sont : initiateur de l'execution OU admin (RBAC)
 
 **Given** le DBA n'a plus les permissions pour l'action ou l'environnement (et n'est pas admin)
 **When** il tente de relancer
-**Then** une erreur explicite est affichee et l'execution n'est pas creee
+**Then** une erreur explicite est affichee et le wizard ne demarre pas (ou l'execution n'est pas creee a la soumission)
+
+### Story 17.16 : Verification conformite FRONTEND-STANDARDS
+
+En tant qu'equipe produit,
+je veux que la conformite aux standards definis dans FRONTEND-STANDARDS.md soit verifiable et appliquee dans le code,
+afin que les regles (React 19, Ant Design 6.2, APIs publiques, naming, tests) restent respectees au fil des evolutions.
+
+**Contexte :** Le document idp-portal/frontend/FRONTEND-STANDARDS.md (Story 5.5) definit les regles adoptees ; aucun mecanisme ne garantit aujourd'hui que le code reste conforme.
+
+**Acceptance Criteria:**
+
+**Given** le document FRONTEND-STANDARDS.md
+**When** on execute une verification (script, ESLint, ou CI)
+**Then** les regles suivantes sont controlees automatiquement : pas d'import depuis antd/es/*, pas de class components, message/notification/modal via App.useApp() uniquement, types Table extraits depuis TableProps
+
+**Given** une PR frontend
+**When** elle est soumise
+**Then** la checklist PR Frontend est integree (template ou CI) ou couverte par les verifications automatiques
+
+**And** les tests existants passent ; pas de regression ; exceptions documentees si besoin
+
+### Story 17.17 : Optimisation des requetes BD — page Catalogue
+
+En tant qu'utilisateur du portail,
+je veux que la page Catalogue se charge rapidement,
+afin que l'experience reste fluide meme avec peu d'actions affichees.
+
+**Contexte :** La page Catalogue (peu d'actions) est percue comme lente ; les donnees viennent de catalog/actions, catalog/tags, users/me/favorites.
+
+**Acceptance Criteria:**
+
+**Given** les endpoints utilises par la page Catalogue (catalog/actions, catalog/tags, users/me/favorites)
+**When** un audit est realise
+**Then** on dispose d'un inventaire : nombre de requetes par endpoint, N+1, select_related/prefetch_related, index
+
+**Given** l'audit
+**When** on applique les optimisations
+**Then** les vues catalog et favoris n'executent plus de N+1 ; jointures via select_related/prefetch_related ; index adaptes si besoin
+
+**And** le temps de reponse (ou nombre de requetes) est mesure avant/apres ; gains documentes

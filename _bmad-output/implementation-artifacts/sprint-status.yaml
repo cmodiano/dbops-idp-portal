@@ -234,8 +234,8 @@ development_status:
     17-11-rate-limiting-endpoints-publics: done # 2026-02-07: Code review completed — 10 issues fixed (7 MEDIUM + 3 LOW), 37 tests pass (29 unit + 8 security), scope collision doc added, XFF spoofing detection, RATELIMIT_ENABLED validation, ExecutionThrottle test added, documentation enhanced ✅
     17-12-systeme-feature-flags: done # 2026-02-07: Code review adversarial — 10 issues (3 HIGH + 5 MEDIUM + 2 LOW), 6 auto-fixed (audit/cache race, rollout security, model validation, context refresh, MD5 doc), 4 follow-up actions documented (non-blocking) — 53 backend + 17 frontend tests pass ✅
     17-13-densite-tableau-executions: done # UX - reduire hauteur lignes vue Executions
-    17-14-annuler-operation-par-initiateur: backlog # Annuler Soumise/En cours : initiateur ou admin (RBAC)
-    17-15-relancer-operation-memes-parametres: backlog # Relancer sans ressaisie parametres
+    17-14-annuler-operation-par-initiateur: done # Annuler Soumise/En cours : initiateur ou admin (RBAC) — Code review: 5 HIGH + 3 MEDIUM + 2 LOW fixes, 16 backend + 6 frontend tests pass (2026-02-07)
+    17-15-relancer-operation-memes-parametres: backlog # Relancer : wizard pre rempli (parametres modifiables avant reexecution)
     17-16-verification-conformite-frontend-standards: backlog # Verifier que FRONTEND-STANDARDS.md est applique (ESLint/CI)
     17-17-optimisation-requetes-bd-page-catalogue: backlog # Audit + optimisation requetes BD page Catalogue (lenteur perçue)
     epic-17-retrospective: optional
