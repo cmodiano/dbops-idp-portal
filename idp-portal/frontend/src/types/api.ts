@@ -428,8 +428,8 @@ export interface ActionStats {
 /** Execution environment (Story 4.1, AC2). */
 export type ExecutionEnvironment = 'dev' | 'staging' | 'prod';
 
-/** Execution status (Story 4.1; Story 7.4: REJECTED). */
-export type ExecutionStatusType = 'SUBMITTED' | 'PENDING_APPROVAL' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'REJECTED';
+/** Execution status (Story 4.1; Story 7.4: REJECTED; Story 18.6: INTEGRATION_ERROR). */
+export type ExecutionStatusType = 'SUBMITTED' | 'INTEGRATION_ERROR' | 'PENDING_APPROVAL' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'REJECTED';
 
 /** Execution scope for filtering (Story 8.9). */
 export type ExecutionScope = 'all' | 'mine';
@@ -453,6 +453,8 @@ export interface ExecutionCreateResponse {
   execution_id: number;
   status: ExecutionStatusType;
   created_at: string;
+  /** Story 18.6: Error message when status is INTEGRATION_ERROR. */
+  error_message?: string | null;
 }
 
 /** Execution record (Story 4.1; Story 7.4: approval fields; Story 9.2: remediation; Story 9.9: enrichment). */
@@ -478,6 +480,8 @@ export interface ExecutionResponse {
   approval_comment?: string | null;
   /** Story 9.2: Parent execution ID for remediation actions. */
   parent_execution_id?: number | null;
+  /** Story 18.6: Error message when status is INTEGRATION_ERROR. */
+  error_message?: string | null;
   /** Story 9.9 AC6: Database engine from action (for Technologie column). */
   engine?: ActionEngine | null;
   /** Story 9.9 AC6: Execution platform from action. */
@@ -739,7 +743,7 @@ export interface EnvironmentStats {
 
 /** Status values for execution filter (Story 8.4, Task 8.2).
  * Includes all execution statuses including approval workflow statuses (Story 7.4). */
-export type DashboardFilterStatus = 'PENDING' | 'SUBMITTED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'PENDING_APPROVAL' | 'REJECTED';
+export type DashboardFilterStatus = 'PENDING' | 'SUBMITTED' | 'INTEGRATION_ERROR' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'PENDING_APPROVAL' | 'REJECTED';
 
 /** Advanced filters for dashboard endpoints (Story 8.4, AC1, AC6, AC7). */
 export interface DashboardFilters {

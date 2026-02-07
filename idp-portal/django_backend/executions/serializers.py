@@ -33,6 +33,8 @@ class ExecutionSerializer(serializers.Serializer):
             "approved_at": obj.approved_at.isoformat() if obj.approved_at else None,
             "approval_comment": obj.approval_comment,
             "parent_execution_id": obj.parent_execution_id,
+            # Story 18.6: Integration error message
+            "error_message": obj.error_message,
             # Enrichment (Story 9.9)
             "engine": getattr(action, "engine", None) if action else None,
             "platform": getattr(action, "platform", None) if action else None,

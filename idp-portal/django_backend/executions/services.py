@@ -235,13 +235,14 @@ class ExecutionService:
         
         # Validate transition (basic validation - can be enhanced)
         valid_transitions = {
-            ExecutionStatus.SUBMITTED: [ExecutionStatus.RUNNING, ExecutionStatus.CANCELLED, ExecutionStatus.PENDING_APPROVAL],
+            ExecutionStatus.SUBMITTED: [ExecutionStatus.RUNNING, ExecutionStatus.CANCELLED, ExecutionStatus.PENDING_APPROVAL, ExecutionStatus.INTEGRATION_ERROR],
             ExecutionStatus.PENDING_APPROVAL: [ExecutionStatus.SUBMITTED, ExecutionStatus.REJECTED],
             ExecutionStatus.RUNNING: [ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED],
             ExecutionStatus.COMPLETED: [],
             ExecutionStatus.FAILED: [],
             ExecutionStatus.CANCELLED: [],
             ExecutionStatus.REJECTED: [],
+            ExecutionStatus.INTEGRATION_ERROR: [],  # Terminal state (Story 18.6)
         }
         
         if new_status not in valid_transitions.get(old_status, []):
@@ -260,6 +261,7 @@ class ExecutionService:
         # Map status to audit action type enum
         status_to_audit_type = {
             ExecutionStatus.SUBMITTED: AuditActionType.EXECUTION_SUBMITTED,
+            ExecutionStatus.INTEGRATION_ERROR: AuditActionType.EXECUTION_INTEGRATION_ERROR,
             ExecutionStatus.RUNNING: AuditActionType.EXECUTION_RUNNING,
             ExecutionStatus.COMPLETED: AuditActionType.EXECUTION_COMPLETED,
             ExecutionStatus.FAILED: AuditActionType.EXECUTION_FAILED,

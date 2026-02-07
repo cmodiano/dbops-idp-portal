@@ -837,16 +837,56 @@ class ExecutionsView(APIView):
             delegated_referenced_action_ids=delegated_referenced_action_ids,
         )
 
-        return Response(
-            {
-                "data": {
-                    "execution_id": execution.id,
-                    "status": execution.status,
-                    "created_at": execution.created_at.isoformat() if execution.created_at else None,
-                }
-            },
-            status=201,
-        )
+        try:
+            # Story 18.6: Future integration call here (AAP, ServiceNow, etc.)
+            # When integration is implemented, this will trigger the platform:
+            # if action.integration:
+            #     integration_service = get_integration_service(action.integration)
+            #     integration_service.trigger_execution(execution)
+            pass
+        except Exception as e:
+            # Story 18.6 AC5: Handle integration errors
+            exec_logger.error(
+                "integration_error_on_execution",
+                execution_id=execution.id,
+                action_id=action.id,
+                error_type=type(e).__name__,
+                error_message=str(e),
+                correlation_id=correlation_id,
+            )
+
+            execution.status = ExecutionStatus.INTEGRATION_ERROR
+            execution.error_message = str(e)
+            execution.save(update_fields=["status", "error_message"])
+
+            AuditService.create_entry(
+                user_id=str(request.user.id),
+                action_type=AuditActionType.EXECUTION_INTEGRATION_ERROR,
+                entity_type=AuditEntityType.EXECUTION,
+                entity_id=execution.id,
+                details={
+                    "action_id": action.id,
+                    "action_name": action.name,
+                    "environment": environment,
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                },
+                ip_address=ip_address,
+                correlation_id=correlation_id,
+            )
+
+        # Build response data
+        response_data = {
+            "execution_id": execution.id,
+            "status": execution.status,
+            "created_at": execution.created_at.isoformat() if execution.created_at else None,
+        }
+
+        # Include error_message if integration failed
+        if execution.status == ExecutionStatus.INTEGRATION_ERROR:
+            response_data["error_message"] = execution.error_message
+
+        return Response({"data": response_data}, status=201)
 
 
 class ExecutionDetailView(APIView):

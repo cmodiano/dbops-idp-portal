@@ -16,8 +16,23 @@ class ExecutionEnvironment(models.TextChoices):
 
 
 class ExecutionStatus(models.TextChoices):
-    """Execution status enum matching Oracle CHECK constraint (V023, V030)."""
+    """
+    Execution status enum matching Oracle CHECK constraint (V023, V030, V057).
+
+    Status flow:
+    - SUBMITTED: Successfully submitted to platform (AAP, ServiceNow, etc.)
+    - INTEGRATION_ERROR: Failed to submit to platform (platform unreachable, API error, etc.)
+      This is a PRE-execution failure — the execution never reached the platform.
+      Distinct from FAILED which means the platform received and processed the request but it failed.
+    - PENDING_APPROVAL: Waiting for approval (high-impact production actions)
+    - RUNNING: Execution in progress on platform
+    - COMPLETED: Execution finished successfully
+    - FAILED: Execution failed during/after platform processing
+    - CANCELLED: Execution cancelled by user
+    - REJECTED: Approval rejected
+    """
     SUBMITTED = 'SUBMITTED', 'Submitted'
+    INTEGRATION_ERROR = 'INTEGRATION_ERROR', 'Integration Error'  # Story 18.6 (V057)
     PENDING_APPROVAL = 'PENDING_APPROVAL', 'Pending Approval'
     RUNNING = 'RUNNING', 'Running'
     COMPLETED = 'COMPLETED', 'Completed'
@@ -142,10 +157,12 @@ class Execution(models.Model):
         related_name='child_executions',
         db_column='PARENT_EXECUTION_ID'
     )
+    # Story 18.6: Error message for integration failures
+    error_message = models.TextField(null=True, blank=True, db_column='ERROR_MESSAGE')
     started_at = models.DateTimeField(null=True, blank=True, db_column='STARTED_AT')
     completed_at = models.DateTimeField(null=True, blank=True, db_column='COMPLETED_AT')
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
-    
+
     # Custom manager
     objects = ExecutionManager()
 

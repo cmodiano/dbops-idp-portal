@@ -246,6 +246,6 @@ development_status:
     18-3-mode-visuel-builder-taille-blocs-lien-libelle: done # Fenêtre plus grande, blocs Départ/Fin déplaçables, lien auto sans erreur, nom action affiché
     18-4-catalogue-retirer-adapter-filtre-environnement: done # Code review 2026-02-07: 11 issues (3 HIGH + 5 MEDIUM + 3 LOW) auto-corrigés, 20/20 tests pass (8 HorizontalFilters + 12 ActiveFiltersChips), diagramme Excalidraw créé, documentation enrichie
     18-5-favoris-correction-affichage-compteur: done # Fix: .exclude(action__status=ActionStatus.DISABLED) dans list_favorites() + is_favorite(), code review adversarial 9 issues auto-corrigés, 13 tests backend passent ✅
-    18-6-erreur-integration-afficher-statut-erreur: backlog # Intégration erreur → statut erreur visible (pas "soumis")
+    18-6-erreur-integration-afficher-statut-erreur: done # Intégration erreur → statut erreur visible (pas "soumis") — 10 tests (8 backend + 2 frontend), AC1-AC10 validés
     18-7-correction-tests-en-echec: backlog # Restaurer la suite de tests (fixtures, migrations, refactorings)
     epic-18-retrospective: optional

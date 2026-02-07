@@ -25,6 +25,7 @@ import {
   PauseCircleOutlined,
   StopOutlined,
   MinusCircleOutlined,
+  ExclamationCircleOutlined,
 } from '@ant-design/icons';
 import type { ActionEngine, ActionPlatform, ItemType, ExecutionStatusType } from '../types/api';
 import { STYLE_TOKENS } from '../theme/styleTokens';
@@ -272,6 +273,7 @@ const STATUS_BADGE_CONFIG: Record<
   }
 > = {
   SUBMITTED: { status: 'processing', label: 'Soumise', color: '#3B82F6' },
+  INTEGRATION_ERROR: { status: 'error', label: 'Erreur intégration', color: '#EF4444' },
   PENDING_APPROVAL: { status: 'processing', label: 'En attente', color: '#F59E0B' },
   RUNNING: { status: 'processing', label: 'En cours', color: '#3B82F6' },
   COMPLETED: { status: 'success', label: 'Terminée', color: '#10B981' },
@@ -341,6 +343,7 @@ export const STATUS_CONFIG: Record<
   { label: string; Icon: React.ComponentType<{ spin?: boolean; style?: React.CSSProperties }>; color: string }
 > = {
   SUBMITTED: { label: 'Soumise', Icon: ClockCircleOutlined, color: '#3B82F6' },
+  INTEGRATION_ERROR: { label: 'Erreur intégration', Icon: ExclamationCircleOutlined, color: '#EF4444' },
   PENDING_APPROVAL: { label: 'En attente', Icon: PauseCircleOutlined, color: '#F59E0B' },
   RUNNING: { label: 'En cours', Icon: SyncOutlined, color: '#3B82F6' },
   COMPLETED: { label: 'Terminée', Icon: CheckCircleOutlined, color: '#10B981' },
