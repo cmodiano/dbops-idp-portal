@@ -3515,7 +3515,7 @@ afin de **reduire durablement la dette technique, diminuer la surface d'attaque,
   - Refactoriser les fichiers surdimensionnes (en priorite `ExecutionWizard.tsx`) en sous-composants et hooks dedies
   - Extraire un **wrapper HTTP commun** dans `api_client.ts` pour eliminer la duplication (auth, retry 401, parsing erreurs)
   - Remplacer `console.*` par un service de logging frontend + regle linter/CI
-  - **UX vue Executions** : densifier la table (reduire hauteur des lignes), permettre a l'utilisateur initiateur d'annuler une operation (Soumise/En cours), permettre de relancer une execution passee avec les memes parametres sans ressaisie
+  - **UX vue Executions** : densifier la table (reduire hauteur des lignes) ; permettre a l'utilisateur initiateur ou aux admins d'annuler une operation (Soumise/En cours) et de relancer une execution passee avec les memes parametres sans ressaisie
 - **Securite & Tooling**
   - Supprimer les secrets par defaut risquant de fuiter en prod et appliquer un **fail-fast** en environnement non-dev si variables manquantes
   - Ajouter `pyproject.toml` + lockfile pour le Django backend (build reproductible)
@@ -3536,6 +3536,202 @@ afin de **reduire durablement la dette technique, diminuer la surface d'attaque,
 - Un lockfile est present pour le Django backend ; le durcissement mypy est enclenche
 - Les Dockerfile(s) buildent ; rate limiting et feature flags sont disponibles (si retenus)
 
+### Story 17.1 : Finaliser migration backend et decommissionner FastAPI
+
+En tant qu'equipe technique,
+je veux supprimer le backend FastAPI legacy une fois la migration Django validee,
+afin d'eliminer la dette technique majeure (double backend), eviter les divergences de comportement et simplifier la base de code.
+
+**Contexte (assessment §4.1) :** Le depot contient deux backends complets (`backend/` FastAPI ~48k LOC et `django_backend/` Django). La coexistence represente un risque de divergence, de la duplication et de la confusion.
+
+**Acceptance Criteria:**
+
+**Given** la migration vers Django est validee (parite fonctionnelle, tests, bascule effectuee)
+**When** le decommissionnement est execute
+**Then** le dossier `backend/` (FastAPI) est supprime du depot
+**And** la doc, la CI et les procedures de deploiement ne reference plus FastAPI
+**And** un seul backend (Django) est la cible de deploiement
+
+### Story 17.2 : Refactoriser les composants frontend volumineux
+
+En tant que developpeur,
+je veux decouper les fichiers frontend qui depassent les bonnes pratiques de taille,
+afin d'ameliorer la maintenabilite et la lisibilite (max ~300-400 lignes par composant).
+
+**Contexte (assessment §4.2) :** ExecutionWizard.tsx (1 661 lignes), executions/views.py (1 140), ScheduledExecutionsPage.tsx (692), ExecutionTimeline.tsx (664), ExecutionsPage.tsx (650), catalog/views.py (749).
+
+**Acceptance Criteria:**
+
+**Given** un fichier composant ou page depasse ~500 lignes
+**When** le refactoring est realise
+**Then** la logique est extraite en sous-composants et/ou hooks dedies
+**And** aucun fichier cible ne depasse ~300-400 lignes sans justification
+**And** les tests existants passent sans regression
+**And** en priorite : ExecutionWizard.tsx (chaque step en composant, hook pour la logique)
+
+### Story 17.3 : Eliminer la duplication dans le client API frontend
+
+En tant que developpeur,
+je veux un wrapper HTTP commun dans `api_client.ts`,
+afin d'eviter la duplication d'auth, retry 401 et parsing d'erreurs entre apiFetch, apiFetchRaw, apiFetchBlob, apiPostFormData.
+
+**Contexte (assessment §4.3) :** Quatre fonctions dupliquent la meme logique (auth, intercepteur 401, parsing erreurs).
+
+**Acceptance Criteria:**
+
+**Given** le frontend appelle l'API (GET, POST, blob, form-data)
+**When** une requete est effectuee
+**Then** un wrapper HTTP commun gere : authentification, intercepteur 401 avec retry, parsing d'erreurs au format unifie
+**And** les methodes specifiques (apiFetch, apiFetchRaw, apiFetchBlob, apiPostFormData) s'appuient sur ce wrapper sans dupliquer la logique
+**And** les tests existants passent
+
+### Story 17.4 : Oracle JSON field pour le modele Action
+
+En tant que developpeur,
+je veux centraliser le stockage JSON du modele Action (CLOB) via un champ/abstraction unique avec validation,
+afin d'eliminer les 7 paires getter/setter manuelles et d'avoir une validation JSON au niveau du modele.
+
+**Contexte (assessment §4.4) :** Le modele Action stocke du JSON dans des TextField (CLOB) avec getter/setter repetitifs ; pas de validation JSON ni de JSONField natif (Oracle).
+
+**Acceptance Criteria:**
+
+**Given** le modele Action a des champs JSON (parameters_schema, impact_rules, etc.)
+**When** on lit ou ecrit ces champs
+**Then** un OracleJSONField custom (ou descripteur equivalent) est utilise
+**And** la validation JSON est appliquee au niveau du modele
+**And** les getter/setter dupliques sont supprimes
+**And** les serializers et services restent compatibles
+
+### Story 17.5 : Securiser la gestion des secrets
+
+En tant qu'equipe securite,
+je veux qu'aucun secret par defaut ne soit exploitable en production,
+afin d'eviter les fuites si les variables d'environnement ne sont pas configurees.
+
+**Contexte (assessment §4.7) :** SECRET_KEY, JWT_SECRET_KEY et mots de passe par defaut en dur ou commentes "development only".
+
+**Acceptance Criteria:**
+
+**Given** l'application demarre en environnement non-dev (staging, production)
+**When** SECRET_KEY ou JWT_SECRET_KEY (ou autres secrets critiques) ne sont pas definis
+**Then** le demarrage echoue (fail-fast) avec un message explicite
+**And** aucun secret "change-me-in-production" ou valeur par defaut exploitable n'est present dans le code
+**And** detect-secrets (ou equivalent) est utilise dans le CI
+
+### Story 17.6 : Restreindre les exception catches trop larges
+
+En tant que developpeur,
+je veux que les `except Exception` ou `except:` soient restreints aux exceptions specifiques attendues,
+afin de ne pas masquer des bugs et de logger les exceptions inattendues.
+
+**Contexte (assessment §4.5) :** 14 occurrences de broad exception catches dans le Django backend ; certains masquent des erreurs (ex. catalog/views.py).
+
+**Acceptance Criteria:**
+
+**Given** du code attrape des exceptions
+**When** un `except Exception` ou `except:` est utilise
+**Then** il est justifie (fallback graceful documente) ou remplace par des exceptions specifiques
+**And** les exceptions inattendues sont loguees avant re-raise ou traitement
+**And** les cas identifies dans l'audit (ex. ProfileService) sont corriges
+
+### Story 17.7 : Remplacer console.log par un service de logging frontend
+
+En tant que developpeur,
+je veux un service de logging frontend avec niveaux (debug/info/warn/error) et regle linter,
+afin que les sorties soient structurees et filtrables (et envoyables au backend en prod si besoin).
+
+**Contexte (assessment §4.6) :** 21 occurrences de console.log/error/warn dans le frontend de production.
+
+**Acceptance Criteria:**
+
+**Given** le code frontend doit emettre des logs
+**When** un log est emis
+**Then** un service de logging frontend est utilise (niveaux debug/info/warn/error)
+**And** les appels directs a `console.log` / `console.error` / `console.warn` sont supprimes ou remplaces
+**And** une regle linter/CI interdit l'usage direct de console.* (sauf exception documentee)
+
+### Story 17.8 : pyproject.toml et lockfile pour le Django backend
+
+En tant que developpeur,
+je veux un pyproject.toml et un lockfile pour le backend Django,
+afin d'avoir des builds reproductibles et un alignement avec les bonnes pratiques Python.
+
+**Contexte (assessment §4.8) :** Le Django backend utilise requirements.txt avec ranges de versions ; pas de lock, contrairement au backend FastAPI qui a deja un pyproject.toml.
+
+**Acceptance Criteria:**
+
+**Given** le backend Django est installe ou build
+**When** on installe les dependances
+**Then** un pyproject.toml definit les dependances du projet
+**And** un lockfile (pip-tools, poetry ou equivalent) fixe les versions exactes
+**And** le CI verifie la coherence du lockfile
+**And** la doc de build est mise a jour
+
+### Story 17.9 : Rendre mypy bloquant progressivement
+
+En tant que developpeur,
+je veux durcir le type checking jusqu'a le rendre bloquant dans le CI,
+afin de reduire les erreurs de typage et d'ameliorer la fiabilite.
+
+**Contexte (assessment §4.9) :** Le CI execute mypy avec continue-on-error: true ; strict = false dans le pyproject.toml FastAPI.
+
+**Acceptance Criteria:**
+
+**Given** le CI execute mypy sur le code cible (Django backend et/ou frontend selon portee)
+**When** des erreurs de typage sont presentes
+**Then** une strategie progressive est definie (baseline, correction par module)
+**And** a terme, mypy est execute sans continue-on-error et bloque le merge en cas d'erreur
+**And** la configuration mypy (strict ou niveaux) est documentee
+
+### Story 17.10 : Dockerfile pour backend et frontend
+
+En tant qu'equipe DevOps,
+je veux des Dockerfile pour le backend et le frontend,
+afin de conteneuriser les applications pour des deploiements reproductibles et portables.
+
+**Contexte (assessment §4.10) :** docker-compose existe pour Oracle uniquement ; pas de Dockerfile applicatif ; deploiement via systemd/Nginx manuels.
+
+**Acceptance Criteria:**
+
+**Given** on build l'image backend ou frontend
+**When** on utilise le Dockerfile fourni
+**Then** l'application demarre correctement dans le conteneur
+**And** les secrets ne sont pas inclus dans l'image (injection par env ou volume)
+**And** la doc de deploiement mentionne l'option conteneurisee
+**And** les Dockerfile sont dans le depot (ou reference explicite)
+
+### Story 17.11 : Rate limiting sur les endpoints publics
+
+En tant qu'equipe securite,
+je veux un rate limiting sur les endpoints exposes (API publiques),
+afin de limiter les abus et les attaques par force brute.
+
+**Contexte (assessment §6, §7) :** Rate limiting API non implemente.
+
+**Acceptance Criteria:**
+
+**Given** un client appelle un endpoint expose (ex. login, API v1)
+**When** le nombre de requetes depasse un seuil defini (par IP ou par utilisateur)
+**Then** le serveur repond 429 Too Many Requests (ou equivalent)
+**And** la configuration (seuils, fenetre) est parametrable
+**And** les endpoints critiques (auth, execution) sont couverts
+
+### Story 17.12 : Systeme de feature flags
+
+En tant qu'equipe produit / DevOps,
+je veux un systeme de feature flags,
+afin de permettre des deploiements progressifs et des rollouts controles.
+
+**Contexte (assessment §6, §7) :** Pas de systeme de feature flags.
+
+**Acceptance Criteria:**
+
+**Given** une fonctionnalite peut etre livree sans etre activee pour tous les utilisateurs
+**When** un feature flag est configure (on/off ou pourcentage)
+**Then** le frontend et/ou le backend respectent l'etat du flag
+**And** la configuration des flags est centralisee (fichier, env, ou service dedie)
+**And** l'impact sur la CI et le deploiement est documente
+
 ### Story 17.13 : Densite table Executions
 
 As a DBA,
@@ -3552,11 +3748,13 @@ So that je puisse afficher plus d'executions a l'ecran sans scroller.
 **When** le DBA consulte la liste
 **Then** plus de lignes sont visibles dans le viewport sans scroll qu'avant
 
-### Story 17.14 : Annuler une operation par l'utilisateur initiateur
+### Story 17.14 : Annuler une operation (initiateur ou admin)
 
-As a DBA,
-I want annuler une operation que j'ai declenchee (statut Soumise ou En cours),
-So that je puisse corriger rapidement une erreur de parametrage ou une operation lancee par erreur.
+As a DBA ou admin,
+je veux annuler une operation (statut Soumise ou En cours) que j'ai declenchee, ou n'importe quelle operation si je suis admin,
+afin de corriger rapidement une erreur de parametrage ou une operation lancee par erreur.
+
+**Privileges :** L'utilisateur qui a declenche l'operation peut l'annuler ; les **admins** peuvent annuler **n'importe quelle** operation.
 
 **Acceptance Criteria:**
 
@@ -3564,32 +3762,43 @@ So that je puisse corriger rapidement une erreur de parametrage ou une operation
 **When** il consulte la vue Executions
 **Then** un bouton ou action "Annuler" est visible sur la ligne pour les operations qu'il a initiees
 
-**Given** le DBA clique sur "Annuler" pour une operation Soumise ou En cours
+**Given** un utilisateur avec role admin consulte la vue Executions
+**When** il voit une operation Soumise ou En cours (initiee par n'importe qui)
+**Then** un bouton ou action "Annuler" est visible ; l'admin peut annuler n'importe quelle operation
+
+**Given** le DBA ou l'admin clique sur "Annuler" pour une operation Soumise ou En cours
 **When** il confirme l'annulation
 **Then** l'operation est annulee et le statut est mis a jour (ex. Annulee)
-**And** seuls les utilisateurs ayant declenche l'operation peuvent l'annuler (RBAC)
+**And** les privileges sont : initiateur de l'operation OU admin (RBAC)
 
 **Given** une operation est en cours d'execution sur le moteur distant
-**When** le DBA annule
+**When** le DBA ou l'admin annule
 **Then** le backend tente d'annuler l'execution cote AAP/moteur si supporte, ou marque comme annulee
 
-### Story 17.15 : Relancer une execution avec les memes parametres
+### Story 17.15 : Relancer une execution avec les memes parametres (initiateur ou admin)
 
-As a DBA,
-I want relancer une execution passee avec exactement les memes parametres,
-So that je n'aie pas a ressaisir les parametres manuellement (gain de temps, moins d'erreurs).
+As a DBA ou admin,
+je veux relancer une execution passee avec exactement les memes parametres (que j'ai initiee, ou n'importe laquelle si je suis admin),
+afin de ne pas ressaisir les parametres manuellement (gain de temps, moins d'erreurs).
+
+**Privileges :** L'utilisateur qui a declenche l'execution peut la relancer ; les **admins** peuvent relancer **n'importe quelle** execution.
 
 **Acceptance Criteria:**
 
 **Given** un DBA consulte la vue Executions
-**When** il selectionne une execution passee (terminee, echouee ou annulee)
+**When** il selectionne une execution passee qu'il a initiee (terminee, echouee ou annulee)
 **Then** un bouton ou action "Relancer" est disponible
 
-**Given** le DBA clique sur "Relancer" pour une execution
+**Given** un utilisateur avec role admin consulte la vue Executions
+**When** il selectionne une execution passee (initiee par n'importe qui)
+**Then** un bouton ou action "Relancer" est disponible ; l'admin peut relancer n'importe quelle execution
+
+**Given** le DBA ou l'admin clique sur "Relancer" pour une execution
 **When** il confirme
 **Then** une nouvelle execution est creee avec les memes parametres (action, target, environnement, parametres dynamiques)
 **And** le wizard n'est pas affiche ; l'execution demarre directement
+**And** les privileges sont : initiateur de l'execution OU admin (RBAC)
 
-**Given** le DBA n'a plus les permissions pour l'action ou l'environnement
+**Given** le DBA n'a plus les permissions pour l'action ou l'environnement (et n'est pas admin)
 **When** il tente de relancer
 **Then** une erreur explicite est affichee et l'execution n'est pas creee

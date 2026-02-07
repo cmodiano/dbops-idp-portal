@@ -38,6 +38,7 @@ from executions.serializers import (
 from executions.services import ExecutionService, SchedulingService
 from inventory.services import InventoryService, InventoryServiceError, MAX_TARGETS_FOR_RBAC_FILTER
 from profiles.services import ProfileService
+from core.throttling import ExecutionThrottle, GeneralAPIThrottle
 from utils.json_helpers import validate_json_schema
 
 try:
@@ -561,6 +562,7 @@ class ExecutionsView(APIView):
     """
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [GeneralAPIThrottle, ExecutionThrottle]
 
     def get(self, request):
         limit = _parse_int(request.query_params.get("limit"), 50, name="limit")

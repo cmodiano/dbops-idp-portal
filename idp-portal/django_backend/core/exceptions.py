@@ -212,7 +212,13 @@ def custom_exception_handler(exc, context):
                 **request_context
             )
             # Story 13.5: 401 auth failures must use UNAUTHORIZED, not VALIDATION_ERROR
-            error_code = "UNAUTHORIZED" if response.status_code == status.HTTP_401_UNAUTHORIZED else "VALIDATION_ERROR"
+            # Story 17.11: 429 throttled uses THROTTLED error code
+            if response.status_code == status.HTTP_401_UNAUTHORIZED:
+                error_code = "UNAUTHORIZED"
+            elif response.status_code == 429:
+                error_code = "THROTTLED"
+            else:
+                error_code = "VALIDATION_ERROR"
             resp = Response(
                 {
                     "error": {
@@ -224,6 +230,9 @@ def custom_exception_handler(exc, context):
                 status=response.status_code
             )
             resp['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
+            # Story 17.11: Propagate Retry-After header from DRF throttle response
+            if 'Retry-After' in response:
+                resp['Retry-After'] = response['Retry-After']
             return resp
 
         # Handle field validation errors

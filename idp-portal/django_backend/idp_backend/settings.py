@@ -64,6 +64,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'core.middleware.CorrelationIdMiddleware',  # Story M.7 - correlation ID first
     'core.middleware.RequestResponseLoggingMiddleware',  # Story M.8 - request/response logging
+    'core.middleware.RateLimitHeadersMiddleware',  # Story 17.11 - rate limit headers + logging
     'core.middleware.SecurityHeadersMiddleware',  # Story M.7 - security headers
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',  # CORS middleware should be early
@@ -170,6 +171,16 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',  # Story M.7 - default to authenticated
     ],
+    'DEFAULT_THROTTLE_CLASSES': [
+        'core.throttling.GeneralAPIThrottle',  # Story 17.11 - default rate limit for all API endpoints
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'auth': os.getenv('THROTTLE_AUTH_RATE', '10/minute'),
+        'token_refresh': os.getenv('THROTTLE_TOKEN_REFRESH_RATE', '20/minute'),
+        'execution': os.getenv('THROTTLE_EXECUTION_RATE', '30/minute'),
+        'general_api': os.getenv('THROTTLE_API_RATE', '100/minute'),
+        'public': os.getenv('THROTTLE_PUBLIC_RATE', '50/minute'),
+    },
     'DEFAULT_PAGINATION_CLASS': 'core.pagination.CustomPageNumberPagination',
     'PAGE_SIZE': 25,
     # Custom exception handler for standardized error format
@@ -183,6 +194,20 @@ REST_FRAMEWORK = {
     ],
 }
 
+# ============================================================================
+# Cache Configuration (Story 17.11 - Rate Limiting)
+# ============================================================================
+# LocMemCache for MVP single-instance. Migrate to Redis for production HA.
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'idp-ratelimit-cache',
+    }
+}
+
+# Rate limiting enable/disable flag (Story 17.11)
+RATELIMIT_ENABLED = os.getenv('RATELIMIT_ENABLED', 'true').lower() == 'true'
+
 # CORS configuration (Story M.8 - Task 7)
 # NOTE: Default value is for development only. MUST be configured via CORS_ORIGIN env var in production.
 CORS_ALLOWED_ORIGINS = [
@@ -195,6 +220,10 @@ CORS_ALLOW_CREDENTIALS = True
 # Expose correlation ID header to frontend for debugging
 CORS_EXPOSE_HEADERS = [
     'X-Idp-Request-Id',
+    'Retry-After',  # Story 17.11 - rate limit headers
+    'X-RateLimit-Limit',
+    'X-RateLimit-Remaining',
+    'X-RateLimit-Reset',
 ]
 
 # Allowed headers from frontend

@@ -231,9 +231,9 @@ development_status:
     17-8-pyproject-toml-lockfile-django-backend: done # 2026-02-06: Code review completed — 13 issues fixed (4 CRITICAL + 6 MEDIUM + 3 LOW), lockfile verification CI added, rollback doc, build-backend fixed, 512 tests pass ✅
     17-9-mypy-bloquant-progressivement: done # 2026-02-07: Code review completed — 8 HIGH + 4 MEDIUM + 2 LOW fixes applied, pre-commit hook added, README created, progress tracking doc added, baseline validation robuste, 89 erreurs tolérées
     17-10-dockerfile-backend-frontend: done # 2026-02-07: Code review adversarial — 11 fixes appliqués (5 HIGH + 6 MEDIUM) — healthcheck URL, secrets protection, CI/CD paths, LOG_LEVEL, collectstatic, build validation, volume cleanup, X-XSS-Protection deprecated
-    17-11-rate-limiting-endpoints-publics: backlog
+    17-11-rate-limiting-endpoints-publics: done # 2026-02-07: Code review completed — 10 issues fixed (7 MEDIUM + 3 LOW), 37 tests pass (29 unit + 8 security), scope collision doc added, XFF spoofing detection, RATELIMIT_ENABLED validation, ExecutionThrottle test added, documentation enhanced ✅
     17-12-systeme-feature-flags: backlog
     17-13-densite-tableau-executions: backlog # UX - reduire hauteur lignes vue Executions
-    17-14-annuler-operation-par-initiateur: backlog # Annuler operation Soumise/En cours (RBAC initiateur)
+    17-14-annuler-operation-par-initiateur: backlog # Annuler Soumise/En cours : initiateur ou admin (RBAC)
     17-15-relancer-operation-memes-parametres: backlog # Relancer sans ressaisie parametres
     epic-17-retrospective: optional

@@ -25,6 +25,7 @@ from core.exceptions import ForbiddenError, UnauthorizedError, NotFoundError
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id
+from core.throttling import AuthEndpointThrottle, TokenRefreshThrottle, PublicEndpointThrottle
 from catalog.models import Action
 
 logger = structlog.get_logger(__name__)
@@ -65,6 +66,7 @@ class SAMLLoginView(APIView):
     When AUTH_DEV_BYPASS is true, skips IdP and redirects to frontend with dev JWT.
     """
     permission_classes = [AllowAny]
+    throttle_classes = [AuthEndpointThrottle]
 
     def get(self, request):
         """Initiate SAML login flow."""
@@ -130,6 +132,7 @@ class SAMLCallbackView(APIView):
     Validates assertion, creates/updates user, emits JWT tokens.
     """
     permission_classes = [AllowAny]
+    throttle_classes = [AuthEndpointThrottle]
 
     def post(self, request):
         """Process SAML callback with assertion."""
@@ -331,6 +334,7 @@ class RefreshTokenView(APIView):
     POST /auth/refresh - Exchange refresh token for access token.
     """
     permission_classes = [AllowAny]
+    throttle_classes = [TokenRefreshThrottle]
 
     def post(self, request):
         """
@@ -397,6 +401,7 @@ class LogoutView(APIView):
     POST /auth/logout - Clear refresh token cookie.
     """
     permission_classes = [AllowAny]
+    throttle_classes = [PublicEndpointThrottle]
 
     def post(self, request):
         """

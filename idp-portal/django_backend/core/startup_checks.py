@@ -108,3 +108,52 @@ def validate_required_secrets(app_env: str, auth_dev_bypass: bool):
     logger.info("secret_validation_success",
                 message=f"✓ Configuration des secrets validée pour environnement {app_env}",
                 environment=app_env, warnings_count=len(warnings), is_dev=is_dev)
+
+
+# Story 17.11: Rate limiting configuration validation
+# Valid formats: "<count>/<period>" where period is second/minute/hour/day (or abbreviations)
+RATE_FORMAT_PATTERN = re.compile(
+    r'^\d+/(second|sec|s|minute|min|m|hour|h|day|d)$', re.IGNORECASE
+)
+
+
+def validate_rate_limit_config():
+    """
+    Validate rate limit configuration at startup.
+
+    Checks that all THROTTLE_*_RATE env vars use valid DRF rate format.
+    Validates that RATELIMIT_ENABLED is a proper boolean value.
+    Raises ImproperlyConfigured if any rate has an invalid format.
+    """
+    # Validate RATELIMIT_ENABLED is a boolean value
+    ratelimit_enabled = os.getenv('RATELIMIT_ENABLED', 'true').lower()
+    if ratelimit_enabled not in ('true', 'false', '1', '0'):
+        error_msg = (
+            "❌ RATE LIMIT: Invalid RATELIMIT_ENABLED value.\n"
+            f"Current value: {os.getenv('RATELIMIT_ENABLED')}\n"
+            "Expected: true, false, 1, or 0"
+        )
+        logger.error("rate_limit_enabled_invalid", value=os.getenv('RATELIMIT_ENABLED'))
+        raise ImproperlyConfigured(error_msg)
+
+    rate_vars = {
+        'THROTTLE_AUTH_RATE': os.getenv('THROTTLE_AUTH_RATE', '10/minute'),
+        'THROTTLE_TOKEN_REFRESH_RATE': os.getenv('THROTTLE_TOKEN_REFRESH_RATE', '20/minute'),
+        'THROTTLE_EXECUTION_RATE': os.getenv('THROTTLE_EXECUTION_RATE', '30/minute'),
+        'THROTTLE_API_RATE': os.getenv('THROTTLE_API_RATE', '100/minute'),
+        'THROTTLE_PUBLIC_RATE': os.getenv('THROTTLE_PUBLIC_RATE', '50/minute'),
+    }
+
+    invalid = []
+    for var_name, value in rate_vars.items():
+        if not RATE_FORMAT_PATTERN.match(value):
+            invalid.append(f"{var_name}={value}")
+
+    if invalid:
+        error_msg = (
+            "❌ RATE LIMIT: Invalid rate format detected.\n"
+            f"Invalid rates: {', '.join(invalid)}\n"
+            "Expected format: <count>/<period> where period is second|minute|hour|day (or s|m|h|d)"
+        )
+        logger.error("rate_limit_config_invalid", invalid_rates=invalid)
+        raise ImproperlyConfigured(error_msg)

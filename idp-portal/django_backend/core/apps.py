@@ -23,3 +23,10 @@ class CoreConfig(AppConfig):
         except ImproperlyConfigured:
             # Re-raise to stop application startup
             raise
+
+        # Story 17.11: Validate rate limit configuration at startup
+        from core.startup_checks import validate_rate_limit_config
+        try:
+            validate_rate_limit_config()
+        except ImproperlyConfigured:
+            raise
