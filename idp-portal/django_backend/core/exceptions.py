@@ -59,6 +59,15 @@ class ForbiddenError(Exception):
         super().__init__(self.message)
 
 
+class ConflictError(Exception):
+    """Exception for 409 Conflict errors (Story 18.1)."""
+    def __init__(self, code="CONFLICT", message="Conflict", details=None):
+        self.code = code
+        self.message = message
+        self.details = details or {}
+        super().__init__(self.message)
+
+
 def _get_request_context(context):
     """Extract request context for logging."""
     request = context.get('request')
@@ -196,6 +205,27 @@ def custom_exception_handler(exc, context):
                 }
             },
             status=status.HTTP_403_FORBIDDEN
+        )
+        resp['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
+        return resp
+
+    if isinstance(exc, ConflictError):
+        logger.warning(
+            "handled_exception",
+            exception_type="ConflictError",
+            code=exc.code,
+            message=exc.message,
+            **request_context
+        )
+        resp = Response(
+            {
+                "error": {
+                    "code": exc.code,
+                    "message": exc.message,
+                    "details": exc.details
+                }
+            },
+            status=status.HTTP_409_CONFLICT
         )
         resp['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
         return resp

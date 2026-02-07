@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
-import { Typography, Button, Table, Space, Card, Tag, Tabs, App, Spin } from 'antd';
+import { Typography, Button, Table, Space, Card, Tag, Tabs, App, Spin, Checkbox, Modal } from 'antd';
 import type { TableProps } from 'antd';
 import {
   PlusOutlined,
@@ -20,6 +20,8 @@ import {
   StopOutlined,
   PlayCircleOutlined,
   ApartmentOutlined,
+  DeleteOutlined,
+  PauseCircleOutlined,
 } from '@ant-design/icons';
 import { ActionWizard } from '../components/admin/ActionWizard';
 import { ActionStatusBadge } from '../components/admin/ActionStatusBadge';
@@ -31,7 +33,8 @@ import { IntegrationForm } from '../components/admin/IntegrationForm';
 
 const AdminAnalyticsDashboard = lazy(() => import('../components/admin/analytics/AdminAnalyticsDashboard'));
 const FeatureFlagsPanel = lazy(() => import('../components/admin/FeatureFlagsPanel').then(m => ({ default: m.FeatureFlagsPanel })));
-import { createAction, getAction, getAdminActions, updateAction, updateActionStatus } from '../services/admin_service';
+import { createAction, getAction, getAdminActions, updateAction, updateActionStatus, deleteAction, deactivateAction, reactivateAction } from '../services/admin_service';
+import type { DeactivateConfirmation } from '../services/admin_service';
 import { getProfiles, getProfile, deleteProfile, exportProfilesYaml } from '../services/profiles_service';
 import { getIntegrations, getIntegration, createIntegration, updateIntegration, deleteIntegration } from '../services/integrations_service';
 import type { ActionCreate, ActionListItem, ActionDetail, ActionResponse, ActionStatus, StatusTransition, AdminActionsFilters, ProfileResponse, ProfileListItem, IntegrationResponse, IntegrationListItem, IntegrationCreate, IntegrationUpdate } from '../types/api';
@@ -43,6 +46,9 @@ const { Title } = Typography;
 const getColumns = (
   onEdit: (record: ActionListItem) => void,
   onStatusChange: (record: ActionListItem, transition: StatusTransition) => void,
+  onDelete: (record: ActionListItem) => void,
+  onDeactivate: (record: ActionListItem) => void,
+  onReactivate: (record: ActionListItem) => void,
   isDark: boolean,
 ): TableProps<ActionListItem>['columns'] => [
   {
@@ -106,7 +112,7 @@ const getColumns = (
   {
     title: '',
     key: 'actions',
-    width: 200,
+    width: 280,
     render: (_: unknown, record: ActionListItem) => (
       <Space size="small">
         {record.status === 'draft' && (
@@ -122,6 +128,18 @@ const getColumns = (
             >
               Publier
             </Button>
+            {/* AC1/AC6: Delete only for draft with 0 executions */}
+            {record.execution_count === 0 && (
+              <Button
+                type="link"
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+                onClick={() => onDelete(record)}
+              >
+                Supprimer
+              </Button>
+            )}
           </>
         )}
         {record.status === 'published' && (
@@ -129,27 +147,41 @@ const getColumns = (
             <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => onEdit(record)}>
               Voir
             </Button>
-            <Button
-              type="link"
-              size="small"
-              danger
-              icon={<StopOutlined />}
-              onClick={() => onStatusChange(record, 'disable')}
-            >
-              Desactiver
-            </Button>
+            {/* AC6: Deactivate for published with executions, delete for published with 0 */}
+            {record.execution_count === 0 ? (
+              <Button
+                type="link"
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+                onClick={() => onDelete(record)}
+              >
+                Supprimer
+              </Button>
+            ) : (
+              <Button
+                type="link"
+                size="small"
+                danger
+                icon={<PauseCircleOutlined />}
+                onClick={() => onDeactivate(record)}
+              >
+                Desactiver
+              </Button>
+            )}
           </>
         )}
         {record.status === 'disabled' && (
           <>
-            <Button type="link" size="small" icon={<EditOutlined />} onClick={() => onEdit(record)}>
-              Modifier
+            <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => onEdit(record)}>
+              Voir
             </Button>
+            {/* AC5: Reactivate for disabled actions */}
             <Button
               type="link"
               size="small"
               icon={<PlayCircleOutlined />}
-              onClick={() => onStatusChange(record, 'enable')}
+              onClick={() => onReactivate(record)}
             >
               Reactiver
             </Button>
@@ -161,7 +193,7 @@ const getColumns = (
 ];
 
 export default function AdminPage() {
-  const { notification } = App.useApp();
+  const { notification, modal } = App.useApp();
   const { effectiveMode } = useTheme();
   const [actions, setActions] = useState<ActionListItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -170,6 +202,14 @@ export default function AdminPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [editAction, setEditAction] = useState<ActionDetail | null>(null);
   const [wizardInitialItemType, setWizardInitialItemType] = useState<'action' | 'workflow' | null>(null);
+
+  // Story 18.1: include disabled actions filter (AC4/AC5)
+  const [includeDisabled, setIncludeDisabled] = useState(false);
+  // Story 18.1: cascade confirmation modal state (AC3)
+  const [cascadeModalOpen, setCascadeModalOpen] = useState(false);
+  const [cascadeAction, setCascadeAction] = useState<ActionListItem | null>(null);
+  const [cascadeWorkflows, setCascadeWorkflows] = useState<{ id: number; name: string; status: string }[]>([]);
+  const [cascadeReason, setCascadeReason] = useState<string>('');
 
   const [profiles, setProfiles] = useState<ProfileListItem[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(false);
@@ -187,7 +227,9 @@ export default function AdminPage() {
   const fetchActions = useCallback(async (filters?: AdminActionsFilters) => {
     setLoading(true);
     try {
-      const response = await getAdminActions(filters);
+      const mergedFilters: AdminActionsFilters = { ...filters };
+      if (includeDisabled) mergedFilters.include_disabled = true;
+      const response = await getAdminActions(mergedFilters);
       setActions(response.data ?? []);
     } catch (err) {
       notification.error({
@@ -197,7 +239,7 @@ export default function AdminPage() {
     } finally {
       setLoading(false);
     }
-  }, [notification]);
+  }, [notification, includeDisabled]);
 
   useEffect(() => {
     fetchActions();
@@ -268,6 +310,98 @@ export default function AdminPage() {
       notification.error({
         title: 'Erreur',
         description: err instanceof Error ? err.message : 'Impossible de changer le statut',
+      });
+    }
+  };
+
+  // Story 18.1 AC1: Hard delete (execution_count=0 only)
+  const handleDelete = (record: ActionListItem) => {
+    modal.confirm({
+      title: 'Supprimer l\'action',
+      content: `Voulez-vous vraiment supprimer definitivement l'action « ${record.name} » ? Cette operation est irreversible.`,
+      okText: 'Supprimer',
+      okType: 'danger',
+      cancelText: 'Annuler',
+      onOk: async () => {
+        try {
+          await deleteAction(record.id);
+          notification.success({
+            message: 'Succes',
+            description: `Action « ${record.name} » supprimee`,
+          });
+          fetchActions();
+        } catch (err) {
+          notification.error({
+            message: 'Erreur',
+            description: err instanceof Error ? err.message : 'Impossible de supprimer l\'action',
+          });
+        }
+      },
+    });
+  };
+
+  // Story 18.1 AC2/AC3: Deactivate (soft-delete) with cascade confirmation
+  const handleDeactivate = async (record: ActionListItem) => {
+    try {
+      const result = await deactivateAction(record.id);
+      if ('status' in result && result.status === 'requires_confirmation') {
+        // AC3: Show cascade confirmation modal with affected workflows
+        const confirmation = result as DeactivateConfirmation;
+        setCascadeAction(record);
+        setCascadeWorkflows(confirmation.affected_workflows);
+        setCascadeReason('');
+        setCascadeModalOpen(true);
+      } else {
+        // No workflows affected — deactivated directly
+        notification.success({
+          message: 'Succes',
+          description: `Action « ${record.name} » desactivee`,
+        });
+        fetchActions();
+      }
+    } catch (err) {
+      notification.error({
+        message: 'Erreur',
+        description: err instanceof Error ? err.message : 'Impossible de desactiver l\'action',
+      });
+    }
+  };
+
+  // Story 18.1 AC3: Confirm cascade deactivation
+  const handleCascadeConfirm = async () => {
+    if (!cascadeAction) return;
+    try {
+      await deactivateAction(cascadeAction.id, cascadeReason || undefined, true);
+      notification.success({
+        message: 'Succes',
+        description: `Action « ${cascadeAction.name} » et ${cascadeWorkflows.length} workflow(s) desactive(s)`,
+      });
+      setCascadeModalOpen(false);
+      setCascadeAction(null);
+      setCascadeWorkflows([]);
+      setCascadeReason('');
+      fetchActions();
+    } catch (err) {
+      notification.error({
+        message: 'Erreur',
+        description: err instanceof Error ? err.message : 'Impossible de desactiver l\'action',
+      });
+    }
+  };
+
+  // Story 18.1 AC5: Reactivate a disabled action
+  const handleReactivate = async (record: ActionListItem) => {
+    try {
+      await reactivateAction(record.id);
+      notification.success({
+        message: 'Succes',
+        description: `Action « ${record.name} » reactivee`,
+      });
+      fetchActions();
+    } catch (err) {
+      notification.error({
+        message: 'Erreur',
+        description: err instanceof Error ? err.message : 'Impossible de reactiver l\'action',
       });
     }
   };
@@ -502,13 +636,26 @@ export default function AdminPage() {
                   body: { paddingTop: 16 },
                 }}
               >
+                {/* Story 18.1 AC4/AC5: Toggle to include disabled actions */}
+                <div style={{ marginBottom: 12 }}>
+                  <Checkbox
+                    checked={includeDisabled}
+                    onChange={(e) => setIncludeDisabled(e.target.checked)}
+                  >
+                    Inclure les actions desactivees
+                  </Checkbox>
+                </div>
                 <Table
-                  columns={getColumns(handleEdit, handleStatusChange, effectiveMode === 'dark')}
+                  columns={getColumns(handleEdit, handleStatusChange, handleDelete, handleDeactivate, handleReactivate, effectiveMode === 'dark')}
                   dataSource={actions}
                   rowKey="id"
                   loading={loading}
                   pagination={{ pageSize: 10, showSizeChanger: true }}
                   locale={{ emptyText: 'Aucune action dans le catalogue' }}
+                  rowClassName={(record) => record.status === 'disabled' ? 'action-row-disabled' : ''}
+                  onRow={(record) => ({
+                    style: record.status === 'disabled' ? { opacity: 0.6 } : undefined,
+                  })}
                 />
               </Card>
             ),
@@ -610,6 +757,44 @@ export default function AdminPage() {
         editIntegration={editIntegration}
         onSuccess={handleIntegrationSuccess}
       />
+
+      {/* Story 18.1 AC3: Cascade confirmation modal for workflow deactivation */}
+      <Modal
+        title="Confirmation de desactivation en cascade"
+        open={cascadeModalOpen}
+        onCancel={() => {
+          setCascadeModalOpen(false);
+          setCascadeAction(null);
+          setCascadeWorkflows([]);
+          setCascadeReason('');
+        }}
+        onOk={handleCascadeConfirm}
+        okText="Confirmer la desactivation"
+        okType="danger"
+        cancelText="Annuler"
+      >
+        <p>
+          L'action <strong>{cascadeAction?.name}</strong> est referencee par{' '}
+          {cascadeWorkflows.length} workflow(s) qui seront egalement desactive(s) :
+        </p>
+        <ul style={{ marginBottom: 16 }}>
+          {cascadeWorkflows.map((wf) => (
+            <li key={wf.id}>
+              {wf.name} <Tag>{wf.status}</Tag>
+            </li>
+          ))}
+        </ul>
+        <div>
+          <Typography.Text type="secondary">Raison (optionnel) :</Typography.Text>
+          <input
+            type="text"
+            value={cascadeReason}
+            onChange={(e) => setCascadeReason(e.target.value)}
+            placeholder="Raison de la desactivation"
+            style={{ width: '100%', marginTop: 4, padding: '4px 8px' }}
+          />
+        </div>
+      </Modal>
     </div>
   );
 }

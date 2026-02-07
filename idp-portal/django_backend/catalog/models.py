@@ -196,7 +196,18 @@ class Action(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
     updated_at = models.DateTimeField(null=True, blank=True, db_column='UPDATED_AT')
-    
+    # Story 18.1: Soft-delete columns for action deactivation
+    deleted_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        db_column='DELETED_BY',
+        related_name='deleted_actions',
+    )
+    deleted_at = models.DateTimeField(null=True, blank=True, db_column='DELETED_AT')
+    deletion_reason = models.CharField(max_length=500, null=True, blank=True, db_column='DELETION_REASON')
+
     # Custom manager
     objects = ActionManager()
 
@@ -207,6 +218,18 @@ class Action(models.Model):
             models.Index(fields=['status'], name='idx_actions_status'),
             models.Index(fields=['status', 'engine'], name='idx_actions_status_engine'),
             models.Index(fields=['status', 'created_at'], name='idx_actions_status_created'),
+            # Story 18.1: Index for soft-delete queries
+            models.Index(fields=['deleted_at'], name='idx_actions_deleted_at'),
+        ]
+        constraints = [
+            # Story 18.1: Ensure consistency between status and deleted_at
+            models.CheckConstraint(
+                check=(
+                    models.Q(status='disabled', deleted_at__isnull=False)
+                    | models.Q(status__in=['draft', 'published'], deleted_at__isnull=True)
+                ),
+                name='ck_actions_soft_delete_consistency',
+            ),
         ]
 
     def __str__(self):

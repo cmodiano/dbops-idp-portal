@@ -270,20 +270,20 @@ class ActionListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'description', 'item_type', 'engine', 'platform',
             'status', 'created_by', 'created_at', 'updated_at',
-            'tags', 'execution_count'
+            'tags', 'execution_count',
+            # Story 18.1: soft-delete fields for admin list
+            'deleted_at', 'deleted_by', 'deletion_reason',
         ]
-    
+
     def get_tags(self, obj):
         """Get tag names from ActionTag relations."""
         if hasattr(obj, 'actiontag_set'):
             return [at.tag.name for at in obj.actiontag_set.all()]
         return list(obj.actiontag_set.values_list('tag__name', flat=True))
-    
+
     def get_execution_count(self, obj):
         """Get execution count from Execution model (computed field)."""
-        # This will be annotated in the ViewSet queryset
         if hasattr(obj, 'execution_count'):
             return obj.execution_count
-        # Fallback: count executions if not annotated
         from executions.models import Execution
         return Execution.objects.filter(action_id=obj.id).count()

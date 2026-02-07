@@ -15,6 +15,9 @@ class AuditActionType(models.TextChoices):
     ACTION_DISABLED = 'ACTION_DISABLED', 'Action Disabled'
     ACTION_ENABLED = 'ACTION_ENABLED', 'Action Enabled'
     ACTION_DELETED = 'ACTION_DELETED', 'Action Deleted'
+    # Story 18.1: Deactivation/reactivation audit types
+    ACTION_DEACTIVATED = 'ACTION_DEACTIVATED', 'Action Deactivated'
+    ACTION_REACTIVATED = 'ACTION_REACTIVATED', 'Action Reactivated'
     # Profile types (added for ProfileService)
     PROFILE_CREATED = 'PROFILE_CREATED', 'Profile Created'
     PROFILE_UPDATED = 'PROFILE_UPDATED', 'Profile Updated'

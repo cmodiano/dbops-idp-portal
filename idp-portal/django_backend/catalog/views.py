@@ -21,7 +21,7 @@ from catalog.serializers import (
 from catalog.services import CatalogService, InvalidTransitionError
 from core.pagination import CustomPageNumberPagination
 from core.permissions import DBOPSProfilePermission, OptionalUserPermission
-from core.exceptions import NotFoundError, BadRequestError, InvalidStateError
+from core.exceptions import NotFoundError, BadRequestError, InvalidStateError, ConflictError
 from core.auth_utils import get_user_ad_groups
 from executions.models import Execution
 from inventory.models import TargetEnvironment
@@ -249,24 +249,32 @@ class ActionViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Filter queryset based on query parameters."""
         queryset = Action.objects.with_tags().with_creator()
-        
+
         # Annotate execution_count for list view
         if self.action == 'list':
             queryset = _annotate_execution_count(queryset)
-        
+
+        # Story 18.1 (AC4/AC5): include_disabled filter — default excludes disabled
+        include_disabled = self.request.query_params.get('include_disabled', 'false').lower() == 'true'
+        if self.action == 'list' and not include_disabled:
+            # Default: exclude disabled actions (AC4)
+            status_filter = self.request.query_params.get('status')
+            if not status_filter:
+                queryset = queryset.filter(status__in=[ActionStatus.DRAFT, ActionStatus.PUBLISHED])
+
         # Filters
         status_filter = self.request.query_params.get('status')
         if status_filter:
             queryset = queryset.filter(status=status_filter)
-        
+
         engine_filter = self.request.query_params.get('engine')
         if engine_filter:
             queryset = queryset.filter(engine=engine_filter)
-        
+
         item_type_filter = self.request.query_params.get('item_type')
         if item_type_filter:
             queryset = queryset.filter(item_type=item_type_filter)
-        
+
         return queryset.order_by('-created_at')
     
     def create(self, request, *args, **kwargs):
@@ -525,6 +533,80 @@ class ActionViewSet(viewsets.ModelViewSet):
         response_serializer = ActionSerializer(action)
 
         return Response({"data": response_serializer.data})
+
+    def destroy(self, request, *args, **kwargs):
+        """DELETE /admin/actions/{id} — Hard delete (only if execution_count=0). Story 18.1 AC1."""
+        instance = self.get_object()
+        service = CatalogService()
+        # ConflictError is raised if execution_count > 0 (propagated to exception handler → 409)
+        deleted = service.delete_action(instance.id, user=request.user)
+        if not deleted:
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message=f"Action {instance.id} introuvable",
+                details={"action_id": instance.id},
+            )
+        _catalog_cache.clear()
+        _tags_cache.clear()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['put'], url_path='deactivate')
+    def deactivate(self, request, pk=None):
+        """PUT /admin/actions/{id}/deactivate — Soft delete with cascade. Story 18.1 AC2/AC3."""
+        instance = self.get_object()
+        service = CatalogService()
+        confirmed = request.query_params.get('confirmed', 'false').lower() == 'true'
+        deletion_reason = request.data.get('deletion_reason')
+
+        # If not confirmed, check for affected workflows and ask for confirmation
+        if not confirmed:
+            affected = service.get_workflows_referencing_action(instance.id)
+            if affected:
+                return Response({
+                    "status": "requires_confirmation",
+                    "affected_workflows": affected,
+                }, status=status.HTTP_200_OK)
+
+        # ConflictError is raised if already disabled (propagated → 409)
+        result = service.deactivate_action(instance.id, user=request.user, deletion_reason=deletion_reason)
+        if result is None:
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message=f"Action {instance.id} introuvable",
+                details={"action_id": instance.id},
+            )
+
+        _catalog_cache.clear()
+        _tags_cache.clear()
+
+        action_obj = result['action']
+        reloaded = service.get_by_id(action_obj.id)
+        serializer = ActionSerializer(reloaded)
+        return Response({
+            "data": serializer.data,
+            "deactivated_workflows": result['deactivated_workflows'],
+        })
+
+    @action(detail=True, methods=['put'], url_path='reactivate')
+    def reactivate(self, request, pk=None):
+        """PUT /admin/actions/{id}/reactivate — Reactivate a disabled action. Story 18.1 AC5."""
+        instance = self.get_object()
+        service = CatalogService()
+        # ConflictError is raised if not disabled (propagated → 409)
+        reactivated = service.reactivate_action(instance.id, user=request.user)
+        if reactivated is None:
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message=f"Action {instance.id} introuvable",
+                details={"action_id": instance.id},
+            )
+
+        _catalog_cache.clear()
+        _tags_cache.clear()
+
+        reloaded = service.get_by_id(reactivated.id)
+        serializer = ActionSerializer(reloaded)
+        return Response({"data": serializer.data})
 
 
 # Story 3.1 AC10: in-memory cache for catalog, TTL 5 min (300s)

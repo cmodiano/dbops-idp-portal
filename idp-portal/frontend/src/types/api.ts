@@ -172,6 +172,10 @@ export interface ActionListItem {
   created_at: string;
   execution_count: number;
   tags?: string[];
+  /** Story 18.1: soft-delete fields (present when include_disabled=true). */
+  deleted_at?: string | null;
+  deleted_by?: number | null;
+  deletion_reason?: string | null;
 }
 
 export interface AdminActionsFilters {
@@ -181,6 +185,8 @@ export interface AdminActionsFilters {
   item_type?: ItemType;
   page?: number;
   page_size?: number;
+  /** Story 18.1 (AC4/AC5): include disabled actions. Default false. */
+  include_disabled?: boolean;
 }
 
 export interface PaginationInfo {

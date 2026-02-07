@@ -41,9 +41,10 @@ export async function getAdminActions(filters?: AdminActionsFilters): Promise<Ac
   if (filters?.engine) params.append('engine', filters.engine);
   if (filters?.page) params.append('page', filters.page.toString());
   if (filters?.page_size) params.append('page_size', filters.page_size.toString());
+  // Story 18.1 (AC4/AC5): include disabled actions filter
+  if (filters?.include_disabled) params.append('include_disabled', 'true');
 
   const queryString = params.toString();
-  // Use apiFetchRaw so we get { data, pagination }; apiFetch would return only body.data (the array).
   return apiFetchRaw<ActionListResponse>(`/admin/actions/${queryString ? `?${queryString}` : ''}`);
 }
 
@@ -203,5 +204,56 @@ export async function updateWorkflowSteps(
   return apiFetch<ActionDetail>(`/admin/actions/${workflowId}/execution-steps/`, {
     method: 'PUT',
     body: JSON.stringify(data),
+  });
+}
+
+// ─── Story 18.1: Delete, Deactivate, Reactivate ───────────────────────────
+
+/** Response from deactivate when workflows need confirmation. */
+export interface DeactivateConfirmation {
+  status: 'requires_confirmation';
+  affected_workflows: { id: number; name: string; status: string }[];
+}
+
+/** Response from deactivate after confirmed. */
+export interface DeactivateResult {
+  data: ActionDetail;
+  deactivated_workflows: { id: number; name: string }[];
+}
+
+/**
+ * Hard-delete an action (only if execution_count=0).
+ * Returns 204 on success, throws ApiError(409) if executions exist.
+ * Story 18.1, AC1.
+ */
+export async function deleteAction(actionId: number): Promise<void> {
+  await apiFetch<void>(`/admin/actions/${actionId}/`, { method: 'DELETE' });
+}
+
+/**
+ * Deactivate (soft-delete) an action.
+ * Without confirmed=true: returns affected workflows if any exist.
+ * With confirmed=true: performs deactivation + cascade.
+ * Story 18.1, AC2/AC3.
+ */
+export async function deactivateAction(
+  actionId: number,
+  reason?: string,
+  confirmed = false,
+): Promise<DeactivateConfirmation | DeactivateResult> {
+  const url = `/admin/actions/${actionId}/deactivate/${confirmed ? '?confirmed=true' : ''}`;
+  return apiFetchRaw<DeactivateConfirmation | DeactivateResult>(url, {
+    method: 'PUT',
+    body: JSON.stringify({ deletion_reason: reason }),
+  });
+}
+
+/**
+ * Reactivate a disabled action (sets status back to 'published').
+ * Story 18.1, AC5.
+ */
+export async function reactivateAction(actionId: number): Promise<ActionDetail> {
+  return apiFetch<ActionDetail>(`/admin/actions/${actionId}/reactivate/`, {
+    method: 'PUT',
   });
 }
