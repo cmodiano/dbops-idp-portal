@@ -229,7 +229,7 @@ development_status:
     17-6-restreindre-exception-catches: done # 2026-02-07: Code review completed — 7 HIGH + 3 MEDIUM fixes applied, dashboard silent exception fixed, test coverage improved 9→13 tests (all pass)
     17-7-remplacer-console-log-logging-frontend: done # 2026-02-07: Code review complete — 12 issues found (4 HIGH + 5 MEDIUM + 3 LOW), 9 auto-fixed, 11/11 tests pass, 0 ESLint violations ✅
     17-8-pyproject-toml-lockfile-django-backend: done # 2026-02-06: Code review completed — 13 issues fixed (4 CRITICAL + 6 MEDIUM + 3 LOW), lockfile verification CI added, rollback doc, build-backend fixed, 512 tests pass ✅
-    17-9-mypy-bloquant-progressivement: backlog
+    17-9-mypy-bloquant-progressivement: done # 2026-02-07: Code review completed — 8 HIGH + 4 MEDIUM + 2 LOW fixes applied, pre-commit hook added, README created, progress tracking doc added, baseline validation robuste, 89 erreurs tolérées
     17-10-dockerfile-backend-frontend: backlog
     17-11-rate-limiting-endpoints-publics: backlog
     17-12-systeme-feature-flags: backlog

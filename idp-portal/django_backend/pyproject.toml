@@ -47,7 +47,12 @@ dev = [
     "factory-boy>=3.3.0",
     "Faker>=26.0.0",
     "httpx>=0.27.0",
+    "django-stubs>=5.1.0",
+    "djangorestframework-stubs>=3.15.0",
     "mypy>=1.10.0",
+    "types-cachetools>=5.3.0",
+    "types-PyYAML>=6.0.0",
+    "types-requests>=2.32.0",
     "pip-audit>=2.7.0",
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
@@ -83,3 +88,63 @@ skips = ["B104"]
 [tool.bandit.assert_used]
 # Allow assert in test files only (already excluded via exclude_dirs)
 skips = ["*_test.py", "test_*.py"]
+
+# Story 17.9: Progressive mypy type checking configuration
+# Strategy: Start permissive globally, tighten per-module over time
+# Baseline approach: block NEW errors, tolerate existing ones
+[tool.mypy]
+python_version = "3.12"
+plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = "$MYPY_CONFIG_FILE_DIR"
+
+# Phase 1: Permissive global settings
+disallow_untyped_defs = false
+disallow_any_generics = false
+disallow_subclassing_any = false
+disallow_untyped_calls = false
+disallow_untyped_decorators = false
+disallow_incomplete_defs = false
+
+# Enabled checks (safe for Phase 1)
+check_untyped_defs = true
+no_implicit_reexport = true
+warn_return_any = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+# Exclusions
+exclude = [
+    "migrations/",
+    "tests/",
+    ".venv/",
+    "venv/",
+    "build/",
+    "dist/",
+    "__pycache__/",
+    ".*/tests\\.py$",
+    "test_settings\\.py$",
+]
+
+[tool.django-stubs]
+django_settings_module = "idp_backend.settings"
+strict_settings = false
+
+# Per-module overrides: stricter on newer modules
+[[tool.mypy.overrides]]
+module = "admin_analytics.*"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = [
+    "oracledb.*",
+    "onelogin.*",
+    "jose.*",
+    "croniter.*",
+]
+ignore_missing_imports = true

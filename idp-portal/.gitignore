@@ -31,3 +31,8 @@ Thumbs.db
 coverage/
 htmlcov/
 .coverage
+
+# Mypy
+.mypy_cache/
+mypy-report.txt
+mypy-html-report/
