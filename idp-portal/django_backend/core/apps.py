@@ -30,3 +30,10 @@ class CoreConfig(AppConfig):
             validate_rate_limit_config()
         except ImproperlyConfigured:
             raise
+
+        # Story 17.12: Validate feature flags configuration at startup
+        from core.startup_checks import validate_feature_flags_config
+        try:
+            validate_feature_flags_config()
+        except ImproperlyConfigured:
+            raise

@@ -29,6 +29,7 @@ import { ProfileImportModal } from '../components/admin/ProfileImportModal';
 import { IntegrationsTable } from '../components/admin/IntegrationsTable';
 import { IntegrationForm } from '../components/admin/IntegrationForm';
 import { AdminAnalyticsDashboard } from '../components/admin/analytics';
+import { FeatureFlagsPanel } from '../components/admin/FeatureFlagsPanel';
 import { createAction, getAction, getAdminActions, updateAction, updateActionStatus } from '../services/admin_service';
 import { getProfiles, getProfile, deleteProfile, exportProfilesYaml } from '../services/profiles_service';
 import { getIntegrations, getIntegration, createIntegration, updateIntegration, deleteIntegration } from '../services/integrations_service';
@@ -556,6 +557,15 @@ export default function AdminPage() {
             children: (
               <Card styles={{ header: { borderBottom: 'none', paddingBottom: 0 }, body: { paddingTop: 16 } }}>
                 <AdminAnalyticsDashboard />
+              </Card>
+            ),
+          },
+          {
+            key: 'feature-flags',
+            label: 'Feature Flags',
+            children: (
+              <Card styles={{ header: { borderBottom: 'none', paddingBottom: 0 }, body: { paddingTop: 16 } }}>
+                <FeatureFlagsPanel />
               </Card>
             ),
           },

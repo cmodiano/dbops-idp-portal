@@ -208,6 +208,18 @@ CACHES = {
 # Rate limiting enable/disable flag (Story 17.11)
 RATELIMIT_ENABLED = os.getenv('RATELIMIT_ENABLED', 'true').lower() == 'true'
 
+# ============================================================================
+# Feature Flags Configuration (Story 17.12)
+# ============================================================================
+# Source: 'env' (from FEATURE_FLAGS JSON env var) or 'database' (from CORE_FEATURE_FLAGS table)
+FEATURE_FLAGS_SOURCE = os.getenv('FEATURE_FLAGS_SOURCE', 'env')
+# Global enable/disable for the feature flags system
+FEATURE_FLAGS_ENABLED = os.getenv('FEATURE_FLAGS_ENABLED', 'true').lower() == 'true'
+# Cache TTL in seconds (default 5 minutes)
+FEATURE_FLAGS_CACHE_TTL = int(os.getenv('FEATURE_FLAGS_CACHE_TTL', '300'))
+# JSON-encoded feature flags from environment (used when FEATURE_FLAGS_SOURCE=env)
+FEATURE_FLAGS = os.getenv('FEATURE_FLAGS', '{}')
+
 # CORS configuration (Story M.8 - Task 7)
 # NOTE: Default value is for development only. MUST be configured via CORS_ORIGIN env var in production.
 CORS_ALLOWED_ORIGINS = [

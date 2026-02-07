@@ -290,6 +290,23 @@ class AuditLogFactory(DjangoModelFactory):
 
 
 # ============================================================================
+# Feature Flag Factory (Story 17.12)
+# ============================================================================
+
+class FeatureFlagFactory(DjangoModelFactory):
+    """Factory for core.FeatureFlag model."""
+
+    class Meta:
+        model = 'core.FeatureFlag'
+
+    flag_key = factory.Sequence(lambda n: f'test_flag_{n}')
+    enabled = True
+    rollout_percent = 100
+    description = factory.LazyAttribute(lambda o: f'Test flag {o.flag_key}')
+    updated_by = 'test_admin'
+
+
+# ============================================================================
 # Batch Factories for Performance Tests
 # ============================================================================
 

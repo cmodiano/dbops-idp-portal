@@ -6,6 +6,7 @@ import { AppLayout } from './components/layout';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { DashboardProvider } from './contexts/DashboardContext';
+import { FeatureFlagProvider } from './contexts/FeatureFlagContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import './styles/glass.css';
 
@@ -97,6 +98,7 @@ function ThemedApp() {
       <AntApp>
         <BrowserRouter>
           <AuthProvider>
+            <FeatureFlagProvider>
             <DashboardProvider>
               <Suspense fallback={null}>
                 <Routes>
@@ -119,6 +121,7 @@ function ThemedApp() {
                 </Routes>
               </Suspense>
             </DashboardProvider>
+            </FeatureFlagProvider>
           </AuthProvider>
         </BrowserRouter>
       </AntApp>

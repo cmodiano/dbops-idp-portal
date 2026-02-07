@@ -52,6 +52,9 @@ class AuditActionType(models.TextChoices):
     EXECUTION_STEP_RETRY_SUCCESS = 'EXECUTION_STEP_RETRY_SUCCESS', 'Execution Step Retry Success'
     EXECUTION_STEP_RETRY_EXHAUSTED = 'EXECUTION_STEP_RETRY_EXHAUSTED', 'Execution Step Retry Exhausted'
     EXECUTION_STEP_RETRY_ABORTED = 'EXECUTION_STEP_RETRY_ABORTED', 'Execution Step Retry Aborted'
+    # Story 17.12: Feature flag audit types
+    FEATURE_FLAG_UPDATED = 'FEATURE_FLAG_UPDATED', 'Feature Flag Updated'
+    FEATURE_FLAG_CREATED = 'FEATURE_FLAG_CREATED', 'Feature Flag Created'
     # Additional types added in later migrations (V028-V035, V039-V041)
     # Note: Full list would include all types from migrations, but base types are sufficient for model
 
@@ -65,6 +68,7 @@ class AuditEntityType(models.TextChoices):
     INTEGRATION = 'integration', 'Integration'
     SCHEDULED_EXECUTION = 'scheduled_execution', 'Scheduled Execution'
     PROFILE = 'profile', 'Profile'
+    FEATURE_FLAG = 'feature_flag', 'Feature Flag'
     # Additional types may exist in later migrations
 
 
@@ -224,3 +228,57 @@ class AuditLog(models.Model):
             self.details = json.dumps(value)
         else:
             self.details = None
+
+
+class FeatureFlag(models.Model):
+    """
+    Story 17.12: Feature flag model for centralized flag management.
+    Maps to Oracle CORE_FEATURE_FLAGS table.
+    """
+    id = models.BigAutoField(primary_key=True, db_column='ID')
+    flag_key = models.CharField(
+        max_length=100,
+        unique=True,
+        db_column='FLAG_KEY',
+        help_text='Unique key for the feature flag (e.g., new_workflow_builder)',
+    )
+    enabled = models.BooleanField(default=False, db_column='ENABLED')
+    rollout_percent = models.IntegerField(
+        default=100,
+        db_column='ROLLOUT_PERCENT',
+        help_text='Percentage of users to enable (0-100)',
+    )
+    description = models.CharField(
+        max_length=500,
+        blank=True,
+        default='',
+        db_column='DESCRIPTION',
+    )
+    updated_at = models.DateTimeField(auto_now=True, db_column='UPDATED_AT')
+    updated_by = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        db_column='UPDATED_BY',
+    )
+
+    class Meta:
+        db_table = 'CORE_FEATURE_FLAGS'
+        ordering = ['flag_key']
+
+    def __str__(self):
+        status = 'ON' if self.enabled else 'OFF'
+        return f"{self.flag_key} ({status}, {self.rollout_percent}%)"
+
+    def clean(self):
+        """Validate rollout_percent is 0-100."""
+        from django.core.exceptions import ValidationError
+        if self.rollout_percent < 0 or self.rollout_percent > 100:
+            raise ValidationError({
+                'rollout_percent': 'Rollout percent must be between 0 and 100.',
+            })
+
+    def save(self, *args, **kwargs):
+        """HIGH-3 fix: Call full_clean() before save to ensure validation."""
+        self.full_clean()
+        super().save(*args, **kwargs)

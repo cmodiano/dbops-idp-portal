@@ -22,6 +22,7 @@ from tests.factories import (
     RecurringPatternFactory,
     AuditLogFactory,
     TagFactory,
+    FeatureFlagFactory,
 )
 
 

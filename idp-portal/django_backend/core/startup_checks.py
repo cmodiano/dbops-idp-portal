@@ -157,3 +157,97 @@ def validate_rate_limit_config():
         )
         logger.error("rate_limit_config_invalid", invalid_rates=invalid)
         raise ImproperlyConfigured(error_msg)
+
+
+# Story 17.12: Feature flags configuration validation
+def validate_feature_flags_config():
+    """
+    Validate feature flags configuration at startup.
+
+    Checks:
+    - FEATURE_FLAGS_SOURCE is 'env' or 'database'
+    - FEATURE_FLAGS_ENABLED is a boolean
+    - FEATURE_FLAGS_CACHE_TTL is a positive integer
+    - FEATURE_FLAGS JSON is valid (when source=env)
+
+    Raises ImproperlyConfigured if critical configuration is invalid in production.
+    """
+    import json
+
+    app_env = os.getenv('APP_ENV', 'development').lower()
+    is_dev = app_env == 'development'
+
+    # Validate FEATURE_FLAGS_SOURCE
+    source = os.getenv('FEATURE_FLAGS_SOURCE', 'env').lower()
+    if source not in ('env', 'database'):
+        error_msg = (
+            "❌ FEATURE FLAGS: Invalid FEATURE_FLAGS_SOURCE value.\n"
+            f"Current value: {source}\n"
+            "Expected: env or database"
+        )
+        logger.error("feature_flags_source_invalid", value=source)
+        raise ImproperlyConfigured(error_msg)
+
+    # Validate FEATURE_FLAGS_ENABLED
+    enabled_raw = os.getenv('FEATURE_FLAGS_ENABLED', 'true').lower()
+    if enabled_raw not in ('true', 'false', '1', '0'):
+        error_msg = (
+            "❌ FEATURE FLAGS: Invalid FEATURE_FLAGS_ENABLED value.\n"
+            f"Current value: {os.getenv('FEATURE_FLAGS_ENABLED')}\n"
+            "Expected: true, false, 1, or 0"
+        )
+        logger.error("feature_flags_enabled_invalid", value=os.getenv('FEATURE_FLAGS_ENABLED'))
+        raise ImproperlyConfigured(error_msg)
+
+    # Validate FEATURE_FLAGS_CACHE_TTL
+    ttl_raw = os.getenv('FEATURE_FLAGS_CACHE_TTL', '300')
+    try:
+        ttl = int(ttl_raw)
+        if ttl < 0:
+            raise ValueError("negative")
+    except (ValueError, TypeError):
+        error_msg = (
+            "❌ FEATURE FLAGS: Invalid FEATURE_FLAGS_CACHE_TTL value.\n"
+            f"Current value: {ttl_raw}\n"
+            "Expected: positive integer (seconds)"
+        )
+        logger.error("feature_flags_cache_ttl_invalid", value=ttl_raw)
+        raise ImproperlyConfigured(error_msg)
+
+    # Validate FEATURE_FLAGS JSON (when source=env)
+    if source == 'env':
+        raw_flags = os.getenv('FEATURE_FLAGS', '{}')
+        if raw_flags:
+            try:
+                parsed = json.loads(raw_flags)
+                if not isinstance(parsed, dict):
+                    raise ValueError("must be a JSON object")
+                flag_count = len(parsed)
+            except (json.JSONDecodeError, ValueError) as e:
+                if is_dev:
+                    logger.warning(
+                        "feature_flags_json_invalid",
+                        error=str(e),
+                        message="Invalid FEATURE_FLAGS JSON - using empty config",
+                    )
+                    flag_count = 0
+                else:
+                    error_msg = (
+                        "❌ FEATURE FLAGS: Invalid FEATURE_FLAGS JSON.\n"
+                        f"Error: {e}\n"
+                        "Expected: valid JSON object"
+                    )
+                    logger.error("feature_flags_json_invalid", error=str(e))
+                    raise ImproperlyConfigured(error_msg)
+        else:
+            flag_count = 0
+    else:
+        flag_count = 0  # Database source - count not available at startup
+
+    logger.info(
+        "feature_flags_config_validated",
+        source=source,
+        enabled=enabled_raw in ('true', '1'),
+        cache_ttl=int(ttl_raw),
+        flag_count=flag_count,
+    )
