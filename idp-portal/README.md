@@ -70,7 +70,8 @@ Pour Oracle Docker, définir les variables d'environnement Oracle (voir section 
 cd django_backend
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+pip install uv
+uv pip install -r requirements-dev.lock  # ou --system si dans Docker/CI
 
 # Variables d'environnement (ou dans .env)
 export ORACLE_HOST=localhost

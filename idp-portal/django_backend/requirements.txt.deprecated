@@ -1,3 +1,15 @@
+# DEPRECATED - Story 17.8 (2026-02-06)
+# This file will be permanently removed on 2026-02-20 (2-week validation period).
+# Use pyproject.toml + lockfiles instead.
+#
+# - Source of truth: pyproject.toml
+# - Production install: uv pip install -r requirements.lock
+# - Development install: uv pip install -r requirements-dev.lock
+#
+# See docs/dependency-management.md for details.
+#
+# --- Original content below (for reference) ---
+#
 # Django Backend
 # Python 3.12+ required
 

@@ -1,6 +1,74 @@
 # Django Backend Configuration
-# Story 15.1: Security audit configuration
+# Story 17.8: pyproject.toml + lockfile for reproducible builds
+# Story 15.1: Security audit configuration (Bandit)
 
+[project]
+name = "idp-portal-backend"
+version = "1.0.0"
+description = "Internal Developer Portal - Django REST API Backend"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "Proprietary"}
+authors = [
+    {name = "DB Automation Team"}
+]
+keywords = ["database", "automation", "portal", "devops"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Web Environment",
+    "Framework :: Django :: 5.1",
+    "Intended Audience :: Information Technology",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "cachetools>=5.3.0",
+    "croniter>=6.0.0",
+    "Django>=5.1.0,<6.0",
+    "django-cors-headers>=4.3.0",
+    "djangorestframework>=3.15.0",
+    "gunicorn>=22.0.0",
+    "oracledb>=3.4.1",
+    "python-dotenv>=1.0.0",
+    "python-jose[cryptography]>=3.3.0",
+    "python3-saml>=1.16.0",
+    "PyYAML>=6.0.0",
+    "requests>=2.32.5",
+    "structlog>=24.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "bandit[toml]>=1.7.5",
+    "coverage[toml]>=7.6.0",
+    "detect-secrets>=1.5.0",
+    "factory-boy>=3.3.0",
+    "Faker>=26.0.0",
+    "httpx>=0.27.0",
+    "mypy>=1.10.0",
+    "pip-audit>=2.7.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-benchmark>=4.0.0",
+    "pytest-cov>=5.0.0",
+    "pytest-django>=4.8.0",
+    "pytest-mock>=3.15.0",
+    "ruff>=0.8.0",
+]
+
+[project.urls]
+Homepage = "https://internal-portal.company.com"
+Documentation = "https://docs.internal-portal.company.com"
+Repository = "https://github.com/company/idp-portal"
+Issues = "https://github.com/company/idp-portal/issues"
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+# Story 15.1: Security audit configuration
 [tool.bandit]
 # Directories to exclude from analysis
 exclude_dirs = ["tests", "migrations", "__pycache__", ".git", ".venv", "venv"]

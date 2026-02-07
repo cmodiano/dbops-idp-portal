@@ -56,11 +56,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install uv
+        run: pip install uv
       - name: Install dependencies
         working-directory: django_backend
         run: |
-          pip install mypy>=1.10 django-stubs djangorestframework-stubs
-          pip install -r requirements.txt
+          uv pip install -r requirements-dev.lock --system
+          pip install django-stubs djangorestframework-stubs
       - name: Run mypy
         working-directory: django_backend
         run: |
@@ -92,9 +94,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install uv
+        run: pip install uv
       - name: Install dependencies
         working-directory: django_backend
-        run: pip install -r requirements.txt
+        run: uv pip install -r requirements-dev.lock --system
       - name: Run pytest
         working-directory: django_backend
         env:
@@ -217,7 +221,7 @@ jobs:
           ssh -i ~/.ssh/deploy_key \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
             "cd ${{ secrets.DEPLOY_PATH }}/django_backend && \
-             pip install -r requirements.txt && \
+             pip install uv && uv pip install -r requirements.lock --system && \
              python manage.py collectstatic --noinput && \
              python manage.py migrate --check && \
              sudo systemctl restart idp-django" || {

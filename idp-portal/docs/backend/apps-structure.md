@@ -19,7 +19,9 @@ django_backend/
 ├── core/                  # App: Fonctionnalités transverses
 ├── tests/                 # Tests d'intégration globaux
 ├── manage.py              # Script Django management
-└── requirements.txt       # Dépendances Python
+├── pyproject.toml         # Métadonnées et dépendances Python
+├── requirements.lock      # Lockfile runtime (production)
+└── requirements-dev.lock  # Lockfile dev (runtime + outils)
 ```
 
 ## Structure standard d'une app

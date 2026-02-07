@@ -65,7 +65,8 @@ venv\Scripts\activate
 
 3. Installer les dépendances:
 ```bash
-pip install -r requirements.txt
+pip install uv
+uv pip install -r requirements-dev.lock
 ```
 
 ### Configuration Base de Données

@@ -36,6 +36,33 @@ jobs:
         working-directory: frontend
         run: npm run lint
 
+  verify-lockfiles:
+    name: Verify Lockfiles Up-to-Date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        run: pip install uv
+      - name: Verify requirements.lock is up-to-date
+        working-directory: django_backend
+        run: |
+          uv pip compile pyproject.toml -o requirements.lock.check --python-version 3.12
+          diff -u requirements.lock requirements.lock.check || {
+            echo "❌ requirements.lock is out of date! Run: uv pip compile pyproject.toml -o requirements.lock --python-version 3.12"
+            exit 1
+          }
+      - name: Verify requirements-dev.lock is up-to-date
+        working-directory: django_backend
+        run: |
+          uv pip compile pyproject.toml --extra dev -o requirements-dev.lock.check --python-version 3.12
+          diff -u requirements-dev.lock requirements-dev.lock.check || {
+            echo "❌ requirements-dev.lock is out of date! Run: uv pip compile pyproject.toml --extra dev -o requirements-dev.lock --python-version 3.12"
+            exit 1
+          }
+
   typecheck-backend:
     name: Type Check Django Backend (mypy)
     runs-on: ubuntu-latest
@@ -44,11 +71,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install uv
+        run: pip install uv
       - name: Install dependencies
         working-directory: django_backend
         run: |
-          pip install mypy>=1.10 django-stubs djangorestframework-stubs
-          pip install -r requirements.txt
+          uv pip install -r requirements-dev.lock --system
+          pip install django-stubs djangorestframework-stubs
       - name: Run mypy
         working-directory: django_backend
         run: |
@@ -80,9 +109,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install uv
+        run: pip install uv
       - name: Install dependencies
         working-directory: django_backend
-        run: pip install -r requirements.txt
+        run: uv pip install -r requirements-dev.lock --system
       - name: Run pytest
         working-directory: django_backend
         env:
@@ -155,9 +186,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install uv
+        run: pip install uv
       - name: Install dependencies
         working-directory: django_backend
-        run: pip install -r requirements.txt
+        run: uv pip install -r requirements-dev.lock --system
       - name: Run security functional tests
         working-directory: django_backend
         env:
@@ -211,9 +244,11 @@ jobs:
           python-version: "3.12"
       - name: Install pip-audit
         run: pip install pip-audit>=2.7.0
+      - name: Install uv
+        run: pip install uv
       - name: Install project dependencies
         working-directory: django_backend
-        run: pip install -r requirements.txt
+        run: uv pip install -r requirements.lock --system
       - name: Run pip-audit
         working-directory: django_backend
         run: |
