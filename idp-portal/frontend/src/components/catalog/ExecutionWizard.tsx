@@ -33,6 +33,7 @@ import { fetchCatalogActionById } from '../../services/catalog_service';
 import { fetchInventoryItems, fetchInventoryTargets } from '../../services/execution_service';
 import { useDebounce } from '../../hooks/useDebounce';
 import { STYLE_TOKENS } from '../../theme/styleTokens';
+import type { WizardInitialParams } from '../../types/wizard';
 import type { Target } from './TargetSelector';
 import { matchGlob } from '../../utils/globMatch';
 import { extractParameterFields } from '../../hooks/useDynamicForm';
@@ -69,6 +70,8 @@ export interface ExecutionWizardProps {
   variant?: 'default' | 'simplified';
   onSuggestionClick?: (suggestion: RemediationSuggestion) => void;
   parentExecutionId?: number | null;
+  /** Story 17.15: Initial parameters to pre-fill the wizard (restart execution). */
+  initialParams?: WizardInitialParams;
 }
 
 function evaluateImpact(
@@ -128,6 +131,7 @@ export function ExecutionWizard({
   variant = 'default',
   onSuggestionClick,
   parentExecutionId,
+  initialParams,
 }: ExecutionWizardProps) {
   const { notification } = App.useApp();
   const schedulingValidation = useSchedulingValidation();
@@ -229,13 +233,29 @@ export function ExecutionWizard({
       setSelectedTargets([]); setTargetInputMode('list'); setTargetPattern('');
       setManualTargetInput(''); setResolvedPatternTargets([]);
       resetScheduling();
-      if (action.requires_target === false && allowedEnvironments.length === 1) {
+
+      // Story 17.15: Apply initialParams for restart execution
+      if (initialParams?.environment) {
+        setSelectedEnvironment(initialParams.environment as ExecutionEnvironment);
+      } else if (action.requires_target === false && allowedEnvironments.length === 1) {
         setSelectedEnvironment(allowedEnvironments[0] as ExecutionEnvironment);
       } else {
         setSelectedEnvironment(null);
       }
+
+      // Story 17.15: Pre-fill target names via manual input mode
+      if (initialParams?.targetNames && initialParams.targetNames.length > 0) {
+        setTargetInputMode('manual');
+        setManualTargetInput(initialParams.targetNames.join(', '));
+      }
+
+      // Story 17.15: Pre-fill dynamic parameters
+      if (initialParams?.parameters && Object.keys(initialParams.parameters).length > 0) {
+        setParameters(initialParams.parameters);
+        form.setFieldsValue(initialParams.parameters);
+      }
     }
-  }, [open, action, form, notification, onCancel, allowedEnvironments, setSubmitError, resetScheduling]);
+  }, [open, action, form, notification, onCancel, allowedEnvironments, setSubmitError, resetScheduling, initialParams]);
 
   // Load workflow step actions
   useEffect(() => {

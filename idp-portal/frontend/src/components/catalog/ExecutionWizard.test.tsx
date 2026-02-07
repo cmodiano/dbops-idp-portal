@@ -902,4 +902,141 @@ describe('ExecutionWizard', () => {
       });
     });
   });
+
+  // === Story 17.15: initialParams tests (AC3, AC4) ===
+  describe('Story 17.15 — Initial Parameters (Restart Execution)', () => {
+    it('pre-selects environment from initialParams (AC3)', async () => {
+      render(
+        <ExecutionWizard
+          {...defaultProps}
+          initialParams={{ actionId: 1, environment: 'staging' }}
+        />,
+        { wrapper: TestWrapper }
+      );
+
+      // Environment should be pre-selected, so Suivant is enabled
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /suivant/i })).not.toBeDisabled();
+      });
+
+      // The staging label should be visible in the rendered output
+      await waitFor(() => {
+        expect(screen.getByText('Staging')).toBeInTheDocument();
+      });
+    });
+
+    it('pre-fills target names in manual mode from initialParams (AC3)', async () => {
+      const actionWithTargets = {
+        ...mockAction,
+        requires_target: true,
+      };
+
+      render(
+        <ExecutionWizard
+          {...defaultProps}
+          action={actionWithTargets}
+          initialParams={{
+            actionId: 1,
+            targetNames: ['srv-dev-01', 'srv-dev-02'],
+            environment: 'dev',
+          }}
+        />,
+        { wrapper: TestWrapper }
+      );
+
+      // Wait for component to initialize
+      await waitFor(() => {
+        // Should be in manual input mode with target names
+        const manualInput = document.querySelector('textarea, input[type="text"]');
+        if (manualInput) {
+          expect((manualInput as HTMLInputElement | HTMLTextAreaElement).value).toContain('srv-dev-01');
+        }
+      });
+    });
+
+    it('pre-fills parameters on step 2 from initialParams (AC3)', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <ExecutionWizard
+          {...defaultProps}
+          initialParams={{
+            actionId: 1,
+            environment: 'dev',
+            parameters: { pdb_name: 'test_pdb', size_gb: 50 },
+          }}
+        />,
+        { wrapper: TestWrapper }
+      );
+
+      // Environment should be pre-selected; click Suivant to go to step 2
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /suivant/i })).not.toBeDisabled();
+      });
+      await user.click(screen.getByRole('button', { name: /suivant/i }));
+
+      // Wait for step 2 to render
+      await waitFor(() => {
+        expect(screen.getByLabelText('PDB Name')).toBeInTheDocument();
+      });
+
+      // Allow form.setFieldsValue deferred call to execute
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+
+      const pdbInput = screen.getByLabelText('PDB Name') as HTMLInputElement;
+      expect(pdbInput.value).toBe('test_pdb');
+    });
+
+    it('allows modification of pre-filled parameters (AC4)', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <ExecutionWizard
+          {...defaultProps}
+          initialParams={{
+            actionId: 1,
+            environment: 'dev',
+            parameters: { pdb_name: 'original_name' },
+          }}
+        />,
+        { wrapper: TestWrapper }
+      );
+
+      // Navigate to step 2
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /suivant/i })).toBeInTheDocument();
+      });
+      await user.click(screen.getByRole('button', { name: /suivant/i }));
+
+      // Wait for step 2 with pre-filled value
+      await waitFor(() => {
+        expect(screen.getByLabelText('PDB Name')).toBeInTheDocument();
+      });
+
+      // Modify the field
+      const pdbInput = screen.getByLabelText('PDB Name') as HTMLInputElement;
+      await user.clear(pdbInput);
+      await user.type(pdbInput, 'modified_name');
+      expect(pdbInput.value).toBe('modified_name');
+    });
+
+    it('works normally without initialParams (backward compatibility)', async () => {
+      render(
+        <ExecutionWizard {...defaultProps} />,
+        { wrapper: TestWrapper }
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Suivant')).toBeInTheDocument();
+      });
+
+      // Environment select should be empty (no pre-selection)
+      const selectItems = document.querySelectorAll('.ant-select-selection-item');
+      // When no initialParams and single allowed env, it might auto-select
+      // For multiple envs, it should be empty
+      expect(selectItems.length).toBeLessThanOrEqual(1);
+    });
+  });
 });

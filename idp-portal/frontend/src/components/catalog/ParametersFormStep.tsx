@@ -230,7 +230,19 @@ export const ParametersFormStep = memo(function ParametersFormStep({
                       ? sanitizeDescription(field.description)
                       : field.description;
 
-                    return (
+                    return (stepIndex === 0 && index === 0) ? (
+                      <div key={`${step.order}-${field.name}`} ref={(ref) => { firstFieldRef.current = ref?.querySelector('input, select, [role="combobox"]') as HTMLElement; }}>
+                        <Form.Item
+                          name={['workflow_step_parameters', stepKey, 'parameters', field.name]}
+                          label={field.label}
+                          rules={rules}
+                          tooltip={displayDescription ? { title: displayDescription, icon: <InfoCircleOutlined /> } : undefined}
+                          style={{ marginBottom: 12 }}
+                        >
+                          {renderFieldInput(field, inventoryData, inventoryWarnings, loadingInventory)}
+                        </Form.Item>
+                      </div>
+                    ) : (
                       <Form.Item
                         key={`${step.order}-${field.name}`}
                         name={['workflow_step_parameters', stepKey, 'parameters', field.name]}
@@ -239,13 +251,7 @@ export const ParametersFormStep = memo(function ParametersFormStep({
                         tooltip={displayDescription ? { title: displayDescription, icon: <InfoCircleOutlined /> } : undefined}
                         style={{ marginBottom: 12 }}
                       >
-                        {(stepIndex === 0 && index === 0) ? (
-                          <div ref={(ref) => { firstFieldRef.current = ref?.querySelector('input, select, [role="combobox"]') as HTMLElement; }}>
-                            {renderFieldInput(field, inventoryData, inventoryWarnings, loadingInventory)}
-                          </div>
-                        ) : (
-                          renderFieldInput(field, inventoryData, inventoryWarnings, loadingInventory)
-                        )}
+                        {renderFieldInput(field, inventoryData, inventoryWarnings, loadingInventory)}
                       </Form.Item>
                     );
                   })
@@ -276,7 +282,18 @@ export const ParametersFormStep = memo(function ParametersFormStep({
               ? sanitizeDescription(field.description)
               : field.description;
 
-            return (
+            return index === 0 ? (
+              <div key={field.name} ref={(ref) => { firstFieldRef.current = ref?.querySelector('input, select, [role="combobox"]') as HTMLElement; }}>
+                <Form.Item
+                  name={field.name}
+                  label={field.label}
+                  rules={rules}
+                  tooltip={displayDescription ? { title: displayDescription, icon: <InfoCircleOutlined /> } : undefined}
+                >
+                  {renderFieldInput(field, inventoryData, inventoryWarnings, loadingInventory)}
+                </Form.Item>
+              </div>
+            ) : (
               <Form.Item
                 key={field.name}
                 name={field.name}
@@ -284,13 +301,7 @@ export const ParametersFormStep = memo(function ParametersFormStep({
                 rules={rules}
                 tooltip={displayDescription ? { title: displayDescription, icon: <InfoCircleOutlined /> } : undefined}
               >
-                {index === 0 ? (
-                  <div ref={(ref) => { firstFieldRef.current = ref?.querySelector('input, select, [role="combobox"]') as HTMLElement; }}>
-                    {renderFieldInput(field, inventoryData, inventoryWarnings, loadingInventory)}
-                  </div>
-                ) : (
-                  renderFieldInput(field, inventoryData, inventoryWarnings, loadingInventory)
-                )}
+                {renderFieldInput(field, inventoryData, inventoryWarnings, loadingInventory)}
               </Form.Item>
             );
           })

@@ -40,6 +40,17 @@ vi.mock('../services/execution_service');
 vi.mock('../services/integrations_service', () => ({
   getIntegrations: vi.fn().mockResolvedValue([]),
 }));
+vi.mock('../services/catalog_service', () => ({
+  fetchCatalogActionById: vi.fn().mockResolvedValue({
+    data: { id: 1, name: 'Test', status: 'published' },
+    can_execute: true,
+    allowed_environments: ['dev', 'staging', 'prod'],
+  }),
+  fetchCatalogActions: vi.fn().mockResolvedValue([]),
+}));
+vi.mock('../components/catalog/ExecutionWizard', () => ({
+  ExecutionWizard: ({ open }: { open: boolean }) => open ? <div data-testid="execution-wizard">Wizard</div> : null,
+}));
 vi.mock('../hooks/useWebSocket', () => ({
   useWebSocket: () => ({ steps: [], execution: null, loading: false, error: null }),
 }));

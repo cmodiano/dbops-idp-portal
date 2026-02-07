@@ -53,6 +53,7 @@ import {
   SyncOutlined,
   ExclamationCircleOutlined,
   CloseCircleOutlined,
+  RedoOutlined,
 } from '@ant-design/icons';
 import type { TableProps, TablePaginationConfig } from 'antd';
 import {
@@ -92,6 +93,11 @@ import type {
   DashboardStats,
   DashboardTimeSeriesPoint,
 } from '../types/api';
+import type { WizardInitialParams } from '../types/wizard';
+import { ExecutionWizard } from '../components/catalog/ExecutionWizard';
+import { fetchCatalogActionById } from '../services/catalog_service';
+import type { CatalogActionDetail } from '../services/catalog_service';
+import { prepareWizardParamsFromExecution } from '../utils/executionHelpers';
 import logger from '../services/logger';
 
 const { Title } = Typography;
@@ -107,6 +113,9 @@ const MESSAGES = {
   CANCEL_CONFIRM_CONTENT: 'Êtes-vous sûr de vouloir annuler cette exécution ? Cette action est irréversible.',
   CANCEL_CONFIRM_OK: 'Confirmer',
   CANCEL_CONFIRM_CANCEL: 'Annuler',
+  RESTART_ACTION_UNAVAILABLE: 'Action non disponible — impossible de relancer cette exécution',
+  RESTART_ERROR_TITLE: 'Erreur de relance',
+  RESTART_ERROR_FALLBACK: 'Erreur lors de la préparation de la relance',
 } as const;
 
 /** Running statuses that appear first with visual indicator (AC3, Story 9.9 AC2). */
@@ -333,6 +342,13 @@ export default function ExecutionsPage() {
   // Story 17.14: Cancel execution state
   const [cancellingId, setCancellingId] = useState<number | null>(null);
 
+  // Story 17.15: Restart execution state
+  const [restartWizardOpen, setRestartWizardOpen] = useState(false);
+  const [restartAction, setRestartAction] = useState<CatalogActionDetail | null>(null);
+  const [restartAllowedEnvs, setRestartAllowedEnvs] = useState<string[]>([]);
+  const [restartInitialParams, setRestartInitialParams] = useState<WizardInitialParams | undefined>(undefined);
+  const [restartLoadingId, setRestartLoadingId] = useState<number | null>(null);
+
   // Story 17.14 AC3: Handle cancel execution with confirmation modal
   const handleCancelExecution = useCallback((executionId: number) => {
     Modal.confirm({
@@ -357,6 +373,55 @@ export default function ExecutionsPage() {
       },
     });
   }, [fetchData, currentPage, activeScope]);
+
+  // Story 17.15 AC1, AC2: Handle restart execution — load action and open wizard
+  const handleRestartExecution = useCallback(async (execution: ExecutionResponse) => {
+    logger.debug('Restart execution requested', { executionId: execution.id, actionId: execution.action_id });
+
+    // AC6: Check if action exists
+    if (!execution.action_id) {
+      notification.error({ message: MESSAGES.RESTART_ERROR_TITLE, description: MESSAGES.RESTART_ACTION_UNAVAILABLE });
+      logger.error('Restart failed: no action_id', { executionId: execution.id });
+      return;
+    }
+
+    setRestartLoadingId(execution.id);
+    try {
+      const response = await fetchCatalogActionById(execution.action_id);
+      const wizardParams = prepareWizardParamsFromExecution(execution);
+
+      if (!wizardParams) {
+        notification.error({ message: MESSAGES.RESTART_ERROR_TITLE, description: MESSAGES.RESTART_ACTION_UNAVAILABLE });
+        logger.error('Restart failed: could not prepare params', { executionId: execution.id });
+        return;
+      }
+
+      setRestartAction(response.data);
+      setRestartAllowedEnvs(response.allowed_environments);
+      setRestartInitialParams(wizardParams);
+      setRestartWizardOpen(true);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : MESSAGES.RESTART_ERROR_FALLBACK;
+      notification.error({ message: MESSAGES.RESTART_ERROR_TITLE, description: message });
+      logger.error('Restart execution failed', { executionId: execution.id, error: message });
+    } finally {
+      setRestartLoadingId(null);
+    }
+  }, [notification]);
+
+  // Story 17.15: Close restart wizard and refresh
+  const handleRestartWizardClose = useCallback(() => {
+    setRestartWizardOpen(false);
+    setRestartAction(null);
+    setRestartAllowedEnvs([]);
+    setRestartInitialParams(undefined);
+  }, []);
+
+  const handleRestartSuccess = useCallback((executionId: number) => {
+    handleRestartWizardClose();
+    fetchData(currentPage, activeScope);
+    logger.debug('Restart execution created', { executionId });
+  }, [handleRestartWizardClose, fetchData, currentPage, activeScope]);
 
   // Story 8.8: Callback after approval/rejection - refresh both lists
   const handleApprovalComplete = useCallback(() => {
@@ -522,37 +587,56 @@ export default function ExecutionsPage() {
         render: (_: unknown, record: ExecutionResponse) =>
           formatDuration(record.started_at, record.completed_at),
       },
-      // Story 17.14 AC1, AC2: Colonne Actions avec bouton Annuler
+      // Story 17.14 AC1, AC2; Story 17.15 AC1, AC2: Colonne Actions avec boutons Annuler et Relancer
       {
         title: 'Actions',
         key: 'actions',
-        width: 70,
+        width: 100,
         align: 'center' as const,
         render: (_: unknown, record: ExecutionResponse) => {
           const isCancellable = record.status === 'SUBMITTED' || record.status === 'RUNNING';
           const canCancel = isCancellable && (
             record.user_id === user?.id || canViewAll
           );
-          if (!canCancel) return null;
+          // Story 17.15 AC1, AC2: Restart visible for initiator OR admin (DBA/DBOPS)
+          const canRestart = record.user_id === user?.id || canViewAll;
+
+          if (!canCancel && !canRestart) return null;
           return (
-            <Tooltip title="Annuler l'exécution">
-              <Button
-                type="text"
-                danger
-                size="small"
-                icon={<CloseCircleOutlined />}
-                aria-label="Annuler"
-                loading={cancellingId === record.id}
-                onClick={(e) => { e.stopPropagation(); handleCancelExecution(record.id); }}
-              />
-            </Tooltip>
+            <Space size={4}>
+              {canRestart && (
+                <Tooltip title="Relancer l'exécution avec les mêmes paramètres">
+                  <Button
+                    type="default"
+                    size="small"
+                    icon={<RedoOutlined />}
+                    aria-label="Relancer"
+                    loading={restartLoadingId === record.id}
+                    onClick={(e) => { e.stopPropagation(); handleRestartExecution(record); }}
+                  />
+                </Tooltip>
+              )}
+              {canCancel && (
+                <Tooltip title="Annuler l'exécution">
+                  <Button
+                    type="text"
+                    danger
+                    size="small"
+                    icon={<CloseCircleOutlined />}
+                    aria-label="Annuler"
+                    loading={cancellingId === record.id}
+                    onClick={(e) => { e.stopPropagation(); handleCancelExecution(record.id); }}
+                  />
+                </Tooltip>
+              )}
+            </Space>
           );
         },
       },
     );
 
     return baseColumns;
-  }, [activeScope, sortField, sortOrder, integrationIconsMap, user, canViewAll, cancellingId, handleCancelExecution]);
+  }, [activeScope, sortField, sortOrder, integrationIconsMap, user, canViewAll, cancellingId, handleCancelExecution, restartLoadingId, handleRestartExecution]);
 
   // Skeleton table during loading (AC4, Task 1.4: skeleton rows; Story 9.9: updated column order)
   if (loading && executions.length === 0) {
@@ -722,6 +806,16 @@ export default function ExecutionsPage() {
           />
         ) : null}
       </Drawer>
+
+      {/* Story 17.15: Restart execution wizard */}
+      <ExecutionWizard
+        open={restartWizardOpen}
+        action={restartAction}
+        allowedEnvironments={restartAllowedEnvs}
+        onCancel={handleRestartWizardClose}
+        onSuccess={handleRestartSuccess}
+        initialParams={restartInitialParams}
+      />
     </div>
   );
 }
