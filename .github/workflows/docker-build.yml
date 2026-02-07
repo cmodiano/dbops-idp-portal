@@ -98,6 +98,6 @@ jobs:
             -p 8080:80 \
             ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
           sleep 5
-          curl -f http://localhost:8080/ || echo "Frontend smoke test completed"
+          curl -f http://localhost:8080/
           docker stop frontend-test || true
           docker rm frontend-test || true
