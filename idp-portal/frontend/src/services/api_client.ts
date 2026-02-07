@@ -25,20 +25,36 @@ export function setAuthAccessors(
   _onRefreshNeeded = refreshFn;
 }
 
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = _getAccessToken();
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(init?.headers as Record<string, string> ?? {}),
-  };
+// --- Internal helpers (centralised auth / retry / error logic) ---
+
+/** Build HTTP headers with optional auth token and content type. */
+export function buildHeaders(
+  token: string | null,
+  contentType?: string,
+  customHeaders?: Record<string, string>,
+): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (contentType) {
+    headers['Content-Type'] = contentType;
+  }
+  if (customHeaders) {
+    Object.assign(headers, customHeaders);
+  }
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
+  return headers;
+}
 
+/** Fetch with automatic 401 retry after token refresh. */
+export async function handleAuthenticatedFetch(
+  path: string,
+  init: RequestInit,
+  headers: Record<string, string>,
+): Promise<Response> {
   let response = await fetch(`${API_BASE}${path}`, { ...init, headers });
 
-  // 401 interceptor: attempt token refresh and retry once
-  if (response.status === 401 && token) {
+  if (response.status === 401 && _getAccessToken()) {
     const newToken = await _onRefreshNeeded();
     if (newToken) {
       headers['Authorization'] = `Bearer ${newToken}`;
@@ -46,30 +62,47 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     }
   }
 
-  if (!response.ok) {
-    let errorMessage = 'Unknown error';
-    let responseBody: ApiError['responseBody'];
-    const contentType = response.headers.get('content-type');
-    const isJson = contentType?.includes('application/json');
+  return response;
+}
 
-    if (isJson) {
-      try {
-        const body = await response.json();
-        responseBody = body;
-        errorMessage = body.error?.message ?? `Erreur HTTP ${response.status}`;
-      } catch {
-        errorMessage = `Erreur HTTP ${response.status}: ${response.statusText}`;
-      }
-    } else {
-      try {
-        const text = await response.text();
-        errorMessage = text || `Erreur HTTP ${response.status}: ${response.statusText}`;
-      } catch {
-        errorMessage = `Erreur HTTP ${response.status}: ${response.statusText}`;
-      }
+/** Parse a non-ok Response into an error message and optional body. */
+export async function parseErrorResponse(
+  response: Response,
+  captureBody = false,
+): Promise<{ message: string; body?: ApiError['responseBody'] }> {
+  const contentType = response.headers.get('content-type');
+  const isJson = contentType?.includes('application/json');
+
+  if (isJson) {
+    try {
+      const body = await response.json();
+      const message = body.error?.message ?? `Erreur HTTP ${response.status}`;
+      return { message, body: captureBody ? body : undefined };
+    } catch {
+      return { message: `Erreur HTTP ${response.status}: ${response.statusText}` };
     }
-    throw new ApiError(errorMessage, response.status, responseBody);
   }
+
+  try {
+    const text = await response.text();
+    return { message: text || `Erreur HTTP ${response.status}: ${response.statusText}` };
+  } catch {
+    return { message: `Erreur HTTP ${response.status}: ${response.statusText}` };
+  }
+}
+
+// --- Public API functions ---
+
+export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = _getAccessToken();
+  const headers = buildHeaders(token, 'application/json', init?.headers as Record<string, string>);
+  const response = await handleAuthenticatedFetch(path, init ?? {}, headers);
+
+  if (!response.ok) {
+    const { message, body } = await parseErrorResponse(response, true);
+    throw new ApiError(message, response.status, body);
+  }
+
   if (response.status === 204) return undefined as T;
   const body = await response.json();
   return body.data as T;
@@ -82,47 +115,14 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
  */
 export async function apiFetchRaw<T>(path: string, init?: RequestInit): Promise<T> {
   const token = _getAccessToken();
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(init?.headers as Record<string, string> ?? {}),
-  };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  let response = await fetch(`${API_BASE}${path}`, { ...init, headers });
-
-  // 401 interceptor: attempt token refresh and retry once
-  if (response.status === 401 && token) {
-    const newToken = await _onRefreshNeeded();
-    if (newToken) {
-      headers['Authorization'] = `Bearer ${newToken}`;
-      response = await fetch(`${API_BASE}${path}`, { ...init, headers });
-    }
-  }
+  const headers = buildHeaders(token, 'application/json', init?.headers as Record<string, string>);
+  const response = await handleAuthenticatedFetch(path, init ?? {}, headers);
 
   if (!response.ok) {
-    let errorMessage = 'Unknown error';
-    const contentType = response.headers.get('content-type');
-    const isJson = contentType?.includes('application/json');
-    
-    if (isJson) {
-      try {
-        const body = await response.json();
-        errorMessage = body.error?.message ?? `Erreur HTTP ${response.status}`;
-      } catch {
-        errorMessage = `Erreur HTTP ${response.status}: ${response.statusText}`;
-      }
-    } else {
-      try {
-        const text = await response.text();
-        errorMessage = text || `Erreur HTTP ${response.status}: ${response.statusText}`;
-      } catch {
-        errorMessage = `Erreur HTTP ${response.status}: ${response.statusText}`;
-      }
-    }
-    throw new ApiError(errorMessage, response.status);
+    const { message } = await parseErrorResponse(response);
+    throw new ApiError(message, response.status);
   }
+
   if (response.status === 204) return undefined as T;
   return await response.json() as T;
 }
@@ -130,78 +130,28 @@ export async function apiFetchRaw<T>(path: string, init?: RequestInit): Promise<
 /** GET and return response as Blob (e.g. file download). Uses auth. */
 export async function apiFetchBlob(path: string): Promise<Blob> {
   const token = _getAccessToken();
-  const headers: Record<string, string> = {};
-  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const headers = buildHeaders(token);
+  const response = await handleAuthenticatedFetch(path, { method: 'GET' }, headers);
 
-  let response = await fetch(`${API_BASE}${path}`, { method: 'GET', headers });
-  if (response.status === 401 && token) {
-    const newToken = await _onRefreshNeeded();
-    if (newToken) {
-      headers['Authorization'] = `Bearer ${newToken}`;
-      response = await fetch(`${API_BASE}${path}`, { method: 'GET', headers });
-    }
-  }
   if (!response.ok) {
-    let errorMessage = 'Unknown error';
-    const contentType = response.headers.get('content-type');
-    const isJson = contentType?.includes('application/json');
-    
-    if (isJson) {
-      try {
-        const body = await response.json();
-        errorMessage = body.error?.message ?? `Erreur HTTP ${response.status}`;
-      } catch {
-        errorMessage = `Erreur HTTP ${response.status}: ${response.statusText}`;
-      }
-    } else {
-      try {
-        const text = await response.text();
-        errorMessage = text || `Erreur HTTP ${response.status}: ${response.statusText}`;
-      } catch {
-        errorMessage = `Erreur HTTP ${response.status}: ${response.statusText}`;
-      }
-    }
-    throw new ApiError(errorMessage, response.status);
+    const { message } = await parseErrorResponse(response);
+    throw new ApiError(message, response.status);
   }
+
   return response.blob();
 }
 
 /** POST FormData (no Content-Type header). Returns unwrapped data from JSON body. Uses auth. */
 export async function apiPostFormData<T>(path: string, formData: FormData): Promise<{ data: T }> {
   const token = _getAccessToken();
-  const headers: Record<string, string> = {};
-  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const headers = buildHeaders(token);
+  const response = await handleAuthenticatedFetch(path, { method: 'POST', body: formData }, headers);
 
-  let response = await fetch(`${API_BASE}${path}`, { method: 'POST', headers, body: formData });
-  if (response.status === 401 && token) {
-    const newToken = await _onRefreshNeeded();
-    if (newToken) {
-      headers['Authorization'] = `Bearer ${newToken}`;
-      response = await fetch(`${API_BASE}${path}`, { method: 'POST', headers, body: formData });
-    }
-  }
   if (!response.ok) {
-    let errorMessage = 'Unknown error';
-    const contentType = response.headers.get('content-type');
-    const isJson = contentType?.includes('application/json');
-    
-    if (isJson) {
-      try {
-        const body = await response.json();
-        errorMessage = body.error?.message ?? `Erreur HTTP ${response.status}`;
-      } catch {
-        errorMessage = `Erreur HTTP ${response.status}: ${response.statusText}`;
-      }
-    } else {
-      try {
-        const text = await response.text();
-        errorMessage = text || `Erreur HTTP ${response.status}: ${response.statusText}`;
-      } catch {
-        errorMessage = `Erreur HTTP ${response.status}: ${response.statusText}`;
-      }
-    }
-    throw new ApiError(errorMessage, response.status);
+    const { message } = await parseErrorResponse(response);
+    throw new ApiError(message, response.status);
   }
+
   const body = await response.json();
   return body as { data: T };
 }

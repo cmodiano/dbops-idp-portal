@@ -21,7 +21,13 @@ describe('auth_service', () => {
   });
 
   it('refreshAccessToken returns null on failure', async () => {
-    global.fetch = vi.fn().mockResolvedValue({ ok: false });
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      headers: { get: () => 'application/json' },
+      json: async () => ({ error: { message: 'Invalid refresh token' } }),
+    });
     const result = await refreshAccessToken();
     expect(result).toBeNull();
   });
@@ -41,7 +47,13 @@ describe('auth_service', () => {
   });
 
   it('fetchCurrentUser returns null on failure', async () => {
-    global.fetch = vi.fn().mockResolvedValue({ ok: false });
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      statusText: 'Forbidden',
+      headers: { get: () => 'application/json' },
+      json: async () => ({ error: { message: 'Access denied' } }),
+    });
     const result = await fetchCurrentUser('bad');
     expect(result).toBeNull();
   });

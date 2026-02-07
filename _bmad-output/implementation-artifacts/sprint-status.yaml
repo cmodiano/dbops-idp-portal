@@ -223,7 +223,7 @@ development_status:
     epic-17: in-progress
     17-1-finaliser-migration-backend-decommissionner-fastapi: done # 2026-02-06: Code review terminé — 10 issues fixées (3 HIGH + 4 MEDIUM + 3 LOW), décommissionnement FastAPI 100% validé ✅
     17-2-refactoriser-composants-frontend-volumineux: done # 2026-02-06: Refactoring Phases 1-3 complétées — ExecutionWizard 2035→536 lignes (-73%), 5 hooks + 4 composants créés, 85 tests passent ✅
-    17-3-eliminer-duplication-api-client: backlog
+    17-3-eliminer-duplication-api-client: done # 2026-02-06: Code review — 10 issues fixés (3 HIGH + 4 MEDIUM + 3 LOW), 81/81 tests passent ✅
     17-4-oracle-json-field-modele-action: backlog
     17-5-securiser-gestion-secrets: backlog
     17-6-restreindre-exception-catches: backlog
