@@ -7,6 +7,6 @@ from django.urls import path
 from reference.views import list_engines, list_platforms
 
 urlpatterns = [
-    path('engines', list_engines, name='reference-engines'),
-    path('platforms', list_platforms, name='reference-platforms'),
+    path('engines/', list_engines, name='reference-engines'),
+    path('platforms/', list_platforms, name='reference-platforms'),
 ]

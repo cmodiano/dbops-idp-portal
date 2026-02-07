@@ -27,6 +27,13 @@ export function setAuthAccessors(
 
 // --- Internal helpers (centralised auth / retry / error logic) ---
 
+/** Ensure path has a trailing slash before any query string (avoids Django APPEND_SLASH 301s). */
+function ensureTrailingSlash(path: string): string {
+  const [base, query] = path.split('?', 2);
+  const slashed = base.endsWith('/') ? base : `${base}/`;
+  return query !== undefined ? `${slashed}?${query}` : slashed;
+}
+
 /** Build HTTP headers with optional auth token and content type. */
 export function buildHeaders(
   token: string | null,
@@ -52,13 +59,14 @@ export async function handleAuthenticatedFetch(
   init: RequestInit,
   headers: Record<string, string>,
 ): Promise<Response> {
-  let response = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  const url = `${API_BASE}${ensureTrailingSlash(path)}`;
+  let response = await fetch(url, { ...init, headers });
 
   if (response.status === 401 && _getAccessToken()) {
     const newToken = await _onRefreshNeeded();
     if (newToken) {
       headers['Authorization'] = `Bearer ${newToken}`;
-      response = await fetch(`${API_BASE}${path}`, { ...init, headers });
+      response = await fetch(url, { ...init, headers });
     }
   }
 

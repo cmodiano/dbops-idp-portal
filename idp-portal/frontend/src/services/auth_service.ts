@@ -12,7 +12,7 @@ const API_BASE = '/api/v1';
 
 export async function refreshAccessToken(): Promise<string | null> {
   try {
-    const res = await fetch(`${API_BASE}/auth/refresh`, {
+    const res = await fetch(`${API_BASE}/auth/refresh/`, {
       method: 'POST',
       credentials: 'include',
     });
@@ -32,7 +32,7 @@ export async function refreshAccessToken(): Promise<string | null> {
 export async function fetchCurrentUser(token: string): Promise<User | null> {
   try {
     const headers = buildHeaders(token);
-    const res = await fetch(`${API_BASE}/auth/me`, { headers });
+    const res = await fetch(`${API_BASE}/auth/me/`, { headers });
     if (!res.ok) {
       const { message } = await parseErrorResponse(res);
       logger.warn('fetchCurrentUser failed', { message });
@@ -49,7 +49,7 @@ export async function fetchCurrentUser(token: string): Promise<User | null> {
 export async function logoutApi(): Promise<void> {
   // Best effort logout - don't throw if network fails
   try {
-    await fetch(`${API_BASE}/auth/logout`, {
+    await fetch(`${API_BASE}/auth/logout/`, {
       method: 'POST',
       credentials: 'include',
     });

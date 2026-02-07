@@ -16,5 +16,5 @@ urlpatterns = [
     # Integrations CRUD: /api/v1/admin/integrations/*
     path('admin/integrations/', include(router.urls)),
     # Upload icon: /api/v1/admin/integrations/upload-icon
-    path('admin/integrations/upload-icon', UploadIconView.as_view(), name='upload-icon'),
+    path('admin/integrations/upload-icon/', UploadIconView.as_view(), name='upload-icon'),
 ]

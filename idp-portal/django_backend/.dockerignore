@@ -1,0 +1,56 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.benchmarks/
+
+# Environment files (secrets)
+.env*
+!.env.production.template
+
+# Development files
+*.log
+.coverage
+.coveragerc
+htmlcov/
+security-reports/
+mypy-report.txt
+.mypy-baseline-count
+
+# Git
+.git/
+.gitignore
+
+# Documentation (not needed in prod)
+docs/
+README.md
+MIGRATION_STRATEGY.md
+*.md
+
+# Tests (not needed in prod)
+tests/
+pytest.ini
+run_tests.sh
+
+# Dev dependencies lockfile
+requirements-dev.lock
+requirements.txt.deprecated
+
+# IDE
+.vscode/
+.idea/
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Pre-commit
+.pre-commit-config.yaml
+
+# Build artifacts
+deployment/
+scripts/

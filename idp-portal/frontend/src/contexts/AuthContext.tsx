@@ -58,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [accessToken]);
 
   const login = useCallback(() => {
-    window.location.href = '/api/v1/auth/saml/login';
+    window.location.href = '/api/v1/auth/saml/login/';
   }, []);
 
   const refreshTokenFn = useCallback(async (): Promise<string | null> => {

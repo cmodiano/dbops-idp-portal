@@ -1,0 +1,41 @@
+# Dependencies (will be installed in container)
+node_modules/
+
+# Build output (will be built in container)
+dist/
+.vite/
+
+# Environment files (secrets)
+# WARNING: .env files should NEVER be copied into Docker images
+# Vite injects env vars at BUILD time, not runtime
+.env*
+
+# Development files
+*.log
+coverage/
+.pytest_cache/
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+README.md
+FRONTEND-STANDARDS.md
+docs/
+*.md
+
+# Tests
+src/**/*.test.*
+src/**/*.spec.*
+
+# IDE
+.vscode/
+.idea/
+
+# Security reports
+security-reports/
+
+# Docker
+Dockerfile
+.dockerignore

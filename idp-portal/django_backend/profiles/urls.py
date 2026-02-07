@@ -15,8 +15,8 @@ urlpatterns = [
     path('', include(profiles_router.urls)),
     
     # Export YAML: /api/v1/admin/profiles/export
-    path('profiles/export', views.ProfileExportView.as_view(), name='profile-export'),
-    
+    path('profiles/export/', views.ProfileExportView.as_view(), name='profile-export'),
+
     # Import YAML: /api/v1/admin/profiles/import
-    path('profiles/import', views.ProfileImportView.as_view(), name='profile-import'),
+    path('profiles/import/', views.ProfileImportView.as_view(), name='profile-import'),
 ]

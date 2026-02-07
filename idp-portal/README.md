@@ -173,6 +173,59 @@ Le flag `is_business_profile` est retourné par l'API `/auth/me` et conditionne 
 
 **Important :** Ce script est réservé à la base de développement. Il refuse de s'exécuter si `APP_ENV` n'est pas `development` ou si `--env=dev` n'est pas spécifié. En cas d'échec du script après un `--reset`, la base reste vide (rollback automatique).
 
+## Build Docker Images
+
+### Build individuel
+
+```bash
+# Backend Django (Gunicorn)
+docker build -t idp-backend:latest ./django_backend
+
+# Frontend React/Vite (Nginx)
+docker build -t idp-frontend:latest ./frontend
+```
+
+### Docker Compose (orchestration complète)
+
+Démarrer tous les services (Oracle + Backend + Frontend) :
+
+```bash
+docker compose up -d
+```
+
+Démarrer uniquement la base de données :
+
+```bash
+docker compose up -d oracle-db
+```
+
+Builder et démarrer backend + frontend :
+
+```bash
+docker compose up -d --build backend frontend
+```
+
+### Ports exposés
+
+| Service | Port local | Description |
+|---------|-----------|-------------|
+| Oracle DB | 1521 | SQL*Net |
+| Backend | 8000 | API Django (Gunicorn) |
+| Frontend | 8080 | SPA React (Nginx) |
+
+### Variables d'environnement (production)
+
+Le backend nécessite des variables d'environnement pour les secrets et la configuration.
+Voir `django_backend/.env.production.template` pour la liste complète.
+
+En développement avec Docker Compose, les variables sont pré-configurées dans `docker-compose.yml`.
+
+### Notes production vs développement
+
+- **Développement** : `docker compose up -d` utilise les valeurs par défaut (Oracle local, AUTH_DEV_BYPASS=true)
+- **Production** : Construire les images et les déployer avec des variables d'environnement sécurisées (Vault, secrets CI/CD). Ne jamais utiliser `AUTH_DEV_BYPASS=true` en production.
+- Les images Docker ne contiennent pas de fichiers `.env` — les secrets sont injectés via variables d'environnement runtime.
+
 ## Structure
 
 - `frontend/` : Application React
@@ -180,7 +233,7 @@ Le flag `is_business_profile` est retourné par l'API `/auth/me` et conditionne 
 - `database/` : Migrations SQL Flyway (`migrations/`), script d'init utilisateur (`init/`)
 - `scripts/` : Scripts utilitaires (`run_migrations.sh`, `seed_dev_data.py`, `post-switchover-validation.sh`)
 - `docs/` : Documentation technique (migration, déploiement, architecture)
-- `docker-compose.yml` : Service Oracle pour le dev local
+- `docker-compose.yml` : Services Docker (Oracle, Backend, Frontend)
 
 ### Documentation
 

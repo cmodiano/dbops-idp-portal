@@ -6,40 +6,113 @@ services:
     image: container-registry.oracle.com/database/free:latest
     container_name: dbops-oracle
     hostname: oracle-db
-    
+
     environment:
       - ORACLE_PWD=Oracle123!
       - ORACLE_CHARACTERSET=AL32UTF8
       # Enable APEX (pre-installed in 23ai)
       - ENABLE_APEX=true
-      
+
     ports:
       - "1521:1521"    # SQL*Net
       - "5500:5500"    # EM Express
-      
+
     volumes:
       - oracle-data:/opt/oracle/oradata
-    
+
     healthcheck:
       test: ["CMD", "bash", "-c", "echo 'SELECT 1 FROM DUAL;' | sqlplus -s sys/Oracle123!@//localhost:1521/FREEPDB1 as sysdba | grep -q '1'"]
       interval: 30s
       timeout: 10s
       retries: 20
       start_period: 300s
-    
+
+    networks:
+      - idp-network
     restart: unless-stopped
 
   # ==========================================================================
+  # Container 2: Backend Django (Gunicorn)
+  # ==========================================================================
+  backend:
+    build:
+      context: ./django_backend
+      dockerfile: Dockerfile
+    container_name: idp-backend
+    hostname: backend
+
+    environment:
+      - DJANGO_SETTINGS_MODULE=idp_backend.settings
+      - DEBUG=true
+      - AUTH_DEV_BYPASS=true
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - ALLOWED_HOSTS=*
+      - CORS_ORIGIN=http://localhost:8080
+      - ORACLE_DSN=oracle-db:1521/FREEPDB1
+      - ORACLE_USER=IDP_APP
+      - ORACLE_PASSWORD=Oracle123!
+      - DJANGO_LOG_LEVEL=INFO
+      - LOG_FORMAT=json
+
+
+    ports:
+      - "8000:8000"
+
+    depends_on:
+      oracle-db:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+    networks:
+      - idp-network
+    restart: unless-stopped
+
+  # ==========================================================================
+  # Container 3: Frontend React/Vite (Nginx)
+  # ==========================================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_MODE: docker
+    container_name: idp-frontend
+    hostname: frontend
+
+    ports:
+      - "8080:80"
+
+    depends_on:
+      - backend
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    networks:
+      - idp-network
+    restart: unless-stopped
+
+# ============================================================================
+# Volumes
+# ============================================================================
 volumes:
   oracle-data:
     name: dbops-oracle-data
-  ords-config:
-    name: dbops-ords-config
 
 # ============================================================================
 # Réseau
 # ============================================================================
 networks:
-  dbops-network:
-    name: dbops-network
+  idp-network:
+    name: idp-network
     driver: bridge
