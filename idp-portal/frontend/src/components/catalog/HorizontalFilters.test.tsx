@@ -1,8 +1,8 @@
 /**
- * Tests for HorizontalFilters component (Story 8.7, AC5).
+ * Tests for HorizontalFilters component (Story 8.7, AC5; Story 18.4: Environment filter removed).
  */
 
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { HorizontalFilters, IMPACT_OPTIONS } from './HorizontalFilters';
 
@@ -18,43 +18,30 @@ vi.mock('../../hooks/useEngines', () => ({
   }),
 }));
 
-vi.mock('../../hooks/useEnvironments', () => ({
-  useEnvironments: () => ({
-    environmentOptions: [
-      { value: 'dev', label: 'Développement' },
-      { value: 'staging', label: 'Staging' },
-      { value: 'prod', label: 'Production' },
-    ],
-    loading: false,
-    error: null,
-    environments: ['dev', 'staging', 'prod'],
-  }),
-}));
-
 describe('HorizontalFilters', () => {
   const defaultProps = {
     selectedEngines: [],
-    selectedEnvironments: [],
     selectedImpacts: [],
     onEnginesChange: vi.fn(),
-    onEnvironmentsChange: vi.fn(),
     onImpactsChange: vi.fn(),
   };
 
-  it('renders 3 Select dropdowns', () => {
+  it('renders 2 Select dropdowns: Moteur and Impact (Story 18.4: Environment removed)', () => {
     render(<HorizontalFilters {...defaultProps} />);
 
     expect(screen.getByText('Moteur')).toBeInTheDocument();
-    expect(screen.getByText('Environnement')).toBeInTheDocument();
     expect(screen.getByText('Impact')).toBeInTheDocument();
+    // Story 18.4: Environment filter removed
+    expect(screen.queryByText('Environnement')).not.toBeInTheDocument();
   });
 
   it('renders with correct placeholders', () => {
     render(<HorizontalFilters {...defaultProps} />);
 
     expect(screen.getByText('Tous les moteurs')).toBeInTheDocument();
-    expect(screen.getByText('Tous les environnements')).toBeInTheDocument();
     expect(screen.getByText('Tous les impacts')).toBeInTheDocument();
+    // Story 18.4: Environment placeholder removed
+    expect(screen.queryByText('Tous les environnements')).not.toBeInTheDocument();
   });
 
   it('renders with selected engines prop', () => {
@@ -65,20 +52,7 @@ describe('HorizontalFilters', () => {
       />
     );
 
-    // Verify component renders without error with selected values
     expect(container.querySelector('.ant-select')).toBeInTheDocument();
-  });
-
-  it('renders with selected environments prop', () => {
-    const { container } = render(
-      <HorizontalFilters
-        {...defaultProps}
-        selectedEnvironments={['PROD', 'DEV']}
-      />
-    );
-
-    // Verify component renders without error with selected values
-    expect(container.querySelectorAll('.ant-select').length).toBe(3);
   });
 
   it('renders with selected impacts prop', () => {
@@ -89,20 +63,12 @@ describe('HorizontalFilters', () => {
       />
     );
 
-    // Verify component renders without error with selected values
     expect(container.querySelector('.ant-select')).toBeInTheDocument();
   });
 
   it('has correct engine options defined', () => {
-    // Story 13.7: options now come from useEngines hook (mocked in this test)
     render(<HorizontalFilters {...defaultProps} />);
     expect(screen.getByLabelText('Filtrer par moteur')).toBeInTheDocument();
-  });
-
-  it('has correct environment options defined', () => {
-    // Story 13.7: options now come from useEnvironments hook (mocked in this test)
-    render(<HorizontalFilters {...defaultProps} />);
-    expect(screen.getByLabelText('Filtrer par environnement')).toBeInTheDocument();
   });
 
   it('has correct impact options defined', () => {
@@ -113,11 +79,19 @@ describe('HorizontalFilters', () => {
     ]);
   });
 
-  it('has ARIA labels for accessibility', () => {
+  it('has ARIA labels for accessibility (2 filters only)', () => {
     render(<HorizontalFilters {...defaultProps} />);
 
     expect(screen.getByLabelText('Filtrer par moteur')).toBeInTheDocument();
-    expect(screen.getByLabelText('Filtrer par environnement')).toBeInTheDocument();
     expect(screen.getByLabelText('Filtrer par impact')).toBeInTheDocument();
+    // Story 18.4: Environment ARIA label removed
+    expect(screen.queryByLabelText('Filtrer par environnement')).not.toBeInTheDocument();
+  });
+
+  it('renders 2 columns with sm=12 layout (Story 18.4)', () => {
+    const { container } = render(<HorizontalFilters {...defaultProps} />);
+
+    const selects = container.querySelectorAll('.ant-select');
+    expect(selects).toHaveLength(2);
   });
 });

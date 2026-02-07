@@ -118,8 +118,9 @@ export default function CatalogPage() {
   const [filterTags, setFilterTags] = useState<string[]>([]);
 
   // Story 8.7: Multi-select filters (replaces single-select)
+  // Story 18.4: filterEnvironments removed (environment = target property, not action)
+  // Filters remaining: Engines and Impacts only (2 columns layout sm=12)
   const [filterEngines, setFilterEngines] = useState<string[]>([]);
-  const [filterEnvironments, setFilterEnvironments] = useState<string[]>([]);
   const [filterImpacts, setFilterImpacts] = useState<string[]>([]);
 
   const [tagsWithCounts, setTagsWithCounts] = useState<CatalogTagWithCount[]>([]);
@@ -144,15 +145,15 @@ export default function CatalogPage() {
     setLoading(true);
     try {
       // Story 8.7: Include category in API call
-      // NOTE: Backend API currently supports only single engine/environment/impact value (not arrays)
+      // Story 18.4: environment parameter removed (environment = target property)
+      // NOTE: Backend API currently supports only single engine/impact value (not arrays)
       // HorizontalFilters uses multi-select UI but we send only the first selected value
-      // TODO: Enhance backend to support multi-value filters (e.g., ?engine=Oracle&engine=SQL%20Server)
+      // Future enhancement: Support multi-value filters for engine and impact
       const [actionsData, favoritesData, tagsData] = await Promise.all([
         fetchCatalogActions({
           tags: filterTags.length > 0 ? filterTags : undefined,
           q: debouncedQ.trim() || undefined,
           engine: filterEngines.length > 0 ? filterEngines[0] : undefined,
-          environment: filterEnvironments.length > 0 ? filterEnvironments[0] : undefined,
           impact: filterImpacts.length > 0 ? filterImpacts[0] : undefined,
           category: activeCategory !== 'tout' && activeCategory !== 'mes-actions' ? activeCategory : undefined,
         }),
@@ -175,25 +176,23 @@ export default function CatalogPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeCategory, debouncedQ, filterTags, filterEngines, filterEnvironments, filterImpacts, message]);
+  }, [activeCategory, debouncedQ, filterTags, filterEngines, filterImpacts, message]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
   const hasActiveFilters =
-    filterTags.length > 0 ||
     filterEngines.length > 0 ||
-    filterEnvironments.length > 0 ||
     filterImpacts.length > 0 ||
-    searchText.trim().length > 0 ||
-    (activeCategory !== 'tout' && activeCategory !== 'mes-actions');
+    filterTags.length > 0 ||
+    (activeCategory !== 'tout' && activeCategory !== 'mes-actions') ||
+    searchText.trim().length > 0;
 
   const resetFilters = useCallback(() => {
     setSearchText('');
     setFilterTags([]);
     setFilterEngines([]);
-    setFilterEnvironments([]);
     setFilterImpacts([]);
     setActiveCategory('tout');
   }, []);
@@ -431,10 +430,8 @@ export default function CatalogPage() {
       {activeCategory !== 'mes-actions' && (
         <HorizontalFilters
           selectedEngines={filterEngines}
-          selectedEnvironments={filterEnvironments}
           selectedImpacts={filterImpacts}
           onEnginesChange={setFilterEngines}
-          onEnvironmentsChange={setFilterEnvironments}
           onImpactsChange={setFilterImpacts}
         />
       )}
@@ -444,12 +441,10 @@ export default function CatalogPage() {
         activeCategory={activeCategory}
         selectedTags={filterTags}
         selectedEngines={filterEngines}
-        selectedEnvironments={filterEnvironments}
         selectedImpacts={filterImpacts}
         onRemoveCategory={() => setActiveCategory('tout')}
         onRemoveTag={(tag) => setFilterTags((prev) => prev.filter((t) => t !== tag))}
         onRemoveEngine={(engine) => setFilterEngines((prev) => prev.filter((e) => e !== engine))}
-        onRemoveEnvironment={(env) => setFilterEnvironments((prev) => prev.filter((e) => e !== env))}
         onRemoveImpact={(impact) => setFilterImpacts((prev) => prev.filter((i) => i !== impact))}
         onClearAll={resetFilters}
       />

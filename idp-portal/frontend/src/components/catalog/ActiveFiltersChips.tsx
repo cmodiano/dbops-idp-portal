@@ -2,10 +2,11 @@
  * ActiveFiltersChips - Visual display of active filters with removal (Story 8.7, AC6).
  *
  * Features:
- * - Chips for category, tags, engines, environments, impacts
+ * - Chips for category, tags, engines, impacts
  * - Individual removal via close button
  * - "Réinitialiser tous les filtres" button
  * - Desjardins green styling: Background #ECFDF5, text #00874E
+ * - Story 18.4: Environment chips removed (environment = target property, not action)
  */
 
 import { Space, Tag, Button } from 'antd';
@@ -13,7 +14,6 @@ import { CloseOutlined } from '@ant-design/icons';
 import type { CategoryKey } from './CategoryTabs';
 import { IMPACT_OPTIONS } from './HorizontalFilters';
 import { useEngines } from '../../hooks/useEngines';
-import { useEnvironments } from '../../hooks/useEnvironments';
 import { STYLE_TOKENS } from '../../theme/styleTokens';
 
 export interface ActiveFiltersChipsProps {
@@ -23,8 +23,6 @@ export interface ActiveFiltersChipsProps {
   selectedTags: string[];
   /** Selected engines. */
   selectedEngines: string[];
-  /** Selected environments. */
-  selectedEnvironments: string[];
   /** Selected impacts. */
   selectedImpacts: string[];
   /** Callback to reset category to "tout". */
@@ -33,8 +31,6 @@ export interface ActiveFiltersChipsProps {
   onRemoveTag: (tag: string) => void;
   /** Callback to remove an engine. */
   onRemoveEngine: (engine: string) => void;
-  /** Callback to remove an environment. */
-  onRemoveEnvironment: (env: string) => void;
   /** Callback to remove an impact. */
   onRemoveImpact: (impact: string) => void;
   /** Callback to clear all filters. */
@@ -64,26 +60,21 @@ export function ActiveFiltersChips({
   activeCategory,
   selectedTags,
   selectedEngines,
-  selectedEnvironments,
   selectedImpacts,
   onRemoveCategory,
   onRemoveTag,
   onRemoveEngine,
-  onRemoveEnvironment,
   onRemoveImpact,
   onClearAll,
 }: ActiveFiltersChipsProps) {
   // Story 13.7: Load engines from REF_ENGINES table
   const { engineOptions } = useEngines();
-  // Story 13.7: Load environments from inventory
-  const { environmentOptions } = useEnvironments();
 
   // Check if any filters are active (Story 8.7: exclude "mes-actions" from category filter)
   const hasFilters =
     (activeCategory !== 'tout' && activeCategory !== 'mes-actions') ||
     selectedTags.length > 0 ||
     selectedEngines.length > 0 ||
-    selectedEnvironments.length > 0 ||
     selectedImpacts.length > 0;
 
   if (!hasFilters) {
@@ -124,16 +115,6 @@ export function ActiveFiltersChips({
           Moteur: {getEngineLabel(engine, engineOptions)}
         </Tag>
       ))}
-
-      {/* Environment chips */}
-      {selectedEnvironments.map((env) => {
-        const envLabel = environmentOptions.find((o) => o.value === env)?.label || env;
-        return (
-          <Tag key={`env-${env}`} closable onClose={() => onRemoveEnvironment(env)}>
-            Env: {envLabel}
-          </Tag>
-        );
-      })}
 
       {/* Impact chips */}
       {selectedImpacts.map((impact) => (

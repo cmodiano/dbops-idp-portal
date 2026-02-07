@@ -244,7 +244,7 @@ development_status:
     18-1-admin-actions-suppression-desactivation-filtres: done # Story 18.1 complete — AC1-AC6 all implemented, 28 backend + 22 frontend tests pass
     18-2-identification-visuelle-workflow-vs-action: done # Code review 2026-02-07: 4 MEDIUM + 3 LOW fixes applied, 18 tests pass (10 AdminPage + 8 iconHelpers)
     18-3-mode-visuel-builder-taille-blocs-lien-libelle: done # Fenêtre plus grande, blocs Départ/Fin déplaçables, lien auto sans erreur, nom action affiché
-    18-4-catalogue-retirer-adapter-filtre-environnement: backlog # Filtre Environnement obsolète (target définit env)
+    18-4-catalogue-retirer-adapter-filtre-environnement: done # Code review 2026-02-07: 11 issues (3 HIGH + 5 MEDIUM + 3 LOW) auto-corrigés, 20/20 tests pass (8 HorizontalFilters + 12 ActiveFiltersChips), diagramme Excalidraw créé, documentation enrichie
     18-5-favoris-correction-affichage-compteur: backlog # Onglet vide avec (1) — actions désactivées ou requête incorrecte
     18-6-erreur-integration-afficher-statut-erreur: backlog # Intégration erreur → statut erreur visible (pas "soumis")
     18-7-correction-tests-en-echec: backlog # Restaurer la suite de tests (fixtures, migrations, refactorings)
