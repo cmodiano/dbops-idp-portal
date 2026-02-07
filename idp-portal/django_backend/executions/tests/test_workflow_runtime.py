@@ -114,7 +114,7 @@ class TestWorkflowRuntimeResolveNextStep:
                 "on_error_step_id": None,
             },
         ]
-        self.action.set_execution_steps(workflow_steps)
+        self.action.execution_steps = (workflow_steps)
         self.action.save()
 
         self.execution = Execution.objects.create(
@@ -183,7 +183,7 @@ class TestWorkflowRuntimeResolveNextStep:
             {"step_id": "step-b", "order": 2, "name": "Step B"},
             {"step_id": "step-c", "order": 3, "name": "Step C"},
         ]
-        linear_action.set_execution_steps(linear_steps)
+        linear_action.execution_steps = (linear_steps)
         linear_action.save()
 
         linear_execution = Execution.objects.create(
@@ -229,7 +229,7 @@ class TestWorkflowRuntimeResolveNextStep:
             {"step_id": "step-2", "order": 2, "name": "Step 2"},  # linear continuation expected
             {"step_id": "step-err", "order": 99, "name": "Err"},
         ]
-        action.set_execution_steps(steps)
+        action.execution_steps = (steps)
         action.save()
 
         execution = Execution.objects.create(
@@ -281,7 +281,7 @@ class TestWorkflowRuntimeExecution:
                 "on_error_step_id": None,
             },
         ]
-        action.set_execution_steps(workflow_steps)
+        action.execution_steps = (workflow_steps)
         action.save()
 
         execution = Execution.objects.create(
@@ -351,7 +351,7 @@ class TestWorkflowRuntimeExecution:
                 "on_error_step_id": None,
             },
         ]
-        action.set_execution_steps(workflow_steps)
+        action.execution_steps = (workflow_steps)
         action.save()
 
         execution = Execution.objects.create(
@@ -432,7 +432,7 @@ class TestWorkflowRuntimeExecution:
                 "on_error_step_id": None,
             },
         ]
-        action.set_execution_steps(workflow_steps)
+        action.execution_steps = (workflow_steps)
         action.save()
 
         execution = Execution.objects.create(
@@ -472,7 +472,7 @@ class TestWorkflowRuntimeExecution:
         )
 
         # No steps
-        action.set_execution_steps([])
+        action.execution_steps = ([])
         action.save()
 
         execution = Execution.objects.create(
@@ -525,7 +525,7 @@ class TestWorkflowRuntimeStory412StepParameters:
             status=ActionStatus.PUBLISHED,
             item_type=ActionItemType.WORKFLOW,
         )
-        self.action.set_execution_steps([
+        self.action.execution_steps = ([
             {
                 "step_id": "s1",
                 "order": 1,
@@ -627,7 +627,7 @@ class TestWorkflowRuntimeStory412StepParameters:
             status=ActionStatus.PUBLISHED,
             item_type=ActionItemType.WORKFLOW,
         )
-        workflow.set_execution_steps([
+        workflow.execution_steps = ([
             {
                 "step_id": "s1",
                 "order": 1,

@@ -1,9 +1,9 @@
-import json
 import logging
 from django.db import models
 from django.db.models import Count, Subquery
 from idp_auth.models import User
 from integrations.models import Integration
+from core.fields import OracleJSONField
 
 logger = logging.getLogger(__name__)
 
@@ -147,13 +147,13 @@ class Action(models.Model):
         db_column='PLATFORM',
         help_text='Platform code (must exist in REF_PLATFORMS.CODE). Validated by application logic.'
     )
-    # CLOB fields - using TextField with JSON serialization helpers
-    parameters_schema = models.TextField(null=True, blank=True, db_column='PARAMETERS_SCHEMA')
-    impact_rules = models.TextField(null=True, blank=True, db_column='IMPACT_RULES')
-    execution_steps = models.TextField(null=True, blank=True, db_column='EXECUTION_STEPS')  # Story M.3: Added for CRUD operations
-    change_type_config = models.TextField(null=True, blank=True, db_column='CHANGE_TYPE_CONFIG')
+    # CLOB fields - using OracleJSONField with automatic JSON handling (Story 17.4)
+    parameters_schema = OracleJSONField(null=True, blank=True, db_column='PARAMETERS_SCHEMA')
+    impact_rules = OracleJSONField(null=True, blank=True, db_column='IMPACT_RULES')
+    execution_steps = OracleJSONField(null=True, blank=True, db_column='EXECUTION_STEPS')
+    change_type_config = OracleJSONField(null=True, blank=True, db_column='CHANGE_TYPE_CONFIG')
     documentation_md = models.TextField(null=True, blank=True, db_column='DOCUMENTATION_MD')
-    remediation_rules = models.TextField(null=True, blank=True, db_column='REMEDIATION_RULES')
+    remediation_rules = OracleJSONField(null=True, blank=True, db_column='REMEDIATION_RULES')
     default_impact_level = models.CharField(
         max_length=20,
         choices=[
@@ -206,92 +206,6 @@ class Action(models.Model):
 
     def __str__(self):
         return self.name
-
-    # JSON field helpers for CLOB fields
-    def get_parameters_schema(self):
-        """Deserialize JSON from CLOB."""
-        if self.parameters_schema:
-            try:
-                return json.loads(self.parameters_schema)
-            except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"Failed to deserialize parameters_schema for Action {self.id}: {e}")
-                return None
-        return None
-
-    def set_parameters_schema(self, value):
-        """Serialize JSON to CLOB."""
-        if value is not None:
-            self.parameters_schema = json.dumps(value)
-        else:
-            self.parameters_schema = None
-
-    def get_impact_rules(self):
-        """Deserialize JSON from CLOB."""
-        if self.impact_rules:
-            try:
-                return json.loads(self.impact_rules)
-            except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"Failed to deserialize impact_rules for Action {self.id}: {e}")
-                return None
-        return None
-
-    def set_impact_rules(self, value):
-        """Serialize JSON to CLOB."""
-        if value is not None:
-            self.impact_rules = json.dumps(value)
-        else:
-            self.impact_rules = None
-
-    def get_change_type_config(self):
-        """Deserialize JSON from CLOB."""
-        if self.change_type_config:
-            try:
-                return json.loads(self.change_type_config)
-            except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"Failed to deserialize change_type_config for Action {self.id}: {e}")
-                return None
-        return None
-
-    def set_change_type_config(self, value):
-        """Serialize JSON to CLOB."""
-        if value is not None:
-            self.change_type_config = json.dumps(value)
-        else:
-            self.change_type_config = None
-
-    def get_remediation_rules(self):
-        """Deserialize JSON from CLOB."""
-        if self.remediation_rules:
-            try:
-                return json.loads(self.remediation_rules)
-            except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"Failed to deserialize remediation_rules for Action {self.id}: {e}")
-                return None
-        return None
-
-    def set_remediation_rules(self, value):
-        """Serialize JSON to CLOB."""
-        if value is not None:
-            self.remediation_rules = json.dumps(value)
-        else:
-            self.remediation_rules = None
-    
-    def get_execution_steps(self):
-        """Deserialize JSON from CLOB."""
-        if self.execution_steps:
-            try:
-                return json.loads(self.execution_steps)
-            except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"Failed to deserialize execution_steps for Action {self.id}: {e}")
-                return None
-        return None
-    
-    def set_execution_steps(self, value):
-        """Serialize JSON to CLOB."""
-        if value is not None:
-            self.execution_steps = json.dumps(value)
-        else:
-            self.execution_steps = None
 
 
 class Tag(models.Model):

@@ -96,7 +96,7 @@ def _extract_workflow_referenced_action_ids(workflow_action: Action) -> list[int
         ]
     Returns IDs in step order, skipping invalid/missing entries.
     """
-    steps = workflow_action.get_execution_steps() or []
+    steps = workflow_action.execution_steps or []
     if not isinstance(steps, list):
         return []
 
@@ -134,7 +134,7 @@ def _extract_workflow_step_map(workflow_action: Action) -> dict[int, int]:
     """
     Build mapping step_order -> referenced_action_id for a workflow.
     """
-    steps = workflow_action.get_execution_steps() or []
+    steps = workflow_action.execution_steps or []
     if not isinstance(steps, list):
         return {}
     out: dict[int, int] = {}
@@ -210,7 +210,7 @@ def _validate_workflow_step_parameters(
                 details={"step_order": order_int, "referenced_action_id": ref_action_id},
             )
 
-        schema = ref_action.get_parameters_schema() or {}
+        schema = ref_action.parameters_schema or {}
         if not schema:
             # No schema: accept only empty params
             if params:
@@ -752,13 +752,13 @@ class ExecutionsView(APIView):
         env_upper = (environment or "").upper()
 
         # Subtask 2.3: Get change_type_config for this environment
-        change_type_config = action.get_change_type_config() or {}
+        change_type_config = action.change_type_config or {}
         env_change_config = change_type_config.get(env_upper, {})
         change_required = env_change_config.get("required", False)
         change_model_code = env_change_config.get("change_model_code")
 
         # Subtask 2.4: Get impact_rules for this environment
-        impact_rules = action.get_impact_rules() or {}
+        impact_rules = action.impact_rules or {}
         env_impact_config = impact_rules.get(env_upper, {})
         impact_level = env_impact_config.get("impact_level") or env_impact_config.get("level") or action.default_impact_level
 

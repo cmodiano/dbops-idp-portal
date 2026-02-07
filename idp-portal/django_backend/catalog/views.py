@@ -488,7 +488,7 @@ class ActionViewSet(viewsets.ModelViewSet):
             )
 
         # Update remediation_rules
-        action.set_remediation_rules(remediation_rules)
+        action.remediation_rules = remediation_rules
         action.save()
 
         # Invalidate cache

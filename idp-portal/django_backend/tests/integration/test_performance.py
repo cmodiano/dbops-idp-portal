@@ -271,7 +271,7 @@ class TestActionCreationPerformance:
         assert result.id is not None
 
         # Verify steps stored
-        stored_steps = result.get_execution_steps()
+        stored_steps = result.execution_steps
         assert len(stored_steps) == 50
 
     def test_bulk_create_100_actions(self, benchmark):

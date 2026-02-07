@@ -55,13 +55,13 @@ class StatusUpdateSerializer(serializers.Serializer):
 
 class ActionSerializer(serializers.ModelSerializer):
     """Base Action serializer (read/write) matching ActionResponse/ActionDetail."""
-    
-    # CLOB/JSON fields - use SerializerMethodField for read, custom handling for write
-    parameters_schema = serializers.SerializerMethodField()
-    impact_rules = serializers.SerializerMethodField()
-    execution_steps = serializers.SerializerMethodField()
-    change_type_config = serializers.SerializerMethodField()
-    remediation_rules = serializers.SerializerMethodField()
+
+    # CLOB/JSON fields - OracleJSONField handles serialization automatically (Story 17.4)
+    parameters_schema = serializers.JSONField(required=False, allow_null=True)
+    impact_rules = serializers.JSONField(required=False, allow_null=True)
+    execution_steps = serializers.JSONField(required=False, allow_null=True)
+    change_type_config = serializers.JSONField(required=False, allow_null=True)
+    remediation_rules = serializers.JSONField(required=False, allow_null=True)
     # Story 5.7: workflow_steps for workflows (converted from execution_steps)
     workflow_steps = serializers.SerializerMethodField()
     
@@ -112,26 +112,9 @@ class ActionSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'created_by']
     
-    def get_parameters_schema(self, obj):
-        """Deserialize JSON from CLOB using model helper."""
-        return obj.get_parameters_schema()
-    
-    def get_impact_rules(self, obj):
-        """Deserialize JSON from CLOB using model helper."""
-        return obj.get_impact_rules()
-    
-    def get_execution_steps(self, obj):
-        """Deserialize JSON from CLOB using model helper."""
-        return obj.get_execution_steps()
-    
-    def get_change_type_config(self, obj):
-        """Deserialize JSON from CLOB using model helper."""
-        return obj.get_change_type_config()
-    
-    def get_remediation_rules(self, obj):
-        """Deserialize JSON from CLOB using model helper."""
-        return obj.get_remediation_rules()
-    
+    # Story 17.4: Removed redundant get_parameters_schema, get_impact_rules, etc.
+    # OracleJSONField handles deserialization automatically - no need for SerializerMethodField
+
     def get_workflow_steps(self, obj):
         """
         Convert execution_steps to workflow_steps format for workflows.
@@ -140,7 +123,7 @@ class ActionSerializer(serializers.ModelSerializer):
         if obj.item_type != ActionItemType.WORKFLOW:
             return None
 
-        execution_steps = obj.get_execution_steps()
+        execution_steps = obj.execution_steps
         if not execution_steps:
             return None
 

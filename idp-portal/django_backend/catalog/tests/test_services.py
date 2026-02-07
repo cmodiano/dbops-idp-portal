@@ -88,11 +88,11 @@ class TestCatalogService(TestCase):
         action = self.service.create_action(action_data, self.user)
         
         # Verify JSON fields
-        self.assertEqual(action.get_parameters_schema()['type'], 'object')
-        self.assertEqual(action.get_impact_rules()['DEV']['level'], 'low')
-        self.assertEqual(len(action.get_execution_steps()), 1)
-        self.assertEqual(action.get_change_type_config()['type'], 'standard')
-        self.assertTrue(action.get_remediation_rules()['enabled'])
+        self.assertEqual(action.parameters_schema['type'], 'object')
+        self.assertEqual(action.impact_rules['DEV']['level'], 'low')
+        self.assertEqual(len(action.execution_steps), 1)
+        self.assertEqual(action.change_type_config['type'], 'standard')
+        self.assertTrue(action.remediation_rules['enabled'])
     
     def test_list_all_with_filters(self):
         """Test list_all() with various filters."""

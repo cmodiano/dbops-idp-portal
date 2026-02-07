@@ -49,7 +49,7 @@ class TestWorkflowRetryIntegrationSuccessAfterRetries:
             status=ActionStatus.PUBLISHED,
             item_type=ActionItemType.WORKFLOW,
         )
-        action.set_execution_steps([
+        action.execution_steps = ([
             {
                 "step_id": "step-retry",
                 "order": 1,
@@ -155,7 +155,7 @@ class TestWorkflowRetryIntegrationExhaustion:
             status=ActionStatus.PUBLISHED,
             item_type=ActionItemType.WORKFLOW,
         )
-        action.set_execution_steps([
+        action.execution_steps = ([
             {
                 "step_id": "step-retry",
                 "order": 1,
@@ -252,7 +252,7 @@ class TestWorkflowRetryIntegrationPermanentError:
             status=ActionStatus.PUBLISHED,
             item_type=ActionItemType.WORKFLOW,
         )
-        action.set_execution_steps([
+        action.execution_steps = ([
             {
                 "step_id": "step-retry",
                 "order": 1,
@@ -356,7 +356,7 @@ class TestWorkflowRetryIntegrationAuditTrail:
             status=ActionStatus.PUBLISHED,
             item_type=ActionItemType.WORKFLOW,
         )
-        action.set_execution_steps([
+        action.execution_steps = ([
             {
                 "step_id": "step-retry",
                 "order": 1,

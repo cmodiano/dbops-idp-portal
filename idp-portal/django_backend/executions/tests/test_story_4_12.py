@@ -28,13 +28,11 @@ class TestStory412WorkflowStepParameters(TestCase):
             status=ActionStatus.PUBLISHED,
             requires_target=False,
         )
-        self.ref.set_parameters_schema(
-            {
-                "type": "object",
-                "properties": {"foo": {"type": "string"}},
-                "required": ["foo"],
-            }
-        )
+        self.ref.parameters_schema = {
+            "type": "object",
+            "properties": {"foo": {"type": "string"}},
+            "required": ["foo"],
+        }
         self.ref.save(update_fields=["parameters_schema"])
 
         self.workflow = Action.objects.create(
@@ -46,7 +44,7 @@ class TestStory412WorkflowStepParameters(TestCase):
             item_type="workflow",
             requires_target=False,
         )
-        self.workflow.set_execution_steps(
+        self.workflow.execution_steps = (
             [{"order": 1, "name": "Step 1", "referenced_action_id": self.ref.id}]
         )
         self.workflow.save(update_fields=["execution_steps"])

@@ -385,11 +385,11 @@ class TestParametrizedJSONSerialization:
             integration=self.integration
         )
 
-        action.set_parameters_schema(parameters)
+        action.parameters_schema = parameters
         action.save()
 
         action.refresh_from_db()
-        loaded = action.get_parameters_schema()
+        loaded = action.parameters_schema
 
         assert loaded == parameters
 
@@ -410,10 +410,10 @@ class TestParametrizedJSONSerialization:
             integration=self.integration
         )
 
-        action.set_impact_rules(impact_rules)
+        action.impact_rules = impact_rules
         action.save()
 
         action.refresh_from_db()
-        loaded = action.get_impact_rules()
+        loaded = action.impact_rules
 
         assert loaded == impact_rules

@@ -51,15 +51,15 @@ class ActionModelTest(TestCase):
         )
         # Test parameters_schema
         schema = {'type': 'object', 'properties': {'db_name': {'type': 'string'}}}
-        action.set_parameters_schema(schema)
+        action.parameters_schema = schema
         action.save()
-        self.assertEqual(action.get_parameters_schema(), schema)
+        self.assertEqual(action.parameters_schema, schema)
         
         # Test impact_rules
         impact_rules = {'DEV': {'level': 'low'}, 'PROD': {'level': 'high'}}
-        action.set_impact_rules(impact_rules)
+        action.impact_rules = impact_rules
         action.save()
-        self.assertEqual(action.get_impact_rules(), impact_rules)
+        self.assertEqual(action.impact_rules, impact_rules)
     
     def test_action_json_fields_complex(self):
         """Test JSON field helpers with complex nested objects and arrays (Task 10.4)."""
@@ -103,9 +103,9 @@ class ActionModelTest(TestCase):
                 }
             }
         }
-        action.set_parameters_schema(complex_parameters_schema)
+        action.parameters_schema = complex_parameters_schema
         action.save()
-        retrieved = action.get_parameters_schema()
+        retrieved = action.parameters_schema
         self.assertEqual(retrieved['type'], 'object')
         self.assertIn('databases', retrieved['properties'])
         self.assertEqual(retrieved['properties']['databases']['type'], 'array')
@@ -140,9 +140,9 @@ class ActionModelTest(TestCase):
                 }
             }
         ]
-        action.set_execution_steps(complex_execution_steps)
+        action.execution_steps = complex_execution_steps
         action.save()
-        retrieved_steps = action.get_execution_steps()
+        retrieved_steps = action.execution_steps
         self.assertIsInstance(retrieved_steps, list)
         self.assertEqual(len(retrieved_steps), 2)
         self.assertEqual(retrieved_steps[0]['step_name'], 'Pre-flight checks')
@@ -179,9 +179,9 @@ class ActionModelTest(TestCase):
                 }
             }
         }
-        action.set_impact_rules(complex_impact_rules)
+        action.impact_rules = complex_impact_rules
         action.save()
-        retrieved_rules = action.get_impact_rules()
+        retrieved_rules = action.impact_rules
         self.assertEqual(retrieved_rules['PROD']['level'], 'high')
         self.assertIn('change_window', retrieved_rules['PROD'])
         self.assertEqual(retrieved_rules['PROD']['change_window']['enabled'], True)

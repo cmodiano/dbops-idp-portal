@@ -42,11 +42,11 @@ class ExecutionTargetRequiredTests(TestCase):
             requires_target=True
         )
         # Set change_type_config and impact_rules
-        self.action_with_target.set_change_type_config({
+        self.action_with_target.change_type_config = ({
             'DEV': {'required': False, 'change_model_code': None},
             'PROD': {'required': True, 'change_model_code': '1516B'}
         })
-        self.action_with_target.set_impact_rules({
+        self.action_with_target.impact_rules = ({
             'DEV': {'level': 'low'},
             'PROD': {'level': 'high'}
         })

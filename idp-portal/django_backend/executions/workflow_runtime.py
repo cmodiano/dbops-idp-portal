@@ -152,7 +152,7 @@ class WorkflowRuntime:
         Returns:
             List of step dicts with step_id, on_success_step_id, on_error_step_id, etc.
         """
-        steps = self.action.get_execution_steps() or []
+        steps = self.action.execution_steps or []
         if not isinstance(steps, list):
             logger.warning(
                 "workflow_steps_invalid_format",

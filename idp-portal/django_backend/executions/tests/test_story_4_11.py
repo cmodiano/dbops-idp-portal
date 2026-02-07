@@ -65,7 +65,7 @@ class TestStory411WorkflowDelegation(TestCase):
             item_type="workflow",
             requires_target=False,
         )
-        self.workflow.set_execution_steps(
+        self.workflow.execution_steps = (
             [
                 {"order": 1, "name": "Step 1", "referenced_action_id": self.ref1.id},
                 {"order": 2, "name": "Step 2", "referenced_action_id": self.ref2.id},
@@ -199,7 +199,7 @@ class TestStory411WorkflowDelegation(TestCase):
 
     def test_workflow_empty_referenced_actions_returns_400(self):
         """Workflow with no referenced actions -> 400."""
-        self.workflow.set_execution_steps([])
+        self.workflow.execution_steps = ([])
         self.workflow.save(update_fields=["execution_steps"])
 
         resp = self.client.post(

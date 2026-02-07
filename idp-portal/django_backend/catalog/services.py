@@ -107,17 +107,17 @@ class CatalogService:
             correlation_id=correlation_id
         )
         
-        # Set JSON fields using helper methods
+        # Set JSON fields (OracleJSONField handles serialization automatically)
         if 'parameters_schema' in action_data:
-            action.set_parameters_schema(action_data['parameters_schema'])
+            action.parameters_schema = action_data['parameters_schema']
         if 'impact_rules' in action_data:
-            action.set_impact_rules(action_data['impact_rules'])
+            action.impact_rules = action_data['impact_rules']
         if 'execution_steps' in action_data:
-            action.set_execution_steps(action_data['execution_steps'])
+            action.execution_steps = action_data['execution_steps']
         if 'change_type_config' in action_data:
-            action.set_change_type_config(action_data['change_type_config'])
+            action.change_type_config = action_data['change_type_config']
         if 'remediation_rules' in action_data:
-            action.set_remediation_rules(action_data['remediation_rules'])
+            action.remediation_rules = action_data['remediation_rules']
         action.save()
         
         # Add tags if provided
@@ -247,13 +247,13 @@ class CatalogService:
         if 'default_impact_level' in action_update_data:
             action.default_impact_level = action_update_data.get('default_impact_level')
         
-        # Update JSON fields
+        # Update JSON fields (OracleJSONField handles serialization automatically)
         if 'parameters_schema' in action_update_data:
-            action.set_parameters_schema(action_update_data['parameters_schema'])
+            action.parameters_schema = action_update_data['parameters_schema']
         if 'impact_rules' in action_update_data:
-            action.set_impact_rules(action_update_data['impact_rules'])
+            action.impact_rules = action_update_data['impact_rules']
         if 'remediation_rules' in action_update_data:
-            action.set_remediation_rules(action_update_data['remediation_rules'])
+            action.remediation_rules = action_update_data['remediation_rules']
         
         action.save()
         
@@ -491,11 +491,11 @@ class CatalogService:
             if action.item_type == ActionItemType.WORKFLOW:
                 steps = validate_workflow_steps(steps, action_id=action.id)
 
-            action.set_execution_steps(steps)
+            action.execution_steps = steps
 
         # Update change_type_config if provided
         if change_type_config is not None:
-            action.set_change_type_config(change_type_config)
+            action.change_type_config = change_type_config
 
         action.save()
 

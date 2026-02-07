@@ -45,7 +45,7 @@ class TestIsRetryableError:
             status=ActionStatus.PUBLISHED,
             item_type=ActionItemType.WORKFLOW,
         )
-        self.action.set_execution_steps([{
+        self.action.execution_steps = ([{
             "step_id": "s1", "order": 1, "name": "Step 1",
             "referenced_action_id": self.ref_action.id,
             "on_success_step_id": None,
@@ -178,7 +178,7 @@ class TestExecuteStepWithRetryDisabled:
             status=ActionStatus.PUBLISHED,
             item_type=ActionItemType.WORKFLOW,
         )
-        self.action.set_execution_steps([{
+        self.action.execution_steps = ([{
             "step_id": "s1", "order": 1, "name": "Step 1",
             "referenced_action_id": self.ref_action.id,
             "on_success_step_id": None,
@@ -240,7 +240,7 @@ class TestExecuteStepWithRetryBackoff:
             status=ActionStatus.PUBLISHED,
             item_type=ActionItemType.WORKFLOW,
         )
-        self.action.set_execution_steps([{
+        self.action.execution_steps = ([{
             "step_id": "s1", "order": 1, "name": "Step 1",
             "referenced_action_id": self.ref_action.id,
             "on_success_step_id": None,
@@ -435,7 +435,7 @@ class TestExecuteStepWithRetryPermanentError:
             status=ActionStatus.PUBLISHED,
             item_type=ActionItemType.WORKFLOW,
         )
-        self.action.set_execution_steps([{
+        self.action.execution_steps = ([{
             "step_id": "s1", "order": 1, "name": "Step 1",
             "referenced_action_id": self.ref_action.id,
             "on_success_step_id": None,
@@ -493,7 +493,7 @@ class TestExecuteStepWithRetryCancellation:
             status=ActionStatus.PUBLISHED,
             item_type=ActionItemType.WORKFLOW,
         )
-        self.action.set_execution_steps([{
+        self.action.execution_steps = ([{
             "step_id": "s1", "order": 1, "name": "Step 1",
             "referenced_action_id": self.ref_action.id,
             "on_success_step_id": None,
@@ -584,7 +584,7 @@ class TestExecuteStepWithRetryAuditTrail:
             status=ActionStatus.PUBLISHED,
             item_type=ActionItemType.WORKFLOW,
         )
-        self.action.set_execution_steps([{
+        self.action.execution_steps = ([{
             "step_id": "s1", "order": 1, "name": "Step 1",
             "referenced_action_id": self.ref_action.id,
             "on_success_step_id": None,
