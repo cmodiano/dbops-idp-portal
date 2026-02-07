@@ -152,6 +152,9 @@ class Execution(models.Model):
     class Meta:
         db_table = 'EXECUTIONS'
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['action', 'created_at'], name='idx_exec_action_created'),
+        ]
 
     def __str__(self):
         return f"Execution {self.id} - {self.action.name} ({self.status})"

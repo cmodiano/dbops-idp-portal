@@ -289,6 +289,7 @@ class ActionViewSet(viewsets.ModelViewSet):
 
         # MEDIUM-1 fix: Invalidate cache after write
         _catalog_cache.clear()
+        _tags_cache.clear()
 
         return Response({"data": response_serializer.data}, status=status.HTTP_201_CREATED)
     
@@ -339,6 +340,7 @@ class ActionViewSet(viewsets.ModelViewSet):
 
         # MEDIUM-1 fix: Invalidate cache after write
         _catalog_cache.clear()
+        _tags_cache.clear()
 
         return Response({"data": response_serializer.data})
 
@@ -373,6 +375,7 @@ class ActionViewSet(viewsets.ModelViewSet):
 
         # MEDIUM-1 fix: Invalidate cache after write
         _catalog_cache.clear()
+        _tags_cache.clear()
 
         return Response({"data": response_serializer.data})
 
@@ -412,6 +415,7 @@ class ActionViewSet(viewsets.ModelViewSet):
 
         # MEDIUM-1 fix: Invalidate cache after write
         _catalog_cache.clear()
+        _tags_cache.clear()
 
         return Response({"data": response_serializer.data})
 
@@ -453,6 +457,7 @@ class ActionViewSet(viewsets.ModelViewSet):
 
         # MEDIUM-1 fix: Invalidate cache after write
         _catalog_cache.clear()
+        _tags_cache.clear()
 
         return Response({"data": response_serializer.data})
 
@@ -513,6 +518,7 @@ class ActionViewSet(viewsets.ModelViewSet):
 
         # Invalidate cache
         _catalog_cache.clear()
+        _tags_cache.clear()
 
         # Reload with relations
         action = CatalogService().get_by_id(action.id)
@@ -523,6 +529,9 @@ class ActionViewSet(viewsets.ModelViewSet):
 
 # Story 3.1 AC10: in-memory cache for catalog, TTL 5 min (300s)
 _catalog_cache: TTLCache[str, list[dict]] = TTLCache(maxsize=1000, ttl=300)
+
+# Story 17.17: in-memory cache for catalog tags, TTL 5 min (300s)
+_tags_cache: TTLCache[str, list[dict]] = TTLCache(maxsize=200, ttl=300)
 
 
 def _get_cache_key(user_id, tags_filter, q=None, engine=None, environment=None, impact=None, category=None):
@@ -742,13 +751,20 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=['get'], url_path='catalog')
     def list_catalog_tags(self, request):
         """GET /catalog/tags - List tags with action_count and RBAC filtering."""
+        # Story 17.17: Cache tags endpoint (5min TTL, same as actions)
+        user_id = request.user.id if request.user and request.user.is_authenticated else None
+        category = request.query_params.get('category')
+        tags_cache_key = f"tags_user_{user_id}_cat_{category or 'all'}"
+
+        if tags_cache_key in _tags_cache:
+            return Response({"data": _tags_cache[tags_cache_key]})
+
         # HIGH-3 fix: Implement action_count and RBAC filtering
 
         # Get base queryset of published actions (filtered by RBAC if user authenticated)
         actions_queryset = Action.objects.filter(status=ActionStatus.PUBLISHED)
 
         # Optional category filter (Story 8.7): restrict to actions tagged with the category tag
-        category = request.query_params.get('category')
         if category and category.lower() not in ('tout', 'all', 'mes-actions'):
             from catalog.models import normalize_tag_name
             category_tag = normalize_tag_name(category)
@@ -793,5 +809,8 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet):
                 'action_count': tag.action_count,
                 'created_at': tag.created_at.isoformat() if tag.created_at else None
             })
+
+        # Cache result
+        _tags_cache[tags_cache_key] = data
 
         return Response({"data": data})

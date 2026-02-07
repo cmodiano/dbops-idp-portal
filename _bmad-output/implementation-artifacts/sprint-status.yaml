@@ -237,5 +237,5 @@ development_status:
     17-14-annuler-operation-par-initiateur: done # Annuler Soumise/En cours : initiateur ou admin (RBAC) — Code review: 5 HIGH + 3 MEDIUM + 2 LOW fixes, 16 backend + 6 frontend tests pass (2026-02-07)
     17-15-relancer-operation-memes-parametres: done # Relancer : wizard pre rempli (parametres modifiables avant reexecution)
     17-16-verification-conformite-frontend-standards: done # Plugin ESLint custom 3 regles, 10 violations corrigees, template PR, 34 tests regles - Code review: 3 CRITICAL found
-    17-17-optimisation-requetes-bd-page-catalogue: backlog # Audit + optimisation requetes BD page Catalogue (lenteur perçue)
+    17-17-optimisation-requetes-bd-page-catalogue: done # Audit + optimisation requetes BD page Catalogue — 4 index Django, cache tags, 12 tests perf, code review 7 fixes applied ✅
     epic-17-retrospective: optional

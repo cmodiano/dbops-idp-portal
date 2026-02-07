@@ -203,6 +203,11 @@ class Action(models.Model):
     class Meta:
         db_table = 'ACTIONS_CATALOG'
         ordering = ['name']
+        indexes = [
+            models.Index(fields=['status'], name='idx_actions_status'),
+            models.Index(fields=['status', 'engine'], name='idx_actions_status_engine'),
+            models.Index(fields=['status', 'created_at'], name='idx_actions_status_created'),
+        ]
 
     def __str__(self):
         return self.name

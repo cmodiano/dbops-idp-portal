@@ -1,0 +1,18 @@
+-- V056: Add performance indexes for catalog page optimization
+-- Story 17.17: Optimisation requêtes BD — page Catalogue
+--
+-- These indexes target the most frequently filtered columns in catalog queries.
+-- The catalog page filters on STATUS in every query (published actions only),
+-- and commonly combines with ENGINE, CREATED_AT filters.
+
+-- Index simple sur STATUS (filtré dans chaque requête catalogue)
+CREATE INDEX IDX_ACTIONS_STATUS ON ACTIONS_CATALOG(STATUS);
+
+-- Index composite pour filtres combinés STATUS + ENGINE
+CREATE INDEX IDX_ACTIONS_STATUS_ENGINE ON ACTIONS_CATALOG(STATUS, ENGINE);
+
+-- Index composite pour listes triées par date avec filtre status
+CREATE INDEX IDX_ACTIONS_STATUS_CREATED ON ACTIONS_CATALOG(STATUS, CREATED_AT);
+
+-- Index composite pour subquery execution_count (correlated subquery sur ACTION_ID + CREATED_AT)
+CREATE INDEX IDX_EXEC_ACTION_CREATED ON EXECUTIONS(ACTION_ID, CREATED_AT);
