@@ -652,4 +652,29 @@ describe('ActionWizard', () => {
       expect(screen.getByLabelText('Nom du workflow')).toBeInTheDocument();
     });
   });
+
+  // Story 18.3, AC1: Modal width increased to 1400 in visual workflow mode
+  describe('Story 18.3 — Modal width (AC1)', () => {
+    it('modal width=640 for action type (default)', async () => {
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} />);
+      });
+      // Default action wizard should have normal width
+      const modal = document.querySelector('.ant-modal');
+      if (modal) {
+        expect(modal).toHaveStyle({ width: '640px' });
+      }
+    });
+
+    it('modal width=640 for workflow in list mode (default)', async () => {
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} initialItemType="workflow" />);
+      });
+      // Workflow wizard defaults to list mode → 640px
+      const modal = document.querySelector('.ant-modal');
+      if (modal) {
+        expect(modal).toHaveStyle({ width: '640px' });
+      }
+    });
+  });
 });

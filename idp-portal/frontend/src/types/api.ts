@@ -89,6 +89,8 @@ export interface WorkflowStep {
   order: number;
   name: string | null;
   referenced_action_id: number;
+  /** Story 18.3: Real action name from backend (resolved from referenced_action). */
+  action_name?: string | null;
   /** Story 16.2: Stable ID for referencing in branches (optional for backward compatibility). */
   step_id?: string | null;
   /** Story 16.2: Next step ID on success (nullable = exit or continue to next by order). */

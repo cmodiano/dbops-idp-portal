@@ -119,6 +119,7 @@ class ActionSerializer(serializers.ModelSerializer):
         """
         Convert execution_steps to workflow_steps format for workflows.
         Story 16.2: Include branch conditional and retry fields.
+        Story 18.3: Include action_name resolved from referenced_action.
         """
         if obj.item_type != ActionItemType.WORKFLOW:
             return None
@@ -127,15 +128,29 @@ class ActionSerializer(serializers.ModelSerializer):
         if not execution_steps:
             return None
 
+        # Story 18.3: Batch-fetch action names to avoid N+1 queries
+        action_ids = {
+            step['referenced_action_id']
+            for step in execution_steps
+            if isinstance(step, dict) and 'referenced_action_id' in step
+        }
+        action_names = {}
+        if action_ids:
+            action_names = dict(
+                Action.objects.filter(id__in=action_ids).values_list('id', 'name')
+            )
+
         # Convert execution_steps to workflow_steps format
         # Story 16.2: Include step_id, branches (on_success/on_error), and retry config
         workflow_steps = []
         for step in execution_steps:
             if isinstance(step, dict) and 'referenced_action_id' in step:
+                ref_id = step['referenced_action_id']
                 workflow_step = {
                     'order': step.get('order', 0),
                     'name': step.get('name'),
-                    'referenced_action_id': step['referenced_action_id'],
+                    'referenced_action_id': ref_id,
+                    'action_name': action_names.get(ref_id),
                 }
 
                 # Story 16.2: Add optional branch and retry fields

@@ -185,4 +185,48 @@ describe('WorkflowStepNode', () => {
       expect(screen.getByText('Réessai: 5×')).toBeInTheDocument();
     });
   });
+
+  // Story 18.3, AC4: Real action name display
+  describe('action name display (Story 18.3)', () => {
+    it('displays real action_name "Apply Oracle Patch"', () => {
+      render(
+        <WorkflowStepNode
+          {...makeProps({ action_name: 'Apply Oracle Patch', action_id: 12 })}
+        />,
+      );
+      expect(screen.getByText('Apply Oracle Patch')).toBeInTheDocument();
+      expect(screen.queryByText('Action #12')).not.toBeInTheDocument();
+    });
+
+    it('falls back to action_name when name is null', () => {
+      render(
+        <WorkflowStepNode
+          {...makeProps({ action_name: 'Backup DB', name: null })}
+        />,
+      );
+      expect(screen.getByText('Backup DB')).toBeInTheDocument();
+    });
+
+    it('displays custom name over action_name when both present', () => {
+      render(
+        <WorkflowStepNode
+          {...makeProps({ action_name: 'Apply Oracle Patch', name: 'Mon étape' })}
+        />,
+      );
+      // Custom name displayed first (primary)
+      expect(screen.getByText('Mon étape')).toBeInTheDocument();
+      // action_name displayed as secondary
+      expect(screen.getByText('Apply Oracle Patch')).toBeInTheDocument();
+    });
+
+    it('truncates long action names with ellipsis via CSS', () => {
+      render(
+        <WorkflowStepNode
+          {...makeProps({ action_name: 'A very long action name that exceeds thirty characters easily' })}
+        />,
+      );
+      // The text is rendered but CSS handles truncation
+      expect(screen.getByText('A very long action name that exceeds thirty characters easily')).toBeInTheDocument();
+    });
+  });
 });

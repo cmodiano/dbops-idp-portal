@@ -637,7 +637,7 @@ export function ActionWizard({
       open={open}
       onCancel={onCancel}
       footer={null}
-      width={isWorkflow && workflowViewMode === 'visual' ? 1100 : 640}
+      width={isWorkflow && workflowViewMode === 'visual' ? 1400 : 640}
       destroyOnHidden
       styles={{ body: { maxHeight: 'calc(100vh - 220px)', overflowY: 'auto' } }}
       aria-label={modalTitle}

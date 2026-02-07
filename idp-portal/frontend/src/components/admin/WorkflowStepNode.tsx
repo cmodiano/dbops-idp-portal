@@ -108,11 +108,11 @@ const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
           aria-label="Entrée"
         />
 
-        <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 13 }}>
+        <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 13, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {nodeData.name ?? nodeData.action_name}
         </div>
         {nodeData.name && nodeData.name !== nodeData.action_name && (
-          <div style={{ fontSize: 11, color: token.colorTextSecondary, marginBottom: 2 }}>
+          <div style={{ fontSize: 11, color: token.colorTextSecondary, marginBottom: 2, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {nodeData.action_name}
           </div>
         )}

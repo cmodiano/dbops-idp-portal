@@ -83,7 +83,7 @@ export function workflowStepsToReactFlow(
     position: { x: (index % 4) * 280, y: Math.floor(index / 4) * 200 + 120 },
     data: {
       action_id: step.referenced_action_id,
-      action_name: step.name ?? `Action #${step.referenced_action_id}`,
+      action_name: step.action_name ?? `Action #${step.referenced_action_id}`,
       action_engine: '',
       action_platform: '',
       name: step.name,
@@ -139,13 +139,13 @@ export function workflowStepsToReactFlow(
     }
   });
 
-  // Inject visual start node
+  // Inject visual start node (Story 18.3: draggable: true for repositioning)
   const startNode: Node = {
     id: START_NODE_ID,
     type: 'start',
     position: { x: 0, y: 0 },
     data: { isStartNode: true },
-    draggable: false,
+    draggable: true,
     selectable: false,
     deletable: false,
   };
@@ -159,45 +159,13 @@ export function workflowStepsToReactFlow(
     type: 'end',
     position: { x: 0, y: maxY },
     data: { isEndNode: true },
-    draggable: false,
+    draggable: true,
     selectable: false,
     deletable: false,
   };
 
-  // Connect start → first workflow node
-  if (workflowNodes.length > 0) {
-    edges.push({
-      id: `${START_NODE_ID}_to_${workflowNodes[0].id}`,
-      source: START_NODE_ID,
-      sourceHandle: 'output',
-      target: workflowNodes[0].id,
-      targetHandle: 'input',
-      type: 'customEdge',
-      animated: false,
-      style: { stroke: '#52c41a', strokeWidth: 2, strokeDasharray: '5,5' },
-      deletable: false,
-      selectable: false,
-    });
-  }
-
-  // Connect nodes without any output to end node
-  const nodesWithOutput = new Set(edges.map((e) => e.source));
-  workflowNodes.forEach((node) => {
-    if (!nodesWithOutput.has(node.id)) {
-      edges.push({
-        id: `${node.id}_to_${END_NODE_ID}`,
-        source: node.id,
-        sourceHandle: 'success',
-        target: END_NODE_ID,
-        targetHandle: 'input',
-        type: 'customEdge',
-        animated: false,
-        style: { stroke: '#8c8c8c', strokeWidth: 1, strokeDasharray: '5,5' },
-        deletable: false,
-        selectable: false,
-      });
-    }
-  });
+  // Story 18.3: Removed auto-connections Start → first node and nodes → End.
+  // Users now create connections manually for better control over the flow layout.
 
   return { nodes: [startNode, ...workflowNodes, endNode], edges };
 }
@@ -789,7 +757,7 @@ function WorkflowBuilderCanvasInner({
   );
 
   return (
-    <div style={{ display: 'flex', height: 600, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: 700, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, overflow: 'hidden' }}>
       <ActionPalette disabled={disabled} />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         {/* Toolbar */}
