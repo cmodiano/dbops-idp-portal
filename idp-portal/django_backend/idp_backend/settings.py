@@ -25,8 +25,11 @@ load_dotenv(BASE_DIR / '.env')
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-# NOTE: Default value is for development only. MUST be set via SECRET_KEY env var in production.
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-bvc0qsxvq0dly--u$d1pge47!6f^r+wf%9e4c^2sn!=z(-wkqf')
+# Story 17.5: No hardcoded default - fail-fast if missing in production
+# Dev fallback keeps Django functional; startup_checks.py validates properly
+SECRET_KEY = os.getenv('SECRET_KEY', '')
+if not SECRET_KEY:
+    SECRET_KEY = 'django-insecure-dev-fallback-will-be-validated'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
@@ -101,7 +104,8 @@ WSGI_APPLICATION = 'idp_backend.wsgi.application'
 #   TIMESTAMP WITH TIME ZONE / DPY-3022 "named time zones not supported in thin mode")
 ORACLE_DSN = os.getenv('ORACLE_DSN', 'localhost:1521/FREEPDB1')
 ORACLE_USER = os.getenv('ORACLE_USER', 'idp_app')
-ORACLE_PASSWORD = os.getenv('ORACLE_PASSWORD', 'changeme')
+# Story 17.5: No hardcoded default - fail-fast if missing in production
+ORACLE_PASSWORD = os.getenv('ORACLE_PASSWORD', '')
 
 DATABASES = {
     'default': {
@@ -227,7 +231,8 @@ SAML_IDP_CERT_PATH = os.getenv('SAML_IDP_CERT_PATH', '')
 # JWT Configuration (Story M.7)
 # ============================================================================
 
-JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'change-me-in-production')
+# Story 17.5: No hardcoded default - fail-fast if missing in production
+JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', '')
 JWT_ALGORITHM = os.getenv('JWT_ALGORITHM', 'HS256')
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv('JWT_ACCESS_TOKEN_EXPIRE_MINUTES', '30'))
 JWT_REFRESH_TOKEN_EXPIRE_HOURS = int(os.getenv('JWT_REFRESH_TOKEN_EXPIRE_HOURS', '8'))

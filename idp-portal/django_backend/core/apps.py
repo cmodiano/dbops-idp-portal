@@ -6,6 +6,20 @@ class CoreConfig(AppConfig):
     name = 'core'
 
     def ready(self):
-        """Initialize structlog configuration on app startup."""
+        """Initialize structlog configuration and validate secrets on app startup."""
         from core.logging import configure_structlog
         configure_structlog()
+
+        # Story 17.5: Validate secrets at startup
+        from django.conf import settings
+        from django.core.exceptions import ImproperlyConfigured
+        from core.startup_checks import validate_required_secrets
+
+        try:
+            validate_required_secrets(
+                app_env=settings.APP_ENV,
+                auth_dev_bypass=settings.AUTH_DEV_BYPASS,
+            )
+        except ImproperlyConfigured:
+            # Re-raise to stop application startup
+            raise

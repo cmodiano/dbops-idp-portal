@@ -7,12 +7,14 @@ Tests validating SOC1 controls:
 - AC3: Production security settings (TLS/HTTPS)
 - AC4: Secrets management via Vault references (NFR7)
 - AC5: Sensitive data protection (NFR11)
+- AC10: Secret validation at startup (Story 17.5)
 """
 
 import os
 import re
 
 import pytest
+from django.core.exceptions import ImproperlyConfigured
 from django.db import IntegrityError
 from django.test import override_settings
 from rest_framework.test import APIClient
@@ -438,3 +440,119 @@ class TestSensitiveDataProtection:
         assert 'Traceback' not in content
         assert 'line 42' not in content
         assert response.data.get("error", {}).get("message") == "An unexpected error occurred"
+
+
+# ============================================================================
+# AC10: Secret Validation at Startup (Story 17.5)
+# ============================================================================
+
+class TestSecretValidation:
+    """Story 17.5: Tests de validation des secrets au démarrage."""
+
+    def test_production_missing_secret_key_fails(self):
+        """Production sans SECRET_KEY doit échouer."""
+        from core.startup_checks import validate_required_secrets
+        from unittest.mock import patch as mock_patch
+        with mock_patch.dict('os.environ', {'SECRET_KEY': ''}, clear=False):
+            with pytest.raises(ImproperlyConfigured, match="SECRET_KEY is not set"):
+                validate_required_secrets(app_env='production', auth_dev_bypass=False)
+
+    def test_production_insecure_secret_key_fails(self):
+        """Production avec SECRET_KEY par défaut doit échouer."""
+        from core.startup_checks import validate_required_secrets
+        from unittest.mock import patch as mock_patch
+        with mock_patch.dict('os.environ', {'SECRET_KEY': 'django-insecure-test'}, clear=False):
+            with pytest.raises(ImproperlyConfigured, match="SECRET_KEY contains insecure default"):
+                validate_required_secrets(app_env='production', auth_dev_bypass=False)
+
+    def test_production_placeholder_jwt_secret_fails(self):
+        """Production avec placeholder JWT_SECRET_KEY doit échouer."""
+        from core.startup_checks import validate_required_secrets
+        from unittest.mock import patch as mock_patch
+        env_vars = {
+            'SECRET_KEY': 'valid-production-secret-key-abc123',
+            'JWT_SECRET_KEY': 'CHANGE_JWT_SECRET',
+            'ORACLE_PASSWORD': 'valid-oracle-password',
+        }
+        with mock_patch.dict('os.environ', env_vars, clear=False):
+            with pytest.raises(ImproperlyConfigured, match="JWT_SECRET_KEY contains unreplaced placeholder"):
+                validate_required_secrets(app_env='production', auth_dev_bypass=False)
+
+    def test_production_missing_saml_certs_with_saml_active_fails(self):
+        """Production avec SAML activé mais certs manquants doit échouer."""
+        from core.startup_checks import validate_required_secrets
+        from unittest.mock import patch as mock_patch
+        env_vars = {
+            'SECRET_KEY': 'valid-production-secret-key-abc123',
+            'JWT_SECRET_KEY': 'valid-jwt-secret-key-xyz789',
+            'ORACLE_PASSWORD': 'valid-oracle-password',
+            'SAML_SP_CERT_PATH': '',
+        }
+        with mock_patch.dict('os.environ', env_vars, clear=False):
+            with pytest.raises(ImproperlyConfigured, match="SAML_SP_CERT_PATH required"):
+                validate_required_secrets(app_env='production', auth_dev_bypass=False)
+
+    def test_production_all_valid_secrets_succeeds(self):
+        """Production avec tous secrets valides doit réussir."""
+        from core.startup_checks import validate_required_secrets
+        from unittest.mock import patch as mock_patch
+        env_vars = {
+            'SECRET_KEY': 'valid-production-secret-key-abc123',
+            'JWT_SECRET_KEY': 'valid-jwt-secret-key-xyz789',
+            'ORACLE_PASSWORD': 'valid-oracle-password',
+            'SAML_SP_CERT_PATH': '/etc/idp/certs/sp.crt',
+            'SAML_SP_KEY_PATH': '/etc/idp/certs/sp.key',
+            'SAML_IDP_CERT_PATH': '/etc/idp/certs/idp.crt',
+        }
+        with mock_patch.dict('os.environ', env_vars, clear=False):
+            validate_required_secrets(app_env='production', auth_dev_bypass=False)
+
+    def test_development_insecure_secrets_warns_but_succeeds(self):
+        """Dev mode avec secrets par défaut doit avertir mais réussir."""
+        from core.startup_checks import validate_required_secrets
+        from unittest.mock import patch as mock_patch
+        env_vars = {
+            'SECRET_KEY': 'django-insecure-dev-only',
+            'JWT_SECRET_KEY': 'change-me-in-production',
+            'ORACLE_PASSWORD': 'changeme',
+        }
+        with mock_patch.dict('os.environ', env_vars, clear=False):
+            validate_required_secrets(app_env='development', auth_dev_bypass=True)
+
+    def test_staging_env_treated_as_production(self):
+        """Staging doit être traité comme production (fail-fast)."""
+        from core.startup_checks import validate_required_secrets
+        from unittest.mock import patch as mock_patch
+        with mock_patch.dict('os.environ', {'SECRET_KEY': 'changeme'}, clear=False):
+            with pytest.raises(ImproperlyConfigured):
+                validate_required_secrets(app_env='staging', auth_dev_bypass=False)
+
+    def test_no_hardcoded_secrets_in_settings(self):
+        """settings.py ne doit contenir aucun secret hardcodé après Story 17.5."""
+        settings_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            'idp_backend', 'settings.py'
+        )
+        with open(settings_path) as f:
+            content = f.read()
+        # OLD dangerous patterns that should be COMPLETELY REMOVED
+        old_dangerous_patterns = [
+            'django-insecure-bvc0qsxvq0dly',  # Old hardcoded SECRET_KEY
+            "'changeme'",  # Old hardcoded ORACLE_PASSWORD
+            "'change-me-in-production'",  # Old hardcoded JWT_SECRET_KEY
+        ]
+        for pattern in old_dangerous_patterns:
+            assert pattern not in content, \
+                f"Hardcoded secret pattern found in settings.py: {pattern}"
+
+        # NEW fallback pattern (Story 17.5) should exist ONLY in controlled context
+        # Verify it's used as a fallback with proper comment explaining validation
+        assert 'django-insecure-dev-fallback-will-be-validated' in content, \
+            "Dev fallback SECRET_KEY missing (Story 17.5 requirement)"
+        assert 'startup_checks.py validates properly' in content, \
+            "Missing comment explaining dev fallback validation"
+        # Ensure it's ONLY used in an if statement, not as direct os.getenv default
+        assert "os.getenv('SECRET_KEY', 'django-insecure-dev-fallback" not in content, \
+            "Dev fallback must not be in os.getenv() default - should be in if not SECRET_KEY: block"
+        assert 'if not SECRET_KEY:' in content, \
+            "Dev fallback must be conditional (if not SECRET_KEY: pattern)"

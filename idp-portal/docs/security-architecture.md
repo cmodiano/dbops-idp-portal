@@ -551,6 +551,27 @@ VAULT_ADDR=https://vault.example.com:8200
 VAULT_TOKEN=hvs.XXXXXXXXXXXXX
 ```
 
+### Startup Secret Validation (Story 17.5)
+
+**Fail-Fast Pattern :** L'application refuse de demarrer si des secrets critiques sont manquants ou contiennent des valeurs par defaut en environnement non-dev.
+
+**Secrets proteges :**
+- `SECRET_KEY` : Protection sessions/CSRF Django
+- `JWT_SECRET_KEY` : Cle de signature tokens
+- `ORACLE_PASSWORD` : Credentials base de donnees
+- `SAML_*_CERT_PATH` : Chemins certificats SAML (si `AUTH_DEV_BYPASS=false`)
+
+**Regles de validation :**
+1. Production/Staging : Valeurs manquantes ou par defaut → `ImproperlyConfigured`
+2. Development : Valeurs par defaut autorisees mais loguees en warning
+3. Detection placeholders : Patterns `CHANGE_*`, `<VARIABLE>`, `TODO:` rejetes
+
+**Implementation :**
+- Module : `core/startup_checks.py`
+- Point d'entree : `core/apps.CoreConfig.ready()`
+- Tests : `tests/security/test_soc1_compliance.py::TestSecretValidation`
+- Tests unitaires : `core/tests/test_startup_checks.py`
+
 ### detect-secrets
 
 **Fichier :** `.secrets.baseline`
