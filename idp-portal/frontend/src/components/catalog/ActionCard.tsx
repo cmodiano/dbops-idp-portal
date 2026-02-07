@@ -268,11 +268,11 @@ export function ActionCard({
                 disabled={false}
                 style={{
                   padding: 0,
-                  width: 24,
-                  height: 24,
-                  minWidth: 24,
+                  width: 44,
+                  height: 44,
+                  minWidth: 44,
                   lineHeight: 1,
-                  margin: -4,
+                  margin: -10,
                 }}
                 aria-label={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
               />

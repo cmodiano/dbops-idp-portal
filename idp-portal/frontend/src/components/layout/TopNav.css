@@ -156,6 +156,27 @@ html.dark .nav-pill:hover {
   transform: rotate(15deg);
 }
 
+/* Reduced motion: disable animations (WCAG) */
+@media (prefers-reduced-motion: reduce) {
+  .nav-pill,
+  .theme-toggle,
+  .nav-profile {
+    transition: none !important;
+  }
+
+  .theme-toggle svg {
+    transition: none !important;
+  }
+
+  .theme-toggle:hover {
+    transform: none !important;
+  }
+
+  .theme-toggle:hover svg {
+    transform: none !important;
+  }
+}
+
 /* Mobile responsive - hide labels on small screens */
 @media (max-width: 768px) {
   .nav-pill span:last-child {

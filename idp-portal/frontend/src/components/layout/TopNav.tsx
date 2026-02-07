@@ -111,6 +111,9 @@ export function TopNav() {
       {/* Logo */}
       <div
         className="nav-logo"
+        role="link"
+        tabIndex={0}
+        aria-label="Accueil — Catalogue"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -119,6 +122,12 @@ export function TopNav() {
           cursor: 'pointer',
         }}
         onClick={() => navigate('/catalog')}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            navigate('/catalog');
+          }
+        }}
       >
         <img
           src="/logo-dbops.svg"

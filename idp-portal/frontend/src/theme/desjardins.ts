@@ -135,7 +135,7 @@ export const darkTheme: ThemeConfig = {
     // Brighter text for better readability
     colorText: '#f0f0f2',
     colorTextSecondary: '#a8a8b3',
-    colorTextTertiary: '#6b6b78',
+    colorTextTertiary: '#8a8a96',
     // Subtle borders with slight luminosity for glass effect
     colorBorder: '#2d2d3a',
     colorBorderSecondary: '#252532',

@@ -357,19 +357,7 @@ export default function CatalogPage() {
     const cardVariant: ActionCardProps['variant'] = isBusinessProfile ? 'business' : 'default';
 
     return (
-      <div
-        key={action.id}
-        tabIndex={0}
-        role="button"
-        aria-label={`Voir détails: ${action.name}`}
-        onClick={(e) => handleActionClick(action, e)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            handleActionClick(action, e as unknown as React.MouseEvent);
-          }
-        }}
-      >
+      <div key={action.id}>
         <ActionCard
           action={preview}
           onClick={(e) => handleActionClick(action, e)}
@@ -397,7 +385,7 @@ export default function CatalogPage() {
     ) : (
       <Row gutter={[16, 16]}>
         {Array.from({ length: 6 }).map((_, i) => (
-          <Col key={i} xs={24} sm={12} lg={8} xl={6}>
+          <Col key={i} xs={24} sm={12} md={8} lg={8} xl={6}>
             <Card>
               <Skeleton active avatar={{ shape: 'square', size: 'small' }} paragraph={{ rows: 2 }} />
             </Card>
@@ -515,7 +503,7 @@ export default function CatalogPage() {
         ) : (
           <Row gutter={[16, 16]}>
             {filteredActions.map((action) => (
-              <Col key={action.id} xs={24} sm={12} lg={8} xl={6}>
+              <Col key={action.id} xs={24} sm={12} md={8} lg={8} xl={6}>
                 {renderActionCard(action)}
               </Col>
             ))}
