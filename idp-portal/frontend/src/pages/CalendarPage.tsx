@@ -13,7 +13,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link } from 'react-router';
-import { Typography, Spin, Alert, Popover, Tag, Space, Descriptions, theme, Segmented, Button, Modal, Switch, Form, DatePicker, Input, Select, Radio } from 'antd';
+import { App, Typography, Spin, Alert, Popover, Tag, Space, Descriptions, theme, Segmented, Button, Modal, Switch, Form, DatePicker, Input, Select, Radio } from 'antd';
 import { SyncOutlined, ClockCircleOutlined, LinkOutlined } from '@ant-design/icons';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
@@ -33,7 +33,6 @@ import { fetchInventoryTargets } from '../services/execution_service';
 import { ApiError } from '../services/api_client';
 import type { ScheduledExecutionListItem, ExecutionEnvironment, ScheduledExecutionFilters, ScheduledExecutionUpdateRequest } from '../types/api';
 import { formatUtcToLocal } from '../utils/dateFormat';
-import { notification } from 'antd';
 import './CalendarPage.css';
 import logger from '../services/logger';
 
@@ -331,6 +330,7 @@ export function EventDetailsPopover({
 }
 
 export function CalendarPage() {
+  const { notification } = App.useApp();
   const { token } = theme.useToken();
   const { user } = useAuth();
   const { filters, applyFilters, resetFilters, activeFilterCount } = useCalendarFilters();

@@ -34,11 +34,29 @@ import ExecutionsPage from './ExecutionsPage';
 import { AuthProvider } from '../contexts/AuthContext';
 import { ThemeProvider } from '../contexts/ThemeContext';
 import * as executionService from '../services/execution_service';
+import { getIntegrations } from '../services/integrations_service';
 import type { ExecutionResponse, ExecutionStepResponse, DashboardStats } from '../types/api';
+
+// Mock App.useApp() to provide notification/message/modal without requiring <App> context
+const mockNotification = {
+  success: vi.fn(),
+  error: vi.fn(),
+  info: vi.fn(),
+  warning: vi.fn(),
+  open: vi.fn(),
+};
+
+const mockMessage = {
+  success: vi.fn(),
+  error: vi.fn(),
+  info: vi.fn(),
+  warning: vi.fn(),
+  loading: vi.fn(),
+};
 
 vi.mock('../services/execution_service');
 vi.mock('../services/integrations_service', () => ({
-  getIntegrations: vi.fn().mockResolvedValue([]),
+  getIntegrations: vi.fn(),
 }));
 vi.mock('../services/catalog_service', () => ({
   fetchCatalogActionById: vi.fn().mockResolvedValue({
@@ -208,6 +226,14 @@ describe('ExecutionsPage', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    // Re-mock App.useApp after resetAllMocks (provides notification without <App> context)
+    vi.spyOn(App, 'useApp').mockReturnValue({
+      message: mockMessage as any,
+      notification: mockNotification as any,
+      modal: {} as any,
+    });
+    // Re-mock getIntegrations after resetAllMocks (factory mock is cleared by resetAllMocks)
+    vi.mocked(getIntegrations).mockResolvedValue([]);
     vi.mocked(executionService.listExecutions).mockResolvedValue(defaultListResponse);
     vi.mocked(executionService.getExecution).mockResolvedValue(mockExecutions[0]);
     vi.mocked(executionService.getExecutionSteps).mockResolvedValue(mockSteps);
@@ -1257,7 +1283,7 @@ describe('ExecutionsPage', () => {
       expect(plateformeHeader).not.toHaveAttribute('aria-description', 'sortable');
     });
 
-    it('includes 8 columns when scope=all (with Utilisateur)', async () => {
+    it('includes 9 columns when scope=all (with Utilisateur and Actions)', async () => {
       mockAuthSession('DBA');
 
       vi.mocked(executionService.listExecutions).mockResolvedValue({
@@ -1289,8 +1315,8 @@ describe('ExecutionsPage', () => {
       const table = screen.getByRole('table');
       const headers = within(table).getAllByRole('columnheader');
 
-      // Should have 8 columns including Utilisateur
-      expect(headers.length).toBe(8);
+      // Should have 9 columns including Utilisateur and Actions (Story 17.14/17.15)
+      expect(headers.length).toBe(9);
     });
   });
 

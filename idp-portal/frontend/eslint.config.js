@@ -4,6 +4,7 @@ import react from 'eslint-plugin-react'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 import security from 'eslint-plugin-security'
+import standards from './eslint-plugin-standards/index.js'
 import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
@@ -24,6 +25,7 @@ export default defineConfig([
     plugins: {
       react,
       security,
+      standards,
     },
     settings: {
       react: {
@@ -58,6 +60,11 @@ export default defineConfig([
 
       // Structured logging enforcement (Story 17.7)
       'no-console': 'error',
+
+      // Frontend standards enforcement (Story 17.16)
+      'standards/no-antd-internal-imports': 'error',
+      'standards/require-app-useapp': 'error',
+      'standards/no-class-components': 'error',
     },
   },
   // Allow console.* in test files (test helpers, spies, assertions)

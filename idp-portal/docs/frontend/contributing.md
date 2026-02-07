@@ -143,20 +143,29 @@ if (typeof data === 'object' && data !== null) {
 
 ### Règles Ant Design 6
 
+> Ces règles sont appliquées automatiquement par ESLint (`eslint-plugin-standards/`).
+> Voir [`FRONTEND-STANDARDS.md`](../../frontend/FRONTEND-STANDARDS.md) pour la référence complète.
+
 ```typescript
-// ❌ INTERDIT - imports internes
+// ❌ INTERDIT - imports internes (standards/no-antd-internal-imports)
 import { ColumnsType } from 'antd/es/table';
 
 // ✅ CORRECT - exports publics
 import type { TableProps } from 'antd';
 
-// ❌ INTERDIT - message/notification direct
+// ❌ INTERDIT - message/notification direct (standards/require-app-useapp)
 import { message } from 'antd';
 message.error('Erreur');
 
 // ✅ CORRECT - via App.useApp()
 const { message } = App.useApp();
 message.error('Erreur');
+
+// ❌ INTERDIT - class components (standards/no-class-components)
+class MyComponent extends React.Component { ... }
+
+// ✅ CORRECT - function components
+function MyComponent() { ... }
 ```
 
 ---

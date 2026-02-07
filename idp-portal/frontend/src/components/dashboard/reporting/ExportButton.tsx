@@ -10,7 +10,7 @@
  */
 
 import { useState } from 'react';
-import { Button, Dropdown, message } from 'antd';
+import { App, Button, Dropdown } from 'antd';
 import {
   DownloadOutlined,
   FileExcelOutlined,
@@ -43,6 +43,7 @@ export function ExportButton({
   loading = false,
   disabled = false,
 }: ExportButtonProps) {
+  const { message } = App.useApp();
   const [exporting, setExporting] = useState(false);
 
   const handleExport = async (format: 'csv' | 'pdf') => {

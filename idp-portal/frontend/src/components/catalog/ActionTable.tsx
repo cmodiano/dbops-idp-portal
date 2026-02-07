@@ -26,7 +26,8 @@ import {
   Button,
   theme,
 } from 'antd';
-import type { ColumnsType } from 'antd/es/table';
+import type { TableProps } from 'antd';
+
 import {
   DatabaseOutlined,
   CloudServerOutlined,
@@ -160,7 +161,7 @@ export function ActionTable({
     );
   }, [isDark]);
 
-  const columns: ColumnsType<CatalogAction> = useMemo(
+  const columns: TableProps<CatalogAction>['columns'] = useMemo(
     () => [
       // AC2: Action column with icon and name
       {

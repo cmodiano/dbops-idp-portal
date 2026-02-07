@@ -6,8 +6,9 @@
  */
 
 import { Drawer, Table, Tag, Empty, Button } from 'antd';
+import type { TableProps } from 'antd';
 import { Link } from 'react-router';
-import type { ColumnsType } from 'antd/es/table';
+
 import type { ComparisonDimension, ComparisonMetric, DashboardRecentExecution } from '../../../types/api';
 
 export interface ComparisonExecutionsDrawerProps {
@@ -49,7 +50,7 @@ const METRIC_LABELS: Record<ComparisonMetric, string> = {
   incident_count: 'Incidents',
 };
 
-const columns: ColumnsType<DashboardRecentExecution> = [
+const columns: TableProps<DashboardRecentExecution>['columns'] = [
   {
     title: 'Action',
     dataIndex: 'action_name',

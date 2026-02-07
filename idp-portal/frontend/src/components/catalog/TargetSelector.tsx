@@ -12,7 +12,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Select, Badge, Alert, Spin, Empty } from 'antd';
-import type { DefaultOptionType } from 'antd/es/select';
+import type { SelectProps } from 'antd';
+
 import { apiFetchRaw } from '../../services/api_client';
 import { useDebounce } from '../../hooks/useDebounce';
 
@@ -126,7 +127,7 @@ export function TargetSelector({
   }, [debouncedSearch]);
 
   // Group targets by environment for dropdown display
-  const groupedOptions = useMemo((): DefaultOptionType[] => {
+  const groupedOptions = useMemo((): NonNullable<SelectProps['options']> => {
     // Group by environment
     const groups: Record<string, Target[]> = {};
     for (const target of targets) {

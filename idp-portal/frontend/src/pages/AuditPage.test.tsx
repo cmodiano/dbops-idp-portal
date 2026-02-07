@@ -13,8 +13,23 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router';
-import { ConfigProvider } from 'antd';
+import { App, ConfigProvider } from 'antd';
 import { ThemeProvider } from '../contexts/ThemeContext';
+
+// Mock App.useApp() to provide message without needing full App context
+const mockMessage = {
+  success: vi.fn(),
+  error: vi.fn(),
+  info: vi.fn(),
+  warning: vi.fn(),
+  loading: vi.fn(),
+};
+
+vi.spyOn(App, 'useApp').mockReturnValue({
+  message: mockMessage,
+  notification: {} as any,
+  modal: {} as any,
+});
 
 // Mock the audit service
 const mockListExecutionAudit = vi.fn();
@@ -349,7 +364,7 @@ describe('AuditPage', () => {
       await user.click(screen.getByText('CSV'));
 
       await waitFor(() => {
-        expect(screen.getByText(/Rapport exporté/i)).toBeInTheDocument();
+        expect(mockMessage.success).toHaveBeenCalledWith(expect.stringMatching(/Rapport exporté/i), expect.anything());
       });
     });
 
@@ -372,7 +387,7 @@ describe('AuditPage', () => {
       await user.click(screen.getByText('PDF'));
 
       await waitFor(() => {
-        expect(screen.getByText(/Limite d'export dépassée/i)).toBeInTheDocument();
+        expect(mockMessage.error).toHaveBeenCalledWith(expect.stringMatching(/Limite d'export dépassée/i), expect.anything());
       });
     });
 

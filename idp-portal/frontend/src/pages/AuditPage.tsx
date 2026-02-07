@@ -24,8 +24,8 @@ import {
   Descriptions,
   Badge,
   Button,
+  App,
   Dropdown,
-  message,
 } from 'antd';
 import type { MenuProps } from 'antd';
 import { DownloadOutlined } from '@ant-design/icons';
@@ -105,6 +105,7 @@ function getActionName(entry: AuditExecutionEntry): string {
 }
 
 export default function AuditPage() {
+  const { message } = App.useApp();
   const { user } = useAuth();
 
   // Table data

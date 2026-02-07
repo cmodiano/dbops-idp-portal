@@ -6,14 +6,15 @@
  */
 
 import { useState } from 'react';
-import { Table, Button, Space, Modal, Input, Tag, message, Typography, Tooltip } from 'antd';
+import { App, Table, Button, Space, Modal, Input, Tag, Typography, Tooltip } from 'antd';
+import type { TableProps } from 'antd';
 import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   ClockCircleOutlined,
   ExclamationCircleOutlined,
 } from '@ant-design/icons';
-import type { ColumnsType } from 'antd/es/table';
+
 import type { ExecutionResponse } from '../../types/api';
 import { approveExecution, rejectExecution } from '../../services/execution_service';
 
@@ -31,6 +32,7 @@ export function PendingApprovalsList({
   loading,
   onActionComplete,
 }: PendingApprovalsListProps) {
+  const { message } = App.useApp();
   const [approveModalOpen, setApproveModalOpen] = useState(false);
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [selectedExecution, setSelectedExecution] = useState<ExecutionResponse | null>(null);
@@ -81,7 +83,7 @@ export function PendingApprovalsList({
     }
   };
 
-  const columns: ColumnsType<ExecutionResponse> = [
+  const columns: TableProps<ExecutionResponse>['columns'] = [
     {
       title: 'Action',
       dataIndex: 'action_name',

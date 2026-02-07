@@ -17,27 +17,22 @@ vi.mock('../../services/execution_service', () => ({
   rejectExecution: vi.fn(),
 }));
 
-// Mock antd message to prevent console warnings
-vi.mock('antd', async () => {
-  const actual = await vi.importActual('antd');
-  return {
-    ...actual,
-    message: {
-      success: vi.fn(),
-      error: vi.fn(),
-    },
-  };
-});
-
 import { approveExecution, rejectExecution } from '../../services/execution_service';
-import { message } from 'antd';
+import { App } from 'antd';
 
 const mockApproveExecution = approveExecution as ReturnType<typeof vi.fn>;
 const mockRejectExecution = rejectExecution as ReturnType<typeof vi.fn>;
-const mockMessage = message as {
-  success: ReturnType<typeof vi.fn>;
-  error: ReturnType<typeof vi.fn>;
+const mockMessage = {
+  success: vi.fn(),
+  error: vi.fn(),
 };
+
+// Mock App.useApp to provide message API (component uses App.useApp() hook)
+vi.spyOn(App, 'useApp').mockReturnValue({
+  message: mockMessage,
+  notification: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), open: vi.fn() },
+  modal: { confirm: vi.fn(), info: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn() },
+} as unknown as ReturnType<typeof App.useApp>);
 
 const mockExecutions: ExecutionResponse[] = [
   {

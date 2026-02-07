@@ -45,7 +45,7 @@
  */
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Typography, Table, Drawer, Skeleton, Alert, Card, Space, Row, Col, Tag, theme, Button, Modal, notification, Tooltip } from 'antd';
+import { App, Typography, Table, Drawer, Skeleton, Alert, Card, Space, Row, Col, Tag, theme, Button, Modal, Tooltip } from 'antd';
 import {
   SafetyCertificateOutlined,
   RocketOutlined,
@@ -152,6 +152,7 @@ function isRunning(status: ExecutionStatusType): boolean {
 }
 
 export default function ExecutionsPage() {
+  const { notification } = App.useApp();
   // Story 8.8 AC9, Story 8.9: Auth context for profile check
   const { user, isLoading: authLoading } = useAuth();
   const { token } = theme.useToken();
