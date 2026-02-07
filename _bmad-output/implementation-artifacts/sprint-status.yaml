@@ -227,7 +227,7 @@ development_status:
     17-4-oracle-json-field-modele-action: done # 2026-02-07: Code review completed — 7 HIGH + 4 MEDIUM fixes applied. OracleJSONField enhanced (validation, logging), serializers simplified (-5 methods), 45/45 OracleJSONField tests pass. KNOWN ISSUES: 40+ catalog tests fail (pre-existing User fixtures, NOT caused by refactor)
     17-5-securiser-gestion-secrets: done # 2026-02-07: Code review completed — 1 CRITICAL + 4 MEDIUM + 3 LOW fixes applied, 21/21 tests pass, secrets vides en dev loggent warnings, .env.production.template enrichi, fail-fast validé production
     17-6-restreindre-exception-catches: done # 2026-02-07: Code review completed — 7 HIGH + 3 MEDIUM fixes applied, dashboard silent exception fixed, test coverage improved 9→13 tests (all pass)
-    17-7-remplacer-console-log-logging-frontend: backlog
+    17-7-remplacer-console-log-logging-frontend: done # 2026-02-07: Code review complete — 12 issues found (4 HIGH + 5 MEDIUM + 3 LOW), 9 auto-fixed, 11/11 tests pass, 0 ESLint violations ✅
     17-8-pyproject-toml-lockfile-django-backend: backlog
     17-9-mypy-bloquant-progressivement: backlog
     17-10-dockerfile-backend-frontend: backlog

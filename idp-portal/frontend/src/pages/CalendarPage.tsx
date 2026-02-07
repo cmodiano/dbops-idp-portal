@@ -35,6 +35,7 @@ import type { ScheduledExecutionListItem, ExecutionEnvironment, ScheduledExecuti
 import { formatUtcToLocal } from '../utils/dateFormat';
 import { notification } from 'antd';
 import './CalendarPage.css';
+import logger from '../services/logger';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -384,7 +385,7 @@ export function CalendarPage() {
     } catch (err) {
       setError('Erreur lors du chargement des exécutions planifiées');
       if (import.meta.env.DEV) {
-        console.error('Failed to fetch scheduled executions:', err);
+        logger.error('Failed to fetch scheduled executions', { error: err instanceof Error ? err.message : String(err) });
       }
     } finally {
       setLoading(false);

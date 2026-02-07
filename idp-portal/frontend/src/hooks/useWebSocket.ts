@@ -10,6 +10,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { getExecution, getExecutionSteps } from '../services/execution_service';
 import type { ExecutionResponse } from '../types/api';
 import type { ExecutionStepResponse } from '../types/api';
+import logger from '../services/logger';
 
 const RECONNECT_DELAY_MS = 2000;
 const WS_PROTOCOL = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -131,7 +132,7 @@ export function useWebSocket(executionId: number | null): UseWebSocketResult {
           }
         } catch (parseError) {
           // HIGH-3 FIX: Log parse errors instead of silently ignoring
-          console.warn('useWebSocket: Failed to parse message', parseError, event.data);
+          logger.warn('useWebSocket: Failed to parse message', { error: parseError instanceof Error ? parseError.message : String(parseError) });
         }
       };
 

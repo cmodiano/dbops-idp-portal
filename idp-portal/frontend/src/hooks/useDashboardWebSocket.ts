@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import type { DashboardRecentExecution, ExecutionStatusType } from '../types/api';
+import logger from '../services/logger';
 
 const RECONNECT_DELAY_MS = 3000;
 const WS_PROTOCOL = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -127,7 +128,7 @@ export function useDashboardWebSocket(
       } catch {
         // Parse error: ignore invalid messages (no console in prod — code-review)
         if (import.meta.env.DEV) {
-          console.warn('useDashboardWebSocket: Failed to parse message');
+          logger.warn('useDashboardWebSocket: Failed to parse message');
         }
       }
     },

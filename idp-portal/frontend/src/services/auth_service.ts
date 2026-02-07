@@ -1,5 +1,6 @@
 import type { User } from '../types/common';
 import { buildHeaders, parseErrorResponse } from './api_client';
+import logger from './logger';
 
 const API_BASE = '/api/v1';
 
@@ -17,13 +18,13 @@ export async function refreshAccessToken(): Promise<string | null> {
     });
     if (!res.ok) {
       const { message } = await parseErrorResponse(res);
-      console.warn(`Token refresh failed: ${message}`);
+      logger.warn('Token refresh failed', { message });
       return null;
     }
     const body = await res.json();
     return body.data?.access_token ?? null;
   } catch (err) {
-    console.warn('Token refresh error:', err);
+    logger.warn('Token refresh error', { error: err instanceof Error ? err.message : String(err) });
     return null;
   }
 }
@@ -34,13 +35,13 @@ export async function fetchCurrentUser(token: string): Promise<User | null> {
     const res = await fetch(`${API_BASE}/auth/me`, { headers });
     if (!res.ok) {
       const { message } = await parseErrorResponse(res);
-      console.warn(`fetchCurrentUser failed: ${message}`);
+      logger.warn('fetchCurrentUser failed', { message });
       return null;
     }
     const body = await res.json();
     return body.data ?? null;
   } catch (err) {
-    console.warn('fetchCurrentUser error:', err);
+    logger.warn('fetchCurrentUser error', { error: err instanceof Error ? err.message : String(err) });
     return null;
   }
 }

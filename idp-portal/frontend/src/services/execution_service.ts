@@ -6,6 +6,7 @@
  */
 
 import { apiFetch, apiFetchRaw } from './api_client';
+import logger from './logger';
 
 /** Target from inventory API (for pattern/manual resolution). */
 export interface InventoryTarget {
@@ -375,7 +376,7 @@ export async function fetchInventoryItems(
   // Special handling for environments: share cache with fetchEnvironments
   if (type === 'environments' && !environment) {
     if (import.meta.env.DEV) {
-      console.log('[SHARED CACHE] fetchInventoryItems(environments) - using fetchEnvironments cache');
+      logger.debug('Shared cache - fetchInventoryItems(environments) using fetchEnvironments cache');
     }
     const { fetchEnvironments } = await import('./reference_service');
     const envStrings = await fetchEnvironments();
@@ -432,7 +433,7 @@ export async function fetchInventoryItems(
               }
             } catch (parseError) {
               // Invalid cache JSON or missing timestamp - log and continue to throw original error
-              console.warn('Invalid inventory cache format', parseError);
+              logger.warn('Invalid inventory cache format', { error: parseError instanceof Error ? parseError.message : String(parseError) });
             }
           }
           const error = new Error('Inventaire temporairement indisponible — dernières valeurs en cache');

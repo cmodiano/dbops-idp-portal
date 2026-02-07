@@ -11,6 +11,7 @@ import dayjs from 'dayjs';
 import { submitExecution } from '../services/execution_service';
 import { createScheduledExecution } from '../services/scheduled_execution_service';
 import type { RecurringPatternRequest } from '../types/api';
+import logger from '../services/logger';
 
 export interface SubmitImmediateParams {
   action_id: number;
@@ -169,7 +170,7 @@ export function useExecutionSubmit(): UseExecutionSubmitReturn {
       });
 
       if (import.meta.env.DEV) {
-        console.log('[useExecutionSubmit] Scheduled execution created:', response.scheduled_execution_id);
+        logger.info('Scheduled execution created', { scheduledExecutionId: response.scheduled_execution_id });
       }
 
       return response.scheduled_execution_id;
@@ -178,7 +179,7 @@ export function useExecutionSubmit(): UseExecutionSubmitReturn {
       const errorMessage = getSchedulingErrorMessage(error);
 
       if (import.meta.env.DEV) {
-        console.error('[useExecutionSubmit] Scheduled execution failed:', error, 'correlation_id:', error.correlation_id);
+        logger.error('Scheduled execution failed', { error: error.message, correlation_id: error.correlation_id });
       }
 
       notification.error({

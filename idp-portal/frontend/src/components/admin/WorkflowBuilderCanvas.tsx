@@ -56,6 +56,7 @@ import CustomEdge from './CustomEdge';
 import { ActionPalette } from './ActionPalette';
 import { StepConfigPanel } from './StepConfigPanel';
 import ValidationReportPanel from './ValidationReportPanel';
+import logger from '../../services/logger';
 
 const { Text } = Typography;
 
@@ -630,7 +631,7 @@ function WorkflowBuilderCanvasInner({
   const handleExportJSON = useCallback(() => {
     const currentSteps = reactFlowToWorkflowSteps(nodes, edges);
     // MEDIUM-2 FIX: Add debug logging for troubleshooting
-    console.debug('[Export JSON]', currentSteps.length, 'steps exported:', getMetadata().name);
+    logger.debug('Export JSON', { stepCount: currentSteps.length, workflowName: getMetadata().name });
     exportWorkflowAsJSON(currentSteps, getMetadata());
     notification.success({ message: 'Export JSON réussi', duration: 3 });
   }, [nodes, edges, getMetadata, notification]);
@@ -638,7 +639,7 @@ function WorkflowBuilderCanvasInner({
   const handleExportYAML = useCallback(() => {
     const currentSteps = reactFlowToWorkflowSteps(nodes, edges);
     // MEDIUM-2 FIX: Add debug logging for troubleshooting
-    console.debug('[Export YAML]', currentSteps.length, 'steps exported:', getMetadata().name);
+    logger.debug('Export YAML', { stepCount: currentSteps.length, workflowName: getMetadata().name });
     exportWorkflowAsYAML(currentSteps, getMetadata());
     notification.success({ message: 'Export YAML réussi', duration: 3 });
   }, [nodes, edges, getMetadata, notification]);
@@ -657,7 +658,7 @@ function WorkflowBuilderCanvasInner({
         description: errorMessage,
         duration: 5,
       });
-      console.error('[Export Image] Error:', err);
+      logger.error('Export image error', { error: err instanceof Error ? err.message : String(err) });
     } finally {
       setExporting(false);
     }
@@ -673,7 +674,7 @@ function WorkflowBuilderCanvasInner({
     const { nodes: newNodes, edges: newEdges } = workflowStepsToReactFlow(importData.workflow.steps);
 
     // MEDIUM-2 FIX: Add debug logging for troubleshooting
-    console.debug('[Import]', importData.workflow.steps.length, 'steps imported:', importData.workflow.name);
+    logger.debug('Workflow imported', { stepCount: importData.workflow.steps.length, workflowName: importData.workflow.name });
 
     // HIGH-5 FIX: Use setState callback to ensure fitView runs after render
     // HIGH-6 FIX: Clear validation state when importing new workflow

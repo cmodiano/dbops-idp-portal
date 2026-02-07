@@ -59,6 +59,7 @@ import {
   type FavoriteEntry,
 } from '../services/catalog_service';
 import type { ActionPreviewData, ActionStats, ImpactLevel, RemediationSuggestion } from '../types/api';
+import logger from '../services/logger';
 
 const { Title, Text } = Typography;
 
@@ -159,7 +160,7 @@ export default function CatalogPage() {
         // Story 8.7, AC3: Fetch tags filtered by category
         activeCategory !== 'mes-actions'
           ? fetchCatalogTags(activeCategory !== 'tout' ? activeCategory : undefined).catch((error) => {
-              console.error('Failed to load tags:', error);
+              logger.error('Failed to load tags', { error: error instanceof Error ? error.message : String(error) });
               message.warning('Impossible de charger les tags');
               return [] as CatalogTagWithCount[];
             })
@@ -169,7 +170,7 @@ export default function CatalogPage() {
       setFavorites(new Set(favoritesData.map((f) => f.action_id)));
       if (activeCategory !== 'mes-actions') setTagsWithCounts(tagsData);
     } catch (error) {
-      console.error('Failed to load catalog:', error);
+      logger.error('Failed to load catalog', { error: error instanceof Error ? error.message : String(error) });
       message.error('Erreur lors du chargement du catalogue');
     } finally {
       setLoading(false);
@@ -270,7 +271,7 @@ export default function CatalogPage() {
       setSelectedActionEnvs(detailResponse.allowed_environments);
       setSelectedActionStats(statsResponse);
     } catch (error) {
-      console.error('Failed to load action detail:', error);
+      logger.error('Failed to load action detail', { error: error instanceof Error ? error.message : String(error) });
       message.error('Erreur lors du chargement de l\'action');
       // Keep drawer open with basic info from list
     } finally {
@@ -343,7 +344,7 @@ export default function CatalogPage() {
       // Keep wizard open with new action
       setExecutionWizardOpen(true);
     } catch (error) {
-      console.error('Failed to load suggested action:', error);
+      logger.error('Failed to load suggested action', { error: error instanceof Error ? error.message : String(error) });
       message.error('Erreur lors du chargement de l\'action corrective');
     }
   }, [message]);

@@ -26,6 +26,7 @@ import {
 import { PlusOutlined, DeleteOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import type { RemediationRule, RiskLevel } from '../../types/api';
 import { fetchCatalogActions, type CatalogAction } from '../../services/catalog_service';
+import logger from '../../services/logger';
 
 const { Text } = Typography;
 
@@ -235,7 +236,7 @@ export const RemediationRulesEditor: React.FC<RemediationRulesEditorProps> = ({
     fetchCatalogActions()
       .then(setActions)
       .catch((err) => {
-        console.error('Failed to load actions for remediation rules:', err);
+        logger.error('Failed to load actions for remediation rules', { error: err instanceof Error ? err.message : String(err) });
         setActions([]);
       });
   }, []);

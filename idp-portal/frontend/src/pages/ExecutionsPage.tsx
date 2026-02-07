@@ -87,6 +87,7 @@ import type {
   DashboardStats,
   DashboardTimeSeriesPoint,
 } from '../types/api';
+import logger from '../services/logger';
 
 const { Title } = Typography;
 
@@ -221,7 +222,7 @@ export default function ExecutionsPage() {
         const data = await fetchExecutionTimeSeries(activeScope, filters);
         setTimeSeriesData(data);
       } catch (err) {
-        console.error('Erreur chargement timeseries:', err);
+        logger.error('Erreur chargement timeseries', { error: err instanceof Error ? err.message : String(err) });
         setTimeSeriesData([]);
       } finally {
         setTimeSeriesLoading(false);
@@ -294,7 +295,7 @@ export default function ExecutionsPage() {
         const stats = await fetchExecutionStats(activeScope, filters);
         setStatsData(stats);
       } catch (err) {
-        console.error('Erreur chargement stats:', err);
+        logger.error('Erreur chargement stats', { error: err instanceof Error ? err.message : String(err) });
         // Afficher stats vides plutôt que bloquer l'UI
         setStatsData({
           executions_jour: 0,

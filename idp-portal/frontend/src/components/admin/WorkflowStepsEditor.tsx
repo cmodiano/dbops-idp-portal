@@ -45,6 +45,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import type { WorkflowStep, ActionListItem } from '../../types/api';
 import { getEligibleActionsForWorkflow } from '../../services/admin_service';
+import logger from '../../services/logger';
 
 const { Text } = Typography;
 
@@ -415,7 +416,7 @@ export const WorkflowStepsEditor: React.FC<WorkflowStepsEditorProps> = ({
         setEligibleActions(actions);
       })
       .catch((err) => {
-        console.error('Failed to load eligible actions for workflow:', err);
+        logger.error('Failed to load eligible actions for workflow', { error: err instanceof Error ? err.message : String(err) });
         // Improve error message to be more helpful
         let errorMessage = 'Impossible de charger les actions éligibles';
         if (err instanceof Error) {

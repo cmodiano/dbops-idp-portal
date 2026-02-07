@@ -4,6 +4,7 @@
  */
 
 import { apiFetchRaw } from './api_client';
+import logger from './logger';
 
 // Global cache for environments endpoint to prevent duplicate calls
 // Shared between fetchEnvironments() and fetchInventoryItems('environments')
@@ -49,7 +50,7 @@ export async function fetchEnvironments(): Promise<string[]> {
   // Return cached data if available
   if (environmentsCache) {
     if (import.meta.env.DEV) {
-      console.log('[CACHE HIT] fetchEnvironments - using cached data');
+      logger.debug('Cache hit - fetchEnvironments using cached data');
     }
     return Promise.resolve(environmentsCache);
   }
@@ -57,14 +58,14 @@ export async function fetchEnvironments(): Promise<string[]> {
   // Return existing promise if request is in progress
   if (environmentsLoadingPromise) {
     if (import.meta.env.DEV) {
-      console.log('[CACHE HIT] fetchEnvironments - reusing existing promise');
+      logger.debug('Cache hit - fetchEnvironments reusing existing promise');
     }
     return environmentsLoadingPromise;
   }
   
   // Start new request atomically
   if (import.meta.env.DEV) {
-    console.log('[CACHE MISS] fetchEnvironments - starting new request', new Error().stack);
+    logger.debug('Cache miss - fetchEnvironments starting new request');
   }
   const requestStartTime = Date.now();
   environmentsLoadingPromise = apiFetchRaw<string[]>('/inventory/environments')
@@ -73,14 +74,14 @@ export async function fetchEnvironments(): Promise<string[]> {
       environmentsLoadingPromise = null;
       if (import.meta.env.DEV) {
         const duration = Date.now() - requestStartTime;
-        console.log(`[CACHE SET] fetchEnvironments - cache updated with ${data.length} environments in ${duration}ms`);
+        logger.debug('Cache set - fetchEnvironments cache updated', { count: data.length, durationMs: duration });
       }
       return data;
     })
     .catch((err) => {
       environmentsLoadingPromise = null;
       if (import.meta.env.DEV) {
-        console.error('[CACHE ERROR] fetchEnvironments failed:', err);
+        logger.error('Cache error - fetchEnvironments failed', { error: err instanceof Error ? err.message : String(err) });
       }
       // Fallback: do not throw. In dev/test environments the inventory API may be unavailable;
       // returning a stable fallback keeps UI and tests deterministic.

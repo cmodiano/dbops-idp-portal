@@ -55,6 +55,17 @@ export default defineConfig([
       'no-implied-eval': 'error',
       'no-new-func': 'error',
       'no-script-url': 'error',
+
+      // Structured logging enforcement (Story 17.7)
+      'no-console': 'error',
+    },
+  },
+  // Allow console.* in test files (test helpers, spies, assertions)
+  // Justification: Tests need to spy on console methods and suppress errors intentionally
+  {
+    files: ['**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}'],
+    rules: {
+      'no-console': 'off',
     },
   },
 ])
