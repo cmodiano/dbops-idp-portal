@@ -92,6 +92,8 @@ function toPreviewData(action: CatalogAction, stats?: ActionStats | null): Actio
     tags: action.tags,
     execution_count: action.execution_count,
     stats: stats ?? null,
+    // Story 18.2: item_type for workflow vs action visual distinction
+    item_type: action.item_type,
   };
 }
 
