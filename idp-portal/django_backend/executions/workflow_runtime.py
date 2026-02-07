@@ -667,10 +667,10 @@ class WorkflowRuntime:
             )
 
         except Exception as e:
-            # Handle unexpected step failures
+            # Story 17.6: Justified broad catch - Step can raise any exception from adapters
             execution_step.status = ExecutionStepStatus.FAILED
             execution_step.completed_at = timezone.now()
-            execution_step.error_message = str(e)
+            execution_step.error_message = f"{type(e).__name__}: {str(e)}"
             execution_step.save()
 
             logger.error(
@@ -681,6 +681,7 @@ class WorkflowRuntime:
                 error=str(e),
                 error_type=type(e).__name__,
                 correlation_id=self.correlation_id,
+                exc_info=True,
             )
 
             return StepResult(

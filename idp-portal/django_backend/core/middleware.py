@@ -153,6 +153,7 @@ class RequestResponseLoggingMiddleware:
             return response
 
         except Exception as e:
+            # Story 17.6: Justified broad catch - Middleware must not break request chain
             duration_ms = int((time.time() - start_time) * 1000)
             user_id = self._get_user_id(request)
 
@@ -164,6 +165,7 @@ class RequestResponseLoggingMiddleware:
                 duration_ms=duration_ms,
                 user_id=user_id,
                 exception=str(e),
+                error_type=type(e).__name__,
                 exc_info=True,
             )
             raise

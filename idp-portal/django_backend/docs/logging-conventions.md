@@ -113,6 +113,64 @@ except Exception as e:
     raise
 ```
 
+## Gestion des exceptions (Story 17.6)
+
+### Règle : Éviter les `except Exception` trop larges
+
+**Mauvais :**
+
+```python
+try:
+    result = api.call()
+except Exception:
+    return None  # Masque toutes les erreurs silencieusement
+```
+
+**Bon - Exceptions spécifiques :**
+
+```python
+try:
+    result = api.call()
+except (requests.HTTPError, requests.Timeout) as e:
+    logger.error("api_call_failed", service="api", error=str(e), exc_info=True)
+    raise
+```
+
+**Acceptable - Broad catch justifié :**
+
+```python
+try:
+    result = dynamic_plugin.execute()
+except Exception as e:
+    # Story 17.6: Justified broad catch - Plugin can raise any exception
+    logger.error(
+        "plugin_execution_failed",
+        plugin=plugin_name,
+        error=str(e),
+        error_type=type(e).__name__,
+        correlation_id=get_correlation_id(),
+        exc_info=True,
+    )
+    return {"status": "failed", "error": str(e)}
+```
+
+### Pattern de gestion d'erreur standard
+
+1. **Exceptions spécifiques d'abord** (ex: `ValueError`, `KeyError`, `requests.HTTPError`)
+2. **Broad catch seulement si justifié** avec commentaire `# Story 17.6: Justified broad catch - [raison]`
+3. **Toujours capturer `as e`** pour permettre le logging
+4. **Logging obligatoire** avec `exc_info=True` pour erreurs inattendues
+5. **Toujours inclure `correlation_id`** pour traçabilité
+
+### Exceptions par domaine
+
+| Domaine | Exceptions spécifiques |
+|---------|----------------------|
+| Django ORM | `ObjectDoesNotExist`, `MultipleObjectsReturned`, `IntegrityError`, `ValidationError` |
+| API externes | `requests.HTTPError`, `requests.Timeout`, `requests.ConnectionError` |
+| Validation données | `ValueError`, `KeyError`, `TypeError`, `AttributeError` |
+| Croniter | `CroniterBadCronError`, `CroniterBadDateError` |
+
 ## Données sensibles
 
 **Ne jamais logger** :

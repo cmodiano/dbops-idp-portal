@@ -20,8 +20,12 @@ def _init_oracle_client_if_needed():
 
             oracledb.init_oracle_client(lib_dir=lib_dir)
             _oracle_client_initialized = True
-        except Exception:
-            pass  # Fall back to thin mode
+        except Exception as e:
+            # Story 17.6: Justified broad catch - Oracle client init can fail in various ways
+            import logging
+            logging.getLogger(__name__).warning(
+                "Oracle thick mode init failed, falling back to thin mode: %s", str(e)
+            )
 
 
 _init_oracle_client_if_needed()

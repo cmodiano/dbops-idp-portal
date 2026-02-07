@@ -3,6 +3,9 @@ Custom permissions for DRF RBAC.
 """
 
 from rest_framework import permissions
+import structlog
+
+logger = structlog.get_logger(__name__)
 
 
 class DBOPSProfilePermission(permissions.BasePermission):
@@ -45,8 +48,15 @@ class DBOPSProfilePermission(permissions.BasePermission):
                 for profile in service.get_profiles_by_ad_groups(ad_groups):
                     if profile.code.lower() == 'dbops':
                         return True
-            except Exception:
-                pass  # ProfileService not available or error
+            except Exception as e:
+                # Story 17.6: Justified broad catch - ProfileService can raise various exceptions
+                logger.warning(
+                    "profile_service_unavailable_dbops_check",
+                    user_id=request.user.id,
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    exc_info=True,
+                )
 
         # Fallback: superuser always has access (for development/admin)
         if request.user.is_superuser:

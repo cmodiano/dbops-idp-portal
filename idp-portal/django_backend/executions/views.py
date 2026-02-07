@@ -79,7 +79,7 @@ def _validate_environment_against_inventory(environment: str) -> None:
             message="Failed to validate environment against inventory - allowing execution with warning"
         )
 
-from croniter import croniter
+from croniter import croniter, CroniterBadCronError, CroniterBadDateError
 import structlog
 
 exec_logger = structlog.get_logger(__name__)
@@ -425,8 +425,16 @@ def _get_allowed_action_ids_for_user(user) -> set[int] | None:
     try:
         profile_service = ProfileService()
         permissions = profile_service.get_cumulative_permissions(user.id, ad_groups)
-    except Exception:
-        # ProfileService not available or error - no access
+    except Exception as e:
+        # Story 17.6: Justified broad catch - ProfileService can raise various exceptions
+        exec_logger.warning(
+            "profile_service_unavailable_access_denied",
+            user_id=user.id,
+            error=str(e),
+            error_type=type(e).__name__,
+            correlation_id=get_correlation_id(),
+            exc_info=True,
+        )
         return set()
 
     if not permissions or not permissions.get('action_permissions'):
@@ -1638,7 +1646,13 @@ class ScheduledExecutionValidateCronView(APIView):
             it = croniter(expr, datetime.now(UTC))
             _ = it.get_next(datetime)
             return Response({"data": {"valid": True, "error": ""}})
-        except Exception as e:
+        except (CroniterBadCronError, CroniterBadDateError, ValueError) as e:
+            exec_logger.debug(
+                "cron_expression_validation_failed",
+                expression=expr,
+                error=str(e),
+                correlation_id=get_correlation_id(),
+            )
             return Response({"data": {"valid": False, "error": f"Expression cron invalide : {str(e)}"}})
 
 

@@ -289,13 +289,15 @@ class CurrentUserProfileView(APIView):
                 profile_service = ProfileService()
                 cumulative_permissions = profile_service.get_cumulative_permissions(user.id, ad_groups)
             except Exception as e:
-                # Log error but don't fail the request
+                # Story 17.6: Justified broad catch - ProfileService can raise various exceptions
                 correlation_id = get_correlation_id()
                 logger.error(
                     "failed_to_get_cumulative_permissions",
                     user_id=user.id,
                     error=str(e),
-                    correlation_id=correlation_id
+                    error_type=type(e).__name__,
+                    correlation_id=correlation_id,
+                    exc_info=True,
                 )
                 cumulative_permissions = None
 

@@ -26,6 +26,10 @@ from core.auth_utils import get_user_ad_groups
 from executions.models import Execution
 from inventory.models import TargetEnvironment
 from profiles.services import ProfileService
+from core.middleware import get_correlation_id
+import structlog
+
+logger = structlog.get_logger(__name__)
 
 
 def _annotate_execution_count(queryset):
@@ -161,8 +165,16 @@ def _get_cumulative_permissions_for_user(user):
     try:
         profile_service = ProfileService()
         permissions = profile_service.get_cumulative_permissions(user.id, ad_groups)
-    except Exception:
-        # ProfileService not available or error - return None (no RBAC filtering)
+    except Exception as e:
+        # Story 17.6: Justified broad catch - ProfileService can raise various exceptions
+        logger.warning(
+            "profile_service_unavailable_no_rbac_filtering",
+            user_id=user.id,
+            error=str(e),
+            error_type=type(e).__name__,
+            correlation_id=get_correlation_id(),
+            exc_info=True,
+        )
         return None
     
     if not permissions or not permissions.get('action_permissions'):
@@ -197,8 +209,16 @@ def _get_cumulative_permissions_for_user(user):
         try:
             inventory_service = InventoryService()
             environments = set(inventory_service.list_environments())
-        except Exception:
-            # Fallback to default environments if inventory unavailable
+        except Exception as e:
+            # Story 17.6: Justified broad catch - InventoryService can raise various exceptions
+            logger.warning(
+                "inventory_service_unavailable_fallback_environments",
+                user_id=user.id,
+                error=str(e),
+                error_type=type(e).__name__,
+                correlation_id=get_correlation_id(),
+                exc_info=True,
+            )
             environments = {'dev', 'staging', 'prod'}
 
     return {

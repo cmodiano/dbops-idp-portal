@@ -1,6 +1,9 @@
 """
 Auth utilities for RBAC resolution across catalog, executions, inventory.
 """
+import structlog
+
+logger = structlog.get_logger(__name__)
 
 
 def get_user_ad_groups(user) -> list[str]:
@@ -21,8 +24,15 @@ def get_user_ad_groups(user) -> list[str]:
     if hasattr(user, 'get_ad_groups') and callable(user.get_ad_groups):
         try:
             ad_groups = user.get_ad_groups() or []
-        except Exception:
-            pass
+        except Exception as e:
+            # Story 17.6: Justified broad catch - get_ad_groups() can raise various exceptions
+            logger.warning(
+                "get_ad_groups_failed",
+                user_id=getattr(user, 'id', None),
+                error=str(e),
+                error_type=type(e).__name__,
+                exc_info=True,
+            )
     elif hasattr(user, 'ad_groups'):
         attr = user.ad_groups
         if isinstance(attr, list):

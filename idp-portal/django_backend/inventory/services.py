@@ -335,11 +335,14 @@ class InventoryService:
             # Re-raise our own exceptions
             raise
         except Exception as e:
+            # Story 17.6: Justified broad catch - Oracle DB can raise various exceptions
             logger.error(
                 "oracle_inventory_read_error",
                 source=table_or_synonym,
                 error=str(e),
-                correlation_id=correlation_id
+                error_type=type(e).__name__,
+                correlation_id=correlation_id,
+                exc_info=True,
             )
             raise InventoryServiceError(
                 f"Failed to read inventory from {table_or_synonym}: {str(e)}"

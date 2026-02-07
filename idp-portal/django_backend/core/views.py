@@ -59,11 +59,14 @@ def health_check(request):
             cursor.execute("SELECT 1 FROM DUAL")
             health_data["oracle"] = "connected"
     except Exception as e:
+        # Story 17.6: Justified broad catch - DB connection can raise various exceptions
         logger.error(
             "health_check_failed",
             service="oracle",
             error=str(e),
-            correlation_id=correlation_id
+            error_type=type(e).__name__,
+            correlation_id=correlation_id,
+            exc_info=True,
         )
         health_data["oracle"] = "disconnected"
         health_data["status"] = "degraded"
@@ -79,13 +82,16 @@ def health_check(request):
             if response.status_code == 200:
                 health_data["vault"] = "reachable"
             else:
-                raise Exception(f"Vault returned {response.status_code}")
+                raise ConnectionError(f"Vault returned {response.status_code}")
         except Exception as e:
+            # Story 17.6: Justified broad catch - Health check must handle any connectivity issue
             logger.warning(
                 "health_check_failed",
                 service="vault",
                 error=str(e),
-                correlation_id=correlation_id
+                error_type=type(e).__name__,
+                correlation_id=correlation_id,
+                exc_info=True,
             )
             health_data["vault"] = "unreachable"
             health_data["status"] = "degraded"
@@ -106,13 +112,16 @@ def health_check(request):
                 # 401 means ServiceNow is reachable but requires auth (expected)
                 health_data["servicenow"] = "reachable"
             else:
-                raise Exception(f"ServiceNow returned {response.status_code}")
+                raise ConnectionError(f"ServiceNow returned {response.status_code}")
         except Exception as e:
+            # Story 17.6: Justified broad catch - Health check must handle any connectivity issue
             logger.warning(
                 "health_check_failed",
                 service="servicenow",
                 error=str(e),
-                correlation_id=correlation_id
+                error_type=type(e).__name__,
+                correlation_id=correlation_id,
+                exc_info=True,
             )
             health_data["servicenow"] = "unreachable"
             health_data["status"] = "degraded"

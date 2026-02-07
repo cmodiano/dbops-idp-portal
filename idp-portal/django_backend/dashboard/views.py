@@ -8,10 +8,14 @@ from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+import structlog
 
 from catalog.models import Action, Tag
 from core.exceptions import BadRequestError
+from core.middleware import get_correlation_id
 from executions.models import Execution, ExecutionStatus
+
+logger = structlog.get_logger(__name__)
 
 
 def _parse_int(value: str | None, default: int, *, name: str) -> int:
@@ -350,7 +354,16 @@ def _stats_for_queryset(qs) -> dict:
             delta = (completed_at - started_at).total_seconds()
             if delta >= 0:
                 durations.append(delta)
-        except Exception:
+        except (TypeError, AttributeError) as e:
+            # Story 17.6: Specific catch for invalid timestamp data
+            logger.debug(
+                "execution_duration_calculation_skipped",
+                started_at=started_at,
+                completed_at=completed_at,
+                error=str(e),
+                error_type=type(e).__name__,
+                correlation_id=get_correlation_id(),
+            )
             continue
 
     avg_time = round(sum(durations) / len(durations), 2) if durations else None
