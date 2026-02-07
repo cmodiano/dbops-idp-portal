@@ -82,7 +82,7 @@ describe('executionRenderers', () => {
       const { container } = render(<>{renderEngineIcon('Oracle', 'action')}</>);
       const img = container.querySelector('img[src*="oracle"]');
       expect(img).toBeInTheDocument();
-      expect(img).toHaveAttribute('width', '44');
+      expect(img).toHaveAttribute('width', '40');
     });
 
     it('renders SQL Server icon (SVG)', () => {

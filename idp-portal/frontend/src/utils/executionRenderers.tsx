@@ -35,6 +35,9 @@ import { getIconUrl } from './iconUrl';
  */
 const ENGINE_ICON_SIZE = 56;
 
+/** Compact icon size for execution tables (Story 17.13) - aligned with size="small" row height. */
+const ENGINE_ICON_SIZE_COMPACT = 40;
+
 /** SVG URLs for database engine icons (real vendor logos from svgrepo.com). */
 const ENGINE_SVG_SOURCES: Partial<Record<ActionEngine, string>> = {
   Oracle: 'https://www.svgrepo.com/show/354152/oracle.svg',
@@ -83,7 +86,7 @@ export function renderPlatformIcon(platform: ActionPlatform | string | null | un
   return (
     <Tooltip title={platform}>
       <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-        <config.Icon style={{ fontSize: ENGINE_ICON_SIZE, color: config.color }} />
+        <config.Icon style={{ fontSize: ENGINE_ICON_SIZE_COMPACT, color: config.color }} />
       </div>
     </Tooltip>
   );
@@ -125,7 +128,7 @@ export function renderPlateformeIcon(
             <Avatar
               src={fallbackIcon}
               shape="square"
-              size={ENGINE_ICON_SIZE}
+              size={ENGINE_ICON_SIZE_COMPACT}
               icon={<ApiOutlined />}
               style={{ flexShrink: 0 }}
             />
@@ -153,7 +156,7 @@ export function renderEngineIcon(
     return (
       <Tooltip title="Workflow (chaîne d'actions)">
         <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-          <ApartmentOutlined style={{ fontSize: ENGINE_ICON_SIZE, color: WORKFLOW_ICON_COLOR }} />
+          <ApartmentOutlined style={{ fontSize: ENGINE_ICON_SIZE_COMPACT, color: WORKFLOW_ICON_COLOR }} />
         </div>
       </Tooltip>
     );
@@ -194,8 +197,8 @@ export function renderEngineIcon(
             <img
               src={svgSrc}
               alt=""
-              width={ENGINE_ICON_SIZE}
-              height={ENGINE_ICON_SIZE}
+              width={ENGINE_ICON_SIZE_COMPACT}
+              height={ENGINE_ICON_SIZE_COMPACT}
               style={{ 
                 flexShrink: 0, 
                 verticalAlign: 'middle',
@@ -215,7 +218,7 @@ export function renderEngineIcon(
   return (
     <Tooltip title={engine}>
       <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-        <config.Icon style={{ fontSize: ENGINE_ICON_SIZE, color: config.color }} />
+        <config.Icon style={{ fontSize: ENGINE_ICON_SIZE_COMPACT, color: config.color }} />
       </div>
     </Tooltip>
   );
@@ -313,7 +316,7 @@ export function renderStatusIndicator(status: ExecutionStatusType): React.ReactN
         border: `1px solid ${borderColor}`,
         backgroundColor: bgColor,
         color: textColor,
-        padding: '2px 8px',
+        padding: '1px 6px',
         fontSize: '12px',
         lineHeight: '20px',
         backdropFilter: 'blur(8px)',
@@ -353,3 +356,4 @@ export { ENGINE_SVG_SOURCES };
 /** Platform icons config for tests. */
 export const PLATFORM_ICONS_CONFIG = PLATFORM_ICONS;
 export const ENGINE_ICON_SIZE_VALUE = ENGINE_ICON_SIZE;
+export const ENGINE_ICON_SIZE_COMPACT_VALUE = ENGINE_ICON_SIZE_COMPACT;

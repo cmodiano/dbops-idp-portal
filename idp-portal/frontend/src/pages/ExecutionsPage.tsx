@@ -1,5 +1,8 @@
 /**
- * ExecutionsPage - Execution history (Story 4.8, 8.8, 8.9, 9.4, 9.9, 9.10).
+ * ExecutionsPage - Execution history (Story 4.8, 8.8, 8.9, 9.4, 9.9, 9.10, 17.13).
+ *
+ * Story 17.13: Compact mode for increased density — size="small", reduced column widths,
+ * compact icons (40px) and badge padding. +20% visible rows on 1080p viewport.
  *
  * AC1: Table with columns: action, environment, status, date, duration.
  * AC3: Running executions first with blue pulsed indicator.
@@ -398,7 +401,7 @@ export default function ExecutionsPage() {
         title: 'Statut',
         dataIndex: 'status',
         key: 'status',
-        width: 120,
+        width: 100,
         align: 'center' as const,
         render: (status: ExecutionStatusType) => renderStatusIndicator(status),
         sorter: false, // Story 9.9 AC7: Statut not sortable
@@ -417,7 +420,7 @@ export default function ExecutionsPage() {
       {
         title: 'Technologie',
         key: 'engine',
-        width: 140,
+        width: 100,
         align: 'center' as const,
         render: (_: unknown, record: ExecutionResponse) =>
           renderEngineIcon(record.engine, record.item_type),
@@ -427,7 +430,7 @@ export default function ExecutionsPage() {
       {
         title: 'Plateforme',
         key: 'integration',
-        width: 120,
+        width: 100,
         align: 'center' as const,
         render: (_: unknown, record: ExecutionResponse) =>
           renderPlateformeIcon(
@@ -446,7 +449,7 @@ export default function ExecutionsPage() {
         title: 'Utilisateur',
         dataIndex: 'user_display_name',
         key: 'user_display_name',
-        width: 150,
+        width: 130,
         render: (name: string | null) => name || 'Utilisateur inconnu',
       });
     }
@@ -471,7 +474,7 @@ export default function ExecutionsPage() {
       {
         title: 'Durée',
         key: 'duration',
-        width: 100,
+        width: 80,
         render: (_: unknown, record: ExecutionResponse) =>
           formatDuration(record.started_at, record.completed_at),
       },
@@ -503,6 +506,7 @@ export default function ExecutionsPage() {
           columns={skeletonColumns}
           dataSource={skeletonData}
           rowKey="key"
+          size="small"
           pagination={false}
           showHeader
         />
@@ -609,6 +613,7 @@ export default function ExecutionsPage() {
         dataSource={sortedExecutions}
         columns={columns}
         rowKey="id"
+        size="small"
         loading={loading}
         pagination={{
           current: currentPage,
