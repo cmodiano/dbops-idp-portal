@@ -8,8 +8,8 @@
  * - Metriques: DBOPS analytics dashboard (Story 8.2)
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { Typography, Button, Table, Space, Card, Tag, Tabs, App } from 'antd';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { Typography, Button, Table, Space, Card, Tag, Tabs, App, Spin } from 'antd';
 import type { TableProps } from 'antd';
 import {
   PlusOutlined,
@@ -28,8 +28,9 @@ import { ProfilesTable } from '../components/admin/ProfilesTable';
 import { ProfileImportModal } from '../components/admin/ProfileImportModal';
 import { IntegrationsTable } from '../components/admin/IntegrationsTable';
 import { IntegrationForm } from '../components/admin/IntegrationForm';
-import { AdminAnalyticsDashboard } from '../components/admin/analytics';
-import { FeatureFlagsPanel } from '../components/admin/FeatureFlagsPanel';
+
+const AdminAnalyticsDashboard = lazy(() => import('../components/admin/analytics/AdminAnalyticsDashboard'));
+const FeatureFlagsPanel = lazy(() => import('../components/admin/FeatureFlagsPanel').then(m => ({ default: m.FeatureFlagsPanel })));
 import { createAction, getAction, getAdminActions, updateAction, updateActionStatus } from '../services/admin_service';
 import { getProfiles, getProfile, deleteProfile, exportProfilesYaml } from '../services/profiles_service';
 import { getIntegrations, getIntegration, createIntegration, updateIntegration, deleteIntegration } from '../services/integrations_service';
@@ -556,7 +557,9 @@ export default function AdminPage() {
             label: 'Metriques',
             children: (
               <Card styles={{ header: { borderBottom: 'none', paddingBottom: 0 }, body: { paddingTop: 16 } }}>
-                <AdminAnalyticsDashboard />
+                <Suspense fallback={<Spin style={{ display: 'block', margin: '48px auto' }} />}>
+                  <AdminAnalyticsDashboard />
+                </Suspense>
               </Card>
             ),
           },
@@ -565,7 +568,9 @@ export default function AdminPage() {
             label: 'Feature Flags',
             children: (
               <Card styles={{ header: { borderBottom: 'none', paddingBottom: 0 }, body: { paddingTop: 16 } }}>
-                <FeatureFlagsPanel />
+                <Suspense fallback={<Spin style={{ display: 'block', margin: '48px auto' }} />}>
+                  <FeatureFlagsPanel />
+                </Suspense>
               </Card>
             ),
           },

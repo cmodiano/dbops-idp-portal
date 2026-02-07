@@ -2,7 +2,7 @@ import { ConfigProvider, App as AntApp } from 'antd';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
 import { lazy, Suspense, useEffect } from 'react';
 import { lightTheme, darkTheme } from './theme/desjardins';
-import { AppLayout } from './components/layout';
+import { AppLayout } from './components/layout/AppLayout';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { DashboardProvider } from './contexts/DashboardContext';

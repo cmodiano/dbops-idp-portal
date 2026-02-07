@@ -142,8 +142,10 @@ export function ProfileForm({
         target_patterns: tt === 'pattern' ? (values.target_patterns ?? []) : [],
       };
       try {
-        await putProfileActions(editProfile.id, actionsPayload);
-        await putProfileTargets(editProfile.id, targetsPayload);
+        await Promise.all([
+          putProfileActions(editProfile.id, actionsPayload),
+          putProfileTargets(editProfile.id, targetsPayload),
+        ]);
       } catch {
         setPermError('Profil mis à jour, mais erreur lors de la sauvegarde des permissions. Réessayez en éditant le profil.');
         if (res && onSuccess) onSuccess(res);

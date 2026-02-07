@@ -26,11 +26,13 @@
  * Story 7.1: Business variant with sanitized descriptions, impact callout, larger execute button.
  */
 
-import { Card, Typography, Button, Descriptions, Space, Empty, Tag, Tooltip, Divider, Badge, Alert, theme } from 'antd';
+import { Card, Typography, Button, Descriptions, Space, Empty, Tag, Tooltip, Divider, Badge, Alert, theme, Spin } from 'antd';
 import { PlayCircleOutlined, FileTextOutlined, ApartmentOutlined, BarChartOutlined } from '@ant-design/icons';
-import Markdown from 'react-markdown';
+import { lazy, Suspense } from 'react';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
+
+const Markdown = lazy(() => import('react-markdown'));
 import type { ActionPreviewData } from '../../types/api';
 import { useTheme } from '../../contexts/ThemeContext';
 import { ImpactIndicator } from '../shared/ImpactIndicator';
@@ -41,6 +43,8 @@ import { sanitizeDescription } from '../../utils/businessLanguage';
 import { ActionMetrics } from './ActionMetrics';
 
 const { Title, Paragraph, Text } = Typography;
+
+const EMPTY_ENVIRONMENTS: string[] = [];
 
 export interface ActionDrawerPreviewProps {
   action: ActionPreviewData;
@@ -86,7 +90,7 @@ export function ActionDrawerPreview({
   action,
   visible = true,
   canExecute,
-  allowedEnvironments = [],
+  allowedEnvironments = EMPTY_ENVIRONMENTS,
   onExecute,
   variant = 'default',
   statsLoading = false,
@@ -248,6 +252,7 @@ export function ActionDrawerPreview({
               }}
               data-testid="documentation-content"
             >
+              <Suspense fallback={<Spin size="small" />}>
               <Markdown
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[rehypeSanitize]}
@@ -320,6 +325,7 @@ export function ActionDrawerPreview({
               >
                 {action.documentation_md}
               </Markdown>
+              </Suspense>
             </div>
           ) : (
             <Empty

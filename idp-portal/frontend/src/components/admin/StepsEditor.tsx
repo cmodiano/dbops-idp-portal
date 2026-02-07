@@ -41,6 +41,8 @@ import type { ExecutionStep, ExecutionStepType, ConnectorType } from '../../type
 
 const { Text } = Typography;
 
+const EMPTY_STEPS: ExecutionStep[] = [];
+
 interface StepsEditorProps {
   value?: ExecutionStep[];
   onChange?: (steps: ExecutionStep[]) => void;
@@ -276,7 +278,7 @@ const SortableStepCard: React.FC<SortableStepCardProps> = ({
   );
 };
 
-export const StepsEditor: React.FC<StepsEditorProps> = ({ value = [], onChange }) => {
+export const StepsEditor: React.FC<StepsEditorProps> = ({ value = EMPTY_STEPS, onChange }) => {
   // Configure dnd-kit sensors for pointer and keyboard interaction
   const sensors = useSensors(
     useSensor(PointerSensor),

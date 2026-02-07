@@ -42,6 +42,8 @@ export interface RemediationRulesEditorProps {
   currentActionId?: number;
 }
 
+const EMPTY_REMEDIATION_RULES: RemediationRuleDefinition[] = [];
+
 const RISK_LEVEL_OPTIONS: { value: RiskLevel; label: string }[] = [
   { value: 'low', label: 'Faible' },
   { value: 'medium', label: 'Moyen' },
@@ -225,7 +227,7 @@ const RuleCard: React.FC<RuleCardProps> = ({
 };
 
 export const RemediationRulesEditor: React.FC<RemediationRulesEditorProps> = ({
-  value = [],
+  value = EMPTY_REMEDIATION_RULES,
   onChange,
   currentActionId,
 }) => {

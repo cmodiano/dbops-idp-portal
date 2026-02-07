@@ -14,13 +14,15 @@ const ENVIRONMENTS = ['DEV', 'STAGING', 'PROD'];
 const CODE_MAX_LENGTH = 50;
 const CODE_PATTERN = /^[A-Za-z0-9]*$/;
 
+const EMPTY_CONFIG: Record<string, ChangeTypeConfigEntry> = {};
+
 export interface ChangeTypeConfigProps {
   value?: Record<string, ChangeTypeConfigEntry>;
   onChange?: (config: Record<string, ChangeTypeConfigEntry>) => void;
 }
 
 export const ChangeTypeConfig: React.FC<ChangeTypeConfigProps> = ({
-  value = {},
+  value = EMPTY_CONFIG,
   onChange,
 }) => {
   const { token } = theme.useToken();

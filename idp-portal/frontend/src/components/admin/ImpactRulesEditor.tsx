@@ -26,6 +26,8 @@ import { IMPACT_ENVIRONMENTS } from '../../utils/impactRulesSchema';
 
 const { Text } = Typography;
 
+const EMPTY_RULES: ImpactRuleDefinition[] = [];
+
 export interface ImpactRulesEditorProps {
   value?: ImpactRuleDefinition[];
   onChange?: (value: ImpactRuleDefinition[]) => void;
@@ -140,7 +142,7 @@ const RuleCard: React.FC<RuleCardProps> = ({
   );
 };
 
-export const ImpactRulesEditor: React.FC<ImpactRulesEditorProps> = ({ value = [], onChange }) => {
+export const ImpactRulesEditor: React.FC<ImpactRulesEditorProps> = ({ value = EMPTY_RULES, onChange }) => {
   const handleAdd = () => {
     const newRule: ImpactRuleDefinition = {
       id: `rule-new-${Date.now()}-${Math.random().toString(36).slice(2)}`,

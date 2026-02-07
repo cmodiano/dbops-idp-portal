@@ -42,6 +42,8 @@ import type { ParameterDefinition, ParameterSchemaType } from '../../types/api';
 
 const { Text } = Typography;
 
+const EMPTY_PARAMS: ParameterDefinition[] = [];
+
 export interface ParametersEditorProps {
   value?: ParameterDefinition[];
   onChange?: (value: ParameterDefinition[]) => void;
@@ -203,7 +205,7 @@ const SortableParamCard: React.FC<SortableParamCardProps> = ({
   );
 };
 
-export const ParametersEditor: React.FC<ParametersEditorProps> = ({ value = [], onChange }) => {
+export const ParametersEditor: React.FC<ParametersEditorProps> = ({ value = EMPTY_PARAMS, onChange }) => {
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })

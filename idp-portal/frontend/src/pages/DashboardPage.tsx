@@ -13,7 +13,7 @@
  */
 
 import { Typography } from 'antd';
-import { ReportingDashboard } from '../components/dashboard/reporting';
+import { ReportingDashboard } from '../components/dashboard/reporting/ReportingDashboard';
 
 const { Title } = Typography;
 

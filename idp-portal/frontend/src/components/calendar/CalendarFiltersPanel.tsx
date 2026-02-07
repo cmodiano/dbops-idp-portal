@@ -29,6 +29,8 @@ const { RangePicker } = DatePicker;
 // Story 13.7: ENGINE_OPTIONS removed - use useEngines hook instead
 // Story 13.7: ENVIRONMENT_OPTIONS removed - use useEnvironments hook instead
 
+const EMPTY_ACTIONS: { action_id: number; action_name: string }[] = [];
+
 export interface CalendarFiltersPanelProps {
   /** Current filter values (from useCalendarFilters). */
   filters: CalendarFilters;
@@ -50,7 +52,7 @@ export function CalendarFiltersPanel({
   onResetFilters,
   activeFilterCount,
   loading = false,
-  availableActions = [],
+  availableActions = EMPTY_ACTIONS,
 }: CalendarFiltersPanelProps) {
   const { token } = theme.useToken();
   const { user } = useAuth();

@@ -30,6 +30,8 @@ export interface ComparisonExecutionsDrawerProps {
   loading?: boolean;
 }
 
+const EMPTY_EXECUTIONS: DashboardRecentExecution[] = [];
+
 /** Status tag colors. */
 const STATUS_COLORS: Record<string, string> = {
   COMPLETED: 'green',
@@ -103,7 +105,7 @@ export function ComparisonExecutionsDrawer({
   value1,
   value2,
   metric,
-  executions = [],
+  executions = EMPTY_EXECUTIONS,
   loading = false,
 }: ComparisonExecutionsDrawerProps) {
   const title = metric

@@ -197,10 +197,12 @@ export function ProfileWizard({
         target_patterns: targetsType === 'pattern' ? (values.target_patterns ?? []) : [],
       };
 
-      // Save permissions
+      // Save permissions in parallel
       try {
-        await putProfileActions(profile.id, actionsPayload);
-        await putProfileTargets(profile.id, targetsPayload);
+        await Promise.all([
+          putProfileActions(profile.id, actionsPayload),
+          putProfileTargets(profile.id, targetsPayload),
+        ]);
       } catch (permErr) {
         // Profile created/updated but permissions failed - still call onSuccess
         notification.warning({
