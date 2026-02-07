@@ -232,7 +232,7 @@ development_status:
     17-9-mypy-bloquant-progressivement: done # 2026-02-07: Code review completed — 8 HIGH + 4 MEDIUM + 2 LOW fixes applied, pre-commit hook added, README created, progress tracking doc added, baseline validation robuste, 89 erreurs tolérées
     17-10-dockerfile-backend-frontend: done # 2026-02-07: Code review adversarial — 11 fixes appliqués (5 HIGH + 6 MEDIUM) — healthcheck URL, secrets protection, CI/CD paths, LOG_LEVEL, collectstatic, build validation, volume cleanup, X-XSS-Protection deprecated
     17-11-rate-limiting-endpoints-publics: done # 2026-02-07: Code review completed — 10 issues fixed (7 MEDIUM + 3 LOW), 37 tests pass (29 unit + 8 security), scope collision doc added, XFF spoofing detection, RATELIMIT_ENABLED validation, ExecutionThrottle test added, documentation enhanced ✅
-    17-12-systeme-feature-flags: review # 2026-02-07: All 10 tasks completed — FeatureFlag model + service + API + startup validation + context/hooks + FeatureGuard/Toggle + admin UI + docs — 53 backend + 17 frontend tests pass ✅
+    17-12-systeme-feature-flags: done # 2026-02-07: Code review adversarial — 10 issues (3 HIGH + 5 MEDIUM + 2 LOW), 6 auto-fixed (audit/cache race, rollout security, model validation, context refresh, MD5 doc), 4 follow-up actions documented (non-blocking) — 53 backend + 17 frontend tests pass ✅
     17-13-densite-tableau-executions: backlog # UX - reduire hauteur lignes vue Executions
     17-14-annuler-operation-par-initiateur: backlog # Annuler Soumise/En cours : initiateur ou admin (RBAC)
     17-15-relancer-operation-memes-parametres: backlog # Relancer sans ressaisie parametres

@@ -1,6 +1,6 @@
 # Story 17.12: Système de Feature Flags
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -404,6 +404,20 @@ Claude Opus 4.6 (claude-opus-4-6)
 - Frontend auto-refresh toutes les 5 minutes
 - Admin UI intégrée dans l'onglet Admin existant (pas de nouvelle page)
 - Fixtures pytest locales dans test file (contournement scope conftest.py)
+
+### Code Review (2026-02-07)
+
+**Adversarial Review - Claude Opus 4.6:**
+- 10 issues found: 3 HIGH + 5 MEDIUM + 2 LOW
+- 6 issues auto-fixed immédiatement
+- HIGH-1: Race condition audit/cache → audit BEFORE invalidation (SOC1 fix)
+- HIGH-2: Rollout security → return False when user_id missing (CRON job safety)
+- HIGH-3: Model validation → FeatureFlag.save() enforces full_clean()
+- MEDIUM-2: Frontend refresh → FeatureFlagsPanel refreshes global context
+- LOW-1: MD5 documentation → added non-crypto hashing comment
+- 4 action items documented for follow-up (non-blocking)
+- Status: ✅ APPROVED - Core functionality secure and validated
+- See: CODE_REVIEW_17-12_FINDINGS.md
 
 ### File List
 
