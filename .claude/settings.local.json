@@ -44,13 +44,7 @@
       "Bash(pytest:*)",
       "Bash(pip freeze:*)",
       "Bash(DJANGO_SETTINGS_MODULE=idp_backend.test_settings python -m pytest:*)",
-      "Bash(DJANGO_SETTINGS_MODULE=idp_backend.test_settings python3 -m pytest:*)",
-      "Bash(for f in src/components/catalog/TargetSelectionStep.tsx src/components/catalog/ParametersFormStep.tsx src/components/catalog/ConfirmationStep.tsx src/components/catalog/SchedulingPanel.tsx src/hooks/useWizardState.ts src/hooks/useExecutionSubmit.ts src/hooks/useTargetInventory.ts src/hooks/useDynamicForm.ts src/hooks/useSchedulingValidation.ts)",
-      "Bash(do if [ -f \"$f\" ])",
-      "Bash(else echo \"✗ $f MANQUANT\")",
-      "Bash(fi:*)",
-      "Bash(done)",
-      "Bash(for f in src/hooks/useWizardState.test.ts src/hooks/useExecutionSubmit.test.ts src/hooks/useTargetInventory.test.ts src/hooks/useDynamicForm.test.ts src/hooks/useSchedulingValidation.test.ts)"
+      "Bash(DJANGO_SETTINGS_MODULE=idp_backend.test_settings python3 -m pytest:*)"
     ]
   }
 }
