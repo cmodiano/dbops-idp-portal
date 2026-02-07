@@ -12,6 +12,8 @@ export const STYLE_TOKENS = {
   drawerPreviewShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
   /** Engine icon size in ActionCard (px). */
   engineIconSize: 32,
+  /** Workflow icon color (Story 18.2). */
+  workflowColor: '#722ed1',
   /** Engine icon colors (UX spec). */
   engineIconColor: {
     Oracle: '#EF4444',

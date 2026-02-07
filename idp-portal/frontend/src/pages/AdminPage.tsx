@@ -25,6 +25,7 @@ import {
 } from '@ant-design/icons';
 import { ActionWizard } from '../components/admin/ActionWizard';
 import { ActionStatusBadge } from '../components/admin/ActionStatusBadge';
+import { getItemTypeIcon } from '../utils/iconHelpers';
 import { ProfileWizard } from '../components/admin/ProfileWizard';
 import { ProfilesTable } from '../components/admin/ProfilesTable';
 import { ProfileImportModal } from '../components/admin/ProfileImportModal';
@@ -56,6 +57,15 @@ const getColumns = (
     dataIndex: 'name',
     key: 'name',
     sorter: (a, b) => a.name.localeCompare(b.name),
+    render: (name: string, record: ActionListItem) => {
+      const { icon } = getItemTypeIcon(record.item_type, record.engine, { withTooltip: true, fontSize: 16 });
+      return (
+        <Space>
+          {icon}
+          {name}
+        </Space>
+      );
+    },
   },
   {
     title: 'Moteur',

@@ -19,10 +19,6 @@
 
 import { Card, Tag, Typography, Space, Tooltip, Button } from 'antd';
 import {
-  DatabaseOutlined,
-  CloudServerOutlined,
-  HddOutlined,
-  ApartmentOutlined,
   HeartOutlined,
   HeartFilled,
 } from '@ant-design/icons';
@@ -34,6 +30,7 @@ import { STYLE_TOKENS } from '../../theme/styleTokens';
 import { getTagStyle } from '../../utils/tagStyles';
 import { sanitizeDescription } from '../../utils/businessLanguage';
 import { ENGINE_SVG_SOURCES } from '../../utils/executionRenderers';
+import { getItemTypeIcon } from '../../utils/iconHelpers';
 
 const { Text, Paragraph } = Typography;
 
@@ -50,24 +47,7 @@ export interface ActionCardProps {
   showFavoriteButton?: boolean;
 }
 
-const ENGINE_ICON_FALLBACKS: Record<ActionEngine, React.ReactNode> = {
-  Oracle: (
-    <DatabaseOutlined
-      style={{ fontSize: STYLE_TOKENS.engineIconSize, color: STYLE_TOKENS.engineIconColor.Oracle }}
-    />
-  ),
-  'SQL Server': (
-    <CloudServerOutlined
-      style={{ fontSize: STYLE_TOKENS.engineIconSize, color: STYLE_TOKENS.engineIconColor['SQL Server'] }}
-    />
-  ),
-  DB2: (
-    <HddOutlined
-      style={{ fontSize: STYLE_TOKENS.engineIconSize, color: STYLE_TOKENS.engineIconColor.DB2 }}
-    />
-  ),
-};
-
+/** Get engine icon with SVG override for cards (real vendor logos). Story 18.2: fallback uses shared iconHelpers. */
 function getEngineIcon(engine: ActionEngine): React.ReactNode {
   const svgSrc = ENGINE_SVG_SOURCES[engine];
   if (svgSrc) {
@@ -82,17 +62,9 @@ function getEngineIcon(engine: ActionEngine): React.ReactNode {
       />
     );
   }
-  return ENGINE_ICON_FALLBACKS[engine];
+  const { icon } = getItemTypeIcon('action', engine, { fontSize: STYLE_TOKENS.engineIconSize });
+  return icon;
 }
-
-/** Workflow icon - distinct from action icons (Story 5.7, AC3). */
-const WORKFLOW_ICON = (
-  <Tooltip title="Workflow (chaîne d'actions)">
-    <ApartmentOutlined
-      style={{ fontSize: STYLE_TOKENS.engineIconSize, color: '#722ed1' }}
-    />
-  </Tooltip>
-);
 
 const MAX_VISIBLE_TAGS = 3;
 
@@ -116,9 +88,9 @@ export function ActionCard({
     ? sanitizeDescription(action.description)
     : action.description;
 
-  // Story 5.7, AC3: Use workflow icon for workflows, engine icon for actions
+  // Story 5.7, AC3; Story 18.2: Use shared iconHelpers for workflow, engine-specific SVG for actions
   const icon = isWorkflow
-    ? WORKFLOW_ICON
+    ? getItemTypeIcon('workflow', null, { withTooltip: true, fontSize: STYLE_TOKENS.engineIconSize }).icon
     : (action.engine ? getEngineIcon(action.engine) : null);
 
   const visibleTags = action.tags?.slice(0, MAX_VISIBLE_TAGS) || [];

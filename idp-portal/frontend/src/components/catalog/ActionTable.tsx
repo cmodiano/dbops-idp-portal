@@ -29,11 +29,6 @@ import {
 import type { TableProps } from 'antd';
 
 import {
-  DatabaseOutlined,
-  CloudServerOutlined,
-  HddOutlined,
-  ApartmentOutlined,
-  AppstoreOutlined,
   HeartOutlined,
   HeartFilled,
   EyeOutlined,
@@ -42,8 +37,8 @@ import type { CatalogAction } from '../../services/catalog_service';
 import type { ImpactLevel } from '../../types/api';
 import { ImpactIndicator } from '../shared/ImpactIndicator';
 import { getTagStyle } from '../../utils/tagStyles';
+import { getItemTypeIcon } from '../../utils/iconHelpers';
 import { useTheme } from '../../contexts/ThemeContext';
-import { STYLE_TOKENS } from '../../theme/styleTokens';
 
 const { Text, Paragraph } = Typography;
 
@@ -77,27 +72,10 @@ const getImpactSortValue = (level: ImpactLevel | null | undefined): number => {
   return level ? mapping[level] : 0;
 };
 
-/** Get appropriate icon for action based on item_type and engine (AC2) - H3 fix: use design tokens */
+/** Get appropriate icon for action based on item_type and engine (AC2) - Story 18.2: use shared iconHelpers */
 const getActionIcon = (action: CatalogAction): React.ReactNode => {
-  const iconStyle = { fontSize: 18 };
-
-  // Workflow icon (Story 5.7)
-  if (action.item_type === 'workflow') {
-    return <ApartmentOutlined style={{ ...iconStyle, color: '#722ed1' }} />;
-  }
-
-  // Engine-specific icons with design tokens (H3 fix)
-  const engineColors = STYLE_TOKENS.engineIconColor;
-  switch (action.engine) {
-    case 'Oracle':
-      return <DatabaseOutlined style={{ ...iconStyle, color: engineColors.Oracle }} />;
-    case 'SQL Server':
-      return <CloudServerOutlined style={{ ...iconStyle, color: engineColors['SQL Server'] }} />;
-    case 'DB2':
-      return <HddOutlined style={{ ...iconStyle, color: engineColors.DB2 }} />;
-    default:
-      return <AppstoreOutlined style={iconStyle} />;
-  }
+  const { icon } = getItemTypeIcon(action.item_type, action.engine, { fontSize: 18 });
+  return icon;
 };
 
 export function ActionTable({

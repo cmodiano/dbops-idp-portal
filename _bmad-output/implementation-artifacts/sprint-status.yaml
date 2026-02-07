@@ -242,7 +242,7 @@ development_status:
     # === Epic 18: Ameliorations UX et corrections issues du feedback utilisateurs ===
     epic-18: in-progress
     18-1-admin-actions-suppression-desactivation-filtres: done # Story 18.1 complete — AC1-AC6 all implemented, 28 backend + 22 frontend tests pass
-    18-2-identification-visuelle-workflow-vs-action: backlog # Icône ou type+icône Admin et Catalogue
+    18-2-identification-visuelle-workflow-vs-action: done # Code review 2026-02-07: 4 MEDIUM + 3 LOW fixes applied, 18 tests pass (10 AdminPage + 8 iconHelpers)
     18-3-mode-visuel-builder-taille-blocs-lien-libelle: backlog # Fenêtre plus grande, blocs Départ/Fin déplaçables, lien auto sans erreur, nom action affiché
     18-4-catalogue-retirer-adapter-filtre-environnement: backlog # Filtre Environnement obsolète (target définit env)
     18-5-favoris-correction-affichage-compteur: backlog # Onglet vide avec (1) — actions désactivées ou requête incorrecte

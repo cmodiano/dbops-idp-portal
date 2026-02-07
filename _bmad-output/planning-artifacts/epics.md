@@ -292,6 +292,11 @@ Le specialiste securite et l'equipe technique valident que le portail respecte l
 **Phase :** Release (pre-production)
 **Reference :** Compliance SOC1, exigences securite premiere release
 
+### Epic 18 : Ameliorations UX et corrections issues du feedback utilisateurs
+Corrections et ameliorations basees sur le feedback terrain : admin actions (suppression/désactivation/filtres), identification workflow vs action, mode visuel builder (taille, blocs, lien, libellé), filtre Environnement catalogue, favoris, statut erreur intégration.
+**FRs couvertes :** FR6, FR11, FR19 (cycle de vie actions, catalogue, statuts)
+**Phase :** Growth (Phase 2)
+
 ---
 
 ## Epic 1 : Bootstrap Projet & Authentification
@@ -3843,3 +3848,175 @@ afin que l'experience reste fluide meme avec peu d'actions affichees.
 **Then** les vues catalog et favoris n'executent plus de N+1 ; jointures via select_related/prefetch_related ; index adaptes si besoin
 
 **And** le temps de reponse (ou nombre de requetes) est mesure avant/apres ; gains documentes
+
+---
+
+## Epic 18 : Ameliorations UX et corrections issues du feedback utilisateurs
+
+En tant que **DBOPS et DBA**,
+je veux **des corrections et ameliorations basees sur le feedback utilisateurs recueilli**,
+afin de **fluidifier l'usage quotidien du portail, eliminer les irritants et fiabiliser les statuts d'execution**.
+
+**Contexte :** Feedback terrain sur l'admin des actions, le mode visuel du builder de workflows, le catalogue, les favoris et l'affichage des erreurs d'integration.
+
+### Portee (scope)
+
+- **Admin Actions** : suppression/désactivation des actions jamais exécutées, filtres (actives par défaut, désactivées via filtre), propagation aux workflows
+- **Admin + Catalogue** : identification visuelle des workflows vs actions (icône ou type avec icône)
+- **Builder visuel** : taille fenêtre, déplacement blocs Départ/Fin, lien automatique sans erreur, affichage du nom d'action
+- **Catalogue** : filtre Environnement obsolète (environnement = propriété du target)
+- **Favoris** : correction du compteur et de l'affichage (actions désactivées)
+- **Execution** : afficher le statut erreur quand l'intégration échoue (pas "soumis")
+- **Tests** : correction des tests en échec (fixtures, migrations, refactorings)
+
+### Definition of Done (criteres d'acceptation de l'epic)
+
+- Les actions jamais exécutées peuvent être supprimées ; les autres peuvent être désactivées (avec message si workflow impacté)
+- Les workflows et actions sont visuellement distincts dans Admin et Catalogue
+- Le mode visuel du builder offre une zone de travail suffisante et des blocs repositionnables
+- Le filtre Environnement du catalogue est retiré ou adapté au modèle target-first
+- Les favoris affichent correctement le contenu et le compteur
+- Une erreur d'intégration se traduit par un statut erreur visible (pas soumis)
+- La suite de tests (backend et frontend) passe à nouveau
+
+### Story 18.1 : Admin Actions — suppression, désactivation et filtres
+
+En tant que **DBOPS**,
+je veux **supprimer les actions jamais exécutées et désactiver les autres**, avec filtres pour voir actives par défaut et désactivées à la demande,
+afin de **maintenir un catalogue propre tout en préservant la traçabilité des exécutions passées**.
+
+**Acceptance Criteria:**
+
+**Given** une action dans l'admin
+**When** elle n'a jamais été exécutée
+**Then** je peux la supprimer
+
+**Given** une action ayant au moins une exécution passée
+**When** je veux la retirer du catalogue actif
+**Then** je peux la désactiver (pas supprimer, pour traçabilité/audit)
+
+**Given** je désactive une action utilisée par un ou plusieurs workflows
+**When** je confirme la désactivation
+**Then** un message de confirmation m'informe que le(s) workflow(s) sera/seront désactivé(s) aussi
+**And** le(s) workflow(s) référençant cette action est/sont désactivé(s)
+
+**Given** la liste des actions en admin
+**When** j'accède par défaut
+**Then** je vois uniquement les actions actives
+
+**Given** je veux gérer les actions désactivées
+**When** j'applique un filtre "Inclure désactivées" (ou équivalent)
+**Then** je vois les actions désactivées, pouvant les réactiver ou les modifier
+
+### Story 18.2 : Identification visuelle workflow vs action (Admin et Catalogue)
+
+En tant que **DBOPS ou DBA**,
+je veux **distinguer facilement les workflows des actions simples** dans les listes,
+afin de **identifier rapidement le type d'élément sans lire le détail**.
+
+**Acceptance Criteria:**
+
+**Given** la liste des actions en admin
+**When** j'affiche les lignes
+**Then** chaque élément affiche une icône ou un indicateur (type + icône) permettant de distinguer workflow vs action
+
+**Given** la liste des actions côté catalogue
+**When** j'affiche les cartes ou la liste
+**Then** chaque élément affiche la même distinction visuelle (icône ou type avec icône)
+
+### Story 18.3 : Mode visuel builder — taille, blocs, lien et libellé
+
+En tant que **DBOPS**,
+je veux **un mode visuel du builder de workflows plus utilisable**,
+afin de **concevoir et modifier les workflows sans friction**.
+
+**Acceptance Criteria:**
+
+**Given** je crée ou modifie un workflow en mode visuel
+**When** la fenêtre modale s'ouvre
+**Then** la zone de dessin (canvas) est suffisamment grande pour visualiser le workflow sans scroll excessif
+
+**Given** les blocs Départ et Fin sur le canvas
+**When** je souhaite réorganiser la disposition
+**Then** je peux déplacer les blocs Départ et Fin (comme les autres blocs d'action)
+
+**Given** j'ajoute la première action au workflow (entre Départ et Fin)
+**When** la connexion Départ → première action est établie
+**Then** le lien se crée automatiquement sans condition et s'affiche en succès (pas en erreur)
+
+**Given** je sauvegarde un workflow puis je le rouvre
+**When** je visualise les blocs d'action
+**Then** le nom de l'action s'affiche (ex. "Apply Oracle Patch"), pas un libellé générique "Action #2"
+
+### Story 18.4 : Catalogue — retirer ou adapter le filtre Environnement
+
+En tant que **utilisateur du catalogue**,
+je veux **que le filtre Environnement soit pertinent ou retiré**,
+afin de **ne pas être induit en erreur** : l'environnement est défini par le target, pas par l'action.
+
+**Acceptance Criteria:**
+
+**Given** le catalogue avec filtre Environnement actuel
+**When** les actions ne sont plus reliées directement à un environnement (c'est le target qui définit l'environnement)
+**Then** le filtre Environnement est retiré OU adapté pour refléter le modèle target-first (ex. filtrer par environnements des targets disponibles)
+
+### Story 18.5 : Favoris — correction affichage et compteur
+
+En tant que **DBA**,
+je veux **que mes actions favorites s'affichent correctement** dans l'onglet Favoris,
+afin de **retrouver rapidement les actions que j'utilise le plus**.
+
+**Acceptance Criteria:**
+
+**Given** j'ai des actions en favoris
+**When** j'accède à l'onglet Favoris
+**Then** les actions favorites s'affichent (et non une liste vide)
+
+**Given** une action en favoris est désactivée
+**When** je consulte mes favoris
+**Then** le compteur et l'affichage excluent ou gèrent correctement les actions désactivées (pas de compteur incorrect ni d'onglet vide alors qu'un chiffre s'affiche)
+
+**And** la requête côté client/serveur retourne bien les favoris visibles (investigation possible : action désactivée encore comptée côté serveur mais non retournée dans la liste)
+
+### Story 18.6 : Erreur intégration — afficher statut erreur
+
+En tant que **DBA ou utilisateur**,
+je veux **voir un statut erreur** quand l'intégration (AAP, ServiceNow, etc.) retourne une erreur,
+afin de **savoir immédiatement que l'action n'a pas été correctement soumise**.
+
+**Acceptance Criteria:**
+
+**Given** je déclenche une action
+**When** l'intégration (plateforme distante) retourne une erreur
+**Then** l'exécution n'apparaît pas comme "soumise" ou "en cours" de manière trompeuse
+**And** l'exécution affiche un statut erreur explicite (ex. "Erreur", "Échec intégration")
+**And** un message ou un détail permet de comprendre la cause (idéalement issu de la réponse d'erreur de l'intégration)
+
+**Given** le backend reçoit une erreur de l'intégration avant ou pendant la création de l'exécution
+**When** la réponse est traitée
+**Then** le statut en base et/ou le callback reflètent l'état d'erreur
+**And** le frontend affiche correctement ce statut (pas de statut "soumis" pour une exécution qui a échoué côté intégration)
+
+### Story 18.7 : Correction des tests en échec
+
+En tant qu'**équipe de développement**,
+je veux **que l'ensemble des tests (backend et frontend) passent à nouveau**,
+afin de **restaurer la confiance dans la suite de tests et permettre les déploiements en CI**.
+
+**Contexte :** Un bon nombre de tests échouent actuellement ; causes possibles : fixtures obsolètes (ex. User), migrations, refactorings (OracleJSONField, etc.), changements d'API ou de modèles. Cette story vise à identifier et corriger ces échecs.
+
+**Acceptance Criteria:**
+
+**Given** la suite de tests backend et frontend
+**When** on exécute `pytest` (backend) et les tests frontend (Vitest/Jest)
+**Then** l'ensemble des tests passent (ou les échecs restants sont documentés avec tickets de suivi)
+
+**Given** des tests échouent pour cause de fixtures obsolètes (User, Action, etc.)
+**When** on corrige les fixtures
+**Then** elles reflètent le modèle de données et les contraintes actuels
+
+**Given** des tests échouent pour cause de refactoring (OracleJSONField, changements d'API)
+**When** on adapte les tests
+**Then** ils valident le comportement attendu sans dépendre d'implémentations internes fragiles
+
+**And** la CI (ou commande locale) exécute la suite complète avec succès ; les échecs connus sont documentés si des corrections sont reportées

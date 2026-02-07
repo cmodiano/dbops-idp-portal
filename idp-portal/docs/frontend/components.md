@@ -14,7 +14,35 @@ components/
 ├── executions/  # Liste exécutions
 ├── layout/      # Layout et navigation
 └── shared/      # Composants partagés
+├── utils/       # Utilitaires partagés (iconHelpers, etc.)
 ```
+
+---
+
+## Identification visuelle des workflows (`src/utils/iconHelpers.tsx`)
+
+Utilitaire centralisé pour l'identification visuelle workflow vs action (Story 18.2).
+
+**Fonction principale :** `getItemTypeIcon(itemType, engine, options?)`
+
+| Type | Icône | Couleur | Label |
+|------|-------|---------|-------|
+| Workflow | `ApartmentOutlined` | `#722ed1` (violet) | "Workflow (chaîne d'actions)" |
+| Action Oracle | `DatabaseOutlined` | `#EF4444` (rouge) | "Action Oracle" |
+| Action SQL Server | `CloudServerOutlined` | `#3B82F6` (bleu) | "Action SQL Server" |
+| Action DB2 | `HddOutlined` | `#10B981` (vert) | "Action DB2" |
+| Action (inconnu) | `HddOutlined` | `#8c8c8c` (gris) | "Action {engine}" |
+
+**Utilisé par :**
+- `AdminPage.tsx` — colonne "Nom" (avec tooltip)
+- `ActionTable.tsx` — colonne "Action" (catalogue)
+- `ActionCard.tsx` — icône header (avec SVG override pour logos vendeurs)
+
+**Options :**
+- `withTooltip` : Enveloppe l'icône dans un `Tooltip` Ant Design
+- `fontSize` : Taille de l'icône en px (défaut: 16)
+
+**Accessibilité :** Chaque icône inclut un `aria-label` (ex: "Type: Workflow", "Type: Action Oracle").
 
 ---
 
