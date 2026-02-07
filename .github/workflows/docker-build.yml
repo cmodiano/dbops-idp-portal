@@ -1,10 +1,11 @@
 name: Docker Build
 
 on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:  # Exécution manuelle uniquement (Actions > Docker Build > Run workflow)
+  # push:
+  #   branches: [main, develop]
+  # pull_request:
+  #   branches: [main]
 
 env:
   BACKEND_IMAGE: idp-backend
