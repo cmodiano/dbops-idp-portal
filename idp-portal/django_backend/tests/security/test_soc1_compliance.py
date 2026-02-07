@@ -324,7 +324,7 @@ class TestSecretsManagement:
         with patch('core.views.requests.get') as mock_get:
             mock_get.side_effect = Exception("Connection refused")
             client = APIClient()
-            response = client.get('/api/v1/health')
+            response = client.get('/api/v1/health/')
             assert response.status_code in (200, 503)
             data = response.json().get('data', {})
             assert 'vault' in data

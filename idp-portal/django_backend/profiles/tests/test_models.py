@@ -75,7 +75,7 @@ class ProfileActionPermissionModelTest(TestCase):
             tag_patterns_json='["oracle", "provisioning"]'
         )
         self.assertEqual(permission.get_tag_patterns(), ['oracle', 'provisioning'])
-        
+
         permission.set_environments(['DEV', 'STAGING'])
         permission.save()
         self.assertEqual(permission.get_environments(), ['DEV', 'STAGING'])

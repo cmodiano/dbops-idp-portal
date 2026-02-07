@@ -23,8 +23,7 @@ class TestTagViewSet(TestCase):
         # Create user
         self.user = User.objects.create(
             username='testuser',
-            profile='dba',
-            is_staff=False
+            profile='dba'
         )
         
         # Create tags
@@ -76,15 +75,15 @@ class TestTagViewSet(TestCase):
     
     def test_list_catalog_tags_public(self):
         """Test GET /catalog/tags is public (no authentication required)."""
-        response = self.client.get('/api/v1/catalog/tags')
-        
+        response = self.client.get('/api/v1/catalog/tags/')
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('data', response.data)
         self.assertIsInstance(response.data['data'], list)
-    
+
     def test_list_catalog_tags_format(self):
         """Test GET /catalog/tags returns correct format."""
-        response = self.client.get('/api/v1/catalog/tags')
+        response = self.client.get('/api/v1/catalog/tags/')
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('data', response.data)

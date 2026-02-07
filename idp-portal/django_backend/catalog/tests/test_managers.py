@@ -4,6 +4,7 @@ Tests for catalog managers (ActionManager).
 
 import pytest
 from django.test import TestCase
+from django.utils import timezone
 from idp_auth.models import User
 from integrations.models import Integration
 from catalog.models import Action, Tag, ActionTag, ActionStatus, ActionItemType
@@ -48,6 +49,7 @@ class TestActionManager(TestCase):
             engine='Oracle',
             platform='AAP',
             status=ActionStatus.DISABLED,
+            deleted_at=timezone.now(),
             created_by=self.user,
             integration=self.integration
         )

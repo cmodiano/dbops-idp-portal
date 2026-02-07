@@ -346,7 +346,7 @@ class ExecutionViewTargetsTest(TestCase):
 
     def test_post_execution_requires_action_id(self):
         """Test that action_id is required."""
-        response = self.client.post('/api/v1/executions', {
+        response = self.client.post('/api/v1/executions/', {
             'environment': 'dev'
         }, format='json')
         self.assertEqual(response.status_code, 400)
@@ -354,7 +354,7 @@ class ExecutionViewTargetsTest(TestCase):
 
     def test_post_execution_requires_environment_or_targets(self):
         """Test that either environment or target_names is required."""
-        response = self.client.post('/api/v1/executions', {
+        response = self.client.post('/api/v1/executions/', {
             'action_id': self.action.id
         }, format='json')
         self.assertEqual(response.status_code, 400)
@@ -362,7 +362,7 @@ class ExecutionViewTargetsTest(TestCase):
 
     def test_post_execution_with_environment_only(self):
         """Test creating execution with environment only (backward compatibility)."""
-        response = self.client.post('/api/v1/executions', {
+        response = self.client.post('/api/v1/executions/', {
             'action_id': self.action.id,
             'environment': 'dev'
         }, format='json')
@@ -372,7 +372,7 @@ class ExecutionViewTargetsTest(TestCase):
 
     def test_post_execution_target_names_must_be_list(self):
         """Test that target_names must be a non-empty list."""
-        response = self.client.post('/api/v1/executions', {
+        response = self.client.post('/api/v1/executions/', {
             'action_id': self.action.id,
             'target_names': 'not-a-list'
         }, format='json')
@@ -381,7 +381,7 @@ class ExecutionViewTargetsTest(TestCase):
 
     def test_post_execution_target_names_not_empty(self):
         """Test that target_names must not be empty."""
-        response = self.client.post('/api/v1/executions', {
+        response = self.client.post('/api/v1/executions/', {
             'action_id': self.action.id,
             'target_names': []
         }, format='json')
@@ -401,7 +401,7 @@ class ExecutionViewTargetsTest(TestCase):
             mock_instance.list_targets_for_user.return_value = (allowed_targets, 2, False)
             MockInventoryService.return_value = mock_instance
 
-            response = self.client.post('/api/v1/executions', {
+            response = self.client.post('/api/v1/executions/', {
                 'action_id': self.action.id,
                 'target_names': ['srv-dev-01'],
                 'parameters': {},
@@ -468,7 +468,7 @@ class ExecutionRBACValidationTests(TestCase):
             MockInventoryService.return_value = mock_instance
 
             # Try to execute on a target not in the allowed list
-            response = self.client.post('/api/v1/executions', {
+            response = self.client.post('/api/v1/executions/', {
                 'action_id': self.action.id,
                 'target_names': ['srv-prod-01'],  # Not in allowed list
             }, format='json')
@@ -494,7 +494,7 @@ class ExecutionRBACValidationTests(TestCase):
             MockInventoryService.return_value = mock_instance
 
             # Try to execute on a db-* target (not matching web-* pattern)
-            response = self.client.post('/api/v1/executions', {
+            response = self.client.post('/api/v1/executions/', {
                 'action_id': self.action.id,
                 'target_names': ['db-dev-01'],  # Doesn't match web-* pattern
             }, format='json')
@@ -517,7 +517,7 @@ class ExecutionRBACValidationTests(TestCase):
             mock_instance.list_targets_for_user.return_value = (allowed_targets, 2, False)
             MockInventoryService.return_value = mock_instance
 
-            response = self.client.post('/api/v1/executions', {
+            response = self.client.post('/api/v1/executions/', {
                 'action_id': self.action.id,
                 'target_names': ['srv-dev-01'],  # In allowed list
             }, format='json')
@@ -541,7 +541,7 @@ class ExecutionRBACValidationTests(TestCase):
             MockInventoryService.return_value = mock_instance
 
             # One allowed, one forbidden
-            response = self.client.post('/api/v1/executions', {
+            response = self.client.post('/api/v1/executions/', {
                 'action_id': self.action.id,
                 'target_names': ['srv-dev-01', 'srv-prod-01'],  # srv-prod-01 not allowed
             }, format='json')
@@ -566,7 +566,7 @@ class ExecutionRBACValidationTests(TestCase):
             MockInventoryService.return_value = mock_instance
 
             # Try to mix DEV and STAGING targets in same execution
-            response = self.client.post('/api/v1/executions', {
+            response = self.client.post('/api/v1/executions/', {
                 'action_id': self.action.id,
                 'target_names': ['srv-dev-01', 'srv-stg-01'],  # Different environments
             }, format='json')
@@ -587,7 +587,7 @@ class ExecutionRBACValidationTests(TestCase):
             MockInventoryService.return_value = mock_instance
 
             with patch('executions.views.AuditService.create_entry') as mock_audit:
-                response = self.client.post('/api/v1/executions', {
+                response = self.client.post('/api/v1/executions/', {
                     'action_id': self.action.id,
                     'target_names': ['forbidden-target'],
                 }, format='json')
@@ -649,7 +649,7 @@ class ExecutionRBACMultiProfileTests(TestCase):
             MockInventoryService.return_value = mock_instance
 
             # Execute on DEV target
-            response = self.client.post('/api/v1/executions', {
+            response = self.client.post('/api/v1/executions/', {
                 'action_id': self.action.id,
                 'target_names': ['srv-dev-01'],
             }, format='json')
@@ -662,7 +662,7 @@ class ExecutionRBACMultiProfileTests(TestCase):
             MockInventoryService.return_value = mock_instance
 
             # Execute on STAGING target
-            response = self.client.post('/api/v1/executions', {
+            response = self.client.post('/api/v1/executions/', {
                 'action_id': self.action.id,
                 'target_names': ['srv-stg-01'],
             }, format='json')

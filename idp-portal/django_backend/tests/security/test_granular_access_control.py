@@ -388,7 +388,7 @@ class TestUserDataIsolation:
     def test_business_user_sees_only_own_executions(self, isolation_setup):
         """Client Business user only sees own executions (scope=mine default)."""
         client = make_auth_client(isolation_setup['token_b'])
-        response = client.get('/api/v1/executions')
+        response = client.get('/api/v1/executions/')
         assert response.status_code == status.HTTP_200_OK
         data = response.json()['data']
         exec_ids = [e['id'] for e in data]
@@ -398,7 +398,7 @@ class TestUserDataIsolation:
     def test_business_user_scope_all_fallback_to_mine(self, isolation_setup):
         """Client Business requesting scope=all still gets only own executions."""
         client = make_auth_client(isolation_setup['token_b'])
-        response = client.get('/api/v1/executions?scope=all')
+        response = client.get('/api/v1/executions/?scope=all')
         assert response.status_code == status.HTTP_200_OK
         data = response.json()['data']
         exec_ids = [e['id'] for e in data]
@@ -408,7 +408,7 @@ class TestUserDataIsolation:
     def test_dba_user_can_see_all_executions(self, isolation_setup):
         """DBA user with scope=all sees all executions."""
         client = make_auth_client(isolation_setup['token_a'])
-        response = client.get('/api/v1/executions?scope=all')
+        response = client.get('/api/v1/executions/?scope=all')
         assert response.status_code == status.HTTP_200_OK
         data = response.json()['data']
         exec_ids = [e['id'] for e in data]
@@ -418,7 +418,7 @@ class TestUserDataIsolation:
     def test_dbops_user_can_see_all_executions(self, isolation_setup):
         """DBOPS user with scope=all sees all executions."""
         client = make_auth_client(isolation_setup['token_dbops'])
-        response = client.get('/api/v1/executions?scope=all')
+        response = client.get('/api/v1/executions/?scope=all')
         assert response.status_code == status.HTTP_200_OK
         data = response.json()['data']
         exec_ids = [e['id'] for e in data]
@@ -428,25 +428,25 @@ class TestUserDataIsolation:
     def test_execution_detail_forbidden_for_other_user(self, isolation_setup):
         """Business user cannot view execution detail of another user."""
         client = make_auth_client(isolation_setup['token_b'])
-        response = client.get(f'/api/v1/executions/{isolation_setup["exec_a"].id}')
+        response = client.get(f'/api/v1/executions/{isolation_setup["exec_a"].id}/')
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_execution_detail_allowed_for_owner(self, isolation_setup):
         """User can view their own execution detail."""
         client = make_auth_client(isolation_setup['token_b'])
-        response = client.get(f'/api/v1/executions/{isolation_setup["exec_b"].id}')
+        response = client.get(f'/api/v1/executions/{isolation_setup["exec_b"].id}/')
         assert response.status_code == status.HTTP_200_OK
 
     def test_execution_detail_dbops_sees_any(self, isolation_setup):
         """DBOPS can view any user's execution detail."""
         client = make_auth_client(isolation_setup['token_dbops'])
-        response = client.get(f'/api/v1/executions/{isolation_setup["exec_b"].id}')
+        response = client.get(f'/api/v1/executions/{isolation_setup["exec_b"].id}/')
         assert response.status_code == status.HTTP_200_OK
 
     def test_execution_steps_forbidden_for_other_user(self, isolation_setup):
         """Business user cannot view execution steps of another user."""
         client = make_auth_client(isolation_setup['token_b'])
-        response = client.get(f'/api/v1/executions/{isolation_setup["exec_a"].id}/steps')
+        response = client.get(f'/api/v1/executions/{isolation_setup["exec_a"].id}/steps/')
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
 

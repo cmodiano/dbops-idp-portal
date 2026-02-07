@@ -11,6 +11,7 @@ from idp_auth.models import User
 from catalog.models import Action, Tag, ActionTag, ActionStatus, ActionItemType, ActionEngine, ActionPlatform
 from catalog.services import CatalogService
 from executions.models import Execution, ExecutionStatus
+from reference.models import RefEngine, RefPlatform
 
 
 @pytest.mark.django_db
@@ -24,8 +25,7 @@ class TestCatalogActionViewSet(TestCase):
         # Create user (optional for catalog endpoints)
         self.user = User.objects.create(
             username='testuser',
-            profile='dba',
-            is_staff=False
+            profile='dba'
         )
         
         # Create test actions

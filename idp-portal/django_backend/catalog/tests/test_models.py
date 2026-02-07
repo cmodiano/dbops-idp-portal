@@ -54,13 +54,13 @@ class ActionModelTest(TestCase):
         action.parameters_schema = schema
         action.save()
         self.assertEqual(action.parameters_schema, schema)
-        
+
         # Test impact_rules
         impact_rules = {'DEV': {'level': 'low'}, 'PROD': {'level': 'high'}}
         action.impact_rules = impact_rules
         action.save()
         self.assertEqual(action.impact_rules, impact_rules)
-    
+
     def test_action_json_fields_complex(self):
         """Test JSON field helpers with complex nested objects and arrays (Task 10.4)."""
         action = Action.objects.create(
@@ -69,7 +69,7 @@ class ActionModelTest(TestCase):
             engine='Oracle',
             platform='AAP'
         )
-        
+
         # Test complex nested object with arrays
         complex_parameters_schema = {
             'type': 'object',
@@ -109,7 +109,7 @@ class ActionModelTest(TestCase):
         self.assertEqual(retrieved['type'], 'object')
         self.assertIn('databases', retrieved['properties'])
         self.assertEqual(retrieved['properties']['databases']['type'], 'array')
-        
+
         # Test execution_steps with array of complex objects
         complex_execution_steps = [
             {
@@ -152,7 +152,7 @@ class ActionModelTest(TestCase):
         self.assertEqual(retrieved_steps[1]['step_name'], 'Execute SQL')
         self.assertIn('sql_statements', retrieved_steps[1])
         self.assertIn('rollback', retrieved_steps[1])
-        
+
         # Test impact_rules with nested structures
         complex_impact_rules = {
             'DEV': {

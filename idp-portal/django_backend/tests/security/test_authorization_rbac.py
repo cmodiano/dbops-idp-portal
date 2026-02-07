@@ -29,10 +29,10 @@ ADMIN_ENDPOINTS = [
 
 # Endpoints accessible to all authenticated users
 COMMON_ENDPOINTS = [
-    ('GET', '/api/v1/auth/me'),
-    ('GET', '/api/v1/executions'),
-    ('GET', '/api/v1/catalog/actions'),
-    ('GET', '/api/v1/dashboard/stats'),
+    ('GET', '/api/v1/auth/me/'),
+    ('GET', '/api/v1/executions/'),
+    ('GET', '/api/v1/catalog/actions/'),
+    ('GET', '/api/v1/dashboard/stats/'),
 ]
 
 

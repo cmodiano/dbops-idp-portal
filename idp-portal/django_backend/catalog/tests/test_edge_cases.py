@@ -7,6 +7,7 @@ import pytest
 from django.test import TestCase
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 from idp_auth.models import User
 from integrations.models import Integration
 from catalog.models import Action, Tag, ActionTag, ActionStatus
@@ -35,33 +36,33 @@ class TestPaginationEdgeCases(TestCase):
     
     def test_pagination_first_page(self):
         """Test pagination first page."""
-        results, total = self.service.list_all(page=1, page_size=10)
+        results, pagination_info = self.service.list_all(page=1, page_size=10)
         self.assertEqual(len(results), 10)
-        self.assertEqual(total, 30)
+        self.assertEqual(pagination_info['total_count'], 30)
     
     def test_pagination_last_page(self):
         """Test pagination last page (partial)."""
-        results, total = self.service.list_all(page=3, page_size=10)
+        results, pagination_info = self.service.list_all(page=3, page_size=10)
         self.assertEqual(len(results), 10)
-        self.assertEqual(total, 30)
+        self.assertEqual(pagination_info['total_count'], 30)
     
     def test_pagination_beyond_total(self):
         """Test pagination beyond total pages."""
-        results, total = self.service.list_all(page=10, page_size=10)
+        results, pagination_info = self.service.list_all(page=10, page_size=10)
         self.assertEqual(len(results), 0)
-        self.assertEqual(total, 30)
+        self.assertEqual(pagination_info['total_count'], 30)
     
     def test_pagination_page_size_zero(self):
         """Test pagination with page_size=0."""
-        results, total = self.service.list_all(page=1, page_size=0)
+        results, pagination_info = self.service.list_all(page=1, page_size=0)
         self.assertEqual(len(results), 0)
-        self.assertEqual(total, 30)
+        self.assertEqual(pagination_info['total_count'], 30)
     
     def test_pagination_page_size_large(self):
         """Test pagination with very large page_size."""
-        results, total = self.service.list_all(page=1, page_size=1000)
+        results, pagination_info = self.service.list_all(page=1, page_size=1000)
         self.assertEqual(len(results), 30)
-        self.assertEqual(total, 30)
+        self.assertEqual(pagination_info['total_count'], 30)
     
     def test_pagination_negative_page(self):
         """Test pagination with negative page number."""

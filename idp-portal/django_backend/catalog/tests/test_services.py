@@ -8,6 +8,7 @@ from django.db import transaction
 from idp_auth.models import User
 from integrations.models import Integration
 from catalog.models import Action, Tag, ActionTag, ActionStatus, ActionItemType
+from django.utils import timezone
 from catalog.services import CatalogService
 from core.models import AuditLog
 
@@ -113,15 +114,15 @@ class TestCatalogService(TestCase):
         )
         
         # Filter by status
-        results, total = self.service.list_all(status=ActionStatus.PUBLISHED)
-        self.assertEqual(total, 1)
+        results, pagination_info = self.service.list_all(status=ActionStatus.PUBLISHED)
+        self.assertEqual(pagination_info['total_count'], 1)
         self.assertEqual(results[0].id, action1.id)
-        
+
         # Filter by engine
-        results, total = self.service.list_all(engine='Oracle')
-        self.assertGreaterEqual(total, 1)
+        results, pagination_info = self.service.list_all(engine='Oracle')
+        self.assertGreaterEqual(pagination_info['total_count'], 1)
         self.assertTrue(any(a.id == action1.id for a in results))
-        
+
         # Filter by item_type
         workflow = Action.objects.create(
             name='Workflow 1',
@@ -131,8 +132,8 @@ class TestCatalogService(TestCase):
             item_type=ActionItemType.WORKFLOW,
             created_by=self.user
         )
-        results, total = self.service.list_all(item_type=ActionItemType.WORKFLOW)
-        self.assertGreaterEqual(total, 1)
+        results, pagination_info = self.service.list_all(item_type=ActionItemType.WORKFLOW)
+        self.assertGreaterEqual(pagination_info['total_count'], 1)
         self.assertTrue(any(a.id == workflow.id for a in results))
     
     def test_list_all_with_pagination(self):

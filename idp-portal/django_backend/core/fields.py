@@ -64,11 +64,15 @@ class OracleJSONField(models.TextField):
         Serialize dict/list to JSON string before INSERT/UPDATE.
 
         If value is already a string, validates it's valid JSON before returning.
+        Treats empty string as None (common when frontend sends "" for optional JSON).
         Raises ValidationError for non-serializable values (strict mode).
         """
         if value is None:
             return None
         if isinstance(value, str):
+            if not value.strip():
+                # Empty or whitespace-only string → treat as None
+                return None
             # Validate that string is valid JSON before allowing it through
             try:
                 json.loads(value)

@@ -362,6 +362,8 @@ def test_unauthenticated_request_returns_401():
 - ✅ Mocker services externes (Vault, ServiceNow, AAP)
 - ✅ Tester cas limites et conditions d'erreur
 - ✅ Vérifier piste d'audit pour opérations CRUD
+- ✅ **TOUJOURS** ajouter trailing slash aux URLs API dans tests (`/api/v1/executions/`)
+- ✅ **TOUJOURS** utiliser `UserFactory` pour créer utilisateurs tests
 
 ### À ÉVITER
 
@@ -370,6 +372,222 @@ def test_unauthenticated_request_returns_401():
 - ❌ Sauter des tests sans bonne raison
 - ❌ Laisser des print/debug statements
 - ❌ Créer des dépendances entre tests
+- ❌ **JAMAIS** utiliser `User.objects.create(is_staff=True)` (champ n'existe pas)
+- ❌ **JAMAIS** créer `Action` manuellement avec JSON strings — utiliser `ActionFactory`
+- ❌ **JAMAIS** utiliser URLs sans trailing slash dans tests (`/api/v1/executions` → 301 redirect)
+
+---
+
+## ⚠️ Common Testing Pitfalls (Story 18.7)
+
+**Updated:** 2026-02-07 — Lessons learned from Story 18.7 test fixes
+
+### ❌ PIÈGE 1: User Fixtures avec Champs Django Auth Standard
+
+**Problème:** Le modèle `User` custom ne possède **PAS** les champs Django auth standard (`is_staff`, `is_active`, `is_superuser`, `password`). L'authentification se fait via SAML 2.0, pas Django auth.
+
+**❌ MAUVAIS (provoque TypeError):**
+```python
+from idp_auth.models import User
+
+def test_example():
+    user = User.objects.create(
+        username='testuser',
+        profile='DBA',
+        is_staff=True,        # ❌ TypeError: Unknown field 'is_staff'
+        is_active=True,       # ❌ TypeError: Unknown field 'is_active'
+        is_superuser=False    # ❌ TypeError: Unknown field 'is_superuser'
+    )
+```
+
+**✅ CORRECT (utiliser UserFactory):**
+```python
+from tests.factories import UserFactory
+
+def test_example():
+    user = UserFactory(
+        username='testuser',
+        profile='DBA'
+    )
+    # Champs valides: username, profile, display_name, saml_subject
+```
+
+**Variantes UserFactory:**
+```python
+# Profils différents
+dba_user = UserFactory(profile='DBA')
+dbops_user = UserFactory(profile='DBOPS')
+business_user = UserFactory(profile='BUSINESS')
+
+# Traits factory
+dbops_user = UserFactory(dbops=True)  # Trait pour DBOPS
+business_user = UserFactory(business=True)  # Trait pour BUSINESS
+
+# Override display_name et saml_subject
+user = UserFactory(
+    username='john.doe',
+    display_name='John Doe',
+    saml_subject='john.doe@example.com'
+)
+```
+
+---
+
+### ❌ PIÈGE 2: Créer Action Manuellement avec JSON Fields
+
+**Problème:** Depuis Story 17.4 (OracleJSONField refactor), les champs JSON (`parameters_schema`, `impact_rules`, etc.) doivent être passés comme `dict`/`list`, pas comme JSON `string`. Créer manuellement provoque erreurs de sérialisation.
+
+**❌ MAUVAIS (JSON strings manuelles):**
+```python
+from catalog.models import Action
+
+def test_example():
+    action = Action.objects.create(
+        name='Test Action',
+        status='published',
+        parameters_schema='{"type": "object"}',  # ❌ String, pas dict
+        impact_rules='[{"condition": "env==prod"}]'  # ❌ String, pas list
+    )
+    # Fragile, verbose, prone to errors
+```
+
+**✅ CORRECT (utiliser ActionFactory):**
+```python
+from tests.factories import ActionFactory
+
+def test_example():
+    action = ActionFactory(
+        name='Test Action',
+        status='published',
+        parameters_schema={'type': 'object'},  # ✅ Dict, factory gère JSON
+        impact_rules=[{'condition': 'env==prod'}]  # ✅ List, factory gère JSON
+    )
+    # Clean, maintainable, type-safe
+```
+
+**Variantes ActionFactory:**
+```python
+# Action publiée (default)
+action = ActionFactory()  # status='published', item_type='action'
+
+# Workflow (item_type='workflow')
+workflow = ActionFactory(workflow=True)  # Trait pour workflow
+
+# Action désactivée
+disabled_action = ActionFactory(disabled=True)  # Trait pour disabled
+
+# Avec intégration spécifique
+from tests.factories import IntegrationFactory
+integration = IntegrationFactory(platform_type='AAP')
+action = ActionFactory(integration=integration)
+```
+
+---
+
+### ❌ PIÈGE 3: URLs Sans Trailing Slash dans Tests
+
+**Problème:** Django `APPEND_SLASH=True` redirige les URLs sans trailing slash vers URLs avec trailing slash (301 redirect). Les tests d'authentification échouent car le redirect (301) arrive **AVANT** la vérification auth (401).
+
+**❌ MAUVAIS (301 redirect avant auth check):**
+```python
+def test_unauthenticated_returns_401(anon_client):
+    response = anon_client.get('/api/v1/executions')  # ❌ Sans trailing slash
+    # Résultat: 301 Redirect (vers /api/v1/executions/)
+    # Expected: 401 Unauthorized
+    assert response.status_code == 401  # ❌ ÉCHEC (301 != 401)
+```
+
+**✅ CORRECT (trailing slash évite redirect):**
+```python
+def test_unauthenticated_returns_401(anon_client):
+    response = anon_client.get('/api/v1/executions/')  # ✅ Trailing slash
+    # Résultat: 401 Unauthorized (pas de redirect, auth check exécuté)
+    assert response.status_code == 401  # ✅ PASSE
+```
+
+**Pattern Paramétrisé:**
+```python
+import pytest
+
+PROTECTED_ENDPOINTS = [
+    ('GET', '/api/v1/executions/'),          # ✅ Trailing slash
+    ('POST', '/api/v1/executions/'),         # ✅ Trailing slash
+    ('GET', '/api/v1/scheduled-executions/'),  # ✅ Trailing slash
+]
+
+@pytest.mark.parametrize('method,url', PROTECTED_ENDPOINTS)
+def test_unauthenticated_returns_401(anon_client, method, url):
+    response = getattr(anon_client, method.lower())(url)
+    assert response.status_code == 401
+```
+
+---
+
+### ❌ PIÈGE 4: Soft Delete Constraint CHECK Oracle vs SQLite
+
+**Problème:** Migration V004 ajoute contrainte CHECK Oracle pour soft delete consistency:
+```sql
+CHECK (
+    (IS_DELETED = 1 AND DELETED_AT IS NOT NULL) OR
+    (IS_DELETED = 0 AND DELETED_AT IS NULL)
+)
+```
+SQLite enforce cette contrainte, mais code tests peut la violer si `is_deleted` et `deleted_at` sont définis séparément.
+
+**❌ MAUVAIS (viole constraint):**
+```python
+from django.utils import timezone
+
+def test_soft_delete():
+    action = Action.objects.create(name='Test', status='published')
+    action.is_deleted = True
+    action.save()  # ❌ IntegrityError: CHECK constraint failed
+    # Cause: is_deleted=True mais deleted_at=NULL (incohérent)
+```
+
+**✅ CORRECT (définir ensemble):**
+```python
+from django.utils import timezone
+
+def test_soft_delete():
+    action = Action.objects.create(name='Test', status='published')
+    action.is_deleted = True
+    action.deleted_at = timezone.now()  # ✅ Cohérent avec is_deleted=True
+    action.save()  # OK, constraint satisfaite
+```
+
+**Ou utiliser méthode soft_delete() si elle existe:**
+```python
+def test_soft_delete():
+    action = Action.objects.create(name='Test', status='published')
+    action.soft_delete()  # ✅ Méthode model gère les deux champs ensemble
+```
+
+**Ou ActionFactory avec trait:**
+```python
+from tests.factories import ActionFactory
+
+def test_soft_delete():
+    action = ActionFactory(is_deleted=True, deleted_at=timezone.now())
+    # ✅ Factory s'assure de cohérence
+```
+
+---
+
+## 📝 Quick Reference Checklist
+
+Avant de soumettre un test:
+
+- [ ] ✅ J'utilise `UserFactory` (pas `User.objects.create()`)
+- [ ] ✅ J'utilise `ActionFactory` (pas `Action.objects.create()`)
+- [ ] ✅ Mes URLs API ont trailing slash (`/api/v1/executions/`)
+- [ ] ✅ Si soft delete, je définis `is_deleted` **ET** `deleted_at` ensemble
+- [ ] ✅ Je mocke services externes (Vault, ServiceNow, AAP)
+- [ ] ✅ J'ajoute `@pytest.mark.django_db` si j'accède à la DB
+- [ ] ✅ Je catégorise avec markers (`@pytest.mark.unit`, `@security`, etc.)
+- [ ] ❌ Je n'utilise PAS de champs Django auth (`is_staff`, `is_active`)
+- [ ] ❌ Je ne crée PAS de JSON fields avec strings manuelles
+- [ ] ❌ Je ne laisse PAS de `print()` ou debug statements
 
 ## Dépannage
 

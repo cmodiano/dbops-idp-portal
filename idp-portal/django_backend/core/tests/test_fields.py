@@ -283,9 +283,10 @@ class TestOracleJSONFieldStringValidation:
         with pytest.raises(ValidationError, match="Invalid JSON string"):
             self.field.get_prep_value('not valid json')
 
-    def test_empty_json_string_rejected(self):
-        with pytest.raises(ValidationError, match="Invalid JSON string"):
-            self.field.get_prep_value('')
+    def test_empty_json_string_treated_as_none(self):
+        """Empty string is treated as None (common when frontend sends '' for optional JSON)."""
+        result = self.field.get_prep_value('')
+        assert result is None
 
     def test_partial_json_string_rejected(self):
         with pytest.raises(ValidationError, match="Invalid JSON string"):

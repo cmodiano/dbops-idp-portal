@@ -58,12 +58,26 @@ const getColumns = (
     key: 'name',
     sorter: (a, b) => a.name.localeCompare(b.name),
     render: (name: string, record: ActionListItem) => {
-      const { icon } = getItemTypeIcon(record.item_type, record.engine, { withTooltip: true, fontSize: 16 });
+      const itemType = record.item_type ?? 'action';
+      const { icon } = getItemTypeIcon(itemType, record.engine, { withTooltip: true, fontSize: 18 });
       return (
         <Space>
           {icon}
           {name}
         </Space>
+      );
+    },
+  },
+  {
+    title: 'Type',
+    key: 'item_type',
+    width: 100,
+    render: (_: unknown, record: ActionListItem) => {
+      const itemType = record.item_type ?? 'action';
+      return (
+        <Tag color={itemType === 'workflow' ? 'purple' : 'blue'}>
+          {itemType === 'workflow' ? 'Workflow' : 'Action'}
+        </Tag>
       );
     },
   },

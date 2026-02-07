@@ -110,16 +110,22 @@ class CatalogService:
         )
         
         # Set JSON fields (OracleJSONField handles serialization automatically)
+        # Normalize empty strings to None - OracleJSONField rejects "" as invalid JSON
+        def _json_value(val):
+            if val is None or (isinstance(val, str) and not val.strip()):
+                return None
+            return val
+
         if 'parameters_schema' in action_data:
-            action.parameters_schema = action_data['parameters_schema']
+            action.parameters_schema = _json_value(action_data['parameters_schema'])
         if 'impact_rules' in action_data:
-            action.impact_rules = action_data['impact_rules']
+            action.impact_rules = _json_value(action_data['impact_rules'])
         if 'execution_steps' in action_data:
-            action.execution_steps = action_data['execution_steps']
+            action.execution_steps = _json_value(action_data['execution_steps'])
         if 'change_type_config' in action_data:
-            action.change_type_config = action_data['change_type_config']
+            action.change_type_config = _json_value(action_data['change_type_config'])
         if 'remediation_rules' in action_data:
-            action.remediation_rules = action_data['remediation_rules']
+            action.remediation_rules = _json_value(action_data['remediation_rules'])
         action.save()
         
         # Add tags if provided

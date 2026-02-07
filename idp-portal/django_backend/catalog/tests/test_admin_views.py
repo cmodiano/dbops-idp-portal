@@ -23,15 +23,13 @@ class TestAdminActionViewSet(TestCase):
         # Create DBOPS user
         self.dbops_user = User.objects.create(
             username='dbops_user',
-            profile='dbops',
-            is_staff=True
+            profile='dbops'
         )
         
         # Create non-DBOPS user
         self.regular_user = User.objects.create(
             username='regular_user',
-            profile='dba',
-            is_staff=False
+            profile='dba'
         )
         
         # Create test action

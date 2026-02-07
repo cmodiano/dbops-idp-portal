@@ -73,14 +73,14 @@ class TestExecutionSubmissionRBAC:
 
     def test_unauthenticated_cannot_submit_execution(self, anon_client):
         """POST /executions without auth returns 401."""
-        response = anon_client.post('/api/v1/executions', format='json')
+        response = anon_client.post('/api/v1/executions/', format='json')
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_authenticated_can_submit_execution(self, exec_setup):
         """DBA user can submit an execution for a published action."""
         client = make_auth_client(exec_setup['token_dba'])
         response = client.post(
-            '/api/v1/executions',
+            '/api/v1/executions/',
             data={
                 'action_id': exec_setup['action'].id,
                 'environment': 'dev',
@@ -97,7 +97,7 @@ class TestExecutionSubmissionRBAC:
         """POST /executions without action_id returns 400."""
         client = make_auth_client(exec_setup['token_dba'])
         response = client.post(
-            '/api/v1/executions',
+            '/api/v1/executions/',
             data={'environment': 'dev'},
             format='json',
         )
@@ -107,7 +107,7 @@ class TestExecutionSubmissionRBAC:
         """POST /executions with non-existent action_id returns 404."""
         client = make_auth_client(exec_setup['token_dba'])
         response = client.post(
-            '/api/v1/executions',
+            '/api/v1/executions/',
             data={'action_id': 999999, 'environment': 'dev'},
             format='json',
         )
@@ -177,24 +177,24 @@ class TestAuditEndpointAccess:
     def test_auditor_can_access_audit_executions(self, audit_setup):
         """User with auditor profile can access /audit/executions."""
         client = make_auth_client(audit_setup['token_auditor'])
-        response = client.get('/api/v1/audit/executions')
+        response = client.get('/api/v1/audit/executions/')
         assert response.status_code == status.HTTP_200_OK
 
     def test_non_auditor_denied_audit_executions(self, audit_setup):
         """Non-auditor user is denied access to /audit/executions."""
         client = make_auth_client(audit_setup['token_non_auditor'])
-        response = client.get('/api/v1/audit/executions')
+        response = client.get('/api/v1/audit/executions/')
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_dbops_without_auditor_denied_audit(self, audit_setup):
         """DBOPS without auditor flag is denied /audit/executions."""
         client = make_auth_client(audit_setup['token_dbops'])
-        response = client.get('/api/v1/audit/executions')
+        response = client.get('/api/v1/audit/executions/')
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_unauthenticated_denied_audit(self, anon_client):
         """Unauthenticated request to /audit/executions returns 401."""
-        response = anon_client.get('/api/v1/audit/executions')
+        response = anon_client.get('/api/v1/audit/executions/')
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_auditor_can_reach_export_view(self, audit_setup):
@@ -202,14 +202,14 @@ class TestAuditEndpointAccess:
         client = make_auth_client(audit_setup['token_auditor'])
         # Without ?format= the view returns 400 (format invalide), but NOT 403.
         # We avoid ?format=csv because DRF's URL_FORMAT_OVERRIDE intercepts it.
-        response = client.get('/api/v1/audit/export')
+        response = client.get('/api/v1/audit/export/')
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert response.status_code != status.HTTP_403_FORBIDDEN
 
     def test_non_auditor_denied_audit_export(self, audit_setup):
         """Non-auditor is denied /audit/export (403 before format validation)."""
         client = make_auth_client(audit_setup['token_non_auditor'])
-        response = client.get('/api/v1/audit/export')
+        response = client.get('/api/v1/audit/export/')
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
@@ -407,40 +407,40 @@ class TestExecutionLogIsolation:
         """Owner can GET /executions/{id}."""
         eid = log_isolation_setup['execution'].id
         client = make_auth_client(log_isolation_setup['token_owner'])
-        response = client.get(f'/api/v1/executions/{eid}')
+        response = client.get(f'/api/v1/executions/{eid}/')
         assert response.status_code == status.HTTP_200_OK
 
     def test_other_user_forbidden_execution_detail(self, log_isolation_setup):
         """Non-owner non-DBOPS gets 403 on GET /executions/{id}."""
         eid = log_isolation_setup['execution'].id
         client = make_auth_client(log_isolation_setup['token_other'])
-        response = client.get(f'/api/v1/executions/{eid}')
+        response = client.get(f'/api/v1/executions/{eid}/')
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_dbops_can_view_any_execution_detail(self, log_isolation_setup):
         """DBOPS can view any execution detail."""
         eid = log_isolation_setup['execution'].id
         client = make_auth_client(log_isolation_setup['token_dbops'])
-        response = client.get(f'/api/v1/executions/{eid}')
+        response = client.get(f'/api/v1/executions/{eid}/')
         assert response.status_code == status.HTTP_200_OK
 
     def test_owner_can_view_execution_steps(self, log_isolation_setup):
         """Owner can GET /executions/{id}/steps."""
         eid = log_isolation_setup['execution'].id
         client = make_auth_client(log_isolation_setup['token_owner'])
-        response = client.get(f'/api/v1/executions/{eid}/steps')
+        response = client.get(f'/api/v1/executions/{eid}/steps/')
         assert response.status_code == status.HTTP_200_OK
 
     def test_other_user_forbidden_execution_steps(self, log_isolation_setup):
         """Non-owner gets 403 on GET /executions/{id}/steps."""
         eid = log_isolation_setup['execution'].id
         client = make_auth_client(log_isolation_setup['token_other'])
-        response = client.get(f'/api/v1/executions/{eid}/steps')
+        response = client.get(f'/api/v1/executions/{eid}/steps/')
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_dbops_can_view_any_execution_steps(self, log_isolation_setup):
         """DBOPS can view any execution's steps."""
         eid = log_isolation_setup['execution'].id
         client = make_auth_client(log_isolation_setup['token_dbops'])
-        response = client.get(f'/api/v1/executions/{eid}/steps')
+        response = client.get(f'/api/v1/executions/{eid}/steps/')
         assert response.status_code == status.HTTP_200_OK
