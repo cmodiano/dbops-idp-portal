@@ -31,7 +31,7 @@ import {
   useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Alert, App, Button, Dropdown, Modal, Space, theme, Typography, List } from 'antd';
+import { Alert, App, Button, Dropdown, Space, theme, Typography, List } from 'antd';
 import {
   CheckCircleOutlined,
   CloseCircleOutlined,
@@ -400,7 +400,7 @@ function WorkflowBuilderCanvasInner({
   onMetadataImport,
 }: WorkflowBuilderCanvasProps) {
   const { token } = theme.useToken();
-  const { notification } = App.useApp();
+  const { notification, modal } = App.useApp();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { screenToFlowPosition, fitView } = useReactFlow();
@@ -739,7 +739,7 @@ function WorkflowBuilderCanvasInner({
 
       const result = parseWorkflowFile(content, extension);
       if (!result.valid || !result.data) {
-        Modal.error({
+        modal.error({
           title: 'Format de fichier invalide',
           width: 600,
           content: (
@@ -766,7 +766,7 @@ function WorkflowBuilderCanvasInner({
         (n) => n.id !== START_NODE_ID && n.id !== END_NODE_ID
       );
       if (currentWorkflowNodes.length > 0) {
-        Modal.confirm({
+        modal.confirm({
           title: 'Remplacer le workflow actuel ?',
           content: 'Le workflow actuel sera remplacé par le workflow importé. Cette action est irréversible.',
           okText: 'Remplacer',
@@ -786,7 +786,7 @@ function WorkflowBuilderCanvasInner({
     reader.readAsText(file);
     // Reset input so the same file can be re-imported
     event.target.value = '';
-  }, [nodes, notification, loadImportedWorkflow]);
+  }, [nodes, notification, modal, loadImportedWorkflow]);
 
   // Navigate to a specific node (for validation report)
   const { getNode, setCenter } = useReactFlow();

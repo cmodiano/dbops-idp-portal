@@ -45,7 +45,7 @@
  */
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { App, Typography, Table, Drawer, Skeleton, Alert, Card, Space, Row, Col, Tag, theme, Button, Modal, Tooltip } from 'antd';
+import { App, Typography, Table, Drawer, Skeleton, Alert, Card, Space, Row, Col, Tag, theme, Button, Tooltip } from 'antd';
 import {
   SafetyCertificateOutlined,
   RocketOutlined,
@@ -152,7 +152,7 @@ function isRunning(status: ExecutionStatusType): boolean {
 }
 
 export default function ExecutionsPage() {
-  const { notification } = App.useApp();
+  const { notification, modal } = App.useApp();
   // Story 8.8 AC9, Story 8.9: Auth context for profile check
   const { user, isLoading: authLoading } = useAuth();
   const { token } = theme.useToken();
@@ -352,7 +352,7 @@ export default function ExecutionsPage() {
 
   // Story 17.14 AC3: Handle cancel execution with confirmation modal
   const handleCancelExecution = useCallback((executionId: number) => {
-    Modal.confirm({
+    modal.confirm({
       title: MESSAGES.CANCEL_CONFIRM_TITLE,
       content: MESSAGES.CANCEL_CONFIRM_CONTENT,
       okText: MESSAGES.CANCEL_CONFIRM_OK,
@@ -373,7 +373,7 @@ export default function ExecutionsPage() {
         }
       },
     });
-  }, [fetchData, currentPage, activeScope]);
+  }, [modal, fetchData, currentPage, activeScope]);
 
   // Story 17.15 AC1, AC2: Handle restart execution — load action and open wizard
   const handleRestartExecution = useCallback(async (execution: ExecutionResponse) => {

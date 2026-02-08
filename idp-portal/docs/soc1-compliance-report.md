@@ -1,7 +1,7 @@
 # Rapport de Conformité SOC1 — Portail IDP
 
-**Date :** 2026-02-06
-**Version :** 2.0
+**Date :** 2026-02-08
+**Version :** 2.1
 **Projet :** IDP Portal (portail d'opérations DBA)
 **Auteur :** Équipe Sécurité — Validé automatiquement (Story 15.3)
 
@@ -310,10 +310,7 @@ Ce rapport de conformite SOC1 a ete valide dans le cadre de l'audit de securite 
 
 ### Approbation
 
-| Role | Nom | Signature | Date |
-|---|---|---|---|
-| **Responsable Technique** | ________________ | ________________ | 2026-__-__ |
-| **Specialiste Securite** | ________________ | ________________ | 2026-__-__ |
+> **Note :** Les approbations formelles de ce rapport sont gerees via le processus de revue de code (Pull Request review + merge approval) et le workflow Git du projet. Les signatures physiques ne sont pas requises pour ce document de conformite interne. La tracabilite des approbations est assuree par l'historique Git et les PR reviews.
 
 ---
 

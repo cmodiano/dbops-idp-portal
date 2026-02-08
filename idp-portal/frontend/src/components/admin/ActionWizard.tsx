@@ -76,7 +76,7 @@ export function ActionWizard({
   onSuccess,
   initialItemType,
 }: ActionWizardProps) {
-  const { notification } = App.useApp();
+  const { notification, modal } = App.useApp();
   const [form] = Form.useForm();
   const [currentStep, setCurrentStep] = useState(0);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -190,7 +190,7 @@ export function ActionWizard({
     const graphValidation = validateWorkflowGraph(nodes, edges);
     if (!graphValidation.valid) {
       const errors = graphValidation.errors.filter((e) => e.type === 'error');
-      Modal.error({
+      modal.error({
         title: 'Impossible de sauvegarder le workflow',
         width: 600,
         content: (

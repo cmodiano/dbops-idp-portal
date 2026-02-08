@@ -12,12 +12,12 @@
 
 ## Frontend Standards Checklist
 
-> Référence : [`FRONTEND-STANDARDS.md`](../idp-portal/frontend/FRONTEND-STANDARDS.md)
+> Référence : [`FRONTEND-STANDARDS.md`](../frontend/FRONTEND-STANDARDS.md)
 
 **Vérifications automatiques (ESLint)** — ces règles sont bloquantes en CI :
 
 - [x] `standards/no-antd-internal-imports` — Pas d'import depuis `antd/es/*`
-- [x] `standards/require-app-useapp` — `message`/`notification` via `App.useApp()`
+- [x] `standards/require-app-useapp` — `message`/`notification`/`modal` via `App.useApp()`
 - [x] `standards/no-class-components` — Pas de class components
 - [x] `no-console` — Pas de `console.log` (utiliser `logger`)
 

@@ -685,6 +685,12 @@ Claude Opus 4.6 (claude-opus-4-6)
 - ✅ CI existant (`lint-frontend`) suffit — aucune modification nécessaire
 - ⚠️ Note: Erreurs ESLint/TypeScript/tests pre-existantes non liees aux standards restent (separees de cette story)
 
+**Detail erreurs pre-existantes (non liees Story 17-16) :**
+- Build TypeScript : 243 erreurs dans 81 fichiers (principalement : `*.test.tsx` TS2304 `global`, `*.test.ts` TS2591 `require`, `*.tsx` TS6133 unused vars, `*.tsx` TS2769 props type mismatch)
+- Tests frontend : 65 tests echoues sur 20 suites (1507/1572 passent, 95.9%) — suites affectees : `api_client.test.ts`, `auth_service.test.ts`, `AuthContext.test.tsx`, `ActionForm.test.tsx`, `ActionWizard.test.tsx`, `ExecutionWizard.test.tsx`, `CatalogPage.test.tsx`, `AuditPage.test.tsx`
+- Reference : `django_backend/tests/KNOWN_ISSUES.md` (backend, 181 failures pre-existants) — pas de fichier equivalent frontend
+- Confirmation : 0 erreur/test cause par changements standards (10 violations corrigees, 34 tests regles ESLint passent)
+
 ### Change Log
 
 - 2026-02-07: Implémentation complète Story 17.16 — Plugin ESLint custom, audit + corrections code, template PR, documentation
