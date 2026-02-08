@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, date, timezone
 # Fixed-offset UTC (no name): Oracle Thin Mode does not support named timezones (DPY-3022)
 UTC = timezone(timedelta(0))
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Q, Count
 from django.db.models.functions import TruncDate
@@ -838,12 +839,23 @@ class ExecutionsView(APIView):
         )
 
         try:
-            # Story 18.6: Future integration call here (AAP, ServiceNow, etc.)
-            # When integration is implemented, this will trigger the platform:
-            # if action.integration:
-            #     integration_service = get_integration_service(action.integration)
-            #     integration_service.trigger_execution(execution)
-            pass
+            # Story 19.0: Simulation mode - create steps and start simulation
+            if getattr(settings, 'SIMULATE_EXECUTION_DEV', False):
+                from executions.simulation_service import SimulationService
+                SimulationService.create_simulated_steps(execution)
+                SimulationService.start_simulation(execution)
+                exec_logger.info(
+                    "execution_simulation_started",
+                    execution_id=execution.id,
+                    correlation_id=correlation_id,
+                )
+            else:
+                # Story 18.6: Future integration call here (AAP, ServiceNow, etc.)
+                # When integration is implemented, this will trigger the platform:
+                # if action.integration:
+                #     integration_service = get_integration_service(action.integration)
+                #     integration_service.trigger_execution(execution)
+                pass
         except Exception as e:
             # Story 18.6 AC5: Handle integration errors
             exec_logger.error(

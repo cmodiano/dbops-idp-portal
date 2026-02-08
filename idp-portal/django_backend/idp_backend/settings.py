@@ -289,6 +289,16 @@ AUTH_DEV_BYPASS = os.getenv('AUTH_DEV_BYPASS', 'False').lower() == 'true'
 APP_ENV = os.getenv('APP_ENV', 'development')
 
 # ============================================================================
+# Execution Simulation Configuration (Story 19.0)
+# ============================================================================
+# Enables simulated execution progression in dev mode (no real platform calls)
+SIMULATE_EXECUTION_DEV = os.getenv('SIMULATE_EXECUTION_DEV', str(DEBUG)).lower() == 'true'
+# Probability of a simulated execution failing (0.0 = never, 1.0 = always)
+SIMULATE_EXECUTION_FAILURE_RATE = float(os.getenv('SIMULATE_EXECUTION_FAILURE_RATE', '0.1'))
+# Duration in seconds for each simulated step
+SIMULATE_EXECUTION_STEP_DURATION = int(os.getenv('SIMULATE_EXECUTION_STEP_DURATION', '2'))
+
+# ============================================================================
 # Logging Configuration (Story M.8)
 # ============================================================================
 

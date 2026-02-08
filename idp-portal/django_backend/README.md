@@ -99,6 +99,19 @@ django_backend/
 └── idp_backend/          # Configuration Django
 ```
 
+## Mode Simulation (Story 19.0)
+
+En environnement de développement, les exécutions peuvent être simulées sans intégrations réelles (AAP, ServiceNow, Vault).
+
+```bash
+# .env
+SIMULATE_EXECUTION_DEV=true           # Active le mode simulation (default: même que DEBUG)
+SIMULATE_EXECUTION_FAILURE_RATE=0.1   # 10% d'échecs aléatoires
+SIMULATE_EXECUTION_STEP_DURATION=2    # 2 secondes par étape
+```
+
+Voir [docs/simulation-mode.md](docs/simulation-mode.md) pour la documentation complète.
+
 ## CI/CD
 
 Le pipeline GitHub Actions exécute :

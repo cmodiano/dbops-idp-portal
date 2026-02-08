@@ -25,3 +25,8 @@ if not JWT_SECRET_KEY:  # noqa: F405
     JWT_SECRET_KEY = 'test-jwt-secret-key-for-tests-only'  # noqa: F811
 if not ORACLE_PASSWORD:  # noqa: F405
     ORACLE_PASSWORD = 'test-oracle-password'  # noqa: F811
+
+# Story 19.0: Disable simulation by default in tests (enable per-test with @override_settings)
+SIMULATE_EXECUTION_DEV = False
+SIMULATE_EXECUTION_FAILURE_RATE = 0.0
+SIMULATE_EXECUTION_STEP_DURATION = 0

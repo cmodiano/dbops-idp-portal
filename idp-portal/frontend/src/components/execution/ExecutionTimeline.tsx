@@ -8,13 +8,16 @@
  */
 
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, MinusOutlined, ClockCircleOutlined, LinkOutlined, WarningOutlined, SyncOutlined, ToolOutlined, StopOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, MinusOutlined, ClockCircleOutlined, LinkOutlined, WarningOutlined, SyncOutlined, ToolOutlined, StopOutlined, ReloadOutlined } from '@ant-design/icons';
 import { Spin, Typography, Alert, Drawer, Button, Tooltip, Tag, Card, Space, Skeleton } from 'antd';
 import { useWebSocket } from '../../hooks/useWebSocket';
+import { useExecutionPolling } from '../../hooks/useExecutionPolling';
 import { useRemediationSuggestions } from '../../hooks/useRemediationSuggestions';
 import { useRemediationContext } from '../../hooks/useRemediationContext';
 import { StructuredErrorCard } from './StructuredErrorCard';
 import type { ExecutionResponse, ExecutionStepResponse, ExecutionStepStatus, RemediationSuggestion, ExecutionStatusType } from '../../types/api';
+
+const FORCE_POLLING = import.meta.env.VITE_SIMULATE_EXECUTION === 'true';
 
 const { Text } = Typography;
 
@@ -63,7 +66,22 @@ export function ExecutionTimeline({
   onSuggestionClick,
 }: ExecutionTimelineProps) {
   const useRealtime = mode === 'realtime' && executionId != null;
-  const { steps: wsSteps, execution: wsExecution, loading, error, lastMessage } = useWebSocket(useRealtime ? executionId : null);
+
+  // Story 19.0: Use polling instead of WebSocket when VITE_SIMULATE_EXECUTION=true
+  const useWs = useRealtime && !FORCE_POLLING;
+  const { steps: wsSteps, execution: wsExecution, loading: wsLoading, error: wsError, lastMessage } = useWebSocket(useWs ? executionId : null);
+
+  // Story 19.0: Detect WebSocket failure and fallback to polling (AC8)
+  const wsHasError = useWs && wsError != null;
+  const usePolling = useRealtime && (FORCE_POLLING || wsHasError);
+  const { execution: pollExecution, steps: pollSteps, isPolling, error: pollError } = useExecutionPolling({
+    executionId: executionId ?? null,
+    enabled: usePolling,
+    interval: 2500,
+  });
+
+  const loading = useWs ? wsLoading : false;
+  const error = useWs && !wsHasError ? wsError : (pollError?.message ?? null);
 
   // Story 9.3: Listen for auto-remediation WebSocket events
   // Fix: Batch state updates to avoid race conditions during mount
@@ -93,10 +111,14 @@ export function ExecutionTimeline({
   }, [lastMessage]);
 
   const steps = useMemo(
-    () => (useRealtime ? wsSteps : (stepsProp ?? [])),
-    [useRealtime, wsSteps, stepsProp]
+    () => {
+      if (usePolling) return pollSteps;
+      if (useWs) return wsSteps;
+      return stepsProp ?? [];
+    },
+    [usePolling, useWs, pollSteps, wsSteps, stepsProp]
   );
-  const execution = useRealtime ? wsExecution : executionProp ?? null;
+  const execution = usePolling ? pollExecution : (useWs ? wsExecution : executionProp ?? null);
 
   // Story 9.1, Task 11.1-11.2: Fetch remediation suggestions for failed executions
   const { suggestions: remediationSuggestions, loading: suggestionsLoading } = useRemediationSuggestions(
@@ -187,13 +209,26 @@ export function ExecutionTimeline({
 
   return (
     <>
+      {/* Story 19.0, AC8: Polling mode indicator */}
+      {isPolling && (
+        <Alert
+          type="info"
+          showIcon
+          icon={<ReloadOutlined spin />}
+          title="Mode polling activé (dev)"
+          closable
+          style={{ marginBottom: 16 }}
+          data-testid="polling-mode-alert"
+        />
+      )}
+
       {/* Story 9.2, Task 18: Alert when this is a child remediation execution */}
       {execution?.parent_execution_id && (
         <Alert
           type="info"
           showIcon
           icon={<LinkOutlined />}
-          message={
+          title={
             <>
               Cette exécution est une action corrective de l'exécution{' '}
               <a href={`/executions/${execution.parent_execution_id}`} target="_blank" rel="noopener noreferrer">
@@ -212,7 +247,7 @@ export function ExecutionTimeline({
           type="warning"
           showIcon
           icon={<ClockCircleOutlined />}
-          message="En attente d'approbation DBA"
+          title="En attente d'approbation DBA"
           description={
             <>
               Cette exécution nécessite l'approbation d'un DBA avant de pouvoir démarrer.
@@ -230,7 +265,7 @@ export function ExecutionTimeline({
           type="error"
           showIcon
           icon={<StopOutlined />}
-          message="Exécution refusée"
+          title="Exécution refusée"
           description={
             <>
               Cette exécution a été refusée par un DBA.
@@ -292,7 +327,7 @@ export function ExecutionTimeline({
           type="warning"
           showIcon
           icon={<WarningOutlined />}
-          message="Tentative de correction automatique échouée"
+          title="Tentative de correction automatique échouée"
           description={
             <>
               {autoRemediationState.failureMessage || "Le système n'a pas pu corriger automatiquement l'erreur."}
