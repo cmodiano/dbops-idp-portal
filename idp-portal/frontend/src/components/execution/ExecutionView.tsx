@@ -1,9 +1,12 @@
 /**
- * ExecutionView - Immersive real-time execution view drawer (Story 19.1).
+ * ExecutionView - Immersive real-time execution view drawer (Story 19.1, 19.2).
  *
  * Opens as a right-side Drawer after execution launch, replacing the simple "Action démarrée" popup.
  * Shows metadata header (AC8), timeline with steps (AC2-5), real-time updates (AC6),
  * close/back button (AC7), error handling (AC9), and action/workflow badge (AC10).
+ *
+ * Story 19.2: Detects workflow executions (item_type === 'workflow') and renders
+ * WorkflowExecutionGraph instead of ExecutionTimeline for visual graph display.
  *
  * Delegates real-time timeline rendering to ExecutionTimeline (Story 4.6, 19.0).
  */
@@ -12,8 +15,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { Drawer, Spin, Alert, Button, Space, Badge, Typography } from 'antd';
 import { CloseOutlined, ReloadOutlined } from '@ant-design/icons';
 import { ExecutionTimeline } from './ExecutionTimeline';
+import { WorkflowExecutionGraph } from './WorkflowExecutionGraph';
 import { getExecution } from '../../services/execution_service';
-import type { ExecutionResponse, ExecutionStatusType, RemediationSuggestion } from '../../types/api';
+import { getAction } from '../../services/admin_service';
+import type { ExecutionResponse, ExecutionStatusType, RemediationSuggestion, ActionDetail } from '../../types/api';
+import logger from '../../services/logger';
 
 const { Text, Title } = Typography;
 
@@ -47,16 +53,18 @@ const STATUS_CONFIG: Record<ExecutionStatusType, { color: string; label: string 
 
 export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggestionClick }: ExecutionViewProps) {
   const [execution, setExecution] = useState<ExecutionResponse | null>(null);
+  const [actionDetail, setActionDetail] = useState<ActionDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  // AC10: Detect type (action simple vs workflow)
-  const isWorkflow = execution?.workflow_id != null;
+  // AC1/AC10: Detect type (action simple vs workflow)
+  const isWorkflow = execution?.item_type === 'workflow';
 
-  // Initial load
+  // Initial load + Story 19.2: load workflow details for graph
   useEffect(() => {
     if (executionId == null) {
       setExecution(null);
+      setActionDetail(null);
       setLoading(false);
       setError(null);
       return;
@@ -65,9 +73,21 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
     setLoading(true);
     setError(null);
     getExecution(executionId)
-      .then((data) => {
+      .then(async (data) => {
         setExecution(data);
         setError(null);
+        // Story 19.2 AC2: Load workflow definition if this is a workflow execution
+        if (data.item_type === 'workflow' && data.action_id) {
+          try {
+            const detail = await getAction(data.action_id);
+            setActionDetail(detail);
+          } catch (err) {
+            logger.warn('ExecutionView: Failed to load workflow details', {
+              action_id: data.action_id,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
       })
       .catch((err) => {
         setError(err instanceof Error ? err : new Error(String(err)));
@@ -215,15 +235,21 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
           />
         )}
 
-        {/* AC2-6: Timeline with steps and real-time updates */}
-        {executionId != null && !loading && (
+        {/* Story 19.2 AC1: Workflow graph OR action timeline */}
+        {executionId != null && !loading && isWorkflow && actionDetail?.workflow_steps ? (
+          <WorkflowExecutionGraph
+            executionId={executionId}
+            workflowSteps={actionDetail.workflow_steps}
+            execution={execution}
+          />
+        ) : executionId != null && !loading ? (
           <ExecutionTimeline
             executionId={executionId}
             execution={execution}
             mode="realtime"
             onSuggestionClick={onSuggestionClick}
           />
-        )}
+        ) : null}
       </div>
     </Drawer>
   );

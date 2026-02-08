@@ -16,6 +16,14 @@ vi.mock('../../services/execution_service', () => ({
   getExecutionSteps: vi.fn(() => Promise.resolve([])),
 }));
 
+vi.mock('../../services/admin_service', () => ({
+  getAction: vi.fn(() => Promise.resolve({ workflow_steps: [] })),
+}));
+
+vi.mock('../../services/logger', () => ({
+  default: { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() },
+}));
+
 vi.mock('../../hooks/useWebSocket', () => ({
   useWebSocket: vi.fn(() => ({
     steps: [],
@@ -107,8 +115,8 @@ describe('ExecutionView', () => {
     });
   });
 
-  it('AC10: shows "Workflow" badge when workflow_id is set', async () => {
-    const workflowExecution = { ...mockExecution, workflow_id: 5 } as ExecutionResponse & { workflow_id: number };
+  it('AC10: shows "Workflow" badge when item_type is workflow', async () => {
+    const workflowExecution = { ...mockExecution, item_type: 'workflow' as const };
     vi.mocked(executionService.getExecution).mockResolvedValue(workflowExecution);
 
     render(<ExecutionView executionId={1} onClose={vi.fn()} />, { wrapper: Wrapper });

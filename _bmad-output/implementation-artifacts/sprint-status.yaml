@@ -255,7 +255,7 @@ development_status:
     epic-19: in-progress
     19-0-simulation-execution-dev-mode: done # Code review 2026-02-08: 10 issues (4 HIGH + 4 MEDIUM + 2 LOW), 6 auto-fixes, 27 backend + 42 frontend tests pass ✅
     19-1-vue-execution-action-simple-timeline-logs: done # 2026-02-08: ExecutionView drawer + timeline visuels améliorés, 113 tests pass
-    19-2-vue-execution-workflow-apercu-visuel-etape-active: backlog
+    19-2-vue-execution-workflow-apercu-visuel-etape-active: done # 2026-02-08: WorkflowExecutionGraph read-only, tooltips, real-time, 154 tests pass
     19-3-detail-etape-workflow-timeline-logs-au-clic: backlog
     19-4-integration-remplacement-popup-ouverture-vue-execution: backlog
     19-5-differenciation-action-vs-workflow-page-execution: backlog # Badge/icône/libellé type dans la vue d'exécution
