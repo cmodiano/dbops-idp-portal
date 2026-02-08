@@ -269,7 +269,7 @@ development_status:
     20-3-migrer-retry-vers-celery-asynchrone: done # 2026-02-08: Celery + Redis retry async, cache annulation, 42/42 tests, docs/workflow-retry-celery.md — AC1-AC5 validés — Code review: 6 MEDIUM + 3 LOW fixes (CACHES→Redis, doc workflow, test slow AC3, systemd)
     20-4-executionwizard-phase4-optimisations-metriques: done # Code review 2026-02-08: 10 issues (3 HIGH + 4 MEDIUM + 3 LOW), 6 auto-fixes, 99/99 tests pass — BLOCKER: HIGH-2 backend files investigation required
     20-5-epic-m-checklist-adrs-couverture-tests: done # Rétro Epic M — checklist endpoints, ADRs, couverture 85%+ (profiles 89%, idp_auth 88%, integrations 88%), onboarding docs, PR template, CONTRIBUTING.md — Code review 2026-02-08: 7 issues auto-corrigés (File List ajouté, dates ADRs, chemins PR template, tests skipped documentés, completion notes)
-    20-6-finaliser-workflow-conteneur-tasks-3-4-6: backlog # 5-7 — execution engine, admin UI, tests
+    20-6-finaliser-workflow-conteneur-tasks-3-4-6: done # 5-7 — execution engine, admin UI, tests
     20-7-m10-et-17-12-followups-non-bloquants: backlog # WebSocket test, CI/CD, Redis pub/sub feature flags
     20-8-documentation-conformite-15-4-17-16: backlog # Signatures rapports, 3 CRITICAL 17-16
     epic-20-retrospective: optional

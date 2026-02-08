@@ -839,8 +839,19 @@ class ExecutionsView(APIView):
         )
 
         try:
+            # Story 20.6 (AC1): Detect workflow type and branch to container engine
+            if action.item_type == "workflow":
+                from executions.container_workflow_runtime import ContainerWorkflowRuntime
+                runtime = ContainerWorkflowRuntime(execution)
+                runtime.run()
+                exec_logger.info(
+                    "container_workflow_execution_completed",
+                    execution_id=execution.id,
+                    final_status=execution.status,
+                    correlation_id=correlation_id,
+                )
             # Story 19.0: Simulation mode - create steps and start simulation
-            if getattr(settings, 'SIMULATE_EXECUTION_DEV', False):
+            elif getattr(settings, 'SIMULATE_EXECUTION_DEV', False):
                 from executions.simulation_service import SimulationService
                 SimulationService.create_simulated_steps(execution)
                 SimulationService.start_simulation(execution)

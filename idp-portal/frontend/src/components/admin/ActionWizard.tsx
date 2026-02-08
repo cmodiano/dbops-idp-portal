@@ -533,6 +533,13 @@ export function ActionWizard({
             {isWorkflow ? (
               <Form.Item label="Étapes du workflow" tooltip="Définissez les actions qui composent ce workflow, dans l'ordre d'exécution.">
                 <Space direction="vertical" style={{ width: '100%' }}>
+                  {/* Story 20.6 Task 4.4: Contextual help message for workflows */}
+                  <Alert
+                    type="info"
+                    showIcon
+                    message="Un workflow enchaîne des actions existantes dans l'ordre défini. Aucun connecteur à configurer : chaque étape utilise le connecteur de l'action référencée."
+                    style={{ marginBottom: 8 }}
+                  />
                   <Radio.Group
                     value={workflowViewMode}
                     onChange={(e) => setWorkflowViewMode(e.target.value)}
