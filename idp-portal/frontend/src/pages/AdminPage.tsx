@@ -31,6 +31,7 @@ import { ProfilesTable } from '../components/admin/ProfilesTable';
 import { ProfileImportModal } from '../components/admin/ProfileImportModal';
 import { IntegrationsTable } from '../components/admin/IntegrationsTable';
 import { IntegrationForm } from '../components/admin/IntegrationForm';
+import { CategoriesAdminTable } from '../components/admin/CategoriesAdminTable';
 
 const AdminAnalyticsDashboard = lazy(() => import('../components/admin/analytics/AdminAnalyticsDashboard'));
 const FeatureFlagsPanel = lazy(() => import('../components/admin/FeatureFlagsPanel').then(m => ({ default: m.FeatureFlagsPanel })));
@@ -731,6 +732,15 @@ export default function AdminPage() {
                   }}
                   onRefresh={fetchIntegrations}
                 />
+              </Card>
+            ),
+          },
+          {
+            key: 'categories',
+            label: 'Catégories',
+            children: (
+              <Card styles={{ header: { borderBottom: 'none', paddingBottom: 0 }, body: { paddingTop: 16 } }}>
+                <CategoriesAdminTable />
               </Card>
             ),
           },

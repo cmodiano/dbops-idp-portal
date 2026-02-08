@@ -8,7 +8,7 @@ from catalog.models import (
     Action, Tag, ActionTag,
     ActionStatus, ActionEngine, ActionPlatform, ActionItemType
 )
-from reference.models import RefEngine, RefPlatform
+from reference.models import RefEngine, RefPlatform, RefCategory
 
 
 class TagSerializer(serializers.ModelSerializer):
@@ -73,6 +73,8 @@ class ActionSerializer(serializers.ModelSerializer):
     status = serializers.ChoiceField(choices=ActionStatus.choices)
     engine = serializers.CharField(max_length=50, allow_null=True, required=False)
     platform = serializers.CharField(max_length=50, allow_null=True, required=False)
+    # Story 2.30: Category code (optional, validated against REF_CATEGORIES)
+    category = serializers.CharField(max_length=50, allow_null=True, required=False)
     item_type = serializers.ChoiceField(choices=ActionItemType.choices, default=ActionItemType.ACTION)
     
     def validate_engine(self, value):
@@ -98,11 +100,22 @@ class ActionSerializer(serializers.ModelSerializer):
                 f"Invalid platform '{value}'. Must be one of: {', '.join(active_platforms)}"
             )
         return value
-    
+
+    def validate_category(self, value):
+        """Validate category against REF_CATEGORIES table (Story 2.30)."""
+        if value is None:
+            return value
+        if not RefCategory.objects.filter(code=value, is_active=1).exists():
+            active_categories = list(RefCategory.objects.active().values_list('code', flat=True))
+            raise serializers.ValidationError(
+                f"Invalid category '{value}'. Must be one of: {', '.join(active_categories)}"
+            )
+        return value
+
     class Meta:
         model = Action
         fields = [
-            'id', 'name', 'description', 'item_type', 'engine', 'platform',
+            'id', 'name', 'description', 'item_type', 'category', 'engine', 'platform',
             'parameters_schema', 'impact_rules', 'default_impact_level',
             'status', 'created_by', 'created_at', 'updated_at',
             'tags', 'documentation_md', 'remediation_rules',
@@ -217,13 +230,26 @@ class ActionSerializer(serializers.ModelSerializer):
 
 class ActionCreateSerializer(serializers.Serializer):
     """Serializer for POST /admin/actions (ActionCreate model)."""
-    
+
     name = serializers.CharField(max_length=255, min_length=1)
     description = serializers.CharField(max_length=4000, required=False, allow_null=True)
     item_type = serializers.ChoiceField(choices=ActionItemType.choices, default=ActionItemType.ACTION)
+    # Story 2.30: Category code (optional, validated against REF_CATEGORIES)
+    category = serializers.CharField(max_length=50, required=False, allow_null=True)
     engine = serializers.CharField(max_length=50, required=False, allow_null=True)
     platform = serializers.CharField(max_length=50, required=False, allow_null=True)
-    
+
+    def validate_category(self, value):
+        """Validate category against REF_CATEGORIES table (Story 2.30)."""
+        if value is None:
+            return value
+        if not RefCategory.objects.filter(code=value, is_active=1).exists():
+            active_categories = list(RefCategory.objects.active().values_list('code', flat=True))
+            raise serializers.ValidationError(
+                f"Invalid category '{value}'. Must be one of: {', '.join(active_categories)}"
+            )
+        return value
+
     def validate_engine(self, value):
         """Validate engine against REF_ENGINES table."""
         if value is None:
@@ -283,7 +309,7 @@ class ActionListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Action
         fields = [
-            'id', 'name', 'description', 'item_type', 'engine', 'platform',
+            'id', 'name', 'description', 'item_type', 'category', 'engine', 'platform',
             'status', 'created_by', 'created_at', 'updated_at',
             'tags', 'execution_count',
             # Story 18.1: soft-delete fields for admin list

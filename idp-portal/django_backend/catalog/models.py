@@ -134,8 +134,10 @@ class Action(models.Model):
     description = models.CharField(max_length=4000, null=True, blank=True, db_column='DESCRIPTION')
     category = models.CharField(
         max_length=50,
-        choices=ActionCategory.choices,
-        db_column='CATEGORY'
+        null=True,
+        blank=True,
+        db_column='CATEGORY',
+        help_text='Category code (must exist in REF_CATEGORIES.CODE). Validated by application logic.'
     )
     engine = models.CharField(
         max_length=50,

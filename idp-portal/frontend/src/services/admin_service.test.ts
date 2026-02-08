@@ -19,16 +19,24 @@ describe('admin_service', () => {
         { id: 1, name: 'Action A', engine: 'Oracle', status: 'published', created_at: '2025-01-01', execution_count: 5 },
         { id: 2, name: 'Action B', engine: 'SQL Server', status: 'published', created_at: '2025-01-02', execution_count: 3 },
       ];
-      vi.spyOn(apiClient, 'apiFetch').mockResolvedValue(mockActions as any);
+      vi.spyOn(apiClient, 'apiFetchRaw').mockResolvedValue({ data: mockActions } as any);
 
       const result = await getEligibleActionsForWorkflow();
 
-      expect(apiClient.apiFetch).toHaveBeenCalledWith('/admin/actions/eligible-for-workflow/');
+      expect(apiClient.apiFetchRaw).toHaveBeenCalledWith('/admin/actions/eligible-for-workflow/');
       expect(result).toEqual(mockActions);
     });
 
+    it('retourne [] si la réponse n\'a pas de champ data', async () => {
+      vi.spyOn(apiClient, 'apiFetchRaw').mockResolvedValue({} as any);
+
+      const result = await getEligibleActionsForWorkflow();
+
+      expect(result).toEqual([]);
+    });
+
     it('lance une erreur quand l\'API retourne une erreur 500', async () => {
-      vi.spyOn(apiClient, 'apiFetch').mockRejectedValue(new Error('Internal Server Error'));
+      vi.spyOn(apiClient, 'apiFetchRaw').mockRejectedValue(new Error('Internal Server Error'));
 
       await expect(getEligibleActionsForWorkflow()).rejects.toThrow('Internal Server Error');
     });

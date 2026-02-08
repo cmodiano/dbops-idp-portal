@@ -34,6 +34,7 @@ import { WorkflowBuilderCanvas, validateWorkflowGraph, workflowStepsToReactFlow 
 import { getTags, updateActionTags, updateActionSteps, updateWorkflowSteps, checkActionNameAvailable } from '../../services/admin_service';
 import { useEngines } from '../../hooks/useEngines';
 import { usePlatforms } from '../../hooks/usePlatforms';
+import { useCategories } from '../../hooks/useCategories';
 
 const { TextArea } = Input;
 
@@ -108,6 +109,8 @@ export function ActionWizard({
   const { engineOptions, loading: enginesLoading } = useEngines();
   // Story 13.7: Load platforms from REF_PLATFORMS table
   const { platformOptions, loading: platformsLoading } = usePlatforms();
+  // Story 2.30: Load categories from REF_CATEGORIES table
+  const { categoryOptions, loading: categoriesLoading } = useCategories();
 
   useEffect(() => {
     if (!open) return;
@@ -122,6 +125,7 @@ export function ActionWizard({
         item_type: editAction.item_type ?? 'action',
         name: editAction.name,
         description: editAction.description,
+        category: editAction.category ?? undefined,
         engine: editAction.engine,
         platform: editAction.platform,
       });
@@ -309,10 +313,11 @@ export function ActionWizard({
         // impact_rules and default_impact_level apply to both actions and workflows
         impact_rules: listToImpactRules(impactRulesList),
         default_impact_level: defaultImpactLevel,
-        // Only include engine/platform/parameters_schema for actions
+        // Only include engine/platform/parameters_schema/category for actions
         ...(isWorkflowSave
           ? {}
           : {
+              category: (values as Record<string, unknown>).category as string | undefined ?? null,
               engine: values.engine,
               platform: values.platform,
               parameters_schema: parameterListToSchema(parameterList),
@@ -338,8 +343,8 @@ export function ActionWizard({
       }
 
       if (actionId) {
-        // Only save steps if action is in draft or disabled status
-        const canEditSteps = editAction?.status === 'draft' || editAction?.status === 'disabled';
+        // New workflows: always save steps. Existing: only if draft or disabled
+        const canEditSteps = !editAction || editAction?.status === 'draft' || editAction?.status === 'disabled';
         
         if (isWorkflowSave) {
           // Story 9.5: Save workflow steps (only if draft or disabled)
@@ -467,6 +472,24 @@ export function ActionWizard({
           <Form.Item name="description" label="Description" rules={[{ required: true, message: 'La description est requise' }, { max: 4000, message: 'La description ne peut pas dépasser 4000 caractères' }]}>
             <TextArea rows={3} placeholder="Description..." aria-label="Description" showCount maxLength={4000} disabled={isReadOnly} />
           </Form.Item>
+          {/* Story 2.30: Category field for actions only (not workflows) */}
+          {!isWorkflow && (
+            <Form.Item
+              name="category"
+              label="Catégorie"
+              rules={[{ required: false }]}
+              tooltip="La catégorie permet d'organiser les actions dans le catalogue"
+            >
+              <Select
+                options={categoryOptions}
+                placeholder={categoriesLoading ? "Chargement..." : "Sélectionnez une catégorie"}
+                loading={categoriesLoading}
+                disabled={isReadOnly}
+                allowClear
+                aria-label="Catégorie"
+              />
+            </Form.Item>
+          )}
           {/* Only show engine/platform for actions, not workflows */}
           {!isWorkflow && (
             <>

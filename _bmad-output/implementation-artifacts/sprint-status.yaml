@@ -77,7 +77,7 @@ development_status:
     2-27-backend-integrations-plateformes-distantes: done # Config plateformes distantes (AAP, Terraform, etc.) — type, URL, credential_ref, icon (code-review 2026-01-29)
     2-28-frontend-admin-integrations-liste-formulaire-icone: done # Onglet Admin Integrations + liste, formulaire, icone (code-review 2026-01-29)
     2-29-separation-boutons-creation-action-et-workflow-admin: done # 2026-02-06: Code review — 1 HIGH + 3 MEDIUM + 3 LOW fixes applied, tests 21/26 ActionWizard + 5/5 AdminPage pass
-    2-30-categories-definir-sur-action-et-gerer-admin: backlog # 1) Définir catégorie sur une action (form + API) 2) Gérer catégories (CRUD admin, onglets catalogue dynamiques)
+    2-30-categories-definir-sur-action-et-gerer-admin: done # 1) Définir catégorie sur une action (form + API) 2) Gérer catégories (CRUD admin, onglets catalogue dynamiques) — 26 backend + 13 frontend tests pass
     epic-2-retrospective: optional
     # === Epic 3: Decouverte du Catalogue - Marc (MVP) ===
     epic-3: in-progress
@@ -273,3 +273,13 @@ development_status:
     20-7-m10-et-17-12-followups-non-bloquants: backlog # WebSocket test, CI/CD, Redis pub/sub feature flags
     20-8-documentation-conformite-15-4-17-16: backlog # Signatures rapports, 3 CRITICAL 17-16
     epic-20-retrospective: optional
+    # === Epic 21: Inventaire — source unique des environnements ===
+    # Supprimer normalisation envs, utiliser inventaire comme source unique. Éliminer récursion Oracle, accepter lab/dev/staging/prod.
+    epic-21: backlog
+    21-1-backend-supprimer-normalisation-inventaire-valeurs-brutes: backlog # _read_oracle_inventory sans _normalize_environment, suppression/simplification _normalize_environment
+    21-2-backend-ajuster-profile-env-matching-executions: backlog # list_targets_for_user, get_allowed_environments_for_user, _validate_environment_against_inventory, change_type/impact lookup
+    21-3-tests-backend-inventaire-executions-profils: backlog # Tests inventory, executions, profils avec valeurs brutes (lab, etc.)
+    21-4-frontend-editeurs-admin-environnements-dynamiques: backlog # ImpactRulesEditor, StepsEditor, ChangeTypeConfig, RemediationRulesEditor — useEnvironments
+    21-5-frontend-targetselection-labels-type-executionenvironment: backlog # TargetSelectionStep sans fallback, ENVIRONMENT_LABELS dynamique, ExecutionEnvironment = string
+    21-6-validation-environnements-profil-sauvegarde: backlog # Optionnel — validation backend/frontend envs à la sauvegarde profil
+    epic-21-retrospective: optional

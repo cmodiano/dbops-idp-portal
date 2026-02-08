@@ -21,7 +21,14 @@ export interface ApiError {
 }
 
 // === Catalog Action Types (Story 2.1) ===
-// Story 2.23: ActionCategory removed — use tags for categorization.
+// Story 2.30: RefCategory type for administrable categories.
+export interface RefCategory {
+  id: number;
+  code: string;
+  label: string;
+  display_order: number;
+  is_active: number;
+}
 
 // Story 13.7: These types are now dynamic (loaded from REF_ENGINES and REF_PLATFORMS tables).
 // The union types below are kept for backward compatibility, but values come from API.
@@ -39,6 +46,8 @@ export interface ActionCreate {
   description?: string | null;
   /** Story 5.7: item type (action or workflow). Default: action. */
   item_type?: ItemType;
+  /** Story 2.30: Category code (optional, validated against REF_CATEGORIES). */
+  category?: string | null;
   /** Engine is required for actions, optional for workflows (Story 5.7). */
   engine?: ActionEngine | null;
   /** Platform is required for actions, optional for workflows (Story 5.7). */
@@ -59,6 +68,8 @@ export interface ActionResponse {
   description: string | null;
   /** Story 5.7: item type (action or workflow). */
   item_type: ItemType;
+  /** Story 2.30: Category code (nullable). */
+  category?: string | null;
   /** Engine (nullable for workflows). */
   engine: ActionEngine | null;
   /** Platform (nullable for workflows). */
@@ -168,6 +179,8 @@ export interface ActionListItem {
   name: string;
   /** Story 5.7: item type for workflow icon display. */
   item_type?: ItemType;
+  /** Story 2.30: Category code (nullable). */
+  category?: string | null;
   status: ActionStatus;
   /** Engine (nullable for workflows). */
   engine: ActionEngine | null;

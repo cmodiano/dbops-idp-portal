@@ -80,8 +80,12 @@ const disabledAction: ActionListItem = {
   created_at: '2026-01-04T00:00:00Z', execution_count: 3, tags: [],
   deleted_at: '2026-02-01T00:00:00Z', deleted_by: 99, deletion_reason: 'Obsolete',
 };
+const disabledNoExec: ActionListItem = {
+  id: 5, name: 'Action Disabled Zero', status: 'disabled', engine: 'Oracle',
+  created_at: '2026-01-05T00:00:00Z', execution_count: 0, tags: [],
+};
 
-const allActions = [draftNoExec, publishedNoExec, publishedWithExec, disabledAction];
+const allActions = [draftNoExec, publishedNoExec, publishedWithExec, disabledAction, disabledNoExec];
 const activeActions = [draftNoExec, publishedNoExec, publishedWithExec];
 
 function makeResponse(data: ActionListItem[]): ActionListResponse {
@@ -457,7 +461,7 @@ describe('Story 18.1 — AdminPage Actions', () => {
       expect(within(row).getByText('Supprimer')).toBeInTheDocument();
     });
 
-    it('published with exec=0: shows Voir, Supprimer (not Desactiver)', async () => {
+    it('published with exec=0: shows Voir, Supprimer, Desactiver', async () => {
       renderPage();
 
       await waitFor(() => {
@@ -467,7 +471,7 @@ describe('Story 18.1 — AdminPage Actions', () => {
       const row = screen.getByText('Action Published Zero').closest('tr')!;
       expect(within(row).getByText('Voir')).toBeInTheDocument();
       expect(within(row).getByText('Supprimer')).toBeInTheDocument();
-      expect(within(row).queryByText('Desactiver')).not.toBeInTheDocument();
+      expect(within(row).getByText('Desactiver')).toBeInTheDocument();
     });
 
     it('published with exec>0: shows Voir, Desactiver (not Supprimer)', async () => {
@@ -483,7 +487,7 @@ describe('Story 18.1 — AdminPage Actions', () => {
       expect(within(row).queryByText('Supprimer')).not.toBeInTheDocument();
     });
 
-    it('disabled: shows Voir, Reactiver (not Supprimer/Desactiver)', async () => {
+    it('disabled: shows Modifier, Reactiver (Supprimer only when execution_count=0)', async () => {
       const user = userEvent.setup();
       mockGetAdminActions
         .mockResolvedValueOnce(makeResponse(activeActions))
@@ -503,10 +507,36 @@ describe('Story 18.1 — AdminPage Actions', () => {
       });
 
       const row = screen.getByText('Action Disabled').closest('tr')!;
-      expect(within(row).getByText('Voir')).toBeInTheDocument();
+      expect(within(row).getByText('Modifier')).toBeInTheDocument();
       expect(within(row).getByText('Reactiver')).toBeInTheDocument();
+      // Action Disabled has execution_count=3 → no Supprimer
       expect(within(row).queryByText('Supprimer')).not.toBeInTheDocument();
       expect(within(row).queryByText('Desactiver')).not.toBeInTheDocument();
+    });
+
+    it('disabled with execution_count=0: shows Modifier, Supprimer, Reactiver', async () => {
+      const user = userEvent.setup();
+      mockGetAdminActions
+        .mockResolvedValueOnce(makeResponse(activeActions))
+        .mockResolvedValueOnce(makeResponse(allActions));
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByText('Action Draft Zero')).toBeInTheDocument();
+      });
+
+      const checkbox = screen.getByLabelText('Inclure les actions desactivees');
+      await user.click(checkbox);
+
+      await waitFor(() => {
+        expect(screen.getByText('Action Disabled Zero')).toBeInTheDocument();
+      });
+
+      const row = screen.getByText('Action Disabled Zero').closest('tr')!;
+      expect(within(row).getByText('Modifier')).toBeInTheDocument();
+      expect(within(row).getByText('Supprimer')).toBeInTheDocument();
+      expect(within(row).getByText('Reactiver')).toBeInTheDocument();
     });
   });
 

@@ -90,6 +90,7 @@ class CatalogService:
         action = Action.objects.create(
             name=action_data['name'],
             description=action_data.get('description'),
+            category=action_data.get('category'),
             engine=action_data.get('engine'),
             platform=action_data.get('platform'),
             status=status,

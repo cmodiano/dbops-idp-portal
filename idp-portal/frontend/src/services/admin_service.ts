@@ -98,7 +98,7 @@ export async function updateActionSteps(
   actionId: number,
   data: ExecutionStepsUpdate
 ): Promise<ActionDetail> {
-  return apiFetch<ActionDetail>(`/admin/actions/${actionId}/steps/`, {
+  return apiFetch<ActionDetail>(`/admin/actions/${actionId}/execution-steps/`, {
     method: 'PUT',
     body: JSON.stringify(data),
   });
@@ -184,9 +184,15 @@ export async function updateRemediationRules(
  * Get actions eligible for workflow steps (Story 9.5, AC2).
  * Returns published actions only (no workflows).
  * Requires DBOPS profile.
+ *
+ * Uses apiFetchRaw to handle response format robustly (backend returns { data: [...] }).
  */
 export async function getEligibleActionsForWorkflow(): Promise<ActionListItem[]> {
-  return apiFetch<ActionListItem[]>('/admin/actions/eligible-for-workflow/');
+  const res = await apiFetchRaw<{ data?: ActionListItem[]; results?: ActionListItem[] }>(
+    '/admin/actions/eligible-for-workflow/'
+  );
+  const list = res?.data ?? res?.results;
+  return Array.isArray(list) ? list : [];
 }
 
 /**
