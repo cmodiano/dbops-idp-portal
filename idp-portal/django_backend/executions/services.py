@@ -396,6 +396,102 @@ class ExecutionService:
             'by_status': list(by_status),
             'by_environment': list(by_environment),
         }
+
+    def get_action_stats(self, action_id: int, days: int = 30):
+        """
+        Get execution statistics for a single action (Story 20.2, AC5).
+
+        Args:
+            action_id: Action ID to filter executions
+            days: Number of days to look back
+
+        Returns:
+            Dict with keys: total_executions, incidents_count, success_rate, avg_execution_time_ms.
+            Always returns a dict (never None) - empty stats have zeros/None values.
+        """
+        # CRITICAL-3: Validate that action exists
+        try:
+            Action.objects.get(id=action_id)
+        except Action.DoesNotExist:
+            logger.warning(
+                "get_action_stats_invalid_action_id",
+                action_id=action_id,
+                correlation_id=get_correlation_id()
+            )
+            raise ValueError(f"Action {action_id} does not exist")
+        
+        date_from = timezone.now() - timedelta(days=days)
+        queryset = Execution.objects.filter(
+            action_id=action_id,
+            created_at__gte=date_from
+        )
+        
+        # MEDIUM-1: Single aggregation query instead of multiple queries
+        stats = queryset.aggregate(
+            total=Count('id'),
+            completed=Count('id', filter=Q(status=ExecutionStatus.COMPLETED)),
+            failed=Count('id', filter=Q(status=ExecutionStatus.FAILED))
+        )
+        
+        total = stats['total']
+        completed = stats['completed']
+        failed = stats['failed']
+        
+        # MEDIUM-3: Always return dict (never None)
+        # Success rate = COMPLETED / (COMPLETED + FAILED) * 100
+        # Only calculated if there are finished executions (completed or failed)
+        finished_count = completed + failed
+        success_rate = (
+            round((completed / finished_count * 100), 2) if finished_count > 0 else None
+        )
+        
+        # CRITICAL-2: Calculate avg_execution_time_ms from started_at and completed_at
+        # Only for COMPLETED executions with both timestamps
+        completed_executions = queryset.filter(
+            status=ExecutionStatus.COMPLETED,
+            started_at__isnull=False,
+            completed_at__isnull=False
+        )
+        durations = []
+        for exec in completed_executions:
+            try:
+                delta = (exec.completed_at - exec.started_at).total_seconds() * 1000
+                if delta >= 0:
+                    durations.append(delta)
+            except (TypeError, AttributeError) as e:
+                # Story 17.6: Specific catch for invalid timestamp data
+                logger.debug(
+                    "execution_duration_calculation_skipped",
+                    execution_id=exec.id,
+                    started_at=exec.started_at,
+                    completed_at=exec.completed_at,
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    correlation_id=get_correlation_id(),
+                )
+                continue
+        
+        avg_time_ms = round(sum(durations) / len(durations), 2) if durations else None
+        
+        # MEDIUM-4: Add structured logging
+        logger.info(
+            "get_action_stats_called",
+            action_id=action_id,
+            days=days,
+            total_executions=total,
+            completed=completed,
+            failed=failed,
+            success_rate=success_rate,
+            avg_execution_time_ms=avg_time_ms,
+            correlation_id=get_correlation_id()
+        )
+        
+        return {
+            "total_executions": total,
+            "incidents_count": failed,
+            "success_rate": success_rate,
+            "avg_execution_time_ms": avg_time_ms,
+        }
     
     # ExecutionStep CRUD methods
     @transaction.atomic

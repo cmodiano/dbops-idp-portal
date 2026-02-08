@@ -30,3 +30,10 @@ if not ORACLE_PASSWORD:  # noqa: F405
 SIMULATE_EXECUTION_DEV = False
 SIMULATE_EXECUTION_FAILURE_RATE = 0.0
 SIMULATE_EXECUTION_STEP_DURATION = 0
+
+# Story 20.3: Celery eager mode for tests (synchronous execution, no broker needed)
+CELERY_TASK_ALWAYS_EAGER = True
+CELERY_TASK_EAGER_PROPAGATES = True
+
+# Story 20.3: Disable cancellation cache in tests by default
+WORKFLOW_RETRY_USE_CANCELLATION_CACHE = False

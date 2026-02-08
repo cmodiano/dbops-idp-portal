@@ -3,8 +3,14 @@ Django project package.
 Initializes oracledb in thick mode when ORACLE_CLIENT_LIB is set.
 Thick mode is required for TIMESTAMP WITH TIME ZONE (DPY-3022: named time zones
 are not supported in thin mode).
+Story 20.3: Loads Celery app on Django startup.
 """
 import os
+
+# Story 20.3: Import Celery app so that shared_task uses this app
+from idp_backend.celery import app as celery_app
+
+__all__ = ('celery_app',)
 
 _oracle_client_initialized = False
 

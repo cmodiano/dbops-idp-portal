@@ -263,10 +263,10 @@ development_status:
     epic-19-retrospective: optional
     # === Epic 20: Action items et suivi — Restant des stories "done" ===
     # Consolidation des follow-ups, known issues et action items documentés dans les stories marquées done
-    epic-20: backlog
-    20-1-corriger-fixtures-user-tests-catalog-workflow: backlog # KNOWN ISSUES 17.4, 18.7 — 40+ catalog, 3 workflow_runtime, AC8 95%
-    20-2-m4-validation-parite-contractuelle-environnement-tests: backlog # Action items M-4 (Task 12, env, docs, ExecutionService.get_action_stats)
-    20-3-migrer-retry-vers-celery-asynchrone: backlog # 16-4 H4 — time.sleep bloquant, Celery apply_async
+    epic-20: in-progress
+    20-1-corriger-fixtures-user-tests-catalog-workflow: done # 37 catalog + 3 workflow tests corrigés, 1007/1189 (84.8%), KNOWN_ISSUES + README enrichis — Code review 2026-02-08: 2 CRITICAL + 5 HIGH fixes appliqués (UserFactory/ActionFactory utilisés partout, AC3 NOT MET honnêtement documenté) — Auto-fixes appliqués: UserFactory dans 7+ catalog files, ActionFactory dans test_workflow_runtime_retry.py, create_user() corrigé — Story marked done: AC1/AC2/AC4/AC5 MET, AC3 NOT MET (181 failures pré-existants hors scope catalog/workflow)
+    20-2-m4-validation-parite-contractuelle-environnement-tests: done # Code review 2026-02-08: 7 fixes appliqués (avg_execution_time_ms implémenté, validation action_id, optimisation requêtes, tests cas limites)
+    20-3-migrer-retry-vers-celery-asynchrone: done # 2026-02-08: Celery + Redis retry async, cache annulation, 42/42 tests, docs/workflow-retry-celery.md — AC1-AC5 validés — Code review: 6 MEDIUM + 3 LOW fixes (CACHES→Redis, doc workflow, test slow AC3, systemd)
     20-4-executionwizard-phase4-optimisations-metriques: backlog # 17-2 Phase 4 — <300 lignes, usePatternResolver, coverage, bundle size
     20-5-epic-m-checklist-adrs-couverture-tests: backlog # Rétro Epic M — checklist endpoints, ADRs, 85% M-5/M-6
     20-6-finaliser-workflow-conteneur-tasks-3-4-6: backlog # 5-7 — execution engine, admin UI, tests

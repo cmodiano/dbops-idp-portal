@@ -195,13 +195,13 @@ REST_FRAMEWORK = {
 }
 
 # ============================================================================
-# Cache Configuration (Story 17.11 - Rate Limiting)
+# Cache Configuration (Story 17.11 - Rate Limiting, Story 20.3 - Cancellation Cache)
 # ============================================================================
-# LocMemCache for MVP single-instance. Migrate to Redis for production HA.
+# Story 20.3: Redis cache required for cancellation cache (AC5) to work in production
 CACHES = {
     'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        'LOCATION': 'idp-ratelimit-cache',
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': os.getenv('REDIS_URL', 'redis://localhost:6379/1'),
     }
 }
 
@@ -346,6 +346,27 @@ if not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# ============================================================================
+# Celery Configuration (Story 20.3 - Asynchronous retry)
+# ============================================================================
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'UTC'
+CELERY_TASK_ALWAYS_EAGER = os.getenv('CELERY_TASK_ALWAYS_EAGER', 'False').lower() == 'true'
+CELERY_TASK_EAGER_PROPAGATES = True
+
+# ============================================================================
+# Workflow Retry Configuration (Story 20.3)
+# ============================================================================
+# Enable Redis cache for cancellation status check (AC5)
+# Default: False (use refresh_from_db). Enable for production with >100 active workflows.
+WORKFLOW_RETRY_USE_CANCELLATION_CACHE = os.getenv(
+    'WORKFLOW_RETRY_USE_CANCELLATION_CACHE', 'False'
+).lower() == 'true'
 
 # ============================================================================
 # External Services Configuration (Story M.8 - Health Check)
