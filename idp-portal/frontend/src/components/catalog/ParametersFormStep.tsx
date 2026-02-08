@@ -1,33 +1,21 @@
 /**
  * ParametersFormStep - Step 2 of the execution wizard.
- * Story 17.2, Task 4.2.
+ * Story 17.2, Task 4.2. Refactored Story 20.4: workflow rendering extracted to WorkflowStepsRenderer.
  *
  * Renders a dynamic form from action's parameters_schema or
- * per-step forms for workflows.
+ * delegates to WorkflowStepsRenderer for workflows.
  */
 
 import { memo, useRef } from 'react';
-import {
-  Form,
-  Select,
-  Input,
-  InputNumber,
-  Switch,
-  DatePicker,
-  Alert,
-  Badge,
-  Typography,
-} from 'antd';
+import { Form, Alert } from 'antd';
 import { InfoCircleOutlined } from '@ant-design/icons';
 import type { FormInstance } from 'antd';
 import type { CatalogActionDetail } from '../../services/catalog_service';
 import type { InventoryItem } from '../../types/api';
 import type { ParameterField } from '../../hooks/useDynamicForm';
-import { extractParameterFields } from '../../hooks/useDynamicForm';
-import { STYLE_TOKENS } from '../../theme/styleTokens';
 import { sanitizeDescription } from '../../utils/businessLanguage';
-
-const { Title } = Typography;
+import { renderFieldInput } from './renderFieldInput';
+import { WorkflowStepsRenderer } from './WorkflowStepsRenderer';
 
 const STEP_DESCRIPTIONS_SIMPLIFIED = [
   'Selectionnez la cible sur laquelle executer l\'action. L\'environnement sera derive automatiquement.',
@@ -53,83 +41,8 @@ export interface ParametersFormStepProps {
   loadingInventory: boolean;
 }
 
-function renderFieldInput(
-  field: ParameterField,
-  inventoryData: Record<string, InventoryItem[]>,
-  inventoryWarnings: Record<string, boolean>,
-  loadingInventory: boolean,
-) {
-  if (field.inventorySource && inventoryData[field.inventorySource]) {
-    const hasWarning = inventoryWarnings[field.inventorySource];
-    return (
-      <div>
-        <Select
-          placeholder={`Selectionnez ${field.label.toLowerCase()}`}
-          aria-label={field.label}
-          loading={loadingInventory}
-          options={inventoryData[field.inventorySource].map((item) => ({
-            value: item.id,
-            label: item.name,
-          }))}
-        />
-        {hasWarning && (
-          <Badge
-            status="warning"
-            text="Données inventaire temporairement indisponibles — dernières valeurs en cache"
-            style={{ marginTop: 4, fontSize: '12px', color: '#faad14' }}
-          />
-        )}
-      </div>
-    );
-  }
-
-  switch (field.type) {
-    case 'select':
-      return (
-        <Select
-          placeholder={`Selectionnez ${field.label.toLowerCase()}`}
-          aria-label={field.label}
-          options={(field.enum || []).map((v) => ({ value: v, label: v }))}
-        />
-      );
-    case 'number':
-    case 'integer':
-      return (
-        <InputNumber
-          style={{ width: '100%' }}
-          aria-label={field.label}
-          min={field.minimum}
-          max={field.maximum}
-          precision={field.type === 'integer' ? 0 : undefined}
-        />
-      );
-    case 'boolean':
-      return <Switch aria-label={field.label} />;
-    case 'date':
-    case 'date-time':
-      return (
-        <DatePicker
-          style={{ width: '100%' }}
-          showTime={field.type === 'date-time'}
-          aria-label={field.label}
-        />
-      );
-    case 'array':
-      return (
-        <Select
-          mode="tags"
-          placeholder={`Entrez ${field.label.toLowerCase()}`}
-          aria-label={field.label}
-        />
-      );
-    default:
-      return <Input aria-label={field.label} />;
-  }
-}
-
 export const ParametersFormStep = memo(function ParametersFormStep({
   form,
-  action,
   variant,
   parameterFields,
   parameters,
@@ -166,100 +79,17 @@ export const ParametersFormStep = memo(function ParametersFormStep({
       )}
 
       {isWorkflow ? (
-        <div>
-          {workflowValidationSummary && (
-            <Alert
-              type="error"
-              showIcon
-              message="Certaines étapes sont invalides"
-              description={workflowValidationSummary}
-              style={{ marginBottom: 16 }}
-            />
-          )}
-          {workflowStepActionsError && (
-            <Alert
-              type="error"
-              showIcon
-              message="Impossible de charger les actions du workflow"
-              description={workflowStepActionsError}
-              style={{ marginBottom: 16 }}
-            />
-          )}
-          {loadingWorkflowStepActions && (
-            <Alert
-              type="info"
-              showIcon
-              message="Chargement des étapes du workflow..."
-              style={{ marginBottom: 16 }}
-            />
-          )}
-
-          {workflowSteps.map((step, stepIndex) => {
-            const refAction = workflowStepActions[step.referenced_action_id];
-            const actionName = refAction?.name || `Action #${step.referenced_action_id}`;
-            const schema = refAction?.parameters_schema ?? null;
-            const fields = extractParameterFields(schema as Record<string, unknown> | null);
-            const stepKey = String(step.order);
-
-            return (
-              <div
-                key={`${step.order}-${step.referenced_action_id}`}
-                style={{
-                  border: `1px solid ${STYLE_TOKENS.borderColor}`,
-                  borderRadius: 8,
-                  padding: 12,
-                  marginBottom: 12,
-                  background: STYLE_TOKENS.surfaceColor,
-                }}
-              >
-                <Title level={5} style={{ marginTop: 0, marginBottom: 8 }}>
-                  Étape {step.order} — {actionName}
-                </Title>
-
-                {fields.length === 0 ? (
-                  <Alert type="info" showIcon description="Cette action n'a pas de paramètres" />
-                ) : (
-                  fields.map((field, index) => {
-                    const rules: unknown[] = [];
-                    if (field.required) rules.push({ required: true, message: `${field.label} est requis` });
-                    if (field.pattern) rules.push({ pattern: new RegExp(field.pattern), message: 'Format invalide' });
-                    if (field.minimum !== undefined) rules.push({ type: 'number', min: field.minimum, message: `Minimum: ${field.minimum}` });
-                    if (field.maximum !== undefined) rules.push({ type: 'number', max: field.maximum, message: `Maximum: ${field.maximum}` });
-
-                    const displayDescription = variant === 'simplified' && field.description
-                      ? sanitizeDescription(field.description)
-                      : field.description;
-
-                    return (stepIndex === 0 && index === 0) ? (
-                      <div key={`${step.order}-${field.name}`} ref={(ref) => { firstFieldRef.current = ref?.querySelector('input, select, [role="combobox"]') as HTMLElement; }}>
-                        <Form.Item
-                          name={['workflow_step_parameters', stepKey, 'parameters', field.name]}
-                          label={field.label}
-                          rules={rules}
-                          tooltip={displayDescription ? { title: displayDescription, icon: <InfoCircleOutlined /> } : undefined}
-                          style={{ marginBottom: 12 }}
-                        >
-                          {renderFieldInput(field, inventoryData, inventoryWarnings, loadingInventory)}
-                        </Form.Item>
-                      </div>
-                    ) : (
-                      <Form.Item
-                        key={`${step.order}-${field.name}`}
-                        name={['workflow_step_parameters', stepKey, 'parameters', field.name]}
-                        label={field.label}
-                        rules={rules}
-                        tooltip={displayDescription ? { title: displayDescription, icon: <InfoCircleOutlined /> } : undefined}
-                        style={{ marginBottom: 12 }}
-                      >
-                        {renderFieldInput(field, inventoryData, inventoryWarnings, loadingInventory)}
-                      </Form.Item>
-                    );
-                  })
-                )}
-              </div>
-            );
-          })}
-        </div>
+        <WorkflowStepsRenderer
+          workflowSteps={workflowSteps}
+          workflowStepActions={workflowStepActions}
+          loadingWorkflowStepActions={loadingWorkflowStepActions}
+          workflowStepActionsError={workflowStepActionsError}
+          workflowValidationSummary={workflowValidationSummary}
+          variant={variant}
+          inventoryData={inventoryData}
+          inventoryWarnings={inventoryWarnings}
+          loadingInventory={loadingInventory}
+        />
       ) : (
         parameterFields.length === 0 ? (
           <Alert

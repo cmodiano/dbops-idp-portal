@@ -30,13 +30,12 @@ import type {
   RecurringPatternRequest,
 } from '../../types/api';
 import { fetchCatalogActionById } from '../../services/catalog_service';
-import { fetchInventoryItems, fetchInventoryTargets } from '../../services/execution_service';
-import { useDebounce } from '../../hooks/useDebounce';
+import { fetchInventoryItems } from '../../services/execution_service';
 import { STYLE_TOKENS } from '../../theme/styleTokens';
 import type { WizardInitialParams } from '../../types/wizard';
 import type { Target } from './TargetSelector';
-import { matchGlob } from '../../utils/globMatch';
 import { extractParameterFields } from '../../hooks/useDynamicForm';
+import { usePatternResolver } from '../../hooks/usePatternResolver';
 import { useSchedulingValidation } from '../../hooks/useSchedulingValidation';
 import { useExecutionSubmit } from '../../hooks/useExecutionSubmit';
 import { TargetSelectionStep } from './TargetSelectionStep';
@@ -149,10 +148,15 @@ export function ExecutionWizard({
   const [targetInputMode, setTargetInputMode] = useState<'list' | 'pattern' | 'manual'>('list');
   const [targetPattern, setTargetPattern] = useState('');
   const [manualTargetInput, setManualTargetInput] = useState('');
-  const [resolvedPatternTargets, setResolvedPatternTargets] = useState<Target[]>([]);
-  const [patternResolving, setPatternResolving] = useState(false);
   const [selectedEnvironment, setSelectedEnvironment] = useState<ExecutionEnvironment | null>(null);
   const [parameters, setParameters] = useState<Record<string, unknown>>({});
+
+  // Pattern resolution (Story 20.4: extracted to usePatternResolver)
+  const { resolvedTargets: resolvedPatternTargets, isResolving: patternResolving } = usePatternResolver({
+    enabled: open,
+    inputMode: targetInputMode,
+    pattern: targetPattern,
+  });
 
   // Workflow state
   const [workflowStepActions, setWorkflowStepActions] = useState<Record<number, CatalogActionDetail>>({});
@@ -231,7 +235,7 @@ export function ExecutionWizard({
       setWorkflowInvalidStepOrders([]); setWorkflowValidationSummary(null);
       form.resetFields();
       setSelectedTargets([]); setTargetInputMode('list'); setTargetPattern('');
-      setManualTargetInput(''); setResolvedPatternTargets([]);
+      setManualTargetInput('');
       resetScheduling();
 
       // Story 17.15: Apply initialParams for restart execution
@@ -349,18 +353,6 @@ export function ExecutionWizard({
     if (isWorkflow && workflowSteps.length > 0 && Object.keys(workflowStepActions || {}).length === 0) return;
     try { form.setFieldsValue(parameters); } catch { /* ignore */ }
   }, [open, currentStep, parameters, form, isWorkflow, loadingWorkflowStepActions, workflowSteps.length, workflowStepActions]);
-
-  // Pattern resolution
-  const debouncedTargetPattern = useDebounce(targetPattern.trim(), 400);
-  useEffect(() => {
-    if (!open || targetInputMode !== 'pattern' || !debouncedTargetPattern) { setResolvedPatternTargets([]); return; }
-    let cancelled = false; setPatternResolving(true);
-    fetchInventoryTargets()
-      .then((targets) => { if (!cancelled) setResolvedPatternTargets(targets.filter((t) => matchGlob(debouncedTargetPattern, t.name)) as Target[]); })
-      .catch(() => { if (!cancelled) setResolvedPatternTargets([]); })
-      .finally(() => { if (!cancelled) setPatternResolving(false); });
-    return () => { cancelled = true; };
-  }, [open, targetInputMode, debouncedTargetPattern]);
 
   // === Handlers ===
 
