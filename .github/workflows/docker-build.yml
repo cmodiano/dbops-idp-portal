@@ -109,6 +109,19 @@ jobs:
             -p 8080:80 \
             ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
           sleep 5
-          curl -f http://localhost:8080/
+          # Capture state before cleanup so we can fail the step if image is broken
+          STATUS=$(docker inspect frontend-test --format='{{.State.Status}}' 2>/dev/null || echo 'missing')
+          # Try curl but capture exit code instead of failing immediately
+          curl -f http://localhost:8080/ || CURL_EXIT=$?
+          CURL_EXIT=${CURL_EXIT:-0}
+          docker logs frontend-test
           docker stop frontend-test || true
           docker rm frontend-test || true
+          if [ "$STATUS" != "running" ]; then
+            echo "::error::Frontend container is not running (status=$STATUS). Image may be broken."
+            exit 1
+          fi
+          if [ "$CURL_EXIT" -ne 0 ]; then
+            echo "::error::Frontend container did not respond to HTTP request (curl exit code=$CURL_EXIT). Image may be broken."
+            exit 1
+          fi
