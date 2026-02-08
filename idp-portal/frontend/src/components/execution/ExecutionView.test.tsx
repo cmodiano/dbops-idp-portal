@@ -152,12 +152,14 @@ describe('ExecutionView', () => {
     expect(redirectOnClose).toHaveBeenCalledTimes(1);
   });
 
-  it('AC9: displays error alert with refresh button on network error', async () => {
+  it('AC6: displays warning alert with reconnection message on network error', async () => {
     vi.mocked(executionService.getExecution).mockRejectedValue(new Error('Network error'));
 
     render(<ExecutionView executionId={1} onClose={vi.fn()} />, { wrapper: Wrapper });
 
     await waitFor(() => {
+      // Story 19.4 AC6: Warning alert with reconnection message
+      expect(screen.getByText('Connexion perdue. Tentative de reconnexion...')).toBeInTheDocument();
       expect(screen.getByText('Network error')).toBeInTheDocument();
     });
     expect(screen.getByTestId('execution-view-error')).toBeInTheDocument();
@@ -215,5 +217,77 @@ describe('ExecutionView', () => {
     await waitFor(() => {
       expect(screen.getByText('Temps écoulé:')).toBeInTheDocument();
     });
+  });
+
+  // Story 19.4 AC10: Accessibility tests
+  it('AC10: has aria-live region announcing execution status', async () => {
+    render(<ExecutionView executionId={1} onClose={vi.fn()} />, { wrapper: Wrapper });
+
+    await waitFor(() => {
+      const liveRegion = screen.getByTestId('execution-view-live-region');
+      expect(liveRegion).toHaveAttribute('aria-live', 'polite');
+      expect(liveRegion).toHaveTextContent(/Exécution #1/);
+      expect(liveRegion).toHaveTextContent(/En cours/);
+    });
+  });
+
+  it('AC10: shows initial announcement before execution loads', () => {
+    vi.mocked(executionService.getExecution).mockImplementation(
+      () => new Promise(() => {}) // Never resolves
+    );
+
+    render(<ExecutionView executionId={1} onClose={vi.fn()} />, { wrapper: Wrapper });
+
+    const liveRegion = screen.getByTestId('execution-view-live-region');
+    expect(liveRegion).toHaveTextContent('Exécution créée, suivi en cours');
+  });
+
+  it('AC10: close button has aria-label', async () => {
+    render(<ExecutionView executionId={1} onClose={vi.fn()} />, { wrapper: Wrapper });
+
+    await waitFor(() => {
+      const closeButton = screen.getByTestId('close-execution-view');
+      expect(closeButton).toHaveAttribute('aria-label', "Fermer la vue d'exécution");
+    });
+  });
+
+  it('AC10: moves focus to close button after drawer opens', async () => {
+    render(<ExecutionView executionId={1} onClose={vi.fn()} />, { wrapper: Wrapper });
+
+    await waitFor(() => screen.getByText('Deploy App'));
+
+    // Wait for focus to move after Drawer animation (350ms delay)
+    await waitFor(() => {
+      const closeButton = screen.getByTestId('close-execution-view');
+      expect(closeButton).toHaveFocus();
+    }, { timeout: 500 });
+  });
+
+  it('AC10: drawer has aria-label for screen readers', () => {
+    render(<ExecutionView executionId={1} onClose={vi.fn()} />, { wrapper: Wrapper });
+
+    const drawer = screen.getByTestId('execution-view-drawer');
+    expect(drawer).toBeInTheDocument();
+  });
+
+  // Story 19.4 AC9: Remediation badge
+  it('AC9: shows remediation badge when parent_execution_id is present', async () => {
+    const remediationExecution = { ...mockExecution, parent_execution_id: 42 };
+    vi.mocked(executionService.getExecution).mockResolvedValue(remediationExecution);
+
+    render(<ExecutionView executionId={1} onClose={vi.fn()} />, { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByText('Remédiation de #42')).toBeInTheDocument();
+    });
+  });
+
+  it('AC9: does not show remediation badge when parent_execution_id is null', async () => {
+    render(<ExecutionView executionId={1} onClose={vi.fn()} />, { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByText('Deploy App')).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Remédiation de/)).not.toBeInTheDocument();
   });
 });

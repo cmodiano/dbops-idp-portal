@@ -101,6 +101,53 @@ describe('useExecutionSubmit', () => {
         })
       );
     });
+
+    // Story 19.4 AC1: On success, returns executionId without side effects (no popup)
+    it('returns executionId and clears submitError on success — no popup (AC1)', async () => {
+      vi.mocked(submitExecution).mockResolvedValue({ execution_id: 42 } as any);
+
+      const { result } = renderHook(() => useExecutionSubmit(), { wrapper });
+
+      // Pre-set an error to verify it gets cleared
+      await act(async () => {
+        result.current.setSubmitError('previous error');
+      });
+
+      let executionId: number | null = null;
+      await act(async () => {
+        executionId = await result.current.submitImmediate({
+          action_id: 1,
+          environment: 'dev',
+          parameters: null,
+        });
+      });
+
+      expect(executionId).toBe(42);
+      expect(result.current.submitError).toBeNull();
+      expect(result.current.isSubmitting).toBe(false);
+    });
+
+    // Story 19.4 AC5: On failure, sets submitError for wizard Alert display (no popup)
+    it('sets submitError for wizard Alert on failure — no popup (AC5)', async () => {
+      vi.mocked(submitExecution).mockRejectedValue(new Error('Bad request'));
+
+      const { result } = renderHook(() => useExecutionSubmit(), { wrapper });
+
+      let executionId: number | null = null;
+      await act(async () => {
+        executionId = await result.current.submitImmediate({
+          action_id: 1,
+          environment: 'dev',
+          parameters: null,
+        });
+      });
+
+      // Returns null on failure
+      expect(executionId).toBeNull();
+      // submitError is set for wizard Alert display (AC5)
+      expect(result.current.submitError).toBe('Bad request');
+      expect(result.current.isSubmitting).toBe(false);
+    });
   });
 
   describe('submitScheduled', () => {

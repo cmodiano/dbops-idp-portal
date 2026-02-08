@@ -125,11 +125,7 @@ export function useExecutionSubmit(): UseExecutionSubmitReturn {
         parent_execution_id: params.parent_execution_id ?? null,
       });
 
-      notification.success({
-        message: 'Execution soumise',
-        description: `Execution #${response.execution_id} creee avec succes.`,
-      });
-
+      // Story 19.4 AC1: No success notification — ExecutionView opens automatically
       return response.execution_id;
     } catch (err) {
       const error = err as Error & { code?: string };
@@ -141,17 +137,13 @@ export function useExecutionSubmit(): UseExecutionSubmitReturn {
       } else if (error.code === 'FORBIDDEN' || message.includes('forbidden')) {
         message = 'Accès refusé à l\'exécution parente';
       }
+      // Story 19.4 AC5: Error shown in wizard Alert via submitError, no notification popup
       setSubmitError(message);
-      notification.error({
-        message: 'Erreur',
-        description: message,
-        duration: 5,
-      });
       return null;
     } finally {
       setIsSubmitting(false);
     }
-  }, [notification]);
+  }, []);
 
   const submitScheduled = useCallback(async (params: SubmitScheduledParams): Promise<number | null> => {
     setIsSubmitting(true);

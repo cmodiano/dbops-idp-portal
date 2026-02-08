@@ -11,7 +11,7 @@
  * Delegates real-time timeline rendering to ExecutionTimeline (Story 4.6, 19.0).
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Drawer, Spin, Alert, Button, Space, Badge, Typography } from 'antd';
 import { CloseOutlined, ReloadOutlined } from '@ant-design/icons';
 import { ExecutionTimeline } from './ExecutionTimeline';
@@ -56,9 +56,25 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
   const [actionDetail, setActionDetail] = useState<ActionDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   // AC1/AC10: Detect type (action simple vs workflow)
   const isWorkflow = execution?.item_type === 'workflow';
+
+  // Story 19.4 AC10: Focus management — move focus to close button when drawer opens
+  useEffect(() => {
+    if (executionId != null && closeButtonRef.current) {
+      // Ant Design Drawer animation duration: 0.3s (from antd source: motionDurationMid = 0.2s, use 350ms for safety)
+      // Only focus if drawer is still open after animation completes
+      const timer = setTimeout(() => {
+        // Verify drawer still open before focusing (avoid race condition)
+        if (executionId != null && closeButtonRef.current && document.contains(closeButtonRef.current)) {
+          closeButtonRef.current.focus();
+        }
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+  }, [executionId]);
 
   // Initial load + Story 19.2: load workflow details for graph
   useEffect(() => {
@@ -139,13 +155,29 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
       open={executionId != null}
       onClose={handleClose}
       closable={false}
+      keyboard
       destroyOnHidden
       styles={{
         body: { padding: 0 },
         header: { display: 'none' },
       }}
       data-testid="execution-view-drawer"
+      aria-label="Vue d'exécution temps réel"
     >
+      {/* Story 19.4 AC10: aria-live for status announcements */}
+      <div
+        aria-live="polite"
+        aria-atomic="true"
+        style={{ position: 'absolute', left: '-9999px', width: 1, height: 1, overflow: 'hidden' }}
+        data-testid="execution-view-live-region"
+      >
+        {loading
+          ? 'Chargement de l\'exécution en cours'
+          : execution
+            ? `Exécution #${execution.id} — ${statusCfg.label}`
+            : 'Exécution créée, suivi en cours'}
+      </div>
+
       {/* AC8: Metadata header */}
       {execution && (
         <div
@@ -172,8 +204,15 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
                 <Title level={4} style={{ margin: 0 }}>
                   {execution.action_name ?? `Exécution #${execution.id}`}
                 </Title>
+                {/* Story 19.4 AC9: Remediation badge */}
+                {execution.parent_execution_id && (
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    Remédiation de #{execution.parent_execution_id}
+                  </Text>
+                )}
               </Space>
               <Button
+                ref={closeButtonRef}
                 icon={<CloseOutlined />}
                 onClick={handleClose}
                 type="text"
@@ -218,12 +257,12 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
           </div>
         )}
 
-        {/* AC9: Network error */}
+        {/* Story 19.4 AC6: Network error with retry */}
         {error && !loading && (
           <Alert
             type="warning"
             showIcon
-            title="Erreur de chargement"
+            title="Connexion perdue. Tentative de reconnexion..."
             description={error.message}
             action={
               <Button size="small" onClick={handleRefresh} icon={<ReloadOutlined />}>

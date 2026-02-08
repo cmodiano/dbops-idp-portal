@@ -128,27 +128,17 @@ export function ActionCard({
       }}
     >
       <Space orientation="vertical" size="small" style={{ width: '100%' }}>
-        {/* Header: Icon (workflow or engine) + Impact indicator — no overlap, badge stays inside card */}
+        {/* Ligne 1: Icône technologie/workflow + impact */}
         <div
           style={{
             display: 'flex',
             justifyContent: 'space-between',
-            alignItems: 'flex-start',
+            alignItems: 'center',
             gap: 8,
             minWidth: 0,
-            overflow: 'hidden',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, minWidth: 0, flex: 1 }}>
-            {icon}
-            <Paragraph
-              strong
-              style={{ margin: 0, fontSize: 16, lineHeight: 1.4 }}
-              ellipsis={{ rows: 2, tooltip: action.name }}
-            >
-              {action.name || 'Sans nom'}
-            </Paragraph>
-          </div>
+          <span style={{ flexShrink: 0 }}>{icon}</span>
           {action.impact_level && (
             <span style={{ flexShrink: 0 }}>
               <ImpactIndicator level={action.impact_level} size="small" />
@@ -156,16 +146,25 @@ export function ActionCard({
           )}
         </div>
 
-        {/* Description (2 lines max) - sanitized for business variant (Story 7.1) */}
+        {/* Ligne 2: Titre */}
+        <Paragraph
+          strong
+          style={{ margin: 0, fontSize: 16, lineHeight: 1.4 }}
+          ellipsis={{ rows: 2, tooltip: action.name }}
+        >
+          {action.name || 'Sans nom'}
+        </Paragraph>
+
+        {/* Ligne 3: Description - sanitized for business variant (Story 7.1) */}
         <Paragraph
           type="secondary"
           ellipsis={{ rows: 2, tooltip: displayDescription }}
-          style={{ marginBottom: 8 }}
+          style={{ marginBottom: 0 }}
         >
           {displayDescription || 'Aucune description'}
         </Paragraph>
 
-        {/* Tags — pastel, pill-shaped, user-friendly */}
+        {/* Tags — pastel, pill-shaped */}
         {visibleTags.length > 0 && (
           <Space size={6} wrap style={{ width: '100%' }}>
             {visibleTags.map((tag) => {
@@ -205,7 +204,7 @@ export function ActionCard({
           </Space>
         )}
 
-        {/* Bottom row: execution count + optional favorite heart inside card */}
+        {/* Bouton favori + compteur d'exécutions */}
         <div
           style={{
             display: 'flex',

@@ -307,12 +307,18 @@ export default function CatalogPage() {
     setExecutionWizardOpen(true);
   }, []);
 
-  // Handle execution success (Story 4.1, 4.6; Story 19.1 AC1: open ExecutionView drawer)
+  // Handle execution success (Story 4.1, 4.6; Story 19.4 AC1, AC8: close wizard + open ExecutionView)
   const handleExecutionSuccess = useCallback((executionId: number) => {
-    // Story 19.1, AC1: Close wizard and open ExecutionView drawer instead of popup
+    // Story 19.4 AC1: Close wizard and open ExecutionView drawer automatically
     setExecutionWizardOpen(false);
     setActiveExecutionId(null);
+    // Story 19.4 AC8: Reset wizard-related state (form resets via useEffect on open change)
+    setSelectedAction(null);
+    setSelectedActionDetail(null);
+    setDrawerVisible(false);
+    // Story 19.4 AC1: Open ExecutionView with returned executionId
     setExecutionViewId(executionId);
+    logger.info('CatalogPage: Opening ExecutionView after execution created', { executionId });
     loadData();
   }, [loadData]);
 
@@ -579,10 +585,14 @@ export default function CatalogPage() {
         parentExecutionId={parentExecutionId}
       />
 
-      {/* Story 19.1, AC1: ExecutionView drawer — replaces popup "Action démarrée" */}
+      {/* Story 19.4 AC1: ExecutionView drawer — replaces popup "Action démarrée" */}
       <ExecutionView
         executionId={executionViewId}
-        onClose={() => setExecutionViewId(null)}
+        onClose={() => {
+          // Story 19.4 AC3: Close ExecutionView, stay on catalog
+          setExecutionViewId(null);
+          setParentExecutionId(null);
+        }}
         onSuggestionClick={handleRemediationSuggestionClick}
       />
     </div>
