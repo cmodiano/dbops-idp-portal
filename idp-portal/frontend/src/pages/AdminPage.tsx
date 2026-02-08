@@ -171,8 +171,8 @@ const getColumns = (
             <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => onEdit(record)}>
               Voir
             </Button>
-            {/* AC6: Deactivate for published with executions, delete for published with 0 */}
-            {record.execution_count === 0 ? (
+            {/* AC6: Supprimer only when execution_count=0; Désactiver always (for both 0 and >0) */}
+            {record.execution_count === 0 && (
               <Button
                 type="link"
                 size="small"
@@ -182,24 +182,35 @@ const getColumns = (
               >
                 Supprimer
               </Button>
-            ) : (
-              <Button
-                type="link"
-                size="small"
-                danger
-                icon={<PauseCircleOutlined />}
-                onClick={() => onDeactivate(record)}
-              >
-                Desactiver
-              </Button>
             )}
+            <Button
+              type="link"
+              size="small"
+              danger
+              icon={<PauseCircleOutlined />}
+              onClick={() => onDeactivate(record)}
+            >
+              Desactiver
+            </Button>
           </>
         )}
         {record.status === 'disabled' && (
           <>
-            <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => onEdit(record)}>
-              Voir
+            <Button type="link" size="small" icon={<EditOutlined />} onClick={() => onEdit(record)}>
+              Modifier
             </Button>
+            {/* AC1/AC6: Delete only when execution_count=0 */}
+            {record.execution_count === 0 && (
+              <Button
+                type="link"
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+                onClick={() => onDelete(record)}
+              >
+                Supprimer
+              </Button>
+            )}
             {/* AC5: Reactivate for disabled actions */}
             <Button
               type="link"

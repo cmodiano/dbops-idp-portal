@@ -15,7 +15,7 @@
  * - Legend and tooltips (AC10)
  */
 
-import { useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   ReactFlow,
   Controls,
@@ -32,7 +32,6 @@ import { Card, Space, Typography, Spin, Alert, Badge } from 'antd';
 import type { WorkflowStep, ExecutionResponse, ExecutionStepResponse, ExecutionStepStatus } from '../../types/api';
 import { useExecutionPolling } from '../../hooks/useExecutionPolling';
 import { useWebSocket } from '../../hooks/useWebSocket';
-import { STYLE_TOKENS } from '../../theme/styleTokens';
 import {
   workflowStepsToReactFlow,
   START_NODE_ID,
@@ -42,6 +41,7 @@ import WorkflowStepNode from '../admin/WorkflowStepNode';
 import StartNode from '../admin/StartNode';
 import EndNode from '../admin/EndNode';
 import CustomEdge from '../admin/CustomEdge';
+import { StepDetailDrawer } from './StepDetailDrawer';
 import logger from '../../services/logger';
 
 const { Text } = Typography;
@@ -53,6 +53,7 @@ const STATUS_COLORS = {
   FAILED: '#ff4d4f',
   PENDING: '#8c8c8c',
   SKIPPED: '#8c8c8c',
+  SELECTED: '#faad14', // Story 19.3 AC7: Golden border for selected node
 } as const;
 
 interface WorkflowExecutionGraphProps {
@@ -122,6 +123,17 @@ function WorkflowExecutionGraphInner({
   workflowSteps,
   execution,
 }: WorkflowExecutionGraphProps) {
+  // Story 19.3 AC1: Selected step state for drawer
+  const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
+
+  // Story 19.3 AC1, AC8: Handle node click — open drawer for action nodes, ignore Start/End
+  const handleNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
+    if (node.id === START_NODE_ID || node.id === END_NODE_ID) {
+      return;
+    }
+    setSelectedStepId(node.id);
+  }, []);
+
   // AC5: Real-time updates via WebSocket + polling fallback
   const ws = useWebSocket(executionId);
   const polling = useExecutionPolling({
@@ -166,6 +178,8 @@ function WorkflowExecutionGraphInner({
       const execStep = stepStatusMap.get(node.id);
       const status = execStep?.status;
       const duration = execStep ? calculateStepDuration(execStep) : null;
+      // Story 19.3 AC7: Selected node indicator
+      const isSelected = node.id === selectedStepId;
 
       return {
         ...node,
@@ -178,14 +192,21 @@ function WorkflowExecutionGraphInner({
         style: {
           ...node.style,
           ...getNodeStyle(status),
+          // Story 19.3 AC7: Golden border for selected node (overrides status border)
+          ...(isSelected && {
+            borderColor: STATUS_COLORS.SELECTED,
+            borderWidth: 4,
+            boxShadow: `0 0 12px ${STATUS_COLORS.SELECTED}80`,
+            opacity: 1,
+          }),
           transition: 'border-color 0.3s, opacity 0.3s, box-shadow 0.3s',
         },
-        className: status === 'RUNNING' ? 'workflow-node-running' : undefined,
+        className: status === 'RUNNING' && !isSelected ? 'workflow-node-running' : undefined,
       };
     });
 
     setNodes(enrichedNodes);
-  }, [baseNodes, executionSteps, workflowSteps, setNodes]);
+  }, [baseNodes, executionSteps, workflowSteps, selectedStepId, setNodes]);
 
   // AC8: Enrich edges for traversed path
   useEffect(() => {
@@ -279,7 +300,7 @@ function WorkflowExecutionGraphInner({
         <Text strong style={{ display: 'block', marginBottom: 8, fontSize: 13 }}>
           Légende
         </Text>
-        <Space orientation="vertical" size={4}>
+        <Space direction="vertical" size={4}>
           <Space size={8}>
             <Badge color={STATUS_COLORS.RUNNING} />
             <Text type="secondary">En cours</Text>
@@ -305,6 +326,7 @@ function WorkflowExecutionGraphInner({
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onNodeClick={handleNodeClick}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
@@ -325,6 +347,16 @@ function WorkflowExecutionGraphInner({
         <Controls showInteractive={false} />
         <MiniMap nodeStrokeWidth={3} zoomable pannable />
       </ReactFlow>
+
+      {/* Story 19.3 AC1: Step detail drawer */}
+      <StepDetailDrawer
+        open={selectedStepId != null}
+        stepId={selectedStepId}
+        executionId={executionId}
+        executionSteps={executionSteps}
+        workflowSteps={workflowSteps}
+        onClose={() => setSelectedStepId(null)}
+      />
 
       {/* AC3: Pulse animation CSS */}
       <style>{`

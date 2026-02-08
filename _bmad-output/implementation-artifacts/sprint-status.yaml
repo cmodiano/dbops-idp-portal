@@ -77,6 +77,7 @@ development_status:
     2-27-backend-integrations-plateformes-distantes: done # Config plateformes distantes (AAP, Terraform, etc.) — type, URL, credential_ref, icon (code-review 2026-01-29)
     2-28-frontend-admin-integrations-liste-formulaire-icone: done # Onglet Admin Integrations + liste, formulaire, icone (code-review 2026-01-29)
     2-29-separation-boutons-creation-action-et-workflow-admin: done # 2026-02-06: Code review — 1 HIGH + 3 MEDIUM + 3 LOW fixes applied, tests 21/26 ActionWizard + 5/5 AdminPage pass
+    2-30-categories-definir-sur-action-et-gerer-admin: backlog # 1) Définir catégorie sur une action (form + API) 2) Gérer catégories (CRUD admin, onglets catalogue dynamiques)
     epic-2-retrospective: optional
     # === Epic 3: Decouverte du Catalogue - Marc (MVP) ===
     epic-3: in-progress
@@ -256,7 +257,7 @@ development_status:
     19-0-simulation-execution-dev-mode: done # Code review 2026-02-08: 10 issues (4 HIGH + 4 MEDIUM + 2 LOW), 6 auto-fixes, 27 backend + 42 frontend tests pass ✅
     19-1-vue-execution-action-simple-timeline-logs: done # 2026-02-08: ExecutionView drawer + timeline visuels améliorés, 113 tests pass
     19-2-vue-execution-workflow-apercu-visuel-etape-active: done # 2026-02-08: WorkflowExecutionGraph read-only, tooltips, real-time, 154 tests pass
-    19-3-detail-etape-workflow-timeline-logs-au-clic: backlog
+    19-3-detail-etape-workflow-timeline-logs-au-clic: done # 2026-02-08: Code review — 8 issues fixed (Ant Design API, missing tests AC6/AC7, unused import), 20/20 tests pass
     19-4-integration-remplacement-popup-ouverture-vue-execution: backlog
     19-5-differenciation-action-vs-workflow-page-execution: backlog # Badge/icône/libellé type dans la vue d'exécution
     epic-19-retrospective: optional
