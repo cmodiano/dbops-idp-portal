@@ -490,6 +490,90 @@ class TestFeatureFlagUpdateAPI:
 
 
 # ============================================================================
+# API Tests - Feature Flag Update with source=env (PATCH)
+# Story 20.7 Task 4: Verify env-source updates only affect cache,
+# do NOT write to database, and still create audit trail.
+# ============================================================================
+
+@pytest.mark.django_db
+class TestFeatureFlagUpdateEnvSourceAPI:
+
+    def setup_method(self):
+        cache.clear()
+
+    @override_settings(
+        FEATURE_FLAGS_SOURCE='env',
+        FEATURE_FLAGS_ENABLED=True,
+        FEATURE_FLAGS='{"env_flag":{"enabled":false,"rollout_percent":100}}',
+    )
+    def test_patch_env_source_updates_cache_only(self, api_client_admin):
+        """PATCH with source=env should update cache without database write."""
+        response = api_client_admin.patch(
+            '/api/v1/feature-flags/env_flag/',
+            data={'enabled': True},
+            format='json',
+        )
+        assert response.status_code == status.HTTP_200_OK
+        result = response.json()['data']
+        assert result['flag_key'] == 'env_flag'
+        assert result['enabled'] is True
+        assert result['updated_at'] is not None
+
+    @override_settings(
+        FEATURE_FLAGS_SOURCE='env',
+        FEATURE_FLAGS_ENABLED=True,
+        FEATURE_FLAGS='{"env_flag":{"enabled":true,"rollout_percent":100}}',
+    )
+    def test_patch_env_source_no_database_write(self, api_client_admin):
+        """Env source PATCH must NOT create FeatureFlag objects in database."""
+        initial_count = FeatureFlag.objects.count()
+        api_client_admin.patch(
+            '/api/v1/feature-flags/env_flag/',
+            data={'enabled': False},
+            format='json',
+        )
+        assert FeatureFlag.objects.count() == initial_count
+
+    @override_settings(
+        FEATURE_FLAGS_SOURCE='env',
+        FEATURE_FLAGS_ENABLED=True,
+        FEATURE_FLAGS='{"cache_env_flag":{"enabled":true,"rollout_percent":100}}',
+    )
+    def test_patch_env_source_invalidates_cache(self, api_client_admin):
+        """PATCH should invalidate per-flag and global cache."""
+        feature_flags.is_enabled('cache_env_flag')
+        assert cache.get('feature_flags:all') is not None
+
+        api_client_admin.patch(
+            '/api/v1/feature-flags/cache_env_flag/',
+            data={'enabled': False},
+            format='json',
+        )
+        assert cache.get('feature_flag:cache_env_flag') is None
+        assert cache.get('feature_flags:all') is None
+
+    @override_settings(
+        FEATURE_FLAGS_SOURCE='env',
+        FEATURE_FLAGS_ENABLED=True,
+        FEATURE_FLAGS='{"audit_env_flag":{"enabled":false,"rollout_percent":50}}',
+    )
+    def test_patch_env_source_creates_audit_trail(self, api_client_admin):
+        """Audit log must be created even when source=env."""
+        api_client_admin.patch(
+            '/api/v1/feature-flags/audit_env_flag/',
+            data={'enabled': True},
+            format='json',
+        )
+        audit = AuditLog.objects.filter(
+            entity_type='feature_flag',
+        ).order_by('-id').first()
+        assert audit is not None
+        details = audit.get_details()
+        assert details['flag_key'] == 'audit_env_flag'
+        assert details['enabled'] is True
+
+
+# ============================================================================
 # Startup Validation Tests
 # ============================================================================
 

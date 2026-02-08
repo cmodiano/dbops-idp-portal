@@ -12,7 +12,7 @@ on:
           - staging
           - production
   push:
-    branches: [main]
+    branches: [main, develop]
 
 concurrency:
   group: deploy-${{ github.event.inputs.environment || 'staging' }}
@@ -155,12 +155,12 @@ jobs:
           echo "✅ Build output verified"
 
   deploy:
-    name: Deploy Django to ${{ github.event.inputs.environment || 'staging' }}
+    name: Deploy Django to ${{ github.event.inputs.environment || (github.ref == 'refs/heads/develop' && 'staging') || 'staging' }}
     runs-on: ubuntu-latest
     needs: [lint-backend, lint-frontend, typecheck-backend, typecheck-frontend, test-backend, test-frontend, build-frontend]
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch'
     environment:
-      name: ${{ github.event.inputs.environment || 'staging' }}
+      name: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/develop' && 'staging') || 'staging' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -168,10 +168,21 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Determine deploy environment
+        id: env
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "target=${{ github.event.inputs.environment }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.ref }}" = "refs/heads/develop" ]; then
+            echo "target=staging" >> "$GITHUB_OUTPUT"
+          else
+            echo "target=staging" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Copy environment file
         working-directory: frontend
         run: |
-          ENV=${{ github.event.inputs.environment || 'staging' }}
+          ENV=${{ steps.env.outputs.target }}
           if [ -f ".env.${ENV}" ]; then
             cp ".env.${ENV}" .env
             echo "✅ Using .env.${ENV} for build"
@@ -195,6 +206,14 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
 
+      - name: Backup current release
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "cd ${{ secrets.DEPLOY_PATH }} && \
+             cp -a django_backend django_backend.bak 2>/dev/null || true && \
+             cp -a frontend/dist frontend/dist.bak 2>/dev/null || true"
+
       - name: Deploy frontend via rsync
         run: |
           rsync -avz --delete \
@@ -215,7 +234,7 @@ jobs:
             django_backend/ \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}/django_backend/
 
-      # Restart Django service
+      # Install deps, migrate, restart
       - name: Restart Django service
         run: |
           ssh -i ~/.ssh/deploy_key \
@@ -233,9 +252,36 @@ jobs:
             }
 
       - name: Health check
+        id: healthcheck
         run: |
           sleep 5
           ssh -i ~/.ssh/deploy_key \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
             "curl -sf http://localhost:8000/api/v1/health || exit 1"
           echo "✅ Health check passed"
+
+      - name: Run smoke tests
+        if: success()
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "cd ${{ secrets.DEPLOY_PATH }} && \
+             bash scripts/post-switchover-validation.sh --api-url http://localhost:8000" || {
+              echo "⚠️ Smoke tests failed — deployment succeeded but validation concerns detected"
+              echo "Review logs above for details"
+              exit 1
+            }
+
+      - name: Rollback on health check failure
+        if: failure() && steps.healthcheck.outcome == 'failure'
+        run: |
+          echo "⚠️ Health check failed — rolling back to previous release"
+          ssh -i ~/.ssh/deploy_key \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "cd ${{ secrets.DEPLOY_PATH }} && \
+             rm -rf django_backend && mv django_backend.bak django_backend 2>/dev/null || true && \
+             rm -rf frontend/dist && mv frontend/dist.bak frontend/dist 2>/dev/null || true && \
+             cd django_backend && \
+             uv pip install -r requirements.lock --system && \
+             sudo systemctl restart idp-django"
+          echo "✅ Rollback completed with dependency restoration"

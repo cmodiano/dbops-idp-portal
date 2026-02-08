@@ -78,6 +78,7 @@ def _get_all_flags():
         flags = _load_flags_from_env()
 
     cache.set(cache_key, flags, _get_cache_ttl())
+    logger.debug("feature_flag_cache_miss", source=source, flag_count=len(flags))
     return flags
 
 
@@ -109,7 +110,6 @@ def is_enabled(flag_key, context=None):
         bool: True if the flag is enabled for the given context.
     """
     if not _get_flags_enabled():
-        logger.debug("feature_flags_disabled_globally")
         return False
 
     flag_config = _get_flag_config(flag_key)
@@ -122,17 +122,14 @@ def is_enabled(flag_key, context=None):
     rollout_percent = flag_config.get('rollout_percent', 100)
 
     if not enabled:
-        logger.debug("feature_flag_evaluated", flag_key=flag_key, enabled=False, reason="disabled")
         return False
 
     # If rollout is 100%, flag is fully enabled
     if rollout_percent >= 100:
-        logger.debug("feature_flag_evaluated", flag_key=flag_key, enabled=True, rollout_percent=100)
         return True
 
     # If rollout is 0%, flag is effectively disabled
     if rollout_percent <= 0:
-        logger.debug("feature_flag_evaluated", flag_key=flag_key, enabled=False, rollout_percent=0)
         return False
 
     # Rollout evaluation requires user_id
@@ -143,18 +140,10 @@ def is_enabled(flag_key, context=None):
     if not user_id:
         # HIGH-2 fix: No user context with partial rollout = return False for safety
         # (prevents CRON/background jobs from bypassing rollout percentage)
-        logger.debug("feature_flag_evaluated", flag_key=flag_key, enabled=False, reason="no_user_context_partial_rollout")
+        logger.debug("feature_flag_no_user_context", flag_key=flag_key)
         return False
 
-    result = get_rollout_status(flag_key, str(user_id), rollout_percent)
-    logger.debug(
-        "feature_flag_evaluated",
-        flag_key=flag_key,
-        enabled=result,
-        rollout_percent=rollout_percent,
-        user_id=str(user_id),
-    )
-    return result
+    return get_rollout_status(flag_key, str(user_id), rollout_percent)
 
 
 def get_rollout_status(flag_key, user_id, rollout_percent=None):

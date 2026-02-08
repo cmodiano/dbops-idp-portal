@@ -244,10 +244,45 @@ def validate_feature_flags_config():
     else:
         flag_count = 0  # Database source - count not available at startup
 
+    # Story 20.7: Validate Redis pub/sub configuration if enabled
+    pubsub_enabled_raw = os.getenv('FEATURE_FLAGS_PUBSUB_ENABLED', 'false').lower()
+    if pubsub_enabled_raw not in ('true', 'false', '1', '0'):
+        error_msg = (
+            "❌ FEATURE FLAGS: Invalid FEATURE_FLAGS_PUBSUB_ENABLED value.\n"
+            f"Current value: {os.getenv('FEATURE_FLAGS_PUBSUB_ENABLED')}\n"
+            "Expected: true, false, 1, or 0"
+        )
+        logger.error("feature_flags_pubsub_enabled_invalid", value=os.getenv('FEATURE_FLAGS_PUBSUB_ENABLED'))
+        raise ImproperlyConfigured(error_msg)
+
+    pubsub_enabled = pubsub_enabled_raw in ('true', '1')
+    if pubsub_enabled:
+        redis_url = os.getenv('REDIS_URL', '')
+        if not redis_url:
+            error_msg = (
+                "❌ FEATURE FLAGS: REDIS_URL required when FEATURE_FLAGS_PUBSUB_ENABLED=true.\n"
+                "Set REDIS_URL in environment (e.g., redis://localhost:6379/0)"
+            )
+            logger.error("feature_flags_redis_url_missing")
+            raise ImproperlyConfigured(error_msg)
+
+        # Validate Redis URL format (basic check)
+        if not redis_url.startswith(('redis://', 'rediss://')):
+            error_msg = (
+                "❌ FEATURE FLAGS: Invalid REDIS_URL format.\n"
+                f"Current value: {redis_url}\n"
+                "Expected: redis:// or rediss:// URL"
+            )
+            logger.error("feature_flags_redis_url_invalid", redis_url=redis_url)
+            raise ImproperlyConfigured(error_msg)
+
+        logger.info("feature_flags_redis_pubsub_enabled", redis_url=redis_url.split('@')[-1])  # Hide credentials
+
     logger.info(
         "feature_flags_config_validated",
         source=source,
         enabled=enabled_raw in ('true', '1'),
         cache_ttl=int(ttl_raw),
         flag_count=flag_count,
+        pubsub_enabled=pubsub_enabled,
     )

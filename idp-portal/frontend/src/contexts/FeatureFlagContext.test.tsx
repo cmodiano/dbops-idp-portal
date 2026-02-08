@@ -150,3 +150,134 @@ describe('useFeatureFlags hook', () => {
     });
   });
 });
+
+// ============================================================================
+// Story 20.7 Task 5: Auto-refresh timer tests
+// ============================================================================
+
+// To test auto-refresh, we need isAuthenticated=true.
+// We mock useAuth to control authentication state directly.
+import * as AuthContextModule from './AuthContext';
+
+/**
+ * Render with a mocked authenticated context.
+ * Wraps FeatureFlagProvider without AuthProvider, mocking useAuth instead.
+ */
+function renderAuthenticated(ui: React.ReactElement) {
+  return render(
+    <FeatureFlagProvider>
+      {ui}
+    </FeatureFlagProvider>
+  );
+}
+
+describe('FeatureFlagProvider auto-refresh', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.mocked(fetchFeatureFlagsStatus).mockResolvedValue({ test_flag: true });
+    // Mock useAuth to return authenticated state
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+      user: { id: 1, username: 'test_user', display_name: 'Test', profile: 'dbops', navigation_tabs: ['catalog'], is_auditor: false },
+      accessToken: 'mock-token',
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      logout: vi.fn().mockResolvedValue(undefined),
+      refreshToken: vi.fn().mockResolvedValue('mock-token'),
+      hasTab: vi.fn().mockReturnValue(true),
+      isBusinessProfile: false,
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('fetches flags again after 5 minutes', async () => {
+    const fetchMock = vi.mocked(fetchFeatureFlagsStatus);
+
+    await act(async () => {
+      renderAuthenticated(<FlagDisplay flagKey="test_flag" />);
+    });
+
+    // Let initial effects settle
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+
+    const initialCallCount = fetchMock.mock.calls.length;
+    expect(initialCallCount).toBeGreaterThanOrEqual(1); // Initial fetch happened
+
+    // Advance 5 minutes (300000ms = REFRESH_INTERVAL_MS)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300_000);
+    });
+
+    // Should have at least one more call from the interval
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(initialCallCount);
+  });
+
+  it('cleans up interval on unmount', async () => {
+    const fetchMock = vi.mocked(fetchFeatureFlagsStatus);
+
+    let unmount: () => void;
+    await act(async () => {
+      const result = renderAuthenticated(<FlagDisplay flagKey="test_flag" />);
+      unmount = result.unmount;
+    });
+
+    // Let initial effects settle
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+
+    const callCountBeforeUnmount = fetchMock.mock.calls.length;
+
+    // Unmount the component
+    await act(async () => {
+      unmount!();
+    });
+
+    // Advance 5 minutes - should NOT trigger additional calls
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300_000);
+    });
+
+    expect(fetchMock.mock.calls.length).toBe(callCountBeforeUnmount);
+  });
+
+  it('does not set interval when not authenticated', async () => {
+    // Override: not authenticated
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+      user: null,
+      accessToken: null,
+      isAuthenticated: false,
+      isLoading: false,
+      login: vi.fn(),
+      logout: vi.fn().mockResolvedValue(undefined),
+      refreshToken: vi.fn().mockResolvedValue(null),
+      hasTab: vi.fn().mockReturnValue(false),
+      isBusinessProfile: false,
+    });
+    const fetchMock = vi.mocked(fetchFeatureFlagsStatus);
+
+    await act(async () => {
+      renderAuthenticated(<FlagDisplay flagKey="test_flag" />);
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+
+    const callCountAfterInit = fetchMock.mock.calls.length;
+
+    // Advance 5 minutes
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300_000);
+    });
+
+    // No additional calls since not authenticated
+    expect(fetchMock.mock.calls.length).toBe(callCountAfterInit);
+  });
+});

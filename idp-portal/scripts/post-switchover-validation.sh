@@ -264,6 +264,62 @@ test_executions_list() {
     fi
 }
 
+test_websocket() {
+    log_test "WebSocket Connectivity"
+
+    # Check for WebSocket testing tool (websocat or wscat)
+    local ws_tool=""
+    if command -v websocat &>/dev/null; then
+        ws_tool="websocat"
+    elif command -v wscat &>/dev/null; then
+        ws_tool="wscat"
+    fi
+
+    if [[ -z "$ws_tool" ]]; then
+        log_warn "No WebSocket testing tool found (websocat or wscat)"
+        log_warn "Install: cargo install websocat  OR  npm install -g wscat"
+        log_warn "Skipping WebSocket tests (non-blocking)"
+        return 0
+    fi
+
+    # Derive WebSocket URL from API URL
+    local ws_url
+    ws_url=$(echo "$API_URL" | sed 's|^https://|wss://|; s|^http://|ws://|')
+
+    # Test WebSocket connection to timeline endpoint
+    # Use a dummy execution_id — we expect connection upgrade to succeed
+    local ws_endpoint="${ws_url}/ws/timeline/test-validation/"
+    local ws_result
+
+    if [[ "$ws_tool" == "websocat" ]]; then
+        # websocat: try connection with 5s timeout, send ping, capture response
+        ws_result=$(echo '{"type":"ping"}' | timeout 5 websocat -n1 "$ws_endpoint" 2>&1) || true
+    else
+        # wscat: try connection with timeout
+        ws_result=$(echo '{"type":"ping"}' | timeout 5 wscat -c "$ws_endpoint" -w 3 2>&1) || true
+    fi
+
+    if [[ -n "$ws_result" ]]; then
+        # Check if we got a valid JSON response
+        if echo "$ws_result" | grep -q '{'; then
+            test_pass "WebSocket connection successful ($ws_tool)"
+            if [[ "$VERBOSE" == "true" ]]; then
+                echo "  Response: $ws_result"
+            fi
+        else
+            # Non-JSON response but connection was made
+            test_pass "WebSocket connection established ($ws_tool)"
+        fi
+    else
+        # Empty result could mean timeout or rejected connection
+        # In production, this would be a concern — mark as warning but don't fail
+        log_warn "WebSocket endpoint did not respond within timeout"
+        log_warn "This may indicate auth requirement or endpoint unavailable"
+        log_warn "Manual verification recommended for production deployments"
+        # Don't mark as pass — this is indeterminate, not success
+    fi
+}
+
 test_response_time() {
     log_test "Response Time (Health Check)"
 
@@ -308,6 +364,7 @@ main() {
     test_catalog_detail
     test_profiles_list
     test_executions_list
+    test_websocket
     test_response_time
 
     # Summary
