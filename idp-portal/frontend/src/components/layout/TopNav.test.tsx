@@ -13,7 +13,7 @@ import * as executionService from '../../services/execution_service';
 
 vi.mock('../../services/execution_service');
 
-function mockAuthSession(profile: string, navigationTabs: string[]) {
+function mockAuthSession(profile: string, navigationTabs: string[], options?: { is_auditor?: boolean }) {
   global.fetch = vi.fn()
     .mockResolvedValueOnce({
       ok: true,
@@ -28,6 +28,7 @@ function mockAuthSession(profile: string, navigationTabs: string[]) {
           display_name: 'Test User',
           profile,
           navigation_tabs: navigationTabs,
+          is_auditor: options?.is_auditor ?? false,
         },
       }),
     });
@@ -54,6 +55,7 @@ function renderTopNav(initialPath = '/catalog', withUnseenError = false) {
       // Story 9.10: Dashboard renamed to Analytics
       { path: '/analytics', element: <Nav /> },
       { path: '/admin', element: <Nav /> },
+      { path: '/audit', element: <Nav /> },
     ],
     { initialEntries: [initialPath] },
   );
@@ -491,6 +493,55 @@ describe('TopNav', () => {
       // We can't easily test tooltip visibility without hovering, but we can verify the element exists
       const tooltip = bellButton.closest('.ant-tooltip-open') || document.querySelector('[title="Erreur de chargement des approbations"]');
       // Note: Tooltip won't be visible until hover, but error state is tracked in hook
+    });
+  });
+
+  describe('Story 6.5 — Audit Tab Visibility for Auditors', () => {
+    it('AC1: auditor user with audit in navigation_tabs sees Audit tab', async () => {
+      mockAuthSession('dba_applicatif', ['catalog', 'executions', 'calendar', 'dashboard', 'audit'], { is_auditor: true });
+      renderTopNav();
+
+      await waitFor(() => {
+        expect(screen.getByText('Audit')).toBeInTheDocument();
+      });
+    });
+
+    it('AC1: auditor user WITHOUT audit in navigation_tabs still sees Audit tab (fallback)', async () => {
+      mockAuthSession('dba_applicatif', ['catalog', 'executions', 'calendar', 'dashboard'], { is_auditor: true });
+      renderTopNav();
+
+      await waitFor(() => {
+        expect(screen.getByText('Audit')).toBeInTheDocument();
+      });
+    });
+
+    it('AC2: non-auditor user does NOT see Audit tab', async () => {
+      mockAuthSession('dba_applicatif', ['catalog', 'executions', 'calendar', 'dashboard'], { is_auditor: false });
+      renderTopNav();
+
+      await waitFor(() => {
+        expect(screen.getByText('Catalogue')).toBeInTheDocument();
+      });
+      expect(screen.queryByText('Audit')).not.toBeInTheDocument();
+    });
+
+    it('AC3: clicking Audit tab navigates to /audit', async () => {
+      const user = userEvent.setup();
+      mockAuthSession('dba_applicatif', ['catalog', 'executions', 'calendar', 'dashboard', 'audit'], { is_auditor: true });
+      renderTopNav('/catalog');
+
+      await waitFor(() => {
+        expect(screen.getByText('Audit')).toBeInTheDocument();
+      });
+
+      const auditButton = screen.getByText('Audit').closest('button');
+      expect(auditButton).toBeInTheDocument();
+      await user.click(auditButton!);
+
+      await waitFor(() => {
+        const activeButton = screen.getByText('Audit').closest('button');
+        expect(activeButton).toHaveClass('nav-pill-active');
+      });
     });
   });
 });

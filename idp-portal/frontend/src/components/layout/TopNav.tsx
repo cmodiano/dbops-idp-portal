@@ -54,7 +54,11 @@ export function TopNav() {
   const { unseenErrorCount } = useDashboard();
   const { count: pendingApprovalsCount, error: approvalsError } = usePendingApprovalsCount();
 
-  const navigationTabs = user?.navigation_tabs ?? [];
+  // Story 6.5: Fallback — inject 'audit' tab for auditors even if backend didn't include it
+  const tabs = user?.navigation_tabs ?? [];
+  const navigationTabs = user?.is_auditor && !tabs.includes('audit')
+    ? [...tabs, 'audit']
+    : tabs;
 
   // Story 8.8 AC9: Only DBA/DBOPS see bell icon
   const showApprovalsBell =

@@ -312,6 +312,17 @@ class CurrentUserProfileView(APIView):
                 for p in profiles
             )
 
+        # Build navigation tabs, injecting 'audit' for auditors (Story 6.5)
+        navigation_tabs = get_user_navigation_permissions(profile_name)
+        if navigation_tabs is None:
+            navigation_tabs = []
+        # Convert to list if needed and inject 'audit' for auditors (avoid creating new list if possible)
+        if is_auditor and 'audit' not in navigation_tabs:
+            if isinstance(navigation_tabs, list):
+                navigation_tabs.append('audit')
+            else:
+                navigation_tabs = list(navigation_tabs) + ['audit']
+
         # Build user profile data
         profile_data = {
             'id': user.id,
@@ -321,7 +332,7 @@ class CurrentUserProfileView(APIView):
             'profile_ids': profile_ids,
             'cumulative_permissions': cumulative_permissions,
             'is_auditor': is_auditor,
-            'navigation_tabs': get_user_navigation_permissions(profile_name),
+            'navigation_tabs': navigation_tabs,
             'is_business_profile': is_business_profile(profile_name),
         }
 

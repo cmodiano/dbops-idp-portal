@@ -121,7 +121,7 @@ development_status:
     6-2-evidence-specifique-patching-et-comptes-a-privileges: done # Code review 2026-01-31: 10 fixes (1 CRITICAL + 5 MEDIUM + 4 LOW), 33/33 tests pass
     6-3-consultation-historique-audit-filtre: done # Code review fixes applied 2026-01-31: CRITICAL-1 + 4 HIGH fixes
     6-4-export-rapports-audit: done # Code review 2026-01-31: 10 fixes (3 HIGH + 4 MEDIUM + 3 LOW) - action_name et servicenow_change_id ajoutés CSV/PDF, enrichissement cohérent avec /executions
-    6-5-restaurer-visibilite-menu-audit-pour-auditeurs: backlog # Menu Audit disparu : navigation_tabs ne contient jamais 'audit', is_auditor non fusionné
+    6-5-restaurer-visibilite-menu-audit-pour-auditeurs: done # Menu Audit restauré : navigation_tabs inclut 'audit' si is_auditor (backend + frontend fallback), 3 backend + 4 frontend tests — Code review 2026-02-08: 9 fixes appliqués
     epic-6-retrospective: optional
     # === Epic 7: Self-Service Business & RBAC Granulaire - Fatima (Phase 2) ===
     epic-7: in-progress
