@@ -9,7 +9,7 @@
 
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, MinusOutlined, ClockCircleOutlined, LinkOutlined, WarningOutlined, SyncOutlined, ToolOutlined, StopOutlined, ReloadOutlined } from '@ant-design/icons';
-import { Spin, Typography, Alert, Drawer, Button, Tooltip, Tag, Card, Space, Skeleton } from 'antd';
+import { Spin, Typography, Alert, Drawer, Button, Tooltip, Tag, Card, Space, Skeleton, Badge } from 'antd';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useExecutionPolling } from '../../hooks/useExecutionPolling';
 import { useRemediationSuggestions } from '../../hooks/useRemediationSuggestions';
@@ -541,6 +541,8 @@ export function ExecutionTimeline({
                 {step.status === 'COMPLETED' && <CheckCircleOutlined style={{ color: '#fff', fontSize: 14 }} />}
                 {step.status === 'FAILED' && <CloseCircleOutlined style={{ color: '#fff', fontSize: 14 }} />}
                 {step.status === 'SKIPPED' && <MinusOutlined style={{ color: '#fff', fontSize: 14 }} />}
+                {step.status === 'RUNNING' && <LoadingOutlined spin style={{ color: '#fff', fontSize: 14 }} />}
+                {step.status === 'PENDING' && <ClockCircleOutlined style={{ color: '#fff', fontSize: 14 }} />}
               </div>
               {idx < steps.length - 1 && (
                 <div
@@ -569,9 +571,13 @@ export function ExecutionTimeline({
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <Text strong>{step.step_name}</Text>
+                  {/* Story 19.1, AC3: "En cours" badge for RUNNING step */}
+                  {step.status === 'RUNNING' && (
+                    <Badge status="processing" text="En cours" />
+                  )}
                   <Text type="secondary" style={{ fontSize: 12 }}>
                     {formatDuration(step.started_at, step.completed_at) || (
-                      step.status === 'RUNNING' ? 'En cours...' : ''
+                      step.status === 'RUNNING' ? '' : ''
                     )}
                   </Text>
                   {showChangeBadge && (

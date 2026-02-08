@@ -39,6 +39,7 @@ import { ActionCard, type ActionCardProps } from '../components/catalog/ActionCa
 import { ActionDrawerPreview } from '../components/catalog/ActionDrawerPreview';
 import { ActionTable } from '../components/catalog/ActionTable';
 import { ExecutionWizard } from '../components/catalog/ExecutionWizard';
+import { ExecutionView } from '../components/execution/ExecutionView';
 import { TagCloud } from '../components/catalog/TagCloud';
 import { CategoryTabs, type CategoryKey } from '../components/catalog/CategoryTabs';
 import { HorizontalFilters } from '../components/catalog/HorizontalFilters';
@@ -139,6 +140,8 @@ export default function CatalogPage() {
   const [drawerLoading, setDrawerLoading] = useState(false);
   const [executionWizardOpen, setExecutionWizardOpen] = useState(false);
   const [activeExecutionId, setActiveExecutionId] = useState<number | null>(null);
+  // Story 19.1: ExecutionView drawer state (replaces popup success message)
+  const [executionViewId, setExecutionViewId] = useState<number | null>(null);
   // Story 9.2, Task 19: Parent execution ID for remediation
   const [parentExecutionId, setParentExecutionId] = useState<number | null>(null);
   const lastFocusedCardRef = useRef<HTMLElement | null>(null);
@@ -304,18 +307,22 @@ export default function CatalogPage() {
     setExecutionWizardOpen(true);
   }, []);
 
-  // Handle execution success (Story 4.1, 4.6) — show timeline in wizard, do not close
+  // Handle execution success (Story 4.1, 4.6; Story 19.1 AC1: open ExecutionView drawer)
   const handleExecutionSuccess = useCallback((executionId: number) => {
-    setActiveExecutionId(executionId);
-    message.success(`Execution #${executionId} demarree`);
+    // Story 19.1, AC1: Close wizard and open ExecutionView drawer instead of popup
+    setExecutionWizardOpen(false);
+    setActiveExecutionId(null);
+    setExecutionViewId(executionId);
     loadData();
-  }, [loadData, message]);
+  }, [loadData]);
 
-  // Back to catalog — close timeline and wizard (Story 4.6, Task 4.2; Story 9.2, Task 19)
+  // Back to catalog — close timeline, wizard, and execution view (Story 4.6, Task 4.2; Story 9.2, Task 19; Story 19.1)
   const handleBackToCatalog = useCallback(() => {
     setActiveExecutionId(null);
     setExecutionWizardOpen(false);
     setDrawerVisible(false);
+    // Story 19.1: Close ExecutionView drawer
+    setExecutionViewId(null);
     // Story 9.2, Task 19: Reset parent execution ID
     setParentExecutionId(null);
     loadData();
@@ -570,6 +577,13 @@ export default function CatalogPage() {
         variant={isBusinessProfile ? 'simplified' : 'default'}
         onSuggestionClick={handleRemediationSuggestionClick}
         parentExecutionId={parentExecutionId}
+      />
+
+      {/* Story 19.1, AC1: ExecutionView drawer — replaces popup "Action démarrée" */}
+      <ExecutionView
+        executionId={executionViewId}
+        onClose={() => setExecutionViewId(null)}
+        onSuggestionClick={handleRemediationSuggestionClick}
       />
     </div>
   );

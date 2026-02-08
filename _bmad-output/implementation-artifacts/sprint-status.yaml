@@ -120,6 +120,7 @@ development_status:
     6-2-evidence-specifique-patching-et-comptes-a-privileges: done # Code review 2026-01-31: 10 fixes (1 CRITICAL + 5 MEDIUM + 4 LOW), 33/33 tests pass
     6-3-consultation-historique-audit-filtre: done # Code review fixes applied 2026-01-31: CRITICAL-1 + 4 HIGH fixes
     6-4-export-rapports-audit: done # Code review 2026-01-31: 10 fixes (3 HIGH + 4 MEDIUM + 3 LOW) - action_name et servicenow_change_id ajoutés CSV/PDF, enrichissement cohérent avec /executions
+    6-5-restaurer-visibilite-menu-audit-pour-auditeurs: backlog # Menu Audit disparu : navigation_tabs ne contient jamais 'audit', is_auditor non fusionné
     epic-6-retrospective: optional
     # === Epic 7: Self-Service Business & RBAC Granulaire - Fatima (Phase 2) ===
     epic-7: in-progress
@@ -249,3 +250,25 @@ development_status:
     18-6-erreur-integration-afficher-statut-erreur: done # Intégration erreur → statut erreur visible (pas "soumis") — 10 tests (8 backend + 2 frontend), AC1-AC10 validés
     18-7-correction-tests-en-echec: done # 934/1135 tests pass (82.4%) — AC8 95% not met, 200 failures documented in KNOWN_ISSUES.md
     epic-18-retrospective: optional
+    # === Epic 19: UX — Vue d'exécution temps réel (Phase 2) ===
+    # Remplacer popup "action démarrée" par vue immersive : action simple = timeline + logs ; workflow = graphe visuel + étape active + clic = détail
+    epic-19: in-progress
+    19-0-simulation-execution-dev-mode: done # Code review 2026-02-08: 10 issues (4 HIGH + 4 MEDIUM + 2 LOW), 6 auto-fixes, 27 backend + 42 frontend tests pass ✅
+    19-1-vue-execution-action-simple-timeline-logs: done # 2026-02-08: ExecutionView drawer + timeline visuels améliorés, 113 tests pass
+    19-2-vue-execution-workflow-apercu-visuel-etape-active: backlog
+    19-3-detail-etape-workflow-timeline-logs-au-clic: backlog
+    19-4-integration-remplacement-popup-ouverture-vue-execution: backlog
+    19-5-differenciation-action-vs-workflow-page-execution: backlog # Badge/icône/libellé type dans la vue d'exécution
+    epic-19-retrospective: optional
+    # === Epic 20: Action items et suivi — Restant des stories "done" ===
+    # Consolidation des follow-ups, known issues et action items documentés dans les stories marquées done
+    epic-20: backlog
+    20-1-corriger-fixtures-user-tests-catalog-workflow: backlog # KNOWN ISSUES 17.4, 18.7 — 40+ catalog, 3 workflow_runtime, AC8 95%
+    20-2-m4-validation-parite-contractuelle-environnement-tests: backlog # Action items M-4 (Task 12, env, docs, ExecutionService.get_action_stats)
+    20-3-migrer-retry-vers-celery-asynchrone: backlog # 16-4 H4 — time.sleep bloquant, Celery apply_async
+    20-4-executionwizard-phase4-optimisations-metriques: backlog # 17-2 Phase 4 — <300 lignes, usePatternResolver, coverage, bundle size
+    20-5-epic-m-checklist-adrs-couverture-tests: backlog # Rétro Epic M — checklist endpoints, ADRs, 85% M-5/M-6
+    20-6-finaliser-workflow-conteneur-tasks-3-4-6: backlog # 5-7 — execution engine, admin UI, tests
+    20-7-m10-et-17-12-followups-non-bloquants: backlog # WebSocket test, CI/CD, Redis pub/sub feature flags
+    20-8-documentation-conformite-15-4-17-16: backlog # Signatures rapports, 3 CRITICAL 17-16
+    epic-20-retrospective: optional
