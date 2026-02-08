@@ -107,22 +107,25 @@ describe('ExecutionView', () => {
     });
   });
 
-  it('AC10: shows "Action" badge when workflow_id is null/undefined', async () => {
+  it('AC10/19.5: shows engine-specific icon for action (default engine)', async () => {
     render(<ExecutionView executionId={1} onClose={vi.fn()} />, { wrapper: Wrapper });
 
     await waitFor(() => {
-      expect(screen.getByText('Action')).toBeInTheDocument();
+      // Default engine (null) → HddOutlined fallback icon with aria-label
+      const icon = screen.getByLabelText('Type: Action inconnu');
+      expect(icon).toBeInTheDocument();
     });
   });
 
-  it('AC10: shows "Workflow" badge when item_type is workflow', async () => {
+  it('AC10/19.5: shows ApartmentOutlined icon for workflow', async () => {
     const workflowExecution = { ...mockExecution, item_type: 'workflow' as const };
     vi.mocked(executionService.getExecution).mockResolvedValue(workflowExecution);
 
     render(<ExecutionView executionId={1} onClose={vi.fn()} />, { wrapper: Wrapper });
 
     await waitFor(() => {
-      expect(screen.getByText('Workflow')).toBeInTheDocument();
+      const icon = screen.getByLabelText('Type: Workflow');
+      expect(icon).toBeInTheDocument();
     });
   });
 
@@ -289,5 +292,113 @@ describe('ExecutionView', () => {
       expect(screen.getByText('Deploy App')).toBeInTheDocument();
     });
     expect(screen.queryByText(/Remédiation de/)).not.toBeInTheDocument();
+  });
+
+  // Story 19.5: Engine-specific type icon tests
+  describe('Story 19.5: Badge type action vs workflow', () => {
+    it('AC1: affiche icône DatabaseOutlined pour action Oracle', async () => {
+      const oracleExecution = { ...mockExecution, engine: 'Oracle' as const, item_type: 'action' as const };
+      vi.mocked(executionService.getExecution).mockResolvedValue(oracleExecution);
+
+      render(<ExecutionView executionId={1} onClose={vi.fn()} />, { wrapper: Wrapper });
+
+      await waitFor(() => {
+        const icon = screen.getByLabelText('Type: Action Oracle');
+        expect(icon).toBeInTheDocument();
+        expect(icon.closest('.anticon-database')).toBeTruthy();
+      });
+    });
+
+    it('AC1: affiche icône CloudServerOutlined pour action SQL Server', async () => {
+      const sqlExecution = { ...mockExecution, engine: 'SQL Server' as const, item_type: 'action' as const };
+      vi.mocked(executionService.getExecution).mockResolvedValue(sqlExecution);
+
+      render(<ExecutionView executionId={1} onClose={vi.fn()} />, { wrapper: Wrapper });
+
+      await waitFor(() => {
+        const icon = screen.getByLabelText('Type: Action SQL Server');
+        expect(icon).toBeInTheDocument();
+        expect(icon.closest('.anticon-cloud-server')).toBeTruthy();
+      });
+    });
+
+    it('AC1: affiche icône HddOutlined pour action DB2', async () => {
+      const db2Execution = { ...mockExecution, engine: 'DB2' as const, item_type: 'action' as const };
+      vi.mocked(executionService.getExecution).mockResolvedValue(db2Execution);
+
+      render(<ExecutionView executionId={1} onClose={vi.fn()} />, { wrapper: Wrapper });
+
+      await waitFor(() => {
+        const icon = screen.getByLabelText('Type: Action DB2');
+        expect(icon).toBeInTheDocument();
+        expect(icon.closest('.anticon-hdd')).toBeTruthy();
+      });
+    });
+
+    it('AC2: affiche icône ApartmentOutlined violet pour workflow', async () => {
+      const workflowExecution = { ...mockExecution, item_type: 'workflow' as const };
+      vi.mocked(executionService.getExecution).mockResolvedValue(workflowExecution);
+
+      render(<ExecutionView executionId={1} onClose={vi.fn()} />, { wrapper: Wrapper });
+
+      await waitFor(() => {
+        const icon = screen.getByLabelText('Type: Workflow');
+        expect(icon).toBeInTheDocument();
+        expect(icon.closest('.anticon-apartment')).toBeTruthy();
+      });
+    });
+
+    it('AC4: tooltip "Action Oracle" apparaît au survol', async () => {
+      const oracleExecution = { ...mockExecution, engine: 'Oracle' as const, item_type: 'action' as const };
+      vi.mocked(executionService.getExecution).mockResolvedValue(oracleExecution);
+
+      render(<ExecutionView executionId={1} onClose={vi.fn()} />, { wrapper: Wrapper });
+
+      await waitFor(() => screen.getByLabelText('Type: Action Oracle'));
+
+      // Hover over icon to trigger tooltip
+      const icon = screen.getByLabelText('Type: Action Oracle');
+      await userEvent.hover(icon);
+
+      await waitFor(() => {
+        expect(screen.getByRole('tooltip')).toHaveTextContent('Action Oracle');
+      });
+    });
+
+    it('AC4: tooltip "Workflow (chaîne d\'actions)" apparaît au survol', async () => {
+      const workflowExecution = { ...mockExecution, item_type: 'workflow' as const };
+      vi.mocked(executionService.getExecution).mockResolvedValue(workflowExecution);
+
+      render(<ExecutionView executionId={1} onClose={vi.fn()} />, { wrapper: Wrapper });
+
+      await waitFor(() => screen.getByLabelText('Type: Workflow'));
+
+      const icon = screen.getByLabelText('Type: Workflow');
+      await userEvent.hover(icon);
+
+      await waitFor(() => {
+        expect(screen.getByRole('tooltip')).toHaveTextContent("Workflow (chaîne d'actions)");
+      });
+    });
+
+    it('AC7: badge type et badge remédiation cohabitent', async () => {
+      const remediationExecution = {
+        ...mockExecution,
+        engine: 'Oracle' as const,
+        item_type: 'action' as const,
+        parent_execution_id: 42,
+      };
+      vi.mocked(executionService.getExecution).mockResolvedValue(remediationExecution);
+
+      render(<ExecutionView executionId={1} onClose={vi.fn()} />, { wrapper: Wrapper });
+
+      await waitFor(() => {
+        // Type icon present
+        const icon = screen.getByLabelText('Type: Action Oracle');
+        expect(icon).toBeInTheDocument();
+        // Remediation badge present
+        expect(screen.getByText('Remédiation de #42')).toBeInTheDocument();
+      });
+    });
   });
 });

@@ -18,7 +18,8 @@ import { ExecutionTimeline } from './ExecutionTimeline';
 import { WorkflowExecutionGraph } from './WorkflowExecutionGraph';
 import { getExecution } from '../../services/execution_service';
 import { getAction } from '../../services/admin_service';
-import type { ExecutionResponse, ExecutionStatusType, RemediationSuggestion, ActionDetail } from '../../types/api';
+import type { ExecutionResponse, ExecutionStatusType, RemediationSuggestion, ActionDetail, ActionEngine } from '../../types/api';
+import { getItemTypeIcon } from '../../utils/iconHelpers';
 import logger from '../../services/logger';
 
 const { Text, Title } = Typography;
@@ -60,6 +61,14 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
 
   // AC1/AC10: Detect type (action simple vs workflow)
   const isWorkflow = execution?.item_type === 'workflow';
+
+  // Story 19.5: Engine-specific icon with tooltip (AC1-5)
+  const engine: ActionEngine | null = (execution?.engine as ActionEngine) || null;
+  const { icon: typeIcon } = getItemTypeIcon(
+    execution?.item_type,
+    engine,
+    { withTooltip: true, fontSize: 20 },
+  );
 
   // Story 19.4 AC10: Focus management — move focus to close button when drawer opens
   useEffect(() => {
@@ -194,13 +203,8 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
           <Space orientation="vertical" size={8} style={{ width: '100%' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <Space size={8} align="center">
-                {/* AC10: Badge type action/workflow */}
-                <Badge
-                  count={isWorkflow ? 'Workflow' : 'Action'}
-                  style={{
-                    backgroundColor: isWorkflow ? '#722ed1' : '#10B981',
-                  }}
-                />
+                {/* Story 19.5 AC1-5: Engine-specific icon with tooltip */}
+                {typeIcon}
                 <Title level={4} style={{ margin: 0 }}>
                   {execution.action_name ?? `Exécution #${execution.id}`}
                 </Title>
