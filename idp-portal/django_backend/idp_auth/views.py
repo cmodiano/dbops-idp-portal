@@ -11,6 +11,7 @@ from django.shortcuts import redirect
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated, AllowAny
 
 from idp_auth.models import User
@@ -131,6 +132,7 @@ class SAMLCallbackView(APIView):
     POST /auth/saml/callback - Receive SAML assertion from IdP.
     Validates assertion, creates/updates user, emits JWT tokens.
     """
+    parser_classes = [FormParser, MultiPartParser]
     permission_classes = [AllowAny]
     throttle_classes = [AuthEndpointThrottle]
 
@@ -316,12 +318,10 @@ class CurrentUserProfileView(APIView):
         navigation_tabs = get_user_navigation_permissions(profile_name)
         if navigation_tabs is None:
             navigation_tabs = []
-        # Convert to list if needed and inject 'audit' for auditors (avoid creating new list if possible)
+        else:
+            navigation_tabs = list(navigation_tabs)  # Copy to avoid mutating global
         if is_auditor and 'audit' not in navigation_tabs:
-            if isinstance(navigation_tabs, list):
-                navigation_tabs.append('audit')
-            else:
-                navigation_tabs = list(navigation_tabs) + ['audit']
+            navigation_tabs.append('audit')
 
         # Build user profile data
         profile_data = {

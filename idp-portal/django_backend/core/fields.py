@@ -46,10 +46,13 @@ class OracleJSONField(models.TextField):
         """
         Deserialize JSON from Oracle CLOB after SELECT.
 
+        Treats empty/whitespace string as None (DB may contain "" from legacy data).
         Returns None on deserialization error (permissive mode) to avoid breaking
-        queries when DB contains corrupted/legacy data. Logs warning for debugging.
+        queries when DB contains corrupted data. Logs warning for debugging.
         """
         if value is None:
+            return None
+        if isinstance(value, str) and not value.strip():
             return None
         if isinstance(value, (dict, list)):
             return value

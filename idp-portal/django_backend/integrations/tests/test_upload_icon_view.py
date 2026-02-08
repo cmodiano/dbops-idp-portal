@@ -44,7 +44,7 @@ class TestUploadIconView(TestCase):
         )
         
         response = self.client.post(
-            '/api/v1/admin/integrations/upload-icon',
+            '/api/v1/admin/integrations/upload-icon/',
             {'file': png_file},
             format='multipart'
         )
@@ -66,7 +66,7 @@ class TestUploadIconView(TestCase):
         )
         
         response = self.client.post(
-            '/api/v1/admin/integrations/upload-icon',
+            '/api/v1/admin/integrations/upload-icon/',
             {'file': jpeg_file},
             format='multipart'
         )
@@ -88,7 +88,7 @@ class TestUploadIconView(TestCase):
         )
         
         response = self.client.post(
-            '/api/v1/admin/integrations/upload-icon',
+            '/api/v1/admin/integrations/upload-icon/',
             {'file': svg_file},
             format='multipart'
         )
@@ -109,7 +109,7 @@ class TestUploadIconView(TestCase):
         )
         
         response = self.client.post(
-            '/api/v1/admin/integrations/upload-icon',
+            '/api/v1/admin/integrations/upload-icon/',
             {'file': invalid_file},
             format='multipart'
         )
@@ -130,7 +130,7 @@ class TestUploadIconView(TestCase):
         )
         
         response = self.client.post(
-            '/api/v1/admin/integrations/upload-icon',
+            '/api/v1/admin/integrations/upload-icon/',
             {'file': large_file},
             format='multipart'
         )
@@ -144,7 +144,7 @@ class TestUploadIconView(TestCase):
         self.client.force_authenticate(user=self.dbops_user)
         
         response = self.client.post(
-            '/api/v1/admin/integrations/upload-icon',
+            '/api/v1/admin/integrations/upload-icon/',
             {},
             format='multipart'
         )
@@ -164,7 +164,7 @@ class TestUploadIconView(TestCase):
         )
         
         response = self.client.post(
-            '/api/v1/admin/integrations/upload-icon',
+            '/api/v1/admin/integrations/upload-icon/',
             {'file': png_file},
             format='multipart'
         )

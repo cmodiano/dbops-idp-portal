@@ -93,7 +93,7 @@ describe('useTargetInventory', () => {
     expect(result.current.loadingInventory).toBe(false);
   });
 
-  it('resolvedPatternTargets starts empty', () => {
+  it('does not expose pattern resolution (moved to usePatternResolver)', () => {
     const { result } = renderHook(() =>
       useTargetInventory({
         open: true,
@@ -103,7 +103,10 @@ describe('useTargetInventory', () => {
       })
     );
 
-    expect(result.current.resolvedPatternTargets).toEqual([]);
-    expect(result.current.patternResolving).toBe(false);
+    // Verify no pattern-related properties exist (Story 20.4: extracted)
+    const returnValue = result.current;
+    expect(returnValue).not.toHaveProperty('resolvedPatternTargets');
+    expect(returnValue).not.toHaveProperty('patternResolving');
+    expect(returnValue).not.toHaveProperty('resolvePattern');
   });
 });

@@ -27,6 +27,7 @@ from executions.workflow_runtime import (
 from executions.models import Execution, ExecutionStatus, ExecutionStep, ExecutionStepStatus
 from catalog.models import Action, ActionStatus, ActionItemType
 from idp_auth.models import User
+from tests.factories import UserFactory, ActionFactory
 
 
 @pytest.mark.django_db
@@ -77,11 +78,11 @@ class TestWorkflowRuntimeResolveNextStep:
 
     def setup_method(self):
         """Create test workflow with branches."""
-        self.user = User.objects.create(
+        self.user = UserFactory(
             username="test_user"
         )
 
-        self.action = Action.objects.create(
+        self.action = ActionFactory(
             name="Test Workflow",
             category="Administration",
             engine="Oracle",
@@ -169,7 +170,7 @@ class TestWorkflowRuntimeResolveNextStep:
     def test_resolve_next_step_backward_compat_linear(self):
         """Backward compat: Linear workflow without branches."""
         # Create linear workflow (no on_success_step_id/on_error_step_id)
-        linear_action = Action.objects.create(
+        linear_action = ActionFactory(
             name="Linear Workflow",
             category="Administration",
             engine="Oracle",
@@ -215,7 +216,7 @@ class TestWorkflowRuntimeResolveNextStep:
         This catches a subtle retro-compat bug where the presence of only one branch key
         caused success-path resolution to incorrectly return None (AC1).
         """
-        action = Action.objects.create(
+        action = ActionFactory(
             name="Partial Branch Workflow",
             category="Administration",
             engine="Oracle",
@@ -249,13 +250,29 @@ class TestWorkflowRuntimeExecution:
 
     def setup_method(self):
         """Create test workflow."""
-        self.user = User.objects.create(
+        self.user = UserFactory(
             username="test_user"
         )
 
     def test_workflow_execution_success_path(self):
         """Test successful workflow execution following success path."""
-        action = Action.objects.create(
+        # Create referenced actions for workflow steps
+        ref_action_1 = ActionFactory(
+            name="Ref Action 1",
+            category="Administration",
+            engine="Oracle",
+            platform="AAP",
+            status=ActionStatus.PUBLISHED,
+        )
+        ref_action_2 = ActionFactory(
+            name="Ref Action 2",
+            category="Administration",
+            engine="Oracle",
+            platform="AAP",
+            status=ActionStatus.PUBLISHED,
+        )
+
+        action = ActionFactory(
             name="Success Workflow",
             category="Administration",
             engine="Oracle",
@@ -270,6 +287,7 @@ class TestWorkflowRuntimeExecution:
                 "step_id": "step-1",
                 "order": 1,
                 "name": "First Step",
+                "referenced_action_id": ref_action_1.id,
                 "on_success_step_id": "step-2",
                 "on_error_step_id": None,
             },
@@ -277,6 +295,7 @@ class TestWorkflowRuntimeExecution:
                 "step_id": "step-2",
                 "order": 2,
                 "name": "Second Step",
+                "referenced_action_id": ref_action_2.id,
                 "on_success_step_id": None,  # End on success
                 "on_error_step_id": None,
             },
@@ -318,7 +337,30 @@ class TestWorkflowRuntimeExecution:
 
     def test_workflow_execution_error_path(self):
         """Test workflow execution following error path."""
-        action = Action.objects.create(
+        # Create referenced actions for workflow steps
+        ref_action_1 = ActionFactory(
+            name="Ref Fail Action",
+            category="Administration",
+            engine="Oracle",
+            platform="AAP",
+            status=ActionStatus.PUBLISHED,
+        )
+        ref_action_2 = ActionFactory(
+            name="Ref Success Action",
+            category="Administration",
+            engine="Oracle",
+            platform="AAP",
+            status=ActionStatus.PUBLISHED,
+        )
+        ref_action_err = ActionFactory(
+            name="Ref Error Handler",
+            category="Administration",
+            engine="Oracle",
+            platform="AAP",
+            status=ActionStatus.PUBLISHED,
+        )
+
+        action = ActionFactory(
             name="Error Workflow",
             category="Administration",
             engine="Oracle",
@@ -333,6 +375,7 @@ class TestWorkflowRuntimeExecution:
                 "step_id": "step-1",
                 "order": 1,
                 "name": "Failing Step",
+                "referenced_action_id": ref_action_1.id,
                 "on_success_step_id": "step-2",
                 "on_error_step_id": "step-error",
             },
@@ -340,6 +383,7 @@ class TestWorkflowRuntimeExecution:
                 "step_id": "step-2",
                 "order": 2,
                 "name": "Success Step (skipped)",
+                "referenced_action_id": ref_action_2.id,
                 "on_success_step_id": None,
                 "on_error_step_id": None,
             },
@@ -347,6 +391,7 @@ class TestWorkflowRuntimeExecution:
                 "step_id": "step-error",
                 "order": 3,
                 "name": "Error Handler",
+                "referenced_action_id": ref_action_err.id,
                 "on_success_step_id": None,
                 "on_error_step_id": None,
             },
@@ -406,7 +451,23 @@ class TestWorkflowRuntimeExecution:
 
     def test_workflow_loop_detection(self):
         """AC5: Detect infinite loop and fail after 100 transitions."""
-        action = Action.objects.create(
+        # Create referenced actions for workflow steps
+        ref_action_1 = ActionFactory(
+            name="Ref Loop Action 1",
+            category="Administration",
+            engine="Oracle",
+            platform="AAP",
+            status=ActionStatus.PUBLISHED,
+        )
+        ref_action_2 = ActionFactory(
+            name="Ref Loop Action 2",
+            category="Administration",
+            engine="Oracle",
+            platform="AAP",
+            status=ActionStatus.PUBLISHED,
+        )
+
+        action = ActionFactory(
             name="Loop Workflow",
             category="Administration",
             engine="Oracle",
@@ -421,6 +482,7 @@ class TestWorkflowRuntimeExecution:
                 "step_id": "step-1",
                 "order": 1,
                 "name": "Step 1",
+                "referenced_action_id": ref_action_1.id,
                 "on_success_step_id": "step-2",
                 "on_error_step_id": None,
             },
@@ -428,6 +490,7 @@ class TestWorkflowRuntimeExecution:
                 "step_id": "step-2",
                 "order": 2,
                 "name": "Step 2",
+                "referenced_action_id": ref_action_2.id,
                 "on_success_step_id": "step-1",  # Loop back
                 "on_error_step_id": None,
             },
@@ -462,7 +525,7 @@ class TestWorkflowRuntimeExecution:
 
     def test_workflow_empty_fails(self):
         """Test workflow with no steps fails immediately."""
-        action = Action.objects.create(
+        action = ActionFactory(
             name="Empty Workflow",
             category="Administration",
             engine="Oracle",
@@ -498,17 +561,17 @@ class TestWorkflowRuntimeStory412StepParameters:
     """Story 4.12 AC5/AC6: workflow_step_parameters injection and audit in step output."""
 
     def setup_method(self):
-        self.user = User.objects.create(username="story412_user")
+        self.user = UserFactory(username="story412_user")
 
         # Create referenced actions for workflow steps
-        self.ref_action_1 = Action.objects.create(
+        self.ref_action_1 = ActionFactory(
             name="Referenced Action 1",
             category="Administration",
             engine="Oracle",
             platform="AAP",
             status=ActionStatus.PUBLISHED,
         )
-        self.ref_action_2 = Action.objects.create(
+        self.ref_action_2 = ActionFactory(
             name="Referenced Action 2",
             category="Administration",
             engine="Oracle",
@@ -517,7 +580,7 @@ class TestWorkflowRuntimeStory412StepParameters:
         )
 
         # Create workflow with steps referencing the actions
-        self.action = Action.objects.create(
+        self.action = ActionFactory(
             name="Workflow With Params",
             category="Administration",
             engine="Oracle",
@@ -610,7 +673,7 @@ class TestWorkflowRuntimeStory412StepParameters:
     def test_step_loads_referenced_action_and_prepares_adapter_payload(self):
         """AC5 COMPLETE: Step loads referenced action and prepares full adapter payload."""
         # Create a referenced action with platform AAP
-        ref_action = Action.objects.create(
+        ref_action = ActionFactory(
             name="Referenced AAP Action",
             category="Administration",
             engine="Oracle",
@@ -619,7 +682,7 @@ class TestWorkflowRuntimeStory412StepParameters:
         )
 
         # Create workflow with step referencing the action
-        workflow = Action.objects.create(
+        workflow = ActionFactory(
             name="Workflow AC5 Test",
             category="Administration",
             engine="Oracle",
@@ -639,7 +702,7 @@ class TestWorkflowRuntimeStory412StepParameters:
         workflow.save()
 
         # Create execution with step parameters
-        user = User.objects.create(username="ac5_test_user")
+        user = UserFactory(username="ac5_test_user")
         execution = Execution.objects.create(
             action=workflow,
             user=user,

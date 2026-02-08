@@ -9,6 +9,7 @@ from rest_framework.test import APIClient
 from idp_auth.models import User
 from catalog.models import Action, ActionStatus, ActionItemType, ActionEngine, ActionPlatform
 from catalog.serializers import ActionSerializer
+from tests.factories import UserFactory
 
 
 @pytest.mark.django_db
@@ -18,7 +19,7 @@ class TestWorkflowStepActionName(TestCase):
     def setUp(self):
         """Set up test data with a workflow referencing other actions."""
         self.client = APIClient()
-        self.user = User.objects.create(
+        self.user = UserFactory(
             username='testuser_18_3',
             profile='admin',
         )

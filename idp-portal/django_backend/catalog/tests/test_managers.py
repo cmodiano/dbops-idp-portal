@@ -8,6 +8,7 @@ from django.utils import timezone
 from idp_auth.models import User
 from integrations.models import Integration
 from catalog.models import Action, Tag, ActionTag, ActionStatus, ActionItemType
+from tests.factories import UserFactory
 
 
 @pytest.mark.django_db
@@ -16,7 +17,7 @@ class TestActionManager(TestCase):
     
     def setUp(self):
         """Set up test data."""
-        self.user = User.objects.create(
+        self.user = UserFactory(
             username='testuser',
             profile='DBA'
         )
@@ -181,7 +182,7 @@ class TestActionManagerAdvanced(TestCase):
 
     def setUp(self):
         """Set up test data."""
-        self.user = User.objects.create(username='testuser_adv', profile='DBA')
+        self.user = UserFactory(username='testuser_adv', profile='DBA')
         self.integration = Integration.objects.create(
             type='aap',
             name='Test AAP Adv',

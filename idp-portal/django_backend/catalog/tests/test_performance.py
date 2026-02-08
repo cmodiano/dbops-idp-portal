@@ -17,6 +17,7 @@ from rest_framework import status
 from idp_auth.models import User
 from catalog.models import Action, Tag, ActionTag, ActionStatus, UserFavorite
 from catalog.views import _catalog_cache, _tags_cache
+from tests.factories import UserFactory
 
 
 def _log_queries(context, label=""):
@@ -38,7 +39,7 @@ class TestCatalogActionsPerformance(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Seed data: 20 actions publiées, 10 tags, associations variées."""
-        cls.user = User.objects.create(username='perfuser', profile='DBA')
+        cls.user = UserFactory(username='perfuser', profile='DBA')
 
         # Create tags
         cls.tags = []
@@ -154,7 +155,7 @@ class TestCatalogTagsPerformance(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Seed data for tags endpoint audit."""
-        cls.user = User.objects.create(username='tagsuser', profile='DBA')
+        cls.user = UserFactory(username='tagsuser', profile='DBA')
 
         cls.tags = []
         for i in range(10):
@@ -220,7 +221,7 @@ class TestFavoritesPerformance(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Seed data for favorites endpoint audit."""
-        cls.user = User.objects.create(username='favuser', profile='DBA')
+        cls.user = UserFactory(username='favuser', profile='DBA')
 
         cls.actions = []
         for i in range(10):
@@ -288,7 +289,7 @@ class TestNoPlusOneRegression(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.user = User.objects.create(username='n1user', profile='DBA')
+        cls.user = UserFactory(username='n1user', profile='DBA')
 
         cls.tags = [Tag.objects.create(name=f'n1tag{i}') for i in range(5)]
 

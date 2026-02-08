@@ -24,5 +24,11 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: './src/test-setup.ts',
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json'],
+      include: ['src/hooks/**/*.ts', 'src/components/**/*.tsx'],
+      exclude: ['**/*.test.ts', '**/*.test.tsx', '**/node_modules/**', 'src/test-setup.ts'],
+    },
   },
 });

@@ -11,12 +11,10 @@ profiles_router = DefaultRouter()
 profiles_router.register(r'profiles', views.ProfileViewSet, basename='profile')
 
 urlpatterns = [
+    # Export/Import YAML: MUST be before router to avoid matching as detail routes
+    path('profiles/export/', views.ProfileExportView.as_view(), name='profile-export'),
+    path('profiles/import/', views.ProfileImportView.as_view(), name='profile-import'),
+
     # Profiles CRUD: /api/v1/admin/profiles/*
     path('', include(profiles_router.urls)),
-    
-    # Export YAML: /api/v1/admin/profiles/export
-    path('profiles/export/', views.ProfileExportView.as_view(), name='profile-export'),
-
-    # Import YAML: /api/v1/admin/profiles/import
-    path('profiles/import/', views.ProfileImportView.as_view(), name='profile-import'),
 ]

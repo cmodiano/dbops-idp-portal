@@ -186,6 +186,45 @@ describe('WorkflowStepNode', () => {
     });
   });
 
+  // Story 19.2: Execution status tooltip
+  describe('execution status tooltip (Story 19.2)', () => {
+    it('AC10: renders node with executionStatus data', () => {
+      render(
+        <WorkflowStepNode
+          {...makeProps({
+            executionStatus: 'COMPLETED',
+            executionDuration: '1m 30s',
+          })}
+        />,
+      );
+      // Node renders correctly with execution data
+      expect(screen.getByText('Create PDB')).toBeInTheDocument();
+    });
+
+    it('AC10: renders node with RUNNING status', () => {
+      render(
+        <WorkflowStepNode
+          {...makeProps({
+            executionStatus: 'RUNNING',
+            executionDuration: null,
+          })}
+        />,
+      );
+      expect(screen.getByText('Create PDB')).toBeInTheDocument();
+    });
+
+    it('AC10: renders node with PENDING status (no duration)', () => {
+      render(
+        <WorkflowStepNode
+          {...makeProps({
+            executionStatus: 'PENDING',
+          })}
+        />,
+      );
+      expect(screen.getByText('Create PDB')).toBeInTheDocument();
+    });
+  });
+
   // Story 18.3, AC4: Real action name display
   describe('action name display (Story 18.3)', () => {
     it('displays real action_name "Apply Oracle Patch"', () => {

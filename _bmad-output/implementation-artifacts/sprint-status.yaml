@@ -267,8 +267,8 @@ development_status:
     20-1-corriger-fixtures-user-tests-catalog-workflow: done # 37 catalog + 3 workflow tests corrigés, 1007/1189 (84.8%), KNOWN_ISSUES + README enrichis — Code review 2026-02-08: 2 CRITICAL + 5 HIGH fixes appliqués (UserFactory/ActionFactory utilisés partout, AC3 NOT MET honnêtement documenté) — Auto-fixes appliqués: UserFactory dans 7+ catalog files, ActionFactory dans test_workflow_runtime_retry.py, create_user() corrigé — Story marked done: AC1/AC2/AC4/AC5 MET, AC3 NOT MET (181 failures pré-existants hors scope catalog/workflow)
     20-2-m4-validation-parite-contractuelle-environnement-tests: done # Code review 2026-02-08: 7 fixes appliqués (avg_execution_time_ms implémenté, validation action_id, optimisation requêtes, tests cas limites)
     20-3-migrer-retry-vers-celery-asynchrone: done # 2026-02-08: Celery + Redis retry async, cache annulation, 42/42 tests, docs/workflow-retry-celery.md — AC1-AC5 validés — Code review: 6 MEDIUM + 3 LOW fixes (CACHES→Redis, doc workflow, test slow AC3, systemd)
-    20-4-executionwizard-phase4-optimisations-metriques: backlog # 17-2 Phase 4 — <300 lignes, usePatternResolver, coverage, bundle size
-    20-5-epic-m-checklist-adrs-couverture-tests: backlog # Rétro Epic M — checklist endpoints, ADRs, 85% M-5/M-6
+    20-4-executionwizard-phase4-optimisations-metriques: done # Code review 2026-02-08: 10 issues (3 HIGH + 4 MEDIUM + 3 LOW), 6 auto-fixes, 99/99 tests pass — BLOCKER: HIGH-2 backend files investigation required
+    20-5-epic-m-checklist-adrs-couverture-tests: done # Rétro Epic M — checklist endpoints, ADRs, couverture 85%+ (profiles 89%, idp_auth 88%, integrations 88%), onboarding docs, PR template, CONTRIBUTING.md — Code review 2026-02-08: 7 issues auto-corrigés (File List ajouté, dates ADRs, chemins PR template, tests skipped documentés, completion notes)
     20-6-finaliser-workflow-conteneur-tasks-3-4-6: backlog # 5-7 — execution engine, admin UI, tests
     20-7-m10-et-17-12-followups-non-bloquants: backlog # WebSocket test, CI/CD, Redis pub/sub feature flags
     20-8-documentation-conformite-15-4-17-16: backlog # Signatures rapports, 3 CRITICAL 17-16

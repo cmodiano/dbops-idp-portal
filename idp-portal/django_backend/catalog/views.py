@@ -780,39 +780,17 @@ class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
                     details={"action_id": action.id}
                 )
         
-        # TODO: Use ExecutionService.get_action_stats() when implemented
-        # For now, return None (AC3: "Pas encore de donnees")
-        from executions.models import Execution, ExecutionStatus
-        from django.utils import timezone
-        from datetime import timedelta
-        
-        # Calculate stats over last 30 days
-        date_from = timezone.now() - timedelta(days=30)
-        executions = Execution.objects.filter(
-            action_id=action.id,
-            created_at__gte=date_from
-        )
-        
-        total = executions.count()
-        if total == 0:
-            return Response({"data": None})
-        
-        completed = executions.filter(status=ExecutionStatus.COMPLETED).count()
-        failed = executions.filter(status=ExecutionStatus.FAILED).count()
-        
-        # Calculate success rate
-        success_rate = (completed / (completed + failed) * 100) if (completed + failed) > 0 else None
-        
-        # Calculate avg execution time (simplified - would need proper calculation)
-        avg_time_ms = None
-        
-        stats = {
-            "success_rate": round(success_rate, 2) if success_rate is not None else None,
-            "avg_execution_time_ms": avg_time_ms,
-            "total_executions": total,
-            "incidents_count": failed
-        }
-        
+        from executions.services import ExecutionService
+        execution_service = ExecutionService()
+        try:
+            stats = execution_service.get_action_stats(action.id, days=30)
+        except ValueError as e:
+            # CRITICAL-3: Handle invalid action_id (should not happen since get_object() validated it)
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message=str(e),
+                details={"action_id": action.id}
+            )
         return Response({"data": stats})
 
 

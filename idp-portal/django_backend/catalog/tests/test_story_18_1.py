@@ -14,14 +14,15 @@ from catalog.models import Action, ActionStatus, ActionItemType, Tag, ActionTag
 from catalog.services import CatalogService
 from core.exceptions import ConflictError
 from core.models import AuditLog
+from tests.factories import UserFactory
 
 
 def _create_dbops_user(username='dbops_user'):
-    return User.objects.create(username=username, profile='dbops')
+    return UserFactory(username=username, profile='dbops')
 
 
 def _create_regular_user(username='regular_user'):
-    return User.objects.create(username=username, profile='dba')
+    return UserFactory(username=username, profile='dba')
 
 
 def _create_action(name='Test Action', user=None, item_type='action', action_status='draft'):

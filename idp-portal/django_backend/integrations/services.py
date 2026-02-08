@@ -12,6 +12,7 @@ from django.db import IntegrityError
 from integrations.models import Integration
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
+from core.exceptions import InvalidStateError
 from core.middleware import get_correlation_id
 
 logger = structlog.get_logger(__name__)

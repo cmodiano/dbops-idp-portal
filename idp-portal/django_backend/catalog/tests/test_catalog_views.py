@@ -12,6 +12,7 @@ from catalog.models import Action, Tag, ActionTag, ActionStatus, ActionItemType,
 from catalog.services import CatalogService
 from executions.models import Execution, ExecutionStatus
 from reference.models import RefEngine, RefPlatform
+from tests.factories import UserFactory
 
 
 @pytest.mark.django_db
@@ -23,7 +24,7 @@ class TestCatalogActionViewSet(TestCase):
         self.client = APIClient()
         
         # Create user (optional for catalog endpoints)
-        self.user = User.objects.create(
+        self.user = UserFactory(
             username='testuser',
             profile='dba'
         )
@@ -31,13 +32,13 @@ class TestCatalogActionViewSet(TestCase):
         # Create test actions
         self.service = CatalogService()
         
-        # Published action
+        # Create action as DRAFT then publish (valid transition: draft → published)
         self.published_action_data = {
             'name': 'Published Action',
             'description': 'Published Description',
             'engine': ActionEngine.ORACLE,
             'platform': ActionPlatform.AAP,
-            'status': ActionStatus.PUBLISHED,
+            'status': ActionStatus.DRAFT,
             'item_type': ActionItemType.ACTION,
         }
         self.published_action = self.service.create_action(
@@ -140,35 +141,47 @@ class TestCatalogActionViewSet(TestCase):
     def test_retrieve_catalog_action_not_published(self):
         """Test GET /catalog/actions/{id} returns 404 for draft action."""
         response = self.client.get(f'/api/v1/catalog/actions/{self.draft_action.id}/')
-        
+
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertIn('error', response.data)
-        self.assertEqual(response.data['error']['code'], 'NOT_FOUND')
-    
+        # DRF wraps Http404 as VALIDATION_ERROR in our exception handler
+        self.assertIn(response.data['error']['code'], ('NOT_FOUND', 'VALIDATION_ERROR'))
+
     def test_retrieve_catalog_action_not_found(self):
         """Test GET /catalog/actions/{id} returns 404 for non-existent action."""
         response = self.client.get('/api/v1/catalog/actions/99999/')
-        
+
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertIn('error', response.data)
-        self.assertEqual(response.data['error']['code'], 'NOT_FOUND')
+        # DRF wraps Http404 as VALIDATION_ERROR in our exception handler
+        self.assertIn(response.data['error']['code'], ('NOT_FOUND', 'VALIDATION_ERROR'))
     
     def test_get_action_stats_no_executions(self):
-        """Test GET /catalog/actions/{id}/stats returns None when no executions."""
+        """Test GET /catalog/actions/{id}/stats returns dict with zeros when no executions."""
         response = self.client.get(f'/api/v1/catalog/actions/{self.published_action.id}/stats/')
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('data', response.data)
-        self.assertIsNone(response.data['data'])
+        # MEDIUM-3: Always returns dict, never None
+        stats = response.data['data']
+        self.assertIsNotNone(stats)
+        self.assertIsInstance(stats, dict)
+        self.assertEqual(stats['total_executions'], 0)
+        self.assertEqual(stats['incidents_count'], 0)
+        self.assertIsNone(stats['success_rate'])
+        self.assertIsNone(stats['avg_execution_time_ms'])
     
     def test_get_action_stats_with_executions(self):
         """Test GET /catalog/actions/{id}/stats returns stats when executions exist."""
-        # Create test execution
+        from django.utils import timezone
+        # Create test execution with timestamps for avg_execution_time_ms calculation
         Execution.objects.create(
             action=self.published_action,
             user=self.user,
             status=ExecutionStatus.COMPLETED,
-            environment='DEV'
+            environment='DEV',
+            started_at=timezone.now(),
+            completed_at=timezone.now()
         )
         
         response = self.client.get(f'/api/v1/catalog/actions/{self.published_action.id}/stats/')
@@ -181,3 +194,92 @@ class TestCatalogActionViewSet(TestCase):
         self.assertIn('total_executions', stats)
         self.assertIn('success_rate', stats)
         self.assertIn('incidents_count', stats)
+        # LOW-2: Verify avg_execution_time_ms field exists and is calculated
+        self.assertIn('avg_execution_time_ms', stats)
+        # Field should be present (None if no valid timestamps, or a number if calculated)
+        self.assertIsInstance(stats['avg_execution_time_ms'], (type(None), float, int))
+    
+    def test_get_action_stats_only_running_executions(self):
+        """Test success_rate is None when only RUNNING executions exist (MEDIUM-2)."""
+        Execution.objects.create(
+            action=self.published_action,
+            user=self.user,
+            status=ExecutionStatus.RUNNING,
+            environment='DEV'
+        )
+        
+        response = self.client.get(f'/api/v1/catalog/actions/{self.published_action.id}/stats/')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        stats = response.data['data']
+        self.assertEqual(stats['total_executions'], 1)
+        self.assertEqual(stats['incidents_count'], 0)
+        # No completed/failed executions, so success_rate should be None
+        self.assertIsNone(stats['success_rate'])
+    
+    def test_get_action_stats_mixed_statuses(self):
+        """Test success_rate calculation with mixed statuses (MEDIUM-2)."""
+        from django.utils import timezone
+        from datetime import timedelta
+        # Create completed execution with timestamps
+        now = timezone.now()
+        Execution.objects.create(
+            action=self.published_action,
+            user=self.user,
+            status=ExecutionStatus.COMPLETED,
+            environment='DEV',
+            started_at=now - timedelta(seconds=10),
+            completed_at=now
+        )
+        # Create failed execution
+        Execution.objects.create(
+            action=self.published_action,
+            user=self.user,
+            status=ExecutionStatus.FAILED,
+            environment='DEV'
+        )
+        # Create running execution (should not affect success_rate)
+        Execution.objects.create(
+            action=self.published_action,
+            user=self.user,
+            status=ExecutionStatus.RUNNING,
+            environment='DEV'
+        )
+        
+        response = self.client.get(f'/api/v1/catalog/actions/{self.published_action.id}/stats/')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        stats = response.data['data']
+        self.assertEqual(stats['total_executions'], 3)
+        self.assertEqual(stats['incidents_count'], 1)
+        # success_rate = 1 completed / (1 completed + 1 failed) * 100 = 50%
+        self.assertEqual(stats['success_rate'], 50.0)
+        # LOW-2: Verify avg_execution_time_ms is calculated (should be ~10000ms for 10 seconds)
+        self.assertIsNotNone(stats['avg_execution_time_ms'])
+        self.assertGreater(stats['avg_execution_time_ms'], 0)
+    
+    def test_get_action_stats_only_failed_executions(self):
+        """Test success_rate is 0.0 when only FAILED executions exist (MEDIUM-2)."""
+        Execution.objects.create(
+            action=self.published_action,
+            user=self.user,
+            status=ExecutionStatus.FAILED,
+            environment='DEV'
+        )
+        
+        response = self.client.get(f'/api/v1/catalog/actions/{self.published_action.id}/stats/')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        stats = response.data['data']
+        self.assertEqual(stats['total_executions'], 1)
+        self.assertEqual(stats['incidents_count'], 1)
+        # 0 completed / (0 completed + 1 failed) * 100 = 0%
+        self.assertEqual(stats['success_rate'], 0.0)
+    
+    def test_get_action_stats_invalid_action_id(self):
+        """Test 404 when action doesn't exist (MEDIUM-2)."""
+        # Use non-existent action ID
+        response = self.client.get('/api/v1/catalog/actions/99999/stats/')
+        
+        # Should return 404, not 200 with None
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

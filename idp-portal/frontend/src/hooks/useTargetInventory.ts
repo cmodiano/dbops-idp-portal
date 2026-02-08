@@ -1,15 +1,14 @@
 /**
- * useTargetInventory - Inventory and target fetching hook.
+ * useTargetInventory - Inventory fetching hook.
  * Extracted from ExecutionWizard.tsx (Story 17.2, Task 2.3).
+ * Refactored in Story 20.4: pattern resolution extracted to usePatternResolver.
  *
- * Manages inventory data loading, environment caching, and RBAC-filtered targets.
+ * Manages inventory data loading, environment caching. Single responsibility: fetch only.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { fetchInventoryItems, fetchInventoryTargets } from '../services/execution_service';
+import { useEffect, useRef, useState } from 'react';
+import { fetchInventoryItems } from '../services/execution_service';
 import type { InventoryItem } from '../types/api';
-import { useDebounce } from './useDebounce';
-import { matchGlob } from '../utils/globMatch';
 
 export type { Target } from '../components/catalog/TargetSelector';
 
@@ -26,9 +25,6 @@ export interface UseTargetInventoryReturn {
   inventoryData: Record<string, InventoryItem[]>;
   inventoryWarnings: Record<string, boolean>;
   loadingInventory: boolean;
-  resolvedPatternTargets: Array<{ name: string; environment: string }>;
-  patternResolving: boolean;
-  resolvePattern: (pattern: string, inputMode: string) => void;
 }
 
 export function useTargetInventory({
@@ -41,13 +37,7 @@ export function useTargetInventory({
   const [inventoryData, setInventoryData] = useState<Record<string, InventoryItem[]>>({});
   const [inventoryWarnings, setInventoryWarnings] = useState<Record<string, boolean>>({});
   const [loadingInventory, setLoadingInventory] = useState(false);
-  const [resolvedPatternTargets, setResolvedPatternTargets] = useState<Array<{ name: string; environment: string }>>([]);
-  const [patternResolving, setPatternResolving] = useState(false);
-  const [patternInput, setPatternInput] = useState('');
-  const [patternMode, setPatternMode] = useState('');
   const lastInventoryEnvRef = useRef<string | null>(null);
-
-  const debouncedPattern = useDebounce(patternInput, 400);
 
   // Load environments (cached, loaded once)
   useEffect(() => {
@@ -126,41 +116,10 @@ export function useTargetInventory({
       .finally(() => setLoadingInventory(false));
   }, [open, currentStep, parameterFields, environment, inventoryData]);
 
-  // Resolve pattern targets (debounced)
-  useEffect(() => {
-    if (!open || patternMode !== 'pattern' || !debouncedPattern) {
-      setResolvedPatternTargets([]);
-      return;
-    }
-    let cancelled = false;
-    setPatternResolving(true);
-    fetchInventoryTargets()
-      .then((targets) => {
-        if (cancelled) return;
-        const matched = targets.filter((t) => matchGlob(debouncedPattern, t.name));
-        setResolvedPatternTargets(matched as Array<{ name: string; environment: string }>);
-      })
-      .catch(() => {
-        if (!cancelled) setResolvedPatternTargets([]);
-      })
-      .finally(() => {
-        if (!cancelled) setPatternResolving(false);
-      });
-    return () => { cancelled = true; };
-  }, [open, patternMode, debouncedPattern]);
-
-  const resolvePattern = useCallback((pattern: string, inputMode: string) => {
-    setPatternInput(pattern.trim());
-    setPatternMode(inputMode);
-  }, []);
-
   return {
     environmentsCache,
     inventoryData,
     inventoryWarnings,
     loadingInventory,
-    resolvedPatternTargets,
-    patternResolving,
-    resolvePattern,
   };
 }

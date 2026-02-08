@@ -4,7 +4,6 @@ Tests for PUT /api/v1/scheduled-executions/{id} (Story 13.8, AC4).
 
 from unittest.mock import patch
 from django.test import TestCase
-from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from rest_framework import status
 from django.utils import timezone
@@ -12,8 +11,7 @@ from datetime import timedelta
 
 from catalog.models import Action, ActionStatus
 from executions.models import ScheduledExecution, ScheduledExecutionStatus, RecurringPattern
-
-User = get_user_model()
+from tests.factories import UserFactory
 
 
 @patch('executions.views._validate_environment_against_inventory')
@@ -22,9 +20,9 @@ class ScheduledExecutionPutTests(TestCase):
 
     def setUp(self):
         self.client = APIClient()
-        self.user = User.objects.create_user(username='creator', profile='DBA')
-        self.other_user = User.objects.create_user(username='other', profile='DBA')
-        self.dbops_user = User.objects.create_user(username='dbops', profile='DBOPS')
+        self.user = UserFactory(username='creator', profile='DBA')
+        self.other_user = UserFactory(username='other', profile='DBA')
+        self.dbops_user = UserFactory(username='dbops', profile='DBOPS')
         self.action = Action.objects.create(
             name='Test Action',
             description='Test',

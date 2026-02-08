@@ -297,6 +297,23 @@ Corrections et ameliorations basees sur le feedback terrain : admin actions (sup
 **FRs couvertes :** FR6, FR11, FR19 (cycle de vie actions, catalogue, statuts)
 **Phase :** Growth (Phase 2)
 
+### Epic 19 : UX — Vue d'exécution temps réel
+Remplacer le popup « action démarrée » par une vue d'exécution immersive : pour une action simple, timeline avec logs détaillés et indicateur d'étape active ; pour un workflow, aperçu visuel du graphe avec étape active, et clic sur une étape pour afficher la timeline et les logs en direct de cette action.
+**FRs couvertes :** FR19, FR20, FR21 (suivi temps réel, logs plateforme, logs techniques)
+**Phase :** Growth (Phase 2)
+**Reference :** planning-artifacts/epic-19-ux-vue-execution-temps-reel.md
+
+### Epic 20 : Action items et suivi — Restant des stories « done »
+Consolider et implémenter les action items, follow-ups et known issues documentés dans les stories déjà marquées done : fixtures User, validation M-4, retry Celery, ExecutionWizard Phase 4, Epic M rétrospective, 5-7 tasks restantes, M-10/17-12 follow-ups, 15-4/17-16 documentation.
+**Phase :** Tech Debt / Quality — Amélioration continue
+**Reference :** planning-artifacts/epic-20-action-items-et-suivi-stories-done.md
+
+### Epic 21 : Inventaire — source unique des environnements
+Supprimer la normalisation des environnements et utiliser l'inventaire comme seule source de vérité. Accepter toute valeur présente dans l'inventaire (ex. lab, dev, staging, prod), éliminer la récursion et les cascades Oracle, permettre l'ajout de nouveaux environnements sans migration.
+**FRs couvertes :** FR43 (inventaire), FR26 (RBAC environnements)
+**Phase :** Growth (Phase 2)
+**Reference :** planning-artifacts/epic-21-inventaire-source-unique-environnements.md
+
 ---
 
 ## Epic 1 : Bootstrap Projet & Authentification
@@ -4020,3 +4037,130 @@ afin de **restaurer la confiance dans la suite de tests et permettre les déploi
 **Then** ils valident le comportement attendu sans dépendre d'implémentations internes fragiles
 
 **And** la CI (ou commande locale) exécute la suite complète avec succès ; les échecs connus sont documentés si des corrections sont reportées
+
+---
+
+## Epic 21 : Inventaire — source unique des environnements
+
+En tant que **équipe produit et utilisateurs du portail**,
+je veux **que l'inventaire soit la seule source de vérité pour les environnements**, sans normalisation ni liste hardcodée,
+afin de **accepter toute valeur présente dans l'inventaire (ex. lab, dev, staging, prod), éviter les cascades de requêtes Oracle et les warnings, et permettre l'ajout de nouveaux environnements sans migration**.
+
+**Contexte :** `_normalize_environment` impose une liste fixe, appelle récursivement `list_environments()`, et force les valeurs inconnues vers `dev`, provoquant récursion, incohérence et problèmes de perf.
+
+**Reference :** planning-artifacts/epic-21-inventaire-source-unique-environnements.md
+
+### Story 21.1 : Backend — Supprimer normalisation inventaire et utiliser valeurs brutes
+
+En tant que développeur backend,
+je veux que la lecture de l'inventaire Oracle retourne les valeurs ENVIRONMENT telles quelles (trim/lowercase uniquement),
+afin d'éliminer la récursion et les warnings `unknown_environment_value_defaulted`.
+
+**Acceptance Criteria:**
+
+**Given** `_read_oracle_inventory` dans `inventory/services.py`
+**When** une ligne Oracle contient `ENVIRONMENT = 'lab'`
+**Then** la valeur retournée est `lab` (ou lowercased), sans appel à `_normalize_environment`
+**And** aucun warning `unknown_environment_value_defaulted` n'est loggé
+
+**Given** la méthode `_normalize_environment`
+**When** on la supprime ou la simplifie
+**Then** elle ne contient plus d'appel à `list_environments()`
+**And** optionnel : on conserve uniquement un mapping d'alias pour legacy (ex. certif→staging) sans appel récursif
+
+**Given** `list_environments()`
+**When** elle extrait les environnements distincts des targets
+**Then** elle utilise les valeurs brutes des targets (sans normalisation dans la boucle)
+
+### Story 21.2 : Backend — Ajuster profile/env matching et exécutions
+
+En tant que développeur backend,
+je veux que les profils et les exécutions comparent les environnements de manière case-insensitive sans normalisation forcée,
+afin d'accepter les valeurs de l'inventaire et des profils de façon cohérente.
+
+**Acceptance Criteria:**
+
+**Given** `list_targets_for_user` et `get_allowed_environments_for_user`
+**When** un profil a `ENVIRONMENTS_JSON = ["lab", "dev"]` et l'inventaire contient lab, dev
+**Then** la comparaison est case-insensitive
+**And** les targets avec `environment: lab` sont autorisés
+
+**Given** `_validate_environment_against_inventory`
+**When** l'environnement soumis est lab et l'inventaire le contient
+**Then** la validation réussit
+**And** aucun fallback vers dev n'est appliqué
+
+**Given** `change_type_config` et `impact_rules` lookup
+**When** l'environnement d'exécution est lab
+**Then** le lookup utilise env_upper ou comparaison case-insensitive
+**And** si aucune règle n'existe pour lab, `default_impact_level` est utilisé pour impact
+
+### Story 21.3 : Tests backend — inventaire, exécutions, profils
+
+En tant que développeur,
+je veux que les tests couvrent les nouveaux comportements (valeurs brutes, profils avec lab, exécutions avec env inconnu),
+afin d'éviter les régressions et documenter le comportement attendu.
+
+**Acceptance Criteria:**
+
+**Given** les tests `inventory/tests/test_services.py`
+**When** on exécute la suite
+**Then** les tests de `_normalize_environment` sont mis à jour ou supprimés
+**And** des tests vérifient que `list_targets` retourne des environnements bruts (ex. lab)
+**And** des tests vérifient que `list_environments()` retourne les valeurs distinctes sans normalisation
+
+**Given** les tests d'exécution et de profils
+**When** un profil a `environments: [lab]` et l'inventaire contient lab
+**Then** les tests vérifient l'accès autorisé
+
+### Story 21.4 : Frontend — Editeurs admin avec environnements dynamiques
+
+En tant que DBOPS,
+je veux que les editeurs d'actions (règles d'impact, étapes, changement ServiceNow, règles de remédiation) proposent la liste des environnements issue de l'inventaire,
+afin de configurer des règles pour tous les environnements existants (ex. lab, dev, staging, prod) sans liste fixe.
+
+**Acceptance Criteria:**
+
+**Given** `ImpactRulesEditor`
+**When** j'ajoute une règle d'impact
+**Then** le dropdown Environnement affiche les options de `useEnvironments()`
+**And** `IMPACT_ENVIRONMENTS` hardcodé est remplacé par la liste dynamique
+
+**Given** `StepsEditor`, `ChangeTypeConfig`, `RemediationRulesEditor`
+**When** je configure des environnements (conditional_environments, change type, remediation)
+**Then** les composants utilisent les environnements de l'inventaire
+**And** les listes hardcodées sont remplacées
+
+### Story 21.5 : Frontend — TargetSelectionStep, labels et type ExecutionEnvironment
+
+En tant que DBA ou utilisateur,
+je veux que la sélection d'environnement et l'affichage des labels utilisent les valeurs de l'inventaire sans fallback hardcodé,
+afin de pouvoir exécuter des actions sur des environnements comme lab et les afficher correctement.
+
+**Acceptance Criteria:**
+
+**Given** `TargetSelectionStep`
+**When** le cache d'environnements est chargé
+**Then** le Select Environnement utilise uniquement ces valeurs
+**And** le fallback `[dev, staging, prod]` est supprimé
+
+**Given** `ENVIRONMENT_LABELS`
+**When** un environnement n'est pas dans la map (ex. lab)
+**Then** on affiche la valeur avec capitalisation ou telle quelle
+
+**Given** le type `ExecutionEnvironment`
+**When** on étend le type
+**Then** `ExecutionEnvironment` devient `string` (ou union étendue) pour accepter lab et autres
+
+### Story 21.6 (optionnel) : Validation des environnements de profil à la sauvegarde
+
+En tant que DBOPS,
+je veux que la sauvegarde d'un profil valide que les environnements sélectionnés existent dans l'inventaire,
+afin d'éviter les typo et les références à des environnements obsolètes.
+
+**Acceptance Criteria:**
+
+**Given** le formulaire de profil
+**When** je sauvegarde un profil avec `environments: [lab, invalid_env]`
+**Then** le backend vérifie que chaque valeur existe dans `list_environments()`
+**And** si invalid_env n'existe pas, une erreur de validation est retournée

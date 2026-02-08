@@ -4,6 +4,7 @@ from django.test import TestCase
 from idp_auth.models import User
 from integrations.models import Integration
 from catalog.models import Action, Tag, ActionTag, UserFavorite
+from tests.factories import UserFactory
 
 
 @pytest.mark.django_db
@@ -12,7 +13,7 @@ class ActionModelTest(TestCase):
 
     def setUp(self):
         """Set up test data."""
-        self.user = User.objects.create(
+        self.user = UserFactory(
             username='testuser',
             profile='DBA'
         )
@@ -253,7 +254,7 @@ class UserFavoriteModelTest(TestCase):
 
     def setUp(self):
         """Set up test data."""
-        self.user = User.objects.create(
+        self.user = UserFactory(
             username='testuser',
             profile='DBA'
         )

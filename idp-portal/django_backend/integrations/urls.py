@@ -13,8 +13,8 @@ router = DefaultRouter()
 router.register(r'', IntegrationViewSet, basename='integration')
 
 urlpatterns = [
+    # Upload icon: MUST be before router to avoid matching as detail route
+    path('admin/integrations/upload-icon/', UploadIconView.as_view(), name='upload-icon'),
     # Integrations CRUD: /api/v1/admin/integrations/*
     path('admin/integrations/', include(router.urls)),
-    # Upload icon: /api/v1/admin/integrations/upload-icon
-    path('admin/integrations/upload-icon/', UploadIconView.as_view(), name='upload-icon'),
 ]

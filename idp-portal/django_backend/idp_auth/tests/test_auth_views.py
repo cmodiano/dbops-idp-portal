@@ -48,7 +48,7 @@ class TestCurrentUserProfileView(TestCase):
     def test_get_current_user_profile_authenticated(self):
         """Test GET /auth/me with authenticated user returns 200."""
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/auth/me')
+        response = self.client.get('/api/v1/auth/me/')
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('data', response.data)
@@ -62,14 +62,14 @@ class TestCurrentUserProfileView(TestCase):
 
     def test_get_current_user_profile_unauthenticated(self):
         """Test GET /auth/me without authentication returns 401."""
-        response = self.client.get('/api/v1/auth/me')
+        response = self.client.get('/api/v1/auth/me/')
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_get_current_user_profile_includes_navigation_tabs(self):
         """Test GET /auth/me includes navigation_tabs."""
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/auth/me')
+        response = self.client.get('/api/v1/auth/me/')
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.data['data']
@@ -80,7 +80,7 @@ class TestCurrentUserProfileView(TestCase):
     def test_get_current_user_profile_includes_is_business_profile(self):
         """Test GET /auth/me includes is_business_profile flag."""
         self.client.force_authenticate(user=self.user)
-        response = self.client.get('/api/v1/auth/me')
+        response = self.client.get('/api/v1/auth/me/')
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.data['data']
@@ -101,7 +101,7 @@ class TestCurrentUserProfileView(TestCase):
         token = create_access_token(token_data)
 
         response = self.client.get(
-            '/api/v1/auth/me',
+            '/api/v1/auth/me/',
             HTTP_AUTHORIZATION=f'Bearer {token}'
         )
 
@@ -190,7 +190,7 @@ class TestCurrentUserProfileView(TestCase):
         token = create_access_token(token_data, expires_delta=timedelta(seconds=-1))
 
         response = self.client.get(
-            '/api/v1/auth/me',
+            '/api/v1/auth/me/',
             HTTP_AUTHORIZATION=f'Bearer {token}'
         )
 
@@ -233,7 +233,7 @@ class TestRefreshTokenView(TestCase):
 
         # Set cookie in request
         self.client.cookies['refresh_token'] = refresh_token
-        response = self.client.post('/api/v1/auth/refresh')
+        response = self.client.post('/api/v1/auth/refresh/')
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('data', response.data)
@@ -242,7 +242,7 @@ class TestRefreshTokenView(TestCase):
 
     def test_refresh_token_missing_cookie(self):
         """Test POST /auth/refresh without cookie returns 401."""
-        response = self.client.post('/api/v1/auth/refresh')
+        response = self.client.post('/api/v1/auth/refresh/')
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
         self.assertIn('error', response.data)
@@ -251,7 +251,7 @@ class TestRefreshTokenView(TestCase):
     def test_refresh_token_invalid_cookie(self):
         """Test POST /auth/refresh with invalid token returns 401."""
         self.client.cookies['refresh_token'] = 'invalid-token'
-        response = self.client.post('/api/v1/auth/refresh')
+        response = self.client.post('/api/v1/auth/refresh/')
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
         self.assertIn('error', response.data)
@@ -277,7 +277,7 @@ class TestRefreshTokenView(TestCase):
         )
 
         self.client.cookies['refresh_token'] = expired_token
-        response = self.client.post('/api/v1/auth/refresh')
+        response = self.client.post('/api/v1/auth/refresh/')
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
@@ -295,7 +295,7 @@ class TestRefreshTokenView(TestCase):
         access_token = create_access_token(token_data)
 
         self.client.cookies['refresh_token'] = access_token
-        response = self.client.post('/api/v1/auth/refresh')
+        response = self.client.post('/api/v1/auth/refresh/')
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
@@ -317,7 +317,7 @@ class TestLogoutView(TestCase):
     @patch('idp_auth.views.AuditService')
     def test_logout_success(self, mock_audit):
         """Test POST /auth/logout returns success and clears cookie."""
-        response = self.client.post('/api/v1/auth/logout')
+        response = self.client.post('/api/v1/auth/logout/')
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('data', response.data)
@@ -338,7 +338,7 @@ class TestLogoutView(TestCase):
         refresh_token = create_refresh_token(token_data)
         self.client.cookies['refresh_token'] = refresh_token
 
-        response = self.client.post('/api/v1/auth/logout')
+        response = self.client.post('/api/v1/auth/logout/')
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 

@@ -24,7 +24,7 @@ const StartNode: React.FC<NodeProps> = () => {
       aria-label="Nœud de départ"
     >
       <PlayCircleOutlined style={{ fontSize: 24, color: '#52c41a' }} />
-      <div style={{ fontWeight: 600, marginTop: 4, fontSize: 13 }}>Départ</div>
+      <div style={{ fontWeight: 600, marginTop: 4, fontSize: 13, color: '#237804' }}>Départ</div>
 
       <Handle
         type="source"

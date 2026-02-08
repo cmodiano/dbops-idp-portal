@@ -82,6 +82,8 @@ interface SortableStepCardProps {
   eligibleActions: ActionListItem[];
   loadingActions: boolean;
   stepIdsFromEditor: string[];
+  /** All steps for resolving step_id → action name in branch selects */
+  allSteps: WorkflowStepEditable[];
   onStepChange: (index: number, field: keyof WorkflowStepEditable, value: unknown) => void;
   onRemoveStep: (index: number) => void;
   canRemove: boolean;
@@ -96,6 +98,7 @@ const SortableStepCard: React.FC<SortableStepCardProps> = ({
   eligibleActions,
   loadingActions,
   stepIdsFromEditor,
+  allSteps,
   onStepChange,
   onRemoveStep,
   canRemove,
@@ -139,7 +142,20 @@ const SortableStepCard: React.FC<SortableStepCardProps> = ({
     : '';
 
   const stepIdValue = step.step_id ?? '';
-  const stepIdOptions = (stepIds: string[]) => stepIds.map((sid) => ({ value: sid, label: sid }));
+  /** Build branch options: step_id → display label (action name + order) */
+  const getBranchOptions = (excludeStepId: string | null | undefined) => {
+    const ids = stepIdsFromEditor.filter((sid) => sid && sid !== excludeStepId);
+    return ids.map((sid) => {
+      const s = allSteps.find((st) => (st.step_id ?? st._tempId) === sid);
+      const action = s ? eligibleActions.find((a) => a.id === s.referenced_action_id) : undefined;
+      const actionName = s?.action_name ?? action?.name;
+      const engine = action?.engine;
+      const label = actionName
+        ? `Étape ${s?.order ?? '?'} — ${actionName}${engine ? ` (${engine})` : ''}`
+        : sid;
+      return { value: sid, label };
+    });
+  };
 
   return (
     <Card
@@ -239,22 +255,22 @@ const SortableStepCard: React.FC<SortableStepCardProps> = ({
             </Tooltip>
           </div>
 
-          {/* Story 16.2: advanced fields for branches and retry */}
-          <div style={{ marginBottom: 0, minWidth: 240 }}>
+          {/* Story 16.2: step_id read-only (auto-generated for branches/retry) */}
+          {step.step_id && (
+          <div style={{ marginBottom: 0, minWidth: 200 }}>
             <Text type="secondary" style={{ fontSize: 12 }}>
-              ID d’étape (step_id)
+              ID d'étape
             </Text>
-            <Tooltip title="Identifiant stable requis pour les branches/retry. Doit être unique dans le workflow.">
+            <Tooltip title="Identifiant technique auto-généré pour les branches. Non modifiable.">
               <Input
-                style={{ width: 240, marginTop: 4, display: 'block' }}
+                style={{ width: 200, marginTop: 4, display: 'block', fontSize: 11, fontFamily: 'monospace' }}
                 value={stepIdValue}
-                placeholder="(optionnel si workflow linéaire)"
-                onChange={(e) => onStepChange(index, 'step_id', e.target.value || null)}
+                readOnly
                 aria-label={`step_id de l'étape ${step.order}`}
-                disabled={disabled}
               />
             </Tooltip>
           </div>
+          )}
         </Space>
 
         <Card
@@ -268,16 +284,14 @@ const SortableStepCard: React.FC<SortableStepCardProps> = ({
                 Branche succès
               </Text>
               <Select
-                style={{ width: 240, marginTop: 4, display: 'block' }}
+                style={{ width: 260, marginTop: 4, display: 'block' }}
                 value={(step.on_success_step_id ?? EXIT_VALUE) as string}
                 onChange={(v) => onStepChange(index, 'on_success_step_id', v === EXIT_VALUE ? null : v)}
                 options={[
                   { value: EXIT_VALUE, label: '(fin du workflow)' },
-                  ...stepIdOptions(
-                    stepIdsFromEditor.filter((sid) => sid && sid !== step.step_id)
-                  ),
+                  ...getBranchOptions(step.step_id),
                 ]}
-                placeholder="Sélectionner step_id..."
+                placeholder="Sélectionner une étape..."
                 aria-label={`on_success_step_id de l'étape ${step.order}`}
                 disabled={disabled}
                 allowClear={false}
@@ -289,16 +303,14 @@ const SortableStepCard: React.FC<SortableStepCardProps> = ({
                 Branche erreur
               </Text>
               <Select
-                style={{ width: 240, marginTop: 4, display: 'block' }}
+                style={{ width: 260, marginTop: 4, display: 'block' }}
                 value={(step.on_error_step_id ?? EXIT_VALUE) as string}
                 onChange={(v) => onStepChange(index, 'on_error_step_id', v === EXIT_VALUE ? null : v)}
                 options={[
                   { value: EXIT_VALUE, label: '(fin du workflow)' },
-                  ...stepIdOptions(
-                    stepIdsFromEditor.filter((sid) => sid && sid !== step.step_id)
-                  ),
+                  ...getBranchOptions(step.step_id),
                 ]}
-                placeholder="Sélectionner step_id..."
+                placeholder="Sélectionner une étape..."
                 aria-label={`on_error_step_id de l'étape ${step.order}`}
                 disabled={disabled}
                 allowClear={false}
@@ -413,7 +425,7 @@ export const WorkflowStepsEditor: React.FC<WorkflowStepsEditorProps> = ({
     setLoadError(null);
     getEligibleActionsForWorkflow()
       .then((actions) => {
-        setEligibleActions(actions);
+        setEligibleActions(Array.isArray(actions) ? actions : []);
       })
       .catch((err) => {
         logger.error('Failed to load eligible actions for workflow', { error: err instanceof Error ? err.message : String(err) });
@@ -603,6 +615,7 @@ export const WorkflowStepsEditor: React.FC<WorkflowStepsEditorProps> = ({
                 eligibleActions={eligibleActions}
                 loadingActions={loadingActions}
                 stepIdsFromEditor={stepIdsFromEditor}
+                allSteps={internalSteps}
                 onStepChange={handleStepChange}
                 onRemoveStep={handleRemoveStep}
                 canRemove={internalSteps.length > 1}

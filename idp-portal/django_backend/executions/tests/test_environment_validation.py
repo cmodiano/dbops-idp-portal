@@ -5,14 +5,12 @@ Story 13.7 - Tests for environment validation in executions.
 
 from unittest.mock import patch, MagicMock
 from django.test import TestCase
-from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from rest_framework import status
 
 from catalog.models import Action, ActionStatus
 from inventory.services import InventoryServiceError
-
-User = get_user_model()
+from tests.factories import UserFactory
 
 
 class ExecutionEnvironmentValidationTests(TestCase):
@@ -21,7 +19,7 @@ class ExecutionEnvironmentValidationTests(TestCase):
     def setUp(self):
         """Set up test data."""
         self.client = APIClient()
-        self.user = User.objects.create_user(
+        self.user = UserFactory(
             username='testuser',
             profile='DBA'
         )

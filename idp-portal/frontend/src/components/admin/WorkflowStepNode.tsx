@@ -34,6 +34,11 @@ export interface WorkflowStepNodeData {
   /** Visual-only flags (Story 16.7, AC1) */
   isStartNode?: boolean;
   isEndNode?: boolean;
+
+  /** Story 19.2: Execution status for read-only visualization (optional, backward compatible) */
+  executionStatus?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'SKIPPED';
+  /** Story 19.2: Step execution duration (e.g. "1m 30s") */
+  executionDuration?: string | null;
 }
 
 const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
@@ -49,8 +54,29 @@ const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
           ? token.colorPrimary
           : token.colorBorderSecondary;
 
-  // Story 16.7, AC6: Extended tooltip with exit paths + retry info
+  // Status labels for execution tooltip (Story 19.2, AC10)
+  const executionStatusLabels: Record<string, string> = {
+    PENDING: 'En attente',
+    RUNNING: 'En cours',
+    COMPLETED: 'Terminé',
+    FAILED: 'Échoué',
+    SKIPPED: 'Annulé',
+  };
+
+  // Story 16.7, AC6 + Story 19.2, AC10: Extended tooltip with execution info or exit paths
   const tooltipContent = useMemo(() => {
+    // Story 19.2: Execution mode tooltip (takes priority when executionStatus is present)
+    if (nodeData.executionStatus) {
+      return (
+        <div style={{ fontSize: 12 }}>
+          <div style={{ marginBottom: 4, fontWeight: 600 }}>{nodeData.name ?? nodeData.action_name}</div>
+          <div>Statut: {executionStatusLabels[nodeData.executionStatus] ?? nodeData.executionStatus}</div>
+          {nodeData.executionDuration && <div>Durée: {nodeData.executionDuration}</div>}
+        </div>
+      );
+    }
+
+    // Builder mode: exit paths + retry info
     const hasExitPaths = nodeData.on_success_step_id !== undefined;
     const hasRetry = nodeData.retry_enabled;
 

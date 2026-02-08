@@ -198,12 +198,29 @@ REST_FRAMEWORK = {
 # Cache Configuration (Story 17.11 - Rate Limiting, Story 20.3 - Cancellation Cache)
 # ============================================================================
 # Story 20.3: Redis cache required for cancellation cache (AC5) to work in production
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION': os.getenv('REDIS_URL', 'redis://localhost:6379/1'),
+# Fallback to LocMemCache if Redis is not available (development/Docker without Redis)
+# Set CACHE_BACKEND=locmem to force in-memory cache, or CACHE_BACKEND=redis to use Redis
+CACHE_BACKEND = os.getenv('CACHE_BACKEND', 'redis').lower()
+
+if CACHE_BACKEND == 'locmem':
+    # Use in-memory cache (works without Redis, but not shared across processes/containers)
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'idp-portal-cache',
+        }
     }
-}
+else:
+    # Use Redis cache (default for production)
+    # Note: If Redis is unavailable, Django will raise ConnectionError on cache access
+    # For Docker/CI environments without Redis, set CACHE_BACKEND=locmem
+    redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/1')
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': redis_url,
+        }
+    }
 
 # Rate limiting enable/disable flag (Story 17.11)
 RATELIMIT_ENABLED = os.getenv('RATELIMIT_ENABLED', 'true').lower() == 'true'

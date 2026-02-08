@@ -53,6 +53,11 @@ services:
       - ORACLE_PASSWORD=Oracle123!
       - DJANGO_LOG_LEVEL=INFO
       - LOG_FORMAT=json
+      # Use in-memory cache since Redis is not included in docker-compose
+      # For production with Redis, set CACHE_BACKEND=redis and add Redis service
+      - CACHE_BACKEND=locmem
+      # Celery eager mode for Docker (no Redis broker needed)
+      - CELERY_TASK_ALWAYS_EAGER=true
 
 
     ports:

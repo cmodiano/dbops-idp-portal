@@ -122,12 +122,40 @@ export function workflowStepsToReactFlow(
         label: 'succès',
         labelStyle: { fontSize: 10, fill: '#52c41a' },
       });
+    } else {
+      // on_success_step_id=null means "end of workflow" — draw edge to End node for clarity
+      edges.push({
+        id: `${sourceId}_success_${END_NODE_ID}`,
+        source: sourceId,
+        target: END_NODE_ID,
+        sourceHandle: 'success',
+        targetHandle: 'input',
+        type: 'customEdge',
+        animated: false,
+        style: { stroke: '#52c41a', strokeWidth: 2 },
+        label: 'succès',
+        labelStyle: { fontSize: 10, fill: '#52c41a' },
+      });
     }
     if (step.on_error_step_id) {
       edges.push({
         id: `${sourceId}_error_${step.on_error_step_id}`,
         source: sourceId,
         target: step.on_error_step_id,
+        sourceHandle: 'error',
+        targetHandle: 'input',
+        type: 'customEdge',
+        animated: false,
+        style: { stroke: '#ff4d4f', strokeWidth: 2 },
+        label: 'erreur',
+        labelStyle: { fontSize: 10, fill: '#ff4d4f' },
+      });
+    } else {
+      // on_error_step_id=null means "end/fail" — draw edge to End node for clarity
+      edges.push({
+        id: `${sourceId}_error_${END_NODE_ID}`,
+        source: sourceId,
+        target: END_NODE_ID,
         sourceHandle: 'error',
         targetHandle: 'input',
         type: 'customEdge',
@@ -164,8 +192,24 @@ export function workflowStepsToReactFlow(
     deletable: false,
   };
 
-  // Story 18.3: Removed auto-connections Start → first node and nodes → End.
-  // Users now create connections manually for better control over the flow layout.
+  // Auto-connect Start → first step and steps with null → End for correct display when loading
+  if (workflowNodes.length > 0) {
+    const firstStepId = steps[0]?.step_id ?? workflowNodes[0].id;
+    if (firstStepId) {
+      edges.push({
+        id: `${START_NODE_ID}_output_${firstStepId}`,
+        source: START_NODE_ID,
+        target: firstStepId,
+        sourceHandle: 'output',
+        targetHandle: 'input',
+        type: 'customEdge',
+        animated: false,
+        style: { stroke: '#52c41a', strokeWidth: 2 },
+        label: 'succès',
+        labelStyle: { fontSize: 10, fill: '#52c41a' },
+      });
+    }
+  }
 
   return { nodes: [startNode, ...workflowNodes, endNode], edges };
 }
@@ -233,10 +277,10 @@ export function validateWorkflowGraph(nodes: Node[], edges: Edge[]): ValidationR
     return { valid: false, errors: [{ nodeId: '', type: 'error', message: 'Au moins une étape est requise' }] };
   }
 
-  // 1. Check every node has at least one output connection
+  // 1. Check every node has at least one output connection (incl. edges to End node)
   workflowNodes.forEach((node) => {
-    const hasSuccessEdge = workflowEdges.some((e) => e.source === node.id && e.sourceHandle === 'success');
-    const hasErrorEdge = workflowEdges.some((e) => e.source === node.id && e.sourceHandle === 'error');
+    const hasSuccessEdge = edges.some((e) => e.source === node.id && e.sourceHandle === 'success');
+    const hasErrorEdge = edges.some((e) => e.source === node.id && e.sourceHandle === 'error');
 
     if (!hasSuccessEdge && !hasErrorEdge) {
       errors.push({

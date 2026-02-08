@@ -10,6 +10,7 @@ from rest_framework import status
 from idp_auth.models import User
 from catalog.models import Action, Tag, ActionTag, ActionStatus, ActionItemType, ActionEngine, ActionPlatform
 from catalog.services import CatalogService
+from tests.factories import UserFactory
 
 
 @pytest.mark.django_db
@@ -21,7 +22,7 @@ class TestTagViewSet(TestCase):
         self.client = APIClient()
         
         # Create user
-        self.user = User.objects.create(
+        self.user = UserFactory(
             username='testuser',
             profile='dba'
         )
@@ -31,14 +32,14 @@ class TestTagViewSet(TestCase):
         self.tag2 = Tag.objects.create(name='database')
         self.tag3 = Tag.objects.create(name='patching')
         
-        # Create published action with tags
+        # Create action as DRAFT then publish (valid transition: draft → published)
         self.service = CatalogService()
         self.action_data = {
             'name': 'Test Action',
             'description': 'Test Description',
             'engine': ActionEngine.ORACLE,
             'platform': ActionPlatform.AAP,
-            'status': ActionStatus.PUBLISHED,
+            'status': ActionStatus.DRAFT,
             'item_type': ActionItemType.ACTION,
         }
         self.action = self.service.create_action(self.action_data, self.user)

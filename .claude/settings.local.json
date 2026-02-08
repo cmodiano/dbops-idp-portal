@@ -44,7 +44,9 @@
       "Bash(pytest:*)",
       "Bash(pip freeze:*)",
       "Bash(DJANGO_SETTINGS_MODULE=idp_backend.test_settings python -m pytest:*)",
-      "Bash(DJANGO_SETTINGS_MODULE=idp_backend.test_settings python3 -m pytest:*)"
+      "Bash(DJANGO_SETTINGS_MODULE=idp_backend.test_settings python3 -m pytest:*)",
+      "Bash(npx vite build:*)",
+      "Bash(npx eslint:*)"
     ]
   }
 }

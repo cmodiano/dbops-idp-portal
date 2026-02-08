@@ -99,6 +99,26 @@ django_backend/
 └── idp_backend/          # Configuration Django
 ```
 
+## Worker Celery (Story 20.3)
+
+Le retry asynchrone des workflows utilise Celery avec Redis comme broker.
+
+### Prérequis
+
+- Redis server ≥ 7.x sur `localhost:6379` (ou URL configurée via `CELERY_BROKER_URL`)
+
+### Développement
+
+```bash
+# Terminal 1 : Backend Django
+python manage.py runserver
+
+# Terminal 2 : Worker Celery
+celery -A idp_backend worker -l info
+```
+
+Voir [docs/workflow-retry-celery.md](docs/workflow-retry-celery.md) pour la documentation complète (architecture, backoff, déploiement production).
+
 ## Mode Simulation (Story 19.0)
 
 En environnement de développement, les exécutions peuvent être simulées sans intégrations réelles (AAP, ServiceNow, Vault).

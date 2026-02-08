@@ -72,9 +72,9 @@ describe('workflowStepsToReactFlow', () => {
     expect((workflowNode.data as Record<string, unknown>).action_id).toBe(100);
     expect((workflowNode.data as Record<string, unknown>).retry_enabled).toBe(true);
     expect((workflowNode.data as Record<string, unknown>).retry_max_attempts).toBe(3);
-    // Story 18.3: No auto-connections from start or to end — users create them manually
-    expect(edges.some((e) => e.source === START_NODE_ID)).toBe(false);
-    expect(edges.some((e) => e.target === END_NODE_ID)).toBe(false);
+    // When loading: Start→first and null→End are drawn for correct visual display
+    expect(edges.some((e) => e.source === START_NODE_ID)).toBe(true);
+    expect(edges.some((e) => e.target === END_NODE_ID)).toBe(true);
   });
 
   it('generates fallback step_id when missing', () => {
@@ -172,24 +172,26 @@ describe('workflowStepsToReactFlow', () => {
     expect(nodes[nodes.length - 1].data).toEqual({ isEndNode: true });
   });
 
-  // Story 18.3: Auto-connections removed — users create connections manually
-  it('does NOT auto-connect start to first workflow node (Story 18.3)', () => {
+  // Story 18.3: When loading, auto-connect Start→first and null→End for correct visual display
+  it('auto-connects Start to first step when loading', () => {
     const steps: WorkflowStep[] = [
       { order: 1, step_id: 'a', name: null, referenced_action_id: 100 },
     ];
     const { edges } = workflowStepsToReactFlow(steps);
     const startEdge = edges.find((e) => e.source === START_NODE_ID);
-    expect(startEdge).toBeUndefined();
+    expect(startEdge).toBeDefined();
+    expect(startEdge!.target).toBe('a');
   });
 
-  it('does NOT auto-connect nodes without output to end node (Story 18.3)', () => {
+  it('draws edges to End for steps with null success/error (end of workflow)', () => {
     const steps: WorkflowStep[] = [
       { order: 1, step_id: 'a', name: null, referenced_action_id: 100, on_success_step_id: 'b' },
-      { order: 2, step_id: 'b', name: null, referenced_action_id: 101 }, // no output
+      { order: 2, step_id: 'b', name: null, referenced_action_id: 101 }, // no output → End
     ];
     const { edges } = workflowStepsToReactFlow(steps);
-    const endEdge = edges.find((e) => e.target === END_NODE_ID);
-    expect(endEdge).toBeUndefined();
+    const endEdges = edges.filter((e) => e.target === END_NODE_ID);
+    // Step 'b' has success→null and error→null → both draw to End
+    expect(endEdges.length).toBeGreaterThanOrEqual(1);
   });
 
   it('populates on_success_step_id and on_error_step_id in node data for tooltip', () => {
@@ -852,24 +854,26 @@ describe('Story 18.3 — Draggable Start/End nodes (AC2)', () => {
   });
 });
 
-describe('Story 18.3 — Manual connections (AC3)', () => {
-  it('no auto-connection from start to any node', () => {
+describe('Story 18.3 — Visual display when loading', () => {
+  it('draws Start→first step for correct flow display', () => {
     const steps: WorkflowStep[] = [
       { order: 1, step_id: 'a', name: null, referenced_action_id: 100 },
       { order: 2, step_id: 'b', name: null, referenced_action_id: 101 },
     ];
     const { edges } = workflowStepsToReactFlow(steps);
     const startEdges = edges.filter((e) => e.source === START_NODE_ID);
-    expect(startEdges).toHaveLength(0);
+    expect(startEdges).toHaveLength(1);
+    expect(startEdges[0].target).toBe('a');
   });
 
-  it('no auto-connection from any node to end', () => {
+  it('draws edges to End for steps with null success/error (end of workflow)', () => {
     const steps: WorkflowStep[] = [
       { order: 1, step_id: 'a', name: null, referenced_action_id: 100 },
     ];
     const { edges } = workflowStepsToReactFlow(steps);
     const endEdges = edges.filter((e) => e.target === END_NODE_ID);
-    expect(endEdges).toHaveLength(0);
+    // Step 'a' has both success and error → End (null = end of workflow)
+    expect(endEdges.length).toBe(2);
   });
 
   it('validation accepts Start without outgoing connection', () => {

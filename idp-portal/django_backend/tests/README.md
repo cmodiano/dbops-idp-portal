@@ -37,7 +37,7 @@ django_backend/
 │       ├── test_transaction_handling.py
 │       ├── test_rbac_security.py
 │       └── test_performance.py
-├── catalog/tests/           # Tests app Catalog
+├── catalog/tests/           # Tests app Catalog (TestCase + APIClient + UserFactory/ActionFactory; voir drf-api-migration-notes.md)
 ├── profiles/tests/          # Tests app Profiles
 ├── integrations/tests/      # Tests app Integrations
 ├── executions/tests/        # Tests app Executions
@@ -378,9 +378,9 @@ def test_unauthenticated_request_returns_401():
 
 ---
 
-## ⚠️ Common Testing Pitfalls (Story 18.7)
+## ⚠️ Common Testing Pitfalls (Stories 18.7, 20.1)
 
-**Updated:** 2026-02-07 — Lessons learned from Story 18.7 test fixes
+**Updated:** 2026-02-08 — Lessons learned from Stories 18.7 and 20.1 test fixes
 
 ### ❌ PIÈGE 1: User Fixtures avec Champs Django Auth Standard
 
@@ -574,6 +574,183 @@ def test_soft_delete():
 
 ---
 
+### ❌ PIÈGE 5: Double Transition de Statut Action (Story 20.1)
+
+**Problème:** Créer une action avec `status=PUBLISHED` puis appeler `update_status('publish')` provoque une `InvalidTransitionError` car l'action est déjà au statut `PUBLISHED`.
+
+**❌ MAUVAIS (double transition):**
+```python
+from catalog.services import CatalogService
+
+def test_tags_on_published_action():
+    service = CatalogService()
+    action = service.create_action({
+        'name': 'Test',
+        'engine': 'Oracle',
+        'platform': 'AAP',
+        'status': ActionStatus.PUBLISHED,  # ❌ Déjà PUBLISHED
+    }, user)
+    service.update_status(action.id, 'publish', user)  # ❌ InvalidTransitionError
+```
+
+**✅ CORRECT (créer DRAFT puis publier):**
+```python
+def test_tags_on_published_action():
+    service = CatalogService()
+    action = service.create_action({
+        'name': 'Test',
+        'engine': 'Oracle',
+        'platform': 'AAP',
+        'status': ActionStatus.DRAFT,  # ✅ Créer en DRAFT
+    }, user)
+    service.update_status(action.id, 'publish', user)  # ✅ DRAFT → PUBLISHED
+```
+
+---
+
+### ❌ PIÈGE 6: API CatalogService.list_all() Obsolète (Story 20.1)
+
+**Problème:** `CatalogService.list_all()` n'accepte plus les kwargs `engine` ni `search_query`. La signature actuelle est: `list_all(status=None, tags_filter=None, item_type=None, page=1, page_size=25)`. De plus, la valeur de retour est `(list, dict)` et non `(list, int)`.
+
+**❌ MAUVAIS (kwargs obsolètes):**
+```python
+# ❌ TypeError: list_all() got an unexpected keyword argument 'engine'
+results, count = service.list_all(engine='Oracle')
+
+# ❌ TypeError: list_all() got an unexpected keyword argument 'search_query'
+results, count = service.list_all(search_query='oracle')
+
+# ❌ pagination_info est un dict, pas un int
+results, total_count = service.list_all()
+self.assertEqual(total_count, 5)  # ❌ Comparing dict to int
+```
+
+**✅ CORRECT (signature actuelle):**
+```python
+# ✅ Filtrer par status, tags, item_type uniquement
+results, pagination_info = service.list_all(status='published')
+results, pagination_info = service.list_all(tags_filter=['oracle', 'dba'])
+results, pagination_info = service.list_all(item_type='action', page=1, page_size=10)
+
+# ✅ pagination_info est un dict avec 'total_count'
+self.assertEqual(pagination_info['total_count'], 5)
+```
+
+---
+
+### ❌ PIÈGE 7: Désactivation/Réactivation d'Action (Story 20.1)
+
+**Problème:** `update_status('disable')` ne gère pas les champs soft-delete (`deleted_at`, `deleted_by`, `is_deleted`), ce qui viole la contrainte CHECK `ck_actions_soft_delete_consistency`. Utiliser `deactivate_action()` et `reactivate_action()` à la place.
+
+**❌ MAUVAIS (viole contrainte CHECK):**
+```python
+# ❌ IntegrityError: CHECK constraint ck_actions_soft_delete_consistency
+service.update_status(action.id, 'disable', user)
+
+# ❌ Même problème pour réactivation
+service.update_status(action.id, 'enable', user)
+```
+
+**✅ CORRECT (méthodes dédiées):**
+```python
+# ✅ deactivate_action gère soft-delete fields automatiquement
+service.deactivate_action(action.id, user)
+
+# ✅ reactivate_action nettoie les champs soft-delete
+service.reactivate_action(action.id, user)
+```
+
+---
+
+### ❌ PIÈGE 8: delete_action() Attend un Objet User (Story 20.1)
+
+**Problème:** `CatalogService.delete_action(action_id, user)` attend un objet `User`, pas un `str(user.id)`. Passer un string provoque `AttributeError: 'str' object has no attribute 'id'`.
+
+**❌ MAUVAIS:**
+```python
+service.delete_action(action.id, str(user.id))  # ❌ AttributeError
+service.delete_action(action.id, 'user123')      # ❌ AttributeError
+```
+
+**✅ CORRECT:**
+```python
+service.delete_action(action.id, user)  # ✅ Objet User
+```
+
+---
+
+### ❌ PIÈGE 9: RefEngine/RefPlatform Requis pour Admin API (Story 20.1)
+
+**Problème:** Les endpoints admin (`/api/v1/admin/actions/`) utilisent un serializer qui valide `engine` et `platform` contre les tables de référence `RefEngine` et `RefPlatform`. Sans ces données, les requêtes POST/PUT retournent 400.
+
+**❌ MAUVAIS (données de référence manquantes):**
+```python
+def setUp(self):
+    self.client = APIClient()
+    self.user = UserFactory(profile='DBOPS')
+    # ❌ Pas de RefEngine/RefPlatform
+    # POST /api/v1/admin/actions/ → 400 "Invalid engine 'Oracle'"
+```
+
+**✅ CORRECT (créer données de référence):**
+```python
+from reference.models import RefEngine, RefPlatform
+
+def setUp(self):
+    self.client = APIClient()
+    self.user = UserFactory(profile='DBOPS')
+    # ✅ Créer les données de référence
+    RefEngine.objects.get_or_create(code='Oracle', defaults={'label': 'Oracle', 'display_order': 1})
+    RefPlatform.objects.get_or_create(code='AAP', defaults={'label': 'AAP', 'display_order': 1})
+```
+
+---
+
+### ❌ PIÈGE 10: Workflow Steps Sans referenced_action_id (Story 20.1)
+
+**Problème:** Depuis Story 4.12, tous les steps de workflow doivent avoir un `referenced_action_id` pointant vers une Action existante. Sans ce champ, le moteur de workflow lève une erreur de validation `"missing referenced_action_id"`.
+
+**❌ MAUVAIS (step sans referenced_action_id):**
+```python
+workflow_steps = [
+    {
+        "step_id": "step-1",
+        "order": 1,
+        "name": "First Step",
+        # ❌ Pas de referenced_action_id
+        "on_success_step_id": "step-2",
+        "on_failure_step_id": None
+    }
+]
+```
+
+**✅ CORRECT (step avec referenced_action_id):**
+```python
+from catalog.models import Action, ActionStatus
+
+# Créer l'action référencée
+ref_action = Action.objects.create(
+    name="Referenced Action",
+    engine="Oracle",
+    platform="AAP",
+    status=ActionStatus.PUBLISHED,
+    created_by=user
+)
+
+workflow_steps = [
+    {
+        "step_id": "step-1",
+        "order": 1,
+        "name": "First Step",
+        "referenced_action_id": ref_action.id,  # ✅ Requis depuis Story 4.12
+        "on_success_step_id": "step-2",
+        "on_failure_step_id": None
+    }
+]
+```
+
+---
+
 ## 📝 Quick Reference Checklist
 
 Avant de soumettre un test:
@@ -585,9 +762,16 @@ Avant de soumettre un test:
 - [ ] ✅ Je mocke services externes (Vault, ServiceNow, AAP)
 - [ ] ✅ J'ajoute `@pytest.mark.django_db` si j'accède à la DB
 - [ ] ✅ Je catégorise avec markers (`@pytest.mark.unit`, `@security`, etc.)
+- [ ] ✅ Je crée Actions en DRAFT avant d'appeler `update_status('publish')`
+- [ ] ✅ J'utilise `deactivate_action()`/`reactivate_action()` (pas `update_status('disable')`)
+- [ ] ✅ Je passe un objet `User` à `delete_action()` (pas `str(user.id)`)
+- [ ] ✅ Je crée `RefEngine`/`RefPlatform` avant les tests admin API
+- [ ] ✅ J'ajoute `referenced_action_id` aux workflow steps
+- [ ] ✅ J'utilise `pagination_info['total_count']` (dict, pas int) pour `list_all()`
 - [ ] ❌ Je n'utilise PAS de champs Django auth (`is_staff`, `is_active`)
 - [ ] ❌ Je ne crée PAS de JSON fields avec strings manuelles
 - [ ] ❌ Je ne laisse PAS de `print()` ou debug statements
+- [ ] ❌ Je ne passe PAS `engine` ou `search_query` à `list_all()`
 
 ## Dépannage
 

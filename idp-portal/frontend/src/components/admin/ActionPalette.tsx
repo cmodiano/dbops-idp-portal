@@ -27,7 +27,7 @@ export const ActionPalette: React.FC<ActionPaletteProps> = ({ disabled = false }
     setLoading(true);
     setError(null);
     getEligibleActionsForWorkflow()
-      .then(setActions)
+      .then((list) => setActions(Array.isArray(list) ? list : []))
       .catch((err) => {
         setError(err instanceof Error ? err.message : 'Erreur de chargement');
         setActions([]);

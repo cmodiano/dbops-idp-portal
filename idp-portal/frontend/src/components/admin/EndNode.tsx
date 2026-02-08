@@ -32,7 +32,7 @@ const EndNode: React.FC<NodeProps> = () => {
       />
 
       <CheckCircleOutlined style={{ fontSize: 24, color: '#8c8c8c' }} />
-      <div style={{ fontWeight: 600, marginTop: 4, fontSize: 13 }}>Fin</div>
+      <div style={{ fontWeight: 600, marginTop: 4, fontSize: 13, color: '#434343' }}>Fin</div>
     </div>
   );
 };

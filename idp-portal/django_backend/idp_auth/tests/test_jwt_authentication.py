@@ -139,9 +139,7 @@ class TestJWTAuthentication(TestCase):
         token = create_access_token(token_data)
         request = self.factory.get('/api/v1/test/', HTTP_AUTHORIZATION=f'Bearer {token}')
 
-        with patch('idp_auth.authentication.User') as MockUser:
-            MockUser.objects.get.side_effect = User.DoesNotExist()
-
+        with patch('idp_auth.authentication.User.objects.get', side_effect=User.DoesNotExist()):
             auth = JWTAuthentication()
             with self.assertRaises(AuthenticationFailed) as context:
                 auth.authenticate(request)
