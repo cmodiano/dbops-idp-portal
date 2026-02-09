@@ -58,6 +58,28 @@ src/pages/
 3. Add a new tab item in `AdminPage.tsx` Tabs items array
 4. Pass `notification` (and `modal` if needed) from `App.useApp()` as props
 
+## Error Boundary
+
+`ErrorBoundary` captures unhandled React render errors and displays a user-friendly fallback UI (Ant Design `Result`). Integrated in `AppLayout` around `<Outlet />` so page-level errors are caught without crashing the entire application.
+
+```tsx
+// Default usage (already in AppLayout)
+<ErrorBoundary>
+  <Suspense fallback={<Spin />}>
+    <Outlet />
+  </Suspense>
+</ErrorBoundary>
+
+// Custom fallback
+<ErrorBoundary fallback={(error, resetError) => <MyErrorUI error={error} onReset={resetError} />}>
+  <MyComponent />
+</ErrorBoundary>
+```
+
+**Behavior:** Errors are logged via `logger.error()` with stack trace and componentStack. Users see French-language error message with "Recharger la page" and "Retour à l'accueil" buttons.
+
+**Note:** Error Boundaries only catch render errors. Event handler errors, async errors, and API errors are handled by try-catch and `api_client.ts`.
+
 Currently, two official plugins are available:
 
 - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
