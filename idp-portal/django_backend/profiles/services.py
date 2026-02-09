@@ -313,8 +313,10 @@ class ProfileService:
             perm.set_target_names(permission_data['target_names'])
         if 'target_patterns' in permission_data:
             perm.set_target_patterns(permission_data['target_patterns'])
+        if 'filter_by_attribute' in permission_data:
+            perm.set_filter_by_attribute(permission_data['filter_by_attribute'])
         perm.save()
-        
+
         return perm
     
     def get_target_permissions(self, profile_id: int):

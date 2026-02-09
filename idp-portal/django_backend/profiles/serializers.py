@@ -1,8 +1,12 @@
 """DRF serializers for profiles and permissions API (Story M.5)."""
 
+import structlog
 from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_serializer
 from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
+from core.middleware import get_correlation_id
+
+logger = structlog.get_logger(__name__)
 
 
 class ProfileSerializer(serializers.ModelSerializer):
@@ -218,19 +222,67 @@ class ProfileTargetPermissionsSerializer(serializers.Serializer):
         allow_null=True,
         default=list
     )
-    
+    filter_by_attribute = serializers.DictField(
+        child=serializers.ListField(
+            child=serializers.CharField(),
+            allow_empty=False,
+        ),
+        required=False,
+        allow_null=True,
+        help_text="Filter targets by inventory attributes. Keys must be valid concept names from inventory mapping."
+    )
+
+    def validate_filter_by_attribute(self, value):
+        """
+        Validate filter_by_attribute keys against available inventory concepts.
+        Story 23.4 - AC3.
+        """
+        if value is None:
+            return value
+
+        # Code review fix: Reject empty dict per AC3 "valider que le JSON est valide et non vide si fourni"
+        if not value:
+            raise serializers.ValidationError(
+                "filter_by_attribute cannot be an empty dict. Use null to remove filter."
+            )
+
+        from inventory.mapper import InventoryMapper
+        valid_concepts = InventoryMapper.get_available_concepts('servers')
+
+        invalid_keys = [k for k in value.keys() if k not in valid_concepts]
+        if invalid_keys:
+            raise serializers.ValidationError(
+                f"Invalid filter attributes: {', '.join(invalid_keys)}. "
+                f"Valid attributes: {', '.join(valid_concepts)}"
+            )
+
+        for key, values in value.items():
+            if not isinstance(values, list) or not values:
+                raise serializers.ValidationError(
+                    f"Filter attribute '{key}' must have a non-empty list of values"
+                )
+
+        logger.info(
+            "profile_filter_by_attribute_validated",
+            filter=value,
+            validation_result="success",
+            correlation_id=get_correlation_id()
+        )
+
+        return value
+
     def validate(self, data):
         """Validate type/fields coherence (equivalent to Pydantic model_validator)."""
         targets_type = data.get('targets_type')
         target_names = data.get('target_names')
         target_patterns = data.get('target_patterns')
-        
+
         # Normalize empty lists to None for consistent validation
         if target_names is not None and len(target_names) == 0:
             target_names = None
         if target_patterns is not None and len(target_patterns) == 0:
             target_patterns = None
-        
+
         if targets_type == 'list':
             if not target_names:
                 raise serializers.ValidationError({
@@ -254,19 +306,20 @@ class ProfileTargetPermissionsSerializer(serializers.Serializer):
                 raise serializers.ValidationError({
                     'non_field_errors': 'target_names and target_patterns must be empty when targets_type is "all"'
                 })
-        
+
         return data
-    
+
     def to_representation(self, instance):
         """Convert ProfileTargetPermission model to serializer format."""
         if isinstance(instance, ProfileTargetPermission):
             # Map permission_type (LIST/PATTERN/ALL) to targets_type (list/pattern/all)
             type_map = {'LIST': 'list', 'PATTERN': 'pattern', 'ALL': 'all'}
             targets_type = type_map.get(instance.permission_type, 'all')
-            
+
             return {
                 'targets_type': targets_type,
                 'target_names': instance.get_target_names(),
                 'target_patterns': instance.get_target_patterns(),
+                'filter_by_attribute': instance.get_filter_by_attribute(),
             }
         return super().to_representation(instance)

@@ -206,6 +206,10 @@ class ProfileTargetPermission(models.Model):
     """
     Profile target permission model mapping to Oracle PROFILE_TARGET_PERMISSIONS table (V012).
     One row per profile: type (LIST/PATTERN/ALL), target_names/target_patterns in JSON (CLOB).
+
+    Story 23.4: Added filter_by_attribute_json for attribute-based RBAC filtering.
+    Format: {"engine_type": ["oracle", "sqlserver"], "zone": ["prod"], ...}
+    Keys are business concept names from InventoryMapper config (stable, not Oracle columns).
     """
     profile = models.OneToOneField(
         Profile,
@@ -225,6 +229,12 @@ class ProfileTargetPermission(models.Model):
     # CLOB fields - using TextField with JSON serialization helpers
     target_names_json = models.TextField(null=True, blank=True, db_column='TARGET_NAMES_JSON')
     target_patterns_json = models.TextField(null=True, blank=True, db_column='TARGET_PATTERNS_JSON')
+    filter_by_attribute_json = models.TextField(
+        null=True,
+        blank=True,
+        db_column='FILTER_BY_ATTRIBUTE_JSON',
+        help_text='JSON dict filtering targets by inventory attributes. Format: {"engine_type": ["oracle"], ...}'
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
     updated_at = models.DateTimeField(auto_now=True, db_column='UPDATED_AT')
 
@@ -268,3 +278,38 @@ class ProfileTargetPermission(models.Model):
             self.target_patterns_json = json.dumps(value)
         else:
             self.target_patterns_json = None
+
+    def get_filter_by_attribute(self) -> dict[str, list[str]] | None:
+        """
+        Deserialize filter_by_attribute from JSON CLOB.
+
+        Returns:
+            Dict mapping attribute concept keys to list of values, or None if not set.
+            Example: {"engine_type": ["oracle", "sqlserver"], "zone": ["prod"]}
+
+        Story 23.4 - RBAC filter by inventory attributes.
+        """
+        if self.filter_by_attribute_json:
+            try:
+                return json.loads(self.filter_by_attribute_json)
+            except (json.JSONDecodeError, TypeError) as e:
+                # Code review fix: JSON malformé = ERROR (corruption données), pas WARNING
+                logger.error(
+                    f"Failed to deserialize filter_by_attribute for Profile {self.profile_id}: {e}"
+                )
+                return None
+        return None
+
+    def set_filter_by_attribute(self, value: dict | None) -> None:
+        """
+        Serialize filter_by_attribute to JSON CLOB.
+
+        Args:
+            value: Dict mapping attribute keys to list of values, or None to clear.
+
+        Story 23.4 - RBAC filter by inventory attributes.
+        """
+        if value is not None:
+            self.filter_by_attribute_json = json.dumps(value)
+        else:
+            self.filter_by_attribute_json = None

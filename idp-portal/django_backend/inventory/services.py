@@ -44,6 +44,69 @@ class InventoryServiceError(Exception):
     pass
 
 
+def _apply_attribute_filter(
+    servers: list[dict],
+    filter_by_attr: dict,
+    correlation_id: str = '',
+) -> list[dict]:
+    """
+    Apply attribute-based filtering to servers list.
+
+    Filters are cumulative (AND): server must match ALL criteria.
+    If an attribute is absent from server data, that criterion is ignored (WARNING logged).
+
+    Args:
+        servers: List of server dicts
+        filter_by_attr: Dict mapping attribute keys to allowed values.
+        correlation_id: Correlation ID for logging.
+
+    Returns:
+        Filtered list of servers matching all criteria.
+
+    Story 23.4 - AC2.
+    """
+    nb_before = len(servers)
+    if not filter_by_attr:
+        return servers
+
+    filtered = list(servers)
+
+    for attr_key, allowed_values in filter_by_attr.items():
+        if not allowed_values:
+            continue
+
+        # Check if attribute exists in any server
+        has_attribute = any(attr_key in srv for srv in servers)
+        if not has_attribute:
+            logger.warning(
+                "rbac_filter_attribute_not_found",
+                attribute=attr_key,
+                allowed_values=allowed_values,
+                correlation_id=correlation_id,
+            )
+            continue
+
+        # Case-insensitive matching for attribute values
+        allowed_lower = [str(v).lower() for v in allowed_values]
+        filtered = [
+            srv for srv in filtered
+            if str(srv.get(attr_key, '')).lower() in allowed_lower
+        ]
+
+    nb_after = len(filtered)
+
+    # Code review fix: Log filter application with nb_before/after per AC2
+    logger.info(
+        "rbac_filter_by_attribute_applied",
+        filter=filter_by_attr,
+        nb_servers_before=nb_before,
+        nb_servers_after=nb_after,
+        correlation_id=correlation_id,
+    )
+
+    return filtered
+
+
 class InventoryService:
     """
     Service for inventory source resolution and target retrieval.
@@ -401,7 +464,10 @@ class InventoryService:
         # Aggregate permissions from all profiles (RM6: cumul multi-profils)
         allowed_environments: set[str] = set()
         target_restrictions: list[tuple[str, list[str] | None]] = []
+        # Story 23.4: Collect attribute filters per profile for post-restriction filtering
+        attribute_filters: list[dict | None] = []
         has_all_access = False
+        all_access_attribute_filters: list[dict | None] = []
 
         for profile in profiles:
             is_admin = getattr(profile, 'is_admin', 0) == 1
@@ -416,10 +482,10 @@ class InventoryService:
                         if isinstance(e, str):
                             raw_env = (e or '').strip().lower()
                             normalized_env = self._normalize_environment(e)
-                            
+
                             # Add normalized value (for alias handling: certif -> staging)
                             allowed_environments.add(normalized_env)
-                            
+
                             # Also add raw value to match targets with raw environments
                             # Example: profile has "certif" -> adds both "staging" and "certif"
                             if raw_env and raw_env != normalized_env:
@@ -435,21 +501,38 @@ class InventoryService:
 
             # Get target permissions
             target_perm = getattr(profile, 'profiletargetpermission', None)
+            # Story 23.4: Get attribute filter for this profile
+            attr_filter = None
+            if target_perm:
+                try:
+                    attr_filter = target_perm.get_filter_by_attribute()
+                except Exception as e:
+                    logger.error(
+                        "rbac_filter_by_attribute_error",
+                        profile_id=profile.id,
+                        error=str(e),
+                        correlation_id=correlation_id
+                    )
+
             if target_perm:
                 perm_type = target_perm.permission_type
                 if perm_type == 'ALL':
                     has_all_access = True
+                    all_access_attribute_filters.append(attr_filter)
                 elif perm_type == 'PATTERN':
                     patterns = target_perm.get_target_patterns()
                     if patterns:
                         target_restrictions.append(('PATTERN', patterns))
+                        attribute_filters.append(attr_filter)
                 elif perm_type == 'LIST':
                     names = target_perm.get_target_names()
                     if names:
                         target_restrictions.append(('LIST', names))
+                        attribute_filters.append(attr_filter)
             elif is_admin:
                 # Admin profiles without ProfileTargetPermission: full target access
                 has_all_access = True
+                all_access_attribute_filters.append(None)
 
         # When admin profiles have actions_type=ALL but empty environments
         if not allowed_environments and any(getattr(p, 'is_admin', 0) == 1 for p in profiles):
@@ -492,13 +575,19 @@ class InventoryService:
                 try:
                     servers = self.list_servers(environment=env)
                     # Normalize to Target-like dicts for compatibility
+                    # Story 23.4: Preserve all server attributes for attribute filtering
                     for s in servers:
-                        all_targets.append({
+                        target = {
                             'name': s.get('name', ''),
                             'environment': s.get('environment', ''),
                             'target_type': 'server',
                             'metadata': None,
-                        })
+                        }
+                        # Carry over extra mapped attributes (engine_type, zone, etc.)
+                        for key, val in s.items():
+                            if key not in target:
+                                target[key] = val
+                        all_targets.append(target)
                 except InventoryServiceError as e:
                     # Log and track failed environments
                     failed_envs.append(env)
@@ -573,6 +662,16 @@ class InventoryService:
                 filtered_targets, target_restrictions
             )
 
+        # Story 23.4: Apply attribute-based filtering per profile (OR between profiles)
+        filtered_targets = self._apply_attribute_filters_across_profiles(
+            filtered_targets,
+            has_all_access,
+            all_access_attribute_filters,
+            target_restrictions,
+            attribute_filters,
+            correlation_id,
+        )
+
         # Pagination (Story 22.6: renamed total_count → total)
         total = len(filtered_targets)
         start_index = (page - 1) * page_size
@@ -638,6 +737,90 @@ class InventoryService:
                 result.append(target)
 
         return result
+
+    def _apply_attribute_filters_across_profiles(
+        self,
+        targets: list[dict],
+        has_all_access: bool,
+        all_access_attribute_filters: list[dict | None],
+        target_restrictions: list[tuple[str, list[str] | None]],
+        attribute_filters: list[dict | None],
+        correlation_id: str,
+    ) -> list[dict]:
+        """
+        Apply attribute-based filters across profiles (OR between profiles).
+
+        Story 23.4 - AC2:
+        - Within a profile: attribute filters are cumulative (AND)
+        - Between profiles: results are additive (OR)
+        - If ANY profile has no attribute filter, its targets pass through unfiltered
+
+        Performance Note:
+            Applies each filter independently (O(n×m) where n=servers, m=filters).
+            May be slow with >1000 servers and >5 active filters.
+
+        Args:
+            targets: Pre-filtered targets (after env + target restrictions)
+            has_all_access: Whether any profile has ALL target access
+            all_access_attribute_filters: Attribute filters for ALL-access profiles
+            target_restrictions: List of (type, values) for non-ALL profiles
+            attribute_filters: Parallel list of attribute filters for non-ALL profiles
+            correlation_id: Correlation ID for logging
+
+        Returns:
+            Targets filtered by attribute filters (OR across profiles)
+        """
+        # Collect all active attribute filters
+        active_filters = []
+        has_unfiltered_profile = False
+
+        # Check ALL-access profiles
+        if has_all_access:
+            for af in all_access_attribute_filters:
+                if af:
+                    active_filters.append(af)
+                else:
+                    has_unfiltered_profile = True
+
+        # Check non-ALL profiles
+        for af in attribute_filters:
+            if af:
+                active_filters.append(af)
+            else:
+                has_unfiltered_profile = True
+
+        # If no attribute filters at all, or any profile has no filter, return as-is
+        if not active_filters or has_unfiltered_profile:
+            return targets
+
+        # Code review fix: Use tuple (name, environment) as key to avoid name collisions across environments
+        # Apply each filter independently and union results (OR between profiles)
+        result_set: set[tuple[str, str]] = set()
+        result_targets: dict[tuple[str, str], dict] = {}
+
+        for attr_filter in active_filters:
+            filtered = _apply_attribute_filter(targets, attr_filter, correlation_id)
+            for t in filtered:
+                name = t.get('name', '')
+                env = t.get('environment', '')
+                key = (name, env)
+                if key not in result_set:
+                    result_set.add(key)
+                    result_targets[key] = t
+
+        nb_before = len(targets)
+        nb_after = len(result_targets)
+
+        logger.info(
+            "rbac_filter_by_attribute_applied_across_profiles",
+            nb_filters=len(active_filters),
+            nb_servers_before=nb_before,
+            nb_servers_after=nb_after,
+            correlation_id=correlation_id,
+        )
+
+        # Preserve original order
+        return [t for t in targets if (t.get('name', ''), t.get('environment', '')) in result_set]
 
     def _normalize_environment(self, raw_env: str) -> str:
         """

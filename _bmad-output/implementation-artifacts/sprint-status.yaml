@@ -314,7 +314,7 @@ development_status:
     23-1-backend-config-mapping-colonnes-lecture-entites: done # Code review adversarial 2026-02-09: 6 HIGH + 4 MEDIUM + 3 LOW issues, ALL auto-fixed — Python 3.9+ compatibility, type hints complets, validation sécurité renforcée (concept keys, Oracle length limits 30 char), limites résultats ROWNUM ≤ 10000 (DoS prevention) — 69/69 tests pass ✅
     23-2-backend-inventory-service-multi-tables: done # Code review adversarial 2026-02-09: 10 issues (3 CRITICAL + 4 MEDIUM + 3 LOW) ALL auto-fixed — Optimized IN clause for server_names (fixes N+1), empty list validation, all-envs-fail error handling, enhanced docstrings Performance Note, improved RBAC docs with 3-step example — 43/43 tests pass ✅
     23-3-backend-api-servers-databases-instances: done # 2026-02-09: Code review — 11 issues auto-fixés (8 HIGH + 3 MEDIUM) — RBAC security, OpenAPI docs, error handling, test refactoring — 55/55 tests pass ✅
-    23-4-backend-rbac-profils-filtres-par-attribut: backlog
+    23-4-backend-rbac-profils-filtres-par-attribut: done # 53 tests, AC1-AC8 done, docs/rbac-filter-by-attribute.md
     23-5-frontend-admin-source-inventaire-table-par-parametre: backlog
     23-6-frontend-use-target-inventory-contexte-serveur: backlog
     23-7-frontend-profile-form-options-tous-oracle-sql: backlog

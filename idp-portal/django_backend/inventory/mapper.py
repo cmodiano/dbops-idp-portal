@@ -261,6 +261,54 @@ class InventoryMapper:
 
         return " AND ".join(conditions), params
 
+    @staticmethod
+    def get_available_concepts(entity_name: str = 'servers') -> list[str]:
+        """
+        Get available concept keys for the specified entity type.
+
+        Concept keys are stable attribute names defined in the inventory mapping config,
+        independent of actual Oracle column names. Used for RBAC filter validation (Story 23.4).
+
+        Performance Note:
+            Instantiates InventoryService internally, which queries the Integration DB.
+            Avoid calling repeatedly in loops - cache result if needed.
+
+        Args:
+            entity_name: Entity type ('servers', 'instances', 'databases')
+
+        Returns:
+            List of concept keys (e.g., ['name', 'environment', 'engine_type', ...])
+
+        Story 23.4 - AC5.
+        """
+        from inventory.services import InventoryService
+
+        service = InventoryService()
+        mapper = service._get_inventory_mapper()
+
+        if mapper and mapper.is_multi_table:
+            # Code review fix: validate config before reading to prevent SQL injection via malicious config
+            errors = mapper.validate_config()
+            if errors:
+                correlation_id = get_correlation_id()
+                logger.error(
+                    "inventory_mapper_config_invalid_in_get_available_concepts",
+                    entity_name=entity_name,
+                    validation_errors=errors,
+                    correlation_id=correlation_id,
+                )
+                # Fallback to safe defaults if config is invalid
+                return ['name', 'environment', 'type']
+
+            entity = mapper.get_entity_config(entity_name)
+            if entity:
+                columns = entity.get('columns', {})
+                if columns:
+                    return list(columns.keys())
+
+        # Fallback: default concepts for flat table mode
+        return ['name', 'environment', 'type']
+
     def validate_config(self) -> list[str]:
         """
         Validate the entire mapping configuration.
