@@ -278,11 +278,59 @@ def validate_feature_flags_config():
 
         logger.info("feature_flags_redis_pubsub_enabled", redis_url=redis_url.split('@')[-1])  # Hide credentials
 
+    # Story 22.16: Validate cache backend compatibility with anti-thundering herd lock
+    if source == 'database':
+        from django.conf import settings
+        cache_backend = settings.CACHES.get('default', {}).get('BACKEND', '')
+
+        # LocMemCache only provides per-process locking, not inter-process
+        if 'locmem' in cache_backend.lower():
+            if is_dev:
+                logger.warning(
+                    "feature_flags_cache_backend_warning",
+                    message="⚠️ DEV: LocMemCache provides per-process locking only. "
+                            "Anti-thundering herd lock will NOT work across multiple workers. "
+                            "Use Redis/Memcached in production.",
+                    cache_backend=cache_backend,
+                )
+            else:
+                error_msg = (
+                    "❌ FEATURE FLAGS: LocMemCache incompatible with database source in production.\n"
+                    f"Current cache backend: {cache_backend}\n"
+                    "The anti-thundering herd lock requires a distributed cache (Redis/Memcached) "
+                    "to prevent concurrent DB loads across multiple workers.\n"
+                    "Either:\n"
+                    "  1. Change FEATURE_FLAGS_SOURCE to 'env', OR\n"
+                    "  2. Configure CACHES['default'] to use Redis/Memcached"
+                )
+                logger.error(
+                    "feature_flags_cache_backend_incompatible",
+                    cache_backend=cache_backend,
+                    source=source,
+                )
+                raise ImproperlyConfigured(error_msg)
+
+    # Validate FEATURE_FLAGS_LOCK_TIMEOUT
+    lock_timeout_raw = os.getenv('FEATURE_FLAGS_LOCK_TIMEOUT', '3')
+    try:
+        lock_timeout = int(lock_timeout_raw)
+        if lock_timeout <= 0:
+            raise ValueError("must be positive")
+    except (ValueError, TypeError):
+        error_msg = (
+            "❌ FEATURE FLAGS: Invalid FEATURE_FLAGS_LOCK_TIMEOUT value.\n"
+            f"Current value: {lock_timeout_raw}\n"
+            "Expected: positive integer (seconds)"
+        )
+        logger.error("feature_flags_lock_timeout_invalid", value=lock_timeout_raw)
+        raise ImproperlyConfigured(error_msg)
+
     logger.info(
         "feature_flags_config_validated",
         source=source,
         enabled=enabled_raw in ('true', '1'),
         cache_ttl=int(ttl_raw),
+        lock_timeout=lock_timeout,
         flag_count=flag_count,
         pubsub_enabled=pubsub_enabled,
     )

@@ -200,7 +200,7 @@ class TestFeatureFlagServiceEnv:
     )
     def test_cache_is_used(self):
         feature_flags.is_enabled('test')
-        cached = cache.get('feature_flags:all')
+        cached = cache.get('feature_flags:all:env')
         assert cached is not None
         assert 'test' in cached
 
@@ -258,11 +258,11 @@ class TestFeatureFlagCacheInvalidation:
     )
     def test_invalidate_specific_flag(self):
         feature_flags.is_enabled('cached_flag')
-        assert cache.get('feature_flag:cached_flag') is not None
+        assert cache.get('feature_flag:cached_flag:env') is not None
 
         feature_flags.invalidate_cache('cached_flag')
-        assert cache.get('feature_flag:cached_flag') is None
-        assert cache.get('feature_flags:all') is None
+        assert cache.get('feature_flag:cached_flag:env') is None
+        assert cache.get('feature_flags:all:env') is None
 
     @override_settings(
         FEATURE_FLAGS_SOURCE='env',
@@ -273,7 +273,7 @@ class TestFeatureFlagCacheInvalidation:
         feature_flags.is_enabled('a')
         feature_flags.is_enabled('b')
         feature_flags.invalidate_cache()
-        assert cache.get('feature_flags:all') is None
+        assert cache.get('feature_flags:all:env') is None
 
 
 # ============================================================================
@@ -421,16 +421,16 @@ class TestFeatureFlagUpdateAPI:
     )
     def test_patch_invalidates_cache(self, api_client_admin):
         FeatureFlagFactory.create(flag_key='cache_test', enabled=True)
-        cache.set('feature_flag:cache_test', {'enabled': True}, 300)
-        cache.set('feature_flags:all', {'cache_test': {'enabled': True}}, 300)
+        cache.set('feature_flag:cache_test:database', {'enabled': True}, 300)
+        cache.set('feature_flags:all:database', {'cache_test': {'enabled': True}}, 300)
 
         api_client_admin.patch(
             '/api/v1/feature-flags/cache_test/',
             data={'enabled': False},
             format='json',
         )
-        assert cache.get('feature_flag:cache_test') is None
-        assert cache.get('feature_flags:all') is None
+        assert cache.get('feature_flag:cache_test:database') is None
+        assert cache.get('feature_flags:all:database') is None
 
     def test_patch_invalid_rollout_over_100(self, api_client_admin):
         response = api_client_admin.patch(
@@ -542,15 +542,15 @@ class TestFeatureFlagUpdateEnvSourceAPI:
     def test_patch_env_source_invalidates_cache(self, api_client_admin):
         """PATCH should invalidate per-flag and global cache."""
         feature_flags.is_enabled('cache_env_flag')
-        assert cache.get('feature_flags:all') is not None
+        assert cache.get('feature_flags:all:env') is not None
 
         api_client_admin.patch(
             '/api/v1/feature-flags/cache_env_flag/',
             data={'enabled': False},
             format='json',
         )
-        assert cache.get('feature_flag:cache_env_flag') is None
-        assert cache.get('feature_flags:all') is None
+        assert cache.get('feature_flag:cache_env_flag:env') is None
+        assert cache.get('feature_flags:all:env') is None
 
     @override_settings(
         FEATURE_FLAGS_SOURCE='env',

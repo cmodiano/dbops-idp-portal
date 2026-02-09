@@ -229,7 +229,7 @@ else:
 RATELIMIT_ENABLED = os.getenv('RATELIMIT_ENABLED', 'true').lower() == 'true'
 
 # ============================================================================
-# Feature Flags Configuration (Story 17.12)
+# Feature Flags Configuration (Story 17.12, 22.16)
 # ============================================================================
 # Source: 'env' (from FEATURE_FLAGS JSON env var) or 'database' (from CORE_FEATURE_FLAGS table)
 FEATURE_FLAGS_SOURCE = os.getenv('FEATURE_FLAGS_SOURCE', 'env')
@@ -239,6 +239,12 @@ FEATURE_FLAGS_ENABLED = os.getenv('FEATURE_FLAGS_ENABLED', 'true').lower() == 't
 FEATURE_FLAGS_CACHE_TTL = int(os.getenv('FEATURE_FLAGS_CACHE_TTL', '300'))
 # JSON-encoded feature flags from environment (used when FEATURE_FLAGS_SOURCE=env)
 FEATURE_FLAGS = os.getenv('FEATURE_FLAGS', '{}')
+
+# Story 22.16: Anti-thundering herd lock timeout (seconds)
+# Timeout for distributed lock when cache expires. Prevents concurrent DB loads.
+# CRITICAL: Requires distributed cache backend (Redis/Memcached) in production.
+# LocMemCache provides per-process locking only.
+FEATURE_FLAGS_LOCK_TIMEOUT = int(os.getenv('FEATURE_FLAGS_LOCK_TIMEOUT', '3'))
 
 # CORS configuration (Story M.8 - Task 7)
 # NOTE: Default value is for development only. MUST be configured via CORS_ORIGIN env var in production.
