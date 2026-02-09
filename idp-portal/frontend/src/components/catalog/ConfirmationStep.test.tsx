@@ -1,0 +1,234 @@
+/**
+ * Tests for ConfirmationStep component (Story 21.5).
+ * Tests dynamic environment labels, badge colors, and case-insensitive production detection.
+ */
+
+import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { App } from 'antd';
+import { ConfirmationStep, type ConfirmationStepProps } from './ConfirmationStep';
+import type { InventoryItem, ImpactLevel } from '../../types/api';
+
+// Mock SchedulingPanel to avoid complex dependency chain
+vi.mock('./SchedulingPanel', () => ({
+  SchedulingPanel: () => <div data-testid="scheduling-panel" />,
+}));
+
+function TestWrapper({ children }: { children: React.ReactNode }) {
+  return <App>{children}</App>;
+}
+
+const mockAction = {
+  id: 1,
+  name: 'Test Action',
+  description: 'Test',
+  engine: 'Oracle',
+  platform: 'AAP',
+  parameters_schema: {},
+  impact_rules: {},
+  default_impact_level: 'low' as ImpactLevel,
+  status: 'published' as const,
+  requires_target: false,
+  change_type_config: {},
+  execution_count: 0,
+  tags: [],
+  is_favorite: false,
+  icon_url: null,
+  owner: 'admin',
+  created_at: '',
+  updated_at: '',
+  resource_type: 'job_template' as const,
+  category_id: null,
+  category_name: null,
+  allowed_environments: [],
+  integration_id: null,
+  requires_approval: false,
+  approval_groups: [],
+} as unknown as ConfirmationStepProps['action'];
+
+const defaultProps: ConfirmationStepProps = {
+  action: mockAction,
+  variant: 'default',
+  selectedTargets: [],
+  derivedEnvironment: 'dev',
+  currentImpact: null,
+  parameters: {},
+  submitError: null,
+  environmentsCache: null,
+  isScheduling: false,
+  scheduling: { mode: 'immediate' } as ConfirmationStepProps['scheduling'],
+  onSchedulingChange: vi.fn(),
+  schedulingError: null,
+  submitting: false,
+  schedulingValidation: { isValid: true, errors: [] } as unknown as ConfirmationStepProps['schedulingValidation'],
+};
+
+describe('ConfirmationStep - Story 21.5', () => {
+  describe('Environment label display (AC #2)', () => {
+    it('displays environment name from cache when available', () => {
+      const cache: InventoryItem[] = [
+        { id: 'dev', name: 'Développement', environment: null },
+      ];
+
+      render(
+        <TestWrapper>
+          <ConfirmationStep
+            {...defaultProps}
+            derivedEnvironment="dev"
+            environmentsCache={cache}
+          />
+        </TestWrapper>
+      );
+
+      expect(screen.getByText('Développement')).toBeInTheDocument();
+    });
+
+    it('falls back to getEnvironmentLabel when env not in cache', () => {
+      render(
+        <TestWrapper>
+          <ConfirmationStep
+            {...defaultProps}
+            derivedEnvironment="dev"
+            environmentsCache={[]}
+          />
+        </TestWrapper>
+      );
+
+      expect(screen.getByText('Développement')).toBeInTheDocument();
+    });
+
+    it('displays capitalized label for non-standard environment', () => {
+      render(
+        <TestWrapper>
+          <ConfirmationStep
+            {...defaultProps}
+            derivedEnvironment="lab"
+            environmentsCache={[]}
+          />
+        </TestWrapper>
+      );
+
+      expect(screen.getByText('Lab')).toBeInTheDocument();
+    });
+
+    it('displays cache name for non-standard environment when in cache', () => {
+      const cache: InventoryItem[] = [
+        { id: 'lab', name: 'Laboratoire', environment: null },
+      ];
+
+      render(
+        <TestWrapper>
+          <ConfirmationStep
+            {...defaultProps}
+            derivedEnvironment="lab"
+            environmentsCache={cache}
+          />
+        </TestWrapper>
+      );
+
+      expect(screen.getByText('Laboratoire')).toBeInTheDocument();
+    });
+  });
+
+  describe('Badge status (AC #4, #5)', () => {
+    it('shows warning badge for production environment', () => {
+      render(
+        <TestWrapper>
+          <ConfirmationStep
+            {...defaultProps}
+            derivedEnvironment="prod"
+            environmentsCache={[]}
+          />
+        </TestWrapper>
+      );
+
+      const badge = screen.getByText('Production').closest('.ant-badge');
+      expect(badge).toBeTruthy();
+      const dot = badge?.querySelector('.ant-badge-status-dot');
+      expect(dot).toHaveClass('ant-badge-status-warning');
+    });
+
+    it('shows warning badge for PROD (case-insensitive)', () => {
+      render(
+        <TestWrapper>
+          <ConfirmationStep
+            {...defaultProps}
+            derivedEnvironment="PROD"
+            environmentsCache={[]}
+          />
+        </TestWrapper>
+      );
+
+      const badge = screen.getByText('Production').closest('.ant-badge');
+      expect(badge).toBeTruthy();
+      const dot = badge?.querySelector('.ant-badge-status-dot');
+      expect(dot).toHaveClass('ant-badge-status-warning');
+    });
+
+    it('shows processing badge for non-production environment', () => {
+      render(
+        <TestWrapper>
+          <ConfirmationStep
+            {...defaultProps}
+            derivedEnvironment="dev"
+            environmentsCache={[]}
+          />
+        </TestWrapper>
+      );
+
+      const badge = screen.getByText('Développement').closest('.ant-badge');
+      expect(badge).toBeTruthy();
+      const dot = badge?.querySelector('.ant-badge-status-dot');
+      expect(dot).toHaveClass('ant-badge-status-processing');
+    });
+
+    it('shows processing badge for lab environment', () => {
+      render(
+        <TestWrapper>
+          <ConfirmationStep
+            {...defaultProps}
+            derivedEnvironment="lab"
+            environmentsCache={[]}
+          />
+        </TestWrapper>
+      );
+
+      const badge = screen.getByText('Lab').closest('.ant-badge');
+      expect(badge).toBeTruthy();
+      const dot = badge?.querySelector('.ant-badge-status-dot');
+      expect(dot).toHaveClass('ant-badge-status-processing');
+    });
+  });
+
+  describe('Non-standard environments in recap (AC #5)', () => {
+    it('renders non-standard environments without errors', () => {
+      expect(() => {
+        render(
+          <TestWrapper>
+            <ConfirmationStep
+              {...defaultProps}
+              derivedEnvironment="uat"
+              environmentsCache={[]}
+            />
+          </TestWrapper>
+        );
+      }).not.toThrow();
+
+      expect(screen.getByText('Uat')).toBeInTheDocument();
+    });
+
+    it('displays qa environment correctly', () => {
+      render(
+        <TestWrapper>
+          <ConfirmationStep
+            {...defaultProps}
+            derivedEnvironment="qa"
+            environmentsCache={[]}
+          />
+        </TestWrapper>
+      );
+
+      expect(screen.getByText('Qa')).toBeInTheDocument();
+    });
+  });
+});

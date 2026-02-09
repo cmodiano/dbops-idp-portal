@@ -438,8 +438,8 @@ export interface ActionStats {
 
 // === Execution Types (Story 4.1) ===
 
-/** Execution environment (Story 4.1, AC2). */
-export type ExecutionEnvironment = 'dev' | 'staging' | 'prod';
+/** Execution environment (Story 4.1, AC2; Story 21.5: extended to string for dynamic inventory). */
+export type ExecutionEnvironment = string;
 
 /** Execution status (Story 4.1; Story 7.4: REJECTED; Story 18.6: INTEGRATION_ERROR). */
 export type ExecutionStatusType = 'SUBMITTED' | 'INTEGRATION_ERROR' | 'PENDING_APPROVAL' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'REJECTED';

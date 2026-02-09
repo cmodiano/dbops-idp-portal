@@ -241,16 +241,23 @@ describe('ExecutionWizard', () => {
       expect(screen.getByText('Eleve')).toBeInTheDocument();
     });
 
-    it('only shows allowed environments', () => {
+    it('only shows allowed environments', async () => {
       render(
         <ExecutionWizard {...defaultProps} allowedEnvironments={['dev', 'staging']} />,
         { wrapper: TestWrapper }
       );
 
+      // Wait for cache to load
+      await waitFor(() => {
+        expect(screen.getByLabelText('Environnement cible')).toBeInTheDocument();
+      });
+
       const select = screen.getByRole('combobox');
       fireEvent.mouseDown(select);
 
-      expect(screen.getByText('Developpement')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText('Developpement')).toBeInTheDocument();
+      });
       expect(screen.getByText('Staging')).toBeInTheDocument();
       // Prod should not be visible (not in allowed list)
     });
@@ -345,8 +352,14 @@ describe('ExecutionWizard', () => {
         { wrapper: TestWrapper }
       );
 
-      // Step 1: select env and proceed
+      // Step 1: wait for cache to load, then select env and proceed
+      await waitFor(() => {
+        expect(screen.getByLabelText('Environnement cible')).toBeInTheDocument();
+      });
       fireEvent.mouseDown(screen.getByLabelText('Environnement cible'));
+      await waitFor(() => {
+        expect(screen.getAllByText('Developpement').length).toBeGreaterThan(0);
+      });
       fireEvent.click(screen.getAllByText('Developpement')[0]);
       await user.click(screen.getByRole('button', { name: 'Suivant' }));
 
@@ -404,7 +417,13 @@ describe('ExecutionWizard', () => {
         { wrapper: TestWrapper }
       );
 
+      await waitFor(() => {
+        expect(screen.getByLabelText('Environnement cible')).toBeInTheDocument();
+      });
       fireEvent.mouseDown(screen.getByLabelText('Environnement cible'));
+      await waitFor(() => {
+        expect(screen.getAllByText('Developpement').length).toBeGreaterThan(0);
+      });
       fireEvent.click(screen.getAllByText('Developpement')[0]);
       await user.click(screen.getByRole('button', { name: 'Suivant' }));
 

@@ -19,14 +19,9 @@ import type { SchedulingState } from '../../hooks/useExecutionSubmit';
 import { SchedulingPanel } from './SchedulingPanel';
 import type { UseSchedulingValidationReturn } from '../../hooks/useSchedulingValidation';
 import type { Target } from './TargetSelector';
+import { getEnvironmentLabel, isProductionEnvironment } from '../../utils/environmentHelpers';
 
 const { Text, Title } = Typography;
-
-const ENVIRONMENT_LABELS: Record<ExecutionEnvironment, string> = {
-  dev: 'Developpement',
-  staging: 'Staging',
-  prod: 'Production',
-};
 
 const STEP_DESCRIPTIONS_SIMPLIFIED = [
   'Selectionnez la cible sur laquelle executer l\'action. L\'environnement sera derive automatiquement.',
@@ -71,8 +66,7 @@ export const ConfirmationStep = memo(function ConfirmationStep({
   const isChangeRequired = changeConfig?.required ?? false;
 
   const environmentName = environmentsCache?.find((env) => env.id === derivedEnvironment)?.name
-    ?? ENVIRONMENT_LABELS[derivedEnvironment!]
-    ?? derivedEnvironment;
+    ?? (derivedEnvironment ? getEnvironmentLabel(derivedEnvironment) : '');
 
   return (
     <div>
@@ -101,7 +95,7 @@ export const ConfirmationStep = memo(function ConfirmationStep({
         )}
         <Descriptions.Item label="Environnement">
           <Badge
-            status={derivedEnvironment === 'prod' ? 'warning' : 'processing'}
+            status={derivedEnvironment && isProductionEnvironment(derivedEnvironment) ? 'warning' : 'processing'}
             text={environmentName}
           />
         </Descriptions.Item>

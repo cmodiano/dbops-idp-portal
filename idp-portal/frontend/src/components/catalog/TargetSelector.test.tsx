@@ -182,7 +182,7 @@ describe('TargetSelector', () => {
       // Wait for dropdown and check group headers
       await waitFor(() => {
         // Group headers should be visible
-        expect(screen.getByText('Developpement')).toBeInTheDocument();
+        expect(screen.getByText('Développement')).toBeInTheDocument();
         expect(screen.getByText('Staging')).toBeInTheDocument();
         expect(screen.getByText('Production')).toBeInTheDocument();
       });
@@ -255,6 +255,127 @@ describe('TargetSelector', () => {
       });
 
       expect(screen.getByLabelText('Custom aria label')).toBeInTheDocument();
+    });
+  });
+
+  describe('Story 21.5 — Non-standard environments', () => {
+    it('displays non-standard environment groups with capitalized labels', async () => {
+      const targetsWithNonStandard: Target[] = [
+        { name: 'srv-dev-01', environment: 'dev', target_type: 'server', metadata: null },
+        { name: 'srv-lab-01', environment: 'lab', target_type: 'server', metadata: null },
+        { name: 'srv-qa-01', environment: 'qa', target_type: 'server', metadata: null },
+      ];
+
+      mockApiFetchRaw.mockResolvedValue({
+        items: targetsWithNonStandard,
+        total: 3,
+        page: 1,
+        page_size: 100,
+        total_pages: 1,
+      });
+
+      const onChange = vi.fn();
+
+      render(
+        <TestWrapper>
+          <TargetSelector value={[]} onChange={onChange} />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(mockApiFetchRaw).toHaveBeenCalled();
+      });
+
+      const select = screen.getByRole('combobox');
+      fireEvent.mouseDown(select);
+
+      await waitFor(() => {
+        expect(screen.getByText('Développement')).toBeInTheDocument();
+        expect(screen.getByText('Lab')).toBeInTheDocument();
+        expect(screen.getByText('Qa')).toBeInTheDocument();
+      });
+    });
+
+    it('orders environments: dev first, then non-standard alphabetically', async () => {
+      const targetsWithMixed: Target[] = [
+        { name: 'srv-qa-01', environment: 'qa', target_type: 'server', metadata: null },
+        { name: 'srv-dev-01', environment: 'dev', target_type: 'server', metadata: null },
+        { name: 'db-prod-01', environment: 'prod', target_type: 'database', metadata: null },
+        { name: 'srv-lab-01', environment: 'lab', target_type: 'server', metadata: null },
+      ];
+
+      mockApiFetchRaw.mockResolvedValue({
+        items: targetsWithMixed,
+        total: 4,
+        page: 1,
+        page_size: 100,
+        total_pages: 1,
+      });
+
+      const onChange = vi.fn();
+
+      render(
+        <TestWrapper>
+          <TargetSelector value={[]} onChange={onChange} />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(mockApiFetchRaw).toHaveBeenCalled();
+      });
+
+      const select = screen.getByRole('combobox');
+      fireEvent.mouseDown(select);
+
+      await waitFor(() => {
+        // All groups should be visible
+        expect(screen.getByText('Développement')).toBeInTheDocument();
+        expect(screen.getByText('Production')).toBeInTheDocument();
+        expect(screen.getByText('Lab')).toBeInTheDocument();
+        expect(screen.getByText('Qa')).toBeInTheDocument();
+      });
+
+      // Check ordering via DOM: dev should appear before prod, prod before lab, lab before qa
+      const groupItems = document.querySelectorAll('.ant-select-item-group');
+      const groupTexts = Array.from(groupItems).map((el) => el.textContent);
+      expect(groupTexts).toEqual(['Développement', 'Production', 'Lab', 'Qa']);
+    });
+
+    it('uses default badge color for non-standard environments', async () => {
+      const targetsWithLab: Target[] = [
+        { name: 'srv-lab-01', environment: 'lab', target_type: 'server', metadata: null },
+      ];
+
+      mockApiFetchRaw.mockResolvedValue({
+        items: targetsWithLab,
+        total: 1,
+        page: 1,
+        page_size: 100,
+        total_pages: 1,
+      });
+
+      const onChange = vi.fn();
+
+      render(
+        <TestWrapper>
+          <TargetSelector value={[]} onChange={onChange} />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(mockApiFetchRaw).toHaveBeenCalled();
+      });
+
+      const select = screen.getByRole('combobox');
+      fireEvent.mouseDown(select);
+
+      await waitFor(() => {
+        expect(screen.getByText('Lab')).toBeInTheDocument();
+      });
+
+      // Check badge color — lab should get 'default' status
+      const badgeDot = document.querySelector('.ant-badge-status-default');
+      expect(badgeDot).toBeInTheDocument();
     });
   });
 });

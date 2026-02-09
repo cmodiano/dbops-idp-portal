@@ -16,6 +16,7 @@ import type { SelectProps } from 'antd';
 
 import { apiFetchRaw } from '../../services/api_client';
 import { useDebounce } from '../../hooks/useDebounce';
+import { getEnvironmentLabel, getEnvironmentColor, sortEnvironments } from '../../utils/environmentHelpers';
 
 /** Target from inventory API */
 export interface Target {
@@ -50,20 +51,6 @@ export interface TargetSelectorProps {
   /** Ref to focus element */
   inputRef?: React.Ref<HTMLElement>;
 }
-
-/** Environment display labels */
-const ENVIRONMENT_LABELS: Record<string, string> = {
-  dev: 'Developpement',
-  staging: 'Staging',
-  prod: 'Production',
-};
-
-/** Environment colors for badges */
-const ENVIRONMENT_COLORS: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
-  dev: 'success',
-  staging: 'warning',
-  prod: 'error',
-};
 
 /**
  * Fetch targets from inventory API.
@@ -139,20 +126,12 @@ export function TargetSelector({
     }
 
     // Convert to Ant Design options with groups
-    const envOrder = ['dev', 'staging', 'prod'];
-    const orderedEnvs = Object.keys(groups).sort((a, b) => {
-      const indexA = envOrder.indexOf(a);
-      const indexB = envOrder.indexOf(b);
-      if (indexA === -1 && indexB === -1) return a.localeCompare(b);
-      if (indexA === -1) return 1;
-      if (indexB === -1) return -1;
-      return indexA - indexB;
-    });
+    const orderedEnvs = sortEnvironments(Object.keys(groups));
 
     return orderedEnvs.map((env) => ({
       label: (
         <span style={{ fontWeight: 600 }}>
-          {ENVIRONMENT_LABELS[env] || env.toUpperCase()}
+          {getEnvironmentLabel(env)}
         </span>
       ),
       options: groups[env].map((target) => ({
@@ -161,7 +140,7 @@ export function TargetSelector({
           <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span>{target.name}</span>
             <Badge
-              status={ENVIRONMENT_COLORS[target.environment] || 'default'}
+              status={getEnvironmentColor(target.environment)}
               text={
                 <span style={{ fontSize: 11, color: '#8c8c8c' }}>
                   ({target.environment})

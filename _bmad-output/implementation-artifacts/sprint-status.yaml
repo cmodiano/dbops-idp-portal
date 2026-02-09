@@ -281,6 +281,6 @@ development_status:
     21-2-backend-ajuster-profile-env-matching-executions: done # Code review 2026-02-09: 10 fixes (5 HIGH + 3 MEDIUM + 2 LOW) - sécurité SOC1, audit trail, performance, tests corrigés
     21-3-tests-backend-inventaire-executions-profils: done # Tests inventory, executions, profils avec valeurs brutes (lab, etc.) — 50 new tests, 101 total pass — Code review adversarial 2026-02-09: AUCUN PROBLÈME trouvé, qualité exemplaire ✅
     21-4-frontend-editeurs-admin-environnements-dynamiques: done # Code review 2026-02-09: 8 fixes (2 HIGH + 4 MEDIUM + 2 LOW) - constantes deprecated, direction→orientation, error UX, cache invalidation, tests error state - 76/76 tests pass ✅
-    21-5-frontend-targetselection-labels-type-executionenvironment: backlog # TargetSelectionStep sans fallback, ENVIRONMENT_LABELS dynamique, ExecutionEnvironment = string
+    21-5-frontend-targetselection-labels-type-executionenvironment: done # Code review 2026-02-09: 2 fixes (2 MEDIUM) - EnvironmentBarChart JSDoc, isEnvironmentAllowed() helper — 113/113 tests pass ✅
     21-6-validation-environnements-profil-sauvegarde: backlog # Optionnel — validation backend/frontend envs à la sauvegarde profil
     epic-21-retrospective: optional

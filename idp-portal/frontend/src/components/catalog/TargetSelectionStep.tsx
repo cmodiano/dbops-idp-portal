@@ -20,14 +20,17 @@ import type { CatalogActionDetail } from '../../services/catalog_service';
 import type { ExecutionEnvironment, InventoryItem } from '../../types/api';
 import { ImpactIndicator } from '../shared/ImpactIndicator';
 import { TargetSelector, type Target } from './TargetSelector';
+import { getEnvironmentLabel, isProductionEnvironment } from '../../utils/environmentHelpers';
 
 const { Text } = Typography;
 
-const ENVIRONMENT_LABELS: Record<ExecutionEnvironment, string> = {
-  dev: 'Developpement',
-  staging: 'Staging',
-  prod: 'Production',
-};
+/**
+ * Check if environment ID is allowed (case-insensitive).
+ * Story 21.5: Optimizes repeated toUpperCase() calls in filtering logic.
+ */
+function isEnvironmentAllowed(envId: string, allowedEnvironments: string[]): boolean {
+  return allowedEnvironments.includes(envId) || allowedEnvironments.includes(envId.toUpperCase());
+}
 
 export interface TargetSelectionStepProps {
   action: CatalogActionDetail;
@@ -196,7 +199,7 @@ export const TargetSelectionStep = memo(function TargetSelectionStep({
             <Alert
               type="info"
               showIcon
-              description={`Environnement derive : ${ENVIRONMENT_LABELS[derivedEnvironment] || derivedEnvironment}`}
+              description={`Environnement derive : ${getEnvironmentLabel(derivedEnvironment)}`}
               style={{ marginBottom: 16 }}
             />
           )}
@@ -214,26 +217,27 @@ export const TargetSelectionStep = memo(function TargetSelectionStep({
               }}
               value={selectedEnvironment ?? undefined}
               onChange={onEnvironmentChange}
-              placeholder="Selectionnez un environnement"
+              placeholder={
+                environmentsCache === null
+                  ? 'Chargement...'
+                  : environmentsCache.length === 0
+                    ? 'Aucun environnement disponible'
+                    : 'Selectionnez un environnement'
+              }
               aria-label="Environnement cible"
               style={{ width: '100%' }}
               loading={environmentsCache === null}
+              disabled={environmentsCache !== null && environmentsCache.filter((env) => isEnvironmentAllowed(env.id, allowedEnvironments)).length === 0}
               options={
                 environmentsCache && environmentsCache.length > 0
                   ? environmentsCache
-                      .filter((env) => allowedEnvironments.includes(env.id) || allowedEnvironments.includes(env.id.toUpperCase()))
+                      .filter((env) => isEnvironmentAllowed(env.id, allowedEnvironments))
                       .map((env) => ({
-                        value: env.id as ExecutionEnvironment,
+                        value: env.id,
                         label: env.name,
                         disabled: false,
                       }))
-                  : (['dev', 'staging', 'prod'] as ExecutionEnvironment[])
-                      .filter((env) => allowedEnvironments.includes(env) || allowedEnvironments.includes(env.toUpperCase()))
-                      .map((env) => ({
-                        value: env,
-                        label: ENVIRONMENT_LABELS[env],
-                        disabled: false,
-                      }))
+                  : []
               }
             />
           </Form.Item>
@@ -262,7 +266,7 @@ export const TargetSelectionStep = memo(function TargetSelectionStep({
         </>
       )}
 
-      {derivedEnvironment === 'prod' && (
+      {derivedEnvironment && isProductionEnvironment(derivedEnvironment) && (
         <Alert
           message="Avertissement - Environnement Production"
           description="Vous etes sur le point d'executer une action en production. Verifiez attentivement les parametres."
