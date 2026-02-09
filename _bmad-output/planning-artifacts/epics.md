@@ -314,6 +314,12 @@ Supprimer la normalisation des environnements et utiliser l'inventaire comme seu
 **Phase :** Growth (Phase 2)
 **Reference :** planning-artifacts/epic-21-inventaire-source-unique-environnements.md
 
+### Epic 23 : Inventaire multi-tables (SERVER, INSTANCE, DB) et UX cibles
+Étendre l'inventaire pour supporter les tables SERVER, INSTANCE et DB avec relations, filtrer les listes instance/DB par serveur choisi dans le wizard, permettre aux profils d'accorder l'accès « tous les serveurs Oracle » ou « tous les serveurs SQL », avec un modèle d'accès évolutif (mapping colonnes) et un RBAC intimement lié aux données d'inventaire.
+**FRs couvertes :** FR42, FR43, FR25b, FR26/FR26a (extension inventaire multi-tables, RBAC par attributs)
+**Phase :** Growth (Phase 2)
+**Reference :** docs/inventaire-multi-tables-ux-cibles.md
+
 ---
 
 ## Epic 1 : Bootstrap Projet & Authentification
@@ -4164,3 +4170,35 @@ afin d'éviter les typo et les références à des environnements obsolètes.
 **When** je sauvegarde un profil avec `environments: [lab, invalid_env]`
 **Then** le backend vérifie que chaque valeur existe dans `list_environments()`
 **And** si invalid_env n'existe pas, une erreur de validation est retournée
+
+---
+
+## Epic 23 : Inventaire multi-tables (SERVER, INSTANCE, DB) et UX cibles
+
+Étendre l'inventaire pour supporter les tables SERVER, INSTANCE et DB avec relations, filtrer les listes instance/DB par serveur choisi dans le wizard, permettre aux profils d'accorder l'accès « tous les serveurs Oracle » ou « tous les serveurs SQL », avec un modèle d'accès évolutif (mapping colonnes) et un RBAC intimement lié aux données d'inventaire.
+
+**Source :** docs/inventaire-multi-tables-ux-cibles.md
+
+### Exigences couvertes (résumé)
+
+- **Données :** Plusieurs tables (SERVER, INSTANCE, DB), relations Serveur 1–N Instance, Instance → DB, DB 1–N Instances. Modèle piloté par config (mapping entités/colonnes/relations), pas de colonnes en dur.
+- **Définition des paramètres (Admin) :** Lors de la définition d’un paramètre pour une action, DBOPS peut indiquer que la valeur **provient de l’inventaire** et choisir **quelle table/entité** : **serveurs**, **instances** ou **bases de données**. Le schéma des paramètres de l’action porte cette info (ex. `source: 'inventory'`, `inventory_type: 'servers' | 'instances' | 'databases'`). Les éditeurs Admin (paramètres d’action) doivent proposer explicitement ce choix.
+- **UX exécution (Wizard) :** Si l’utilisateur a choisi un ou plusieurs serveurs à l’étape 1 (cibles), alors pour tout paramètre marqué « source = inventaire, table = **instances** » (ex. `instance_name`), la liste déroulante à l’étape 2 n’affiche **que les instances liées au(x) serveur(s) choisi(s)**. Idem pour « table = **databases** » : uniquement les bases liées à ce(s) serveur(s). Pour « table = serveurs », la liste reste filtrée par environnement (comportement actuel).
+- **Profils :** Options « Tous les serveurs Oracle » / « Tous les serveurs SQL » (filtre par type de moteur) ; RBAC sur attributs mappés (ex. `engine_type`).
+- **API :** `GET /inventory/servers`, `/databases`, `/instances` avec `environment` et `server_name`/`server_names` ; format `{ data: [...] }`.
+- **Sécurité / perf :** Validation stricte noms tables/colonnes et paramètres ; pagination / limite de serveurs pour gros inventaires ; rétrocompatibilité table plate.
+
+### Comportement cible (exemple)
+
+- **Admin :** Pour l’action « Patching instance », le paramètre `instance_name` est configuré avec : source = inventaire, table = **instances**.
+- **Exécution :** L’utilisateur choisit `server1` (et éventuellement `server2`) à l’étape 1. À l’étape 2, le champ `instance_name` affiche **uniquement les instances liées à server1** (et server2 si multi-sélection). Pas toutes les instances de l’environnement.
+
+### Stories proposées (ordre suggéré)
+
+1. **Backend — Config mapping colonnes + lecture entités** : Config (entités, colonnes, relations), layer InventoryMapper, requêtes SQL pilotées par config, fallback table plate.
+2. **Backend — InventoryService multi-tables** : `list_servers`, `list_instances`, `list_databases` avec filtres environment / server_name / engine_type ; RBAC list_targets_for_user inchangé sur serveurs, listes instance/DB cohérentes avec serveurs autorisés.
+3. **Backend — API /servers, /databases, /instances** : Endpoints avec query params, format attendu par le front.
+4. **Backend — RBAC profils filtres par attribut** : Champ JSON `filter_by_attribute` (ex. engine_type), application dans `list_targets_for_user`, exposition API profils.
+5. **Frontend — Admin : source inventaire + table par paramètre** : Dans l’éditeur de paramètres d’une action, permettre de marquer un paramètre « source = inventaire » et de choisir la table : **Serveurs**, **Instances** ou **Bases de données**. Persistance dans le schéma (ex. `inventory_type`) pour alimenter le wizard.
+6. **Frontend — useTargetInventory + contexte serveur** : Paramètre `selectedServerNames` (ou `selectedTargets`), appels API avec `server_name`/`server_names` pour les paramètres de type instances/databases ; à l’étape 2 du wizard, les listes instance/DB sont restreintes aux instances/bases du (des) serveur(s) choisi(s).
+7. **Frontend — ProfileForm options Tous / Oracle / SQL** : UI pour filtres par type de moteur (et extension à d’autres attributs mappés).

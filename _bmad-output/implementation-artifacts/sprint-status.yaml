@@ -310,8 +310,8 @@ development_status:
     epic-22-retrospective: optional
     # === Epic 23: Inventaire multi-tables (SERVER, INSTANCE, DB) et UX cibles ===
     # Réf: docs/inventaire-multi-tables-ux-cibles.md, epics.md — Mapping config, API /servers /databases /instances, RBAC par attributs, listes instance/DB filtrées par serveur choisi
-    epic-23: backlog
-    23-1-backend-config-mapping-colonnes-lecture-entites: backlog
+    epic-23: in-progress
+    23-1-backend-config-mapping-colonnes-lecture-entites: done # Code review adversarial 2026-02-09: 6 HIGH + 4 MEDIUM + 3 LOW issues, ALL auto-fixed — Python 3.9+ compatibility, type hints complets, validation sécurité renforcée (concept keys, Oracle length limits 30 char), limites résultats ROWNUM ≤ 10000 (DoS prevention) — 69/69 tests pass ✅
     23-2-backend-inventory-service-multi-tables: backlog
     23-3-backend-api-servers-databases-instances: backlog
     23-4-backend-rbac-profils-filtres-par-attribut: backlog

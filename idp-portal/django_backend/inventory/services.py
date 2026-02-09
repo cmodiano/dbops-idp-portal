@@ -1,8 +1,11 @@
 """
 InventoryService for inventory source resolution and target retrieval.
 Story 13.1 - AC1,2: Source inventaire via intégration, fallback DBOPS_INVENTORY.
+Story 23.1 - Config-driven multi-table mapping (servers, instances, databases).
 No local DB table - reads directly from external sources.
 """
+
+from __future__ import annotations
 
 import fnmatch
 import re
@@ -12,6 +15,7 @@ from cachetools import TTLCache
 from django.db import connection
 
 from integrations.models import Integration, IntegrationType
+from inventory.mapper import InventoryMapper, MapperValidationError
 from inventory.models import Target, TargetEnvironment, TargetType
 from profiles.models import Profile
 from core.middleware import get_correlation_id
@@ -23,6 +27,13 @@ _environments_cache: TTLCache[str, list[str]] = TTLCache(maxsize=1, ttl=300)
 
 # Maximum targets to load for in-memory RBAC filtering
 MAX_TARGETS_FOR_RBAC_FILTER = 5000
+
+# Maximum results from multi-table config queries (防止 DoS via unbounded queries)
+# Story 23.1 code review fix: prevent out-of-memory from million-row tables
+MAX_MULTI_TABLE_RESULTS = 10000
+
+# Maximum results from flat table fallback
+MAX_FLAT_TABLE_RESULTS = 10000
 
 # Whitelist of allowed table/synonym names pattern (alphanumeric, underscore, dot for schema.table)
 SAFE_TABLE_NAME_PATTERN = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$')
@@ -708,8 +719,410 @@ class InventoryService:
         """
         Get default environment values as fallback when inventory is unavailable.
         Story 13.7 - Fallback to standard values if inventory service fails.
-        
+
         Returns:
             List of default environment values (dev, staging, prod)
         """
         return ['dev', 'staging', 'prod']
+
+    # --- Story 23.1: Config-driven multi-table entity reading ---
+
+    def _get_inventory_mapper(self) -> InventoryMapper | None:
+        """
+        Get InventoryMapper from active inventory_db integration config.
+
+        Returns:
+            InventoryMapper instance or None if no inventory_db integration
+        """
+        integration = Integration.objects.get_by_type(IntegrationType.INVENTORY_DB)
+        if not integration:
+            return None
+        config = integration.get_config() or {}
+        return InventoryMapper(config)
+
+    def _read_servers_from_config(
+        self,
+        environment: str | None = None,
+        engine_type: str | None = None,
+    ) -> list[dict]:
+        """
+        Read servers from config-driven multi-table or flat table fallback.
+        Story 23.1 AC3: Uses mapped table/columns for servers entity.
+
+        Args:
+            environment: Optional environment filter
+            engine_type: Optional engine type filter (Oracle, SQL Server, etc.)
+
+        Returns:
+            List of dicts with standardized keys (id, name, environment, engine_type)
+        """
+        correlation_id = get_correlation_id()
+        mapper = self._get_inventory_mapper()
+
+        if mapper is None or not mapper.is_multi_table:
+            # AC6 Fallback: use flat table with TYPE=server filter
+            return self._read_servers_flat_fallback(environment)
+
+        try:
+            table = mapper.get_table_name('servers')
+            select = mapper.build_select_clause('servers')
+
+            filters = {}
+            if environment:
+                filters['environment'] = environment
+            if engine_type:
+                filters['engine_type'] = engine_type
+
+            where_clause, params = mapper.build_where_clause('servers', filters)
+
+            # nosec B608 - table/columns validated by mapper via _validate_table_name/_validate_column_name
+            # Oracle subquery pattern to combine ORDER BY + ROWNUM limit (防止 DoS)
+            inner_sql = f"SELECT {select} FROM {table}"
+            if where_clause:
+                inner_sql += f" WHERE {where_clause}"
+            inner_sql += " ORDER BY name"
+            sql = f"SELECT * FROM ({inner_sql}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"
+
+            logger.info(
+                "reading_servers_from_config",
+                table=table,
+                has_env_filter=bool(environment),
+                has_engine_filter=bool(engine_type),
+                correlation_id=correlation_id,
+            )
+
+            return self._execute_mapped_query(sql, params)
+
+        except MapperValidationError as e:
+            logger.error(
+                "server_config_mapping_error",
+                error=str(e),
+                correlation_id=correlation_id,
+            )
+            raise InventoryServiceError(f"Server mapping config error: {e}")
+        except Exception as e:
+            logger.error(
+                "read_servers_from_config_error",
+                error=str(e),
+                error_type=type(e).__name__,
+                correlation_id=correlation_id,
+                exc_info=True,
+            )
+            raise InventoryServiceError(f"Failed to read servers: {e}")
+
+    def _read_instances_from_config(
+        self,
+        environment: str | None = None,
+        server_name: str | None = None,
+    ) -> list[dict]:
+        """
+        Read instances from config-driven multi-table mapping.
+        Story 23.1 AC4: Filters on server_ref column if server_name provided.
+
+        Args:
+            environment: Optional environment filter
+            server_name: Optional server name to filter instances by
+
+        Returns:
+            List of dicts with standardized keys (id, name, environment, server_ref, db_ref)
+        """
+        correlation_id = get_correlation_id()
+        mapper = self._get_inventory_mapper()
+
+        if mapper is None or not mapper.is_multi_table:
+            # AC6 Fallback: flat table mode - no instance concept
+            logger.info(
+                "instances_flat_fallback",
+                reason="no multi-table config",
+                correlation_id=correlation_id,
+            )
+            return []
+
+        entity_config = mapper.get_entity_config('instances')
+        if not entity_config:
+            logger.info(
+                "instances_entity_not_configured",
+                correlation_id=correlation_id,
+            )
+            return []
+
+        try:
+            table = mapper.get_table_name('instances')
+            select = mapper.build_select_clause('instances')
+
+            filters = {}
+            if environment:
+                filters['environment'] = environment
+            if server_name:
+                filters['server_ref'] = server_name
+
+            where_clause, params = mapper.build_where_clause('instances', filters)
+
+            # nosec B608 - table/columns validated by mapper via _validate_table_name/_validate_column_name
+            # Oracle subquery pattern to combine ORDER BY + ROWNUM limit (防止 DoS)
+            inner_sql = f"SELECT {select} FROM {table}"
+            if where_clause:
+                inner_sql += f" WHERE {where_clause}"
+            inner_sql += " ORDER BY name"
+            sql = f"SELECT * FROM ({inner_sql}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"
+
+            logger.info(
+                "reading_instances_from_config",
+                table=table,
+                has_env_filter=bool(environment),
+                has_server_filter=bool(server_name),
+                correlation_id=correlation_id,
+            )
+
+            return self._execute_mapped_query(sql, params)
+
+        except MapperValidationError as e:
+            logger.error(
+                "instance_config_mapping_error",
+                error=str(e),
+                correlation_id=correlation_id,
+            )
+            raise InventoryServiceError(f"Instance mapping config error: {e}")
+        except Exception as e:
+            logger.error(
+                "read_instances_from_config_error",
+                error=str(e),
+                error_type=type(e).__name__,
+                correlation_id=correlation_id,
+                exc_info=True,
+            )
+            raise InventoryServiceError(f"Failed to read instances: {e}")
+
+    def _read_databases_from_config(
+        self,
+        environment: str | None = None,
+        server_name: str | None = None,
+    ) -> list[dict]:
+        """
+        Read databases from config-driven multi-table mapping.
+        Story 23.1 AC5: If server_name provided, joins via instances to find related DBs.
+
+        Args:
+            environment: Optional environment filter
+            server_name: Optional server name to filter databases via instance relations
+
+        Returns:
+            List of dicts with standardized keys (id, name, environment)
+        """
+        correlation_id = get_correlation_id()
+        mapper = self._get_inventory_mapper()
+
+        if mapper is None or not mapper.is_multi_table:
+            # AC6 Fallback: flat table mode - no database entity concept
+            logger.info(
+                "databases_flat_fallback",
+                reason="no multi-table config",
+                correlation_id=correlation_id,
+            )
+            return []
+
+        entity_config = mapper.get_entity_config('databases')
+        if not entity_config:
+            logger.info(
+                "databases_entity_not_configured",
+                correlation_id=correlation_id,
+            )
+            return []
+
+        try:
+            db_table = mapper.get_table_name('databases')
+            db_select = mapper.build_select_clause('databases')
+
+            if server_name and mapper.get_entity_config('instances'):
+                # AC5: Join via instances to find DBs related to server
+                return self._read_databases_via_instances(
+                    mapper, environment, server_name
+                )
+
+            # Simple query without server filter
+            filters = {}
+            if environment:
+                filters['environment'] = environment
+
+            where_clause, params = mapper.build_where_clause('databases', filters)
+
+            # nosec B608 - table/columns validated by mapper via _validate_table_name/_validate_column_name
+            # Oracle subquery pattern to combine ORDER BY + ROWNUM limit (防止 DoS)
+            inner_sql = f"SELECT {db_select} FROM {db_table}"
+            if where_clause:
+                inner_sql += f" WHERE {where_clause}"
+            inner_sql += " ORDER BY name"
+            sql = f"SELECT * FROM ({inner_sql}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"
+
+            logger.info(
+                "reading_databases_from_config",
+                table=db_table,
+                has_env_filter=bool(environment),
+                correlation_id=correlation_id,
+            )
+
+            return self._execute_mapped_query(sql, params)
+
+        except MapperValidationError as e:
+            logger.error(
+                "database_config_mapping_error",
+                error=str(e),
+                correlation_id=correlation_id,
+            )
+            raise InventoryServiceError(f"Database mapping config error: {e}")
+        except Exception as e:
+            logger.error(
+                "read_databases_from_config_error",
+                error=str(e),
+                error_type=type(e).__name__,
+                correlation_id=correlation_id,
+                exc_info=True,
+            )
+            raise InventoryServiceError(f"Failed to read databases: {e}")
+
+    def _read_databases_via_instances(
+        self,
+        mapper: InventoryMapper,
+        environment: str | None,
+        server_name: str,
+    ) -> list[dict]:
+        """
+        Read databases by joining through instances table.
+        Uses instance.server_ref = server_name AND instance.db_ref = db.name.
+
+        Args:
+            mapper: Configured InventoryMapper
+            environment: Optional environment filter
+            server_name: Server name to filter by
+
+        Returns:
+            List of database dicts
+        """
+        correlation_id = get_correlation_id()
+
+        db_table = mapper.get_table_name('databases')
+        inst_table = mapper.get_table_name('instances')
+        db_name_col = mapper.get_column('databases', 'name')
+        inst_db_ref_col = mapper.get_column('instances', 'db_ref')
+        inst_server_ref_col = mapper.get_column('instances', 'server_ref')
+        db_select = mapper.build_select_clause('databases')
+
+        # Prefix DB columns with alias 'd'
+        aliased_select = db_select.replace(
+            mapper.get_column('databases', 'name'),
+            f"d.{mapper.get_column('databases', 'name')}",
+            1,
+        )
+        # Replace other DB columns with 'd.' prefix
+        for concept, col in (mapper.get_entity_config('databases') or {}).get('columns', {}).items():
+            aliased_select = aliased_select.replace(col, f"d.{col}")
+        id_col = (mapper.get_entity_config('databases') or {}).get('id_column')
+        if id_col:
+            aliased_select = aliased_select.replace(id_col, f"d.{id_col}")
+
+        # nosec B608 - all identifiers validated by mapper via _validate_table_name/_validate_column_name
+        # Oracle subquery pattern to combine ORDER BY + ROWNUM limit (防止 DoS)
+        inner_sql = (
+            f"SELECT DISTINCT {aliased_select} "
+            f"FROM {db_table} d "
+            f"INNER JOIN {inst_table} i ON UPPER(i.{inst_db_ref_col}) = UPPER(d.{db_name_col}) "
+            f"WHERE UPPER(i.{inst_server_ref_col}) = UPPER(:p_server_name)"
+        )
+        params = {'p_server_name': server_name}
+
+        if environment:
+            db_env_col = mapper.get_column('databases', 'environment')
+            inner_sql += f" AND UPPER(d.{db_env_col}) = UPPER(:p_environment)"
+            params['p_environment'] = environment
+
+        inner_sql += f" ORDER BY d.{db_name_col}"
+        sql = f"SELECT * FROM ({inner_sql}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"
+
+        logger.info(
+            "reading_databases_via_instances",
+            db_table=db_table,
+            inst_table=inst_table,
+            server_name=server_name,
+            has_env_filter=bool(environment),
+            correlation_id=correlation_id,
+        )
+
+        return self._execute_mapped_query(sql, params)
+
+    def _read_servers_flat_fallback(self, environment: str | None = None) -> list[dict]:
+        """
+        Fallback: read servers from flat table (TYPE=server filter).
+        Story 23.1 AC6.
+
+        Args:
+            environment: Optional environment filter
+
+        Returns:
+            List of server dicts with standardized keys
+        """
+        correlation_id = get_correlation_id()
+
+        logger.info(
+            "reading_servers_flat_fallback",
+            correlation_id=correlation_id,
+        )
+
+        targets, _ = self._read_oracle_inventory(
+            'DBOPS_INVENTORY',
+            environment=environment,
+            target_type='server',
+            page=1,
+            page_size=MAX_FLAT_TABLE_RESULTS,
+        )
+        # Map flat results to standardized format
+        return [
+            {
+                'id': t.get('name', ''),
+                'name': t.get('name', ''),
+                'environment': t.get('environment', ''),
+                'engine_type': None,
+            }
+            for t in targets
+        ]
+
+    def _execute_mapped_query(self, sql: str, params: dict) -> list[dict]:
+        """
+        Execute a mapped SQL query and return results as list of dicts.
+        Column aliases from SELECT clause become dict keys.
+
+        Args:
+            sql: SQL query string with named bind parameters
+            params: Bind parameter dict
+
+        Returns:
+            List of dicts with column alias as keys
+        """
+        correlation_id = get_correlation_id()
+
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(sql, params)
+                columns = [col[0].lower() for col in cursor.description]
+                rows = cursor.fetchall()
+
+            results = [dict(zip(columns, row)) for row in rows]
+
+            logger.info(
+                "mapped_query_executed",
+                result_count=len(results),
+                correlation_id=correlation_id,
+            )
+
+            return results
+
+        except InventoryServiceError:
+            raise
+        except Exception as e:
+            logger.error(
+                "mapped_query_execution_error",
+                error=str(e),
+                error_type=type(e).__name__,
+                correlation_id=correlation_id,
+                exc_info=True,
+            )
+            raise InventoryServiceError(f"Query execution failed: {e}")
