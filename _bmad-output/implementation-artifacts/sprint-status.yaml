@@ -312,7 +312,7 @@ development_status:
     # Réf: docs/inventaire-multi-tables-ux-cibles.md, epics.md — Mapping config, API /servers /databases /instances, RBAC par attributs, listes instance/DB filtrées par serveur choisi
     epic-23: in-progress
     23-1-backend-config-mapping-colonnes-lecture-entites: done # Code review adversarial 2026-02-09: 6 HIGH + 4 MEDIUM + 3 LOW issues, ALL auto-fixed — Python 3.9+ compatibility, type hints complets, validation sécurité renforcée (concept keys, Oracle length limits 30 char), limites résultats ROWNUM ≤ 10000 (DoS prevention) — 69/69 tests pass ✅
-    23-2-backend-inventory-service-multi-tables: backlog
+    23-2-backend-inventory-service-multi-tables: done # Code review adversarial 2026-02-09: 10 issues (3 CRITICAL + 4 MEDIUM + 3 LOW) ALL auto-fixed — Optimized IN clause for server_names (fixes N+1), empty list validation, all-envs-fail error handling, enhanced docstrings Performance Note, improved RBAC docs with 3-step example — 43/43 tests pass ✅
     23-3-backend-api-servers-databases-instances: backlog
     23-4-backend-rbac-profils-filtres-par-attribut: backlog
     23-5-frontend-admin-source-inventaire-table-par-parametre: backlog

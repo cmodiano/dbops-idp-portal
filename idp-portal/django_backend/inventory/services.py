@@ -479,18 +479,74 @@ class InventoryService:
             )
             return [], 0, False
 
-        # Get targets from source for RBAC filtering
-        # NOTE: RBAC filtering is done in-memory. For large inventories (>5000),
-        # consider implementing server-side RBAC filtering in the SQL query.
-        all_targets, total_available = self.list_targets(
-            environment=None,  # We'll filter ourselves
-            search=search,
-            target_type=target_type,
-            page=1,
-            page_size=MAX_TARGETS_FOR_RBAC_FILTER
-        )
+        # Story 23.2 AC4: Detect multi-table config and use list_servers if active
+        mapper = self._get_inventory_mapper()
+        use_multi_table = mapper is not None and mapper.is_multi_table
 
-        if total_available > MAX_TARGETS_FOR_RBAC_FILTER:
+        if use_multi_table:
+            # Multi-table path: use list_servers (no pagination, returns all for env)
+            # We pass environment=None equivalent by loading all servers then filtering
+            all_targets = []
+            failed_envs = []
+            for env in allowed_environments:
+                try:
+                    servers = self.list_servers(environment=env)
+                    # Normalize to Target-like dicts for compatibility
+                    for s in servers:
+                        all_targets.append({
+                            'name': s.get('name', ''),
+                            'environment': s.get('environment', ''),
+                            'target_type': 'server',
+                            'metadata': None,
+                        })
+                except InventoryServiceError as e:
+                    # Log and track failed environments
+                    failed_envs.append(env)
+                    logger.warning(
+                        "list_servers_failed_for_env",
+                        environment=env,
+                        user_id=user_id,
+                        error=str(e),
+                        correlation_id=correlation_id,
+                    )
+
+            # If ALL environments failed, raise error instead of silent empty result
+            if failed_envs and len(failed_envs) == len(allowed_environments):
+                logger.error(
+                    "list_targets_for_user_all_environments_failed",
+                    user_id=user_id,
+                    failed_environments=failed_envs,
+                    correlation_id=correlation_id,
+                )
+                raise InventoryServiceError(
+                    f"Failed to load servers from all {len(failed_envs)} allowed environments"
+                )
+
+            total_available = len(all_targets)
+            rbac_truncated = False
+
+            logger.info(
+                "rbac_using_multi_table_servers",
+                user_id=user_id,
+                environments_checked=len(allowed_environments),
+                environments_failed=len(failed_envs),
+                total_servers=total_available,
+                correlation_id=correlation_id,
+            )
+        else:
+            # Get targets from source for RBAC filtering (legacy path)
+            # NOTE: RBAC filtering is done in-memory. For large inventories (>5000),
+            # consider implementing server-side RBAC filtering in the SQL query.
+            all_targets, total_available = self.list_targets(
+                environment=None,  # We'll filter ourselves
+                search=search,
+                target_type=target_type,
+                page=1,
+                page_size=MAX_TARGETS_FOR_RBAC_FILTER
+            )
+            rbac_truncated = total_available > MAX_TARGETS_FOR_RBAC_FILTER
+
+        if total_available > MAX_TARGETS_FOR_RBAC_FILTER and not use_multi_table:
             logger.warning(
                 "rbac_filter_truncated",
                 total_available=total_available,
@@ -522,7 +578,7 @@ class InventoryService:
         start_index = (page - 1) * page_size
         end_index = start_index + page_size
         page_results = filtered_targets[start_index:end_index]
-        rbac_truncated = total_available > MAX_TARGETS_FOR_RBAC_FILTER
+        # rbac_truncated already set above (multi-table: always False, legacy: based on count)
 
         # RBAC traceability log (Story 13.3, Subtask 1.5) - single consolidated log
         logger.info(
@@ -725,6 +781,262 @@ class InventoryService:
         """
         return ['dev', 'staging', 'prod']
 
+    # --- Story 23.2: Public multi-table inventory methods ---
+
+    def list_servers(
+        self,
+        environment: str,
+        engine_type: str | None = None,
+    ) -> list[dict]:
+        """
+        List servers from multi-table inventory or flat table fallback.
+
+        Performance Note:
+            Results are limited to MAX_MULTI_TABLE_RESULTS (10000).
+            A warning is logged if this limit is reached.
+
+        Args:
+            environment: Target environment (required)
+            engine_type: Optional filter by engine type (oracle, sqlserver, etc.)
+
+        Returns:
+            List of server dicts: [{ id, name, environment, engine_type? }]
+
+        Raises:
+            InventoryServiceError: If inventory source is unreachable or config invalid
+            ValueError: If environment is empty
+        """
+        if not environment or not environment.strip():
+            raise ValueError("environment is required")
+
+        correlation_id = get_correlation_id()
+
+        try:
+            servers = self._read_servers_from_config(environment, engine_type)
+
+            logger.info(
+                "inventory_list_servers",
+                environment=environment,
+                engine_type=engine_type,
+                nb_results=len(servers),
+                correlation_id=correlation_id,
+            )
+
+            if len(servers) >= MAX_MULTI_TABLE_RESULTS:
+                logger.warning(
+                    "inventory_result_limit_reached",
+                    entity="servers",
+                    limit=MAX_MULTI_TABLE_RESULTS,
+                    correlation_id=correlation_id,
+                )
+
+            return servers
+
+        except (InventoryServiceError, ValueError):
+            raise
+        except MapperValidationError as e:
+            logger.error(
+                "inventory_config_validation_failed",
+                entity="servers",
+                environment=environment,
+                error=str(e),
+                correlation_id=correlation_id,
+            )
+            raise InventoryServiceError("Invalid inventory configuration") from e
+        except Exception as e:
+            logger.error(
+                "inventory_list_servers_failed",
+                environment=environment,
+                error=str(e),
+                error_type=type(e).__name__,
+                correlation_id=correlation_id,
+            )
+            raise InventoryServiceError("Failed to list servers") from e
+
+    def list_instances(
+        self,
+        environment: str,
+        server_name: str | None = None,
+        server_names: list[str] | None = None,
+    ) -> list[dict]:
+        """
+        List instances from multi-table inventory.
+
+        NO RBAC FILTERING - caller must validate server_name against user's allowed servers.
+
+        Security Note:
+            This method does NOT apply RBAC filtering. The caller (API layer)
+            is responsible for:
+            1. Validating that user has access to specified server_name(s)
+            2. Only passing server_name(s) from the user's allowed servers list
+            3. Calling list_targets_for_user first to get allowed servers
+
+        Performance Note:
+            Results are limited to MAX_MULTI_TABLE_RESULTS (10000) per query.
+            A warning is logged if this limit is reached.
+
+        Args:
+            environment: Target environment (required)
+            server_name: Filter by single server (exclusive with server_names)
+            server_names: Filter by multiple servers (exclusive with server_name)
+
+        Returns:
+            List of instance dicts: [{ id, name, environment, server_ref, db_ref? }]
+
+        Raises:
+            InventoryServiceError: If inventory source is unreachable or config invalid
+            ValueError: If environment is empty or both server_name and server_names provided
+        """
+        if not environment or not environment.strip():
+            raise ValueError("environment is required")
+
+        if server_name and server_names:
+            raise ValueError("Cannot specify both server_name and server_names")
+
+        if server_names is not None and not server_names:
+            raise ValueError("server_names cannot be empty list")
+
+        correlation_id = get_correlation_id()
+
+        try:
+            if server_names:
+                # Multiple server filter: use optimized IN clause via _read_instances_from_config_multi
+                result = self._read_instances_from_config_multi(environment, server_names)
+            else:
+                result = self._read_instances_from_config(environment, server_name=server_name)
+
+            server_filter = server_name or (f"[{len(server_names)} servers]" if server_names else None)
+            logger.info(
+                "inventory_list_instances",
+                environment=environment,
+                server_filter=server_filter,
+                nb_results=len(result),
+                correlation_id=correlation_id,
+            )
+
+            if len(result) >= MAX_MULTI_TABLE_RESULTS:
+                logger.warning(
+                    "inventory_result_limit_reached",
+                    entity="instances",
+                    limit=MAX_MULTI_TABLE_RESULTS,
+                    correlation_id=correlation_id,
+                )
+
+            return result
+
+        except (InventoryServiceError, ValueError):
+            raise
+        except MapperValidationError as e:
+            logger.error(
+                "inventory_config_validation_failed",
+                entity="instances",
+                environment=environment,
+                error=str(e),
+                correlation_id=correlation_id,
+            )
+            raise InventoryServiceError("Invalid inventory configuration") from e
+        except Exception as e:
+            logger.error(
+                "inventory_list_instances_failed",
+                environment=environment,
+                error=str(e),
+                error_type=type(e).__name__,
+                correlation_id=correlation_id,
+            )
+            raise InventoryServiceError("Failed to list instances") from e
+
+    def list_databases(
+        self,
+        environment: str,
+        server_name: str | None = None,
+        server_names: list[str] | None = None,
+    ) -> list[dict]:
+        """
+        List databases from multi-table inventory.
+
+        NO RBAC FILTERING - caller must validate server_name against user's allowed servers.
+
+        Security Note:
+            This method does NOT apply RBAC filtering. The caller (API layer)
+            is responsible for:
+            1. Validating that user has access to specified server_name(s)
+            2. Only passing server_name(s) from the user's allowed servers list
+            3. Calling list_targets_for_user first to get allowed servers
+
+        Performance Note:
+            Results are limited to MAX_MULTI_TABLE_RESULTS (10000) per query.
+            A warning is logged if this limit is reached.
+
+        Args:
+            environment: Target environment (required)
+            server_name: Filter by single server (exclusive with server_names)
+            server_names: Filter by multiple servers (exclusive with server_name)
+
+        Returns:
+            List of database dicts: [{ id, name, environment }]
+
+        Raises:
+            InventoryServiceError: If inventory source is unreachable or config invalid
+            ValueError: If environment is empty or both server_name and server_names provided
+        """
+        if not environment or not environment.strip():
+            raise ValueError("environment is required")
+
+        if server_name and server_names:
+            raise ValueError("Cannot specify both server_name and server_names")
+
+        if server_names is not None and not server_names:
+            raise ValueError("server_names cannot be empty list")
+
+        correlation_id = get_correlation_id()
+
+        try:
+            if server_names:
+                # Multiple server filter: use optimized IN clause via _read_databases_from_config_multi
+                result = self._read_databases_from_config_multi(environment, server_names)
+            else:
+                result = self._read_databases_from_config(environment, server_name=server_name)
+
+            server_filter = server_name or (f"[{len(server_names)} servers]" if server_names else None)
+            logger.info(
+                "inventory_list_databases",
+                environment=environment,
+                server_filter=server_filter,
+                nb_results=len(result),
+                correlation_id=correlation_id,
+            )
+
+            if len(result) >= MAX_MULTI_TABLE_RESULTS:
+                logger.warning(
+                    "inventory_result_limit_reached",
+                    entity="databases",
+                    limit=MAX_MULTI_TABLE_RESULTS,
+                    correlation_id=correlation_id,
+                )
+
+            return result
+
+        except (InventoryServiceError, ValueError):
+            raise
+        except MapperValidationError as e:
+            logger.error(
+                "inventory_config_validation_failed",
+                entity="databases",
+                environment=environment,
+                error=str(e),
+                correlation_id=correlation_id,
+            )
+            raise InventoryServiceError("Invalid inventory configuration") from e
+        except Exception as e:
+            logger.error(
+                "inventory_list_databases_failed",
+                environment=environment,
+                error=str(e),
+                error_type=type(e).__name__,
+                correlation_id=correlation_id,
+            )
+            raise InventoryServiceError("Failed to list databases") from e
+
     # --- Story 23.1: Config-driven multi-table entity reading ---
 
     def _get_inventory_mapper(self) -> InventoryMapper | None:
@@ -893,6 +1205,79 @@ class InventoryService:
             )
             raise InventoryServiceError(f"Failed to read instances: {e}")
 
+    def _read_instances_from_config_multi(
+        self,
+        environment: str,
+        server_names: list[str],
+    ) -> list[dict]:
+        """
+        Read instances from multi-table config filtered by multiple servers using IN clause.
+        Optimized version of _read_instances_from_config for server_names parameter.
+
+        Args:
+            environment: Target environment (required)
+            server_names: List of server names to filter by (non-empty)
+
+        Returns:
+            List of instance dicts (deduplicated by id+name)
+        """
+        correlation_id = get_correlation_id()
+        mapper = self._get_inventory_mapper()
+
+        if mapper is None or not mapper.is_multi_table:
+            return []
+
+        entity_config = mapper.get_entity_config('instances')
+        if not entity_config:
+            return []
+
+        try:
+            table = mapper.get_table_name('instances')
+            select = mapper.build_select_clause('instances')
+            server_ref_col = mapper.get_column('instances', 'server_ref')
+            env_col = mapper.get_column('instances', 'environment')
+
+            # Build IN clause with bind parameters
+            in_params = {f'p_server_{i}': sn for i, sn in enumerate(server_names)}
+            in_placeholders = ', '.join(f":{key}" for key in in_params.keys())
+
+            params = {**in_params, 'p_environment': environment}
+
+            # nosec B608 - table/columns validated by mapper
+            inner_sql = (
+                f"SELECT {select} FROM {table} "
+                f"WHERE UPPER({env_col}) = UPPER(:p_environment) "
+                f"AND UPPER({server_ref_col}) IN ({in_placeholders}) "
+                f"ORDER BY name"
+            )
+            sql = f"SELECT * FROM ({inner_sql}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"
+
+            logger.info(
+                "reading_instances_from_config_multi",
+                table=table,
+                server_count=len(server_names),
+                correlation_id=correlation_id,
+            )
+
+            return self._execute_mapped_query(sql, params)
+
+        except MapperValidationError as e:
+            logger.error(
+                "instance_config_mapping_error",
+                error=str(e),
+                correlation_id=correlation_id,
+            )
+            raise InventoryServiceError(f"Instance mapping config error: {e}")
+        except Exception as e:
+            logger.error(
+                "read_instances_from_config_multi_error",
+                error=str(e),
+                error_type=type(e).__name__,
+                correlation_id=correlation_id,
+                exc_info=True,
+            )
+            raise InventoryServiceError(f"Failed to read instances: {e}")
+
     def _read_databases_from_config(
         self,
         environment: str | None = None,
@@ -1048,6 +1433,93 @@ class InventoryService:
         )
 
         return self._execute_mapped_query(sql, params)
+
+    def _read_databases_from_config_multi(
+        self,
+        environment: str,
+        server_names: list[str],
+    ) -> list[dict]:
+        """
+        Read databases from multi-table config filtered by multiple servers using IN clause.
+        Optimized version using JOIN with instances + IN for server_names.
+
+        Args:
+            environment: Target environment (required)
+            server_names: List of server names to filter by (non-empty)
+
+        Returns:
+            List of database dicts (deduplicated by id+name)
+        """
+        correlation_id = get_correlation_id()
+        mapper = self._get_inventory_mapper()
+
+        if mapper is None or not mapper.is_multi_table:
+            return []
+
+        entity_config = mapper.get_entity_config('databases')
+        if not entity_config or not mapper.get_entity_config('instances'):
+            return []
+
+        try:
+            db_table = mapper.get_table_name('databases')
+            inst_table = mapper.get_table_name('instances')
+            db_name_col = mapper.get_column('databases', 'name')
+            db_env_col = mapper.get_column('databases', 'environment')
+            inst_db_ref_col = mapper.get_column('instances', 'db_ref')
+            inst_server_ref_col = mapper.get_column('instances', 'server_ref')
+            db_select = mapper.build_select_clause('databases')
+
+            # Prefix DB columns with alias 'd'
+            aliased_select = db_select
+            for concept, col in entity_config.get('columns', {}).items():
+                aliased_select = aliased_select.replace(col, f"d.{col}")
+            id_col = entity_config.get('id_column')
+            if id_col:
+                aliased_select = aliased_select.replace(id_col, f"d.{id_col}")
+
+            # Build IN clause with bind parameters
+            in_params = {f'p_server_{i}': sn for i, sn in enumerate(server_names)}
+            in_placeholders = ', '.join(f":{key}" for key in in_params.keys())
+
+            params = {**in_params, 'p_environment': environment}
+
+            # nosec B608 - table/columns validated by mapper
+            inner_sql = (
+                f"SELECT DISTINCT {aliased_select} "
+                f"FROM {db_table} d "
+                f"INNER JOIN {inst_table} i ON UPPER(i.{inst_db_ref_col}) = UPPER(d.{db_name_col}) "
+                f"WHERE UPPER(d.{db_env_col}) = UPPER(:p_environment) "
+                f"AND UPPER(i.{inst_server_ref_col}) IN ({in_placeholders}) "
+                f"ORDER BY d.{db_name_col}"
+            )
+            sql = f"SELECT * FROM ({inner_sql}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"
+
+            logger.info(
+                "reading_databases_from_config_multi",
+                db_table=db_table,
+                inst_table=inst_table,
+                server_count=len(server_names),
+                correlation_id=correlation_id,
+            )
+
+            return self._execute_mapped_query(sql, params)
+
+        except MapperValidationError as e:
+            logger.error(
+                "database_config_mapping_error",
+                error=str(e),
+                correlation_id=correlation_id,
+            )
+            raise InventoryServiceError(f"Database mapping config error: {e}")
+        except Exception as e:
+            logger.error(
+                "read_databases_from_config_multi_error",
+                error=str(e),
+                error_type=type(e).__name__,
+                correlation_id=correlation_id,
+                exc_info=True,
+            )
+            raise InventoryServiceError(f"Failed to read databases: {e}")
 
     def _read_servers_flat_fallback(self, environment: str | None = None) -> list[dict]:
         """

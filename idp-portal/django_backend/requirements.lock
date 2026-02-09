@@ -4,18 +4,36 @@ amqp==5.3.1
     # via kombu
 asgiref==3.11.1
     # via
+    #   channels
+    #   daphne
     #   django
     #   django-cors-headers
+attrs==25.4.0
+    # via
+    #   jsonschema
+    #   referencing
+    #   service-identity
+    #   twisted
+autobahn==25.12.2
+    # via daphne
+automat==25.4.16
+    # via twisted
 billiard==4.2.4
     # via celery
 cachetools==7.0.0
     # via idp-portal-backend (pyproject.toml)
+cbor2==5.8.0
+    # via autobahn
 celery==5.6.2
     # via idp-portal-backend (pyproject.toml)
 certifi==2026.1.4
     # via requests
 cffi==2.0.0
-    # via cryptography
+    # via
+    #   autobahn
+    #   cryptography
+channels==4.3.2
+    # via idp-portal-backend (pyproject.toml)
 charset-normalizer==3.4.4
     # via requests
 click==8.3.1
@@ -30,49 +48,88 @@ click-plugins==1.1.1.2
     # via celery
 click-repl==0.3.0
     # via celery
+constantly==23.10.4
+    # via twisted
 croniter==6.0.0
     # via idp-portal-backend (pyproject.toml)
 cryptography==46.0.4
     # via
+    #   autobahn
     #   oracledb
+    #   pyopenssl
     #   python-jose
+    #   service-identity
+daphne==4.2.1
+    # via idp-portal-backend (pyproject.toml)
 django==5.2.11
     # via
     #   idp-portal-backend (pyproject.toml)
+    #   channels
     #   django-cors-headers
     #   djangorestframework
+    #   drf-spectacular
 django-cors-headers==4.9.0
     # via idp-portal-backend (pyproject.toml)
 djangorestframework==3.16.1
+    # via
+    #   idp-portal-backend (pyproject.toml)
+    #   drf-spectacular
+drf-spectacular==0.29.0
     # via idp-portal-backend (pyproject.toml)
 ecdsa==0.19.1
     # via python-jose
 gunicorn==25.0.2
     # via idp-portal-backend (pyproject.toml)
+hyperlink==21.0.0
+    # via
+    #   autobahn
+    #   twisted
 idna==3.11
-    # via requests
+    # via
+    #   hyperlink
+    #   requests
+    #   twisted
+incremental==24.11.0
+    # via twisted
+inflection==0.5.1
+    # via drf-spectacular
 isodate==0.7.2
     # via python3-saml
+jsonschema==4.26.0
+    # via drf-spectacular
+jsonschema-specifications==2025.9.1
+    # via jsonschema
 kombu==5.6.2
     # via celery
 lxml==6.0.2
     # via
     #   python3-saml
     #   xmlsec
+msgpack==1.1.2
+    # via autobahn
 oracledb==3.4.2
     # via idp-portal-backend (pyproject.toml)
 packaging==26.0
     # via
     #   gunicorn
+    #   incremental
     #   kombu
 prompt-toolkit==3.0.52
     # via click-repl
+py-ubjson==0.16.1
+    # via autobahn
 pyasn1==0.6.2
     # via
+    #   pyasn1-modules
     #   python-jose
     #   rsa
+    #   service-identity
+pyasn1-modules==0.4.2
+    # via service-identity
 pycparser==3.0
     # via cffi
+pyopenssl==25.3.0
+    # via twisted
 python-dateutil==2.9.0.post0
     # via
     #   celery
@@ -86,15 +143,27 @@ python3-saml==1.16.0
 pytz==2025.2
     # via croniter
 pyyaml==6.0.3
-    # via idp-portal-backend (pyproject.toml)
+    # via
+    #   idp-portal-backend (pyproject.toml)
+    #   drf-spectacular
 redis==6.4.0
     # via
     #   idp-portal-backend (pyproject.toml)
     #   kombu
+referencing==0.37.0
+    # via
+    #   jsonschema
+    #   jsonschema-specifications
 requests==2.32.5
     # via idp-portal-backend (pyproject.toml)
+rpds-py==0.30.0
+    # via
+    #   jsonschema
+    #   referencing
 rsa==4.9.1
     # via python-jose
+service-identity==24.2.0
+    # via twisted
 six==1.17.0
     # via
     #   ecdsa
@@ -103,12 +172,24 @@ sqlparse==0.5.5
     # via django
 structlog==25.5.0
     # via idp-portal-backend (pyproject.toml)
+twisted==25.5.0
+    # via daphne
+txaio==25.12.2
+    # via autobahn
 typing-extensions==4.15.0
-    # via oracledb
+    # via
+    #   oracledb
+    #   pyopenssl
+    #   referencing
+    #   twisted
 tzdata==2025.3
     # via kombu
 tzlocal==5.3.1
     # via celery
+ujson==5.11.0
+    # via autobahn
+uritemplate==4.2.0
+    # via drf-spectacular
 urllib3==2.6.3
     # via requests
 vine==5.1.0
@@ -120,3 +201,5 @@ wcwidth==0.6.0
     # via prompt-toolkit
 xmlsec==1.3.17
     # via python3-saml
+zope-interface==8.2
+    # via twisted

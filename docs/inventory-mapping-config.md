@@ -92,6 +92,48 @@ Tous les noms de tables et colonnes sont validés par des patterns regex stricts
 
 Toute valeur non conforme est rejetée avec un `MapperValidationError` et loggée avec `correlation_id`.
 
+## Responsabilités RBAC
+
+Les méthodes `list_instances` et `list_databases` sont des **helpers techniques** qui ne filtrent PAS par RBAC. La responsabilité du contrôle d'accès incombe à la couche API.
+
+### Pattern d'utilisation sécurisé
+
+```python
+# CORRECT : la couche API valide d'abord les serveurs autorisés
+# Étape 1 : Obtenir les serveurs autorisés pour cet utilisateur
+allowed_servers, total, truncated = inventory.list_targets_for_user(
+    user_id=user.id,
+    ad_groups=user.ad_groups,
+    environment='prod'
+)
+
+# Étape 2 : Vérifier que le server_name demandé est dans la liste autorisée
+allowed_server_names = {s['name'] for s in allowed_servers}
+if server_name not in allowed_server_names:
+    raise PermissionDenied(f"User not allowed to access server {server_name}")
+
+# Étape 3 : Maintenant on peut charger les instances/databases en sécurité
+instances = inventory.list_instances(environment='prod', server_name=server_name)
+databases = inventory.list_databases(environment='prod', server_name=server_name)
+
+# INCORRECT : pas de validation RBAC préalable
+instances = inventory.list_instances(environment, user_input_server)  # UNSAFE!
+# ⚠️ Risque : n'importe quel utilisateur peut accéder aux instances de n'importe quel serveur
+```
+
+### Répartition des responsabilités
+
+| Couche | Responsabilité |
+|--------|---------------|
+| `list_targets_for_user` | Filtre RBAC complet (LIST, PATTERN, ALL) sur les **serveurs** |
+| `list_servers` | Lecture brute des serveurs par environnement |
+| `list_instances` / `list_databases` | Lecture brute — **aucun filtre RBAC** |
+| API layer (views) | Valider que `server_name` est dans la liste des serveurs autorisés avant d'appeler `list_instances`/`list_databases` |
+
+### Détection multi-tables
+
+`list_targets_for_user` détecte automatiquement la config multi-tables (via `InventoryMapper.is_multi_table`) et utilise `list_servers` au lieu de `list_targets` quand elle est active. La logique RBAC (LIST, PATTERN, ALL) est appliquée de la même manière dans les deux cas.
+
 ## Architecture
 
 ```
@@ -106,6 +148,10 @@ InventoryMapper (inventory/mapper.py)
     │
     ▼
 InventoryService (inventory/services.py)
+    ├── list_servers()              → Méthode publique (AC1)
+    ├── list_instances()            → Méthode publique, pas de RBAC (AC2)
+    ├── list_databases()            → Méthode publique, pas de RBAC (AC3)
+    ├── list_targets_for_user()     → RBAC, utilise list_servers si multi-tables (AC4)
     ├── _read_servers_from_config()
     ├── _read_instances_from_config()
     └── _read_databases_from_config()
