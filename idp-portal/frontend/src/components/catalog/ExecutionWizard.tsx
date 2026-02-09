@@ -10,6 +10,7 @@
  */
 
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import logger from '../../services/logger';
 import {
   Modal,
   Steps,
@@ -175,6 +176,9 @@ export function ExecutionWizard({
   const firstFieldRef = useRef<HTMLElement | null>(null);
   const lastInventoryEnvRef = useRef<string | null>(null);
 
+  // Story 22.5: Synchronous guard to prevent double-submit (React state updates are batched)
+  const isSubmittingRef = useRef(false);
+
   // Derived values
   const parameterFields = useMemo(() => extractParameterFields(action?.parameters_schema ?? null), [action?.parameters_schema]);
 
@@ -230,7 +234,7 @@ export function ExecutionWizard({
         onCancel();
         return;
       }
-      setCurrentStep(0); setParameters({}); setSubmitError(null);
+      setCurrentStep(0); setParameters({}); setSubmitError(null); isSubmittingRef.current = false;
       setWorkflowStepActions({}); setWorkflowStepActionsError(null);
       setWorkflowInvalidStepOrders([]); setWorkflowValidationSummary(null);
       form.resetFields();
@@ -384,23 +388,78 @@ export function ExecutionWizard({
 
   const handlePrev = useCallback(() => setCurrentStep((s) => Math.max(s - 1, 0)), []);
 
+  /**
+   * Submit immediate execution with double-submit protection.
+   *
+   * **Double-Submit Protection:**
+   * Uses a synchronous ref guard (`isSubmittingRef`) because React batches state updates.
+   * A double-click within the same React batch will be blocked by the ref guard.
+   * The secondary check (`execSubmit.isSubmitting`) provides defense-in-depth for UI state
+   * but is NOT a synchronous guard (React state is batched).
+   *
+   * **Side Effects:**
+   * - Calls `execSubmit.submitImmediate()` (async API call)
+   * - Triggers `onSuccess(executionId)` on success
+   * - Logs blocked double-submit attempts via `logger.debug()`
+   * - Sets ref to `true` before async operation, resets in `finally` block
+   *
+   * @returns {Promise<void>} Resolves when submission completes (success or error)
+   * @throws Never throws — errors are handled by `useExecutionSubmit` hook
+   */
   const handleSubmit = useCallback(async () => {
+    // Story 22.5: Synchronous guard to prevent double-submit
+    // Note: execSubmit.isSubmitting is a React state (batched), so the ref is the primary guard
+    if (isSubmittingRef.current || execSubmit.isSubmitting) {
+      logger.debug('Double-submit blocked in handleSubmit', { component: 'ExecutionWizard', action: 'double_submit_blocked' });
+      return;
+    }
     if (!action || (!derivedEnvironment && effectiveTargetNames.length === 0)) {
       notification.warning({ message: 'Donnees incompletes', description: 'Veuillez completer toutes les etapes du wizard.' }); return;
     }
     if (action.status !== 'published') { const msg = 'Cette action n\'est plus publiee et ne peut pas etre executee.'; execSubmit.setSubmitError(msg); notification.error({ message: 'Action non disponible', description: msg }); return; }
-    const targetNames = effectiveTargetNames.length > 0 ? effectiveTargetNames : undefined;
-    const executionId = await execSubmit.submitImmediate({
-      action_id: action.id, environment: targetNames ? undefined : (derivedEnvironment ?? undefined),
-      target_names: targetNames,
-      parameters: isWorkflow ? null : (Object.keys(parameters).length > 0 ? parameters : null),
-      workflow_step_parameters: buildWorkflowStepParams(parameters, isWorkflow),
-      parent_execution_id: parentExecutionId ?? null,
-    });
-    if (executionId != null) onSuccess?.(executionId);
+
+    isSubmittingRef.current = true;
+    try {
+      const targetNames = effectiveTargetNames.length > 0 ? effectiveTargetNames : undefined;
+      const executionId = await execSubmit.submitImmediate({
+        action_id: action.id, environment: targetNames ? undefined : (derivedEnvironment ?? undefined),
+        target_names: targetNames,
+        parameters: isWorkflow ? null : (Object.keys(parameters).length > 0 ? parameters : null),
+        workflow_step_parameters: buildWorkflowStepParams(parameters, isWorkflow),
+        parent_execution_id: parentExecutionId ?? null,
+      });
+      if (executionId != null) onSuccess?.(executionId);
+    } finally {
+      isSubmittingRef.current = false;
+    }
   }, [action, derivedEnvironment, effectiveTargetNames, parameters, notification, onSuccess, parentExecutionId, isWorkflow, execSubmit]);
 
+  /**
+   * Submit scheduled execution with double-submit protection.
+   *
+   * **Double-Submit Protection:**
+   * Uses a synchronous ref guard (`isSubmittingRef`) because React batches state updates.
+   * A double-click within the same React batch will be blocked by the ref guard.
+   * The secondary check (`execSubmit.isSubmitting`) provides defense-in-depth for UI state
+   * but is NOT a synchronous guard (React state is batched).
+   *
+   * **Side Effects:**
+   * - Calls `execSubmit.submitScheduled()` (async API call)
+   * - Triggers `onSuccess(scheduledId)` on success
+   * - Shows success notification with recurring pattern details
+   * - Logs blocked double-submit attempts via `logger.debug()`
+   * - Sets ref to `true` before async operation, resets in `finally` block
+   *
+   * @returns {Promise<void>} Resolves when submission completes (success or error)
+   * @throws Never throws — errors are handled by `useExecutionSubmit` hook
+   */
   const handleSubmitScheduled = useCallback(async () => {
+    // Story 22.5: Synchronous guard to prevent double-submit
+    // Note: execSubmit.isSubmitting is a React state (batched), so the ref is the primary guard
+    if (isSubmittingRef.current || execSubmit.isSubmitting) {
+      logger.debug('Double-submit blocked in handleSubmitScheduled', { component: 'ExecutionWizard', action: 'double_submit_blocked' });
+      return;
+    }
     if (!action || !derivedEnvironment) { notification.warning({ message: 'Données incomplètes', description: 'Veuillez compléter toutes les étapes du wizard.' }); return; }
     const { schedulingType, scheduledAt, cronExpression, cronIsValid, dailyHour, dailyMinute, weeklyDayOfWeek, weeklyHour, weeklyMinute } = execSubmit.scheduling;
     if (schedulingType === 'one-time') {
@@ -409,31 +468,36 @@ export function ExecutionWizard({
     } else if (schedulingType === 'cron' && (!cronExpression || !cronIsValid)) { execSubmit.setSchedulingError('Veuillez saisir une expression cron valide'); return; }
     if (action.status !== 'published') { const msg = "Cette action n'est plus publiée et ne peut pas être planifiée."; execSubmit.setSchedulingError(msg); notification.error({ message: 'Action non disponible', description: msg }); return; }
 
-    let recurringPattern: RecurringPatternRequest | undefined;
-    if (schedulingType === 'daily') { const l = dayjs().hour(dailyHour).minute(dailyMinute).second(0).millisecond(0).utc(); recurringPattern = { pattern_type: 'daily', pattern_config: { hour: l.hour(), minute: l.minute() } }; }
-    else if (schedulingType === 'weekly') { const l = dayjs().isoWeekday(weeklyDayOfWeek).hour(weeklyHour).minute(weeklyMinute).second(0).millisecond(0).utc(); recurringPattern = { pattern_type: 'weekly', pattern_config: { day_of_week: l.isoWeekday(), hour: l.hour(), minute: l.minute() } }; }
-    else if (schedulingType === 'cron') recurringPattern = { pattern_type: 'cron', pattern_config: { cron_expression: cronExpression } };
+    isSubmittingRef.current = true;
+    try {
+      let recurringPattern: RecurringPatternRequest | undefined;
+      if (schedulingType === 'daily') { const l = dayjs().hour(dailyHour).minute(dailyMinute).second(0).millisecond(0).utc(); recurringPattern = { pattern_type: 'daily', pattern_config: { hour: l.hour(), minute: l.minute() } }; }
+      else if (schedulingType === 'weekly') { const l = dayjs().isoWeekday(weeklyDayOfWeek).hour(weeklyHour).minute(weeklyMinute).second(0).millisecond(0).utc(); recurringPattern = { pattern_type: 'weekly', pattern_config: { day_of_week: l.isoWeekday(), hour: l.hour(), minute: l.minute() } }; }
+      else if (schedulingType === 'cron') recurringPattern = { pattern_type: 'cron', pattern_config: { cron_expression: cronExpression } };
 
-    const scheduledId = await execSubmit.submitScheduled({
-      action_id: action.id, environment: derivedEnvironment,
-      parameters: isWorkflow ? null : (Object.keys(parameters).length > 0 ? parameters : null),
-      workflow_step_parameters: buildWorkflowStepParams(parameters, isWorkflow),
-      scheduled_at: schedulingType === 'one-time' ? scheduledAt?.utc().toISOString() : null,
-      recurring_pattern: recurringPattern,
-      target_names: selectedTargets.length > 0 ? selectedTargets.map((t) => t.name) : undefined,
-    });
+      const scheduledId = await execSubmit.submitScheduled({
+        action_id: action.id, environment: derivedEnvironment,
+        parameters: isWorkflow ? null : (Object.keys(parameters).length > 0 ? parameters : null),
+        workflow_step_parameters: buildWorkflowStepParams(parameters, isWorkflow),
+        scheduled_at: schedulingType === 'one-time' ? scheduledAt?.utc().toISOString() : null,
+        recurring_pattern: recurringPattern,
+        target_names: selectedTargets.length > 0 ? selectedTargets.map((t) => t.name) : undefined,
+      });
 
-    if (scheduledId != null) {
-      if (recurringPattern) {
-        let txt = ''; const pad = (n: number) => String(n).padStart(2, '0');
-        if (schedulingType === 'daily') txt = `Tous les jours à ${pad(dailyHour)}:${pad(dailyMinute)} (heure locale)`;
-        else if (schedulingType === 'weekly') txt = `Tous les ${['', 'lundis', 'mardis', 'mercredis', 'jeudis', 'vendredis', 'samedis', 'dimanches'][weeklyDayOfWeek]} à ${pad(weeklyHour)}:${pad(weeklyMinute)} (heure locale)`;
-        else if (schedulingType === 'cron') txt = `Expression cron : ${cronExpression}`;
-        notification.success({ message: 'Exécution récurrente créée', description: txt });
-      } else {
-        notification.success({ message: 'Exécution planifiée', description: `Exécution planifiée pour le ${scheduledAt?.format('DD/MM/YYYY [à] HH:mm')} (heure locale)` });
+      if (scheduledId != null) {
+        if (recurringPattern) {
+          let txt = ''; const pad = (n: number) => String(n).padStart(2, '0');
+          if (schedulingType === 'daily') txt = `Tous les jours à ${pad(dailyHour)}:${pad(dailyMinute)} (heure locale)`;
+          else if (schedulingType === 'weekly') txt = `Tous les ${['', 'lundis', 'mardis', 'mercredis', 'jeudis', 'vendredis', 'samedis', 'dimanches'][weeklyDayOfWeek]} à ${pad(weeklyHour)}:${pad(weeklyMinute)} (heure locale)`;
+          else if (schedulingType === 'cron') txt = `Expression cron : ${cronExpression}`;
+          notification.success({ message: 'Exécution récurrente créée', description: txt });
+        } else {
+          notification.success({ message: 'Exécution planifiée', description: `Exécution planifiée pour le ${scheduledAt?.format('DD/MM/YYYY [à] HH:mm')} (heure locale)` });
+        }
+        onCancel(); if (onSuccess) onSuccess(scheduledId);
       }
-      onCancel(); if (onSuccess) onSuccess(scheduledId);
+    } finally {
+      isSubmittingRef.current = false;
     }
   }, [action, derivedEnvironment, selectedTargets, parameters, notification, onCancel, onSuccess, isWorkflow, execSubmit]);
 
@@ -528,7 +592,7 @@ export function ExecutionWizard({
             )}
             {currentStep === 2 && !scheduling.isScheduling && (
               <>
-                <Button type="primary" onClick={handleSubmit} loading={submitting} style={{ backgroundColor: STYLE_TOKENS.primaryColor }}>Exécuter maintenant</Button>
+                <Button type="primary" onClick={handleSubmit} loading={submitting} disabled={submitting} aria-busy={submitting} style={{ backgroundColor: STYLE_TOKENS.primaryColor }}>Exécuter maintenant</Button>
                 <Button type="default" onClick={() => execSubmit.updateScheduling({ isScheduling: true })} icon={<ClockCircleOutlined />}>Planifier</Button>
               </>
             )}
@@ -536,7 +600,8 @@ export function ExecutionWizard({
               <>
                 <Button onClick={() => { execSubmit.updateScheduling({ isScheduling: false }); execSubmit.setSchedulingError(null); execSubmit.updateScheduling({ scheduledAt: null }); }}>Annuler planification</Button>
                 <Button type="primary" onClick={handleSubmitScheduled} loading={submitting}
-                  disabled={scheduling.schedulingType === 'one-time' ? !scheduling.scheduledAt : scheduling.schedulingType === 'cron' ? !scheduling.cronIsValid : false}
+                  disabled={submitting || (scheduling.schedulingType === 'one-time' ? !scheduling.scheduledAt : scheduling.schedulingType === 'cron' ? !scheduling.cronIsValid : false)}
+                  aria-busy={submitting}
                   style={{ backgroundColor: STYLE_TOKENS.primaryColor }}>Confirmer planification</Button>
               </>
             )}
