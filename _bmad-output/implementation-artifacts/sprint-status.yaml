@@ -289,7 +289,7 @@ development_status:
     epic-22: in-progress
     22-1-corriger-crit-1-methode-get-profiles-by-ad-groups: done # Code review adversarial 2026-02-09: 9 HIGH + 5 MEDIUM fixes appliqués, 18 tests (14 unit + 4 integration) passent ✅
     22-2-corriger-crit-2-fallback-superuser-permissions: done # Code review adversarial 2026-02-09: 10 issues (5 HIGH + 3 MEDIUM + 2 LOW) auto-fixés, event renommé security_rbac_bypass_superuser_fallback, 40/40 tests pass ✅
-    22-3-corriger-crit-3-race-condition-token-refresh: backlog
+    22-3-corriger-crit-3-race-condition-token-refresh: done # 2026-02-09: Promise-based mutex + correlation_id + 8 tests (6 unit + 2 integration), code review fixes appliqués, 17/17 tests pass ✅
     22-4-corriger-high-3-gestion-http-429-throttling-frontend: backlog
     22-5-corriger-high-5-protection-double-submit-executionwizard: backlog
     22-6-corriger-high-6-standardiser-pagination-total: backlog
