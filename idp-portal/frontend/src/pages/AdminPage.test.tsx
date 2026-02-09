@@ -71,14 +71,14 @@ describe('AdminPage', () => {
     expect(screen.queryByText('Exécutions planifiées')).not.toBeInTheDocument();
   });
 
-  it('shows Actions, Profils, Intégrations, Metriques tabs', async () => {
+  it('shows Actions, Profils, Intégrations, Métriques tabs', async () => {
     renderAdminPage();
     await waitFor(
       () => {
         expect(screen.getByText('Actions')).toBeInTheDocument();
         expect(screen.getByText('Profils')).toBeInTheDocument();
         expect(screen.getByText('Intégrations')).toBeInTheDocument();
-        expect(screen.getByText('Metriques')).toBeInTheDocument();
+        expect(screen.getByText('Métriques')).toBeInTheDocument();
       },
       { timeout: 5000 }
     );

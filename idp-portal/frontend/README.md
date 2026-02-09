@@ -2,6 +2,62 @@
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
+## API Types Structure
+
+API types are organized by domain under `src/types/api/`:
+
+```
+src/types/
+├── api.ts                  # Re-export for backward compatibility (deprecated)
+└── api/
+    ├── index.ts            # Barrel re-export of all domain types
+    ├── common.ts           # ApiResponse, PaginatedResponse, ApiError, PaginationInfo
+    ├── catalog.ts          # Actions, workflows, steps, parameters, impact rules
+    ├── executions.ts       # Executions, steps, dashboard stats, filters
+    ├── profiles.ts         # Profiles, RBAC permissions (actions & targets)
+    ├── integrations.ts     # Integrations, auth flows
+    ├── audit.ts            # Audit trail entries, filters
+    ├── analytics.ts        # Analytics, reporting, comparisons, exports
+    ├── scheduled.ts        # Scheduled executions, recurring patterns, cron
+    ├── inventory.ts        # Inventory items
+    └── remediation.ts      # Remediation rules, suggestions, actions
+```
+
+**Imports recommandes :**
+
+```typescript
+// Import direct par domaine (recommande pour le nouveau code)
+import type { ActionResponse } from '../types/api/catalog';
+import type { ExecutionResponse } from '../types/api/executions';
+
+// Import barrel (toujours supporte)
+import type { ActionResponse, ExecutionResponse } from '../types/api';
+```
+
+## Admin Page Structure
+
+`AdminPage.tsx` is a lightweight orchestrator that delegates each tab to a dedicated panel component under `pages/admin/`:
+
+```
+src/pages/
+├── AdminPage.tsx              # Orchestrator (~75 LOC) — Tabs container
+└── admin/
+    ├── index.ts               # Barrel export
+    ├── ActionsAdminPanel.tsx   # Actions tab (CRUD, filters, cascade deactivation)
+    ├── actionsColumns.tsx      # Table column definitions for Actions
+    ├── ProfilesAdminPanel.tsx  # Profiles tab (CRUD, YAML import/export)
+    ├── IntegrationsAdminPanel.tsx # Integrations tab (CRUD)
+    ├── CategoriesAdminPanel.tsx   # Categories tab (wrapper)
+    ├── MetricsAdminPanel.tsx      # Metrics tab (lazy-loaded dashboard)
+    └── FeatureFlagsAdminPanel.tsx  # Feature Flags tab (lazy-loaded)
+```
+
+**Adding a new admin tab:**
+1. Create `<Name>AdminPanel.tsx` in `pages/admin/`
+2. Export it from `pages/admin/index.ts`
+3. Add a new tab item in `AdminPage.tsx` Tabs items array
+4. Pass `notification` (and `modal` if needed) from `App.useApp()` as props
+
 Currently, two official plugins are available:
 
 - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
