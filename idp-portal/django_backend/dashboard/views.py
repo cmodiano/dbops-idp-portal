@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, date
+from typing import Any
 
-from django.db.models import Q, Count
+from django.db.models import Q, Count, QuerySet
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
@@ -64,7 +65,7 @@ def _get_period_bounds(request) -> tuple[datetime, datetime]:
     return start_dt, end_exclusive
 
 
-def _apply_common_filters(qs, *, request, include_status: bool) -> object:
+def _apply_common_filters(qs: QuerySet, *, request: Any, include_status: bool) -> QuerySet:
     """
     Apply common dashboard filters:
     - engine (Action.engine)

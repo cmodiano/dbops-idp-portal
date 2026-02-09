@@ -144,6 +144,24 @@ strict_settings = false
 module = "admin_analytics.*"
 disallow_untyped_defs = true
 
+# Story 22.19: Phase 2 - stricter checks on corrected modules
+# Status: Annotations complètes sur fonctions publiques (core.*, idp_auth.*, utils.*)
+# disallow_untyped_defs=true NOT activated yet due to 98 remaining errors in:
+#   - Private/internal functions (models, services, helpers)
+#   - Django model methods (save, __str__, Meta classes)
+#   - Middleware internal methods
+# Target: Phase 3 will annotate internal functions then activate strict mode
+#
+# Key public functions fully annotated:
+#   - core/: auth_utils, logging, middleware, pagination, consumers, throttling
+#   - idp_auth/: jwt_utils, authentication, models (Manager), views
+#   - utils/: json_helpers
+#
+# To activate strict mode (when internal functions annotated):
+# [[tool.mypy.overrides]]
+# module = ["core.*", "idp_auth.*", "utils.*"]
+# disallow_untyped_defs = true
+
 [[tool.mypy.overrides]]
 module = [
     "oracledb.*",

@@ -33,7 +33,7 @@ class _RateLimitEnabledMixin:
     def allow_request(self, request, view):
         if not getattr(settings, 'RATELIMIT_ENABLED', True):
             return True
-        return super().allow_request(request, view)
+        return super().allow_request(request, view)  # type: ignore[misc]  # MRO resolves via concrete throttle class
 
 
 class AuthEndpointThrottle(_RateLimitEnabledMixin, AnonRateThrottle):

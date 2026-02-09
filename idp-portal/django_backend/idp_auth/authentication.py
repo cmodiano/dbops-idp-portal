@@ -59,7 +59,7 @@ class JWTAuthentication(BaseAuthentication):
                     "profile": "dbops",
                 },
             )
-            dev_user.ad_groups = ["dbops"]
+            dev_user.ad_groups = ["dbops"]  # type: ignore[attr-defined]  # runtime RBAC attr
             return (dev_user, None)
 
         # Verify token
@@ -75,7 +75,7 @@ class JWTAuthentication(BaseAuthentication):
             raise AuthenticationFailed('Utilisateur non trouve')
 
         # Attach ad_groups to user for RBAC resolution (Story 2.12)
-        user.ad_groups = payload.ad_groups
+        user.ad_groups = payload.ad_groups  # type: ignore[attr-defined]  # runtime RBAC attr
 
         return (user, None)
 

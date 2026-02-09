@@ -23,8 +23,9 @@ class CustomPageNumberPagination(PageNumberPagination):
     page_size_query_param = 'page_size'
     max_page_size = 1000
     
-    def get_paginated_response(self, data):
+    def get_paginated_response(self, data: list) -> Response:
         """Return paginated response."""
+        assert self.page is not None, "paginate_queryset must be called first"
         return Response({
             "data": data,
             "pagination": {

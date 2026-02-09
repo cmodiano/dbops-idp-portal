@@ -4,7 +4,7 @@ Story 20.3: Asynchronous retry with Celery apply_async(countdown=...).
 """
 
 import structlog
-from celery import shared_task
+from celery import shared_task  # type: ignore[import-untyped]
 from django.db import transaction
 
 from executions.models import Execution, ExecutionStatus

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, date, timezone
+from datetime import datetime, timedelta, date
+from datetime import timezone as dt_timezone
 
 # Fixed-offset UTC (no name): Oracle Thin Mode does not support named timezones (DPY-3022)
-UTC = timezone(timedelta(0))
+UTC = dt_timezone(timedelta(0))
 
 from django.conf import settings
 from django.db import transaction
@@ -276,13 +277,14 @@ class ExecutionsView(APIView):
         # Story 21.2, Task 4: Case-insensitive environment config lookup
         # Get environment-specific config from action
         change_type_config = action.change_type_config or {}
-        env_change_config = _get_env_config_case_insensitive(change_type_config, environment)
+        env_str: str = str(environment) if environment else ""
+        env_change_config = _get_env_config_case_insensitive(change_type_config, env_str)
         change_required = env_change_config.get("required", False)
         change_model_code = env_change_config.get("change_model_code")
 
         # Task 4.3: Get impact_rules for this environment (case-insensitive)
         impact_rules = action.impact_rules or {}
-        env_impact_config = _get_env_config_case_insensitive(impact_rules, environment)
+        env_impact_config = _get_env_config_case_insensitive(impact_rules, env_str)
         # Task 4.4: Fallback to default_impact_level if no rule for environment
         impact_level = env_impact_config.get("impact_level") or env_impact_config.get("level") or action.default_impact_level
 
@@ -338,7 +340,7 @@ class ExecutionsView(APIView):
         execution = ExecutionService().create_execution(
             user=request.user,
             action=action,
-            environment=environment,
+            environment=env_str,
             parameters=parameters if parameters else None,
             parent_execution_id=parent_execution_id,
             correlation_id=correlation_id,
@@ -1070,7 +1072,7 @@ class ScheduledExecutionUpdateView(APIView):
         rp = getattr(se, "recurringpattern", None)
         if scheduled_at_raw is not None and rp is None:
             scheduled_at = _parse_iso_datetime(scheduled_at_raw, name="scheduled_at")
-            if scheduled_at <= timezone.now().astimezone(UTC):
+            if scheduled_at is not None and scheduled_at <= timezone.now().astimezone(UTC):
                 raise BadRequestError(
                     code="INVALID_SCHEDULED_DATE",
                     message="scheduled_at doit être dans le futur",

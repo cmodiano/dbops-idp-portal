@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 from django.db import models
 
 
-class UserManager(models.Manager):
+class UserManager(models.Manager["User"]):
     """
     Custom manager for User model.
     Provides query methods for common user queries.

@@ -19,39 +19,46 @@
 - [x] Pre-commit hook mypy
 - [x] README avec instructions type checking
 
-## Phase 2 : Réduire baseline de 50% (Mai 2026 - 3 mois)
+## Phase 2 : Réduire baseline de 50% (Story 22.19) - ✅ Complété (Février 2026)
 
-**Objectif** : Réduire de 89 à ~45 erreurs (-50%)
-**Date cible** : Mai 2026
-**Velocity cible** : ~15 erreurs corrigées/mois
+**Date de complétion** : 2026-02-09
+**Résultat** : 89 → 29 erreurs (**-67%**, dépassant l'objectif de -50%)
 
-**Modules prioritaires** :
-- `core/` : middleware, auth_utils, permissions, logging
-- `idp_auth/` : jwt_utils, authentication, models
-- `utils/` : json_helpers
+**Modules corrigés** :
+- `core/` : 9 → 0 erreurs (middleware, auth_utils, logging, pagination, consumers, throttling)
+- `idp_auth/` : 9 → 0 erreurs (jwt_utils, authentication, models, views)
+- `utils/` : 1 → 0 erreurs (json_helpers)
+- `executions/` : 52 → ~15 erreurs (views, utils, cancellation_cache, container_workflow_runtime, tasks)
+- `catalog/` : 6 → ~3 erreurs (views)
+- `dashboard/` : 4 → 0 erreurs (views)
+- `idp_backend/` : 3 → 0 erreurs (celery, asgi)
 
-**Actions** :
-- Annoter les fonctions publiques de core/ et idp_auth/
-- Corriger les erreurs `no-any-return` (casts explicites)
-- Corriger les erreurs `var-annotated` (annotations manquantes)
-- Activer `disallow_untyped_defs = true` sur core/ et idp_auth/
+**Corrections clés** :
+- Résolution du shadow `timezone` dans executions/ (import alias `dt_timezone`)
+- Annotations de type sur fonctions publiques (core/, idp_auth/, utils/)
+- Casts explicites pour `no-any-return` (jwt_utils, logging, cancellation_cache)
+- `type: ignore` ciblés avec codes spécifiques (attr-defined, import-untyped, misc)
+- Suppression de code inatteignable (json_helpers, idp_auth/views)
+
+**Note** : `disallow_untyped_defs = true` non activé — introduit 98 nouvelles erreurs dues aux fonctions internes non annotées. Reporté à Phase 3/4.
 
 ## Phase 3 : Réduire baseline de 80% (Août 2026 - 6 mois cumulés)
 
-**Objectif** : Réduire de 89 à ~18 erreurs (-80%)
+**Objectif** : Réduire de 89 à ~18 erreurs (-80%) — baseline actuel : 29
 **Date cible** : Août 2026
-**Velocity cible** : ~12 erreurs corrigées/mois
+**Erreurs restantes à corriger** : ~11
 
-**Modules** :
-- `catalog/` : models, services, views
-- `executions/` : services, views
-- `integrations/` : services, validation
-- `inventory/` : services
+**Modules restants** :
+- `executions/` : ~15 erreurs (services, models, remaining views)
+- `reference/` : ~5 erreurs
+- `integrations/` : ~4 erreurs
+- `catalog/` : ~3 erreurs restantes
+- `inventory/` : ~2 erreurs
 
 **Actions** :
-- Annoter tous les services et views
-- Corriger les erreurs `override` (Manager/QuerySet)
-- Activer `disallow_untyped_defs = true` sur tous les modules applicatifs
+- Annoter fonctions dans executions/services et models
+- Corriger erreurs `override` (Manager/QuerySet)
+- Activer `disallow_untyped_defs = true` sur core/, idp_auth/, utils/ (fonctions internes à annoter d'abord)
 
 ## Phase 4 : Baseline à 0, Mode strict (Février 2027 - 12 mois cumulés)
 

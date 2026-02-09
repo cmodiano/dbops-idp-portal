@@ -37,7 +37,7 @@ def is_cancelled(execution_id: int) -> bool:
     try:
         cached_value = cache.get(cache_key)
         if cached_value is not None:
-            return cached_value
+            return bool(cached_value)
 
         # Cache miss: query DB and populate cache
         is_cancelled_status = _check_db(execution_id)

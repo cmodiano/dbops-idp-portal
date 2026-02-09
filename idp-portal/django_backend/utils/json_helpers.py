@@ -77,9 +77,6 @@ def validate_json_schema(data: Any, schema: dict) -> tuple[bool, str | None]:
         - is_valid: True if data is valid, False otherwise
         - error_message: Error message if invalid, None if valid
     """
-    if not isinstance(schema, dict):
-        return False, "Schema must be a JSON object"
-
     # When schema expects an object or has properties, data must be a dict
     expected_type = schema.get("type")
     has_properties = "properties" in schema and isinstance(schema["properties"], dict)

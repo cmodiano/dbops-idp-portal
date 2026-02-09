@@ -4,7 +4,7 @@ Story 20.3: Asynchronous retry with Celery.
 """
 
 import os
-from celery import Celery
+from celery import Celery  # type: ignore[import-untyped]
 
 # Set default Django settings module
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'idp_backend.settings')

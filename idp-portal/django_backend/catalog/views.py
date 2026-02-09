@@ -182,9 +182,9 @@ def _get_cumulative_permissions_for_user(user):
         return None
     
     # Aggregate action permissions (union across profiles)
-    action_ids = set()
-    tag_patterns = set()
-    environments = set()
+    action_ids: set[int] = set()
+    tag_patterns: set[str] = set()
+    environments: set[str] = set()
     actions_type_all = False
     
     for perm in permissions.get('action_permissions', []):

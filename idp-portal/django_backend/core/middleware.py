@@ -3,12 +3,15 @@ Core middleware for the IDP Portal Django backend.
 Story M.7 - Task 7: Security and audit middleware.
 Story M.8 - Task 3/4: Request/Response logging and correlation ID propagation.
 """
+from __future__ import annotations
 
 import time
 import uuid
+from collections.abc import Callable
 from threading import local
 
 import structlog
+from django.http import HttpRequest, HttpResponse
 
 # Thread-local storage for correlation ID
 _correlation_id = local()
@@ -27,7 +30,7 @@ def set_correlation_id(correlation_id: str | None) -> None:
     _correlation_id.value = correlation_id
 
 
-def get_client_ip(request) -> str:
+def get_client_ip(request: HttpRequest) -> str:
     """
     Extract client IP address from request, handling proxies.
 
@@ -50,8 +53,8 @@ def get_client_ip(request) -> str:
                 extracted_client_ip=ips[0],
                 message="X-Forwarded-For contains excessive IPs - potential spoofing"
             )
-        return ips[0]
-    return request.META.get('REMOTE_ADDR', '')
+        return str(ips[0])
+    return str(request.META.get('REMOTE_ADDR', ''))
 
 
 class CorrelationIdMiddleware:
@@ -68,10 +71,10 @@ class CorrelationIdMiddleware:
     - Available via get_correlation_id() function
     """
 
-    def __init__(self, get_response):
+    def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
         self.get_response = get_response
 
-    def __call__(self, request):
+    def __call__(self, request: HttpRequest) -> HttpResponse:
         # Get or generate correlation ID
         correlation_id = request.META.get('HTTP_X_IDP_REQUEST_ID')
         if not correlation_id:
@@ -81,7 +84,7 @@ class CorrelationIdMiddleware:
         set_correlation_id(correlation_id)
 
         # Add to request for easy access
-        request.correlation_id = correlation_id
+        request.correlation_id = correlation_id  # type: ignore[attr-defined]  # dynamic attr for downstream access
 
         # Bind to structlog contextvars for automatic inclusion in all logs
         structlog.contextvars.bind_contextvars(correlation_id=correlation_id)

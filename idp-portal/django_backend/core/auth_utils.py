@@ -1,12 +1,15 @@
 """
 Auth utilities for RBAC resolution across catalog, executions, inventory.
 """
+from __future__ import annotations
+
+from typing import Any
 import structlog
 
 logger = structlog.get_logger(__name__)
 
 
-def get_user_ad_groups(user) -> list[str]:
+def get_user_ad_groups(user: Any) -> list[str]:  # Any: Django User varies (custom User, AnonymousUser, request.user)
     """
     Get AD groups for a user, with profile fallback.
 
@@ -19,7 +22,7 @@ def get_user_ad_groups(user) -> list[str]:
     if not user or not getattr(user, 'is_authenticated', False):
         return []
 
-    ad_groups = []
+    ad_groups: list[str] = []
 
     if hasattr(user, 'get_ad_groups') and callable(user.get_ad_groups):
         try:

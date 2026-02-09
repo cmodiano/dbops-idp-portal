@@ -12,14 +12,18 @@ Contains utility functions for:
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, date, timezone
+from datetime import datetime, timedelta, date
+from datetime import timezone as dt_timezone
 
 # Fixed-offset UTC (no name): Oracle Thin Mode does not support named timezones (DPY-3022)
-UTC = timezone(timedelta(0))
+UTC = dt_timezone(timedelta(0))
+
+from typing import Any
 
 from django.conf import settings
-from django.db.models import Q
+from django.db.models import Q, QuerySet
 from django.utils import timezone
+from rest_framework.request import Request
 from django.utils.dateparse import parse_datetime
 
 from catalog.models import Action, ActionStatus
@@ -294,15 +298,15 @@ def _validate_workflow_step_parameters(
 
         if JSONSCHEMA_AVAILABLE:
             try:
-                jsonschema.validate(instance=params, schema=schema)  # type: ignore[attr-defined]
-            except jsonschema.ValidationError as e:  # type: ignore[attr-defined]
+                jsonschema.validate(instance=params, schema=schema)
+            except jsonschema.ValidationError as e:
                 field_path = ".".join(str(p) for p in e.absolute_path) if e.absolute_path else "root"
                 raise BadRequestError(
                     code="INVALID_PARAMETERS",
                     message=f"Paramètres invalides (étape {order_int}): {e.message}",
                     details={"step_order": order_int, "field": field_path, "error": e.message},
                 ) from e
-            except jsonschema.SchemaError as e:  # type: ignore[attr-defined]
+            except jsonschema.SchemaError as e:
                 raise BadRequestError(
                     code="INVALID_SCHEMA",
                     message="Schema de paramètres invalide pour une action référencée",
@@ -511,8 +515,8 @@ def _get_allowed_action_ids_for_user(user) -> set[int] | None:
         return set()
 
     # Aggregate action permissions (union across profiles)
-    action_ids = set()
-    tag_patterns = set()
+    action_ids: set[int] = set()
+    tag_patterns: set[str] = set()
 
     for perm in permissions.get('action_permissions', []):
         if perm.get('actions_type') == 'all':
@@ -561,7 +565,7 @@ def _detect_request_source(request) -> str:
     return 'api'
 
 
-def _apply_scope_filter(qs, *, user, scope: str) -> tuple[object, str]:
+def _apply_scope_filter(qs: QuerySet, *, user: Any, scope: str) -> tuple[QuerySet, str]:
     """
     Return (qs, effective_scope):
     - scope defaults to mine
@@ -578,7 +582,7 @@ def _apply_scope_filter(qs, *, user, scope: str) -> tuple[object, str]:
     return qs, effective_scope
 
 
-def _apply_execution_filters(qs, *, request):
+def _apply_execution_filters(qs: QuerySet, *, request: Request) -> tuple[QuerySet, date | None, date | None]:
     """
     Apply advanced filters (Story 9.10) used by the frontend:
     start_date, end_date, action_id, engine, tags (AND), status, environment.
@@ -680,7 +684,7 @@ def _calculate_next_execution_date(pattern_type: str, pattern_config: dict, refe
                 details={"expression": expr},
             )
         it = croniter(expr, reference)
-        nxt = it.get_next(datetime)
+        nxt: datetime = it.get_next(datetime)
         if timezone.is_naive(nxt):
             nxt = timezone.make_aware(nxt, timezone=UTC)
         else:

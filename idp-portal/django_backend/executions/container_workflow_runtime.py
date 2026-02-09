@@ -125,7 +125,7 @@ class ContainerWorkflowRuntime:
 
         # Step-specific parameters (Story 4.12)
         wsp = params.get("workflow_step_parameters")
-        step_params = {}
+        step_params: dict[str, object] = {}
         if isinstance(wsp, dict):
             order_key = str(step.get("order", ""))
             step_entry = wsp.get(order_key)
@@ -289,7 +289,8 @@ class ContainerWorkflowRuntime:
         })
         parent_step.save()
 
-        return child_execution.status
+        status: ExecutionStatus = child_execution.status
+        return status
 
     @transaction.atomic
     def run(self) -> ExecutionStatus:

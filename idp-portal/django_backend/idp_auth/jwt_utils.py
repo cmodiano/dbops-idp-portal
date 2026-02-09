@@ -46,7 +46,8 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
         expires_delta or timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     to_encode.update({"exp": expire, "type": "access"})
-    return jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+    encoded: str = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+    return encoded
 
 
 def create_refresh_token(data: dict) -> str:
@@ -61,7 +62,8 @@ def create_refresh_token(data: dict) -> str:
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(hours=settings.JWT_REFRESH_TOKEN_EXPIRE_HOURS)
     to_encode.update({"exp": expire, "type": "refresh"})
-    return jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+    encoded: str = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+    return encoded
 
 
 def verify_token(token: str, expected_type: str | None = None) -> TokenPayload | None:
@@ -105,6 +107,7 @@ def decode_token_unsafe(token: str) -> dict[str, Any] | None:
     """
     try:
         # Use get_unverified_claims to avoid exposing secret key
-        return jwt.get_unverified_claims(token)
+        claims: dict[str, Any] = jwt.get_unverified_claims(token)
+        return claims
     except JWTError:
         return None

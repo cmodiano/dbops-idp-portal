@@ -104,7 +104,7 @@ class SAMLLoginView(APIView):
                 value=refresh_token,
                 httponly=True,
                 secure=settings.APP_ENV != "development",
-                samesite="lax",
+                samesite="Lax",
                 max_age=settings.JWT_REFRESH_TOKEN_EXPIRE_HOURS * 3600,
                 path="/api/v1/auth",
             )
@@ -249,7 +249,7 @@ class SAMLCallbackView(APIView):
             value=refresh_token,
             httponly=True,
             secure=settings.APP_ENV != "development",
-            samesite="lax",
+            samesite="Lax",
             max_age=settings.JWT_REFRESH_TOKEN_EXPIRE_HOURS * 3600,
             path="/api/v1/auth",
         )
@@ -316,11 +316,7 @@ class CurrentUserProfileView(APIView):
             )
 
         # Build navigation tabs, injecting 'audit' for auditors (Story 6.5)
-        navigation_tabs = get_user_navigation_permissions(profile_name)
-        if navigation_tabs is None:
-            navigation_tabs = []
-        else:
-            navigation_tabs = list(navigation_tabs)  # Copy to avoid mutating global
+        navigation_tabs = list(get_user_navigation_permissions(profile_name))  # Copy to avoid mutating global
         if is_auditor and 'audit' not in navigation_tabs:
             navigation_tabs.append('audit')
 
