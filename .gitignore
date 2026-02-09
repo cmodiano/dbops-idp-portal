@@ -1,0 +1,7 @@
+################################################################################
+# Repo-root ignores
+################################################################################
+
+# Transient AI/code-review session artifacts (do not commit)
+CODE_REVIEW_*_FINDINGS.md
+
