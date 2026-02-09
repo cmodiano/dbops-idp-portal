@@ -49,3 +49,10 @@ CACHES = {
         'LOCATION': 'test-cache',
     }
 }
+
+# Story 22.13: In-memory channel layer for WebSocket tests
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
+    },
+}

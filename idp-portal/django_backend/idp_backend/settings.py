@@ -47,8 +47,10 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     # Third-party apps
+    'daphne',  # Story 22.13: ASGI server for WebSocket support (must be before staticfiles)
     'rest_framework',
     'corsheaders',
+    'channels',  # Story 22.13: Django Channels for WebSocket
     # Local apps
     'catalog',
     'profiles',
@@ -94,6 +96,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'idp_backend.wsgi.application'
+ASGI_APPLICATION = 'idp_backend.asgi.application'  # Story 22.13: WebSocket via Channels
 
 
 # Database
@@ -382,6 +385,16 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
 CELERY_TASK_ALWAYS_EAGER = os.getenv('CELERY_TASK_ALWAYS_EAGER', 'False').lower() == 'true'
 CELERY_TASK_EAGER_PROPAGATES = True
+
+# ============================================================================
+# Django Channels / WebSocket Configuration (Story 22.13)
+# ============================================================================
+# Uses InMemoryChannelLayer for development; switch to Redis for production.
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
+    },
+}
 
 # ============================================================================
 # Workflow Retry Configuration (Story 20.3)

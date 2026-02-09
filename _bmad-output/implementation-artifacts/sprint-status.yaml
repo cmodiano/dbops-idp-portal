@@ -299,7 +299,7 @@ development_status:
     22-10-ajouter-error-boundary-react: done # 2026-02-09: Code review adversarial — 12 issues (2 HIGH + 5 MEDIUM + 5 LOW), 9 auto-fixés (safe navigation, error prop, try-catch fallback, soft refresh, correlation_id, aria, tests intégration AppLayout), 15 tests total (9 ErrorBoundary + 6 AppLayout) ✅
     22-11-reduire-broad-exception-catches: done # 2026-02-09: Code review adversarial — 10 issues (2 CRIT + 5 HIGH + 3 MED) auto-fixés, correlation_id added, Celery retry fixed, 8/8 tests pass ✅
     22-12-corriger-high-2-transition-pending-approval-submitted: done # Code review: 11 fixes (8 HIGH + 3 MEDIUM), 14/14 tests pass, action items created for follow-up
-    22-13-corriger-high-4-token-websocket-hors-url: backlog
+    22-13-corriger-high-4-token-websocket-hors-url: done # 2026-02-09: Token WebSocket URL→message-based auth, Django Channels, 18 tests (10 FE + 8 BE), 0 régression
     22-14-corriger-high-7-stale-closure-executionspage: backlog
     22-15-corriger-med-1-serialisation-date-timezone: backlog
     22-16-corriger-med-3-med-4-cache-feature-flags: backlog
@@ -308,3 +308,14 @@ development_status:
     22-19-rendre-mypy-bloquant-progressivement: backlog
     22-20-integrer-drf-spectacular-documentation-api: backlog
     epic-22-retrospective: optional
+    # === Epic 23: Inventaire multi-tables (SERVER, INSTANCE, DB) et UX cibles ===
+    # Réf: docs/inventaire-multi-tables-ux-cibles.md, epics.md — Mapping config, API /servers /databases /instances, RBAC par attributs, listes instance/DB filtrées par serveur choisi
+    epic-23: backlog
+    23-1-backend-config-mapping-colonnes-lecture-entites: backlog
+    23-2-backend-inventory-service-multi-tables: backlog
+    23-3-backend-api-servers-databases-instances: backlog
+    23-4-backend-rbac-profils-filtres-par-attribut: backlog
+    23-5-frontend-admin-source-inventaire-table-par-parametre: backlog
+    23-6-frontend-use-target-inventory-contexte-serveur: backlog
+    23-7-frontend-profile-form-options-tous-oracle-sql: backlog
+    epic-23-retrospective: optional
