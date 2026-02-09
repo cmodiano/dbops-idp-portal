@@ -112,7 +112,7 @@ jobs:
           # Capture state before cleanup so we can fail the step if image is broken
           STATUS=$(docker inspect frontend-test --format='{{.State.Status}}' 2>/dev/null || echo 'missing')
           # Try curl but capture exit code instead of failing immediately
-          curl -f http://localhost:8080/ || CURL_EXIT=$?
+          curl -f --connect-timeout 5 --max-time 10 http://localhost:8080/ || CURL_EXIT=$?
           CURL_EXIT=${CURL_EXIT:-0}
           docker logs frontend-test
           docker stop frontend-test || true
