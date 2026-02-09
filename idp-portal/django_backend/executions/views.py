@@ -49,19 +49,75 @@ except ImportError:  # pragma: no cover
     JSONSCHEMA_AVAILABLE = False
 
 
-def _validate_environment_against_inventory(environment: str) -> None:
+def _get_env_config_case_insensitive(config: dict, env: str) -> dict:
+    """
+    Story 21.2, Task 4.1: Helper to get environment-specific config with case-insensitive lookup.
+    
+    Args:
+        config: Dictionary with environment keys (e.g., {"DEV": {...}, "STAGING": {...}})
+        env: Environment string (case-insensitive)
+    
+    Returns:
+        Config dict for the environment, or empty dict if not found
+    """
+    if not config or not env:
+        return {}
+    
+    env_lower = (env or '').strip().lower()
+    for key, value in config.items():
+        if (key or '').strip().lower() == env_lower:
+            # HIGH-5 FIX: Log warning if config value is not a dict
+            if not isinstance(value, dict):
+                exec_logger.warning(
+                    "invalid_env_config_value",
+                    env=env,
+                    key=key,
+                    value_type=type(value).__name__,
+                    correlation_id=get_correlation_id(),
+                    message="Environment config value should be a dict, returning empty dict",
+                )
+                return {}
+            return value
+    
+    return {}
+
+
+def _validate_environment_against_inventory(environment: str, *, user_id: int | None = None) -> None:
     """
     Validate environment against inventory (Story 13.7, AC2).
+    Story 21.2, AC2 / Task 3: Case-insensitive validation, no fallback to dev.
     Raises BadRequestError if environment is not in inventory.
+    
+    Args:
+        environment: Environment string to validate
+        user_id: Optional user ID for audit trail
     """
     if not environment:
         return
+    
+    correlation_id = get_correlation_id()
     
     try:
         inventory_service = InventoryService()
         valid_environments = inventory_service.list_environments()
         
-        if environment.lower() not in [e.lower() for e in valid_environments]:
+        # HIGH-3 FIX: Use set comprehension for O(1) lookup instead of O(n) list comprehension
+        valid_envs_lower = {e.lower() for e in valid_environments}
+        if environment.lower() not in valid_envs_lower:
+            # HIGH-4 FIX: Audit trail for invalid environment attempts (SOC1 compliance)
+            AuditService.create_entry(
+                user_id=str(user_id) if user_id else "system",
+                action_type=AuditActionType.EXECUTION_SUBMITTED,
+                entity_type=AuditEntityType.EXECUTION,
+                entity_id=0,
+                details={
+                    "environment": environment,
+                    "valid_environments": sorted(valid_environments),
+                    "validation_result": "failed",
+                    "reason": "invalid_environment",
+                },
+                correlation_id=correlation_id,
+            )
             raise BadRequestError(
                 code="INVALID_ENVIRONMENT",
                 message=f"Environnement invalide: {environment}",
@@ -71,14 +127,17 @@ def _validate_environment_against_inventory(environment: str) -> None:
                 },
             )
     except InventoryServiceError as e:
-        # If inventory service fails, log warning but don't block execution
-        # (fallback behavior - allow execution with warning)
-        exec_logger.warning(
-            "inventory_validation_failed",
+        # HIGH-2 FIX: Block execution if inventory unavailable - can't validate safely
+        exec_logger.error(
+            "inventory_validation_failed_blocking_execution",
             environment=environment,
             error=str(e),
-            correlation_id=get_correlation_id(),
-            message="Failed to validate environment against inventory - allowing execution with warning"
+            correlation_id=correlation_id,
+        )
+        raise BadRequestError(
+            code="INVENTORY_UNAVAILABLE",
+            message="Impossible de valider l'environnement: service inventaire indisponible",
+            details={"environment": environment, "error": str(e)},
         )
 
 from croniter import croniter, CroniterBadCronError, CroniterBadDateError
@@ -660,7 +719,7 @@ class ExecutionsView(APIView):
             
             # Story 13.7, AC2: Validate environment against inventory
             if environment:
-                _validate_environment_against_inventory(environment)
+                _validate_environment_against_inventory(environment, user_id=request.user.id)
 
         # Story 13.2, Task 5 & 6: Handle target_names with RBAC validation
         if target_names:
@@ -762,18 +821,17 @@ class ExecutionsView(APIView):
                 correlation_id=correlation_id
             )
 
-        # Story 13.4, AC3: Get environment-specific config from action
-        env_upper = (environment or "").upper()
-
-        # Subtask 2.3: Get change_type_config for this environment
+        # Story 21.2, Task 4: Case-insensitive environment config lookup
+        # Get environment-specific config from action
         change_type_config = action.change_type_config or {}
-        env_change_config = change_type_config.get(env_upper, {})
+        env_change_config = _get_env_config_case_insensitive(change_type_config, environment)
         change_required = env_change_config.get("required", False)
         change_model_code = env_change_config.get("change_model_code")
 
-        # Subtask 2.4: Get impact_rules for this environment
+        # Task 4.3: Get impact_rules for this environment (case-insensitive)
         impact_rules = action.impact_rules or {}
-        env_impact_config = impact_rules.get(env_upper, {})
+        env_impact_config = _get_env_config_case_insensitive(impact_rules, environment)
+        # Task 4.4: Fallback to default_impact_level if no rule for environment
         impact_level = env_impact_config.get("impact_level") or env_impact_config.get("level") or action.default_impact_level
 
         exec_logger.info(
@@ -1343,7 +1401,7 @@ class ScheduledExecutionsView(APIView):
         # Story 13.6: Filter by environment (from scheduled execution)
         # Story 13.7, AC2: Validate against inventory instead of hardcoded list
         if environment_filter:
-            _validate_environment_against_inventory(environment_filter)
+            _validate_environment_against_inventory(environment_filter, user_id=request.user.id)
             qs = qs.filter(environment=environment_filter.lower())
 
         # Story 13.6: Filter by engine (from action)
@@ -1410,7 +1468,7 @@ class ScheduledExecutionsView(APIView):
             )
         
         # Story 13.7, AC2: Validate environment against inventory
-        _validate_environment_against_inventory(environment)
+        _validate_environment_against_inventory(environment, user_id=request.user.id)
 
         # Validate mutual exclusivity
         if scheduled_at_raw and recurring_pattern:
@@ -1638,7 +1696,7 @@ class ScheduledExecutionUpdateView(APIView):
 
         # Environment (validate against inventory)
         if environment is not None:
-            _validate_environment_against_inventory(environment)
+            _validate_environment_against_inventory(environment, user_id=request.user.id)
             se.environment = environment.lower()
 
         # Target names: RBAC validation and merge into parameters (empty list allowed = clear targets)
@@ -1657,7 +1715,7 @@ class ScheduledExecutionUpdateView(APIView):
                 new_params["_targets"] = []
                 se.set_parameters(new_params)
                 if environment is not None:
-                    _validate_environment_against_inventory(environment)
+                    _validate_environment_against_inventory(environment, user_id=request.user.id)
                     se.environment = environment.lower()
             else:
                 ad_groups = get_user_ad_groups(request.user)

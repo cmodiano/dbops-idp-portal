@@ -306,17 +306,18 @@ class InventoryService:
 
             results = []
             for row in rows:
-                # Normalize environment value (certif -> staging, case insensitive)
+                # Story 21.1: Use raw environment values - inventory is source of truth
+                # MEDIUM-1 FIX: Removed confusing "Oracle recursion" comment - no recursion here
+                # Normalization moved to RBAC layer (Story 21.2) for case-insensitive matching
                 raw_env = (row[1] or '').lower().strip()
-                normalized_env = self._normalize_environment(raw_env)
 
-                # Normalize target type
+                # Normalize target type (unchanged)
                 raw_type = (row[2] or '').lower().strip()
                 normalized_type = raw_type if raw_type in TargetType.VALUES else TargetType.SERVER
 
                 results.append({
                     'name': row[0],
-                    'environment': normalized_env,
+                    'environment': raw_env,
                     'target_type': normalized_type,
                     'metadata': None,
                 })
@@ -394,14 +395,24 @@ class InventoryService:
         for profile in profiles:
             is_admin = getattr(profile, 'is_admin', 0) == 1
 
-            # Get action permissions for environments (normalize so certif/certification match staging)
+            # Story 21.2, Task 1.1: Build allowed_environments with both raw and normalized values
+            # This allows matching targets with raw values (e.g., certif) against profiles with aliases
             action_perm = getattr(profile, 'profileactionpermission', None)
             if action_perm:
                 envs = action_perm.get_environments()
                 if envs:
                     for e in envs:
                         if isinstance(e, str):
-                            allowed_environments.add(self._normalize_environment(e))
+                            raw_env = (e or '').strip().lower()
+                            normalized_env = self._normalize_environment(e)
+                            
+                            # Add normalized value (for alias handling: certif -> staging)
+                            allowed_environments.add(normalized_env)
+                            
+                            # Also add raw value to match targets with raw environments
+                            # Example: profile has "certif" -> adds both "staging" and "certif"
+                            if raw_env and raw_env != normalized_env:
+                                allowed_environments.add(raw_env)
             elif is_admin:
                 # Admin profiles without ProfileActionPermission: full environment access
                 # Story 13.7: Get environments from inventory instead of hardcoded list
@@ -438,13 +449,16 @@ class InventoryService:
                 # Fallback to default environments if inventory unavailable
                 allowed_environments = set(self.get_default_environments())
 
-        # Apply environment filter if provided (normalize query param to match allowed set)
+        # Story 21.2, Task 1.3: Apply environment filter with case-insensitive matching
         if environment:
-            env_normalized = self._normalize_environment(environment) if isinstance(environment, str) else environment
-            if env_normalized not in allowed_environments:
+            env_lower = (environment or '').strip().lower()
+            # Check if user has access to this environment (case-insensitive)
+            allowed_lower = {e.lower() for e in allowed_environments}
+            if env_lower not in allowed_lower:
                 # User doesn't have access to this environment
                 return [], 0, False
-            allowed_environments = {env_normalized}
+            # Filter to only this environment (keep case-insensitive matching)
+            allowed_environments = {e for e in allowed_environments if e.lower() == env_lower}
 
         if not allowed_environments:
             logger.info(
@@ -475,10 +489,11 @@ class InventoryService:
                 message="Inventory too large for in-memory RBAC filtering. Results may be incomplete."
             )
 
-        # Filter by environment
+        # Story 21.2, Task 1.2: Filter by environment with case-insensitive comparison
+        allowed_environments_lower = {e.lower() for e in allowed_environments}
         filtered_targets = [
             t for t in all_targets
-            if t['environment'] in allowed_environments
+            if (t.get('environment') or '').lower() in allowed_environments_lower
         ]
         env_filtered_count = len(filtered_targets)
 
@@ -560,62 +575,53 @@ class InventoryService:
     def _normalize_environment(self, raw_env: str) -> str:
         """
         Normalize environment value from external sources.
-        Handles aliases like 'certif' -> 'staging'.
+        Handles legacy aliases like 'certif' -> 'staging'.
+        
+        Story 21.1: Simplified to only apply aliases without recursion.
+        Inventory is the source of truth - unknown values are returned as-is.
 
         Args:
-            raw_env: Raw environment string from Oracle
+            raw_env: Raw environment string
 
         Returns:
-            Normalized environment value
+            Normalized environment value (alias applied or raw value)
         """
-        # Environment aliases mapping
+        # Environment aliases mapping (legacy compatibility)
         env_aliases = {
-            'certif': TargetEnvironment.STAGING,
-            'certification': TargetEnvironment.STAGING,
-            'stg': TargetEnvironment.STAGING,
-            'development': TargetEnvironment.DEV,
-            'production': TargetEnvironment.PROD,
+            'certif': 'staging',
+            'certification': 'staging',
+            'stg': 'staging',
+            'development': 'dev',
+            'production': 'prod',
         }
 
-        # Story 13.7: Check against inventory environments instead of hardcoded VALUES
-        # First check standard values (for backward compatibility)
-        standard_values = ['dev', 'staging', 'prod']
-        if raw_env.lower() in [v.lower() for v in standard_values]:
-            return raw_env.lower()
-        if raw_env.lower() in env_aliases:
-            return env_aliases[raw_env.lower()]
-
-        # Try to validate against inventory (if available)
-        try:
-            valid_environments = self.list_environments()
-            if raw_env.lower() in [e.lower() for e in valid_environments]:
-                # Find matching environment with correct case
-                for env in valid_environments:
-                    if env.lower() == raw_env.lower():
-                        return env
-        except InventoryServiceError:
-            # Inventory unavailable - use fallback logic
-            pass
-
-        # Default to dev for unknown values, but log warning
-        if raw_env:
-            logger.warning(
-                "unknown_environment_value_defaulted",
-                raw_value=raw_env,
-                defaulted_to='dev',
-                correlation_id=get_correlation_id()
-            )
-        return 'dev'
+        # Normalize input
+        normalized = (raw_env or '').strip().lower()
+        
+        # Apply alias if exists
+        if normalized in env_aliases:
+            return env_aliases[normalized]
+        
+        # Return raw value - inventory is source of truth
+        return normalized
 
     def get_allowed_environments_for_user(self, ad_groups: list[str]) -> set[str]:
         """
         Get allowed environments for a user based on their profiles.
+        
+        Story 21.2, Task 2.1: Returns both raw and normalized values for consistency
+        with list_targets_for_user RBAC filtering.
+        
+        MEDIUM-2 FIX: This method returns a set that may contain both the normalized
+        form and raw form of aliased environments. For example, a profile with
+        ["certif"] will return {"staging", "certif"} because certif normalizes to staging.
 
         Args:
             ad_groups: User's AD groups
 
         Returns:
-            Set of allowed environment values
+            Set of allowed environment values (includes both raw and normalized).
+            Example: profile with ["certif", "lab"] returns {"staging", "certif", "lab"}
         """
         profiles = Profile.objects.find_by_ad_groups(ad_groups).prefetch_related(
             'profileactionpermission'
@@ -629,19 +635,27 @@ class InventoryService:
                 if envs:
                     for e in envs:
                         if isinstance(e, str):
-                            allowed_environments.add(self._normalize_environment(e))
+                            raw_env = (e or '').strip().lower()
+                            normalized_env = self._normalize_environment(e)
+                            
+                            # Add normalized value (for alias handling)
+                            allowed_environments.add(normalized_env)
+                            
+                            # Also add raw value for consistency with RBAC filtering
+                            if raw_env and raw_env != normalized_env:
+                                allowed_environments.add(raw_env)
 
         return allowed_environments
 
     def list_environments(self) -> list[str]:
         """
         List distinct environments from inventory.
-        Returns normalized environment values (dev, staging, prod).
+        Story 21.1: Returns raw environment values from inventory (e.g., dev, lab, staging, prod, certif).
         Story 13.7 - AC2: Source of truth for environments is inventory.
         Uses cache to prevent duplicate Oracle queries.
 
         Returns:
-            List of distinct environment values (normalized)
+            List of distinct environment values (raw, not normalized)
         """
         correlation_id = get_correlation_id()
         

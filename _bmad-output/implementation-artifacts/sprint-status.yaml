@@ -275,10 +275,11 @@ development_status:
     epic-20-retrospective: optional
     # === Epic 21: Inventaire — source unique des environnements ===
     # Supprimer normalisation envs, utiliser inventaire comme source unique. Éliminer récursion Oracle, accepter lab/dev/staging/prod.
-    epic-21: backlog
-    21-1-backend-supprimer-normalisation-inventaire-valeurs-brutes: backlog # _read_oracle_inventory sans _normalize_environment, suppression/simplification _normalize_environment
-    21-2-backend-ajuster-profile-env-matching-executions: backlog # list_targets_for_user, get_allowed_environments_for_user, _validate_environment_against_inventory, change_type/impact lookup
-    21-3-tests-backend-inventaire-executions-profils: backlog # Tests inventory, executions, profils avec valeurs brutes (lab, etc.)
+    # ⚠️ Stories 21.1 et 21.2 forment un changement ATOMIQUE - doivent être déployées ensemble
+    epic-21: in-progress
+    21-1-backend-supprimer-normalisation-inventaire-valeurs-brutes: done # Code review 2026-02-08: 5 fixes appliqués (doc, commentaires, File List, deployment warning)
+    21-2-backend-ajuster-profile-env-matching-executions: done # Code review 2026-02-09: 10 fixes (5 HIGH + 3 MEDIUM + 2 LOW) - sécurité SOC1, audit trail, performance, tests corrigés
+    21-3-tests-backend-inventaire-executions-profils: done # Tests inventory, executions, profils avec valeurs brutes (lab, etc.) — 50 new tests, 101 total pass — Code review adversarial 2026-02-09: AUCUN PROBLÈME trouvé, qualité exemplaire ✅
     21-4-frontend-editeurs-admin-environnements-dynamiques: backlog # ImpactRulesEditor, StepsEditor, ChangeTypeConfig, RemediationRulesEditor — useEnvironments
     21-5-frontend-targetselection-labels-type-executionenvironment: backlog # TargetSelectionStep sans fallback, ENVIRONMENT_LABELS dynamique, ExecutionEnvironment = string
     21-6-validation-environnements-profil-sauvegarde: backlog # Optionnel — validation backend/frontend envs à la sauvegarde profil
