@@ -604,24 +604,68 @@ class TestNonSuperuserDBOPSAccessViaADGroup(TestCase):
         # AC#3: Non-superuser with AD group should access endpoint successfully
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-    def test_superuser_fallback_logs_when_used(self):
-        """Verify that superuser fallback emits a log when used (Story 22.2 CRIT-2)."""
+    def test_superuser_fallback_not_triggered_with_profile(self):
+        """Story 22.2 AC#6: security_rbac_bypass_superuser_fallback log is NOT emitted when
+        superuser has a DBOPS profile (profile resolves normally)."""
+        from django.test import override_settings
+
         superuser = User.objects.create(
-            username='superuser_no_profile',
-            profile='',  # No profile
+            username='superuser_with_profile',
+            profile='DBOPS',  # Has DBOPS profile
         )
-        superuser.ad_groups = []  # No AD groups
+        superuser.ad_groups = []
         superuser.is_superuser = True
 
         self.client.force_authenticate(user=superuser)
 
-        # Capture logs during request
         import logging
-        with self.assertLogs('core.permissions', level='INFO') as logs:
+        with override_settings(ALLOW_SUPERUSER_FALLBACK=True):
+            # Story 22.2 LOW-2: Django 5.2.11 supports assertNoLogs, no fallback needed
+            with self.assertNoLogs('core.permissions', level='WARNING'):
+                response = self.client.get('/api/v1/admin/actions/')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_superuser_fallback_denied_in_production(self):
+        """Story 22.2 AC#6: Superuser without DBOPS profile receives 403
+        in production (ALLOW_SUPERUSER_FALLBACK=False)."""
+        from django.test import override_settings
+
+        superuser = User.objects.create(
+            username='superuser_no_profile_prod',
+            profile='',
+        )
+        superuser.ad_groups = []
+        superuser.is_superuser = True
+
+        self.client.force_authenticate(user=superuser)
+
+        with override_settings(ALLOW_SUPERUSER_FALLBACK=False):
             response = self.client.get('/api/v1/admin/actions/')
 
-        # Verify superuser_fallback_used log was emitted
-        superuser_fallback_logs = [log for log in logs.output if 'superuser_fallback_used' in log]
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_superuser_fallback_allowed_in_dev(self):
+        """Story 22.2 AC#6: Superuser without DBOPS profile receives 200
+        in dev mode and security_rbac_bypass_superuser_fallback log is emitted."""
+        from django.test import override_settings
+
+        superuser = User.objects.create(
+            username='superuser_no_profile_dev',
+            profile='',
+        )
+        superuser.ad_groups = []
+        superuser.is_superuser = True
+
+        self.client.force_authenticate(user=superuser)
+
+        import logging
+        with override_settings(ALLOW_SUPERUSER_FALLBACK=True):
+            with self.assertLogs('core.permissions', level='WARNING') as logs:
+                response = self.client.get('/api/v1/admin/actions/')
+
+        # Verify security_rbac_bypass_superuser_fallback log was emitted (Story 22.2 HIGH-2: renamed event)
+        superuser_fallback_logs = [log for log in logs.output if 'security_rbac_bypass_superuser_fallback' in log]
         self.assertGreater(len(superuser_fallback_logs), 0, "Superuser fallback SHOULD log when used")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)

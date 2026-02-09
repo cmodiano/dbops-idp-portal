@@ -2,6 +2,7 @@
 Custom permissions for DRF RBAC.
 """
 
+from django.conf import settings
 from django.db import OperationalError
 from rest_framework import permissions
 from profiles.models import Profile
@@ -16,6 +17,9 @@ class DBOPSProfilePermission(permissions.BasePermission):
 
     Story 22.1 CRIT-1: Fixed AttributeError from non-existent service.get_profiles_by_ad_groups()
     by using Profile.objects.find_by_ad_groups() directly.
+
+    Story 22.2 CRIT-2: Superuser fallback is now conditional on ALLOW_SUPERUSER_FALLBACK setting.
+    Default is False (fail-secure). Set to True only in development for bootstrapping/convenience.
     """
 
     def has_permission(self, request, view):
@@ -66,13 +70,19 @@ class DBOPSProfilePermission(permissions.BasePermission):
                     exc_info=True,
                 )
 
-        # Fallback: superuser always has access (for development/admin)
-        # Story 22.2 CRIT-2: This fallback should be removed or restricted in production
-        if request.user.is_superuser:
-            logger.info(
-                "superuser_fallback_used",
+        # Story 22.2 CRIT-2: Conditional superuser fallback (executed ONLY if all profile checks above returned False).
+        # This fallback exists for development/bootstrapping convenience ONLY.
+        # Controlled by settings.ALLOW_SUPERUSER_FALLBACK (default: False = fail-secure).
+        # In production, superusers MUST have an explicit DBOPS profile.
+        # WARNING: Enabling this in production bypasses RBAC for superusers — violates
+        # principle of least privilege and SOC1 compliance requirements.
+        if getattr(settings, 'ALLOW_SUPERUSER_FALLBACK', False) and request.user.is_superuser:
+            logger.warning(
+                "security_rbac_bypass_superuser_fallback",
                 user_id=getattr(request.user, 'id', None),
                 username=getattr(request.user, 'username', None),
+                allow_superuser_fallback=True,
+                debug_mode=getattr(settings, 'DEBUG', False),
             )
             return True
 

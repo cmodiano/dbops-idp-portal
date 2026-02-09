@@ -8,6 +8,7 @@ instead of the non-existent service.get_profiles_by_ad_groups().
 import pytest
 from unittest.mock import MagicMock, patch
 from django.db import OperationalError
+from django.test import override_settings
 
 from core.permissions import DBOPSProfilePermission
 
@@ -184,15 +185,94 @@ class TestDBOPSProfilePermissionBasic:
 
         assert result is True
 
-    def test_superuser_fallback_when_no_profile_match(self):
-        """Superuser gets access as fallback when no profile matches."""
+    def test_superuser_without_profile_denied_in_production(self):
+        """Story 22.2 AC#5: Superuser without DBOPS profile is denied when
+        ALLOW_SUPERUSER_FALLBACK=False (production default)."""
         user = _make_user(is_superuser=True)
         request = _make_request(user)
         permission = DBOPSProfilePermission()
 
-        result = permission.has_permission(request, MagicMock())
+        with override_settings(ALLOW_SUPERUSER_FALLBACK=False):
+            result = permission.has_permission(request, MagicMock())
+
+        assert result is False
+
+    def test_superuser_without_profile_allowed_in_dev(self):
+        """Story 22.2 AC#5: Superuser without DBOPS profile is allowed when
+        ALLOW_SUPERUSER_FALLBACK=True (dev mode)."""
+        user = _make_user(is_superuser=True)
+        request = _make_request(user)
+        permission = DBOPSProfilePermission()
+
+        with override_settings(ALLOW_SUPERUSER_FALLBACK=True):
+            result = permission.has_permission(request, MagicMock())
 
         assert result is True
+
+    def test_superuser_with_profile_always_allowed(self):
+        """Story 22.2 AC#5: Superuser with DBOPS profile is always allowed,
+        regardless of ALLOW_SUPERUSER_FALLBACK setting."""
+        user = _make_user(is_superuser=True, profile="dbops")
+        request = _make_request(user)
+        permission = DBOPSProfilePermission()
+
+        # Allowed with fallback disabled
+        with override_settings(ALLOW_SUPERUSER_FALLBACK=False):
+            result = permission.has_permission(request, MagicMock())
+        assert result is True
+
+        # Also allowed with fallback enabled
+        with override_settings(ALLOW_SUPERUSER_FALLBACK=True):
+            result = permission.has_permission(request, MagicMock())
+        assert result is True
+
+    def test_superuser_fallback_logs_warning(self):
+        """Story 22.2 AC#5: Superuser fallback logs WARNING (not INFO) when used."""
+        user = _make_user(is_superuser=True)
+        request = _make_request(user)
+        permission = DBOPSProfilePermission()
+
+        import logging
+        with override_settings(ALLOW_SUPERUSER_FALLBACK=True):
+            with patch("core.permissions.logger") as mock_logger:
+                result = permission.has_permission(request, MagicMock())
+
+        assert result is True
+        mock_logger.warning.assert_called_once()
+        call_args = mock_logger.warning.call_args
+        assert call_args[0][0] == "security_rbac_bypass_superuser_fallback"
+
+    def test_superuser_fallback_logs_debug_mode(self):
+        """Story 22.2 HIGH-5: Verify debug_mode field in log (True in dev, False in prod)."""
+        user = _make_user(is_superuser=True)
+        request = _make_request(user)
+        permission = DBOPSProfilePermission()
+
+        # Test dev mode (DEBUG=True)
+        with override_settings(ALLOW_SUPERUSER_FALLBACK=True, DEBUG=True):
+            with patch("core.permissions.logger") as mock_logger:
+                result = permission.has_permission(request, MagicMock())
+
+        assert result is True
+        call_kwargs = mock_logger.warning.call_args[1]
+        assert call_kwargs['debug_mode'] is True
+
+        # Test production mode (DEBUG=False)
+        with override_settings(ALLOW_SUPERUSER_FALLBACK=True, DEBUG=False):
+            with patch("core.permissions.logger") as mock_logger:
+                result = permission.has_permission(request, MagicMock())
+
+        assert result is True
+        call_kwargs = mock_logger.warning.call_args[1]
+        assert call_kwargs['debug_mode'] is False
+
+    def test_default_superuser_fallback_disabled_in_test_settings(self):
+        """Story 22.2 HIGH-3: Verify ALLOW_SUPERUSER_FALLBACK=False in test_settings.py by default."""
+        from django.conf import settings
+        # NO @override_settings — verify the actual default from test_settings.py
+        assert settings.ALLOW_SUPERUSER_FALLBACK is False, (
+            "test_settings.py MUST have ALLOW_SUPERUSER_FALLBACK = False by default (fail-secure)"
+        )
 
     def test_non_superuser_no_profile_denied(self):
         """Non-superuser without any profile is denied."""

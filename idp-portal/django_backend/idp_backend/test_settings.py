@@ -26,6 +26,10 @@ if not JWT_SECRET_KEY:  # noqa: F405
 if not ORACLE_PASSWORD:  # noqa: F405
     ORACLE_PASSWORD = 'test-oracle-password'  # noqa: F811
 
+# Story 22.2: Superuser fallback disabled by default in tests (fail-secure)
+# Enable per-test with @override_settings(ALLOW_SUPERUSER_FALLBACK=True) for dev-mode tests
+ALLOW_SUPERUSER_FALLBACK = False
+
 # Story 19.0: Disable simulation by default in tests (enable per-test with @override_settings)
 SIMULATE_EXECUTION_DEV = False
 SIMULATE_EXECUTION_FAILURE_RATE = 0.0
