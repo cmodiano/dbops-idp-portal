@@ -4,12 +4,11 @@
  */
 
 import React from 'react';
-import { Switch, Input, Space, Typography, theme } from 'antd';
+import { Switch, Input, Space, Typography, theme, Skeleton, Alert } from 'antd';
 import type { ChangeTypeConfigEntry } from '../../types/api';
+import { useEnvironments } from '../../hooks/useEnvironments';
 
 const { Text } = Typography;
-
-const ENVIRONMENTS = ['DEV', 'STAGING', 'PROD'];
 
 const CODE_MAX_LENGTH = 50;
 const CODE_PATTERN = /^[A-Za-z0-9]*$/;
@@ -26,6 +25,7 @@ export const ChangeTypeConfig: React.FC<ChangeTypeConfigProps> = ({
   onChange,
 }) => {
   const { token } = theme.useToken();
+  const { environments, environmentOptions, loading, error } = useEnvironments();
 
   const getEntry = (env: string): ChangeTypeConfigEntry => {
     const e = value[env];
@@ -46,9 +46,31 @@ export const ChangeTypeConfig: React.FC<ChangeTypeConfigProps> = ({
     onChange?.(newConfig);
   };
 
+  if (loading) {
+    return <Skeleton active paragraph={{ rows: 3 }} />;
+  }
+
+  // If error, still render the grid but show warning at top
+  // The hook falls back to ['dev','staging','prod'] so environments array is still usable
+  const errorAlert = error ? (
+    <Alert
+      message="Erreur de chargement des environnements depuis l'inventaire"
+      description="Utilisation des environnements par défaut (dev, staging, prod). Rechargez la page pour réessayer."
+      type="warning"
+      showIcon
+      style={{ marginBottom: 16 }}
+    />
+  ) : null;
+
+  // Get label for an environment from environmentOptions
+  const getLabel = (env: string): string =>
+    environmentOptions.find((opt) => opt.value === env)?.label || env.toUpperCase();
+
   return (
-    <div role="table" aria-label="Configuration type de changement par environnement">
-      <Space orientation="vertical" style={{ width: '100%' }}>
+    <div>
+      {errorAlert}
+      <div role="table" aria-label="Configuration type de changement par environnement">
+        <Space orientation="vertical" style={{ width: '100%' }}>
         <div
           style={{
             display: 'grid',
@@ -65,7 +87,7 @@ export const ChangeTypeConfig: React.FC<ChangeTypeConfigProps> = ({
           <Text strong role="columnheader">Code modèle</Text>
         </div>
 
-        {ENVIRONMENTS.map((env) => {
+        {environments.map((env) => {
           const entry = getEntry(env);
           const required = entry.required ?? false;
           const code = entry.change_model_code ?? '';
@@ -82,7 +104,7 @@ export const ChangeTypeConfig: React.FC<ChangeTypeConfigProps> = ({
               }}
               role="row"
             >
-              <Text role="cell">{env}</Text>
+              <Text role="cell">{getLabel(env)}</Text>
               <div role="cell">
                 <Switch
                   checked={required}
@@ -106,7 +128,8 @@ export const ChangeTypeConfig: React.FC<ChangeTypeConfigProps> = ({
             </div>
           );
         })}
-      </Space>
+        </Space>
+      </div>
     </div>
   );
 };

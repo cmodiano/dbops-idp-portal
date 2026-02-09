@@ -19,6 +19,18 @@ let loadingPromise: Promise<string[]> | null = null;
 let cacheError: Error | null = null;
 let listeners: Set<(data: string[], error: Error | null) => void> = new Set();
 
+/**
+ * Invalidate the environments cache.
+ * Forces next hook call to refetch from API.
+ * Useful for testing or when inventory data changes.
+ */
+export function invalidateEnvironmentsCache(): void {
+  cachedEnvironments = null;
+  loadingPromise = null;
+  cacheError = null;
+  listeners.clear();
+}
+
 // Atomic function to ensure only one request is made
 function getOrFetchEnvironments(): Promise<string[]> {
   // If cached, return immediately
@@ -128,7 +140,7 @@ export function useEnvironments(options?: UseEnvironmentsOptions): UseEnvironmen
     };
     return {
       value: env,
-      label: labels[env.toLowerCase()] || env.toUpperCase(),
+      label: labels[env.toLowerCase()] || (env.charAt(0).toUpperCase() + env.slice(1).toLowerCase()),
     };
   });
 

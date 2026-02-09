@@ -79,5 +79,9 @@ export function listToImpactRules(list: ImpactRuleDefinition[]): ImpactRulesJson
   return result;
 }
 
-/** Available environments for the editor (Task 1.3 - aligned with StepsEditor). */
+/**
+ * @deprecated Use useEnvironments hook instead (Story 21.4).
+ * This constant is kept for backward compatibility with existing tests only.
+ * DO NOT use in new code.
+ */
 export const IMPACT_ENVIRONMENTS = ['DEV', 'STAGING', 'PROD'] as const;

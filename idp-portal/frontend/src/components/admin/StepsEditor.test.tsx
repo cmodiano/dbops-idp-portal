@@ -1,15 +1,38 @@
 /**
- * Tests for StepsEditor (Story 2.2, Story 2.7 connector_type).
+ * Tests for StepsEditor (Story 2.2, Story 2.7 connector_type, Story 21.4 dynamic environments).
  * Task 4.4: dropdown connecteur, ServiceNow shows conditional_environments, save sends connector_type.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { StepsEditor } from './StepsEditor';
 import type { ExecutionStep } from '../../types/api';
+import { useEnvironments } from '../../hooks/useEnvironments';
+
+vi.mock('../../hooks/useEnvironments', () => ({
+  useEnvironments: vi.fn(),
+}));
+
+const mockUseEnvironments = useEnvironments as ReturnType<typeof vi.fn>;
+
+const defaultEnvMock = {
+  environments: ['dev', 'staging', 'prod'],
+  environmentOptions: [
+    { value: 'dev', label: 'Développement' },
+    { value: 'staging', label: 'Staging' },
+    { value: 'prod', label: 'Production' },
+  ],
+  loading: false,
+  error: null,
+};
 
 describe('StepsEditor', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseEnvironments.mockReturnValue(defaultEnvMock);
+  });
+
   it('renders connector dropdown (Story 2.7)', async () => {
     const steps: ExecutionStep[] = [
       {
@@ -32,7 +55,7 @@ describe('StepsEditor', () => {
         type: 'execution',
         connector_type: 'servicenow',
         connector_config: {},
-        conditional_environments: ['PROD'],
+        conditional_environments: ['prod'],
       },
     ];
     render(<StepsEditor value={steps} onChange={() => {}} />);
@@ -92,5 +115,105 @@ describe('StepsEditor', () => {
         connector_type: 'servicenow',
       }),
     ]);
+  });
+
+  // Story 21.4 tests
+  describe('Story 21.4: dynamic environments', () => {
+    it('displays dynamic environment options in multi-select', async () => {
+      const user = userEvent.setup();
+      mockUseEnvironments.mockReturnValue({
+        environments: ['dev', 'lab'],
+        environmentOptions: [
+          { value: 'dev', label: 'Développement' },
+          { value: 'lab', label: 'Lab' },
+        ],
+        loading: false,
+        error: null,
+      });
+
+      const steps: ExecutionStep[] = [
+        {
+          order: 1,
+          name: 'Changement ServiceNow',
+          type: 'execution',
+          connector_type: 'servicenow',
+          connector_config: {},
+          conditional_environments: [],
+        },
+      ];
+      render(<StepsEditor value={steps} onChange={vi.fn()} />);
+
+      const envSelect = screen.getByLabelText(/Environnements conditionnes etape 1/i);
+      await user.click(envSelect);
+
+      expect(screen.getByText('Développement')).toBeInTheDocument();
+      expect(screen.getByText('Lab')).toBeInTheDocument();
+    });
+
+    it('disables environment select when loading', () => {
+      mockUseEnvironments.mockReturnValue({
+        ...defaultEnvMock,
+        loading: true,
+      });
+
+      const steps: ExecutionStep[] = [
+        {
+          order: 1,
+          name: 'Changement',
+          type: 'execution',
+          connector_type: 'servicenow',
+          connector_config: {},
+          conditional_environments: [],
+        },
+      ];
+      render(<StepsEditor value={steps} onChange={vi.fn()} />);
+
+      const envSelect = screen.getByLabelText(/Environnements conditionnes etape 1/i);
+      expect(envSelect.closest('.ant-select-disabled')).toBeTruthy();
+    });
+
+    it('validates at least one environment with dynamic envs', () => {
+      const steps: ExecutionStep[] = [
+        {
+          order: 1,
+          name: 'Changement',
+          type: 'execution',
+          connector_type: 'servicenow',
+          connector_config: {},
+          conditional_environments: [],
+        },
+      ];
+      render(<StepsEditor value={steps} onChange={vi.fn()} />);
+
+      expect(screen.getByText(/Selectionnez au moins un environnement/i)).toBeInTheDocument();
+    });
+
+    it('uses fallback environments when error occurs', () => {
+      mockUseEnvironments.mockReturnValue({
+        environments: ['dev', 'staging', 'prod'],
+        environmentOptions: [
+          { value: 'dev', label: 'Développement' },
+          { value: 'staging', label: 'Staging' },
+          { value: 'prod', label: 'Production' },
+        ],
+        loading: false,
+        error: new Error('API error'),
+      });
+
+      const steps: ExecutionStep[] = [
+        {
+          order: 1,
+          name: 'Changement',
+          type: 'execution',
+          connector_type: 'servicenow',
+          connector_config: {},
+          conditional_environments: [],
+        },
+      ];
+      render(<StepsEditor value={steps} onChange={vi.fn()} />);
+
+      // Component should still render with fallback environments
+      expect(screen.getByLabelText(/Environnements conditionnes etape 1/i)).toBeInTheDocument();
+    });
   });
 });

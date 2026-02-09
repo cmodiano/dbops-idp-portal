@@ -38,6 +38,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { ExecutionStep, ExecutionStepType, ConnectorType } from '../../types/api';
+import { useEnvironments } from '../../hooks/useEnvironments';
 
 const { Text } = Typography;
 
@@ -65,12 +66,12 @@ const CONNECTOR_OPTIONS: { value: ConnectorType; label: string }[] = [
   { value: 'terraform', label: 'Terraform' },
 ];
 
-const ENVIRONMENT_OPTIONS = ['DEV', 'STAGING', 'PROD'];
-
 /** Props for the sortable step card */
 interface SortableStepCardProps {
   step: ExecutionStep;
   index: number;
+  environmentOptions: { value: string; label: string }[];
+  environmentsLoading: boolean;
   onStepChange: (index: number, field: keyof ExecutionStep, fieldValue: unknown) => void;
   onRemoveStep: (index: number) => void;
   /** When false, remove button is disabled (at least one step required). */
@@ -81,6 +82,8 @@ interface SortableStepCardProps {
 const SortableStepCard: React.FC<SortableStepCardProps> = ({
   step,
   index,
+  environmentOptions,
+  environmentsLoading,
   onStepChange,
   onRemoveStep,
   canRemove,
@@ -191,7 +194,9 @@ const SortableStepCard: React.FC<SortableStepCardProps> = ({
                 onChange={(val) => onStepChange(index, 'conditional_environments', val)}
                 placeholder="Environnements conditionnes"
                 style={{ minWidth: 180 }}
-                options={ENVIRONMENT_OPTIONS.map((env) => ({ value: env, label: env }))}
+                options={environmentOptions}
+                loading={environmentsLoading}
+                disabled={environmentsLoading}
                 aria-label={`Environnements conditionnes etape ${step.order}`}
               />
             </Form.Item>
@@ -279,6 +284,8 @@ const SortableStepCard: React.FC<SortableStepCardProps> = ({
 };
 
 export const StepsEditor: React.FC<StepsEditorProps> = ({ value = EMPTY_STEPS, onChange }) => {
+  const { environmentOptions, loading: environmentsLoading } = useEnvironments();
+
   // Configure dnd-kit sensors for pointer and keyboard interaction
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -352,6 +359,8 @@ export const StepsEditor: React.FC<StepsEditorProps> = ({ value = EMPTY_STEPS, o
                 key={step.order}
                 step={step}
                 index={index}
+                environmentOptions={environmentOptions}
+                environmentsLoading={environmentsLoading}
                 onStepChange={handleStepChange}
                 onRemoveStep={handleRemoveStep}
                 canRemove={value.length > 1}
