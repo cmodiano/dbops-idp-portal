@@ -10,6 +10,7 @@ export interface ParametersJsonSchema {
   type?: string;
   properties?: Record<string, Record<string, unknown>>;
   required?: string[];
+  [key: string]: unknown; // Index signature for compatibility with Record<string, unknown>
 }
 
 /**

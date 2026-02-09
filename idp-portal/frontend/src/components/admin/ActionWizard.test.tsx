@@ -91,12 +91,13 @@ describe('ActionWizard', () => {
   });
 
   describe('AC3: Navigation et persistance', () => {
-    it('boutons Précédent / Suivant changent l’étape sans perdre le state', async () => {
+    it('boutons Précédent / Suivant changent l\'étape sans perdre le state', async () => {
       const user = userEvent.setup();
       const editAction: ActionDetail = {
         id: 1,
         name: 'Action test',
         description: null,
+        item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
         parameters_schema: null,
@@ -107,6 +108,7 @@ describe('ActionWizard', () => {
         created_at: '',
         updated_at: null,
         execution_steps: null,
+        workflow_steps: null,
         change_type_config: null,
         tags: [],
       };
@@ -124,12 +126,13 @@ describe('ActionWizard', () => {
       });
     });
 
-    it("bouton Enregistrer visible uniquement à l’étape 3", async () => {
+    it("bouton Enregistrer visible uniquement à l'étape 3", async () => {
       const user = userEvent.setup();
       const editAction: ActionDetail = {
         id: 1,
         name: 'X',
         description: null,
+        item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
         parameters_schema: null,
@@ -140,6 +143,7 @@ describe('ActionWizard', () => {
         created_at: '',
         updated_at: null,
         execution_steps: null,
+        workflow_steps: null,
         change_type_config: null,
         tags: [],
       };
@@ -167,6 +171,7 @@ describe('ActionWizard', () => {
         id: 10,
         name: 'Action à modifier',
         description: 'Desc',
+        item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
         parameters_schema: null,
@@ -177,6 +182,7 @@ describe('ActionWizard', () => {
         created_at: '',
         updated_at: null,
         execution_steps: null,
+        workflow_steps: null,
         change_type_config: null,
         tags: [],
       };
@@ -204,12 +210,13 @@ describe('ActionWizard', () => {
   });
 
   describe('AC4: Enregistrement', () => {
-    it('à l’étape 4, Enregistrer envoie le payload via onSubmit (mode édition pré-rempli)', async () => {
+    it('à l\'étape 4, Enregistrer envoie le payload via onSubmit (mode édition pré-rempli)', async () => {
       const user = userEvent.setup();
       const editAction: ActionDetail = {
         id: 10,
         name: 'Action à modifier',
         description: 'Desc',
+        item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
         parameters_schema: null,
@@ -220,6 +227,7 @@ describe('ActionWizard', () => {
         created_at: '2025-01-01T00:00:00Z',
         updated_at: null,
         execution_steps: [],
+        workflow_steps: null,
         change_type_config: null,
         tags: [],
       };
@@ -265,11 +273,12 @@ describe('ActionWizard', () => {
   });
 
   describe('AC5: Mode édition', () => {
-    it('en mode édition les champs sont pré-remplis depuis l’action existante', async () => {
+    it('en mode édition les champs sont pré-remplis depuis l\'action existante', async () => {
       const editAction: ActionDetail = {
         id: 42,
         name: 'Action existante',
         description: 'Description existante',
+        item_type: 'action',
         engine: 'SQL Server',
         platform: 'GitHub Actions',
         parameters_schema: { type: 'object', properties: { foo: { type: 'string' } }, required: ['foo'] },
@@ -280,6 +289,7 @@ describe('ActionWizard', () => {
         created_at: '2025-01-01T00:00:00Z',
         updated_at: null,
         execution_steps: [],
+        workflow_steps: null,
         change_type_config: { PROD: { required: true, change_model_code: '1516B' } },
         tags: ['tag1'],
       };
@@ -297,6 +307,7 @@ describe('ActionWizard', () => {
         id: 1,
         name: 'X',
         description: null,
+        item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
         parameters_schema: null,
@@ -307,6 +318,7 @@ describe('ActionWizard', () => {
         created_at: '',
         updated_at: null,
         execution_steps: null,
+        workflow_steps: null,
         change_type_config: null,
         tags: [],
       };
@@ -326,6 +338,7 @@ describe('ActionWizard', () => {
         id: 1,
         name: 'Action existante',
         description: null,
+        item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
         parameters_schema: null,
@@ -336,6 +349,7 @@ describe('ActionWizard', () => {
         created_at: '2025-01-01T00:00:00Z',
         updated_at: null,
         execution_steps: [],
+        workflow_steps: null,
         change_type_config: null,
         tags: [],
       };
@@ -620,6 +634,7 @@ describe('ActionWizard', () => {
         created_at: '',
         updated_at: null,
         execution_steps: null,
+        workflow_steps: null,
         change_type_config: null,
         tags: [],
       };

@@ -9,6 +9,7 @@
 
 import { useEffect, useState } from 'react';
 import { Modal, Steps, Button, Form, Input, Select, Alert, Space, App, Radio, List } from 'antd';
+import { CloseCircleOutlined } from '@ant-design/icons';
 import type {
   ActionCreate,
   ActionDetail,

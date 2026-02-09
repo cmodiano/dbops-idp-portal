@@ -6,7 +6,7 @@
 import type { ImpactLevel, ImpactRuleDefinition } from '../types/api';
 
 /** JSON object format stored in ACTIONS_CATALOG.impact_rules (CLOB). */
-export type ImpactRulesJson = Record<string, { level: string; criteria?: string | null }>;
+export type ImpactRulesJson = Record<string, { level: ImpactLevel; criteria?: string | null }>;
 
 const VALID_LEVELS: ImpactLevel[] = ['low', 'medium', 'high', 'critical'];
 
@@ -63,7 +63,7 @@ export function listToImpactRules(list: ImpactRuleDefinition[]): ImpactRulesJson
     const env = (rule.environment || '').trim();
     if (!env) continue;
 
-    const entry: { level: string; criteria?: string | null } = {
+    const entry: { level: ImpactLevel; criteria?: string | null } = {
       level: rule.level || 'low',
     };
     // Only include criteria if non-empty

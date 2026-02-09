@@ -135,6 +135,7 @@ describe('ActionForm', () => {
         id: 1,
         name: 'Test Action',
         description: null,
+        item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
         parameters_schema: null,
@@ -153,6 +154,7 @@ describe('ActionForm', () => {
             conditional_environments: null,
           },
         ],
+        workflow_steps: null,
         change_type_config: null,
       };
 
@@ -187,6 +189,7 @@ describe('ActionForm', () => {
       id: 1,
       name: 'Existing Action',
       description: 'Existing description',
+      item_type: 'action',
       engine: 'Oracle',
       platform: 'AAP',
       parameters_schema: { type: 'object', properties: { param1: { type: 'string' } } },
@@ -197,6 +200,7 @@ describe('ActionForm', () => {
       created_at: '2026-01-01T00:00:00Z',
       updated_at: null,
       execution_steps: null,
+      workflow_steps: null,
       change_type_config: null,
       tags: [],
     };
@@ -308,6 +312,7 @@ describe('ActionForm', () => {
         id: 1,
         name: 'Existing Action',
         description: 'Existing description',
+        item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
         parameters_schema: { type: 'object', properties: { param1: { type: 'string' } } },
@@ -326,6 +331,7 @@ describe('ActionForm', () => {
             conditional_environments: null,
           },
         ],
+        workflow_steps: null,
         change_type_config: null,
       };
 
@@ -351,6 +357,7 @@ describe('ActionForm', () => {
         id: 1,
         name: 'Edit',
         description: null,
+        item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
         parameters_schema: {
@@ -376,6 +383,7 @@ describe('ActionForm', () => {
             conditional_environments: null,
           },
         ],
+        workflow_steps: null,
         change_type_config: null,
       };
       await act(async () => {
@@ -400,6 +408,7 @@ describe('ActionForm', () => {
         id: 1,
         name: 'Test Action',
         description: null,
+        item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
         parameters_schema: null,
@@ -422,6 +431,7 @@ describe('ActionForm', () => {
             conditional_environments: null,
           },
         ],
+        workflow_steps: null,
         change_type_config: null,
       };
 
@@ -466,6 +476,7 @@ describe('ActionForm', () => {
         id: 1,
         name: 'Test Action',
         description: null,
+        item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
         parameters_schema: null,
@@ -478,6 +489,7 @@ describe('ActionForm', () => {
         execution_steps: [
           { order: 1, name: 'Step', type: 'prerequisite', connector_type: 'none', conditional_environments: null },
         ],
+        workflow_steps: null,
         change_type_config: { PROD: { required: true, change_model_code: '' } },
         tags: [],
       };
@@ -503,6 +515,7 @@ describe('ActionForm', () => {
         id: 1,
         name: 'Test Action',
         description: null,
+        item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
         parameters_schema: null,
@@ -515,6 +528,7 @@ describe('ActionForm', () => {
         execution_steps: [
           { order: 1, name: 'Step', type: 'prerequisite', connector_type: 'none', conditional_environments: null },
         ],
+        workflow_steps: null,
         change_type_config: { PROD: { required: true, change_model_code: '1516-B' } },
         tags: [],
       };
