@@ -433,24 +433,36 @@ export async function fetchInventoryItems(
 
       if (!response.ok) {
         if (response.status === 503) {
-          // Inventory unavailable - try to use localStorage cache if available (Task 4.2, 4.3)
-          const cached = localStorage.getItem(cacheKey);
+          // Inventory unavailable - try sessionStorage cache if available (Task 4.2, 4.3)
+          // Security (MED-5): sessionStorage mitigates XSS risk for infrastructure topology data
+          // (server names, DB names). localStorage persisted indefinitely → extended XSS exposure.
+          // sessionStorage auto-clears on tab close → limits attack window to active session.
+          // Risk: MEDIUM-HIGH (plaintext infra topology readable via DevTools if XSS present)
+          const cached = sessionStorage.getItem(cacheKey);
           if (cached) {
+            let cachedData;
             try {
-              const cachedData = JSON.parse(cached);
+              cachedData = JSON.parse(cached);
+            } catch (parseError) {
+              // Invalid JSON - log and continue to throw original 503 error
+              logger.warn('Invalid inventory cache JSON', { error: parseError instanceof Error ? parseError.message : String(parseError) });
+            }
+
+            // Validate cache structure (defense against XSS-injected malformed data)
+            if (cachedData && typeof cachedData.timestamp === 'number' && Array.isArray(cachedData.items)) {
               const cacheTime = cachedData.timestamp;
               const now = Date.now();
-              // Use cache if less than 5 minutes old (Task 4.3)
-              if (now - cacheTime < 5 * 60 * 1000) {
+              // Use cache if less than TTL (Task 4.3) - FIXED: use CACHE_TTL constant
+              if (now - cacheTime < CACHE_TTL) {
                 const error = new Error('Inventaire temporairement indisponible — dernières valeurs en cache');
                 (error as Error & { code: string }).code = 'INVENTORY_UNAVAILABLE';
                 (error as Error & { useCache: boolean }).useCache = true;
                 (error as Error & { cachedItems: InventoryItem[] }).cachedItems = cachedData.items;
                 throw error;
               }
-            } catch (parseError) {
-              // Invalid cache JSON or missing timestamp - log and continue to throw original error
-              logger.warn('Invalid inventory cache format', { error: parseError instanceof Error ? parseError.message : String(parseError) });
+            } else if (cachedData) {
+              // Invalid cache structure - log warning
+              logger.warn('Invalid inventory cache structure (missing timestamp or items array)');
             }
           }
           const error = new Error('Inventaire temporairement indisponible — dernières valeurs en cache');
@@ -467,9 +479,10 @@ export async function fetchInventoryItems(
       inventoryCache.set(apiKey, { data: items, timestamp: Date.now() });
       loadingPromises.delete(apiKey);
 
-      // Cache successful response in localStorage (Task 4.3)
+      // Cache successful response in sessionStorage (Task 4.3, Story 22.17 MED-5)
+      // Security: sessionStorage limits XSS exposure — cache cleared on tab close
       if (items.length > 0) {
-        localStorage.setItem(
+        sessionStorage.setItem(
           cacheKey,
           JSON.stringify({
             items,
