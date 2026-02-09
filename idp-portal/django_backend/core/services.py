@@ -12,6 +12,7 @@ from datetime import datetime
 from io import StringIO
 from django.db.models import Q
 from core.models import AuditLog, AuditActionType, AuditEntityType
+from core.utils import ensure_utc_isoformat
 
 logger = structlog.get_logger(__name__)
 
@@ -164,7 +165,7 @@ class AuditService:
                     details_formatted = entry.details
             
             writer.writerow([
-                entry.timestamp.isoformat(),
+                ensure_utc_isoformat(entry.timestamp),
                 entry.user_id,
                 entry.action_type,
                 entry.entity_type,

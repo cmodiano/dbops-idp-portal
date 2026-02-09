@@ -8,6 +8,8 @@ from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from core.utils import ensure_utc_isoformat
 import structlog
 
 from catalog.models import Action, Tag
@@ -159,7 +161,7 @@ class DashboardRecentView(APIView):
                     "user_display_name": getattr(user, "display_name", None) or "Unknown",
                     "environment": e.environment,
                     "status": e.status,
-                    "created_at": e.created_at.isoformat() if e.created_at else None,
+                    "created_at": ensure_utc_isoformat(e.created_at),
                     "platform": getattr(action, "platform", None) if action else None,
                     "engine": getattr(action, "engine", None) if action else None,
                 }

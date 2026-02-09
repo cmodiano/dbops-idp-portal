@@ -17,6 +17,7 @@ from core import feature_flags
 from core.middleware import get_correlation_id
 from core.models import AuditActionType, AuditEntityType, AuditLog, FeatureFlag
 from core.permissions import DBOPSProfilePermission
+from core.utils import ensure_utc_isoformat
 
 logger = structlog.get_logger(__name__)
 
@@ -40,7 +41,7 @@ class FeatureFlagListView(APIView):
                     'enabled': f.enabled,
                     'rollout_percent': f.rollout_percent,
                     'description': f.description,
-                    'updated_at': f.updated_at.isoformat() if f.updated_at else None,
+                    'updated_at': ensure_utc_isoformat(f.updated_at),
                     'updated_by': f.updated_by,
                 }
                 for f in flags
@@ -146,7 +147,7 @@ class FeatureFlagUpdateView(APIView):
                 'flag_key': flag.flag_key,
                 'enabled': flag.enabled,
                 'rollout_percent': flag.rollout_percent,
-                'updated_at': flag.updated_at.isoformat() if flag.updated_at else None,
+                'updated_at': ensure_utc_isoformat(flag.updated_at),
                 'updated_by': flag.updated_by,
             }
         else:
@@ -163,7 +164,7 @@ class FeatureFlagUpdateView(APIView):
                 'flag_key': flag_key,
                 'enabled': current.get('enabled', False),
                 'rollout_percent': current.get('rollout_percent', 100),
-                'updated_at': timezone.now().isoformat(),
+                'updated_at': ensure_utc_isoformat(timezone.now()),
                 'updated_by': user_id,
             }
 

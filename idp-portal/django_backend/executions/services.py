@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from django.db import transaction
 from django.db.models import Q, Count, Avg, Sum
 from django.utils import timezone
+from core.utils import ensure_utc_isoformat
 from executions.models import (
     Execution, ExecutionStep, ExecutionStatus, ExecutionStepStatus,
     ScheduledExecution, ScheduledExecutionStatus
@@ -686,7 +687,7 @@ class SchedulingService:
                     'action_id': action.id,
                     'action_name': action.name,
                     'environment': environment,
-                    'scheduled_at': scheduled_at.isoformat() if scheduled_at else None,
+                    'scheduled_at': ensure_utc_isoformat(scheduled_at),
                 }
             )
         

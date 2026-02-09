@@ -13,6 +13,7 @@ from django.db.models import Count, Q, OuterRef, Subquery, IntegerField, Value
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from cachetools import TTLCache
+from core.utils import ensure_utc_isoformat
 from catalog.models import Action, Tag, ActionStatus, ActionItemType
 from catalog.serializers import (
     ActionSerializer, ActionCreateSerializer, ActionListSerializer,
@@ -867,7 +868,7 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet):
                 'id': tag.id,
                 'name': tag.name,
                 'action_count': tag.action_count,
-                'created_at': tag.created_at.isoformat() if tag.created_at else None
+                'created_at': ensure_utc_isoformat(tag.created_at)
             })
 
         # Cache result

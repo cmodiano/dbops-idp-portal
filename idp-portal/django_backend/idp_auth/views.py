@@ -27,6 +27,7 @@ from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id
 from core.throttling import AuthEndpointThrottle, TokenRefreshThrottle, PublicEndpointThrottle
+from core.utils import ensure_utc_isoformat
 from catalog.models import Action
 
 logger = structlog.get_logger(__name__)
@@ -462,7 +463,7 @@ class UserFavoritesView(APIView):
         data = [
             {
                 "action_id": fav.action_id,
-                "created_at": fav.created_at.isoformat() if fav.created_at else None,
+                "created_at": ensure_utc_isoformat(fav.created_at),
             }
             for fav in favorites
         ]

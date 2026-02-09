@@ -3,6 +3,7 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from catalog.models import Action
+from core.utils import ensure_utc_isoformat
 from executions.models import Execution, ExecutionStep, ScheduledExecution, RecurringPattern
 
 
@@ -23,14 +24,14 @@ class ExecutionSerializer(serializers.Serializer):
             "user_id": obj.user_id,
             "user_display_name": getattr(user, "display_name", None) if user else None,
             "environment": obj.environment,
-            "parameters": obj.get_parameters() if hasattr(obj, "get_parameters") else None,
+            "parameters": obj.get_parameters(),
             "status": obj.status,
             "servicenow_change_id": obj.servicenow_change_id,
-            "started_at": obj.started_at.isoformat() if obj.started_at else None,
-            "completed_at": obj.completed_at.isoformat() if obj.completed_at else None,
-            "created_at": obj.created_at.isoformat() if obj.created_at else None,
+            "started_at": ensure_utc_isoformat(obj.started_at),
+            "completed_at": ensure_utc_isoformat(obj.completed_at),
+            "created_at": ensure_utc_isoformat(obj.created_at),
             "approved_by": obj.approved_by_id,
-            "approved_at": obj.approved_at.isoformat() if obj.approved_at else None,
+            "approved_at": ensure_utc_isoformat(obj.approved_at),
             "approval_comment": obj.approval_comment,
             "parent_execution_id": obj.parent_execution_id,
             # Story 18.6: Integration error message
@@ -56,9 +57,9 @@ class ExecutionStepSerializer(serializers.Serializer):
             "step_name": obj.step_name,
             "step_type": obj.step_type,
             "status": obj.status,
-            "started_at": obj.started_at.isoformat() if obj.started_at else None,
-            "completed_at": obj.completed_at.isoformat() if obj.completed_at else None,
-            "output": obj.get_output() if hasattr(obj, "get_output") else None,
+            "started_at": ensure_utc_isoformat(obj.started_at),
+            "completed_at": ensure_utc_isoformat(obj.completed_at),
+            "output": obj.get_output(),
             "platform_job_id": obj.platform_job_id,
             "error_message": obj.error_message,
         }
@@ -70,8 +71,8 @@ class RecurringPatternSerializer(serializers.Serializer):
     def to_representation(self, obj: RecurringPattern) -> dict:
         return {
             "pattern_type": obj.pattern_type,
-            "pattern_config": obj.get_pattern_config() if hasattr(obj, "get_pattern_config") else None,
-            "next_execution_date": obj.next_execution_date.isoformat() if obj.next_execution_date else None,
+            "pattern_config": obj.get_pattern_config(),
+            "next_execution_date": ensure_utc_isoformat(obj.next_execution_date),
             "is_active": bool(obj.is_active),
         }
 
@@ -92,9 +93,9 @@ class ScheduledExecutionSerializer(serializers.Serializer):
             "action_name": action.name if action else None,
             "environment": obj.environment,
             "status": obj.status,
-            "scheduled_at": obj.scheduled_at.isoformat() if obj.scheduled_at else None,
-            "parameters": obj.get_parameters() if hasattr(obj, "get_parameters") else None,
-            "created_at": obj.created_at.isoformat() if obj.created_at else None,
+            "scheduled_at": ensure_utc_isoformat(obj.scheduled_at),
+            "parameters": obj.get_parameters(),
+            "created_at": ensure_utc_isoformat(obj.created_at),
             "correlation_id": getattr(obj, "correlation_id", None),
         }
 
@@ -119,10 +120,10 @@ class ScheduledExecutionListItemSerializer(serializers.Serializer):
             "user_id": obj.user_id,
             "user_name": getattr(user, "display_name", None) or getattr(user, "username", None) or "",
             "environment": obj.environment,
-            "scheduled_at": obj.scheduled_at.isoformat() if obj.scheduled_at else None,
+            "scheduled_at": ensure_utc_isoformat(obj.scheduled_at),
             "status": obj.status,
-            "created_at": obj.created_at.isoformat() if obj.created_at else None,
-            "parameters": obj.get_parameters() if hasattr(obj, "get_parameters") else None,
+            "created_at": ensure_utc_isoformat(obj.created_at),
+            "parameters": obj.get_parameters(),
             "correlation_id": getattr(obj, "correlation_id", None),
             "execution_id": getattr(obj, "execution_id", None),
             # Story 13.6 AC3: Plateforme et Technologie pour le popover détail

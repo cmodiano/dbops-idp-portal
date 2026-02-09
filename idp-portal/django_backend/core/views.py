@@ -16,6 +16,7 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from core.middleware import get_correlation_id
+from core.utils import ensure_utc_isoformat
 
 logger = structlog.get_logger(__name__)
 
@@ -50,7 +51,7 @@ def health_check(request):
     correlation_id = get_correlation_id()
     health_data = {
         "status": "healthy",
-        "timestamp": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
+        "timestamp": ensure_utc_isoformat(datetime.now(timezone.utc)),
     }
 
     # Test database connection

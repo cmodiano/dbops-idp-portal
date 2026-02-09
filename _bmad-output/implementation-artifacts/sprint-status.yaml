@@ -301,7 +301,7 @@ development_status:
     22-12-corriger-high-2-transition-pending-approval-submitted: done # Code review: 11 fixes (8 HIGH + 3 MEDIUM), 14/14 tests pass, action items created for follow-up
     22-13-corriger-high-4-token-websocket-hors-url: done # 2026-02-09: Token WebSocket URL→message-based auth, Django Channels, 18 tests (10 FE + 8 BE), 0 régression
     22-14-corriger-high-7-stale-closure-executionspage: done # Code review adversarial 2026-02-09: 4 MEDIUM issues auto-fixed, 67/67 tests pass, 0 ESLint warnings, follow-up story 22-14b created
-    22-15-corriger-med-1-serialisation-date-timezone: backlog
+    22-15-corriger-med-1-serialisation-date-timezone: done # 2026-02-09: Code review — 6 HIGH + 2 MEDIUM + 1 LOW fixes, 29 backend tests + 11 frontend tests pass
     22-16-corriger-med-3-med-4-cache-feature-flags: backlog
     22-17-corriger-med-5-cache-inventaire-sessionstorage: backlog
     22-18-corriger-med-6-champ-requires-target-types-frontend: backlog

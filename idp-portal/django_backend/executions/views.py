@@ -14,6 +14,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.utils import ensure_utc_isoformat
+
 from catalog.models import Action, ActionStatus
 from core.auth_utils import get_user_ad_groups
 from core.exceptions import BadRequestError, NotFoundError, ForbiddenError, InvalidStateError
@@ -414,7 +416,7 @@ class ExecutionsView(APIView):
         response_data = {
             "execution_id": execution.id,
             "status": execution.status,
-            "created_at": execution.created_at.isoformat() if execution.created_at else None,
+            "created_at": ensure_utc_isoformat(execution.created_at),
         }
 
         # Include error_message if integration failed
@@ -585,8 +587,8 @@ class ExecutionStepLogsView(APIView):
                     "step_id": step.id,
                     "output": step.get_output() if hasattr(step, "get_output") else None,
                     "error_message": step.error_message,
-                    "started_at": step.started_at.isoformat() if step.started_at else None,
-                    "completed_at": step.completed_at.isoformat() if step.completed_at else None,
+                    "started_at": ensure_utc_isoformat(step.started_at),
+                    "completed_at": ensure_utc_isoformat(step.completed_at),
                 }
             }
         )
@@ -968,8 +970,8 @@ class ScheduledExecutionUpdateView(APIView):
                         "action_name": se.action.name if se.action else None,
                         "environment": se.environment,
                         "status": se.status,
-                        "scheduled_at": se.scheduled_at.isoformat() if se.scheduled_at else None,
-                        "created_at": se.created_at.isoformat() if se.created_at else None,
+                        "scheduled_at": ensure_utc_isoformat(se.scheduled_at),
+                        "created_at": ensure_utc_isoformat(se.created_at),
                     }
                 }
             )
@@ -1012,8 +1014,8 @@ class ScheduledExecutionUpdateView(APIView):
                         "action_name": se.action.name if se.action else None,
                         "environment": se.environment,
                         "status": se.status,
-                        "scheduled_at": se.scheduled_at.isoformat() if se.scheduled_at else None,
-                        "created_at": se.created_at.isoformat() if se.created_at else None,
+                        "scheduled_at": ensure_utc_isoformat(se.scheduled_at),
+                        "created_at": ensure_utc_isoformat(se.created_at),
                     }
                 }
             )
@@ -1286,11 +1288,7 @@ class ScheduledExecutionCronNextExecutionsView(APIView):
         executions = []
         for _ in range(count):
             nxt = it.get_next(datetime)
-            if timezone.is_naive(nxt):
-                nxt = timezone.make_aware(nxt, timezone=UTC)
-            else:
-                nxt = nxt.astimezone(UTC)
-            executions.append(nxt.isoformat())
+            executions.append(ensure_utc_isoformat(nxt))
 
         return Response({"data": {"executions": executions}})
 

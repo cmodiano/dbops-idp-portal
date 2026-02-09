@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.exceptions import BadRequestError, ForbiddenError
+from core.utils import ensure_utc_isoformat
 from core.models import AuditLog, AuditEntityType, AuditActionType
 from executions.models import Execution
 from profiles.models import Profile
@@ -216,7 +217,7 @@ class AuditExecutionsView(APIView):
             data.append(
                 {
                     "id": r.id,
-                    "timestamp": r.timestamp.isoformat() if r.timestamp else None,
+                    "timestamp": ensure_utc_isoformat(r.timestamp),
                     "user_id": r.user_id,
                     "action_type": r.action_type,
                     "entity_type": r.entity_type,
@@ -317,7 +318,7 @@ class AuditExportView(APIView):
             writer.writerow(
                 [
                     r.id,
-                    r.timestamp.isoformat() if r.timestamp else "",
+                    ensure_utc_isoformat(r.timestamp) or "",
                     r.user_id,
                     r.action_type,
                     int(r.entity_id),
