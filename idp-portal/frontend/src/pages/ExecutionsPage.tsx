@@ -340,6 +340,46 @@ export default function ExecutionsPage() {
     loadStats();
   }, [activeScope, filters]);
 
+  /**
+   * Refs to track current page and scope at call time (not closure creation time).
+   * Solves stale closure issue (Story 22.14 / HIGH-7): callbacks created before a
+   * pagination or scope change would otherwise capture outdated values.
+   */
+  const currentPageRef = useRef(currentPage);
+  const activeScopeRef = useRef(activeScope);
+
+  useEffect(() => {
+    currentPageRef.current = currentPage;
+  }, [currentPage]);
+
+  useEffect(() => {
+    activeScopeRef.current = activeScope;
+  }, [activeScope]);
+
+  /**
+   * Refetch using the current page and scope at call time (not closure creation time).
+   *
+   * **Problem Solved (Story 22.14 / HIGH-7):**
+   * React callbacks capture values in their closure at creation time. If a user:
+   * 1. Clicks "Cancel" (creates callback with page=1, scope="all")
+   * 2. Changes to page=2, scope="mine" BEFORE confirming the modal
+   * 3. Confirms cancel → the callback would call fetchData(1, "all") [WRONG!]
+   *
+   * **Solution:**
+   * This function reads from refs which are updated synchronously, so it ALWAYS
+   * uses the latest values regardless of when the enclosing callback was created.
+   *
+   * @see currentPageRef, activeScopeRef - synchronized with state via useEffect
+   * @see handleCancelExecution, handleApprovalComplete, handleRestartSuccess - usage
+   */
+  const refetchCurrentState = useCallback(() => {
+    return fetchData(currentPageRef.current, activeScopeRef.current);
+  }, [fetchData]);
+
+  // Story 22.14: Guards to prevent concurrent cancel/refresh operations
+  const isCancellingRef = useRef(false);
+  const isRefreshingRef = useRef(false);
+
   // Story 17.14: Cancel execution state
   const [cancellingId, setCancellingId] = useState<number | null>(null);
 
@@ -351,7 +391,17 @@ export default function ExecutionsPage() {
   const [restartLoadingId, setRestartLoadingId] = useState<number | null>(null);
 
   // Story 17.14 AC3: Handle cancel execution with confirmation modal
+  // Story 22.14: Uses refetchCurrentState (refs) to avoid stale closure + isCancellingRef guard
   const handleCancelExecution = useCallback((executionId: number) => {
+    // Guard: block if cancel already in progress OR if this execution is already being cancelled
+    if (isCancellingRef.current || cancellingId === executionId) {
+      logger.debug('Cancel operation already in progress or modal open, ignoring duplicate', {
+        executionId,
+        correlation_id: crypto.randomUUID(),
+      });
+      return;
+    }
+
     modal.confirm({
       title: MESSAGES.CANCEL_CONFIRM_TITLE,
       content: MESSAGES.CANCEL_CONFIRM_CONTENT,
@@ -359,21 +409,30 @@ export default function ExecutionsPage() {
       cancelText: MESSAGES.CANCEL_CONFIRM_CANCEL,
       okButtonProps: { danger: true },
       onOk: async () => {
+        isCancellingRef.current = true;
         setCancellingId(executionId);
         try {
           await cancelExecution(executionId);
           notification.success({ message: MESSAGES.CANCEL_SUCCESS });
-          fetchData(currentPage, activeScope);
+          if (!isRefreshingRef.current) {
+            isRefreshingRef.current = true;
+            try {
+              await refetchCurrentState();
+            } finally {
+              isRefreshingRef.current = false;
+            }
+          }
         } catch (err) {
           const message = err instanceof Error ? err.message : MESSAGES.CANCEL_ERROR_FALLBACK;
           notification.error({ message: MESSAGES.CANCEL_ERROR_TITLE, description: message });
           logger.error('Cancel execution failed', { executionId, error: message });
         } finally {
+          isCancellingRef.current = false;
           setCancellingId(null);
         }
       },
     });
-  }, [modal, fetchData, currentPage, activeScope]);
+  }, [modal, notification, refetchCurrentState, cancellingId]);
 
   // Story 17.15 AC1, AC2: Handle restart execution — load action and open wizard
   const handleRestartExecution = useCallback(async (execution: ExecutionResponse) => {
@@ -418,17 +477,31 @@ export default function ExecutionsPage() {
     setRestartInitialParams(undefined);
   }, []);
 
+  // Story 22.14: Uses refetchCurrentState (refs) to avoid stale closure + isRefreshingRef guard
   const handleRestartSuccess = useCallback((executionId: number) => {
     handleRestartWizardClose();
-    fetchData(currentPage, activeScope);
+
+    if (!isRefreshingRef.current) {
+      isRefreshingRef.current = true;
+      refetchCurrentState().finally(() => {
+        isRefreshingRef.current = false;
+      });
+    }
+
     logger.debug('Restart execution created', { executionId });
-  }, [handleRestartWizardClose, fetchData, currentPage, activeScope]);
+  }, [handleRestartWizardClose, refetchCurrentState]);
 
   // Story 8.8: Callback after approval/rejection - refresh both lists
+  // Story 22.14: Uses refetchCurrentState (refs) to avoid stale closure + isRefreshingRef guard
   const handleApprovalComplete = useCallback(() => {
     loadPendingApprovals();
-    fetchData(currentPage, activeScope);
-  }, [loadPendingApprovals, fetchData, currentPage, activeScope]);
+    if (!isRefreshingRef.current) {
+      isRefreshingRef.current = true;
+      refetchCurrentState().finally(() => {
+        isRefreshingRef.current = false;
+      });
+    }
+  }, [loadPendingApprovals, refetchCurrentState]);
 
   // Sort executions: running first, then by sortField (AC3)
   const sortedExecutions = useMemo(() => {

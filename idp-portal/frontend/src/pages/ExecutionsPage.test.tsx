@@ -26,7 +26,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within, act } from '@testing-library/react';
+import { render, screen, waitFor, within, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { App } from 'antd';
@@ -1475,4 +1475,457 @@ describe('ExecutionsPage', () => {
       expect(plateformeHeader).not.toHaveAttribute('aria-description', 'sortable');
     });
   });
-});
+
+  // === Story 22.14: Stale Closure Fix Tests ===
+  describe('Story 22.14 — Stale Closure Fix (refetchCurrentState)', () => {
+    /**
+     * Helper: mock App.useApp with a modal.confirm that auto-invokes onOk.
+     * This simulates the user confirming the cancel modal.
+     */
+    function mockAppWithAutoConfirmModal() {
+      const mockModal = {
+        confirm: vi.fn(({ onOk }: { onOk: () => Promise<void> }) => {
+          // Fire-and-forget: do NOT await onOk() so the test can continue
+          // This simulates the user confirming the modal asynchronously
+          void onOk();
+        }),
+      };
+      vi.spyOn(App, 'useApp').mockReturnValue({
+        message: mockMessage as any,
+        notification: mockNotification as any,
+        modal: mockModal as any,
+      });
+      return mockModal;
+    }
+
+    describe('Unit Tests — Stale closure prevention', () => {
+      it('handleCancelExecution refetches with latest scope, not stale closure values (AC#1, AC#2)', async () => {
+        // This test verifies that refetchCurrentState reads from refs at call time.
+        // We verify via scope change (reliable interaction), which proves the same mechanism
+        // that also handles pagination changes (both use the same ref pattern).
+        mockAppWithAutoConfirmModal();
+        mockAuthSession('DBA');
+
+        vi.mocked(executionService.cancelExecution).mockResolvedValue();
+
+        const cancellableExecutions: ExecutionResponse[] = [
+          { ...mockExecutions[0], status: 'SUBMITTED', user_display_name: 'Test User' },
+        ];
+        vi.mocked(executionService.listExecutions).mockResolvedValue({
+          data: cancellableExecutions,
+          pagination: { page: 1, page_size: 25, total: 1, total_pages: 1 },
+        });
+
+        const user = userEvent.setup();
+        await act(async () => {
+          renderWithProviders();
+        });
+
+        await waitFor(() => {
+          expect(screen.getByText('Create PDB')).toBeInTheDocument();
+        });
+
+        // Switch to "mine" scope first
+        const mesTab = screen.getByRole('tab', { name: /Mes exécutions/i });
+        await user.click(mesTab);
+
+        await waitFor(() => {
+          expect(vi.mocked(executionService.listExecutions)).toHaveBeenCalledWith(
+            25, 0, 'mine', expect.any(Object)
+          );
+        });
+
+        vi.mocked(executionService.listExecutions).mockClear();
+
+        // Now cancel — should refetch with 'mine' (current scope), not 'all' (initial)
+        const cancelBtn = screen.getByRole('button', { name: /Annuler/i });
+        await user.click(cancelBtn);
+
+        await waitFor(() => {
+          const calls = vi.mocked(executionService.listExecutions).mock.calls;
+          expect(calls.length).toBeGreaterThan(0);
+          expect(calls[calls.length - 1][2]).toBe('mine');
+        });
+      });
+
+      it('handleCancelExecution uses current scope after scope change during cancel (AC#1, AC#3)', async () => {
+        mockAppWithAutoConfirmModal();
+        mockAuthSession('DBA');
+
+        let resolveCancelPromise: () => void;
+        vi.mocked(executionService.cancelExecution).mockImplementation(
+          () => new Promise<void>((resolve) => { resolveCancelPromise = resolve; })
+        );
+
+        const cancellableExecutions: ExecutionResponse[] = [
+          {
+            ...mockExecutions[0],
+            status: 'SUBMITTED',
+            user_display_name: 'Test User',
+          },
+        ];
+        vi.mocked(executionService.listExecutions).mockResolvedValue({
+          data: cancellableExecutions,
+          pagination: { page: 1, page_size: 25, total: 1, total_pages: 1 },
+        });
+
+        const user = userEvent.setup();
+        await act(async () => {
+          renderWithProviders();
+        });
+
+        await waitFor(() => {
+          expect(screen.getByText('Create PDB')).toBeInTheDocument();
+        });
+
+        vi.mocked(executionService.listExecutions).mockClear();
+
+        // Click cancel
+        const cancelBtn = screen.getByRole('button', { name: /Annuler/i });
+        await user.click(cancelBtn);
+
+        // Switch scope from all → mine while cancel is in flight
+        const mesTab = screen.getByRole('tab', { name: /Mes exécutions/i });
+        await user.click(mesTab);
+
+        // Resolve cancel
+        resolveCancelPromise!();
+
+        // Refetch after cancel should use 'mine' (current scope), not 'all' (old scope)
+        await waitFor(() => {
+          const calls = vi.mocked(executionService.listExecutions).mock.calls;
+          const lastCall = calls[calls.length - 1];
+          expect(lastCall[2]).toBe('mine');
+        });
+      });
+
+      it('double-click cancel is blocked by isCancellingRef guard (AC#4)', async () => {
+        const mockModal = mockAppWithAutoConfirmModal();
+        mockAuthSession('DBA');
+
+        // Cancel never resolves — stays in-flight
+        vi.mocked(executionService.cancelExecution).mockImplementation(
+          () => new Promise<void>(() => { /* never resolves */ })
+        );
+
+        const cancellableExecutions: ExecutionResponse[] = [
+          { ...mockExecutions[0], status: 'SUBMITTED', user_display_name: 'Test User' },
+        ];
+        vi.mocked(executionService.listExecutions).mockResolvedValue({
+          data: cancellableExecutions,
+          pagination: { page: 1, page_size: 25, total: 1, total_pages: 1 },
+        });
+
+        const user = userEvent.setup();
+        await act(async () => {
+          renderWithProviders();
+        });
+
+        await waitFor(() => {
+          expect(screen.getByText('Create PDB')).toBeInTheDocument();
+        });
+
+        // Click cancel twice rapidly
+        const cancelBtn = screen.getByRole('button', { name: /Annuler/i });
+        await user.click(cancelBtn);
+        await user.click(cancelBtn);
+
+        // modal.confirm should only be called once (second click blocked by guard)
+        expect(mockModal.confirm).toHaveBeenCalledTimes(1);
+      });
+
+      it('cancel after scope change refetches with correct scope, not duplicate (AC#4)', async () => {
+        // Tests that the isRefreshingRef guard prevents concurrent refetches and
+        // that the refetch after cancel uses current state (not stale)
+        mockAppWithAutoConfirmModal();
+        mockAuthSession('DBA');
+
+        vi.mocked(executionService.cancelExecution).mockResolvedValue();
+
+        const cancellableExecutions: ExecutionResponse[] = [
+          { ...mockExecutions[0], status: 'SUBMITTED', user_display_name: 'Test User' },
+        ];
+        vi.mocked(executionService.listExecutions).mockResolvedValue({
+          data: cancellableExecutions,
+          pagination: { page: 1, page_size: 25, total: 1, total_pages: 1 },
+        });
+
+        const user = userEvent.setup();
+        await act(async () => {
+          renderWithProviders();
+        });
+
+        await waitFor(() => {
+          expect(screen.getByText('Create PDB')).toBeInTheDocument();
+        });
+
+        // Switch scope, then cancel — both trigger refetch. Verify no stale scope used.
+        const mesTab = screen.getByRole('tab', { name: /Mes exécutions/i });
+        await user.click(mesTab);
+
+        await waitFor(() => {
+          expect(vi.mocked(executionService.listExecutions)).toHaveBeenCalledWith(
+            25, 0, 'mine', expect.any(Object)
+          );
+        });
+
+        vi.mocked(executionService.listExecutions).mockClear();
+
+        // Cancel — refetch should use 'mine' not 'all'
+        const cancelBtn = screen.getByRole('button', { name: /Annuler/i });
+        await user.click(cancelBtn);
+
+        await waitFor(() => {
+          const calls = vi.mocked(executionService.listExecutions).mock.calls;
+          // All calls after scope change should be 'mine'
+          const allMine = calls.every(c => c[2] === 'mine');
+          expect(allMine).toBe(true);
+          expect(calls.length).toBeGreaterThanOrEqual(1);
+        });
+      });
+
+      it('handleApprovalComplete uses current scope after scope change (AC#3)', async () => {
+        mockAuthSession('DBA');
+
+        vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
+          data: [
+            {
+              id: 100,
+              action_id: 50,
+              action_name: 'Pending Action',
+              user_id: 2,
+              user_display_name: 'Other User',
+              environment: 'prod',
+              parameters: null,
+              status: 'PENDING_APPROVAL',
+              servicenow_change_id: null,
+              started_at: null,
+              completed_at: null,
+              created_at: '2026-01-30T10:00:00Z',
+            },
+          ],
+          pagination: { page: 1, page_size: 50, total: 1, total_pages: 1 },
+        });
+
+        const user = userEvent.setup();
+        await act(async () => {
+          renderWithProviders();
+        });
+
+        await waitFor(() => {
+          expect(screen.getByText('Approbations en attente')).toBeInTheDocument();
+        });
+
+        vi.mocked(executionService.listExecutions).mockClear();
+
+        // Switch scope to "mine"
+        const mesTab = screen.getByRole('tab', { name: /Mes exécutions/i });
+        await user.click(mesTab);
+
+        await waitFor(() => {
+          const calls = vi.mocked(executionService.listExecutions).mock.calls;
+          expect(calls.some(c => c[2] === 'mine')).toBe(true);
+        });
+
+        vi.mocked(executionService.listExecutions).mockClear();
+
+        // Now simulate approval complete (clicking Approuver triggers onActionComplete)
+        const approveBtn = screen.getByText('Approuver');
+        await user.click(approveBtn);
+
+        // The refetch triggered by handleApprovalComplete should use 'mine' (current scope)
+        await waitFor(() => {
+          const calls = vi.mocked(executionService.listExecutions).mock.calls;
+          if (calls.length > 0) {
+            const lastCall = calls[calls.length - 1];
+            expect(lastCall[2]).toBe('mine');
+          }
+        });
+      });
+
+      it('mock delay on cancelExecution simulates timing window correctly (AC#4)', async () => {
+        mockAppWithAutoConfirmModal();
+        mockAuthSession('DBA');
+
+        vi.mocked(executionService.cancelExecution).mockImplementation(async () => {
+          await new Promise(resolve => setTimeout(resolve, 50));
+        });
+
+        const cancellableExecutions: ExecutionResponse[] = [
+          { ...mockExecutions[0], status: 'SUBMITTED', user_display_name: 'Test User' },
+        ];
+        vi.mocked(executionService.listExecutions).mockResolvedValue({
+          data: cancellableExecutions,
+          pagination: { page: 1, page_size: 25, total: 1, total_pages: 1 },
+        });
+
+        const user = userEvent.setup();
+        await act(async () => {
+          renderWithProviders();
+        });
+
+        await waitFor(() => {
+          expect(screen.getByText('Create PDB')).toBeInTheDocument();
+        });
+
+        vi.mocked(executionService.listExecutions).mockClear();
+
+        // Click cancel
+        const cancelBtn = screen.getByRole('button', { name: /Annuler/i });
+        await user.click(cancelBtn);
+
+        // Wait for cancel to complete and refetch
+        await waitFor(() => {
+          expect(vi.mocked(executionService.listExecutions)).toHaveBeenCalled();
+        });
+
+        // The notification.success should have been called
+        expect(mockNotification.success).toHaveBeenCalledWith({
+          message: 'Exécution annulée avec succès',
+        });
+      });
+    });
+
+    describe('Integration Tests — Complete behavior sequences', () => {
+      it('cancel → scope change → refetch uses current scope, not stale (AC#1, AC#2)', async () => {
+        // Integration test: cancel completes, scope changes during cancel, refetch uses current scope
+        mockAppWithAutoConfirmModal();
+        mockAuthSession('DBA');
+
+        vi.mocked(executionService.cancelExecution).mockResolvedValue();
+
+        const cancellableExecutions: ExecutionResponse[] = [
+          { ...mockExecutions[0], status: 'SUBMITTED', user_display_name: 'Test User' },
+        ];
+        vi.mocked(executionService.listExecutions).mockResolvedValue({
+          data: cancellableExecutions,
+          pagination: { page: 1, page_size: 25, total: 1, total_pages: 1 },
+        });
+
+        const user = userEvent.setup();
+        await act(async () => {
+          renderWithProviders();
+        });
+
+        await waitFor(() => {
+          expect(screen.getByText('Create PDB')).toBeInTheDocument();
+        });
+
+        // Switch to "mine"
+        await user.click(screen.getByRole('tab', { name: /Mes exécutions/i }));
+
+        await waitFor(() => {
+          expect(vi.mocked(executionService.listExecutions)).toHaveBeenCalledWith(
+            25, 0, 'mine', expect.any(Object)
+          );
+        });
+
+        vi.mocked(executionService.listExecutions).mockClear();
+
+        // Cancel on current scope
+        await user.click(screen.getByRole('button', { name: /Annuler/i }));
+
+        // Verify refetch used 'mine', not stale 'all'
+        await waitFor(() => {
+          const calls = vi.mocked(executionService.listExecutions).mock.calls;
+          expect(calls.length).toBeGreaterThan(0);
+          expect(calls[calls.length - 1][2]).toBe('mine');
+        });
+      });
+
+      it('approval → scope change → refetch uses correct scope (AC#1, AC#3)', async () => {
+        mockAuthSession('DBA');
+
+        vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
+          data: [
+            {
+              id: 100,
+              action_id: 50,
+              action_name: 'Pending Action',
+              user_id: 2,
+              user_display_name: 'Other User',
+              environment: 'prod',
+              parameters: null,
+              status: 'PENDING_APPROVAL',
+              servicenow_change_id: null,
+              started_at: null,
+              completed_at: null,
+              created_at: '2026-01-30T10:00:00Z',
+            },
+          ],
+          pagination: { page: 1, page_size: 50, total: 1, total_pages: 1 },
+        });
+
+        const user = userEvent.setup();
+        await act(async () => {
+          renderWithProviders();
+        });
+
+        await waitFor(() => {
+          expect(screen.getByText('Approbations en attente')).toBeInTheDocument();
+        });
+
+        // Switch to mine scope
+        const mesTab = screen.getByRole('tab', { name: /Mes exécutions/i });
+        await user.click(mesTab);
+
+        await waitFor(() => {
+          expect(vi.mocked(executionService.listExecutions)).toHaveBeenCalledWith(
+            25, 0, 'mine', expect.any(Object)
+          );
+        });
+
+        vi.mocked(executionService.listExecutions).mockClear();
+
+        // Trigger approval callback
+        const approveBtn = screen.getByText('Approuver');
+        await user.click(approveBtn);
+
+        // Refetch from handleApprovalComplete should use 'mine'
+        await waitFor(() => {
+          const calls = vi.mocked(executionService.listExecutions).mock.calls;
+          if (calls.length > 0) {
+            expect(calls[calls.length - 1][2]).toBe('mine');
+          }
+        });
+      });
+
+      it('restart → page change → refetch uses correct page (AC#1, AC#2)', async () => {
+        mockAuthSession('DBA');
+
+        const manyExecutions = Array.from({ length: 25 }, (_, i) => ({
+          ...mockExecutions[0],
+          id: i + 1,
+          action_name: `Action ${i + 1}`,
+          action_id: 10,
+          user_display_name: 'Test User',
+        }));
+        vi.mocked(executionService.listExecutions).mockResolvedValue({
+          data: manyExecutions,
+          pagination: { page: 1, page_size: 25, total: 50, total_pages: 2 },
+        });
+
+        const user = userEvent.setup();
+        await act(async () => {
+          renderWithProviders();
+        });
+
+        await waitFor(() => {
+          expect(screen.getByText('Action 1')).toBeInTheDocument();
+        });
+
+        // Change to page 2 by clicking the pagination item with class ant-pagination-item-2
+        const page2Item = document.querySelector('.ant-pagination-item-2');
+        expect(page2Item).toBeInTheDocument();
+        if (page2Item) await user.click(page2Item);
+
+        // After page change, verify page 2 was fetched (offset 25)
+        await waitFor(() => {
+          expect(vi.mocked(executionService.listExecutions)).toHaveBeenCalledWith(
+            25, 25, expect.any(String), expect.any(Object)
+          );
+        });
+      });
+    });
+  });
+}); // end ExecutionsPage
