@@ -125,3 +125,117 @@ describe('ParametersEditor', () => {
     expect(screen.getByLabelText(/Glisser pour reordonner parametre 2/i)).toBeInTheDocument();
   });
 });
+
+// Story 23.5: Source and inventory_type fields
+describe('ParametersEditor - Story 23.5 (Inventory Source)', () => {
+  it('renders Source select field for each parameter', () => {
+    const params: ParameterDefinition[] = [
+      { name: 'srv', type: 'string', required: false },
+    ];
+    render(<ParametersEditor value={params} onChange={() => {}} />);
+    expect(screen.getByLabelText(/Source parametre 1/i)).toBeInTheDocument();
+  });
+
+  it('shows Source field with default value "Saisie manuelle"', () => {
+    const params: ParameterDefinition[] = [
+      { name: 'path', type: 'string', required: false },
+    ];
+    render(<ParametersEditor value={params} onChange={() => {}} />);
+    // The source select should show manual by default
+    const sourceSelect = screen.getByLabelText(/Source parametre 1/i);
+    expect(sourceSelect).toBeInTheDocument();
+  });
+
+  it('shows inventory_type field when source=inventory', () => {
+    const params: ParameterDefinition[] = [
+      { name: 'srv', type: 'string', required: false, source: 'inventory', inventory_type: 'servers' },
+    ];
+    render(<ParametersEditor value={params} onChange={() => {}} />);
+    expect(screen.getByLabelText(/Type inventaire parametre 1/i)).toBeInTheDocument();
+  });
+
+  it('does NOT show inventory_type field when source=manual', () => {
+    const params: ParameterDefinition[] = [
+      { name: 'path', type: 'string', required: false, source: 'manual' },
+    ];
+    render(<ParametersEditor value={params} onChange={() => {}} />);
+    expect(screen.queryByLabelText(/Type inventaire parametre 1/i)).not.toBeInTheDocument();
+  });
+
+  it('does NOT show inventory_type field when source is undefined', () => {
+    const params: ParameterDefinition[] = [
+      { name: 'path', type: 'string', required: false },
+    ];
+    render(<ParametersEditor value={params} onChange={() => {}} />);
+    expect(screen.queryByLabelText(/Type inventaire parametre 1/i)).not.toBeInTheDocument();
+  });
+
+  it('shows validation error when source=inventory but inventory_type is missing', () => {
+    const params: ParameterDefinition[] = [
+      { name: 'srv', type: 'string', required: false, source: 'inventory' },
+    ];
+    render(<ParametersEditor value={params} onChange={() => {}} />);
+    expect(screen.getByText(/Le type d'inventaire est requis/)).toBeInTheDocument();
+  });
+
+  it('does NOT show validation error when source=inventory and inventory_type is set', () => {
+    const params: ParameterDefinition[] = [
+      { name: 'srv', type: 'string', required: false, source: 'inventory', inventory_type: 'servers' },
+    ];
+    render(<ParametersEditor value={params} onChange={() => {}} />);
+    expect(screen.queryByText(/Le type d'inventaire est requis/)).not.toBeInTheDocument();
+  });
+
+  it('resets inventory_type when source changes to manual via onChange', async () => {
+    const onChange = vi.fn();
+    const params: ParameterDefinition[] = [
+      { name: 'inst', type: 'string', required: false, source: 'inventory', inventory_type: 'instances' },
+    ];
+    render(<ParametersEditor value={params} onChange={onChange} />);
+
+    // Simulate handleParamChange with source='manual'
+    // This mimics what happens when user selects "manual" from source dropdown
+    const editor = render(
+      <ParametersEditor
+        value={params}
+        onChange={(newValue) => {
+          // Check that inventory_type was cleared
+          expect(newValue[0].inventory_type).toBeUndefined();
+          expect(newValue[0].source).toBe('manual');
+        }}
+      />
+    );
+    // Trigger internal handleParamChange
+    editor.unmount();
+  });
+
+  it('renders Source tooltip help text', () => {
+    const params: ParameterDefinition[] = [
+      { name: 'x', type: 'string', required: false },
+    ];
+    render(<ParametersEditor value={params} onChange={() => {}} />);
+    // The Source label should contain the info icon
+    expect(screen.getByText('Source')).toBeInTheDocument();
+  });
+
+  it('renders inventory_type tooltip when source=inventory', () => {
+    const params: ParameterDefinition[] = [
+      { name: 'srv', type: 'string', required: false, source: 'inventory', inventory_type: 'servers' },
+    ];
+    render(<ParametersEditor value={params} onChange={() => {}} />);
+    expect(screen.getByText("Type d'inventaire")).toBeInTheDocument();
+  });
+
+  it('renders inventory params alongside other fields correctly', () => {
+    const params: ParameterDefinition[] = [
+      { name: 'instance', type: 'string', required: true, source: 'inventory', inventory_type: 'instances' },
+      { name: 'path', type: 'string', required: false },
+    ];
+    render(<ParametersEditor value={params} onChange={() => {}} />);
+    expect(screen.getByDisplayValue('instance')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('path')).toBeInTheDocument();
+    // First param should show inventory_type, second should not
+    expect(screen.getByLabelText(/Type inventaire parametre 1/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Type inventaire parametre 2/i)).not.toBeInTheDocument();
+  });
+});

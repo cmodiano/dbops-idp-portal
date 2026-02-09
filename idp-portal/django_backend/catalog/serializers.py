@@ -13,6 +13,43 @@ from catalog.models import (
 from reference.models import RefEngine, RefPlatform, RefCategory
 
 
+VALID_INVENTORY_TYPES = ('servers', 'instances', 'databases')
+
+
+def validate_parameters_schema_inventory(value):
+    """
+    Story 23.5: Validate inventory_type in parameters_schema properties.
+
+    If a parameter property has source='inventory', inventory_type must be one of
+    'servers', 'instances', or 'databases'.
+    """
+    if not value or not isinstance(value, dict):
+        return value
+
+    properties = value.get('properties')
+    if not properties or not isinstance(properties, dict):
+        return value
+
+    for param_name, prop in properties.items():
+        if not isinstance(prop, dict):
+            continue
+        source = prop.get('source')
+        if source != 'inventory':
+            continue
+        inventory_type = prop.get('inventory_type')
+        if not inventory_type:
+            raise serializers.ValidationError(
+                f"Parameter '{param_name}': inventory_type is required when source is 'inventory'"
+            )
+        if inventory_type not in VALID_INVENTORY_TYPES:
+            raise serializers.ValidationError(
+                f"Parameter '{param_name}': inventory_type must be one of: "
+                f"{', '.join(VALID_INVENTORY_TYPES)}"
+            )
+
+    return value
+
+
 class TagSerializer(serializers.ModelSerializer):
     """Serializer for Tag model (GET /tags, GET /catalog/tags)."""
     
@@ -149,6 +186,10 @@ class ActionSerializer(serializers.ModelSerializer):
                 f"Invalid category '{value}'. Must be one of: {', '.join(active_categories)}"
             )
         return value
+
+    def validate_parameters_schema(self, value):
+        """Story 23.5: Validate inventory_type in parameters_schema."""
+        return validate_parameters_schema_inventory(value)
 
     class Meta:
         model = Action
@@ -329,7 +370,11 @@ class ActionCreateSerializer(serializers.Serializer):
         allow_null=True
     )
     documentation_md = serializers.CharField(max_length=100_000, required=False, allow_null=True)
-    
+
+    def validate_parameters_schema(self, value):
+        """Story 23.5: Validate inventory_type in parameters_schema."""
+        return validate_parameters_schema_inventory(value)
+
     def validate_name(self, value):
         """Strip whitespace and validate not empty."""
         stripped = value.strip()

@@ -228,6 +228,9 @@ export type ParameterSchemaType =
   | 'date-time'
   | 'select';
 
+/** Inventory source type for parameter fields (Story 23.5). */
+export type InventorySourceType = 'servers' | 'instances' | 'databases';
+
 /** Single parameter definition for the visual editor (AC2). */
 export interface ParameterDefinition {
   /** Optional stable id for React key / DnD; assigned when adding or loading. */
@@ -239,6 +242,10 @@ export interface ParameterDefinition {
   description?: string;
   /** When type is 'select', list of enum options. */
   enum?: string[];
+  /** Story 23.5: Parameter value source — manual input or inventory selection. */
+  source?: 'manual' | 'inventory';
+  /** Story 23.5: Inventory entity type when source is 'inventory'. */
+  inventory_type?: InventorySourceType;
 }
 
 /**

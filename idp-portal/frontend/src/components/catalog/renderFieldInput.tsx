@@ -21,15 +21,21 @@ export function renderFieldInput(
   inventoryWarnings: Record<string, boolean>,
   loadingInventory: boolean,
 ) {
-  if (field.inventorySource && inventoryData[field.inventorySource]) {
+  if (field.inventorySource) {
+    const items = inventoryData[field.inventorySource] ?? [];
     const hasWarning = inventoryWarnings[field.inventorySource];
     return (
       <div>
         <Select
-          placeholder={`Selectionnez ${field.label.toLowerCase()}`}
+          placeholder={`Sélectionnez ${field.label.toLocaleLowerCase('fr-FR')}`}
           aria-label={field.label}
           loading={loadingInventory}
-          options={inventoryData[field.inventorySource].map((item) => ({
+          showSearch
+          filterOption={(input, option) =>
+            (String(option?.label ?? '')).toLowerCase().includes(input.toLowerCase())
+          }
+          notFoundContent={loadingInventory ? undefined : 'Aucune donnee disponible'}
+          options={items.map((item) => ({
             value: item.id,
             label: item.name,
           }))}

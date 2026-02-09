@@ -6,6 +6,8 @@
  */
 
 import { useMemo } from 'react';
+import type { InventorySourceType } from '../types/api';
+import logger from '../services/logger';
 
 export interface ParameterField {
   name: string;
@@ -18,7 +20,8 @@ export interface ParameterField {
   minimum?: number;
   maximum?: number;
   default?: unknown;
-  inventorySource?: 'databases' | 'servers';
+  /** Story 23.5: Inventory source type for inventory-backed fields. */
+  inventorySource?: InventorySourceType;
 }
 
 export function extractParameterFields(schema: Record<string, unknown> | null): ParameterField[] {
@@ -61,9 +64,20 @@ export function extractParameterFields(schema: Record<string, unknown> | null): 
       minimum: prop?.minimum as number | undefined,
       maximum: prop?.maximum as number | undefined,
       default: prop?.default,
-      inventorySource: (prop as Record<string, unknown>)?.source === 'inventory'
-        ? ((prop as Record<string, unknown>)?.inventory_type as 'databases' | 'servers' | undefined)
-        : undefined,
+      inventorySource: (() => {
+        if ((prop as Record<string, unknown>)?.source !== 'inventory') return undefined;
+        const invType = (prop as Record<string, unknown>)?.inventory_type as string | undefined;
+        if (!invType) {
+          logger.warn(`Parameter '${name}': source=inventory but inventory_type is missing`);
+          return undefined;
+        }
+        const validTypes: InventorySourceType[] = ['databases', 'servers', 'instances'];
+        if (!validTypes.includes(invType as InventorySourceType)) {
+          logger.warn(`Parameter '${name}': unknown inventory_type '${invType}', falling back to text input`);
+          return undefined;
+        }
+        return invType as InventorySourceType;
+      })(),
     };
   });
 }

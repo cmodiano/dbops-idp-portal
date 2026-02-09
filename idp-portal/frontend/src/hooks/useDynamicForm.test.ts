@@ -102,6 +102,67 @@ describe('extractParameterFields', () => {
     expect(fields[0]).toMatchObject({ name: 'database', inventorySource: 'databases' });
   });
 
+  // Story 23.5: Inventory source with instances type
+  it('extracts inventory source with instances type', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        instance_name: { type: 'string', title: 'Instance', source: 'inventory', inventory_type: 'instances' },
+      },
+    };
+    const fields = extractParameterFields(schema);
+    expect(fields[0]).toMatchObject({ name: 'instance_name', inventorySource: 'instances' });
+  });
+
+  it('extracts inventory source with servers type', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        server_name: { type: 'string', title: 'Serveur', source: 'inventory', inventory_type: 'servers' },
+      },
+    };
+    const fields = extractParameterFields(schema);
+    expect(fields[0]).toMatchObject({ name: 'server_name', inventorySource: 'servers' });
+  });
+
+  it('does not set inventorySource when source is not inventory', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        path: { type: 'string', title: 'Path', source: 'manual' },
+      },
+    };
+    const fields = extractParameterFields(schema);
+    expect(fields[0].inventorySource).toBeUndefined();
+  });
+
+  it('does not set inventorySource when source is absent', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        path: { type: 'string', title: 'Path' },
+      },
+    };
+    const fields = extractParameterFields(schema);
+    expect(fields[0].inventorySource).toBeUndefined();
+  });
+
+  it('handles mixed inventory and manual params', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        instance: { type: 'string', title: 'Instance', source: 'inventory', inventory_type: 'instances' },
+        path: { type: 'string', title: 'Path' },
+        db: { type: 'string', title: 'Base', source: 'inventory', inventory_type: 'databases' },
+      },
+      required: ['instance'],
+    };
+    const fields = extractParameterFields(schema);
+    expect(fields[0].inventorySource).toBe('instances');
+    expect(fields[1].inventorySource).toBeUndefined();
+    expect(fields[2].inventorySource).toBe('databases');
+  });
+
   it('uses field name as label when title is missing', () => {
     const schema = {
       type: 'object',

@@ -196,3 +196,134 @@ describe('renderFieldInput', () => {
     expect(select).toBeInTheDocument();
   });
 });
+
+// Story 23.5: Inventory source with instances type
+describe('renderFieldInput - Story 23.5 (Inventory instances)', () => {
+  it('renders Select for inventorySource=instances', () => {
+    const field: ParameterField = {
+      name: 'instance_name',
+      label: 'Nom de instance',
+      type: 'string',
+      inventorySource: 'instances',
+      required: true,
+    };
+
+    const inventoryData = {
+      instances: [
+        { id: 'inst1', name: 'ORA_PROD_01' },
+        { id: 'inst2', name: 'ORA_PROD_02' },
+      ],
+    };
+
+    renderField(field, { inventoryData });
+    const select = screen.getByLabelText('Nom de instance');
+    expect(select).toBeInTheDocument();
+  });
+
+  it('renders Select for inventorySource=servers', () => {
+    const field: ParameterField = {
+      name: 'server_name',
+      label: 'Serveur',
+      type: 'string',
+      inventorySource: 'servers',
+      required: true,
+    };
+
+    const inventoryData = {
+      servers: [
+        { id: 'srv1', name: 'srv-prod-01' },
+      ],
+    };
+
+    renderField(field, { inventoryData });
+    expect(screen.getByLabelText('Serveur')).toBeInTheDocument();
+  });
+
+  it('renders Select for inventorySource=databases', () => {
+    const field: ParameterField = {
+      name: 'database_name',
+      label: 'Base de donnees',
+      type: 'string',
+      inventorySource: 'databases',
+      required: true,
+    };
+
+    const inventoryData = {
+      databases: [
+        { id: 'db1', name: 'MYDB_PROD' },
+      ],
+    };
+
+    renderField(field, { inventoryData });
+    expect(screen.getByLabelText('Base de donnees')).toBeInTheDocument();
+  });
+
+  it('renders empty Select when inventory data not yet loaded', () => {
+    const field: ParameterField = {
+      name: 'instance',
+      label: 'Instance',
+      type: 'string',
+      inventorySource: 'instances',
+      required: true,
+    };
+
+    // inventoryData has no "instances" key
+    renderField(field, { inventoryData: {} });
+    const select = screen.getByLabelText('Instance');
+    expect(select).toBeInTheDocument();
+  });
+
+  it('renders standard Input when inventorySource is not set', () => {
+    const field: ParameterField = {
+      name: 'backup_path',
+      label: 'Chemin sauvegarde',
+      type: 'string',
+      required: false,
+    };
+
+    renderField(field);
+    const input = screen.getByLabelText('Chemin sauvegarde');
+    expect(input).toBeInTheDocument();
+    expect(input.tagName).toBe('INPUT');
+  });
+
+  it('shows warning badge for instances when data comes from cache', () => {
+    const field: ParameterField = {
+      name: 'instance',
+      label: 'Instance',
+      type: 'string',
+      inventorySource: 'instances',
+      required: true,
+    };
+
+    const inventoryData = {
+      instances: [{ id: '1', name: 'inst-01' }],
+    };
+
+    renderField(field, {
+      inventoryData,
+      inventoryWarnings: { instances: true },
+    });
+    expect(screen.getByText(/temporairement indisponibles/)).toBeInTheDocument();
+  });
+
+  it('does not show warning when no inventory warning', () => {
+    const field: ParameterField = {
+      name: 'instance',
+      label: 'Instance',
+      type: 'string',
+      inventorySource: 'instances',
+      required: true,
+    };
+
+    const inventoryData = {
+      instances: [{ id: '1', name: 'inst-01' }],
+    };
+
+    renderField(field, {
+      inventoryData,
+      inventoryWarnings: { instances: false },
+    });
+    expect(screen.queryByText(/temporairement indisponibles/)).not.toBeInTheDocument();
+  });
+});

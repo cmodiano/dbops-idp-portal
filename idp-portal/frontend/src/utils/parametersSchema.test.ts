@@ -116,3 +116,174 @@ describe('parameterListToSchema', () => {
     expect(back?.required).toEqual(['a']);
   });
 });
+
+// Story 23.5: Tests for source and inventory_type round-trip
+describe('Story 23.5 - Inventory source/type in parameters schema', () => {
+  describe('schemaToParameterList', () => {
+    it('extracts source=inventory and inventory_type from schema property', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          instance_name: {
+            type: 'string',
+            source: 'inventory',
+            inventory_type: 'instances',
+          },
+        },
+        required: ['instance_name'],
+      };
+      const list = schemaToParameterList(schema);
+      expect(list).toHaveLength(1);
+      expect(list[0]).toMatchObject({
+        name: 'instance_name',
+        type: 'string',
+        required: true,
+        source: 'inventory',
+        inventory_type: 'instances',
+      });
+    });
+
+    it('extracts source=manual from schema property', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          path: { type: 'string', source: 'manual' },
+        },
+      };
+      const list = schemaToParameterList(schema);
+      expect(list[0].source).toBe('manual');
+      expect(list[0].inventory_type).toBeUndefined();
+    });
+
+    it('handles param without source (backward compat)', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          path: { type: 'string' },
+        },
+      };
+      const list = schemaToParameterList(schema);
+      expect(list[0].source).toBeUndefined();
+      expect(list[0].inventory_type).toBeUndefined();
+    });
+
+    it('extracts all valid inventory_type values', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          srv: { type: 'string', source: 'inventory', inventory_type: 'servers' },
+          inst: { type: 'string', source: 'inventory', inventory_type: 'instances' },
+          db: { type: 'string', source: 'inventory', inventory_type: 'databases' },
+        },
+      };
+      const list = schemaToParameterList(schema);
+      expect(list[0].inventory_type).toBe('servers');
+      expect(list[1].inventory_type).toBe('instances');
+      expect(list[2].inventory_type).toBe('databases');
+    });
+
+    it('ignores invalid inventory_type value', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          x: { type: 'string', source: 'inventory', inventory_type: 'unknown' },
+        },
+      };
+      const list = schemaToParameterList(schema);
+      expect(list[0].inventory_type).toBeUndefined();
+    });
+  });
+
+  describe('parameterListToSchema', () => {
+    it('includes source and inventory_type for inventory params', () => {
+      const list: ParameterDefinition[] = [
+        {
+          name: 'instance_name',
+          type: 'string',
+          required: true,
+          source: 'inventory',
+          inventory_type: 'instances',
+        },
+      ];
+      const schema = parameterListToSchema(list);
+      expect(schema?.properties?.instance_name).toMatchObject({
+        type: 'string',
+        source: 'inventory',
+        inventory_type: 'instances',
+      });
+    });
+
+    it('does not include source/inventory_type for manual params', () => {
+      const list: ParameterDefinition[] = [
+        { name: 'path', type: 'string', required: false, source: 'manual' },
+      ];
+      const schema = parameterListToSchema(list);
+      expect(schema?.properties?.path).toEqual({ type: 'string' });
+      expect(schema?.properties?.path).not.toHaveProperty('source');
+      expect(schema?.properties?.path).not.toHaveProperty('inventory_type');
+    });
+
+    it('does not include source/inventory_type for params without source', () => {
+      const list: ParameterDefinition[] = [
+        { name: 'path', type: 'string', required: false },
+      ];
+      const schema = parameterListToSchema(list);
+      expect(schema?.properties?.path).not.toHaveProperty('source');
+    });
+
+    it('mixed params: inventory and manual', () => {
+      const list: ParameterDefinition[] = [
+        {
+          name: 'db_name',
+          type: 'string',
+          required: true,
+          source: 'inventory',
+          inventory_type: 'databases',
+        },
+        {
+          name: 'backup_path',
+          type: 'string',
+          required: true,
+          source: 'manual',
+        },
+      ];
+      const schema = parameterListToSchema(list);
+      expect(schema?.properties?.db_name).toMatchObject({
+        source: 'inventory',
+        inventory_type: 'databases',
+      });
+      expect(schema?.properties?.backup_path).not.toHaveProperty('source');
+    });
+  });
+
+  describe('round-trip', () => {
+    it('preserves source=inventory and inventory_type through conversion', () => {
+      const original = {
+        type: 'object',
+        properties: {
+          instance_name: {
+            type: 'string',
+            source: 'inventory',
+            inventory_type: 'instances',
+            description: 'Nom de instance',
+          },
+          backup_path: {
+            type: 'string',
+            description: 'Chemin sauvegarde',
+          },
+        },
+        required: ['instance_name'],
+      };
+      const list = schemaToParameterList(original);
+      const back = parameterListToSchema(list);
+      expect(back?.properties?.instance_name).toMatchObject({
+        type: 'string',
+        source: 'inventory',
+        inventory_type: 'instances',
+        description: 'Nom de instance',
+      });
+      expect(back?.properties?.backup_path).not.toHaveProperty('source');
+      expect(back?.required).toEqual(['instance_name']);
+    });
+  });
+});

@@ -59,6 +59,13 @@ export function schemaToParameterList(schema: ParametersJsonSchema | null | unde
     if (type === 'select' && Array.isArray(prop.enum)) {
       def.enum = prop.enum.map((v) => String(v));
     }
+    // Story 23.5: Extract source and inventory_type from schema properties
+    if (prop.source === 'inventory' || prop.source === 'manual') {
+      def.source = prop.source as ParameterDefinition['source'];
+    }
+    if (typeof prop.inventory_type === 'string' && ['servers', 'instances', 'databases'].includes(prop.inventory_type)) {
+      def.inventory_type = prop.inventory_type as ParameterDefinition['inventory_type'];
+    }
     list.push(def);
   }
   return list;
@@ -98,6 +105,13 @@ export function parameterListToSchema(list: ParameterDefinition[]): ParametersJs
     if (p.default !== undefined && p.default !== '') {
       const parsed = parseDefaultByType(p.default, p.type);
       if (parsed !== undefined) (base as Record<string, unknown>).default = parsed;
+    }
+    // Story 23.5 AC2: Only write 'source' when 'inventory' (omit when 'manual' for backward compatibility)
+    if (p.source === 'inventory') {
+      (base as Record<string, unknown>).source = 'inventory';
+      if (p.inventory_type) {
+        (base as Record<string, unknown>).inventory_type = p.inventory_type;
+      }
     }
     properties[name] = base;
     if (p.required) required.push(name);

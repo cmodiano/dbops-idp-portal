@@ -16,7 +16,7 @@ export interface UseTargetInventoryOptions {
   open: boolean;
   actionId?: number;
   currentStep: number;
-  parameterFields: Array<{ inventorySource?: 'databases' | 'servers' }>;
+  parameterFields: Array<{ inventorySource?: 'databases' | 'servers' | 'instances' }>;
   environment: string | null;
 }
 
@@ -62,7 +62,7 @@ export function useTargetInventory({
   useEffect(() => {
     if (!open || currentStep !== 1 || !environment) return;
 
-    const sourcesToLoad = new Set<'databases' | 'servers'>();
+    const sourcesToLoad = new Set<'databases' | 'servers' | 'instances'>();
     parameterFields.forEach((field) => {
       if (field.inventorySource) {
         sourcesToLoad.add(field.inventorySource);
@@ -76,7 +76,7 @@ export function useTargetInventory({
       lastInventoryEnvRef.current = environment;
     }
 
-    const toFetch: Array<'databases' | 'servers'> = [];
+    const toFetch: Array<'databases' | 'servers' | 'instances'> = [];
     const cached: Record<string, InventoryItem[]> = {};
 
     sourcesToLoad.forEach((source) => {

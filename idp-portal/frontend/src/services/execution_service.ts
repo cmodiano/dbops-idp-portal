@@ -383,7 +383,7 @@ const loadingPromises = new Map<string, Promise<InventoryItem[]>>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 export async function fetchInventoryItems(
-  type: 'databases' | 'servers' | 'environments',
+  type: 'databases' | 'servers' | 'instances' | 'environments',
   environment?: string
 ): Promise<InventoryItem[]> {
   const params = environment ? `?environment=${encodeURIComponent(environment)}` : '';
