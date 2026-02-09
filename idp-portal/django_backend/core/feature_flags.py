@@ -11,6 +11,9 @@ import json
 import structlog
 from django.core.cache import cache
 from django.conf import settings
+from django.db import DatabaseError, IntegrityError, OperationalError
+
+from core.middleware import get_correlation_id
 
 logger = structlog.get_logger(__name__)
 
@@ -59,8 +62,26 @@ def _load_flags_from_database():
                 'enabled': flag.enabled,
                 'rollout_percent': flag.rollout_percent,
             }
+    except (DatabaseError, IntegrityError, OperationalError) as e:
+        logger.error(
+            "feature_flags_db_error",
+            error=str(e),
+            error_type=type(e).__name__,
+            exc_info=True,
+            correlation_id=get_correlation_id(),
+        )
+        # Return empty dict (fallback) - feature flags non disponibles ne doivent pas bloquer l'app
     except Exception as e:
-        logger.error("feature_flags_db_load_error", error=str(e), error_type=type(e).__name__)
+        # Story 22.11: Justified broad catch - Unexpected ORM errors must not break app startup
+        # Pattern: Return empty dict as graceful degradation instead of raising
+        logger.error(
+            "feature_flags_unexpected_error",
+            error=str(e),
+            error_type=type(e).__name__,
+            exc_info=True,
+            correlation_id=get_correlation_id(),
+        )
+        # Return empty dict (fallback) - permet à l'app de démarrer même si feature flags fail
     return flags
 
 

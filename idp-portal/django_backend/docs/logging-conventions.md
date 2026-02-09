@@ -166,10 +166,58 @@ except Exception as e:
 
 | Domaine | Exceptions spécifiques |
 |---------|----------------------|
-| Django ORM | `ObjectDoesNotExist`, `MultipleObjectsReturned`, `IntegrityError`, `ValidationError` |
+| Django ORM | `ObjectDoesNotExist`, `MultipleObjectsReturned`, `IntegrityError`, `ValidationError`, `DatabaseError`, `OperationalError` |
 | API externes | `requests.HTTPError`, `requests.Timeout`, `requests.ConnectionError` |
 | Validation données | `ValueError`, `KeyError`, `TypeError`, `AttributeError` |
+| Celery | `Retry`, `MaxRetriesExceededError`, `SoftTimeLimitExceeded` |
 | Croniter | `CroniterBadCronError`, `CroniterBadDateError` |
+
+### Story 22.11 — Complétion audit exception handling
+
+**Règles complémentaires Story 22.11 :**
+
+1. **OBLIGATOIRE :** Tous les `except Exception:` doivent avoir `as e` pour capturer la variable
+2. **OBLIGATOIRE :** Logging avec `exc_info=True` pour exceptions inattendues
+3. **OBLIGATOIRE :** Ajouter `error_type=type(e).__name__` dans tous les logs d'exception
+4. **OBLIGATOIRE :** Commentaire justification `# Story 22.11: Justified broad catch - [raison]` si broad catch nécessaire
+5. **OBLIGATOIRE :** Commentaire `# Story 17.6: Justified broad catch - [raison]` reste valide pour les broad catches existants
+
+**Exceptions ORM Django préférées :**
+
+```python
+from django.db import DatabaseError, IntegrityError, OperationalError
+from django.core.exceptions import ValidationError
+```
+
+Plus spécifiques que `Exception` pour erreurs DB.
+
+**Pattern Celery tasks :**
+
+```python
+from core.middleware import get_correlation_id
+
+try:
+    # ... task logic ...
+except (DatabaseError, IntegrityError) as e:
+    logger.error(
+        "task_db_error",
+        error=str(e),
+        error_type=type(e).__name__,
+        exc_info=True,
+        correlation_id=get_correlation_id(),  # OBLIGATOIRE pour traçabilité
+    )
+    raise  # Re-raise pour retry Celery
+except Exception as e:
+    # Story 22.11: Justified broad catch - Task must handle all failure modes
+    logger.error(
+        "task_unexpected_error",
+        error=str(e),
+        error_type=type(e).__name__,
+        exc_info=True,
+        correlation_id=get_correlation_id(),  # OBLIGATOIRE pour traçabilité
+    )
+    raise
+```
 
 ## Données sensibles
 

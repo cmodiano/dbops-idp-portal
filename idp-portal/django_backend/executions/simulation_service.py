@@ -9,8 +9,11 @@ from threading import Thread
 
 import structlog
 from django.conf import settings
-from django.db import close_old_connections
+from django.db import DatabaseError, IntegrityError, close_old_connections
+from django.core.exceptions import ValidationError
 from django.utils import timezone
+
+from core.middleware import get_correlation_id
 
 from executions.models import (
     Execution,
@@ -217,12 +220,27 @@ class SimulationService:
                 status="COMPLETED",
             )
 
-        except Exception:
+        except (DatabaseError, IntegrityError, ValidationError) as e:
             logger.error(
-                "simulation_error",
+                "simulation_db_error",
                 execution_id=execution_id,
+                error=str(e),
+                error_type=type(e).__name__,
                 exc_info=True,
+                correlation_id=get_correlation_id(),
             )
+            raise  # Re-raise pour permettre Celery retry si appelé comme task
+        except Exception as e:
+            # Story 22.11: Justified broad catch - Simulation thread must handle any unexpected error gracefully
+            logger.error(
+                "simulation_unexpected_error",
+                execution_id=execution_id,
+                error=str(e),
+                error_type=type(e).__name__,
+                exc_info=True,
+                correlation_id=get_correlation_id(),
+            )
+            raise  # Re-raise pour signaler l'échec au caller
         finally:
             close_old_connections()
 

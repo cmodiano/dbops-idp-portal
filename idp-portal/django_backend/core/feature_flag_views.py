@@ -183,7 +183,14 @@ class FeatureFlagUpdateView(APIView):
                 correlation_id=get_correlation_id(),
             )
         except Exception as e:
-            logger.warning("feature_flag_audit_error", error=str(e), flag_key=flag_key)
+            # Story 22.11: Justified broad catch - Audit failures must not block flag updates
+            logger.warning(
+                "feature_flag_audit_error",
+                error=str(e),
+                error_type=type(e).__name__,
+                flag_key=flag_key,
+                correlation_id=get_correlation_id(),
+            )
             # If audit fails, don't invalidate cache to maintain consistency
             return Response(
                 {'error': {'code': 'AUDIT_FAILED', 'message': 'Feature flag updated but audit logging failed'}},

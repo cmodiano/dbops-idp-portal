@@ -297,7 +297,7 @@ development_status:
     22-8-decouper-types-api-ts-par-domaine: done # 2026-02-09: Code review adversarial — 8 HIGH + 4 MEDIUM fixes auto-appliqués, 1023→1048 LOC (10 fichiers), build 0 erreurs types, 19 mocks corrigés ✅
     22-9-decouper-adminpage-tsx-sous-composants: done # 2026-02-09: AdminPage 845→75 LOC, 6 panels créés, 36/36 tests pass, 0 régression; code-review fixes: 6 HIGH + 3 MEDIUM (Ant Design imports, Input component, accents FR, notification API) ✅
     22-10-ajouter-error-boundary-react: done # 2026-02-09: Code review adversarial — 12 issues (2 HIGH + 5 MEDIUM + 5 LOW), 9 auto-fixés (safe navigation, error prop, try-catch fallback, soft refresh, correlation_id, aria, tests intégration AppLayout), 15 tests total (9 ErrorBoundary + 6 AppLayout) ✅
-    22-11-reduire-broad-exception-catches: backlog
+    22-11-reduire-broad-exception-catches: done # 2026-02-09: Code review adversarial — 10 issues (2 CRIT + 5 HIGH + 3 MED) auto-fixés, correlation_id added, Celery retry fixed, 8/8 tests pass ✅
     22-12-corriger-high-2-transition-pending-approval-submitted: backlog
     22-13-corriger-high-4-token-websocket-hors-url: backlog
     22-14-corriger-high-7-stale-closure-executionspage: backlog

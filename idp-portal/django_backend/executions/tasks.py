@@ -10,6 +10,7 @@ from django.db import transaction
 from executions.models import Execution, ExecutionStatus
 from executions.workflow_runtime import StepResult, StepOutcome
 from core.services import AuditService
+from core.middleware import get_correlation_id
 from core.models import AuditActionType, AuditEntityType
 
 logger = structlog.get_logger(__name__)
@@ -194,12 +195,15 @@ def retry_workflow_step(self, execution_id: int, step: dict, attempt: int):
             'error_message': f'Execution {execution_id} not found',
         }
     except Exception as e:
+        # Story 22.11: Justified broad catch - Celery retry task must handle all failure modes
         logger.exception(
             "celery_retry_workflow_step_error",
             execution_id=execution_id,
             step_id=step_id,
             attempt=attempt,
             error=str(e),
+            error_type=type(e).__name__,
+            correlation_id=get_correlation_id(),
         )
         return {
             'outcome': StepOutcome.ERROR.value,

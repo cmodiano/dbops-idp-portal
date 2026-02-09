@@ -376,7 +376,7 @@ class ExecutionsView(APIView):
                 #     integration_service.trigger_execution(execution)
                 pass
         except Exception as e:
-            # Story 18.6 AC5: Handle integration errors
+            # Story 22.11: Justified broad catch - Execution creation wraps multiple services (workflow runtime, simulation, integrations)
             exec_logger.error(
                 "integration_error_on_execution",
                 execution_id=execution.id,
@@ -384,6 +384,7 @@ class ExecutionsView(APIView):
                 error_type=type(e).__name__,
                 error_message=str(e),
                 correlation_id=correlation_id,
+                exc_info=True,
             )
 
             execution.status = ExecutionStatus.INTEGRATION_ERROR
