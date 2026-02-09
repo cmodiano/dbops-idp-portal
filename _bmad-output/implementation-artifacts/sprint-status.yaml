@@ -284,3 +284,27 @@ development_status:
     21-5-frontend-targetselection-labels-type-executionenvironment: done # Code review 2026-02-09: 2 fixes (2 MEDIUM) - EnvironmentBarChart JSDoc, isEnvironmentAllowed() helper — 113/113 tests pass ✅
     21-6-validation-environnements-profil-sauvegarde: done # Validation envs backend/frontend à sauvegarde profil — 37 tests (29 backend + 8 frontend) — Code review adversarial 2026-02-09: 5 MEDIUM + 3 LOW fixes, Ant Design API updated, 0 deprecation warnings ✅
     epic-21-retrospective: optional
+    # === Epic 22: Amélioration Qualité du Code — Points d'amélioration restants (assessment 08/02/2026) ===
+    # Réf: epic-22-amelioration-qualite-code.md — CRIT-1/2/3, HIGH-2 à 7, MED-1 à 9, refactoring fichiers volumineux, Error Boundary, mypy, drf-spectacular
+    epic-22: in-progress
+    22-1-corriger-crit-1-methode-get-profiles-by-ad-groups: done # Code review adversarial 2026-02-09: 9 HIGH + 5 MEDIUM fixes appliqués, 18 tests (14 unit + 4 integration) passent ✅
+    22-2-corriger-crit-2-fallback-superuser-permissions: backlog
+    22-3-corriger-crit-3-race-condition-token-refresh: backlog
+    22-4-corriger-high-3-gestion-http-429-throttling-frontend: backlog
+    22-5-corriger-high-5-protection-double-submit-executionwizard: backlog
+    22-6-corriger-high-6-standardiser-pagination-total: backlog
+    22-7-refactoriser-executions-views-extraction-helpers: backlog
+    22-8-decouper-types-api-ts-par-domaine: backlog
+    22-9-decouper-adminpage-tsx-sous-composants: backlog
+    22-10-ajouter-error-boundary-react: backlog
+    22-11-reduire-broad-exception-catches: backlog
+    22-12-corriger-high-2-transition-pending-approval-submitted: backlog
+    22-13-corriger-high-4-token-websocket-hors-url: backlog
+    22-14-corriger-high-7-stale-closure-executionspage: backlog
+    22-15-corriger-med-1-serialisation-date-timezone: backlog
+    22-16-corriger-med-3-med-4-cache-feature-flags: backlog
+    22-17-corriger-med-5-cache-inventaire-sessionstorage: backlog
+    22-18-corriger-med-6-champ-requires-target-types-frontend: backlog
+    22-19-rendre-mypy-bloquant-progressivement: backlog
+    22-20-integrer-drf-spectacular-documentation-api: backlog
+    epic-22-retrospective: optional
