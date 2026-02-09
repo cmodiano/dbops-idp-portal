@@ -1,6 +1,7 @@
 """DRF serializers for profiles and permissions API (Story M.5)."""
 
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_serializer
 from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
 
 
@@ -91,10 +92,17 @@ class ProfileListSerializer(serializers.ModelSerializer):
         return data
 
 
+@extend_schema_serializer(
+    exclude_fields=[],
+    examples=[]
+)
 class ProfileActionPermissionsSerializer(serializers.Serializer):
     """Serializer for GET/PUT /admin/profiles/{id}/actions."""
-    
-    actions_type = serializers.ChoiceField(choices=['list', 'pattern', 'all'])
+
+    actions_type = serializers.ChoiceField(
+        choices=['list', 'pattern', 'all'],
+        help_text="Type de permission : list (IDs explicites), pattern (par tags), all (toutes)"
+    )
     action_ids = serializers.ListField(
         child=serializers.IntegerField(),
         required=False,
@@ -187,10 +195,17 @@ class ProfileActionPermissionsSerializer(serializers.Serializer):
         return super().to_representation(instance)
 
 
+@extend_schema_serializer(
+    exclude_fields=[],
+    examples=[]
+)
 class ProfileTargetPermissionsSerializer(serializers.Serializer):
     """Serializer for GET/PUT /admin/profiles/{id}/targets."""
-    
-    targets_type = serializers.ChoiceField(choices=['list', 'pattern', 'all'])
+
+    targets_type = serializers.ChoiceField(
+        choices=['list', 'pattern', 'all'],
+        help_text="Type de permission : list (noms explicites), pattern (wildcards), all (tous)"
+    )
     target_names = serializers.ListField(
         child=serializers.CharField(),
         required=False,

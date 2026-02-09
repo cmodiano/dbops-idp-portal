@@ -1,16 +1,44 @@
 from __future__ import annotations
 
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_serializer, inline_serializer
 
 from catalog.models import Action
 from core.utils import ensure_utc_isoformat
 from executions.models import Execution, ExecutionStep, ScheduledExecution, RecurringPattern
 
 
+@extend_schema_serializer(
+    exclude_fields=[],
+    examples=[]
+)
 class ExecutionSerializer(serializers.Serializer):
     """
     Serializer matching frontend ExecutionResponse (see frontend/src/types/api.ts).
     """
+    id = serializers.IntegerField(read_only=True, help_text="Identifiant unique de l'exécution")
+    action_id = serializers.IntegerField(help_text="ID de l'action exécutée")
+    action_name = serializers.CharField(read_only=True, help_text="Nom de l'action")
+    user_id = serializers.IntegerField(help_text="ID de l'utilisateur initiateur")
+    user_display_name = serializers.CharField(read_only=True, allow_null=True)
+    environment = serializers.CharField(help_text="Environnement d'exécution")
+    parameters = serializers.DictField(read_only=True, allow_null=True, help_text="Paramètres d'exécution")
+    status = serializers.CharField(help_text="Statut (submitted, running, completed, failed, cancelled)")
+    servicenow_change_id = serializers.CharField(read_only=True, allow_null=True)
+    started_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    completed_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    created_at = serializers.DateTimeField(read_only=True)
+    approved_by = serializers.IntegerField(read_only=True, allow_null=True)
+    approved_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    approval_comment = serializers.CharField(read_only=True, allow_null=True)
+    parent_execution_id = serializers.IntegerField(read_only=True, allow_null=True)
+    error_message = serializers.CharField(read_only=True, allow_null=True)
+    engine = serializers.CharField(read_only=True, allow_null=True)
+    platform = serializers.CharField(read_only=True, allow_null=True)
+    item_type = serializers.CharField(read_only=True, allow_null=True)
+    integration_id = serializers.IntegerField(read_only=True, allow_null=True)
+    integration_name = serializers.CharField(read_only=True, allow_null=True)
+    integration_icon = serializers.CharField(read_only=True, allow_null=True)
 
     def to_representation(self, obj: Execution) -> dict:
         action: Action | None = getattr(obj, "action", None)
@@ -48,6 +76,17 @@ class ExecutionSerializer(serializers.Serializer):
 
 class ExecutionStepSerializer(serializers.Serializer):
     """Serializer matching frontend ExecutionStepResponse."""
+    id = serializers.IntegerField(read_only=True)
+    execution_id = serializers.IntegerField(read_only=True)
+    step_order = serializers.IntegerField(read_only=True)
+    step_name = serializers.CharField(read_only=True)
+    step_type = serializers.CharField(read_only=True)
+    status = serializers.CharField(read_only=True)
+    started_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    completed_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    output = serializers.DictField(read_only=True, allow_null=True)
+    platform_job_id = serializers.CharField(read_only=True, allow_null=True)
+    error_message = serializers.CharField(read_only=True, allow_null=True)
 
     def to_representation(self, obj: ExecutionStep) -> dict:
         return {
@@ -67,6 +106,10 @@ class ExecutionStepSerializer(serializers.Serializer):
 
 class RecurringPatternSerializer(serializers.Serializer):
     """Serializer matching frontend RecurringPatternResponse."""
+    pattern_type = serializers.CharField(read_only=True, help_text="Type de récurrence (daily, weekly, cron)")
+    pattern_config = serializers.DictField(read_only=True, help_text="Configuration du pattern")
+    next_execution_date = serializers.DateTimeField(read_only=True, allow_null=True)
+    is_active = serializers.BooleanField(read_only=True)
 
     def to_representation(self, obj: RecurringPattern) -> dict:
         return {
@@ -82,6 +125,16 @@ class ScheduledExecutionSerializer(serializers.Serializer):
     Serializer matching frontend ScheduledExecutionResponse.
     Used for POST /scheduled-executions responses.
     """
+    scheduled_execution_id = serializers.IntegerField(read_only=True)
+    action_id = serializers.IntegerField(read_only=True)
+    action_name = serializers.CharField(read_only=True, allow_null=True)
+    environment = serializers.CharField(read_only=True)
+    status = serializers.CharField(read_only=True)
+    scheduled_at = serializers.DateTimeField(read_only=True)
+    parameters = serializers.DictField(read_only=True, allow_null=True)
+    created_at = serializers.DateTimeField(read_only=True)
+    correlation_id = serializers.CharField(read_only=True, allow_null=True)
+    recurring_pattern = RecurringPatternSerializer(read_only=True, allow_null=True)
 
     def to_representation(self, obj: ScheduledExecution) -> dict:
         action: Action | None = getattr(obj, "action", None)
@@ -107,6 +160,21 @@ class ScheduledExecutionSerializer(serializers.Serializer):
 
 class ScheduledExecutionListItemSerializer(serializers.Serializer):
     """Serializer matching frontend ScheduledExecutionListItem."""
+    scheduled_execution_id = serializers.IntegerField(read_only=True)
+    action_id = serializers.IntegerField(read_only=True)
+    action_name = serializers.CharField(read_only=True, allow_null=True)
+    user_id = serializers.IntegerField(read_only=True)
+    user_name = serializers.CharField(read_only=True)
+    environment = serializers.CharField(read_only=True)
+    scheduled_at = serializers.DateTimeField(read_only=True)
+    status = serializers.CharField(read_only=True)
+    created_at = serializers.DateTimeField(read_only=True)
+    parameters = serializers.DictField(read_only=True, allow_null=True)
+    correlation_id = serializers.CharField(read_only=True, allow_null=True)
+    execution_id = serializers.IntegerField(read_only=True, allow_null=True)
+    engine = serializers.CharField(read_only=True, allow_null=True)
+    platform = serializers.CharField(read_only=True, allow_null=True)
+    recurring_pattern = RecurringPatternSerializer(read_only=True, allow_null=True)
 
     def to_representation(self, obj: ScheduledExecution) -> dict:
         action: Action | None = getattr(obj, "action", None)

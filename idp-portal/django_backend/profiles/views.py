@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
 from profiles.serializers import (
     ProfileSerializer,
@@ -34,6 +35,13 @@ def invalidate_permissions_cache():
     pass
 
 
+@extend_schema_view(
+    list=extend_schema(tags=['profiles'], summary='Lister les profils', responses={200: ProfileListSerializer(many=True)}),
+    create=extend_schema(tags=['profiles'], summary='Créer un profil', request=ProfileCreateSerializer, responses={201: ProfileSerializer}),
+    retrieve=extend_schema(tags=['profiles'], summary='Détail d\'un profil', responses={200: ProfileSerializer}),
+    update=extend_schema(tags=['profiles'], summary='Modifier un profil', request=ProfileUpdateSerializer, responses={200: ProfileSerializer}),
+    destroy=extend_schema(tags=['profiles'], summary='Supprimer un profil'),
+)
 class ProfileViewSet(viewsets.ViewSet):
     """
     ViewSet for admin profiles CRUD operations.
@@ -257,7 +265,8 @@ class ProfileViewSet(viewsets.ViewSet):
 class ProfileExportView(APIView):
     """APIView for GET /admin/profiles/export - Export profiles as YAML."""
     permission_classes = [IsAuthenticated, DBOPSProfilePermission]
-    
+
+    @extend_schema(tags=['profiles'], summary='Exporter les profils en YAML')
     def get(self, request):
         """Export all profiles as YAML."""
         content = export_profiles_yaml()
@@ -271,7 +280,8 @@ class ProfileImportView(APIView):
     """APIView for POST /admin/profiles/import - Import profiles from YAML."""
     permission_classes = [IsAuthenticated, DBOPSProfilePermission]
     parser_classes = [MultiPartParser]
-    
+
+    @extend_schema(tags=['profiles'], summary='Importer des profils depuis un fichier YAML')
     def post(self, request):
         """Import profiles from YAML file."""
         file = request.FILES.get('file')

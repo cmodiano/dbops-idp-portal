@@ -10,6 +10,9 @@ class CoreConfig(AppConfig):
         from core.logging import configure_structlog
         configure_structlog()
 
+        # Story 22.20: Import OpenAPI schema extensions so drf-spectacular autodiscovers them
+        import core.schema  # noqa: F401
+
         # Story 17.5: Validate secrets at startup
         from django.conf import settings
         from django.core.exceptions import ImproperlyConfigured

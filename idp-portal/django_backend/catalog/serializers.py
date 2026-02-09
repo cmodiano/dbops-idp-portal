@@ -4,6 +4,8 @@ Maps Django models to JSON responses.
 """
 
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field, extend_schema_serializer, OpenApiExample
+from drf_spectacular.types import OpenApiTypes
 from catalog.models import (
     Action, Tag, ActionTag,
     ActionStatus, ActionEngine, ActionPlatform, ActionItemType
@@ -53,15 +55,51 @@ class StatusUpdateSerializer(serializers.Serializer):
     )
 
 
+@extend_schema_serializer(
+    examples=[
+        OpenApiExample(
+            'Action Example',
+            value={
+                'id': 42,
+                'name': 'Oracle Patch Application',
+                'description': 'Applique un patch Oracle sur une base de données',
+                'item_type': 'action',
+                'engine': 'oracle',
+                'platform': 'linux',
+                'category': 'patching',
+                'status': 'active',
+                'requires_target': True,
+                'parameters_schema': {'type': 'object', 'properties': {'patch_id': {'type': 'string'}}},
+                'tags': ['oracle', 'patching'],
+            }
+        )
+    ]
+)
 class ActionSerializer(serializers.ModelSerializer):
     """Base Action serializer (read/write) matching ActionResponse/ActionDetail."""
 
     # CLOB/JSON fields - OracleJSONField handles serialization automatically (Story 17.4)
-    parameters_schema = serializers.JSONField(required=False, allow_null=True)
-    impact_rules = serializers.JSONField(required=False, allow_null=True)
-    execution_steps = serializers.JSONField(required=False, allow_null=True)
-    change_type_config = serializers.JSONField(required=False, allow_null=True)
-    remediation_rules = serializers.JSONField(required=False, allow_null=True)
+    # Story 22.20 (AC4): Schémas explicites pour JSONField complexes
+    parameters_schema = serializers.JSONField(
+        required=False, allow_null=True,
+        help_text="Schéma JSON des paramètres d'entrée de l'action (format JSON Schema)"
+    )
+    impact_rules = serializers.JSONField(
+        required=False, allow_null=True,
+        help_text="Règles d'évaluation d'impact (conditions + niveau d'impact)"
+    )
+    execution_steps = serializers.JSONField(
+        required=False, allow_null=True,
+        help_text="Étapes d'exécution pour workflows (array d'objets avec order, referenced_action_id, etc.)"
+    )
+    change_type_config = serializers.JSONField(
+        required=False, allow_null=True,
+        help_text="Configuration du type de changement pour l'audit SOC1"
+    )
+    remediation_rules = serializers.JSONField(
+        required=False, allow_null=True,
+        help_text="Règles de remédiation automatique en cas d'erreur"
+    )
     # Story 5.7: workflow_steps for workflows (converted from execution_steps)
     workflow_steps = serializers.SerializerMethodField()
     
@@ -128,6 +166,14 @@ class ActionSerializer(serializers.ModelSerializer):
     # Story 17.4: Removed redundant get_parameters_schema, get_impact_rules, etc.
     # OracleJSONField handles deserialization automatically - no need for SerializerMethodField
 
+    @extend_schema_field({'type': 'array', 'items': {'type': 'object', 'properties': {
+        'order': {'type': 'integer'}, 'name': {'type': 'string'},
+        'referenced_action_id': {'type': 'integer'}, 'action_name': {'type': 'string'},
+        'step_id': {'type': 'string'}, 'on_success_step_id': {'type': 'string'},
+        'on_error_step_id': {'type': 'string'}, 'retry_enabled': {'type': 'boolean'},
+        'retry_max_attempts': {'type': 'integer'}, 'retry_interval_seconds': {'type': 'integer'},
+        'retry_backoff_multiplier': {'type': 'number'},
+    }}, 'nullable': True})
     def get_workflow_steps(self, obj):
         """
         Convert execution_steps to workflow_steps format for workflows.
@@ -189,6 +235,7 @@ class ActionSerializer(serializers.ModelSerializer):
 
         return workflow_steps if workflow_steps else None
     
+    @extend_schema_field({'type': 'array', 'items': {'type': 'string'}, 'example': ['oracle', 'patching']})
     def get_tags(self, obj):
         """Get tag names from ActionTag relations."""
         # Use prefetched tags if available
@@ -196,7 +243,8 @@ class ActionSerializer(serializers.ModelSerializer):
             return [at.tag.name for at in obj.actiontag_set.all()]
         # Fallback: query if not prefetched
         return list(obj.actiontag_set.values_list('tag__name', flat=True))
-    
+
+    @extend_schema_field(OpenApiTypes.INT)
     def get_created_by(self, obj):
         """Get created_by user ID."""
         return obj.created_by.id if obj.created_by else None
@@ -316,12 +364,14 @@ class ActionListSerializer(serializers.ModelSerializer):
             'deleted_at', 'deleted_by', 'deletion_reason',
         ]
 
+    @extend_schema_field({'type': 'array', 'items': {'type': 'string'}})
     def get_tags(self, obj):
         """Get tag names from ActionTag relations."""
         if hasattr(obj, 'actiontag_set'):
             return [at.tag.name for at in obj.actiontag_set.all()]
         return list(obj.actiontag_set.values_list('tag__name', flat=True))
 
+    @extend_schema_field(OpenApiTypes.INT)
     def get_execution_count(self, obj):
         """Get execution count from Execution model (computed field)."""
         if hasattr(obj, 'execution_count'):

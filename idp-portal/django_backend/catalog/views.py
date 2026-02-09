@@ -8,6 +8,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.serializers import ValidationError as DRFValidationError
+from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
 from django.db import IntegrityError
 from django.db.models import Count, Q, OuterRef, Subquery, IntegerField, Value
 from django.db.models.functions import Coalesce
@@ -230,6 +231,24 @@ def _get_cumulative_permissions_for_user(user):
     }
 
 
+@extend_schema_view(
+    list=extend_schema(
+        tags=['catalog'], summary='Lister les actions (admin)',
+        description='Retourne la liste paginée des actions avec filtrage et exécution_count.',
+        parameters=[
+            OpenApiParameter('include_disabled', bool, description='Inclure les actions désactivées'),
+            OpenApiParameter('search', str, description='Recherche par nom ou description'),
+            OpenApiParameter('status', str, description='Filtrage par statut (draft, published, disabled)'),
+            OpenApiParameter('engine', str, description='Filtrage par technologie'),
+            OpenApiParameter('platform', str, description='Filtrage par plateforme'),
+            OpenApiParameter('item_type', str, description='Filtrage par type (action, workflow)'),
+        ],
+    ),
+    create=extend_schema(tags=['catalog'], summary='Créer une action', request=ActionCreateSerializer),
+    retrieve=extend_schema(tags=['catalog'], summary='Détail d\'une action'),
+    update=extend_schema(tags=['catalog'], summary='Modifier une action'),
+    destroy=extend_schema(tags=['catalog'], summary='Supprimer une action (soft-delete)'),
+)
 class ActionViewSet(viewsets.ModelViewSet):
     """
     ViewSet for admin actions (CRUD operations).
@@ -629,6 +648,19 @@ def _get_cache_key(user_id, tags_filter, q=None, engine=None, environment=None, 
     return f"{user_part}_{tags_part}_q{q_part}_e{engine_part}_env{env_part}_i{impact_part}_cat{category_part}"
 
 
+@extend_schema_view(
+    list=extend_schema(
+        tags=['catalog'], summary='Catalogue des actions (public)',
+        description='Retourne la liste paginée des actions publiées avec filtrage RBAC.',
+        parameters=[
+            OpenApiParameter('tags', str, description='Filtrage par tags (séparés par virgules)'),
+            OpenApiParameter('category', str, description='Filtrage par catégorie'),
+            OpenApiParameter('search', str, description='Recherche par nom ou description'),
+            OpenApiParameter('favorites_only', bool, description='Afficher uniquement les favoris'),
+        ],
+    ),
+    retrieve=extend_schema(tags=['catalog'], summary='Détail d\'une action du catalogue'),
+)
 class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for catalog actions (read-only, public with RBAC filtering).
@@ -795,6 +827,9 @@ class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
         return Response({"data": stats})
 
 
+@extend_schema_view(
+    list=extend_schema(tags=['catalog'], summary='Lister tous les tags'),
+)
 class TagViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for tags (read-only, public).

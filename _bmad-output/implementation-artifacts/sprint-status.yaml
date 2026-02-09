@@ -306,7 +306,7 @@ development_status:
     22-17-corriger-med-5-cache-inventaire-sessionstorage: done # 2026-02-09: localStorage→sessionStorage + validation JSON + tests robustesse, code review adversarial: 10 issues (5 CRIT + 3 MED) auto-fixés, 53/53 tests pass ✅
     22-18-corriger-med-6-champ-requires-target-types-frontend: done # 2026-02-09: MED-6 fix — requires_target ajouté dans ActionResponse/ActionListItem/ActionPreviewData, code review 6 issues corrigés (3 HIGH + 3 MEDIUM), 53 tests pass
     22-19-rendre-mypy-bloquant-progressivement: done # Code review adversarial 2026-02-09: 15 issues (3 CRITICAL + 7 MEDIUM + 5 LOW), AC3 strict mode reporté Phase 3, 29 erreurs mypy (objectif -50% dépassé -67%)
-    22-20-integrer-drf-spectacular-documentation-api: backlog
+    22-20-integrer-drf-spectacular-documentation-api: done # drf-spectacular intégré, 15/15 tests, Swagger UI + ReDoc + schema export, 11 serializers + 16 viewsets annotés
     epic-22-retrospective: optional
     # === Epic 23: Inventaire multi-tables (SERVER, INSTANCE, DB) et UX cibles ===
     # Réf: docs/inventaire-multi-tables-ux-cibles.md, epics.md — Mapping config, API /servers /databases /instances, RBAC par attributs, listes instance/DB filtrées par serveur choisi

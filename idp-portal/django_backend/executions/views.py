@@ -61,6 +61,7 @@ from core.throttling import ExecutionThrottle, GeneralAPIThrottle
 
 
 from croniter import croniter, CroniterBadCronError, CroniterBadDateError
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 import structlog
 
 # Story 17.14: Import adapter at module level (HIGH-3 fix)
@@ -80,6 +81,21 @@ class ExecutionsView(APIView):
     permission_classes = [IsAuthenticated]
     throttle_classes = [GeneralAPIThrottle, ExecutionThrottle]
 
+    @extend_schema(
+        tags=['executions'],
+        summary='Lister les exécutions',
+        description='Retourne la liste paginée des exécutions avec filtrage par scope, dates et statut.',
+        parameters=[
+            OpenApiParameter('limit', int, description='Nombre de résultats par page (défaut: 50)'),
+            OpenApiParameter('offset', int, description='Décalage pour la pagination'),
+            OpenApiParameter('scope', str, description='Scope: mine (défaut) ou all'),
+            OpenApiParameter('status', str, description='Filtrage par statut'),
+            OpenApiParameter('action_id', int, description='Filtrage par action'),
+            OpenApiParameter('start_date', str, description='Date de début (ISO 8601)'),
+            OpenApiParameter('end_date', str, description='Date de fin (ISO 8601)'),
+        ],
+        responses={200: ExecutionSerializer(many=True)},
+    )
     def get(self, request):
         limit = _parse_int(request.query_params.get("limit"), 50, name="limit")
         offset = _parse_int(request.query_params.get("offset"), 0, name="offset")
@@ -110,6 +126,12 @@ class ExecutionsView(APIView):
             }
         )
 
+    @extend_schema(
+        tags=['executions'],
+        summary='Créer une exécution',
+        description="Lance une nouvelle exécution d'action. target_names requis si requires_target=True.",
+        responses={201: ExecutionSerializer},
+    )
     def post(self, request):
         """
         Create a new execution.
@@ -433,6 +455,7 @@ class ExecutionDetailView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(tags=['executions'], summary="Détail d'une exécution", responses={200: ExecutionSerializer})
     def get(self, request, execution_id: int):
         try:
             execution = Execution.objects.select_related("action", "user", "action__integration").get(id=execution_id)
@@ -452,6 +475,7 @@ class ExecutionCancelView(APIView):
     permission_classes = [IsAuthenticated]
     throttle_classes = [GeneralAPIThrottle]  # MEDIUM-1 fix: Add rate limiting
 
+    @extend_schema(tags=['executions'], summary='Annuler une exécution', responses={200: ExecutionSerializer})
     def patch(self, request, execution_id: int):
         try:
             execution = Execution.objects.select_related("action", "user", "action__integration").get(id=execution_id)
@@ -551,6 +575,7 @@ class ExecutionStepsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(tags=['executions'], summary="Étapes d'une exécution", responses={200: ExecutionStepSerializer(many=True)})
     def get(self, request, execution_id: int):
         try:
             execution = Execution.objects.get(id=execution_id)
@@ -569,6 +594,7 @@ class ExecutionStepLogsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(tags=['executions'], summary="Logs d'une étape d'exécution")
     def get(self, request, execution_id: int, step_id: int):
         try:
             step = ExecutionStep.objects.select_related("execution").get(id=step_id, execution_id=execution_id)
@@ -601,6 +627,7 @@ class ExecutionStatsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(tags=['executions'], summary='Statistiques des exécutions')
     def get(self, request):
         qs = Execution.objects.select_related("action")
         qs, _effective_scope = _apply_scope_filter(qs, user=request.user, scope=request.query_params.get("scope") or "mine")
@@ -639,6 +666,7 @@ class ExecutionTimeSeriesView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(tags=['executions'], summary='Série temporelle des exécutions')
     def get(self, request):
         qs = Execution.objects.all()
         qs, _effective_scope = _apply_scope_filter(qs, user=request.user, scope=request.query_params.get("scope") or "mine")
@@ -682,6 +710,7 @@ class ExecutionTagsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(tags=['executions'], summary='Tags des actions exécutées')
     def get(self, request):
         action_ids = Execution.objects.values_list("action_id", flat=True).distinct()
         tags = (
@@ -699,6 +728,7 @@ class PendingApprovalsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(tags=['executions'], summary='Approbations en attente', responses={200: ExecutionSerializer(many=True)})
     def get(self, request):
         if not _is_dba_or_dbops(request.user):
             raise ForbiddenError(code="FORBIDDEN", message="Accès interdit", details={})
@@ -749,6 +779,7 @@ class ScheduledExecutionsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(tags=['scheduling'], summary='Lister les exécutions planifiées', responses={200: ScheduledExecutionListItemSerializer(many=True)})
     def get(self, request):
         limit = _parse_int(request.query_params.get("limit"), 50, name="limit")
         offset = _parse_int(request.query_params.get("offset"), 0, name="offset")
@@ -837,6 +868,7 @@ class ScheduledExecutionsView(APIView):
         }
         return Response({"data": inner})
 
+    @extend_schema(tags=['scheduling'], summary='Créer une exécution planifiée', responses={201: ScheduledExecutionSerializer})
     def post(self, request):
         payload = request.data or {}
 

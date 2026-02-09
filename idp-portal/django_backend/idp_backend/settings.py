@@ -40,15 +40,18 @@ ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',') if os.getenv('ALLOWED_
 # Application definition
 
 INSTALLED_APPS = [
+    # Third-party apps (Daphne MUST be before staticfiles per daphne.E001)
+    'daphne',  # Story 22.13: ASGI server for WebSocket support (must be before staticfiles)
+    # Django contrib apps
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    # Third-party apps
-    'daphne',  # Story 22.13: ASGI server for WebSocket support (must be before staticfiles)
+    # Other third-party apps
     'rest_framework',
+    'drf_spectacular',  # Story 22.20: OpenAPI/Swagger documentation
     'corsheaders',
     'channels',  # Story 22.13: Django Channels for WebSocket
     # Local apps
@@ -194,6 +197,47 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PARSER_CLASSES': [
         'rest_framework.parsers.JSONParser',
+    ],
+    # Story 22.20: drf-spectacular OpenAPI schema generation
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# ============================================================================
+# drf-spectacular Configuration (Story 22.20 - OpenAPI/Swagger Documentation)
+# ============================================================================
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'DBOps Portal API',
+    'DESCRIPTION': "API REST pour le portail DBOps — Gestion et exécution d'actions DBA",
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'SWAGGER_UI_SETTINGS': {
+        'deepLinking': True,
+        'persistAuthorization': True,
+        'displayOperationId': True,
+    },
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SCHEMA_PATH_PREFIX': r'/api/v1',
+    'SECURITY': [{'bearerAuth': []}],
+    'APPEND_COMPONENTS': {
+        'securitySchemes': {
+            'bearerAuth': {
+                'type': 'http',
+                'scheme': 'bearer',
+                'bearerFormat': 'JWT',
+            }
+        }
+    },
+    'TAGS': [
+        {'name': 'catalog', 'description': "Gestion du catalogue d'actions"},
+        {'name': 'executions', 'description': "Exécution et suivi des actions"},
+        {'name': 'profiles', 'description': "Gestion des profils et permissions RBAC"},
+        {'name': 'inventory', 'description': "Inventaire des targets et environnements"},
+        {'name': 'integrations', 'description': "Intégrations plateformes distantes"},
+        {'name': 'audit', 'description': "Audit trail et conformité SOC1"},
+        {'name': 'auth', 'description': "Authentification SAML et JWT"},
+        {'name': 'reference', 'description': "Données de référence (engines, platforms, catégories)"},
+        {'name': 'dashboard', 'description': "Dashboard et analytics"},
+        {'name': 'scheduling', 'description': "Planification et exécutions programmées"},
     ],
 }
 
