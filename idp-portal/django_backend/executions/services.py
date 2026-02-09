@@ -214,29 +214,68 @@ class ExecutionService:
     def update_status(self, execution_id: int, new_status: str, user_id: str):
         """
         Update execution status with transition validation.
-        
+
         Args:
             execution_id: ID of the execution
             new_status: New status value
             user_id: ID of user making the change
-        
+
         Returns:
             Updated Execution instance or None
-        
+
         Raises:
-            ValueError: If transition is invalid
+            ValueError: If transition is invalid or user_id is invalid
         """
+        # Validate user exists (SOC1 audit integrity)
+        try:
+            User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            raise ValueError(f"Invalid user_id: {user_id}")
+
         try:
             execution = Execution.objects.get(id=execution_id)
         except Execution.DoesNotExist:
             return None
-        
+
         old_status = execution.status
-        
-        # Validate transition (basic validation - can be enhanced)
+
+        # State machine: valid transitions for execution status.
+        #
+        # SECURITY (Story 22.12): PENDING_APPROVAL → SUBMITTED is explicitly FORBIDDEN.
+        #   Allowing it would let executions bypass the DBA approval workflow,
+        #   violating SOC1 compliance. An execution that requires approval must
+        #   go through RUNNING (after DBA approval) or REJECTED (if DBA refuses).
+        #
+        # TODO (Story 7.4): Approval transitions must use dedicated endpoints:
+        #   - PENDING_APPROVAL → RUNNING via POST /api/v1/executions/{id}/approve
+        #   - PENDING_APPROVAL → REJECTED via POST /api/v1/executions/{id}/reject
+        #   These endpoints are not yet implemented.
+        #
+        # Valid transitions by state (with business rationale):
+        # ┌─────────────────────┬────────────────────────────────────────────────────────┐
+        # │ From State          │ To State → Business Rationale                          │
+        # ├─────────────────────┼────────────────────────────────────────────────────────┤
+        # │ SUBMITTED           │ → RUNNING: Normal execution start                      │
+        # │                     │ → CANCELLED: User cancels before start                 │
+        # │                     │ → PENDING_APPROVAL: Elevation to approval required     │
+        # │                     │ → INTEGRATION_ERROR: Platform integration failed       │
+        # ├─────────────────────┼────────────────────────────────────────────────────────┤
+        # │ PENDING_APPROVAL    │ → RUNNING: DBA approves (via /approve endpoint)        │
+        # │                     │ → REJECTED: DBA rejects (via /reject endpoint)         │
+        # ├─────────────────────┼────────────────────────────────────────────────────────┤
+        # │ RUNNING             │ → COMPLETED: Execution succeeded                       │
+        # │                     │ → FAILED: Execution failed                             │
+        # │                     │ → CANCELLED: User cancels during execution             │
+        # ├─────────────────────┼────────────────────────────────────────────────────────┤
+        # │ COMPLETED           │ (terminal state - no transitions)                      │
+        # │ FAILED              │ (terminal state - no transitions)                      │
+        # │ CANCELLED           │ (terminal state - no transitions)                      │
+        # │ REJECTED            │ (terminal state - no transitions)                      │
+        # │ INTEGRATION_ERROR   │ (terminal state - Story 18.6)                          │
+        # └─────────────────────┴────────────────────────────────────────────────────────┘
         valid_transitions = {
             ExecutionStatus.SUBMITTED: [ExecutionStatus.RUNNING, ExecutionStatus.CANCELLED, ExecutionStatus.PENDING_APPROVAL, ExecutionStatus.INTEGRATION_ERROR],
-            ExecutionStatus.PENDING_APPROVAL: [ExecutionStatus.SUBMITTED, ExecutionStatus.REJECTED],
+            ExecutionStatus.PENDING_APPROVAL: [ExecutionStatus.RUNNING, ExecutionStatus.REJECTED],
             ExecutionStatus.RUNNING: [ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED],
             ExecutionStatus.COMPLETED: [],
             ExecutionStatus.FAILED: [],
@@ -244,17 +283,22 @@ class ExecutionService:
             ExecutionStatus.REJECTED: [],
             ExecutionStatus.INTEGRATION_ERROR: [],  # Terminal state (Story 18.6)
         }
-        
+
         if new_status not in valid_transitions.get(old_status, []):
-            raise ValueError(f"Invalid transition from {old_status} to {new_status}")
-        
+            valid_list = ", ".join(valid_transitions.get(old_status, []))
+            raise ValueError(
+                f"Invalid transition from {old_status} to {new_status}. "
+                f"Valid transitions: {valid_list or 'none (terminal state)'}"
+            )
+
         execution.status = new_status
-        
-        # Update timestamps
-        if new_status == ExecutionStatus.RUNNING:
+
+        # Update timestamps (idempotent - preserve original timestamps)
+        if new_status == ExecutionStatus.RUNNING and not execution.started_at:
             execution.started_at = timezone.now()
         elif new_status in [ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED, ExecutionStatus.REJECTED]:
-            execution.completed_at = timezone.now()
+            if not execution.completed_at:
+                execution.completed_at = timezone.now()
         
         execution.save()
         

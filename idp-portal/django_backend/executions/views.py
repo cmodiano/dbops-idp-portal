@@ -387,25 +387,28 @@ class ExecutionsView(APIView):
                 exc_info=True,
             )
 
-            execution.status = ExecutionStatus.INTEGRATION_ERROR
-            execution.error_message = str(e)
-            execution.save(update_fields=["status", "error_message"])
+            # Use state machine for status transition (Story 22.12 review fix)
+            execution_service = ExecutionService()
+            try:
+                execution_service.update_status(
+                    execution.id,
+                    ExecutionStatus.INTEGRATION_ERROR,
+                    str(request.user.id)
+                )
+            except ValueError as ve:
+                # Should not happen - SUBMITTED → INTEGRATION_ERROR is valid
+                exec_logger.error(
+                    "unexpected_state_machine_error",
+                    execution_id=execution.id,
+                    error=str(ve),
+                    correlation_id=correlation_id,
+                )
+                # Fallback to direct update (defensive programming)
+                execution.status = ExecutionStatus.INTEGRATION_ERROR
+                execution.save(update_fields=["status"])
 
-            AuditService.create_entry(
-                user_id=str(request.user.id),
-                action_type=AuditActionType.EXECUTION_INTEGRATION_ERROR,
-                entity_type=AuditEntityType.EXECUTION,
-                entity_id=execution.id,
-                details={
-                    "action_id": action.id,
-                    "action_name": action.name,
-                    "environment": environment,
-                    "error_type": type(e).__name__,
-                    "error_message": str(e),
-                },
-                ip_address=ip_address,
-                correlation_id=correlation_id,
-            )
+            execution.error_message = str(e)
+            execution.save(update_fields=["error_message"])
 
         # Build response data
         response_data = {
