@@ -17,7 +17,7 @@ import * as integrationsService from '../services/integrations_service';
 vi.mock('../services/admin_service', () => ({
   getAdminActions: vi.fn().mockResolvedValue({
     data: [],
-    pagination: { page: 1, page_size: 10, total_count: 0, total_pages: 0 },
+    pagination: { page: 1, page_size: 10, total: 0, total_pages: 0 },
   }),
   getTags: vi.fn().mockResolvedValue([]),
   checkActionNameAvailable: vi.fn().mockResolvedValue(true),

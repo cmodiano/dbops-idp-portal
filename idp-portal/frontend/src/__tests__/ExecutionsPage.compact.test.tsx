@@ -84,7 +84,7 @@ const mockExecutions: ExecutionResponse[] = [
 describe('ExecutionsPage - Compact Mode (Story 17.13)', () => {
   const defaultListResponse = {
     data: mockExecutions,
-    pagination: { page: 1, page_size: 25, total_count: 2, total_pages: 1 },
+    pagination: { page: 1, page_size: 25, total: 2, total_pages: 1 },
   };
 
   beforeEach(() => {
@@ -96,7 +96,7 @@ describe('ExecutionsPage - Compact Mode (Story 17.13)', () => {
     vi.mocked(executionService.getExecutionSteps).mockResolvedValue([]);
     vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
       data: [],
-      pagination: { page: 1, page_size: 50, total_count: 0, total_pages: 0 },
+      pagination: { page: 1, page_size: 50, total: 0, total_pages: 0 },
     });
     vi.mocked(executionService.fetchExecutionStats).mockResolvedValue({
       executions_jour: 10,

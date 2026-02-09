@@ -382,7 +382,7 @@ export default function AuditPage() {
           />
           {pagination && (
             <Badge
-              count={pagination.total_count}
+              count={pagination.total}
               overflowCount={99999}
               style={{ backgroundColor: '#1890ff' }}
               showZero
@@ -410,7 +410,7 @@ export default function AuditPage() {
         pagination={{
           current: currentPage,
           pageSize: PAGE_SIZE,
-          total: pagination?.total_count || 0,
+          total: pagination?.total || 0,
           showSizeChanger: false,
         }}
         onChange={handleTableChange}

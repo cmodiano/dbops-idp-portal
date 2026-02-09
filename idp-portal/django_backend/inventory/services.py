@@ -325,7 +325,7 @@ class InventoryService:
             logger.info(
                 "oracle_inventory_read",
                 source=table_or_synonym,
-                total_count=total_count,
+                total=total_count,
                 returned_count=len(results),
                 correlation_id=correlation_id
             )
@@ -506,8 +506,8 @@ class InventoryService:
                 filtered_targets, target_restrictions
             )
 
-        # Pagination
-        total_count = len(filtered_targets)
+        # Pagination (Story 22.6: renamed total_count → total)
+        total = len(filtered_targets)
         start_index = (page - 1) * page_size
         end_index = start_index + page_size
         page_results = filtered_targets[start_index:end_index]
@@ -524,13 +524,13 @@ class InventoryService:
             total_before_filter=len(all_targets),
             after_env_filter=env_filtered_count,
             after_target_filter=len(filtered_targets),
-            total_count=total_count,
+            total=total,
             returned_count=len(page_results),
             rbac_truncated=rbac_truncated,
             correlation_id=correlation_id
         )
 
-        return page_results, total_count, rbac_truncated
+        return page_results, total, rbac_truncated
 
     def _apply_target_restrictions(self, targets: list[dict],
                                    restrictions: list[tuple[str, list[str] | None]]) -> list[dict]:

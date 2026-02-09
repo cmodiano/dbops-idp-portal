@@ -116,7 +116,7 @@ class TestCatalogService(TestCase):
 
         # Filter by status
         results, pagination_info = self.service.list_all(status=ActionStatus.PUBLISHED)
-        self.assertEqual(pagination_info['total_count'], 1)
+        self.assertEqual(pagination_info['total'], 1)
         self.assertEqual(results[0].id, action1.id)
 
         # Filter by item_type
@@ -129,7 +129,7 @@ class TestCatalogService(TestCase):
             created_by=self.user
         )
         results, pagination_info = self.service.list_all(item_type=ActionItemType.WORKFLOW)
-        self.assertGreaterEqual(pagination_info['total_count'], 1)
+        self.assertGreaterEqual(pagination_info['total'], 1)
         self.assertTrue(any(a.id == workflow.id for a in results))
 
     def test_list_all_with_pagination(self):
@@ -146,7 +146,7 @@ class TestCatalogService(TestCase):
 
         # First page
         results, pagination_info = self.service.list_all(page=1, page_size=10)
-        self.assertEqual(pagination_info['total_count'], 30)
+        self.assertEqual(pagination_info['total'], 30)
         self.assertEqual(len(results), 10)
 
         # Second page

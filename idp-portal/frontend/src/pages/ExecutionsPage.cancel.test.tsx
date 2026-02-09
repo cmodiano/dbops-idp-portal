@@ -125,13 +125,13 @@ function setupDefaultMocks(executions: ExecutionResponse[]) {
   vi.mocked(referenceService.fetchEngines).mockResolvedValue([]);
   vi.mocked(executionService.listExecutions).mockResolvedValue({
     data: executions,
-    pagination: { page: 1, page_size: 25, total_count: executions.length, total_pages: 1 },
+    pagination: { page: 1, page_size: 25, total: executions.length, total_pages: 1 },
   });
   vi.mocked(executionService.getExecution).mockResolvedValue(executions[0]);
   vi.mocked(executionService.getExecutionSteps).mockResolvedValue([]);
   vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
     data: [],
-    pagination: { page: 1, page_size: 50, total_count: 0, total_pages: 0 },
+    pagination: { page: 1, page_size: 50, total: 0, total_pages: 0 },
   });
   vi.mocked(executionService.fetchExecutionStats).mockResolvedValue(defaultStats);
   vi.mocked(executionService.fetchExecutionTimeSeries).mockResolvedValue([]);

@@ -113,7 +113,7 @@ export interface ListExecutionsResponse {
   pagination: {
     page: number;
     page_size: number;
-    total_count: number;
+    total: number;
     total_pages: number;
   };
 }
@@ -143,7 +143,7 @@ function buildFilterParams(filters?: ExecutionFilters): string {
  * @param offset - Offset for pagination (default 0)
  * @param scope - "mine" for user's executions (default), "all" for all executions (DBA/DBOPS only)
  * @param filters - Advanced filters (Story 9.10)
- * @returns ListExecutionsResponse with data and pagination (total_count for UI)
+ * @returns ListExecutionsResponse with data and pagination (total for UI)
  */
 export async function listExecutions(
   limit = 50,
@@ -165,7 +165,7 @@ export interface PendingApprovalsResponse {
   pagination: {
     page: number;
     page_size: number;
-    total_count: number;
+    total: number;
     total_pages: number;
   };
 }

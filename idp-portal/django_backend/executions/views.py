@@ -638,9 +638,9 @@ class ExecutionsView(APIView):
         qs, _start_d, _end_d = _apply_execution_filters(qs, request=request)
         qs = qs.order_by("-created_at")
 
-        total_count = qs.count()
+        total = qs.count()
         page = (offset // limit) + 1
-        total_pages = (total_count + limit - 1) // limit if limit else 1
+        total_pages = (total + limit - 1) // limit if limit else 1
 
         items = list(qs[offset: offset + limit])
         data = ExecutionSerializer(items, many=True).data
@@ -651,7 +651,7 @@ class ExecutionsView(APIView):
                 "pagination": {
                     "page": page,
                     "page_size": limit,
-                    "total_count": total_count,
+                    "total": total,
                     "total_pages": total_pages,
                 },
             }
@@ -1258,9 +1258,9 @@ class PendingApprovalsView(APIView):
         if limit <= 0 or offset < 0:
             raise BadRequestError(code="BAD_REQUEST", message="Pagination invalide", details={"limit": limit, "offset": offset})
 
-        total_count = qs.count()
+        total = qs.count()
         page = (offset // limit) + 1
-        total_pages = (total_count + limit - 1) // limit if limit else 1
+        total_pages = (total + limit - 1) // limit if limit else 1
 
         items = list(qs[offset: offset + limit])
         data = ExecutionSerializer(items, many=True).data
@@ -1271,7 +1271,7 @@ class PendingApprovalsView(APIView):
                 "pagination": {
                     "page": page,
                     "page_size": limit,
-                    "total_count": total_count,
+                    "total": total,
                     "total_pages": total_pages,
                 },
             }
@@ -1422,9 +1422,9 @@ class ScheduledExecutionsView(APIView):
             )
 
         qs = qs.order_by("-created_at")
-        total_count = qs.count()
+        total = qs.count()
         page = (offset // limit) + 1
-        total_pages = (total_count + limit - 1) // limit if total_count > 0 else 1
+        total_pages = (total + limit - 1) // limit if total > 0 else 1
 
         items = list(qs[offset: offset + limit])
         data_items = ScheduledExecutionListItemSerializer(items, many=True).data
@@ -1444,7 +1444,7 @@ class ScheduledExecutionsView(APIView):
             "pagination": {
                 "page": page,
                 "page_size": limit,
-                "total_count": total_count,
+                "total": total,
                 "total_pages": total_pages,
             },
             "available_actions": available_actions,

@@ -203,7 +203,7 @@ class CatalogService:
         pagination_info = {
             'page': page,
             'page_size': page_size,
-            'total_count': paginator.count,
+            'total': paginator.count,
             'total_pages': paginator.num_pages,
         }
         

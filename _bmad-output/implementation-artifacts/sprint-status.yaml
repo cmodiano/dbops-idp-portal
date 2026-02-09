@@ -292,7 +292,7 @@ development_status:
     22-3-corriger-crit-3-race-condition-token-refresh: done # 2026-02-09: Promise-based mutex + correlation_id + 8 tests (6 unit + 2 integration), code review fixes appliqués, 17/17 tests pass ✅
     22-4-corriger-high-3-gestion-http-429-throttling-frontend: done # Code review adversarial 2026-02-09: 8 issues (2 HIGH + 3 MEDIUM + 3 LOW) auto-fixés, ApiError throw, correlation_id unifié, grammaire FR, 34/38 tests pass (4 échecs pré-existants)
     22-5-corriger-high-5-protection-double-submit-executionwizard: done # Code review adversarial 2026-02-09: 2 CRIT + 5 MED + 4 LOW issues found, ALL fixed — JSDoc complet, test AC#6 corrigé, logger mock fixed, typo FR, file code-quality staged, 48/48 tests pass ✅
-    22-6-corriger-high-6-standardiser-pagination-total: backlog
+    22-6-corriger-high-6-standardiser-pagination-total: done
     22-7-refactoriser-executions-views-extraction-helpers: backlog
     22-8-decouper-types-api-ts-par-domaine: backlog
     22-9-decouper-adminpage-tsx-sous-composants: backlog

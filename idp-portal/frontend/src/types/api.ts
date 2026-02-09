@@ -204,10 +204,11 @@ export interface AdminActionsFilters {
   include_disabled?: boolean;
 }
 
+/** Pagination metadata aligned with DRF CustomPageNumberPagination response format. */
 export interface PaginationInfo {
   page: number;
   page_size: number;
-  total_count: number;
+  total: number;
   total_pages: number;
 }
 
@@ -991,7 +992,7 @@ export interface ScheduledExecutionListResponse {
   pagination: {
     page: number;
     page_size: number;
-    total_count: number;
+    total: number;
     total_pages: number;
   };
   /** AC8: All actions that have scheduled executions (for filter dropdown). */

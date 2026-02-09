@@ -87,7 +87,7 @@ const mockScheduledExecutionsResponse: ScheduledExecutionListResponse = {
   pagination: {
     page: 1,
     page_size: 50,
-    total_count: 2,
+    total: 2,
     total_pages: 1,
   },
   available_actions: [
@@ -608,7 +608,7 @@ describe('CalendarPage', () => {
     it('handles empty response gracefully', async () => {
       vi.mocked(scheduledExecutionService.listScheduledExecutions).mockResolvedValue({
         data: [],
-        pagination: { page: 1, page_size: 50, total_count: 0, total_pages: 1 },
+        pagination: { page: 1, page_size: 50, total: 0, total_pages: 1 },
         available_actions: [],
       });
 

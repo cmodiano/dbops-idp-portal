@@ -204,7 +204,7 @@ const mockSteps: ExecutionStepResponse[] = [
 describe('ExecutionsPage', () => {
   const defaultListResponse = {
     data: mockExecutions,
-    pagination: { page: 1, page_size: 25, total_count: 3, total_pages: 1 },
+    pagination: { page: 1, page_size: 25, total: 3, total_pages: 1 },
   };
 
   const mockPendingApprovals: ExecutionResponse[] = [
@@ -239,7 +239,7 @@ describe('ExecutionsPage', () => {
     vi.mocked(executionService.getExecutionSteps).mockResolvedValue(mockSteps);
     vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
       data: [],
-      pagination: { page: 1, page_size: 50, total_count: 0, total_pages: 0 },
+      pagination: { page: 1, page_size: 50, total: 0, total_pages: 0 },
     });
     // Story 9.4: Mock fetchExecutionStats
     vi.mocked(executionService.fetchExecutionStats).mockResolvedValue({
@@ -392,7 +392,7 @@ describe('ExecutionsPage', () => {
       }));
       vi.mocked(executionService.listExecutions).mockResolvedValue({
         data: manyExecutions,
-        pagination: { page: 1, page_size: 25, total_count: 30, total_pages: 2 },
+        pagination: { page: 1, page_size: 25, total: 30, total_pages: 2 },
       });
 
       renderWithTheme(<ExecutionsPage />);
@@ -416,7 +416,7 @@ describe('ExecutionsPage', () => {
               () =>
                 resolve({
                   data: mockExecutions,
-                  pagination: { page: 1, page_size: 25, total_count: 3, total_pages: 1 },
+                  pagination: { page: 1, page_size: 25, total: 3, total_pages: 1 },
                 }),
               100
             )
@@ -590,7 +590,7 @@ describe('ExecutionsPage', () => {
     it('shows empty message when no executions', async () => {
       vi.mocked(executionService.listExecutions).mockResolvedValue({
         data: [],
-        pagination: { page: 1, page_size: 25, total_count: 0, total_pages: 1 },
+        pagination: { page: 1, page_size: 25, total: 0, total_pages: 1 },
       });
 
       renderWithTheme(<ExecutionsPage />);
@@ -606,7 +606,7 @@ describe('ExecutionsPage', () => {
       mockAuthSession('DBA');
       vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
         data: mockPendingApprovals,
-        pagination: { page: 1, page_size: 50, total_count: 1, total_pages: 1 },
+        pagination: { page: 1, page_size: 50, total: 1, total_pages: 1 },
       });
 
       await act(async () => {
@@ -624,7 +624,7 @@ describe('ExecutionsPage', () => {
       mockAuthSession('DBOPS');
       vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
         data: mockPendingApprovals,
-        pagination: { page: 1, page_size: 50, total_count: 1, total_pages: 1 },
+        pagination: { page: 1, page_size: 50, total: 1, total_pages: 1 },
       });
 
       await act(async () => {
@@ -640,7 +640,7 @@ describe('ExecutionsPage', () => {
       mockAuthSession('CLIENT');
       vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
         data: mockPendingApprovals,
-        pagination: { page: 1, page_size: 50, total_count: 1, total_pages: 1 },
+        pagination: { page: 1, page_size: 50, total: 1, total_pages: 1 },
       });
 
       await act(async () => {
@@ -658,7 +658,7 @@ describe('ExecutionsPage', () => {
       mockAuthSession('DBA');
       vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
         data: [],
-        pagination: { page: 1, page_size: 50, total_count: 0, total_pages: 0 },
+        pagination: { page: 1, page_size: 50, total: 0, total_pages: 0 },
       });
 
       await act(async () => {
@@ -676,7 +676,7 @@ describe('ExecutionsPage', () => {
       mockAuthSession('DBA');
       vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
         data: mockPendingApprovals,
-        pagination: { page: 1, page_size: 50, total_count: 1, total_pages: 1 },
+        pagination: { page: 1, page_size: 50, total: 1, total_pages: 1 },
       });
 
       await act(async () => {
@@ -695,7 +695,7 @@ describe('ExecutionsPage', () => {
       mockAuthSession('DBA');
       vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
         data: mockPendingApprovals,
-        pagination: { page: 1, page_size: 50, total_count: 1, total_pages: 1 },
+        pagination: { page: 1, page_size: 50, total: 1, total_pages: 1 },
       });
 
       await act(async () => {
@@ -712,7 +712,7 @@ describe('ExecutionsPage', () => {
       mockAuthSession('DBA');
       vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
         data: mockPendingApprovals,
-        pagination: { page: 1, page_size: 50, total_count: 1, total_pages: 1 },
+        pagination: { page: 1, page_size: 50, total: 1, total_pages: 1 },
       });
 
       await act(async () => {
@@ -798,7 +798,7 @@ describe('ExecutionsPage', () => {
       }));
       vi.mocked(executionService.listExecutions).mockResolvedValue({
         data: manyExecutions,
-        pagination: { page: 1, page_size: 25, total_count: 30, total_pages: 2 },
+        pagination: { page: 1, page_size: 25, total: 30, total_pages: 2 },
       });
 
       await act(async () => {
@@ -846,7 +846,7 @@ describe('ExecutionsPage', () => {
           if (scope === 'all') {
             return {
               data: mockAllExecutions,
-              pagination: { page: 1, page_size: 25, total_count: 1, total_pages: 1 },
+              pagination: { page: 1, page_size: 25, total: 1, total_pages: 1 },
             };
           }
           return defaultListResponse;
@@ -900,7 +900,7 @@ describe('ExecutionsPage', () => {
           if (scope === 'all') {
             return {
               data: mockAllExecutionsNoUser,
-              pagination: { page: 1, page_size: 25, total_count: 1, total_pages: 1 },
+              pagination: { page: 1, page_size: 25, total: 1, total_pages: 1 },
             };
           }
           return defaultListResponse;
@@ -1006,7 +1006,7 @@ describe('ExecutionsPage', () => {
             created_at: '2026-01-30T10:00:00Z',
           },
         ],
-        pagination: { page: 1, page_size: 50, total_count: 1, total_pages: 1 },
+        pagination: { page: 1, page_size: 50, total: 1, total_pages: 1 },
       });
 
       await act(async () => {
@@ -1184,7 +1184,7 @@ describe('ExecutionsPage', () => {
             item_type: 'action',
           },
         ],
-        pagination: { page: 1, page_size: 25, total_count: 1, total_pages: 1 },
+        pagination: { page: 1, page_size: 25, total: 1, total_pages: 1 },
       });
 
       const { container } = renderWithTheme(<ExecutionsPage />);
@@ -1207,7 +1207,7 @@ describe('ExecutionsPage', () => {
             item_type: 'workflow',
           },
         ],
-        pagination: { page: 1, page_size: 25, total_count: 1, total_pages: 1 },
+        pagination: { page: 1, page_size: 25, total: 1, total_pages: 1 },
       });
 
       const { container } = renderWithTheme(<ExecutionsPage />);
@@ -1229,7 +1229,7 @@ describe('ExecutionsPage', () => {
             platform: 'AAP',
           },
         ],
-        pagination: { page: 1, page_size: 25, total_count: 1, total_pages: 1 },
+        pagination: { page: 1, page_size: 25, total: 1, total_pages: 1 },
       });
 
       const { container } = renderWithTheme(<ExecutionsPage />);
@@ -1252,7 +1252,7 @@ describe('ExecutionsPage', () => {
             platform: null, // Plateforme column shows — when platform is null (e.g. workflow)
           },
         ],
-        pagination: { page: 1, page_size: 25, total_count: 1, total_pages: 1 },
+        pagination: { page: 1, page_size: 25, total: 1, total_pages: 1 },
       });
 
       renderWithTheme(<ExecutionsPage />);
@@ -1293,7 +1293,7 @@ describe('ExecutionsPage', () => {
             user_display_name: 'Test User',
           },
         ],
-        pagination: { page: 1, page_size: 25, total_count: 1, total_pages: 1 },
+        pagination: { page: 1, page_size: 25, total: 1, total_pages: 1 },
       });
 
       renderWithProviders();
@@ -1365,7 +1365,7 @@ describe('ExecutionsPage', () => {
     beforeEach(() => {
       vi.mocked(executionService.listExecutions).mockResolvedValue({
         data: enrichedMockExecutions,
-        pagination: { page: 1, page_size: 25, total_count: 3, total_pages: 1 },
+        pagination: { page: 1, page_size: 25, total: 3, total_pages: 1 },
       });
     });
 

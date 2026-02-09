@@ -105,8 +105,8 @@ def list_targets(request):
     )
 
     try:
-        # Get targets with RBAC filtering
-        targets, total_count, rbac_truncated = inventory_service.list_targets_for_user(
+        # Get targets with RBAC filtering (Story 22.6: returns total not total_count)
+        targets, total, rbac_truncated = inventory_service.list_targets_for_user(
             user_id=user.id,
             ad_groups=ad_groups,
             environment=environment,
@@ -132,10 +132,10 @@ def list_targets(request):
 
     return Response({
         'items': serializer.data,
-        'total': total_count,
+        'total': total,
         'page': page,
         'page_size': page_size,
-        'total_pages': (total_count + page_size - 1) // page_size if page_size > 0 else 0,
+        'total_pages': (total + page_size - 1) // page_size if page_size > 0 else 0,
         'rbac_truncated': rbac_truncated,
     })
 
@@ -200,8 +200,8 @@ def list_all_targets(request):
     )
 
     try:
-        # Get targets without RBAC
-        targets, total_count = inventory_service.list_targets(
+        # Get targets without RBAC (Story 22.6: returns total not total_count)
+        targets, total = inventory_service.list_targets(
             environment=environment,
             search=search,
             target_type=target_type,
@@ -224,10 +224,10 @@ def list_all_targets(request):
 
     return Response({
         'items': serializer.data,
-        'total': total_count,
+        'total': total,
         'page': page,
         'page_size': page_size,
-        'total_pages': (total_count + page_size - 1) // page_size if page_size > 0 else 0
+        'total_pages': (total + page_size - 1) // page_size if page_size > 0 else 0
     })
 
 

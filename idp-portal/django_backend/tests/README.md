@@ -632,8 +632,8 @@ results, pagination_info = service.list_all(status='published')
 results, pagination_info = service.list_all(tags_filter=['oracle', 'dba'])
 results, pagination_info = service.list_all(item_type='action', page=1, page_size=10)
 
-# ✅ pagination_info est un dict avec 'total_count'
-self.assertEqual(pagination_info['total_count'], 5)
+# ✅ pagination_info est un dict avec 'total'
+self.assertEqual(pagination_info['total'], 5)
 ```
 
 ---
@@ -767,7 +767,7 @@ Avant de soumettre un test:
 - [ ] ✅ Je passe un objet `User` à `delete_action()` (pas `str(user.id)`)
 - [ ] ✅ Je crée `RefEngine`/`RefPlatform` avant les tests admin API
 - [ ] ✅ J'ajoute `referenced_action_id` aux workflow steps
-- [ ] ✅ J'utilise `pagination_info['total_count']` (dict, pas int) pour `list_all()`
+- [ ] ✅ J'utilise `pagination_info['total']` (dict, pas int) pour `list_all()`
 - [ ] ❌ Je n'utilise PAS de champs Django auth (`is_staff`, `is_active`)
 - [ ] ❌ Je ne crée PAS de JSON fields avec strings manuelles
 - [ ] ❌ Je ne laisse PAS de `print()` ou debug statements

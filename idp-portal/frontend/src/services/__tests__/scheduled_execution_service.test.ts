@@ -144,7 +144,7 @@ describe('scheduled_execution_service', () => {
             scheduled_at: '2026-03-15T14:30:00Z',
           },
         ],
-        pagination: { page: 1, page_size: 50, total_count: 1, total_pages: 1 },
+        pagination: { page: 1, page_size: 50, total: 1, total_pages: 1 },
       };
 
       vi.mocked(apiClient.apiFetch).mockResolvedValue(mockResponse);
@@ -160,7 +160,7 @@ describe('scheduled_execution_service', () => {
     it('lists scheduled executions with filters', async () => {
       const mockResponse = {
         data: [],
-        pagination: { page: 1, page_size: 50, total_count: 0, total_pages: 1 },
+        pagination: { page: 1, page_size: 50, total: 0, total_pages: 1 },
       };
 
       vi.mocked(apiClient.apiFetch).mockResolvedValue(mockResponse);

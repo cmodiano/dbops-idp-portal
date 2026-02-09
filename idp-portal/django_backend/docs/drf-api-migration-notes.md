@@ -8,6 +8,50 @@
 **Date:** 2026-02-03, 2026-02-04, 2026-02-05
 **Status:** Migration terminée — Document historique conservé
 
+## BREAKING CHANGES
+
+### Story 22.6 (2026-02-09) — Pagination field `total_count` renamed to `total`
+
+Le champ de pagination `total_count` a été renommé en `total` dans toutes les réponses API paginées pour aligner backend et frontend sur le standard DRF `CustomPageNumberPagination`.
+
+**Endpoints affectés :**
+- `GET /api/v1/executions/` — `pagination.total_count` → `pagination.total`
+- `GET /api/v1/executions/pending-approvals` — `pagination.total_count` → `pagination.total`
+- `GET /api/v1/scheduled-executions/` — `pagination.total_count` → `pagination.total`
+- `GET /api/v1/audit/executions/` — `pagination.total_count` → `pagination.total`
+- `GET /api/v1/inventory/targets/` — `total_count` → `total` (flat structure)
+- `CatalogService.list_all()` — `pagination_info['total_count']` → `pagination_info['total']`
+
+**Migration Guide pour clients externes :**
+
+**Avant (deprecated) :**
+```typescript
+const response = await fetch('/api/v1/executions/?limit=25&offset=0');
+const data = await response.json();
+const totalItems = data.pagination.total_count; // ❌ DEPRECATED
+```
+
+**Après (correct) :**
+```typescript
+const response = await fetch('/api/v1/executions/?limit=25&offset=0');
+const data = await response.json();
+const totalItems = data.pagination.total; // ✅ CORRECT
+```
+
+**Python clients :**
+```python
+# Avant
+response = requests.get('/api/v1/executions/', params={'limit': 25, 'offset': 0})
+total = response.json()['pagination']['total_count']  # ❌ KeyError
+
+# Après
+response = requests.get('/api/v1/executions/', params={'limit': 25, 'offset': 0})
+total = response.json()['pagination']['total']  # ✅ Correct
+```
+
+**Effective date :** 2026-02-09
+**Rollback instructions :** Non applicable — frontend TypeScript types enforce `total`, rollback would cause compilation errors.
+
 ## Vue d'ensemble
 
 Cette migration implémente les endpoints DRF pour remplacer les endpoints FastAPI suivants:

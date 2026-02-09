@@ -218,7 +218,7 @@ export default function ExecutionsPage() {
   const [statsData, setStatsData] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
 
-  // Fetch executions (AC4: pagination with total_count from API; Story 8.9: scope filter; Story 9.10: filters)
+  // Fetch executions (AC4: pagination with total from API; Story 8.9: scope filter; Story 9.10: filters)
   const fetchData = useCallback(async (page: number, scope: ExecutionScope) => {
     setLoading(true);
     setError(null);
@@ -226,7 +226,7 @@ export default function ExecutionsPage() {
       const offset = (page - 1) * PAGE_SIZE;
       const result = await listExecutions(PAGE_SIZE, offset, scope, filters);
       setExecutions(result.data);
-      setTotalCount(result.pagination.total_count);
+      setTotalCount(result.pagination.total);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur de chargement');
     } finally {

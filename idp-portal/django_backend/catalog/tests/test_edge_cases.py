@@ -39,20 +39,20 @@ class TestPaginationEdgeCases(TestCase):
         """Test pagination first page."""
         results, pagination_info = self.service.list_all(page=1, page_size=10)
         self.assertEqual(len(results), 10)
-        self.assertEqual(pagination_info['total_count'], 30)
+        self.assertEqual(pagination_info['total'], 30)
 
     def test_pagination_last_page(self):
         """Test pagination last page (partial)."""
         results, pagination_info = self.service.list_all(page=3, page_size=10)
         self.assertEqual(len(results), 10)
-        self.assertEqual(pagination_info['total_count'], 30)
+        self.assertEqual(pagination_info['total'], 30)
 
     def test_pagination_beyond_total(self):
         """Test pagination beyond total pages returns empty results."""
         results, pagination_info = self.service.list_all(page=10, page_size=10)
         # Django Paginator.get_page returns last page for out-of-range
         self.assertIsNotNone(results)
-        self.assertEqual(pagination_info['total_count'], 30)
+        self.assertEqual(pagination_info['total'], 30)
 
     def test_pagination_page_size_zero(self):
         """Test pagination with page_size=0 handled gracefully."""
@@ -60,20 +60,20 @@ class TestPaginationEdgeCases(TestCase):
         # Use page_size=1 as minimum
         results, pagination_info = self.service.list_all(page=1, page_size=1)
         self.assertEqual(len(results), 1)
-        self.assertEqual(pagination_info['total_count'], 30)
+        self.assertEqual(pagination_info['total'], 30)
 
     def test_pagination_page_size_large(self):
         """Test pagination with very large page_size."""
         results, pagination_info = self.service.list_all(page=1, page_size=1000)
         self.assertEqual(len(results), 30)
-        self.assertEqual(pagination_info['total_count'], 30)
+        self.assertEqual(pagination_info['total'], 30)
 
     def test_pagination_negative_page(self):
         """Test pagination with negative page number handled gracefully."""
         # Django Paginator.get_page handles invalid page numbers
         results, pagination_info = self.service.list_all(page=-1, page_size=10)
         self.assertIsNotNone(results)
-        self.assertEqual(pagination_info['total_count'], 30)
+        self.assertEqual(pagination_info['total'], 30)
 
 
 @pytest.mark.django_db
@@ -103,12 +103,12 @@ class TestFilteringEdgeCases(TestCase):
     def test_filter_with_none_values(self):
         """Test filtering with None values returns all results."""
         results, pagination_info = self.service.list_all(status=None)
-        self.assertGreaterEqual(pagination_info['total_count'], 2)
+        self.assertGreaterEqual(pagination_info['total'], 2)
 
     def test_filter_with_empty_string(self):
         """Test filtering with empty string treated as no filter."""
         results, pagination_info = self.service.list_all(status='')
-        self.assertGreaterEqual(pagination_info['total_count'], 2)
+        self.assertGreaterEqual(pagination_info['total'], 2)
 
     def test_multi_filter_combination(self):
         """Test multiple filters combined (status + item_type)."""
@@ -116,24 +116,24 @@ class TestFilteringEdgeCases(TestCase):
             status=ActionStatus.PUBLISHED,
             item_type='action'
         )
-        self.assertGreaterEqual(pagination_info['total_count'], 1)
+        self.assertGreaterEqual(pagination_info['total'], 1)
         self.assertTrue(all(a.status == ActionStatus.PUBLISHED for a in results))
 
     def test_filter_nonexistent_status(self):
         """Test filtering with nonexistent status returns empty results."""
         results, pagination_info = self.service.list_all(status='NONEXISTENT')
-        self.assertEqual(pagination_info['total_count'], 0)
+        self.assertEqual(pagination_info['total'], 0)
         self.assertEqual(len(results), 0)
 
     def test_tags_filter_empty_list(self):
         """Test tags filter with empty list returns all results."""
         results, pagination_info = self.service.list_all(tags_filter=[])
-        self.assertGreaterEqual(pagination_info['total_count'], 2)
+        self.assertGreaterEqual(pagination_info['total'], 2)
 
     def test_tags_filter_none(self):
         """Test tags filter with None returns all results."""
         results, pagination_info = self.service.list_all(tags_filter=None)
-        self.assertGreaterEqual(pagination_info['total_count'], 2)
+        self.assertGreaterEqual(pagination_info['total'], 2)
 
 
 @pytest.mark.django_db

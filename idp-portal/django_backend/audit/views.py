@@ -184,7 +184,7 @@ class AuditExecutionsView(APIView):
             raise BadRequestError(code="BAD_REQUEST", message="offset invalide", details={"offset": offset})
 
         qs = _build_audit_queryset(request)
-        total_count = qs.count()
+        total = qs.count()
 
         rows = list(qs[offset : offset + limit])
         execution_ids = [r.entity_id for r in rows if r.entity_id]
@@ -230,7 +230,7 @@ class AuditExecutionsView(APIView):
             )
 
         page = (offset // limit) + 1
-        total_pages = int(ceil(total_count / limit)) if total_count else 1
+        total_pages = int(ceil(total / limit)) if total else 1
 
         return Response(
             {
@@ -238,7 +238,7 @@ class AuditExecutionsView(APIView):
                 "pagination": {
                     "page": page,
                     "page_size": limit,
-                    "total_count": int(total_count),
+                    "total": int(total),
                     "total_pages": total_pages,
                 },
             }
