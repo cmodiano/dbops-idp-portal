@@ -21,6 +21,12 @@ import type { ProfileResponse, ProfileActionPermissionsResponse, ProfileTargetPe
 vi.mock('../../services/profiles_service');
 vi.mock('../../services/admin_service');
 
+import { useEnvironments } from '../../hooks/useEnvironments';
+vi.mock('../../hooks/useEnvironments', () => ({
+  useEnvironments: vi.fn(),
+}));
+const mockUseEnvironments = useEnvironments as ReturnType<typeof vi.fn>;
+
 const mockProfilesService = vi.mocked(profilesService);
 const mockAdminService = vi.mocked(adminService);
 
@@ -67,6 +73,16 @@ describe('ProfileWizard', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseEnvironments.mockReturnValue({
+      environments: ['dev', 'staging', 'prod'],
+      environmentOptions: [
+        { value: 'dev', label: 'Développement' },
+        { value: 'staging', label: 'Staging' },
+        { value: 'prod', label: 'Production' },
+      ],
+      loading: false,
+      error: null,
+    });
     mockAdminService.listActions.mockResolvedValue(mockActions);
     mockAdminService.getTags.mockResolvedValue(mockTags);
     mockProfilesService.createProfile.mockResolvedValue(mockProfile);
@@ -517,6 +533,107 @@ describe('ProfileWizard', () => {
       await waitFor(() => {
         expect(screen.getByLabelText(/Nom du profil/i)).toHaveValue('');
       });
+    });
+  });
+
+  describe('Story 21.6: Environment validation warning (AC6)', () => {
+    it('shows warning when profile has environments not in inventory', async () => {
+      const user = userEvent.setup();
+      // Edit mode with environments including unknown one
+      mockProfilesService.getProfileActions.mockResolvedValue({
+        actions_type: 'all',
+        action_ids: [],
+        tag_patterns: [],
+        environments: ['DEV', 'UNKNOWN_ENV'],
+      });
+
+      renderWithApp(<ProfileWizard {...defaultProps} editProfile={mockProfile} />);
+
+      // Wait for data to load, then navigate to step 2
+      await waitFor(() => {
+        expect(screen.getByLabelText(/Nom du profil/i)).toHaveValue('Test Profile');
+      });
+      await user.click(screen.getByRole('button', { name: /Suivant/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/Attention : environnements non reconnus/)).toBeInTheDocument();
+      });
+      expect(screen.getAllByText(/UNKNOWN_ENV/).length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('does not show warning when all environments are valid', async () => {
+      const user = userEvent.setup();
+      mockProfilesService.getProfileActions.mockResolvedValue({
+        actions_type: 'all',
+        action_ids: [],
+        tag_patterns: [],
+        environments: ['DEV', 'PROD'],
+      });
+
+      renderWithApp(<ProfileWizard {...defaultProps} editProfile={mockProfile} />);
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/Nom du profil/i)).toHaveValue('Test Profile');
+      });
+      await user.click(screen.getByRole('button', { name: /Suivant/i }));
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/Environnements autorisés/i)).toBeInTheDocument();
+      });
+      expect(screen.queryByText(/Attention : environnements non reconnus/)).not.toBeInTheDocument();
+    });
+
+    it('does not show warning with empty environments', async () => {
+      const user = userEvent.setup();
+      mockProfilesService.getProfileActions.mockResolvedValue({
+        actions_type: 'all',
+        action_ids: [],
+        tag_patterns: [],
+        environments: [],
+      });
+
+      renderWithApp(<ProfileWizard {...defaultProps} editProfile={mockProfile} />);
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/Nom du profil/i)).toHaveValue('Test Profile');
+      });
+      await user.click(screen.getByRole('button', { name: /Suivant/i }));
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/Environnements autorisés/i)).toBeInTheDocument();
+      });
+      expect(screen.queryByText(/Attention : environnements non reconnus/)).not.toBeInTheDocument();
+    });
+
+    it('submit button remains enabled despite warning', async () => {
+      const user = userEvent.setup();
+      mockProfilesService.getProfileActions.mockResolvedValue({
+        actions_type: 'all',
+        action_ids: [],
+        tag_patterns: [],
+        environments: ['UNKNOWN_ENV'],
+      });
+
+      renderWithApp(<ProfileWizard {...defaultProps} editProfile={mockProfile} />);
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/Nom du profil/i)).toHaveValue('Test Profile');
+      });
+
+      // Navigate to step 2 to see warning
+      await user.click(screen.getByRole('button', { name: /Suivant/i }));
+      await waitFor(() => {
+        expect(screen.getByText(/Attention : environnements non reconnus/)).toBeInTheDocument();
+      });
+
+      // Navigate to step 3 (Suivant should still work)
+      await user.click(screen.getByRole('button', { name: /Suivant/i }));
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeInTheDocument();
+      });
+
+      // Submit button should not be disabled
+      expect(screen.getByRole('button', { name: /Enregistrer/i })).not.toBeDisabled();
     });
   });
 });

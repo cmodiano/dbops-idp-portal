@@ -199,7 +199,7 @@ class ProfileViewSet(viewsets.ViewSet):
         
         else:  # PUT
             # PUT /admin/profiles/{id}/actions
-            serializer = ProfileActionPermissionsSerializer(data=request.data)
+            serializer = ProfileActionPermissionsSerializer(data=request.data, context={'request': request})
             serializer.is_valid(raise_exception=True)
             
             perm = service.set_action_permissions(profile_id, serializer.validated_data, user=request.user)

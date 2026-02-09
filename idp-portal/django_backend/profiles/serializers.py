@@ -113,7 +113,26 @@ class ProfileActionPermissionsSerializer(serializers.Serializer):
         allow_null=True,
         default=list
     )
-    
+
+    def validate_environments(self, value: list[str] | None) -> list[str]:
+        """Validate environments against inventory (Story 21.6, AC1-3)."""
+        from profiles.validation import validate_environments_against_inventory
+        from core.exceptions import BadRequestError, ServiceUnavailableError
+
+        if not value:
+            return []
+
+        request = self.context.get('request')
+        user_id = request.user.id if request and hasattr(request, 'user') and hasattr(request.user, 'id') else None
+
+        try:
+            return validate_environments_against_inventory(value, user_id=user_id)
+        except BadRequestError as e:
+            raise serializers.ValidationError(e.message)
+        except ServiceUnavailableError:
+            # Re-raise ServiceUnavailableError as-is for HTTP 503 (handled by custom_exception_handler)
+            raise
+
     def validate(self, data):
         """Validate type/fields coherence (equivalent to Pydantic model_validator)."""
         actions_type = data.get('actions_type')

@@ -59,6 +59,15 @@ class ForbiddenError(Exception):
         super().__init__(self.message)
 
 
+class ServiceUnavailableError(Exception):
+    """Exception for 503 Service Unavailable errors (Story 21.6)."""
+    def __init__(self, code="SERVICE_UNAVAILABLE", message="Service unavailable", details=None):
+        self.code = code
+        self.message = message
+        self.details = details or {}
+        super().__init__(self.message)
+
+
 class ConflictError(Exception):
     """Exception for 409 Conflict errors (Story 18.1)."""
     def __init__(self, code="CONFLICT", message="Conflict", details=None):
@@ -205,6 +214,27 @@ def custom_exception_handler(exc, context):
                 }
             },
             status=status.HTTP_403_FORBIDDEN
+        )
+        resp['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
+        return resp
+
+    if isinstance(exc, ServiceUnavailableError):
+        logger.warning(
+            "handled_exception",
+            exception_type="ServiceUnavailableError",
+            code=exc.code,
+            message=exc.message,
+            **request_context
+        )
+        resp = Response(
+            {
+                "error": {
+                    "code": exc.code,
+                    "message": exc.message,
+                    "details": exc.details
+                }
+            },
+            status=status.HTTP_503_SERVICE_UNAVAILABLE
         )
         resp['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
         return resp

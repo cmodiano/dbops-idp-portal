@@ -5,7 +5,7 @@
  * Modal with name, description, ad_group, is_admin, is_auditor; when edit: actions + targets permissions.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Form, Input, Modal, Alert, Switch, Radio, Select } from 'antd';
 import type {
   ProfileCreate,
@@ -65,6 +65,16 @@ export function ProfileForm({
   
   // Story 13.7: Load environments from inventory
   const { environmentOptions, loading: environmentsLoading } = useEnvironments();
+
+  // Story 21.6, AC6: Detect environments not in inventory for warning
+  const watchedEnvironments = Form.useWatch('environments', form);
+  const unknownEnvironments = useMemo(() => {
+    if (!watchedEnvironments?.length || !environmentOptions.length) return [];
+    const validEnvs = new Set(environmentOptions.map((e) => e.value.toLowerCase()));
+    return watchedEnvironments.filter(
+      (env: string) => !validEnvs.has(env.toLowerCase()),
+    );
+  }, [watchedEnvironments, environmentOptions]);
 
   useEffect(() => {
     if (!open) return;
@@ -240,6 +250,15 @@ export function ProfileForm({
                 ) : null
               }
             </Form.Item>
+            {unknownEnvironments.length > 0 && (
+              <Alert
+                type="warning"
+                title="Attention : environnements non reconnus"
+                description={`Les environnements suivants ne sont pas dans l'inventaire : ${unknownEnvironments.join(', ')}. Validation finale au backend.`}
+                showIcon
+                style={{ marginBottom: 8 }}
+              />
+            )}
             <Form.Item name="environments" label="Environnements autorisés">
               <Select
                 mode="multiple"

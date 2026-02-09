@@ -5,7 +5,7 @@
  * Pattern: ActionWizard (Story 2.22).
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Modal, Steps, Button, Form, Input, Select, Radio, Switch, Alert, Space, App } from 'antd';
 import type {
   ProfileCreate,
@@ -225,6 +225,16 @@ export function ProfileWizard({
   const actionsType = Form.useWatch('actions_type', form);
   const targetsType = Form.useWatch('targets_type', form);
 
+  // Story 21.6, AC6: Detect environments not in inventory for warning
+  const watchedEnvironments = Form.useWatch('environments', form);
+  const unknownEnvironments = useMemo(() => {
+    if (!watchedEnvironments?.length || !environmentOptions.length) return [];
+    const validEnvs = new Set(environmentOptions.map((e) => e.value.toLowerCase()));
+    return watchedEnvironments.filter(
+      (env: string) => !validEnvs.has(env.toLowerCase()),
+    );
+  }, [watchedEnvironments, environmentOptions]);
+
   const stepContent = () => {
     return (
       <Form
@@ -314,6 +324,15 @@ export function ProfileWizard({
               </Form.Item>
             )}
 
+            {unknownEnvironments.length > 0 && (
+              <Alert
+                type="warning"
+                title="Attention : environnements non reconnus"
+                description={`Les environnements suivants ne sont pas dans l'inventaire : ${unknownEnvironments.join(', ')}. Validation finale au backend.`}
+                showIcon
+                style={{ marginBottom: 8 }}
+              />
+            )}
             <Form.Item name="environments" label="Environnements autorisés">
               <Select
                 mode="multiple"

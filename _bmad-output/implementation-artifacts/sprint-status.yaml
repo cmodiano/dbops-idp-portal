@@ -282,5 +282,5 @@ development_status:
     21-3-tests-backend-inventaire-executions-profils: done # Tests inventory, executions, profils avec valeurs brutes (lab, etc.) — 50 new tests, 101 total pass — Code review adversarial 2026-02-09: AUCUN PROBLÈME trouvé, qualité exemplaire ✅
     21-4-frontend-editeurs-admin-environnements-dynamiques: done # Code review 2026-02-09: 8 fixes (2 HIGH + 4 MEDIUM + 2 LOW) - constantes deprecated, direction→orientation, error UX, cache invalidation, tests error state - 76/76 tests pass ✅
     21-5-frontend-targetselection-labels-type-executionenvironment: done # Code review 2026-02-09: 2 fixes (2 MEDIUM) - EnvironmentBarChart JSDoc, isEnvironmentAllowed() helper — 113/113 tests pass ✅
-    21-6-validation-environnements-profil-sauvegarde: backlog # Optionnel — validation backend/frontend envs à la sauvegarde profil
+    21-6-validation-environnements-profil-sauvegarde: done # Validation envs backend/frontend à sauvegarde profil — 37 tests (29 backend + 8 frontend) — Code review adversarial 2026-02-09: 5 MEDIUM + 3 LOW fixes, Ant Design API updated, 0 deprecation warnings ✅
     epic-21-retrospective: optional

@@ -2,6 +2,7 @@
  * Tests for ProfileForm (Story 2.9, AC #1, #2, #4).
  * Story 2.10: section Actions autorisées (AC1–AC4).
  * Story 2.11: section Targets autorisés (AC1–AC3).
+ * Story 21.6: environment validation warning (AC6).
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -11,6 +12,13 @@ import { ProfileForm } from './ProfileForm';
 import type { ProfileResponse } from '../../types/api';
 import * as profilesService from '../../services/profiles_service';
 import * as adminService from '../../services/admin_service';
+import { useEnvironments } from '../../hooks/useEnvironments';
+
+vi.mock('../../hooks/useEnvironments', () => ({
+  useEnvironments: vi.fn(),
+}));
+
+const mockUseEnvironments = useEnvironments as ReturnType<typeof vi.fn>;
 
 const mockOnSubmit = vi.fn().mockResolvedValue({ id: 1, name: 'Assurance', ad_group: 'GRP-X' } as ProfileResponse);
 const mockOnCancel = vi.fn();
@@ -38,6 +46,19 @@ const editProfile: ProfileResponse = {
 };
 
 describe('ProfileForm', () => {
+  beforeEach(() => {
+    mockUseEnvironments.mockReturnValue({
+      environments: ['dev', 'staging', 'prod'],
+      environmentOptions: [
+        { value: 'dev', label: 'Développement' },
+        { value: 'staging', label: 'Staging' },
+        { value: 'prod', label: 'Production' },
+      ],
+      loading: false,
+      error: null,
+    });
+  });
+
   it('renders Nouveau profil when not editing', () => {
     render(<ProfileForm {...defaultProps} />);
     expect(screen.getByText('Nouveau profil')).toBeInTheDocument();
@@ -194,6 +215,106 @@ describe('ProfileForm', () => {
       render(<ProfileForm {...defaultProps} editProfile={editProfile} />);
       await waitFor(() => expect(screen.getByText('Targets autorisés')).toBeInTheDocument());
       expect(profilesService.getProfileTargets).toHaveBeenCalledWith(1);
+    });
+  });
+
+  describe('Story 21.6: Environment validation warning (AC6)', () => {
+    beforeEach(() => {
+      mockUseEnvironments.mockReturnValue({
+        environments: ['dev', 'staging', 'prod'],
+        environmentOptions: [
+          { value: 'dev', label: 'Développement' },
+          { value: 'staging', label: 'Staging' },
+          { value: 'prod', label: 'Production' },
+        ],
+        loading: false,
+        error: null,
+      });
+      vi.spyOn(profilesService, 'getProfileTargets').mockResolvedValue({
+        targets_type: 'all',
+        target_names: [],
+        target_patterns: [],
+      });
+      vi.spyOn(adminService, 'listActions').mockResolvedValue([]);
+      vi.spyOn(adminService, 'getTags').mockResolvedValue([]);
+      vi.spyOn(profilesService, 'putProfileActions').mockResolvedValue({
+        actions_type: 'all',
+        action_ids: [],
+        tag_patterns: [],
+        environments: [],
+      });
+      vi.spyOn(profilesService, 'putProfileTargets').mockResolvedValue({
+        targets_type: 'all',
+        target_names: [],
+        target_patterns: [],
+      });
+    });
+
+    it('shows warning when profile has environments not in inventory (AC6)', async () => {
+      // Profile loaded from backend has 'unknown_env' not in inventory
+      vi.spyOn(profilesService, 'getProfileActions').mockResolvedValue({
+        actions_type: 'all',
+        action_ids: [],
+        tag_patterns: [],
+        environments: ['DEV', 'UNKNOWN_ENV'],
+      });
+
+      render(<ProfileForm {...defaultProps} editProfile={editProfile} />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Attention : environnements non reconnus/)).toBeInTheDocument();
+      });
+      expect(screen.getAllByText(/UNKNOWN_ENV/).length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('does not show warning when all environments are valid (AC6)', async () => {
+      vi.spyOn(profilesService, 'getProfileActions').mockResolvedValue({
+        actions_type: 'all',
+        action_ids: [],
+        tag_patterns: [],
+        environments: ['DEV', 'PROD'],
+      });
+
+      render(<ProfileForm {...defaultProps} editProfile={editProfile} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Environnements autorisés')).toBeInTheDocument();
+      });
+      expect(screen.queryByText(/Attention : environnements non reconnus/)).not.toBeInTheDocument();
+    });
+
+    it('does not show warning with empty environments (AC6)', async () => {
+      vi.spyOn(profilesService, 'getProfileActions').mockResolvedValue({
+        actions_type: 'all',
+        action_ids: [],
+        tag_patterns: [],
+        environments: [],
+      });
+
+      render(<ProfileForm {...defaultProps} editProfile={editProfile} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Environnements autorisés')).toBeInTheDocument();
+      });
+      expect(screen.queryByText(/Attention : environnements non reconnus/)).not.toBeInTheDocument();
+    });
+
+    it('submit button remains enabled despite warning (AC6)', async () => {
+      vi.spyOn(profilesService, 'getProfileActions').mockResolvedValue({
+        actions_type: 'all',
+        action_ids: [],
+        tag_patterns: [],
+        environments: ['UNKNOWN_ENV'],
+      });
+
+      render(<ProfileForm {...defaultProps} editProfile={editProfile} />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Attention : environnements non reconnus/)).toBeInTheDocument();
+      });
+
+      const submitButton = screen.getByRole('button', { name: /Enregistrer/i });
+      expect(submitButton).not.toBeDisabled();
     });
   });
 });

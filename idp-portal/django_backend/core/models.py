@@ -59,6 +59,8 @@ class AuditActionType(models.TextChoices):
     # Story 17.12: Feature flag audit types
     FEATURE_FLAG_UPDATED = 'FEATURE_FLAG_UPDATED', 'Feature Flag Updated'
     FEATURE_FLAG_CREATED = 'FEATURE_FLAG_CREATED', 'Feature Flag Created'
+    # Story 21.6: Profile environment validation audit
+    PROFILE_UPDATE_REJECTED = 'PROFILE_UPDATE_REJECTED', 'Profile Update Rejected'
     # Additional types added in later migrations (V028-V035, V039-V041)
     # Note: Full list would include all types from migrations, but base types are sufficient for model
 
