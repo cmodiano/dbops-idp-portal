@@ -304,7 +304,7 @@ development_status:
     22-15-corriger-med-1-serialisation-date-timezone: done # 2026-02-09: Code review — 6 HIGH + 2 MEDIUM + 1 LOW fixes, 29 backend tests + 11 frontend tests pass
     22-16-corriger-med-3-med-4-cache-feature-flags: done # Code review adversarial: 10 issues (3 HIGH + 4 MEDIUM + 3 LOW), 7 auto-fixed (lock token race, reduced timeout, production validation, observability, config documented), 71/71 tests pass ✅
     22-17-corriger-med-5-cache-inventaire-sessionstorage: done # 2026-02-09: localStorage→sessionStorage + validation JSON + tests robustesse, code review adversarial: 10 issues (5 CRIT + 3 MED) auto-fixés, 53/53 tests pass ✅
-    22-18-corriger-med-6-champ-requires-target-types-frontend: backlog
+    22-18-corriger-med-6-champ-requires-target-types-frontend: done # 2026-02-09: MED-6 fix — requires_target ajouté dans ActionResponse/ActionListItem/ActionPreviewData, code review 6 issues corrigés (3 HIGH + 3 MEDIUM), 53 tests pass
     22-19-rendre-mypy-bloquant-progressivement: backlog
     22-20-integrer-drf-spectacular-documentation-api: backlog
     epic-22-retrospective: optional

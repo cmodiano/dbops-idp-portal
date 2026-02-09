@@ -68,6 +68,13 @@ export interface ActionResponse {
   tags?: string[];
   /** Story 3.4 FR12: Markdown documentation for contextual help. */
   documentation_md?: string | null;
+  /**
+   * Story 13.2, AC3: Whether action requires target selection (default true).
+   * Story 22.18: MED-6 fix (code-quality-assessment-2026-02-08.md:442-445).
+   * Optional because frontend uses defensive logic (!== false) to assume true by default,
+   * consistent with backend models.BooleanField(default=True).
+   */
+  requires_target?: boolean;
 }
 
 /** Per-environment change config (Story 2.24). required=true implies change_model_code required, alphanumeric max 50. */
@@ -172,6 +179,8 @@ export interface ActionListItem {
   deleted_at?: string | null;
   deleted_by?: number | null;
   deletion_reason?: string | null;
+  /** Story 22.18: MED-6 fix — Whether action requires target selection (default true). */
+  requires_target?: boolean;
 }
 
 export interface AdminActionsFilters {
@@ -253,6 +262,8 @@ export interface ActionPreviewData {
   documentation_md?: string | null;
   /** Story 8.1: Performance stats for action scorecard (optional, loaded separately). */
   stats?: ActionStats | null;
+  /** Story 22.18: MED-6 fix — Whether action requires target selection (default true). */
+  requires_target?: boolean;
 }
 
 /**

@@ -245,7 +245,7 @@ export function ExecutionWizard({
       // Story 17.15: Apply initialParams for restart execution
       if (initialParams?.environment) {
         setSelectedEnvironment(initialParams.environment as ExecutionEnvironment);
-      } else if (action.requires_target === false && allowedEnvironments.length === 1) {
+      } else if (action?.requires_target === false && allowedEnvironments.length === 1) {
         setSelectedEnvironment(allowedEnvironments[0] as ExecutionEnvironment);
       } else {
         setSelectedEnvironment(null);
