@@ -46,6 +46,13 @@ class GateEvaluator:
             return True, {'gates': [], 'timeout_triggered': False}
 
         gate_conditions = output['gate_conditions']
+        params = step.execution.get_parameters() if hasattr(step.execution, "get_parameters") else {}
+        env_config = (params or {}).get("_env_config") if isinstance(params, dict) else None
+        requires_maintenance_window = False
+        requires_approval = False
+        if isinstance(env_config, dict):
+            requires_maintenance_window = bool(env_config.get("requires_maintenance_window", False))
+            requires_approval = bool(env_config.get("requires_approval", False))
 
         # Validate gate_conditions schema (Story 25.3 code review fix: HIGH-4)
         if not isinstance(gate_conditions, list):
@@ -109,7 +116,21 @@ class GateEvaluator:
             gate_type = condition.get('type')
             match gate_type:
                 case 'maintenance_window':
-                    satisfied, context = self._check_maintenance_window(step, condition)
+                    # Story 25.4: if maintenance window is not required for this env, auto-satisfy.
+                    if not requires_maintenance_window:
+                        satisfied = True
+                        context = {'reason': "Plage de maintenance non requise pour cet environnement"}
+                    else:
+                        satisfied, context = self._check_maintenance_window(step, condition)
+                case 'approval_granted':
+                    # Story 25.4: if approval is not required for this env, auto-satisfy.
+                    # If required=true, the actual approval mechanism is handled by a separate flow (future story).
+                    if not requires_approval:
+                        satisfied = True
+                        context = {'reason': "Approbation non requise pour cet environnement"}
+                    else:
+                        satisfied = False
+                        context = {'reason': "Approbation requise mais mécanisme d'approbation non implémenté"}
                 case _:
                     # Unsupported gate types are not satisfied (future stories)
                     satisfied = False

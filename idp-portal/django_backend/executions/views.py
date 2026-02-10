@@ -298,11 +298,37 @@ class ExecutionsView(APIView):
 
         # Story 21.2, Task 4: Case-insensitive environment config lookup
         # Get environment-specific config from action
-        change_type_config = action.change_type_config or {}
+        change_type_config_raw = action.change_type_config
+        if change_type_config_raw is None:
+            change_type_config = {}
+        elif not isinstance(change_type_config_raw, dict):
+            # Defensive: misconfigured data should not crash execution creation.
+            exec_logger.warning(
+                "invalid_change_type_config_type_ignored",
+                action_id=action.id,
+                value_type=type(change_type_config_raw).__name__,
+                correlation_id=correlation_id,
+            )
+            change_type_config = {}
+        else:
+            change_type_config = change_type_config_raw
         env_str: str = str(environment) if environment else ""
         env_change_config = _get_env_config_case_insensitive(change_type_config, env_str)
         change_required = env_change_config.get("required", False)
         change_model_code = env_change_config.get("change_model_code")
+
+        # Story 25.4: allowed=false → reject submission for this environment
+        allowed = env_change_config.get("allowed", True)
+        if allowed is False:
+            raise BadRequestError(
+                code="EXECUTION_NOT_ALLOWED_FOR_ENVIRONMENT",
+                message=f"L'exécution de cette action n'est pas autorisée pour l'environnement {env_str}.",
+                details={"environment": env_str, "action_id": action.id},
+            )
+
+        # Story 25.4: read requires_maintenance_window, requires_approval for downstream (gates, ServiceNow)
+        requires_maintenance_window = env_change_config.get("requires_maintenance_window", False)
+        requires_approval = env_change_config.get("requires_approval", False)
 
         # Task 4.3: Get impact_rules for this environment (case-insensitive)
         impact_rules = action.impact_rules or {}
@@ -317,15 +343,19 @@ class ExecutionsView(APIView):
             change_required=change_required,
             change_model_code=change_model_code,
             impact_level=impact_level,
+            requires_maintenance_window=requires_maintenance_window,
+            requires_approval=requires_approval,
             correlation_id=correlation_id
         )
 
-        # Store environment config in parameters for downstream use
+        # Store environment config in parameters for downstream use (Story 25.4: + requires_maintenance_window, requires_approval)
         parameters = parameters.copy() if parameters else {}
         parameters['_env_config'] = {
             'change_required': change_required,
             'change_model_code': change_model_code,
             'impact_level': impact_level,
+            'requires_maintenance_window': requires_maintenance_window,
+            'requires_approval': requires_approval,
         }
 
         # Story 13.5: Detect source and capture IP for audit traceability

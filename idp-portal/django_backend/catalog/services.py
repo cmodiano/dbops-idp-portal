@@ -124,7 +124,11 @@ class CatalogService:
         if 'execution_steps' in action_data:
             action.execution_steps = _json_value(action_data['execution_steps'])
         if 'change_type_config' in action_data:
-            action.change_type_config = _json_value(action_data['change_type_config'])
+            ctc = _json_value(action_data['change_type_config'])
+            if ctc is not None:
+                from catalog.validators import validate_change_type_config
+                validate_change_type_config(ctc)
+            action.change_type_config = ctc
         if 'remediation_rules' in action_data:
             action.remediation_rules = _json_value(action_data['remediation_rules'])
         action.save()
@@ -626,8 +630,10 @@ class CatalogService:
 
             action.execution_steps = steps
 
-        # Update change_type_config if provided
+        # Update change_type_config if provided (Story 25.4: validated)
         if change_type_config is not None:
+            from catalog.validators import validate_change_type_config
+            validate_change_type_config(change_type_config)
             action.change_type_config = change_type_config
 
         action.save()

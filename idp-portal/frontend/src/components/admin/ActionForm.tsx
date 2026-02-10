@@ -303,6 +303,11 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
                 {
                   required: e?.required ?? false,
                   change_model_code: e?.required ? (e.change_model_code?.trim() || null) : null,
+                  change_type: (e?.change_type ?? null) ? String(e.change_type).trim() || null : null,
+                  template_id: (e?.template_id ?? null) ? String(e.template_id).trim() || null : null,
+                  allowed: e?.allowed ?? true,
+                  requires_maintenance_window: e?.requires_maintenance_window ?? false,
+                  requires_approval: e?.requires_approval ?? false,
                 },
               ])
             )

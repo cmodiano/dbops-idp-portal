@@ -1,7 +1,10 @@
 """
 Validators for catalog app.
 Story 25.2: gate_conditions validation for execution steps.
+Story 25.4: change_type_config validation (allowed, requires_maintenance_window, requires_approval).
 """
+
+import re
 
 from rest_framework.exceptions import ValidationError
 
@@ -80,3 +83,90 @@ def validate_gate_conditions(gate_conditions: list) -> None:
 
     if errors:
         raise ValidationError(errors)
+
+
+def validate_change_type_config(change_type_config: dict | None) -> None:
+    """
+    Validate change_type_config per-environment structure (Story 25.4).
+
+    Per-env keys: change_type, template_id, required, change_model_code,
+    requires_maintenance_window, requires_approval, allowed.
+
+    Rules:
+    - Each env value must be a dict
+    - allowed: must be bool if present (default: true if absent)
+    - requires_maintenance_window, requires_approval: must be bool if present
+    - If required=true for an env, change_model_code must be non-empty and alphanumeric (max 50)
+
+    Raises:
+        ValidationError: If any validation rule fails
+    """
+    if change_type_config is None:
+        return
+    if not isinstance(change_type_config, dict):
+        # Defensive: prevent persisting invalid JSON that would later crash execution validation.
+        raise ValidationError(
+            "change_type_config doit être un objet JSON (mapping d'environnements vers configuration)"
+        )
+
+    for env_key, env_value in change_type_config.items():
+        # Skip non-dict values (legacy flat format e.g. {'type': 'standard'})
+        if not isinstance(env_value, dict):
+            continue
+
+        # required: bool if present
+        if 'required' in env_value:
+            val = env_value['required']
+            if not isinstance(val, bool):
+                raise ValidationError(
+                    f"change_type_config.{env_key}.required: doit être un booléen (true/false)"
+                )
+
+        # allowed: bool if present
+        if 'allowed' in env_value:
+            val = env_value['allowed']
+            if not isinstance(val, bool):
+                raise ValidationError(
+                    f"change_type_config.{env_key}.allowed: doit être un booléen (true/false)"
+                )
+
+        # change_type, template_id: strings if present (Story 25.4 AC2)
+        for field, max_len in (('change_type', 50), ('template_id', 100)):
+            if field in env_value:
+                val = env_value[field]
+                if val is None:
+                    continue
+                if not isinstance(val, str):
+                    raise ValidationError(
+                        f"change_type_config.{env_key}.{field}: doit être une chaîne"
+                    )
+                if len(val.strip()) > max_len:
+                    raise ValidationError(
+                        f"change_type_config.{env_key}.{field}: max {max_len} caractères"
+                    )
+
+        # requires_maintenance_window, requires_approval: bool if present
+        for field in ('requires_maintenance_window', 'requires_approval'):
+            if field in env_value:
+                val = env_value[field]
+                if not isinstance(val, bool):
+                    raise ValidationError(
+                        f"change_type_config.{env_key}.{field}: doit être un booléen (true/false)"
+                    )
+
+        # required=true → change_model_code required, alphanumeric, max 50
+        if env_value.get('required') is True:
+            code = env_value.get('change_model_code')
+            if not code or not str(code).strip():
+                raise ValidationError(
+                    f"change_type_config.{env_key}: change_model_code obligatoire quand required=true"
+                )
+            code_str = str(code).strip()
+            if not re.fullmatch(r'[A-Za-z0-9]+', code_str):
+                raise ValidationError(
+                    f"change_type_config.{env_key}: change_model_code doit être alphanumérique"
+                )
+            if len(code_str) > 50:
+                raise ValidationError(
+                    f"change_type_config.{env_key}: change_model_code max 50 caractères"
+                )

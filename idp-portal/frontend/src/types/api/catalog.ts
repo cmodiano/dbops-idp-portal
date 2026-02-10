@@ -77,10 +77,20 @@ export interface ActionResponse {
   requires_target?: boolean;
 }
 
-/** Per-environment change config (Story 2.24). required=true implies change_model_code required, alphanumeric max 50. */
+/** Per-environment change config (Story 2.24; Story 25.4: + requires_maintenance_window, requires_approval, allowed). */
 export interface ChangeTypeConfigEntry {
   required: boolean;
   change_model_code?: string | null;
+  /** Story 25.4 AC2: Optional ServiceNow change type (e.g. standard/normal/emergency). */
+  change_type?: string | null;
+  /** Story 25.4 AC2: Optional ServiceNow template ID (if applicable). */
+  template_id?: string | null;
+  /** Story 25.4: If false, execution refused for this env. Default true. */
+  allowed?: boolean;
+  /** Story 25.4: Require maintenance window gate. Default false. */
+  requires_maintenance_window?: boolean;
+  /** Story 25.4: Require approval before execution. Default false. */
+  requires_approval?: boolean;
 }
 
 /** Workflow step - reference to an existing action (Story 5.7, AC2; Story 16.2 branches & retry). */

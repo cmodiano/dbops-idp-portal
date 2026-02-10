@@ -294,6 +294,25 @@ export function ActionWizard({
         }
       }
 
+      // Story 25.4: validate change_type_config — when required=true, change_model_code required and alphanumeric max 50
+      for (const [env, entry] of Object.entries(changeTypeConfig)) {
+        if (entry?.required) {
+          const code = (entry.change_model_code ?? '').trim();
+          if (!code) {
+            setSubmitError(`Le code modèle est obligatoire pour ${env} lorsque « Changement requis » est activé.`);
+            return;
+          }
+          if (!/^[A-Za-z0-9]+$/.test(code)) {
+            setSubmitError(`Le code modèle pour ${env} doit être alphanumérique uniquement.`);
+            return;
+          }
+          if (code.length > 50) {
+            setSubmitError(`Le code modèle pour ${env} ne peut pas dépasser 50 caractères.`);
+            return;
+          }
+        }
+      }
+
       if (values.platform === 'AAP' && (aapTemplateId == null || aapTemplateId < 1)) {
         setSubmitError('Pour la plateforme AAP, l\'ID du template (job ou workflow) est requis.');
         return;
@@ -378,7 +397,15 @@ export function ActionWizard({
             ? Object.fromEntries(
                 Object.entries(changeTypeConfig).map(([env, e]) => [
                   env,
-                  { required: e?.required ?? false, change_model_code: e?.required ? (e.change_model_code?.trim() || null) : null },
+                  {
+                    required: e?.required ?? false,
+                    change_model_code: e?.required ? (e.change_model_code?.trim() || null) : null,
+                    change_type: (e?.change_type ?? null) ? String(e.change_type).trim() || null : null,
+                    template_id: (e?.template_id ?? null) ? String(e.template_id).trim() || null : null,
+                    allowed: e?.allowed ?? true,
+                    requires_maintenance_window: e?.requires_maintenance_window ?? false,
+                    requires_approval: e?.requires_approval ?? false,
+                  },
                 ])
               )
             : null;
