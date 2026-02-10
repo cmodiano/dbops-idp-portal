@@ -70,13 +70,16 @@ __all__ = [
 def _get_env_config_case_insensitive(config: dict, env: str) -> dict:
     """
     Story 21.2, Task 4.1: Helper to get environment-specific config with case-insensitive lookup.
+    Story 25.4: Returned dict may include requires_maintenance_window, requires_approval, allowed.
 
     Args:
         config: Dictionary with environment keys (e.g., {"DEV": {...}, "STAGING": {...}})
         env: Environment string (case-insensitive)
 
     Returns:
-        Config dict for the environment, or empty dict if not found
+        Config dict for the environment, or empty dict if not found.
+        Per-env keys: required, change_model_code, change_type, template_id,
+        requires_maintenance_window, requires_approval, allowed (Story 25.4).
     """
     if not config or not env:
         return {}
