@@ -628,6 +628,129 @@ class ActionViewSet(viewsets.ModelViewSet):
         serializer = ActionSerializer(reloaded)
         return Response({"data": serializer.data})
 
+    @action(detail=True, methods=['get', 'post'], url_path='mutex')
+    def mutex_rules(self, request, pk=None):
+        """
+        GET /admin/actions/{id}/mutex/ - List mutex rules for this action.
+        POST /admin/actions/{id}/mutex/ - Create a mutex rule.
+        Story 25.5, Task 4.1: CRUD operations for mutex rules.
+        """
+        from catalog.models import ActionMutex
+        from catalog.serializers import ActionMutexSerializer, ActionMutexCreateSerializer
+        
+        action = self.get_object()
+        
+        if request.method == 'GET':
+            # List rules where this action is involved (either side)
+            rules = ActionMutex.objects.filter(
+                Q(action=action) | Q(incompatible_with=action)
+            ).select_related('action', 'incompatible_with')
+            
+            serializer = ActionMutexSerializer(rules, many=True)
+            return Response({"data": serializer.data})
+        
+        elif request.method == 'POST':
+            # Create mutex rule
+            # Pass action_id to serializer context for validation
+            serializer = ActionMutexCreateSerializer(
+                data=request.data,
+                context={'action_id': action.id}
+            )
+            serializer.is_valid(raise_exception=True)
+            
+            # Create the primary rule (A→B)
+            # Code Review Fix HIGH-3: Allow NULL description instead of forcing empty string
+            mutex_rule = ActionMutex.objects.create(
+                action=action,
+                incompatible_with_id=serializer.validated_data['incompatible_with_id'],
+                same_target=serializer.validated_data['same_target'],
+                description=serializer.validated_data.get('description'),
+            )
+            
+            # Story 25.5, Task 2.3 Option A: Create symmetric rule (B→A) automatically
+            # Check if symmetric rule already exists
+            symmetric_exists = ActionMutex.objects.filter(
+                action_id=serializer.validated_data['incompatible_with_id'],
+                incompatible_with=action
+            ).exists()
+            
+            if not symmetric_exists:
+                ActionMutex.objects.create(
+                    action_id=serializer.validated_data['incompatible_with_id'],
+                    incompatible_with=action,
+                    same_target=serializer.validated_data['same_target'],
+                    description=serializer.validated_data.get('description'),
+                )
+                logger.info(
+                    "mutex_symmetric_rule_created",
+                    action_id=action.id,
+                    incompatible_with_id=serializer.validated_data['incompatible_with_id'],
+                    same_target=serializer.validated_data['same_target'],
+                    correlation_id=get_correlation_id(),
+                )
+            
+            response_serializer = ActionMutexSerializer(mutex_rule)
+            return Response({"data": response_serializer.data}, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['delete'], url_path='mutex/(?P<rule_id>[^/.]+)')
+    def delete_mutex_rule(self, request, pk=None, rule_id=None):
+        """
+        DELETE /admin/actions/{id}/mutex/{rule_id}/ - Delete a mutex rule.
+        Story 25.5, Task 4.1: Deletes rule and optionally its symmetric counterpart.
+        """
+        from catalog.models import ActionMutex
+        
+        action = self.get_object()
+        
+        # Find the rule
+        try:
+            mutex_rule = ActionMutex.objects.get(
+                id=rule_id,
+                action=action
+            )
+        except ActionMutex.DoesNotExist:
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message=f"Règle mutex {rule_id} non trouvée pour cette action",
+                details={"action_id": action.id, "rule_id": rule_id}
+            )
+        
+        # Store data for symmetric rule deletion
+        incompatible_with_id = mutex_rule.incompatible_with_id
+        same_target = mutex_rule.same_target
+        
+        # Delete the primary rule
+        mutex_rule.delete()
+        
+        # Task 2.3: Delete symmetric rule if it exists
+        # Story 25.5 Code Review Fix: Remove without strict same_target filter to handle inconsistencies
+        symmetric_rules = ActionMutex.objects.filter(
+            action_id=incompatible_with_id,
+            incompatible_with=action
+        )
+        
+        # Log warning if multiple symmetric rules found (data inconsistency)
+        if symmetric_rules.count() > 1:
+            logger.warning(
+                "mutex_multiple_symmetric_rules_found",
+                action_id=action.id,
+                incompatible_with_id=incompatible_with_id,
+                count=symmetric_rules.count(),
+                correlation_id=get_correlation_id(),
+            )
+        
+        if symmetric_rules.exists():
+            deleted_count = symmetric_rules.delete()[0]
+            logger.info(
+                "mutex_symmetric_rule_deleted",
+                action_id=action.id,
+                incompatible_with_id=incompatible_with_id,
+                deleted_count=deleted_count,
+                correlation_id=get_correlation_id(),
+            )
+        
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 # Story 3.1 AC10: in-memory cache for catalog, TTL 5 min (300s)
 _catalog_cache: TTLCache[str, list[dict]] = TTLCache(maxsize=1000, ttl=300)

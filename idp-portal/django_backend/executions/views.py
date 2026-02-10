@@ -55,6 +55,7 @@ from executions.utils import (
     _apply_execution_filters,
     _parse_iso_datetime,
     _calculate_next_execution_date,
+    validate_action_mutex,
 )
 from inventory.services import InventoryService, InventoryServiceError, MAX_TARGETS_FOR_RBAC_FILTER
 from core.throttling import ExecutionThrottle, GeneralAPIThrottle
@@ -197,6 +198,8 @@ class ExecutionsView(APIView):
                 _validate_environment_against_inventory(environment, user_id=request.user.id)
 
         # Story 13.2, Task 5 & 6: Handle target_names with RBAC validation
+        # Story 25.5: Initialize validated_targets to avoid NameError for actions without targets
+        validated_targets = []
         if target_names:
             if not isinstance(target_names, list) or len(target_names) == 0:
                 raise BadRequestError(
@@ -388,6 +391,16 @@ class ExecutionsView(APIView):
             # Store for runtime (Story 4.12 AC5 will consume it)
             parameters = parameters.copy() if parameters else {}
             parameters["workflow_step_parameters"] = normalized_wsp
+
+        # Story 25.5: Validate action mutex rules before creating execution
+        # Extract target_ids from validated_targets for mutex check
+        target_ids_for_mutex = [t['name'] for t in validated_targets] if validated_targets else []
+        validate_action_mutex(
+            action=action,
+            target_ids=target_ids_for_mutex,
+            correlation_id=correlation_id,
+            user_id=str(request.user.id),
+        )
 
         execution = ExecutionService().create_execution(
             user=request.user,

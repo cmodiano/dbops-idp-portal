@@ -303,3 +303,47 @@ class UserFavorite(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.action.name}"
+
+
+class ActionMutex(models.Model):
+    """
+    ActionMutex model mapping to Oracle ACTION_MUTEX table (V070).
+    Story 25.5: Defines mutual exclusion rules between actions.
+    Prevents incompatible operations from running simultaneously.
+    """
+    action = models.ForeignKey(
+        Action,
+        on_delete=models.CASCADE,
+        db_column='ACTION_ID',
+        related_name='mutex_rules'
+    )
+    incompatible_with = models.ForeignKey(
+        Action,
+        on_delete=models.CASCADE,
+        db_column='INCOMPATIBLE_WITH_ID',
+        related_name='incompatible_mutex_rules'
+    )
+    same_target = models.BooleanField(
+        db_column='SAME_TARGET',
+        help_text='If True: mutex applies only when targeting same target_id. If False: mutex applies globally.'
+    )
+    description = models.CharField(
+        max_length=500,
+        db_column='DESCRIPTION',
+        blank=True,
+        null=True,
+        help_text='Human-readable explanation of why these actions are incompatible'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        db_column='CREATED_AT'
+    )
+
+    class Meta:
+        db_table = 'ACTION_MUTEX'
+        unique_together = [['action', 'incompatible_with']]
+        ordering = ['action', 'incompatible_with']
+
+    def __str__(self):
+        scope = "same target" if self.same_target else "global"
+        return f"{self.action.name} ⊗ {self.incompatible_with.name} ({scope})"
