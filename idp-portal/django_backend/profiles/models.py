@@ -235,6 +235,12 @@ class ProfileTargetPermission(models.Model):
         db_column='FILTER_BY_ATTRIBUTE_JSON',
         help_text='JSON dict filtering targets by inventory attributes. Format: {"engine_type": ["oracle"], ...}'
     )
+    exclusion_patterns_json = models.TextField(
+        null=True,
+        blank=True,
+        db_column='EXCLUSION_PATTERNS_JSON',
+        help_text='JSON array filtering out targets matching any pattern. Applied after inclusion rules. Format: ["PROD-CRITICAL-*", "DR-*"]. Story 25.6'
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
     updated_at = models.DateTimeField(auto_now=True, db_column='UPDATED_AT')
 
@@ -313,3 +319,52 @@ class ProfileTargetPermission(models.Model):
             self.filter_by_attribute_json = json.dumps(value)
         else:
             self.filter_by_attribute_json = None
+
+    def get_exclusion_patterns(self) -> list[str]:
+        """
+        Deserialize exclusion_patterns from JSON CLOB.
+
+        Returns:
+            List of exclusion patterns, or empty list if not set.
+            Example: ["PROD-CRITICAL-*", "DR-*"]
+
+        Story 25.6 - Deny explicit RBAC (exclusion patterns).
+        Code review fix: Use ERROR level for data corruption (consistency with filter_by_attribute).
+        """
+        if self.exclusion_patterns_json:
+            try:
+                patterns = json.loads(self.exclusion_patterns_json)
+                # Validate that it's a list of strings
+                if not isinstance(patterns, list):
+                    # Code review fix: ERROR (not WARNING) - this is data corruption
+                    logger.error(
+                        f"exclusion_patterns for Profile {self.profile_id} is not a list (data corruption), returning empty"
+                    )
+                    return []
+                # Filter out invalid patterns (non-string, empty)
+                valid_patterns = [p for p in patterns if isinstance(p, str) and p.strip()]
+                if len(valid_patterns) != len(patterns):
+                    logger.warning(
+                        f"exclusion_patterns for Profile {self.profile_id} contained invalid patterns (filtered out)"
+                    )
+                return valid_patterns
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.error(
+                    f"Failed to deserialize exclusion_patterns for Profile {self.profile_id}: {e}"
+                )
+                return []
+        return []
+
+    def set_exclusion_patterns(self, value: list[str] | None) -> None:
+        """
+        Serialize exclusion_patterns to JSON CLOB.
+
+        Args:
+            value: List of exclusion patterns (strings), or None to clear.
+
+        Story 25.6 - Deny explicit RBAC (exclusion patterns).
+        """
+        if value is not None:
+            self.exclusion_patterns_json = json.dumps(value)
+        else:
+            self.exclusion_patterns_json = None

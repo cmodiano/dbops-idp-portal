@@ -231,6 +231,13 @@ class ProfileTargetPermissionsSerializer(serializers.Serializer):
         allow_null=True,
         help_text="Filter targets by inventory attributes. Keys must be valid concept names from inventory mapping."
     )
+    exclusion_patterns = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+        allow_null=True,
+        default=list,
+        help_text="Deny patterns (applied after inclusion rules). Glob-style: PROD-CRITICAL-*, DR-*. Story 25.6"
+    )
 
     def validate_filter_by_attribute(self, value):
         """
@@ -270,6 +277,63 @@ class ProfileTargetPermissionsSerializer(serializers.Serializer):
         )
 
         return value
+
+    def validate_exclusion_patterns(self, value):
+        """
+        Validate exclusion_patterns are non-empty strings.
+        Story 25.6 - AC2.
+        Code review fix: Enforce max 100 patterns limit (performance).
+        """
+        if value is None:
+            return None
+        
+        if not isinstance(value, list):
+            raise serializers.ValidationError("exclusion_patterns must be a list")
+        
+        # Filter out invalid patterns (non-string, empty/whitespace only)
+        invalid_patterns = []
+        for pattern in value:
+            if not isinstance(pattern, str):
+                invalid_patterns.append(f"{pattern} (not a string)")
+            elif not pattern.strip():
+                invalid_patterns.append("(empty or whitespace)")
+        
+        if invalid_patterns:
+            raise serializers.ValidationError(
+                f"Invalid exclusion patterns: {', '.join(invalid_patterns)}. "
+                "Each pattern must be a non-empty string."
+            )
+        
+        # Return list of stripped patterns
+        stripped_patterns = [p.strip() for p in value if isinstance(p, str) and p.strip()]
+        
+        # Code review fix: Enforce performance limit (max 100 patterns)
+        MAX_EXCLUSION_PATTERNS = 100
+        if len(stripped_patterns) > MAX_EXCLUSION_PATTERNS:
+            raise serializers.ValidationError(
+                f"Too many exclusion patterns ({len(stripped_patterns)}). "
+                f"Maximum allowed: {MAX_EXCLUSION_PATTERNS} (performance limit)."
+            )
+        
+        # Warning if approaching limit (> 50 patterns)
+        if len(stripped_patterns) > 50:
+            logger.warning(
+                "profile_exclusion_patterns_high_count",
+                patterns_count=len(stripped_patterns),
+                max_allowed=MAX_EXCLUSION_PATTERNS,
+                message="High number of exclusion patterns may impact RBAC performance",
+                correlation_id=get_correlation_id()
+            )
+        
+        logger.info(
+            "profile_exclusion_patterns_validated",
+            patterns=stripped_patterns,
+            patterns_count=len(stripped_patterns),
+            validation_result="success",
+            correlation_id=get_correlation_id()
+        )
+        
+        return stripped_patterns
 
     def validate(self, data):
         """Validate type/fields coherence (equivalent to Pydantic model_validator)."""
@@ -321,5 +385,6 @@ class ProfileTargetPermissionsSerializer(serializers.Serializer):
                 'target_names': instance.get_target_names(),
                 'target_patterns': instance.get_target_patterns(),
                 'filter_by_attribute': instance.get_filter_by_attribute(),
+                'exclusion_patterns': instance.get_exclusion_patterns(),  # Story 25.6
             }
         return super().to_representation(instance)

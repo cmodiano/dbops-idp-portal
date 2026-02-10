@@ -315,6 +315,9 @@ class ProfileService:
             perm.set_target_patterns(permission_data['target_patterns'])
         if 'filter_by_attribute' in permission_data:
             perm.set_filter_by_attribute(permission_data['filter_by_attribute'])
+        # Story 25.6: Persist exclusion_patterns
+        if 'exclusion_patterns' in permission_data:
+            perm.set_exclusion_patterns(permission_data['exclusion_patterns'])
         perm.save()
 
         return perm

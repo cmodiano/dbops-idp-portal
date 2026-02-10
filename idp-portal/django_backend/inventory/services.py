@@ -466,6 +466,8 @@ class InventoryService:
         target_restrictions: list[tuple[str, list[str] | None]] = []
         # Story 23.4: Collect attribute filters per profile for post-restriction filtering
         attribute_filters: list[dict | None] = []
+        # Story 25.6: Collect exclusion patterns from all profiles (union = most restrictive)
+        all_exclusion_patterns: list[str] = []
         has_all_access = False
         all_access_attribute_filters: list[dict | None] = []
 
@@ -509,6 +511,25 @@ class InventoryService:
                 except Exception as e:
                     logger.error(
                         "rbac_filter_by_attribute_error",
+                        profile_id=profile.id,
+                        error=str(e),
+                        correlation_id=correlation_id
+                    )
+                
+                # Story 25.6: Get exclusion patterns for this profile
+                try:
+                    patterns = target_perm.get_exclusion_patterns()
+                    if patterns:
+                        all_exclusion_patterns.extend(patterns)
+                        logger.debug(
+                            "rbac_exclusion_patterns_collected",
+                            profile_id=profile.id,
+                            patterns=patterns,
+                            correlation_id=correlation_id
+                        )
+                except Exception as e:
+                    logger.warning(
+                        "rbac_exclusion_patterns_error",
                         profile_id=profile.id,
                         error=str(e),
                         correlation_id=correlation_id
@@ -671,6 +692,17 @@ class InventoryService:
             attribute_filters,
             correlation_id,
         )
+        after_attribute_filter_count = len(filtered_targets)
+
+        # Story 25.6: Apply exclusion patterns (deny explicit - applied AFTER inclusion and attributes)
+        if all_exclusion_patterns:
+            # Deduplicate patterns (union from multiple profiles)
+            unique_exclusion_patterns = list(set(all_exclusion_patterns))
+            filtered_targets = self._apply_exclusion_patterns(
+                filtered_targets,
+                unique_exclusion_patterns,
+                correlation_id
+            )
 
         # Pagination (Story 22.6: renamed total_count → total)
         total = len(filtered_targets)
@@ -680,6 +712,7 @@ class InventoryService:
         # rbac_truncated already set above (multi-table: always False, legacy: based on count)
 
         # RBAC traceability log (Story 13.3, Subtask 1.5) - single consolidated log
+        # Story 25.6: Include exclusion step traceability
         logger.info(
             "rbac_targets_filtered",
             user_id=user_id,
@@ -687,9 +720,11 @@ class InventoryService:
             restriction_type=restriction_type,
             restriction_count=len(target_restrictions) if target_restrictions else 0,
             has_all_access=has_all_access,
+            exclusion_patterns_count=len(all_exclusion_patterns) if all_exclusion_patterns else 0,
             total_before_filter=len(all_targets),
             after_env_filter=env_filtered_count,
-            after_target_filter=len(filtered_targets),
+            after_attribute_filter=after_attribute_filter_count,
+            after_exclusion_filter=len(filtered_targets),
             total=total,
             returned_count=len(page_results),
             rbac_truncated=rbac_truncated,
@@ -821,6 +856,87 @@ class InventoryService:
 
         # Preserve original order
         return [t for t in targets if (t.get('name', ''), t.get('environment', '')) in result_set]
+
+    def _apply_exclusion_patterns(
+        self,
+        targets: list[dict],
+        exclusion_patterns: list[str],
+        correlation_id: str,
+    ) -> list[dict]:
+        """
+        Apply exclusion patterns to filter out targets matching any pattern.
+        
+        Story 25.6 - Deny explicit RBAC:
+        - Exclusion patterns are applied AFTER inclusion rules (LIST/PATTERN/ALL)
+        - Exclusion patterns are applied AFTER attribute filters
+        - If a target matches ANY exclusion pattern, it's removed from results
+        - Matching is case-insensitive using fnmatch (glob-style: *, ?, [abc])
+        
+        Code review fix: Log warning for patterns that never match any target (potential typo).
+        
+        Args:
+            targets: Pre-filtered targets (after inclusion + attributes)
+            exclusion_patterns: List of glob patterns to exclude
+            correlation_id: Correlation ID for logging
+        
+        Returns:
+            Targets with exclusions applied (subset of input)
+        """
+        if not exclusion_patterns:
+            return targets
+        
+        nb_before = len(targets)
+        result = []
+        excluded_count = 0
+        
+        # Code review fix: Track which patterns matched at least one target
+        pattern_match_count = {pattern: 0 for pattern in exclusion_patterns}
+        
+        for target in targets:
+            target_name = target.get('name', '').lower()
+            is_excluded = False
+            
+            for pattern in exclusion_patterns:
+                pattern_lower = pattern.lower()
+                if fnmatch.fnmatch(target_name, pattern_lower):
+                    is_excluded = True
+                    excluded_count += 1
+                    pattern_match_count[pattern] += 1
+                    logger.debug(
+                        "rbac_target_excluded",
+                        target_name=target.get('name'),
+                        exclusion_pattern=pattern,
+                        correlation_id=correlation_id
+                    )
+                    break
+            
+            if not is_excluded:
+                result.append(target)
+        
+        nb_after = len(result)
+        
+        # Code review fix: Warn about patterns that never matched anything (potential typo/misconfiguration)
+        unused_patterns = [p for p, count in pattern_match_count.items() if count == 0]
+        if unused_patterns:
+            logger.warning(
+                "rbac_exclusion_patterns_never_matched",
+                unused_patterns=unused_patterns,
+                nb_targets_checked=nb_before,
+                message="These exclusion patterns did not match any target (check for typos or misconfiguration)",
+                correlation_id=correlation_id,
+            )
+        
+        logger.info(
+            "rbac_exclusion_patterns_applied",
+            nb_patterns=len(exclusion_patterns),
+            patterns=exclusion_patterns,
+            nb_targets_before=nb_before,
+            nb_targets_excluded=excluded_count,
+            nb_targets_after=nb_after,
+            correlation_id=correlation_id,
+        )
+        
+        return result
 
     def _normalize_environment(self, raw_env: str) -> str:
         """

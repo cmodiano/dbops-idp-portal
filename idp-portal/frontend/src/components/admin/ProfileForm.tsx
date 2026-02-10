@@ -93,6 +93,7 @@ export interface ProfileFormValues {
   environments?: string[];
   target_names?: string[];
   target_patterns?: string[];
+  exclusion_patterns?: string[]; // Story 25.6
 }
 
 export interface ProfileFormProps {
@@ -153,6 +154,7 @@ export function ProfileForm({
         environments: [],
         target_names: [],
         target_patterns: [],
+        exclusion_patterns: [], // Story 25.6
       });
       queueMicrotask(() => setLoadingActions(true));
       Promise.all([
@@ -172,6 +174,7 @@ export function ProfileForm({
             environments: perms.environments ?? [],
             target_names: targetsPerms.target_names ?? [],
             target_patterns: targetsPerms.target_patterns ?? [],
+            exclusion_patterns: targetsPerms.exclusion_patterns ?? [], // Story 25.6
           });
           setActionsOptions(actions.map((a) => ({ id: a.id, name: a.name })));
           setTagsOptions(tags.map((t) => t.name));
@@ -216,6 +219,7 @@ export function ProfileForm({
         target_names: tt === 'list' ? (values.target_names ?? []) : [],
         target_patterns: tt === 'pattern' ? (values.target_patterns ?? []) : [],
         filter_by_attribute: getFilterByAttribute(targetsMode),
+        exclusion_patterns: values.exclusion_patterns ?? [], // Story 25.6
       };
       try {
         await Promise.all([
@@ -443,6 +447,61 @@ export function ProfileForm({
                 />
               </Form.Item>
             )}
+            
+            {/* Story 25.6: Exclusion patterns (deny explicit) */}
+            <Form.Item
+              name="exclusion_patterns"
+              label="Patterns d'exclusion"
+              tooltip="Cibles à exclure même si elles matchent les règles d'inclusion (sémantique: allow first, then exclude)"
+              rules={[
+                {
+                  validator: (_, value) => {
+                    if (!value || value.length === 0) return Promise.resolve();
+                    
+                    // Code review fix: Enforce max 100 patterns (performance limit)
+                    const MAX_PATTERNS = 100;
+                    if (value.length > MAX_PATTERNS) {
+                      return Promise.reject(new Error(`Maximum ${MAX_PATTERNS} patterns autorisés (limite de performance)`));
+                    }
+                    
+                    // Code review fix: Validate patterns for glob syntax (warn about regex-like patterns)
+                    const regexLikePatterns = value.filter((p: string) => 
+                      p.includes('\\') || p.includes('.+') || p.includes('.*') || /\{\d+,\d+\}/.test(p)
+                    );
+                    if (regexLikePatterns.length > 0) {
+                      return Promise.reject(
+                        new Error(`Patterns invalides (syntaxe regex détectée): ${regexLikePatterns.join(', ')}. Utilisez la syntaxe glob: *, ?, [abc]`)
+                      );
+                    }
+                    
+                    // Code review fix: Basic pattern validation (must contain wildcard or be exact name)
+                    const invalidPatterns = value.filter((p: string) => {
+                      const trimmed = p.trim();
+                      // Empty patterns
+                      if (!trimmed) return true;
+                      // Valid: contains glob wildcards OR is a simple name (no special chars except dash/underscore)
+                      const hasWildcard = trimmed.includes('*') || trimmed.includes('?') || /\[.*\]/.test(trimmed);
+                      const isSimpleName = /^[A-Za-z0-9_-]+$/.test(trimmed);
+                      return !(hasWildcard || isSimpleName);
+                    });
+                    
+                    if (invalidPatterns.length > 0) {
+                      return Promise.reject(
+                        new Error(`Patterns invalides: ${invalidPatterns.join(', ')}. Utilisez *, ?, [abc] ou noms exacts`)
+                      );
+                    }
+                    
+                    return Promise.resolve();
+                  },
+                },
+              ]}
+            >
+              <Select
+                mode="tags"
+                placeholder="ex: PROD-CRITICAL-*, DR-*"
+                tokenSeparators={[',']}
+              />
+            </Form.Item>
           </>
         )}
       </Form>

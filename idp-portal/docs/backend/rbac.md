@@ -464,3 +464,220 @@ if not _check_rbac_for_action(action, permissions):
 if not _check_rbac_for_action(action, permissions):
     raise NotFoundError("Action non trouvée")
 ```
+
+## Exclusion explicite de cibles (Deny patterns) - Story 25.6
+
+### Principe: "Allow first, then exclude"
+
+Les patterns d'exclusion permettent de retirer explicitement des cibles des permissions accordées par les règles d'inclusion. La sémantique est **"allow first, then exclude"** :
+
+1. Les règles d'inclusion (LIST, PATTERN, ALL) déterminent d'abord les cibles autorisées
+2. Les filtres par attributs (`filter_by_attribute`) affinent ensuite ces cibles
+3. **Enfin, les patterns d'exclusion retirent les cibles qui matchent**
+
+Une cible qui matche un pattern d'exclusion n'est **jamais** retournée comme autorisée, même si elle matche une règle d'inclusion.
+
+### Ordre d'application des règles RBAC
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ 1. INCLUSION (LIST / PATTERN / ALL)                            │
+│    → Ensemble initial de cibles autorisées                     │
+└────────────────────────────┬────────────────────────────────────┘
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 2. FILTRAGE PAR ATTRIBUTS (filter_by_attribute)                │
+│    → Affine selon engine_type, zone, etc.                      │
+└────────────────────────────┬────────────────────────────────────┘
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 3. EXCLUSION (exclusion_patterns) ← Story 25.6                 │
+│    → Retire les cibles qui matchent un pattern d'exclusion     │
+└────────────────────────────┬────────────────────────────────────┘
+                             ▼
+                      Résultat final
+```
+
+### Exemples d'utilisation
+
+#### Exemple 1 : Tous les serveurs Oracle sauf les critiques
+
+**Configuration profil :**
+```json
+{
+  "permission_type": "ALL",
+  "filter_by_attribute": {"engine_type": ["oracle"]},
+  "exclusion_patterns": ["PROD-CRITICAL-*"]
+}
+```
+
+**Résultat :**
+- ✅ PROD-APP-DB-01 (Oracle, pas critique)
+- ✅ PROD-REPORTING-DB-02 (Oracle, pas critique)
+- ❌ PROD-CRITICAL-DB-01 (Oracle, mais matche exclusion)
+- ❌ PROD-SQL-01 (SQL Server, pas Oracle)
+
+#### Exemple 2 : Pattern large avec exclusions spécifiques
+
+**Configuration profil :**
+```json
+{
+  "permission_type": "PATTERN",
+  "target_patterns": ["PROD-*"],
+  "exclusion_patterns": ["PROD-CRITICAL-*", "PROD-DR-*"]
+}
+```
+
+**Résultat :**
+- ✅ PROD-APP-01 (matche PROD-*)
+- ✅ PROD-WEB-02 (matche PROD-*)
+- ❌ PROD-CRITICAL-DB-01 (matche PROD-* mais exclu)
+- ❌ PROD-DR-BACKUP (matche PROD-* mais exclu)
+
+#### Exemple 3 : Liste explicite avec exclusion
+
+**Configuration profil :**
+```json
+{
+  "permission_type": "LIST",
+  "target_names": ["SERVER-01", "SERVER-02", "SERVER-03"],
+  "exclusion_patterns": ["SERVER-02"]
+}
+```
+
+**Résultat :**
+- ✅ SERVER-01 (dans la liste, pas exclu)
+- ❌ SERVER-02 (dans la liste MAIS exclu)
+- ✅ SERVER-03 (dans la liste, pas exclu)
+
+### Cumul multi-profils : Union des exclusions
+
+**Code review fix:** Clarification du comportement multi-profils.
+
+Quand un utilisateur a plusieurs profils avec des patterns d'exclusion différents, l'**union** des exclusions s'applique (le plus restrictif gagne).
+
+**Règle générale :**
+1. **Inclusions** : Union (l'utilisateur obtient toutes les cibles de tous ses profils)
+2. **Exclusions** : Union (toutes les exclusions de tous les profils s'appliquent)
+3. Ordre d'application : Inclusions → Exclusions
+
+**Exemple concret:**
+
+Un utilisateur appartient à deux profils:
+
+**Profil 1 (DBA Standard):**
+```json
+{
+  "permission_type": "ALL",
+  "exclusion_patterns": ["PROD-CRITICAL-*"]
+}
+```
+
+**Profil 2 (DBA Backup):**
+```json
+{
+  "permission_type": "ALL",
+  "exclusion_patterns": ["*-DR-*"]
+}
+```
+
+**Exclusions effectives :** `["PROD-CRITICAL-*", "*-DR-*"]` (union des deux profils)
+
+**Résultat pour l'utilisateur :**
+- ✅ PROD-APP-01 (inclus par les deux profils, pas exclu)
+- ❌ PROD-CRITICAL-DB-01 (inclus mais **exclu par Profil 1**)
+- ❌ PROD-DR-BACKUP (inclus mais **exclu par Profil 2**)
+- ❌ STAGING-DR-02 (inclus mais **exclu par Profil 2**)
+
+### Cas limites
+
+#### Exclusion sans inclusion
+
+Si un profil a des exclusions mais aucune inclusion (ex. `PATTERN` avec `target_patterns=[]`), aucune cible n'est autorisée. L'exclusion ne crée pas d'accès, elle ne fait que retirer.
+
+**Configuration :**
+```json
+{
+  "permission_type": "PATTERN",
+  "target_patterns": [],
+  "exclusion_patterns": ["PROD-*"]
+}
+```
+
+**Résultat :** Aucune cible (pas d'erreur, simplement liste vide)
+
+#### Pattern d'exclusion vide ou invalide
+
+Les patterns vides (`""`) ou invalides (non-string, null) sont ignorés silencieusement avec un log warning. Ils n'affectent pas la résolution RBAC.
+
+#### Limite de performance (max 100 patterns)
+
+**Code review fix:** Pour éviter des problèmes de performance lors du matching RBAC, un maximum de **100 patterns d'exclusion** est imposé par profil.
+
+- **Validation backend** : Refuse les `PUT` avec > 100 patterns (HTTP 400)
+- **Validation frontend** : Bloque la saisie à 100 patterns
+- **Warning** : Un log warning est émis si un profil a > 50 patterns (approche de la limite)
+
+**Raison technique :** Le matching des patterns utilise `fnmatch` en O(n×m) où n = nombre de cibles, m = nombre de patterns. Avec 10 000 cibles et 1000 patterns, cela représente 10 millions de comparaisons par requête RBAC.
+
+**Recommendation :** Si > 50 patterns sont nécessaires, réévaluer la stratégie RBAC (ex: utiliser `filter_by_attribute` pour réduire d'abord le scope, puis des exclusions ciblées).
+
+### Matching des patterns
+
+- **Syntaxe :** Glob-style (`*`, `?`, `[abc]`) via `fnmatch`
+- **Sensibilité casse :** Case-insensitive (`PROD-CRITICAL-*` matche `prod-critical-db-01`)
+- **Exemples :**
+  - `PROD-*` → Tous les noms commençant par PROD-
+  - `*-DR-*` → Tous les noms contenant -DR-
+  - `SERVER-[123]` → SERVER-1, SERVER-2, SERVER-3
+  - `APP-?-PROD` → APP-A-PROD, APP-1-PROD, etc.
+
+### Implémentation technique
+
+**Modèle Django:**
+```python
+class ProfileTargetPermission(models.Model):
+    exclusion_patterns_json = models.TextField(
+        null=True, blank=True, db_column='EXCLUSION_PATTERNS_JSON'
+    )
+    
+    def get_exclusion_patterns(self) -> list[str]:
+        """Retourne la liste des patterns d'exclusion (filtrés et validés)."""
+    
+    def set_exclusion_patterns(self, value: list[str] | None) -> None:
+        """Sérialise la liste de patterns en JSON CLOB."""
+```
+
+**Service RBAC:** `inventory/services.py` → `InventoryService.list_targets_for_user()` applique les exclusions après le filtrage par attributs.
+
+**API endpoint:** `GET/PUT /api/v1/admin/profiles/{id}/targets`
+
+**Frontend:** Champ `exclusion_patterns` dans `ProfileForm.tsx` (Select mode="tags")
+
+### Comportement API (PUT)
+
+**Code review fix:** Clarification du comportement lors de la mise à jour des exclusions via `PUT /api/v1/admin/profiles/{id}/targets`:
+
+| Payload | Comportement | Use case |
+|---------|--------------|----------|
+| `exclusion_patterns` **non présent** (clé absente) | **Préserve** les exclusions existantes | Mettre à jour `target_patterns` sans toucher aux exclusions |
+| `exclusion_patterns: []` (array vide) | **Efface** toutes les exclusions | Supprimer toutes les exclusions |
+| `exclusion_patterns: null` | **Efface** toutes les exclusions (équivalent à `[]`) | Réinitialiser les exclusions |
+| `exclusion_patterns: ["PROD-*"]` | **Remplace** par les nouvelles exclusions | Définir de nouvelles exclusions |
+
+**Exemple:** Mettre à jour `target_patterns` sans modifier `exclusion_patterns`
+```json
+PUT /api/v1/admin/profiles/123/targets
+{
+  "targets_type": "pattern",
+  "target_patterns": ["STAGING-*"],
+  "target_names": []
+  // exclusion_patterns: omis → préservé
+}
+```
+
+### Tests
+
+- `profiles/tests/test_exclusion_patterns_model.py` - Tests unitaires helpers
+- `inventory/tests/test_rbac_exclusion.py` - Tests d'intégration RBAC
+- `profiles/tests/test_api_exclusion_patterns.py` - Tests API

@@ -333,6 +333,6 @@ development_status:
     25-2-condition-gates-statut-waiting-gate-conditions-execution-steps: done # 2026-02-10: Code review completed — 9 fixes applied (1 CRIT + 3 HIGH + 4 MED), 36/36 tests pass, audit trail EXECUTION_STEP_WAITING added
     25-3-tache-celery-beat-evaluate-waiting-gates-gate-maintenance-window: done # Code review 2026-02-10: 11 fixes appliqués (4 HIGH + 4 MEDIUM + 3 LOW), 22/22 tests pass
     25-4-overrides-par-environnement-change-type-config-enrichi: done # Code review 2026-02-10: fixes applied (validation stricte + UI change_type/template_id + gates env_config + tests 21/21)
-    25-5-mutex-inter-actions-table-action-mutex-validation-soumission: ready-for-dev
-    25-6-deny-explicite-rbac-exclusion-patterns-profile-target-permission: backlog
+    25-5-mutex-inter-actions-table-action-mutex-validation-soumission: done # Code review 2026-02-10: 6 fixes (3 CRITICAL + 3 HIGH) — validated_targets init, symmetric rules deletion robust, requires_target=False tests, disabled action validation, NULL description allowed — 23/23 tests
+    25-6-deny-explicite-rbac-exclusion-patterns-profile-target-permission: done # Code review 2026-02-10: 7 issues fixed (3 HIGH + 4 MEDIUM) — max 100 patterns validation (backend + frontend), traceability for unused patterns, API behavior documented (null/omitted/[]), multi-profile union clarified — 30/30 backend tests + 9/9 frontend tests pass
     epic-25-retrospective: optional
