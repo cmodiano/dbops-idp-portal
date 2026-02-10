@@ -61,10 +61,14 @@ export interface ProfileTargetPermissionsUpdate {
   targets_type: ProfileTargetsType;
   target_names?: string[] | null;
   target_patterns?: string[] | null;
+  /** Story 23.7 - Filter targets by inventory attributes (e.g., engine_type: ['oracle']). */
+  filter_by_attribute?: Record<string, string[]> | null;
 }
 
 export interface ProfileTargetPermissionsResponse {
   targets_type: ProfileTargetsType;
   target_names: string[];
   target_patterns: string[];
+  /** Story 23.7 - Filter targets by inventory attributes (e.g., engine_type: ['oracle']). */
+  filter_by_attribute?: Record<string, string[]> | null;
 }

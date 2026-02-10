@@ -2,19 +2,21 @@
  * ProfileForm — create/edit profile (Story 2.9, AC #1, #2, #4).
  * Story 2.10: section « Actions autorisées » + Environnements en édition (AC1–AC4).
  * Story 2.11: section « Targets autorisés » (AC1–AC3).
+ * Story 23.7: Radio options for All servers / Oracle / SQL with filter_by_attribute.
  * Modal with name, description, ad_group, is_admin, is_auditor; when edit: actions + targets permissions.
  */
 
 import { useEffect, useMemo, useState } from 'react';
 import { Form, Input, Modal, Alert, Switch, Radio, Select } from 'antd';
+import { CheckCircleOutlined, WarningOutlined } from '@ant-design/icons';
 import type {
   ProfileCreate,
   ProfileUpdate,
   ProfileResponse,
   ProfileActionsType,
   ProfileActionPermissionsUpdate,
-  ProfileTargetsType,
   ProfileTargetPermissionsUpdate,
+  ProfileTargetPermissionsResponse,
 } from '../../types/api';
 import { getProfileActions, putProfileActions, getProfileTargets, putProfileTargets } from '../../services/profiles_service';
 import { listActions, getTags } from '../../services/admin_service';
@@ -22,6 +24,62 @@ import { MOCK_TARGET_OPTIONS } from '../../utils/profileOptions';
 import { useEnvironments } from '../../hooks/useEnvironments';
 
 const { TextArea } = Input;
+
+// Story 23.7 - Targets mode discriminator for UI display
+export type TargetsMode = 'all' | 'all-oracle' | 'all-sql' | 'list' | 'pattern' | 'advanced';
+
+/**
+ * Story 23.7 - Detect targets mode from profile target permissions response.
+ * Returns 'all-oracle', 'all-sql' for engine-specific filters, 'advanced' for unsupported filters.
+ */
+export function detectTargetsMode(targetsPerms: ProfileTargetPermissionsResponse): TargetsMode {
+  const { targets_type, filter_by_attribute } = targetsPerms;
+
+  if (targets_type === 'list') return 'list';
+  if (targets_type === 'pattern') return 'pattern';
+
+  // ALL without filter (null or undefined)
+  if (targets_type === 'all' && !filter_by_attribute) return 'all';
+
+  // ALL with filter_by_attribute
+  if (targets_type === 'all' && filter_by_attribute) {
+    const keys = Object.keys(filter_by_attribute);
+
+    // Empty object → treat as 'all' (no filter)
+    if (keys.length === 0) return 'all';
+
+    // Exactly one key: engine_type
+    if (keys.length === 1 && keys[0] === 'engine_type') {
+      const engineValues = filter_by_attribute.engine_type;
+
+      // Exactly one value
+      if (engineValues && engineValues.length === 1) {
+        const engineType = engineValues[0].toLowerCase();
+        if (engineType === 'oracle') return 'all-oracle';
+        if (engineType === 'sqlserver' || engineType === 'sql') return 'all-sql';
+      }
+    }
+
+    // Unsupported filter structure (multi-keys, multi-values, unknown values)
+    return 'advanced';
+  }
+
+  return 'all';
+}
+
+// Story 23.7 - Compute filter_by_attribute from targetsMode
+function getFilterByAttribute(mode: TargetsMode): Record<string, string[]> | null {
+  if (mode === 'all-oracle') return { engine_type: ['oracle'] };
+  if (mode === 'all-sql') return { engine_type: ['sqlserver'] };
+  return null;
+}
+
+// Story 23.7 - Compute targets_type from targetsMode
+function getTargetsTypeFromMode(mode: TargetsMode): 'all' | 'list' | 'pattern' {
+  if (mode === 'list') return 'list';
+  if (mode === 'pattern') return 'pattern';
+  return 'all';
+}
 
 export interface ProfileFormValues {
   name: string;
@@ -33,7 +91,6 @@ export interface ProfileFormValues {
   action_ids?: number[];
   tag_patterns?: string[];
   environments?: string[];
-  targets_type?: ProfileTargetsType;
   target_names?: string[];
   target_patterns?: string[];
 }
@@ -62,7 +119,9 @@ export function ProfileForm({
   const [actionsOptions, setActionsOptions] = useState<{ id: number; name: string }[]>([]);
   const [tagsOptions, setTagsOptions] = useState<string[]>([]);
   const [loadingActions, setLoadingActions] = useState(false);
-  
+  // Story 23.7 - Targets mode state
+  const [targetsMode, setTargetsMode] = useState<TargetsMode>('all');
+
   // Story 13.7: Load environments from inventory
   const { environmentOptions, loading: environmentsLoading } = useEnvironments();
 
@@ -79,6 +138,8 @@ export function ProfileForm({
   useEffect(() => {
     if (!open) return;
     form.resetFields();
+    // Story 23.7 - Reset targets mode
+    setTargetsMode('all');
     if (editProfile) {
       form.setFieldsValue({
         name: editProfile.name,
@@ -90,7 +151,6 @@ export function ProfileForm({
         action_ids: [],
         tag_patterns: [],
         environments: [],
-        targets_type: 'all',
         target_names: [],
         target_patterns: [],
       });
@@ -102,12 +162,14 @@ export function ProfileForm({
         getTags(),
       ])
         .then(([perms, targetsPerms, actions, tags]) => {
+          // Story 23.7 - Load targets permissions and detect mode from filter_by_attribute
+          const mode = detectTargetsMode(targetsPerms);
+          setTargetsMode(mode);
           form.setFieldsValue({
             actions_type: perms.actions_type,
             action_ids: perms.action_ids ?? [],
             tag_patterns: perms.tag_patterns ?? [],
             environments: perms.environments ?? [],
-            targets_type: targetsPerms.targets_type,
             target_names: targetsPerms.target_names ?? [],
             target_patterns: targetsPerms.target_patterns ?? [],
           });
@@ -120,6 +182,8 @@ export function ProfileForm({
         })
         .finally(() => setLoadingActions(false));
     } else {
+      // Story 23.7 - Default for new profile
+      setTargetsMode('all');
       form.setFieldsValue({ is_admin: false, is_auditor: false });
     }
   }, [open, editProfile, form]);
@@ -145,11 +209,13 @@ export function ProfileForm({
         tag_patterns: at === 'pattern' ? (values.tag_patterns ?? []) : [],
         environments: values.environments ?? [],
       };
-      const tt = values.targets_type ?? 'all';
+      // Story 23.7 - Include filter_by_attribute for engine-based filtering
+      const tt = getTargetsTypeFromMode(targetsMode);
       const targetsPayload: ProfileTargetPermissionsUpdate = {
         targets_type: tt,
         target_names: tt === 'list' ? (values.target_names ?? []) : [],
         target_patterns: tt === 'pattern' ? (values.target_patterns ?? []) : [],
+        filter_by_attribute: getFilterByAttribute(targetsMode),
       };
       try {
         await Promise.all([
@@ -213,7 +279,7 @@ export function ProfileForm({
             <div style={{ marginTop: 16, marginBottom: 8, fontWeight: 500 }}>Actions autorisées</div>
             <Form.Item name="actions_type" label="Type" rules={[{ required: true }]}>
               <Radio.Group>
-                <Radio value="list">Liste d'actions</Radio>
+                <Radio value="list">Liste d&apos;actions</Radio>
                 <Radio value="pattern">Pattern par tags</Radio>
                 <Radio value="all">Toutes (*)</Radio>
               </Radio.Group>
@@ -268,63 +334,115 @@ export function ProfileForm({
               />
             </Form.Item>
 
+            {/* Story 23.7 - Section Targets autorisés avec filter by engine type */}
             <div style={{ marginTop: 16, marginBottom: 8, fontWeight: 500 }}>Targets autorisés</div>
-            <Form.Item name="targets_type" label="Type" rules={[{ required: true }]}>
-              <Radio.Group>
-                <Radio value="list">Liste explicite</Radio>
-                <Radio value="pattern">Pattern</Radio>
-                <Radio value="all">Tous (*)</Radio>
-              </Radio.Group>
-            </Form.Item>
-            <Form.Item
-              noStyle
-              shouldUpdate={(prev, curr) => prev?.targets_type !== curr?.targets_type}
+            {/* Story 23.7 - Radio options for All servers / Oracle / SQL with filter_by_attribute */}
+            <Radio.Group
+              value={targetsMode}
+              onChange={(e) => {
+                const newMode = e.target.value as TargetsMode;
+                setTargetsMode(newMode);
+                if (newMode === 'all' || newMode === 'all-oracle' || newMode === 'all-sql') {
+                  form.setFieldsValue({ target_names: [], target_patterns: [] });
+                }
+              }}
+              style={{ width: '100%', marginBottom: 16 }}
             >
-              {({ getFieldValue }) =>
-                getFieldValue('targets_type') === 'list' ? (
-                  <Form.Item
-                    name="target_names"
-                    label="Targets"
-                    rules={[
-                      {
-                        validator: (_, value) =>
-                          value?.length
-                            ? Promise.resolve()
-                            : Promise.reject(new Error('Sélectionnez au moins un target.')),
-                      },
-                    ]}
-                  >
-                    <Select
-                      mode="multiple"
-                      placeholder="Sélectionner des targets (ex. assurance-db01)"
-                      options={MOCK_TARGET_OPTIONS.map((t) => ({ value: t, label: t }))}
-                      filterOption={(input, opt) =>
-                        (opt?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
-                      }
-                    />
-                  </Form.Item>
-                ) : getFieldValue('targets_type') === 'pattern' ? (
-                  <Form.Item
-                    name="target_patterns"
-                    label="Patterns (ex. assurance-*)"
-                    rules={[
-                      {
-                        validator: (_, value) =>
-                          value?.length
-                            ? Promise.resolve()
-                            : Promise.reject(new Error('Saisissez au moins un pattern.')),
-                      },
-                    ]}
-                  >
-                    <Select
-                      mode="tags"
-                      placeholder="ex. assurance-*, infra-*"
-                      tokenSeparators={[',']}
-                    />
-                  </Form.Item>
-                ) : null
-              }
-            </Form.Item>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <Radio value="all">Tous les serveurs</Radio>
+                <Radio value="all-oracle">Tous les serveurs Oracle</Radio>
+                <Radio value="all-sql">Tous les serveurs SQL</Radio>
+                <Radio value="list">Liste de serveurs spécifiques</Radio>
+                <Radio value="pattern">Pattern de serveurs</Radio>
+              </div>
+            </Radio.Group>
+
+            {/* Story 23.7 - Alerts informatifs selon targetsMode */}
+            {targetsMode === 'all' && (
+              <Alert
+                type="info"
+                showIcon
+                icon={<CheckCircleOutlined />}
+                closable={false}
+                title="Accès complet à tous les serveurs (tous types, tous environnements)"
+                style={{ marginBottom: 16 }}
+              />
+            )}
+            {targetsMode === 'all-oracle' && (
+              <Alert
+                type="info"
+                showIcon
+                icon={<CheckCircleOutlined />}
+                closable={false}
+                title="Accès à tous les serveurs Oracle (tous environnements)"
+                style={{ marginBottom: 16 }}
+              />
+            )}
+            {targetsMode === 'all-sql' && (
+              <Alert
+                type="info"
+                showIcon
+                icon={<CheckCircleOutlined />}
+                closable={false}
+                title="Accès à tous les serveurs SQL (tous environnements)"
+                style={{ marginBottom: 16 }}
+              />
+            )}
+            {targetsMode === 'advanced' && (
+              <Alert
+                type="warning"
+                showIcon
+                icon={<WarningOutlined />}
+                closable={false}
+                title="Ce profil utilise des filtres avancés non supportés par l'interface. L'édition réinitialisera ces filtres."
+                style={{ marginBottom: 16 }}
+              />
+            )}
+
+            {/* Story 23.7 - Conditional target fields */}
+            {targetsMode === 'list' && (
+              <Form.Item
+                name="target_names"
+                label="Targets"
+                rules={[
+                  {
+                    validator: (_, value) =>
+                      value?.length
+                        ? Promise.resolve()
+                        : Promise.reject(new Error('Sélectionnez au moins un target.')),
+                  },
+                ]}
+              >
+                <Select
+                  mode="multiple"
+                  placeholder="Sélectionner des targets (ex. assurance-db01)"
+                  options={MOCK_TARGET_OPTIONS.map((t) => ({ value: t, label: t }))}
+                  filterOption={(input, opt) =>
+                    (opt?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
+                  }
+                />
+              </Form.Item>
+            )}
+            {targetsMode === 'pattern' && (
+              <Form.Item
+                name="target_patterns"
+                label="Patterns (ex. assurance-*)"
+                rules={[
+                  {
+                    validator: (_, value) =>
+                      value?.length
+                        ? Promise.resolve()
+                        : Promise.reject(new Error('Saisissez au moins un pattern.')),
+                  },
+                ]}
+              >
+                <Select
+                  mode="tags"
+                  placeholder="ex. assurance-*, infra-*"
+                  tokenSeparators={[',']}
+                />
+              </Form.Item>
+            )}
           </>
         )}
       </Form>

@@ -317,5 +317,5 @@ development_status:
     23-4-backend-rbac-profils-filtres-par-attribut: done # 53 tests, AC1-AC8 done, docs/rbac-filter-by-attribute.md
     23-5-frontend-admin-source-inventaire-table-par-parametre: done # Code review 2026-02-09: 7 auto-fixes (FR accents, types, comments), 4 action items (validation, selectedServerNames, race condition, UI warning), 94/94 tests pass
     23-6-frontend-use-target-inventory-contexte-serveur: done # Code review 2026-02-09: 10 issues (4 HIGH + 4 MEDIUM + 2 LOW) auto-fixed
-    23-7-frontend-profile-form-options-tous-oracle-sql: backlog
+    23-7-frontend-profile-form-options-tous-oracle-sql: done # Code review 2026-02-09: 6 HIGH + 4 MEDIUM + 2 LOW issues fixed — Alert API deprecated→title, AC10 comments complete, edge cases covered (empty {}, 'sql' engine, undefined), 48/48 tests pass (15 detectTargetsMode + 33 ProfileForm)
     epic-23-retrospective: optional
