@@ -10,6 +10,7 @@ import {
   createIntegration,
   updateIntegration,
   deleteIntegration,
+  getIntegrationTypes,
 } from './integrations_service';
 
 const base = {
@@ -132,5 +133,37 @@ describe('integrations_service', () => {
       '/api/v1/admin/integrations/1/',
       expect.objectContaining({ method: 'DELETE' })
     );
+  });
+
+  // Story 24.2 AC1: getIntegrationTypes service
+  it('getIntegrationTypes calls GET /integrations/types/', async () => {
+    const typesData = [
+      { code: 'aap', name: 'AAP', description: '', version: '1.0', is_active: true, actions: [], created_at: '', updated_at: '' },
+    ];
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: typesData }),
+    });
+    (global as unknown as { fetch: typeof fetch }).fetch = fetchMock;
+
+    const result = await getIntegrationTypes();
+    expect(result).toEqual(typesData);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/integrations/types/',
+      expect.objectContaining({ headers: expect.any(Object) })
+    );
+  });
+
+  it('getIntegrationTypes returns empty array when data is undefined', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+    });
+    (global as unknown as { fetch: typeof fetch }).fetch = fetchMock;
+
+    const result = await getIntegrationTypes();
+    expect(result).toEqual([]);
   });
 });

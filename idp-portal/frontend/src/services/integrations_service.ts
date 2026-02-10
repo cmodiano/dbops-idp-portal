@@ -8,7 +8,15 @@ import type {
   IntegrationCreate,
   IntegrationUpdate,
   IntegrationResponse,
+  IntegrationTypeCatalogue,
 } from '../types/api';
+
+/** Story 24.2 AC1: Fetch integration type catalogue from backend. */
+export async function getIntegrationTypes(): Promise<IntegrationTypeCatalogue[]> {
+  const res = await apiFetch<IntegrationTypeCatalogue[]>('/integrations/types/');
+  // MEDIUM-3 fix: Handle { data: null } case
+  return Array.isArray(res) ? res : [];
+}
 
 export async function getIntegrations(): Promise<IntegrationResponse[]> {
   const res = await apiFetch<IntegrationResponse[]>('/admin/integrations/');

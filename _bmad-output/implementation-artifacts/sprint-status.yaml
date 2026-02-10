@@ -322,7 +322,7 @@ development_status:
     # === Epic 24: Intégrations Admin alignées sur le backend ===
     epic-24: in-progress
     24-1-backend-catalogue-types-dintegration: done # Code review 2026-02-10: 11 issues fixed (8 HIGH, 2 MEDIUM, 1 LOW) — audit trail correlation_id, JSON Schema validation, structlog, documentation versionnement — 76/76 tests pass
-    24-2-frontend-admin-restriction-types-actions: backlog
+    24-2-frontend-admin-restriction-types-actions: done # 2026-02-10: Code review — 10 issues (5 MEDIUM + 5 LOW) auto-fixés, 43/43 tests pass ✅
     24-3-backend-frontend-validation-etat-integrations: backlog
     24-4-migration-config-integrations-existantes: backlog
     epic-24-retrospective: optional

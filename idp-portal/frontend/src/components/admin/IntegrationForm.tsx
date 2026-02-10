@@ -1,20 +1,19 @@
 /**
- * IntegrationForm — création/édition d'intégration (Story 2.28, 4.9, 13.1).
- * Story 4.9: Type libre (AutoComplete), auth_flow (Select), Upload icône.
+ * IntegrationForm — création/édition d'intégration (Story 2.28, 4.9, 13.1, 24.2).
+ * Story 24.2: Type restreint au catalogue backend (Select), actions disponibles, mode édition disabled, validation type actif.
  * Story 13.1: Si type = inventory_db, champs Schéma et Table (config) pour inventaire BD.
  */
 
 import { useEffect, useState } from 'react';
-import { Form, Input, Modal, Alert, Select, Avatar, Space, Button, AutoComplete, Upload, App } from 'antd';
+import { Form, Input, Modal, Alert, Select, Avatar, Space, Button, Upload, App } from 'antd';
 import { useAuth } from '../../contexts/AuthContext';
 import type { UploadFile } from 'antd';
-import { UploadOutlined, ApiOutlined } from '@ant-design/icons';
+import { UploadOutlined, ApiOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import type { AuthFlow, IntegrationCreate, IntegrationUpdate, IntegrationResponse } from '../../types/api';
-import { SUGGESTED_INTEGRATION_TYPES, AUTH_FLOW_LABELS } from '../../types/api';
+import { AUTH_FLOW_LABELS } from '../../types/api';
 import { getIconUrl } from '../../utils/iconUrl';
-
-/** Type suggestions for AutoComplete (Story 4.9 AC1). */
-const TYPE_SUGGESTIONS = SUGGESTED_INTEGRATION_TYPES.map((t) => ({ value: t }));
+import { useIntegrationTypes } from '../../hooks/useIntegrationTypes';
+import { AvailableActionsPanel } from './AvailableActionsPanel';
 
 /** Auth flow options for Select (Story 4.9 AC2). */
 const AUTH_FLOW_OPTIONS: { value: AuthFlow; label: string }[] = (
@@ -22,14 +21,14 @@ const AUTH_FLOW_OPTIONS: { value: AuthFlow; label: string }[] = (
 ).map(([value, label]) => ({ value, label }));
 
 export interface IntegrationFormValues {
-  type: string; // Story 4.9 AC1: free-form platform name
+  type: string;
   name: string;
   base_url: string;
   credential_ref?: string | null;
   icon?: string | null;
-  auth_flow?: AuthFlow | null; // Story 4.9 AC2: authentication flow
-  schema?: string | null; // Story 13.1: inventory_db config
-  table?: string | null; // Story 13.1: inventory_db config
+  auth_flow?: AuthFlow | null;
+  schema?: string | null;
+  table?: string | null;
 }
 
 export interface IntegrationFormProps {
@@ -61,9 +60,15 @@ export function IntegrationForm({
   const [uploadedIconUrl, setUploadedIconUrl] = useState<string | null>(null);
   const [fileList, setFileList] = useState<UploadFile[]>([]);
 
+  // Story 24.2 AC1: Fetch integration types from backend catalogue
+  const { types: integrationTypes, loading: loadingTypes, error: errorTypes, isFallback } = useIntegrationTypes();
+
   const watchIcon = Form.useWatch('icon', form);
   const watchType = Form.useWatch('type', form);
   const isInventoryDb = (watchType ?? '').trim().toLowerCase() === 'inventory_db';
+
+  // Story 24.2 AC3: Find selected type data for actions display
+  const selectedTypeData = integrationTypes.find((t) => t.code === watchType) ?? null;
 
   // Valeurs pour préremplir en édition (stable pour initialValues / key)
   const editConfig = editIntegration?.config as { schema?: string; table?: string } | undefined;
@@ -86,7 +91,6 @@ export function IntegrationForm({
     if (editIntegration) {
       setUploadedIconUrl(null);
       setFileList([]);
-      // Appliquer après le rendu des champs (évite que la modal n'ait pas encore monté les inputs)
       const t = setTimeout(() => {
         const cfg = editIntegration.config as { schema?: string; table?: string } | undefined;
         form.setFieldsValue({
@@ -108,7 +112,7 @@ export function IntegrationForm({
         setFileList([]);
       });
       form.setFieldsValue({
-        type: '',
+        type: undefined,
         name: '',
         base_url: '',
         credential_ref: undefined,
@@ -123,12 +127,33 @@ export function IntegrationForm({
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
+
+      // Story 24.2 AC7: Validate selected type is active
+      const typeData = integrationTypes.find((t) => t.code === values.type);
+
+      if (!isEdit) {
+        // LOW-2 fix: Specific error messages
+        if (!typeData) {
+          message.error("Ce type d'intégration n'existe pas");
+          return;
+        }
+        if (!typeData.is_active) {
+          message.error("Ce type d'intégration est inactif et ne peut plus être utilisé");
+          return;
+        }
+      } else {
+        // MEDIUM-5 fix: Warn if editing an integration with inactive type
+        if (typeData && !typeData.is_active) {
+          message.warning("Attention : le type de cette intégration est marqué comme inactif");
+        }
+      }
+
       const payload: IntegrationCreate | IntegrationUpdate = {
-        type: values.type.trim(),
+        type: values.type,
         name: values.name.trim(),
         base_url: values.base_url.trim(),
         credential_ref: values.credential_ref?.trim() || null,
-        icon: uploadedIconUrl || values.icon?.trim() || null, // Prioritize uploaded icon
+        icon: uploadedIconUrl || values.icon?.trim() || null,
         auth_flow: values.auth_flow || null,
       };
       if (isInventoryDb && (values.schema?.trim() || values.table?.trim())) {
@@ -163,7 +188,7 @@ export function IntegrationForm({
 
       if (!response.ok) {
         const errorData = await response.json();
-        message.error(errorData.error?.message || 'Échec de l\'upload');
+        message.error(errorData.error?.message || "Échec de l'upload");
         return;
       }
 
@@ -175,7 +200,7 @@ export function IntegrationForm({
         message.success('Icône uploadée avec succès');
       }
     } catch {
-      message.error('Erreur lors de l\'upload de l\'icône');
+      message.error("Erreur lors de l'upload de l'icône");
     }
   };
 
@@ -186,10 +211,18 @@ export function IntegrationForm({
     <Avatar shape="square" size={32} icon={<ApiOutlined />} />
   );
 
+  // Story 24.2 AC2: Build Select options from catalogue
+  const typeOptions = integrationTypes
+    .filter((t) => t.is_active)
+    .map((t) => ({
+      value: t.code,
+      label: t.name,
+    }));
+
   return (
     <Modal
       open={open}
-      title={isEdit ? 'Modifier l\'intégration' : 'Nouvelle intégration'}
+      title={isEdit ? "Modifier l'intégration" : 'Nouvelle intégration'}
       onCancel={onCancel}
       destroyOnHidden
       footer={
@@ -206,6 +239,15 @@ export function IntegrationForm({
       {error && (
         <Alert type="error" title={error} style={{ marginBottom: 16 }} showIcon />
       )}
+      {/* Story 24.2 AC2: Warning when using fallback types */}
+      {isFallback && (
+        <Alert
+          type="warning"
+          title="Impossible de charger les types depuis le backend. Mode dégradé activé — la liste peut être incomplète."
+          style={{ marginBottom: 16 }}
+          showIcon
+        />
+      )}
       <Form
         form={form}
         layout="vertical"
@@ -213,24 +255,37 @@ export function IntegrationForm({
         initialValues={editValues ?? undefined}
         key={editIntegration ? `edit-${editIntegration.id}` : 'create'}
       >
+        {/* Story 24.2 AC2: Select replaces AutoComplete */}
         <Form.Item
           name="type"
-          label="Type de plateforme (libre)"
-          rules={[
-            { required: true, message: 'Le type est requis' },
-            { max: 100, message: 'Le type ne peut pas dépasser 100 caractères' },
-          ]}
-          tooltip="Nom libre de la plateforme (ex: aap, terraform, jenkins...)"
+          label="Type d'intégration"
+          rules={[{ required: true, message: "Veuillez sélectionner un type d'intégration" }]}
         >
-          <AutoComplete
-            placeholder="Saisir ou choisir un type"
-            options={TYPE_SUGGESTIONS}
-            filterOption={(input, option) =>
-              (option?.value ?? '').toLowerCase().includes(input.toLowerCase())
-            }
-            aria-label="Type de plateforme"
+          <Select
+            placeholder={loadingTypes ? 'Chargement des types...' : "Sélectionner un type d'intégration"}
+            loading={loadingTypes}
+            disabled={isEdit || loadingTypes}
+            showSearch
+            optionFilterProp="label"
+            options={typeOptions}
+            aria-label="Type d'intégration"
           />
         </Form.Item>
+
+        {/* Story 24.2 AC6: Info message when type is disabled in edit mode */}
+        {isEdit && (
+          <Alert
+            type="info"
+            showIcon
+            icon={<InfoCircleOutlined />}
+            title="Le type d'une intégration ne peut pas être modifié après sa création"
+            style={{ marginBottom: 16 }}
+          />
+        )}
+
+        {/* Story 24.2 AC3, AC4, AC8: Available actions panel */}
+        <AvailableActionsPanel selectedType={selectedTypeData} />
+
         <Form.Item
           name="name"
           label="Nom"
@@ -269,9 +324,9 @@ export function IntegrationForm({
               required: true,
               validator: (_, v) => {
                 const s = (v ?? '').toString().trim();
-                if (!s) return Promise.reject(new Error('L\'URL de base est requise'));
+                if (!s) return Promise.reject(new Error("L'URL de base est requise"));
                 if (!URL_PATTERN.test(s)) {
-                  return Promise.reject(new Error('L\'URL doit être valide (commencer par http:// ou https://)'));
+                  return Promise.reject(new Error("L'URL doit être valide (commencer par http:// ou https://)"));
                 }
                 return Promise.resolve();
               },
@@ -295,7 +350,7 @@ export function IntegrationForm({
           />
         </Form.Item>
         <Form.Item label="Icône" tooltip="Uploader une icône ou saisir une URL">
-          <Space orientation="vertical" style={{ width: '100%' }}>
+          <Space direction="vertical" style={{ width: '100%' }}>
             <Upload
               accept="image/*"
               maxCount={1}
@@ -308,12 +363,12 @@ export function IntegrationForm({
                 }
                 const isLt2M = file.size / 1024 / 1024 < 2;
                 if (!isLt2M) {
-                  message.error('L\'image doit faire moins de 2MB!');
+                  message.error("L'image doit faire moins de 2MB!");
                   return Upload.LIST_IGNORE;
                 }
                 handleIconUpload(file);
                 setFileList([file]);
-                return false; // Prevent default upload
+                return false;
               }}
               onRemove={() => {
                 setFileList([]);

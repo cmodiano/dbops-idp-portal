@@ -241,6 +241,7 @@ En développement avec Docker Compose, les variables sont pré-configurées dans
 - [Récapitulatif migration](docs/fastapi-to-django-migration.md)
 - [Parité schéma base de données](docs/schema-differences.md)
 - [Templates de communication](docs/communication-templates.md)
+- [Admin Intégrations — Restriction types via catalogue](docs/admin-integrations-type-restriction.md)
 
 ## API Integrations — champ config
 
