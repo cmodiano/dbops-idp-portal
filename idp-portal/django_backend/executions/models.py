@@ -265,6 +265,7 @@ class ExecutionStepType(models.TextChoices):
 class ExecutionStepStatus(models.TextChoices):
     """Execution step status enum matching Oracle CHECK constraint."""
     PENDING = 'PENDING', 'Pending'
+    WAITING = 'WAITING', 'Waiting'
     RUNNING = 'RUNNING', 'Running'
     COMPLETED = 'COMPLETED', 'Completed'
     FAILED = 'FAILED', 'Failed'

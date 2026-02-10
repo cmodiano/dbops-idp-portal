@@ -618,6 +618,12 @@ class CatalogService:
             if action.item_type == ActionItemType.WORKFLOW:
                 steps = validate_workflow_steps(steps, action_id=action.id)
 
+            # Story 25.2: Validate gate_conditions in execution steps
+            from catalog.validators import validate_gate_conditions
+            for step in steps:
+                if isinstance(step, dict) and 'gate_conditions' in step:
+                    validate_gate_conditions(step['gate_conditions'])
+
             action.execution_steps = steps
 
         # Update change_type_config if provided

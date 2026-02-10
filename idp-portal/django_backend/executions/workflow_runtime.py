@@ -35,6 +35,7 @@ class StepOutcome(str, Enum):
     """Outcome of a step execution."""
     SUCCESS = "success"
     ERROR = "error"
+    WAITING = "waiting"  # Story 25.2: step blocked by gate_conditions
 
 
 @dataclass
@@ -62,6 +63,11 @@ class StepResult:
     def is_error(self) -> bool:
         """Check if step failed."""
         return self.outcome == StepOutcome.ERROR
+
+    @property
+    def is_waiting(self) -> bool:
+        """Check if step is waiting for gate conditions (Story 25.2)."""
+        return self.outcome == StepOutcome.WAITING
 
 
 @dataclass
@@ -498,16 +504,13 @@ class WorkflowRuntime:
 
     def _execute_step(self, step: Dict[str, Any]) -> StepResult:
         """
-        Execute a single workflow step.
+        Execute a single workflow step, or put it in WAITING if gate_conditions present.
+
+        Story 25.2: If step has gate_conditions, create ExecutionStep in WAITING status
+        and return immediately without executing. The Celery Beat task (Story 25.3) will
+        evaluate gates and unblock the step later.
 
         Story 4.12 AC5: Injects workflow_step_parameters[step_order] for this step.
-        When the platform adapter is called (future story), it must receive step_parameters
-        as the execution parameters for the referenced action.
-
-        Placeholder implementation for Story 16.3 - actual execution logic
-        will be added in future stories (e.g., calling platform adapters).
-
-        For now, creates an ExecutionStep record and marks it COMPLETED.
 
         Args:
             step: Step dict from workflow definition
@@ -533,6 +536,59 @@ class WorkflowRuntime:
             step_order=step_order,
             correlation_id=self.correlation_id,
         )
+
+        # Story 25.2: Check for gate_conditions — create WAITING step instead of executing
+        gate_conditions = step.get('gate_conditions', [])
+        if gate_conditions:
+            from executions.gate_context import build_waiting_context
+
+            execution_step = ExecutionStep.objects.create(
+                execution=self.execution,
+                step_order=step_order,
+                step_name=step_name,
+                step_type='platform',
+                status=ExecutionStepStatus.WAITING,
+            )
+
+            waiting_context = build_waiting_context(execution_step, gate_conditions)
+            execution_step.set_output(waiting_context)
+            execution_step.save()
+
+            logger.info(
+                "workflow_step_waiting",
+                execution_id=self.execution.id,
+                step_id=step_id,
+                step_name=step_name,
+                gate_conditions_count=len(gate_conditions),
+                correlation_id=self.correlation_id,
+            )
+
+            # AC3: Audit trail for WAITING step creation
+            AuditService.create_entry(
+                user_id=str(self.execution.user_id),
+                action_type=AuditActionType.EXECUTION_STEP_WAITING,
+                entity_type=AuditEntityType.EXECUTION,
+                entity_id=self.execution.id,
+                details={
+                    'step_id': step_id,
+                    'step_name': step_name,
+                    'step_order': step_order,
+                    'gate_conditions_count': len(gate_conditions),
+                    'gate_types': [c.get('type') for c in gate_conditions],
+                },
+                correlation_id=self.correlation_id,
+            )
+
+            return StepResult(
+                outcome=StepOutcome.WAITING,
+                error_message="Step waiting for gate conditions",
+                error_details={
+                    'step_id': step_id,
+                    'step_name': step_name,
+                    'waiting': True,
+                    'gate_conditions_count': len(gate_conditions),
+                },
+            )
 
         # Note (AC3): this runtime is strictly sequential in V1.
         # Parallel execution is intentionally NOT supported yet; this is a future enhancement.
@@ -867,6 +923,19 @@ class WorkflowRuntime:
                     'error_message': result.error_message,
                     'error_details': result.error_details,
                 }
+
+            # Story 25.2: If step is WAITING, stop workflow but keep RUNNING status
+            # The Celery Beat task (Story 25.3) will resume execution after gates are satisfied
+            if result.is_waiting:
+                logger.info(
+                    "workflow_paused_waiting_gate",
+                    execution_id=self.execution.id,
+                    step_id=self.state.current_step_id,
+                    correlation_id=self.correlation_id,
+                )
+                # Keep execution in RUNNING status — do NOT set completed_at
+                # Story 25.3 will resume from this step
+                return ExecutionStatus.RUNNING
 
             # AC2: If step failed and no error path, workflow fails
             if result.is_error and 'on_error_step_id' not in current_step:
