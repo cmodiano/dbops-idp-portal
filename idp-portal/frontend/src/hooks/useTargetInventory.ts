@@ -18,6 +18,8 @@ export interface UseTargetInventoryOptions {
   currentStep: number;
   parameterFields: Array<{ inventorySource?: 'databases' | 'servers' | 'instances' }>;
   environment: string | null;
+  /** Names of servers selected at step 1, used to filter instances/databases (Story 23.6). */
+  selectedServerNames?: string[];
 }
 
 export interface UseTargetInventoryReturn {
@@ -32,12 +34,15 @@ export function useTargetInventory({
   currentStep,
   parameterFields,
   environment,
+  selectedServerNames = [],
 }: UseTargetInventoryOptions): UseTargetInventoryReturn {
   const [environmentsCache, setEnvironmentsCache] = useState<InventoryItem[] | null>(null);
   const [inventoryData, setInventoryData] = useState<Record<string, InventoryItem[]>>({});
   const [inventoryWarnings, setInventoryWarnings] = useState<Record<string, boolean>>({});
   const [loadingInventory, setLoadingInventory] = useState(false);
   const lastInventoryEnvRef = useRef<string | null>(null);
+  // Story 23.6 - Track previous selectedServerNames for cache invalidation
+  const lastServerNamesRef = useRef<string[] | null>(null);
 
   // Load environments (cached, loaded once)
   useEffect(() => {
@@ -76,11 +81,32 @@ export function useTargetInventory({
       lastInventoryEnvRef.current = environment;
     }
 
+    // Story 23.6 - Invalidate cache if selected servers change
+    const serverNamesChanged = JSON.stringify(lastServerNamesRef.current) !== JSON.stringify(selectedServerNames);
+    if (serverNamesChanged) {
+      lastServerNamesRef.current = selectedServerNames;
+      // Story 23.6 - Log cache invalidation for debugging (HIGH-3 fix)
+      if (import.meta.env.DEV) {
+        const prevNames = JSON.stringify(lastServerNamesRef.current || []);
+        const newNames = JSON.stringify(selectedServerNames);
+        // Use console for DEV mode (logger not available in hooks without correlation_id context)
+        console.debug('[useTargetInventory] Cache invalidation: server_names changed', {
+          previous: prevNames,
+          current: newNames,
+          environment,
+        });
+      }
+    }
+
     const toFetch: Array<'databases' | 'servers' | 'instances'> = [];
     const cached: Record<string, InventoryItem[]> = {};
 
     sourcesToLoad.forEach((source) => {
-      if (!envChanged && inventoryData[source] && inventoryData[source].length > 0) {
+      // Story 23.6 - For instances/databases, also invalidate on server_names change
+      const needsRefetch = source === 'instances' || source === 'databases'
+        ? envChanged || serverNamesChanged
+        : envChanged;
+      if (!needsRefetch && inventoryData[source] && inventoryData[source].length > 0) {
         cached[source] = inventoryData[source];
       } else {
         toFetch.push(source);
@@ -93,7 +119,13 @@ export function useTargetInventory({
     Promise.all(
       toFetch.map(async (source) => {
         try {
-          const items = await fetchInventoryItems(source, environment);
+          // Story 23.6 - Pass server_names for instances/databases
+          // MEDIUM-1 fix: Validate selectedServerNames format before API call
+          const validServerNames = selectedServerNames.filter(name => typeof name === 'string' && name.trim().length > 0);
+          const options = (source === 'instances' || source === 'databases')
+            ? { server_names: validServerNames }
+            : undefined;
+          const items = await fetchInventoryItems(source, environment, options);
           setInventoryWarnings((prev) => ({ ...prev, [source]: false }));
           return [source, items] as const;
         } catch (err: unknown) {
@@ -114,7 +146,7 @@ export function useTargetInventory({
         setInventoryData(data);
       })
       .finally(() => setLoadingInventory(false));
-  }, [open, currentStep, parameterFields, environment, inventoryData]);
+  }, [open, currentStep, parameterFields, environment, inventoryData, selectedServerNames]);
 
   return {
     environmentsCache,

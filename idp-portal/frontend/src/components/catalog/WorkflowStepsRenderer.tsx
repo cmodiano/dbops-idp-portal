@@ -30,6 +30,8 @@ export interface WorkflowStepsRendererProps {
   inventoryData: Record<string, InventoryItem[]>;
   inventoryWarnings: Record<string, boolean>;
   loadingInventory: boolean;
+  /** Story 23.6 - Selected server names for filtering instances/databases. */
+  selectedServerNames?: string[];
 }
 
 export const WorkflowStepsRenderer = memo(function WorkflowStepsRenderer({
@@ -42,6 +44,7 @@ export const WorkflowStepsRenderer = memo(function WorkflowStepsRenderer({
   inventoryData,
   inventoryWarnings,
   loadingInventory,
+  selectedServerNames = [],
 }: WorkflowStepsRendererProps) {
   const firstFieldRef = useRef<HTMLElement | null>(null);
 
@@ -119,7 +122,7 @@ export const WorkflowStepsRenderer = memo(function WorkflowStepsRenderer({
                       tooltip={displayDescription ? { title: displayDescription, icon: <InfoCircleOutlined /> } : undefined}
                       style={{ marginBottom: 12 }}
                     >
-                      {renderFieldInput(field, inventoryData, inventoryWarnings, loadingInventory)}
+                      {renderFieldInput(field, inventoryData, inventoryWarnings, loadingInventory, selectedServerNames)}
                     </Form.Item>
                   </div>
                 ) : (
@@ -131,7 +134,7 @@ export const WorkflowStepsRenderer = memo(function WorkflowStepsRenderer({
                     tooltip={displayDescription ? { title: displayDescription, icon: <InfoCircleOutlined /> } : undefined}
                     style={{ marginBottom: 12 }}
                   >
-                    {renderFieldInput(field, inventoryData, inventoryWarnings, loadingInventory)}
+                    {renderFieldInput(field, inventoryData, inventoryWarnings, loadingInventory, selectedServerNames)}
                   </Form.Item>
                 );
               })

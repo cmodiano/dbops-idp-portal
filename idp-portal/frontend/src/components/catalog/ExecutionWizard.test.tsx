@@ -641,26 +641,44 @@ describe('ExecutionWizard', () => {
       });
 
       // Verify databases were fetched
-      expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev');
+      expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', { server_names: [] });
     });
 
     it('displays warning badge when inventory unavailable (503)', async () => {
-      const cachedDatabaseItems: InventoryItem[] = [
-        { id: 'db1', name: 'Database 1', environment: 'dev' },
+      // Story 23.6: Use servers inventory_type (not databases) because databases
+      // with empty selectedServerNames shows Alert instead of Select+warning badge
+      const actionWithServerInventory: CatalogActionDetail = {
+        ...mockAction,
+        parameters_schema: {
+          type: 'object',
+          properties: {
+            server: {
+              type: 'string',
+              title: 'Server',
+              source: 'inventory',
+              inventory_type: 'servers',
+            },
+          },
+          required: ['server'],
+        },
+      };
+
+      const cachedServerItems: InventoryItem[] = [
+        { id: 'srv1', name: 'Server 1', environment: 'dev' },
       ];
       const error503 = new Error('Inventaire temporairement indisponible — dernières valeurs en cache');
       (error503 as Error & { code: string }).code = 'INVENTORY_UNAVAILABLE';
       (error503 as Error & { useCache: boolean }).useCache = true;
-      (error503 as Error & { cachedItems: InventoryItem[] }).cachedItems = cachedDatabaseItems;
+      (error503 as Error & { cachedItems: InventoryItem[] }).cachedItems = cachedServerItems;
 
-      // Environments work, databases fail with 503
+      // Environments work, servers fail with 503
       vi.mocked(fetchInventoryItems).mockImplementation(async (type: string) => {
         if (type === 'environments') return mockEnvironments;
         throw error503;
       });
 
       render(
-        <ExecutionWizard {...defaultProps} action={actionWithInventory} />,
+        <ExecutionWizard {...defaultProps} action={actionWithServerInventory} />,
         { wrapper: TestWrapper }
       );
 
@@ -679,13 +697,31 @@ describe('ExecutionWizard', () => {
     });
 
     it('uses sessionStorage cache when API fails with 503', async () => {
+      // Story 23.6: Use servers inventory_type (not databases) because databases
+      // with empty selectedServerNames shows Alert instead of Select+warning badge
+      const actionWithServerInventory: CatalogActionDetail = {
+        ...mockAction,
+        parameters_schema: {
+          type: 'object',
+          properties: {
+            server: {
+              type: 'string',
+              title: 'Server',
+              source: 'inventory',
+              inventory_type: 'servers',
+            },
+          },
+          required: ['server'],
+        },
+      };
+
       const cachedItems: InventoryItem[] = [
-        { id: 'db_cached', name: 'Cached Database', environment: 'dev' },
+        { id: 'srv_cached', name: 'Cached Server', environment: 'dev' },
       ];
 
       // Set up sessionStorage cache (Story 22.17: migrated from localStorage)
       sessionStorage.setItem(
-        'inventory_cache_databases_dev',
+        'inventory_cache_servers_dev',
         JSON.stringify({
           items: cachedItems,
           timestamp: Date.now(),
@@ -698,14 +734,14 @@ describe('ExecutionWizard', () => {
       (error503 as Error & { useCache: boolean }).useCache = true;
       (error503 as Error & { cachedItems: InventoryItem[] }).cachedItems = cachedItems;
 
-      // Environments work, databases fail with cache fallback
+      // Environments work, servers fail with cache fallback
       vi.mocked(fetchInventoryItems).mockImplementation(async (type: string) => {
         if (type === 'environments') return mockEnvironments;
         throw error503;
       });
 
       render(
-        <ExecutionWizard {...defaultProps} action={actionWithInventory} />,
+        <ExecutionWizard {...defaultProps} action={actionWithServerInventory} />,
         { wrapper: TestWrapper }
       );
 
@@ -743,7 +779,7 @@ describe('ExecutionWizard', () => {
 
       // Check that fetchInventoryItems was called with databases (caching is internal to the service)
       await waitFor(() => {
-        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev');
+        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', { server_names: [] });
       });
     });
 
@@ -854,7 +890,7 @@ describe('ExecutionWizard', () => {
 
       // Should NOT use expired cache - error should propagate without cache fallback
       await waitFor(() => {
-        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev');
+        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', { server_names: [] });
       });
 
       // Verify error is shown (no cache fallback for expired data)
@@ -883,7 +919,7 @@ describe('ExecutionWizard', () => {
       await user.click(screen.getByRole('button', { name: /suivant/i }));
 
       await waitFor(() => {
-        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev');
+        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', { server_names: [] });
       });
 
       // Verify no sessionStorage.setItem calls for inventory_cache_databases_dev
@@ -921,7 +957,7 @@ describe('ExecutionWizard', () => {
       await user.click(screen.getByRole('button', { name: /suivant/i }));
 
       await waitFor(() => {
-        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev');
+        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', { server_names: [] });
       });
 
       // Verify old localStorage data still exists (migration doesn't auto-clean)

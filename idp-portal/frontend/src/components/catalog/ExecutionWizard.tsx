@@ -175,6 +175,8 @@ export function ExecutionWizard({
 
   const firstFieldRef = useRef<HTMLElement | null>(null);
   const lastInventoryEnvRef = useRef<string | null>(null);
+  // Story 23.6 - Track previous selectedServerNames for cache invalidation
+  const lastServerNamesRef = useRef<string[] | null>(null);
 
   // Story 22.5: Synchronous guard to prevent double-submit (React state updates are batched)
   const isSubmittingRef = useRef(false);
@@ -223,6 +225,11 @@ export function ExecutionWizard({
   }, [derivedEnvironment, action]);
 
   const envForInventory = selectedEnvironment || derivedEnvironment;
+
+  // Story 23.6 - Compute selectedServerNames from effectiveTargetNames
+  const selectedServerNames = useMemo((): string[] => {
+    return effectiveTargetNames;
+  }, [effectiveTargetNames]);
 
   // === Effects ===
 
@@ -319,15 +326,21 @@ export function ExecutionWizard({
   // Load inventory data for parameter fields
   useEffect(() => {
     if (!open || !action || currentStep !== 1 || !envForInventory) return;
-    const sourcesToLoad = new Set<'databases' | 'servers'>();
+    const sourcesToLoad = new Set<'databases' | 'servers' | 'instances'>();
     parameterFields.forEach((f) => { if (f.inventorySource) sourcesToLoad.add(f.inventorySource); });
     if (sourcesToLoad.size === 0) return;
     const envChanged = lastInventoryEnvRef.current !== envForInventory;
     if (envChanged) lastInventoryEnvRef.current = envForInventory;
-    const toFetch: Array<'databases' | 'servers'> = [];
+    // Story 23.6 — Invalider cache si serveurs sélectionnés changent (LOW-1 fix: French comment)
+    const serverNamesChanged = JSON.stringify(lastServerNamesRef.current) !== JSON.stringify(selectedServerNames);
+    if (serverNamesChanged) lastServerNamesRef.current = selectedServerNames;
+    const toFetch: Array<'databases' | 'servers' | 'instances'> = [];
     sourcesToLoad.forEach((source) => {
-      if (!envChanged && inventoryData[source]?.length > 0) {
-        // Already cached and environment hasn't changed - skip
+      const needsRefetch = source === 'instances' || source === 'databases'
+        ? envChanged || serverNamesChanged
+        : envChanged;
+      if (!needsRefetch && inventoryData[source]?.length > 0) {
+        // Already cached and nothing changed - skip
       } else {
         toFetch.push(source);
       }
@@ -335,7 +348,15 @@ export function ExecutionWizard({
     if (toFetch.length === 0) return;
     setLoadingInventory(true);
     Promise.all(toFetch.map(async (source) => {
-      try { const items = await fetchInventoryItems(source, envForInventory); setInventoryWarnings((p) => ({ ...p, [source]: false })); return [source, items] as const; }
+      try {
+        // Story 23.6 - Pass server_names for instances/databases
+        const options = (source === 'instances' || source === 'databases')
+          ? { server_names: selectedServerNames }
+          : undefined;
+        const items = await fetchInventoryItems(source, envForInventory, options);
+        setInventoryWarnings((p) => ({ ...p, [source]: false }));
+        return [source, items] as const;
+      }
       catch (err: unknown) { const e = err as Error & { code?: string; useCache?: boolean; cachedItems?: import('../../types/api').InventoryItem[] }; if (e.code === 'INVENTORY_UNAVAILABLE' && e.useCache && e.cachedItems) { setInventoryWarnings((p) => ({ ...p, [source]: true })); return [source, e.cachedItems] as const; } return [source, []] as const; }
     })).then((results) => {
       setInventoryData((prevData) => {
@@ -345,7 +366,7 @@ export function ExecutionWizard({
       });
     }).finally(() => setLoadingInventory(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, action, currentStep, parameterFields, envForInventory]);
+  }, [open, action, currentStep, parameterFields, envForInventory, selectedServerNames]);
 
   // Focus management
   useEffect(() => { if (open && firstFieldRef.current) setTimeout(() => firstFieldRef.current?.focus(), 100); }, [open, currentStep]);
@@ -566,6 +587,7 @@ export function ExecutionWizard({
               workflowStepActions={workflowStepActions} loadingWorkflowStepActions={loadingWorkflowStepActions}
               workflowStepActionsError={workflowStepActionsError} workflowValidationSummary={workflowValidationSummary}
               inventoryData={inventoryData} inventoryWarnings={inventoryWarnings} loadingInventory={loadingInventory}
+              selectedServerNames={selectedServerNames}
             />
           </div>
           {currentStep === 2 && (

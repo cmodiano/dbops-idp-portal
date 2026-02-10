@@ -39,6 +39,8 @@ export interface ParametersFormStepProps {
   inventoryData: Record<string, InventoryItem[]>;
   inventoryWarnings: Record<string, boolean>;
   loadingInventory: boolean;
+  /** Story 23.6 - Selected server names for filtering instances/databases. */
+  selectedServerNames?: string[];
 }
 
 export const ParametersFormStep = memo(function ParametersFormStep({
@@ -56,6 +58,7 @@ export const ParametersFormStep = memo(function ParametersFormStep({
   inventoryData,
   inventoryWarnings,
   loadingInventory,
+  selectedServerNames = [],
 }: ParametersFormStepProps) {
   const firstFieldRef = useRef<HTMLElement | null>(null);
 
@@ -89,6 +92,7 @@ export const ParametersFormStep = memo(function ParametersFormStep({
           inventoryData={inventoryData}
           inventoryWarnings={inventoryWarnings}
           loadingInventory={loadingInventory}
+          selectedServerNames={selectedServerNames}
         />
       ) : (
         parameterFields.length === 0 ? (
@@ -120,7 +124,7 @@ export const ParametersFormStep = memo(function ParametersFormStep({
                   rules={rules}
                   tooltip={displayDescription ? { title: displayDescription, icon: <InfoCircleOutlined /> } : undefined}
                 >
-                  {renderFieldInput(field, inventoryData, inventoryWarnings, loadingInventory)}
+                  {renderFieldInput(field, inventoryData, inventoryWarnings, loadingInventory, selectedServerNames)}
                 </Form.Item>
               </div>
             ) : (
@@ -131,7 +135,7 @@ export const ParametersFormStep = memo(function ParametersFormStep({
                 rules={rules}
                 tooltip={displayDescription ? { title: displayDescription, icon: <InfoCircleOutlined /> } : undefined}
               >
-                {renderFieldInput(field, inventoryData, inventoryWarnings, loadingInventory)}
+                {renderFieldInput(field, inventoryData, inventoryWarnings, loadingInventory, selectedServerNames)}
               </Form.Item>
             );
           })

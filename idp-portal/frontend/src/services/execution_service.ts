@@ -384,10 +384,23 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 export async function fetchInventoryItems(
   type: 'databases' | 'servers' | 'instances' | 'environments',
-  environment?: string
+  environment?: string,
+  /** Story 23.6 - Optional server names to filter instances/databases. */
+  options?: { server_names?: string[] }
 ): Promise<InventoryItem[]> {
-  const params = environment ? `?environment=${encodeURIComponent(environment)}` : '';
-  const cacheKey = `inventory_cache_${type}${environment ? `_${environment}` : ''}`;
+  // Story 23.6 - Build query string with optional server_names filter
+  const queryParams = new URLSearchParams();
+  if (environment) queryParams.set('environment', environment);
+  if (options?.server_names && options.server_names.length > 0) {
+    queryParams.set('server_names', options.server_names.join(','));
+  }
+  const params = queryParams.toString() ? `?${queryParams.toString()}` : '';
+  // MEDIUM-2 fix: Include server_names in cache key to prevent incorrect cache hits
+  // Story 23.6 - Cache must differentiate by server_names filter
+  const serverNamesSuffix = options?.server_names && options.server_names.length > 0
+    ? `_${options.server_names.join(',')}`
+    : '';
+  const cacheKey = `inventory_cache_${type}${environment ? `_${environment}` : ''}${serverNamesSuffix}`;
   const apiKey = `${type}${params}`;
 
   // Special handling for environments: share cache with fetchEnvironments

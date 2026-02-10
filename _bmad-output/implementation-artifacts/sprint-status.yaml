@@ -316,6 +316,6 @@ development_status:
     23-3-backend-api-servers-databases-instances: done # 2026-02-09: Code review — 11 issues auto-fixés (8 HIGH + 3 MEDIUM) — RBAC security, OpenAPI docs, error handling, test refactoring — 55/55 tests pass ✅
     23-4-backend-rbac-profils-filtres-par-attribut: done # 53 tests, AC1-AC8 done, docs/rbac-filter-by-attribute.md
     23-5-frontend-admin-source-inventaire-table-par-parametre: done # Code review 2026-02-09: 7 auto-fixes (FR accents, types, comments), 4 action items (validation, selectedServerNames, race condition, UI warning), 94/94 tests pass
-    23-6-frontend-use-target-inventory-contexte-serveur: backlog
+    23-6-frontend-use-target-inventory-contexte-serveur: done # Code review 2026-02-09: 10 issues (4 HIGH + 4 MEDIUM + 2 LOW) auto-fixed
     23-7-frontend-profile-form-options-tous-oracle-sql: backlog
     epic-23-retrospective: optional
