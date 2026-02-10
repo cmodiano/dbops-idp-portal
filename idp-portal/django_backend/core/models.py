@@ -66,6 +66,8 @@ class AuditActionType(models.TextChoices):
     INTEGRATION_TYPE_UPDATED = 'INTEGRATION_TYPE_UPDATED', 'Integration Type Updated'
     INTEGRATION_ACTION_CREATED = 'INTEGRATION_ACTION_CREATED', 'Integration Action Created'
     INTEGRATION_ACTION_UPDATED = 'INTEGRATION_ACTION_UPDATED', 'Integration Action Updated'
+    # Story 24.3: Integration status validation audit
+    INTEGRATION_STATUS_UPDATED = 'INTEGRATION_STATUS_UPDATED', 'Integration Status Updated'
     # Additional types added in later migrations (V028-V035, V039-V041)
     # Note: Full list would include all types from migrations, but base types are sufficient for model
 

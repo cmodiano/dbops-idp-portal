@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
 import { Form, Input, Modal, Alert, Select, Avatar, Space, Button, Upload, App } from 'antd';
 import { useAuth } from '../../contexts/AuthContext';
 import type { UploadFile } from 'antd';
-import { UploadOutlined, ApiOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { UploadOutlined, ApiOutlined, InfoCircleOutlined, ExclamationCircleOutlined, WarningOutlined } from '@ant-design/icons';
 import type { AuthFlow, IntegrationCreate, IntegrationUpdate, IntegrationResponse } from '../../types/api';
 import { AUTH_FLOW_LABELS } from '../../types/api';
 import { getIconUrl } from '../../utils/iconUrl';
@@ -66,6 +66,12 @@ export function IntegrationForm({
   const watchIcon = Form.useWatch('icon', form);
   const watchType = Form.useWatch('type', form);
   const isInventoryDb = (watchType ?? '').trim().toLowerCase() === 'inventory_db';
+
+  // Story 24.3: Status-based UI restrictions
+  const editStatus = editIntegration?.status;
+  const isInvalid = editStatus === 'invalid';
+  const isDeprecated = editStatus === 'deprecated';
+  const isSubmitDisabled = isInvalid;
 
   // Story 24.2 AC3: Find selected type data for actions display
   const selectedTypeData = integrationTypes.find((t) => t.code === watchType) ?? null;
@@ -230,7 +236,7 @@ export function IntegrationForm({
           <Button onClick={onCancel} disabled={loading}>
             Annuler
           </Button>
-          <Button type="primary" onClick={handleSubmit} loading={loading}>
+          <Button type="primary" onClick={handleSubmit} loading={loading} disabled={isSubmitDisabled}>
             {isEdit ? 'Enregistrer' : 'Créer'}
           </Button>
         </Space>
@@ -238,6 +244,28 @@ export function IntegrationForm({
     >
       {error && (
         <Alert type="error" title={error} style={{ marginBottom: 16 }} showIcon />
+      )}
+      {/* Story 24.3: Alert if integration is invalid */}
+      {isEdit && isInvalid && (
+        <Alert
+          type="error"
+          showIcon
+          icon={<ExclamationCircleOutlined />}
+          message="Intégration invalide"
+          description={`Cette intégration est invalide. Le type '${editIntegration?.type}' n'existe pas dans le catalogue backend. Veuillez contacter un administrateur. Les modifications ne sont pas autorisées pour les intégrations invalides.`}
+          style={{ marginBottom: 16 }}
+        />
+      )}
+      {/* Story 24.3: Alert if integration is deprecated */}
+      {isEdit && isDeprecated && (
+        <Alert
+          type="warning"
+          showIcon
+          icon={<WarningOutlined />}
+          message="Intégration dépréciée"
+          description={`Attention : le type de cette intégration ('${editIntegration?.type}') est déprécié. Il est recommandé de migrer vers un type supporté. Vous pouvez encore modifier cette intégration, mais son utilisation dans de nouveaux workflows sera bloquée.`}
+          style={{ marginBottom: 16 }}
+        />
       )}
       {/* Story 24.2 AC2: Warning when using fallback types */}
       {isFallback && (

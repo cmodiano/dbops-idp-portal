@@ -40,6 +40,13 @@ class AuthFlow(models.TextChoices):
     PAT = 'pat', 'Personal Access Token'
 
 
+class IntegrationStatus(models.TextChoices):
+    """Story 24.3: Integration validation status against type catalogue."""
+    VALID = 'valid', 'Valide'
+    INVALID = 'invalid', 'Invalide'
+    DEPRECATED = 'deprecated', 'Déprécié'
+
+
 class IntegrationType(models.TextChoices):
     """Integration type enum. DB allows free-form type (V024); these are suggested values."""
     AAP = 'aap', 'AAP'
@@ -109,9 +116,17 @@ class Integration(models.Model):
     token_url = models.CharField(max_length=2000, null=True, blank=True, db_column='TOKEN_URL')
     # CLOB field - using TextField with JSON serialization helper
     config = models.TextField(null=True, blank=True, db_column='CONFIG')
+    # Story 24.3: Validation status against type catalogue
+    status = models.CharField(
+        max_length=20,
+        choices=IntegrationStatus.choices,
+        default=IntegrationStatus.VALID,
+        db_column='STATUS',
+        db_index=True,
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
     updated_at = models.DateTimeField(auto_now=True, db_column='UPDATED_AT')
-    
+
     # Custom manager
     objects = IntegrationManager()
 

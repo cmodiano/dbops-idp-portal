@@ -94,6 +94,35 @@ export interface IntegrationUpdate {
   config?: IntegrationConfigInventoryDb | Record<string, unknown> | null; // Story 13.1: inventory_db schema/table
 }
 
+/** Story 24.3: Integration validation status values. */
+export type IntegrationStatusType = 'valid' | 'invalid' | 'deprecated';
+
+/** Story 24.3: Validation details returned by /validate endpoint. */
+export interface IntegrationValidationDetails {
+  status: IntegrationStatusType;
+  type_exists: boolean;
+  type_is_active: boolean;
+  catalogue_version: string | null;
+  validation_message: string;
+}
+
+/** Story 24.3: Response from GET /admin/integrations/{id}/validate. */
+export interface IntegrationValidationResponse {
+  integration_id: number;
+  integration_name: string;
+  integration_type: string;
+  current_status: IntegrationStatusType;
+  validation_details: IntegrationValidationDetails;
+}
+
+/** Story 24.3: Response from POST /admin/integrations/validate-all. */
+export interface IntegrationValidateAllResponse {
+  valid: number;
+  invalid: number;
+  deprecated: number;
+  updated: number;
+}
+
 export interface IntegrationResponse {
   id: number;
   type: string; // Story 4.9 AC1: free-form platform name
@@ -102,6 +131,7 @@ export interface IntegrationResponse {
   credential_ref: string | null;
   icon: string | null;
   auth_flow: AuthFlow | null; // Story 4.9 AC2: authentication flow
+  status?: IntegrationStatusType; // Story 24.3: validation status
   config?: IntegrationConfigInventoryDb | Record<string, unknown> | null; // Story 13.1: inventory_db schema/table
   created_at: string;
   updated_at: string;

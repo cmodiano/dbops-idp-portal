@@ -195,6 +195,19 @@ curl -H "Authorization: Bearer <token>" \
      http://localhost:8000/api/v1/integrations/types/terraform/
    ```
 
+## Validation du Statut des Intégrations
+
+> Voir [integration-status-validation.md](integration-status-validation.md) pour la documentation complète.
+
+Chaque intégration possède un champ `status` (`valid`, `invalid`, `deprecated`) calculé automatiquement en vérifiant l'existence et l'état (`is_active`) du type dans le catalogue.
+
+**Scénario de dépréciation :**
+1. Un type est marqué `is_active=False` dans le catalogue
+2. La validation périodique (`validate_integrations`) détecte le changement
+3. Les intégrations utilisant ce type passent en `status=deprecated`
+4. L'UI Admin affiche un badge orange "Déprécié" et un warning dans le formulaire
+5. Les nouvelles utilisations dans les workflows sont bloquées (Story 24.4)
+
 ## Gestion des Versions et Dépréciation
 
 ### Stratégie de Versionnement

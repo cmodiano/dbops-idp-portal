@@ -476,4 +476,96 @@ describe('IntegrationForm', () => {
       expect.objectContaining({ type: 'aap' })
     );
   }, 15000);
+
+  // === Story 24.3: Status alerts in edit mode ===
+
+  it('24.3: shows error alert when editing invalid integration', () => {
+    const invalidIntegration: IntegrationResponse = {
+      id: 10,
+      type: 'nonexistent',
+      name: 'Invalid Integration',
+      base_url: 'https://invalid.example.com',
+      credential_ref: null,
+      icon: null,
+      auth_flow: null,
+      status: 'invalid',
+      created_at: '2026-01-28T10:00:00Z',
+      updated_at: '2026-01-28T10:00:00Z',
+    };
+    renderWithApp(<IntegrationForm {...defaultProps} editIntegration={invalidIntegration} />);
+    expect(screen.getByText('Intégration invalide')).toBeInTheDocument();
+    expect(screen.getByText(/n'existe pas dans le catalogue backend/)).toBeInTheDocument();
+  });
+
+  it('24.3: disables submit button when editing invalid integration', () => {
+    const invalidIntegration: IntegrationResponse = {
+      id: 10,
+      type: 'nonexistent',
+      name: 'Invalid Integration',
+      base_url: 'https://invalid.example.com',
+      credential_ref: null,
+      icon: null,
+      auth_flow: null,
+      status: 'invalid',
+      created_at: '2026-01-28T10:00:00Z',
+      updated_at: '2026-01-28T10:00:00Z',
+    };
+    renderWithApp(<IntegrationForm {...defaultProps} editIntegration={invalidIntegration} />);
+    const submitBtn = screen.getByRole('button', { name: /Enregistrer/i });
+    expect(submitBtn).toBeDisabled();
+  });
+
+  it('24.3: shows warning alert when editing deprecated integration', () => {
+    const deprecatedIntegration: IntegrationResponse = {
+      id: 11,
+      type: 'old_type',
+      name: 'Deprecated Integration',
+      base_url: 'https://deprecated.example.com',
+      credential_ref: null,
+      icon: null,
+      auth_flow: null,
+      status: 'deprecated',
+      created_at: '2026-01-28T10:00:00Z',
+      updated_at: '2026-01-28T10:00:00Z',
+    };
+    renderWithApp(<IntegrationForm {...defaultProps} editIntegration={deprecatedIntegration} />);
+    expect(screen.getByText('Intégration dépréciée')).toBeInTheDocument();
+    expect(screen.getByText(/est déprécié/)).toBeInTheDocument();
+  });
+
+  it('24.3: submit button is enabled when editing deprecated integration', () => {
+    const deprecatedIntegration: IntegrationResponse = {
+      id: 11,
+      type: 'old_type',
+      name: 'Deprecated Integration',
+      base_url: 'https://deprecated.example.com',
+      credential_ref: null,
+      icon: null,
+      auth_flow: null,
+      status: 'deprecated',
+      created_at: '2026-01-28T10:00:00Z',
+      updated_at: '2026-01-28T10:00:00Z',
+    };
+    renderWithApp(<IntegrationForm {...defaultProps} editIntegration={deprecatedIntegration} />);
+    const submitBtn = screen.getByRole('button', { name: /Enregistrer/i });
+    expect(submitBtn).not.toBeDisabled();
+  });
+
+  it('24.3: no status alert for valid integration', () => {
+    const validIntegration: IntegrationResponse = {
+      id: 12,
+      type: 'aap',
+      name: 'Valid Integration',
+      base_url: 'https://valid.example.com',
+      credential_ref: null,
+      icon: null,
+      auth_flow: null,
+      status: 'valid',
+      created_at: '2026-01-28T10:00:00Z',
+      updated_at: '2026-01-28T10:00:00Z',
+    };
+    renderWithApp(<IntegrationForm {...defaultProps} editIntegration={validIntegration} />);
+    expect(screen.queryByText('Intégration invalide')).not.toBeInTheDocument();
+    expect(screen.queryByText('Intégration dépréciée')).not.toBeInTheDocument();
+  });
 });

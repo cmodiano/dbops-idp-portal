@@ -29,6 +29,8 @@ const items: IntegrationListItem[] = [
     base_url: 'https://aap.example.com',
     credential_ref: null,
     icon: null,
+    auth_flow: null,
+    status: 'valid',
     created_at: '2026-01-28T10:00:00Z',
     updated_at: '2026-01-28T10:00:00Z',
   },
@@ -146,5 +148,44 @@ describe('IntegrationsTable', () => {
     renderWithApp(<IntegrationsTable {...defaultProps} onRefresh={mockOnRefresh} />);
     await user.click(screen.getByRole('button', { name: /Actualiser/i }));
     expect(mockOnRefresh).toHaveBeenCalled();
+  });
+
+  // Story 24.3: Status column tests
+  it('renders Statut column header', () => {
+    renderWithApp(<IntegrationsTable {...defaultProps} />);
+    expect(screen.getByText('Statut')).toBeInTheDocument();
+  });
+
+  it('renders Valide badge for status=valid', () => {
+    renderWithApp(<IntegrationsTable {...defaultProps} />);
+    expect(screen.getByText('Valide')).toBeInTheDocument();
+  });
+
+  it('renders Invalide badge for status=invalid', () => {
+    const invalidItems: IntegrationListItem[] = [
+      { ...items[0], id: 2, name: 'Invalid One', status: 'invalid' },
+    ];
+    renderWithApp(<IntegrationsTable {...defaultProps} dataSource={invalidItems} />);
+    expect(screen.getByText('Invalide')).toBeInTheDocument();
+  });
+
+  it('renders Déprécié badge for status=deprecated', () => {
+    const deprecatedItems: IntegrationListItem[] = [
+      { ...items[0], id: 3, name: 'Deprecated One', status: 'deprecated' },
+    ];
+    renderWithApp(<IntegrationsTable {...defaultProps} dataSource={deprecatedItems} />);
+    expect(screen.getByText('Déprécié')).toBeInTheDocument();
+  });
+
+  it('renders Re-valider button per row', () => {
+    renderWithApp(<IntegrationsTable {...defaultProps} />);
+    // Both "Re-valider" (per row) and "Re-valider tout" (toolbar) exist
+    const buttons = screen.getAllByRole('button', { name: /Re-valider/i });
+    expect(buttons.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('renders Re-valider tout button in toolbar', () => {
+    renderWithApp(<IntegrationsTable {...defaultProps} onRefresh={vi.fn()} />);
+    expect(screen.getByRole('button', { name: /Re-valider tout/i })).toBeInTheDocument();
   });
 });

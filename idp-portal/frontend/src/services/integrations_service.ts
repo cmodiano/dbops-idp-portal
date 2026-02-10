@@ -9,6 +9,8 @@ import type {
   IntegrationUpdate,
   IntegrationResponse,
   IntegrationTypeCatalogue,
+  IntegrationValidationResponse,
+  IntegrationValidateAllResponse,
 } from '../types/api';
 
 /** Story 24.2 AC1: Fetch integration type catalogue from backend. */
@@ -46,4 +48,16 @@ export async function updateIntegration(
 
 export async function deleteIntegration(id: number): Promise<void> {
   await apiFetch<void>(`/admin/integrations/${id}/`, { method: 'DELETE' });
+}
+
+/** Story 24.3: Validate a single integration against the type catalogue. */
+export async function validateIntegration(id: number): Promise<IntegrationValidationResponse> {
+  return apiFetch<IntegrationValidationResponse>(`/admin/integrations/${id}/validate/`);
+}
+
+/** Story 24.3: Batch validate all integrations. */
+export async function validateAllIntegrations(): Promise<IntegrationValidateAllResponse> {
+  return apiFetch<IntegrationValidateAllResponse>('/admin/integrations/validate-all/', {
+    method: 'POST',
+  });
 }

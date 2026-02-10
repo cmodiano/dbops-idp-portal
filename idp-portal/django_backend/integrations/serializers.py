@@ -6,7 +6,7 @@ import json
 
 from rest_framework import serializers
 from integrations.models import (
-    Integration, AuthFlow, IntegrationType,
+    Integration, AuthFlow, IntegrationType, IntegrationStatus,
     IntegrationTypeCatalogue, IntegrationAction,
 )
 
@@ -31,9 +31,9 @@ class IntegrationSerializer(serializers.ModelSerializer):
         model = Integration
         fields = [
             'id', 'type', 'name', 'base_url', 'credential_ref', 'icon',
-            'auth_flow', 'token_url', 'config', 'created_at', 'updated_at'
+            'auth_flow', 'token_url', 'config', 'status', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'status']
     
     def get_config(self, obj):
         """Deserialize config CLOB to dict."""
@@ -225,7 +225,7 @@ class IntegrationListSerializer(serializers.ModelSerializer):
         model = Integration
         fields = [
             'id', 'type', 'name', 'base_url', 'credential_ref', 'icon',
-            'auth_flow', 'token_url', 'created_at', 'updated_at'
+            'auth_flow', 'token_url', 'status', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
