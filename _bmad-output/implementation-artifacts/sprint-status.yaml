@@ -330,7 +330,7 @@ development_status:
     # Réf: implementation-artifacts/convergence-dbops-idp-portal.md
     epic-25: in-progress
     25-1-modele-execution-target-table-execution-targets-api: done # 2026-02-10: Modèle ExecutionTarget, migration V066, API targets[], 19 tests — AC1-AC5 validés
-    25-2-condition-gates-statut-waiting-gate-conditions-execution-steps: review # 2026-02-10: WAITING status, gate_conditions validation, WorkflowRuntime WAITING, documentation — 36 tests (29 unit + 7 integration)
+    25-2-condition-gates-statut-waiting-gate-conditions-execution-steps: done # 2026-02-10: Code review completed — 9 fixes applied (1 CRIT + 3 HIGH + 4 MED), 36/36 tests pass, audit trail EXECUTION_STEP_WAITING added
     25-3-tache-celery-beat-evaluate-waiting-gates-gate-maintenance-window: backlog
     25-4-overrides-par-environnement-change-type-config-enrichi: backlog
     25-5-mutex-inter-actions-table-action-mutex-validation-soumission: backlog
