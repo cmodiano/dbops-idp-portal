@@ -2,8 +2,13 @@
 Serializers for integrations endpoints.
 """
 
+import json
+
 from rest_framework import serializers
-from integrations.models import Integration, AuthFlow, IntegrationType
+from integrations.models import (
+    Integration, AuthFlow, IntegrationType,
+    IntegrationTypeCatalogue, IntegrationAction,
+)
 
 
 def validate_url(value):
@@ -215,7 +220,7 @@ class IntegrationListSerializer(serializers.ModelSerializer):
     Excludes config for performance.
     """
     auth_flow = serializers.CharField(required=False, allow_null=True)
-    
+
     class Meta:
         model = Integration
         fields = [
@@ -223,3 +228,68 @@ class IntegrationListSerializer(serializers.ModelSerializer):
             'auth_flow', 'token_url', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+# ============================================================================
+# Story 24.1: Integration Type Catalogue Serializers
+# ============================================================================
+
+
+class JSONTextField(serializers.Field):
+    """Serialize/deserialize TextField containing JSON."""
+
+    def to_representation(self, value):
+        if not value:
+            return {}
+        if isinstance(value, dict):
+            return value
+        try:
+            return json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+
+    def to_internal_value(self, data):
+        if isinstance(data, str):
+            return data
+        return json.dumps(data)
+
+
+class IntegrationActionSerializer(serializers.ModelSerializer):
+    """Serializer for IntegrationAction model."""
+    required_params = JSONTextField()
+    optional_params = JSONTextField()
+    response_format = JSONTextField()
+
+    class Meta:
+        model = IntegrationAction
+        fields = [
+            'id', 'action_code', 'action_label', 'description',
+            'required_params', 'optional_params', 'response_format',
+            'is_active', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class IntegrationTypeCatalogueSerializer(serializers.ModelSerializer):
+    """Serializer for IntegrationTypeCatalogue model (without nested actions)."""
+
+    class Meta:
+        model = IntegrationTypeCatalogue
+        fields = [
+            'code', 'name', 'description', 'version',
+            'is_active', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+
+class IntegrationTypeWithActionsSerializer(serializers.ModelSerializer):
+    """Serializer for IntegrationTypeCatalogue with nested actions."""
+    actions = IntegrationActionSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = IntegrationTypeCatalogue
+        fields = [
+            'code', 'name', 'description', 'version',
+            'is_active', 'created_at', 'updated_at', 'actions',
+        ]
+        read_only_fields = ['created_at', 'updated_at']

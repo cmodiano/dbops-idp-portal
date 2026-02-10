@@ -307,6 +307,48 @@ class FeatureFlagFactory(DjangoModelFactory):
 
 
 # ============================================================================
+# Integration Type Catalogue Factories (Story 24.1)
+# ============================================================================
+
+class IntegrationTypeCatalogueFactory(DjangoModelFactory):
+    """Factory for integrations.IntegrationTypeCatalogue model."""
+
+    class Meta:
+        model = 'integrations.IntegrationTypeCatalogue'
+
+    code = factory.Sequence(lambda n: f'type_{n}')
+    name = factory.LazyAttribute(lambda o: f'Type {o.code}')
+    description = factory.LazyAttribute(lambda o: f'Description for {o.code}')
+    version = '1.0'
+    is_active = True
+
+
+class IntegrationActionFactory(DjangoModelFactory):
+    """Factory for integrations.IntegrationAction model."""
+
+    class Meta:
+        model = 'integrations.IntegrationAction'
+
+    integration_type = factory.SubFactory(IntegrationTypeCatalogueFactory)
+    action_code = factory.Sequence(lambda n: f'action_{n}')
+    action_label = factory.LazyAttribute(lambda o: f'Label {o.action_code}')
+    description = factory.LazyAttribute(lambda o: f'Description for {o.action_code}')
+    required_params = factory.LazyFunction(lambda: json.dumps({
+        "type": "object",
+        "properties": {"param1": {"type": "string"}},
+        "required": ["param1"]
+    }))
+    optional_params = factory.LazyFunction(lambda: json.dumps({
+        "type": "object",
+        "properties": {"opt1": {"type": "string"}}
+    }))
+    response_format = factory.LazyFunction(lambda: json.dumps({
+        "result": "string", "status": "string"
+    }))
+    is_active = True
+
+
+# ============================================================================
 # Batch Factories for Performance Tests
 # ============================================================================
 

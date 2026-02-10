@@ -320,6 +320,12 @@ Supprimer la normalisation des environnements et utiliser l'inventaire comme seu
 **Phase :** Growth (Phase 2)
 **Reference :** docs/inventaire-multi-tables-ux-cibles.md
 
+### Epic 24 : Intégrations Admin alignées sur le backend
+Encadrer la configuration des intégrations dans l'interface Admin pour n'autoriser que des types et des actions d'intégration explicitement supportés par le backend (AAP, ServiceNow, etc.), via un modèle "type d'intégration" + "instance d'intégration" et un catalogue d'actions contractuel.
+**FRs couvertes :** FR18 (facade plateformes d'exécution), FR42, FR43 (cohérence inventaire / intégrations)
+**NFRs couvertes :** NFR17, NFR18, NFR19, NFR20, NFR22 (robustesse intégrations, plugin/adapter)
+**Phase :** Growth (Phase 2)
+
 ---
 
 ## Epic 1 : Bootstrap Projet & Authentification
@@ -4202,3 +4208,29 @@ afin d'éviter les typo et les références à des environnements obsolètes.
 5. **Frontend — Admin : source inventaire + table par paramètre** : Dans l’éditeur de paramètres d’une action, permettre de marquer un paramètre « source = inventaire » et de choisir la table : **Serveurs**, **Instances** ou **Bases de données**. Persistance dans le schéma (ex. `inventory_type`) pour alimenter le wizard.
 6. **Frontend — useTargetInventory + contexte serveur** : Paramètre `selectedServerNames` (ou `selectedTargets`), appels API avec `server_name`/`server_names` pour les paramètres de type instances/databases ; à l’étape 2 du wizard, les listes instance/DB sont restreintes aux instances/bases du (des) serveur(s) choisi(s).
 7. **Frontend — ProfileForm options Tous / Oracle / SQL** : UI pour filtres par type de moteur (et extension à d’autres attributs mappés).
+
+## Epic 24 : Intégrations Admin alignées sur le backend
+
+Encadrer la configuration des intégrations dans l'interface Admin pour n'autoriser que des types et des actions d'intégration explicitement supportés par le backend (AAP, ServiceNow, etc.), via un modèle "type d'intégration" + "instance d'intégration" et un catalogue d'actions contractuel. L'objectif est de supprimer les intégrations "libres" non supportées, réduire les erreurs de configuration, et rendre les exécutions d'intégrations prévisibles et observables.
+
+### Exigences couvertes (résumé)
+
+- **Modèle d'intégration** : Distinction claire entre **Type d'intégration** (AAP, ServiceNow, …) et **Instance d'intégration** (ex. "AAP Dev", "ServiceNow ITSM Préprod"). Chaque type définit un catalogue d'actions supportées (ex. `start_job`, `start_workflow`, `get_job_status`, `create_change`) avec leur contrat de paramètres minimal.
+- **Catalogue d'actions contractuel** : Le backend expose pour chaque type la liste des actions possibles, leurs noms, descriptions, paramètres attendus (obligatoires / optionnels) et formats de réponse. Le frontend consomme ce catalogue et ne peut pas inventer de nouvelles actions.
+- **UI Admin restreinte** : L'écran Admin Intégrations permet uniquement de créer/éditer des **instances d'intégration** en choisissant un **type existant** fourni par le backend, puis en remplissant les paramètres attendus (URL, credentials, IDs de templates, options métiers, etc.). Aucun champ ne permet de définir directement des verbes HTTP ou des endpoints arbitraires.
+- **Validation forte** : Une intégration dont le type ou une action n'existe plus côté backend est marquée comme **invalide ou dépréciée** ; elle est clairement signalée dans l'UI, et son utilisation dans les workflows est bloquée ou dégradée de manière contrôlée.
+- **Migration & compatibilité** : Les intégrations existantes "libres" sont migrées vers des instances typées autant que possible, ou marquées comme "legacy / read-only" avec garde-fous pour éviter de nouvelles utilisations.
+
+### Stories proposées (ordre suggéré)
+
+1. **Backend — Catalogue des types d'intégration et actions supportées**  
+   Définir le modèle `IntegrationType` (nom, code, version, description) et la liste des `IntegrationAction` associées (nom technique, label, description, paramètres exigés). Exposer une API de lecture (ex. `GET /api/v1/integrations/types`) permettant au frontend de récupérer le catalogue complet, avec versionnement minimal pour tracer les changements.
+
+2. **Frontend Admin — Création d'instances à partir des types d'intégration backend**  
+   Adapter l'écran Admin Intégrations pour que la création/édition passe obligatoirement par la sélection d'un `IntegrationType` renvoyé par le backend, puis par la configuration des champs attendus (URL, credential_ref, IDs AAP/ServiceNow, options métiers). Supprimer ou masquer les champs qui permettent d'encoder directement des endpoints/verbs/payloads arbitraires.
+
+3. **Backend & Frontend — Validation d'intégration et état (valide / invalide / dépréciée)**  
+   Introduire un statut d'intégration (`valid`, `invalid`, `deprecated`) calculé côté backend en fonction de l'existence du type et des actions référencées. Exposer ce statut via l'API, l'afficher clairement dans l'UI Admin (badge + message), et empêcher l'utilisation d'intégrations `invalid` dans les nouveaux workflows ou exécutions.
+
+4. **Migration des intégrations existantes et garde-fous d'exécution**  
+   Identifier les intégrations déjà configurées dans le système : pour chacune, tenter de les rattacher à un `IntegrationType` existant (AAP, ServiceNow, …) ou les marquer comme `legacy`. Mettre en place des garde-fous côté moteur d'exécution pour refuser proprement l'utilisation d'intégrations non typées ou invalides, avec messages d'erreur explicites et logs d'audit.

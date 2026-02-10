@@ -132,6 +132,10 @@ SIMULATE_EXECUTION_STEP_DURATION=2    # 2 secondes par étape
 
 Voir [docs/simulation-mode.md](docs/simulation-mode.md) pour la documentation complète.
 
+## Catalogue des Types d'Intégration (Epic 24)
+
+Voir [docs/integration-type-catalogue.md](docs/integration-type-catalogue.md) pour l'architecture du catalogue, les types supportés (AAP, ServiceNow), les endpoints API et le guide d'ajout de nouveaux types.
+
 ## CI/CD
 
 Le pipeline GitHub Actions exécute :

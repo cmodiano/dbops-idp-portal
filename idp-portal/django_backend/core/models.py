@@ -61,6 +61,11 @@ class AuditActionType(models.TextChoices):
     FEATURE_FLAG_CREATED = 'FEATURE_FLAG_CREATED', 'Feature Flag Created'
     # Story 21.6: Profile environment validation audit
     PROFILE_UPDATE_REJECTED = 'PROFILE_UPDATE_REJECTED', 'Profile Update Rejected'
+    # Story 24.1: Integration type catalogue audit types
+    INTEGRATION_TYPE_CREATED = 'INTEGRATION_TYPE_CREATED', 'Integration Type Created'
+    INTEGRATION_TYPE_UPDATED = 'INTEGRATION_TYPE_UPDATED', 'Integration Type Updated'
+    INTEGRATION_ACTION_CREATED = 'INTEGRATION_ACTION_CREATED', 'Integration Action Created'
+    INTEGRATION_ACTION_UPDATED = 'INTEGRATION_ACTION_UPDATED', 'Integration Action Updated'
     # Additional types added in later migrations (V028-V035, V039-V041)
     # Note: Full list would include all types from migrations, but base types are sufficient for model
 
@@ -75,6 +80,9 @@ class AuditEntityType(models.TextChoices):
     SCHEDULED_EXECUTION = 'scheduled_execution', 'Scheduled Execution'
     PROFILE = 'profile', 'Profile'
     FEATURE_FLAG = 'feature_flag', 'Feature Flag'
+    # Story 24.1: Integration type catalogue entity types
+    INTEGRATION_TYPE_CATALOGUE = 'integration_type_catalogue', 'Integration Type Catalogue'
+    INTEGRATION_ACTION = 'integration_action', 'Integration Action'
     # Additional types may exist in later migrations
 
 
