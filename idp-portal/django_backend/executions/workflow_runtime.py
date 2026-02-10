@@ -557,11 +557,73 @@ class WorkflowRuntime:
             # Load the referenced action (validates it exists and is accessible)
             from catalog.models import Action
             try:
-                referenced_action = Action.objects.get(id=referenced_action_id)
+                referenced_action = Action.objects.select_related('integration').get(id=referenced_action_id)
             except Action.DoesNotExist:
                 raise ValueError(
                     f"Referenced action {referenced_action_id} not found for step {step_id}"
                 )
+
+            # Story 24.4 (AC5): Validate integration status before executing step
+            integration = getattr(referenced_action, 'integration', None)
+            if integration:
+                from integrations.models import IntegrationStatus
+                if integration.status == IntegrationStatus.INVALID:
+                    error_msg = (
+                        f"Workflow step '{step_name}' failed: Integration '{integration.name}' "
+                        f"(type: {integration.type}) is invalid and cannot be used. "
+                        f"Please update the workflow to use a valid integration before retrying."
+                    )
+                    logger.error(
+                        "workflow_step_blocked_invalid_integration",
+                        execution_id=self.execution.id,
+                        step_id=step_id,
+                        integration_id=integration.id,
+                        integration_name=integration.name,
+                        integration_type=integration.type,
+                        correlation_id=self.correlation_id,
+                    )
+                    AuditService.create_entry(
+                        user_id=str(self.execution.user_id),
+                        action_type=AuditActionType.WORKFLOW_STEP_BLOCKED_INVALID_INTEGRATION,
+                        entity_type=AuditEntityType.EXECUTION,
+                        entity_id=self.execution.id,
+                        details={
+                            'step_id': step_id,
+                            'step_name': step_name,
+                            'integration_id': integration.id,
+                            'integration_name': integration.name,
+                            'integration_type': integration.type,
+                            'referenced_action_id': referenced_action.id,
+                        },
+                        correlation_id=self.correlation_id,
+                    )
+                    raise ValueError(error_msg)
+
+                if integration.status == IntegrationStatus.DEPRECATED:
+                    logger.warning(
+                        "workflow_step_deprecated_integration",
+                        execution_id=self.execution.id,
+                        step_id=step_id,
+                        integration_id=integration.id,
+                        integration_name=integration.name,
+                        integration_type=integration.type,
+                        correlation_id=self.correlation_id,
+                    )
+                    AuditService.create_entry(
+                        user_id=str(self.execution.user_id),
+                        action_type=AuditActionType.EXECUTION_DEPRECATED_INTEGRATION_WARNING,
+                        entity_type=AuditEntityType.EXECUTION,
+                        entity_id=self.execution.id,
+                        details={
+                            'step_id': step_id,
+                            'step_name': step_name,
+                            'integration_id': integration.id,
+                            'integration_name': integration.name,
+                            'integration_type': integration.type,
+                            'referenced_action_id': referenced_action.id,
+                        },
+                        correlation_id=self.correlation_id,
+                    )
 
             # Story 4.12 AC5: Prepare complete adapter payload with step_parameters ✓
             adapter_payload = {

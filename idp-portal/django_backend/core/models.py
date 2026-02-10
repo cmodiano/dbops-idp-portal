@@ -68,6 +68,11 @@ class AuditActionType(models.TextChoices):
     INTEGRATION_ACTION_UPDATED = 'INTEGRATION_ACTION_UPDATED', 'Integration Action Updated'
     # Story 24.3: Integration status validation audit
     INTEGRATION_STATUS_UPDATED = 'INTEGRATION_STATUS_UPDATED', 'Integration Status Updated'
+    # Story 24.4: Migration and execution guard-rail audit types
+    INTEGRATION_MARKED_LEGACY = 'INTEGRATION_MARKED_LEGACY', 'Integration Marked Legacy'
+    EXECUTION_BLOCKED_INVALID_INTEGRATION = 'EXECUTION_BLOCKED_INVALID_INTEGRATION', 'Execution Blocked Invalid Integration'
+    EXECUTION_DEPRECATED_INTEGRATION_WARNING = 'EXECUTION_DEPRECATED_INTEGRATION_WARNING', 'Execution Deprecated Integration Warning'
+    WORKFLOW_STEP_BLOCKED_INVALID_INTEGRATION = 'WORKFLOW_STEP_BLOCKED_INVALID_INTEGRATION', 'Workflow Step Blocked Invalid Integration'
     # Additional types added in later migrations (V028-V035, V039-V041)
     # Note: Full list would include all types from migrations, but base types are sufficient for model
 

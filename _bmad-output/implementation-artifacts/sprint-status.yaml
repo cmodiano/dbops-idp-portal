@@ -324,5 +324,5 @@ development_status:
     24-1-backend-catalogue-types-dintegration: done # Code review 2026-02-10: 11 issues fixed (8 HIGH, 2 MEDIUM, 1 LOW) — audit trail correlation_id, JSON Schema validation, structlog, documentation versionnement — 76/76 tests pass
     24-2-frontend-admin-restriction-types-actions: done # 2026-02-10: Code review — 10 issues (5 MEDIUM + 5 LOW) auto-fixés, 43/43 tests pass ✅
     24-3-backend-frontend-validation-etat-integrations: done # Code review 2026-02-10: AC8 incomplete (WorkflowBuilder filtering), 78 tests pass
-    24-4-migration-config-integrations-existantes: backlog
+    24-4-migration-config-integrations-existantes: done # Code review 2026-02-10: 5 issues (3 MEDIUM + 2 LOW) auto-fixed, 23/23 tests pass
     epic-24-retrospective: optional

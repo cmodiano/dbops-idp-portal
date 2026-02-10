@@ -20,7 +20,9 @@ from catalog.models import Action
 from idp_auth.models import User
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
+from core.exceptions import BadRequestError
 from core.middleware import get_correlation_id
+from integrations.models import IntegrationStatus
 
 logger = structlog.get_logger(__name__)
 
@@ -30,8 +32,86 @@ class ExecutionService:
     Service for execution business logic.
     Handles complex operations like atomic execution creation with steps.
     """
-    
-    @transaction.atomic
+
+    @staticmethod
+    def _check_integration_status(
+        action: Action, user_id: str, correlation_id: str | None = None,
+    ) -> None:
+        """
+        Story 24.4 (AC4): Validate integration status before execution.
+        Blocks INVALID integrations (with audit), warns for DEPRECATED, allows VALID.
+        Called OUTSIDE the atomic transaction so audit entries survive on error.
+
+        Raises:
+            BadRequestError: If integration status is INVALID
+        """
+        integration = getattr(action, 'integration', None)
+        if not integration:
+            return
+
+        if integration.status == IntegrationStatus.INVALID:
+            logger.error(
+                "execution_blocked_invalid_integration",
+                integration_id=integration.id,
+                integration_name=integration.name,
+                integration_status=integration.status,
+                action_id=action.id,
+                user_id=user_id,
+                correlation_id=correlation_id,
+            )
+            AuditService.create_entry(
+                user_id=user_id,
+                action_type=AuditActionType.EXECUTION_BLOCKED_INVALID_INTEGRATION,
+                entity_type=AuditEntityType.INTEGRATION,
+                entity_id=integration.id,
+                details={
+                    'integration_id': integration.id,
+                    'integration_name': integration.name,
+                    'integration_type': integration.type,
+                    'integration_status': integration.status,
+                    'action_id': action.id,
+                    'reason': 'type_not_found_in_catalogue',
+                },
+                correlation_id=correlation_id,
+            )
+            raise BadRequestError(
+                code="INVALID_INTEGRATION",
+                message=f"L'intégration '{integration.name}' (type: '{integration.type}') est invalide et ne peut pas être utilisée. Veuillez contacter un administrateur.",
+                details={
+                    'integration_id': integration.id,
+                    'integration_name': integration.name,
+                    'integration_type': integration.type,
+                    'integration_status': integration.status,
+                    'reason': 'type_not_found_in_catalogue',
+                    'action': 'contact_administrator',
+                },
+            )
+
+        if integration.status == IntegrationStatus.DEPRECATED:
+            logger.warning(
+                "execution_with_deprecated_integration",
+                integration_id=integration.id,
+                integration_name=integration.name,
+                integration_status=integration.status,
+                action_id=action.id,
+                user_id=user_id,
+                correlation_id=correlation_id,
+            )
+            AuditService.create_entry(
+                user_id=user_id,
+                action_type=AuditActionType.EXECUTION_DEPRECATED_INTEGRATION_WARNING,
+                entity_type=AuditEntityType.INTEGRATION,
+                entity_id=integration.id,
+                details={
+                    'integration_id': integration.id,
+                    'integration_name': integration.name,
+                    'integration_type': integration.type,
+                    'integration_status': integration.status,
+                    'action_id': action.id,
+                },
+                correlation_id=correlation_id,
+            )
+
     def create_execution(self, user: User, action: Action, environment: str,
                        parameters: dict | None = None, parent_execution_id: int | None = None,
                        correlation_id: str | None = None,
@@ -40,6 +120,9 @@ class ExecutionService:
                        delegated_referenced_action_ids: list[int] | None = None):
         """
         Create an execution atomically.
+
+        Story 24.4 (AC4): Validates integration status BEFORE the atomic block
+        so audit entries survive even when execution is blocked.
 
         Args:
             user: User instance creating the execution
@@ -56,7 +139,32 @@ class ExecutionService:
 
         Returns:
             Execution instance
+
+        Raises:
+            BadRequestError: If action's integration is INVALID (Story 24.4 AC4)
         """
+        # Story 24.4 (AC4): Validate integration status BEFORE atomic block
+        self._check_integration_status(
+            action=action,
+            user_id=str(user.id),
+            correlation_id=correlation_id,
+        )
+
+        return self._create_execution_atomic(
+            user=user, action=action, environment=environment,
+            parameters=parameters, parent_execution_id=parent_execution_id,
+            correlation_id=correlation_id, source=source, ip_address=ip_address,
+            targets=targets, delegated_referenced_action_ids=delegated_referenced_action_ids,
+        )
+
+    @transaction.atomic
+    def _create_execution_atomic(self, user: User, action: Action, environment: str,
+                       parameters: dict | None = None, parent_execution_id: int | None = None,
+                       correlation_id: str | None = None,
+                       source: str | None = None, ip_address: str | None = None,
+                       targets: list[str] | None = None,
+                       delegated_referenced_action_ids: list[int] | None = None):
+        """Internal atomic execution creation (after integration validation)."""
         execution = Execution.objects.create(
             action=action,
             user=user,
