@@ -326,6 +326,12 @@ Encadrer la configuration des intégrations dans l'interface Admin pour n'autori
 **NFRs couvertes :** NFR17, NFR18, NFR19, NFR20, NFR22 (robustesse intégrations, plugin/adapter)
 **Phase :** Growth (Phase 2)
 
+### Epic 25 : Convergence DBOps → IDP Portal
+Intégrer les patterns DBOps dans le portail : modèle de cible générique (ExecutionTarget), condition gates sur les étapes (statut WAITING), overrides par environnement, mutex inter-actions, deny explicite RBAC.
+**FRs couvertes :** FR15, FR19, FR26, FR26a (guardrails moteur, cibles explicites, RBAC affiné)
+**Phase :** Growth (Phase 2)
+**Référence :** implementation-artifacts/convergence-dbops-idp-portal.md
+
 ---
 
 ## Epic 1 : Bootstrap Projet & Authentification
@@ -4234,3 +4240,138 @@ Encadrer la configuration des intégrations dans l'interface Admin pour n'autori
 
 4. **Migration des intégrations existantes et garde-fous d'exécution**  
    Identifier les intégrations déjà configurées dans le système : pour chacune, tenter de les rattacher à un `IntegrationType` existant (AAP, ServiceNow, …) ou les marquer comme `legacy`. Mettre en place des garde-fous côté moteur d'exécution pour refuser proprement l'utilisation d'intégrations non typées ou invalides, avec messages d'erreur explicites et logs d'audit.
+
+---
+
+## Epic 25 : Convergence DBOps → IDP Portal
+
+Intégrer les patterns DBOps dans le portail : modèle de cible générique (ExecutionTarget), condition gates sur les étapes (statut WAITING), overrides par environnement, mutex inter-actions, deny explicite RBAC. Référence : implementation-artifacts/convergence-dbops-idp-portal.md.
+
+### Story 25.1 : Modèle ExecutionTarget (table EXECUTION_TARGETS et API)
+
+As a moteur d'exécution,
+I want une liaison explicite entre une exécution et ses cibles (serveurs, bases),
+So que les requêtes par cible, la validation RBAC, les mutex et les condition gates s'appuient sur un modèle relationnel fiable.
+
+**Acceptance Criteria:**
+
+**Given** une exécution est créée avec des cibles choisies par l'utilisateur
+**When** le backend enregistre l'exécution
+**Then** une entrée est créée dans la table EXECUTION_TARGETS pour chaque cible (execution_id, target_type, target_id, target_name, target_metadata)
+**And** le couple (execution, target_type, target_id) est unique
+**And** l'API d'exécution accepte et persiste les targets (target_type : SERVER, DATABASE, PDB, SCHEMA ; target_id opaque vers l'inventaire ; target_name en snapshot pour affichage)
+
+**Given** une exécution existante
+**When** on consulte ses cibles
+**Then** l'API retourne la liste des ExecutionTarget avec target_type, target_id, target_name et métadonnées optionnelles
+
+**And** une migration Flyway/SQL crée la table EXECUTION_TARGETS avec les contraintes et index appropriés
+**And** le modèle Django ExecutionTarget est exposé via le repository et les serializers existants
+
+### Story 25.2 : Condition Gates — statut WAITING et gate_conditions dans execution_steps
+
+As a DBOPS,
+I want pouvoir définir des préconditions (gates) sur une étape d'exécution (plage de maintenance, créneau horaire, approbation, état cible),
+So que l'étape ne démarre qu'une fois les conditions remplies, sans exécution prématurée.
+
+**Acceptance Criteria:**
+
+**Given** une action dont une étape possède un champ `gate_conditions` (JSON) dans execution_steps
+**When** le workflow runtime atteint cette étape
+**Then** l'ExecutionStep est créée avec le statut WAITING (et non RUNNING)
+**And** le statut WAITING est ajouté à l'enum ExecutionStepStatus (PENDING, WAITING, RUNNING, COMPLETED, FAILED, SKIPPED)
+
+**Given** une étape en WAITING
+**When** les gate_conditions ne sont pas encore satisfaites
+**Then** l'étape reste en WAITING ; le champ output (ou équivalent) peut contenir le contexte d'attente (raison, next_possible_at, etc.)
+
+**And** le schéma JSON des gate_conditions supporte au moins les types : maintenance_window, time_window, approval_granted, target_state (structure documentée dans convergence-dbops-idp-portal.md)
+**And** le WorkflowRuntime (ou équivalent Django) lit gate_conditions et crée l'étape en WAITING au lieu de lancer l'exécution immédiate
+
+### Story 25.3 : Tâche Celery Beat evaluate_waiting_gates et gate maintenance_window
+
+As a système,
+I want une tâche périodique qui évalue les étapes en WAITING et les débloque lorsque les conditions sont remplies,
+So que les condition gates soient appliquées sans blocage actif.
+
+**Acceptance Criteria:**
+
+**Given** Celery Beat est configuré avec une tâche périodique (ex. toutes les 60 secondes)
+**When** la tâche `evaluate_waiting_gates` s'exécute
+**Then** elle sélectionne toutes les ExecutionStep en statut WAITING dont l'exécution parente est RUNNING
+**And** pour chaque étape, elle évalue les gate_conditions via un service GateEvaluator
+**And** si toutes les conditions sont satisfaites : l'étape passe en RUNNING, started_at est renseigné, et l'exécution réelle de l'étape est déclenchée (task Celery)
+**And** si au moins une condition n'est pas satisfaite : l'étape reste en WAITING et le contexte d'attente est mis à jour (output / logs)
+
+**Given** une condition de type maintenance_window
+**When** le GateEvaluator l'évalue
+**Then** il interroge l'inventaire (ou service équivalent) pour savoir si le moment actuel est dans la plage de maintenance des serveurs cibles (via ExecutionTarget)
+**And** le contexte retourné inclut les infos pour afficher à l'utilisateur quand l'étape pourra démarrer (next_possible_at, windows par cible)
+
+**And** un timeout optionnel par condition (ex. timeout_hours, on_timeout: FAIL) est supporté : si dépassé, l'étape passe en FAILED (ou SKIPPED selon config) et le workflow suit on_error_step_id
+**And** une notification WebSocket ou équivalent peut informer le frontend de l'état WAITING et du contexte (optionnel pour cette story)
+
+### Story 25.4 : Overrides par environnement (change_type_config enrichi)
+
+As a DBOPS,
+I want configurer par environnement (prod, staging, dev) des exigences différentes : ticket ServiceNow requis, plage de maintenance requise, opération autorisée ou interdite,
+So que la gouvernance soit adaptée à chaque environnement sans dupliquer les actions.
+
+**Acceptance Criteria:**
+
+**Given** une action avec un champ change_type_config (ou équivalent) par environnement
+**When** le backend valide ou exécute une exécution pour un environnement donné
+**Then** les flags suivants sont lus depuis la config de cet environnement : requires_maintenance_window, requires_approval, allowed (booléen)
+**And** si allowed est false pour l'environnement cible, la soumission est refusée avec un message explicite
+**And** les règles d'ouverture de changement ServiceNow et de vérification de plage de maintenance s'appuient sur requires_maintenance_window et requires_approval
+
+**Given** l'éditeur admin des actions (ou des règles d'impact)
+**When** on configure les overrides par environnement
+**Then** l'interface permet de définir pour chaque environnement : change_type, template_id (si applicable), requires_maintenance_window, requires_approval, allowed
+**And** la validation côté backend rejette les valeurs invalides et persiste le JSON enrichi
+
+**And** aucun nouveau schéma de table n'est requis : le champ Oracle/JSON existant (change_type_config ou équivalent) est étendu
+**And** la logique de validation dans executions/utils.py (ou équivalent) utilise ces flags pour accepter ou refuser la soumission
+
+### Story 25.5 : Mutex inter-actions (table ACTION_MUTEX et validation à la soumission)
+
+As a DBOPS,
+I want définir des exclusions mutuelles entre actions (ex. patching et backup sur la même base ne doivent pas tourner en parallèle),
+So que des opérations incompatibles ne soient jamais exécutées simultanément sur les mêmes cibles.
+
+**Acceptance Criteria:**
+
+**Given** une table ACTION_MUTEX (action_id, incompatible_with_id, same_target bool, description)
+**When** un DBOPS configure une règle de mutex entre l'action A et l'action B avec same_target=True
+**Then** au moment de la soumission d'une exécution pour l'action A sur des cibles données, le backend vérifie qu'aucune exécution en cours (RUNNING, PENDING_APPROVAL, SUBMITTED) pour l'action B ne cible les mêmes target_id (via ExecutionTarget)
+**And** si une telle exécution existe, la soumission est refusée avec une erreur explicite (MutexViolationError ou équivalent)
+
+**Given** une règle de mutex avec same_target=False
+**When** une exécution pour l'action A est soumise
+**Then** le backend refuse la soumission si une exécution pour l'action B est déjà en cours, quelle que soit la cible
+
+**And** une migration crée la table ACTION_MUTEX avec unique_together (action, incompatible_with) et les clés étrangères vers ACTIONS_CATALOG (ou équivalent)
+**And** l'API admin permet de créer/supprimer des règles de mutex entre actions (CRUD ou équivalent)
+**And** la validation mutex est appelée systématiquement avant de créer une Execution et d'insérer les ExecutionTarget
+
+### Story 25.6 : Deny explicite RBAC (exclusion_patterns sur ProfileTargetPermission)
+
+As a DBOPS,
+I want pouvoir exclure explicitement des cibles des permissions d'un profil (ex. tout sauf PROD-CRITICAL-*),
+So que l'accès soit "allow then exclude" sans avoir à lister toutes les cibles autorisées.
+
+**Acceptance Criteria:**
+
+**Given** un profil avec des permissions sur les targets (liste ou pattern)
+**When** le profil possède un nouveau champ exclusion_patterns (JSON array de patterns, ex. ["PROD-CRITICAL-*", "DR-*"])
+**Then** la résolution RBAC des cibles autorisées pour l'utilisateur applique d'abord les règles d'inclusion (LIST, PATTERN, ALL), puis retire toute cible dont le nom (ou identifiant) matche au moins un pattern d'exclusion
+**And** une cible qui matche un pattern d'exclusion n'est jamais retournée comme autorisée, même si elle matche un pattern d'inclusion
+
+**Given** l'interface admin des profils / permissions targets
+**When** on édite les permissions cibles d'un profil
+**Then** un champ (liste ou texte) permet de saisir les patterns d'exclusion (ex. un par ligne ou tags)
+**And** la validation backend accepte un tableau de chaînes (patterns) et le persiste dans exclusion_patterns_json (ou nom de colonne équivalent)
+
+**And** une migration ajoute le champ exclusion_patterns_json (TextField/JSON) à la table PROFILE_TARGET_PERMISSIONS (ou équivalent)
+**And** la logique existante list_targets_for_user (ou équivalent) est étendue pour appliquer l'exclusion après l'inclusion ; les appels API qui renvoient les cibles autorisées reflètent ce comportement
+**And** la documentation décrit la sémantique "allow first, then exclude" et les exemples de patterns

@@ -195,6 +195,64 @@ class Execution(models.Model):
             self.parameters = None
 
 
+class TargetType(models.TextChoices):
+    """Target type enum for ExecutionTarget."""
+    SERVER = 'SERVER', 'Server'
+    DATABASE = 'DATABASE', 'Database'
+    INSTANCE = 'INSTANCE', 'Instance'
+    SCHEMA = 'SCHEMA', 'Schema'
+    CLUSTER = 'CLUSTER', 'Cluster'
+    OTHER = 'OTHER', 'Other'
+
+
+class ExecutionTarget(models.Model):
+    """
+    ExecutionTarget model mapping to Oracle EXECUTION_TARGETS table.
+    Stores the explicit link between an execution and its targets (servers, databases, etc.).
+    Story 25.1: Foundation for condition gates, mutex, and RBAC validation.
+    """
+    id = models.BigAutoField(primary_key=True, db_column='ID')
+    execution = models.ForeignKey(
+        Execution,
+        on_delete=models.CASCADE,
+        related_name='targets',
+        db_column='EXECUTION_ID'
+    )
+    target_type = models.CharField(
+        max_length=50,
+        choices=TargetType.choices,
+        db_column='TARGET_TYPE'
+    )
+    target_id = models.CharField(max_length=200, db_column='TARGET_ID')
+    target_name = models.CharField(max_length=255, db_column='TARGET_NAME')
+    target_metadata = models.TextField(null=True, blank=True, db_column='TARGET_METADATA')
+    created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
+
+    class Meta:
+        db_table = 'EXECUTION_TARGETS'
+        unique_together = [['execution', 'target_type', 'target_id']]
+
+    def __str__(self):
+        return f"ExecutionTarget {self.id} - {self.target_type}:{self.target_name}"
+
+    def get_target_metadata(self) -> dict | None:
+        """Deserialize JSON from CLOB."""
+        if self.target_metadata:
+            try:
+                return json.loads(self.target_metadata)
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning(f"Failed to deserialize target_metadata for ExecutionTarget {self.id}: {e}")
+                return None
+        return None
+
+    def set_target_metadata(self, value: dict | None):
+        """Serialize JSON to CLOB."""
+        if value is not None:
+            self.target_metadata = json.dumps(value, ensure_ascii=False)
+        else:
+            self.target_metadata = None
+
+
 class ExecutionStepType(models.TextChoices):
     """Execution step type enum matching Oracle CHECK constraint."""
     VAULT = 'vault', 'Vault'

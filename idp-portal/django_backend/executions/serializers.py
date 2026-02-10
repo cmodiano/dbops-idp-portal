@@ -5,7 +5,23 @@ from drf_spectacular.utils import extend_schema_serializer, inline_serializer
 
 from catalog.models import Action
 from core.utils import ensure_utc_isoformat
-from executions.models import Execution, ExecutionStep, ScheduledExecution, RecurringPattern
+from executions.models import Execution, ExecutionStep, ExecutionTarget, ScheduledExecution, RecurringPattern
+
+
+class ExecutionTargetSerializer(serializers.Serializer):
+    """Serializer for ExecutionTarget (Story 25.1)."""
+    target_type = serializers.CharField(read_only=True)
+    target_id = serializers.CharField(read_only=True)
+    target_name = serializers.CharField(read_only=True)
+    target_metadata = serializers.DictField(read_only=True, allow_null=True)
+
+    def to_representation(self, obj: ExecutionTarget) -> dict:
+        return {
+            "target_type": obj.target_type,
+            "target_id": obj.target_id,
+            "target_name": obj.target_name,
+            "target_metadata": obj.get_target_metadata(),
+        }
 
 
 @extend_schema_serializer(
@@ -71,6 +87,8 @@ class ExecutionSerializer(serializers.Serializer):
             "integration_id": getattr(integration, "id", None) if integration else None,
             "integration_name": getattr(integration, "name", None) if integration else None,
             "integration_icon": getattr(integration, "icon", None) if integration else None,
+            # Story 25.1: ExecutionTarget list
+            "targets": ExecutionTargetSerializer(obj.targets.all(), many=True).data,
         }
 
 

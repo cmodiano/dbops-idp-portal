@@ -326,3 +326,13 @@ development_status:
     24-3-backend-frontend-validation-etat-integrations: done # Code review 2026-02-10: AC8 incomplete (WorkflowBuilder filtering), 78 tests pass
     24-4-migration-config-integrations-existantes: done # Code review 2026-02-10: 5 issues (3 MEDIUM + 2 LOW) auto-fixed, 23/23 tests pass
     epic-24-retrospective: optional
+    # === Epic 25: Convergence DBOps → IDP Portal ===
+    # Réf: implementation-artifacts/convergence-dbops-idp-portal.md
+    epic-25: in-progress
+    25-1-modele-execution-target-table-execution-targets-api: done # 2026-02-10: Modèle ExecutionTarget, migration V066, API targets[], 19 tests — AC1-AC5 validés
+    25-2-condition-gates-statut-waiting-gate-conditions-execution-steps: backlog
+    25-3-tache-celery-beat-evaluate-waiting-gates-gate-maintenance-window: backlog
+    25-4-overrides-par-environnement-change-type-config-enrichi: backlog
+    25-5-mutex-inter-actions-table-action-mutex-validation-soumission: backlog
+    25-6-deny-explicite-rbac-exclusion-patterns-profile-target-permission: backlog
+    epic-25-retrospective: optional

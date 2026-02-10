@@ -14,6 +14,7 @@ from django.utils import timezone
 from core.utils import ensure_utc_isoformat
 from executions.models import (
     Execution, ExecutionStep, ExecutionStatus, ExecutionStepStatus,
+    ExecutionTarget, TargetType,
     ScheduledExecution, ScheduledExecutionStatus
 )
 from catalog.models import Action
@@ -117,7 +118,8 @@ class ExecutionService:
                        correlation_id: str | None = None,
                        source: str | None = None, ip_address: str | None = None,
                        targets: list[str] | None = None,
-                       delegated_referenced_action_ids: list[int] | None = None):
+                       delegated_referenced_action_ids: list[int] | None = None,
+                       validated_targets: list[dict] | None = None):
         """
         Create an execution atomically.
 
@@ -136,6 +138,8 @@ class ExecutionService:
             targets: Optional list of target names for audit (Story 13.5)
             delegated_referenced_action_ids: Story 4.11 - when set, merge workflow delegation
                 into the single audit entry (avoids duplicate EXECUTION_SUBMITTED).
+            validated_targets: Story 25.1 - list of validated target dicts from inventory
+                (keys: name, environment, target_type, metadata). Creates ExecutionTarget records.
 
         Returns:
             Execution instance
@@ -155,6 +159,7 @@ class ExecutionService:
             parameters=parameters, parent_execution_id=parent_execution_id,
             correlation_id=correlation_id, source=source, ip_address=ip_address,
             targets=targets, delegated_referenced_action_ids=delegated_referenced_action_ids,
+            validated_targets=validated_targets,
         )
 
     @transaction.atomic
@@ -163,7 +168,8 @@ class ExecutionService:
                        correlation_id: str | None = None,
                        source: str | None = None, ip_address: str | None = None,
                        targets: list[str] | None = None,
-                       delegated_referenced_action_ids: list[int] | None = None):
+                       delegated_referenced_action_ids: list[int] | None = None,
+                       validated_targets: list[dict] | None = None):
         """Internal atomic execution creation (after integration validation)."""
         execution = Execution.objects.create(
             action=action,
@@ -177,6 +183,44 @@ class ExecutionService:
         if parameters:
             execution.set_parameters(parameters)
             execution.save()
+
+        # Story 25.1: Create ExecutionTarget records for each validated target
+        if validated_targets:
+            for target_data in validated_targets:
+                target_type_str = (target_data.get('target_type') or 'other').upper()
+                # Map to TargetType enum, default to OTHER
+                try:
+                    target_type = TargetType(target_type_str)
+                except ValueError:
+                    target_type = TargetType.OTHER
+
+                metadata = target_data.get('metadata')
+                # Build metadata snapshot with environment and any extra attributes
+                metadata_snapshot = {}
+                if metadata and isinstance(metadata, dict):
+                    metadata_snapshot.update(metadata)
+                if target_data.get('environment'):
+                    metadata_snapshot['environment'] = target_data['environment']
+                # Include extra inventory attributes (engine_type, zone, etc.)
+                for key in ('engine_type', 'zone', 'technology'):
+                    if key in target_data:
+                        metadata_snapshot[key] = target_data[key]
+
+                exec_target = ExecutionTarget(
+                    execution=execution,
+                    target_type=target_type,
+                    target_id=target_data.get('name', ''),
+                    target_name=target_data.get('name', ''),
+                )
+                exec_target.set_target_metadata(metadata_snapshot if metadata_snapshot else None)
+                exec_target.save()
+
+            logger.info(
+                "execution_targets_created",
+                execution_id=execution.id,
+                target_count=len(validated_targets),
+                correlation_id=correlation_id,
+            )
 
         # Build audit details (Story 13.5: include source, ip_address, targets)
         audit_details = {

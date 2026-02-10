@@ -102,7 +102,7 @@ class ExecutionsView(APIView):
         if limit <= 0 or offset < 0:
             raise BadRequestError(code="BAD_REQUEST", message="Pagination invalide", details={"limit": limit, "offset": offset})
 
-        qs = Execution.objects.select_related("action", "user", "action__integration")
+        qs = Execution.objects.select_related("action", "user", "action__integration").prefetch_related("targets")
         qs, _effective_scope = _apply_scope_filter(qs, user=request.user, scope=request.query_params.get("scope") or "mine")
         qs, _start_d, _end_d = _apply_execution_filters(qs, request=request)
         qs = qs.order_by("-created_at")
@@ -370,6 +370,7 @@ class ExecutionsView(APIView):
             ip_address=ip_address,
             targets=target_names if target_names else None,
             delegated_referenced_action_ids=delegated_referenced_action_ids,
+            validated_targets=validated_targets if target_names else None,
         )
 
         try:
@@ -458,7 +459,7 @@ class ExecutionDetailView(APIView):
     @extend_schema(tags=['executions'], summary="Détail d'une exécution", responses={200: ExecutionSerializer})
     def get(self, request, execution_id: int):
         try:
-            execution = Execution.objects.select_related("action", "user", "action__integration").get(id=execution_id)
+            execution = Execution.objects.select_related("action", "user", "action__integration").prefetch_related("targets").get(id=execution_id)
         except Execution.DoesNotExist:
             raise NotFoundError(code="NOT_FOUND", message="Execution non trouvée", details={"execution_id": execution_id})
 
