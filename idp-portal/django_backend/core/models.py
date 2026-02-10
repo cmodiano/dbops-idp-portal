@@ -58,6 +58,9 @@ class AuditActionType(models.TextChoices):
     EXECUTION_STEP_RETRY_ABORTED = 'EXECUTION_STEP_RETRY_ABORTED', 'Execution Step Retry Aborted'
     # Story 25.2: Condition gates audit types
     EXECUTION_STEP_WAITING = 'EXECUTION_STEP_WAITING', 'Execution Step Waiting'
+    # Story 25.3: Gate evaluation audit types
+    EXECUTION_STEP_GATE_SATISFIED = 'EXECUTION_STEP_GATE_SATISFIED', 'Execution Step Gate Satisfied'
+    EXECUTION_STEP_GATE_TIMEOUT = 'EXECUTION_STEP_GATE_TIMEOUT', 'Execution Step Gate Timeout'
     # Story 17.12: Feature flag audit types
     FEATURE_FLAG_UPDATED = 'FEATURE_FLAG_UPDATED', 'Feature Flag Updated'
     FEATURE_FLAG_CREATED = 'FEATURE_FLAG_CREATED', 'Feature Flag Created'

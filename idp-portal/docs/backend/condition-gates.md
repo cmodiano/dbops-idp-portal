@@ -1,21 +1,30 @@
 # Condition Gates — Préconditions sur les étapes d'exécution
 
-## Scope de Story 25.2
+## Historique d'implémentation
 
-✅ **Implémenté dans cette story :**
-- Statut WAITING ajouté à ExecutionStepStatus (modèle + migrations Django + SQL)
-- Schéma JSON gate_conditions documenté et validé côté backend
-- WorkflowRuntime crée ExecutionStep en WAITING si gate_conditions présent
-- Contexte d'attente stocké dans ExecutionStep.output avec waiting_since, gate_conditions, gate_status
-- Validation gate_conditions intégrée dans CatalogService.update_execution_steps()
-- Tests unitaires (29) et d'intégration (7) pour tous les ACs
+### Story 25.2 — Fondation (statut WAITING + schéma gate_conditions)
 
-❌ **Hors scope (Story 25.3 — à venir) :**
-- Évaluation périodique des gates (tâche Celery Beat `evaluate_waiting_gates`)
-- Transition WAITING → RUNNING quand conditions satisfaites
-- Implémentation des evaluators spécifiques (maintenance_window, time_window, approval_granted, target_state)
-- Gestion des timeouts et passage en FAILED/SKIPPED selon on_timeout
-- Déblocage et reprise d'exécution après satisfaction des gates
+✅ Statut WAITING ajouté à ExecutionStepStatus (modèle + migrations Django + SQL)
+✅ Schéma JSON gate_conditions documenté et validé côté backend
+✅ WorkflowRuntime crée ExecutionStep en WAITING si gate_conditions présent
+✅ Contexte d'attente stocké dans ExecutionStep.output
+✅ Tests unitaires (29) et d'intégration (7)
+
+### Story 25.3 — Évaluation périodique et déblocage
+
+✅ Tâche Celery Beat `evaluate_waiting_gates` (toutes les 60s, configurable)
+✅ Service GateEvaluator avec dispatch par type de condition
+✅ Évaluateur `maintenance_window` via InventoryService
+✅ Gestion timeout_hours + on_timeout (FAIL/SKIP)
+✅ Transition WAITING → RUNNING + déclenchement exécution réelle
+✅ Audit trail (EXECUTION_STEP_GATE_SATISFIED, EXECUTION_STEP_GATE_TIMEOUT)
+✅ Tests unitaires (13) et d'intégration (8)
+
+### Hors scope (stories futures)
+
+❌ Évaluateurs time_window, approval_granted, target_state (Story 25.3b ou 25.4)
+❌ Notification WebSocket frontend WAITING → RUNNING
+❌ UI contexte d'attente (next_possible_at, reason)
 
 ---
 
@@ -215,8 +224,143 @@ Les champs spécifiques par type (ex: `after`, `before` pour `time_window`) sont
 - **Pas de conditions composées** : toutes les conditions doivent être satisfaites (ET logique), pas de OU
 - **Champs spécifiques non validés** : les champs propres à chaque type (ex: `after`, `timezone`) sont validés uniquement lors de l'évaluation
 
+## Évaluation périodique des gates (Story 25.3)
+
+### Tâche Celery Beat `evaluate_waiting_gates`
+
+La tâche `evaluate_waiting_gates` est exécutée périodiquement par Celery Beat pour évaluer les étapes en WAITING et les débloquer lorsque les conditions sont satisfaites.
+
+**Configuration** (`idp_backend/celery.py`) :
+
+```python
+app.conf.beat_schedule = {
+    'evaluate-waiting-gates': {
+        'task': 'executions.tasks.evaluate_waiting_gates',
+        'schedule': float(os.getenv('CELERY_BEAT_EVALUATE_GATES_INTERVAL', '60.0')),
+    },
+}
+```
+
+**Variable d'environnement** : `CELERY_BEAT_EVALUATE_GATES_INTERVAL` (défaut: 60 secondes)
+
+**Démarrage** :
+
+```bash
+# Worker Celery
+celery -A idp_backend worker --loglevel=info
+
+# Celery Beat (scheduler)
+celery -A idp_backend beat --loglevel=info
+```
+
+### Flux d'évaluation
+
+```
+Celery Beat (60s) → evaluate_waiting_gates
+  ↓
+Sélection ExecutionStep WHERE status='WAITING' AND execution.status='RUNNING'
+  ↓ (pour chaque étape)
+GateEvaluator.evaluate(step)
+  ├── Vérifier timeout_hours → si dépassé → FAILED/SKIPPED + audit
+  ├── _check_maintenance_window(step) → InventoryService
+  ├── _check_time_window(step) → (futur)
+  └── _check_approval_granted(step) → (futur)
+  ↓
+Si TOUTES conditions satisfaites:
+  step.status = RUNNING, started_at = now()
+  retry_workflow_step.apply_async() → exécution réelle
+  Audit: EXECUTION_STEP_GATE_SATISFIED
+  ↓
+Si conditions NON satisfaites:
+  Mise à jour output avec gate_status, last_evaluated_at
+  Log: evaluate_waiting_gates_step_still_waiting
+```
+
+### GateEvaluator
+
+Service dans `executions/gate_evaluator.py` :
+
+```python
+class GateEvaluator:
+    def evaluate(self, step) -> tuple[bool, dict]:
+        """Évalue toutes les gate_conditions d'un step WAITING."""
+    def _check_maintenance_window(self, step, condition) -> tuple[bool, dict]:
+        """Vérifie que TOUTES les cibles sont dans leur fenêtre de maintenance."""
+    def _check_timeout(self, step, condition) -> tuple[bool, str | None]:
+        """Vérifie si le timeout_hours est dépassé."""
+```
+
+### Exemples de gate_status retournés
+
+**Conditions satisfaites** :
+
+```json
+{
+  "gates": [
+    {
+      "type": "maintenance_window",
+      "satisfied": true,
+      "reason": "All targets in maintenance window",
+      "details": [
+        {"target_id": "SRV-01", "is_active": true, "reason": "Within maintenance window"}
+      ]
+    }
+  ],
+  "timeout_triggered": false
+}
+```
+
+**Conditions non satisfaites** :
+
+```json
+{
+  "gates": [
+    {
+      "type": "maintenance_window",
+      "satisfied": false,
+      "reason": "One or more targets outside maintenance window",
+      "next_possible_at": "2026-02-11T22:00:00Z",
+      "details": [
+        {"target_id": "SRV-01", "is_active": false, "next_start": "2026-02-11T22:00:00Z"}
+      ]
+    }
+  ],
+  "timeout_triggered": false
+}
+```
+
+**Timeout déclenché** :
+
+```json
+{
+  "gates": [],
+  "timeout_triggered": true,
+  "action": "FAILED",
+  "timeout_hours": 48
+}
+```
+
+### Logs structlog émis
+
+| Événement | Niveau | Description |
+|-----------|--------|-------------|
+| `evaluate_waiting_gates_start` | INFO | Début d'évaluation, nombre d'étapes WAITING |
+| `evaluate_waiting_gates_step_satisfied` | INFO | Étape débloquée (toutes conditions satisfaites) |
+| `evaluate_waiting_gates_step_still_waiting` | INFO | Étape toujours en attente |
+| `evaluate_waiting_gates_step_timeout` | INFO | Timeout déclenché |
+| `evaluate_waiting_gates_error` | ERROR | Erreur d'évaluation sur une étape |
+| `evaluate_waiting_gates_complete` | INFO | Fin d'évaluation, résumé |
+| `evaluate_waiting_gates_step_execution_triggered` | INFO | Exécution réelle déclenchée via retry_workflow_step |
+
+### Audit Trail
+
+| Action Type | Description |
+|-------------|-------------|
+| `EXECUTION_STEP_GATE_SATISFIED` | Gate conditions satisfaites, étape passe WAITING → RUNNING |
+| `EXECUTION_STEP_GATE_TIMEOUT` | Timeout gate expiré, étape passe en FAILED/SKIPPED |
+
 ## Références
 
 - Story 25.1 : ExecutionTarget (fondation cibles explicites)
-- Story 25.2 : Condition Gates (cette fonctionnalité)
+- Story 25.2 : Condition Gates (statut WAITING + schéma gate_conditions)
 - Story 25.3 : Tâche Celery Beat evaluate_waiting_gates (évaluation et déblocage)

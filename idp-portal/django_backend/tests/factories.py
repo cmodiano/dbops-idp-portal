@@ -234,6 +234,19 @@ class ExecutionStepFactory(DjangoModelFactory):
     error_message = None
 
 
+class ExecutionTargetFactory(DjangoModelFactory):
+    """Factory for executions.ExecutionTarget model. Story 25.3."""
+
+    class Meta:
+        model = 'executions.ExecutionTarget'
+
+    execution = factory.SubFactory(ExecutionFactory)
+    target_type = 'SERVER'
+    target_id = factory.Sequence(lambda n: f'srv-dev-{n:02d}')
+    target_name = factory.LazyAttribute(lambda o: o.target_id)
+    target_metadata = None
+
+
 class ScheduledExecutionFactory(DjangoModelFactory):
     """Factory for executions.ScheduledExecution model."""
 

@@ -1781,3 +1781,45 @@ class InventoryService:
                 exc_info=True,
             )
             raise InventoryServiceError(f"Query execution failed: {e}")
+
+    # --- Story 25.3: Maintenance window for gate evaluation ---
+
+    def get_next_maintenance_window(self, target_id: str) -> dict | None:
+        """
+        Get the next maintenance window for a target.
+
+        Story 25.3 AC7: Used by GateEvaluator to check maintenance_window gate conditions.
+
+        Currently returns None (no maintenance window defined) as the external inventory
+        API endpoint for maintenance windows is not yet available. This means maintenance_window
+        gates will always be satisfied (safe default for initial implementation).
+
+        When the inventory API supports maintenance windows, this method should call:
+        GET /api/inventory/servers/{target_id}/maintenance-window
+
+        Args:
+            target_id: Opaque target ID in the inventory
+
+        Returns:
+            dict | None:
+                {
+                    'is_active': bool,      # True if current time is within the window
+                    'start': datetime,       # Start of next window (if is_active=False)
+                    'end': datetime,         # End of the window
+                    'timezone': str,         # Window timezone
+                }
+                None if no maintenance window is defined for this target
+
+        Raises:
+            InventoryServiceError: If inventory API call fails
+        """
+        correlation_id = get_correlation_id()
+        logger.info(
+            "get_next_maintenance_window",
+            target_id=target_id,
+            correlation_id=correlation_id,
+        )
+
+        # TODO: Implement actual API call when inventory supports maintenance windows
+        # For now, return None → gate always satisfied (no window defined)
+        return None

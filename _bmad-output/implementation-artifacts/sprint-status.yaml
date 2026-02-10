@@ -331,7 +331,7 @@ development_status:
     epic-25: in-progress
     25-1-modele-execution-target-table-execution-targets-api: done # 2026-02-10: Modèle ExecutionTarget, migration V066, API targets[], 19 tests — AC1-AC5 validés
     25-2-condition-gates-statut-waiting-gate-conditions-execution-steps: done # 2026-02-10: Code review completed — 9 fixes applied (1 CRIT + 3 HIGH + 4 MED), 36/36 tests pass, audit trail EXECUTION_STEP_WAITING added
-    25-3-tache-celery-beat-evaluate-waiting-gates-gate-maintenance-window: backlog
+    25-3-tache-celery-beat-evaluate-waiting-gates-gate-maintenance-window: done # Code review 2026-02-10: 11 fixes appliqués (4 HIGH + 4 MEDIUM + 3 LOW), 22/22 tests pass
     25-4-overrides-par-environnement-change-type-config-enrichi: backlog
     25-5-mutex-inter-actions-table-action-mutex-validation-soumission: backlog
     25-6-deny-explicite-rbac-exclusion-patterns-profile-target-permission: backlog
