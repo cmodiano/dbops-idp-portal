@@ -16,10 +16,13 @@ Architecture:
 - Supports workflow_step_parameters injection (Story 4.12)
 """
 
+import time
 import structlog
+from threading import Thread
 from typing import Optional, Dict, Any, List
 
-from django.db import transaction
+from django.conf import settings
+from django.db import transaction, close_old_connections
 from django.utils import timezone
 
 from catalog.models import Action, ActionStatus
@@ -267,15 +270,29 @@ class ContainerWorkflowRuntime:
         # Simulate child execution completion
         # In production, this would be handled by the platform adapter
         # triggering the referenced action and waiting for completion.
-        # For now (no adapter infrastructure), we simulate immediate completion.
-        child_execution.status = ExecutionStatus.RUNNING
-        child_execution.started_at = timezone.now()
-        child_execution.save(update_fields=['status', 'started_at'])
+        # For now (no adapter infrastructure), we simulate completion.
+        # Use queryset.update() for reliable saves in background threads (avoids ORM caching issues)
+        now = timezone.now()
+        Execution.objects.filter(id=child_execution.id).update(
+            status=ExecutionStatus.RUNNING,
+            started_at=now,
+        )
+
+        # In simulation mode, add delay so duration is visible in UI
+        if getattr(settings, 'SIMULATE_EXECUTION_DEV', False):
+            step_duration = getattr(settings, 'SIMULATE_EXECUTION_STEP_DURATION', 2)
+            if step_duration > 0:
+                time.sleep(step_duration)
 
         # Simulate success (adapter infrastructure pending)
+        completed_at = timezone.now()
+        Execution.objects.filter(id=child_execution.id).update(
+            status=ExecutionStatus.COMPLETED,
+            completed_at=completed_at,
+        )
+        # Refresh in-memory object for downstream status check
         child_execution.status = ExecutionStatus.COMPLETED
-        child_execution.completed_at = timezone.now()
-        child_execution.save(update_fields=['status', 'completed_at'])
+        child_execution.completed_at = completed_at
 
         # Update parent step to reflect child outcome
         parent_step.status = ExecutionStepStatus.COMPLETED
@@ -292,20 +309,14 @@ class ContainerWorkflowRuntime:
         status: ExecutionStatus = child_execution.status
         return status
 
-    @transaction.atomic
-    def run(self) -> ExecutionStatus:
+    def run(self) -> None:
         """
-        Execute the container workflow sequentially.
+        Start the container workflow execution asynchronously.
 
-        For each step in order:
-        1. Check cancellation
-        2. Load referenced action
-        3. Create child execution with merged parameters
-        4. Wait for child completion (simulated for now)
-        5. Propagate failure/cancellation
-
-        Returns:
-            Final ExecutionStatus of the parent workflow
+        Sets the execution to RUNNING and launches the workflow loop in a
+        background daemon thread so the HTTP response returns immediately
+        with the execution_id. The frontend can then poll / subscribe via
+        WebSocket to follow real-time progress.
         """
         logger.info(
             "container_workflow_execution_starting",
@@ -316,7 +327,7 @@ class ContainerWorkflowRuntime:
             correlation_id=self.correlation_id,
         )
 
-        # Update parent to RUNNING
+        # Update parent to RUNNING immediately (visible to frontend)
         self.execution.status = ExecutionStatus.RUNNING
         self.execution.started_at = timezone.now()
         self.execution.save(update_fields=['status', 'started_at'])
@@ -332,8 +343,93 @@ class ContainerWorkflowRuntime:
             self.execution.completed_at = timezone.now()
             self.execution.error_message = "Workflow has no steps"
             self.execution.save(update_fields=['status', 'completed_at', 'error_message'])
+            return
+
+        # Launch background thread for step-by-step execution
+        thread = Thread(
+            target=self._run_workflow_loop,
+            args=(self.execution.id,),
+            daemon=True,
+        )
+        thread.start()
+        logger.info(
+            "container_workflow_thread_started",
+            execution_id=self.execution.id,
+            correlation_id=self.correlation_id,
+        )
+
+    def run_sync(self) -> ExecutionStatus:
+        """
+        Execute the container workflow synchronously (for tests only).
+
+        Identical to run() but blocks until completion. Do NOT use in
+        production request handlers — use run() instead.
+        """
+        logger.info(
+            "container_workflow_execution_starting_sync",
+            execution_id=self.execution.id,
+            action_id=self.action.id,
+            step_count=len(self.workflow_steps),
+            correlation_id=self.correlation_id,
+        )
+
+        self.execution.status = ExecutionStatus.RUNNING
+        self.execution.started_at = timezone.now()
+        self.execution.save(update_fields=['status', 'started_at'])
+
+        if not self.workflow_steps:
+            self.execution.status = ExecutionStatus.FAILED
+            self.execution.completed_at = timezone.now()
+            self.execution.error_message = "Workflow has no steps"
+            self.execution.save(update_fields=['status', 'completed_at', 'error_message'])
             return ExecutionStatus.FAILED
 
+        return self._execute_workflow_steps()
+
+    def _run_workflow_loop(self, execution_id: int) -> None:
+        """Background workflow execution loop (runs in a daemon thread)."""
+        try:
+            close_old_connections()
+
+            # Re-load execution from DB in this thread's connection
+            self.execution = Execution.objects.select_related('action').get(id=execution_id)
+            self.action = self.execution.action
+            self.workflow_steps = self._load_workflow_steps()
+            self.child_executions = []
+            self._step_order_counter = 0
+            self._transition_count = 0
+
+            self._execute_workflow_steps()
+
+        except Exception as e:
+            # Catch-all: ensure the parent execution is marked as FAILED
+            logger.error(
+                "container_workflow_thread_error",
+                execution_id=execution_id,
+                error=str(e),
+                error_type=type(e).__name__,
+                correlation_id=self.correlation_id,
+                exc_info=True,
+            )
+            try:
+                execution = Execution.objects.get(id=execution_id)
+                if execution.status not in (ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED):
+                    execution.status = ExecutionStatus.FAILED
+                    execution.completed_at = timezone.now()
+                    execution.error_message = f"Workflow thread error: {e}"
+                    execution.save(update_fields=['status', 'completed_at', 'error_message'])
+            except Exception:
+                logger.error("container_workflow_thread_cleanup_failed", execution_id=execution_id, exc_info=True)
+        finally:
+            close_old_connections()
+
+    def _execute_workflow_steps(self) -> ExecutionStatus:
+        """
+        Execute workflow steps sequentially (shared by async thread and sync mode).
+
+        Returns:
+            Final ExecutionStatus of the parent workflow
+        """
         final_status = ExecutionStatus.COMPLETED
 
         for step in self.workflow_steps:
@@ -374,12 +470,17 @@ class ContainerWorkflowRuntime:
                 final_status = ExecutionStatus.CANCELLED
                 break
 
-        # Update parent execution final status
-        self.execution.status = final_status
-        self.execution.completed_at = timezone.now()
+        # Update parent execution final status (use queryset.update for reliable thread saves)
+        update_fields = {
+            'status': final_status,
+            'completed_at': timezone.now(),
+        }
         if final_status == ExecutionStatus.FAILED:
-            self.execution.error_message = "Workflow failed: a referenced action failed"
-        self.execution.save(update_fields=['status', 'completed_at', 'error_message'])
+            update_fields['error_message'] = "Workflow failed: a referenced action failed"
+        Execution.objects.filter(id=self.execution.id).update(**update_fields)
+        # Sync in-memory
+        self.execution.status = final_status
+        self.execution.completed_at = update_fields['completed_at']
 
         # Audit trail
         audit_action_type = {

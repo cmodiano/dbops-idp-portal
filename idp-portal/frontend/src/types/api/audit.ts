@@ -26,6 +26,10 @@ export interface AuditExecutionEntry {
   ip_address: string | null;
   correlation_id: string | null;
   derived_status: 'success' | 'failed' | 'running' | 'unknown';
+  /** Parent execution ID for workflow child grouping. */
+  parent_execution_id?: number | null;
+  /** Item type from action (action or workflow). */
+  item_type?: string | null;
 }
 
 /** Filters for GET /audit/executions (Story 6.3, AC2, AC6). */

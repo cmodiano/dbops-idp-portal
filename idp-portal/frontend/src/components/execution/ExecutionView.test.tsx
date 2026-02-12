@@ -16,8 +16,8 @@ vi.mock('../../services/execution_service', () => ({
   getExecutionSteps: vi.fn(() => Promise.resolve([])),
 }));
 
-vi.mock('../../services/admin_service', () => ({
-  getAction: vi.fn(() => Promise.resolve({ workflow_steps: [] })),
+vi.mock('../../services/catalog_service', () => ({
+  fetchCatalogActionById: vi.fn(() => Promise.resolve({ data: { workflow_steps: [] }, can_execute: true, allowed_environments: [] })),
 }));
 
 vi.mock('../../services/logger', () => ({
@@ -283,6 +283,18 @@ describe('ExecutionView', () => {
     await waitFor(() => {
       expect(screen.getByText('Remédiation de #42')).toBeInTheDocument();
     });
+  });
+
+  it('AC9: does not show remediation badge when parent is workflow (workflow child)', async () => {
+    const workflowChildExecution = { ...mockExecution, parent_execution_id: 42, parent_item_type: 'workflow' };
+    vi.mocked(executionService.getExecution).mockResolvedValue(workflowChildExecution);
+
+    render(<ExecutionView executionId={1} onClose={vi.fn()} />, { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByText('Deploy App')).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Remédiation de/)).not.toBeInTheDocument();
   });
 
   it('AC9: does not show remediation badge when parent_execution_id is null', async () => {

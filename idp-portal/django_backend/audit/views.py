@@ -192,7 +192,7 @@ class AuditExecutionsView(APIView):
         executions = (
             Execution.objects.filter(id__in=execution_ids)
             .select_related("action")
-            .only("id", "environment", "status", "servicenow_change_id", "parameters", "action_id", "action__name")
+            .only("id", "environment", "status", "servicenow_change_id", "parameters", "action_id", "action__name", "parent_execution_id")
         )
         exec_by_id = {e.id: e for e in executions}
 
@@ -209,10 +209,17 @@ class AuditExecutionsView(APIView):
                     "parameters": exec_obj.get_parameters(),
                     "servicenow_change_id": exec_obj.servicenow_change_id,
                 }
+            elif details is not None and exec_obj is not None:
+                # Always enrich with current execution status (not stale audit-time status)
+                details["status"] = exec_obj.status
 
             action_name = None
             if exec_obj is not None and getattr(exec_obj, "action", None) is not None:
                 action_name = exec_obj.action.name
+
+            # Derive parent_execution_id and item_type for frontend grouping
+            parent_execution_id = getattr(exec_obj, "parent_execution_id", None) if exec_obj else None
+            item_type = getattr(exec_obj.action, "item_type", None) if exec_obj and getattr(exec_obj, "action", None) else None
 
             data.append(
                 {
@@ -227,6 +234,8 @@ class AuditExecutionsView(APIView):
                     "ip_address": r.ip_address,
                     "correlation_id": r.correlation_id,
                     "derived_status": _derive_status(r.action_type, details),
+                    "parent_execution_id": parent_execution_id,
+                    "item_type": item_type,
                 }
             )
 
@@ -262,9 +271,10 @@ class AuditExportView(APIView):
                 details={},
             )
 
-        fmt = (request.query_params.get("format") or "").strip().lower()
+        # Use 'fmt' param (not 'format') to avoid DRF content negotiation conflict
+        fmt = (request.query_params.get("fmt") or request.query_params.get("export_format") or "").strip().lower()
         if fmt not in ("csv", "pdf"):
-            raise BadRequestError(code="BAD_REQUEST", message="format invalide", details={"format": fmt})
+            raise BadRequestError(code="BAD_REQUEST", message="format invalide (use ?fmt=csv or ?fmt=pdf)", details={"fmt": fmt})
 
         qs = _build_audit_queryset(request)
         total = qs.count()

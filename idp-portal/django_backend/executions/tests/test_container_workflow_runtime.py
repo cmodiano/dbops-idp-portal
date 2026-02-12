@@ -96,7 +96,7 @@ class TestContainerWorkflowRuntimeBasic:
         """AC1: Each step triggers execution of referenced action in order."""
         execution = self._create_execution()
         runtime = ContainerWorkflowRuntime(execution)
-        result = runtime.run()
+        result = runtime.run_sync()
 
         assert result == ExecutionStatus.COMPLETED
 
@@ -113,7 +113,7 @@ class TestContainerWorkflowRuntimeBasic:
         """AC2: Each child execution has parent_execution_id set."""
         execution = self._create_execution()
         runtime = ContainerWorkflowRuntime(execution)
-        runtime.run()
+        runtime.run_sync()
 
         for child in runtime.child_executions:
             child.refresh_from_db()
@@ -124,7 +124,7 @@ class TestContainerWorkflowRuntimeBasic:
         """Child executions use same environment as parent."""
         execution = self._create_execution()
         runtime = ContainerWorkflowRuntime(execution)
-        runtime.run()
+        runtime.run_sync()
 
         for child in runtime.child_executions:
             assert child.environment == 'dev'
@@ -134,7 +134,7 @@ class TestContainerWorkflowRuntimeBasic:
         """Child executions use same user as parent."""
         execution = self._create_execution()
         runtime = ContainerWorkflowRuntime(execution)
-        runtime.run()
+        runtime.run_sync()
 
         for child in runtime.child_executions:
             assert child.user_id == self.user.id
@@ -144,7 +144,7 @@ class TestContainerWorkflowRuntimeBasic:
         """AC4: Parent workflow status is COMPLETED when all steps succeed."""
         execution = self._create_execution()
         runtime = ContainerWorkflowRuntime(execution)
-        result = runtime.run()
+        result = runtime.run_sync()
 
         execution.refresh_from_db()
         assert execution.status == ExecutionStatus.COMPLETED
@@ -157,7 +157,7 @@ class TestContainerWorkflowRuntimeBasic:
         """Parent execution has step records tracking each child."""
         execution = self._create_execution()
         runtime = ContainerWorkflowRuntime(execution)
-        runtime.run()
+        runtime.run_sync()
 
         parent_steps = ExecutionStep.objects.filter(execution=execution).order_by('step_order')
         assert parent_steps.count() == 3
@@ -180,7 +180,7 @@ class TestContainerWorkflowRuntimeBasic:
         )
         execution = self._create_execution(action=workflow)
         runtime = ContainerWorkflowRuntime(execution)
-        result = runtime.run()
+        result = runtime.run_sync()
 
         assert result == ExecutionStatus.FAILED
         execution.refresh_from_db()
@@ -238,7 +238,7 @@ class TestContainerWorkflowParameterInjection:
         execution.save()
 
         runtime = ContainerWorkflowRuntime(execution)
-        runtime.run()
+        runtime.run_sync()
 
         # Child 1 should have step-1 params merged with global
         child_1 = runtime.child_executions[0]
@@ -273,7 +273,7 @@ class TestContainerWorkflowParameterInjection:
         execution.save()
 
         runtime = ContainerWorkflowRuntime(execution)
-        runtime.run()
+        runtime.run_sync()
 
         child_1_params = runtime.child_executions[0].get_parameters()
         assert child_1_params["host"] == "step-host"  # step overrides global
@@ -292,7 +292,7 @@ class TestContainerWorkflowParameterInjection:
         execution.save()
 
         runtime = ContainerWorkflowRuntime(execution)
-        runtime.run()
+        runtime.run_sync()
 
         child_1_params = runtime.child_executions[0].get_parameters()
         assert child_1_params["global_key"] == "global_value"
@@ -314,7 +314,7 @@ class TestContainerWorkflowParameterInjection:
         execution.save()
 
         runtime = ContainerWorkflowRuntime(execution)
-        runtime.run()
+        runtime.run_sync()
 
         child_params = runtime.child_executions[0].get_parameters()
         assert "_env_config" not in child_params
@@ -357,7 +357,7 @@ class TestContainerWorkflowFailurePropagation:
             environment='dev', status=ExecutionStatus.SUBMITTED,
         )
         runtime = ContainerWorkflowRuntime(execution)
-        result = runtime.run()
+        result = runtime.run_sync()
 
         assert result == ExecutionStatus.FAILED
         execution.refresh_from_db()
@@ -387,7 +387,7 @@ class TestContainerWorkflowFailurePropagation:
             environment='dev', status=ExecutionStatus.SUBMITTED,
         )
         runtime = ContainerWorkflowRuntime(execution)
-        result = runtime.run()
+        result = runtime.run_sync()
 
         assert result == ExecutionStatus.FAILED
 
@@ -408,7 +408,7 @@ class TestContainerWorkflowFailurePropagation:
             environment='dev', status=ExecutionStatus.SUBMITTED,
         )
         runtime = ContainerWorkflowRuntime(execution)
-        result = runtime.run()
+        result = runtime.run_sync()
 
         assert result == ExecutionStatus.FAILED
 
@@ -428,7 +428,7 @@ class TestContainerWorkflowFailurePropagation:
             environment='dev', status=ExecutionStatus.SUBMITTED,
         )
         runtime = ContainerWorkflowRuntime(execution)
-        result = runtime.run()
+        result = runtime.run_sync()
 
         assert result == ExecutionStatus.CANCELLED
         execution.refresh_from_db()
@@ -452,7 +452,7 @@ class TestContainerWorkflowFailurePropagation:
             environment='dev', status=ExecutionStatus.SUBMITTED,
         )
         runtime = ContainerWorkflowRuntime(execution)
-        result = runtime.run()
+        result = runtime.run_sync()
 
         assert result == ExecutionStatus.FAILED
         # No child executions should have been created (first step failed before child creation)
@@ -489,7 +489,7 @@ class TestContainerWorkflowStatusManagement:
             environment='dev', status=ExecutionStatus.SUBMITTED,
         )
         runtime = ContainerWorkflowRuntime(execution)
-        runtime.run()
+        runtime.run_sync()
 
         execution.refresh_from_db()
         assert execution.status == ExecutionStatus.COMPLETED
@@ -511,7 +511,7 @@ class TestContainerWorkflowStatusManagement:
             environment='dev', status=ExecutionStatus.SUBMITTED,
         )
         runtime = ContainerWorkflowRuntime(execution)
-        runtime.run()
+        runtime.run_sync()
 
         child = runtime.child_executions[0]
         child.refresh_from_db()
@@ -534,7 +534,7 @@ class TestContainerWorkflowStatusManagement:
             environment='dev', status=ExecutionStatus.SUBMITTED,
         )
         runtime = ContainerWorkflowRuntime(execution)
-        runtime.run()
+        runtime.run_sync()
 
         # Verify audit was called (2 calls: child creation + parent completion)
         assert mock_audit.create_entry.call_count >= 1
@@ -575,7 +575,7 @@ class TestContainerWorkflowIntegration:
             environment='dev', status=ExecutionStatus.SUBMITTED,
         )
         runtime = ContainerWorkflowRuntime(execution)
-        result = runtime.run()
+        result = runtime.run_sync()
 
         assert result == ExecutionStatus.COMPLETED
         assert len(runtime.child_executions) == 1
@@ -601,7 +601,7 @@ class TestContainerWorkflowIntegration:
             environment='dev', status=ExecutionStatus.SUBMITTED,
         )
         runtime = ContainerWorkflowRuntime(execution)
-        runtime.run()
+        runtime.run_sync()
 
         parent_step = ExecutionStep.objects.get(execution=execution, step_order=1)
         output = parent_step.get_output()
@@ -625,6 +625,6 @@ class TestContainerWorkflowIntegration:
             environment='dev', status=ExecutionStatus.SUBMITTED,
         )
         runtime = ContainerWorkflowRuntime(execution)
-        result = runtime.run()
+        result = runtime.run_sync()
 
         assert result == ExecutionStatus.FAILED

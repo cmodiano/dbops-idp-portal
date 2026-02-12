@@ -318,7 +318,7 @@ development_status:
     23-5-frontend-admin-source-inventaire-table-par-parametre: done # Code review 2026-02-09: 7 auto-fixes (FR accents, types, comments), 4 action items (validation, selectedServerNames, race condition, UI warning), 94/94 tests pass
     23-6-frontend-use-target-inventory-contexte-serveur: done # Code review 2026-02-09: 10 issues (4 HIGH + 4 MEDIUM + 2 LOW) auto-fixed
     23-7-frontend-profile-form-options-tous-oracle-sql: done # Code review 2026-02-09: 6 HIGH + 4 MEDIUM + 2 LOW issues fixed — Alert API deprecated→title, AC10 comments complete, edge cases covered (empty {}, 'sql' engine, undefined), 48/48 tests pass (15 detectTargetsMode + 33 ProfileForm)
-    epic-23-retrospective: optional
+    epic-23-retrospective: done # 2026-02-10
     # === Epic 24: Intégrations Admin alignées sur le backend ===
     epic-24: in-progress
     24-1-backend-catalogue-types-dintegration: done # Code review 2026-02-10: 11 issues fixed (8 HIGH, 2 MEDIUM, 1 LOW) — audit trail correlation_id, JSON Schema validation, structlog, documentation versionnement — 76/76 tests pass

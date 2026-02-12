@@ -9,7 +9,7 @@
 import React, { memo, useMemo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Badge, Divider, Tooltip, theme } from 'antd';
-import { CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, ClockCircleOutlined, MinusCircleOutlined } from '@ant-design/icons';
 
 export interface WorkflowStepNodeData {
   action_id: number;
@@ -45,14 +45,33 @@ const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
   const { token } = theme.useToken();
   const nodeData = data as unknown as WorkflowStepNodeData;
 
+  // Execution status colors — subtle, professional palette
+  const executionBorderColors: Record<string, string> = {
+    RUNNING: '#fa8c16',
+    COMPLETED: '#389e0d', // Slightly muted green (ant design green-7)
+    FAILED: '#cf1322',    // Slightly muted red (ant design red-7)
+    SKIPPED: '#8c8c8c',
+    PENDING: token.colorBorderSecondary,
+  };
+
   const borderColor =
-    nodeData.validationStatus === 'error'
+    nodeData.executionStatus && nodeData.executionStatus !== 'PENDING'
+      ? executionBorderColors[nodeData.executionStatus] ?? token.colorBorderSecondary
+    : nodeData.validationStatus === 'error'
       ? '#ff4d4f'
       : nodeData.validationStatus === 'warning'
         ? '#fa8c16'
         : selected
           ? token.colorPrimary
           : token.colorBorderSecondary;
+
+  // Subtle 2px border for all states, no heavy glow
+  const borderWidth = nodeData.executionStatus === 'RUNNING' ? 2 : 2;
+  const boxShadowNode = nodeData.executionStatus === 'RUNNING'
+    ? '0 0 6px #fa8c1640'
+    : selected
+      ? `0 0 0 2px ${token.colorPrimary}40`
+      : token.boxShadowTertiary;
 
   // Status labels for execution tooltip (Story 19.2, AC10)
   const executionStatusLabels: Record<string, string> = {
@@ -115,13 +134,15 @@ const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
     <Tooltip title={tooltipContent} placement="top">
       <div
         style={{
-          border: `2px solid ${borderColor}`,
+          border: `${borderWidth}px solid ${borderColor}`,
           borderRadius: 8,
           padding: 12,
           background: token.colorBgContainer,
           minWidth: 200,
           position: 'relative',
-          boxShadow: selected ? `0 0 0 2px ${token.colorPrimary}40` : token.boxShadowTertiary,
+          boxShadow: boxShadowNode,
+          opacity: nodeData.executionStatus === 'SKIPPED' ? 0.6 : nodeData.executionStatus === 'PENDING' ? 0.7 : 1,
+          transition: 'border-color 0.3s, box-shadow 0.3s, opacity 0.3s',
         }}
         role="img"
         aria-label={`Étape: ${nodeData.name ?? nodeData.action_name}`}
@@ -147,8 +168,22 @@ const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
           {nodeData.action_platform ? ` / ${nodeData.action_platform}` : ''}
         </div>
 
+        {/* Execution status icon — small, top-right */}
+        {nodeData.executionStatus === 'COMPLETED' && (
+          <CheckCircleOutlined style={{ position: 'absolute', top: 8, right: 8, color: '#389e0d', fontSize: 13 }} />
+        )}
+        {nodeData.executionStatus === 'FAILED' && (
+          <CloseCircleOutlined style={{ position: 'absolute', top: 8, right: 8, color: '#cf1322', fontSize: 13 }} />
+        )}
+        {nodeData.executionStatus === 'RUNNING' && (
+          <LoadingOutlined spin style={{ position: 'absolute', top: 8, right: 8, color: '#fa8c16', fontSize: 13 }} />
+        )}
+        {nodeData.executionStatus === 'SKIPPED' && (
+          <MinusCircleOutlined style={{ position: 'absolute', top: 8, right: 8, color: '#8c8c8c', fontSize: 13 }} />
+        )}
+
         {/* Story 16.6, AC3: Retry badge visible on the node */}
-        {nodeData.retry_enabled && (
+        {nodeData.retry_enabled && !nodeData.executionStatus && (
           <Badge
             count={`Réessai: ${nodeData.retry_max_attempts || 3}×`}
             style={{

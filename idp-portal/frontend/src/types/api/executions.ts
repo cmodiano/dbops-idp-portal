@@ -55,8 +55,10 @@ export interface ExecutionResponse {
   approved_at?: string | null;
   /** Story 7.4: Comment from approver. */
   approval_comment?: string | null;
-  /** Story 9.2: Parent execution ID for remediation actions. */
+  /** Story 9.2: Parent execution ID for remediation or workflow child. */
   parent_execution_id?: number | null;
+  /** Parent's action item_type: 'workflow' = workflow child, else = remediation. */
+  parent_item_type?: string | null;
   /** Story 18.6: Error message when status is INTEGRATION_ERROR. */
   error_message?: string | null;
   /** Story 9.9 AC6: Database engine from action (for Technologie column). */

@@ -17,8 +17,9 @@ import { CloseOutlined, ReloadOutlined } from '@ant-design/icons';
 import { ExecutionTimeline } from './ExecutionTimeline';
 import { WorkflowExecutionGraph } from './WorkflowExecutionGraph';
 import { getExecution } from '../../services/execution_service';
-import { getAction } from '../../services/admin_service';
-import type { ExecutionResponse, ExecutionStatusType, RemediationSuggestion, ActionDetail, ActionEngine } from '../../types/api';
+import { fetchCatalogActionById } from '../../services/catalog_service';
+import type { ExecutionResponse, ExecutionStatusType, RemediationSuggestion, ActionEngine } from '../../types/api';
+import type { CatalogActionDetail } from '../../services/catalog_service';
 import { getItemTypeIcon } from '../../utils/iconHelpers';
 import logger from '../../services/logger';
 
@@ -54,7 +55,7 @@ const STATUS_CONFIG: Record<ExecutionStatusType, { color: string; label: string 
 
 export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggestionClick }: ExecutionViewProps) {
   const [execution, setExecution] = useState<ExecutionResponse | null>(null);
-  const [actionDetail, setActionDetail] = useState<ActionDetail | null>(null);
+  const [actionDetail, setActionDetail] = useState<CatalogActionDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -102,10 +103,11 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
         setExecution(data);
         setError(null);
         // Story 19.2 AC2: Load workflow definition if this is a workflow execution
+        // Use catalog API (accessible to all users) instead of admin API (DBOPS only)
         if (data.item_type === 'workflow' && data.action_id) {
           try {
-            const detail = await getAction(data.action_id);
-            setActionDetail(detail);
+            const { data: actionDetailData } = await fetchCatalogActionById(data.action_id);
+            setActionDetail(actionDetailData);
           } catch (err) {
             logger.warn('ExecutionView: Failed to load workflow details', {
               action_id: data.action_id,
@@ -127,6 +129,18 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
     onClose();
     redirectOnClose?.();
   }, [onClose, redirectOnClose]);
+
+  // Sync execution status from WorkflowExecutionGraph polling/WS
+  const handleExecutionUpdate = useCallback((updated: ExecutionResponse) => {
+    setExecution((prev) => {
+      if (!prev) return updated;
+      // Only update if status or completed_at changed
+      if (prev.status !== updated.status || prev.completed_at !== updated.completed_at) {
+        return { ...prev, status: updated.status, completed_at: updated.completed_at, started_at: updated.started_at ?? prev.started_at };
+      }
+      return prev;
+    });
+  }, []);
 
   // AC9: Manual refresh
   const handleRefresh = useCallback(async () => {
@@ -160,7 +174,7 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
     <Drawer
       title={null}
       placement="right"
-      size="large"
+      width="min(90vw, 1400px)"
       open={executionId != null}
       onClose={handleClose}
       closable={false}
@@ -187,13 +201,14 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
             : 'Exécution créée, suivi en cours'}
       </div>
 
-      {/* AC8: Metadata header */}
+      {/* AC8: Metadata header — dark text for contrast on light background */}
       {execution && (
         <div
           style={{
             padding: '16px 24px',
             borderBottom: '1px solid #E5E7EB',
-            background: '#FAFAFA',
+            background: '#F5F5F5',
+            color: '#262626',
             position: 'sticky',
             top: 0,
             zIndex: 1,
@@ -205,11 +220,11 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
               <Space size={8} align="center">
                 {/* Story 19.5 AC1-5: Engine-specific icon with tooltip */}
                 {typeIcon}
-                <Title level={4} style={{ margin: 0 }}>
+                <Title level={4} style={{ margin: 0, color: '#262626' }}>
                   {execution.action_name ?? `Exécution #${execution.id}`}
                 </Title>
                 {/* Story 19.4 AC9: Remediation badge */}
-                {execution.parent_execution_id && (
+                {execution.parent_execution_id && execution.parent_item_type !== 'workflow' && (
                   <Text type="secondary" style={{ fontSize: 12 }}>
                     Remédiation de #{execution.parent_execution_id}
                   </Text>
@@ -227,25 +242,25 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
 
             <Space size={16} wrap>
               <Space size={4}>
-                <Text type="secondary">ID:</Text>
-                <Text strong>#{execution.id}</Text>
+                <Text type="secondary" style={{ color: '#595959' }}>ID:</Text>
+                <Text strong style={{ color: '#262626' }}>#{execution.id}</Text>
               </Space>
               <Space size={4}>
-                <Text type="secondary">Environnement:</Text>
-                <Badge color={envBadge.color} text={envBadge.label} />
+                <Text type="secondary" style={{ color: '#595959' }}>Environnement:</Text>
+                <Badge color={envBadge.color} text={<span style={{ color: '#262626' }}>{envBadge.label}</span>} />
               </Space>
               <Space size={4}>
-                <Text type="secondary">Statut:</Text>
-                <Badge status={statusCfg.color as 'default' | 'processing' | 'success' | 'error' | 'warning'} text={statusCfg.label} />
+                <Text type="secondary" style={{ color: '#595959' }}>Statut:</Text>
+                <Badge status={statusCfg.color as 'default' | 'processing' | 'success' | 'error' | 'warning'} text={<span style={{ color: '#262626' }}>{statusCfg.label}</span>} />
               </Space>
               <Space size={4}>
-                <Text type="secondary">Initiateur:</Text>
-                <Text>{execution.user_display_name ?? `User #${execution.user_id}`}</Text>
+                <Text type="secondary" style={{ color: '#595959' }}>Initiateur:</Text>
+                <Text style={{ color: '#262626' }}>{execution.user_display_name ?? `User #${execution.user_id}`}</Text>
               </Space>
               {getDuration() && (
                 <Space size={4}>
-                  <Text type="secondary">{isTerminal ? 'Durée:' : 'Temps écoulé:'}</Text>
-                  <Text>{getDuration()}</Text>
+                  <Text type="secondary" style={{ color: '#595959' }}>{isTerminal ? 'Durée:' : 'Temps écoulé:'}</Text>
+                  <Text style={{ color: '#262626' }}>{getDuration()}</Text>
                 </Space>
               )}
             </Space>
@@ -284,6 +299,7 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
             executionId={executionId}
             workflowSteps={actionDetail.workflow_steps}
             execution={execution}
+            onExecutionUpdate={handleExecutionUpdate}
           />
         ) : executionId != null && !loading ? (
           <ExecutionTimeline

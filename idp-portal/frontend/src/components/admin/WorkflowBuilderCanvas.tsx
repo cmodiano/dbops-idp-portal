@@ -470,7 +470,8 @@ function WorkflowBuilderCanvasInner({
         return;
       }
       const sourceHandle = params.sourceHandle as string;
-      const isSuccess = sourceHandle === 'success';
+      // StartNode uses handle id="output", treat it as success (not error)
+      const isSuccess = sourceHandle === 'success' || sourceHandle === 'output';
 
       // Remove existing edge from same source+handle (only one success and one error per node)
       setEdges((eds) => {
@@ -533,9 +534,62 @@ function WorkflowBuilderCanvasInner({
         } satisfies WorkflowStepNodeData,
       };
 
-      setNodes((nds) => [...nds, newNode]);
+      setNodes((nds) => {
+        const updated = [...nds, newNode];
+
+        // Auto-connect: find existing workflowStep nodes (excluding Start/End)
+        const existingStepNodes = nds.filter(
+          (n) => n.type === 'workflowStep'
+        );
+
+        if (existingStepNodes.length === 0) {
+          // First step: auto-connect Start → new node
+          setEdges((eds) => [
+            ...eds,
+            {
+              id: `${START_NODE_ID}_output_${newNode.id}`,
+              source: START_NODE_ID,
+              target: newNode.id,
+              sourceHandle: 'output',
+              targetHandle: 'input',
+              type: 'customEdge',
+              animated: false,
+              style: { stroke: '#52c41a', strokeWidth: 2 },
+              label: 'succès',
+              labelStyle: { fontSize: 10, fill: '#52c41a' },
+            } as Edge,
+          ]);
+        } else {
+          // Not the first step: auto-connect the last step's success handle → new node
+          // (only if that handle doesn't already have an outgoing edge)
+          const lastStep = existingStepNodes[existingStepNodes.length - 1];
+          setEdges((eds) => {
+            const lastStepHasSuccessEdge = eds.some(
+              (e) => e.source === lastStep.id && e.sourceHandle === 'success'
+            );
+            if (lastStepHasSuccessEdge) return eds; // Don't override existing connection
+            return [
+              ...eds,
+              {
+                id: `${lastStep.id}_success_${newNode.id}`,
+                source: lastStep.id,
+                target: newNode.id,
+                sourceHandle: 'success',
+                targetHandle: 'input',
+                type: 'customEdge',
+                animated: false,
+                style: { stroke: '#52c41a', strokeWidth: 2 },
+                label: 'succès',
+                labelStyle: { fontSize: 10, fill: '#52c41a' },
+              } as Edge,
+            ];
+          });
+        }
+
+        return updated;
+      });
     },
-    [disabled, screenToFlowPosition, setNodes]
+    [disabled, screenToFlowPosition, setNodes, setEdges]
   );
 
   // Node double-click → open config panel

@@ -27,6 +27,11 @@ function getCachedTypes(): IntegrationTypeCatalogue[] | null {
       sessionStorage.removeItem(CACHE_KEY);
       return null;
     }
+    // Don't use cached empty array — could be stale from before loaddata
+    if (parsed.data.length === 0) {
+      sessionStorage.removeItem(CACHE_KEY);
+      return null;
+    }
 
     if (Date.now() - parsed.timestamp > CACHE_TTL) {
       sessionStorage.removeItem(CACHE_KEY);
@@ -89,7 +94,16 @@ export function useIntegrationTypes(): UseIntegrationTypesReturn {
       .then((data) => {
         if (cancelled) return;
         setTypes(data);
-        setCachedTypes(data);
+        // Only cache non-empty responses to avoid stale "No data" after loaddata
+        if (data.length > 0) {
+          setCachedTypes(data);
+        } else {
+          try {
+            sessionStorage.removeItem(CACHE_KEY);
+          } catch {
+            /* ignore */
+          }
+        }
         setError(null);
         setIsFallback(false);
       })

@@ -23,7 +23,8 @@ export async function createCategory(data: {
   display_order: number;
   is_active: number;
 }): Promise<RefCategory> {
-  return apiFetch<RefCategory>('/admin/categories/', {
+  // Backend returns category directly (not wrapped in {data: ...}), use apiFetchRaw
+  return apiFetchRaw<RefCategory>('/admin/categories/', {
     method: 'POST',
     body: JSON.stringify(data),
   });
@@ -36,7 +37,8 @@ export async function updateCategory(
   id: number,
   data: Partial<{ code: string; label: string; display_order: number; is_active: number }>
 ): Promise<RefCategory> {
-  return apiFetch<RefCategory>(`/admin/categories/${id}/`, {
+  // Backend returns category directly (not wrapped in {data: ...}), use apiFetchRaw
+  return apiFetchRaw<RefCategory>(`/admin/categories/${id}/`, {
     method: 'PATCH',
     body: JSON.stringify(data),
   });

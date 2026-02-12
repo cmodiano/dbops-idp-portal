@@ -8,9 +8,8 @@
  */
 
 import { useMemo } from 'react';
-import { Drawer, Space, Typography, Badge, Alert } from 'antd';
-import { CloseOutlined } from '@ant-design/icons';
-import { ExecutionTimeline } from './ExecutionTimeline';
+import { Drawer, Space, Typography, Badge, Alert, Card } from 'antd';
+import { CloseOutlined, CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import { StructuredErrorCard } from './StructuredErrorCard';
 import type { ExecutionStepResponse, WorkflowStep } from '../../types/api';
 
@@ -85,10 +84,31 @@ export function StepDetailDrawer({
     return STATUS_CONFIG[status] ?? STATUS_CONFIG.PENDING;
   }, [selectedStep?.executionStep?.status]);
 
-  if (!open || !stepId || !selectedStep) return null;
+  const workflowStep = selectedStep?.workflowStep ?? null;
+  const executionStep = selectedStep?.executionStep ?? null;
+  const stepTitle = workflowStep?.name || workflowStep?.action_name || (workflowStep ? `Étape ${workflowStep.order}` : '');
 
-  const { workflowStep, executionStep } = selectedStep;
-  const stepTitle = workflowStep.name || workflowStep.action_name || `Étape ${workflowStep.order}`;
+  // Status icon helper — MUST be before any early return (React hooks rule)
+  const statusIcon = useMemo(() => {
+    const status = executionStep?.status;
+    if (status === 'COMPLETED') return <CheckCircleOutlined style={{ color: '#389e0d', fontSize: 18 }} />;
+    if (status === 'FAILED') return <CloseCircleOutlined style={{ color: '#cf1322', fontSize: 18 }} />;
+    if (status === 'RUNNING') return <LoadingOutlined spin style={{ color: '#fa8c16', fontSize: 18 }} />;
+    return <ClockCircleOutlined style={{ color: '#8c8c8c', fontSize: 18 }} />;
+  }, [executionStep?.status]);
+
+  // Parse step output (logs)
+  const stepLogs = useMemo(() => {
+    if (!executionStep?.output) return null;
+    if (typeof executionStep.output === 'string') return executionStep.output;
+    if (typeof executionStep.output === 'object') {
+      return JSON.stringify(executionStep.output, null, 2);
+    }
+    return null;
+  }, [executionStep?.output]);
+
+  // Early return AFTER all hooks
+  if (!open || !stepId || !selectedStep || !workflowStep) return null;
 
   return (
     <Drawer
@@ -106,12 +126,12 @@ export function StepDetailDrawer({
       }}
       data-testid="step-detail-drawer"
     >
-      {/* AC3: Step metadata header */}
+      {/* AC3: Step metadata header — uses theme-safe colors */}
       <div
         style={{
           padding: '16px 24px',
-          borderBottom: '1px solid #E5E7EB',
-          background: '#FAFAFA',
+          borderBottom: '1px solid #303030',
+          background: '#1f1f1f',
           position: 'sticky',
           top: 0,
           zIndex: 1,
@@ -120,10 +140,13 @@ export function StepDetailDrawer({
       >
         <Space direction="vertical" size={8} style={{ width: '100%' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Title level={4} style={{ margin: 0 }}>{stepTitle}</Title>
+            <Space size={8} align="center">
+              {statusIcon}
+              <Title level={4} style={{ margin: 0, color: '#e8e8e8' }}>{stepTitle}</Title>
+            </Space>
             <CloseOutlined
               onClick={onClose}
-              style={{ cursor: 'pointer', fontSize: 16 }}
+              style={{ cursor: 'pointer', fontSize: 16, color: '#999' }}
               data-testid="step-detail-close"
               aria-label="Fermer le détail de l'étape"
             />
@@ -131,26 +154,26 @@ export function StepDetailDrawer({
 
           <Space size={16} wrap>
             <Space size={4}>
-              <Text type="secondary">Ordre:</Text>
-              <Text strong>#{workflowStep.order}</Text>
+              <Text style={{ color: '#999' }}>Ordre:</Text>
+              <Text strong style={{ color: '#e8e8e8' }}>#{workflowStep.order}</Text>
             </Space>
             {workflowStep.action_name && (
               <Space size={4}>
-                <Text type="secondary">Action:</Text>
-                <Text>{workflowStep.action_name}</Text>
+                <Text style={{ color: '#999' }}>Action:</Text>
+                <Text style={{ color: '#e8e8e8' }}>{workflowStep.action_name}</Text>
               </Space>
             )}
             <Space size={4}>
-              <Text type="secondary">Statut:</Text>
+              <Text style={{ color: '#999' }}>Statut:</Text>
               <Badge
                 status={statusCfg.color as 'default' | 'processing' | 'success' | 'error' | 'warning'}
-                text={statusCfg.label}
+                text={<span style={{ color: '#e8e8e8' }}>{statusCfg.label}</span>}
               />
             </Space>
             {duration && (
               <Space size={4}>
-                <Text type="secondary">Durée:</Text>
-                <Text>{duration}</Text>
+                <Text style={{ color: '#999' }}>Durée:</Text>
+                <Text style={{ color: '#e8e8e8' }}>{duration}</Text>
               </Space>
             )}
           </Space>
@@ -180,12 +203,61 @@ export function StepDetailDrawer({
               />
             )}
 
-            {/* AC2: Timeline and logs for this step */}
-            <ExecutionTimeline
-              execution={null}
-              steps={[executionStep]}
-              mode="historical"
-            />
+            {/* Step info card */}
+            <Card size="small" title={<span style={{ fontSize: 13 }}>{executionStep.step_name}</span>}>
+              <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                <Space size={8}>
+                  {statusIcon}
+                  <Text strong>{statusCfg.label}</Text>
+                  {duration && <Text type="secondary">({duration})</Text>}
+                </Space>
+                {executionStep.started_at && (
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    Démarré: {new Date(executionStep.started_at).toLocaleString()}
+                  </Text>
+                )}
+                {executionStep.completed_at && (
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    Terminé: {new Date(executionStep.completed_at).toLocaleString()}
+                  </Text>
+                )}
+                {executionStep.platform_job_id && (
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    Job ID: {executionStep.platform_job_id}
+                  </Text>
+                )}
+              </Space>
+            </Card>
+
+            {/* Logs — shown by default, no need to click */}
+            {stepLogs && (
+              <Card size="small" title={<span style={{ fontSize: 13 }}>Logs</span>}>
+                <pre
+                  style={{
+                    margin: 0,
+                    padding: 12,
+                    background: '#141414',
+                    color: '#d4d4d4',
+                    borderRadius: 6,
+                    fontSize: 12,
+                    fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
+                    lineHeight: 1.6,
+                    overflowX: 'auto',
+                    maxHeight: 400,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {stepLogs}
+                </pre>
+              </Card>
+            )}
+
+            {executionStep.error_message && (
+              <Card size="small" title={<span style={{ fontSize: 13, color: '#ff4d4f' }}>Message d'erreur</span>}>
+                <Text type="danger">{executionStep.error_message}</Text>
+              </Card>
+            )}
           </Space>
         )}
       </div>

@@ -53,6 +53,8 @@ services:
       - ORACLE_PASSWORD=Oracle123!
       - DJANGO_LOG_LEVEL=INFO
       - LOG_FORMAT=json
+      - SIMULATE_EXECUTION_DEV=true
+      - SIMULATE_EXECUTION_STEP_DURATION=4
       # Use in-memory cache since Redis is not included in docker-compose
       # For production with Redis, set CACHE_BACKEND=redis and add Redis service
       - CACHE_BACKEND=locmem

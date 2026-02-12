@@ -45,6 +45,7 @@
  */
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useParams, useSearchParams, useNavigate } from 'react-router';
 import { App, Typography, Table, Drawer, Skeleton, Alert, Card, Space, Row, Col, Tag, theme, Button, Tooltip } from 'antd';
 import {
   SafetyCertificateOutlined,
@@ -67,6 +68,8 @@ type TableOnChange<T> = NonNullable<TableProps<T>['onChange']>;
 type SorterResult<T> = Parameters<TableOnChange<T>>[2];
 type FilterValue = Parameters<TableOnChange<never>>[1][string];
 import { ExecutionTimeline } from '../components/execution/ExecutionTimeline';
+import { WorkflowExecutionGraph } from '../components/execution/WorkflowExecutionGraph';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import { PendingApprovalsList } from '../components/dashboard/PendingApprovalsList';
 import { ExecutionsTabs } from '../components/executions/ExecutionsTabs';
 import { StatCard } from '../components/dashboard/StatCard';
@@ -167,6 +170,9 @@ export default function ExecutionsPage() {
 
   // Story 9.10: URL-synced filters
   const { filters, applyFilters, resetFilters, activeFilterCount } = useExecutionFilters();
+  const params = useParams<{ id?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   // Integration icons for Plateforme column fallback (icons set in integration page)
   const [integrationIconsMap, setIntegrationIconsMap] = useState<IntegrationIconsMap | null>(null);
@@ -211,6 +217,7 @@ export default function ExecutionsPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedExecution, setSelectedExecution] = useState<ExecutionResponse | null>(null);
   const [selectedSteps, setSelectedSteps] = useState<ExecutionStepResponse[]>([]);
+  const [selectedActionDetail, setSelectedActionDetail] = useState<CatalogActionDetail | null>(null);
   const [drawerLoading, setDrawerLoading] = useState(false);
   const [drawerError, setDrawerError] = useState<string | null>(null);
 
@@ -237,6 +244,45 @@ export default function ExecutionsPage() {
   useEffect(() => {
     fetchData(currentPage, activeScope);
   }, [currentPage, activeScope, fetchData]);
+
+  // Open drawer from URL: /executions/:id or /executions?open=79
+  const openExecutionId = params.id || searchParams.get('open');
+  useEffect(() => {
+    if (!openExecutionId) return;
+    const id = parseInt(openExecutionId, 10);
+    if (isNaN(id)) return;
+
+    const doOpen = async () => {
+      setDrawerOpen(true);
+      setDrawerLoading(true);
+      setDrawerError(null);
+      setSelectedExecution(null);
+      setSelectedSteps([]);
+      setSelectedActionDetail(null);
+      try {
+        const [execution, steps] = await Promise.all([
+          getExecution(id),
+          getExecutionSteps(id),
+        ]);
+        setSelectedExecution(execution);
+        setSelectedSteps(steps);
+        if (execution.item_type === 'workflow' && execution.action_id) {
+          try {
+            const { data } = await fetchCatalogActionById(execution.action_id);
+            setSelectedActionDetail(data);
+          } catch {
+            // Fallback: show timeline if action detail fails
+          }
+        }
+      } catch (err) {
+        setDrawerError(err instanceof Error ? err.message : 'Erreur de chargement du détail');
+      } finally {
+        setDrawerLoading(false);
+      }
+    }
+
+    doOpen();
+  }, [openExecutionId]);
 
   // Reset to page 1 when filters change (apply-on-change UX)
   useEffect(() => {
@@ -503,17 +549,33 @@ export default function ExecutionsPage() {
     }
   }, [loadPendingApprovals, refetchCurrentState]);
 
-  // Sort executions: running first, then by sortField (AC3)
-  const sortedExecutions = useMemo(() => {
-    const sorted = [...executions];
+  // Group workflow children under parent (accordion-style)
+  const { topLevelExecutions, childrenByParentId } = useMemo(() => {
+    const childrenMap = new Map<number, ExecutionResponse[]>();
+    for (const e of executions) {
+      if (e.parent_execution_id != null) {
+        const list = childrenMap.get(e.parent_execution_id) ?? [];
+        list.push(e);
+        childrenMap.set(e.parent_execution_id, list);
+      }
+    }
+    // Sort children by created_at
+    for (const list of childrenMap.values()) {
+      list.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    }
+    const topLevel = executions.filter((e) => e.parent_execution_id == null);
+    return { topLevelExecutions: topLevel, childrenByParentId: childrenMap };
+  }, [executions]);
 
-    // First sort by running status (running first)
+  // Sort top-level executions: running first, then by sortField (AC3)
+  const sortedExecutions = useMemo(() => {
+    const sorted = [...topLevelExecutions];
+
     sorted.sort((a, b) => {
       const aRunning = isRunning(a.status) ? 0 : 1;
       const bRunning = isRunning(b.status) ? 0 : 1;
       if (aRunning !== bRunning) return aRunning - bRunning;
 
-      // Then by selected field
       let aVal: string | number | null = null;
       let bVal: string | number | null = null;
 
@@ -535,7 +597,7 @@ export default function ExecutionsPage() {
     });
 
     return sorted;
-  }, [executions, sortField, sortOrder]);
+  }, [topLevelExecutions, sortField, sortOrder]);
 
   // Open drawer with execution details (AC2)
   const handleRowClick = async (record: ExecutionResponse) => {
@@ -544,6 +606,7 @@ export default function ExecutionsPage() {
     setDrawerError(null);
     setSelectedExecution(null);
     setSelectedSteps([]);
+    setSelectedActionDetail(null);
 
     try {
       const [execution, steps] = await Promise.all([
@@ -552,6 +615,14 @@ export default function ExecutionsPage() {
       ]);
       setSelectedExecution(execution);
       setSelectedSteps(steps);
+      if (execution.item_type === 'workflow' && execution.action_id) {
+        try {
+          const { data } = await fetchCatalogActionById(execution.action_id);
+          setSelectedActionDetail(data);
+        } catch {
+          // Fallback: show timeline if action detail fails
+        }
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erreur de chargement du détail';
       setDrawerError(message);
@@ -855,6 +926,34 @@ export default function ExecutionsPage() {
           onClick: () => handleRowClick(record),
           style: { cursor: 'pointer' },
         })}
+        expandable={{
+          rowExpandable: (record) =>
+            record.item_type === 'workflow' &&
+            (childrenByParentId.get(record.id)?.length ?? 0) > 0,
+          expandedRowRender: (record) => {
+            const children = childrenByParentId.get(record.id) ?? [];
+            if (children.length === 0) return null;
+            return (
+              <div style={{ padding: '8px 0 8px 24px', background: token.colorFillQuaternary }}>
+                <Typography.Text type="secondary" style={{ fontSize: 12, marginBottom: 8, display: 'block' }}>
+                  Actions du workflow ({children.length})
+                </Typography.Text>
+                <Table<ExecutionResponse>
+                  dataSource={children}
+                  rowKey="id"
+                  size="small"
+                  pagination={false}
+                  showHeader
+                  onRow={(childRecord) => ({
+                    onClick: (e) => { e.stopPropagation(); handleRowClick(childRecord); },
+                    style: { cursor: 'pointer' },
+                  })}
+                  columns={columns}
+                />
+              </div>
+            );
+          },
+        }}
         locale={{
           emptyText: 'Aucune exécution trouvée',
         }}
@@ -864,8 +963,17 @@ export default function ExecutionsPage() {
       <Drawer
         title={selectedExecution ? `Exécution — ${selectedExecution.action_name || `Action #${selectedExecution.action_id}`}` : 'Détail exécution'}
         open={drawerOpen}
-        onClose={() => { setDrawerOpen(false); setDrawerError(null); }}
-        styles={{ wrapper: { width: 480 } }}
+        onClose={() => {
+          setDrawerOpen(false);
+          setDrawerError(null);
+          if (params.id) {
+            navigate('/executions', { replace: true });
+          } else if (searchParams.has('open')) {
+            searchParams.delete('open');
+            setSearchParams(searchParams, { replace: true });
+          }
+        }}
+        width={selectedExecution?.item_type === 'workflow' && selectedActionDetail?.workflow_steps ? 'min(90vw, 1400px)' : 480}
         destroyOnHidden
       >
         {drawerLoading ? (
@@ -873,11 +981,31 @@ export default function ExecutionsPage() {
         ) : drawerError ? (
           <Alert type="error" title="Erreur de chargement" description={drawerError} showIcon />
         ) : selectedExecution ? (
-          <ExecutionTimeline
-            execution={selectedExecution}
-            steps={selectedSteps}
-            mode="historical"
-          />
+          selectedExecution.item_type === 'workflow' &&
+          selectedActionDetail?.workflow_steps &&
+          selectedActionDetail.workflow_steps.length > 0 ? (
+            <ErrorBoundary
+              fallback={(error, resetError) => (
+                <div style={{ padding: 16 }}>
+                  <Alert type="error" showIcon message="Erreur d'affichage du workflow" description={error.message} />
+                  <Button onClick={resetError} style={{ marginTop: 8 }}>Réessayer</Button>
+                </div>
+              )}
+            >
+              <WorkflowExecutionGraph
+                executionId={selectedExecution.id}
+                workflowSteps={selectedActionDetail.workflow_steps}
+                execution={selectedExecution}
+                onExecutionUpdate={(updated) => setSelectedExecution((prev) => prev ? { ...prev, status: updated.status, completed_at: updated.completed_at, started_at: updated.started_at ?? prev.started_at } : prev)}
+              />
+            </ErrorBoundary>
+          ) : (
+            <ExecutionTimeline
+              execution={selectedExecution}
+              steps={selectedSteps}
+              mode="historical"
+            />
+          )
         ) : null}
       </Drawer>
 

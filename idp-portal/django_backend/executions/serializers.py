@@ -48,6 +48,8 @@ class ExecutionSerializer(serializers.Serializer):
     approved_at = serializers.DateTimeField(read_only=True, allow_null=True)
     approval_comment = serializers.CharField(read_only=True, allow_null=True)
     parent_execution_id = serializers.IntegerField(read_only=True, allow_null=True)
+    # Distinguish workflow child (parent is workflow) vs remediation (parent is action)
+    parent_item_type = serializers.CharField(read_only=True, allow_null=True)
     error_message = serializers.CharField(read_only=True, allow_null=True)
     engine = serializers.CharField(read_only=True, allow_null=True)
     platform = serializers.CharField(read_only=True, allow_null=True)
@@ -78,6 +80,11 @@ class ExecutionSerializer(serializers.Serializer):
             "approved_at": ensure_utc_isoformat(obj.approved_at),
             "approval_comment": obj.approval_comment,
             "parent_execution_id": obj.parent_execution_id,
+            "parent_item_type": (
+                obj.parent_execution
+                and getattr(obj.parent_execution, "action", None)
+                and getattr(obj.parent_execution.action, "item_type", None)
+            ) if obj.parent_execution_id else None,
             # Story 18.6: Integration error message
             "error_message": obj.error_message,
             # Enrichment (Story 9.9)

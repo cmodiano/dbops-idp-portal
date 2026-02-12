@@ -108,6 +108,7 @@ function ThemedApp() {
                   <Route index element={<Navigate to="/catalog" replace />} />
                   <Route path="/catalog" element={<CatalogPage />} />
                   <Route path="/executions" element={<ExecutionsPage />} />
+                  <Route path="/executions/:id" element={<ExecutionsPage />} />
                   {/* Story 13.6: Calendar for DBA/DBOPS to view scheduled executions */}
                   <Route path="/calendar" element={<CalendarGuard><CalendarPage /></CalendarGuard>} />
                   {/* Story 9.10: Dashboard renamed to Analytics, RBAC restricted to DBOPS */}

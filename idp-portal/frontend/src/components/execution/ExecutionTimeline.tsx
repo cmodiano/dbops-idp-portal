@@ -222,24 +222,25 @@ export function ExecutionTimeline({
         />
       )}
 
-      {/* Story 9.2, Task 18: Alert when this is a child remediation execution */}
-      {execution?.parent_execution_id && (
-        <Alert
-          type="info"
-          showIcon
-          icon={<LinkOutlined />}
-          title={
-            <>
-              Cette exécution est une action corrective de l'exécution{' '}
-              <a href={`/executions/${execution.parent_execution_id}`} target="_blank" rel="noopener noreferrer">
-                #{execution.parent_execution_id}
-              </a>
-            </>
-          }
-          style={{ marginBottom: 16 }}
-          data-testid="parent-execution-alert"
-        />
-      )}
+      {/* Story 9.2, Task 18: Alert when this is a remediation (NOT workflow child) */}
+      {execution?.parent_execution_id &&
+        execution?.parent_item_type !== 'workflow' && (
+          <Alert
+            type="info"
+            showIcon
+            icon={<LinkOutlined />}
+            title={
+              <>
+                Cette exécution est une action corrective de l'exécution{' '}
+                <a href={`/executions/${execution.parent_execution_id}`}>
+                  #{execution.parent_execution_id}
+                </a>
+              </>
+            }
+            style={{ marginBottom: 16 }}
+            data-testid="parent-execution-alert"
+          />
+        )}
 
       {/* Story 7.4 AC1: Bandeau attente approbation */}
       {execution?.status === 'PENDING_APPROVAL' && (
@@ -496,7 +497,31 @@ export function ExecutionTimeline({
           {statusAnnouncement}
         </div>
         {steps.length === 0 && (
-          <Text type="secondary">Aucune étape à afficher</Text>
+          execution?.parent_item_type === 'workflow' && execution?.parent_execution_id ? (
+            <Card size="small" style={{ maxWidth: 400 }}>
+              <Space direction="vertical" size={8}>
+                <Text strong>Action du workflow</Text>
+                <Text type="secondary">
+                  Cette action a été exécutée dans le cadre d'un workflow. Les étapes détaillées sont visibles sur l'exécution parente.
+                </Text>
+                <Space>
+                  <Tag color={execution.status === 'COMPLETED' ? 'success' : execution.status === 'FAILED' ? 'error' : 'default'}>
+                    {execution.status}
+                  </Tag>
+                  {execution.started_at && execution.completed_at && (
+                    <Text type="secondary">
+                      Durée: {formatDuration(execution.started_at, execution.completed_at)}
+                    </Text>
+                  )}
+                </Space>
+                <a href={`/executions/${execution.parent_execution_id}`} target="_blank" rel="noopener noreferrer">
+                  <LinkOutlined /> Voir le workflow parent
+                </a>
+              </Space>
+            </Card>
+          ) : (
+            <Text type="secondary">Aucune étape à afficher</Text>
+          )
         )}
       {steps.map((step, idx) => {
         const isExpanded = expandedId === step.id;

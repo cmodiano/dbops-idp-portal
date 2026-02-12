@@ -15,7 +15,8 @@
  * - Legend and tooltips (AC10)
  */
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { getExecutionSteps } from '../../services/execution_service';
 import {
   ReactFlow,
   Controls,
@@ -25,6 +26,7 @@ import {
   useEdgesState,
   type Node,
   type Edge,
+  type ReactFlowInstance,
   ReactFlowProvider,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -46,9 +48,9 @@ import logger from '../../services/logger';
 
 const { Text } = Typography;
 
-// Status colors
+// Status colors — RUNNING uses orange for high visibility (active step)
 const STATUS_COLORS = {
-  RUNNING: '#1677ff',
+  RUNNING: '#fa8c16', // Orange — étape active, bien visible
   COMPLETED: '#52c41a',
   FAILED: '#ff4d4f',
   PENDING: '#8c8c8c',
@@ -60,6 +62,8 @@ interface WorkflowExecutionGraphProps {
   executionId: number;
   workflowSteps: WorkflowStep[];
   execution: ExecutionResponse | null;
+  /** Callback when execution data is updated via polling/WebSocket (for parent header sync). */
+  onExecutionUpdate?: (execution: ExecutionResponse) => void;
 }
 
 const nodeTypes = {
@@ -84,37 +88,21 @@ function calculateStepDuration(step: ExecutionStepResponse): string | null {
   return seconds ? `${minutes}m ${seconds}s` : `${minutes}m`;
 }
 
-/** Get border style for a node based on execution status (AC3, AC4). */
+/** Get subtle border style for the React Flow wrapper (AC3, AC4). */
 function getNodeStyle(status: ExecutionStepStatus | undefined): React.CSSProperties {
+  // The actual visible border is handled by WorkflowStepNode's inner div.
+  // These wrapper styles provide minimal reinforcement.
   switch (status) {
     case 'RUNNING':
-      return {
-        borderColor: STATUS_COLORS.RUNNING,
-        borderWidth: 3,
-        boxShadow: `0 0 8px ${STATUS_COLORS.RUNNING}40`,
-      };
+      return { opacity: 1 };
     case 'COMPLETED':
-      return {
-        borderColor: STATUS_COLORS.COMPLETED,
-        borderWidth: 2,
-      };
+      return { opacity: 1 };
     case 'FAILED':
-      return {
-        borderColor: STATUS_COLORS.FAILED,
-        borderWidth: 2,
-      };
+      return { opacity: 1 };
     case 'SKIPPED':
-      return {
-        borderColor: STATUS_COLORS.PENDING,
-        borderWidth: 1,
-        opacity: 0.6,
-      };
+      return { opacity: 0.6 };
     default: // PENDING
-      return {
-        borderColor: '#d9d9d9',
-        borderWidth: 1,
-        opacity: 0.7,
-      };
+      return { opacity: 0.7 };
   }
 }
 
@@ -122,9 +110,22 @@ function WorkflowExecutionGraphInner({
   executionId,
   workflowSteps,
   execution,
+  onExecutionUpdate,
 }: WorkflowExecutionGraphProps) {
   // Story 19.3 AC1: Selected step state for drawer
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
+
+  // Store React Flow instance ref for delayed fitView
+  const rfInstanceRef = useRef<ReactFlowInstance | null>(null);
+
+  // onInit: React Flow is ready — store instance and do a delayed fitView
+  const handleInit = useCallback((instance: ReactFlowInstance) => {
+    rfInstanceRef.current = instance;
+    // Delay fitView to let the drawer animation complete (antd ~300ms + buffer)
+    setTimeout(() => {
+      instance.fitView({ padding: 0.3, duration: 300 });
+    }, 500);
+  }, []);
 
   // Story 19.3 AC1, AC8: Handle node click — open drawer for action nodes, ignore Start/End
   const handleNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
@@ -135,15 +136,50 @@ function WorkflowExecutionGraphInner({
   }, []);
 
   // AC5: Real-time updates via WebSocket + polling fallback
-  const ws = useWebSocket(executionId);
+  // Skip real-time for terminal executions (no need to poll/WS for completed/failed/cancelled)
+  const TERMINAL_STATUSES = ['COMPLETED', 'FAILED', 'CANCELLED', 'REJECTED'];
+  const isTerminal = execution ? TERMINAL_STATUSES.includes(execution.status) : false;
+
+  // One-time fetch for terminal executions (load steps without WS/polling)
+  const [staticSteps, setStaticSteps] = useState<ExecutionStepResponse[]>([]);
+  useEffect(() => {
+    if (isTerminal && executionId) {
+      getExecutionSteps(executionId).then(setStaticSteps).catch(() => {});
+    }
+  }, [isTerminal, executionId]);
+
+  // Skip WebSocket entirely in simulation mode (no WS server in Docker/dev)
+  const forcePolling = import.meta.env.VITE_SIMULATE_EXECUTION === 'true';
+  const wsExecutionId = isTerminal || forcePolling ? null : executionId;
+  const ws = useWebSocket(wsExecutionId);
   const polling = useExecutionPolling({
-    executionId,
-    enabled: ws.error != null || import.meta.env.VITE_SIMULATE_EXECUTION === 'true',
+    executionId: isTerminal ? null : executionId,
+    enabled: !isTerminal && (forcePolling || ws.error != null),
   });
 
-  // Merge steps from WebSocket or polling
-  const executionSteps: ExecutionStepResponse[] = ws.error == null ? ws.steps : polling.steps;
-  const isLoading = ws.error == null ? ws.loading : false;
+  // Merge steps: terminal → static fetch, polling → polling, WS → WS
+  const executionSteps: ExecutionStepResponse[] = isTerminal
+    ? staticSteps
+    : forcePolling
+      ? polling.steps
+      : (ws.error == null ? ws.steps : polling.steps);
+  // Live execution from real-time only (NOT from prop — that would cause infinite loop)
+  const liveExecutionFromRealtime = !isTerminal
+    ? (forcePolling ? polling.execution : (ws.error == null ? ws.execution : polling.execution))
+    : null;
+  const isLoading = isTerminal ? false : (ws.error == null ? ws.loading : false);
+
+  // Use ref for callback to avoid infinite re-render loop
+  const onExecutionUpdateRef = useRef(onExecutionUpdate);
+  onExecutionUpdateRef.current = onExecutionUpdate;
+
+  // Propagate execution updates to parent (for header status sync)
+  // Only from real-time sources (WS/polling), never from the prop itself
+  useEffect(() => {
+    if (liveExecutionFromRealtime && onExecutionUpdateRef.current) {
+      onExecutionUpdateRef.current(liveExecutionFromRealtime);
+    }
+  }, [liveExecutionFromRealtime]);
 
   // AC2: Convert workflow steps → React Flow nodes + edges
   const { nodes: baseNodes, edges: baseEdges } = useMemo(() => {
@@ -285,7 +321,7 @@ function WorkflowExecutionGraphInner({
   }
 
   return (
-    <div data-testid="workflow-execution-graph" style={{ height: 500, position: 'relative' }}>
+    <div data-testid="workflow-execution-graph" style={{ height: 'calc(100vh - 160px)', minHeight: 500, position: 'relative' }}>
       {/* AC10: Legend */}
       <Card
         size="small"
@@ -302,7 +338,7 @@ function WorkflowExecutionGraphInner({
         </Text>
         <Space direction="vertical" size={4}>
           <Space size={8}>
-            <Badge color={STATUS_COLORS.RUNNING} />
+            <Badge color="#fa8c16" />
             <Text type="secondary">En cours</Text>
           </Space>
           <Space size={8}>
@@ -327,10 +363,11 @@ function WorkflowExecutionGraphInner({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={handleNodeClick}
+        onInit={handleInit}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
-        fitViewOptions={{ padding: 0.2 }}
+        fitViewOptions={{ padding: 0.3 }}
         // AC6: Read-only mode
         nodesDraggable={false}
         nodesConnectable={false}
@@ -340,8 +377,8 @@ function WorkflowExecutionGraphInner({
         zoomOnPinch={true}
         zoomOnDoubleClick={false}
         deleteKeyCode={null}
-        minZoom={0.5}
-        maxZoom={2}
+        minZoom={0.3}
+        maxZoom={3}
       >
         <Background />
         <Controls showInteractive={false} />
@@ -358,14 +395,18 @@ function WorkflowExecutionGraphInner({
         onClose={() => setSelectedStepId(null)}
       />
 
-      {/* AC3: Pulse animation CSS */}
+      {/* AC3: Subtle pulse animation for active (RUNNING) step */}
       <style>{`
         @keyframes workflow-node-pulse {
-          0%, 100% { box-shadow: 0 0 4px ${STATUS_COLORS.RUNNING}40; }
-          50% { box-shadow: 0 0 12px ${STATUS_COLORS.RUNNING}80; }
+          0%, 100% {
+            box-shadow: 0 0 4px ${STATUS_COLORS.RUNNING}30;
+          }
+          50% {
+            box-shadow: 0 0 10px ${STATUS_COLORS.RUNNING}50;
+          }
         }
         .workflow-node-running > div {
-          animation: workflow-node-pulse 2s ease-in-out infinite;
+          animation: workflow-node-pulse 1.5s ease-in-out infinite;
         }
       `}</style>
     </div>
@@ -373,9 +414,12 @@ function WorkflowExecutionGraphInner({
 }
 
 export function WorkflowExecutionGraph(props: WorkflowExecutionGraphProps) {
+  // Memoize the onExecutionUpdate to prevent re-renders
   return (
     <ReactFlowProvider>
       <WorkflowExecutionGraphInner {...props} />
     </ReactFlowProvider>
   );
 }
+
+export type { WorkflowExecutionGraphProps };
