@@ -8,9 +8,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createMemoryRouter, RouterProvider } from 'react-router';
+import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router';
 import { ConfigProvider } from 'antd';
-import { CalendarPage, EventDetailsPopover, getDisplayParameters } from './CalendarPage';
+import { CalendarPage } from './CalendarPage';
+import { EventDetailsPopover } from '../components/calendar/EventDetailsPopover';
+import { getDisplayParameters } from '../utils/calendarEventUtils';
 import { lightTheme } from '../theme/desjardins';
 import { ThemeProvider } from '../contexts/ThemeContext';
 import * as scheduledExecutionService from '../services/scheduled_execution_service';
@@ -402,15 +404,17 @@ describe('CalendarPage', () => {
     it('shows cancel and edit buttons for creator (user_id matches)', () => {
       mockUseAuth.mockReturnValue({ user: { id: 1, profile: 'dba' } });
       render(
-        <ThemeProvider>
-          <ConfigProvider theme={lightTheme}>
-            <EventDetailsPopover
-              execution={mockScheduledExecution}
-              onRequestCancel={() => {}}
-              onRequestEdit={() => {}}
-            />
-          </ConfigProvider>
-        </ThemeProvider>
+        <MemoryRouter>
+          <ThemeProvider>
+            <ConfigProvider theme={lightTheme}>
+              <EventDetailsPopover
+                execution={mockScheduledExecution}
+                onRequestCancel={() => {}}
+                onRequestEdit={() => {}}
+              />
+            </ConfigProvider>
+          </ThemeProvider>
+        </MemoryRouter>
       );
       expect(screen.getByTestId('cancel-execution-btn')).toBeInTheDocument();
       expect(screen.getByTestId('edit-execution-btn')).toBeInTheDocument();
@@ -419,15 +423,17 @@ describe('CalendarPage', () => {
     it('hides cancel and edit buttons for DBA when execution is from another user', () => {
       mockUseAuth.mockReturnValue({ user: { id: 999, profile: 'dba' } });
       render(
-        <ThemeProvider>
-          <ConfigProvider theme={lightTheme}>
-            <EventDetailsPopover
-              execution={mockScheduledExecution}
-              onRequestCancel={() => {}}
-              onRequestEdit={() => {}}
-            />
-          </ConfigProvider>
-        </ThemeProvider>
+        <MemoryRouter>
+          <ThemeProvider>
+            <ConfigProvider theme={lightTheme}>
+              <EventDetailsPopover
+                execution={mockScheduledExecution}
+                onRequestCancel={() => {}}
+                onRequestEdit={() => {}}
+              />
+            </ConfigProvider>
+          </ThemeProvider>
+        </MemoryRouter>
       );
       expect(screen.queryByTestId('cancel-execution-btn')).not.toBeInTheDocument();
       expect(screen.queryByTestId('edit-execution-btn')).not.toBeInTheDocument();
@@ -436,15 +442,17 @@ describe('CalendarPage', () => {
     it('shows cancel and edit buttons for DBOPS even when execution is from another user', () => {
       mockUseAuth.mockReturnValue({ user: { id: 999, profile: 'dbops' } });
       render(
-        <ThemeProvider>
-          <ConfigProvider theme={lightTheme}>
-            <EventDetailsPopover
-              execution={mockScheduledExecution}
-              onRequestCancel={() => {}}
-              onRequestEdit={() => {}}
-            />
-          </ConfigProvider>
-        </ThemeProvider>
+        <MemoryRouter>
+          <ThemeProvider>
+            <ConfigProvider theme={lightTheme}>
+              <EventDetailsPopover
+                execution={mockScheduledExecution}
+                onRequestCancel={() => {}}
+                onRequestEdit={() => {}}
+              />
+            </ConfigProvider>
+          </ThemeProvider>
+        </MemoryRouter>
       );
       expect(screen.getByTestId('cancel-execution-btn')).toBeInTheDocument();
       expect(screen.getByTestId('edit-execution-btn')).toBeInTheDocument();
@@ -453,14 +461,16 @@ describe('CalendarPage', () => {
     it('shows recurrence toggle for DBOPS on recurring execution', () => {
       mockUseAuth.mockReturnValue({ user: { id: 1, profile: 'dbops' } });
       render(
-        <ThemeProvider>
-          <ConfigProvider theme={lightTheme}>
-            <EventDetailsPopover
-              execution={mockRecurringExecution}
-              onToggleRecurrence={() => {}}
-            />
-          </ConfigProvider>
-        </ThemeProvider>
+        <MemoryRouter>
+          <ThemeProvider>
+            <ConfigProvider theme={lightTheme}>
+              <EventDetailsPopover
+                execution={mockRecurringExecution}
+                onToggleRecurrence={() => {}}
+              />
+            </ConfigProvider>
+          </ThemeProvider>
+        </MemoryRouter>
       );
       expect(screen.getByTestId('recurrence-toggle')).toBeInTheDocument();
       expect(screen.getByTestId('recurrence-toggle-label')).toHaveTextContent('Récurrence active');
@@ -469,14 +479,16 @@ describe('CalendarPage', () => {
     it('hides recurrence toggle for DBA on recurring execution', () => {
       mockUseAuth.mockReturnValue({ user: { id: 1, profile: 'dba' } });
       render(
-        <ThemeProvider>
-          <ConfigProvider theme={lightTheme}>
-            <EventDetailsPopover
-              execution={mockRecurringExecution}
-              onToggleRecurrence={() => {}}
-            />
-          </ConfigProvider>
-        </ThemeProvider>
+        <MemoryRouter>
+          <ThemeProvider>
+            <ConfigProvider theme={lightTheme}>
+              <EventDetailsPopover
+                execution={mockRecurringExecution}
+                onToggleRecurrence={() => {}}
+              />
+            </ConfigProvider>
+          </ThemeProvider>
+        </MemoryRouter>
       );
       expect(screen.queryByTestId('recurrence-toggle')).not.toBeInTheDocument();
     });
@@ -556,15 +568,17 @@ describe('CalendarPage', () => {
         scheduled_at: '2026-02-15T12:00:00Z',
       } as never);
       render(
-        <ThemeProvider>
-          <ConfigProvider theme={lightTheme}>
-            <EventDetailsPopover
-              execution={mockScheduledExecution}
-              onRequestCancel={() => {}}
-              onRequestEdit={onRequestEdit}
-            />
-          </ConfigProvider>
-        </ThemeProvider>
+        <MemoryRouter>
+          <ThemeProvider>
+            <ConfigProvider theme={lightTheme}>
+              <EventDetailsPopover
+                execution={mockScheduledExecution}
+                onRequestCancel={() => {}}
+                onRequestEdit={onRequestEdit}
+              />
+            </ConfigProvider>
+          </ThemeProvider>
+        </MemoryRouter>
       );
       await user.click(screen.getByTestId('edit-execution-btn'));
       expect(onRequestEdit).toHaveBeenCalledWith(mockScheduledExecution);

@@ -344,7 +344,7 @@ development_status:
     26-3-extraire-rbac-catalog-service: done # 2026-02-13: CatalogRBACService extrait (214 LOC), views.py réduit -178 LOC, 29 tests (96.10% coverage), 253/253 catalog tests pass, 0 régression — Code review adversarial: 8 issues (3 HIGH + 3 MEDIUM + 2 LOW), 6 auto-fixed, story marked done
     26-4-refactoriser-executionspage-tsx: done # 2026-02-13: ExecutionsPage 1023→298 LOC (-70.9%), 7 fichiers extraits (colonnes+3 hooks+2 composants), 61 tests, 0 régression
     26-5-refactoriser-workflowbuildercanvas-tsx: done # 2026-02-13: WorkflowBuilderCanvas 995→487 LOC (-51%), 5 modules extraits (2 utils+1 hook+2 composants), 50 tests, code-review 9 fixes (Ant Design API, validation BFS, magic numbers, type safety), 107/107 tests pass ✅
-    26-6-refactoriser-calendarpage-tsx: backlog
+    26-6-refactoriser-calendarpage-tsx: done # 2026-02-13: CalendarPage 896→269 LOC (-70%), 8 fichiers extraits (1 utils+3 hooks+4 composants), 62 tests, 0 régression
     26-7-creer-environment-normalizer: backlog
     26-8-creer-permission-isdbaordbops: backlog
     26-9-standardiser-format-reponse-api: backlog
