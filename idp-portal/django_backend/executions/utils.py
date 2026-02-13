@@ -32,6 +32,7 @@ from core.exceptions import BadRequestError, NotFoundError, ConflictError
 from core.middleware import get_correlation_id
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
+from core.environment import EnvironmentHelper
 from inventory.services import InventoryService, InventoryServiceError
 from profiles.services import ProfileService
 from utils.json_helpers import validate_json_schema
@@ -72,6 +73,7 @@ def _get_env_config_case_insensitive(config: dict, env: str) -> dict:
     """
     Story 21.2, Task 4.1: Helper to get environment-specific config with case-insensitive lookup.
     Story 25.4: Returned dict may include requires_maintenance_window, requires_approval, allowed.
+    Story 26.7 AC2: Migrated to use EnvironmentHelper.find_in_dict().
 
     Args:
         config: Dictionary with environment keys (e.g., {"DEV": {...}, "STAGING": {...}})
@@ -85,29 +87,29 @@ def _get_env_config_case_insensitive(config: dict, env: str) -> dict:
     if not config or not env:
         return {}
 
-    env_lower = (env or '').strip().lower()
-    for key, value in config.items():
-        if (key or '').strip().lower() == env_lower:
-            # HIGH-5 FIX: Log warning if config value is not a dict
-            if not isinstance(value, dict):
-                exec_logger.warning(
-                    "invalid_env_config_value",
-                    env=env,
-                    key=key,
-                    value_type=type(value).__name__,
-                    correlation_id=get_correlation_id(),
-                    message="Environment config value should be a dict, returning empty dict",
-                )
-                return {}
-            return value
+    value = EnvironmentHelper.find_in_dict(config, env)
+    if value is None:
+        return {}
 
-    return {}
+    # HIGH-5 FIX: Log warning if config value is not a dict
+    if not isinstance(value, dict):
+        exec_logger.warning(
+            "invalid_env_config_value",
+            env=env,
+            value_type=type(value).__name__,
+            correlation_id=get_correlation_id(),
+            message="Environment config value should be a dict, returning empty dict",
+        )
+        return {}
+
+    return value
 
 
 def _validate_environment_against_inventory(environment: str, *, user_id: int | None = None) -> None:
     """
     Validate environment against inventory (Story 13.7, AC2).
     Story 21.2, AC2 / Task 3: Case-insensitive validation, no fallback to dev.
+    Story 26.7 AC2: Migrated to use EnvironmentHelper.is_in().
     Raises BadRequestError if environment is not in inventory.
 
     Args:
@@ -123,9 +125,7 @@ def _validate_environment_against_inventory(environment: str, *, user_id: int | 
         inventory_service = InventoryService()
         valid_environments = inventory_service.list_environments()
 
-        # HIGH-3 FIX: Use set comprehension for O(1) lookup instead of O(n) list comprehension
-        valid_envs_lower = {e.lower() for e in valid_environments}
-        if environment.lower() not in valid_envs_lower:
+        if not EnvironmentHelper.is_in(environment, valid_environments):
             # HIGH-4 FIX: Audit trail for invalid environment attempts (SOC1 compliance)
             AuditService.create_entry(
                 user_id=str(user_id) if user_id else "system",

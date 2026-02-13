@@ -26,6 +26,7 @@ from inventory.serializers import (
     ServerListResponseSerializer, InstanceListResponseSerializer,
     DatabaseListResponseSerializer,
 )
+from core.environment import EnvironmentHelper
 from inventory.services import InventoryService, InventoryServiceError
 from profiles.models import Profile
 from core.auth_utils import get_user_ad_groups
@@ -188,7 +189,7 @@ def list_all_targets(request):
     if environment:
         try:
             valid_environments = inventory_service.list_environments()
-            if environment.lower() not in [e.lower() for e in valid_environments]:
+            if not EnvironmentHelper.is_in(environment, valid_environments):
                 return Response(
                     {'detail': f'Invalid environment. Must be one of: {sorted(valid_environments)}'},
                     status=status.HTTP_400_BAD_REQUEST

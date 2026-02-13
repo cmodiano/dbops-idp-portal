@@ -7,6 +7,7 @@ Consistent with execution validation (Story 21.2) and SOC1 compliance.
 
 import structlog
 
+from core.environment import EnvironmentHelper
 from inventory.services import InventoryService, InventoryServiceError
 from core.exceptions import BadRequestError, ServiceUnavailableError
 from core.models import AuditActionType, AuditEntityType
@@ -23,6 +24,7 @@ def validate_environments_against_inventory(
 ) -> list[str]:
     """
     Validate profile environments against inventory (Story 21.6, AC1-3).
+    Story 26.7 AC3: Migrated to use EnvironmentHelper.
 
     Case-insensitive validation. Returns normalized (lowercase) list.
     Blocks if inventory unavailable (SOC1, consistent with Story 21.2).
@@ -65,13 +67,12 @@ def validate_environments_against_inventory(
     try:
         inventory_service = InventoryService()
         valid_environments = inventory_service.list_environments()
-        valid_envs_lower = {e.lower() for e in valid_environments}
 
-        # Normalize input to lowercase (AC2)
-        normalized_envs = [env.lower() for env in environments]
+        # Normalize input to lowercase (AC2) — Story 26.7 AC3: using EnvironmentHelper
+        normalized_envs = [EnvironmentHelper.normalize(env) for env in environments]
 
         # Find invalid environments
-        invalid_envs = [env for env in normalized_envs if env not in valid_envs_lower]
+        invalid_envs = [env for env in normalized_envs if not EnvironmentHelper.is_in(env, valid_environments)]
 
         if invalid_envs:
             # Audit trail BEFORE raising error (SOC1, AC7)

@@ -35,6 +35,7 @@ from inventory.rbac_filter import (
     MAX_TARGETS_FOR_RBAC_FILTER,
 )
 from profiles.models import Profile
+from core.environment import EnvironmentHelper
 from core.middleware import get_correlation_id
 
 logger = structlog.get_logger(__name__)
@@ -548,7 +549,7 @@ class InventoryService:
                 if envs:
                     for e in envs:
                         if isinstance(e, str):
-                            raw_env = (e or '').strip().lower()
+                            raw_env = EnvironmentHelper.normalize(e)
                             normalized_env = self._normalize_environment(e)
                             allowed_environments.add(normalized_env)
                             if raw_env and raw_env != normalized_env:
@@ -618,13 +619,11 @@ class InventoryService:
             except InventoryServiceError:
                 allowed_environments = set(self.get_default_environments())
 
-        # Apply environment filter
+        # Apply environment filter (Story 26.7 AC4: using EnvironmentHelper)
         if environment:
-            env_lower = (environment or '').strip().lower()
-            allowed_lower = {e.lower() for e in allowed_environments}
-            if env_lower not in allowed_lower:
+            if not EnvironmentHelper.is_in(environment, list(allowed_environments)):
                 return None
-            allowed_environments = {e for e in allowed_environments if e.lower() == env_lower}
+            allowed_environments = {e for e in allowed_environments if EnvironmentHelper.matches(e, environment)}
 
         if not allowed_environments:
             return None
@@ -751,11 +750,10 @@ class InventoryService:
 
         Story 26.1 - AC4: Step 3 of list_targets_for_user pipeline.
         """
-        # Filter by environment
-        allowed_environments_lower = {e.lower() for e in allowed_environments}
+        # Filter by environment (Story 26.7 AC4: using EnvironmentHelper)
         filtered_targets = [
             t for t in all_targets
-            if (t.get('environment') or '').lower() in allowed_environments_lower
+            if EnvironmentHelper.is_in(t.get('environment'), list(allowed_environments))
         ]
 
         # Delegate to RBACFilter
@@ -804,7 +802,7 @@ class InventoryService:
             'development': 'dev',
             'production': 'prod',
         }
-        normalized = (raw_env or '').strip().lower()
+        normalized = EnvironmentHelper.normalize(raw_env)
         if normalized in env_aliases:
             return env_aliases[normalized]
         return normalized
@@ -831,7 +829,7 @@ class InventoryService:
                 if envs:
                     for e in envs:
                         if isinstance(e, str):
-                            raw_env = (e or '').strip().lower()
+                            raw_env = EnvironmentHelper.normalize(e)
                             normalized_env = self._normalize_environment(e)
                             allowed_environments.add(normalized_env)
                             if raw_env and raw_env != normalized_env:

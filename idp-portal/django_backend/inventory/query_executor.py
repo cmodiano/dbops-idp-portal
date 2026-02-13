@@ -13,6 +13,7 @@ from typing import Literal
 import structlog
 from django.db import DatabaseError, InterfaceError
 
+from core.environment import EnvironmentHelper
 from inventory.mapper import InventoryMapper, MapperValidationError
 from integrations.models import Integration, IntegrationType
 from core.middleware import get_correlation_id
@@ -213,7 +214,8 @@ class InventoryQueryExecutor:
             results = []
             for row in rows:
                 # Story 21.1: Use raw environment values - inventory is source of truth
-                raw_env = (row[1] or '').lower().strip()
+                # Story 26.7 AC4: Use EnvironmentHelper.normalize()
+                raw_env = EnvironmentHelper.normalize(row[1])
 
                 # Normalize target type (unchanged)
                 raw_type = (row[2] or '').lower().strip()

@@ -31,6 +31,7 @@ from executions.serializers import (
     ScheduledExecutionListItemSerializer,
     RecurringPatternSerializer,
 )
+from core.environment import EnvironmentHelper
 from executions.services import SchedulingService
 from executions.utils import (
     _parse_int,
@@ -92,7 +93,7 @@ class ScheduledExecutionsView(APIView):
 
         if environment_filter:
             _validate_environment_against_inventory(environment_filter, user_id=request.user.id)
-            qs = qs.filter(environment=environment_filter.lower())
+            qs = qs.filter(environment=EnvironmentHelper.normalize(environment_filter))
 
         if engine_filter:
             qs = qs.filter(action__engine__iexact=engine_filter)
@@ -378,7 +379,7 @@ class ScheduledExecutionUpdateView(APIView):
 
         if environment is not None:
             _validate_environment_against_inventory(environment, user_id=request.user.id)
-            se.environment = environment.lower()
+            se.environment = EnvironmentHelper.normalize(environment)
 
         if target_names is not None:
             if not isinstance(target_names, list):
@@ -396,7 +397,7 @@ class ScheduledExecutionUpdateView(APIView):
                 se.set_parameters(new_params)
                 if environment is not None:
                     _validate_environment_against_inventory(environment, user_id=request.user.id)
-                    se.environment = environment.lower()
+                    se.environment = EnvironmentHelper.normalize(environment)
             else:
                 ad_groups = get_user_ad_groups(request.user)
                 inventory_service = InventoryService()
@@ -434,7 +435,7 @@ class ScheduledExecutionUpdateView(APIView):
                         message="Les cibles doivent appartenir au même environnement",
                         details={"environments": list(environments_found)},
                     )
-                se.environment = list(environments_found)[0].lower()
+                se.environment = EnvironmentHelper.normalize(list(environments_found)[0])
                 current_params = se.get_parameters() or {}
                 if not isinstance(current_params, dict):
                     current_params = {}
