@@ -264,7 +264,7 @@ class ExecutionTargetCreationFlowTest(TestCase):
             name='No Target Action', category='Provisioning', engine='Oracle', platform='AAP',
             status='published', requires_target=False,
         )
-        with patch('executions.validators.payload_validator.validate_environment_against_inventory'):
+        with patch('executions.utils.validate_environment_against_inventory'):
             response = self.client.post('/api/v1/executions/', {
                 'action_id': action_no_target.id,
                 'environment': 'dev',

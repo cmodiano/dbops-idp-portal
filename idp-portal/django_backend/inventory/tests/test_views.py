@@ -40,8 +40,10 @@ class TargetListViewTests(TestCase):
         # Mock user for authentication
         self.mock_user = MagicMock()
         self.mock_user.id = 1
-        self.mock_user.groups = ['GRP-ADMIN']
+        self.mock_user.ad_groups = ['GRP-ADMIN']
         self.mock_user.is_authenticated = True
+        # Prevent get_ad_groups from being callable
+        del self.mock_user.get_ad_groups
 
     def _authenticate(self):
         """Helper to set up authenticated user."""
@@ -49,7 +51,7 @@ class TargetListViewTests(TestCase):
 
     def test_list_targets_unauthenticated(self):
         """Test listing targets requires authentication."""
-        response = self.client.get('/api/v1/inventory/targets')
+        response = self.client.get('/api/v1/inventory/targets/')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     @patch('inventory.services.connection')
@@ -64,7 +66,7 @@ class TargetListViewTests(TestCase):
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
         self._authenticate()
-        response = self.client.get('/api/v1/inventory/targets')
+        response = self.client.get('/api/v1/inventory/targets/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.json()
         self.assertIn('items', data)
@@ -83,7 +85,7 @@ class TargetListViewTests(TestCase):
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
         self._authenticate()
-        response = self.client.get('/api/v1/inventory/targets', {'environment': 'dev'})
+        response = self.client.get('/api/v1/inventory/targets/', {'environment': 'dev'})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.json()
         for item in data['items']:
@@ -100,7 +102,7 @@ class TargetListViewTests(TestCase):
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
         self._authenticate()
-        response = self.client.get('/api/v1/inventory/targets', {'page': 1, 'page_size': 10})
+        response = self.client.get('/api/v1/inventory/targets/', {'page': 1, 'page_size': 10})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.json()
         self.assertIn('page', data)
@@ -120,7 +122,7 @@ class TargetListViewTests(TestCase):
         mock_service_class.return_value = mock_service
 
         self._authenticate()
-        response = self.client.get('/api/v1/inventory/targets')
+        response = self.client.get('/api/v1/inventory/targets/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.json()
         self.assertIn('rbac_truncated', data)
@@ -129,7 +131,7 @@ class TargetListViewTests(TestCase):
     def test_list_targets_invalid_environment(self):
         """Test invalid environment parameter."""
         self._authenticate()
-        response = self.client.get('/api/v1/inventory/targets', {'environment': 'invalid'})
+        response = self.client.get('/api/v1/inventory/targets/', {'environment': 'invalid'})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
 
@@ -161,31 +163,37 @@ class TargetListAllViewTests(TestCase):
         self.admin_user.id = 1
         self.admin_user.is_authenticated = True
         self.admin_user.is_staff = False
-        self.admin_user.groups = ['GRP-ADMIN']
+        self.admin_user.ad_groups = ['GRP-ADMIN']
+        # Prevent get_ad_groups from being callable
+        del self.admin_user.get_ad_groups
 
         # Regular user (non-admin)
         self.regular_user = MagicMock()
         self.regular_user.id = 2
         self.regular_user.is_authenticated = True
         self.regular_user.is_staff = False
-        self.regular_user.groups = ['GRP-REGULAR']
+        self.regular_user.ad_groups = ['GRP-REGULAR']
+        # Prevent get_ad_groups from being callable
+        del self.regular_user.get_ad_groups
 
         # Staff user (service account)
         self.staff_user = MagicMock()
         self.staff_user.id = 3
         self.staff_user.is_authenticated = True
         self.staff_user.is_staff = True
-        self.staff_user.groups = []
+        self.staff_user.ad_groups = []
+        # Prevent get_ad_groups from being callable
+        del self.staff_user.get_ad_groups
 
     def test_list_all_targets_unauthenticated(self):
         """Test listing all targets requires authentication."""
-        response = self.client.get('/api/v1/inventory/targets/all')
+        response = self.client.get('/api/v1/inventory/targets/all/')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_list_all_targets_non_admin_forbidden(self):
         """Test that non-admin users cannot access /targets/all."""
         self.client.force_authenticate(user=self.regular_user)
-        response = self.client.get('/api/v1/inventory/targets/all')
+        response = self.client.get('/api/v1/inventory/targets/all/')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     @patch('inventory.services.connection')
@@ -201,7 +209,7 @@ class TargetListAllViewTests(TestCase):
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
         self.client.force_authenticate(user=self.admin_user)
-        response = self.client.get('/api/v1/inventory/targets/all')
+        response = self.client.get('/api/v1/inventory/targets/all/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.json()
         self.assertEqual(data['total'], 3)
@@ -218,19 +226,24 @@ class TargetListAllViewTests(TestCase):
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
         self.client.force_authenticate(user=self.staff_user)
-        response = self.client.get('/api/v1/inventory/targets/all')
+        response = self.client.get('/api/v1/inventory/targets/all/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-    def test_list_all_targets_invalid_environment(self):
+    @patch('inventory.views.InventoryService')
+    def test_list_all_targets_invalid_environment(self, mock_service_class):
         """Test invalid environment parameter returns 400."""
+        mock_service = MagicMock()
+        mock_service.list_environments.return_value = ['dev', 'staging', 'prod']
+        mock_service_class.return_value = mock_service
+
         self.client.force_authenticate(user=self.admin_user)
-        response = self.client.get('/api/v1/inventory/targets/all', {'environment': 'invalid'})
+        response = self.client.get('/api/v1/inventory/targets/all/', {'environment': 'invalid'})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_list_all_targets_invalid_page(self):
         """Test invalid page parameter returns 400."""
         self.client.force_authenticate(user=self.admin_user)
-        response = self.client.get('/api/v1/inventory/targets/all', {'page': 'abc'})
+        response = self.client.get('/api/v1/inventory/targets/all/', {'page': 'abc'})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
 
@@ -260,8 +273,10 @@ class TargetRBACTests(TestCase):
         # Mock user with dev-only access
         self.mock_user = MagicMock()
         self.mock_user.id = 1
-        self.mock_user.groups = ['GRP-DEV-ONLY']
+        self.mock_user.ad_groups = ['GRP-DEV-ONLY']
         self.mock_user.is_authenticated = True
+        # Prevent get_ad_groups from being callable
+        del self.mock_user.get_ad_groups
 
     def _authenticate(self):
         """Helper to set up authenticated user."""
@@ -279,7 +294,7 @@ class TargetRBACTests(TestCase):
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
         self._authenticate()
-        response = self.client.get('/api/v1/inventory/targets')
+        response = self.client.get('/api/v1/inventory/targets/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.json()
         # Should only see dev targets
@@ -290,7 +305,7 @@ class TargetRBACTests(TestCase):
     def test_request_forbidden_environment(self, mock_connection):
         """Test that requesting forbidden environment returns empty."""
         self._authenticate()
-        response = self.client.get('/api/v1/inventory/targets', {'environment': 'prod'})
+        response = self.client.get('/api/v1/inventory/targets/', {'environment': 'prod'})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.json()
         self.assertEqual(data['total'], 0)
@@ -323,8 +338,10 @@ class TargetPatternPermissionTests(TestCase):
         # Mock user
         self.mock_user = MagicMock()
         self.mock_user.id = 1
-        self.mock_user.groups = ['GRP-WEB-TEAM']
+        self.mock_user.ad_groups = ['GRP-WEB-TEAM']
         self.mock_user.is_authenticated = True
+        # Prevent get_ad_groups from being callable
+        del self.mock_user.get_ad_groups
 
     def _authenticate(self):
         """Helper to set up authenticated user."""
@@ -344,7 +361,7 @@ class TargetPatternPermissionTests(TestCase):
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
         self._authenticate()
-        response = self.client.get('/api/v1/inventory/targets')
+        response = self.client.get('/api/v1/inventory/targets/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.json()
         # Should only see web-* targets
@@ -381,7 +398,9 @@ class TargetServiceErrorTests(TestCase):
         self.admin_user.id = 1
         self.admin_user.is_authenticated = True
         self.admin_user.is_staff = True
-        self.admin_user.groups = ['GRP-ADMIN']
+        self.admin_user.ad_groups = ['GRP-ADMIN']
+        # Prevent get_ad_groups from being callable
+        del self.admin_user.get_ad_groups
 
     @patch('inventory.views.InventoryService')
     def test_list_targets_service_error_returns_503(self, mock_service_class):
@@ -393,7 +412,7 @@ class TargetServiceErrorTests(TestCase):
         mock_service_class.return_value = mock_service
 
         self.client.force_authenticate(user=self.admin_user)
-        response = self.client.get('/api/v1/inventory/targets')
+        response = self.client.get('/api/v1/inventory/targets/')
         self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
         self.assertIn('ORA-00942', response.json()['detail'])
 
@@ -407,6 +426,6 @@ class TargetServiceErrorTests(TestCase):
         mock_service_class.return_value = mock_service
 
         self.client.force_authenticate(user=self.admin_user)
-        response = self.client.get('/api/v1/inventory/targets/all')
+        response = self.client.get('/api/v1/inventory/targets/all/')
         self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
         self.assertIn('Invalid table', response.json()['detail'])

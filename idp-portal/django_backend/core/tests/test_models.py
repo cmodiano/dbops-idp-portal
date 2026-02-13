@@ -26,15 +26,16 @@ class AuditLogModelTest(TestCase):
 
     def test_audit_log_json_details(self):
         """Test JSON details field helper."""
+        details = {'action_name': 'Test Action', 'previous_status': 'draft', 'new_status': 'published'}
+        # AuditLog is immutable - must set details at creation time
         audit = AuditLog.objects.create(
             user_id='testuser',
             action_type='ACTION_UPDATED',
             entity_type='action',
             entity_id=1
         )
-        details = {'action_name': 'Test Action', 'previous_status': 'draft', 'new_status': 'published'}
         audit.set_details(details)
-        audit.save()
+        # Don't save - AuditLog is immutable, just test get_details works
         self.assertEqual(audit.get_details(), details)
 
     def test_audit_log_str(self):

@@ -80,7 +80,7 @@ class TestStory411WorkflowDelegation(TestCase):
         """
         before = AuditLog.objects.count()
         resp = self.client.post(
-            "/api/v1/executions",
+            "/api/v1/executions/",
             {"action_id": self.workflow.id, "environment": "dev", "parameters": {}},
             format="json",
         )
@@ -109,7 +109,7 @@ class TestStory411WorkflowDelegation(TestCase):
 
         before = AuditLog.objects.count()
         resp = self.client.post(
-            "/api/v1/executions",
+            "/api/v1/executions/",
             {"action_id": self.workflow.id, "environment": "dev"},
             format="json",
         )
@@ -133,12 +133,16 @@ class TestStory411WorkflowDelegation(TestCase):
         AC4: referenced action not published -> 400 with stable message.
         AC5: audit created with delegated=true + validation_result=failed.
         """
+        # Update status while respecting soft delete constraint
+        # disabled status requires deleted_at to be set
+        from django.utils import timezone
         self.ref1.status = ActionStatus.DISABLED
-        self.ref1.save(update_fields=["status"])
+        self.ref1.deleted_at = timezone.now()
+        self.ref1.save(update_fields=["status", "deleted_at"])
 
         before = AuditLog.objects.count()
         resp = self.client.post(
-            "/api/v1/executions",
+            "/api/v1/executions/",
             {"action_id": self.workflow.id, "environment": "dev"},
             format="json",
         )
@@ -167,7 +171,7 @@ class TestStory411WorkflowDelegation(TestCase):
         self.ref2.delete()
 
         resp = self.client.post(
-            "/api/v1/executions",
+            "/api/v1/executions/",
             {"action_id": self.workflow.id, "environment": "dev"},
             format="json",
         )
@@ -179,13 +183,18 @@ class TestStory411WorkflowDelegation(TestCase):
 
     def test_workflow_multiple_not_published_returns_400_with_all_listed(self):
         """AC4: multiple not-published referenced actions -> 400 with all in message."""
+        # Update status while respecting soft delete constraint
+        # disabled status requires deleted_at to be set, draft/published require null
+        from django.utils import timezone
         self.ref1.status = ActionStatus.DISABLED
-        self.ref1.save(update_fields=["status"])
+        self.ref1.deleted_at = timezone.now()
+        self.ref1.save(update_fields=["status", "deleted_at"])
         self.ref2.status = ActionStatus.DRAFT
-        self.ref2.save(update_fields=["status"])
+        self.ref2.deleted_at = None
+        self.ref2.save(update_fields=["status", "deleted_at"])
 
         resp = self.client.post(
-            "/api/v1/executions",
+            "/api/v1/executions/",
             {"action_id": self.workflow.id, "environment": "dev"},
             format="json",
         )
@@ -203,7 +212,7 @@ class TestStory411WorkflowDelegation(TestCase):
         self.workflow.save(update_fields=["execution_steps"])
 
         resp = self.client.post(
-            "/api/v1/executions",
+            "/api/v1/executions/",
             {"action_id": self.workflow.id, "environment": "dev"},
             format="json",
         )

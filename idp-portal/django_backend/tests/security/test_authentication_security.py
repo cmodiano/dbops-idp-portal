@@ -59,11 +59,11 @@ PROTECTED_ENDPOINTS = [
 # but the permission class is AllowAny — the 401 comes from the view, not DRF auth.
 # We test refresh flow separately in TestRefreshTokenFlow.
 PUBLIC_ENDPOINTS = [
-    ('GET', '/api/v1/health'),
-    ('GET', '/api/v1/auth/saml/login'),
-    ('POST', '/api/v1/auth/logout'),
-    ('GET', '/api/v1/catalog/actions'),
-    ('GET', '/api/v1/tags'),
+    ('GET', '/api/v1/health/'),
+    ('GET', '/api/v1/auth/saml/login/'),
+    ('POST', '/api/v1/auth/logout/'),
+    ('GET', '/api/v1/catalog/actions/'),
+    ('GET', '/api/v1/tags/'),
 ]
 
 
@@ -101,13 +101,13 @@ class TestExpiredTokenRejected:
     def test_expired_access_token_returns_401(self, expired_access_token):
         """An expired access token must return 401."""
         client = make_auth_client(expired_access_token)
-        response = client.get('/api/v1/auth/me')
+        response = client.get('/api/v1/auth/me/')
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_expired_token_error_message(self, expired_access_token):
         """Expired token 401 response contains an error message."""
         client = make_auth_client(expired_access_token)
-        response = client.get('/api/v1/auth/me')
+        response = client.get('/api/v1/auth/me/')
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
         data = response.json()
         # Custom exception handler wraps errors in {'error': {'code': ..., 'message': ...}}
@@ -127,37 +127,37 @@ class TestMalformedTokenRejected:
     def test_wrong_signature_returns_401(self, wrong_signature_token):
         """Token signed with a different key is rejected."""
         client = make_auth_client(wrong_signature_token)
-        response = client.get('/api/v1/auth/me')
+        response = client.get('/api/v1/auth/me/')
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_corrupted_token_returns_401(self, corrupted_token):
         """Garbage / non-JWT string is rejected."""
         client = make_auth_client(corrupted_token)
-        response = client.get('/api/v1/auth/me')
+        response = client.get('/api/v1/auth/me/')
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_refresh_token_as_access_returns_401(self, refresh_used_as_access_token):
         """A refresh token used in Authorization header is rejected (type mismatch)."""
         client = make_auth_client(refresh_used_as_access_token)
-        response = client.get('/api/v1/auth/me')
+        response = client.get('/api/v1/auth/me/')
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_tampered_payload_nonexistent_user_returns_401(self, tampered_payload_token):
         """Token with a valid signature but non-existent user_id returns 401."""
         client = make_auth_client(tampered_payload_token)
-        response = client.get('/api/v1/auth/me')
+        response = client.get('/api/v1/auth/me/')
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_empty_bearer_returns_401(self, anon_client):
         """Bearer header with empty token value."""
         anon_client.credentials(HTTP_AUTHORIZATION='Bearer ')
-        response = anon_client.get('/api/v1/auth/me')
+        response = anon_client.get('/api/v1/auth/me/')
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_no_bearer_prefix_ignored(self, anon_client, sec_dba_token):
         """Token without 'Bearer ' prefix is not recognized (returns 401)."""
         anon_client.credentials(HTTP_AUTHORIZATION=sec_dba_token)
-        response = anon_client.get('/api/v1/auth/me')
+        response = anon_client.get('/api/v1/auth/me/')
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
@@ -173,7 +173,7 @@ class TestRefreshTokenFlow:
     def test_valid_refresh_returns_new_access_token(self, anon_client, sec_dba_refresh_token):
         """POST /auth/refresh with valid refresh cookie returns new access token."""
         anon_client.cookies['refresh_token'] = sec_dba_refresh_token
-        response = anon_client.post('/api/v1/auth/refresh')
+        response = anon_client.post('/api/v1/auth/refresh/')
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert 'data' in data
@@ -183,28 +183,28 @@ class TestRefreshTokenFlow:
     def test_new_access_token_is_usable(self, anon_client, sec_dba_refresh_token):
         """New access token obtained via refresh can authenticate requests."""
         anon_client.cookies['refresh_token'] = sec_dba_refresh_token
-        response = anon_client.post('/api/v1/auth/refresh')
+        response = anon_client.post('/api/v1/auth/refresh/')
         new_token = response.json()['data']['access_token']
 
         auth_client = make_auth_client(new_token)
-        me_response = auth_client.get('/api/v1/auth/me')
+        me_response = auth_client.get('/api/v1/auth/me/')
         assert me_response.status_code == status.HTTP_200_OK
 
     def test_missing_refresh_cookie_returns_401(self, anon_client):
         """POST /auth/refresh without cookie returns 401."""
-        response = anon_client.post('/api/v1/auth/refresh')
+        response = anon_client.post('/api/v1/auth/refresh/')
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_invalid_refresh_cookie_returns_401(self, anon_client):
         """POST /auth/refresh with garbage cookie returns 401."""
         anon_client.cookies['refresh_token'] = 'not-a-valid-refresh-token'
-        response = anon_client.post('/api/v1/auth/refresh')
+        response = anon_client.post('/api/v1/auth/refresh/')
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_access_token_as_refresh_returns_401(self, anon_client, sec_dba_token):
         """Using an access token as refresh token (type mismatch) returns 401."""
         anon_client.cookies['refresh_token'] = sec_dba_token
-        response = anon_client.post('/api/v1/auth/refresh')
+        response = anon_client.post('/api/v1/auth/refresh/')
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
@@ -224,7 +224,7 @@ class TestSessionExpiration:
     def test_expired_token_simulates_session_timeout(self, expired_access_token):
         """After token expiration (simulating inactivity), requests are rejected."""
         client = make_auth_client(expired_access_token)
-        response = client.get('/api/v1/auth/me')
+        response = client.get('/api/v1/auth/me/')
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_negative_ttl_immediately_expires(self, sec_dba_user, settings):
@@ -241,7 +241,7 @@ class TestSessionExpiration:
             expires_delta=timedelta(seconds=-1),
         )
         client = make_auth_client(token)
-        response = client.get('/api/v1/auth/me')
+        response = client.get('/api/v1/auth/me/')
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
@@ -258,21 +258,21 @@ class TestDevBypassToken:
     def test_dev_bypass_token_accepted_when_enabled(self, anon_client):
         """dev-mock-token is accepted when AUTH_DEV_BYPASS=True."""
         anon_client.credentials(HTTP_AUTHORIZATION='Bearer dev-mock-token-for-testing')
-        response = anon_client.get('/api/v1/auth/me')
+        response = anon_client.get('/api/v1/auth/me/')
         assert response.status_code == status.HTTP_200_OK
 
     @override_settings(AUTH_DEV_BYPASS=False)
     def test_dev_bypass_token_rejected_when_disabled(self, anon_client):
         """dev-mock-token is rejected when AUTH_DEV_BYPASS=False."""
         anon_client.credentials(HTTP_AUTHORIZATION='Bearer dev-mock-token-for-testing')
-        response = anon_client.get('/api/v1/auth/me')
+        response = anon_client.get('/api/v1/auth/me/')
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     @override_settings(AUTH_DEV_BYPASS=True)
     def test_dev_bypass_user_has_dbops_profile(self, anon_client):
         """Dev bypass user is created with dbops profile."""
         anon_client.credentials(HTTP_AUTHORIZATION='Bearer dev-mock-token-for-testing')
-        response = anon_client.get('/api/v1/auth/me')
+        response = anon_client.get('/api/v1/auth/me/')
         assert response.status_code == status.HTTP_200_OK
         data = response.json()['data']
         assert data['profile'] == 'dbops'
@@ -281,5 +281,5 @@ class TestDevBypassToken:
     def test_random_mock_token_always_rejected(self, anon_client):
         """A random string that is not the known mock token is always rejected."""
         anon_client.credentials(HTTP_AUTHORIZATION='Bearer some-other-mock-token')
-        response = anon_client.get('/api/v1/auth/me')
+        response = anon_client.get('/api/v1/auth/me/')
         assert response.status_code == status.HTTP_401_UNAUTHORIZED

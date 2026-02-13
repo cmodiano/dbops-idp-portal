@@ -580,7 +580,7 @@ class TestStory255MutexValidation(TestCase):
         
         # Mock inventory to validate environment
         with patch('executions.validators.target_validator.InventoryService') as MockInventory, \
-             patch('executions.validators.payload_validator.validate_environment_against_inventory'):
+             patch('executions.utils.validate_environment_against_inventory'):
             mock_inst = MagicMock()
             mock_inst.list_environments.return_value = ['dev', 'staging', 'prod']
             MockInventory.return_value = mock_inst

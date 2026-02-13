@@ -45,6 +45,7 @@ class RateLimitSecurityTestBase(TestCase):
         super().tearDown()
 
 
+@override_settings(RATELIMIT_ENABLED=True)
 class TestSAMLLoginBruteForce(RateLimitSecurityTestBase):
     """Test that SAML login endpoint is protected against brute-force attacks."""
 
@@ -77,6 +78,7 @@ class TestSAMLLoginBruteForce(RateLimitSecurityTestBase):
         assert 'Retry-After' in response
 
 
+@override_settings(RATELIMIT_ENABLED=True)
 class TestSAMLCallbackBruteForce(RateLimitSecurityTestBase):
     """Test that SAML callback endpoint is protected."""
 
@@ -102,6 +104,7 @@ class TestSAMLCallbackBruteForce(RateLimitSecurityTestBase):
         assert response.status_code == 429
 
 
+@override_settings(RATELIMIT_ENABLED=True)
 class TestTokenRefreshAbuse(RateLimitSecurityTestBase):
     """Test that token refresh endpoint is protected against abuse."""
 
@@ -123,6 +126,7 @@ class TestTokenRefreshAbuse(RateLimitSecurityTestBase):
         assert response.status_code == 429
 
 
+@override_settings(RATELIMIT_ENABLED=True)
 class TestIPSpoofingProtection(RateLimitSecurityTestBase):
     """Test that IP spoofing via X-Forwarded-For does not bypass rate limiting."""
 
@@ -165,6 +169,7 @@ class TestIPSpoofingProtection(RateLimitSecurityTestBase):
         assert response.status_code != 429
 
 
+@override_settings(RATELIMIT_ENABLED=True)
 class TestExecutionBruteForce(RateLimitSecurityTestBase):
     """Test that execution POST endpoint is protected against abuse."""
 
@@ -199,6 +204,7 @@ class TestExecutionBruteForce(RateLimitSecurityTestBase):
         assert response.status_code == 429
 
 
+@override_settings(RATELIMIT_ENABLED=True)
 class TestRateLimitPersistence(RateLimitSecurityTestBase):
     """Test that rate limit counters persist in cache between requests."""
 

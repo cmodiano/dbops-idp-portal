@@ -116,13 +116,13 @@ class TestClientBusinessAccess:
     def test_business_can_access_catalog(self, sec_business_token):
         """Client Business can browse the catalog."""
         client = make_auth_client(sec_business_token)
-        response = client.get('/api/v1/catalog/actions')
+        response = client.get('/api/v1/catalog/actions/')
         assert response.status_code != status.HTTP_403_FORBIDDEN
 
     def test_business_can_access_own_profile(self, sec_business_token):
         """Client Business can access /auth/me."""
         client = make_auth_client(sec_business_token)
-        response = client.get('/api/v1/auth/me')
+        response = client.get('/api/v1/auth/me/')
         assert response.status_code == status.HTTP_200_OK
 
 
@@ -145,7 +145,7 @@ class TestUnauthorizedAccessLogging:
 
     def test_401_response_contains_error(self, anon_client):
         """401 response includes an error object."""
-        response = anon_client.get('/api/v1/auth/me')
+        response = anon_client.get('/api/v1/auth/me/')
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
         data = response.json()
         assert 'error' in data or 'detail' in data
@@ -163,7 +163,7 @@ class TestNavigationByProfile:
     def test_dbops_sees_admin_tab(self, sec_dbops_token, sec_profile_dbops):
         """DBOPS user sees the 'admin' navigation tab."""
         client = make_auth_client(sec_dbops_token)
-        response = client.get('/api/v1/auth/me')
+        response = client.get('/api/v1/auth/me/')
         assert response.status_code == status.HTTP_200_OK
         tabs = response.json()['data']['navigation_tabs']
         assert 'admin' in tabs
@@ -171,7 +171,7 @@ class TestNavigationByProfile:
     def test_dba_does_not_see_admin_tab(self, sec_dba_token):
         """DBA user does NOT see the 'admin' navigation tab."""
         client = make_auth_client(sec_dba_token)
-        response = client.get('/api/v1/auth/me')
+        response = client.get('/api/v1/auth/me/')
         assert response.status_code == status.HTTP_200_OK
         tabs = response.json()['data']['navigation_tabs']
         assert 'admin' not in tabs
@@ -179,7 +179,7 @@ class TestNavigationByProfile:
     def test_dba_sees_catalog_and_executions(self, sec_dba_token):
         """DBA user sees catalog, executions, and dashboard tabs."""
         client = make_auth_client(sec_dba_token)
-        response = client.get('/api/v1/auth/me')
+        response = client.get('/api/v1/auth/me/')
         tabs = response.json()['data']['navigation_tabs']
         assert 'catalog' in tabs
         assert 'executions' in tabs
@@ -188,7 +188,7 @@ class TestNavigationByProfile:
     def test_business_sees_default_tabs(self, sec_business_token):
         """Client Business sees default tabs (catalog, executions, dashboard)."""
         client = make_auth_client(sec_business_token)
-        response = client.get('/api/v1/auth/me')
+        response = client.get('/api/v1/auth/me/')
         tabs = response.json()['data']['navigation_tabs']
         assert 'catalog' in tabs
         assert 'executions' in tabs

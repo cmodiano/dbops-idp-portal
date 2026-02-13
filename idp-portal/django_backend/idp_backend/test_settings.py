@@ -50,6 +50,9 @@ CACHES = {
     }
 }
 
+# Story 26.14: Disable rate limiting in tests to prevent 429 errors
+RATELIMIT_ENABLED = False
+
 # Story 22.13: In-memory channel layer for WebSocket tests
 CHANNEL_LAYERS = {
     "default": {

@@ -96,7 +96,7 @@ class APIStandaloneExecutionTests(TestCase):
             MockInventoryService.return_value = self._mock_inventory_service(allowed_targets)
 
             response = self.client.post(
-                '/api/v1/executions',
+                '/api/v1/executions/',
                 {
                     'action_id': self.action.id,
                     'target_names': ['srv-dev-01'],
@@ -121,7 +121,7 @@ class APIStandaloneExecutionTests(TestCase):
         Subtask 5.2: POST /executions without Authorization header → 401
         """
         response = self.client.post(
-            '/api/v1/executions',
+            '/api/v1/executions/',
             {
                 'action_id': self.action.id,
                 'target_names': ['srv-dev-01'],
@@ -138,7 +138,7 @@ class APIStandaloneExecutionTests(TestCase):
         Subtask 5.3: POST /executions with expired/invalid token → 401
         """
         response = self.client.post(
-            '/api/v1/executions',
+            '/api/v1/executions/',
             {
                 'action_id': self.action.id,
                 'target_names': ['srv-dev-01'],
@@ -167,7 +167,7 @@ class APIStandaloneExecutionTests(TestCase):
             MockInventoryService.return_value = self._mock_inventory_service(allowed_targets)
 
             response = self.client.post(
-                '/api/v1/executions',
+                '/api/v1/executions/',
                 {
                     'action_id': self.action.id,
                     'target_names': ['srv-unauthorized-01'],
@@ -188,7 +188,7 @@ class APIStandaloneExecutionTests(TestCase):
 
         # Missing action_id
         response = self.client.post(
-            '/api/v1/executions',
+            '/api/v1/executions/',
             {
                 'target_names': ['srv-dev-01'],
             },
@@ -206,7 +206,7 @@ class APIStandaloneExecutionTests(TestCase):
         token = self._get_valid_token()
 
         response = self.client.post(
-            '/api/v1/executions',
+            '/api/v1/executions/',
             {
                 'action_id': 999999,  # Non-existent action
                 'target_names': ['srv-dev-01'],
@@ -225,7 +225,7 @@ class APIStandaloneExecutionTests(TestCase):
         """
         token = self._get_valid_token()
         response = self.client.post(
-            '/api/v1/executions',
+            '/api/v1/executions/',
             'action_id=1&target_names=srv-dev-01',
             content_type='application/x-www-form-urlencoded',
             HTTP_AUTHORIZATION=f'Bearer {token}',
@@ -245,7 +245,7 @@ class APIStandaloneExecutionTests(TestCase):
         with patch('executions.validators.target_validator.InventoryService') as MockInventoryService:
             MockInventoryService.return_value = self._mock_inventory_service(allowed_targets)
             response = self.client.post(
-                '/api/v1/executions',
+                '/api/v1/executions/',
                 {
                     'action_id': self.action.id,
                     'target_names': ['srv-dev-01', 'srv-prod-01'],
@@ -265,7 +265,7 @@ class APIStandaloneExecutionTests(TestCase):
         token = self._get_valid_token()
 
         response = self.client.post(
-            '/api/v1/executions',
+            '/api/v1/executions/',
             {
                 'action_id': self.action.id,
                 # Missing target_names
@@ -285,7 +285,7 @@ class APIStandaloneExecutionTests(TestCase):
         token = self._get_valid_token()
 
         response = self.client.post(
-            '/api/v1/executions',
+            '/api/v1/executions/',
             {
                 'action_id': self.action.id,
                 'target_names': [],
@@ -315,7 +315,7 @@ class APIStandaloneExecutionTests(TestCase):
 
             # Create execution via API
             create_response = self.client.post(
-                '/api/v1/executions',
+                '/api/v1/executions/',
                 {
                     'action_id': self.action.id,
                     'target_names': ['srv-dev-01'],
@@ -329,7 +329,7 @@ class APIStandaloneExecutionTests(TestCase):
 
         # List executions
         list_response = self.client.get(
-            '/api/v1/executions?scope=mine',
+            '/api/v1/executions/?scope=mine',
             HTTP_AUTHORIZATION=f'Bearer {token}',
         )
 
@@ -354,7 +354,7 @@ class APIStandaloneExecutionTests(TestCase):
 
             # Create execution via API
             create_response = self.client.post(
-                '/api/v1/executions',
+                '/api/v1/executions/',
                 {
                     'action_id': self.action.id,
                     'target_names': ['srv-dev-01'],
@@ -368,7 +368,7 @@ class APIStandaloneExecutionTests(TestCase):
 
         # Get execution detail
         detail_response = self.client.get(
-            f'/api/v1/executions/{execution_id}',
+            f'/api/v1/executions/{execution_id}/',
             HTTP_AUTHORIZATION=f'Bearer {token}',
         )
 
@@ -394,7 +394,7 @@ class APIStandaloneExecutionTests(TestCase):
             MockInventoryService.return_value = self._mock_inventory_service(allowed_targets)
 
             response = self.client.post(
-                '/api/v1/executions',
+                '/api/v1/executions/',
                 {
                     'action_id': self.action.id,
                     'target_names': ['srv-dev-01'],
@@ -438,7 +438,7 @@ class APIStandaloneExecutionTests(TestCase):
             MockInventoryService.return_value = self._mock_inventory_service(allowed_targets)
 
             response = self.client.post(
-                '/api/v1/executions',
+                '/api/v1/executions/',
                 {
                     'action_id': self.action.id,
                     'target_names': ['srv-dev-01', 'srv-dev-02'],
@@ -507,7 +507,7 @@ class APIExecutionNoTargetTests(TestCase):
         token = self._get_valid_token()
 
         response = self.client.post(
-            '/api/v1/executions',
+            '/api/v1/executions/',
             {
                 'action_id': self.action.id,
                 'environment': 'dev',
@@ -527,7 +527,7 @@ class APIExecutionNoTargetTests(TestCase):
         token = self._get_valid_token()
 
         response = self.client.post(
-            '/api/v1/executions',
+            '/api/v1/executions/',
             {
                 'action_id': self.action.id,
                 'environment': 'dev',

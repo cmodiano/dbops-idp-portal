@@ -61,7 +61,7 @@ class TestStory412WorkflowStepParameters(TestCase):
 
     def test_rejects_workflow_step_parameters_for_non_workflow(self):
         resp = self.client.post(
-            "/api/v1/executions",
+            "/api/v1/executions/",
             {
                 "action_id": self.simple_action.id,
                 "environment": "dev",
@@ -75,7 +75,7 @@ class TestStory412WorkflowStepParameters(TestCase):
 
     def test_rejects_unknown_step_order(self):
         resp = self.client.post(
-            "/api/v1/executions",
+            "/api/v1/executions/",
             {
                 "action_id": self.workflow.id,
                 "environment": "dev",
@@ -92,7 +92,7 @@ class TestStory412WorkflowStepParameters(TestCase):
     def test_rejects_invalid_parameters_for_step(self):
         # Missing required foo
         resp = self.client.post(
-            "/api/v1/executions",
+            "/api/v1/executions/",
             {
                 "action_id": self.workflow.id,
                 "environment": "dev",
@@ -108,7 +108,7 @@ class TestStory412WorkflowStepParameters(TestCase):
 
     def test_accepts_valid_workflow_step_parameters_and_stores_them(self):
         resp = self.client.post(
-            "/api/v1/executions",
+            "/api/v1/executions/",
             {
                 "action_id": self.workflow.id,
                 "environment": "dev",

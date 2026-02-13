@@ -12,6 +12,7 @@ from rest_framework.test import APIClient
 from idp_auth.models import User
 from integrations.models import Integration
 from catalog.models import Action, ActionStatus, Tag, ActionTag
+from catalog.services import CatalogService
 from executions.models import Execution, ExecutionStatus
 from core.models import AuditLog
 
@@ -146,9 +147,13 @@ class TestActionLifecycle(TestCase):
         # Verify action is in catalog
         self.assertIn(action.id, [a.id for a in Action.objects.list_published()])
 
-        # Disable action
-        action.status = ActionStatus.DISABLED
-        action.save()
+        # Disable action using proper deactivation method (sets status and soft-delete fields)
+        service = CatalogService()
+        service.deactivate_action(action.id, self.user, deletion_reason="Test deactivation")
+
+        # Refresh from DB to get updated status
+        action.refresh_from_db()
+        self.assertEqual(action.status, ActionStatus.DISABLED)
 
         # Verify action is no longer in published catalog
         self.assertNotIn(action.id, [a.id for a in Action.objects.list_published()])

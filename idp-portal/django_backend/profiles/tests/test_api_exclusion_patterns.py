@@ -17,7 +17,7 @@ class TestProfileTargetPermissionsAPIWithExclusion(TestCase):
     def setUp(self):
         """Set up test user, profile, and API client."""
         self.client = APIClient()
-        
+
         # Create test user
         self.user = User.objects.create_user(
             username='admin_user',
@@ -27,6 +27,8 @@ class TestProfileTargetPermissionsAPIWithExclusion(TestCase):
             last_name='User',
             is_staff=True
         )
+        # Set DBOPS profile for RBAC permission check
+        self.user.profile = 'dbops'
         self.client.force_authenticate(user=self.user)
         
         # Create admin profile for user

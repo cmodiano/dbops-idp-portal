@@ -49,7 +49,7 @@ class ScheduledExecutionPutTests(TestCase):
         )
         new_at = (timezone.now() + timedelta(days=2)).strftime('%Y-%m-%dT%H:%M:%SZ')
         response = self.client.put(
-            f'/api/v1/scheduled-executions/{se.id}',
+            f'/api/v1/scheduled-executions/{se.id}/',
             {'scheduled_at': new_at},
             format='json',
         )
@@ -59,7 +59,7 @@ class ScheduledExecutionPutTests(TestCase):
         self.assertIsNotNone(se.scheduled_at)
 
     def test_put_returns_403_for_non_creator_dba(self, mock_validate):
-        """PUT by DBA who is not creator returns 403."""
+        """PUT by DBA who is not creator is allowed (Story 26.12: owner OR admin can modify)."""
         mock_validate.return_value = None
         future = timezone.now() + timedelta(days=1)
         se = ScheduledExecution.objects.create(
@@ -71,11 +71,12 @@ class ScheduledExecutionPutTests(TestCase):
         )
         self.client.force_authenticate(user=self.other_user)
         response = self.client.put(
-            f'/api/v1/scheduled-executions/{se.id}',
+            f'/api/v1/scheduled-executions/{se.id}/',
             {'scheduled_at': (timezone.now() + timedelta(days=2)).strftime('%Y-%m-%dT%H:%M:%SZ')},
             format='json',
         )
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        # Story 26.12: DBAs can modify any scheduled execution (owner OR admin pattern)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_put_returns_400_when_not_pending(self, mock_validate):
         """PUT on executed/cancelled execution returns 400."""
@@ -89,7 +90,7 @@ class ScheduledExecutionPutTests(TestCase):
             status=ScheduledExecutionStatus.CANCELLED,
         )
         response = self.client.put(
-            f'/api/v1/scheduled-executions/{se.id}',
+            f'/api/v1/scheduled-executions/{se.id}/',
             {'scheduled_at': (timezone.now() + timedelta(days=2)).strftime('%Y-%m-%dT%H:%M:%SZ')},
             format='json',
         )
@@ -98,7 +99,7 @@ class ScheduledExecutionPutTests(TestCase):
     def test_put_returns_404_for_missing_id(self, mock_validate):
         """PUT on non-existent id returns 404."""
         response = self.client.put(
-            '/api/v1/scheduled-executions/99999',
+            '/api/v1/scheduled-executions/99999/',
             {'scheduled_at': (timezone.now() + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ')},
             format='json',
         )
@@ -118,7 +119,7 @@ class ScheduledExecutionPutTests(TestCase):
         se.set_parameters({'_targets': ['t1'], 'key': 'v1'})
         se.save(update_fields=['parameters'])
         response = self.client.put(
-            f'/api/v1/scheduled-executions/{se.id}',
+            f'/api/v1/scheduled-executions/{se.id}/',
             {'target_names': [], 'environment': 'staging'},
             format='json',
         )
@@ -142,7 +143,7 @@ class ScheduledExecutionPutTests(TestCase):
         se.set_parameters({'_targets': ['allowed'], 'x': 1})
         se.save(update_fields=['parameters'])
         response = self.client.put(
-            f'/api/v1/scheduled-executions/{se.id}',
+            f'/api/v1/scheduled-executions/{se.id}/',
             {'parameters': {'x': 2, '_targets': ['injected']}},
             format='json',
         )

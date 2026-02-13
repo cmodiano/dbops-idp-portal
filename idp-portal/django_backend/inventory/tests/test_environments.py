@@ -20,10 +20,13 @@ class InventoryEnvironmentsAPITests(TestCase):
     def setUp(self):
         """Set up test client and user."""
         self.client = APIClient()
-        self.user = User.objects.create_user(
-            username='testuser',
-            profile='DBA'
-        )
+        # Use MagicMock for user to avoid DB-specific fields
+        self.user = MagicMock()
+        self.user.id = 1
+        self.user.is_authenticated = True
+        self.user.ad_groups = ['DBA']
+        # Prevent get_ad_groups from being callable
+        del self.user.get_ad_groups
         self.client.force_authenticate(user=self.user)
 
     @patch('inventory.views.InventoryService')
@@ -33,7 +36,7 @@ class InventoryEnvironmentsAPITests(TestCase):
         mock_service.list_environments.return_value = ['dev', 'staging', 'prod']
         mock_service_class.return_value = mock_service
 
-        response = self.client.get('/api/v1/inventory/environments')
+        response = self.client.get('/api/v1/inventory/environments/')
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIsInstance(response.data, list)
@@ -46,7 +49,7 @@ class InventoryEnvironmentsAPITests(TestCase):
         mock_service.list_environments.return_value = []
         mock_service_class.return_value = mock_service
 
-        response = self.client.get('/api/v1/inventory/environments')
+        response = self.client.get('/api/v1/inventory/environments/')
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data, [])
@@ -60,7 +63,7 @@ class InventoryEnvironmentsAPITests(TestCase):
         mock_service.list_environments.side_effect = InventoryServiceError("Inventory unavailable")
         mock_service_class.return_value = mock_service
 
-        response = self.client.get('/api/v1/inventory/environments')
+        response = self.client.get('/api/v1/inventory/environments/')
         
         self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
         self.assertIn('detail', response.data)
@@ -68,12 +71,17 @@ class InventoryEnvironmentsAPITests(TestCase):
     def test_list_environments_requires_authentication(self):
         """Test endpoint requires authentication."""
         self.client.force_authenticate(user=None)
-        response = self.client.get('/api/v1/inventory/environments')
+        response = self.client.get('/api/v1/inventory/environments/')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
 
 class InventoryServiceEnvironmentsTests(TestCase):
     """Tests for InventoryService.list_environments() method."""
+
+    def setUp(self):
+        """Clear cache before each test."""
+        from inventory.services import _environments_cache
+        _environments_cache.clear()
 
     @patch('inventory.services.InventoryService.list_targets')
     def test_list_environments_from_targets(self, mock_list_targets):
@@ -95,11 +103,11 @@ class InventoryServiceEnvironmentsTests(TestCase):
 
     @patch('inventory.services.InventoryService.list_targets')
     def test_list_environments_normalized(self, mock_list_targets):
-        """Test environments are normalized (certif -> staging)."""
+        """Test environments are returned as-is without normalization."""
         mock_list_targets.return_value = (
             [
                 {'name': 'target1', 'environment': 'dev', 'target_type': 'server'},
-                {'name': 'target2', 'environment': 'certif', 'target_type': 'database'},  # Should normalize to staging
+                {'name': 'target2', 'environment': 'certif', 'target_type': 'database'},
                 {'name': 'target3', 'environment': 'staging', 'target_type': 'server'},
             ],
             3
@@ -108,7 +116,7 @@ class InventoryServiceEnvironmentsTests(TestCase):
         service = InventoryService()
         environments = service.list_environments()
 
-        # certif should be normalized to staging
+        # No normalization - raw values returned
         self.assertIn('staging', environments)
-        self.assertNotIn('certif', environments)
-        self.assertEqual(len(environments), 2)  # dev and staging (certif normalized)
+        self.assertIn('certif', environments)  # certif is NOT normalized
+        self.assertEqual(len(environments), 3)  # dev, certif, and staging (no normalization)

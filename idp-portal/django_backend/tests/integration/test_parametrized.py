@@ -11,6 +11,7 @@ from rest_framework.test import APIClient
 
 from idp_auth.models import User
 from catalog.models import Action, ActionStatus, ActionCategory, ActionEngine, ActionPlatform
+from catalog.services import CatalogService
 from integrations.models import Integration
 from executions.models import Execution, ExecutionStatus, ExecutionEnvironment
 from profiles.models import Profile
@@ -37,15 +38,29 @@ class TestParametrizedActionFilters:
     ])
     def test_filter_by_status(self, status, expected_count):
         """Test filtering actions by different statuses."""
-        Action.objects.create(
-            name=f'Action {status}',
-            category='Provisioning',
-            engine='Oracle',
-            platform='AAP',
-            status=status,
-            created_by=self.user,
-            integration=self.integration
-        )
+        # For disabled status, create as published first then deactivate
+        if status == ActionStatus.DISABLED:
+            action = Action.objects.create(
+                name=f'Action {status}',
+                category='Provisioning',
+                engine='Oracle',
+                platform='AAP',
+                status=ActionStatus.PUBLISHED,
+                created_by=self.user,
+                integration=self.integration
+            )
+            service = CatalogService()
+            service.deactivate_action(action.id, self.user, deletion_reason="Test")
+        else:
+            Action.objects.create(
+                name=f'Action {status}',
+                category='Provisioning',
+                engine='Oracle',
+                platform='AAP',
+                status=status,
+                created_by=self.user,
+                integration=self.integration
+            )
 
         results = Action.objects.list_by_status(status)
         assert results.count() == expected_count

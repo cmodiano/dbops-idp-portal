@@ -13,7 +13,7 @@ class TestHealthCheckEndpoint(TestCase):
 
     def setUp(self):
         self.client = Client()
-        self.url = '/api/v1/health'
+        self.url = '/api/v1/health/'
 
     @patch('core.views.connection')
     def test_health_check_all_services_up(self, mock_connection):
@@ -67,7 +67,7 @@ class TestHealthCheckEndpoint(TestCase):
 
     @patch('core.views.requests')
     @patch('core.views.connection')
-    @override_settings(SERVICENOW_INSTANCE_URL='https://real-instance.service-now.com')
+    @override_settings(SERVICENOW_INSTANCE_URL='https://servicenow.example.com')
     def test_health_check_servicenow_unreachable(self, mock_connection, mock_requests):
         """Test health check returns 503 when ServiceNow is unreachable."""
         # Mock successful database connection

@@ -21,7 +21,7 @@ class RefEnginesAPITests(TestCase):
         self.client = APIClient()
         self.user = User.objects.create_user(
             username='testuser',
-            profile='DBA'
+            password='testpass123'
         )
         self.client.force_authenticate(user=self.user)
 
@@ -33,7 +33,7 @@ class RefEnginesAPITests(TestCase):
 
     def test_list_engines_active_only(self):
         """Test listing active engines only (default)."""
-        response = self.client.get('/api/v1/reference/engines')
+        response = self.client.get('/api/v1/reference/engines/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIsInstance(response.data, list)
         self.assertEqual(len(response.data), 3)  # Only active engines
@@ -46,27 +46,27 @@ class RefEnginesAPITests(TestCase):
 
     def test_list_engines_all(self):
         """Test listing all engines including inactive."""
-        response = self.client.get('/api/v1/reference/engines?active_only=false')
+        response = self.client.get('/api/v1/reference/engines/?active_only=false')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 4)  # All engines including inactive
 
     def test_list_engines_ordered(self):
         """Test engines are ordered by display_order, then code."""
-        response = self.client.get('/api/v1/reference/engines')
+        response = self.client.get('/api/v1/reference/engines/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        
+
         codes = [e['code'] for e in response.data]
-        self.assertEqual(codes, ['DB2', 'Oracle', 'SQL Server'])  # Ordered by display_order
+        self.assertEqual(codes, ['Oracle', 'SQL Server', 'DB2'])  # Ordered by display_order
 
     def test_list_engines_requires_authentication(self):
         """Test endpoint requires authentication."""
         self.client.force_authenticate(user=None)
-        response = self.client.get('/api/v1/reference/engines')
+        response = self.client.get('/api/v1/reference/engines/')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_engine_serializer_fields(self):
         """Test engine serializer includes all required fields."""
-        response = self.client.get('/api/v1/reference/engines')
+        response = self.client.get('/api/v1/reference/engines/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
         engine = response.data[0]
@@ -85,7 +85,7 @@ class RefPlatformsAPITests(TestCase):
         self.client = APIClient()
         self.user = User.objects.create_user(
             username='testuser',
-            profile='DBA'
+            password='testpass123'
         )
         self.client.force_authenticate(user=self.user)
 
@@ -97,7 +97,7 @@ class RefPlatformsAPITests(TestCase):
 
     def test_list_platforms_active_only(self):
         """Test listing active platforms only (default)."""
-        response = self.client.get('/api/v1/reference/platforms')
+        response = self.client.get('/api/v1/reference/platforms/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIsInstance(response.data, list)
         self.assertEqual(len(response.data), 3)  # Only active platforms
@@ -110,27 +110,27 @@ class RefPlatformsAPITests(TestCase):
 
     def test_list_platforms_all(self):
         """Test listing all platforms including inactive."""
-        response = self.client.get('/api/v1/reference/platforms?active_only=false')
+        response = self.client.get('/api/v1/reference/platforms/?active_only=false')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 4)  # All platforms including inactive
 
     def test_list_platforms_ordered(self):
         """Test platforms are ordered by display_order, then code."""
-        response = self.client.get('/api/v1/reference/platforms')
+        response = self.client.get('/api/v1/reference/platforms/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        
+
         codes = [p['code'] for p in response.data]
-        self.assertEqual(codes, ['AAP', 'Azure DevOps', 'GitHub Actions'])  # Ordered by display_order
+        self.assertEqual(codes, ['AAP', 'GitHub Actions', 'Azure DevOps'])  # Ordered by display_order
 
     def test_list_platforms_requires_authentication(self):
         """Test endpoint requires authentication."""
         self.client.force_authenticate(user=None)
-        response = self.client.get('/api/v1/reference/platforms')
+        response = self.client.get('/api/v1/reference/platforms/')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_platform_serializer_fields(self):
         """Test platform serializer includes all required fields."""
-        response = self.client.get('/api/v1/reference/platforms')
+        response = self.client.get('/api/v1/reference/platforms/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
         platform = response.data[0]

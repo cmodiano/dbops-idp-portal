@@ -131,8 +131,12 @@ class InventoryRBACFilter:
         nb_before = len(targets)
 
         # Step 1: Apply target restrictions
-        if not has_all_access and target_restrictions:
-            targets = self.apply_target_restrictions(targets, target_restrictions)
+        if not has_all_access:
+            if target_restrictions:
+                targets = self.apply_target_restrictions(targets, target_restrictions)
+            else:
+                # No ALL access and no restrictions = no targets allowed
+                targets = []
 
         nb_after_restrictions = len(targets)
 

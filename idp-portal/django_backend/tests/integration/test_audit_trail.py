@@ -12,6 +12,7 @@ from datetime import timedelta
 
 from idp_auth.models import User
 from catalog.models import Action, ActionStatus
+from catalog.services import CatalogService
 from integrations.models import Integration
 from profiles.models import Profile, ProfileActionPermission
 from executions.models import Execution, ExecutionStatus, ScheduledExecution, ScheduledExecutionStatus
@@ -83,17 +84,10 @@ class TestAuditTrailCRUD(TestCase):
             correlation_id='publish-001'
         )
 
-        # DISABLE
-        action.status = ActionStatus.DISABLED
-        action.save()
-
-        AuditLog.objects.create_entry(
-            user_id=str(self.user.id),
-            action_type=AuditActionType.ACTION_DISABLED,
-            entity_type=AuditEntityType.ACTION,
-            entity_id=action.id,
-            correlation_id='disable-001'
-        )
+        # DISABLE - use proper deactivation method
+        service = CatalogService()
+        service.deactivate_action(action.id, self.user, deletion_reason="Test deactivation")
+        # deactivate_action() creates its own audit entry with ACTION_DEACTIVATED type
 
         # Verify audit trail
         audit_entries = AuditLog.objects.list_by_entity(AuditEntityType.ACTION, action.id)
@@ -103,7 +97,7 @@ class TestAuditTrailCRUD(TestCase):
         self.assertIn(AuditActionType.ACTION_CREATED, action_types)
         self.assertIn(AuditActionType.ACTION_UPDATED, action_types)
         self.assertIn(AuditActionType.ACTION_PUBLISHED, action_types)
-        self.assertIn(AuditActionType.ACTION_DISABLED, action_types)
+        self.assertIn(AuditActionType.ACTION_DEACTIVATED, action_types)  # deactivate_action() uses ACTION_DEACTIVATED
 
     def test_profile_crud_audit_trail(self):
         """Test audit trail for profile CRUD operations."""

@@ -53,7 +53,7 @@ def audit_integration_type_catalogue(sender, instance, created, **kwargs):
             },
             correlation_id=get_correlation_id(),  # Fix Issue #3
         )
-    except Exception:
+    except Exception as e:
         logger.exception("Failed to create audit entry for IntegrationTypeCatalogue %s", instance.code)
 
 
@@ -78,5 +78,5 @@ def audit_integration_action(sender, instance, created, **kwargs):
             },
             correlation_id=get_correlation_id(),  # Fix Issue #3
         )
-    except Exception:
+    except Exception as e:
         logger.exception("Failed to create audit entry for IntegrationAction %s", instance.action_code)

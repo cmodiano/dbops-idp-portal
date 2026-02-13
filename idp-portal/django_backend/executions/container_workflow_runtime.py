@@ -418,7 +418,7 @@ class ContainerWorkflowRuntime:
                     execution.completed_at = timezone.now()
                     execution.error_message = f"Workflow thread error: {e}"
                     execution.save(update_fields=['status', 'completed_at', 'error_message'])
-            except Exception:
+            except Exception as cleanup_error:
                 logger.error("container_workflow_thread_cleanup_failed", execution_id=execution_id, exc_info=True)
         finally:
             close_old_connections()

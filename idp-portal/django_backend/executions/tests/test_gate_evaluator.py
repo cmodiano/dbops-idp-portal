@@ -28,9 +28,18 @@ from tests.factories import (
 )
 
 
-def _create_waiting_step(gate_conditions, created_at=None):
+def _create_waiting_step(gate_conditions, created_at=None, requires_maintenance_window=True):
     """Helper: create an ExecutionStep in WAITING with gate_conditions in output."""
-    execution = ExecutionFactory(status='RUNNING')
+    # Set up execution parameters with _env_config to control gate evaluation
+    params = {
+        "target_host": "db-test-01.example.com",
+        "database_name": "TESTDB",
+        "_env_config": {
+            "requires_maintenance_window": requires_maintenance_window,
+            "requires_approval": False,
+        }
+    }
+    execution = ExecutionFactory(status='RUNNING', parameters=json.dumps(params))
     step = ExecutionStepFactory(
         execution=execution,
         status=ExecutionStepStatus.WAITING,
@@ -105,7 +114,7 @@ class TestGateEvaluatorMaintenanceWindow:
 
     def test_no_targets_always_satisfied(self):
         """No ExecutionTargets → maintenance_window satisfied by default."""
-        step = _create_waiting_step([{'type': 'maintenance_window'}])
+        step = _create_waiting_step([{'type': 'maintenance_window'}], requires_maintenance_window=True)
         # No targets created
 
         evaluator = GateEvaluator()
@@ -293,8 +302,8 @@ class TestGateEvaluatorMultipleConditions:
     def test_unsupported_gate_type_not_satisfied(self):
         """Unsupported gate types are NOT satisfied."""
         step = _create_waiting_step([
-            {'type': 'approval_granted'},
-        ])
+            {'type': 'unsupported_future_gate'},
+        ], requires_maintenance_window=False)
 
         evaluator = GateEvaluator()
         satisfied, gate_status = evaluator.evaluate(step)

@@ -110,20 +110,17 @@ class ProfileActionPermissionsSerializer(serializers.Serializer):
     action_ids = serializers.ListField(
         child=serializers.IntegerField(),
         required=False,
-        allow_null=True,
-        default=list
+        allow_null=True
     )
     tag_patterns = serializers.ListField(
         child=serializers.CharField(),
         required=False,
-        allow_null=True,
-        default=list
+        allow_null=True
     )
     environments = serializers.ListField(
         child=serializers.CharField(),
         required=False,
-        allow_null=True,
-        default=list
+        allow_null=True
     )
 
     def validate_environments(self, value: list[str] | None) -> list[str]:
@@ -213,14 +210,12 @@ class ProfileTargetPermissionsSerializer(serializers.Serializer):
     target_names = serializers.ListField(
         child=serializers.CharField(),
         required=False,
-        allow_null=True,
-        default=list
+        allow_null=True
     )
     target_patterns = serializers.ListField(
         child=serializers.CharField(),
         required=False,
-        allow_null=True,
-        default=list
+        allow_null=True
     )
     filter_by_attribute = serializers.DictField(
         child=serializers.ListField(
@@ -235,7 +230,6 @@ class ProfileTargetPermissionsSerializer(serializers.Serializer):
         child=serializers.CharField(),
         required=False,
         allow_null=True,
-        default=list,
         help_text="Deny patterns (applied after inclusion rules). Glob-style: PROD-CRITICAL-*, DR-*. Story 25.6"
     )
 

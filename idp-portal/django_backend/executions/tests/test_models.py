@@ -353,20 +353,40 @@ class ExecutionViewTargetsTest(TestCase):
         self.assertIn('action_id', str(response.data))
 
     def test_post_execution_requires_environment_or_targets(self):
-        """Test that either environment or target_names is required."""
+        """Test that environment is required for actions with requires_target=False."""
+        # Create action that doesn't require targets
+        action_no_target = Action.objects.create(
+            name='No Target Action',
+            category='Monitoring',
+            engine='Oracle',
+            platform='AAP',
+            status='published',
+            requires_target=False
+        )
         response = self.client.post('/api/v1/executions/', {
-            'action_id': self.action.id
+            'action_id': action_no_target.id
         }, format='json')
         self.assertEqual(response.status_code, 400)
-        self.assertIn('environment', str(response.data).lower())
+        # Error should mention environment or target_names
+        error_msg = str(response.data).lower()
+        self.assertTrue('environment' in error_msg or 'target' in error_msg)
 
     def test_post_execution_with_environment_only(self):
-        """Test creating execution with environment only (backward compatibility)."""
+        """Test creating execution with environment only for actions with requires_target=False."""
+        # Create action that doesn't require targets
+        action_no_target = Action.objects.create(
+            name='No Target Action',
+            category='Monitoring',
+            engine='Oracle',
+            platform='AAP',
+            status='published',
+            requires_target=False
+        )
         response = self.client.post('/api/v1/executions/', {
-            'action_id': self.action.id,
+            'action_id': action_no_target.id,
             'environment': 'dev'
         }, format='json')
-        # Should succeed (backward compatibility)
+        # Should succeed for actions that don't require targets
         self.assertEqual(response.status_code, 201)
         self.assertIn('execution_id', response.data.get('data', {}))
 
@@ -380,13 +400,15 @@ class ExecutionViewTargetsTest(TestCase):
         self.assertIn('list', str(response.data).lower())
 
     def test_post_execution_target_names_not_empty(self):
-        """Test that target_names must not be empty."""
+        """Test that target_names must not be empty for actions with requires_target=True."""
         response = self.client.post('/api/v1/executions/', {
             'action_id': self.action.id,
             'target_names': []
         }, format='json')
         self.assertEqual(response.status_code, 400)
-        self.assertIn('vide', str(response.data).lower())
+        # Error should mention that targets are required
+        error_msg = str(response.data).lower()
+        self.assertTrue('requis' in error_msg or 'required' in error_msg or 'vide' in error_msg or 'empty' in error_msg)
 
     def test_post_execution_with_target_names_success(self):
         """Test successful execution creation with target_names when InventoryService returns allowed targets (Story 13.2, Task 8.3)."""

@@ -82,82 +82,109 @@ class TestContainerWorkflowAPIIntegration(TestCase):
     @patch('executions.container_workflow_runtime.AuditService')
     def test_workflow_execution_creates_child_executions(self, mock_audit):
         """AC1/AC2: POST /executions with workflow creates parent + child executions."""
-        response = self.client.post(
-            "/api/v1/executions/",
-            data={
-                "action_id": self.workflow.id,
-                "environment": "dev",
-            },
-            format="json",
-        )
+        # Patch ContainerWorkflowRuntime.run to use run_sync (avoid SQLite threading issues)
+        from executions.container_workflow_runtime import ContainerWorkflowRuntime
+        original_run = ContainerWorkflowRuntime.run
+        ContainerWorkflowRuntime.run = lambda self: self.run_sync()
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        data = response.json()["data"]
-        parent_id = data["execution_id"]
+        try:
+            response = self.client.post(
+                "/api/v1/executions/",
+                data={
+                    "action_id": self.workflow.id,
+                    "environment": "dev",
+                },
+                format="json",
+            )
 
-        # Verify parent execution
-        parent = Execution.objects.get(id=parent_id)
-        self.assertEqual(parent.action_id, self.workflow.id)
-        self.assertEqual(parent.status, ExecutionStatus.COMPLETED)
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+            data = response.json()["data"]
+            parent_id = data["execution_id"]
 
-        # Verify child executions
-        children = Execution.objects.filter(parent_execution_id=parent_id).order_by('id')
-        self.assertEqual(children.count(), 2)
-        self.assertEqual(children[0].action_id, self.ref_action_1.id)
-        self.assertEqual(children[1].action_id, self.ref_action_2.id)
+            # Verify parent execution
+            parent = Execution.objects.get(id=parent_id)
+            self.assertEqual(parent.action_id, self.workflow.id)
+            self.assertEqual(parent.status, ExecutionStatus.COMPLETED)
 
-        # Verify children completed
-        for child in children:
-            self.assertEqual(child.status, ExecutionStatus.COMPLETED)
-            self.assertEqual(child.environment, "dev")
-            self.assertEqual(child.user_id, self.user.id)
+            # Verify child executions
+            children = Execution.objects.filter(parent_execution_id=parent_id).order_by('id')
+            self.assertEqual(children.count(), 2)
+            self.assertEqual(children[0].action_id, self.ref_action_1.id)
+            self.assertEqual(children[1].action_id, self.ref_action_2.id)
+
+            # Verify children completed
+            for child in children:
+                self.assertEqual(child.status, ExecutionStatus.COMPLETED)
+                self.assertEqual(child.environment, "dev")
+                self.assertEqual(child.user_id, self.user.id)
+        finally:
+            # Restore original run method
+            ContainerWorkflowRuntime.run = original_run
 
     @patch('executions.container_workflow_runtime.AuditService')
     def test_workflow_execution_creates_parent_steps(self, mock_audit):
         """Parent execution has step records for each workflow step."""
-        response = self.client.post(
-            "/api/v1/executions/",
-            data={
-                "action_id": self.workflow.id,
-                "environment": "dev",
-            },
-            format="json",
-        )
+        # Patch ContainerWorkflowRuntime.run to use run_sync (avoid SQLite threading issues)
+        from executions.container_workflow_runtime import ContainerWorkflowRuntime
+        original_run = ContainerWorkflowRuntime.run
+        ContainerWorkflowRuntime.run = lambda self: self.run_sync()
 
-        parent_id = response.json()["data"]["execution_id"]
-        steps = ExecutionStep.objects.filter(execution_id=parent_id).order_by('step_order')
-        self.assertEqual(steps.count(), 2)
-        self.assertEqual(steps[0].step_name, "Step 1 - Oracle")
-        self.assertEqual(steps[1].step_name, "Step 2 - SQL Server")
+        try:
+            response = self.client.post(
+                "/api/v1/executions/",
+                data={
+                    "action_id": self.workflow.id,
+                    "environment": "dev",
+                },
+                format="json",
+            )
+
+            parent_id = response.json()["data"]["execution_id"]
+            steps = ExecutionStep.objects.filter(execution_id=parent_id).order_by('step_order')
+            self.assertEqual(steps.count(), 2)
+            self.assertEqual(steps[0].step_name, "Step 1 - Oracle")
+            self.assertEqual(steps[1].step_name, "Step 2 - SQL Server")
+        finally:
+            # Restore original run method
+            ContainerWorkflowRuntime.run = original_run
 
     @patch('executions.container_workflow_runtime.AuditService')
     def test_workflow_with_step_parameters(self, mock_audit):
         """AC3: workflow_step_parameters injected into child execution parameters."""
-        response = self.client.post(
-            "/api/v1/executions/",
-            data={
-                "action_id": self.workflow.id,
-                "environment": "dev",
-                "workflow_step_parameters": {
-                    "1": {"parameters": {"db_name": "TESTDB"}},
-                    "2": {"parameters": {"server": "sql-01"}},
+        # Patch ContainerWorkflowRuntime.run to use run_sync (avoid SQLite threading issues)
+        from executions.container_workflow_runtime import ContainerWorkflowRuntime
+        original_run = ContainerWorkflowRuntime.run
+        ContainerWorkflowRuntime.run = lambda self: self.run_sync()
+
+        try:
+            response = self.client.post(
+                "/api/v1/executions/",
+                data={
+                    "action_id": self.workflow.id,
+                    "environment": "dev",
+                    "workflow_step_parameters": {
+                        "1": {"parameters": {"db_name": "TESTDB"}},
+                        "2": {"parameters": {"server": "sql-01"}},
+                    },
                 },
-            },
-            format="json",
-        )
+                format="json",
+            )
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        parent_id = response.json()["data"]["execution_id"]
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+            parent_id = response.json()["data"]["execution_id"]
 
-        children = Execution.objects.filter(parent_execution_id=parent_id).order_by('id')
-        self.assertEqual(children.count(), 2)
+            children = Execution.objects.filter(parent_execution_id=parent_id).order_by('id')
+            self.assertEqual(children.count(), 2)
 
-        # Verify step parameters injected
-        child_1_params = children[0].get_parameters()
-        self.assertEqual(child_1_params.get("db_name"), "TESTDB")
+            # Verify step parameters injected
+            child_1_params = children[0].get_parameters()
+            self.assertEqual(child_1_params.get("db_name"), "TESTDB")
 
-        child_2_params = children[1].get_parameters()
-        self.assertEqual(child_2_params.get("server"), "sql-01")
+            child_2_params = children[1].get_parameters()
+            self.assertEqual(child_2_params.get("server"), "sql-01")
+        finally:
+            # Restore original run method
+            ContainerWorkflowRuntime.run = original_run
 
     @patch('executions.container_workflow_runtime.AuditService')
     def test_workflow_with_missing_referenced_action_fails(self, mock_audit):

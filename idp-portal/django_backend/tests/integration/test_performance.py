@@ -270,8 +270,8 @@ class TestActionCreationPerformance:
         result = benchmark(create_action)
         assert result.id is not None
 
-        # Verify steps stored
-        stored_steps = result.execution_steps
+        # Verify steps stored (execution_steps is a JSON field, need to parse it)
+        stored_steps = json.loads(result.execution_steps) if isinstance(result.execution_steps, str) else result.execution_steps
         assert len(stored_steps) == 50
 
     def test_bulk_create_100_actions(self, benchmark):
