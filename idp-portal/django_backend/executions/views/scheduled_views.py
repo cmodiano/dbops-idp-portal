@@ -19,6 +19,7 @@ from rest_framework.views import APIView
 from catalog.models import Action, ActionStatus
 from core.auth_utils import get_user_ad_groups
 from core.exceptions import BadRequestError, NotFoundError, ForbiddenError, InvalidStateError
+from core.pagination import paginate_queryset
 from core.middleware import get_correlation_id
 from core.utils import ensure_utc_isoformat
 from executions.models import (
@@ -111,12 +112,10 @@ class ScheduledExecutionsView(APIView):
             )
 
         qs = qs.order_by("-created_at")
-        total = qs.count()
-        page = (offset // limit) + 1
-        total_pages = (total + limit - 1) // limit if total > 0 else 1
 
-        items = list(qs[offset: offset + limit])
-        data_items = ScheduledExecutionListItemSerializer(items, many=True).data
+        # AC2: Story 26.11 — Utilisation utilitaire pagination
+        result = paginate_queryset(qs, offset=offset, limit=limit)
+        data_items = ScheduledExecutionListItemSerializer(result["items"], many=True).data
 
         actions_qs = ScheduledExecution.objects.values("action_id", "action__name")
         if (getattr(request.user, "profile", "") or "").lower() != "dbops":
@@ -130,12 +129,7 @@ class ScheduledExecutionsView(APIView):
         # AC1: Story 26.9 — Format standardisé (pas d'imbrication data.data)
         return Response({
             "data": data_items,
-            "pagination": {
-                "page": page,
-                "page_size": limit,
-                "total": total,
-                "total_pages": total_pages,
-            },
+            "pagination": result["pagination"],
             "available_actions": available_actions,
         })
 

@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.exceptions import BadRequestError
+from core.pagination import paginate_queryset
 from core.permissions import IsDBAOrDBOPS
 from executions.models import Execution, ExecutionStatus
 from executions.serializers import ExecutionSerializer
@@ -38,21 +39,8 @@ class PendingApprovalsView(APIView):
         if limit <= 0 or offset < 0:
             raise BadRequestError(code="BAD_REQUEST", message="Pagination invalide", details={"limit": limit, "offset": offset})
 
-        total = qs.count()
-        page = (offset // limit) + 1
-        total_pages = (total + limit - 1) // limit if limit else 1
+        # Code Review Fix (HIGH-2): Story 26.11 — Utilisation utilitaire pagination
+        result = paginate_queryset(qs, offset=offset, limit=limit)
+        data = ExecutionSerializer(result["items"], many=True).data
 
-        items = list(qs[offset: offset + limit])
-        data = ExecutionSerializer(items, many=True).data
-
-        return Response(
-            {
-                "data": data,
-                "pagination": {
-                    "page": page,
-                    "page_size": limit,
-                    "total": total,
-                    "total_pages": total_pages,
-                },
-            }
-        )
+        return Response({"data": data, "pagination": result["pagination"]})
