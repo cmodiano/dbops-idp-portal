@@ -52,8 +52,8 @@ jobs:
             -e ALLOWED_HOSTS=* \
             -p 8000:8000 \
             ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
-          # Wait for healthcheck to pass (max 30s)
-          for i in {1..6}; do
+          # Wait for healthcheck to pass (max 90s: Dockerfile uses start-period=30s + interval=30s)
+          for i in {1..18}; do
             sleep 5
             docker inspect backend-test --format='{{.State.Health.Status}}' 2>/dev/null | grep -q healthy && break
           done
