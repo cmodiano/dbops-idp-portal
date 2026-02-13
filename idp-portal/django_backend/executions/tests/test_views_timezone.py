@@ -17,9 +17,11 @@ class TestEnsureUtcIsoformatUsage:
     """Verify ensure_utc_isoformat is imported in all views that serialize datetimes."""
 
     def test_executions_views_imports_ensure_utc_isoformat(self):
-        """Verify executions/views.py imports ensure_utc_isoformat."""
-        import executions.views
-        assert hasattr(executions.views, "ensure_utc_isoformat")
+        """Verify executions/views sub-modules import ensure_utc_isoformat."""
+        import executions.views.execution_views
+        import executions.views.scheduled_views
+        assert hasattr(executions.views.execution_views, "ensure_utc_isoformat")
+        assert hasattr(executions.views.scheduled_views, "ensure_utc_isoformat")
 
     def test_audit_views_imports_ensure_utc_isoformat(self):
         """Verify audit/views.py imports ensure_utc_isoformat (if needed)."""

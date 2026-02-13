@@ -14,7 +14,7 @@ from executions.models import ScheduledExecution, ScheduledExecutionStatus, Recu
 from tests.factories import UserFactory
 
 
-@patch('executions.views._validate_environment_against_inventory')
+@patch('executions.views.scheduled_views._validate_environment_against_inventory')
 class ScheduledExecutionPutTests(TestCase):
     """Tests for PUT scheduled execution (Story 13.8)."""
 

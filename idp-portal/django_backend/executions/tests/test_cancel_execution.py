@@ -188,7 +188,7 @@ class TestCancelRemoteExecution:
         self.action = ActionFactory.create(status='published', integration=self.integration)
         self.client.force_authenticate(user=self.user)
 
-    @patch('executions.views.AAPAdapter')
+    @patch('executions.views.execution_views.AAPAdapter')
     def test_remote_cancel_called_for_running_with_job_id(self, MockAdapter):
         """2.6a: AAPAdapter.cancel_execution() called for RUNNING with platform_job_id."""
         mock_instance = MockAdapter.return_value
@@ -211,7 +211,7 @@ class TestCancelRemoteExecution:
         execution.refresh_from_db()
         assert execution.status == ExecutionStatus.CANCELLED
 
-    @patch('executions.views.AAPAdapter')
+    @patch('executions.views.execution_views.AAPAdapter')
     def test_remote_cancel_failure_still_cancels_locally(self, MockAdapter):
         """2.6b: If remote cancel fails, execution is still CANCELLED locally with warning."""
         mock_instance = MockAdapter.return_value
@@ -231,7 +231,7 @@ class TestCancelRemoteExecution:
         execution.refresh_from_db()
         assert execution.status == ExecutionStatus.CANCELLED
 
-    @patch('executions.views.AAPAdapter')
+    @patch('executions.views.execution_views.AAPAdapter')
     def test_remote_cancel_not_implemented_still_cancels(self, MockAdapter):
         """2.6c: If adapter raises NotImplementedError, execution still cancelled."""
         mock_instance = MockAdapter.return_value
@@ -259,7 +259,7 @@ class TestCancelRemoteExecution:
         )
         url = f'/api/v1/executions/{execution.id}/cancel/'
 
-        with patch('executions.views.AAPAdapter') as MockAdapter:
+        with patch('executions.views.execution_views.AAPAdapter') as MockAdapter:
             response = self.client.patch(url)
 
         assert response.status_code == 200

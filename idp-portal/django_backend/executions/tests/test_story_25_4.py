@@ -43,7 +43,7 @@ class TestStory254AllowedFlag(TestCase):
         allowed_targets = [
             {'name': 'srv-dev-01', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
         ]
-        with patch('executions.views.InventoryService') as MockInventory:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventory:
             mock_inst = MagicMock()
             mock_inst.list_targets_for_user.return_value = (allowed_targets, 1, False)
             MockInventory.return_value = mock_inst
@@ -65,7 +65,7 @@ class TestStory254AllowedFlag(TestCase):
         allowed_targets = [
             {'name': 'srv-staging-01', 'environment': 'staging', 'target_type': 'server', 'metadata': None},
         ]
-        with patch('executions.views.InventoryService') as MockInventory:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventory:
             mock_inst = MagicMock()
             mock_inst.list_targets_for_user.return_value = (allowed_targets, 1, False)
             MockInventory.return_value = mock_inst
@@ -110,7 +110,7 @@ class TestStory254EnvConfigFlags(TestCase):
         allowed_targets = [
             {'name': 'srv-dev-01', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
         ]
-        with patch('executions.views.InventoryService') as MockInventory:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventory:
             mock_inst = MagicMock()
             mock_inst.list_targets_for_user.return_value = (allowed_targets, 1, False)
             MockInventory.return_value = mock_inst
@@ -158,7 +158,7 @@ class TestStory254BackwardCompatibility(TestCase):
         allowed_targets = [
             {'name': 'srv-dev-01', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
         ]
-        with patch('executions.views.InventoryService') as MockInventory:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventory:
             mock_inst = MagicMock()
             mock_inst.list_targets_for_user.return_value = (allowed_targets, 1, False)
             MockInventory.return_value = mock_inst
@@ -195,7 +195,7 @@ class TestStory254DefensiveInvalidChangeTypeConfig(TestCase):
         allowed_targets = [
             {'name': 'srv-dev-01', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
         ]
-        with patch('executions.views.InventoryService') as MockInventory:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventory:
             mock_inst = MagicMock()
             mock_inst.list_targets_for_user.return_value = (allowed_targets, 1, False)
             MockInventory.return_value = mock_inst

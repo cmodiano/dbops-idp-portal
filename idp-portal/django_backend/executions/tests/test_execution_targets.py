@@ -227,7 +227,7 @@ class ExecutionTargetCreationFlowTest(TestCase):
             {'name': 'srv-dev-01', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
             {'name': 'srv-dev-02', 'environment': 'dev', 'target_type': 'server', 'metadata': None, 'engine_type': 'oracle'},
         ]
-        with patch('executions.views.InventoryService') as MockInventory:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventory:
             mock_inst = MagicMock()
             mock_inst.list_targets_for_user.return_value = (allowed_targets, 2, False)
             MockInventory.return_value = mock_inst
@@ -263,7 +263,7 @@ class ExecutionTargetCreationFlowTest(TestCase):
             name='No Target Action', category='Provisioning', engine='Oracle', platform='AAP',
             status='published', requires_target=False,
         )
-        with patch('executions.views._validate_environment_against_inventory'):
+        with patch('executions.validators.payload_validator._validate_environment_against_inventory'):
             response = self.client.post('/api/v1/executions/', {
                 'action_id': action_no_target.id,
                 'environment': 'dev',
@@ -277,7 +277,7 @@ class ExecutionTargetCreationFlowTest(TestCase):
         allowed_targets = [
             {'name': 'srv-01', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
         ]
-        with patch('executions.views.InventoryService') as MockInventory:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventory:
             mock_inst = MagicMock()
             mock_inst.list_targets_for_user.return_value = (allowed_targets, 1, False)
             MockInventory.return_value = mock_inst
@@ -368,7 +368,7 @@ class ExecutionTargetRBACTest(TestCase):
         allowed_targets = [
             {'name': 'srv-dev-01', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
         ]
-        with patch('executions.views.InventoryService') as MockInventory:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventory:
             mock_inst = MagicMock()
             mock_inst.list_targets_for_user.return_value = (allowed_targets, 1, False)
             MockInventory.return_value = mock_inst

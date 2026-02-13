@@ -1,0 +1,49 @@
+"""Package executions.views — backward-compatible exports.
+
+Ce package réexporte toutes les vues pour que les imports existants
+(ex: ``from executions.views import ExecutionsView``) fonctionnent sans modification.
+"""
+from .list_views import (
+    ExecutionsListView,
+    ExecutionStatsView,
+    ExecutionTimeSeriesView,
+    ExecutionTagsView,
+)
+from .execution_views import (
+    ExecutionsCreateView,
+    ExecutionDetailView,
+    ExecutionCancelView,
+    ExecutionStepsView,
+    ExecutionStepLogsView,
+)
+from .scheduled_views import (
+    ScheduledExecutionsView,
+    ScheduledExecutionUpdateView,
+    ScheduledExecutionRecurringPatternView,
+    ScheduledExecutionValidateCronView,
+    ScheduledExecutionCronNextExecutionsView,
+)
+from .approval_views import PendingApprovalsView
+
+
+class ExecutionsView(ExecutionsListView, ExecutionsCreateView):
+    """Combined view for GET (list) and POST (create) executions."""
+    pass
+
+
+__all__ = [
+    'ExecutionsView',
+    'ExecutionStatsView',
+    'ExecutionTimeSeriesView',
+    'ExecutionTagsView',
+    'ExecutionDetailView',
+    'ExecutionCancelView',
+    'ExecutionStepsView',
+    'ExecutionStepLogsView',
+    'PendingApprovalsView',
+    'ScheduledExecutionsView',
+    'ScheduledExecutionUpdateView',
+    'ScheduledExecutionRecurringPatternView',
+    'ScheduledExecutionValidateCronView',
+    'ScheduledExecutionCronNextExecutionsView',
+]

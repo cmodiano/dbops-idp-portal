@@ -86,7 +86,7 @@ class TestStory255MutexValidation(TestCase):
         allowed_targets = [
             {'name': 'srv-prod-01', 'environment': 'prod', 'target_type': 'server', 'metadata': None},
         ]
-        with patch('executions.views.InventoryService') as MockInventory:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventory:
             mock_inst = MagicMock()
             mock_inst.list_targets_for_user.return_value = (allowed_targets, 1, False)
             MockInventory.return_value = mock_inst
@@ -138,7 +138,7 @@ class TestStory255MutexValidation(TestCase):
         allowed_targets = [
             {'name': 'srv-prod-02', 'environment': 'prod', 'target_type': 'server', 'metadata': None},
         ]
-        with patch('executions.views.InventoryService') as MockInventory:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventory:
             mock_inst = MagicMock()
             mock_inst.list_targets_for_user.return_value = (allowed_targets, 1, False)
             MockInventory.return_value = mock_inst
@@ -189,7 +189,7 @@ class TestStory255MutexValidation(TestCase):
         allowed_targets = [
             {'name': 'srv-prod-99', 'environment': 'prod', 'target_type': 'server', 'metadata': None},
         ]
-        with patch('executions.views.InventoryService') as MockInventory:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventory:
             mock_inst = MagicMock()
             mock_inst.list_targets_for_user.return_value = (allowed_targets, 1, False)
             MockInventory.return_value = mock_inst
@@ -240,7 +240,7 @@ class TestStory255MutexValidation(TestCase):
         allowed_targets = [
             {'name': 'srv-prod-01', 'environment': 'prod', 'target_type': 'server', 'metadata': None},
         ]
-        with patch('executions.views.InventoryService') as MockInventory:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventory:
             mock_inst = MagicMock()
             mock_inst.list_targets_for_user.return_value = (allowed_targets, 1, False)
             MockInventory.return_value = mock_inst
@@ -282,7 +282,7 @@ class TestStory255MutexValidation(TestCase):
         allowed_targets = [
             {'name': 'srv-prod-01', 'environment': 'prod', 'target_type': 'server', 'metadata': None},
         ]
-        with patch('executions.views.InventoryService') as MockInventory:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventory:
             mock_inst = MagicMock()
             mock_inst.list_targets_for_user.return_value = (allowed_targets, 1, False)
             MockInventory.return_value = mock_inst
@@ -321,7 +321,7 @@ class TestStory255MutexValidation(TestCase):
         allowed_targets = [
             {'name': 'srv-prod-01', 'environment': 'prod', 'target_type': 'server', 'metadata': None},
         ]
-        with patch('executions.views.InventoryService') as MockInventory:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventory:
             mock_inst = MagicMock()
             mock_inst.list_targets_for_user.return_value = (allowed_targets, 1, False)
             MockInventory.return_value = mock_inst
@@ -364,7 +364,7 @@ class TestStory255MutexValidation(TestCase):
         allowed_targets = [
             {'name': 'srv-prod-01', 'environment': 'prod', 'target_type': 'server', 'metadata': None},
         ]
-        with patch('executions.views.InventoryService') as MockInventory:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventory:
             mock_inst = MagicMock()
             mock_inst.list_targets_for_user.return_value = (allowed_targets, 1, False)
             MockInventory.return_value = mock_inst
@@ -416,7 +416,7 @@ class TestStory255MutexValidation(TestCase):
             {'name': 'srv-prod-02', 'environment': 'prod', 'target_type': 'server', 'metadata': None},
             {'name': 'srv-prod-03', 'environment': 'prod', 'target_type': 'server', 'metadata': None},
         ]
-        with patch('executions.views.InventoryService') as MockInventory:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventory:
             mock_inst = MagicMock()
             mock_inst.list_targets_for_user.return_value = (allowed_targets, 2, False)
             MockInventory.return_value = mock_inst
@@ -452,7 +452,7 @@ class TestStory255MutexValidation(TestCase):
         allowed_targets = [
             {'name': 'srv-prod-01', 'environment': 'prod', 'target_type': 'server', 'metadata': None},
         ]
-        with patch('executions.views.InventoryService') as MockInventory:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventory:
             mock_inst = MagicMock()
             mock_inst.list_targets_for_user.return_value = (allowed_targets, 1, False)
             MockInventory.return_value = mock_inst
@@ -495,7 +495,7 @@ class TestStory255MutexValidation(TestCase):
         allowed_targets = [
             {'name': 'srv-prod-01', 'environment': 'prod', 'target_type': 'server', 'metadata': None},
         ]
-        with patch('executions.views.InventoryService') as MockInventory:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventory:
             mock_inst = MagicMock()
             mock_inst.list_targets_for_user.return_value = (allowed_targets, 1, False)
             MockInventory.return_value = mock_inst
@@ -547,7 +547,7 @@ class TestStory255MutexValidation(TestCase):
         allowed_targets = [
             {'name': 'srv-prod-01', 'environment': 'prod', 'target_type': 'server', 'metadata': None},
         ]
-        with patch('executions.views.InventoryService') as MockInventory:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventory:
             mock_inst = MagicMock()
             mock_inst.list_targets_for_user.return_value = (allowed_targets, 1, False)
             MockInventory.return_value = mock_inst
@@ -578,11 +578,12 @@ class TestStory255MutexValidation(TestCase):
         )
         
         # Mock inventory to validate environment
-        with patch('executions.views.InventoryService') as MockInventory:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventory, \
+             patch('executions.validators.payload_validator._validate_environment_against_inventory'):
             mock_inst = MagicMock()
             mock_inst.list_environments.return_value = ['dev', 'staging', 'prod']
             MockInventory.return_value = mock_inst
-            
+
             # Submit global action without targets
             response = self.client.post('/api/v1/executions/', {
                 'action_id': global_report.id,

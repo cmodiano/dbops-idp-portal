@@ -81,7 +81,7 @@ class ExecutionTargetRequiredTests(TestCase):
         allowed_targets = [
             {'name': 'srv-dev-01', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
         ]
-        with patch('executions.views.InventoryService') as MockInventoryService:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventoryService:
             mock_instance = MagicMock()
             mock_instance.list_targets_for_user.return_value = (allowed_targets, 1, False)
             MockInventoryService.return_value = mock_instance
@@ -103,7 +103,7 @@ class ExecutionTargetRequiredTests(TestCase):
             {'name': 'srv-dev-01', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
             {'name': 'srv-prod-01', 'environment': 'prod', 'target_type': 'server', 'metadata': None},
         ]
-        with patch('executions.views.InventoryService') as MockInventoryService:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventoryService:
             mock_instance = MagicMock()
             mock_instance.list_targets_for_user.return_value = (allowed_targets, 2, False)
             MockInventoryService.return_value = mock_instance
@@ -136,7 +136,7 @@ class ExecutionTargetRequiredTests(TestCase):
         allowed_targets = [
             {'name': 'srv-prod-01', 'environment': 'prod', 'target_type': 'server', 'metadata': None},
         ]
-        with patch('executions.views.InventoryService') as MockInventoryService:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventoryService:
             mock_instance = MagicMock()
             mock_instance.list_targets_for_user.return_value = (allowed_targets, 1, False)
             MockInventoryService.return_value = mock_instance
@@ -160,7 +160,7 @@ class ExecutionTargetRequiredTests(TestCase):
         allowed_targets = [
             {'name': 'srv-dev-01', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
         ]
-        with patch('executions.views.InventoryService') as MockInventoryService:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventoryService:
             mock_instance = MagicMock()
             mock_instance.list_targets_for_user.return_value = (allowed_targets, 1, False)
             MockInventoryService.return_value = mock_instance
@@ -184,12 +184,12 @@ class ExecutionTargetRequiredTests(TestCase):
         allowed_targets = [
             {'name': 'srv-dev-01', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
         ]
-        with patch('executions.views.InventoryService') as MockInventoryService:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventoryService:
             mock_instance = MagicMock()
             mock_instance.list_targets_for_user.return_value = (allowed_targets, 1, False)
             MockInventoryService.return_value = mock_instance
 
-            with patch('executions.views.exec_logger.warning') as mock_warning:
+            with patch('executions.validators.payload_validator.logger.warning') as mock_warning:
                 response = self.client.post('/api/v1/executions/', {
                     'action_id': self.action_with_target.id,
                     'environment': 'prod',  # Will be ignored

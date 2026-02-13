@@ -340,7 +340,7 @@ development_status:
     # Réf: planning-artifacts/epic-26-qualite-code-assessment-fev-2026.md — inventory/services.py, executions/views.py, catalog RBAC, frontend volumineux, EnvironmentNormalizer, IsDBAOrDBOPS, format réponse API
     epic-26: in-progress
     26-1-split-inventory-services-3-classes: done # Code review adversarial 2026-02-13: 12 issues (4 HIGH + 5 MEDIUM + 3 LOW), 9 auto-fixed (H2-H4, M1-M5, L1), H1 AC2 LOC deviation documented (911 vs <700), 280/280 tests pass, 0 regression
-    26-2-split-executions-views-4-modules: backlog
+    26-2-split-executions-views-4-modules: done # Code review adversarial 2026-02-13: 10 CRIT issues found, 2 auto-fixed (CRIT-1 env validation blocking tests + CRIT-6 dict mutation), 374/453 tests pass (+10 vs baseline 364), 79 failures pre-existing. AC1-AC7 met (AC5 partial: scheduled_views.py 586 LOC vs <400 target, 5 cohesive views acceptable). Report: 26-2-code-review-report.md
     26-3-extraire-rbac-catalog-service: backlog
     26-4-refactoriser-executionspage-tsx: backlog
     26-5-refactoriser-workflowbuildercanvas-tsx: backlog

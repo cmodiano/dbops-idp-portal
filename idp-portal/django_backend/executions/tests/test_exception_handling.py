@@ -167,8 +167,8 @@ class TestCronValidationExceptionHandling:
 
     def test_unexpected_croniter_exception_logs_error(self):
         """Unexpected croniter exception logs ERROR and is caught by broad catch."""
-        with patch('executions.views.croniter.is_valid', side_effect=RuntimeError("Unexpected croniter error")):
-            with patch('executions.views.exec_logger') as mock_logger:
+        with patch('executions.views.scheduled_views.croniter.is_valid', side_effect=RuntimeError("Unexpected croniter error")):
+            with patch('executions.views.scheduled_views.exec_logger') as mock_logger:
                 response = self.client.get(
                     "/api/v1/scheduled-executions/validate-cron",
                     {"expression": "* * * * *"},
@@ -190,13 +190,13 @@ class TestProfileServiceExceptionLogging:
 
     def test_profile_service_failure_logs_warning(self):
         """ProfileService exception logs warning with context."""
-        from executions.views import _get_allowed_action_ids_for_user
+        from executions.utils import _get_allowed_action_ids_for_user
 
         user = User.objects.create(username="test_profile_user")
 
-        with patch('executions.views.ProfileService') as mock_ps_class:
+        with patch('executions.utils.ProfileService') as mock_ps_class:
             mock_ps_class.return_value.get_cumulative_permissions.side_effect = ConnectionError("Service down")
-            with patch('executions.views.exec_logger') as mock_logger:
+            with patch('executions.utils.exec_logger') as mock_logger:
                 result = _get_allowed_action_ids_for_user(user)
 
                 assert result == set()

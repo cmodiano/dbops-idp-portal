@@ -92,7 +92,7 @@ class APIStandaloneExecutionTests(TestCase):
             {'name': 'srv-dev-01', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
         ]
 
-        with patch('executions.views.InventoryService') as MockInventoryService:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventoryService:
             MockInventoryService.return_value = self._mock_inventory_service(allowed_targets)
 
             response = self.client.post(
@@ -163,7 +163,7 @@ class APIStandaloneExecutionTests(TestCase):
         # No authorized targets for user
         allowed_targets = []
 
-        with patch('executions.views.InventoryService') as MockInventoryService:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventoryService:
             MockInventoryService.return_value = self._mock_inventory_service(allowed_targets)
 
             response = self.client.post(
@@ -242,7 +242,7 @@ class APIStandaloneExecutionTests(TestCase):
             {'name': 'srv-dev-01', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
             {'name': 'srv-prod-01', 'environment': 'prod', 'target_type': 'server', 'metadata': None},
         ]
-        with patch('executions.views.InventoryService') as MockInventoryService:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventoryService:
             MockInventoryService.return_value = self._mock_inventory_service(allowed_targets)
             response = self.client.post(
                 '/api/v1/executions',
@@ -310,7 +310,7 @@ class APIStandaloneExecutionTests(TestCase):
             {'name': 'srv-dev-01', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
         ]
 
-        with patch('executions.views.InventoryService') as MockInventoryService:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventoryService:
             MockInventoryService.return_value = self._mock_inventory_service(allowed_targets)
 
             # Create execution via API
@@ -349,7 +349,7 @@ class APIStandaloneExecutionTests(TestCase):
             {'name': 'srv-dev-01', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
         ]
 
-        with patch('executions.views.InventoryService') as MockInventoryService:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventoryService:
             MockInventoryService.return_value = self._mock_inventory_service(allowed_targets)
 
             # Create execution via API
@@ -390,7 +390,7 @@ class APIStandaloneExecutionTests(TestCase):
         ]
         correlation_id = 'test-correlation-id-audit-001'
 
-        with patch('executions.views.InventoryService') as MockInventoryService:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventoryService:
             MockInventoryService.return_value = self._mock_inventory_service(allowed_targets)
 
             response = self.client.post(
@@ -434,7 +434,7 @@ class APIStandaloneExecutionTests(TestCase):
             {'name': 'srv-dev-02', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
         ]
 
-        with patch('executions.views.InventoryService') as MockInventoryService:
+        with patch('executions.validators.target_validator.InventoryService') as MockInventoryService:
             MockInventoryService.return_value = self._mock_inventory_service(allowed_targets)
 
             response = self.client.post(
