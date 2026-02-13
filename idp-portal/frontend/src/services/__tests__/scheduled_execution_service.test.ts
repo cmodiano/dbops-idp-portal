@@ -11,9 +11,10 @@ import {
 } from '../scheduled_execution_service';
 import * as apiClient from '../api_client';
 
-// Mock the apiFetch function
+// Mock the apiFetch and apiFetchRaw functions
 vi.mock('../api_client', () => ({
   apiFetch: vi.fn(),
+  apiFetchRaw: vi.fn(),
 }));
 
 describe('scheduled_execution_service', () => {
@@ -134,7 +135,8 @@ describe('scheduled_execution_service', () => {
   });
 
   describe('listScheduledExecutions', () => {
-    it('lists scheduled executions with default pagination', async () => {
+    it('lists scheduled executions with default pagination (AC3: Story 26.9)', async () => {
+      // AC3: Response uses flat format — apiFetchRaw returns full body
       const mockResponse = {
         data: [
           {
@@ -147,11 +149,11 @@ describe('scheduled_execution_service', () => {
         pagination: { page: 1, page_size: 50, total: 1, total_pages: 1 },
       };
 
-      vi.mocked(apiClient.apiFetch).mockResolvedValue(mockResponse);
+      vi.mocked(apiClient.apiFetchRaw).mockResolvedValue(mockResponse);
 
       const result = await listScheduledExecutions();
 
-      expect(apiClient.apiFetch).toHaveBeenCalledWith(
+      expect(apiClient.apiFetchRaw).toHaveBeenCalledWith(
         '/scheduled-executions?limit=50&offset=0'
       );
       expect(result.data).toHaveLength(1);
@@ -163,7 +165,7 @@ describe('scheduled_execution_service', () => {
         pagination: { page: 1, page_size: 50, total: 0, total_pages: 1 },
       };
 
-      vi.mocked(apiClient.apiFetch).mockResolvedValue(mockResponse);
+      vi.mocked(apiClient.apiFetchRaw).mockResolvedValue(mockResponse);
 
       await listScheduledExecutions(
         { status: 'pending', action_id: 5 },
@@ -171,7 +173,7 @@ describe('scheduled_execution_service', () => {
         10
       );
 
-      expect(apiClient.apiFetch).toHaveBeenCalledWith(
+      expect(apiClient.apiFetchRaw).toHaveBeenCalledWith(
         '/scheduled-executions?status=pending&action_id=5&limit=20&offset=10'
       );
     });
@@ -192,12 +194,10 @@ describe('scheduled_execution_service', () => {
             },
           },
         ],
-        total: 1,
-        limit: 50,
-        offset: 0,
+        pagination: { page: 1, page_size: 50, total: 1, total_pages: 1 },
       };
 
-      vi.mocked(apiClient.apiFetch).mockResolvedValue(mockResponse);
+      vi.mocked(apiClient.apiFetchRaw).mockResolvedValue(mockResponse);
 
       const result = await listScheduledExecutions();
 

@@ -322,6 +322,78 @@
 
 ---
 
+### Story 26.13 : Corriger tous les tests frontend en échec
+
+**En tant que** développeur,  
+**je veux** corriger tous les tests frontend actuellement en échec,  
+**afin de** avoir une suite de tests frontend 100 % verte et garantir la non-régression.
+
+**Contexte :** Plusieurs stories Epic 26 ont documenté des échecs de tests pré-existants (ExecutionsPage table headers, WorkflowGraph/d3, etc.). Ces échecs bloquent la confiance dans la CI et la détection des régressions.
+
+**Acceptance Criteria:**
+- **Given** la suite de tests frontend (`npm test` ou `npm run test`)
+- **When** tous les tests sont exécutés
+- **Then** 100 % des tests passent (0 failure)
+- **And** les échecs documentés sont corrigés (setup, mocks, assertions obsolètes)
+- **And** aucun test n'est désactivé ou marqué skip sans justification documentée
+- **And** un rapport de baseline (nombre de tests, durée) est documenté pour suivi futur
+
+**Fichiers concernés :**
+- `frontend/src/**/*.test.tsx`, `*.spec.tsx`
+- Fichiers de setup : `jest.config`, `setupTests`, mocks
+- Référence : KNOWN_ISSUES.md (backend) et rapports code-review Epic 26 (frontend)
+
+---
+
+### Story 26.14 : Corriger tous les tests backend en échec
+
+**En tant que** développeur,  
+**je veux** corriger tous les tests backend actuellement en échec,  
+**afin de** avoir une suite de tests backend 100 % verte et garantir la non-régression.
+
+**Contexte :** Le fichier `idp-portal/django_backend/tests/KNOWN_ISSUES.md` et les rapports Epic 26 documentent des échecs pré-existants (inventory test_views.py 301 redirect, test_environments.py fixtures, catalog User fixtures, etc.). Ces échecs empêchent une CI fiable.
+
+**Acceptance Criteria:**
+- **Given** la suite de tests backend (`pytest`)
+- **When** tous les tests sont exécutés
+- **Then** 100 % des tests passent (0 failure)
+- **And** les échecs documentés dans KNOWN_ISSUES.md sont corrigés ou documentés comme obsolètes (avec ticket de suppression)
+- **And** les fixtures (UserFactory, ActionFactory, etc.) sont alignées et réutilisables
+- **And** aucun test n'est marqué `@pytest.mark.skip` sans justification dans KNOWN_ISSUES.md
+- **And** KNOWN_ISSUES.md est mis à jour : section "Resolved" pour les corrections, ou suppression si vide
+
+**Fichiers concernés :**
+- `idp-portal/django_backend/**/tests/**`
+- `idp-portal/django_backend/tests/KNOWN_ISSUES.md`
+- Factories : `core/factories.py`, fixtures partagées
+
+---
+
+### Story 26.15 : Corriger toutes les dépréciations et warnings des linters
+
+**En tant que** développeur,  
+**je veux** éliminer toutes les dépréciations et warnings signalés par les linters (ESLint, Ruff, mypy, etc.),  
+**afin de** avoir un codebase propre, sans bruit dans les logs de build, et conforme aux bonnes pratiques actuelles.
+
+**Contexte :** Les mises à jour de dépendances (Ant Design 6, React 19, etc.) et l'évolution des règles ESLint/Ruff génèrent des warnings (props dépréciées, exhaustive-deps, etc.) qui s'accumulent et masquent les vrais problèmes.
+
+**Acceptance Criteria:**
+- **Given** les linters sont exécutés (ESLint, Ruff, mypy)
+- **When** le build et les checks sont lancés
+- **Then** 0 warning et 0 erreur de linter (hors exclusions documentées)
+- **And** les props Ant Design dépréciées sont migrées vers les API actuelles
+- **And** les règles `exhaustive-deps` (React hooks) sont respectées ou justifiées
+- **And** Ruff ne signale aucune violation (ou les violations sont corrigées)
+- **And** mypy en mode progressif ne génère pas de nouvelles erreurs
+- **And** un document ou section README liste les règles linter actives et les exclusions justifiées
+
+**Fichiers concernés :**
+- Configuration : `.eslintrc`, `eslint.config.js`, `pyproject.toml`, `ruff.toml`
+- Code source : `frontend/src/**`, `idp-portal/django_backend/**`
+- Pre-commit : `.pre-commit-config.yaml`
+
+---
+
 ## Priorisation recommandée
 
 ### Court terme (1-2 sprints)
@@ -341,6 +413,7 @@
 | 8 | 26.4 — Extraire colonnes ExecutionsPage | Lisibilité | S |
 | 9 | 26.5, 26.6 — Refactor WorkflowBuilder + CalendarPage | Maintenabilité | M |
 | 10 | 26.11, 26.12 — Pagination + RBAC unifiés | DRY | S |
+| 11 | 26.13, 26.14, 26.15 — Tests verts + Linters propres | Fiabilité CI | M |
 
 ---
 

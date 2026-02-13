@@ -5,7 +5,7 @@
  * toggle recurring patterns, and validate cron expressions.
  */
 
-import { apiFetch } from './api_client';
+import { apiFetch, apiFetchRaw } from './api_client';
 import type {
   ScheduledExecutionCreateRequest,
   ScheduledExecutionUpdateRequest,
@@ -71,7 +71,8 @@ export async function listScheduledExecutions(
   const queryString = params.toString();
   const url = `/scheduled-executions${queryString ? `?${queryString}` : ''}`;
 
-  return apiFetch<ScheduledExecutionListResponse>(url);
+  // AC3: Story 26.9 — Use apiFetchRaw for flat response format (no data.data nesting)
+  return apiFetchRaw<ScheduledExecutionListResponse>(url);
 }
 
 /**

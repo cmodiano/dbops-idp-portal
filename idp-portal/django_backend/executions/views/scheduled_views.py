@@ -127,7 +127,8 @@ class ScheduledExecutionsView(APIView):
             for r in actions_qs
         ]
 
-        inner = {
+        # AC1: Story 26.9 — Format standardisé (pas d'imbrication data.data)
+        return Response({
             "data": data_items,
             "pagination": {
                 "page": page,
@@ -136,8 +137,7 @@ class ScheduledExecutionsView(APIView):
                 "total_pages": total_pages,
             },
             "available_actions": available_actions,
-        }
-        return Response({"data": inner})
+        })
 
     @extend_schema(tags=['scheduling'], summary='Créer une exécution planifiée', responses={201: ScheduledExecutionSerializer})
     def post(self, request):
@@ -225,6 +225,7 @@ class ScheduledExecutionUpdateView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(tags=['scheduling'], summary='Annuler ou marquer exécutée une scheduled execution', responses={200: ScheduledExecutionSerializer})
     def patch(self, request, scheduled_execution_id: int):
         try:
             se = ScheduledExecution.objects.select_related("action", "user").select_related("recurringpattern").get(
@@ -263,20 +264,11 @@ class ScheduledExecutionUpdateView(APIView):
                     message="Exécution planifiée introuvable",
                     details={"scheduled_execution_id": scheduled_execution_id},
                 )
-            se = ScheduledExecution.objects.select_related("action").get(id=scheduled_execution_id)
-            return Response(
-                {
-                    "data": {
-                        "scheduled_execution_id": se.id,
-                        "action_id": se.action_id,
-                        "action_name": se.action.name if se.action else None,
-                        "environment": se.environment,
-                        "status": se.status,
-                        "scheduled_at": ensure_utc_isoformat(se.scheduled_at),
-                        "created_at": ensure_utc_isoformat(se.created_at),
-                    }
-                }
+            # AC2: Story 26.9 — Use ScheduledExecutionSerializer for consistency
+            se = ScheduledExecution.objects.select_related("action", "user").select_related("recurringpattern").get(
+                id=scheduled_execution_id
             )
+            return Response({"data": ScheduledExecutionSerializer(se).data})
 
         if new_status == "executed":
             if execution_id is None:
@@ -305,20 +297,11 @@ class ScheduledExecutionUpdateView(APIView):
                 se.execution_id = execution_id_int
                 se.updated_at = timezone.now()
                 se.save(update_fields=["status", "execution_id", "updated_at"])
-            se = ScheduledExecution.objects.select_related("action").get(id=scheduled_execution_id)
-            return Response(
-                {
-                    "data": {
-                        "scheduled_execution_id": se.id,
-                        "action_id": se.action_id,
-                        "action_name": se.action.name if se.action else None,
-                        "environment": se.environment,
-                        "status": se.status,
-                        "scheduled_at": ensure_utc_isoformat(se.scheduled_at),
-                        "created_at": ensure_utc_isoformat(se.created_at),
-                    }
-                }
+            # AC2: Story 26.9 — Use ScheduledExecutionSerializer for consistency
+            se = ScheduledExecution.objects.select_related("action", "user").select_related("recurringpattern").get(
+                id=scheduled_execution_id
             )
+            return Response({"data": ScheduledExecutionSerializer(se).data})
 
         raise BadRequestError(code="INVALID_STATUS", message="Statut invalide", details={"status": new_status})
 
