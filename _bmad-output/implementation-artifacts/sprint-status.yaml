@@ -350,7 +350,7 @@ development_status:
     26-9-standardiser-format-reponse-api: done # 2026-02-13: data.data supprimé, serializer PATCH, apiFetchRaw frontend, 9 backend + 9 frontend tests
     26-10-renommer-fonctions-underscore-exportees: done # 2026-02-13: 14 fonctions renommées (retrait _), 15 fichiers modifiés, 48/48 test_utils pass, 0 régression — Code review: 4 HIGH/MEDIUM issues auto-fixed (docstrings Story 26.10, patch path, commentaire AC2, headers tests)
     26-11-standardiser-pagination-utilitaire: done
-    26-12-unifier-checks-rbac-permission-mixin: backlog
+    26-12-unifier-checks-rbac-permission-mixin: done # 2026-02-13: Code review adversarial — 8 HIGH + 4 MEDIUM issues auto-fixés, refactoring has_object_permission() (owner-first optimization), parametrize tests, edge case added, commentaires clarifiés, 46 backend + 9 frontend tests = 55/55 ✅
     26-13-corriger-tous-tests-frontend-echec: backlog
     26-14-corriger-tous-tests-backend-echec: backlog
     26-15-corriger-deprecations-warnings-linters: backlog

@@ -33,6 +33,7 @@ from executions.serializers import (
     RecurringPatternSerializer,
 )
 from core.environment import EnvironmentHelper
+from core.permissions import IsDBAOrDBOPS
 from executions.services import SchedulingService
 from executions.utils import (
     parse_int,
@@ -48,6 +49,9 @@ from drf_spectacular.utils import extend_schema
 import structlog
 
 exec_logger = structlog.get_logger(__name__)
+
+# AC2: Story 26.12 — Instance shared across views for owner-or-admin object-level checks
+_dba_permission = IsDBAOrDBOPS()
 
 
 class ScheduledExecutionsView(APIView):
@@ -74,7 +78,9 @@ class ScheduledExecutionsView(APIView):
         platform_filter = request.query_params.get("platform")
 
         qs = ScheduledExecution.objects.select_related("action", "user").select_related("recurringpattern")
-        if (getattr(request.user, "profile", "") or "").lower() != "dbops":
+        # Story 26.12 — View-level permission: admins see all, non-admins see only allowed actions
+        # Note: This uses has_permission() (view-level), not has_object_permission() (object-level)
+        if not _dba_permission.has_permission(request, self):
             allowed_action_ids = get_allowed_action_ids_for_user(request.user)
             if allowed_action_ids is not None:
                 qs = qs.filter(action_id__in=allowed_action_ids)
@@ -118,7 +124,8 @@ class ScheduledExecutionsView(APIView):
         data_items = ScheduledExecutionListItemSerializer(result["items"], many=True).data
 
         actions_qs = ScheduledExecution.objects.values("action_id", "action__name")
-        if (getattr(request.user, "profile", "") or "").lower() != "dbops":
+        # Story 26.12 — View-level permission: admins see all actions, non-admins see only their own
+        if not _dba_permission.has_permission(request, self):
             actions_qs = actions_qs.filter(user_id=request.user.id)
         actions_qs = actions_qs.distinct().order_by("action__name")
         available_actions = [
@@ -232,7 +239,8 @@ class ScheduledExecutionUpdateView(APIView):
                 details={"scheduled_execution_id": scheduled_execution_id},
             )
 
-        if (getattr(request.user, "profile", "") or "").lower() != "dbops" and se.user_id != request.user.id:
+        # Story 26.12 — Object-level permission: owner OR admin can modify
+        if not _dba_permission.has_object_permission(request, self, se):
             raise ForbiddenError(
                 code="PERMISSION_DENIED",
                 message="Vous n'avez pas la permission de modifier cette exécution planifiée",
@@ -312,7 +320,8 @@ class ScheduledExecutionUpdateView(APIView):
                 details={"scheduled_execution_id": scheduled_execution_id},
             )
 
-        if (getattr(request.user, "profile", "") or "").lower() != "dbops" and se.user_id != request.user.id:
+        # Story 26.12 — Object-level permission: owner OR admin can modify
+        if not _dba_permission.has_object_permission(request, self, se):
             raise ForbiddenError(
                 code="PERMISSION_DENIED",
                 message="Vous n'avez pas la permission de modifier cette exécution planifiée",
@@ -471,7 +480,8 @@ class ScheduledExecutionRecurringPatternView(APIView):
                 details={"scheduled_execution_id": scheduled_execution_id},
             )
 
-        if (getattr(request.user, "profile", "") or "").lower() != "dbops" and se.user_id != request.user.id:
+        # AC2: Story 26.12 — owner-or-admin check via IsDBAOrDBOPS permission
+        if not _dba_permission.has_object_permission(request, self, se):
             raise ForbiddenError(
                 code="PERMISSION_DENIED",
                 message="Vous n'avez pas la permission de modifier cette récurrence",

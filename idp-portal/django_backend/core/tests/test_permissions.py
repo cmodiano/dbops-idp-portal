@@ -464,3 +464,28 @@ class TestIsDBAOrDBOPSHasObjectPermission:
         obj_user.id = 42
         obj.user = obj_user
         assert IsDBAOrDBOPS().has_object_permission(request, None, obj) is True
+
+    @pytest.mark.parametrize("profile", ["dbops", "dba", "dba_applicatif", "dba_infrastructure"])
+    def test_has_object_permission_each_admin_profile(self, profile):
+        """Story 26.12 AC#3: Each admin profile can access any object (non-owner)."""
+        user = _make_user(profile=profile, id=1)
+        request = _make_request(user)
+        obj = MagicMock()
+        obj.user_id = 999  # Different owner
+        assert IsDBAOrDBOPS().has_object_permission(request, None, obj) is True
+
+    @pytest.mark.parametrize("profile", ["business", "viewer", "dba_readonly"])
+    def test_has_object_permission_non_owner_non_admin_profiles(self, profile):
+        """Story 26.12 AC#3: Non-admin profiles cannot access other users' objects."""
+        user = _make_user(profile=profile, id=1)
+        request = _make_request(user)
+        obj = MagicMock()
+        obj.user_id = 999
+        assert IsDBAOrDBOPS().has_object_permission(request, None, obj) is False
+
+    def test_has_object_permission_no_user_id_or_user(self):
+        """Edge case: Object with neither user_id nor user attribute is denied."""
+        user = _make_user(profile="business", id=42)
+        request = _make_request(user)
+        obj = MagicMock(spec=[])  # No attributes at all
+        assert IsDBAOrDBOPS().has_object_permission(request, None, obj) is False

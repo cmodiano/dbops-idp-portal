@@ -29,7 +29,7 @@ class IsDBAOrDBOPS(permissions.BasePermission):
 
     Voir aussi :
     - `DBOPSProfilePermission` : permission stricte DBOPS uniquement (admin endpoints)
-    - `IsOwnerOrDBA` mixin : helper pour pattern owner-or-admin (Story 26.12)
+    - Pour pattern owner-or-admin : utiliser `has_object_permission()` directement (Story 26.12)
 
     Exemples :
         # View-level permission (requiert DBA/DBOPS pour tous GET/POST/etc.)
@@ -106,14 +106,17 @@ class IsDBAOrDBOPS(permissions.BasePermission):
         Returns:
             True si user est owner OU a permission admin.
             False sinon.
-        """
-        # Si user a déjà permission admin (has_permission), autoriser
-        if self.has_permission(request, view):
-            return True
 
-        # Sinon, vérifier ownership
+        Performance: Owner check first (fast ID comparison), then admin check
+        (expensive AD/profile lookups). 99% of requests are from owners.
+        """
+        # Fast path: Check ownership first (cheap ID comparison)
         obj_user_id = getattr(obj, 'user_id', None) or getattr(getattr(obj, 'user', None), 'id', None)
         if obj_user_id and obj_user_id == request.user.id:
+            return True
+
+        # Slow path: Check admin permission (DB queries, AD groups, etc.)
+        if self.has_permission(request, view):
             return True
 
         return False
