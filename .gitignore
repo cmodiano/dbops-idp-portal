@@ -5,3 +5,6 @@
 # Transient AI/code-review session artifacts (do not commit)
 CODE_REVIEW_*_FINDINGS.md
 
+# Claude per-developer local settings (user-specific, do not share)
+.claude/settings.local.json
+
