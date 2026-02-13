@@ -8,8 +8,7 @@ from drf_spectacular.utils import extend_schema_field, extend_schema_serializer,
 from drf_spectacular.types import OpenApiTypes
 from catalog import models
 from catalog.models import (
-    Action, Tag, ActionTag,
-    ActionStatus, ActionEngine, ActionPlatform, ActionItemType
+    Action, Tag, ActionStatus, ActionItemType
 )
 from reference.models import RefEngine, RefPlatform, RefCategory
 

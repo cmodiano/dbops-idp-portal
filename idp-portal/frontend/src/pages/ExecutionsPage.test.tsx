@@ -26,7 +26,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within, act, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, within, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { App } from 'antd';
@@ -35,7 +35,7 @@ import { AuthProvider } from '../contexts/AuthContext';
 import { ThemeProvider } from '../contexts/ThemeContext';
 import * as executionService from '../services/execution_service';
 import { getIntegrations } from '../services/integrations_service';
-import type { ExecutionResponse, ExecutionStepResponse, DashboardStats } from '../types/api';
+import type { ExecutionResponse, ExecutionStepResponse } from '../types/api';
 
 // Mock App.useApp() to provide notification/message/modal without requiring <App> context
 const mockNotification = {
@@ -72,11 +72,6 @@ vi.mock('../components/catalog/ExecutionWizard', () => ({
 vi.mock('../hooks/useWebSocket', () => ({
   useWebSocket: () => ({ steps: [], execution: null, loading: false, error: null }),
 }));
-
-/** Helper to wrap component with ThemeProvider (Story 8.9: ExecutionsTabs needs ThemeContext) */
-function TestWrapper({ children }: { children: React.ReactNode }) {
-  return <ThemeProvider>{children}</ThemeProvider>;
-}
 
 /** Mock auth session with profile */
 function mockAuthSession(profile: string) {
@@ -352,7 +347,6 @@ describe('ExecutionsPage', () => {
       const firstDataRow = rows[1];
       expect(within(firstDataRow).getByText('Apply Patch')).toBeInTheDocument();
       // Story 9.9: Status is now a Badge, not text. Check for processing badge in the row.
-      expect(within(firstDataRow).queryByText('.ant-badge-status-processing')).not.toBeNull;
       const processingBadge = firstDataRow.querySelector('.ant-badge-status-processing');
       expect(processingBadge).toBeInTheDocument();
     });

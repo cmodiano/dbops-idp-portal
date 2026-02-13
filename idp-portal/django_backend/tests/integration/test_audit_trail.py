@@ -14,8 +14,8 @@ from idp_auth.models import User
 from catalog.models import Action, ActionStatus
 from catalog.services import CatalogService
 from integrations.models import Integration
-from profiles.models import Profile, ProfileActionPermission
-from executions.models import Execution, ExecutionStatus, ScheduledExecution, ScheduledExecutionStatus
+from profiles.models import Profile
+from executions.models import Execution, ExecutionStatus
 from core.models import AuditLog, AuditActionType, AuditEntityType
 
 

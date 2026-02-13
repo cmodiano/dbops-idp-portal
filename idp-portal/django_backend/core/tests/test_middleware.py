@@ -3,12 +3,11 @@ Tests for core middleware.
 Story M.8 - Task 10: Tests for RequestResponseLoggingMiddleware.
 """
 
-import json
 import uuid
 from unittest.mock import patch, MagicMock
 
 import pytest
-from django.test import TestCase, RequestFactory, override_settings
+from django.test import TestCase, RequestFactory
 from django.http import HttpResponse, HttpResponseServerError
 
 from core.middleware import (

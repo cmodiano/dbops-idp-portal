@@ -9,7 +9,7 @@ Tests cover:
 
 import threading
 import time
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 from django.core.cache import cache

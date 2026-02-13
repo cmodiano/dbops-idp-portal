@@ -13,7 +13,7 @@ from rest_framework import status
 from idp_auth.models import User
 from catalog.models import Action, ActionStatus
 from integrations.models import Integration
-from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
+from profiles.models import Profile, ProfileActionPermission
 from executions.models import Execution, ExecutionStatus
 
 
@@ -434,7 +434,6 @@ class TestRBACMultiProfileAccumulation(TestCase):
 
     def test_most_permissive_wins(self):
         """Test that ALL permission type overrides LIST."""
-        import json
 
         # Create a third profile with ALL permissions
         profile3 = Profile.objects.create(
@@ -521,7 +520,7 @@ class TestDataIsolation(TestCase):
 
     def test_admin_can_see_all_executions(self):
         """Test that admin (DBOPS) can see all executions."""
-        admin_user = User.objects.create(username='isolation_admin', profile='DBOPS')
+        User.objects.create(username='isolation_admin', profile='DBOPS')
 
         # Create executions for different users
         Execution.objects.create(
@@ -618,7 +617,6 @@ class TestNonSuperuserDBOPSAccessViaADGroup(TestCase):
 
         self.client.force_authenticate(user=superuser)
 
-        import logging
         with override_settings(ALLOW_SUPERUSER_FALLBACK=True):
             # Story 22.2 LOW-2: Django 5.2.11 supports assertNoLogs, no fallback needed
             with self.assertNoLogs('core.permissions', level='WARNING'):
@@ -659,7 +657,6 @@ class TestNonSuperuserDBOPSAccessViaADGroup(TestCase):
 
         self.client.force_authenticate(user=superuser)
 
-        import logging
         with override_settings(ALLOW_SUPERUSER_FALLBACK=True):
             with self.assertLogs('core.permissions', level='WARNING') as logs:
                 response = self.client.get('/api/v1/admin/actions/')

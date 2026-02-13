@@ -93,6 +93,7 @@ function WorkflowBuilderCanvasInner({
   const { screenToFlowPosition, fitView } = useReactFlow();
 
   // Convert initial steps to React Flow format
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- Intentional: only compute on mount, steps changes handled via parent re-render
   const initial = useMemo(() => workflowStepsToReactFlow(steps), []);
   const [nodes, setNodes, onNodesChange] = useNodesState(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initial.edges);
@@ -328,7 +329,7 @@ function WorkflowBuilderCanvasInner({
 
   // Handle edges delete
   const onEdgesDelete = useCallback(
-    (_deletedEdges: Edge[]) => {
+    () => {
       if (disabled) return;
     },
     [disabled]

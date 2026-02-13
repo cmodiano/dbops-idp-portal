@@ -82,7 +82,7 @@ export const ActionPalette: React.FC<ActionPaletteProps> = ({ disabled = false }
             <Spin size="small" />
           </div>
         )}
-        {error && <Alert type="error" message={error} showIcon />}
+        {error && <Alert type="error" title={error} showIcon />}
         {!loading && !error && filtered.length === 0 && (
           <Text type="secondary" style={{ fontSize: 12 }}>
             Aucune action disponible

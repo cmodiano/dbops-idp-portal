@@ -41,8 +41,8 @@ export interface IntegrationFormProps {
   onSuccess?: (integration: IntegrationResponse) => void;
 }
 
-/** URL pattern: must start with http(s):// and have at least one valid hostname character. */
-const URL_PATTERN = /^https?:\/\/[a-zA-Z0-9][-a-zA-Z0-9]*(\.[a-zA-Z0-9][-a-zA-Z0-9]*)*.*$/;
+/** URL pattern: must start with http(s):// and have a valid hostname. */
+const URL_PATTERN = /^https?:\/\/[a-zA-Z0-9][-a-zA-Z0-9.]*[a-zA-Z0-9]/;
 
 export function IntegrationForm({
   open,
@@ -61,7 +61,7 @@ export function IntegrationForm({
   const [fileList, setFileList] = useState<UploadFile[]>([]);
 
   // Story 24.2 AC1: Fetch integration types from backend catalogue
-  const { types: integrationTypes, loading: loadingTypes, error: errorTypes, isFallback } = useIntegrationTypes();
+  const { types: integrationTypes, loading: loadingTypes, isFallback } = useIntegrationTypes();
 
   const watchIcon = Form.useWatch('icon', form);
   const watchType = Form.useWatch('type', form);

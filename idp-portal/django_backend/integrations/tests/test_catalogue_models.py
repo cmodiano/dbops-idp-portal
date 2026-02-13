@@ -6,7 +6,7 @@ import json
 import pytest
 from django.db import IntegrityError
 
-from integrations.models import IntegrationTypeCatalogue, IntegrationAction
+from integrations.models import IntegrationAction
 from tests.factories import IntegrationTypeCatalogueFactory, IntegrationActionFactory
 
 
@@ -67,8 +67,8 @@ class TestIntegrationActionModel:
 
     def test_foreign_key_relation(self):
         t = IntegrationTypeCatalogueFactory(code='sn')
-        a1 = IntegrationActionFactory(integration_type=t, action_code='a1')
-        a2 = IntegrationActionFactory(integration_type=t, action_code='a2')
+        IntegrationActionFactory(integration_type=t, action_code='a1')
+        IntegrationActionFactory(integration_type=t, action_code='a2')
         assert t.actions.count() == 2
 
     def test_cascade_delete(self):

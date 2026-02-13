@@ -4,7 +4,7 @@ Tests for idp_auth managers (UserManager).
 
 import pytest
 from django.test import TestCase
-from idp_auth.models import User, UserManager
+from idp_auth.models import User
 
 
 @pytest.mark.django_db

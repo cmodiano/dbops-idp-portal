@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from rest_framework import serializers
-from drf_spectacular.utils import extend_schema_serializer, inline_serializer
+from drf_spectacular.utils import extend_schema_serializer
 
 from catalog.models import Action
 from core.utils import ensure_utc_isoformat

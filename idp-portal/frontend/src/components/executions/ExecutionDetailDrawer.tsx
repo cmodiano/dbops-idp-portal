@@ -51,7 +51,7 @@ export const ExecutionDetailDrawer: React.FC<ExecutionDetailDrawerProps> = ({
         <ErrorBoundary
           fallback={(err, resetError) => (
             <div style={{ padding: 16 }}>
-              <Alert type="error" showIcon message="Erreur d'affichage du workflow" description={err.message} />
+              <Alert type="error" showIcon title="Erreur d'affichage du workflow" description={err.message} />
               <Button onClick={resetError} style={{ marginTop: 8 }}>Réessayer</Button>
             </div>
           )}
@@ -67,7 +67,7 @@ export const ExecutionDetailDrawer: React.FC<ExecutionDetailDrawerProps> = ({
         <ErrorBoundary
           fallback={(err, resetError) => (
             <div style={{ padding: 16 }}>
-              <Alert type="error" showIcon message="Erreur d'affichage de la timeline" description={err.message} />
+              <Alert type="error" showIcon title="Erreur d'affichage de la timeline" description={err.message} />
               <Button onClick={resetError} style={{ marginTop: 8 }}>Réessayer</Button>
             </div>
           )}

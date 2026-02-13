@@ -7,7 +7,6 @@ Story M.8 - Task 9: Structured logging with structlog.
 import structlog
 
 from django.db import transaction
-from django.db.models import Q, Prefetch
 from django.core.paginator import Paginator
 from django.utils import timezone
 from catalog.models import Action, ActionStatus, Tag, ActionTag, ActionItemType

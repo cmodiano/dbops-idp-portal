@@ -99,7 +99,7 @@ describe('Story 18.2 — AdminPage Icon Identification', () => {
   // AC1: Workflow icon displayed
 
   it('displays ApartmentOutlined icon for workflow items', async () => {
-    const { container } = renderPage();
+    renderPage();
 
     await waitFor(() => {
       expect(screen.getByText('Full Backup Workflow')).toBeInTheDocument();
@@ -113,7 +113,7 @@ describe('Story 18.2 — AdminPage Icon Identification', () => {
   // AC1: Engine icon displayed for actions
 
   it('displays DatabaseOutlined icon for Oracle actions', async () => {
-    const { container } = renderPage();
+    renderPage();
 
     await waitFor(() => {
       expect(screen.getByText('Apply Oracle Patch')).toBeInTheDocument();

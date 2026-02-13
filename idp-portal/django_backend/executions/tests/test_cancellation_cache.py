@@ -11,7 +11,7 @@ from django.test import override_settings
 
 from executions.cancellation_cache import is_cancelled, mark_cancelled
 from executions.models import Execution, ExecutionStatus
-from catalog.models import ActionStatus, ActionItemType
+from catalog.models import ActionStatus
 from tests.factories import UserFactory, ActionFactory
 
 

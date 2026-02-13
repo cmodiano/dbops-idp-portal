@@ -4,7 +4,7 @@
  */
 
 import { useState } from 'react';
-import { Table, Button, Space, Avatar, Tag, Tooltip, Modal, App } from 'antd';
+import { Table, Button, Space, Avatar, Tag, Tooltip, App } from 'antd';
 import type { TableProps } from 'antd';
 import { ReloadOutlined, ApiOutlined, EditOutlined, DeleteOutlined, SyncOutlined } from '@ant-design/icons';
 import type { IntegrationListItem, IntegrationStatusType } from '../../types/api';
@@ -78,7 +78,7 @@ export function IntegrationsTable({
     setValidatingAll(true);
     try {
       const stats = await validateAllIntegrations();
-      Modal.info({
+      modal.info({
         title: 'Rapport de validation',
         content: (
           <div>

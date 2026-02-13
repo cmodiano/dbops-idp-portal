@@ -10,8 +10,6 @@ Tests:
 
 import json
 import pytest
-from unittest.mock import patch, MagicMock
-from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from executions.models import Execution, ExecutionStep, ExecutionStatus, ExecutionStepStatus
@@ -21,7 +19,7 @@ from executions.workflow_runtime import (
     StepResult,
     StepOutcome,
 )
-from catalog.models import Action, ActionStatus, ActionItemType
+from catalog.models import ActionStatus, ActionItemType
 from catalog.validators import validate_gate_conditions
 from tests.factories import (
     UserFactory,

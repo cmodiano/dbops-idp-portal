@@ -10,7 +10,6 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser
 from drf_spectacular.utils import extend_schema, extend_schema_view
-from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
 from profiles.serializers import (
     ProfileSerializer,
     ProfileCreateSerializer,

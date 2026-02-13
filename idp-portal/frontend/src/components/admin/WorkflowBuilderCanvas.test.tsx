@@ -491,12 +491,11 @@ describe('validateWorkflowGraph', () => {
 // Mock @xyflow/react for component tests
 vi.mock('@xyflow/react', async () => {
   const actualReact = await import('react');
-  let connectCb: ((params: unknown) => void) | null = null;
   let nodeDoubleClickCb: ((event: unknown, node: unknown) => void) | null = null;
 
   return {
-    ReactFlow: ({ children, nodes, edges, onConnect, onNodeDoubleClick, onDrop, onDragOver, ...rest }: Record<string, unknown>) => {
-      connectCb = onConnect as typeof connectCb;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    ReactFlow: ({ children, nodes, edges, onConnect, onNodeDoubleClick, ...rest }: Record<string, unknown>) => {
       nodeDoubleClickCb = onNodeDoubleClick as typeof nodeDoubleClickCb;
       return actualReact.createElement('div', { 'data-testid': 'react-flow-canvas', ...rest },
         actualReact.createElement('div', { 'data-testid': 'react-flow-nodes' },

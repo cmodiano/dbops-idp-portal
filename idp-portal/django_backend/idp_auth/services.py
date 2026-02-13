@@ -12,7 +12,6 @@ from profiles.models import Profile
 from catalog.models import UserFavorite, Action, ActionStatus
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
-from core.middleware import get_correlation_id
 
 logger = structlog.get_logger(__name__)
 

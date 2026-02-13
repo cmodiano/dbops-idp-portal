@@ -41,9 +41,13 @@ export default defineConfig([
       'security/detect-new-buffer': 'warn',
       'security/detect-no-csrf-before-method-override': 'warn',
       'security/detect-non-literal-fs-filename': 'warn',
-      'security/detect-non-literal-regexp': 'warn',
+      // detect-non-literal-regexp disabled: dynamic RegExp from user-defined patterns
+      // (glob matching, parameter validation) is a core feature, not a vulnerability (Story 26.15)
+      'security/detect-non-literal-regexp': 'off',
       'security/detect-non-literal-require': 'warn',
-      'security/detect-object-injection': 'warn',
+      // detect-object-injection disabled: generates false positives on all dynamic
+      // property access (e.g. obj[key]) which is standard JS/TS pattern (Story 26.15)
+      'security/detect-object-injection': 'off',
       'security/detect-possible-timing-attacks': 'warn',
       'security/detect-pseudoRandomBytes': 'warn',
       'security/detect-unsafe-regex': 'error',
@@ -58,6 +62,16 @@ export default defineConfig([
       'no-new-func': 'error',
       'no-script-url': 'error',
 
+      // React Compiler rules (react-hooks plugin v5+) — disabled for progressive adoption
+      // These rules target React Compiler optimization hints, not correctness issues.
+      // Enable progressively as codebase adopts React Compiler (Story 26.15)
+      'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/preserve-manual-memoization': 'off',
+      'react-hooks/purity': 'off',
+      'react-hooks/immutability': 'off',
+      'react-hooks/refs': 'off',
+      'react-hooks/globals': 'off',
+
       // Structured logging enforcement (Story 17.7)
       'no-console': 'error',
 
@@ -67,12 +81,14 @@ export default defineConfig([
       'standards/no-class-components': 'error',
     },
   },
-  // Allow console.* in test files (test helpers, spies, assertions)
-  // Justification: Tests need to spy on console methods and suppress errors intentionally
+  // Relaxed rules for test files
+  // Justification: Tests need console spies, mock types (any), and setup variables
   {
     files: ['**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}'],
     rules: {
       'no-console': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unsafe-function-type': 'off',
     },
   },
 ])

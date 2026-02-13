@@ -17,7 +17,6 @@ from rest_framework.permissions import IsAuthenticated, BasePermission
 
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
 
-from inventory.models import TargetEnvironment, TargetType
 from inventory.serializers import (
     TargetSerializer, TargetFilterParamsSerializer,
     ServerSerializer, InstanceSerializer, DatabaseSerializer,

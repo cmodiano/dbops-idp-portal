@@ -17,8 +17,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import CatalogPage from './CatalogPage';
 import * as catalogService from '../services/catalog_service';
 import * as executionService from '../services/execution_service';
-import * as authContext from '../contexts/AuthContext';
-import type { CatalogAction, CatalogActionDetail, FavoriteEntry } from '../services/catalog_service';
+import type { CatalogAction, CatalogActionDetail } from '../services/catalog_service';
 import type { ExecutionResponse } from '../types/api';
 
 vi.mock('../services/catalog_service', () => ({

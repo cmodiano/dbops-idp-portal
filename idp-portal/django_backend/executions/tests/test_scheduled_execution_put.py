@@ -11,7 +11,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from catalog.models import Action, ActionStatus
-from executions.models import ScheduledExecution, ScheduledExecutionStatus, RecurringPattern
+from executions.models import ScheduledExecution, ScheduledExecutionStatus
 from tests.factories import UserFactory
 
 

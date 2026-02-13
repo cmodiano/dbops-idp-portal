@@ -5,7 +5,6 @@ Integration config validation against JSON Schema.
 import json
 import threading
 from pathlib import Path
-from django.conf import settings
 
 try:
     import jsonschema

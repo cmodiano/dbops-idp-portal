@@ -20,7 +20,7 @@ export function describeCronExpression(expression: string): string {
       return expression; // Return raw if not 5 fields
     }
 
-    const [minute, hour, day, month, dow] = parts;
+    const [minute, hour, day, , dow] = parts;
 
     // Common exact patterns (Story 11.8, AC8 - description lisible)
     if (expression === '0 2 * * *') return 'Tous les jours à 2h00';

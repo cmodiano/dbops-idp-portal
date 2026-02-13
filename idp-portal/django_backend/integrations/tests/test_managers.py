@@ -4,7 +4,7 @@ Tests for integrations managers (IntegrationManager).
 
 import pytest
 from django.test import TestCase
-from integrations.models import Integration, IntegrationManager
+from integrations.models import Integration
 
 
 @pytest.mark.django_db

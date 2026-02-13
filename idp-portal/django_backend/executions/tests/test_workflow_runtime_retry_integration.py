@@ -21,7 +21,7 @@ from executions.workflow_runtime import (
     StepOutcome,
 )
 from executions.models import Execution, ExecutionStatus, ExecutionStep, ExecutionStepStatus
-from catalog.models import Action, ActionStatus, ActionItemType
+from catalog.models import ActionStatus, ActionItemType
 from core.models import AuditActionType
 from tests.factories import UserFactory, ActionFactory
 

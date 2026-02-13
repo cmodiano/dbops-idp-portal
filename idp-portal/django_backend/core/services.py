@@ -10,8 +10,7 @@ import structlog
 
 from datetime import datetime
 from io import StringIO
-from django.db.models import Q
-from core.models import AuditLog, AuditActionType, AuditEntityType
+from core.models import AuditLog
 from core.utils import ensure_utc_isoformat
 
 logger = structlog.get_logger(__name__)

@@ -7,7 +7,6 @@ from unittest.mock import patch, MagicMock
 from django.test import TestCase
 
 from inventory.services import InventoryService, InventoryServiceError
-from inventory.models import TargetEnvironment
 from integrations.models import Integration, IntegrationType
 from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
 
@@ -1055,7 +1054,7 @@ class RBACEdgeCaseTests(TestCase):
     def test_profile_with_no_permissions_returns_empty(self):
         """Profile without permissions should return empty."""
         # Profile with no action/target permissions
-        empty_profile = Profile.objects.create(
+        Profile.objects.create(
             name='empty-profile',
             description='No permissions',
             ad_group='GRP-EMPTY'

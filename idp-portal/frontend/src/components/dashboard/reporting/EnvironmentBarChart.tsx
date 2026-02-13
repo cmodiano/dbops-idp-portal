@@ -50,7 +50,7 @@ const MIN_CHART_HEIGHT = 150;
 const BAR_HEIGHT_PER_ITEM = 50;
 
 /** Custom tooltip content with count and success rate. */
-function CustomTooltip({ active, payload, label }: any) {
+function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ payload: EnvironmentStats }>; label?: string }) {
   if (!active || !payload?.length) return null;
   const data = payload[0]?.payload as EnvironmentStats;
   return (

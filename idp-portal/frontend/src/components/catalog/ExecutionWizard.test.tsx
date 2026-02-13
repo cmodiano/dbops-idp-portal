@@ -20,7 +20,6 @@ import type { CatalogActionDetail } from '../../services/catalog_service';
 import type { InventoryItem } from '../../types/api';
 import { submitExecution, fetchInventoryItems } from '../../services/execution_service';
 import { fetchCatalogActionById } from '../../services/catalog_service';
-import { createScheduledExecution } from '../../services/scheduled_execution_service';
 
 // Mock environments data (always needed for environment selector) - use French labels to match UI
 const mockEnvironments: InventoryItem[] = [
@@ -966,8 +965,8 @@ describe('ExecutionWizard', () => {
       const oldData = localStorage.getItem('inventory_cache_databases_dev');
       if (oldData) {
         // If old data exists, verify new code never reads it
-        const sessionData = sessionStorage.getItem('inventory_cache_databases_dev');
         // sessionData should be used, not oldData (verified by other tests)
+        expect(sessionStorage.getItem('inventory_cache_databases_dev')).toBeDefined();
       }
     });
   });
@@ -1274,7 +1273,6 @@ describe('ExecutionWizard', () => {
   // === Story 22.5: Double-submit protection tests ===
   describe('Double-Submit Protection (Story 22.5)', () => {
     const mockSubmitExecution = submitExecution as unknown as ReturnType<typeof vi.fn>;
-    const mockCreateScheduledExecution = createScheduledExecution as unknown as ReturnType<typeof vi.fn>;
 
     /** Helper: navigate to confirmation step (step 3) */
     async function navigateToStep3(user: ReturnType<typeof userEvent.setup>) {

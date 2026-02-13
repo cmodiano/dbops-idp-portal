@@ -25,8 +25,7 @@ from executions.workflow_runtime import (
     MAX_STEP_TRANSITIONS,
 )
 from executions.models import Execution, ExecutionStatus, ExecutionStep, ExecutionStepStatus
-from catalog.models import Action, ActionStatus, ActionItemType
-from idp_auth.models import User
+from catalog.models import ActionStatus, ActionItemType
 from tests.factories import UserFactory, ActionFactory
 
 

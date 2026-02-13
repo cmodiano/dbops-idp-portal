@@ -161,7 +161,7 @@ class TestMigrateIntegrationsMarkLegacy(TestCase):
             type='jenkins', name='Jenkins Dep', base_url='https://j.example.com',
             status=IntegrationStatus.INVALID,
         )
-        action = ActionFactory(name='Deploy CI', integration=integration)
+        ActionFactory(name='Deploy CI', integration=integration)
 
         out = StringIO()
         call_command('migrate_integrations', '--mark-legacy', stdout=out)

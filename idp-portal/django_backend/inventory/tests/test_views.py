@@ -8,7 +8,6 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework import status
 
-from integrations.models import Integration, IntegrationType
 from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
 from inventory.services import InventoryServiceError
 

@@ -7,9 +7,6 @@ import pytest
 from django.test import TestCase
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.utils import timezone
-from idp_auth.models import User
-from integrations.models import Integration
 from catalog.models import Action, Tag, ActionTag, ActionStatus
 from catalog.services import CatalogService
 from core.models import AuditLog
@@ -189,7 +186,7 @@ class TestTransactionEdgeCases(TestCase):
         # Simulate error during creation
         with self.assertRaises(ValueError):
             with transaction.atomic():
-                action = Action.objects.create(
+                Action.objects.create(
                     name='Test Action',
                     engine='Oracle',
                     platform='AAP',

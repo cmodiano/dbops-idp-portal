@@ -2,9 +2,7 @@
  * Tests for useCancelExecution hook — Story 26.6 AC9
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
-import { App } from 'antd';
-import type { ReactNode } from 'react';
+import { renderHook, act } from '@testing-library/react';
 
 import { useCancelExecution } from '../useCancelExecution';
 import { cancelScheduledExecution } from '../../services/scheduled_execution_service';

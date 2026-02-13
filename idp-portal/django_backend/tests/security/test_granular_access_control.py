@@ -10,7 +10,6 @@ Validates:
 - AC3: Multi-profile permission accumulation (most permissive wins)
 """
 
-import json
 
 import pytest
 from rest_framework import status
@@ -18,7 +17,7 @@ from rest_framework import status
 from catalog.models import Action, Tag, ActionTag
 from executions.models import Execution, ExecutionStatus
 from idp_auth.models import User
-from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
+from profiles.models import Profile, ProfileActionPermission
 from idp_auth.jwt_utils import create_access_token
 from tests.security.conftest import make_auth_client, _token_data
 

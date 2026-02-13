@@ -73,7 +73,7 @@ class ExecutionEnvironmentValidationTests(TestCase):
         mock_validate.return_value = None  # Validation passes
         mock_sched_service.return_value.create_scheduled_execution.return_value = MagicMock(id=1)
 
-        response = self.client.post('/api/v1/scheduled-executions/', {
+        self.client.post('/api/v1/scheduled-executions/', {
             'action_id': self.action.id,
             'environment': 'dev',
             'parameters': {},

@@ -3,12 +3,10 @@ Integration tests for workflow steps with branches and retry.
 Story 16.2: Test PUT /admin/actions/{id}/execution-steps/ with workflow branches and retry.
 """
 
-import pytest
 from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework import status
 
-from idp_auth.models import User
 from catalog.models import Action, ActionItemType, ActionStatus
 from reference.models import RefEngine, RefPlatform
 from tests.factories import UserFactory

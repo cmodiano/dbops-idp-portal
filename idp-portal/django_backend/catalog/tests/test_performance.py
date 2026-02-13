@@ -14,7 +14,6 @@ from django.test.utils import CaptureQueriesContext
 from django.db import connection
 from rest_framework.test import APIClient
 from rest_framework import status
-from idp_auth.models import User
 from catalog.models import Action, Tag, ActionTag, ActionStatus, UserFavorite
 from catalog.views import _catalog_cache, _tags_cache
 from tests.factories import UserFactory

@@ -3,10 +3,8 @@ Tests for _apply_attribute_filter and attribute filtering in list_targets_for_us
 Story 23.4 - AC2, AC6, AC8: Tests for RBAC attribute-based filtering.
 """
 
-import json
-import pytest
 from django.test import TestCase
-from unittest.mock import patch, MagicMock, PropertyMock
+from unittest.mock import patch, MagicMock
 
 from inventory.services import InventoryService
 from inventory.rbac_filter import InventoryRBACFilter

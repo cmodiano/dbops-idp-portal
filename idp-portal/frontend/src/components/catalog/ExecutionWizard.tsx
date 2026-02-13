@@ -554,7 +554,7 @@ export function ExecutionWizard({
       styles={{ body: { maxHeight: 'calc(100vh - 220px)', overflowY: 'auto' } }} aria-label={`Wizard d'execution: ${action!.name}`}>
       <div onKeyDown={handleKeyDown}>
         {parentExecutionId && (
-          <Alert type="info" showIcon icon={<ToolOutlined />} message={`Action corrective pour l'exécution #${parentExecutionId}`} style={{ marginBottom: 16 }} />
+          <Alert type="info" showIcon icon={<ToolOutlined />} title={`Action corrective pour l'exécution #${parentExecutionId}`} style={{ marginBottom: 16 }} />
         )}
 
         <Steps current={currentStep}

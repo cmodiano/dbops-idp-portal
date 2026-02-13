@@ -4,7 +4,6 @@ Story 23.4 - AC1, AC8: Model tests for get/set filter_by_attribute.
 """
 
 import json
-import pytest
 from django.test import TestCase
 from profiles.models import Profile, ProfileTargetPermission
 

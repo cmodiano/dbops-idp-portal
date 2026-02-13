@@ -6,7 +6,7 @@ Celery apply_async(countdown=...).
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from executions.tasks import retry_workflow_step
 from executions.workflow_runtime import StepResult, StepOutcome, WorkflowRuntime

@@ -207,7 +207,7 @@ class GateEvaluator:
                         'target_id': target.target_id,
                         'target_name': target.target_name,
                         'is_active': False,
-                        'reason': f'Outside maintenance window',
+                        'reason': 'Outside maintenance window',
                         'next_start': next_start.isoformat() if next_start else None,
                     })
 

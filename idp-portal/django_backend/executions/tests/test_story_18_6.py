@@ -7,9 +7,7 @@ AC4: error_message field is included in serializer output.
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
 from django.test import TestCase
-from rest_framework.test import APIClient
 
 from idp_auth.models import User
 from catalog.models import Action

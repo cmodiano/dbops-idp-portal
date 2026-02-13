@@ -12,7 +12,6 @@ Code Review Fix (M.7): Added comment about mock strategy and integration test re
 from unittest.mock import patch, MagicMock
 
 from django.test import TestCase, RequestFactory, override_settings
-from django.http import HttpResponseRedirect
 
 
 @override_settings(

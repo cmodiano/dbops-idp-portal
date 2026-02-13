@@ -66,20 +66,6 @@ function renderWithAuth() {
   );
 }
 
-/** Render without auth (user=undefined, acts like non-admin) */
-function renderWithTheme() {
-  const router = createMemoryRouter(
-    [{ path: '/', element: <ExecutionsPage /> }],
-    { initialEntries: ['/'] },
-  );
-  return render(
-    <ThemeProvider>
-      <App>
-        <RouterProvider router={router} />
-      </App>
-    </ThemeProvider>,
-  );
-}
 
 /** Execution owned by user 1 in SUBMITTED status */
 const submittedExecution: ExecutionResponse = {

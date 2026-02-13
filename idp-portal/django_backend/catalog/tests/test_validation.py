@@ -3,12 +3,17 @@ Tests for catalog validation against reference tables.
 Story 13.7 - Tests for engine/platform validation against REF_ENGINES/REF_PLATFORMS.
 """
 
+import pytest
 from django.test import TestCase
-from idp_auth.models import User
 from rest_framework.test import APIClient
 from rest_framework import status
+from rest_framework import serializers as drf_serializers
 
-from catalog.models import Action
+from catalog.validation import (
+    validate_workflow_steps,
+    validate_retry_constraints,
+    _detect_workflow_cycles
+)
 from reference.models import RefEngine, RefPlatform
 from tests.factories import UserFactory
 
@@ -102,14 +107,6 @@ class CatalogValidationTests(TestCase):
 # ============================================================================
 # Story 16.2: Workflow steps validation (branches, retry, cycles)
 # ============================================================================
-
-import pytest
-from rest_framework import serializers as drf_serializers
-from catalog.validation import (
-    validate_workflow_steps,
-    validate_retry_constraints,
-    _detect_workflow_cycles
-)
 
 
 class TestValidateWorkflowSteps:

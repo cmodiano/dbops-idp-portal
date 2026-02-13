@@ -49,13 +49,14 @@ export function useRemediationContext(
       setError(null);
       const result = await fetchRemediationContext(executionId);
       setContext(result);
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Story 9-2 code-review fix: Better error handling for 404/403
-      if (err.status === 404) {
+      const error = err as { status?: number; message?: string };
+      if (error.status === 404) {
         logger.warn('Execution not found for remediation context', { executionId });
         setContext({ has_remediation: false, successful_remediation: false, remediation_actions: [] });
         setError(null); // Not an error, just no context
-      } else if (err.status === 403) {
+      } else if (error.status === 403) {
         logger.error('Permission denied for remediation context', { executionId, error: err instanceof Error ? err.message : String(err) });
         setError(new Error('Accès refusé'));
         setContext(null);

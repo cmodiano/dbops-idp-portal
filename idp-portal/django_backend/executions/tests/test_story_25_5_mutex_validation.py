@@ -536,7 +536,7 @@ class TestStory255MutexValidation(TestCase):
         )
         
         # Create active execution for global maintenance
-        maintenance_exec = Execution.objects.create(
+        Execution.objects.create(
             user=self.user,
             action=global_maintenance,
             environment='prod',

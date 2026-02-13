@@ -30,15 +30,6 @@ vi.mock('../../hooks/useDynamicForm', () => ({
   }),
 }));
 
-// Wrapper providing Ant Design Form and App context
-function Wrapper({ children }: { children: React.ReactNode }) {
-  const [form] = Form.useForm();
-  return (
-    <App>
-      <Form form={form}>{children}</Form>
-    </App>
-  );
-}
 
 const mockWorkflowSteps = [
   { order: 1, name: 'Stop DB', referenced_action_id: 101 },
@@ -59,7 +50,6 @@ const mockStepActions: Record<number, CatalogActionDetail> = {
 };
 
 function renderComponent(overrides = {}) {
-  const [form] = [null]; // Placeholder — form is provided by wrapper
   const defaultProps = {
     form: {} as ReturnType<typeof Form.useForm>[0],
     workflowSteps: mockWorkflowSteps,

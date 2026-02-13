@@ -11,7 +11,7 @@ from django.test import TestCase
 from idp_auth.models import User
 from catalog.models import Action, ActionStatus, Tag, ActionTag
 from integrations.models import Integration
-from profiles.models import Profile, ProfileActionPermission
+from profiles.models import Profile
 from executions.models import Execution, ExecutionStatus
 from core.models import AuditLog
 

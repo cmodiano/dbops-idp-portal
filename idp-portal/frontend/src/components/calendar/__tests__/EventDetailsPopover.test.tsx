@@ -2,7 +2,7 @@
  * Tests for EventDetailsPopover — Story 26.6 AC9
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ConfigProvider } from 'antd';
 import { MemoryRouter } from 'react-router';

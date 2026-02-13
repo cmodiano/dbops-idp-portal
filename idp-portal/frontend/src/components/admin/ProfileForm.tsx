@@ -32,6 +32,7 @@ export type TargetsMode = 'all' | 'all-oracle' | 'all-sql' | 'list' | 'pattern' 
  * Story 23.7 - Detect targets mode from profile target permissions response.
  * Returns 'all-oracle', 'all-sql' for engine-specific filters, 'advanced' for unsupported filters.
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function detectTargetsMode(targetsPerms: ProfileTargetPermissionsResponse): TargetsMode {
   const { targets_type, filter_by_attribute } = targetsPerms;
 

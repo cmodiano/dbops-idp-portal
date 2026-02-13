@@ -14,8 +14,6 @@ import pytest
 from rest_framework import status
 
 from catalog.models import Action
-from core.models import AuditLog, AuditActionType, AuditEntityType
-from core.services import AuditService
 from executions.models import Execution, ExecutionStatus
 from idp_auth.models import User
 from idp_auth.jwt_utils import create_access_token

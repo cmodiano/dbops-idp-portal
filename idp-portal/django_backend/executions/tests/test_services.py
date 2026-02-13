@@ -6,8 +6,8 @@ import pytest
 from django.test import TestCase
 from idp_auth.models import User
 from catalog.models import Action
-from executions.models import Execution, ExecutionStep, ExecutionStatus, ExecutionStepStatus
-from executions.services import ExecutionService, SchedulingService
+from executions.models import Execution, ExecutionStep, ExecutionStatus
+from executions.services import ExecutionService
 from core.models import AuditLog
 
 

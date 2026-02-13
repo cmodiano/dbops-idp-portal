@@ -9,8 +9,7 @@ from rest_framework.test import APIClient
 from rest_framework import status
 from unittest.mock import patch
 
-from idp_auth.models import User
-from catalog.models import Action, ActionStatus, ActionItemType, Tag, ActionTag
+from catalog.models import Action
 from catalog.services import CatalogService
 from core.exceptions import ConflictError
 from core.models import AuditLog

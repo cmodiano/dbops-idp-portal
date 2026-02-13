@@ -18,7 +18,6 @@ from django.core.exceptions import ImproperlyConfigured
 
 from core.middleware import (
     RateLimitHeadersMiddleware,
-    get_client_ip,
     set_correlation_id,
 )
 from core.throttling import (

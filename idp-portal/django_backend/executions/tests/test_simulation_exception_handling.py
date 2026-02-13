@@ -12,7 +12,6 @@ import pytest
 from unittest.mock import MagicMock
 
 from django.db import DatabaseError, IntegrityError, OperationalError
-from django.test import override_settings
 from rest_framework.test import APIClient
 
 from tests.factories import UserFactory

@@ -29,7 +29,7 @@ import {
 } from 'antd';
 import type { MenuProps } from 'antd';
 import { DownloadOutlined } from '@ant-design/icons';
-import type { TableProps, TablePaginationConfig } from 'antd';
+import type { TableProps } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { listExecutionAudit, exportAuditReport } from '../services/audit_service';
 import { getExecution, getExecutionSteps } from '../services/execution_service';
@@ -360,7 +360,7 @@ export default function AuditPage() {
     return (
       <div style={{ padding: 24 }}>
         <Title level={2}>Audit des exécutions</Title>
-        <Alert type="error" message="Erreur" description={error} showIcon />
+        <Alert type="error" title="Erreur" description={error} showIcon />
       </div>
     );
   }
@@ -484,7 +484,7 @@ export default function AuditPage() {
         {drawerLoading ? (
           <Skeleton active paragraph={{ rows: 8 }} />
         ) : drawerError ? (
-          <Alert type="error" message="Erreur de chargement" description={drawerError} showIcon />
+          <Alert type="error" title="Erreur de chargement" description={drawerError} showIcon />
         ) : selectedEntry ? (
           <div>
             {/* Audit entry details */}

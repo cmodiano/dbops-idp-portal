@@ -66,3 +66,4 @@ Certains tests d'intégration lourds nécessitent un timeout étendu (20s) lorsq
 - Envelopper les mises à jour d'état async dans `act()` (React 19)
 - Documenter tout test skip avec justification
 - Ne pas utiliser de props Ant Design dépréciées (voir FRONTEND-STANDARDS.md)
+- Voir `docs/linters-configuration.md` pour la configuration ESLint et les exclusions documentées (Story 26.15)

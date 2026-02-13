@@ -4,7 +4,6 @@ Story 13.1 - Target data structures (no DB table - data comes from external sour
 """
 
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Any
 
 

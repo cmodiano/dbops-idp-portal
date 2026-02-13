@@ -3,7 +3,6 @@ Tests for integrations config JSON Schema validation.
 Story 20.5: Cover validate_integration_config with and without jsonschema.
 """
 
-import pytest
 from unittest.mock import patch, MagicMock
 from django.test import TestCase
 from core.exceptions import InvalidStateError
@@ -38,7 +37,7 @@ class TestValidateIntegrationConfig(TestCase):
     def test_jsonschema_validation_error(self):
         """When jsonschema validates and fails, raises InvalidStateError."""
         try:
-            import jsonschema
+            import jsonschema  # noqa: F401
         except ImportError:
             self.skipTest("jsonschema not installed")
 
@@ -59,7 +58,7 @@ class TestValidateIntegrationConfig(TestCase):
     def test_jsonschema_valid_config(self):
         """When jsonschema validates and passes, no exception."""
         try:
-            import jsonschema
+            import jsonschema  # noqa: F401
         except ImportError:
             self.skipTest("jsonschema not installed")
 
@@ -77,7 +76,7 @@ class TestValidateIntegrationConfig(TestCase):
     def test_jsonschema_schema_error(self):
         """When schema itself is invalid, raises InvalidStateError INVALID_SCHEMA."""
         try:
-            import jsonschema
+            import jsonschema  # noqa: F401
         except ImportError:
             self.skipTest("jsonschema not installed")
 

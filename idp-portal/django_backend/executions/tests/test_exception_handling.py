@@ -12,9 +12,8 @@ Validates that:
 import pytest
 from unittest.mock import patch, MagicMock
 from rest_framework.test import APIClient
-from django.utils import timezone
 
-from executions.models import Execution, ExecutionStatus, ExecutionStep, ExecutionStepStatus
+from executions.models import Execution, ExecutionStatus, ExecutionStep
 from executions.workflow_runtime import WorkflowRuntime, StepOutcome
 from catalog.models import Action, ActionStatus, ActionItemType
 from idp_auth.models import User
@@ -214,7 +213,6 @@ class TestDashboardExceptionHandling:
     def test_stats_queryset_logs_invalid_timestamps(self):
         """Invalid timestamps in duration calculation are logged."""
         from dashboard.views import _stats_for_queryset
-        from unittest.mock import MagicMock
 
         # Create mock queryset with invalid timestamp data
         mock_qs = MagicMock()
@@ -223,7 +221,7 @@ class TestDashboardExceptionHandling:
         mock_qs.values_list.return_value = [(None, "not_a_datetime")]
 
         with patch('dashboard.views.logger') as mock_logger:
-            result = _stats_for_queryset(mock_qs)
+            _stats_for_queryset(mock_qs)
 
             # Should have logged the invalid timestamp
             debug_calls = [c for c in mock_logger.debug.call_args_list

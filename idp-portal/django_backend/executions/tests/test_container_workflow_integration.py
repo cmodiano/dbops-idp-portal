@@ -10,7 +10,6 @@ Tests end-to-end workflow execution through the API:
 - AC10: Non-regression (existing action execution still works)
 """
 
-import json
 import pytest
 from unittest.mock import patch
 from django.test import TestCase

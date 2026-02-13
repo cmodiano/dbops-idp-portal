@@ -188,7 +188,7 @@ describe('useUrlFilters', () => {
     const storedFilters: DashboardFilters = { engine: 'terraform', days: 30 };
     localStorageMock.getItem.mockReturnValueOnce(JSON.stringify(storedFilters));
 
-    const { result } = renderHook(() => useUrlFilters(), {
+    renderHook(() => useUrlFilters(), {
       wrapper: createWrapper(['/dashboard']),
     });
 

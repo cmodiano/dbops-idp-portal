@@ -19,10 +19,10 @@ Architecture:
 import time
 import structlog
 from threading import Thread
-from typing import Optional, Dict, Any, List
+from typing import Dict, Any, List
 
 from django.conf import settings
-from django.db import transaction, close_old_connections
+from django.db import close_old_connections
 from django.utils import timezone
 
 from catalog.models import Action, ActionStatus

@@ -115,7 +115,7 @@ describe('useTargetInventory - Story 23.6', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(fetchInventoryItems).mockImplementation(
-      (type: string, _environment?: string, _options?: { server_names?: string[] }) => {
+      (type: string) => {
         if (type === 'environments') {
           return Promise.resolve([
             { id: 'dev', name: 'Developpement', environment: null },
@@ -238,8 +238,8 @@ describe('useTargetInventory - Story 23.6', () => {
     // Use a separate spy to track calls precisely
     const spy = vi.fn();
     vi.mocked(fetchInventoryItems).mockImplementation(
-      (type: string, _environment?: string, _options?: { server_names?: string[] }) => {
-        spy(type, _environment, _options);
+      (type: string, __environment?: string, __options?: { server_names?: string[] }) => {
+        spy(type, __environment, __options);
         if (type === 'environments') {
           return Promise.resolve([
             { id: 'dev', name: 'Developpement', environment: null },

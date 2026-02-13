@@ -1,7 +1,5 @@
 import pytest
-import json
 from django.test import TestCase
-from idp_auth.models import User
 from integrations.models import Integration
 from catalog.models import Action, Tag, ActionTag, UserFavorite
 from tests.factories import UserFactory

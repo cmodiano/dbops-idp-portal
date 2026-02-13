@@ -452,6 +452,7 @@ export const WorkflowStepsEditor: React.FC<WorkflowStepsEditorProps> = ({
     onChange(
       newSteps
         .filter((s) => s.referenced_action_id !== undefined && typeof s.referenced_action_id === 'number')
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         .map(({ _tempId, ...rest }) => ({
           ...rest,
           referenced_action_id: rest.referenced_action_id!,

@@ -4,7 +4,7 @@ Story 23.1 AC3-AC6, AC8 — Config-driven servers, instances, databases + fallba
 """
 
 import json
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock
 
 from django.test import TestCase
 
@@ -138,7 +138,7 @@ class ReadServersFromConfigTests(TestCase):
         mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
         mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
 
-        results = self.service._read_servers_from_config(engine_type='Oracle')
+        self.service._read_servers_from_config(engine_type='Oracle')
 
         sql = mock_cursor.execute.call_args[0][0]
         self.assertIn('UPPER(ENGINE)', sql)
@@ -237,7 +237,7 @@ class ReadInstancesFromConfigTests(TestCase):
         mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
         mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
 
-        results = self.service._read_instances_from_config(server_name='srv-01')
+        self.service._read_instances_from_config(server_name='srv-01')
 
         sql = mock_cursor.execute.call_args[0][0]
         self.assertIn('UPPER(SERVER_NAME)', sql)
@@ -330,7 +330,7 @@ class ReadDatabasesFromConfigTests(TestCase):
         mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
         mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
 
-        results = self.service._read_databases_from_config(environment='prod')
+        self.service._read_databases_from_config(environment='prod')
 
         sql = mock_cursor.execute.call_args[0][0]
         self.assertIn('UPPER(ENV)', sql)
@@ -350,7 +350,7 @@ class ReadDatabasesFromConfigTests(TestCase):
         mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
         mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
 
-        results = self.service._read_databases_from_config(
+        self.service._read_databases_from_config(
             environment='prod', server_name='srv-01'
         )
 

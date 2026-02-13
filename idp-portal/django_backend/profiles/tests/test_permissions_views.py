@@ -9,7 +9,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework import status
 from idp_auth.models import User
-from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
+from profiles.models import Profile
 
 
 @pytest.mark.django_db

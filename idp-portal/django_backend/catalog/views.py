@@ -12,7 +12,6 @@ from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiPara
 from django.db import IntegrityError
 from django.db.models import Count, Q, OuterRef, Subquery, IntegerField, Value
 from django.db.models.functions import Coalesce
-from django.utils import timezone
 from cachetools import TTLCache
 from core.utils import ensure_utc_isoformat
 from catalog.models import Action, Tag, ActionStatus, ActionItemType
@@ -24,9 +23,8 @@ from catalog.services import CatalogService, InvalidTransitionError
 from catalog.rbac_service import CatalogRBACService
 from core.pagination import CustomPageNumberPagination
 from core.permissions import DBOPSProfilePermission, OptionalUserPermission
-from core.exceptions import NotFoundError, BadRequestError, InvalidStateError, ConflictError
+from core.exceptions import NotFoundError, BadRequestError, InvalidStateError
 from executions.models import Execution
-from inventory.models import TargetEnvironment
 from core.middleware import get_correlation_id
 import structlog
 
@@ -535,7 +533,6 @@ class ActionViewSet(viewsets.ModelViewSet):
         
         # Store data for symmetric rule deletion
         incompatible_with_id = mutex_rule.incompatible_with_id
-        same_target = mutex_rule.same_target
         
         # Delete the primary rule
         mutex_rule.delete()

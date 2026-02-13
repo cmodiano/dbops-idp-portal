@@ -4,7 +4,6 @@ Tests serializer validation and HTTP endpoints.
 """
 
 import pytest
-from unittest.mock import patch
 from rest_framework.test import APIClient
 from rest_framework import status as http_status
 

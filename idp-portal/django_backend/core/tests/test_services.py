@@ -4,7 +4,6 @@ Tests for core services (AuditService).
 
 import pytest
 from django.test import TestCase
-from core.models import AuditLog
 from core.services import AuditService
 
 

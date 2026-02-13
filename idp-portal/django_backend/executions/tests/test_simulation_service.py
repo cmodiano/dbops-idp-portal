@@ -9,7 +9,6 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from executions.models import (
-    Execution,
     ExecutionStep,
     ExecutionStatus,
     ExecutionStepStatus,

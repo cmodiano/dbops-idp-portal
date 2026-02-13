@@ -89,7 +89,7 @@ class Command(BaseCommand):
             self.stdout.write('   - Soit migrer vers des types existants')
             self.stdout.write('   - Soit marquer comme \'legacy\' (lecture seule, aucune nouvelle utilisation)')
         else:
-            self.stdout.write(f'3. Invalides (0) : Aucune intégration invalide')
+            self.stdout.write('3. Invalides (0) : Aucune intégration invalide')
 
         self.stdout.write('\nPour migrer automatiquement les intégrations :')
         self.stdout.write('  python manage.py migrate_integrations --auto')

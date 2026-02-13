@@ -44,7 +44,6 @@ import StartNode from '../admin/StartNode';
 import EndNode from '../admin/EndNode';
 import CustomEdge from '../admin/CustomEdge';
 import { StepDetailDrawer } from './StepDetailDrawer';
-import logger from '../../services/logger';
 
 const { Text } = Typography;
 

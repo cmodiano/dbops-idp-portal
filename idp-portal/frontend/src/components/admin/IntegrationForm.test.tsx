@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from 'antd';
 import { IntegrationForm } from './IntegrationForm';
@@ -438,9 +438,10 @@ describe('IntegrationForm', () => {
 
   it('AC7: blocks submission when type is inactive', async () => {
     // Override with inactive type included in active types list for the test
-    const typesWithInactive = mockTypes.map((t) =>
-      t.code === 'deprecated_type' ? { ...t, is_active: true } : t
-    );
+    // Note: typesWithInactive would be used to override hook but is not needed for this test
+    // const typesWithInactive = mockTypes.map((t) =>
+    //   t.code === 'deprecated_type' ? { ...t, is_active: true } : t
+    // );
     // Actually, we need the Select to include the inactive type. Let's override the hook.
     mockUseIntegrationTypes.mockReturnValue({
       types: mockTypes, // includes deprecated_type with is_active: false
@@ -453,8 +454,9 @@ describe('IntegrationForm', () => {
     // Instead, test the validation logic by providing a type that exists but is_active=false.
     // We need to include it in typeOptions. Let's test this differently:
     // Override with all types active in Select, but inactive in the actual types array.
-    const allActiveTypes = mockTypes.map((t) => ({ ...t, is_active: true }));
-    const mixedTypes = [...allActiveTypes.slice(0, 2), { ...mockTypes[2], is_active: false }];
+    // Note: These variables document the test design but are not used in implementation
+    // const allActiveTypes = mockTypes.map((t) => ({ ...t, is_active: true }));
+    // const mixedTypes = [...allActiveTypes.slice(0, 2), { ...mockTypes[2], is_active: false }];
     // But the Select only shows is_active types... The validation catches types that
     // exist in the array but have is_active=false. This is a defense-in-depth mechanism.
     // In practice, users can't select inactive types via the UI.

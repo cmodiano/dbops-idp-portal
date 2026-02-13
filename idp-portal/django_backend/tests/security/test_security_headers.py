@@ -13,7 +13,6 @@ import uuid
 
 import pytest
 from rest_framework import status
-from rest_framework.test import APIClient
 
 from tests.security.conftest import make_auth_client
 
@@ -159,7 +158,6 @@ class TestAuditMiddleware:
 
     def test_401_on_auth_endpoint_logged(self, anon_client, caplog):
         """401 on /api/v1/auth/* triggers audit log."""
-        import structlog
         # Use caplog to capture structlog output
         with caplog.at_level('WARNING'):
             response = anon_client.get('/api/v1/auth/me/')

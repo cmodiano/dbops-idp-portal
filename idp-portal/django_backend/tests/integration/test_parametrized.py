@@ -6,8 +6,6 @@ Uses @pytest.mark.parametrize for comprehensive edge case coverage.
 """
 
 import pytest
-from django.test import TestCase
-from rest_framework.test import APIClient
 
 from idp_auth.models import User
 from catalog.models import Action, ActionStatus, ActionCategory, ActionEngine, ActionPlatform
@@ -352,7 +350,7 @@ class TestParametrizedRBACCombinations:
 
         profile = Profile.objects.create(
             name=f'EnvProfile_{permission_type}_{len(allowed_envs)}',
-            ad_group=f'CN=EnvProfile,OU=Groups,DC=corp,DC=com'
+            ad_group='CN=EnvProfile,OU=Groups,DC=corp,DC=com'
         )
 
         ProfileActionPermission.objects.create(

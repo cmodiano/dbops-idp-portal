@@ -14,7 +14,7 @@ Tests:
 import json
 import pytest
 from datetime import timedelta
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from django.utils import timezone
 

@@ -7,8 +7,7 @@ import pytest
 from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework import status
-from idp_auth.models import User
-from catalog.models import Action, Tag, ActionTag, ActionStatus, ActionItemType, ActionEngine, ActionPlatform
+from catalog.models import Tag, ActionTag, ActionStatus, ActionItemType, ActionEngine, ActionPlatform
 from catalog.services import CatalogService
 from tests.factories import UserFactory
 

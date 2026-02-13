@@ -1,11 +1,9 @@
 import pytest
-import json
 from django.test import TestCase
 from idp_auth.models import User
 from catalog.models import Action
 from executions.models import (
-    Execution, ExecutionStep, ScheduledExecution, RecurringPattern,
-    ExecutionStatus, ExecutionStepStatus, ScheduledExecutionStatus
+    Execution, ExecutionStep, ScheduledExecution, RecurringPattern
 )
 
 
@@ -633,7 +631,6 @@ class ExecutionRBACMultiProfileTests(TestCase):
     def setUp(self):
         """Set up test data with multiple profiles."""
         from rest_framework.test import APIClient
-        from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
 
         self.client = APIClient()
         self.user = User.objects.create(

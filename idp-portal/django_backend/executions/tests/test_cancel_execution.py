@@ -4,11 +4,11 @@ PATCH /api/v1/executions/{id}/cancel/
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from rest_framework.test import APIClient
 
 from tests.factories import UserFactory, ActionFactory, IntegrationFactory, ExecutionFactory
-from executions.models import Execution, ExecutionStatus
+from executions.models import ExecutionStatus
 from core.models import AuditLog
 
 

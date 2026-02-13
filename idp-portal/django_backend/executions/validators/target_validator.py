@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from core.exceptions import BadRequestError, ForbiddenError
-from core.middleware import get_correlation_id
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from inventory.services import InventoryService, InventoryServiceError, MAX_TARGETS_FOR_RBAC_FILTER

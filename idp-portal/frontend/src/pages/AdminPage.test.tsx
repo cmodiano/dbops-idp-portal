@@ -10,7 +10,6 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import AdminPage from './AdminPage';
 import { lightTheme } from '../theme/desjardins';
 import { ThemeProvider } from '../contexts/ThemeContext';
-import * as adminService from '../services/admin_service';
 import * as profilesService from '../services/profiles_service';
 import * as integrationsService from '../services/integrations_service';
 

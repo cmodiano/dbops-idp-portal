@@ -8,7 +8,6 @@ import structlog
 
 from django.db import transaction
 from django.db import IntegrityError
-from django.core.exceptions import ValidationError
 from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType

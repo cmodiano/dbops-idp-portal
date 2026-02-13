@@ -13,8 +13,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework import status
 
-from idp_auth.models import User
-from catalog.models import Action, ActionStatus, ActionItemType, ActionEngine, ActionPlatform
+from catalog.models import ActionStatus, ActionItemType, ActionEngine, ActionPlatform
 from catalog.services import CatalogService
 from profiles.models import Profile
 from tests.factories import UserFactory

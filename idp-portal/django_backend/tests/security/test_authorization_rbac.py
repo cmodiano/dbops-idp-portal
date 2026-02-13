@@ -13,7 +13,6 @@ Validates:
 import pytest
 from rest_framework import status
 
-from core.models import AuditLog
 from tests.security.conftest import make_auth_client
 
 

@@ -20,7 +20,6 @@ from django.test import override_settings
 from rest_framework.test import APIClient
 
 from core.models import AuditLog, AuditActionType, AuditEntityType
-from idp_auth.jwt_utils import create_access_token
 from idp_auth.models import User
 from integrations.models import Integration
 

@@ -3,8 +3,6 @@ Tests d'intégration pour filter_by_attribute.
 Story 23.4 - AC8: Flow complet création profil → list_targets_for_user → serveurs filtrés.
 """
 
-import json
-import pytest
 from django.test import TestCase
 from unittest.mock import patch, MagicMock
 

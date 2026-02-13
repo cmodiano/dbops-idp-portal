@@ -18,7 +18,6 @@ from executions.models import (
     Execution,
     ExecutionStatus,
     ExecutionStep,
-    ExecutionStepStatus,
 )
 from executions.simulation_service import SimulationService
 from idp_auth.models import User

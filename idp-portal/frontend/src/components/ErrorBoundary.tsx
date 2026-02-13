@@ -3,6 +3,17 @@ import { Result, Button } from 'antd';
 import { useNavigate } from 'react-router';
 import logger from '../services/logger';
 
+/* eslint-disable standards/no-class-components */
+// Error Boundaries in React require class components - there is no hooks-based alternative
+// See: https://react.dev/reference/react/Component#catching-rendering-errors-with-an-error-boundary
+
+/* eslint-disable react-refresh/only-export-components */
+// This file legitimately exports both ErrorBoundary (class) and ErrorFallback (function component)
+
+/* eslint-disable react-hooks/error-boundaries */
+// The try/catch around JSX in ErrorFallback is intentional as a fallback-of-fallback pattern
+// to ensure we always show something if the error UI itself fails
+
 interface ErrorBoundaryProps {
   children: ReactNode;
   fallback?: (error: Error, resetError: () => void) => ReactNode;
@@ -119,6 +130,8 @@ function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
     );
   } catch (fallbackError) {
     // Ultimate fallback if ErrorFallback itself throws
+    // eslint-disable-next-line no-console
+    console.error('[ErrorFallback] Fallback UI failed:', fallbackError);
     return (
       <div style={{ padding: 24, textAlign: 'center', fontFamily: 'sans-serif' }}>
         <h1>Une erreur est survenue</h1>

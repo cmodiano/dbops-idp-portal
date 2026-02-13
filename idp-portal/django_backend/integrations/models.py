@@ -2,7 +2,6 @@ import json
 import logging
 from django.db import models
 from django.core.exceptions import ValidationError
-from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 

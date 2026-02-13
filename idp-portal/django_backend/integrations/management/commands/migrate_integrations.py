@@ -5,9 +5,7 @@ Story 24.4 (AC2, AC3, AC10): Management command to migrate integrations.
 - --dry-run: Preview changes without applying them
 """
 
-import json
 import time
-import uuid
 
 import structlog
 from django.core.management.base import BaseCommand
@@ -121,7 +119,7 @@ class Command(BaseCommand):
 
         # Apply changes (or preview)
         if dry_run:
-            self.stdout.write(f'\nChangements prévus :')
+            self.stdout.write('\nChangements prévus :')
             for c in changes:
                 self.stdout.write(f'  - ID {c["id"]}: {c["name"]} — {c["old_status"]} → {c["new_status"]}')
 
@@ -168,7 +166,7 @@ class Command(BaseCommand):
                     self.stdout.write(f'  - ID {c["id"]}: {c["name"]} — {c["old_status"]} → {c["new_status"]} {status_symbol}')
 
         # Final stats
-        self.stdout.write(f'\nStatut final :')
+        self.stdout.write('\nStatut final :')
         self.stdout.write(self.style.SUCCESS(f'  ✓ Valides : {stats["valid"]}'))
         self.stdout.write(self.style.WARNING(f'  ⚠ Dépréciées : {stats["deprecated"]}'))
         self.stdout.write(self.style.ERROR(f'  ✗ Invalides : {stats["invalid"]}'))

@@ -9,7 +9,7 @@
 import React, { memo, useMemo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Badge, Divider, Tooltip, theme } from 'antd';
-import { CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, ClockCircleOutlined, MinusCircleOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, MinusCircleOutlined } from '@ant-design/icons';
 
 export interface WorkflowStepNodeData {
   action_id: number;
@@ -73,17 +73,17 @@ const WorkflowStepNode: React.FC<NodeProps> = ({ data, selected }) => {
       ? `0 0 0 2px ${token.colorPrimary}40`
       : token.boxShadowTertiary;
 
-  // Status labels for execution tooltip (Story 19.2, AC10)
-  const executionStatusLabels: Record<string, string> = {
-    PENDING: 'En attente',
-    RUNNING: 'En cours',
-    COMPLETED: 'Terminé',
-    FAILED: 'Échoué',
-    SKIPPED: 'Annulé',
-  };
-
   // Story 16.7, AC6 + Story 19.2, AC10: Extended tooltip with execution info or exit paths
   const tooltipContent = useMemo(() => {
+    // Status labels for execution tooltip (Story 19.2, AC10)
+    const executionStatusLabels: Record<string, string> = {
+      PENDING: 'En attente',
+      RUNNING: 'En cours',
+      COMPLETED: 'Terminé',
+      FAILED: 'Échoué',
+      SKIPPED: 'Annulé',
+    };
+
     // Story 19.2: Execution mode tooltip (takes priority when executionStatus is present)
     if (nodeData.executionStatus) {
       return (

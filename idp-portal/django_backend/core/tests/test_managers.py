@@ -4,7 +4,7 @@ Tests for core managers (AuditLogManager).
 
 import pytest
 from django.test import TestCase
-from core.models import AuditLog, AuditLogManager
+from core.models import AuditLog
 
 
 @pytest.mark.django_db

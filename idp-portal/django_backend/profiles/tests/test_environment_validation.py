@@ -3,7 +3,6 @@ Tests for profile environment validation against inventory (Story 21.6).
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
 
 from profiles.validation import validate_environments_against_inventory
 from inventory.services import InventoryServiceError

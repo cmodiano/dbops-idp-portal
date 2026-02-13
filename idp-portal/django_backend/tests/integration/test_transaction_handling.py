@@ -6,7 +6,7 @@ Tests atomic transactions in services and rollback behavior.
 """
 
 import pytest
-from django.test import TestCase, TransactionTestCase
+from django.test import TransactionTestCase
 from django.db import transaction, IntegrityError
 
 from idp_auth.models import User
@@ -293,7 +293,7 @@ class TestNestedTransactions(TransactionTestCase):
         """Test that nested atomic blocks can have partial rollback."""
         # Create outer action
         with transaction.atomic():
-            outer_action = Action.objects.create(
+            Action.objects.create(
                 name='Outer Action',
                 category='Provisioning',
                 engine='Oracle',
@@ -306,7 +306,7 @@ class TestNestedTransactions(TransactionTestCase):
             try:
                 with transaction.atomic():
                     # Create inner action
-                    inner_action = Action.objects.create(
+                    Action.objects.create(
                         name='Inner Action',
                         category='Patching',
                         engine='Oracle',
@@ -324,7 +324,7 @@ class TestNestedTransactions(TransactionTestCase):
                 pass
 
             # Create another action in outer block
-            another_action = Action.objects.create(
+            Action.objects.create(
                 name='Another Action',
                 category='Administration',
                 engine='Oracle',
@@ -347,7 +347,6 @@ class TestTransactionIsolation(TransactionTestCase):
 
     def test_concurrent_unique_constraint(self):
         """Test that unique constraint is enforced across transactions."""
-        from django.db import connection
 
         # Create initial user
         User.objects.create(username='isolation_test', profile='DBA')

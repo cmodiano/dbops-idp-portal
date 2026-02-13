@@ -9,7 +9,7 @@ import structlog
 
 from datetime import datetime, timedelta
 from django.db import transaction
-from django.db.models import Q, Count, Avg, Sum
+from django.db.models import Q, Count
 from django.utils import timezone
 from core.utils import ensure_utc_isoformat
 from executions.models import (

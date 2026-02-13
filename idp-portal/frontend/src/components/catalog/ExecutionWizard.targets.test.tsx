@@ -11,11 +11,9 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { App } from 'antd';
 import { ExecutionWizard } from './ExecutionWizard';
 import type { CatalogActionDetail } from '../../services/catalog_service';
-import { submitExecution } from '../../services/execution_service';
 
 // Mock targets response
 const mockTargetsResponse = {

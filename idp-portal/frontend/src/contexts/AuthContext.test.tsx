@@ -472,7 +472,7 @@ describe('AuthProvider', () => {
 
       // Setup: Mock fetch to return 401, then succeed on retry with new token
       let fetchCallCount = 0;
-      globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      globalThis.fetch = vi.fn().mockImplementation(() => {
         fetchCallCount++;
         // First call: 401 Unauthorized
         if (fetchCallCount === 1) {

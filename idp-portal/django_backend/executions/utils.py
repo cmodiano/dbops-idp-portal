@@ -14,13 +14,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, date
 from datetime import timezone as dt_timezone
-
-# Fixed-offset UTC (no name): Oracle Thin Mode does not support named timezones (DPY-3022)
-UTC = dt_timezone(timedelta(0))
-
 from typing import Any
 
-from django.conf import settings
 from django.db.models import Q, QuerySet
 from django.utils import timezone
 from rest_framework.request import Request
@@ -49,6 +44,9 @@ except ImportError:  # pragma: no cover
 import structlog
 
 exec_logger = structlog.get_logger(__name__)
+
+# Fixed-offset UTC (no name): Oracle Thin Mode does not support named timezones (DPY-3022)
+UTC = dt_timezone(timedelta(0))
 
 # AC2: Story 26.10 — Respect convention Python (fonctions publiques sans préfixe _)
 __all__ = [
@@ -747,7 +745,7 @@ def validate_action_mutex(
     - same_target=False: blocks globally regardless of targets
     """
     from catalog.models import ActionMutex
-    from executions.models import Execution, ExecutionStatus, ExecutionTarget
+    from executions.models import Execution, ExecutionStatus
 
     # Define active statuses that block new executions
     ACTIVE_STATUSES = [

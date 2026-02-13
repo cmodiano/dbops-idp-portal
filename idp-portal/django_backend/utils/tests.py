@@ -2,7 +2,6 @@
 Tests for utils/json_helpers.py
 """
 
-import pytest
 import json
 from utils.json_helpers import (
     serialize_json,

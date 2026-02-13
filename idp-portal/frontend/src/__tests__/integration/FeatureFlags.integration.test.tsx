@@ -7,7 +7,7 @@
 
 import { render, screen, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { FeatureFlagProvider, useFeatureFlag } from '../../contexts/FeatureFlagContext';
+import { FeatureFlagProvider } from '../../contexts/FeatureFlagContext';
 import { FeatureGuard } from '../../components/FeatureGuard';
 import { FeatureToggle } from '../../components/FeatureToggle';
 import * as AuthContextModule from '../../contexts/AuthContext';

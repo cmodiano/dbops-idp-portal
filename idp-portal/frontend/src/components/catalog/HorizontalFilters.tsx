@@ -15,6 +15,7 @@ import { useEngines } from '../../hooks/useEngines';
 const { Text } = Typography;
 
 /** Impact filter options. */
+// eslint-disable-next-line react-refresh/only-export-components
 export const IMPACT_OPTIONS = [
   { value: 'low', label: 'Faible' },
   { value: 'medium', label: 'Moyen' },

@@ -6,7 +6,7 @@ Story 25.6 - Task 5.3: Test API endpoints accept and return exclusion_patterns.
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
-from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
+from profiles.models import Profile, ProfileTargetPermission
 
 User = get_user_model()
 
@@ -50,7 +50,7 @@ class TestProfileTargetPermissionsAPIWithExclusion(TestCase):
     def test_get_target_permissions_returns_empty_exclusion_patterns(self):
         """Test GET returns empty array when no exclusion_patterns set."""
         # Create permission without exclusion
-        perm = ProfileTargetPermission.objects.create(
+        ProfileTargetPermission.objects.create(
             profile=self.profile,
             permission_type='ALL'
         )

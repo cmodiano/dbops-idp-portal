@@ -9,7 +9,6 @@
 import { memo, useRef } from 'react';
 import { Form, Alert, Typography } from 'antd';
 import { InfoCircleOutlined } from '@ant-design/icons';
-import type { FormInstance } from 'antd';
 import type { CatalogActionDetail } from '../../services/catalog_service';
 import type { InventoryItem } from '../../types/api';
 import type { ParameterField } from '../../hooks/useDynamicForm';

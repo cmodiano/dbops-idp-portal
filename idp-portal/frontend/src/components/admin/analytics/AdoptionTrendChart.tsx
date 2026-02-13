@@ -44,7 +44,6 @@ function getEngineColor(engine: string): string {
 /** Format week start date for display (e.g., "Sem. 01" or "01/01"). */
 function formatWeekLabel(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00');
-  const weekNum = Math.ceil((d.getDate() + new Date(d.getFullYear(), d.getMonth(), 1).getDay()) / 7);
   return `${d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}`;
 }
 

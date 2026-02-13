@@ -3,8 +3,7 @@ Tests for SAML configuration and utilities.
 Story M.7 - Task 2.6
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from django.test import TestCase, RequestFactory, override_settings
 
 

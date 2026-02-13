@@ -4,7 +4,7 @@
  * Story 26.4 - AC6: Extracted from ExecutionsPage.tsx to reduce orchestrator to <400 LOC.
  * Handles listing executions, stats, time series, pending approvals, and integration icons.
  */
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   listExecutions,
   listPendingApprovals,

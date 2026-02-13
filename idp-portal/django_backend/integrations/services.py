@@ -4,7 +4,6 @@ Handles complex operations like JSON Schema validation for config.
 Story M.8 - Task 9: Structured logging with structlog.
 """
 
-import json
 import structlog
 
 from django.db import transaction
@@ -14,7 +13,6 @@ from integrations.validation_service import IntegrationValidationService
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.exceptions import InvalidStateError
-from core.middleware import get_correlation_id
 
 logger = structlog.get_logger(__name__)
 
@@ -243,7 +241,7 @@ class IntegrationService:
                 details={
                     'previous_status': old_status,
                     'new_status': integration.status,
-                    'validation_reason': f"Status recalculated on update",
+                    'validation_reason': "Status recalculated on update",
                 },
             )
 

@@ -8,6 +8,8 @@
  * AC8: Same mapping engine → icon + color, same integration → Avatar, same tooltips/fallbacks.
  */
 
+/* eslint-disable react-refresh/only-export-components */
+
 import { Badge, Tooltip, Avatar, Tag } from 'antd';
 import {
   DatabaseOutlined,

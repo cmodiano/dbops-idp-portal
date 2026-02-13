@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { fetchInventoryItems } from '../services/execution_service';
 import type { InventoryItem } from '../types/api';
+import logger from '../services/logger';
 
 export type { Target } from '../components/catalog/TargetSelector';
 
@@ -89,8 +90,8 @@ export function useTargetInventory({
       if (import.meta.env.DEV) {
         const prevNames = JSON.stringify(lastServerNamesRef.current || []);
         const newNames = JSON.stringify(selectedServerNames);
-        // Use console for DEV mode (logger not available in hooks without correlation_id context)
-        console.debug('[useTargetInventory] Cache invalidation: server_names changed', {
+        // Use logger for DEV mode debugging
+        logger.debug('[useTargetInventory] Cache invalidation: server_names changed', {
           previous: prevNames,
           current: newNames,
           environment,

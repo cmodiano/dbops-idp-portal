@@ -6,9 +6,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from datetime import timezone as dt_timezone
-
-UTC = dt_timezone(timedelta(0))
-
 from django.db.models import Q, Count
 from django.db.models.functions import TruncDate
 from django.utils import timezone
@@ -31,6 +28,7 @@ from executions.utils import (
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 import structlog
 
+UTC = dt_timezone(timedelta(0))
 exec_logger = structlog.get_logger(__name__)
 
 

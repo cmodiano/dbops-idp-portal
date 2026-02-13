@@ -3,6 +3,8 @@
  * Story 18.2: Centralized icon logic used by Admin and Catalog components.
  */
 
+/* eslint-disable react-refresh/only-export-components */
+
 import React from 'react';
 import {
   ApartmentOutlined,

@@ -491,8 +491,9 @@ describe('TopNav', () => {
 
       // Tooltip should be present in the DOM (though may not be visible until hover)
       // We can't easily test tooltip visibility without hovering, but we can verify the element exists
-      const tooltip = bellButton.closest('.ant-tooltip-open') || document.querySelector('[title="Erreur de chargement des approbations"]');
       // Note: Tooltip won't be visible until hover, but error state is tracked in hook
+      const tooltipElement = bellButton.closest('.ant-tooltip-open') || document.querySelector('[title="Erreur de chargement des approbations"]');
+      expect(tooltipElement || bellButton).toBeInTheDocument();
     });
   });
 

@@ -3,7 +3,6 @@ Tests for Story 25.1: ExecutionTarget model, API serialization, creation flow, a
 Story 26.10: Updated patch() calls after function renaming.
 """
 
-import json
 import pytest
 from unittest.mock import patch, MagicMock
 
@@ -16,7 +15,7 @@ from catalog.models import Action
 from executions.models import (
     Execution, ExecutionTarget, TargetType, ExecutionStatus,
 )
-from executions.serializers import ExecutionTargetSerializer, ExecutionSerializer
+from executions.serializers import ExecutionTargetSerializer
 
 
 # =============================================================================

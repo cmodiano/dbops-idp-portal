@@ -6,7 +6,6 @@ import pytest
 from django.test import TestCase
 from django.db import transaction
 from django.utils import timezone
-from idp_auth.models import User
 from integrations.models import Integration
 from catalog.models import Action, Tag, ActionTag, ActionStatus, ActionItemType
 from catalog.services import CatalogService
@@ -106,7 +105,7 @@ class TestCatalogService(TestCase):
             status=ActionStatus.PUBLISHED,
             created_by=self.user
         )
-        action2 = Action.objects.create(
+        Action.objects.create(
             name='Action 2',
             engine='PostgreSQL',
             platform='AAP',
@@ -297,7 +296,7 @@ class TestCatalogService(TestCase):
         # Mock an error during tag creation
         with self.assertRaises(Exception):
             with transaction.atomic():
-                action = Action.objects.create(
+                Action.objects.create(
                     name='Test Action',
                     engine='Oracle',
                     platform='AAP',

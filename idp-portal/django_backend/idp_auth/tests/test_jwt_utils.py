@@ -4,7 +4,6 @@ Story M.7 - Task 4.9
 """
 
 from datetime import timedelta
-from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 from jose import jwt

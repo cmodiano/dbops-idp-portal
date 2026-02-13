@@ -169,7 +169,7 @@ export const TargetSelectionStep = memo(function TargetSelectionStep({
               tooltip="Entrez les noms des cibles, separes par des virgules (ex: srv-01, srv-02, srv-03)"
             >
               <Input.TextArea
-                ref={firstFieldRef as React.Ref<any>}
+                ref={firstFieldRef as React.Ref<HTMLTextAreaElement>}
                 value={manualTargetInput}
                 onChange={(e) => onManualTargetInputChange(e.target.value)}
                 placeholder="ex: srv-dev-01, srv-dev-02, srv-dev-03"

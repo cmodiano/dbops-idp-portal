@@ -17,7 +17,7 @@ interface UseEnvironmentsResult {
 let cachedEnvironments: string[] | null = null;
 let loadingPromise: Promise<string[]> | null = null;
 let cacheError: Error | null = null;
-let listeners: Set<(data: string[], error: Error | null) => void> = new Set();
+const listeners: Set<(data: string[], error: Error | null) => void> = new Set();
 
 /**
  * Invalidate the environments cache.

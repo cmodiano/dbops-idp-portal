@@ -279,7 +279,7 @@ export function ActionTable({
         align: 'center',
       },
     ],
-    [favorites, showFavoriteButton, token, onActionClick, onToggleFavorite, isDark, renderTags]
+    [favorites, showFavoriteButton, token, onActionClick, onToggleFavorite, renderTags]
   );
 
   // H2 fix: Extract styles to avoid inline <style> tag (CSP and performance issue)

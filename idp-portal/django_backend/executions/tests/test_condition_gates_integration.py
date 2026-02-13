@@ -8,13 +8,11 @@ Tests:
 - AC5: API validation of gate_conditions
 """
 
-import json
 import pytest
-from django.utils import timezone
 
-from executions.models import Execution, ExecutionStep, ExecutionStatus, ExecutionStepStatus
+from executions.models import Execution, ExecutionStep, ExecutionStatus
 from executions.workflow_runtime import WorkflowRuntime
-from catalog.models import Action, ActionStatus, ActionItemType
+from catalog.models import ActionStatus, ActionItemType
 from catalog.services import CatalogService
 from tests.factories import UserFactory, ActionFactory, IntegrationFactory
 

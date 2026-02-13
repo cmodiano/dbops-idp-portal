@@ -149,11 +149,11 @@ class TestAuthService(TestCase):
 
         # Create favorites with different timestamps (oldest first)
         import time
-        fav1 = UserFavorite.objects.create(user=user, action=action1)
+        UserFavorite.objects.create(user=user, action=action1)
         time.sleep(0.01)  # Ensure different timestamps
-        fav2 = UserFavorite.objects.create(user=user, action=action2)
+        UserFavorite.objects.create(user=user, action=action2)
         time.sleep(0.01)
-        fav3 = UserFavorite.objects.create(user=user, action=action3)
+        UserFavorite.objects.create(user=user, action=action3)
 
         favorites = list(self.service.list_favorites(user.id))
 

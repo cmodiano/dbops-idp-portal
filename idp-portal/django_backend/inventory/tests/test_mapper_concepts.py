@@ -3,9 +3,8 @@ Tests for InventoryMapper.get_available_concepts().
 Story 23.4 - AC5, AC8: Tests for concept key retrieval.
 """
 
-import pytest
 from django.test import TestCase
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from inventory.mapper import InventoryMapper
 
 

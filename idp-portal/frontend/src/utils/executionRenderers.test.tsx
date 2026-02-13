@@ -18,7 +18,7 @@ import {
   ENGINE_ICONS_CONFIG,
   PLATFORM_ICONS_CONFIG,
 } from './executionRenderers';
-import type { ExecutionStatusType, ActionEngine, ActionPlatform, ItemType } from '../types/api';
+import type { ExecutionStatusType, ActionEngine, ActionPlatform } from '../types/api';
 
 describe('executionRenderers', () => {
   describe('renderStatusIndicator (AC1-AC3)', () => {

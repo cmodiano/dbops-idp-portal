@@ -6,7 +6,6 @@ Provides fixtures that use real JWT tokens (not force_authenticate)
 to exercise the full authentication pipeline.
 """
 
-import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -17,7 +16,7 @@ from idp_auth.jwt_utils import create_access_token, create_refresh_token
 from idp_auth.models import User
 from integrations.models import Integration
 from catalog.models import Action
-from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
+from profiles.models import Profile
 
 
 # ============================================================================

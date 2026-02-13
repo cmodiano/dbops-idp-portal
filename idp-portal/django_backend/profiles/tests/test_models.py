@@ -1,5 +1,4 @@
 import pytest
-import json
 from django.test import TestCase
 from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
 

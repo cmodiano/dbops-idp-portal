@@ -353,6 +353,6 @@ development_status:
     26-12-unifier-checks-rbac-permission-mixin: done # 2026-02-13: Code review adversarial — 8 HIGH + 4 MEDIUM issues auto-fixés, refactoring has_object_permission() (owner-first optimization), parametrize tests, edge case added, commentaires clarifiés, 46 backend + 9 frontend tests = 55/55 ✅
     26-13-corriger-tous-tests-frontend-echec: done # Code review 2026-02-13: 8 issues found (3 HIGH + 3 MEDIUM + 2 LOW), ALL auto-fixed — File List completed (27 files), TESTING.md typos corrected, Change Log reformatted, skip verification documented — 2018/2018 tests pass (100%), 76.22% coverage baseline
     26-14-corriger-tous-tests-backend-echec: done
-    26-15-corriger-deprecations-warnings-linters: backlog
+    26-15-corriger-deprecations-warnings-linters: done # Code review 2026-02-13: 10 issues found (3 CRIT + 4 HIGH + 3 MED), ALL auto-fixed — CRIT-1: 3 `except Exception:` → `as e` (test PASSES), CRIT-3: 19 Alert `message=` → `title=` (Ant Design 6.2), HIGH-1: mypy 29→80 documented as Epic 26 pre-existing — Ruff 0, ESLint 0, mypy baseline stable, 2247 backend + 2018 frontend tests ✅
     26-16-enforcer-mypy-codebase-pre-commit-hook: backlog
     epic-26-retrospective: optional

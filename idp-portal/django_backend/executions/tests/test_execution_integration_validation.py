@@ -3,7 +3,6 @@ Story 24.4 (AC4, AC5, AC6): Tests for integration validation guards in execution
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
 
 from django.test import TestCase
 

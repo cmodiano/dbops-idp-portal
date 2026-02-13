@@ -269,12 +269,6 @@ class TestIntegrationViewSet(TestCase):
     def test_create_integration_invalid_config_reraises(self):
         """Test POST /admin/integrations with INVALID_CONFIG from service → 400."""
         self.client.force_authenticate(user=self.dbops_user)
-        data = {
-            'type': 'inventory_db',
-            'name': 'Bad Config',
-            'base_url': 'https://db.example.com',
-            'config': 'not-a-dict'
-        }
         # config serializer accepts DictField so we need to mock the service
         with patch(
             'integrations.views.IntegrationService.create_integration',

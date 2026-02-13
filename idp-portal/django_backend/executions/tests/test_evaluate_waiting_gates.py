@@ -10,7 +10,6 @@ Tests:
 - GateEvaluator error → step skipped, task continues
 """
 
-import json
 import pytest
 from datetime import timedelta
 from unittest.mock import patch, MagicMock
@@ -18,11 +17,11 @@ from unittest.mock import patch, MagicMock
 from django.utils import timezone
 
 from executions.models import (
-    Execution, ExecutionStep, ExecutionStepStatus, ExecutionStatus,
+    ExecutionStepStatus,
 )
 from executions.gate_evaluator import GateEvaluator
 from executions.tasks import evaluate_waiting_gates
-from core.models import AuditActionType, AuditEntityType, AuditLog
+from core.models import AuditActionType, AuditLog
 from tests.factories import (
     ExecutionFactory,
     ExecutionStepFactory,
@@ -176,7 +175,7 @@ class TestEvaluateWaitingGatesTask:
                 'timeout_hours': 48,
             }),
         ):
-            result = evaluate_waiting_gates()
+            evaluate_waiting_gates()
 
         step.refresh_from_db()
         assert step.status == ExecutionStepStatus.SKIPPED
@@ -198,8 +197,8 @@ class TestEvaluateWaitingGatesTask:
 
     def test_evaluator_error_step_skipped_task_continues(self):
         """AC12: GateEvaluator error → step skipped, task continues."""
-        step1 = _create_waiting_step([{'type': 'maintenance_window'}])
-        step2 = _create_waiting_step([{'type': 'maintenance_window'}])
+        _create_waiting_step([{'type': 'maintenance_window'}])
+        _create_waiting_step([{'type': 'maintenance_window'}])
 
         call_count = [0]
 
@@ -223,9 +222,9 @@ class TestEvaluateWaitingGatesTask:
 
     def test_multiple_waiting_steps_all_processed(self):
         """Multiple WAITING steps are all evaluated in one pass."""
-        step1 = _create_waiting_step([{'type': 'maintenance_window'}])
-        step2 = _create_waiting_step([{'type': 'maintenance_window'}])
-        step3 = _create_waiting_step([{'type': 'maintenance_window'}])
+        _create_waiting_step([{'type': 'maintenance_window'}])
+        _create_waiting_step([{'type': 'maintenance_window'}])
+        _create_waiting_step([{'type': 'maintenance_window'}])
 
         with patch.object(
             GateEvaluator,
@@ -261,7 +260,7 @@ class TestEvaluateWaitingGatesTask:
         ):
             with patch('executions.tasks.retry_workflow_step') as mock_retry:
                 mock_retry.apply_async = MagicMock()
-                result = evaluate_waiting_gates()
+                evaluate_waiting_gates()
 
         # Step transitions to RUNNING even though execution_steps is None
         step.refresh_from_db()

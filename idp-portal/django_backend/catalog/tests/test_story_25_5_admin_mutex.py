@@ -220,7 +220,7 @@ class TestStory255AdminMutexAPI(TestCase):
             incompatible_with=self.action_backup,
             same_target=True,
         )
-        rule_ba = ActionMutex.objects.create(
+        ActionMutex.objects.create(
             action=self.action_backup,
             incompatible_with=self.action_patching,
             same_target=True,

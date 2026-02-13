@@ -13,18 +13,16 @@ Tests AC1-AC5:
 """
 
 import pytest
-from unittest.mock import patch, MagicMock, call
-from django.utils import timezone
+from unittest.mock import patch
 
 from executions.workflow_runtime import (
     WorkflowRuntime,
     StepResult,
     StepOutcome,
 )
-from executions.models import Execution, ExecutionStatus, ExecutionStep, ExecutionStepStatus
-from catalog.models import Action, ActionStatus, ActionItemType
+from executions.models import Execution, ExecutionStatus
+from catalog.models import ActionStatus, ActionItemType
 from core.models import AuditActionType
-from idp_auth.models import User
 from tests.factories import UserFactory, ActionFactory
 
 

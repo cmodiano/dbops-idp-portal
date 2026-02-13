@@ -6,7 +6,6 @@ Tests: Backend serializer enriches workflow_steps with action_name from referenc
 import pytest
 from django.test import TestCase
 from rest_framework.test import APIClient
-from idp_auth.models import User
 from catalog.models import Action, ActionStatus, ActionItemType, ActionEngine, ActionPlatform
 from catalog.serializers import ActionSerializer
 from tests.factories import UserFactory

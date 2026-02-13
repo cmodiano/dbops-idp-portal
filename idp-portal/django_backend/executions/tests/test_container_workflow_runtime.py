@@ -11,18 +11,16 @@ Tests:
 - Subtask 3.5: Integration with existing WorkflowRuntime (no breaking)
 """
 
-import json
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
-from django.utils import timezone
 
 from executions.container_workflow_runtime import ContainerWorkflowRuntime
 from executions.models import (
     Execution, ExecutionStep, ExecutionStatus, ExecutionStepStatus,
 )
-from catalog.models import Action, ActionStatus, ActionItemType
-from tests.factories import UserFactory, ActionFactory, ExecutionFactory
+from catalog.models import ActionStatus, ActionItemType
+from tests.factories import UserFactory, ActionFactory
 
 
 def _make_workflow_steps(referenced_actions):

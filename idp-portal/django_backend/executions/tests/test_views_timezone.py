@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone as dt_timezone
 
-import pytest
 
 from core.utils import ensure_utc_isoformat
 

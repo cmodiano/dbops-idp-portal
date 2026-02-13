@@ -8,7 +8,6 @@ Tests: soumission execution → moteur → plateforme → résultat → audit
 import pytest
 from django.test import TestCase
 from django.utils import timezone
-from unittest.mock import patch, MagicMock
 
 from idp_auth.models import User
 from catalog.models import Action, ActionStatus
@@ -332,13 +331,13 @@ class TestExecutionConcurrency(TestCase):
         """Test that executions are properly isolated per user."""
         user2 = User.objects.create(username='user2', profile='DBA')
 
-        exec1 = Execution.objects.create(
+        Execution.objects.create(
             action=self.action,
             user=self.user,
             environment='dev',
             status=ExecutionStatus.SUBMITTED
         )
-        exec2 = Execution.objects.create(
+        Execution.objects.create(
             action=self.action,
             user=user2,
             environment='dev',

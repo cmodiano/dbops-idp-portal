@@ -7,7 +7,7 @@ import type { ActionPreviewData } from '../../types/api';
 // Mock react-markdown to avoid lazy/Suspense issues in tests
 vi.mock('react-markdown', () => ({
   __esModule: true,
-  default: function MockMarkdown({ children, components }: { children: string; components?: Record<string, Function> }) {
+  default: function MockMarkdown({ children }: { children: string; components?: Record<string, Function> }) {
     // Minimal markdown-to-DOM for test assertions
     const lines = children.split('\n');
     const els: JSX.Element[] = [];

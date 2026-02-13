@@ -55,7 +55,7 @@ export function ExportButton({
         await exportDashboardPDF(filters);
       }
       message.success(`Export ${format.toUpperCase()} téléchargé`);
-    } catch (error) {
+    } catch {
       message.error(`Erreur lors de l'export ${format.toUpperCase()}`);
     } finally {
       setExporting(false);

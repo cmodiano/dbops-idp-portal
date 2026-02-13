@@ -101,7 +101,6 @@ class TestRetryWithRealCeleryDelays:
         # Track attempt times
         attempt_times = []
 
-        original_execute = WorkflowRuntime._execute_step
         attempt_counter = [0]  # Mutable to track across closures
 
         def mock_execute_with_timing(self, step):

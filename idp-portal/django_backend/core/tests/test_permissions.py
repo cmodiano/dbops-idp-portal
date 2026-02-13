@@ -234,7 +234,6 @@ class TestDBOPSProfilePermissionBasic:
         request = _make_request(user)
         permission = DBOPSProfilePermission()
 
-        import logging
         with override_settings(ALLOW_SUPERUSER_FALLBACK=True):
             with patch("core.permissions.logger") as mock_logger:
                 result = permission.has_permission(request, MagicMock())

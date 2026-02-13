@@ -25,6 +25,7 @@ export function prepareWizardParamsFromExecution(
   // Build clean parameters without internal _targets field
   let cleanParameters: Record<string, unknown> | undefined;
   if (params) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { _targets, ...rest } = params;
     if (Object.keys(rest).length > 0) {
       cleanParameters = rest;

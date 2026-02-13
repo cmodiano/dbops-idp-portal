@@ -3,8 +3,6 @@ from __future__ import annotations
 
 from core.exceptions import BadRequestError
 from executions.utils import (
-    extract_workflow_referenced_action_ids,
-    extract_workflow_step_map,
     validate_workflow_step_parameters,
     validate_workflow_referenced_actions,
 )

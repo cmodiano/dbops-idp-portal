@@ -3,11 +3,8 @@ Tests for API endpoints with filter_by_attribute.
 Story 23.4 - AC3, AC4, AC8: API serializer validation and representation tests.
 """
 
-import json
-import pytest
 from django.test import TestCase
-from unittest.mock import patch, MagicMock
-from rest_framework.test import APIRequestFactory
+from unittest.mock import patch
 
 from profiles.serializers import ProfileTargetPermissionsSerializer
 from profiles.models import Profile, ProfileTargetPermission

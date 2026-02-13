@@ -7,9 +7,7 @@ Tests: login SAML → résolution AD groups → permissions → accès API
 
 import pytest
 from django.test import TestCase
-from rest_framework.test import APIClient
 
-from idp_auth.models import User
 from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
 from catalog.models import Action, ActionStatus, Tag, ActionTag
 from integrations.models import Integration
@@ -124,13 +122,13 @@ class TestProfileResolution(TestCase):
 
         for profile in profiles:
             try:
-                action_perm = ProfileActionPermission.objects.get(profile=profile)
+                ProfileActionPermission.objects.get(profile=profile)
                 has_action_permission = True
             except ProfileActionPermission.DoesNotExist:
                 pass
 
             try:
-                target_perm = ProfileTargetPermission.objects.get(profile=profile)
+                ProfileTargetPermission.objects.get(profile=profile)
                 has_target_permission = True
             except ProfileTargetPermission.DoesNotExist:
                 pass

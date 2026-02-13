@@ -7,8 +7,6 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from datetime import timezone as dt_timezone
 
-UTC = dt_timezone(timedelta(0))
-
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -25,7 +23,6 @@ from core.utils import ensure_utc_isoformat
 from executions.models import (
     ScheduledExecution,
     ScheduledExecutionStatus,
-    RecurringPattern,
 )
 from executions.serializers import (
     ScheduledExecutionSerializer,
@@ -47,6 +44,8 @@ from inventory.services import InventoryService, InventoryServiceError, MAX_TARG
 from croniter import croniter, CroniterBadCronError, CroniterBadDateError
 from drf_spectacular.utils import extend_schema
 import structlog
+
+UTC = dt_timezone(timedelta(0))
 
 exec_logger = structlog.get_logger(__name__)
 

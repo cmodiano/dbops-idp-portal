@@ -4,7 +4,7 @@
  * Shows action details, retry config with timeline preview, branch info (read-only).
  */
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo } from 'react';
 import { Drawer, Input, Switch, InputNumber, Typography, Space, Button, Divider, Alert } from 'antd';
 import { DeleteOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import type { Node } from '@xyflow/react';
@@ -30,19 +30,19 @@ export const StepConfigPanel: React.FC<StepConfigPanelProps> = ({
   onNodeDelete,
   disabled = false,
 }) => {
-  if (!node) return null;
+  const data = node?.data as unknown as WorkflowStepNodeData | undefined;
 
-  const data = node.data as unknown as WorkflowStepNodeData;
-
-  const retryEnabled = Boolean(data.retry_enabled);
-  const maxAttempts = data.retry_max_attempts ?? 3;
-  const intervalSeconds = data.retry_interval_seconds ?? 60;
-  const backoffMultiplier = data.retry_backoff_multiplier ?? 2.0;
+  const retryEnabled = Boolean(data?.retry_enabled);
+  const maxAttempts = data?.retry_max_attempts ?? 3;
+  const intervalSeconds = data?.retry_interval_seconds ?? 60;
+  const backoffMultiplier = data?.retry_backoff_multiplier ?? 2.0;
 
   const retryTimeline = useMemo(
     () => retryEnabled ? calculateRetryTimeline(maxAttempts, intervalSeconds, backoffMultiplier) : [],
     [retryEnabled, maxAttempts, intervalSeconds, backoffMultiplier],
   );
+
+  if (!node || !data) return null;
 
   // Validation helpers
   const maxAttemptsError = retryEnabled && (maxAttempts < 1 || maxAttempts > 10);

@@ -463,8 +463,9 @@ describe('Round-trip JSON ↔ YAML', () => {
     expect(result.data!.workflow.name).toBe(exportObj.workflow.name);
   });
 
-  it('export YAML → import → same data structure', () => {
+  it('export YAML → import → same data structure', async () => {
     // Simulate YAML export by using js-yaml
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const yaml = require('js-yaml');
     const exportObj = buildValidExport();
     const yamlString = yaml.dump(exportObj);

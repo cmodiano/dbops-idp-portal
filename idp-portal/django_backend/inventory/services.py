@@ -21,14 +21,12 @@ from django.db import connection  # noqa: F401 — backward compat for tests pat
 
 from integrations.models import IntegrationType
 from inventory.mapper import InventoryMapper, MapperValidationError
-from inventory.models import TargetType
 from inventory.source_resolver import InventorySourceResolver
 from inventory.query_executor import (
     InventoryQueryExecutor,
     InventoryServiceError,
     MAX_MULTI_TABLE_RESULTS,
     MAX_FLAT_TABLE_RESULTS,
-    SAFE_TABLE_NAME_PATTERN,
 )
 from inventory.rbac_filter import (
     InventoryRBACFilter,
@@ -857,7 +855,7 @@ class InventoryService:
             )
             return cached_result
 
-        integration = self.source_resolver.get_active_inventory_integration()
+        self.source_resolver.get_active_inventory_integration()
 
         targets, _ = self.list_targets(
             environment=None,

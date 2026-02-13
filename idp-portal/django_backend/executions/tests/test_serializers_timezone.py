@@ -10,7 +10,6 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone as dt_timezone
 from unittest.mock import MagicMock
 
-import pytest
 from django.utils import timezone
 
 from core.utils import ensure_utc_isoformat

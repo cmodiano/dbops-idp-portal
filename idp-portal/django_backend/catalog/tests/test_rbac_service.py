@@ -5,8 +5,7 @@ Story 26.3 - AC7: Unit tests for the extracted RBAC service.
 """
 from __future__ import annotations
 
-import pytest
-from unittest.mock import patch, MagicMock, PropertyMock
+from unittest.mock import patch, MagicMock
 
 from catalog.rbac_service import CatalogRBACService
 

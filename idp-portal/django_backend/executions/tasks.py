@@ -6,14 +6,13 @@ Story 25.3: Periodic evaluation of WAITING gate conditions.
 
 import structlog
 from celery import shared_task  # type: ignore[import-untyped]
-from django.db import transaction
 from django.utils import timezone
 
 from executions.models import (
     Execution, ExecutionStatus,
     ExecutionStep, ExecutionStepStatus,
 )
-from executions.workflow_runtime import StepResult, StepOutcome
+from executions.workflow_runtime import StepOutcome
 from core.services import AuditService
 from core.middleware import get_correlation_id
 from core.models import AuditActionType, AuditEntityType
@@ -273,7 +272,7 @@ def evaluate_waiting_gates(self):
 
             # AC8: Timeout handling
             if gate_status.get('timeout_triggered'):
-                timeout_action = gate_status.get('action', 'FAILED')
+                gate_status.get('action', 'FAILED')
                 _handle_gate_timeout(step, gate_status, correlation_id)
                 errors += 1  # Count as "processed" but not unblocked
                 continue

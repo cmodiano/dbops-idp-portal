@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Table, Button, Space, Tag, Switch, App } from 'antd';
+import { Table, Button, Space, Tag, App } from 'antd';
 import type { TableProps } from 'antd';
 import { PlusOutlined, ReloadOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import type { RefCategory } from '../../types/api';

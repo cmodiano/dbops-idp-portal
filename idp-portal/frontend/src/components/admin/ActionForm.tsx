@@ -328,7 +328,8 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
       if (actionId) {
         // Convert to API format (strip internal id field)
         const rulesToSave = remediationRules.length > 0
-          ? remediationRules.map(({ id: _id, ...rule }) => rule as RemediationRule)
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          ? remediationRules.map(({ id, ...rule }) => rule as RemediationRule)
           : null;
         await updateRemediationRules(actionId, rulesToSave);
       }

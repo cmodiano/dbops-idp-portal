@@ -5,7 +5,6 @@ Profile YAML export/import service (Story M.5).
 import io
 import yaml
 from typing import Any
-from profiles.models import Profile
 from profiles.services import ProfileService
 from core.exceptions import InvalidStateError
 

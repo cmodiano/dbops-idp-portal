@@ -6,8 +6,7 @@ import json
 
 from rest_framework import serializers
 from integrations.models import (
-    Integration, AuthFlow, IntegrationType, IntegrationStatus,
-    IntegrationTypeCatalogue, IntegrationAction,
+    Integration, AuthFlow, IntegrationType, IntegrationTypeCatalogue, IntegrationAction,
 )
 
 

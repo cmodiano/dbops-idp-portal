@@ -4,7 +4,7 @@ Tests for profiles managers (ProfileManager).
 
 import pytest
 from django.test import TestCase
-from profiles.models import Profile, ProfileManager
+from profiles.models import Profile
 
 
 @pytest.mark.django_db

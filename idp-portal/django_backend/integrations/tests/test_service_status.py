@@ -5,7 +5,7 @@ Story 24.3: Tests for automatic status calculation in IntegrationService create/
 import pytest
 from django.test import TestCase
 
-from integrations.models import Integration, IntegrationStatus, IntegrationTypeCatalogue
+from integrations.models import IntegrationStatus, IntegrationTypeCatalogue
 from integrations.services import IntegrationService
 from core.models import AuditLog, AuditActionType
 from idp_auth.models import User

@@ -15,7 +15,7 @@ import { useExecutionPolling } from '../../hooks/useExecutionPolling';
 import { useRemediationSuggestions } from '../../hooks/useRemediationSuggestions';
 import { useRemediationContext } from '../../hooks/useRemediationContext';
 import { StructuredErrorCard } from './StructuredErrorCard';
-import type { ExecutionResponse, ExecutionStepResponse, ExecutionStepStatus, RemediationSuggestion, ExecutionStatusType } from '../../types/api';
+import type { ExecutionResponse, ExecutionStepResponse, ExecutionStepStatus, RemediationSuggestion } from '../../types/api';
 
 const FORCE_POLLING = import.meta.env.VITE_SIMULATE_EXECUTION === 'true';
 
