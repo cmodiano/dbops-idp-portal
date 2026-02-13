@@ -21,7 +21,7 @@ class ProfileManager(models.Manager):
           - a full DN like "CN=GRP-IDP-DBOPS,OU=...,DC=..."
           - a short group name like "GRP-IDP-DBOPS"
           - sometimes a profile code like "dbops"
-        - For robustness (and to match FastAPI behavior), we match against BOTH:
+        - For robustness, we match against BOTH:
           - `Profile.ad_group`
           - `Profile.name`
         - Matching is case-insensitive.
@@ -74,12 +74,12 @@ class ProfileManager(models.Manager):
         Counts both action and target permissions.
         
         Returns:
-            QuerySet with permissions_count annotation
+            QuerySet with permission_count annotation (used by ProfileListSerializer).
         """
         from django.db.models import Count, Q
         
         return self.annotate(
-            permissions_count=Count(
+            permission_count=Count(
                 'profileactionpermission',
                 filter=Q(profileactionpermission__isnull=False),
                 distinct=True
@@ -206,6 +206,10 @@ class ProfileTargetPermission(models.Model):
     """
     Profile target permission model mapping to Oracle PROFILE_TARGET_PERMISSIONS table (V012).
     One row per profile: type (LIST/PATTERN/ALL), target_names/target_patterns in JSON (CLOB).
+
+    Story 23.4: Added filter_by_attribute_json for attribute-based RBAC filtering.
+    Format: {"engine_type": ["oracle", "sqlserver"], "zone": ["prod"], ...}
+    Keys are business concept names from InventoryMapper config (stable, not Oracle columns).
     """
     profile = models.OneToOneField(
         Profile,
@@ -225,6 +229,18 @@ class ProfileTargetPermission(models.Model):
     # CLOB fields - using TextField with JSON serialization helpers
     target_names_json = models.TextField(null=True, blank=True, db_column='TARGET_NAMES_JSON')
     target_patterns_json = models.TextField(null=True, blank=True, db_column='TARGET_PATTERNS_JSON')
+    filter_by_attribute_json = models.TextField(
+        null=True,
+        blank=True,
+        db_column='FILTER_BY_ATTRIBUTE_JSON',
+        help_text='JSON dict filtering targets by inventory attributes. Format: {"engine_type": ["oracle"], ...}'
+    )
+    exclusion_patterns_json = models.TextField(
+        null=True,
+        blank=True,
+        db_column='EXCLUSION_PATTERNS_JSON',
+        help_text='JSON array filtering out targets matching any pattern. Applied after inclusion rules. Format: ["PROD-CRITICAL-*", "DR-*"]. Story 25.6'
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
     updated_at = models.DateTimeField(auto_now=True, db_column='UPDATED_AT')
 
@@ -268,3 +284,87 @@ class ProfileTargetPermission(models.Model):
             self.target_patterns_json = json.dumps(value)
         else:
             self.target_patterns_json = None
+
+    def get_filter_by_attribute(self) -> dict[str, list[str]] | None:
+        """
+        Deserialize filter_by_attribute from JSON CLOB.
+
+        Returns:
+            Dict mapping attribute concept keys to list of values, or None if not set.
+            Example: {"engine_type": ["oracle", "sqlserver"], "zone": ["prod"]}
+
+        Story 23.4 - RBAC filter by inventory attributes.
+        """
+        if self.filter_by_attribute_json:
+            try:
+                return json.loads(self.filter_by_attribute_json)
+            except (json.JSONDecodeError, TypeError) as e:
+                # Code review fix: JSON malformé = ERROR (corruption données), pas WARNING
+                logger.error(
+                    f"Failed to deserialize filter_by_attribute for Profile {self.profile_id}: {e}"
+                )
+                return None
+        return None
+
+    def set_filter_by_attribute(self, value: dict | None) -> None:
+        """
+        Serialize filter_by_attribute to JSON CLOB.
+
+        Args:
+            value: Dict mapping attribute keys to list of values, or None to clear.
+
+        Story 23.4 - RBAC filter by inventory attributes.
+        """
+        if value is not None:
+            self.filter_by_attribute_json = json.dumps(value)
+        else:
+            self.filter_by_attribute_json = None
+
+    def get_exclusion_patterns(self) -> list[str]:
+        """
+        Deserialize exclusion_patterns from JSON CLOB.
+
+        Returns:
+            List of exclusion patterns, or empty list if not set.
+            Example: ["PROD-CRITICAL-*", "DR-*"]
+
+        Story 25.6 - Deny explicit RBAC (exclusion patterns).
+        Code review fix: Use ERROR level for data corruption (consistency with filter_by_attribute).
+        """
+        if self.exclusion_patterns_json:
+            try:
+                patterns = json.loads(self.exclusion_patterns_json)
+                # Validate that it's a list of strings
+                if not isinstance(patterns, list):
+                    # Code review fix: ERROR (not WARNING) - this is data corruption
+                    logger.error(
+                        f"exclusion_patterns for Profile {self.profile_id} is not a list (data corruption), returning empty"
+                    )
+                    return []
+                # Filter out invalid patterns (non-string, empty)
+                valid_patterns = [p for p in patterns if isinstance(p, str) and p.strip()]
+                if len(valid_patterns) != len(patterns):
+                    logger.warning(
+                        f"exclusion_patterns for Profile {self.profile_id} contained invalid patterns (filtered out)"
+                    )
+                return valid_patterns
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.error(
+                    f"Failed to deserialize exclusion_patterns for Profile {self.profile_id}: {e}"
+                )
+                return []
+        return []
+
+    def set_exclusion_patterns(self, value: list[str] | None) -> None:
+        """
+        Serialize exclusion_patterns to JSON CLOB.
+
+        Args:
+            value: List of exclusion patterns (strings), or None to clear.
+
+        Story 25.6 - Deny explicit RBAC (exclusion patterns).
+        """
+        if value is not None:
+            self.exclusion_patterns_json = json.dumps(value)
+        else:
+            self.exclusion_patterns_json = None

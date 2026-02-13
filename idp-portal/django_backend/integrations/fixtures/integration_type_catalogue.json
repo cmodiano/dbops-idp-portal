@@ -1,0 +1,131 @@
+[
+  {
+    "model": "integrations.integrationtypecatalogue",
+    "pk": "aap",
+    "fields": {
+      "name": "Ansible Automation Platform",
+      "description": "Ex\u00e9cution de jobs et workflows Ansible via AAP Controller",
+      "version": "1.0",
+      "is_active": true,
+      "created_at": "2026-02-10T10:00:00Z",
+      "updated_at": "2026-02-10T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationtypecatalogue",
+    "pk": "servicenow",
+    "fields": {
+      "name": "ServiceNow ITSM",
+      "description": "Gestion des change requests ServiceNow",
+      "version": "1.0",
+      "is_active": true,
+      "created_at": "2026-02-10T10:00:00Z",
+      "updated_at": "2026-02-10T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "aap",
+      "action_code": "start_job",
+      "action_label": "D\u00e9marrer un job",
+      "description": "Lance un job template AAP avec param\u00e8tres extra_vars",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"job_template_id\": {\"type\": \"integer\", \"description\": \"ID du job template AAP\"}}, \"required\": [\"job_template_id\"]}",
+      "optional_params": "{\"type\": \"object\", \"properties\": {\"extra_vars\": {\"type\": \"object\", \"description\": \"Variables suppl\u00e9mentaires JSON\"}}}",
+      "response_format": "{\"job_id\": \"integer\", \"status\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-10T10:00:00Z",
+      "updated_at": "2026-02-10T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "aap",
+      "action_code": "start_workflow",
+      "action_label": "D\u00e9marrer un workflow",
+      "description": "Lance un workflow job template AAP",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"workflow_job_template_id\": {\"type\": \"integer\", \"description\": \"ID du workflow job template AAP\"}}, \"required\": [\"workflow_job_template_id\"]}",
+      "optional_params": "{\"type\": \"object\", \"properties\": {\"extra_vars\": {\"type\": \"object\", \"description\": \"Variables suppl\u00e9mentaires JSON\"}}}",
+      "response_format": "{\"workflow_job_id\": \"integer\", \"status\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-10T10:00:00Z",
+      "updated_at": "2026-02-10T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "aap",
+      "action_code": "get_job_status",
+      "action_label": "R\u00e9cup\u00e9rer le statut d'un job",
+      "description": "R\u00e9cup\u00e8re le statut d'ex\u00e9cution d'un job AAP",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"job_id\": {\"type\": \"integer\", \"description\": \"ID du job AAP\"}}, \"required\": [\"job_id\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"job_id\": \"integer\", \"status\": \"string\", \"finished\": \"boolean\", \"failed\": \"boolean\"}",
+      "is_active": true,
+      "created_at": "2026-02-10T10:00:00Z",
+      "updated_at": "2026-02-10T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "aap",
+      "action_code": "cancel_job",
+      "action_label": "Annuler un job",
+      "description": "Annule un job en cours d'ex\u00e9cution sur AAP",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"job_id\": {\"type\": \"integer\", \"description\": \"ID du job AAP \u00e0 annuler\"}}, \"required\": [\"job_id\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"job_id\": \"integer\", \"status\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-10T10:00:00Z",
+      "updated_at": "2026-02-10T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "servicenow",
+      "action_code": "create_change",
+      "action_label": "Cr\u00e9er un changement",
+      "description": "Cr\u00e9e un change request ServiceNow",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"short_description\": {\"type\": \"string\"}, \"category\": {\"type\": \"string\"}, \"priority\": {\"type\": \"integer\"}}, \"required\": [\"short_description\", \"category\"]}",
+      "optional_params": "{\"type\": \"object\", \"properties\": {\"description\": {\"type\": \"string\"}, \"work_notes\": {\"type\": \"string\"}}}",
+      "response_format": "{\"change_id\": \"string\", \"number\": \"string\", \"state\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-10T10:00:00Z",
+      "updated_at": "2026-02-10T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "servicenow",
+      "action_code": "update_change",
+      "action_label": "Mettre \u00e0 jour un changement",
+      "description": "Met \u00e0 jour un change request ServiceNow existant",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"change_id\": {\"type\": \"string\", \"description\": \"ID du change request\"}, \"state\": {\"type\": \"string\"}}, \"required\": [\"change_id\"]}",
+      "optional_params": "{\"type\": \"object\", \"properties\": {\"work_notes\": {\"type\": \"string\"}, \"close_notes\": {\"type\": \"string\"}}}",
+      "response_format": "{\"change_id\": \"string\", \"state\": \"string\", \"updated\": \"boolean\"}",
+      "is_active": true,
+      "created_at": "2026-02-10T10:00:00Z",
+      "updated_at": "2026-02-10T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "servicenow",
+      "action_code": "get_change_status",
+      "action_label": "R\u00e9cup\u00e9rer le statut d'un changement",
+      "description": "R\u00e9cup\u00e8re le statut d'un change request ServiceNow",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"change_id\": {\"type\": \"string\", \"description\": \"ID du change request\"}}, \"required\": [\"change_id\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"change_id\": \"string\", \"number\": \"string\", \"state\": \"string\", \"priority\": \"integer\"}",
+      "is_active": true,
+      "created_at": "2026-02-10T10:00:00Z",
+      "updated_at": "2026-02-10T10:00:00Z"
+    }
+  }
+]

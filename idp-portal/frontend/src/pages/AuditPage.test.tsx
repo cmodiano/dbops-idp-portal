@@ -13,8 +13,23 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router';
-import { ConfigProvider } from 'antd';
+import { App, ConfigProvider } from 'antd';
 import { ThemeProvider } from '../contexts/ThemeContext';
+
+// Mock App.useApp() to provide message without needing full App context
+const mockMessage = {
+  success: vi.fn(),
+  error: vi.fn(),
+  info: vi.fn(),
+  warning: vi.fn(),
+  loading: vi.fn(),
+};
+
+vi.spyOn(App, 'useApp').mockReturnValue({
+  message: mockMessage,
+  notification: {} as any,
+  modal: {} as any,
+});
 
 // Mock the audit service
 const mockListExecutionAudit = vi.fn();
@@ -113,7 +128,7 @@ describe('AuditPage', () => {
   it('AC1: renders table with correct columns', async () => {
     mockListExecutionAudit.mockResolvedValue({
       data: mockAuditEntries,
-      pagination: { page: 1, page_size: 25, total_count: 2, total_pages: 1 },
+      pagination: { page: 1, page_size: 25, total: 2, total_pages: 1 },
     });
 
     renderWithProviders(<AuditPage />);
@@ -135,7 +150,7 @@ describe('AuditPage', () => {
   it('AC1: displays audit entries in table', async () => {
     mockListExecutionAudit.mockResolvedValue({
       data: mockAuditEntries,
-      pagination: { page: 1, page_size: 25, total_count: 2, total_pages: 1 },
+      pagination: { page: 1, page_size: 25, total: 2, total_pages: 1 },
     });
 
     renderWithProviders(<AuditPage />);
@@ -158,7 +173,7 @@ describe('AuditPage', () => {
   it('AC2: renders filter controls', async () => {
     mockListExecutionAudit.mockResolvedValue({
       data: [],
-      pagination: { page: 1, page_size: 25, total_count: 0, total_pages: 1 },
+      pagination: { page: 1, page_size: 25, total: 0, total_pages: 1 },
     });
 
     renderWithProviders(<AuditPage />);
@@ -175,7 +190,7 @@ describe('AuditPage', () => {
   it('AC5: displays pagination with correct count', async () => {
     mockListExecutionAudit.mockResolvedValue({
       data: mockAuditEntries,
-      pagination: { page: 1, page_size: 25, total_count: 100, total_pages: 4 },
+      pagination: { page: 1, page_size: 25, total: 100, total_pages: 4 },
     });
 
     renderWithProviders(<AuditPage />);
@@ -216,7 +231,7 @@ describe('AuditPage', () => {
   it('AC3: clicking row opens drawer', async () => {
     mockListExecutionAudit.mockResolvedValue({
       data: mockAuditEntries,
-      pagination: { page: 1, page_size: 25, total_count: 2, total_pages: 1 },
+      pagination: { page: 1, page_size: 25, total: 2, total_pages: 1 },
     });
 
     mockGetExecution.mockResolvedValue({
@@ -254,7 +269,7 @@ describe('AuditPage', () => {
     beforeEach(() => {
       mockListExecutionAudit.mockResolvedValue({
         data: mockAuditEntries,
-        pagination: { page: 1, page_size: 25, total_count: 2, total_pages: 1 },
+        pagination: { page: 1, page_size: 25, total: 2, total_pages: 1 },
       });
       mockExportAuditReport.mockResolvedValue(undefined);
     });
@@ -349,7 +364,7 @@ describe('AuditPage', () => {
       await user.click(screen.getByText('CSV'));
 
       await waitFor(() => {
-        expect(screen.getByText(/Rapport exporté/i)).toBeInTheDocument();
+        expect(mockMessage.success).toHaveBeenCalledWith(expect.stringMatching(/Rapport exporté/i), expect.anything());
       });
     });
 
@@ -372,7 +387,7 @@ describe('AuditPage', () => {
       await user.click(screen.getByText('PDF'));
 
       await waitFor(() => {
-        expect(screen.getByText(/Limite d'export dépassée/i)).toBeInTheDocument();
+        expect(mockMessage.error).toHaveBeenCalledWith(expect.stringMatching(/Limite d'export dépassée/i), expect.anything());
       });
     });
 

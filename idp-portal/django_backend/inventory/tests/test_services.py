@@ -272,6 +272,32 @@ class InventoryServiceRBACTests(TestCase):
         envs = self.service.get_allowed_environments_for_user(['GRP-UNKNOWN'])
         self.assertEqual(envs, set())
 
+    def test_get_allowed_environments_includes_raw_and_normalized(self):
+        """
+        Story 21.2, Task 2.1: get_allowed_environments_for_user should return
+        both raw and normalized values for aliases (e.g., certif → {staging, certif}).
+        
+        LOW-2 FIX: Updated reference to Task 2.1 (not AC1 which is about list_targets_for_user).
+        """
+        certif_profile = Profile.objects.create(
+            name='certif-profile',
+            description='Certif access',
+            ad_group='GRP-CERTIF'
+        )
+        ProfileActionPermission.objects.create(
+            profile=certif_profile,
+            permission_type='ALL',
+            environments_json='["certif", "lab"]'
+        )
+
+        envs = self.service.get_allowed_environments_for_user(['GRP-CERTIF'])
+        
+        # Should include both normalized (staging) and raw (certif) for alias
+        # Lab has no alias, so only lab is included
+        self.assertIn('staging', envs)  # Normalized from certif
+        self.assertIn('certif', envs)   # Raw value
+        self.assertIn('lab', envs)      # No alias, raw value only
+
 
 class InventoryServiceSecurityTests(TestCase):
     """Tests for security features in InventoryService."""
@@ -342,28 +368,90 @@ class InventoryServiceEnvironmentNormalizationTests(TestCase):
         self.assertEqual(self.service._normalize_environment('development'), 'dev')
         self.assertEqual(self.service._normalize_environment('production'), 'prod')
 
-    def test_normalize_unknown_defaults_to_dev(self):
-        """Test that unknown values default to dev."""
-        self.assertEqual(self.service._normalize_environment('unknown'), 'dev')
-        self.assertEqual(self.service._normalize_environment('test'), 'dev')
-        self.assertEqual(self.service._normalize_environment(''), 'dev')
+    def test_normalize_unknown_returns_raw_value(self):
+        """
+        Story 21.1: Test that unknown values are returned as-is.
+        Inventory is the source of truth - no default to 'dev'.
+        """
+        self.assertEqual(self.service._normalize_environment('unknown'), 'unknown')
+        self.assertEqual(self.service._normalize_environment('test'), 'test')
+        self.assertEqual(self.service._normalize_environment('lab'), 'lab')
+        self.assertEqual(self.service._normalize_environment(''), '')
 
     @patch('inventory.services.connection')
-    def test_certif_environment_normalized_in_results(self, mock_connection):
-        """Test that CERTIF from Oracle is normalized to staging in results."""
+    def test_oracle_environment_returned_as_raw_value(self, mock_connection):
+        """
+        Story 21.1: Test that environment values from Oracle are returned as-is.
+        No normalization in _read_oracle_inventory - raw values preserved.
+        """
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = (2,)
         mock_cursor.fetchall.return_value = [
             ('srv-certif-01', 'CERTIF', 'SERVER'),
-            ('srv-certif-02', 'certification', 'SERVER'),
+            ('srv-lab-01', 'lab', 'SERVER'),
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
         targets, total = self.service.list_targets()
 
         self.assertEqual(total, 2)
-        self.assertEqual(targets[0]['environment'], 'staging')
-        self.assertEqual(targets[1]['environment'], 'staging')
+        # Story 21.1: Raw values with lowercase/trim only
+        self.assertEqual(targets[0]['environment'], 'certif')
+        self.assertEqual(targets[1]['environment'], 'lab')
+
+    @patch('inventory.services.connection')
+    @patch('inventory.services.logger')
+    def test_oracle_lab_environment_no_warning(self, mock_logger, mock_connection):
+        """
+        Story 21.1, AC1: Test that 'lab' from Oracle doesn't trigger warning.
+        Raw values are accepted without 'unknown_environment_value_defaulted'.
+        """
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (1,)
+        mock_cursor.fetchall.return_value = [
+            ('srv-lab-01', 'lab', 'SERVER'),
+        ]
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
+
+        targets, total = self.service.list_targets()
+
+        self.assertEqual(total, 1)
+        self.assertEqual(targets[0]['environment'], 'lab')
+        
+        # Verify no warning logged for unknown environment
+        # Story 21.1: 'unknown_environment_value_defaulted' should never be logged
+        warning_calls = [
+            call for call in mock_logger.warning.call_args_list
+            if 'unknown_environment_value_defaulted' in str(call)
+        ]
+        self.assertEqual(len(warning_calls), 0, 
+                         "No 'unknown_environment_value_defaulted' warning should be logged for 'lab' environment")
+
+    @patch('inventory.services.connection')
+    def test_list_environments_returns_raw_values(self, mock_connection):
+        """
+        Story 21.1, AC3: Test that list_environments() returns distinct raw values.
+        Includes non-standard environments like 'lab'.
+        """
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (4,)
+        mock_cursor.fetchall.return_value = [
+            ('srv-dev-01', 'dev', 'SERVER'),
+            ('srv-lab-01', 'lab', 'SERVER'),
+            ('srv-lab-02', 'lab', 'DATABASE'),
+            ('srv-prod-01', 'prod', 'SERVER'),
+        ]
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
+
+        # Clear cache to force fresh read
+        from inventory.services import _environments_cache
+        _environments_cache.clear()
+
+        environments = self.service.list_environments()
+
+        # Should return distinct raw values (sorted)
+        self.assertEqual(environments, ['dev', 'lab', 'prod'])
+        self.assertIn('lab', environments, "Non-standard environment 'lab' should be included")
 
 
 # =============================================================================
@@ -428,32 +516,40 @@ class RBACEnvironmentFilterTests(TestCase):
     @patch('inventory.services.connection')
     def test_list_targets_certif_normalized_to_staging(self, mock_connection):
         """
-        AC1: CERTIF environment from inventory should be accessible
-        as staging for users with staging permission.
+        Story 21.2, AC1: RBAC environment matching with raw values.
+        Profile with 'staging' permission should NOT access targets with 'certif' unless
+        the profile explicitly has 'certif' in its allowed environments.
+        
+        HIGH-1 FIX: This profile has ["dev", "staging"] only, so certif targets are filtered out.
+        For testing certif alias matching, see test_list_targets_profile_env_certif_normalized_to_staging.
         """
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = (2,)
         mock_cursor.fetchall.return_value = [
-            ('srv-certif-01', 'certif', 'server'),  # Normalized to staging
-            ('srv-certif-02', 'certification', 'server'),  # Normalized to staging
+            ('srv-certif-01', 'certif', 'server'),  # Raw value from Oracle
+            ('srv-certif-02', 'certification', 'server'),  # Raw value from Oracle
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
         targets, total, _ = self.service.list_targets_for_user(
             user_id=1,
-            ad_groups=['GRP-DEV-STAGING']
+            ad_groups=['GRP-DEV-STAGING']  # Profile has ["dev", "staging"], NOT certif
         )
 
-        # Certif targets normalized to staging should be accessible
-        self.assertEqual(total, 2)
-        self.assertEqual(targets[0]['environment'], 'staging')
-        self.assertEqual(targets[1]['environment'], 'staging')
+        # Profile does NOT have certif access, so targets are filtered out
+        self.assertEqual(total, 0)
+        self.assertEqual(len(targets), 0)
 
     @patch('inventory.services.connection')
     def test_list_targets_profile_env_certif_normalized_to_staging(self, mock_connection):
         """
-        AC1: When profile has environments_json with 'certif', allowed_environments
-        must be normalized so targets from inventory (certif -> staging) are included.
+        Story 21.2, AC1: Profile with 'certif' should access 'certif' targets.
+        allowed_environments includes both normalized (staging) and raw (certif) values.
+        Targets return raw environment values from inventory.
+
+        Story 21.3 FIX: Profile with ["certif"] produces allowed_environments = {staging, certif}.
+        Target with raw env 'certification' (lowercased from Oracle) is NOT 'certif' and NOT 'staging',
+        so it is correctly filtered out. Only 'certif' targets match.
         """
         # Profile with raw "certif" in DB (no "staging" string)
         certif_only_profile = Profile.objects.create(
@@ -484,9 +580,92 @@ class RBACEnvironmentFilterTests(TestCase):
             ad_groups=['GRP-CERTIF-ONLY']
         )
 
+        # Profile certif → allowed_environments = {staging, certif}
+        # Target 'certif' matches 'certif' → included
+        # Target 'certification' doesn't match 'staging' or 'certif' → excluded
+        self.assertEqual(total, 1)
+        self.assertEqual(targets[0]['environment'], 'certif')  # Raw value
+
+    @patch('inventory.services.connection')
+    def test_list_targets_profile_lab_dev_case_insensitive(self, mock_connection):
+        """
+        Story 21.2, AC1 / Task 5.2: Profile with ['lab','dev'] should access lab targets.
+        Case-insensitive matching, no alias needed for lab.
+        """
+        lab_dev_profile = Profile.objects.create(
+            name='lab-dev-profile',
+            description='Lab and dev access',
+            ad_group='GRP-LAB-DEV'
+        )
+        ProfileActionPermission.objects.create(
+            profile=lab_dev_profile,
+            permission_type='ALL',
+            environments_json='["lab", "dev"]'
+        )
+        ProfileTargetPermission.objects.create(
+            profile=lab_dev_profile,
+            permission_type='ALL'
+        )
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (3,)
+        mock_cursor.fetchall.return_value = [
+            ('srv-lab-01', 'lab', 'server'),
+            ('srv-dev-01', 'dev', 'server'),
+            ('srv-prod-01', 'prod', 'server'),  # Should be filtered out
+        ]
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
+
+        targets, total, _ = self.service.list_targets_for_user(
+            user_id=1,
+            ad_groups=['GRP-LAB-DEV']
+        )
+
+        # Should return lab and dev targets only
         self.assertEqual(total, 2)
-        self.assertEqual(targets[0]['environment'], 'staging')
-        self.assertEqual(targets[1]['environment'], 'staging')
+        names = [t['name'] for t in targets]
+        self.assertIn('srv-lab-01', names)
+        self.assertIn('srv-dev-01', names)
+        self.assertNotIn('srv-prod-01', names)
+
+    @patch('inventory.services.connection')
+    def test_list_targets_environment_filter_case_insensitive(self, mock_connection):
+        """
+        Story 21.2, AC1 / Task 1.3: Environment query param filter should be case-insensitive.
+        """
+        profile = Profile.objects.create(
+            name='multi-env',
+            description='Multi environment',
+            ad_group='GRP-MULTI'
+        )
+        ProfileActionPermission.objects.create(
+            profile=profile,
+            permission_type='ALL',
+            environments_json='["lab", "dev", "staging"]'
+        )
+        ProfileTargetPermission.objects.create(
+            profile=profile,
+            permission_type='ALL'
+        )
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (2,)
+        mock_cursor.fetchall.return_value = [
+            ('srv-lab-01', 'lab', 'server'),
+            ('srv-lab-02', 'lab', 'server'),
+        ]
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
+
+        # Filter with uppercase LAB should match lowercase lab
+        targets, total, _ = self.service.list_targets_for_user(
+            user_id=1,
+            ad_groups=['GRP-MULTI'],
+            environment='LAB'  # Uppercase filter
+        )
+
+        self.assertEqual(total, 2)
+        self.assertEqual(targets[0]['environment'], 'lab')
+        self.assertEqual(targets[1]['environment'], 'lab')
 
 
 class RBACPatternRestrictionTests(TestCase):
@@ -968,3 +1147,616 @@ class RBACEdgeCaseTests(TestCase):
         names = [t['name'] for t in targets]
         self.assertIn('srv-dev-03', names)
         self.assertIn('srv-dev-04', names)
+
+
+# =============================================================================
+# Story 21.3: Comprehensive tests for raw environment values
+# =============================================================================
+
+
+class InventoryRawEnvironmentTests(TestCase):
+    """
+    Story 21.3, Task 1: Tests for raw environment values in inventory.
+    Validates that inventory returns environments as-is from Oracle (lowercase/trim).
+    """
+
+    def setUp(self):
+        self.service = InventoryService()
+
+    # -- Task 1.1: Verify alias coverage --
+
+    def test_normalize_alias_certif(self):
+        """Alias certif → staging."""
+        self.assertEqual(self.service._normalize_environment('certif'), 'staging')
+
+    def test_normalize_alias_certification(self):
+        """Alias certification → staging."""
+        self.assertEqual(self.service._normalize_environment('certification'), 'staging')
+
+    def test_normalize_alias_stg(self):
+        """Alias stg → staging."""
+        self.assertEqual(self.service._normalize_environment('stg'), 'staging')
+
+    def test_normalize_alias_development(self):
+        """Alias development → dev."""
+        self.assertEqual(self.service._normalize_environment('development'), 'dev')
+
+    def test_normalize_alias_production(self):
+        """Alias production → prod."""
+        self.assertEqual(self.service._normalize_environment('production'), 'prod')
+
+    # -- Task 1.2: Non-standard environments returned as-is --
+
+    def test_normalize_lab_returns_raw(self):
+        """lab is not an alias, returned as-is."""
+        self.assertEqual(self.service._normalize_environment('lab'), 'lab')
+
+    def test_normalize_qa_returns_raw(self):
+        """qa is not an alias, returned as-is."""
+        self.assertEqual(self.service._normalize_environment('qa'), 'qa')
+
+    def test_normalize_uat_returns_raw(self):
+        """uat is not an alias, returned as-is."""
+        self.assertEqual(self.service._normalize_environment('uat'), 'uat')
+
+    def test_normalize_unknown_returns_raw(self):
+        """Unknown env returned as-is, no fallback to 'dev'."""
+        self.assertEqual(self.service._normalize_environment('custom_env'), 'custom_env')
+
+    def test_normalize_case_handling(self):
+        """Input is lowercased and trimmed."""
+        self.assertEqual(self.service._normalize_environment('  LAB  '), 'lab')
+        self.assertEqual(self.service._normalize_environment('CERTIF'), 'staging')
+
+    def test_normalize_edge_cases(self):
+        """Edge cases: None, empty, whitespace."""
+        self.assertEqual(self.service._normalize_environment(None), '')
+        self.assertEqual(self.service._normalize_environment(''), '')
+        self.assertEqual(self.service._normalize_environment('   '), '')
+
+    # -- Task 1.3: Oracle returns lab environments with lowercase --
+
+    @patch('inventory.services.connection')
+    def test_oracle_lab_environments_lowercased(self, mock_connection):
+        """Oracle ENVIRONMENT='lab', 'LAB', 'Lab' → all returned as 'lab'."""
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (3,)
+        mock_cursor.fetchall.return_value = [
+            ('srv-lab-01', 'lab', 'SERVER'),
+            ('srv-lab-02', 'LAB', 'SERVER'),
+            ('srv-lab-03', 'Lab', 'DATABASE'),
+        ]
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
+
+        targets, total = self.service.list_targets()
+
+        self.assertEqual(total, 3)
+        for target in targets:
+            self.assertEqual(target['environment'], 'lab',
+                             f"Expected 'lab' but got '{target['environment']}' for {target['name']}")
+
+    @patch('inventory.services.connection')
+    def test_oracle_mixed_non_standard_environments(self, mock_connection):
+        """Oracle with lab, qa, uat → all returned as raw lowercase."""
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (3,)
+        mock_cursor.fetchall.return_value = [
+            ('srv-lab-01', 'LAB', 'SERVER'),
+            ('srv-qa-01', 'QA', 'SERVER'),
+            ('srv-uat-01', 'UAT', 'SERVER'),
+        ]
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
+
+        targets, total = self.service.list_targets()
+
+        self.assertEqual(total, 3)
+        self.assertEqual(targets[0]['environment'], 'lab')
+        self.assertEqual(targets[1]['environment'], 'qa')
+        self.assertEqual(targets[2]['environment'], 'uat')
+
+    # -- Task 1.4: list_environments() with raw values --
+
+    @patch('inventory.services.connection')
+    def test_list_environments_with_non_standard(self, mock_connection):
+        """list_environments() returns distinct raw values including non-standard."""
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (5,)
+        mock_cursor.fetchall.return_value = [
+            ('srv-1', 'dev', 'SERVER'),
+            ('srv-2', 'lab', 'SERVER'),
+            ('srv-3', 'lab', 'DATABASE'),
+            ('srv-4', 'staging', 'SERVER'),
+            ('srv-5', 'prod', 'SERVER'),
+        ]
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
+
+        from inventory.services import _environments_cache
+        _environments_cache.clear()
+
+        environments = self.service.list_environments()
+
+        self.assertEqual(sorted(environments), ['dev', 'lab', 'prod', 'staging'])
+        self.assertIn('lab', environments)
+
+    # -- Task 1.5: Cache works with raw environments --
+
+    @patch('inventory.services.connection')
+    def test_environments_cache_with_raw_values(self, mock_connection):
+        """Cache stores and returns raw environment values correctly."""
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (2,)
+        mock_cursor.fetchall.return_value = [
+            ('srv-lab-01', 'lab', 'SERVER'),
+            ('srv-dev-01', 'dev', 'SERVER'),
+        ]
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
+
+        from inventory.services import _environments_cache
+        _environments_cache.clear()
+
+        # First call — populates cache
+        envs1 = self.service.list_environments()
+        self.assertEqual(sorted(envs1), ['dev', 'lab'])
+
+        # Second call — should use cache (cursor not called again for env list)
+        envs2 = self.service.list_environments()
+        self.assertEqual(envs1, envs2)
+
+
+class RBACNonStandardEnvironmentTests(TestCase):
+    """
+    Story 21.3, Task 2: Tests for RBAC with non-standard environments.
+    Validates profile environment permissions with lab, certif, etc.
+    """
+
+    def setUp(self):
+        self.service = InventoryService()
+
+    # -- Task 2.1: Profile lab → lab targets --
+
+    @patch('inventory.services.connection')
+    def test_profile_lab_allows_lab_targets(self, mock_connection):
+        """Profile with environments_json='["lab"]' + targets lab → authorized."""
+        lab_profile = Profile.objects.create(
+            name='lab-team', description='Lab team', ad_group='GRP-LAB-TEAM'
+        )
+        ProfileActionPermission.objects.create(
+            profile=lab_profile, permission_type='ALL',
+            environments_json='["lab"]'
+        )
+        ProfileTargetPermission.objects.create(
+            profile=lab_profile, permission_type='ALL'
+        )
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (3,)
+        mock_cursor.fetchall.return_value = [
+            ('srv-lab-01', 'lab', 'server'),
+            ('srv-lab-02', 'lab', 'database'),
+            ('srv-prod-01', 'prod', 'server'),
+        ]
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
+
+        targets, total, _ = self.service.list_targets_for_user(
+            user_id=1, ad_groups=['GRP-LAB-TEAM']
+        )
+
+        self.assertEqual(total, 2)
+        for t in targets:
+            self.assertEqual(t['environment'], 'lab')
+
+    # -- Task 2.2: Profile certif → certif targets (raw + normalized) --
+
+    @patch('inventory.services.connection')
+    def test_profile_certif_allows_certif_and_staging_targets(self, mock_connection):
+        """Profile with certif → allowed_environments includes {staging, certif}."""
+        certif_profile = Profile.objects.create(
+            name='certif-team', description='Certif', ad_group='GRP-CERTIF-TEAM'
+        )
+        ProfileActionPermission.objects.create(
+            profile=certif_profile, permission_type='ALL',
+            environments_json='["certif"]'
+        )
+        ProfileTargetPermission.objects.create(
+            profile=certif_profile, permission_type='ALL'
+        )
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (3,)
+        mock_cursor.fetchall.return_value = [
+            ('srv-certif-01', 'certif', 'server'),
+            ('srv-stg-01', 'staging', 'server'),
+            ('srv-prod-01', 'prod', 'server'),
+        ]
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
+
+        targets, total, _ = self.service.list_targets_for_user(
+            user_id=1, ad_groups=['GRP-CERTIF-TEAM']
+        )
+
+        # certif → allowed = {staging, certif} → matches certif and staging targets
+        self.assertEqual(total, 2)
+        envs = {t['environment'] for t in targets}
+        self.assertEqual(envs, {'certif', 'staging'})
+
+    # -- Task 2.3: Multi-environment profile --
+
+    def test_get_allowed_environments_multi_env(self):
+        """Profile with ["lab","dev","staging"] → returns all (plus aliases)."""
+        multi_profile = Profile.objects.create(
+            name='multi-env', description='Multi', ad_group='GRP-MULTI-ENV'
+        )
+        ProfileActionPermission.objects.create(
+            profile=multi_profile, permission_type='ALL',
+            environments_json='["lab", "dev", "staging"]'
+        )
+
+        envs = self.service.get_allowed_environments_for_user(['GRP-MULTI-ENV'])
+
+        # lab has no alias, dev/staging have no alias → raw values only
+        self.assertIn('lab', envs)
+        self.assertIn('dev', envs)
+        self.assertIn('staging', envs)
+
+    # -- Task 2.4: Query param filter case-insensitive --
+
+    @patch('inventory.services.connection')
+    def test_environment_filter_case_insensitive_lab(self, mock_connection):
+        """environment=LAB, Lab should match targets 'lab' case-insensitively."""
+        profile = Profile.objects.create(
+            name='lab-ci', description='Lab CI', ad_group='GRP-LAB-CI'
+        )
+        ProfileActionPermission.objects.create(
+            profile=profile, permission_type='ALL',
+            environments_json='["lab"]'
+        )
+        ProfileTargetPermission.objects.create(
+            profile=profile, permission_type='ALL'
+        )
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (1,)
+        mock_cursor.fetchall.return_value = [
+            ('srv-lab-01', 'lab', 'server'),
+        ]
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
+
+        # Filter with 'LAB'
+        targets, total, _ = self.service.list_targets_for_user(
+            user_id=1, ad_groups=['GRP-LAB-CI'], environment='LAB'
+        )
+        self.assertEqual(total, 1)
+        self.assertEqual(targets[0]['environment'], 'lab')
+
+        # Filter with 'Lab'
+        targets, total, _ = self.service.list_targets_for_user(
+            user_id=1, ad_groups=['GRP-LAB-CI'], environment='Lab'
+        )
+        self.assertEqual(total, 1)
+
+    # -- Task 2.5: Multi-profile union --
+
+    @patch('inventory.services.connection')
+    def test_multi_profile_union_lab_dev_staging(self, mock_connection):
+        """Profile A(lab,dev) + Profile B(staging) → union {lab, dev, staging}."""
+        profile_a = Profile.objects.create(
+            name='profile-lab-dev', description='Lab+Dev', ad_group='GRP-A-LD'
+        )
+        ProfileActionPermission.objects.create(
+            profile=profile_a, permission_type='ALL',
+            environments_json='["lab", "dev"]'
+        )
+        ProfileTargetPermission.objects.create(
+            profile=profile_a, permission_type='ALL'
+        )
+
+        profile_b = Profile.objects.create(
+            name='profile-staging', description='Staging', ad_group='GRP-B-STG'
+        )
+        ProfileActionPermission.objects.create(
+            profile=profile_b, permission_type='ALL',
+            environments_json='["staging"]'
+        )
+        ProfileTargetPermission.objects.create(
+            profile=profile_b, permission_type='ALL'
+        )
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (4,)
+        mock_cursor.fetchall.return_value = [
+            ('srv-lab-01', 'lab', 'server'),
+            ('srv-dev-01', 'dev', 'server'),
+            ('srv-stg-01', 'staging', 'server'),
+            ('srv-prod-01', 'prod', 'server'),
+        ]
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
+
+        targets, total, _ = self.service.list_targets_for_user(
+            user_id=1, ad_groups=['GRP-A-LD', 'GRP-B-STG']
+        )
+
+        # Union of environments: lab, dev, staging → prod excluded
+        self.assertEqual(total, 3)
+        envs = {t['environment'] for t in targets}
+        self.assertEqual(envs, {'lab', 'dev', 'staging'})
+
+    def test_multi_profile_get_allowed_environments_union(self):
+        """get_allowed_environments union from multiple profiles."""
+        p_a = Profile.objects.create(
+            name='pa', description='PA', ad_group='GRP-PA-UNION'
+        )
+        ProfileActionPermission.objects.create(
+            profile=p_a, permission_type='ALL',
+            environments_json='["lab", "dev"]'
+        )
+        p_b = Profile.objects.create(
+            name='pb', description='PB', ad_group='GRP-PB-UNION'
+        )
+        ProfileActionPermission.objects.create(
+            profile=p_b, permission_type='ALL',
+            environments_json='["staging"]'
+        )
+
+        envs = self.service.get_allowed_environments_for_user(
+            ['GRP-PA-UNION', 'GRP-PB-UNION']
+        )
+
+        self.assertIn('lab', envs)
+        self.assertIn('dev', envs)
+        self.assertIn('staging', envs)
+        self.assertNotIn('prod', envs)
+
+
+class EnvironmentVariantLegacyAliasTests(TestCase):
+    """
+    Story 21.3, Task 5: Tests for legacy environment alias variants.
+    Validates that aliases work and RBAC handles raw vs normalized correctly.
+    """
+
+    def setUp(self):
+        self.service = InventoryService()
+
+    def test_alias_certif_to_staging(self):
+        """certif normalizes to staging."""
+        self.assertEqual(self.service._normalize_environment('certif'), 'staging')
+
+    def test_alias_certification_to_staging(self):
+        """certification normalizes to staging."""
+        self.assertEqual(self.service._normalize_environment('certification'), 'staging')
+
+    def test_alias_stg_to_staging(self):
+        """stg normalizes to staging."""
+        self.assertEqual(self.service._normalize_environment('stg'), 'staging')
+
+    def test_alias_development_to_dev(self):
+        """development normalizes to dev."""
+        self.assertEqual(self.service._normalize_environment('development'), 'dev')
+
+    def test_alias_production_to_prod(self):
+        """production normalizes to prod."""
+        self.assertEqual(self.service._normalize_environment('production'), 'prod')
+
+    @patch('inventory.services.connection')
+    def test_rbac_certif_profile_matches_certif_and_staging_targets(self, mock_connection):
+        """
+        Task 5.6: Profile with 'certif' authorizes targets with both
+        'certif' (raw) AND 'staging' (normalized) environments.
+        """
+        certif_profile = Profile.objects.create(
+            name='certif-rbac', description='Certif RBAC', ad_group='GRP-CERTIF-RBAC'
+        )
+        ProfileActionPermission.objects.create(
+            profile=certif_profile, permission_type='ALL',
+            environments_json='["certif"]'
+        )
+        ProfileTargetPermission.objects.create(
+            profile=certif_profile, permission_type='ALL'
+        )
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (3,)
+        mock_cursor.fetchall.return_value = [
+            ('srv-certif-01', 'certif', 'server'),
+            ('srv-staging-01', 'staging', 'server'),
+            ('srv-prod-01', 'prod', 'server'),
+        ]
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
+
+        targets, total, _ = self.service.list_targets_for_user(
+            user_id=1, ad_groups=['GRP-CERTIF-RBAC']
+        )
+
+        # Profile certif → allowed = {staging, certif} → both certif and staging match
+        self.assertEqual(total, 2)
+        envs = {t['environment'] for t in targets}
+        self.assertEqual(envs, {'certif', 'staging'})
+
+    def test_get_allowed_environments_certif_includes_staging_and_raw(self):
+        """get_allowed_environments for 'certif' returns both staging and certif."""
+        profile = Profile.objects.create(
+            name='certif-env', description='Certif env', ad_group='GRP-CERTIF-ENV'
+        )
+        ProfileActionPermission.objects.create(
+            profile=profile, permission_type='ALL',
+            environments_json='["certif"]'
+        )
+
+        envs = self.service.get_allowed_environments_for_user(['GRP-CERTIF-ENV'])
+
+        self.assertIn('staging', envs)  # Normalized
+        self.assertIn('certif', envs)   # Raw
+
+
+class InventoryIntegrationEndToEndTests(TestCase):
+    """
+    Story 21.3, Task 6: Integration tests for inventory → profiles → executions.
+    End-to-end scenarios with non-standard environments.
+    """
+
+    def setUp(self):
+        self.service = InventoryService()
+
+    # -- Task 6.1: End-to-end lab scenario --
+
+    @patch('inventory.services.connection')
+    def test_end_to_end_lab_scenario(self, mock_connection):
+        """
+        Full scenario: profile lab/dev → list targets → filter lab → verify access.
+        """
+        profile = Profile.objects.create(
+            name='e2e-lab', description='E2E Lab', ad_group='GRP-E2E-LAB'
+        )
+        ProfileActionPermission.objects.create(
+            profile=profile, permission_type='ALL',
+            environments_json='["lab", "dev"]'
+        )
+        ProfileTargetPermission.objects.create(
+            profile=profile, permission_type='ALL'
+        )
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (4,)
+        mock_cursor.fetchall.return_value = [
+            ('srv-lab-01', 'lab', 'server'),
+            ('srv-lab-02', 'lab', 'database'),
+            ('srv-dev-01', 'dev', 'server'),
+            ('srv-prod-01', 'prod', 'server'),
+        ]
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
+
+        # Step 1: List all targets for user
+        all_targets, total, _ = self.service.list_targets_for_user(
+            user_id=1, ad_groups=['GRP-E2E-LAB']
+        )
+        self.assertEqual(total, 3)  # lab + dev, no prod
+
+        # Step 2: Filter by lab
+        lab_targets, lab_total, _ = self.service.list_targets_for_user(
+            user_id=1, ad_groups=['GRP-E2E-LAB'], environment='lab'
+        )
+        self.assertEqual(lab_total, 2)
+        for t in lab_targets:
+            self.assertEqual(t['environment'], 'lab')
+
+        # Step 3: Verify get_allowed_environments
+        envs = self.service.get_allowed_environments_for_user(['GRP-E2E-LAB'])
+        self.assertIn('lab', envs)
+        self.assertIn('dev', envs)
+        self.assertNotIn('prod', envs)
+
+    # -- Task 6.2: Mixed environments scenario --
+
+    @patch('inventory.services.connection')
+    def test_mixed_environments_scenario(self, mock_connection):
+        """Inventory with {lab, dev, certif, staging, prod} → RBAC filters appropriately."""
+        profile = Profile.objects.create(
+            name='e2e-mixed', description='E2E Mixed', ad_group='GRP-E2E-MIXED'
+        )
+        ProfileActionPermission.objects.create(
+            profile=profile, permission_type='ALL',
+            environments_json='["lab", "certif", "dev"]'
+        )
+        ProfileTargetPermission.objects.create(
+            profile=profile, permission_type='ALL'
+        )
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (5,)
+        mock_cursor.fetchall.return_value = [
+            ('srv-lab-01', 'lab', 'server'),
+            ('srv-dev-01', 'dev', 'server'),
+            ('srv-certif-01', 'certif', 'server'),
+            ('srv-staging-01', 'staging', 'server'),
+            ('srv-prod-01', 'prod', 'server'),
+        ]
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
+
+        targets, total, _ = self.service.list_targets_for_user(
+            user_id=1, ad_groups=['GRP-E2E-MIXED']
+        )
+
+        # certif → allowed = {staging, certif, lab, dev}
+        # lab matches lab, dev matches dev, certif matches certif, staging matches staging
+        # prod excluded
+        self.assertEqual(total, 4)
+        envs = {t['environment'] for t in targets}
+        self.assertEqual(envs, {'lab', 'dev', 'certif', 'staging'})
+
+    # -- Task 6.3: Case-insensitive consistency --
+
+    @patch('inventory.services.connection')
+    def test_case_insensitive_consistency(self, mock_connection):
+        """No forced normalization in inventory, case-insensitive comparison everywhere."""
+        profile = Profile.objects.create(
+            name='e2e-case', description='E2E Case', ad_group='GRP-E2E-CASE'
+        )
+        ProfileActionPermission.objects.create(
+            profile=profile, permission_type='ALL',
+            environments_json='["lab"]'
+        )
+        ProfileTargetPermission.objects.create(
+            profile=profile, permission_type='ALL'
+        )
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (3,)
+        mock_cursor.fetchall.return_value = [
+            ('srv-1', 'lab', 'server'),     # Already lowercase
+            ('srv-2', 'LAB', 'server'),     # Uppercase from Oracle → lowercased in read
+            ('srv-3', 'Lab', 'server'),     # Mixed → lowercased in read
+        ]
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
+
+        targets, total, _ = self.service.list_targets_for_user(
+            user_id=1, ad_groups=['GRP-E2E-CASE']
+        )
+
+        # All Oracle values are lowercased in _read_oracle_inventory
+        self.assertEqual(total, 3)
+        for t in targets:
+            self.assertEqual(t['environment'], 'lab')
+
+    # -- Task 6.4: Pagination with non-standard env filter --
+
+    @patch('inventory.services.connection')
+    def test_pagination_with_non_standard_env_filter(self, mock_connection):
+        """Pagination works correctly when filtering non-standard environments."""
+        profile = Profile.objects.create(
+            name='e2e-page', description='E2E Pagination', ad_group='GRP-E2E-PAGE'
+        )
+        ProfileActionPermission.objects.create(
+            profile=profile, permission_type='ALL',
+            environments_json='["lab"]'
+        )
+        ProfileTargetPermission.objects.create(
+            profile=profile, permission_type='ALL'
+        )
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (5,)
+        mock_cursor.fetchall.return_value = [
+            ('srv-lab-01', 'lab', 'server'),
+            ('srv-lab-02', 'lab', 'server'),
+            ('srv-lab-03', 'lab', 'server'),
+            ('srv-lab-04', 'lab', 'server'),
+            ('srv-lab-05', 'lab', 'server'),
+        ]
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
+
+        # Page 1, size 2
+        targets, total, _ = self.service.list_targets_for_user(
+            user_id=1, ad_groups=['GRP-E2E-PAGE'],
+            environment='lab', page=1, page_size=2
+        )
+        self.assertEqual(total, 5)
+        self.assertEqual(len(targets), 2)
+        self.assertEqual(targets[0]['name'], 'srv-lab-01')
+
+        # Page 3, size 2
+        targets, total, _ = self.service.list_targets_for_user(
+            user_id=1, ad_groups=['GRP-E2E-PAGE'],
+            environment='lab', page=3, page_size=2
+        )
+        self.assertEqual(total, 5)
+        self.assertEqual(len(targets), 1)
+        self.assertEqual(targets[0]['name'], 'srv-lab-05')

@@ -1,8 +1,10 @@
 """
-Workflow Runtime Engine - Story 16.3
+Workflow Runtime Engine - Story 16.3, 16.4, 20.3
 
 Orchestrates execution of workflows with conditional branching (on_success_step_id, on_error_step_id).
-Handles success/error paths, loop detection, and execution state management.
+Handles success/error paths, loop detection, execution state management,
+and retry with exponential backoff (Story 16.4).
+Story 20.3: Retry uses Celery apply_async(countdown=...) instead of time.sleep().
 
 Architecture:
 - WorkflowExecutionState: Runtime state tracking (current step, visited counts, outcomes)
@@ -33,6 +35,7 @@ class StepOutcome(str, Enum):
     """Outcome of a step execution."""
     SUCCESS = "success"
     ERROR = "error"
+    WAITING = "waiting"  # Story 25.2: step blocked by gate_conditions
 
 
 @dataclass
@@ -60,6 +63,11 @@ class StepResult:
     def is_error(self) -> bool:
         """Check if step failed."""
         return self.outcome == StepOutcome.ERROR
+
+    @property
+    def is_waiting(self) -> bool:
+        """Check if step is waiting for gate conditions (Story 25.2)."""
+        return self.outcome == StepOutcome.WAITING
 
 
 @dataclass
@@ -150,7 +158,7 @@ class WorkflowRuntime:
         Returns:
             List of step dicts with step_id, on_success_step_id, on_error_step_id, etc.
         """
-        steps = self.action.get_execution_steps() or []
+        steps = self.action.execution_steps or []
         if not isinstance(steps, list):
             logger.warning(
                 "workflow_steps_invalid_format",
@@ -160,6 +168,263 @@ class WorkflowRuntime:
             )
             return []
         return steps
+
+    def _get_step_parameters(self, step: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Get parameters for a workflow step from execution's workflow_step_parameters (Story 4.12 AC5).
+
+        Keys in workflow_step_parameters are string step_order from the workflow definition.
+        Each value is { "parameters": { ... } }. Returns the inner "parameters" dict or {}.
+
+        Args:
+            step: Step dict from workflow definition (must have "order")
+
+        Returns:
+            Dict of parameters to pass to the referenced action for this step
+        """
+        params = self.execution.get_parameters() or {}
+        wsp = params.get("workflow_step_parameters")
+        if not isinstance(wsp, dict):
+            return {}
+        order_key = str(step.get("order", ""))
+        step_entry = wsp.get(order_key)
+        if not isinstance(step_entry, dict):
+            return {}
+        return step_entry.get("parameters") or {}
+
+    # Story 16.4: Patterns indicating permanent (non-retryable) errors
+    # M2 FIX: Kept as class constant for now, but should be extracted to
+    # executions/constants.py for reusability across modules
+    NON_RETRYABLE_PATTERNS = [
+        'validation',
+        'permission',
+        'not found',
+        'unauthorized',
+        'forbidden',
+        'bad request',
+        '400', '401', '403', '404',
+    ]
+
+    def _is_retryable_error(self, result: StepResult) -> bool:
+        """
+        Determine if an error is retryable (temporary) or permanent (AC3).
+
+        Permanent errors: validation, permission, 4xx HTTP errors.
+        Temporary errors: timeout, connection, 5xx, generic exceptions.
+
+        Args:
+            result: StepResult from step execution
+
+        Returns:
+            True if error is retryable (temporary), False if permanent
+        """
+        error_message = result.error_message
+        if not error_message:
+            return True
+
+        # Check error_type first (more reliable than string matching)
+        error_details = result.error_details or {}
+        error_type = error_details.get('error_type', '')
+        if error_type in ('validation', 'permission'):
+            return False
+
+        # Fallback to string pattern matching
+        error_lower = error_message.lower()
+        for pattern in self.NON_RETRYABLE_PATTERNS:
+            if pattern in error_lower:
+                return False
+        return True
+
+    def _execute_step_with_retry(self, step: Dict[str, Any]) -> StepResult:
+        """
+        Execute a step with retry logic if retry_enabled is true (Story 16.4, 20.3).
+
+        Story 20.3: Uses Celery apply_async(countdown=...) for non-blocking retry
+        instead of time.sleep(). First attempt is synchronous; subsequent retries
+        are scheduled as Celery tasks.
+
+        Implements:
+        - AC1: Retry with exponential backoff (via Celery countdown)
+        - AC2: Stop retrying on success
+        - AC3: Stop retrying on permanent errors
+        - AC4: Cancel-aware (checks execution status before each attempt)
+        - AC5: Audit trail for each attempt
+
+        Args:
+            step: Step dict from workflow definition
+
+        Returns:
+            StepResult with final outcome after first attempt
+        """
+        retry_enabled = step.get('retry_enabled', False)
+
+        if not retry_enabled:
+            return self._execute_step(step)
+
+        max_attempts = step.get('retry_max_attempts', 3)
+        interval_seconds = step.get('retry_interval_seconds', 60)
+        step_id = step.get('step_id', 'unknown')
+
+        # AC4: Check if execution was cancelled before first attempt
+        from executions.cancellation_cache import is_cancelled
+        if is_cancelled(self.execution.id):
+            logger.info(
+                "workflow_step_retry_cancelled",
+                execution_id=self.execution.id,
+                step_id=step_id,
+                attempt=1,
+                correlation_id=self.correlation_id,
+            )
+            ExecutionStep.objects.create(
+                execution=self.execution,
+                step_order=self._step_order_counter + 1,
+                step_name=step.get('name', f"Step {step.get('order', 0)}"),
+                step_type='platform',
+                status=ExecutionStepStatus.FAILED,
+                started_at=timezone.now(),
+                completed_at=timezone.now(),
+                error_message="Execution cancelled during retry",
+            )
+            return StepResult(
+                outcome=StepOutcome.ERROR,
+                error_message="Execution cancelled during retry",
+            )
+
+        # First attempt: synchronous (attempt=1)
+        logger.info(
+            "workflow_step_retry_attempt",
+            execution_id=self.execution.id,
+            step_id=step_id,
+            attempt=1,
+            max_attempts=max_attempts,
+            correlation_id=self.correlation_id,
+        )
+
+        result = self._execute_step(step)
+
+        # AC2: Success — stop immediately
+        if result.is_success:
+            logger.info(
+                "workflow_step_retry_success",
+                execution_id=self.execution.id,
+                step_id=step_id,
+                attempt=1,
+                max_attempts=max_attempts,
+                correlation_id=self.correlation_id,
+            )
+            AuditService.create_entry(
+                user_id=str(self.execution.user_id),
+                action_type=AuditActionType.EXECUTION_STEP_RETRY_SUCCESS,
+                entity_type=AuditEntityType.EXECUTION,
+                entity_id=self.execution.id,
+                details={
+                    'step_id': step_id,
+                    'attempt': 1,
+                    'max_attempts': max_attempts,
+                    'result': 'success',
+                },
+                correlation_id=self.correlation_id,
+            )
+            return result
+
+        # AC3: Permanent error — stop immediately
+        if result.is_error and not self._is_retryable_error(result):
+            logger.warning(
+                "workflow_step_non_retryable_error",
+                execution_id=self.execution.id,
+                step_id=step_id,
+                attempt=1,
+                error=result.error_message,
+                correlation_id=self.correlation_id,
+            )
+            AuditService.create_entry(
+                user_id=str(self.execution.user_id),
+                action_type=AuditActionType.EXECUTION_STEP_RETRY_ABORTED,
+                entity_type=AuditEntityType.EXECUTION,
+                entity_id=self.execution.id,
+                details={
+                    'step_id': step_id,
+                    'attempt': 1,
+                    'max_attempts': max_attempts,
+                    'reason': 'non_retryable_error',
+                    'error': result.error_message,
+                },
+                correlation_id=self.correlation_id,
+            )
+            return result
+
+        # Temporary failure — schedule Celery retry if more attempts available
+        if max_attempts > 1:
+            from executions.tasks import retry_workflow_step
+
+            delay_seconds = interval_seconds  # Delay before attempt 2
+
+            logger.info(
+                "workflow_step_retry_scheduling_celery",
+                execution_id=self.execution.id,
+                step_id=step_id,
+                next_attempt=2,
+                delay_seconds=delay_seconds,
+                correlation_id=self.correlation_id,
+            )
+
+            # AC5: Audit trail for failed first attempt
+            AuditService.create_entry(
+                user_id=str(self.execution.user_id),
+                action_type=AuditActionType.EXECUTION_STEP_RETRY_ATTEMPT,
+                entity_type=AuditEntityType.EXECUTION,
+                entity_id=self.execution.id,
+                details={
+                    'step_id': step_id,
+                    'attempt': 1,
+                    'max_attempts': max_attempts,
+                    'result': 'error',
+                    'error': result.error_message,
+                    'next_wait_seconds': delay_seconds,
+                    'retry_method': 'celery',
+                },
+                correlation_id=self.correlation_id,
+            )
+
+            # Schedule async retry via Celery
+            retry_workflow_step.apply_async(
+                args=[self.execution.id, step, 2],
+                countdown=delay_seconds,
+            )
+
+            return StepResult(
+                outcome=StepOutcome.ERROR,
+                error_message=f"Step failed, retry scheduled (attempt 2/{max_attempts} in {delay_seconds}s)",
+                error_details={
+                    'retry_scheduled': True,
+                    'next_attempt': 2,
+                    'max_attempts': max_attempts,
+                    'delay_seconds': delay_seconds,
+                },
+            )
+
+        # max_attempts = 1, no retry possible
+        logger.error(
+            "workflow_step_retry_exhausted",
+            execution_id=self.execution.id,
+            step_id=step_id,
+            max_attempts=1,
+            final_error=result.error_message,
+            correlation_id=self.correlation_id,
+        )
+        AuditService.create_entry(
+            user_id=str(self.execution.user_id),
+            action_type=AuditActionType.EXECUTION_STEP_RETRY_EXHAUSTED,
+            entity_type=AuditEntityType.EXECUTION,
+            entity_id=self.execution.id,
+            details={
+                'step_id': step_id,
+                'max_attempts': 1,
+                'final_error': result.error_message,
+            },
+            correlation_id=self.correlation_id,
+        )
+        return result
 
     def _resolve_next_step(
         self,
@@ -239,12 +504,13 @@ class WorkflowRuntime:
 
     def _execute_step(self, step: Dict[str, Any]) -> StepResult:
         """
-        Execute a single workflow step.
+        Execute a single workflow step, or put it in WAITING if gate_conditions present.
 
-        Placeholder implementation for Story 16.3 - actual execution logic
-        will be added in future stories (e.g., calling platform adapters).
+        Story 25.2: If step has gate_conditions, create ExecutionStep in WAITING status
+        and return immediately without executing. The Celery Beat task (Story 25.3) will
+        evaluate gates and unblock the step later.
 
-        For now, creates an ExecutionStep record and marks it COMPLETED.
+        Story 4.12 AC5: Injects workflow_step_parameters[step_order] for this step.
 
         Args:
             step: Step dict from workflow definition
@@ -254,6 +520,9 @@ class WorkflowRuntime:
         """
         step_id = step.get('step_id')
         step_name = step.get('name', f"Step {step.get('order', 0)}")
+
+        # Story 4.12 AC5: get parameters for this step (key = workflow step "order" as string)
+        step_parameters = self._get_step_parameters(step)
 
         # Use global counter for step_order to avoid conflicts in loops
         self._step_order_counter += 1
@@ -267,6 +536,59 @@ class WorkflowRuntime:
             step_order=step_order,
             correlation_id=self.correlation_id,
         )
+
+        # Story 25.2: Check for gate_conditions — create WAITING step instead of executing
+        gate_conditions = step.get('gate_conditions', [])
+        if gate_conditions:
+            from executions.gate_context import build_waiting_context
+
+            execution_step = ExecutionStep.objects.create(
+                execution=self.execution,
+                step_order=step_order,
+                step_name=step_name,
+                step_type='platform',
+                status=ExecutionStepStatus.WAITING,
+            )
+
+            waiting_context = build_waiting_context(execution_step, gate_conditions)
+            execution_step.set_output(waiting_context)
+            execution_step.save()
+
+            logger.info(
+                "workflow_step_waiting",
+                execution_id=self.execution.id,
+                step_id=step_id,
+                step_name=step_name,
+                gate_conditions_count=len(gate_conditions),
+                correlation_id=self.correlation_id,
+            )
+
+            # AC3: Audit trail for WAITING step creation
+            AuditService.create_entry(
+                user_id=str(self.execution.user_id),
+                action_type=AuditActionType.EXECUTION_STEP_WAITING,
+                entity_type=AuditEntityType.EXECUTION,
+                entity_id=self.execution.id,
+                details={
+                    'step_id': step_id,
+                    'step_name': step_name,
+                    'step_order': step_order,
+                    'gate_conditions_count': len(gate_conditions),
+                    'gate_types': [c.get('type') for c in gate_conditions],
+                },
+                correlation_id=self.correlation_id,
+            )
+
+            return StepResult(
+                outcome=StepOutcome.WAITING,
+                error_message="Step waiting for gate conditions",
+                error_details={
+                    'step_id': step_id,
+                    'step_name': step_name,
+                    'waiting': True,
+                    'gate_conditions_count': len(gate_conditions),
+                },
+            )
 
         # Note (AC3): this runtime is strictly sequential in V1.
         # Parallel execution is intentionally NOT supported yet; this is a future enhancement.
@@ -282,16 +604,141 @@ class WorkflowRuntime:
         )
 
         try:
-            # TODO (future story): Call actual platform adapter here
-            # For now, simulate success
+            # Story 4.12 AC5: Load referenced action and prepare adapter payload
+            referenced_action_id = step.get('referenced_action_id')
+
+            if not referenced_action_id:
+                raise ValueError(f"Workflow step {step_id} missing referenced_action_id")
+
+            # Load the referenced action (validates it exists and is accessible)
+            from catalog.models import Action
+            try:
+                referenced_action = Action.objects.select_related('integration').get(id=referenced_action_id)
+            except Action.DoesNotExist:
+                raise ValueError(
+                    f"Referenced action {referenced_action_id} not found for step {step_id}"
+                )
+
+            # Story 24.4 (AC5): Validate integration status before executing step
+            integration = getattr(referenced_action, 'integration', None)
+            if integration:
+                from integrations.models import IntegrationStatus
+                if integration.status == IntegrationStatus.INVALID:
+                    error_msg = (
+                        f"Workflow step '{step_name}' failed: Integration '{integration.name}' "
+                        f"(type: {integration.type}) is invalid and cannot be used. "
+                        f"Please update the workflow to use a valid integration before retrying."
+                    )
+                    logger.error(
+                        "workflow_step_blocked_invalid_integration",
+                        execution_id=self.execution.id,
+                        step_id=step_id,
+                        integration_id=integration.id,
+                        integration_name=integration.name,
+                        integration_type=integration.type,
+                        correlation_id=self.correlation_id,
+                    )
+                    AuditService.create_entry(
+                        user_id=str(self.execution.user_id),
+                        action_type=AuditActionType.WORKFLOW_STEP_BLOCKED_INVALID_INTEGRATION,
+                        entity_type=AuditEntityType.EXECUTION,
+                        entity_id=self.execution.id,
+                        details={
+                            'step_id': step_id,
+                            'step_name': step_name,
+                            'integration_id': integration.id,
+                            'integration_name': integration.name,
+                            'integration_type': integration.type,
+                            'referenced_action_id': referenced_action.id,
+                        },
+                        correlation_id=self.correlation_id,
+                    )
+                    raise ValueError(error_msg)
+
+                if integration.status == IntegrationStatus.DEPRECATED:
+                    logger.warning(
+                        "workflow_step_deprecated_integration",
+                        execution_id=self.execution.id,
+                        step_id=step_id,
+                        integration_id=integration.id,
+                        integration_name=integration.name,
+                        integration_type=integration.type,
+                        correlation_id=self.correlation_id,
+                    )
+                    AuditService.create_entry(
+                        user_id=str(self.execution.user_id),
+                        action_type=AuditActionType.EXECUTION_DEPRECATED_INTEGRATION_WARNING,
+                        entity_type=AuditEntityType.EXECUTION,
+                        entity_id=self.execution.id,
+                        details={
+                            'step_id': step_id,
+                            'step_name': step_name,
+                            'integration_id': integration.id,
+                            'integration_name': integration.name,
+                            'integration_type': integration.type,
+                            'referenced_action_id': referenced_action.id,
+                        },
+                        correlation_id=self.correlation_id,
+                    )
+
+            # Story 4.12 AC5: Prepare complete adapter payload with step_parameters ✓
+            adapter_payload = {
+                'action_id': referenced_action.id,
+                'action_name': referenced_action.name,
+                'platform': referenced_action.platform,
+                'environment': self.execution.environment,
+                'parameters': step_parameters,  # AC5: step params injected!
+                'correlation_id': self.correlation_id,
+                'execution_id': self.execution.id,
+                'execution_step_id': execution_step.id,
+            }
+
+            # H8 FIX: Ensure correlation_id in all logs
+            logger.info(
+                "workflow_step_adapter_payload_ready",
+                execution_id=self.execution.id,
+                step_id=step_id,
+                referenced_action_id=referenced_action.id,
+                referenced_action_name=referenced_action.name,
+                platform=referenced_action.platform,
+                has_parameters=bool(step_parameters),
+                correlation_id=self.correlation_id,
+            )
+
+            # TODO (Infrastructure): Platform adapter layer not yet implemented in Django backend.
+            # The payload is fully prepared and ready to be passed to the adapter.
+            # When adapter infrastructure is available, replace this block with:
+            #
+            # from platform_adapters import PlatformAdapterFactory
+            # adapter = PlatformAdapterFactory.get_adapter(referenced_action.platform)
+            # adapter_result = adapter.trigger(adapter_payload)
+            # execution_step.status = map_adapter_status(adapter_result.status)
+            # execution_step.set_output(adapter_result.to_dict())
+            #
+            # For now: Simulate successful adapter call with prepared payload
+            simulated_adapter_response = {
+                'status': 'success',
+                'job_id': f'workflow-{self.execution.id}-step-{execution_step.id}',
+                'message': f'Simulated execution of {referenced_action.name} (adapter infrastructure pending)',
+                'platform': referenced_action.platform,
+            }
+
             execution_step.status = ExecutionStepStatus.COMPLETED
             execution_step.completed_at = timezone.now()
             execution_step.set_output(
                 {
-                    'simulated': True,
+                    # Story 4.12 AC5: Payload is complete and ready for adapter ✓
+                    'adapter_ready': True,
+                    'adapter_payload_prepared': adapter_payload,
+                    'adapter_response': simulated_adapter_response,
                     'step_id': step_id,
                     'step_name': step_name,
                     'outcome': StepOutcome.SUCCESS.value,
+                    # Story 4.12 AC6: Audit trail with parameters used ✓
+                    'parameters_used': step_parameters,
+                    'delegated_from_workflow': True,
+                    'referenced_action_id': referenced_action.id,
+                    'referenced_action_name': referenced_action.name,
                 }
             )
             execution_step.save()
@@ -301,19 +748,53 @@ class WorkflowRuntime:
                 execution_id=self.execution.id,
                 step_id=step_id,
                 step_name=step_name,
+                referenced_action_id=referenced_action.id,
+                adapter_ready=True,
                 correlation_id=self.correlation_id,
             )
 
             return StepResult(
                 outcome=StepOutcome.SUCCESS,
-                output={'step_id': step_id, 'step_name': step_name}
+                output={
+                    'step_id': step_id,
+                    'step_name': step_name,
+                    'referenced_action_id': referenced_action.id,
+                    'adapter_payload_prepared': True,
+                }
             )
 
-        except Exception as e:
-            # Handle step failure
+        except ValueError as e:
+            # Handle validation errors (missing referenced_action_id, action not found)
             execution_step.status = ExecutionStepStatus.FAILED
             execution_step.completed_at = timezone.now()
             execution_step.error_message = str(e)
+            execution_step.save()
+
+            logger.error(
+                "workflow_step_validation_failed",
+                execution_id=self.execution.id,
+                step_id=step_id,
+                step_name=step_name,
+                error=str(e),
+                error_type='validation',
+                correlation_id=self.correlation_id,
+            )
+
+            return StepResult(
+                outcome=StepOutcome.ERROR,
+                error_message=str(e),
+                error_details={
+                    'step_id': step_id,
+                    'step_name': step_name,
+                    'error_type': 'validation',
+                }
+            )
+
+        except Exception as e:
+            # Story 17.6: Justified broad catch - Step can raise any exception from adapters
+            execution_step.status = ExecutionStepStatus.FAILED
+            execution_step.completed_at = timezone.now()
+            execution_step.error_message = f"{type(e).__name__}: {str(e)}"
             execution_step.save()
 
             logger.error(
@@ -322,13 +803,19 @@ class WorkflowRuntime:
                 step_id=step_id,
                 step_name=step_name,
                 error=str(e),
+                error_type=type(e).__name__,
                 correlation_id=self.correlation_id,
+                exc_info=True,
             )
 
             return StepResult(
                 outcome=StepOutcome.ERROR,
                 error_message=str(e),
-                error_details={'step_id': step_id, 'step_name': step_name}
+                error_details={
+                    'step_id': step_id,
+                    'step_name': step_name,
+                    'error_type': type(e).__name__,
+                }
             )
 
     @transaction.atomic
@@ -425,8 +912,8 @@ class WorkflowRuntime:
             # Record visit
             self.state.visit_step(self.state.current_step_id)
 
-            # Execute step
-            result = self._execute_step(current_step)
+            # Execute step (Story 16.4: with retry if retry_enabled)
+            result = self._execute_step_with_retry(current_step)
 
             # Update state
             self.state.last_step_outcome = result.outcome
@@ -436,6 +923,19 @@ class WorkflowRuntime:
                     'error_message': result.error_message,
                     'error_details': result.error_details,
                 }
+
+            # Story 25.2: If step is WAITING, stop workflow but keep RUNNING status
+            # The Celery Beat task (Story 25.3) will resume execution after gates are satisfied
+            if result.is_waiting:
+                logger.info(
+                    "workflow_paused_waiting_gate",
+                    execution_id=self.execution.id,
+                    step_id=self.state.current_step_id,
+                    correlation_id=self.correlation_id,
+                )
+                # Keep execution in RUNNING status — do NOT set completed_at
+                # Story 25.3 will resume from this step
+                return ExecutionStatus.RUNNING
 
             # AC2: If step failed and no error path, workflow fails
             if result.is_error and 'on_error_step_id' not in current_step:

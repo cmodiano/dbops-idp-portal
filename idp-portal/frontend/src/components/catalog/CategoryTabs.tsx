@@ -1,30 +1,20 @@
 /**
- * CategoryTabs - Tab navigation for catalog categories (Story 8.7, AC1, AC2).
+ * CategoryTabs - Tab navigation for catalog categories (Story 8.7, AC1, AC2; Story 2.30, AC6).
  *
  * Features:
- * - Tabs: "Tout", "Provisioning", "Patching", "Administration", "Monitoring", "Backup", "Mes actions"
+ * - Dynamic tabs from REF_CATEGORIES (Story 2.30: replaces hard-coded CATEGORIES)
+ * - Fixed tabs: "Tout" (first) and "Mes actions" (last)
  * - Active tab with Desjardins green #00874E + underline
  * - ARIA: role="tablist", aria-selected, aria-controls
  * - Keyboard accessible (AC6)
  */
 
-import { Tabs } from 'antd';
+import { Tabs, Skeleton } from 'antd';
 import { HeartOutlined } from '@ant-design/icons';
 import { useTheme } from '../../contexts/ThemeContext';
-import { STYLE_TOKENS } from '../../theme/styleTokens';
+import { useCategories } from '../../hooks/useCategories';
 
-/** Category definitions for catalog navigation (Story 8.7: labels in French). */
-export const CATEGORIES = [
-  { key: 'tout', label: 'Tout' },
-  { key: 'provisioning', label: 'Approvisionnement' },
-  { key: 'patching', label: 'Correctifs' },
-  { key: 'administration', label: 'Administration' },
-  { key: 'monitoring', label: 'Surveillance' },
-  { key: 'backup', label: 'Sauvegarde' },
-  { key: 'mes-actions', label: 'Mes actions' },
-] as const;
-
-export type CategoryKey = (typeof CATEGORIES)[number]['key'];
+export type CategoryKey = string;
 
 export interface CategoryTabsProps {
   /** Currently active category key. */
@@ -37,7 +27,7 @@ export interface CategoryTabsProps {
 
 /**
  * Category tabs component for filtering catalog by action categories.
- * Maps to backend tag filtering (e.g., category "patching" filters by tag "patching").
+ * Story 2.30, AC6: Dynamic categories loaded from REF_CATEGORIES API.
  */
 export function CategoryTabs({
   activeCategory,
@@ -46,18 +36,31 @@ export function CategoryTabs({
 }: CategoryTabsProps) {
   const { effectiveMode } = useTheme();
   const isDark = effectiveMode === 'dark';
+  const { categoryOptions, loading: categoriesLoading } = useCategories();
 
-  const items = CATEGORIES.map((cat) => ({
-    key: cat.key,
-    label: (
-      <span>
-        {cat.key === 'mes-actions' && <HeartOutlined style={{ marginRight: 4 }} />}
-        {cat.key === 'mes-actions' && favoritesCount > 0
-          ? `${cat.label} (${favoritesCount})`
-          : cat.label}
-      </span>
-    ),
+  if (categoriesLoading) {
+    return <Skeleton.Input active style={{ width: 400, marginBottom: 16 }} />;
+  }
+
+  // Build tabs: "Tout" + dynamic categories + "Mes actions"
+  const dynamicItems = categoryOptions.map((cat) => ({
+    key: cat.value,
+    label: <span>{cat.label}</span>,
   }));
+
+  const items = [
+    { key: 'tout', label: <span>Tout</span> },
+    ...dynamicItems,
+    {
+      key: 'mes-actions',
+      label: (
+        <span>
+          <HeartOutlined style={{ marginRight: 4 }} />
+          {favoritesCount > 0 ? `Mes actions (${favoritesCount})` : 'Mes actions'}
+        </span>
+      ),
+    },
+  ];
 
   return (
     <Tabs

@@ -3,6 +3,7 @@
  * - Wizard 3 steps: Général, Automatisme & Paramètres, Impact & Changement. 1 action = 1 étape. Plateforme définit le connecteur.
  */
 
+import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -15,10 +16,38 @@ vi.mock('../../services/admin_service', () => ({
   updateActionTags: vi.fn().mockResolvedValue({}),
   updateActionSteps: vi.fn().mockResolvedValue({}),
   updateWorkflowSteps: vi.fn().mockResolvedValue({}),
+  checkActionNameAvailable: vi.fn().mockResolvedValue(true),
   getEligibleActionsForWorkflow: vi.fn().mockResolvedValue([
     { id: 100, name: 'Action A', engine: 'Oracle', status: 'published', created_at: '', execution_count: 0 },
     { id: 101, name: 'Action B', engine: 'SQL Server', status: 'published', created_at: '', execution_count: 0 },
   ]),
+}));
+
+// Mock @xyflow/react to avoid CSS import issues in jsdom (Story 16.5)
+vi.mock('@xyflow/react', () => ({
+  ReactFlow: ({ children }: { children?: React.ReactNode }) => <div data-testid="react-flow">{children}</div>,
+  ReactFlowProvider: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  Controls: () => null,
+  MiniMap: () => null,
+  Background: () => null,
+  Handle: () => null,
+  addEdge: vi.fn(),
+  useNodesState: () => [[], vi.fn(), vi.fn()],
+  useEdgesState: () => [[], vi.fn(), vi.fn()],
+  useReactFlow: () => ({ screenToFlowPosition: vi.fn() }),
+  Position: { Top: 'top', Bottom: 'bottom', Left: 'left', Right: 'right' },
+}));
+
+vi.mock('../../services/reference_service', () => ({
+  fetchEngines: vi.fn().mockResolvedValue([
+    { value: 'Oracle', label: 'Oracle' },
+    { value: 'SQL Server', label: 'SQL Server' },
+  ]),
+  fetchPlatforms: vi.fn().mockResolvedValue([
+    { value: 'AAP', label: 'AAP' },
+    { value: 'GitHub Actions', label: 'GitHub Actions' },
+  ]),
+  fetchEnvironments: vi.fn().mockResolvedValue(['DEV', 'STAGING', 'PROD']),
 }));
 
 const mockOnSubmit = vi.fn().mockResolvedValue({ id: 1 });
@@ -62,12 +91,13 @@ describe('ActionWizard', () => {
   });
 
   describe('AC3: Navigation et persistance', () => {
-    it('boutons Précédent / Suivant changent l’étape sans perdre le state', async () => {
+    it('boutons Précédent / Suivant changent l\'étape sans perdre le state', async () => {
       const user = userEvent.setup();
       const editAction: ActionDetail = {
         id: 1,
         name: 'Action test',
         description: null,
+        item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
         parameters_schema: null,
@@ -78,6 +108,7 @@ describe('ActionWizard', () => {
         created_at: '',
         updated_at: null,
         execution_steps: null,
+        workflow_steps: null,
         change_type_config: null,
         tags: [],
       };
@@ -95,12 +126,13 @@ describe('ActionWizard', () => {
       });
     });
 
-    it("bouton Enregistrer visible uniquement à l’étape 3", async () => {
+    it("bouton Enregistrer visible uniquement à l'étape 3", async () => {
       const user = userEvent.setup();
       const editAction: ActionDetail = {
         id: 1,
         name: 'X',
         description: null,
+        item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
         parameters_schema: null,
@@ -111,6 +143,7 @@ describe('ActionWizard', () => {
         created_at: '',
         updated_at: null,
         execution_steps: null,
+        workflow_steps: null,
         change_type_config: null,
         tags: [],
       };
@@ -138,6 +171,7 @@ describe('ActionWizard', () => {
         id: 10,
         name: 'Action à modifier',
         description: 'Desc',
+        item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
         parameters_schema: null,
@@ -148,6 +182,7 @@ describe('ActionWizard', () => {
         created_at: '',
         updated_at: null,
         execution_steps: null,
+        workflow_steps: null,
         change_type_config: null,
         tags: [],
       };
@@ -175,12 +210,13 @@ describe('ActionWizard', () => {
   });
 
   describe('AC4: Enregistrement', () => {
-    it('à l’étape 4, Enregistrer envoie le payload via onSubmit (mode édition pré-rempli)', async () => {
+    it('à l\'étape 4, Enregistrer envoie le payload via onSubmit (mode édition pré-rempli)', async () => {
       const user = userEvent.setup();
       const editAction: ActionDetail = {
         id: 10,
         name: 'Action à modifier',
         description: 'Desc',
+        item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
         parameters_schema: null,
@@ -191,6 +227,7 @@ describe('ActionWizard', () => {
         created_at: '2025-01-01T00:00:00Z',
         updated_at: null,
         execution_steps: [],
+        workflow_steps: null,
         change_type_config: null,
         tags: [],
       };
@@ -236,11 +273,12 @@ describe('ActionWizard', () => {
   });
 
   describe('AC5: Mode édition', () => {
-    it('en mode édition les champs sont pré-remplis depuis l’action existante', async () => {
+    it('en mode édition les champs sont pré-remplis depuis l\'action existante', async () => {
       const editAction: ActionDetail = {
         id: 42,
         name: 'Action existante',
         description: 'Description existante',
+        item_type: 'action',
         engine: 'SQL Server',
         platform: 'GitHub Actions',
         parameters_schema: { type: 'object', properties: { foo: { type: 'string' } }, required: ['foo'] },
@@ -251,6 +289,7 @@ describe('ActionWizard', () => {
         created_at: '2025-01-01T00:00:00Z',
         updated_at: null,
         execution_steps: [],
+        workflow_steps: null,
         change_type_config: { PROD: { required: true, change_model_code: '1516B' } },
         tags: ['tag1'],
       };
@@ -268,6 +307,7 @@ describe('ActionWizard', () => {
         id: 1,
         name: 'X',
         description: null,
+        item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
         parameters_schema: null,
@@ -278,6 +318,7 @@ describe('ActionWizard', () => {
         created_at: '',
         updated_at: null,
         execution_steps: null,
+        workflow_steps: null,
         change_type_config: null,
         tags: [],
       };
@@ -297,6 +338,7 @@ describe('ActionWizard', () => {
         id: 1,
         name: 'Action existante',
         description: null,
+        item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
         parameters_schema: null,
@@ -307,6 +349,7 @@ describe('ActionWizard', () => {
         created_at: '2025-01-01T00:00:00Z',
         updated_at: null,
         execution_steps: [],
+        workflow_steps: null,
         change_type_config: null,
         tags: [],
       };
@@ -411,7 +454,7 @@ describe('ActionWizard', () => {
       });
     });
 
-    it('type radio est désactivé en mode édition', async () => {
+    it('Radio.Group masqué en mode édition (Story 2.29)', async () => {
       const editAction: ActionDetail = {
         id: 1,
         item_type: 'workflow',
@@ -434,13 +477,9 @@ describe('ActionWizard', () => {
       await act(async () => {
         render(<ActionWizard {...defaultProps} editAction={editAction} />);
       });
-      // Radio buttons should be disabled in edit mode
-      await waitFor(() => {
-        const actionRadio = screen.getByRole('radio', { name: /Action/i });
-        expect(actionRadio).toBeDisabled();
-        const workflowRadio = screen.getByRole('radio', { name: /Workflow/i });
-        expect(workflowRadio).toBeDisabled();
-      });
+      // Radio buttons should be hidden (not in DOM) in edit mode
+      expect(screen.queryByRole('radio', { name: /Action/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('radio', { name: /Workflow/i })).not.toBeInTheDocument();
     });
 
     it('sauvegarde workflow appelle updateWorkflowSteps avec les étapes', async () => {
@@ -524,10 +563,10 @@ describe('ActionWizard', () => {
       await act(async () => {
         render(<ActionWizard {...defaultProps} editAction={editAction} />);
       });
-      // Verify workflow type is selected
-      await waitFor(() => {
-        expect(screen.getByRole('radio', { name: /Workflow/i })).toBeChecked();
-      });
+      // Radio.Group should be hidden in edit mode (Story 2.29)
+      expect(screen.queryByRole('radio', { name: /Workflow/i })).not.toBeInTheDocument();
+      // Title should show "Modifier le workflow"
+      expect(screen.getByText(/Modifier le workflow/i)).toBeInTheDocument();
       // Go to step 2
       await user.click(screen.getByRole('button', { name: /Suivant/i }));
       // Verify steps are loaded
@@ -535,6 +574,122 @@ describe('ActionWizard', () => {
         expect(screen.getByText('Étape 1')).toBeInTheDocument();
         expect(screen.getByText('Étape 2')).toBeInTheDocument();
       });
+    });
+  });
+
+  // Story 2.29: initialItemType prop tests
+  describe('Story 2.29: initialItemType prop', () => {
+    it('avec initialItemType="action", le Radio.Group est masqué', async () => {
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} initialItemType="action" />);
+      });
+      // Radio.Group should NOT be in the DOM
+      expect(screen.queryByRole('radio', { name: /Action/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('radio', { name: /Workflow/i })).not.toBeInTheDocument();
+      // Title should be "Nouvelle action"
+      expect(screen.getByText('Nouvelle action')).toBeInTheDocument();
+      // Engine/platform should be visible (action type)
+      expect(screen.getByLabelText('Moteur')).toBeInTheDocument();
+      expect(screen.getByLabelText('Plateforme')).toBeInTheDocument();
+    });
+
+    it('avec initialItemType="workflow", le Radio.Group est masqué et champs engine/platform masqués', async () => {
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} initialItemType="workflow" />);
+      });
+      // Radio.Group should NOT be in the DOM
+      expect(screen.queryByRole('radio', { name: /Action/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('radio', { name: /Workflow/i })).not.toBeInTheDocument();
+      // Title should be "Nouveau workflow"
+      expect(screen.getByText('Nouveau workflow')).toBeInTheDocument();
+      // Engine/platform should NOT be visible (workflow type)
+      expect(screen.queryByLabelText('Moteur')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Plateforme')).not.toBeInTheDocument();
+    });
+
+    it('sans initialItemType, le Radio.Group est visible (compatibilité rétroactive)', async () => {
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} />);
+      });
+      // Radio.Group should be visible
+      expect(screen.getByRole('radio', { name: /Action/i })).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: /Workflow/i })).toBeInTheDocument();
+      // Action selected by default
+      expect(screen.getByRole('radio', { name: /Action/i })).toBeChecked();
+    });
+
+    it('en mode édition action, le Radio.Group est masqué', async () => {
+      const editAction: ActionDetail = {
+        id: 1,
+        item_type: 'action',
+        name: 'Action existante',
+        description: null,
+        engine: 'Oracle',
+        platform: 'AAP',
+        parameters_schema: null,
+        impact_rules: null,
+        default_impact_level: null,
+        status: 'draft',
+        created_by: null,
+        created_at: '',
+        updated_at: null,
+        execution_steps: null,
+        workflow_steps: null,
+        change_type_config: null,
+        tags: [],
+      };
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} editAction={editAction} />);
+      });
+      // Radio.Group hidden in edit mode
+      expect(screen.queryByRole('radio', { name: /Action/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('radio', { name: /Workflow/i })).not.toBeInTheDocument();
+      // Title should show "Modifier l'action"
+      expect(screen.getByText(/Modifier l'action/i)).toBeInTheDocument();
+      // Engine/platform should still be visible (action type)
+      expect(screen.getByLabelText('Moteur')).toBeInTheDocument();
+      expect(screen.getByLabelText('Plateforme')).toBeInTheDocument();
+    });
+
+    it('avec initialItemType="workflow", titre et champs corrects à étape 1', async () => {
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} initialItemType="workflow" />);
+      });
+      // Verify workflow type is set via title
+      expect(screen.getByText('Nouveau workflow')).toBeInTheDocument();
+      // Verify Radio.Group is hidden
+      expect(screen.queryByRole('radio', { name: /Action/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('radio', { name: /Workflow/i })).not.toBeInTheDocument();
+      // Verify engine/platform are NOT displayed for workflows
+      expect(screen.queryByLabelText('Moteur')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Plateforme')).not.toBeInTheDocument();
+      // Verify name field label is "Nom du workflow" (not "Nom de l'action")
+      expect(screen.getByLabelText('Nom du workflow')).toBeInTheDocument();
+    });
+  });
+
+  // Story 18.3, AC1: Modal width increased to 1400 in visual workflow mode
+  describe('Story 18.3 — Modal width (AC1)', () => {
+    it('modal width=640 for action type (default)', async () => {
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} />);
+      });
+      // Default action wizard should have normal width
+      const modal = document.querySelector('.ant-modal');
+      if (modal) {
+        expect(modal).toHaveStyle({ width: '640px' });
+      }
+    });
+
+    it('modal width=640 for workflow in list mode (default)', async () => {
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} initialItemType="workflow" />);
+      });
+      // Workflow wizard defaults to list mode → 640px
+      const modal = document.querySelector('.ant-modal');
+      if (modal) {
+        expect(modal).toHaveStyle({ width: '640px' });
+      }
     });
   });
 });

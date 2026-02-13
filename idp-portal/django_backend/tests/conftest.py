@@ -1,7 +1,7 @@
 """
 Global pytest fixtures for Django backend tests.
 
-Story M.9: Tests unitaires et d'intégration (parité avec FastAPI)
+Story M.9: Tests unitaires et d'intégration
 This module provides reusable fixtures following pytest best practices.
 """
 
@@ -22,6 +22,7 @@ from tests.factories import (
     RecurringPatternFactory,
     AuditLogFactory,
     TagFactory,
+    FeatureFlagFactory,
 )
 
 

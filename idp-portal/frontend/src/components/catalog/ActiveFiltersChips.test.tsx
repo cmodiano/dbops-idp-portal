@@ -1,5 +1,5 @@
 /**
- * Tests for ActiveFiltersChips component (Story 8.7, AC6).
+ * Tests for ActiveFiltersChips component (Story 8.7, AC6; Story 18.4: Environment chips removed).
  */
 
 import { render, screen, fireEvent } from '@testing-library/react';
@@ -17,12 +17,10 @@ describe('ActiveFiltersChips', () => {
     activeCategory: 'tout' as const,
     selectedTags: [],
     selectedEngines: [],
-    selectedEnvironments: [],
     selectedImpacts: [],
     onRemoveCategory: vi.fn(),
     onRemoveTag: vi.fn(),
     onRemoveEngine: vi.fn(),
-    onRemoveEnvironment: vi.fn(),
     onRemoveImpact: vi.fn(),
     onClearAll: vi.fn(),
   };
@@ -51,7 +49,6 @@ describe('ActiveFiltersChips', () => {
       />
     );
 
-    // Should return null since mes-actions is not shown as a chip
     expect(container.firstChild).toBeNull();
   });
 
@@ -79,16 +76,16 @@ describe('ActiveFiltersChips', () => {
     expect(screen.getByText('Moteur: SQL Server')).toBeInTheDocument();
   });
 
-  it('displays environment chips', () => {
+  it('does not display environment chips (Story 18.4: removed)', () => {
     renderWithTheme(
       <ActiveFiltersChips
         {...defaultProps}
-        selectedEnvironments={['PROD', 'DEV']}
+        selectedEngines={['Oracle']}
       />
     );
 
-    expect(screen.getByText('Env: PROD')).toBeInTheDocument();
-    expect(screen.getByText('Env: DEV')).toBeInTheDocument();
+    // Environment chips should not exist
+    expect(screen.queryByText(/Env:/i)).not.toBeInTheDocument();
   });
 
   it('displays impact chips with French labels', () => {
@@ -113,7 +110,6 @@ describe('ActiveFiltersChips', () => {
       />
     );
 
-    // Find the close icon in the category tag
     const categoryChip = screen.getByText('Catégorie: Patching').closest('.ant-tag');
     const closeIcon = categoryChip?.querySelector('.ant-tag-close-icon, .anticon-close');
     if (closeIcon) {

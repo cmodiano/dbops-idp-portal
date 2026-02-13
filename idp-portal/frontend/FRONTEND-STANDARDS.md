@@ -141,7 +141,32 @@ Tous les tests passent sans aucun warning de dépréciation Ant Design.
 - **react-hooks/exhaustive-deps** : Inclure toutes les dépendances (y compris `message`, `notification`) dans les tableaux de dépendances des hooks.
 - **Tests async** : Envelopper les mises à jour d'état asynchrones dans `act()` pour éviter les warnings React.
 
+## Vérification Automatique
+
+Les standards suivants sont appliqués automatiquement par le plugin ESLint local `eslint-plugin-standards/` :
+
+| Règle ESLint | Standard vérifié | Niveau |
+|---|---|---|
+| `standards/no-antd-internal-imports` | Section 3 — Pas d'import `antd/es/*` | `error` |
+| `standards/require-app-useapp` | Section 4 — `message`/`notification` via `App.useApp()` | `error` |
+| `standards/no-class-components` | Section 1 — Pas de class components | `error` |
+
+### Commandes
+
+```bash
+# Vérifier conformité
+npm run lint
+
+# Corriger automatiquement (quand applicable)
+npm run lint -- --fix
+```
+
+Les règles sont bloquantes en CI (job `lint-frontend` dans `.github/workflows/ci.yml`).
+
+Pour la documentation détaillée du plugin : [`eslint-plugin-standards/README.md`](eslint-plugin-standards/README.md).
+
 ---
 
 *Document créé le 2026-01-30 — Story 5.5*
 *Mise à jour le 2026-01-30 — Corrections dépréciations Ant Design 6.2*
+*Mise à jour le 2026-02-07 — Vérification automatique ESLint (Story 17.16)*

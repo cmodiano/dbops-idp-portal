@@ -9,7 +9,7 @@ import structlog
 from django.db import transaction
 from idp_auth.models import User
 from profiles.models import Profile
-from catalog.models import UserFavorite, Action
+from catalog.models import UserFavorite, Action, ActionStatus
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id
@@ -182,25 +182,44 @@ class AuthService:
     
     def list_favorites(self, user_id: int):
         """
-        List all favorites for a user.
-        
+        List all favorites for a user, excluding disabled actions.
+
+        Story 18.5: Returns only draft and published actions to maintain UX consistency.
+        Catalog UI filters out disabled actions, so badge count must match visible list.
+
         Args:
             user_id: ID of the user
-        
+
         Returns:
-            QuerySet of UserFavorite instances ordered by created_at DESC
+            QuerySet of UserFavorite instances, ordered by created_at DESC
         """
-        return UserFavorite.objects.filter(user_id=user_id).select_related('action').order_by('-created_at')
+        return (
+            UserFavorite.objects
+            .filter(user_id=user_id)
+            .select_related('action')
+            # Story 18.5: Exclude disabled actions for UX consistency (badge count matches visible actions)
+            .exclude(action__status=ActionStatus.DISABLED)
+            .order_by('-created_at')
+        )
     
     def is_favorite(self, user_id: int, action_id: int):
         """
-        Check if an action is in user's favorites.
-        
+        Check if an action is in user's favorites (excluding disabled actions).
+
+        Story 18.5: Only active favorites (draft/published) are considered, matching
+        list_favorites() behavior for UX consistency.
+
         Args:
             user_id: ID of the user
             action_id: ID of the action
-        
+
         Returns:
-            True if favorite, False otherwise
+            True if favorite and action is active, False otherwise
         """
-        return UserFavorite.objects.filter(user_id=user_id, action_id=action_id).exists()
+        return (
+            UserFavorite.objects
+            .filter(user_id=user_id, action_id=action_id)
+            .select_related('action')
+            .exclude(action__status=ActionStatus.DISABLED)
+            .exists()
+        )

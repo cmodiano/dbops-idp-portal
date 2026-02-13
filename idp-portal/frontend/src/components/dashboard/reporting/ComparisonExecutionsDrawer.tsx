@@ -6,8 +6,9 @@
  */
 
 import { Drawer, Table, Tag, Empty, Button } from 'antd';
+import type { TableProps } from 'antd';
 import { Link } from 'react-router';
-import type { ColumnsType } from 'antd/es/table';
+
 import type { ComparisonDimension, ComparisonMetric, DashboardRecentExecution } from '../../../types/api';
 
 export interface ComparisonExecutionsDrawerProps {
@@ -29,6 +30,8 @@ export interface ComparisonExecutionsDrawerProps {
   loading?: boolean;
 }
 
+const EMPTY_EXECUTIONS: DashboardRecentExecution[] = [];
+
 /** Status tag colors. */
 const STATUS_COLORS: Record<string, string> = {
   COMPLETED: 'green',
@@ -49,7 +52,7 @@ const METRIC_LABELS: Record<ComparisonMetric, string> = {
   incident_count: 'Incidents',
 };
 
-const columns: ColumnsType<DashboardRecentExecution> = [
+const columns: TableProps<DashboardRecentExecution>['columns'] = [
   {
     title: 'Action',
     dataIndex: 'action_name',
@@ -102,7 +105,7 @@ export function ComparisonExecutionsDrawer({
   value1,
   value2,
   metric,
-  executions = [],
+  executions = EMPTY_EXECUTIONS,
   loading = false,
 }: ComparisonExecutionsDrawerProps) {
   const title = metric

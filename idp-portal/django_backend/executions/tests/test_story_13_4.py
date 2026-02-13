@@ -42,11 +42,11 @@ class ExecutionTargetRequiredTests(TestCase):
             requires_target=True
         )
         # Set change_type_config and impact_rules
-        self.action_with_target.set_change_type_config({
+        self.action_with_target.change_type_config = ({
             'DEV': {'required': False, 'change_model_code': None},
             'PROD': {'required': True, 'change_model_code': '1516B'}
         })
-        self.action_with_target.set_impact_rules({
+        self.action_with_target.impact_rules = ({
             'DEV': {'level': 'low'},
             'PROD': {'level': 'high'}
         })
@@ -66,7 +66,7 @@ class ExecutionTargetRequiredTests(TestCase):
         """
         Subtask 6.1: POST /executions without target_names → 400 for requires_target=True.
         """
-        response = self.client.post('/api/v1/executions', {
+        response = self.client.post('/api/v1/executions/', {
             'action_id': self.action_with_target.id,
             'environment': 'dev'  # Only environment, no targets
         }, format='json')
@@ -86,7 +86,7 @@ class ExecutionTargetRequiredTests(TestCase):
             mock_instance.list_targets_for_user.return_value = (allowed_targets, 1, False)
             MockInventoryService.return_value = mock_instance
 
-            response = self.client.post('/api/v1/executions', {
+            response = self.client.post('/api/v1/executions/', {
                 'action_id': self.action_with_target.id,
                 'target_names': ['srv-dev-01'],
             }, format='json')
@@ -108,7 +108,7 @@ class ExecutionTargetRequiredTests(TestCase):
             mock_instance.list_targets_for_user.return_value = (allowed_targets, 2, False)
             MockInventoryService.return_value = mock_instance
 
-            response = self.client.post('/api/v1/executions', {
+            response = self.client.post('/api/v1/executions/', {
                 'action_id': self.action_with_target.id,
                 'target_names': ['srv-dev-01', 'srv-prod-01'],
             }, format='json')
@@ -120,7 +120,7 @@ class ExecutionTargetRequiredTests(TestCase):
         """
         Actions with requires_target=False can use environment directly.
         """
-        response = self.client.post('/api/v1/executions', {
+        response = self.client.post('/api/v1/executions/', {
             'action_id': self.action_without_target.id,
             'environment': 'dev'
         }, format='json')
@@ -141,7 +141,7 @@ class ExecutionTargetRequiredTests(TestCase):
             mock_instance.list_targets_for_user.return_value = (allowed_targets, 1, False)
             MockInventoryService.return_value = mock_instance
 
-            response = self.client.post('/api/v1/executions', {
+            response = self.client.post('/api/v1/executions/', {
                 'action_id': self.action_with_target.id,
                 'target_names': ['srv-prod-01'],
             }, format='json')
@@ -165,7 +165,7 @@ class ExecutionTargetRequiredTests(TestCase):
             mock_instance.list_targets_for_user.return_value = (allowed_targets, 1, False)
             MockInventoryService.return_value = mock_instance
 
-            response = self.client.post('/api/v1/executions', {
+            response = self.client.post('/api/v1/executions/', {
                 'action_id': self.action_with_target.id,
                 'target_names': ['srv-dev-01'],
             }, format='json')
@@ -190,7 +190,7 @@ class ExecutionTargetRequiredTests(TestCase):
             MockInventoryService.return_value = mock_instance
 
             with patch('executions.views.exec_logger.warning') as mock_warning:
-                response = self.client.post('/api/v1/executions', {
+                response = self.client.post('/api/v1/executions/', {
                     'action_id': self.action_with_target.id,
                     'environment': 'prod',  # Will be ignored
                     'target_names': ['srv-dev-01'],

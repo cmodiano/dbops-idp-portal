@@ -1,16 +1,50 @@
 import json
 import logging
 from django.db import models
+from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
 
+def _validate_json_schema(value: dict) -> None:
+    """
+    Validate that a dictionary represents a valid JSON Schema structure.
+    Code Review Fix Issue #4: Ensure required_params/optional_params are valid JSON Schema.
+
+    Raises:
+        ValidationError: If the value is not a valid JSON Schema structure
+    """
+    if not isinstance(value, dict):
+        raise ValidationError("JSON Schema must be a dictionary")
+
+    # Basic JSON Schema validation - must have 'type' field
+    if 'type' not in value:
+        raise ValidationError("JSON Schema must have a 'type' field")
+
+    valid_types = ['object', 'array', 'string', 'number', 'integer', 'boolean', 'null']
+    if value['type'] not in valid_types:
+        raise ValidationError(f"JSON Schema 'type' must be one of: {', '.join(valid_types)}")
+
+    # If type is 'object', should have 'properties' or be empty
+    if value['type'] == 'object' and 'properties' in value:
+        if not isinstance(value['properties'], dict):
+            raise ValidationError("JSON Schema 'properties' must be a dictionary")
+
+
 class AuthFlow(models.TextChoices):
-    """Authentication flow enum matching FastAPI model."""
+    """Authentication flow enum."""
     TOKEN = 'token', 'Token'
     BASIC = 'basic', 'Basic'
     BASIC_THEN_TOKEN = 'basic_then_token', 'Basic Then Token'
     PAT = 'pat', 'Personal Access Token'
+
+
+class IntegrationStatus(models.TextChoices):
+    """Story 24.3: Integration validation status against type catalogue."""
+    VALID = 'valid', 'Valide'
+    INVALID = 'invalid', 'Invalide'
+    DEPRECATED = 'deprecated', 'Déprécié'
 
 
 class IntegrationType(models.TextChoices):
@@ -82,9 +116,17 @@ class Integration(models.Model):
     token_url = models.CharField(max_length=2000, null=True, blank=True, db_column='TOKEN_URL')
     # CLOB field - using TextField with JSON serialization helper
     config = models.TextField(null=True, blank=True, db_column='CONFIG')
+    # Story 24.3: Validation status against type catalogue
+    status = models.CharField(
+        max_length=20,
+        choices=IntegrationStatus.choices,
+        default=IntegrationStatus.VALID,
+        db_column='STATUS',
+        db_index=True,
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
     updated_at = models.DateTimeField(auto_now=True, db_column='UPDATED_AT')
-    
+
     # Custom manager
     objects = IntegrationManager()
 
@@ -112,3 +154,104 @@ class Integration(models.Model):
             self.config = json.dumps(value)
         else:
             self.config = None
+
+
+class IntegrationTypeCatalogue(models.Model):
+    """
+    Story 24.1: Formal catalogue of integration types.
+    Defines supported integration types (AAP, ServiceNow, etc.) with metadata.
+    Maps to Oracle INTEGRATION_TYPE_CATALOGUE table.
+    """
+    code = models.CharField(max_length=50, primary_key=True, db_column='CODE')
+    name = models.CharField(max_length=255, db_column='NAME')
+    description = models.TextField(blank=True, default='', db_column='DESCRIPTION')
+    version = models.CharField(max_length=20, default='1.0', db_column='VERSION')
+    is_active = models.BooleanField(default=True, db_column='IS_ACTIVE')
+    created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
+    updated_at = models.DateTimeField(auto_now=True, db_column='UPDATED_AT')
+
+    class Meta:
+        db_table = 'INTEGRATION_TYPE_CATALOGUE'
+        ordering = ['code']
+
+    def __str__(self):
+        return f"{self.code} ({self.name})"
+
+
+class IntegrationAction(models.Model):
+    """
+    Story 24.1: Actions supported by an integration type.
+    Each action defines required/optional params and response format.
+    Maps to Oracle INTEGRATION_ACTIONS table.
+    """
+    id = models.BigAutoField(primary_key=True, db_column='ID')
+    integration_type = models.ForeignKey(
+        IntegrationTypeCatalogue,
+        on_delete=models.CASCADE,
+        related_name='actions',
+        db_column='INTEGRATION_TYPE_CODE'
+    )
+    action_code = models.CharField(max_length=100, db_column='ACTION_CODE')
+    action_label = models.CharField(max_length=255, db_column='ACTION_LABEL')
+    description = models.TextField(blank=True, default='', db_column='DESCRIPTION')
+    required_params = models.TextField(blank=True, default='{}', db_column='REQUIRED_PARAMS')
+    optional_params = models.TextField(blank=True, default='{}', db_column='OPTIONAL_PARAMS')
+    response_format = models.TextField(blank=True, default='{}', db_column='RESPONSE_FORMAT')
+    is_active = models.BooleanField(default=True, db_column='IS_ACTIVE')
+    created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
+    updated_at = models.DateTimeField(auto_now=True, db_column='UPDATED_AT')
+
+    class Meta:
+        db_table = 'INTEGRATION_ACTIONS'
+        ordering = ['action_code']
+        unique_together = [('integration_type', 'action_code')]
+
+    def __str__(self):
+        # Fix Issue #11: Use human-readable code instead of ID
+        return f"{self.integration_type.code}:{self.action_code}"
+
+    def get_required_params(self):
+        """Deserialize required_params JSON."""
+        if self.required_params:
+            try:
+                return json.loads(self.required_params)
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning(f"Failed to deserialize required_params for IntegrationAction {self.id}: {e}")
+                return {}
+        return {}
+
+    def set_required_params(self, value):
+        """Serialize required_params to JSON with validation."""
+        if value is not None and value != {}:
+            _validate_json_schema(value)  # Fix Issue #4
+        self.required_params = json.dumps(value) if value is not None else '{}'
+
+    def get_optional_params(self):
+        """Deserialize optional_params JSON."""
+        if self.optional_params:
+            try:
+                return json.loads(self.optional_params)
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning(f"Failed to deserialize optional_params for IntegrationAction {self.id}: {e}")
+                return {}
+        return {}
+
+    def set_optional_params(self, value):
+        """Serialize optional_params to JSON with validation."""
+        if value is not None and value != {}:
+            _validate_json_schema(value)  # Fix Issue #4
+        self.optional_params = json.dumps(value) if value is not None else '{}'
+
+    def get_response_format(self):
+        """Deserialize response_format JSON."""
+        if self.response_format:
+            try:
+                return json.loads(self.response_format)
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning(f"Failed to deserialize response_format for IntegrationAction {self.id}: {e}")
+                return {}
+        return {}
+
+    def set_response_format(self, value):
+        """Serialize response_format to JSON."""
+        self.response_format = json.dumps(value) if value is not None else '{}'

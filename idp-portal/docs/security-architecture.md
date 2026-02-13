@@ -19,7 +19,7 @@ Ce document decrit l'architecture de securite complete du portail IDP, incluant 
 5. **Secrets** : credential_ref Vault, detect-secrets, pre-commit hooks
 6. **Audit** : Logs immutables (trigger Oracle + Django model override)
 
-**Tests de securite : 177** (154 fonctionnels + 23 SOC1) — 100% passing ✅
+**Tests de securite : 211** (154 fonctionnels + 23 SOC1 + 34 rate limiting) — 100% passing ✅
 
 ---
 
@@ -36,6 +36,7 @@ Ce document decrit l'architecture de securite complete du portail IDP, incluant 
 9. [Guide Bonnes Pratiques Developpeurs](#9-guide-bonnes-pratiques-developpeurs)
 10. [Procedures de Reponse aux Incidents](#10-procedures-de-reponse-aux-incidents)
 11. [References Standards](#11-references-standards)
+12. [Rate Limiting (Story 17.11)](#12-rate-limiting-story-1711)
 
 ---
 
@@ -551,6 +552,27 @@ VAULT_ADDR=https://vault.example.com:8200
 VAULT_TOKEN=hvs.XXXXXXXXXXXXX
 ```
 
+### Startup Secret Validation (Story 17.5)
+
+**Fail-Fast Pattern :** L'application refuse de demarrer si des secrets critiques sont manquants ou contiennent des valeurs par defaut en environnement non-dev.
+
+**Secrets proteges :**
+- `SECRET_KEY` : Protection sessions/CSRF Django
+- `JWT_SECRET_KEY` : Cle de signature tokens
+- `ORACLE_PASSWORD` : Credentials base de donnees
+- `SAML_*_CERT_PATH` : Chemins certificats SAML (si `AUTH_DEV_BYPASS=false`)
+
+**Regles de validation :**
+1. Production/Staging : Valeurs manquantes ou par defaut → `ImproperlyConfigured`
+2. Development : Valeurs par defaut autorisees mais loguees en warning
+3. Detection placeholders : Patterns `CHANGE_*`, `<VARIABLE>`, `TODO:` rejetes
+
+**Implementation :**
+- Module : `core/startup_checks.py`
+- Point d'entree : `core/apps.CoreConfig.ready()`
+- Tests : `tests/security/test_soc1_compliance.py::TestSecretValidation`
+- Tests unitaires : `core/tests/test_startup_checks.py`
+
 ### detect-secrets
 
 **Fichier :** `.secrets.baseline`
@@ -779,7 +801,7 @@ class AuditLog(models.Model):
 | **NFR11** | Pas de donnees sensibles | Scan modeles + masquage erreurs 500 | 4 tests | ✅ CONFORME |
 | **FR29** | Secrets via Vault | credential_ref = reference Vault (VaultService placeholder) | 2 tests | ⚠️ PARTIEL |
 
-**Total tests securite : 177** (154 fonctionnels + 23 SOC1)
+**Total tests securite : 211** (154 fonctionnels + 23 SOC1 + 34 rate limiting)
 
 ### Middleware Stack Complete
 
@@ -788,9 +810,10 @@ class AuditLog(models.Model):
 | 1 | SecurityMiddleware | Django built-in (SSL redirect, HSTS, cookies secure) | ✅ Premier |
 | 2 | CorrelationIdMiddleware | UUID par requete, thread-local, structlog contextvars | ✅ Avant logging |
 | 3 | RequestResponseLoggingMiddleware | Logging JSON structure (method, path, status, duration, correlation_id) | ✅ Avant auth |
-| 4 | SecurityHeadersMiddleware | X-Frame-Options, X-Content-Type-Options, Cache-Control | ✅ Avant auth |
-| 5 | AuthenticationMiddleware | Django authentication (charge user depuis JWT) | ✅ Apres security |
-| 6 | AuditAuthMiddleware | Journalisation 401 sur /api/v1/auth | ✅ Apres auth |
+| 4 | RateLimitHeadersMiddleware | Detection 429, logging rate_limit_exceeded, header Retry-After (Story 17.11) | ✅ Apres logging |
+| 5 | SecurityHeadersMiddleware | X-Frame-Options, X-Content-Type-Options, Cache-Control | ✅ Avant auth |
+| 6 | AuthenticationMiddleware | Django authentication (charge user depuis JWT) | ✅ Apres security |
+| 7 | AuditAuthMiddleware | Journalisation 401 sur /api/v1/auth | ✅ Apres auth |
 
 ---
 
@@ -1167,7 +1190,7 @@ Description cause racine (vulnerabilite, configuration, erreur humaine)
 | **A04:2021 – Insecure Design** | Defense en profondeur (trigger + model + queryset immutable) |
 | **A05:2021 – Security Misconfiguration** | Settings production conditionnels (`if not DEBUG`) + security headers middleware |
 | **A06:2021 – Vulnerable Components** | pip-audit + npm audit + CI/CD scan dependances |
-| **A07:2021 – Identification/Auth Failures** | SAML 2.0 + JWT 30min + 52 tests auth + rate limiting (a implementer) |
+| **A07:2021 – Identification/Auth Failures** | SAML 2.0 + JWT 30min + 52 tests auth + rate limiting DRF (Story 17.11) |
 | **A08:2021 – Software/Data Integrity** | Audit trail immutable + correlation_id bout-en-bout |
 | **A09:2021 – Security Logging Failures** | Logging structlog + audit trail + AuditAuthMiddleware |
 | **A10:2021 – SSRF** | Pas de fetch URL utilisateur + validation URL integrations |
@@ -1189,6 +1212,198 @@ Description cause racine (vulnerabilite, configuration, erreur humaine)
 - NFR11 : Pas de donnees sensibles
 
 **Matrice de tracabilite :** Voir [`soc1-compliance-report.md`](soc1-compliance-report.md)
+
+---
+
+## 12. Rate Limiting (Story 17.11)
+
+### Vue d'ensemble
+
+Le rate limiting protege les endpoints publics et authentifies contre les abus, les attaques par force brute, et les requetes excessives. L'implementation utilise exclusivement le **throttling DRF built-in** (tous les endpoints sont des `APIView` DRF).
+
+### Seuils par Endpoint
+
+| Endpoint | Limite | Cle | Classe Throttle | Justification |
+|---|---|---|---|---|
+| `/auth/saml/login` | 10/min | IP | `AuthEndpointThrottle` | Prevention brute-force SSO |
+| `/auth/saml/callback` | 10/min | IP | `AuthEndpointThrottle` | Prevention replay attacks |
+| `/auth/refresh` | 20/min | IP | `TokenRefreshThrottle` | Abuse modere token refresh |
+| `/executions/` POST | 30/min | User | `ExecutionThrottle` | Usage legitime DBA |
+| Endpoints API generaux | 100/min | User | `GeneralAPIThrottle` | Usage normal authentifie |
+| Endpoints publics anon | 50/min | IP | `PublicEndpointThrottle` | Prevention scraping |
+| `/auth/logout` | 50/min | IP | `PublicEndpointThrottle` | Endpoint public |
+
+### Architecture Technique
+
+**Fichier :** `django_backend/core/throttling.py`
+
+```python
+# 5 classes de throttle DRF, toutes avec mixin _RateLimitEnabledMixin
+class AuthEndpointThrottle(_RateLimitEnabledMixin, AnonRateThrottle):
+    scope = 'auth'
+    def get_cache_key(self, request, view):
+        return self.cache_format % {'scope': self.scope, 'ident': get_client_ip(request)}
+
+class ExecutionThrottle(_RateLimitEnabledMixin, UserRateThrottle):
+    scope = 'execution'
+
+class GeneralAPIThrottle(_RateLimitEnabledMixin, UserRateThrottle):
+    scope = 'general_api'  # Applique par defaut a tous les endpoints DRF
+```
+
+**Keying strategy :**
+- **IP-based** (`AnonRateThrottle`) : Endpoints publics/auth — utilise `get_client_ip()` qui gere `X-Forwarded-For`
+- **User-based** (`UserRateThrottle`) : Endpoints authentifies — cle par user ID
+
+### Cache Backend
+
+**MVP (single-instance) :**
+```python
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'idp-ratelimit-cache',
+    }
+}
+```
+
+**Production HA (multi-instances) — Migration Redis :**
+```python
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/1'),
+        'OPTIONS': {'CLIENT_CLASS': 'django_redis.client.DefaultClient'},
+    }
+}
+```
+
+**Limitation connue :** Avec LocMemCache, les compteurs sont perdus au restart et non partages entre instances.
+
+### Middleware RateLimitHeadersMiddleware
+
+**Fichier :** `django_backend/core/middleware.py`
+**Position :** Apres `RequestResponseLoggingMiddleware`, avant `SecurityHeadersMiddleware`
+
+**Responsabilites :**
+1. Detection des reponses 429 Too Many Requests
+2. Logging structure WARNING avec `correlation_id`, `ip_address`, `user_id`, `endpoint`, `method`, `user_agent`
+3. Normalisation du header `Retry-After` (conversion float → int)
+4. Exemption des endpoints healthcheck (`/api/v1/health`, `/health`, `/metrics`)
+
+### Format Reponse 429
+
+```http
+HTTP/1.1 429 Too Many Requests
+Retry-After: 45
+Content-Type: application/json
+
+{
+    "error": {
+        "code": "THROTTLED",
+        "message": "Request was throttled. Expected available in 45 seconds.",
+        "details": {}
+    }
+}
+```
+
+### Configuration via Variables d'Environnement
+
+**Fichier :** `.env.production.template`
+
+```bash
+RATELIMIT_ENABLED=true              # false = desactive tout rate limiting (urgence)
+THROTTLE_AUTH_RATE=10/minute         # Endpoints auth (par IP)
+THROTTLE_TOKEN_REFRESH_RATE=20/minute # Token refresh (par IP)
+THROTTLE_EXECUTION_RATE=30/minute    # Executions POST (par user)
+THROTTLE_API_RATE=100/minute         # API generales (par user)
+THROTTLE_PUBLIC_RATE=50/minute       # Endpoints publics (par IP)
+```
+
+**Format :** `<count>/<period>` ou period = `second|s`, `minute|m|min`, `hour|h`, `day|d`
+
+**Validation startup :** `core/startup_checks.py::validate_rate_limit_config()` valide le format au demarrage. Format invalide → `ImproperlyConfigured` (fail-fast).
+
+### Procedure d'Ajustement Dynamique des Seuils
+
+#### En Cas d'Attaque DDoS ou Abus Detecte
+
+**Etape 1 : Evaluation**
+- Query Splunk pour identifier endpoints/IPs abuses : `index=idp_portal event="rate_limit_exceeded" | stats count by endpoint, ip_address`
+- Determiner si c'est un abus legitime (augmenter seuil) ou une attaque (reduire seuil)
+
+**Etape 2 : Ajustement des seuils**
+- Modifier `/etc/idp/django.env` ou variables d'environnement :
+  ```bash
+  # Exemple : Reduire auth rate de 10/min a 5/min
+  THROTTLE_AUTH_RATE=5/minute
+  ```
+- **IMPORTANT :** Restart requis pour prendre effet (variables chargees au demarrage)
+
+**Etape 3 : Redemarrage**
+```bash
+sudo systemctl restart gunicorn
+# OU si Docker
+docker restart idp-backend
+```
+
+**Etape 4 : Verification**
+- Checker logs startup : `grep "rate_limit_config" /var/log/idp/django.log`
+- Tester endpoint manuellement : faire 6 requetes rapides, verifier 429 a la 6eme
+
+**Etape 5 : Monitoring post-ajustement**
+- Surveiller taux 429 sur 15min
+- Si taux 429 reste > 5% : investiguer cause racine (bot, script defectueux)
+
+#### Rollback d'Urgence
+
+Si le rate limiting cause des problemes operationnels (faux positifs massifs) :
+
+```bash
+# Desactiver TOUT le rate limiting
+echo "RATELIMIT_ENABLED=false" >> /etc/idp/django.env
+sudo systemctl restart gunicorn
+```
+
+**ATTENTION :** Ceci desactive TOUTE protection rate limit. A utiliser uniquement en urgence et restaurer `RATELIMIT_ENABLED=true` des que possible.
+
+#### Formats Valides
+
+- `<count>/second` ou `/s` : Ex `100/second`
+- `<count>/minute` ou `/m` ou `/min` : Ex `10/minute`
+- `<count>/hour` ou `/h` : Ex `1000/hour`
+- `<count>/day` ou `/d` : Ex `10000/day`
+
+**Validation automatique :** Format invalide = startup bloque avec `ImproperlyConfigured`.
+
+### Monitoring
+
+**Logs structures :** Chaque violation 429 emet un log WARNING :
+```json
+{
+    "event": "rate_limit_exceeded",
+    "correlation_id": "abc-123",
+    "ip_address": "192.168.1.100",
+    "user_id": "42",
+    "endpoint": "/api/v1/executions/",
+    "method": "POST",
+    "user_agent": "Mozilla/5.0..."
+}
+```
+
+**Query Splunk recommandee :**
+```
+index=idp_portal event="rate_limit_exceeded" | stats count by ip_address, endpoint | sort -count
+```
+
+**Alertes suggerees :**
+- Taux 429 > 5% du trafic total → investigation DDoS potentiel
+- > 50 violations/min depuis une meme IP → blocage Nginx recommande
+
+### Tests
+
+- **29 tests unitaires** : `core/tests/test_rate_limiting.py` (throttle classes, middleware, config validation, settings, RATELIMIT_ENABLED bypass)
+- **8 tests securite** : `tests/security/test_rate_limiting_security.py` (brute-force SAML/token/execution, IP spoofing, persistance cache)
 
 ---
 

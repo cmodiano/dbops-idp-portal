@@ -1,6 +1,6 @@
 #!/bin/bash
 # Run Django backend tests with coverage
-# Story M.9: Tests unitaires et d'intégration (parité avec FastAPI)
+# Story M.9: Tests unitaires et d'intégration
 
 set -e
 

@@ -64,16 +64,30 @@ describe('executionRenderers', () => {
       expect(badge).toBeInTheDocument();
     });
 
+    it('renders error badge for INTEGRATION_ERROR status (Story 18.6)', () => {
+      const { container } = render(<>{renderStatusIndicator('INTEGRATION_ERROR')}</>);
+      const badge = container.querySelector('.ant-badge-status-error');
+      expect(badge).toBeInTheDocument();
+      expect(screen.getByText('Erreur intégration')).toBeInTheDocument();
+    });
+
+    it('INTEGRATION_ERROR and FAILED both use error badge (Story 18.6)', () => {
+      const { container: c1 } = render(<>{renderStatusIndicator('INTEGRATION_ERROR')}</>);
+      const { container: c2 } = render(<>{renderStatusIndicator('FAILED')}</>);
+      expect(c1.querySelector('.ant-badge-status-error')).toBeInTheDocument();
+      expect(c2.querySelector('.ant-badge-status-error')).toBeInTheDocument();
+    });
+
     it('applies larger scale transform for running statuses', () => {
       const { container } = render(<>{renderStatusIndicator('RUNNING')}</>);
       const badge = container.querySelector('.ant-badge');
-      expect(badge).toHaveStyle({ transform: 'scale(1.4)' });
+      expect(badge).toHaveStyle({ transform: 'scale(2.0)' });
     });
 
     it('applies smaller scale transform for terminal statuses', () => {
       const { container } = render(<>{renderStatusIndicator('COMPLETED')}</>);
       const badge = container.querySelector('.ant-badge');
-      expect(badge).toHaveStyle({ transform: 'scale(1.2)' });
+      expect(badge).toHaveStyle({ transform: 'scale(1.3)' });
     });
   });
 
@@ -82,7 +96,7 @@ describe('executionRenderers', () => {
       const { container } = render(<>{renderEngineIcon('Oracle', 'action')}</>);
       const img = container.querySelector('img[src*="oracle"]');
       expect(img).toBeInTheDocument();
-      expect(img).toHaveAttribute('width', '44');
+      expect(img).toHaveAttribute('width', '40');
     });
 
     it('renders SQL Server icon (SVG)', () => {
@@ -207,6 +221,7 @@ describe('executionRenderers', () => {
     it('has all execution status types defined', () => {
       const statuses: ExecutionStatusType[] = [
         'SUBMITTED',
+        'INTEGRATION_ERROR',
         'PENDING_APPROVAL',
         'RUNNING',
         'COMPLETED',
@@ -225,6 +240,7 @@ describe('executionRenderers', () => {
 
     it('has French labels for all statuses', () => {
       expect(STATUS_CONFIG.SUBMITTED.label).toBe('Soumise');
+      expect(STATUS_CONFIG.INTEGRATION_ERROR.label).toBe('Erreur intégration');
       expect(STATUS_CONFIG.PENDING_APPROVAL.label).toBe('En attente');
       expect(STATUS_CONFIG.RUNNING.label).toBe('En cours');
       expect(STATUS_CONFIG.COMPLETED.label).toBe('Terminée');

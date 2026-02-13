@@ -1,15 +1,14 @@
 /**
- * Unit tests for RemediationRulesEditor (Story 9.1, 9.3).
- * Tests: add rule, remove rule, validation, auto_trigger constraints.
- *
- * Story 9.3 tests: auto_trigger disabled when risk_level !== 'low',
- * warning shown when auto + prod environment selected.
+ * Unit tests for RemediationRulesEditor (Story 9.1, 9.3 + Story 21.4).
+ * Tests: add rule, remove rule, validation, auto_trigger constraints,
+ * dynamic environments from useEnvironments hook, case-insensitive prod warning.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RemediationRulesEditor, type RemediationRuleDefinition } from './RemediationRulesEditor';
+import { useEnvironments } from '../../hooks/useEnvironments';
 
 // Mock catalog service
 vi.mock('../../services/catalog_service', () => ({
@@ -22,9 +21,27 @@ vi.mock('../../services/catalog_service', () => ({
   ),
 }));
 
+vi.mock('../../hooks/useEnvironments', () => ({
+  useEnvironments: vi.fn(),
+}));
+
+const mockUseEnvironments = useEnvironments as ReturnType<typeof vi.fn>;
+
+const defaultEnvMock = {
+  environments: ['dev', 'staging', 'prod'],
+  environmentOptions: [
+    { value: 'dev', label: 'Développement' },
+    { value: 'staging', label: 'Staging' },
+    { value: 'prod', label: 'Production' },
+  ],
+  loading: false,
+  error: null,
+};
+
 describe('RemediationRulesEditor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseEnvironments.mockReturnValue(defaultEnvMock);
   });
 
   describe('empty state', () => {
@@ -42,7 +59,7 @@ describe('RemediationRulesEditor', () => {
   });
 
   describe('add rule', () => {
-    it('calls onChange with new rule when add button clicked', async () => {
+    it('calls onChange with new rule using dynamic environments', async () => {
       const user = userEvent.setup();
       const onChange = vi.fn();
       render(<RemediationRulesEditor value={[]} onChange={onChange} />);
@@ -284,8 +301,7 @@ describe('RemediationRulesEditor', () => {
       ];
       render(<RemediationRulesEditor value={rules} onChange={vi.fn()} />);
 
-      expect(screen.getByText(/Approbation DBA requise en Production/i)).toBeInTheDocument();
-      expect(screen.getByText(/L'auto-déclenchement n'est pas autorisé en Production/i)).toBeInTheDocument();
+      expect(screen.getByText(/Auto-déclenchement INTERDIT en Production/i)).toBeInTheDocument();
     });
 
     it('does not show prod warning when auto_trigger=false', () => {
@@ -301,7 +317,7 @@ describe('RemediationRulesEditor', () => {
       ];
       render(<RemediationRulesEditor value={rules} onChange={vi.fn()} />);
 
-      expect(screen.queryByText(/Approbation DBA requise en Production/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Auto-déclenchement INTERDIT en Production/i)).not.toBeInTheDocument();
     });
 
     it('does not show prod warning when prod is not in environments', () => {
@@ -317,7 +333,7 @@ describe('RemediationRulesEditor', () => {
       ];
       render(<RemediationRulesEditor value={rules} onChange={vi.fn()} />);
 
-      expect(screen.queryByText(/Approbation DBA requise en Production/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Auto-déclenchement INTERDIT en Production/i)).not.toBeInTheDocument();
     });
 
     it('shows tooltip explaining auto_trigger disabled for non-low risk', async () => {
@@ -387,6 +403,160 @@ describe('RemediationRulesEditor', () => {
         expect(screen.queryByText(/Fix Database/)).not.toBeInTheDocument();
         expect(screen.getByText(/Restart Service/)).toBeInTheDocument();
       });
+    });
+  });
+
+  // Story 21.4 tests
+  describe('Story 21.4: dynamic environments', () => {
+    it('displays dynamic environment options in multi-select', async () => {
+      const user = userEvent.setup();
+      mockUseEnvironments.mockReturnValue({
+        environments: ['dev', 'qa'],
+        environmentOptions: [
+          { value: 'dev', label: 'Développement' },
+          { value: 'qa', label: 'Qa' },
+        ],
+        loading: false,
+        error: null,
+      });
+
+      const rules: RemediationRuleDefinition[] = [
+        {
+          id: '1',
+          error_pattern: 'error',
+          target_action_id: 10,
+          environments: [],
+          auto_trigger: false,
+          risk_level: 'low',
+        },
+      ];
+      render(<RemediationRulesEditor value={rules} onChange={vi.fn()} />);
+
+      const envSelect = screen.getByRole('combobox', { name: /Environnements règle 1/i });
+      await user.click(envSelect);
+
+      expect(screen.getByText('Développement')).toBeInTheDocument();
+      expect(screen.getByText('Qa')).toBeInTheDocument();
+    });
+
+    it('disables environment select when loading', () => {
+      mockUseEnvironments.mockReturnValue({
+        ...defaultEnvMock,
+        loading: true,
+      });
+
+      const rules: RemediationRuleDefinition[] = [
+        {
+          id: '1',
+          error_pattern: 'error',
+          target_action_id: 10,
+          environments: ['dev'],
+          auto_trigger: false,
+          risk_level: 'low',
+        },
+      ];
+      render(<RemediationRulesEditor value={rules} onChange={vi.fn()} />);
+
+      const envSelect = screen.getByRole('combobox', { name: /Environnements règle 1/i });
+      expect(envSelect.closest('.ant-select-disabled')).toBeTruthy();
+    });
+
+    it('shows warning for PROD case-insensitive (uppercase)', () => {
+      const rules: RemediationRuleDefinition[] = [
+        {
+          id: '1',
+          error_pattern: 'error',
+          target_action_id: 10,
+          environments: ['PROD'],
+          auto_trigger: true,
+          risk_level: 'low',
+        },
+      ];
+      render(<RemediationRulesEditor value={rules} onChange={vi.fn()} />);
+
+      expect(screen.getByText(/Auto-déclenchement INTERDIT en Production/i)).toBeInTheDocument();
+    });
+
+    it('shows warning for Prod case-insensitive (mixed case)', () => {
+      const rules: RemediationRuleDefinition[] = [
+        {
+          id: '1',
+          error_pattern: 'error',
+          target_action_id: 10,
+          environments: ['Prod'],
+          auto_trigger: true,
+          risk_level: 'low',
+        },
+      ];
+      render(<RemediationRulesEditor value={rules} onChange={vi.fn()} />);
+
+      expect(screen.getByText(/Auto-déclenchement INTERDIT en Production/i)).toBeInTheDocument();
+    });
+
+    it('no warning when environments contain dev and staging only', () => {
+      const rules: RemediationRuleDefinition[] = [
+        {
+          id: '1',
+          error_pattern: 'error',
+          target_action_id: 10,
+          environments: ['dev', 'staging'],
+          auto_trigger: true,
+          risk_level: 'low',
+        },
+      ];
+      render(<RemediationRulesEditor value={rules} onChange={vi.fn()} />);
+
+      expect(screen.queryByText(/Auto-déclenchement INTERDIT en Production/i)).not.toBeInTheDocument();
+    });
+
+    it('validation with non-standard environments works', () => {
+      mockUseEnvironments.mockReturnValue({
+        environments: ['dev', 'lab', 'qa'],
+        environmentOptions: [
+          { value: 'dev', label: 'Développement' },
+          { value: 'lab', label: 'Lab' },
+          { value: 'qa', label: 'Qa' },
+        ],
+        loading: false,
+        error: null,
+      });
+
+      const rules: RemediationRuleDefinition[] = [
+        {
+          id: '1',
+          error_pattern: 'error',
+          target_action_id: 10,
+          environments: ['lab', 'qa'],
+          auto_trigger: false,
+          risk_level: 'low',
+        },
+      ];
+      render(<RemediationRulesEditor value={rules} onChange={vi.fn()} />);
+
+      // No validation error for non-standard envs
+      expect(screen.queryByText(/Au moins un environnement requis/i)).not.toBeInTheDocument();
+    });
+
+    it('new rule uses dynamic environments as default', async () => {
+      const user = userEvent.setup();
+      mockUseEnvironments.mockReturnValue({
+        environments: ['dev', 'lab'],
+        environmentOptions: [
+          { value: 'dev', label: 'Développement' },
+          { value: 'lab', label: 'Lab' },
+        ],
+        loading: false,
+        error: null,
+      });
+
+      const onChange = vi.fn();
+      render(<RemediationRulesEditor value={[]} onChange={onChange} />);
+
+      await user.click(screen.getByRole('button', { name: /Ajouter une règle/i }));
+
+      expect(onChange).toHaveBeenCalledTimes(1);
+      const newValue = onChange.mock.calls[0][0] as RemediationRuleDefinition[];
+      expect(newValue[0].environments).toEqual(['dev', 'lab']);
     });
   });
 });

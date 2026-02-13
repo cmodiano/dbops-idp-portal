@@ -3,6 +3,7 @@ DRF Authentication backend for JWT tokens.
 Story M.7 - Task 4.5-4.8
 """
 
+from django.conf import settings
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 
@@ -44,6 +45,23 @@ class JWTAuthentication(BaseAuthentication):
 
         token = auth_header.split(' ', 1)[1]
 
+        # Dev mode: Accept mock token from frontend VITE_DEV_AUTH mode
+        # Check both AUTH_DEV_BYPASS setting and token value
+        is_dev_bypass = getattr(settings, 'AUTH_DEV_BYPASS', False)
+        is_mock_token = token == 'dev-mock-token-for-testing'
+        
+        if is_dev_bypass and is_mock_token:
+            # Get or create dev user (same as SAMLLoginView dev bypass)
+            dev_user, _ = User.objects.get_or_create(
+                username="dev-user",
+                defaults={
+                    "display_name": "Dev User",
+                    "profile": "dbops",
+                },
+            )
+            dev_user.ad_groups = ["dbops"]  # type: ignore[attr-defined]  # runtime RBAC attr
+            return (dev_user, None)
+
         # Verify token
         payload = verify_token(token, expected_type='access')
         if not payload:
@@ -57,7 +75,7 @@ class JWTAuthentication(BaseAuthentication):
             raise AuthenticationFailed('Utilisateur non trouve')
 
         # Attach ad_groups to user for RBAC resolution (Story 2.12)
-        user.ad_groups = payload.ad_groups
+        user.ad_groups = payload.ad_groups  # type: ignore[attr-defined]  # runtime RBAC attr
 
         return (user, None)
 

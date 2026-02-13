@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.exceptions import BadRequestError, ForbiddenError
+from core.utils import ensure_utc_isoformat
 from core.models import AuditLog, AuditEntityType, AuditActionType
 from executions.models import Execution
 from profiles.models import Profile
@@ -184,14 +185,14 @@ class AuditExecutionsView(APIView):
             raise BadRequestError(code="BAD_REQUEST", message="offset invalide", details={"offset": offset})
 
         qs = _build_audit_queryset(request)
-        total_count = qs.count()
+        total = qs.count()
 
         rows = list(qs[offset : offset + limit])
         execution_ids = [r.entity_id for r in rows if r.entity_id]
         executions = (
             Execution.objects.filter(id__in=execution_ids)
             .select_related("action")
-            .only("id", "environment", "status", "servicenow_change_id", "parameters", "action_id", "action__name")
+            .only("id", "environment", "status", "servicenow_change_id", "parameters", "action_id", "action__name", "parent_execution_id")
         )
         exec_by_id = {e.id: e for e in executions}
 
@@ -208,15 +209,22 @@ class AuditExecutionsView(APIView):
                     "parameters": exec_obj.get_parameters(),
                     "servicenow_change_id": exec_obj.servicenow_change_id,
                 }
+            elif details is not None and exec_obj is not None:
+                # Always enrich with current execution status (not stale audit-time status)
+                details["status"] = exec_obj.status
 
             action_name = None
             if exec_obj is not None and getattr(exec_obj, "action", None) is not None:
                 action_name = exec_obj.action.name
 
+            # Derive parent_execution_id and item_type for frontend grouping
+            parent_execution_id = getattr(exec_obj, "parent_execution_id", None) if exec_obj else None
+            item_type = getattr(exec_obj.action, "item_type", None) if exec_obj and getattr(exec_obj, "action", None) else None
+
             data.append(
                 {
                     "id": r.id,
-                    "timestamp": r.timestamp.isoformat() if r.timestamp else None,
+                    "timestamp": ensure_utc_isoformat(r.timestamp),
                     "user_id": r.user_id,
                     "action_type": r.action_type,
                     "entity_type": r.entity_type,
@@ -226,11 +234,13 @@ class AuditExecutionsView(APIView):
                     "ip_address": r.ip_address,
                     "correlation_id": r.correlation_id,
                     "derived_status": _derive_status(r.action_type, details),
+                    "parent_execution_id": parent_execution_id,
+                    "item_type": item_type,
                 }
             )
 
         page = (offset // limit) + 1
-        total_pages = int(ceil(total_count / limit)) if total_count else 1
+        total_pages = int(ceil(total / limit)) if total else 1
 
         return Response(
             {
@@ -238,7 +248,7 @@ class AuditExecutionsView(APIView):
                 "pagination": {
                     "page": page,
                     "page_size": limit,
-                    "total_count": int(total_count),
+                    "total": int(total),
                     "total_pages": total_pages,
                 },
             }
@@ -261,9 +271,10 @@ class AuditExportView(APIView):
                 details={},
             )
 
-        fmt = (request.query_params.get("format") or "").strip().lower()
+        # Use 'fmt' param (not 'format') to avoid DRF content negotiation conflict
+        fmt = (request.query_params.get("fmt") or request.query_params.get("export_format") or "").strip().lower()
         if fmt not in ("csv", "pdf"):
-            raise BadRequestError(code="BAD_REQUEST", message="format invalide", details={"format": fmt})
+            raise BadRequestError(code="BAD_REQUEST", message="format invalide (use ?fmt=csv or ?fmt=pdf)", details={"fmt": fmt})
 
         qs = _build_audit_queryset(request)
         total = qs.count()
@@ -317,7 +328,7 @@ class AuditExportView(APIView):
             writer.writerow(
                 [
                     r.id,
-                    r.timestamp.isoformat() if r.timestamp else "",
+                    ensure_utc_isoformat(r.timestamp) or "",
                     r.user_id,
                     r.action_type,
                     int(r.entity_id),

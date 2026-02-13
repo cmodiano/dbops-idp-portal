@@ -8,6 +8,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getPendingApprovalsCount } from '../services/execution_service';
 import { useAuth } from '../contexts/AuthContext';
+import logger from '../services/logger';
 
 /**
  * Default polling interval: 60 seconds.
@@ -56,7 +57,7 @@ export function usePendingApprovalsCount(
       setCount(newCount);
       setError(null);
     } catch (err) {
-      console.error('Failed to fetch pending approvals count:', err);
+      logger.error('Failed to fetch pending approvals count', { error: err instanceof Error ? err.message : String(err) });
       setError(err instanceof Error ? err : new Error('Unknown error'));
       setCount(0);
     } finally {

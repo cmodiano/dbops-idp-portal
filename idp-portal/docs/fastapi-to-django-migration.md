@@ -1,5 +1,9 @@
 # Migration FastAPI → Django : Récapitulatif
 
+> **📦 Document d'archivage — Migration terminée**  
+> Ce document est conservé pour référence historique. La migration FastAPI→Django est complète (février 2026).  
+> Voir [MIGRATION_ARCHIVE.md](MIGRATION_ARCHIVE.md) pour accéder au code FastAPI archivé.
+
 **Date de complétion:** 2026-02-05
 **Epic:** M - Migration FastAPI vers Django REST Framework
 **Durée totale:** 10 stories (M.1 à M.10)

@@ -1,6 +1,7 @@
 import json
 import logging
 from django.db import models
+from django.db import IntegrityError
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +15,9 @@ class AuditActionType(models.TextChoices):
     ACTION_DISABLED = 'ACTION_DISABLED', 'Action Disabled'
     ACTION_ENABLED = 'ACTION_ENABLED', 'Action Enabled'
     ACTION_DELETED = 'ACTION_DELETED', 'Action Deleted'
+    # Story 18.1: Deactivation/reactivation audit types
+    ACTION_DEACTIVATED = 'ACTION_DEACTIVATED', 'Action Deactivated'
+    ACTION_REACTIVATED = 'ACTION_REACTIVATED', 'Action Reactivated'
     # Profile types (added for ProfileService)
     PROFILE_CREATED = 'PROFILE_CREATED', 'Profile Created'
     PROFILE_UPDATED = 'PROFILE_UPDATED', 'Profile Updated'
@@ -24,6 +28,7 @@ class AuditActionType(models.TextChoices):
     INTEGRATION_DELETED = 'INTEGRATION_DELETED', 'Integration Deleted'
     # Execution types (added for ExecutionService)
     EXECUTION_SUBMITTED = 'EXECUTION_SUBMITTED', 'Execution Submitted'
+    EXECUTION_INTEGRATION_ERROR = 'EXECUTION_INTEGRATION_ERROR', 'Execution Integration Error'  # Story 18.6
     EXECUTION_RUNNING = 'EXECUTION_RUNNING', 'Execution Running'
     EXECUTION_COMPLETED = 'EXECUTION_COMPLETED', 'Execution Completed'
     EXECUTION_FAILED = 'EXECUTION_FAILED', 'Execution Failed'
@@ -46,6 +51,33 @@ class AuditActionType(models.TextChoices):
     USER_REFRESH = 'USER_REFRESH', 'User Refresh Token'
     FAVORITE_ADDED = 'FAVORITE_ADDED', 'Favorite Added'
     FAVORITE_REMOVED = 'FAVORITE_REMOVED', 'Favorite Removed'
+    # Story 16.4: Retry audit types
+    EXECUTION_STEP_RETRY_ATTEMPT = 'EXECUTION_STEP_RETRY_ATTEMPT', 'Execution Step Retry Attempt'
+    EXECUTION_STEP_RETRY_SUCCESS = 'EXECUTION_STEP_RETRY_SUCCESS', 'Execution Step Retry Success'
+    EXECUTION_STEP_RETRY_EXHAUSTED = 'EXECUTION_STEP_RETRY_EXHAUSTED', 'Execution Step Retry Exhausted'
+    EXECUTION_STEP_RETRY_ABORTED = 'EXECUTION_STEP_RETRY_ABORTED', 'Execution Step Retry Aborted'
+    # Story 25.2: Condition gates audit types
+    EXECUTION_STEP_WAITING = 'EXECUTION_STEP_WAITING', 'Execution Step Waiting'
+    # Story 25.3: Gate evaluation audit types
+    EXECUTION_STEP_GATE_SATISFIED = 'EXECUTION_STEP_GATE_SATISFIED', 'Execution Step Gate Satisfied'
+    EXECUTION_STEP_GATE_TIMEOUT = 'EXECUTION_STEP_GATE_TIMEOUT', 'Execution Step Gate Timeout'
+    # Story 17.12: Feature flag audit types
+    FEATURE_FLAG_UPDATED = 'FEATURE_FLAG_UPDATED', 'Feature Flag Updated'
+    FEATURE_FLAG_CREATED = 'FEATURE_FLAG_CREATED', 'Feature Flag Created'
+    # Story 21.6: Profile environment validation audit
+    PROFILE_UPDATE_REJECTED = 'PROFILE_UPDATE_REJECTED', 'Profile Update Rejected'
+    # Story 24.1: Integration type catalogue audit types
+    INTEGRATION_TYPE_CREATED = 'INTEGRATION_TYPE_CREATED', 'Integration Type Created'
+    INTEGRATION_TYPE_UPDATED = 'INTEGRATION_TYPE_UPDATED', 'Integration Type Updated'
+    INTEGRATION_ACTION_CREATED = 'INTEGRATION_ACTION_CREATED', 'Integration Action Created'
+    INTEGRATION_ACTION_UPDATED = 'INTEGRATION_ACTION_UPDATED', 'Integration Action Updated'
+    # Story 24.3: Integration status validation audit
+    INTEGRATION_STATUS_UPDATED = 'INTEGRATION_STATUS_UPDATED', 'Integration Status Updated'
+    # Story 24.4: Migration and execution guard-rail audit types
+    INTEGRATION_MARKED_LEGACY = 'INTEGRATION_MARKED_LEGACY', 'Integration Marked Legacy'
+    EXECUTION_BLOCKED_INVALID_INTEGRATION = 'EXECUTION_BLOCKED_INVALID_INTEGRATION', 'Execution Blocked Invalid Integration'
+    EXECUTION_DEPRECATED_INTEGRATION_WARNING = 'EXECUTION_DEPRECATED_INTEGRATION_WARNING', 'Execution Deprecated Integration Warning'
+    WORKFLOW_STEP_BLOCKED_INVALID_INTEGRATION = 'WORKFLOW_STEP_BLOCKED_INVALID_INTEGRATION', 'Workflow Step Blocked Invalid Integration'
     # Additional types added in later migrations (V028-V035, V039-V041)
     # Note: Full list would include all types from migrations, but base types are sufficient for model
 
@@ -59,17 +91,35 @@ class AuditEntityType(models.TextChoices):
     INTEGRATION = 'integration', 'Integration'
     SCHEDULED_EXECUTION = 'scheduled_execution', 'Scheduled Execution'
     PROFILE = 'profile', 'Profile'
+    FEATURE_FLAG = 'feature_flag', 'Feature Flag'
+    # Story 24.1: Integration type catalogue entity types
+    INTEGRATION_TYPE_CATALOGUE = 'integration_type_catalogue', 'Integration Type Catalogue'
+    INTEGRATION_ACTION = 'integration_action', 'Integration Action'
     # Additional types may exist in later migrations
+
+
+class ImmutableQuerySet(models.QuerySet):
+    """QuerySet that forbids update() and delete() for immutable audit logs (SOC1/NFR8)."""
+
+    def update(self, **kwargs):
+        raise IntegrityError("AUDIT_LOG is immutable - bulk updates are forbidden (SOC1/NFR8)")
+
+    def delete(self):
+        raise IntegrityError("AUDIT_LOG is immutable - bulk deletions are forbidden (SOC1/NFR8)")
 
 
 class AuditLogManager(models.Manager):
     """
     Custom manager for AuditLog model.
     Provides query methods for common audit log queries.
+    Uses ImmutableQuerySet to prevent bulk update/delete.
     """
-    
-    def create_entry(self, user_id: str, action_type: str, entity_type: str, 
-                     entity_id: int, details: dict | None = None, 
+
+    def get_queryset(self):
+        return ImmutableQuerySet(self.model, using=self._db)
+
+    def create_entry(self, user_id: str, action_type: str, entity_type: str,
+                     entity_id: int, details: dict | None = None,
                      ip_address: str | None = None, correlation_id: str | None = None):
         """
         Create a new audit log entry.
@@ -177,10 +227,17 @@ class AuditLog(models.Model):
         db_table = 'AUDIT_LOG'
         ordering = ['-timestamp']
 
+    def save(self, *args, **kwargs):
+        if self.pk:
+            raise IntegrityError("AUDIT_LOG is immutable - updates are forbidden (SOC1/NFR8)")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise IntegrityError("AUDIT_LOG is immutable - deletions are forbidden (SOC1/NFR8)")
+
     def __str__(self):
         return f"Audit {self.id} - {self.action_type} ({self.entity_type}:{self.entity_id})"
 
-    # JSON field helper
     def get_details(self):
         """Deserialize JSON from CLOB."""
         if self.details:
@@ -197,3 +254,57 @@ class AuditLog(models.Model):
             self.details = json.dumps(value)
         else:
             self.details = None
+
+
+class FeatureFlag(models.Model):
+    """
+    Story 17.12: Feature flag model for centralized flag management.
+    Maps to Oracle CORE_FEATURE_FLAGS table.
+    """
+    id = models.BigAutoField(primary_key=True, db_column='ID')
+    flag_key = models.CharField(
+        max_length=100,
+        unique=True,
+        db_column='FLAG_KEY',
+        help_text='Unique key for the feature flag (e.g., new_workflow_builder)',
+    )
+    enabled = models.BooleanField(default=False, db_column='ENABLED')
+    rollout_percent = models.IntegerField(
+        default=100,
+        db_column='ROLLOUT_PERCENT',
+        help_text='Percentage of users to enable (0-100)',
+    )
+    description = models.CharField(
+        max_length=500,
+        blank=True,
+        default='',
+        db_column='DESCRIPTION',
+    )
+    updated_at = models.DateTimeField(auto_now=True, db_column='UPDATED_AT')
+    updated_by = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        db_column='UPDATED_BY',
+    )
+
+    class Meta:
+        db_table = 'CORE_FEATURE_FLAGS'
+        ordering = ['flag_key']
+
+    def __str__(self):
+        status = 'ON' if self.enabled else 'OFF'
+        return f"{self.flag_key} ({status}, {self.rollout_percent}%)"
+
+    def clean(self):
+        """Validate rollout_percent is 0-100."""
+        from django.core.exceptions import ValidationError
+        if self.rollout_percent < 0 or self.rollout_percent > 100:
+            raise ValidationError({
+                'rollout_percent': 'Rollout percent must be between 0 and 100.',
+            })
+
+    def save(self, *args, **kwargs):
+        """HIGH-3 fix: Call full_clean() before save to ensure validation."""
+        self.full_clean()
+        super().save(*args, **kwargs)

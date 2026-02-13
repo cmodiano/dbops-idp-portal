@@ -6,7 +6,7 @@
 import type { ImpactLevel, ImpactRuleDefinition } from '../types/api';
 
 /** JSON object format stored in ACTIONS_CATALOG.impact_rules (CLOB). */
-export type ImpactRulesJson = Record<string, { level: string; criteria?: string | null }>;
+export type ImpactRulesJson = Record<string, { level: ImpactLevel; criteria?: string | null }>;
 
 const VALID_LEVELS: ImpactLevel[] = ['low', 'medium', 'high', 'critical'];
 
@@ -63,7 +63,7 @@ export function listToImpactRules(list: ImpactRuleDefinition[]): ImpactRulesJson
     const env = (rule.environment || '').trim();
     if (!env) continue;
 
-    const entry: { level: string; criteria?: string | null } = {
+    const entry: { level: ImpactLevel; criteria?: string | null } = {
       level: rule.level || 'low',
     };
     // Only include criteria if non-empty
@@ -79,5 +79,9 @@ export function listToImpactRules(list: ImpactRuleDefinition[]): ImpactRulesJson
   return result;
 }
 
-/** Available environments for the editor (Task 1.3 - aligned with StepsEditor). */
+/**
+ * @deprecated Use useEnvironments hook instead (Story 21.4).
+ * This constant is kept for backward compatibility with existing tests only.
+ * DO NOT use in new code.
+ */
 export const IMPACT_ENVIRONMENTS = ['DEV', 'STAGING', 'PROD'] as const;

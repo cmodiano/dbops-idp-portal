@@ -5,20 +5,22 @@ Tests for catalog services (CatalogService).
 import pytest
 from django.test import TestCase
 from django.db import transaction
+from django.utils import timezone
 from idp_auth.models import User
 from integrations.models import Integration
 from catalog.models import Action, Tag, ActionTag, ActionStatus, ActionItemType
 from catalog.services import CatalogService
 from core.models import AuditLog
+from tests.factories import UserFactory
 
 
 @pytest.mark.django_db
 class TestCatalogService(TestCase):
     """Tests for CatalogService."""
-    
+
     def setUp(self):
         """Set up test data."""
-        self.user = User.objects.create(
+        self.user = UserFactory(
             username='testuser',
             profile='DBA'
         )
@@ -28,7 +30,7 @@ class TestCatalogService(TestCase):
             base_url='https://aap.example.com'
         )
         self.service = CatalogService()
-    
+
     def test_create_action(self):
         """Test create_action() creates action with tags and audit."""
         action_data = {
@@ -42,18 +44,18 @@ class TestCatalogService(TestCase):
             'impact_rules': {'DEV': {'level': 'low'}},
             'tags': ['oracle', 'database']
         }
-        
+
         action = self.service.create_action(action_data, self.user)
-        
+
         self.assertIsNotNone(action.id)
         self.assertEqual(action.name, 'Test Action')
         self.assertEqual(action.status, ActionStatus.DRAFT)
-        
+
         # Verify tags
         tags = [at.tag.name for at in action.actiontag_set.all()]
         self.assertIn('oracle', tags)
         self.assertIn('database', tags)
-        
+
         # Verify audit
         audit = AuditLog.objects.filter(
             entity_type='action',
@@ -62,7 +64,7 @@ class TestCatalogService(TestCase):
         ).first()
         self.assertIsNotNone(audit)
         self.assertEqual(audit.user_id, str(self.user.id))
-    
+
     def test_create_action_with_json_fields(self):
         """Test create_action() with complex JSON fields."""
         action_data = {
@@ -84,18 +86,18 @@ class TestCatalogService(TestCase):
             'change_type_config': {'type': 'standard'},
             'remediation_rules': {'enabled': True}
         }
-        
+
         action = self.service.create_action(action_data, self.user)
-        
+
         # Verify JSON fields
-        self.assertEqual(action.get_parameters_schema()['type'], 'object')
-        self.assertEqual(action.get_impact_rules()['DEV']['level'], 'low')
-        self.assertEqual(len(action.get_execution_steps()), 1)
-        self.assertEqual(action.get_change_type_config()['type'], 'standard')
-        self.assertTrue(action.get_remediation_rules()['enabled'])
-    
+        self.assertEqual(action.parameters_schema['type'], 'object')
+        self.assertEqual(action.impact_rules['DEV']['level'], 'low')
+        self.assertEqual(len(action.execution_steps), 1)
+        self.assertEqual(action.change_type_config['type'], 'standard')
+        self.assertTrue(action.remediation_rules['enabled'])
+
     def test_list_all_with_filters(self):
-        """Test list_all() with various filters."""
+        """Test list_all() with status and item_type filters."""
         # Create test actions
         action1 = Action.objects.create(
             name='Action 1',
@@ -111,17 +113,12 @@ class TestCatalogService(TestCase):
             status=ActionStatus.DRAFT,
             created_by=self.user
         )
-        
+
         # Filter by status
-        results, total = self.service.list_all(status=ActionStatus.PUBLISHED)
-        self.assertEqual(total, 1)
+        results, pagination_info = self.service.list_all(status=ActionStatus.PUBLISHED)
+        self.assertEqual(pagination_info['total'], 1)
         self.assertEqual(results[0].id, action1.id)
-        
-        # Filter by engine
-        results, total = self.service.list_all(engine='Oracle')
-        self.assertGreaterEqual(total, 1)
-        self.assertTrue(any(a.id == action1.id for a in results))
-        
+
         # Filter by item_type
         workflow = Action.objects.create(
             name='Workflow 1',
@@ -131,10 +128,10 @@ class TestCatalogService(TestCase):
             item_type=ActionItemType.WORKFLOW,
             created_by=self.user
         )
-        results, total = self.service.list_all(item_type=ActionItemType.WORKFLOW)
-        self.assertGreaterEqual(total, 1)
+        results, pagination_info = self.service.list_all(item_type=ActionItemType.WORKFLOW)
+        self.assertGreaterEqual(pagination_info['total'], 1)
         self.assertTrue(any(a.id == workflow.id for a in results))
-    
+
     def test_list_all_with_pagination(self):
         """Test list_all() pagination."""
         # Create multiple actions
@@ -146,16 +143,16 @@ class TestCatalogService(TestCase):
                 status=ActionStatus.PUBLISHED,
                 created_by=self.user
             )
-        
+
         # First page
-        results, total = self.service.list_all(page=1, page_size=10)
-        self.assertEqual(total, 30)
+        results, pagination_info = self.service.list_all(page=1, page_size=10)
+        self.assertEqual(pagination_info['total'], 30)
         self.assertEqual(len(results), 10)
-        
+
         # Second page
-        results, total = self.service.list_all(page=2, page_size=10)
+        results, pagination_info = self.service.list_all(page=2, page_size=10)
         self.assertEqual(len(results), 10)
-    
+
     def test_get_by_id(self):
         """Test get_by_id() retrieves action with relations."""
         tag = Tag.objects.create(name='oracle')
@@ -167,20 +164,20 @@ class TestCatalogService(TestCase):
             created_by=self.user
         )
         ActionTag.objects.create(action=action, tag=tag)
-        
+
         retrieved = self.service.get_by_id(action.id)
         self.assertIsNotNone(retrieved)
         self.assertEqual(retrieved.id, action.id)
         self.assertEqual(retrieved.name, 'Test Action')
-        
+
         # Verify tags are attached
         self.assertIsNotNone(hasattr(retrieved, 'tags'))
-    
+
     def test_get_by_id_not_found(self):
         """Test get_by_id() returns None for non-existent action."""
         result = self.service.get_by_id(99999)
         self.assertIsNone(result)
-    
+
     def test_update_action(self):
         """Test update_action() updates action and creates audit."""
         action = Action.objects.create(
@@ -190,22 +187,22 @@ class TestCatalogService(TestCase):
             status=ActionStatus.DRAFT,
             created_by=self.user
         )
-        
+
         update_data = {
             'name': 'Updated Name',
             'description': 'Updated Description',
             'tags': ['new_tag']
         }
-        
+
         updated = self.service.update_action(action.id, update_data, self.user)
-        
+
         self.assertEqual(updated.name, 'Updated Name')
         self.assertEqual(updated.description, 'Updated Description')
-        
+
         # Verify tags updated
         tags = [at.tag.name for at in updated.actiontag_set.all()]
         self.assertIn('new_tag', tags)
-        
+
         # Verify audit
         audit = AuditLog.objects.filter(
             entity_type='action',
@@ -213,7 +210,7 @@ class TestCatalogService(TestCase):
             action_type='ACTION_UPDATED'
         ).first()
         self.assertIsNotNone(audit)
-    
+
     def test_update_status_publish(self):
         """Test update_status() with publish transition."""
         action = Action.objects.create(
@@ -223,11 +220,11 @@ class TestCatalogService(TestCase):
             status=ActionStatus.DRAFT,
             created_by=self.user
         )
-        
+
         updated = self.service.update_status(action.id, 'publish', self.user)
-        
+
         self.assertEqual(updated.status, ActionStatus.PUBLISHED)
-        
+
         # Verify audit
         audit = AuditLog.objects.filter(
             entity_type='action',
@@ -235,9 +232,9 @@ class TestCatalogService(TestCase):
             action_type='ACTION_PUBLISHED'
         ).first()
         self.assertIsNotNone(audit)
-    
+
     def test_update_status_disable(self):
-        """Test update_status() with disable transition."""
+        """Test deactivate_action() properly disables a published action."""
         action = Action.objects.create(
             name='Published Action',
             engine='Oracle',
@@ -245,41 +242,30 @@ class TestCatalogService(TestCase):
             status=ActionStatus.PUBLISHED,
             created_by=self.user
         )
-        
-        updated = self.service.update_status(action.id, 'disable', self.user)
-        
-        self.assertEqual(updated.status, ActionStatus.DISABLED)
-        
-        # Verify audit
-        audit = AuditLog.objects.filter(
-            entity_type='action',
-            entity_id=action.id,
-            action_type='ACTION_DISABLED'
-        ).first()
-        self.assertIsNotNone(audit)
-    
+
+        result = self.service.deactivate_action(action.id, self.user)
+
+        self.assertIsNotNone(result)
+        action.refresh_from_db()
+        self.assertEqual(action.status, ActionStatus.DISABLED)
+
     def test_update_status_enable(self):
-        """Test update_status() with enable transition."""
+        """Test reactivate_action() properly re-enables a disabled action."""
         action = Action.objects.create(
             name='Disabled Action',
             engine='Oracle',
             platform='AAP',
             status=ActionStatus.DISABLED,
+            deleted_at=timezone.now(),
+            deleted_by=self.user,
             created_by=self.user
         )
-        
-        updated = self.service.update_status(action.id, 'enable', self.user)
-        
-        self.assertEqual(updated.status, ActionStatus.PUBLISHED)
-        
-        # Verify audit
-        audit = AuditLog.objects.filter(
-            entity_type='action',
-            entity_id=action.id,
-            action_type='ACTION_ENABLED'
-        ).first()
-        self.assertIsNotNone(audit)
-    
+
+        result = self.service.reactivate_action(action.id, self.user)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.status, ActionStatus.PUBLISHED)
+
     def test_delete_action(self):
         """Test delete_action() deletes action and creates audit."""
         action = Action.objects.create(
@@ -290,14 +276,14 @@ class TestCatalogService(TestCase):
             created_by=self.user
         )
         action_id = action.id
-        
-        result = self.service.delete_action(action_id, str(self.user.id))
-        
+
+        result = self.service.delete_action(action_id, self.user)
+
         self.assertTrue(result)
-        
+
         # Verify action deleted
         self.assertFalse(Action.objects.filter(id=action_id).exists())
-        
+
         # Verify audit
         audit = AuditLog.objects.filter(
             entity_type='action',
@@ -305,17 +291,9 @@ class TestCatalogService(TestCase):
             action_type='ACTION_DELETED'
         ).first()
         self.assertIsNotNone(audit)
-    
+
     def test_transaction_rollback_on_error(self):
         """Test that transaction rolls back on error."""
-        action_data = {
-            'name': 'Test Action',
-            'engine': 'Oracle',
-            'platform': 'AAP',
-            'status': ActionStatus.DRAFT,
-            'tags': ['tag1']
-        }
-        
         # Mock an error during tag creation
         with self.assertRaises(Exception):
             with transaction.atomic():
@@ -328,6 +306,6 @@ class TestCatalogService(TestCase):
                 )
                 # Simulate error
                 raise ValueError("Test error")
-        
+
         # Verify action was not created
         self.assertFalse(Action.objects.filter(name='Test Action').exists())

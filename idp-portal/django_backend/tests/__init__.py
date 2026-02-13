@@ -1,7 +1,7 @@
 """
 Tests package for Django backend.
 
-Story M.9: Tests unitaires et d'intégration (parité avec FastAPI)
+Story M.9: Tests unitaires et d'intégration
 
 This package contains:
 - conftest.py: Global pytest fixtures

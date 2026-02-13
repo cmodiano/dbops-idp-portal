@@ -1,0 +1,65 @@
+-- V065: Update AUDIT_LOG constraints for feature flags, integration catalogue, and new action types
+-- Django core/0003 + core/0004 - Adds missing ACTION_TYPE and ENTITY_TYPE values
+
+-- 1. Update ACTION_TYPE constraint
+ALTER TABLE AUDIT_LOG DROP CONSTRAINT CK_AUDIT_LOG_ACTION_TYPE;
+
+ALTER TABLE AUDIT_LOG ADD CONSTRAINT CK_AUDIT_LOG_ACTION_TYPE CHECK (
+    ACTION_TYPE IN (
+        -- Action lifecycle
+        'ACTION_CREATED', 'ACTION_UPDATED', 'ACTION_PUBLISHED',
+        'ACTION_DISABLED', 'ACTION_ENABLED', 'ACTION_DELETED',
+        'ACTION_DEACTIVATED', 'ACTION_REACTIVATED',
+
+        -- Profile lifecycle
+        'PROFILE_CREATED', 'PROFILE_UPDATED', 'PROFILE_DELETED',
+        'PROFILE_UPDATE_REJECTED',
+
+        -- Integration lifecycle
+        'INTEGRATION_CREATED', 'INTEGRATION_UPDATED', 'INTEGRATION_DELETED',
+
+        -- Integration type catalogue
+        'INTEGRATION_TYPE_CREATED', 'INTEGRATION_TYPE_UPDATED',
+        'INTEGRATION_ACTION_CREATED', 'INTEGRATION_ACTION_UPDATED',
+
+        -- Execution lifecycle
+        'EXECUTION_SUBMITTED', 'EXECUTION_STARTED', 'EXECUTION_RUNNING',
+        'EXECUTION_COMPLETED', 'EXECUTION_FAILED', 'EXECUTION_CANCELLED',
+        'EXECUTION_PENDING_APPROVAL', 'EXECUTION_APPROVED', 'EXECUTION_REJECTED',
+        'EXECUTION_TARGET_FORBIDDEN', 'EXECUTION_INTEGRATION_ERROR',
+
+        -- ServiceNow change
+        'SERVICENOW_CHANGE_CREATED',
+
+        -- Remediation / auto-remediation
+        'REMEDIATION_EXECUTION_CREATED',
+        'AUTO_REMEDIATION_TRIGGERED', 'AUTO_REMEDIATION_SUCCESS', 'AUTO_REMEDIATION_FAILED',
+
+        -- Scheduled executions
+        'SCHEDULED_EXECUTION_CREATED', 'SCHEDULED_EXECUTION_RECURRING_CREATED',
+        'SCHEDULED_EXECUTION_EXECUTED', 'SCHEDULED_EXECUTION_CANCELLED',
+        'SCHEDULED_EXECUTION_RECURRING_DISABLED',
+
+        -- User / Auth / Favorites
+        'USER_CREATED', 'USER_UPDATED', 'USER_LOGIN', 'USER_LOGOUT', 'USER_REFRESH',
+        'FAVORITE_ADDED', 'FAVORITE_REMOVED',
+
+        -- Execution step retry
+        'EXECUTION_STEP_RETRY_ATTEMPT', 'EXECUTION_STEP_RETRY_SUCCESS',
+        'EXECUTION_STEP_RETRY_EXHAUSTED', 'EXECUTION_STEP_RETRY_ABORTED',
+
+        -- Feature flags
+        'FEATURE_FLAG_CREATED', 'FEATURE_FLAG_UPDATED'
+    )
+);
+
+-- 2. Update ENTITY_TYPE constraint
+ALTER TABLE AUDIT_LOG DROP CONSTRAINT CK_AUDIT_LOG_ENTITY_TYPE;
+
+ALTER TABLE AUDIT_LOG ADD CONSTRAINT CK_AUDIT_LOG_ENTITY_TYPE CHECK (
+    ENTITY_TYPE IN (
+        'action', 'user', 'permission', 'execution',
+        'scheduled_execution', 'integration', 'profile',
+        'feature_flag', 'integration_type_catalogue', 'integration_action'
+    )
+);

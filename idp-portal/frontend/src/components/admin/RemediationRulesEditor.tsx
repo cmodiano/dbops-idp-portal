@@ -26,6 +26,8 @@ import {
 import { PlusOutlined, DeleteOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import type { RemediationRule, RiskLevel } from '../../types/api';
 import { fetchCatalogActions, type CatalogAction } from '../../services/catalog_service';
+import { useEnvironments } from '../../hooks/useEnvironments';
+import logger from '../../services/logger';
 
 const { Text } = Typography;
 
@@ -41,16 +43,12 @@ export interface RemediationRulesEditorProps {
   currentActionId?: number;
 }
 
+const EMPTY_REMEDIATION_RULES: RemediationRuleDefinition[] = [];
+
 const RISK_LEVEL_OPTIONS: { value: RiskLevel; label: string }[] = [
   { value: 'low', label: 'Faible' },
   { value: 'medium', label: 'Moyen' },
   { value: 'high', label: 'Élevé' },
-];
-
-const ENVIRONMENT_OPTIONS = [
-  { value: 'dev', label: 'dev' },
-  { value: 'staging', label: 'staging' },
-  { value: 'prod', label: 'prod' },
 ];
 
 interface RuleCardProps {
@@ -58,6 +56,8 @@ interface RuleCardProps {
   index: number;
   actions: CatalogAction[];
   currentActionId?: number;
+  environmentOptions: { value: string; label: string }[];
+  environmentsLoading: boolean;
   onRuleChange: (index: number, field: keyof RemediationRuleDefinition, fieldValue: unknown) => void;
   onRemove: (index: number) => void;
 }
@@ -67,6 +67,8 @@ const RuleCard: React.FC<RuleCardProps> = ({
   index,
   actions,
   currentActionId,
+  environmentOptions,
+  environmentsLoading,
   onRuleChange,
   onRemove,
 }) => {
@@ -95,7 +97,7 @@ const RuleCard: React.FC<RuleCardProps> = ({
       styles={{ body: { padding: '12px' } }}
       style={{ marginBottom: 8 }}
     >
-      <Space direction="vertical" style={{ width: '100%' }} size="small">
+      <Space orientation="vertical" style={{ width: '100%' }} size="small">
         <Space align="center" style={{ width: '100%', justifyContent: 'space-between' }}>
           <Space>
             <Text strong>Règle {index + 1}</Text>
@@ -166,9 +168,11 @@ const RuleCard: React.FC<RuleCardProps> = ({
               mode="multiple"
               value={rule.environments}
               onChange={(v) => onRuleChange(index, 'environments', v)}
-              options={ENVIRONMENT_OPTIONS}
+              options={environmentOptions}
               placeholder="Sélectionnez"
               style={{ width: 200 }}
+              loading={environmentsLoading}
+              disabled={environmentsLoading}
               aria-label={`Environnements règle ${index + 1}`}
             />
           </Form.Item>
@@ -224,18 +228,19 @@ const RuleCard: React.FC<RuleCardProps> = ({
 };
 
 export const RemediationRulesEditor: React.FC<RemediationRulesEditorProps> = ({
-  value = [],
+  value = EMPTY_REMEDIATION_RULES,
   onChange,
   currentActionId,
 }) => {
   const [actions, setActions] = useState<CatalogAction[]>([]);
+  const { environments, environmentOptions, loading: environmentsLoading } = useEnvironments();
 
   // Load actions for dropdown
   useEffect(() => {
     fetchCatalogActions()
       .then(setActions)
       .catch((err) => {
-        console.error('Failed to load actions for remediation rules:', err);
+        logger.error('Failed to load actions for remediation rules', { error: err instanceof Error ? err.message : String(err) });
         setActions([]);
       });
   }, []);
@@ -245,7 +250,7 @@ export const RemediationRulesEditor: React.FC<RemediationRulesEditorProps> = ({
       id: `rule-new-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       error_pattern: '',
       target_action_id: 0,
-      environments: ['dev', 'staging', 'prod'],
+      environments: [...environments],
       auto_trigger: false,
       risk_level: 'medium',
     };
@@ -272,7 +277,7 @@ export const RemediationRulesEditor: React.FC<RemediationRulesEditorProps> = ({
 
   return (
     <div>
-      <Space direction="vertical" style={{ width: '100%' }}>
+      <Space orientation="vertical" style={{ width: '100%' }}>
         {value.map((rule, index) => (
           <RuleCard
             key={rule.id ?? `rule-${index}`}
@@ -280,6 +285,8 @@ export const RemediationRulesEditor: React.FC<RemediationRulesEditorProps> = ({
             index={index}
             actions={actions}
             currentActionId={currentActionId}
+            environmentOptions={environmentOptions}
+            environmentsLoading={environmentsLoading}
             onRuleChange={handleRuleChange}
             onRemove={handleRemove}
           />

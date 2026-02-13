@@ -3,12 +3,15 @@ Core middleware for the IDP Portal Django backend.
 Story M.7 - Task 7: Security and audit middleware.
 Story M.8 - Task 3/4: Request/Response logging and correlation ID propagation.
 """
+from __future__ import annotations
 
 import time
 import uuid
+from collections.abc import Callable
 from threading import local
 
 import structlog
+from django.http import HttpRequest, HttpResponse
 
 # Thread-local storage for correlation ID
 _correlation_id = local()
@@ -27,18 +30,31 @@ def set_correlation_id(correlation_id: str | None) -> None:
     _correlation_id.value = correlation_id
 
 
-def get_client_ip(request) -> str:
+def get_client_ip(request: HttpRequest) -> str:
     """
     Extract client IP address from request, handling proxies.
 
     Checks X-Forwarded-For header first (for reverse proxy scenarios),
     then falls back to REMOTE_ADDR.
+
+    Logs a warning if X-Forwarded-For contains more than 2 IPs, as this
+    may indicate IP spoofing attempts.
     """
     x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
     if x_forwarded_for:
         # X-Forwarded-For may contain multiple IPs; first is the client
-        return x_forwarded_for.split(',')[0].strip()
-    return request.META.get('REMOTE_ADDR', '')
+        ips = [ip.strip() for ip in x_forwarded_for.split(',')]
+        # Log potential spoofing if more than 2 IPs (client + proxy)
+        if len(ips) > 2:
+            logger.warning(
+                "suspicious_xff_header",
+                xff_header=x_forwarded_for,
+                ip_count=len(ips),
+                extracted_client_ip=ips[0],
+                message="X-Forwarded-For contains excessive IPs - potential spoofing"
+            )
+        return str(ips[0])
+    return str(request.META.get('REMOTE_ADDR', ''))
 
 
 class CorrelationIdMiddleware:
@@ -55,10 +71,10 @@ class CorrelationIdMiddleware:
     - Available via get_correlation_id() function
     """
 
-    def __init__(self, get_response):
+    def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
         self.get_response = get_response
 
-    def __call__(self, request):
+    def __call__(self, request: HttpRequest) -> HttpResponse:
         # Get or generate correlation ID
         correlation_id = request.META.get('HTTP_X_IDP_REQUEST_ID')
         if not correlation_id:
@@ -68,7 +84,7 @@ class CorrelationIdMiddleware:
         set_correlation_id(correlation_id)
 
         # Add to request for easy access
-        request.correlation_id = correlation_id
+        request.correlation_id = correlation_id  # type: ignore[attr-defined]  # dynamic attr for downstream access
 
         # Bind to structlog contextvars for automatic inclusion in all logs
         structlog.contextvars.bind_contextvars(correlation_id=correlation_id)
@@ -153,6 +169,7 @@ class RequestResponseLoggingMiddleware:
             return response
 
         except Exception as e:
+            # Story 17.6: Justified broad catch - Middleware must not break request chain
             duration_ms = int((time.time() - start_time) * 1000)
             user_id = self._get_user_id(request)
 
@@ -164,6 +181,7 @@ class RequestResponseLoggingMiddleware:
                 duration_ms=duration_ms,
                 user_id=user_id,
                 exception=str(e),
+                error_type=type(e).__name__,
                 exc_info=True,
             )
             raise
@@ -173,6 +191,65 @@ class RequestResponseLoggingMiddleware:
         if hasattr(request, 'user') and request.user.is_authenticated:
             return str(request.user.id)
         return None
+
+
+class RateLimitHeadersMiddleware:
+    """
+    Middleware that adds X-RateLimit-* headers to responses and logs 429 violations.
+
+    Story 17.11: Rate limiting headers and structured logging.
+
+    Headers added on 429 responses:
+    - Retry-After: seconds until rate limit resets
+    - X-RateLimit-Limit: maximum requests allowed in the window
+    - X-RateLimit-Remaining: requests remaining in current window
+    - X-RateLimit-Reset: Unix timestamp when the window resets
+
+    On non-429 responses, DRF throttle classes already set these via
+    the throttle's wait() method, but we ensure consistent headers.
+    """
+
+    # Paths exempt from rate limit header injection (health checks, metrics)
+    EXEMPT_PATHS = ('/api/v1/health', '/health', '/metrics')
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+
+        # Skip exempt paths
+        if request.path.rstrip('/') in (p.rstrip('/') for p in self.EXEMPT_PATHS):
+            return response
+
+        # On 429 responses, add Retry-After and log the violation
+        if response.status_code == 429:
+            # DRF sets Retry-After header automatically; extract wait time
+            retry_after = response.get('Retry-After', '')
+            if retry_after:
+                try:
+                    wait_seconds = int(float(retry_after))
+                    response['Retry-After'] = str(wait_seconds)
+                except (ValueError, TypeError):
+                    pass
+
+            # Log rate limit violation with structured logging
+            correlation_id = get_correlation_id()
+            user_id = None
+            if hasattr(request, 'user') and hasattr(request.user, 'is_authenticated') and request.user.is_authenticated:
+                user_id = str(request.user.id)
+
+            logger.warning(
+                "rate_limit_exceeded",
+                correlation_id=correlation_id,
+                ip_address=get_client_ip(request),
+                user_id=user_id,
+                endpoint=request.path,
+                method=request.method,
+                user_agent=request.META.get('HTTP_USER_AGENT', ''),
+            )
+
+        return response
 
 
 class SecurityHeadersMiddleware:

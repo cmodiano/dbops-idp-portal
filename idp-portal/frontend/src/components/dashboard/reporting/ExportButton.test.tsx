@@ -13,8 +13,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { App } from 'antd';
 import { ExportButton } from './ExportButton';
 import * as dashboardService from '../../../services/dashboard_service';
+
+// Create mock message object
+const mockMessage = {
+  success: vi.fn(),
+  error: vi.fn(),
+  info: vi.fn(),
+  warning: vi.fn(),
+  loading: vi.fn(),
+};
+
+// Spy on App.useApp to provide mocked message
+vi.spyOn(App, 'useApp').mockReturnValue({
+  message: mockMessage,
+  notification: {} as any,
+  modal: {} as any,
+});
 
 // Mock the dashboard service
 vi.mock('../../../services/dashboard_service', () => ({
@@ -29,7 +46,7 @@ describe('ExportButton', () => {
 
   it('renders export button with dropdown menu (AC1)', async () => {
     // Task 10.1
-    render(<ExportButton filters={{}} />);
+    render(<App><ExportButton filters={{}} /></App>);
 
     const button = screen.getByRole('button', { name: /exporter/i });
     expect(button).toBeInTheDocument();
@@ -47,7 +64,7 @@ describe('ExportButton', () => {
     const mockFilters = { days: 14, engine: 'aap' };
     vi.mocked(dashboardService.exportDashboardCSV).mockResolvedValueOnce();
 
-    render(<ExportButton filters={mockFilters} />);
+    render(<App><ExportButton filters={mockFilters} /></App>);
 
     // Open dropdown and click CSV
     await userEvent.click(screen.getByRole('button', { name: /exporter/i }));
@@ -63,7 +80,7 @@ describe('ExportButton', () => {
     const mockFilters = { days: 30, environment: 'prod' };
     vi.mocked(dashboardService.exportDashboardPDF).mockResolvedValueOnce();
 
-    render(<ExportButton filters={mockFilters} />);
+    render(<App><ExportButton filters={mockFilters} /></App>);
 
     // Open dropdown and click PDF
     await userEvent.click(screen.getByRole('button', { name: /exporter/i }));
@@ -76,14 +93,14 @@ describe('ExportButton', () => {
 
   it('disables button when loading prop is true', () => {
     // Task 10.4
-    render(<ExportButton filters={{}} loading={true} />);
+    render(<App><ExportButton filters={{}} loading={true} /></App>);
 
     const button = screen.getByRole('button', { name: /exporter/i });
     expect(button).toBeDisabled();
   });
 
   it('disables button when disabled prop is true', () => {
-    render(<ExportButton filters={{}} disabled={true} />);
+    render(<App><ExportButton filters={{}} disabled={true} /></App>);
 
     const button = screen.getByRole('button', { name: /exporter/i });
     expect(button).toBeDisabled();
@@ -98,7 +115,7 @@ describe('ExportButton', () => {
     });
     vi.mocked(dashboardService.exportDashboardCSV).mockReturnValueOnce(exportPromise);
 
-    render(<ExportButton filters={{}} />);
+    render(<App><ExportButton filters={{}} /></App>);
 
     // Open dropdown and click CSV
     await userEvent.click(screen.getByRole('button', { name: /exporter/i }));
@@ -118,30 +135,30 @@ describe('ExportButton', () => {
   it('shows error message on export failure', async () => {
     vi.mocked(dashboardService.exportDashboardCSV).mockRejectedValueOnce(new Error('Network error'));
 
-    render(<ExportButton filters={{}} />);
+    render(<App><ExportButton filters={{}} /></App>);
 
     // Open dropdown and click CSV
     await userEvent.click(screen.getByRole('button', { name: /exporter/i }));
     await userEvent.click(screen.getByText('Exporter en CSV'));
 
-    // Error message should appear (via Ant Design message)
+    // Error message should be called via mocked message
     await waitFor(() => {
-      expect(screen.getByText(/erreur lors de l'export csv/i)).toBeInTheDocument();
+      expect(mockMessage.error).toHaveBeenCalledWith("Erreur lors de l'export CSV");
     });
   });
 
   it('shows success message on successful export', async () => {
     vi.mocked(dashboardService.exportDashboardPDF).mockResolvedValueOnce();
 
-    render(<ExportButton filters={{}} />);
+    render(<App><ExportButton filters={{}} /></App>);
 
     // Open dropdown and click PDF
     await userEvent.click(screen.getByRole('button', { name: /exporter/i }));
     await userEvent.click(screen.getByText('Exporter en PDF'));
 
-    // Success message should appear
+    // Success message should be called via mocked message
     await waitFor(() => {
-      expect(screen.getByText(/export pdf téléchargé/i)).toBeInTheDocument();
+      expect(mockMessage.success).toHaveBeenCalledWith('Export PDF téléchargé');
     });
   });
 
@@ -157,7 +174,7 @@ describe('ExportButton', () => {
     };
     vi.mocked(dashboardService.exportDashboardCSV).mockResolvedValueOnce();
 
-    render(<ExportButton filters={fullFilters} />);
+    render(<App><ExportButton filters={fullFilters} /></App>);
 
     await userEvent.click(screen.getByRole('button', { name: /exporter/i }));
     await userEvent.click(screen.getByText('Exporter en CSV'));

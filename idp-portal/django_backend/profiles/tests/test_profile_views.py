@@ -23,16 +23,13 @@ class TestProfileViewSet(TestCase):
         # Create DBOPS user (required for admin endpoints)
         self.dbops_user = User.objects.create(
             username='dbops_user',
-            profile='dbops',
-            is_staff=True,
-            is_superuser=True
+            profile='dbops'
         )
         
         # Create non-DBOPS user
         self.regular_user = User.objects.create(
             username='regular_user',
-            profile='dba',
-            is_staff=False
+            profile='dba'
         )
         
         # Create test profile

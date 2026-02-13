@@ -1,11 +1,16 @@
 # Stratégie de Migration Flyway → Django
 
+> **📦 Document d'archivage — Migration terminée**  
+> Ce document est conservé pour référence historique. La migration FastAPI→Django est complète (février 2026).  
+> Voir [MIGRATION_ARCHIVE.md](../docs/MIGRATION_ARCHIVE.md) pour accéder au code FastAPI archivé.
+
 ## Contexte
 
 Cette documentation décrit la stratégie de migration des migrations Flyway vers Django migrations pour le projet IDP Portal.
 
 **Date:** 2026-02-03  
 **Story:** m-2-modeles-django-et-migrations-schema-oracle
+**Status:** Migration terminée — Document historique conservé
 
 ## État Actuel
 
@@ -163,6 +168,74 @@ action.set_parameters_schema({'type': 'object'})  # Sérialise vers CLOB
 action.save()
 ```
 
+## Story 17.8: Migration vers pyproject.toml + lockfile
+
+**Date:** 2026-02-06
+**Story:** 17-8-pyproject-toml-lockfile-django-backend
+**Status:** Completed
+
+### Contexte
+
+Migration complète de `requirements.txt` vers `pyproject.toml` + lockfiles pour builds reproductibles et dépendances traçables.
+
+### Changements
+
+**Avant (requirements.txt):**
+- Fichier unique `requirements.txt` avec contraintes larges (`Django>=5.1.0,<6.0`)
+- Pas de séparation runtime vs dev
+- Pas de lockfile → versions transitives non figées
+- Builds non reproductibles entre environnements
+
+**Après (pyproject.toml + lockfiles):**
+- `pyproject.toml` : Source de vérité (métadonnées + contraintes dépendances)
+- `requirements.lock` : Lockfile runtime (33 packages, versions exactes)
+- `requirements-dev.lock` : Lockfile dev (79 packages, versions exactes)
+- Outil `uv` (Astral) pour résolution déterministe
+
+### Workflow de mise à jour
+
+**Ajouter une dépendance:**
+```bash
+# 1. Éditer pyproject.toml
+# 2. Régénérer lockfiles
+uv pip compile pyproject.toml -o requirements.lock --python-version 3.12
+uv pip compile pyproject.toml --extra dev -o requirements-dev.lock --python-version 3.12
+
+# 3. Installer
+uv pip install -r requirements-dev.lock
+
+# 4. Commiter les 3 fichiers
+git add pyproject.toml requirements.lock requirements-dev.lock
+```
+
+**Mettre à jour toutes les dépendances:**
+```bash
+uv pip compile --upgrade pyproject.toml -o requirements.lock --python-version 3.12
+uv pip compile --upgrade pyproject.toml --extra dev -o requirements-dev.lock --python-version 3.12
+```
+
+### Fichiers migrés
+
+- ✅ `pyproject.toml` complété ([project], dependencies, optional-dependencies.dev)
+- ✅ `requirements.lock` généré (33 packages runtime)
+- ✅ `requirements-dev.lock` généré (79 packages dev)
+- ✅ `requirements.txt` → `requirements.txt.deprecated` (sera supprimé 2026-02-20)
+- ✅ CI/CD workflows migrés (`ci.yml`, `django-tests.yml`, `deploy.yml`)
+- ✅ Documentation créée (`docs/dependency-management.md`)
+- ✅ Script créé (`scripts/install_deps.sh`)
+
+### Timeline de dépréciation
+
+- **2026-02-06** : `requirements.txt` renommé `.deprecated`
+- **2026-02-20** : Suppression définitive du fichier deprecated (après 2 semaines validation)
+
+### Références
+
+- Documentation complète : `docs/dependency-management.md`
+- Validation report : `docs/story-17-8-validation-report.md`
+
+---
+
 ## Contraintes et Index Oracle
 
 ### Contraintes CHECK
@@ -233,6 +306,41 @@ Avant de marquer cette story comme complète:
 4. **...** (autres stories de l'Epic M)
 
 Une fois l'Epic M complété, procéder à la bascule définitive vers Django migrations uniquement.
+
+## Story 17.8: Migration requirements.txt → pyproject.toml + lockfiles
+
+**Date:** 2026-02-06
+**Status:** Terminée
+
+### Pourquoi
+
+- `requirements.txt` ne figeait pas les dépendances transitives → builds non reproductibles
+- Pas de séparation runtime vs dev → outils de test installés en production
+- Audit de vulnérabilités imprécis sans versions exactes (pip-audit, Snyk)
+
+### Quoi
+
+| Avant | Après |
+|-------|-------|
+| `requirements.txt` (contraintes larges) | `pyproject.toml` (source de vérité, PEP 621) |
+| Pas de lockfile | `requirements.lock` (prod) + `requirements-dev.lock` (dev) |
+| `pip install -r requirements.txt` | `uv pip install -r requirements.lock` |
+
+### Comment
+
+1. Métadonnées projet ajoutées dans `[project]` de `pyproject.toml`
+2. Dépendances runtime dans `[project.dependencies]`, dev dans `[project.optional-dependencies.dev]`
+3. Lockfiles générés avec `uv pip compile` (versions exactes, directes + transitives)
+4. CI/CD, scripts et docs mis à jour pour utiliser lockfiles
+5. `requirements.txt` renommé en `requirements.txt.deprecated` (référence temporaire)
+
+### Rollback
+
+Si nécessaire, restaurer `requirements.txt.deprecated` → `requirements.txt` et reverter les changements CI/CD.
+
+### Dépréciation finale
+
+`requirements.txt.deprecated` peut être supprimé après validation en production (1-2 semaines).
 
 ## Références
 

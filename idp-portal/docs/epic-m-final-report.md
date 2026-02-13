@@ -1,5 +1,9 @@
 # Rapport Final - Epic M : Migration FastAPI → Django
 
+> **📦 Document d'archivage — Migration terminée**  
+> Ce document est conservé pour référence historique. La migration FastAPI→Django est complète (février 2026).  
+> Voir [MIGRATION_ARCHIVE.md](MIGRATION_ARCHIVE.md) pour accéder au code FastAPI archivé.
+
 **Date de complétion:** 2026-02-05
 **Auteur:** Équipe IDP Backend
 **Statut:** ✅ EPIC COMPLÉTÉ

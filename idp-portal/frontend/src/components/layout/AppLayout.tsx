@@ -1,6 +1,7 @@
 import { Layout, Spin } from 'antd';
 import { Suspense } from 'react';
 import { Outlet } from 'react-router';
+import { ErrorBoundary } from '../ErrorBoundary';
 import { TopNav } from './TopNav';
 
 const { Header, Content } = Layout;
@@ -34,9 +35,11 @@ export function AppLayout() {
           transition: 'background 0.2s ease',
         }}
       >
-        <Suspense fallback={<Spin size="large" style={{ display: 'block', margin: '100px auto' }} />}>
-          <Outlet />
-        </Suspense>
+        <ErrorBoundary>
+          <Suspense fallback={<Spin size="large" style={{ display: 'block', margin: '100px auto' }} />}>
+            <Outlet />
+          </Suspense>
+        </ErrorBoundary>
       </Content>
     </Layout>
   );

@@ -285,6 +285,53 @@ Construire un moteur ops de niveau production dans `idp-portal` en complement d'
 **Phase :** Growth (Phase 2) -> Scale (Phase 3)
 **Reference :** planning-artifacts/epic-14-moteur-ops-et-scalabilite.md
 
+### Epic 15 : Audit de Securite et Conformite SOC1 (premiere release)
+Le specialiste securite et l'equipe technique valident que le portail respecte les exigences de securite (NFR6-NFR11) et la conformite SOC1 avant la premiere release en production. Un audit complet du code, des configurations, des tests de securite et de la documentation est realise avec un plan de remédiation pour les vulnerabilites identifiees.
+**FRs couvertes :** FR24, FR25, FR26, FR29, FR30, FR33 (securite + audit)
+**NFRs couvertes :** NFR6, NFR7, NFR8, NFR9, NFR10, NFR11
+**Phase :** Release (pre-production)
+**Reference :** Compliance SOC1, exigences securite premiere release
+
+### Epic 18 : Ameliorations UX et corrections issues du feedback utilisateurs
+Corrections et ameliorations basees sur le feedback terrain : admin actions (suppression/désactivation/filtres), identification workflow vs action, mode visuel builder (taille, blocs, lien, libellé), filtre Environnement catalogue, favoris, statut erreur intégration.
+**FRs couvertes :** FR6, FR11, FR19 (cycle de vie actions, catalogue, statuts)
+**Phase :** Growth (Phase 2)
+
+### Epic 19 : UX — Vue d'exécution temps réel
+Remplacer le popup « action démarrée » par une vue d'exécution immersive : pour une action simple, timeline avec logs détaillés et indicateur d'étape active ; pour un workflow, aperçu visuel du graphe avec étape active, et clic sur une étape pour afficher la timeline et les logs en direct de cette action.
+**FRs couvertes :** FR19, FR20, FR21 (suivi temps réel, logs plateforme, logs techniques)
+**Phase :** Growth (Phase 2)
+**Reference :** planning-artifacts/epic-19-ux-vue-execution-temps-reel.md
+
+### Epic 20 : Action items et suivi — Restant des stories « done »
+Consolider et implémenter les action items, follow-ups et known issues documentés dans les stories déjà marquées done : fixtures User, validation M-4, retry Celery, ExecutionWizard Phase 4, Epic M rétrospective, 5-7 tasks restantes, M-10/17-12 follow-ups, 15-4/17-16 documentation.
+**Phase :** Tech Debt / Quality — Amélioration continue
+**Reference :** planning-artifacts/epic-20-action-items-et-suivi-stories-done.md
+
+### Epic 21 : Inventaire — source unique des environnements
+Supprimer la normalisation des environnements et utiliser l'inventaire comme seule source de vérité. Accepter toute valeur présente dans l'inventaire (ex. lab, dev, staging, prod), éliminer la récursion et les cascades Oracle, permettre l'ajout de nouveaux environnements sans migration.
+**FRs couvertes :** FR43 (inventaire), FR26 (RBAC environnements)
+**Phase :** Growth (Phase 2)
+**Reference :** planning-artifacts/epic-21-inventaire-source-unique-environnements.md
+
+### Epic 23 : Inventaire multi-tables (SERVER, INSTANCE, DB) et UX cibles
+Étendre l'inventaire pour supporter les tables SERVER, INSTANCE et DB avec relations, filtrer les listes instance/DB par serveur choisi dans le wizard, permettre aux profils d'accorder l'accès « tous les serveurs Oracle » ou « tous les serveurs SQL », avec un modèle d'accès évolutif (mapping colonnes) et un RBAC intimement lié aux données d'inventaire.
+**FRs couvertes :** FR42, FR43, FR25b, FR26/FR26a (extension inventaire multi-tables, RBAC par attributs)
+**Phase :** Growth (Phase 2)
+**Reference :** docs/inventaire-multi-tables-ux-cibles.md
+
+### Epic 24 : Intégrations Admin alignées sur le backend
+Encadrer la configuration des intégrations dans l'interface Admin pour n'autoriser que des types et des actions d'intégration explicitement supportés par le backend (AAP, ServiceNow, etc.), via un modèle "type d'intégration" + "instance d'intégration" et un catalogue d'actions contractuel.
+**FRs couvertes :** FR18 (facade plateformes d'exécution), FR42, FR43 (cohérence inventaire / intégrations)
+**NFRs couvertes :** NFR17, NFR18, NFR19, NFR20, NFR22 (robustesse intégrations, plugin/adapter)
+**Phase :** Growth (Phase 2)
+
+### Epic 25 : Convergence DBOps → IDP Portal
+Intégrer les patterns DBOps dans le portail : modèle de cible générique (ExecutionTarget), condition gates sur les étapes (statut WAITING), overrides par environnement, mutex inter-actions, deny explicite RBAC.
+**FRs couvertes :** FR15, FR19, FR26, FR26a (guardrails moteur, cibles explicites, RBAC affiné)
+**Phase :** Growth (Phase 2)
+**Référence :** implementation-artifacts/convergence-dbops-idp-portal.md
+
 ---
 
 ## Epic 1 : Bootstrap Projet & Authentification
@@ -1160,6 +1207,45 @@ So that je configure les instances AAP, Terraform, etc. et leur representation v
 **And** UX coherente avec les onglets Actions et Profils (Ant Design, formulaires, notifications succes/erreur)
 **And** les libelles sont en francais
 
+### Story 2.29 : Separation boutons creation action et workflow dans admin
+
+As a DBOPS,
+I want avoir deux boutons distincts "Nouvelle action" et "Nouveau workflow" dans l'admin,
+So que la distinction entre action et workflow soit plus claire et que je n'aie pas a choisir le type dans le wizard.
+
+**Contexte :** Actuellement, un seul bouton "Nouvelle action" ouvre ActionWizard avec un Radio.Group pour choisir entre "Action" et "Workflow". Cette separation ameliore la clarte de l'interface.
+
+**Acceptance Criteria:**
+
+**Given** un DBOPS accede a l'onglet Admin > Actions,
+**When** il consulte la barre d'actions,
+**Then** il voit deux boutons distincts :
+- **"Nouvelle action"** (primary, bleu) avec icone `PlusOutlined`
+- **"Nouveau workflow"** (secondary, outlined) avec icone `ApartmentOutlined` ou `DeploymentUnitOutlined`
+
+**Given** un DBOPS clique sur "Nouvelle action",
+**When** le wizard ActionWizard s'ouvre,
+**Then** le type `item_type` est pre-selectionne a "action"
+**And** le Radio.Group pour choisir le type est masque ou desactive (non modifiable)
+**And** les champs specifiques aux workflows (WorkflowStepsEditor) ne sont pas affiches
+
+**Given** un DBOPS clique sur "Nouveau workflow",
+**When** le wizard ActionWizard s'ouvre,
+**Then** le type `item_type` est pre-selectionne a "workflow"
+**And** le Radio.Group pour choisir le type est masque ou desactive (non modifiable)
+**And** les champs specifiques aux actions (engine, platform) ne sont pas affiches
+**And** le WorkflowStepsEditor est affiche a l'etape 2
+
+**Given** un DBOPS edite une action existante,
+**When** le wizard s'ouvre en mode edition,
+**Then** le Radio.Group reste masque/desactive (le type ne peut pas etre modifie apres creation)
+**And** les champs affiches correspondent au type de l'action (action ou workflow)
+
+**And** ActionWizard accepte un prop optionnel `initialItemType?: 'action' | 'workflow'` pour pre-selectionner le type
+**And** si `initialItemType` est fourni, le Radio.Group est masque et le type est fixe
+**And** si `initialItemType` n'est pas fourni (compatibilite retroactive), le Radio.Group reste visible comme avant
+**And** AdminPage passe `initialItemType="action"` pour "Nouvelle action" et `initialItemType="workflow"` pour "Nouveau workflow"
+
 ---
 
 ## Epic 3 : Decouverte du Catalogue (Marc)
@@ -1336,6 +1422,59 @@ So that je navigue dans un catalogue avec beaucoup de tags sans multiplication d
 
 **And** l'onglet « Mes actions » (favoris + recents) reste inchange : un seul onglet dedie, pas de modification de son comportement.
 **And** FR11 et FR11b sont affines.
+
+### Story 5.8 : Visualiseur de workflow (flowchart)
+
+As a DBA ou DBOPS,
+I want visualiser un workflow comme un diagramme de flux avec les etapes et les conditions de passage,
+So que je comprenne rapidement la structure et le flux d'execution d'un workflow complexe.
+
+**Contexte :** Les workflows peuvent contenir plusieurs etapes. Actuellement, les workflows sont lineaires (etapes sequentielles), mais a l'avenir ils pourront avoir des branches conditionnelles (succes/erreur). Un visualiseur simple et lisible aide a comprendre rapidement la structure d'un workflow.
+
+**Acceptance Criteria:**
+
+**Given** un DBA ou DBOPS consulte un workflow dans le catalogue ou l'admin,
+**When** il ouvre le drawer de detail ou la page d'edition,
+**Then** un onglet ou section "Visualisation" affiche un diagramme de flux du workflow
+**And** le diagramme montre :
+  - Les etapes du workflow comme des noeuds (avec nom de l'action referencee)
+  - Les connexions entre etapes comme des fleches
+  - L'ordre d'execution (de gauche a droite ou de haut en bas)
+  - Les conditions de passage si disponibles (fleche verte pour succes, fleche rouge pour erreur)
+
+**Given** un workflow lineaire (etapes sequentielles),
+**When** le visualiseur affiche le workflow,
+**Then** les etapes sont affichees en sequence avec des fleches simples entre elles
+**And** chaque noeud affiche : numero d'ordre, nom de l'action referencee, icone de la technologie
+
+**Given** un workflow avec branches conditionnelles (futur),
+**When** le visualiseur affiche le workflow,
+**Then** les branches sont affichees avec des fleches colorees :
+  - Fleche verte pour le chemin de succes
+  - Fleche rouge pour le chemin d'erreur
+  - Fleche bleue pour le chemin "toujours" (si applicable)
+
+**Given** le visualiseur affiche un workflow,
+**When** le workflow contient beaucoup d'etapes (10+),
+**Then** le diagramme est zoomable et pannable pour naviguer
+**And** un bouton "Vue d'ensemble" permet de voir tout le workflow en une seule vue
+
+**Given** le visualiseur affiche un workflow,
+**When** un utilisateur survole ou clique sur un noeud d'etape,
+**Then** un tooltip ou panneau affiche les details de l'action referencee :
+  - Nom complet de l'action
+  - Description
+  - Moteur et plateforme
+  - Parametres requis (si disponibles)
+
+**Given** le visualiseur affiche un workflow,
+**When** le workflow est en cours d'execution,
+**Then** les etapes executees sont mises en evidence (couleur verte pour succes, rouge pour echec)
+**And** l'etape en cours est mise en evidence avec une animation ou couleur distincte
+
+**And** le visualiseur utilise une bibliotheque legere (ex: Mermaid, React Flow, ou diagramme SVG custom)
+**And** le format est simple et lisible (eviter la complexite visuelle d'AAP qui peut devenir "un mess")
+**And** le visualiseur est accessible : navigation clavier, labels ARIA, contraste suffisant
 
 ---
 
@@ -1581,6 +1720,99 @@ So that je retrouve facilement les actions que j'ai lancees et leur resultat.
 **And** la pagination est de 25 lignes par page
 **And** les skeleton rows s'affichent pendant le chargement
 **And** FR22 est satisfaite
+
+### Story 4.11 : Delegation d'autorisation pour execution de workflows (actions referencees)
+
+As a systeme,
+I want permettre l'execution de workflows contenant des actions referencees meme si l'utilisateur n'a pas acces direct a ces actions,
+So que les workflows multitechnologies puissent etre executes par delegation d'autorisation.
+
+**Contexte :** Les workflows peuvent contenir des actions de plusieurs technologies (Oracle, SQL Server, etc.). Un utilisateur peut voir un workflow s'il a acces au workflow lui-meme (via tags/ID). **Lors de l'execution, le workflow delegue l'autorisation d'executer les actions referencees** : si l'utilisateur a acces au workflow, il peut executer toutes les actions referencees meme s'il n'a pas acces direct a ces actions.
+
+**Regles metier :**
+- **Visibilite** : Un utilisateur voit un workflow s'il a acces au workflow lui-meme (comportement actuel, pas de changement)
+- **Execution** : Un utilisateur peut executer un workflow s'il a acces au workflow. Les actions referencees sont executees avec les permissions du workflow (delegation d'autorisation). **Pas besoin de verifier les permissions individuelles sur chaque action referencee.**
+- **Affichage** : Pas d'avertissement dans le catalogue si l'utilisateur n'a pas acces a toutes les actions referencees
+
+**Cas d'usage :** Un utilisateur Oracle peut executer un workflow contenant des actions SQL Server s'il a acces au workflow. C'est une delegation : le workflow "delegue" l'autorisation d'executer les actions referencees.
+
+**Acceptance Criteria:**
+
+**Given** un utilisateur tente d'executer un workflow,
+**When** l'execution est soumise (POST /api/v1/executions),
+**Then** le backend charge les etapes du workflow (workflow_steps avec referenced_action_id)
+**And** pour chaque action referencee, le backend verifie seulement :
+  - Que l'action existe (404 si non trouvee)
+  - Que l'action est publiee (400 si status != 'published')
+**And** **PAS de verification des permissions RBAC individuelles** sur les actions referencees (delegation)
+
+**Given** un utilisateur tente d'executer un workflow contenant des actions referencees,
+**When** toutes les actions referencees sont validees avec succes (existence + statut publie),
+**Then** l'execution du workflow peut proceder normalement
+**And** chaque action referencee est executee dans l'ordre **avec les permissions du workflow** (delegation)
+**And** **aucune verification RBAC supplementaire** n'est effectuee lors de l'execution de chaque action referencee
+
+**Given** un utilisateur Oracle exécute un workflow contenant des actions SQL Server,
+**When** l'utilisateur a acces au workflow (mais pas aux actions SQL Server individuelles),
+**Then** le workflow peut etre execute avec succes
+**And** les actions SQL Server referencees sont executees grace a la delegation du workflow
+
+**Given** un utilisateur consulte un workflow dans le catalogue,
+**When** il voit le workflow (acces via tags/ID du workflow),
+**Then** aucune verification supplementaire n'est effectuee sur les actions referencees
+**And** aucun avertissement n'est affiche concernant les permissions sur les actions referencees
+
+**Given** un utilisateur tente d'executer un workflow,
+**When** une action referencee n'existe plus (supprimee),
+**Then** l'execution est rejetee avec HTTP 404
+**And** le message d'erreur indique : "L'action referencee '{action_id}' n'existe plus ou n'est plus disponible"
+
+**Given** un utilisateur tente d'executer un workflow,
+**When** une action referencee n'est plus publiee (status != 'published'),
+**Then** l'execution est rejetee avec HTTP 400
+**And** le message d'erreur indique : "L'action referencee '{action_name}' n'est plus publiee (statut: {status})"
+
+**And** la validation est effectuee avant la creation de l'execution (pas apres le debut de l'execution)
+**And** l'audit log enregistre la tentative d'execution avec le resultat de la validation (succes ou echec avec raison)
+**And** l'audit log indique que les actions referencees sont executees avec delegation (permissions du workflow)
+**And** les tests couvrent les scenarios : workflow multitechnologie avec delegation, action supprimee, action non publiee
+
+### Story 4.12 : Parametres par etape lors de l'execution de workflows
+
+As a DBA,
+I want specifier les parametres pour chaque action referencee dans un workflow lors de l'execution,
+So que chaque action du workflow recoive ses parametres specifiques.
+
+**Contexte :** Les workflows n'ont pas de parametres directement car ce sont les actions referencees qui ont des parametres. Lors de l'execution d'un workflow, il faut pouvoir specifier les parametres pour chaque action referencee.
+
+**Acceptance Criteria:**
+
+**Given** un DBA execute un workflow (item_type='workflow'),
+**When** le wizard d'execution s'ouvre,
+**Then** l'etape 2 (Parametres) affiche une section pour chaque etape du workflow
+**And** chaque section affiche le nom de l'action referencee et son formulaire de parametres dynamique (depuis parameters_schema de l'action referencee)
+
+**Given** le DBA remplit les parametres pour chaque etape du workflow,
+**When** il valide l'etape 2,
+**Then** les parametres sont valides selon le schema de chaque action referencee
+**And** le bouton "Suivant" est active seulement si tous les formulaires sont valides
+
+**Given** le DBA confirme l'execution du workflow,
+**When** l'execution est soumise (POST /api/v1/executions),
+**Then** le backend recoit les parametres par etape dans le format : `workflow_step_parameters: { step_order: { parameters: {...} } }`
+**And** chaque action referencee est executee avec ses parametres specifiques
+
+**Given** une action referencee dans le workflow n'a pas de parametres (parameters_schema null ou vide),
+**When** le wizard affiche l'etape correspondante,
+**Then** aucun formulaire n'est affiche pour cette etape (message informatif : "Cette action n'a pas de parametres")
+
+**Given** le DBA navigue entre les etapes du wizard,
+**When** il revient a l'etape 2 (Parametres),
+**Then** tous les parametres saisis pour chaque etape du workflow sont conserves
+
+**And** l'API POST /api/v1/executions accepte le champ optionnel `workflow_step_parameters` pour les workflows
+**And** le moteur d'execution passe les bons parametres a chaque action referencee lors de l'execution du workflow
+**And** les parametres sont traces dans l'audit log pour chaque action referencee executee
 
 ---
 
@@ -3046,3 +3278,1100 @@ So que je puisse contrôler ces listes sans toucher au code et que la source de 
 
 **And** la normalisation des alias (ex. certif → staging) peut rester côté inventaire ou dans le service portail qui agrège les environnements ; le portail n'impose plus un jeu fixe de valeurs en dur.
 
+### Story 13.8 : Amélioration calendrier — détails enrichis (targets, paramètres), annulation, modification, décommission admin
+
+As a DBA ou DBOPS,
+I want que le calendrier affiche tous les détails nécessaires (targets, paramètres) et permette l'annulation et la modification des exécutions planifiées,
+So que je n'ai plus besoin de passer par l'admin pour consulter ou gérer les exécutions planifiées et que l'interface soit unifiée dans le calendrier.
+
+**Contexte :** La story 13.6 a créé le menu Calendrier avec vue calendrier. L'onglet Admin "Exécutions planifiées" (ScheduledExecutionsPage) devient redondant. Cette story enrichit le calendrier avec les fonctionnalités manquantes et retire l'onglet admin.
+
+**Acceptance Criteria:**
+
+**Given** un utilisateur consulte le calendrier et clique ou survole un événement,
+**When** le popover de détails s'affiche,
+**Then** il inclut tous les champs suivants :
+- Action (nom + ID)
+- Environnement (badge coloré)
+- **Targets** : liste des targets sélectionnés (depuis `parameters._targets` si présent)
+- **Paramètres** : affichage formaté des paramètres d'exécution (JSON formaté avec indentation, masquage des champs techniques `_targets`, `_env_config`)
+- Utilisateur (nom + ID)
+- Date/heure planifiée (UTC)
+- Type (unique / récurrent avec pattern)
+- Plateforme et Technologie
+- Statut (En attente, Exécutée, Annulée)
+- Si exécutée : lien vers l'exécution effective (`execution_id`)
+
+**Given** un utilisateur consulte le calendrier,
+**When** il clique sur un événement d'exécution planifiée en statut "pending",
+**Then** le popover affiche un bouton "Annuler" si :
+- L'utilisateur est le créateur de l'exécution planifiée (`user_id` correspond), OU
+- L'utilisateur a le profil DBOPS (admin)
+
+**Given** un utilisateur DBA consulte le calendrier,
+**When** il clique sur une exécution planifiée créée par un autre utilisateur,
+**Then** le bouton "Annuler" n'est pas affiché (pas de permission)
+
+**Given** un utilisateur clique sur "Annuler" dans le popover du calendrier,
+**When** il confirme l'annulation,
+**Then** une modal de confirmation s'affiche avec les détails de l'exécution à annuler
+**And** l'appel API `PATCH /scheduled-executions/{id}` avec `status=cancelled` est effectué
+**And** en cas de succès, une notification de succès s'affiche et le calendrier est rafraîchi
+**And** en cas d'erreur (déjà annulée, permission refusée), un message d'erreur approprié s'affiche
+
+**Given** un utilisateur clique sur "Modifier" dans le popover du calendrier,
+**When** la modal de modification s'ouvre,
+**Then** elle permet de modifier la date planifiée, les paramètres, les targets, l'environnement, et le pattern de récurrence (selon le type)
+**And** l'appel API `PUT /api/v1/scheduled-executions/{id}` met à jour les champs modifiés
+**And** en cas de succès, une notification de succès s'affiche et le calendrier est rafraîchi
+**And** en cas d'erreur (validation, permission refusée), un message d'erreur approprié s'affiche
+
+**Given** un utilisateur DBOPS consulte le calendrier,
+**When** il clique sur un événement récurrent en statut "pending",
+**Then** le popover affiche un toggle pour activer/désactiver la récurrence (si `recurring_pattern` présent)
+**And** le toggle appelle `PATCH /scheduled-executions/{id}/recurring-pattern` avec `is_active` inversé
+**And** une notification de succès/erreur s'affiche selon le résultat
+
+**Given** l'onglet Admin "Exécutions planifiées" existe dans AdminPage,
+**When** on retire cet onglet,
+**Then** l'import de `ScheduledExecutionsPage` est supprimé de `AdminPage.tsx`
+**And** l'onglet avec `key: 'scheduled-executions'` est retiré du composant Tabs
+**And** le composant `ScheduledExecutionsPage.tsx` peut être supprimé (ou conservé pour référence historique)
+**And** les tests associés à `ScheduledExecutionsPage` sont mis à jour ou supprimés
+
+**Given** un utilisateur DBOPS accède à la page Admin,
+**When** il consulte les onglets disponibles,
+**Then** l'onglet "Exécutions planifiées" n'est plus présent
+**And** seuls les onglets Actions, Profils, Intégrations et Métriques sont disponibles
+
+**And** toutes les fonctionnalités de gestion des exécutions planifiées (consultation, annulation, toggle récurrence) sont désormais disponibles uniquement via le menu Calendrier.
+
+---
+
+## Epic 16 : Builder de Workflow Visuel avec Branches Conditionnelles et Retry
+
+En tant que **DBOPS créant des workflows complexes**,
+je veux **un éditeur visuel de workflow avec branches conditionnelles (succès/erreur) et options de retry configurables**,
+afin que **je puisse créer des workflows robustes avec gestion d'erreurs et réessais automatiques sans avoir à écrire du code complexe**.
+
+**Contexte :** Les workflows actuels sont des séquences linéaires d'actions. Cet épic ajoute un éditeur graphique avec drag-and-drop, branches conditionnelles (succès/erreur), options de retry avec backoff exponentiel, et validation visuelle des chemins d'exécution.
+
+**Note :** Voir `epic-16-builder-workflow-visuel.md` pour les détails complets des stories.
+
+---
+
+## Epic 15 : Audit de Securite et Conformite SOC1 (premiere release)
+
+Le specialiste securite et l'equipe technique valident que le portail respecte les exigences de securite (NFR6-NFR11) et la conformite SOC1 avant la premiere release en production. Un audit complet du code, des configurations, des tests de securite et de la documentation est realise avec un plan de remédiation pour les vulnerabilites identifiees.
+
+### Story 15.1 : Audit de securite du code (SAST, dependances, secrets)
+
+As a specialiste securite,
+I want un audit complet du code source pour identifier les vulnerabilites de securite, les dependances obsolètes ou vulnerables, et les fuites potentielles de secrets,
+So que je puisse valider que le code respecte les standards de securite avant la release et documenter les risques identifies.
+
+**Acceptance Criteria:**
+
+**Given** le codebase du portail (frontend React + backend Django),
+**When** on execute un audit de securite statique (SAST),
+**Then** un outil d'analyse (ex. SonarQube, Bandit pour Python, ESLint security pour JS) scanne tout le code source
+**And** un rapport liste toutes les vulnerabilites identifiees avec leur niveau de severite (CRITICAL, HIGH, MEDIUM, LOW)
+**And** les vulnerabilites sont categorisees : injection SQL, XSS, CSRF, authentification faible, gestion d'erreurs exposant des informations, etc.
+**And** chaque vulnerabilite inclut la localisation exacte (fichier, ligne) et une recommandation de correction
+
+**Given** les dependances du projet (requirements.txt, package.json),
+**When** on execute un scan de vulnerabilites des dependances,
+**Then** un outil (ex. Snyk, Dependabot, Safety) analyse toutes les dependances Python et npm
+**And** un rapport liste les packages vulnerables avec leur version actuelle, la version corrigee disponible, et le CVE associe
+**And** les vulnerabilites sont triees par severite et impact sur le projet
+**And** un plan de mise a jour est propose pour les vulnerabilites critiques et elevees
+
+**Given** le codebase et les fichiers de configuration,
+**When** on execute un scan de detection de secrets,
+**Then** un outil (ex. GitGuardian, TruffleHog, detect-secrets) scanne le code et les commits Git
+**And** aucun secret (API keys, tokens, mots de passe, certificats) n'est detecte dans le code source ou l'historique Git
+**And** si des secrets sont detectes, ils sont immediatement revoques et remplaces par des references a Vault ou des variables d'environnement
+**And** NFR7 est verifiee : aucun secret stocke dans le portail
+
+**Given** les resultats des audits,
+**When** on consolide les rapports,
+**Then** un document d'audit de securite est genere avec un resume executif, la liste complete des vulnerabilites, et leur priorisation
+**And** chaque vulnerabilite est documentee avec son impact potentiel, sa probabilite d'exploitation, et son statut (ouvert, en cours, corrige)
+
+### Story 15.2 : Tests de securite fonctionnels (authentification, autorisation, RBAC)
+
+As a specialiste securite,
+I want des tests de securite fonctionnels qui valident l'authentification, l'autorisation RBAC, et la protection des endpoints,
+So que je puisse prouver que les mecanismes de securite fonctionnent correctement et respectent les exigences NFR6, NFR9, NFR10.
+
+**Acceptance Criteria:**
+
+**Given** les endpoints API du portail,
+**When** on execute des tests d'authentification,
+**Then** tous les endpoints proteges renvoient HTTP 401 pour les requetes non authentifiees
+**And** les tokens JWT expires renvoient HTTP 401 avec un message d'erreur approprie
+**And** les tokens JWT invalides ou malformes sont rejetes avec HTTP 401
+**And** le mecanisme de refresh token fonctionne correctement et les tokens expires sont renouveles automatiquement
+**And** NFR9 est verifiee : les sessions expirent apres la periode d'inactivite configuree
+
+**Given** les regles RBAC du portail (profils, permissions actions/targets/environnements),
+**When** on execute des tests d'autorisation,
+**Then** un utilisateur avec un profil DBA ne peut acceder qu'aux endpoints autorises pour son profil
+**And** un utilisateur avec un profil DBOPS peut acceder aux endpoints Admin
+**And** un utilisateur avec un profil Client Business ne peut executer que les actions deleguees a son profil
+**And** toute tentative d'acces non autorise renvoie HTTP 403 avec un message d'erreur approprie
+**And** NFR10 est verifiee : toutes les tentatives d'acces non autorise sont journalisees dans AUDIT_LOG avec le type d'action APPROVAL_DENIED ou EXECUTION_DENIED
+
+**Given** les endpoints sensibles (execution d'actions, modification de profils, acces aux logs),
+**When** on execute des tests de controle d'acces,
+**Then** un utilisateur ne peut executer une action que si son profil a la permission pour cette action ET ce target ET cet environnement
+**And** un utilisateur ne peut modifier un profil que s'il a le role DBOPS
+**And** un utilisateur ne peut consulter les logs d'execution que pour ses propres executions (sauf DBOPS qui peut tout voir)
+**And** les validations RBAC sont appliquees a la fois au niveau API et au niveau service/metier
+
+**Given** les tests de securite fonctionnels,
+**When** on les execute dans un environnement de test,
+**Then** tous les tests passent et un rapport de tests est genere
+**And** le rapport documente chaque scenario teste avec le resultat attendu et obtenu
+**And** les tests sont integres dans le pipeline CI/CD pour validation automatique a chaque commit
+
+### Story 15.3 : Validation conformite SOC1 (audit trail, immutabilite, chiffrement)
+
+As a specialiste securite / auditeur SOC1,
+I want valider que le portail respecte les exigences SOC1 pour l'audit trail, l'immutabilite des logs, et le chiffrement des communications,
+So que je puisse certifier la conformite avant la release et documenter les controles de securite.
+
+**Acceptance Criteria:**
+
+**Given** le systeme d'audit du portail (table AUDIT_LOG),
+**When** on valide l'immutabilite des logs d'audit,
+**Then** aucune operation UPDATE ou DELETE n'est possible sur la table AUDIT_LOG (contraintes DB ou permissions)
+**And** les logs d'audit sont ecrits une seule fois et ne peuvent etre modifies apres ecriture
+**And** NFR8 est verifiee : les logs d'audit sont immutables
+**And** un test demontre qu'une tentative de modification d'un log d'audit echoue avec une erreur appropriee
+
+**Given** chaque execution d'action dans le portail,
+**When** on valide la tracabilite complete,
+**Then** une entree dans AUDIT_LOG est creee avec : utilisateur (qui), action executee (quoi), timestamp precis (quand), parametres de l'execution, resultat (succes/echec), autorisation RBAC appliquee
+**And** FR30 est verifiee : trace d'audit immutable pour chaque execution
+**And** les logs d'audit incluent un correlation_id pour tracer une execution complete de bout en bout
+**And** les logs d'audit sont consultables via l'API /api/v1/audit avec filtres par environnement, periode, type d'action (FR33)
+
+**Given** les communications entre le portail et les systemes integres (Vault, ServiceNow, plateformes d'execution),
+**When** on valide le chiffrement en transit,
+**Then** toutes les communications utilisent TLS 1.2 ou superieur
+**And** les certificats SSL/TLS sont valides et non expires
+**And** NFR6 est verifiee : toutes les communications sont chiffrees en transit
+**And** un test demontre qu'une connexion non chiffree est rejetee
+
+**Given** les secrets et credentials utilises par le portail,
+**When** on valide la gestion des secrets,
+**Then** aucun secret n'est stocke dans le code source, les fichiers de configuration, ou la base de donnees
+**And** tous les secrets sont recuperes depuis HashiCorp Vault au moment de l'execution
+**And** NFR7 est verifiee : aucun secret stocke dans le portail
+**And** FR29 est verifiee : tous les secrets sont recuperes depuis Vault a l'execution
+**And** un test demontre qu'une execution echoue avec un message explicite si Vault est indisponible (NFR21)
+
+**Given** les donnees sensibles stockees dans le portail,
+**When** on valide la protection des donnees,
+**Then** le portail ne stocke que les metadonnees de l'inventaire (noms de bases, environnements, technologies)
+**And** aucune donnee sensible des bases de donnees gerees n'est stockee (pas de mots de passe, donnees utilisateurs, etc.)
+**And** NFR11 est verifiee : le portail ne conserve aucune donnee sensible
+**And** un audit de la base de donnees confirme qu'aucune donnee sensible n'est presente
+
+**Given** les exigences SOC1,
+**When** on consolide la validation,
+**Then** un document de conformite SOC1 est genere avec la liste des controles valides et les preuves associees
+**And** chaque controle SOC1 est documente avec son implementation, sa validation, et les tests associes
+**And** les ecarts identifies sont documentes avec un plan de correction et une date cible
+
+### Story 15.4 : Documentation de securite et plan de remédiation
+
+As a responsable technique / specialiste securite,
+I want une documentation complete de securite et un plan de remédiation pour toutes les vulnerabilites identifiees,
+So que l'equipe puisse corriger les problemes avant la release et que la documentation serve de reference pour les audits futurs.
+
+**Acceptance Criteria:**
+
+**Given** les resultats des audits de securite (Story 15.1, 15.2, 15.3),
+**When** on consolide la documentation,
+**Then** un document de securite est cree avec :
+- Resume executif des vulnerabilites identifiees
+- Liste complete des vulnerabilites avec priorisation (CRITICAL, HIGH, MEDIUM, LOW)
+- Plan de remédiation avec affectation, estimation, et date cible pour chaque vulnerabilite
+- Statut de chaque vulnerabilite (ouvert, en cours, corrige, verifie)
+- Preuves de correction (tests, code review, validation)
+
+**Given** les vulnerabilites critiques et elevees identifiees,
+**When** on cree le plan de remédiation,
+**Then** chaque vulnerabilite CRITICAL et HIGH a une story ou ticket associe avec :
+- Description detaillee du probleme
+- Impact potentiel et risque associe
+- Solution proposee avec estimation
+- Criteres d'acceptation pour la correction
+- Date cible de correction (avant release si blocker)
+
+**Given** les vulnerabilites non critiques (MEDIUM, LOW),
+**When** on les documente,
+**Then** elles sont classees en deux categories :
+- A corriger avant release (si impact utilisateur ou compliance)
+- A corriger post-release (amelioration continue, pas de blocker)
+
+**Given** la documentation de securite,
+**When** on la finalise,
+**Then** elle inclut :
+- Architecture de securite du portail (authentification, autorisation, chiffrement)
+- Liste des controles de securite implementes et valides
+- Procedures de reponse aux incidents de securite
+- Guide de bonnes pratiques pour les developpeurs
+- References aux standards et frameworks utilises (SOC1, OWASP Top 10, etc.)
+
+**Given** toutes les vulnerabilites critiques et elevees sont corrigees,
+**When** on valide la release,
+**Then** un rapport de validation de securite est genere confirmant que :
+- Toutes les vulnerabilites CRITICAL et HIGH sont corrigees et verifiees
+- Tous les tests de securite fonctionnels passent
+- La conformite SOC1 est validee
+- Le portail est pret pour la release en production
+**And** ce rapport est approuve par le specialiste securite et le responsable technique avant la release
+
+---
+
+## Epic 17 : Reduction de la dette technique & amelioration qualite (audit 06/02/2026)
+
+En tant que **equipe securite (beneficiaire principal) et equipe de developpement**,
+je veux **traiter l'ensemble des constats de l'audit qualite du 6 fevrier 2026**,
+afin de **reduire durablement la dette technique, diminuer la surface d'attaque, et accelerer la delivery sans regression**.
+
+**Contexte :** Un audit complet du depot `idp-portal` a mis en evidence une dette technique majeure (double backend FastAPI + Django), des opportunites de refactor frontend (composants surdimensionnes), de la duplication dans le client HTTP, ainsi que des axes d'amelioration securite et DevOps (secrets, lockfile, Dockerfile, rate limiting, feature flags).
+
+### Portee (scope)
+
+- **Backend**
+  - Finaliser le **decommissionnement FastAPI** (suppression du dossier `backend/` legacy) une fois la migration validee
+  - Ameliorer la robustesse de la gestion d'erreurs (restreindre les `except Exception` non justifies)
+  - Remplacer les getter/setter JSON repetitifs du modele `Action` par un **OracleJSONField** (ou abstraction equivalente) avec validation
+- **Frontend**
+  - Refactoriser les fichiers surdimensionnes (en priorite `ExecutionWizard.tsx`) en sous-composants et hooks dedies
+  - Extraire un **wrapper HTTP commun** dans `api_client.ts` pour eliminer la duplication (auth, retry 401, parsing erreurs)
+  - Remplacer `console.*` par un service de logging frontend + regle linter/CI
+  - **UX vue Executions** : densifier la table (reduire hauteur des lignes) ; permettre a l'utilisateur initiateur ou aux admins d'annuler une operation (Soumise/En cours) et de relancer une execution passee avec les memes parametres sans ressaisie
+- **Securite & Tooling**
+  - Supprimer les secrets par defaut risquant de fuiter en prod et appliquer un **fail-fast** en environnement non-dev si variables manquantes
+  - Ajouter `pyproject.toml` + lockfile pour le Django backend (build reproductible)
+  - Durcir progressivement le type checking (mypy) jusqu'a le rendre bloquant
+- **DevOps**
+  - Ajouter des Dockerfile pour backend et frontend (build reproductible)
+  - Implementer du rate limiting sur les endpoints exposes
+  - Mettre en place un systeme de feature flags (deploiements progressifs)
+
+### Definition of Done (criteres d'acceptation de l'epic)
+
+- Le depot ne contient plus de backend FastAPI legacy (un seul backend cible), et la doc/CI/deploiement sont alignes
+- Aucun secret "par defaut" exploitable n'est present ; demarrage refuse en non-dev si secrets non configures
+- Les gros composants/pages frontend sont decoupes et testes, sans regression fonctionnelle
+- Le client HTTP a une logique commune (auth/retry/errors) sans duplication
+- Le JSON Oracle est centralise (champ/abstraction unique) avec validation
+- Les `except Exception` non justifies sont supprimes ou documentes ; les erreurs inattendues sont logguees
+- Un lockfile est present pour le Django backend ; le durcissement mypy est enclenche
+- Les Dockerfile(s) buildent ; rate limiting et feature flags sont disponibles (si retenus)
+
+### Story 17.1 : Finaliser migration backend et decommissionner FastAPI
+
+En tant qu'equipe technique,
+je veux supprimer le backend FastAPI legacy une fois la migration Django validee,
+afin d'eliminer la dette technique majeure (double backend), eviter les divergences de comportement et simplifier la base de code.
+
+**Contexte (assessment §4.1) :** Le depot contient deux backends complets (`backend/` FastAPI ~48k LOC et `django_backend/` Django). La coexistence represente un risque de divergence, de la duplication et de la confusion.
+
+**Acceptance Criteria:**
+
+**Given** la migration vers Django est validee (parite fonctionnelle, tests, bascule effectuee)
+**When** le decommissionnement est execute
+**Then** le dossier `backend/` (FastAPI) est supprime du depot
+**And** la doc, la CI et les procedures de deploiement ne reference plus FastAPI
+**And** un seul backend (Django) est la cible de deploiement
+
+### Story 17.2 : Refactoriser les composants frontend volumineux
+
+En tant que developpeur,
+je veux decouper les fichiers frontend qui depassent les bonnes pratiques de taille,
+afin d'ameliorer la maintenabilite et la lisibilite (max ~300-400 lignes par composant).
+
+**Contexte (assessment §4.2) :** ExecutionWizard.tsx (1 661 lignes), executions/views.py (1 140), ScheduledExecutionsPage.tsx (692), ExecutionTimeline.tsx (664), ExecutionsPage.tsx (650), catalog/views.py (749).
+
+**Acceptance Criteria:**
+
+**Given** un fichier composant ou page depasse ~500 lignes
+**When** le refactoring est realise
+**Then** la logique est extraite en sous-composants et/ou hooks dedies
+**And** aucun fichier cible ne depasse ~300-400 lignes sans justification
+**And** les tests existants passent sans regression
+**And** en priorite : ExecutionWizard.tsx (chaque step en composant, hook pour la logique)
+
+### Story 17.3 : Eliminer la duplication dans le client API frontend
+
+En tant que developpeur,
+je veux un wrapper HTTP commun dans `api_client.ts`,
+afin d'eviter la duplication d'auth, retry 401 et parsing d'erreurs entre apiFetch, apiFetchRaw, apiFetchBlob, apiPostFormData.
+
+**Contexte (assessment §4.3) :** Quatre fonctions dupliquent la meme logique (auth, intercepteur 401, parsing erreurs).
+
+**Acceptance Criteria:**
+
+**Given** le frontend appelle l'API (GET, POST, blob, form-data)
+**When** une requete est effectuee
+**Then** un wrapper HTTP commun gere : authentification, intercepteur 401 avec retry, parsing d'erreurs au format unifie
+**And** les methodes specifiques (apiFetch, apiFetchRaw, apiFetchBlob, apiPostFormData) s'appuient sur ce wrapper sans dupliquer la logique
+**And** les tests existants passent
+
+### Story 17.4 : Oracle JSON field pour le modele Action
+
+En tant que developpeur,
+je veux centraliser le stockage JSON du modele Action (CLOB) via un champ/abstraction unique avec validation,
+afin d'eliminer les 7 paires getter/setter manuelles et d'avoir une validation JSON au niveau du modele.
+
+**Contexte (assessment §4.4) :** Le modele Action stocke du JSON dans des TextField (CLOB) avec getter/setter repetitifs ; pas de validation JSON ni de JSONField natif (Oracle).
+
+**Acceptance Criteria:**
+
+**Given** le modele Action a des champs JSON (parameters_schema, impact_rules, etc.)
+**When** on lit ou ecrit ces champs
+**Then** un OracleJSONField custom (ou descripteur equivalent) est utilise
+**And** la validation JSON est appliquee au niveau du modele
+**And** les getter/setter dupliques sont supprimes
+**And** les serializers et services restent compatibles
+
+### Story 17.5 : Securiser la gestion des secrets
+
+En tant qu'equipe securite,
+je veux qu'aucun secret par defaut ne soit exploitable en production,
+afin d'eviter les fuites si les variables d'environnement ne sont pas configurees.
+
+**Contexte (assessment §4.7) :** SECRET_KEY, JWT_SECRET_KEY et mots de passe par defaut en dur ou commentes "development only".
+
+**Acceptance Criteria:**
+
+**Given** l'application demarre en environnement non-dev (staging, production)
+**When** SECRET_KEY ou JWT_SECRET_KEY (ou autres secrets critiques) ne sont pas definis
+**Then** le demarrage echoue (fail-fast) avec un message explicite
+**And** aucun secret "change-me-in-production" ou valeur par defaut exploitable n'est present dans le code
+**And** detect-secrets (ou equivalent) est utilise dans le CI
+
+### Story 17.6 : Restreindre les exception catches trop larges
+
+En tant que developpeur,
+je veux que les `except Exception` ou `except:` soient restreints aux exceptions specifiques attendues,
+afin de ne pas masquer des bugs et de logger les exceptions inattendues.
+
+**Contexte (assessment §4.5) :** 14 occurrences de broad exception catches dans le Django backend ; certains masquent des erreurs (ex. catalog/views.py).
+
+**Acceptance Criteria:**
+
+**Given** du code attrape des exceptions
+**When** un `except Exception` ou `except:` est utilise
+**Then** il est justifie (fallback graceful documente) ou remplace par des exceptions specifiques
+**And** les exceptions inattendues sont loguees avant re-raise ou traitement
+**And** les cas identifies dans l'audit (ex. ProfileService) sont corriges
+
+### Story 17.7 : Remplacer console.log par un service de logging frontend
+
+En tant que developpeur,
+je veux un service de logging frontend avec niveaux (debug/info/warn/error) et regle linter,
+afin que les sorties soient structurees et filtrables (et envoyables au backend en prod si besoin).
+
+**Contexte (assessment §4.6) :** 21 occurrences de console.log/error/warn dans le frontend de production.
+
+**Acceptance Criteria:**
+
+**Given** le code frontend doit emettre des logs
+**When** un log est emis
+**Then** un service de logging frontend est utilise (niveaux debug/info/warn/error)
+**And** les appels directs a `console.log` / `console.error` / `console.warn` sont supprimes ou remplaces
+**And** une regle linter/CI interdit l'usage direct de console.* (sauf exception documentee)
+
+### Story 17.8 : pyproject.toml et lockfile pour le Django backend
+
+En tant que developpeur,
+je veux un pyproject.toml et un lockfile pour le backend Django,
+afin d'avoir des builds reproductibles et un alignement avec les bonnes pratiques Python.
+
+**Contexte (assessment §4.8) :** Le Django backend utilise requirements.txt avec ranges de versions ; pas de lock, contrairement au backend FastAPI qui a deja un pyproject.toml.
+
+**Acceptance Criteria:**
+
+**Given** le backend Django est installe ou build
+**When** on installe les dependances
+**Then** un pyproject.toml definit les dependances du projet
+**And** un lockfile (pip-tools, poetry ou equivalent) fixe les versions exactes
+**And** le CI verifie la coherence du lockfile
+**And** la doc de build est mise a jour
+
+### Story 17.9 : Rendre mypy bloquant progressivement
+
+En tant que developpeur,
+je veux durcir le type checking jusqu'a le rendre bloquant dans le CI,
+afin de reduire les erreurs de typage et d'ameliorer la fiabilite.
+
+**Contexte (assessment §4.9) :** Le CI execute mypy avec continue-on-error: true ; strict = false dans le pyproject.toml FastAPI.
+
+**Acceptance Criteria:**
+
+**Given** le CI execute mypy sur le code cible (Django backend et/ou frontend selon portee)
+**When** des erreurs de typage sont presentes
+**Then** une strategie progressive est definie (baseline, correction par module)
+**And** a terme, mypy est execute sans continue-on-error et bloque le merge en cas d'erreur
+**And** la configuration mypy (strict ou niveaux) est documentee
+
+### Story 17.10 : Dockerfile pour backend et frontend
+
+En tant qu'equipe DevOps,
+je veux des Dockerfile pour le backend et le frontend,
+afin de conteneuriser les applications pour des deploiements reproductibles et portables.
+
+**Contexte (assessment §4.10) :** docker-compose existe pour Oracle uniquement ; pas de Dockerfile applicatif ; deploiement via systemd/Nginx manuels.
+
+**Acceptance Criteria:**
+
+**Given** on build l'image backend ou frontend
+**When** on utilise le Dockerfile fourni
+**Then** l'application demarre correctement dans le conteneur
+**And** les secrets ne sont pas inclus dans l'image (injection par env ou volume)
+**And** la doc de deploiement mentionne l'option conteneurisee
+**And** les Dockerfile sont dans le depot (ou reference explicite)
+
+### Story 17.11 : Rate limiting sur les endpoints publics
+
+En tant qu'equipe securite,
+je veux un rate limiting sur les endpoints exposes (API publiques),
+afin de limiter les abus et les attaques par force brute.
+
+**Contexte (assessment §6, §7) :** Rate limiting API non implemente.
+
+**Acceptance Criteria:**
+
+**Given** un client appelle un endpoint expose (ex. login, API v1)
+**When** le nombre de requetes depasse un seuil defini (par IP ou par utilisateur)
+**Then** le serveur repond 429 Too Many Requests (ou equivalent)
+**And** la configuration (seuils, fenetre) est parametrable
+**And** les endpoints critiques (auth, execution) sont couverts
+
+### Story 17.12 : Systeme de feature flags
+
+En tant qu'equipe produit / DevOps,
+je veux un systeme de feature flags,
+afin de permettre des deploiements progressifs et des rollouts controles.
+
+**Contexte (assessment §6, §7) :** Pas de systeme de feature flags.
+
+**Acceptance Criteria:**
+
+**Given** une fonctionnalite peut etre livree sans etre activee pour tous les utilisateurs
+**When** un feature flag est configure (on/off ou pourcentage)
+**Then** le frontend et/ou le backend respectent l'etat du flag
+**And** la configuration des flags est centralisee (fichier, env, ou service dedie)
+**And** l'impact sur la CI et le deploiement est documente
+
+### Story 17.13 : Densite table Executions
+
+As a DBA,
+I want que les lignes de la table Executions soient plus compactes,
+So that je puisse afficher plus d'executions a l'ecran sans scroller.
+
+**Acceptance Criteria:**
+
+**Given** un DBA accede a la vue Executions
+**When** la table se charge
+**Then** les lignes ont une hauteur reduite (padding vertical, badges, icones compacts) tout en restant lisibles
+
+**Given** la table affiche les colonnes Action, Statut, Technologie, Plateforme, Utilisateur, Environnement, Date
+**When** le DBA consulte la liste
+**Then** plus de lignes sont visibles dans le viewport sans scroll qu'avant
+
+### Story 17.14 : Annuler une operation (initiateur ou admin)
+
+As a DBA ou admin,
+je veux annuler une operation (statut Soumise ou En cours) que j'ai declenchee, ou n'importe quelle operation si je suis admin,
+afin de corriger rapidement une erreur de parametrage ou une operation lancee par erreur.
+
+**Privileges :** L'utilisateur qui a declenche l'operation peut l'annuler ; les **admins** peuvent annuler **n'importe quelle** operation.
+
+**Acceptance Criteria:**
+
+**Given** un DBA a declenche une operation (statut Soumise ou En cours)
+**When** il consulte la vue Executions
+**Then** un bouton ou action "Annuler" est visible sur la ligne pour les operations qu'il a initiees
+
+**Given** un utilisateur avec role admin consulte la vue Executions
+**When** il voit une operation Soumise ou En cours (initiee par n'importe qui)
+**Then** un bouton ou action "Annuler" est visible ; l'admin peut annuler n'importe quelle operation
+
+**Given** le DBA ou l'admin clique sur "Annuler" pour une operation Soumise ou En cours
+**When** il confirme l'annulation
+**Then** l'operation est annulee et le statut est mis a jour (ex. Annulee)
+**And** les privileges sont : initiateur de l'operation OU admin (RBAC)
+
+**Given** une operation est en cours d'execution sur le moteur distant
+**When** le DBA ou l'admin annule
+**Then** le backend tente d'annuler l'execution cote AAP/moteur si supporte, ou marque comme annulee
+
+### Story 17.15 : Relancer une execution (parametres pre remplis, modifiables)
+
+As a DBA ou admin,
+je veux relancer une execution passee en partant des memes parametres (que j'ai initiee, ou n'importe laquelle si je suis admin),
+afin de gagner du temps tout en pouvant ajuster les parametres avant de reexecuter.
+
+**Privileges :** L'utilisateur qui a declenche l'execution peut la relancer ; les **admins** peuvent relancer **n'importe quelle** execution.
+
+**Acceptance Criteria:**
+
+**Given** un DBA consulte la vue Executions
+**When** il selectionne une execution passee qu'il a initiee (terminee, echouee ou annulee)
+**Then** un bouton ou action "Relancer" est disponible
+
+**Given** un utilisateur avec role admin consulte la vue Executions
+**When** il selectionne une execution passee (initiee par n'importe qui)
+**Then** un bouton ou action "Relancer" est disponible ; l'admin peut relancer n'importe quelle execution
+
+**Given** le DBA ou l'admin clique sur "Relancer" pour une execution
+**When** l'action est declenchee
+**Then** le wizard d'execution s'ouvre avec les parametres pre remplis (action, target(s), environnement, parametres dynamiques) issus de l'execution passee
+**And** l'utilisateur peut modifier tout ou partie de ces parametres avant de soumettre
+**And** a la soumission du wizard, une nouvelle execution est creee avec les parametres affiches (pre remplis ou modifies)
+**And** les privileges sont : initiateur de l'execution OU admin (RBAC)
+
+**Given** le DBA n'a plus les permissions pour l'action ou l'environnement (et n'est pas admin)
+**When** il tente de relancer
+**Then** une erreur explicite est affichee et le wizard ne demarre pas (ou l'execution n'est pas creee a la soumission)
+
+### Story 17.16 : Verification conformite FRONTEND-STANDARDS
+
+En tant qu'equipe produit,
+je veux que la conformite aux standards definis dans FRONTEND-STANDARDS.md soit verifiable et appliquee dans le code,
+afin que les regles (React 19, Ant Design 6.2, APIs publiques, naming, tests) restent respectees au fil des evolutions.
+
+**Contexte :** Le document idp-portal/frontend/FRONTEND-STANDARDS.md (Story 5.5) definit les regles adoptees ; aucun mecanisme ne garantit aujourd'hui que le code reste conforme.
+
+**Acceptance Criteria:**
+
+**Given** le document FRONTEND-STANDARDS.md
+**When** on execute une verification (script, ESLint, ou CI)
+**Then** les regles suivantes sont controlees automatiquement : pas d'import depuis antd/es/*, pas de class components, message/notification/modal via App.useApp() uniquement, types Table extraits depuis TableProps
+
+**Given** une PR frontend
+**When** elle est soumise
+**Then** la checklist PR Frontend est integree (template ou CI) ou couverte par les verifications automatiques
+
+**And** les tests existants passent ; pas de regression ; exceptions documentees si besoin
+
+### Story 17.17 : Optimisation des requetes BD — page Catalogue
+
+En tant qu'utilisateur du portail,
+je veux que la page Catalogue se charge rapidement,
+afin que l'experience reste fluide meme avec peu d'actions affichees.
+
+**Contexte :** La page Catalogue (peu d'actions) est percue comme lente ; les donnees viennent de catalog/actions, catalog/tags, users/me/favorites.
+
+**Acceptance Criteria:**
+
+**Given** les endpoints utilises par la page Catalogue (catalog/actions, catalog/tags, users/me/favorites)
+**When** un audit est realise
+**Then** on dispose d'un inventaire : nombre de requetes par endpoint, N+1, select_related/prefetch_related, index
+
+**Given** l'audit
+**When** on applique les optimisations
+**Then** les vues catalog et favoris n'executent plus de N+1 ; jointures via select_related/prefetch_related ; index adaptes si besoin
+
+**And** le temps de reponse (ou nombre de requetes) est mesure avant/apres ; gains documentes
+
+---
+
+## Epic 18 : Ameliorations UX et corrections issues du feedback utilisateurs
+
+En tant que **DBOPS et DBA**,
+je veux **des corrections et ameliorations basees sur le feedback utilisateurs recueilli**,
+afin de **fluidifier l'usage quotidien du portail, eliminer les irritants et fiabiliser les statuts d'execution**.
+
+**Contexte :** Feedback terrain sur l'admin des actions, le mode visuel du builder de workflows, le catalogue, les favoris et l'affichage des erreurs d'integration.
+
+### Portee (scope)
+
+- **Admin Actions** : suppression/désactivation des actions jamais exécutées, filtres (actives par défaut, désactivées via filtre), propagation aux workflows
+- **Admin + Catalogue** : identification visuelle des workflows vs actions (icône ou type avec icône)
+- **Builder visuel** : taille fenêtre, déplacement blocs Départ/Fin, lien automatique sans erreur, affichage du nom d'action
+- **Catalogue** : filtre Environnement obsolète (environnement = propriété du target)
+- **Favoris** : correction du compteur et de l'affichage (actions désactivées)
+- **Execution** : afficher le statut erreur quand l'intégration échoue (pas "soumis")
+- **Tests** : correction des tests en échec (fixtures, migrations, refactorings)
+
+### Definition of Done (criteres d'acceptation de l'epic)
+
+- Les actions jamais exécutées peuvent être supprimées ; les autres peuvent être désactivées (avec message si workflow impacté)
+- Les workflows et actions sont visuellement distincts dans Admin et Catalogue
+- Le mode visuel du builder offre une zone de travail suffisante et des blocs repositionnables
+- Le filtre Environnement du catalogue est retiré ou adapté au modèle target-first
+- Les favoris affichent correctement le contenu et le compteur
+- Une erreur d'intégration se traduit par un statut erreur visible (pas soumis)
+- La suite de tests (backend et frontend) passe à nouveau
+
+### Story 18.1 : Admin Actions — suppression, désactivation et filtres
+
+En tant que **DBOPS**,
+je veux **supprimer les actions jamais exécutées et désactiver les autres**, avec filtres pour voir actives par défaut et désactivées à la demande,
+afin de **maintenir un catalogue propre tout en préservant la traçabilité des exécutions passées**.
+
+**Acceptance Criteria:**
+
+**Given** une action dans l'admin
+**When** elle n'a jamais été exécutée
+**Then** je peux la supprimer
+
+**Given** une action ayant au moins une exécution passée
+**When** je veux la retirer du catalogue actif
+**Then** je peux la désactiver (pas supprimer, pour traçabilité/audit)
+
+**Given** je désactive une action utilisée par un ou plusieurs workflows
+**When** je confirme la désactivation
+**Then** un message de confirmation m'informe que le(s) workflow(s) sera/seront désactivé(s) aussi
+**And** le(s) workflow(s) référençant cette action est/sont désactivé(s)
+
+**Given** la liste des actions en admin
+**When** j'accède par défaut
+**Then** je vois uniquement les actions actives
+
+**Given** je veux gérer les actions désactivées
+**When** j'applique un filtre "Inclure désactivées" (ou équivalent)
+**Then** je vois les actions désactivées, pouvant les réactiver ou les modifier
+
+### Story 18.2 : Identification visuelle workflow vs action (Admin et Catalogue)
+
+En tant que **DBOPS ou DBA**,
+je veux **distinguer facilement les workflows des actions simples** dans les listes,
+afin de **identifier rapidement le type d'élément sans lire le détail**.
+
+**Acceptance Criteria:**
+
+**Given** la liste des actions en admin
+**When** j'affiche les lignes
+**Then** chaque élément affiche une icône ou un indicateur (type + icône) permettant de distinguer workflow vs action
+
+**Given** la liste des actions côté catalogue
+**When** j'affiche les cartes ou la liste
+**Then** chaque élément affiche la même distinction visuelle (icône ou type avec icône)
+
+### Story 18.3 : Mode visuel builder — taille, blocs, lien et libellé
+
+En tant que **DBOPS**,
+je veux **un mode visuel du builder de workflows plus utilisable**,
+afin de **concevoir et modifier les workflows sans friction**.
+
+**Acceptance Criteria:**
+
+**Given** je crée ou modifie un workflow en mode visuel
+**When** la fenêtre modale s'ouvre
+**Then** la zone de dessin (canvas) est suffisamment grande pour visualiser le workflow sans scroll excessif
+
+**Given** les blocs Départ et Fin sur le canvas
+**When** je souhaite réorganiser la disposition
+**Then** je peux déplacer les blocs Départ et Fin (comme les autres blocs d'action)
+
+**Given** j'ajoute la première action au workflow (entre Départ et Fin)
+**When** la connexion Départ → première action est établie
+**Then** le lien se crée automatiquement sans condition et s'affiche en succès (pas en erreur)
+
+**Given** je sauvegarde un workflow puis je le rouvre
+**When** je visualise les blocs d'action
+**Then** le nom de l'action s'affiche (ex. "Apply Oracle Patch"), pas un libellé générique "Action #2"
+
+### Story 18.4 : Catalogue — retirer ou adapter le filtre Environnement
+
+En tant que **utilisateur du catalogue**,
+je veux **que le filtre Environnement soit pertinent ou retiré**,
+afin de **ne pas être induit en erreur** : l'environnement est défini par le target, pas par l'action.
+
+**Acceptance Criteria:**
+
+**Given** le catalogue avec filtre Environnement actuel
+**When** les actions ne sont plus reliées directement à un environnement (c'est le target qui définit l'environnement)
+**Then** le filtre Environnement est retiré OU adapté pour refléter le modèle target-first (ex. filtrer par environnements des targets disponibles)
+
+### Story 18.5 : Favoris — correction affichage et compteur
+
+En tant que **DBA**,
+je veux **que mes actions favorites s'affichent correctement** dans l'onglet Favoris,
+afin de **retrouver rapidement les actions que j'utilise le plus**.
+
+**Acceptance Criteria:**
+
+**Given** j'ai des actions en favoris
+**When** j'accède à l'onglet Favoris
+**Then** les actions favorites s'affichent (et non une liste vide)
+
+**Given** une action en favoris est désactivée
+**When** je consulte mes favoris
+**Then** le compteur et l'affichage excluent ou gèrent correctement les actions désactivées (pas de compteur incorrect ni d'onglet vide alors qu'un chiffre s'affiche)
+
+**And** la requête côté client/serveur retourne bien les favoris visibles (investigation possible : action désactivée encore comptée côté serveur mais non retournée dans la liste)
+
+### Story 18.6 : Erreur intégration — afficher statut erreur
+
+En tant que **DBA ou utilisateur**,
+je veux **voir un statut erreur** quand l'intégration (AAP, ServiceNow, etc.) retourne une erreur,
+afin de **savoir immédiatement que l'action n'a pas été correctement soumise**.
+
+**Acceptance Criteria:**
+
+**Given** je déclenche une action
+**When** l'intégration (plateforme distante) retourne une erreur
+**Then** l'exécution n'apparaît pas comme "soumise" ou "en cours" de manière trompeuse
+**And** l'exécution affiche un statut erreur explicite (ex. "Erreur", "Échec intégration")
+**And** un message ou un détail permet de comprendre la cause (idéalement issu de la réponse d'erreur de l'intégration)
+
+**Given** le backend reçoit une erreur de l'intégration avant ou pendant la création de l'exécution
+**When** la réponse est traitée
+**Then** le statut en base et/ou le callback reflètent l'état d'erreur
+**And** le frontend affiche correctement ce statut (pas de statut "soumis" pour une exécution qui a échoué côté intégration)
+
+### Story 18.7 : Correction des tests en échec
+
+En tant qu'**équipe de développement**,
+je veux **que l'ensemble des tests (backend et frontend) passent à nouveau**,
+afin de **restaurer la confiance dans la suite de tests et permettre les déploiements en CI**.
+
+**Contexte :** Un bon nombre de tests échouent actuellement ; causes possibles : fixtures obsolètes (ex. User), migrations, refactorings (OracleJSONField, etc.), changements d'API ou de modèles. Cette story vise à identifier et corriger ces échecs.
+
+**Acceptance Criteria:**
+
+**Given** la suite de tests backend et frontend
+**When** on exécute `pytest` (backend) et les tests frontend (Vitest/Jest)
+**Then** l'ensemble des tests passent (ou les échecs restants sont documentés avec tickets de suivi)
+
+**Given** des tests échouent pour cause de fixtures obsolètes (User, Action, etc.)
+**When** on corrige les fixtures
+**Then** elles reflètent le modèle de données et les contraintes actuels
+
+**Given** des tests échouent pour cause de refactoring (OracleJSONField, changements d'API)
+**When** on adapte les tests
+**Then** ils valident le comportement attendu sans dépendre d'implémentations internes fragiles
+
+**And** la CI (ou commande locale) exécute la suite complète avec succès ; les échecs connus sont documentés si des corrections sont reportées
+
+---
+
+## Epic 21 : Inventaire — source unique des environnements
+
+En tant que **équipe produit et utilisateurs du portail**,
+je veux **que l'inventaire soit la seule source de vérité pour les environnements**, sans normalisation ni liste hardcodée,
+afin de **accepter toute valeur présente dans l'inventaire (ex. lab, dev, staging, prod), éviter les cascades de requêtes Oracle et les warnings, et permettre l'ajout de nouveaux environnements sans migration**.
+
+**Contexte :** `_normalize_environment` impose une liste fixe, appelle récursivement `list_environments()`, et force les valeurs inconnues vers `dev`, provoquant récursion, incohérence et problèmes de perf.
+
+**Reference :** planning-artifacts/epic-21-inventaire-source-unique-environnements.md
+
+### Story 21.1 : Backend — Supprimer normalisation inventaire et utiliser valeurs brutes
+
+En tant que développeur backend,
+je veux que la lecture de l'inventaire Oracle retourne les valeurs ENVIRONMENT telles quelles (trim/lowercase uniquement),
+afin d'éliminer la récursion et les warnings `unknown_environment_value_defaulted`.
+
+**Acceptance Criteria:**
+
+**Given** `_read_oracle_inventory` dans `inventory/services.py`
+**When** une ligne Oracle contient `ENVIRONMENT = 'lab'`
+**Then** la valeur retournée est `lab` (ou lowercased), sans appel à `_normalize_environment`
+**And** aucun warning `unknown_environment_value_defaulted` n'est loggé
+
+**Given** la méthode `_normalize_environment`
+**When** on la supprime ou la simplifie
+**Then** elle ne contient plus d'appel à `list_environments()`
+**And** optionnel : on conserve uniquement un mapping d'alias pour legacy (ex. certif→staging) sans appel récursif
+
+**Given** `list_environments()`
+**When** elle extrait les environnements distincts des targets
+**Then** elle utilise les valeurs brutes des targets (sans normalisation dans la boucle)
+
+### Story 21.2 : Backend — Ajuster profile/env matching et exécutions
+
+En tant que développeur backend,
+je veux que les profils et les exécutions comparent les environnements de manière case-insensitive sans normalisation forcée,
+afin d'accepter les valeurs de l'inventaire et des profils de façon cohérente.
+
+**Acceptance Criteria:**
+
+**Given** `list_targets_for_user` et `get_allowed_environments_for_user`
+**When** un profil a `ENVIRONMENTS_JSON = ["lab", "dev"]` et l'inventaire contient lab, dev
+**Then** la comparaison est case-insensitive
+**And** les targets avec `environment: lab` sont autorisés
+
+**Given** `_validate_environment_against_inventory`
+**When** l'environnement soumis est lab et l'inventaire le contient
+**Then** la validation réussit
+**And** aucun fallback vers dev n'est appliqué
+
+**Given** `change_type_config` et `impact_rules` lookup
+**When** l'environnement d'exécution est lab
+**Then** le lookup utilise env_upper ou comparaison case-insensitive
+**And** si aucune règle n'existe pour lab, `default_impact_level` est utilisé pour impact
+
+### Story 21.3 : Tests backend — inventaire, exécutions, profils
+
+En tant que développeur,
+je veux que les tests couvrent les nouveaux comportements (valeurs brutes, profils avec lab, exécutions avec env inconnu),
+afin d'éviter les régressions et documenter le comportement attendu.
+
+**Acceptance Criteria:**
+
+**Given** les tests `inventory/tests/test_services.py`
+**When** on exécute la suite
+**Then** les tests de `_normalize_environment` sont mis à jour ou supprimés
+**And** des tests vérifient que `list_targets` retourne des environnements bruts (ex. lab)
+**And** des tests vérifient que `list_environments()` retourne les valeurs distinctes sans normalisation
+
+**Given** les tests d'exécution et de profils
+**When** un profil a `environments: [lab]` et l'inventaire contient lab
+**Then** les tests vérifient l'accès autorisé
+
+### Story 21.4 : Frontend — Editeurs admin avec environnements dynamiques
+
+En tant que DBOPS,
+je veux que les editeurs d'actions (règles d'impact, étapes, changement ServiceNow, règles de remédiation) proposent la liste des environnements issue de l'inventaire,
+afin de configurer des règles pour tous les environnements existants (ex. lab, dev, staging, prod) sans liste fixe.
+
+**Acceptance Criteria:**
+
+**Given** `ImpactRulesEditor`
+**When** j'ajoute une règle d'impact
+**Then** le dropdown Environnement affiche les options de `useEnvironments()`
+**And** `IMPACT_ENVIRONMENTS` hardcodé est remplacé par la liste dynamique
+
+**Given** `StepsEditor`, `ChangeTypeConfig`, `RemediationRulesEditor`
+**When** je configure des environnements (conditional_environments, change type, remediation)
+**Then** les composants utilisent les environnements de l'inventaire
+**And** les listes hardcodées sont remplacées
+
+### Story 21.5 : Frontend — TargetSelectionStep, labels et type ExecutionEnvironment
+
+En tant que DBA ou utilisateur,
+je veux que la sélection d'environnement et l'affichage des labels utilisent les valeurs de l'inventaire sans fallback hardcodé,
+afin de pouvoir exécuter des actions sur des environnements comme lab et les afficher correctement.
+
+**Acceptance Criteria:**
+
+**Given** `TargetSelectionStep`
+**When** le cache d'environnements est chargé
+**Then** le Select Environnement utilise uniquement ces valeurs
+**And** le fallback `[dev, staging, prod]` est supprimé
+
+**Given** `ENVIRONMENT_LABELS`
+**When** un environnement n'est pas dans la map (ex. lab)
+**Then** on affiche la valeur avec capitalisation ou telle quelle
+
+**Given** le type `ExecutionEnvironment`
+**When** on étend le type
+**Then** `ExecutionEnvironment` devient `string` (ou union étendue) pour accepter lab et autres
+
+### Story 21.6 (optionnel) : Validation des environnements de profil à la sauvegarde
+
+En tant que DBOPS,
+je veux que la sauvegarde d'un profil valide que les environnements sélectionnés existent dans l'inventaire,
+afin d'éviter les typo et les références à des environnements obsolètes.
+
+**Acceptance Criteria:**
+
+**Given** le formulaire de profil
+**When** je sauvegarde un profil avec `environments: [lab, invalid_env]`
+**Then** le backend vérifie que chaque valeur existe dans `list_environments()`
+**And** si invalid_env n'existe pas, une erreur de validation est retournée
+
+---
+
+## Epic 23 : Inventaire multi-tables (SERVER, INSTANCE, DB) et UX cibles
+
+Étendre l'inventaire pour supporter les tables SERVER, INSTANCE et DB avec relations, filtrer les listes instance/DB par serveur choisi dans le wizard, permettre aux profils d'accorder l'accès « tous les serveurs Oracle » ou « tous les serveurs SQL », avec un modèle d'accès évolutif (mapping colonnes) et un RBAC intimement lié aux données d'inventaire.
+
+**Source :** docs/inventaire-multi-tables-ux-cibles.md
+
+### Exigences couvertes (résumé)
+
+- **Données :** Plusieurs tables (SERVER, INSTANCE, DB), relations Serveur 1–N Instance, Instance → DB, DB 1–N Instances. Modèle piloté par config (mapping entités/colonnes/relations), pas de colonnes en dur.
+- **Définition des paramètres (Admin) :** Lors de la définition d’un paramètre pour une action, DBOPS peut indiquer que la valeur **provient de l’inventaire** et choisir **quelle table/entité** : **serveurs**, **instances** ou **bases de données**. Le schéma des paramètres de l’action porte cette info (ex. `source: 'inventory'`, `inventory_type: 'servers' | 'instances' | 'databases'`). Les éditeurs Admin (paramètres d’action) doivent proposer explicitement ce choix.
+- **UX exécution (Wizard) :** Si l’utilisateur a choisi un ou plusieurs serveurs à l’étape 1 (cibles), alors pour tout paramètre marqué « source = inventaire, table = **instances** » (ex. `instance_name`), la liste déroulante à l’étape 2 n’affiche **que les instances liées au(x) serveur(s) choisi(s)**. Idem pour « table = **databases** » : uniquement les bases liées à ce(s) serveur(s). Pour « table = serveurs », la liste reste filtrée par environnement (comportement actuel).
+- **Profils :** Options « Tous les serveurs Oracle » / « Tous les serveurs SQL » (filtre par type de moteur) ; RBAC sur attributs mappés (ex. `engine_type`).
+- **API :** `GET /inventory/servers`, `/databases`, `/instances` avec `environment` et `server_name`/`server_names` ; format `{ data: [...] }`.
+- **Sécurité / perf :** Validation stricte noms tables/colonnes et paramètres ; pagination / limite de serveurs pour gros inventaires ; rétrocompatibilité table plate.
+
+### Comportement cible (exemple)
+
+- **Admin :** Pour l’action « Patching instance », le paramètre `instance_name` est configuré avec : source = inventaire, table = **instances**.
+- **Exécution :** L’utilisateur choisit `server1` (et éventuellement `server2`) à l’étape 1. À l’étape 2, le champ `instance_name` affiche **uniquement les instances liées à server1** (et server2 si multi-sélection). Pas toutes les instances de l’environnement.
+
+### Stories proposées (ordre suggéré)
+
+1. **Backend — Config mapping colonnes + lecture entités** : Config (entités, colonnes, relations), layer InventoryMapper, requêtes SQL pilotées par config, fallback table plate.
+2. **Backend — InventoryService multi-tables** : `list_servers`, `list_instances`, `list_databases` avec filtres environment / server_name / engine_type ; RBAC list_targets_for_user inchangé sur serveurs, listes instance/DB cohérentes avec serveurs autorisés.
+3. **Backend — API /servers, /databases, /instances** : Endpoints avec query params, format attendu par le front.
+4. **Backend — RBAC profils filtres par attribut** : Champ JSON `filter_by_attribute` (ex. engine_type), application dans `list_targets_for_user`, exposition API profils.
+5. **Frontend — Admin : source inventaire + table par paramètre** : Dans l’éditeur de paramètres d’une action, permettre de marquer un paramètre « source = inventaire » et de choisir la table : **Serveurs**, **Instances** ou **Bases de données**. Persistance dans le schéma (ex. `inventory_type`) pour alimenter le wizard.
+6. **Frontend — useTargetInventory + contexte serveur** : Paramètre `selectedServerNames` (ou `selectedTargets`), appels API avec `server_name`/`server_names` pour les paramètres de type instances/databases ; à l’étape 2 du wizard, les listes instance/DB sont restreintes aux instances/bases du (des) serveur(s) choisi(s).
+7. **Frontend — ProfileForm options Tous / Oracle / SQL** : UI pour filtres par type de moteur (et extension à d’autres attributs mappés).
+
+## Epic 24 : Intégrations Admin alignées sur le backend
+
+Encadrer la configuration des intégrations dans l'interface Admin pour n'autoriser que des types et des actions d'intégration explicitement supportés par le backend (AAP, ServiceNow, etc.), via un modèle "type d'intégration" + "instance d'intégration" et un catalogue d'actions contractuel. L'objectif est de supprimer les intégrations "libres" non supportées, réduire les erreurs de configuration, et rendre les exécutions d'intégrations prévisibles et observables.
+
+### Exigences couvertes (résumé)
+
+- **Modèle d'intégration** : Distinction claire entre **Type d'intégration** (AAP, ServiceNow, …) et **Instance d'intégration** (ex. "AAP Dev", "ServiceNow ITSM Préprod"). Chaque type définit un catalogue d'actions supportées (ex. `start_job`, `start_workflow`, `get_job_status`, `create_change`) avec leur contrat de paramètres minimal.
+- **Catalogue d'actions contractuel** : Le backend expose pour chaque type la liste des actions possibles, leurs noms, descriptions, paramètres attendus (obligatoires / optionnels) et formats de réponse. Le frontend consomme ce catalogue et ne peut pas inventer de nouvelles actions.
+- **UI Admin restreinte** : L'écran Admin Intégrations permet uniquement de créer/éditer des **instances d'intégration** en choisissant un **type existant** fourni par le backend, puis en remplissant les paramètres attendus (URL, credentials, IDs de templates, options métiers, etc.). Aucun champ ne permet de définir directement des verbes HTTP ou des endpoints arbitraires.
+- **Validation forte** : Une intégration dont le type ou une action n'existe plus côté backend est marquée comme **invalide ou dépréciée** ; elle est clairement signalée dans l'UI, et son utilisation dans les workflows est bloquée ou dégradée de manière contrôlée.
+- **Migration & compatibilité** : Les intégrations existantes "libres" sont migrées vers des instances typées autant que possible, ou marquées comme "legacy / read-only" avec garde-fous pour éviter de nouvelles utilisations.
+
+### Stories proposées (ordre suggéré)
+
+1. **Backend — Catalogue des types d'intégration et actions supportées**  
+   Définir le modèle `IntegrationType` (nom, code, version, description) et la liste des `IntegrationAction` associées (nom technique, label, description, paramètres exigés). Exposer une API de lecture (ex. `GET /api/v1/integrations/types`) permettant au frontend de récupérer le catalogue complet, avec versionnement minimal pour tracer les changements.
+
+2. **Frontend Admin — Création d'instances à partir des types d'intégration backend**  
+   Adapter l'écran Admin Intégrations pour que la création/édition passe obligatoirement par la sélection d'un `IntegrationType` renvoyé par le backend, puis par la configuration des champs attendus (URL, credential_ref, IDs AAP/ServiceNow, options métiers). Supprimer ou masquer les champs qui permettent d'encoder directement des endpoints/verbs/payloads arbitraires.
+
+3. **Backend & Frontend — Validation d'intégration et état (valide / invalide / dépréciée)**  
+   Introduire un statut d'intégration (`valid`, `invalid`, `deprecated`) calculé côté backend en fonction de l'existence du type et des actions référencées. Exposer ce statut via l'API, l'afficher clairement dans l'UI Admin (badge + message), et empêcher l'utilisation d'intégrations `invalid` dans les nouveaux workflows ou exécutions.
+
+4. **Migration des intégrations existantes et garde-fous d'exécution**  
+   Identifier les intégrations déjà configurées dans le système : pour chacune, tenter de les rattacher à un `IntegrationType` existant (AAP, ServiceNow, …) ou les marquer comme `legacy`. Mettre en place des garde-fous côté moteur d'exécution pour refuser proprement l'utilisation d'intégrations non typées ou invalides, avec messages d'erreur explicites et logs d'audit.
+
+---
+
+## Epic 25 : Convergence DBOps → IDP Portal
+
+Intégrer les patterns DBOps dans le portail : modèle de cible générique (ExecutionTarget), condition gates sur les étapes (statut WAITING), overrides par environnement, mutex inter-actions, deny explicite RBAC. Référence : implementation-artifacts/convergence-dbops-idp-portal.md.
+
+### Story 25.1 : Modèle ExecutionTarget (table EXECUTION_TARGETS et API)
+
+As a moteur d'exécution,
+I want une liaison explicite entre une exécution et ses cibles (serveurs, bases),
+So que les requêtes par cible, la validation RBAC, les mutex et les condition gates s'appuient sur un modèle relationnel fiable.
+
+**Acceptance Criteria:**
+
+**Given** une exécution est créée avec des cibles choisies par l'utilisateur
+**When** le backend enregistre l'exécution
+**Then** une entrée est créée dans la table EXECUTION_TARGETS pour chaque cible (execution_id, target_type, target_id, target_name, target_metadata)
+**And** le couple (execution, target_type, target_id) est unique
+**And** l'API d'exécution accepte et persiste les targets (target_type : SERVER, DATABASE, PDB, SCHEMA ; target_id opaque vers l'inventaire ; target_name en snapshot pour affichage)
+
+**Given** une exécution existante
+**When** on consulte ses cibles
+**Then** l'API retourne la liste des ExecutionTarget avec target_type, target_id, target_name et métadonnées optionnelles
+
+**And** une migration Flyway/SQL crée la table EXECUTION_TARGETS avec les contraintes et index appropriés
+**And** le modèle Django ExecutionTarget est exposé via le repository et les serializers existants
+
+### Story 25.2 : Condition Gates — statut WAITING et gate_conditions dans execution_steps
+
+As a DBOPS,
+I want pouvoir définir des préconditions (gates) sur une étape d'exécution (plage de maintenance, créneau horaire, approbation, état cible),
+So que l'étape ne démarre qu'une fois les conditions remplies, sans exécution prématurée.
+
+**Acceptance Criteria:**
+
+**Given** une action dont une étape possède un champ `gate_conditions` (JSON) dans execution_steps
+**When** le workflow runtime atteint cette étape
+**Then** l'ExecutionStep est créée avec le statut WAITING (et non RUNNING)
+**And** le statut WAITING est ajouté à l'enum ExecutionStepStatus (PENDING, WAITING, RUNNING, COMPLETED, FAILED, SKIPPED)
+
+**Given** une étape en WAITING
+**When** les gate_conditions ne sont pas encore satisfaites
+**Then** l'étape reste en WAITING ; le champ output (ou équivalent) peut contenir le contexte d'attente (raison, next_possible_at, etc.)
+
+**And** le schéma JSON des gate_conditions supporte au moins les types : maintenance_window, time_window, approval_granted, target_state (structure documentée dans convergence-dbops-idp-portal.md)
+**And** le WorkflowRuntime (ou équivalent Django) lit gate_conditions et crée l'étape en WAITING au lieu de lancer l'exécution immédiate
+
+### Story 25.3 : Tâche Celery Beat evaluate_waiting_gates et gate maintenance_window
+
+As a système,
+I want une tâche périodique qui évalue les étapes en WAITING et les débloque lorsque les conditions sont remplies,
+So que les condition gates soient appliquées sans blocage actif.
+
+**Acceptance Criteria:**
+
+**Given** Celery Beat est configuré avec une tâche périodique (ex. toutes les 60 secondes)
+**When** la tâche `evaluate_waiting_gates` s'exécute
+**Then** elle sélectionne toutes les ExecutionStep en statut WAITING dont l'exécution parente est RUNNING
+**And** pour chaque étape, elle évalue les gate_conditions via un service GateEvaluator
+**And** si toutes les conditions sont satisfaites : l'étape passe en RUNNING, started_at est renseigné, et l'exécution réelle de l'étape est déclenchée (task Celery)
+**And** si au moins une condition n'est pas satisfaite : l'étape reste en WAITING et le contexte d'attente est mis à jour (output / logs)
+
+**Given** une condition de type maintenance_window
+**When** le GateEvaluator l'évalue
+**Then** il interroge l'inventaire (ou service équivalent) pour savoir si le moment actuel est dans la plage de maintenance des serveurs cibles (via ExecutionTarget)
+**And** le contexte retourné inclut les infos pour afficher à l'utilisateur quand l'étape pourra démarrer (next_possible_at, windows par cible)
+
+**And** un timeout optionnel par condition (ex. timeout_hours, on_timeout: FAIL) est supporté : si dépassé, l'étape passe en FAILED (ou SKIPPED selon config) et le workflow suit on_error_step_id
+**And** une notification WebSocket ou équivalent peut informer le frontend de l'état WAITING et du contexte (optionnel pour cette story)
+
+### Story 25.4 : Overrides par environnement (change_type_config enrichi)
+
+As a DBOPS,
+I want configurer par environnement (prod, staging, dev) des exigences différentes : ticket ServiceNow requis, plage de maintenance requise, opération autorisée ou interdite,
+So que la gouvernance soit adaptée à chaque environnement sans dupliquer les actions.
+
+**Acceptance Criteria:**
+
+**Given** une action avec un champ change_type_config (ou équivalent) par environnement
+**When** le backend valide ou exécute une exécution pour un environnement donné
+**Then** les flags suivants sont lus depuis la config de cet environnement : requires_maintenance_window, requires_approval, allowed (booléen)
+**And** si allowed est false pour l'environnement cible, la soumission est refusée avec un message explicite
+**And** les règles d'ouverture de changement ServiceNow et de vérification de plage de maintenance s'appuient sur requires_maintenance_window et requires_approval
+
+**Given** l'éditeur admin des actions (ou des règles d'impact)
+**When** on configure les overrides par environnement
+**Then** l'interface permet de définir pour chaque environnement : change_type, template_id (si applicable), requires_maintenance_window, requires_approval, allowed
+**And** la validation côté backend rejette les valeurs invalides et persiste le JSON enrichi
+
+**And** aucun nouveau schéma de table n'est requis : le champ Oracle/JSON existant (change_type_config ou équivalent) est étendu
+**And** la logique de validation dans executions/utils.py (ou équivalent) utilise ces flags pour accepter ou refuser la soumission
+
+### Story 25.5 : Mutex inter-actions (table ACTION_MUTEX et validation à la soumission)
+
+As a DBOPS,
+I want définir des exclusions mutuelles entre actions (ex. patching et backup sur la même base ne doivent pas tourner en parallèle),
+So que des opérations incompatibles ne soient jamais exécutées simultanément sur les mêmes cibles.
+
+**Acceptance Criteria:**
+
+**Given** une table ACTION_MUTEX (action_id, incompatible_with_id, same_target bool, description)
+**When** un DBOPS configure une règle de mutex entre l'action A et l'action B avec same_target=True
+**Then** au moment de la soumission d'une exécution pour l'action A sur des cibles données, le backend vérifie qu'aucune exécution en cours (RUNNING, PENDING_APPROVAL, SUBMITTED) pour l'action B ne cible les mêmes target_id (via ExecutionTarget)
+**And** si une telle exécution existe, la soumission est refusée avec une erreur explicite (MutexViolationError ou équivalent)
+
+**Given** une règle de mutex avec same_target=False
+**When** une exécution pour l'action A est soumise
+**Then** le backend refuse la soumission si une exécution pour l'action B est déjà en cours, quelle que soit la cible
+
+**And** une migration crée la table ACTION_MUTEX avec unique_together (action, incompatible_with) et les clés étrangères vers ACTIONS_CATALOG (ou équivalent)
+**And** l'API admin permet de créer/supprimer des règles de mutex entre actions (CRUD ou équivalent)
+**And** la validation mutex est appelée systématiquement avant de créer une Execution et d'insérer les ExecutionTarget
+
+### Story 25.6 : Deny explicite RBAC (exclusion_patterns sur ProfileTargetPermission)
+
+As a DBOPS,
+I want pouvoir exclure explicitement des cibles des permissions d'un profil (ex. tout sauf PROD-CRITICAL-*),
+So que l'accès soit "allow then exclude" sans avoir à lister toutes les cibles autorisées.
+
+**Acceptance Criteria:**
+
+**Given** un profil avec des permissions sur les targets (liste ou pattern)
+**When** le profil possède un nouveau champ exclusion_patterns (JSON array de patterns, ex. ["PROD-CRITICAL-*", "DR-*"])
+**Then** la résolution RBAC des cibles autorisées pour l'utilisateur applique d'abord les règles d'inclusion (LIST, PATTERN, ALL), puis retire toute cible dont le nom (ou identifiant) matche au moins un pattern d'exclusion
+**And** une cible qui matche un pattern d'exclusion n'est jamais retournée comme autorisée, même si elle matche un pattern d'inclusion
+
+**Given** l'interface admin des profils / permissions targets
+**When** on édite les permissions cibles d'un profil
+**Then** un champ (liste ou texte) permet de saisir les patterns d'exclusion (ex. un par ligne ou tags)
+**And** la validation backend accepte un tableau de chaînes (patterns) et le persiste dans exclusion_patterns_json (ou nom de colonne équivalent)
+
+**And** une migration ajoute le champ exclusion_patterns_json (TextField/JSON) à la table PROFILE_TARGET_PERMISSIONS (ou équivalent)
+**And** la logique existante list_targets_for_user (ou équivalent) est étendue pour appliquer l'exclusion après l'inclusion ; les appels API qui renvoient les cibles autorisées reflètent ce comportement
+**And** la documentation décrit la sémantique "allow first, then exclude" et les exemples de patterns

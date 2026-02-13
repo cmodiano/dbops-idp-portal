@@ -1,6 +1,6 @@
 """
 RBAC utility functions for Django backend.
-Matches FastAPI rbac_service functionality for navigation permissions and business profile detection.
+Provides navigation permissions and business profile detection.
 """
 
 # Navigation tabs by profile — DBOPS sees Admin, others do not

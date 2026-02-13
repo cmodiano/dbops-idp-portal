@@ -10,6 +10,6 @@ from admin_analytics import views
 app_name = "admin_analytics"
 
 urlpatterns = [
-    path("analytics", views.AdminAnalyticsView.as_view(), name="admin-analytics"),
+    path("analytics/", views.AdminAnalyticsView.as_view(), name="admin-analytics"),
 ]
 

@@ -8,6 +8,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { fetchRemediationContext } from '../services/execution_service';
 import type { RemediationContext, ExecutionStatusType } from '../types/api';
+import logger from '../services/logger';
 
 interface UseRemediationContextResult {
   context: RemediationContext | null;
@@ -51,15 +52,15 @@ export function useRemediationContext(
     } catch (err: any) {
       // Story 9-2 code-review fix: Better error handling for 404/403
       if (err.status === 404) {
-        console.warn('Execution not found for remediation context');
+        logger.warn('Execution not found for remediation context', { executionId });
         setContext({ has_remediation: false, successful_remediation: false, remediation_actions: [] });
         setError(null); // Not an error, just no context
       } else if (err.status === 403) {
-        console.error('Permission denied for remediation context:', err);
+        logger.error('Permission denied for remediation context', { executionId, error: err instanceof Error ? err.message : String(err) });
         setError(new Error('Accès refusé'));
         setContext(null);
       } else {
-        console.error('Failed to fetch remediation context:', err);
+        logger.error('Failed to fetch remediation context', { executionId, error: err instanceof Error ? err.message : String(err) });
         setError(err instanceof Error ? err : new Error('Erreur inconnue'));
         setContext(null);
       }

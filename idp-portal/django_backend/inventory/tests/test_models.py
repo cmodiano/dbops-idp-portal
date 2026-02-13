@@ -66,7 +66,12 @@ class TargetEnvironmentTests(TestCase):
         self.assertEqual(TargetEnvironment.PROD, 'prod')
 
     def test_environment_values_list(self):
-        """Test VALUES list contains all environments."""
+        """Test VALUES list contains all environments.
+        Story 13.7: Note that VALUES is deprecated - environments come from inventory API.
+        This test is kept for backward compatibility but VALUES should not be used in new code.
+        """
+        # Story 13.7: VALUES is deprecated but kept for backward compatibility
+        # In production, environments come from GET /api/v1/inventory/environments
         self.assertIn('dev', TargetEnvironment.VALUES)
         self.assertIn('staging', TargetEnvironment.VALUES)
         self.assertIn('prod', TargetEnvironment.VALUES)

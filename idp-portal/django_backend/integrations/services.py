@@ -9,9 +9,11 @@ import structlog
 
 from django.db import transaction
 from django.db import IntegrityError
-from integrations.models import Integration
+from integrations.models import Integration, IntegrationStatus
+from integrations.validation_service import IntegrationValidationService
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
+from core.exceptions import InvalidStateError
 from core.middleware import get_correlation_id
 
 logger = structlog.get_logger(__name__)
@@ -109,7 +111,19 @@ class IntegrationService:
             if 'config' in integration_data:
                 integration.set_config(integration_data['config'])
                 integration.save()
-            
+
+            # Story 24.3: Compute status from catalogue
+            computed_status = IntegrationValidationService.validate_integration(integration)
+            if integration.status != computed_status:
+                integration.status = computed_status
+                integration.save(update_fields=['status', 'updated_at'])
+
+            warnings = []
+            if computed_status != IntegrationStatus.VALID:
+                msg = f"Integration created with non-valid status: {computed_status}"
+                logger.warning("integration_created_non_valid", integration_id=integration.id, status=computed_status)
+                warnings.append(msg)
+
             # Audit if user provided
             if user:
                 AuditService.create_entry(
@@ -119,7 +133,10 @@ class IntegrationService:
                     entity_id=integration.id,
                     details={'name': integration.name, 'type': integration.type}
                 )
-            
+
+            # Attach warnings for API response
+            integration._warnings = warnings
+
             return integration
         except IntegrityError:
             raise ValueError(f"Une intégration avec le nom '{integration_data['name']}' existe déjà")
@@ -203,11 +220,38 @@ class IntegrationService:
         if 'config' in integration_update_data:
             integration.set_config(integration_update_data['config'])
         
+        old_status = integration.status
+
         try:
             integration.save()
         except IntegrityError:
             raise ValueError(f"Une intégration avec le nom '{integration_update_data.get('name', integration.name)}' existe déjà")
-        
+
+        # Story 24.3: Recompute status if type changed
+        computed_status = IntegrationValidationService.validate_integration(integration)
+        warnings = []
+        if integration.status != computed_status:
+            integration.status = computed_status
+            integration.save(update_fields=['status', 'updated_at'])
+
+        if old_status != integration.status:
+            AuditService.create_entry(
+                user_id=str(user.id) if user else 'system',
+                action_type=AuditActionType.INTEGRATION_STATUS_UPDATED,
+                entity_type=AuditEntityType.INTEGRATION,
+                entity_id=integration.id,
+                details={
+                    'previous_status': old_status,
+                    'new_status': integration.status,
+                    'validation_reason': f"Status recalculated on update",
+                },
+            )
+
+        if computed_status != IntegrationStatus.VALID:
+            msg = f"Integration updated with non-valid status: {computed_status}"
+            logger.warning("integration_updated_non_valid", integration_id=integration.id, status=computed_status)
+            warnings.append(msg)
+
         # Audit if user provided
         if user:
             AuditService.create_entry(
@@ -217,7 +261,9 @@ class IntegrationService:
                 entity_id=integration.id,
                 details={'name': integration.name}
             )
-        
+
+        integration._warnings = warnings
+
         return integration
     
     @transaction.atomic

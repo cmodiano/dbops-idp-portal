@@ -6,6 +6,7 @@
  */
 
 import { apiFetch, apiFetchRaw } from './api_client';
+import logger from './logger';
 
 /** Target from inventory API (for pattern/manual resolution). */
 export interface InventoryTarget {
@@ -112,7 +113,7 @@ export interface ListExecutionsResponse {
   pagination: {
     page: number;
     page_size: number;
-    total_count: number;
+    total: number;
     total_pages: number;
   };
 }
@@ -142,7 +143,7 @@ function buildFilterParams(filters?: ExecutionFilters): string {
  * @param offset - Offset for pagination (default 0)
  * @param scope - "mine" for user's executions (default), "all" for all executions (DBA/DBOPS only)
  * @param filters - Advanced filters (Story 9.10)
- * @returns ListExecutionsResponse with data and pagination (total_count for UI)
+ * @returns ListExecutionsResponse with data and pagination (total for UI)
  */
 export async function listExecutions(
   limit = 50,
@@ -164,7 +165,7 @@ export interface PendingApprovalsResponse {
   pagination: {
     page: number;
     page_size: number;
-    total_count: number;
+    total: number;
     total_pages: number;
   };
 }
@@ -315,6 +316,23 @@ export async function fetchExecutionTags(): Promise<string[]> {
   return apiFetch<string[]>('/executions/tags');
 }
 
+// === Story 17.14: Cancel Execution ===
+
+/**
+ * Cancel an execution (Story 17.14, AC3).
+ *
+ * @param executionId - Execution ID to cancel
+ * @returns ExecutionResponse with updated status (CANCELLED)
+ * @throws Error if user cannot cancel (403), invalid status (400), or not found (404)
+ */
+export async function cancelExecution(
+  executionId: number
+): Promise<ExecutionResponse> {
+  return apiFetch<ExecutionResponse>(`/executions/${executionId}/cancel`, {
+    method: 'PATCH',
+  });
+}
+
 // === Story 9.1: Remediation Suggestions (FR36) ===
 
 /**
@@ -359,71 +377,144 @@ export async function fetchRemediationContext(
  * @returns Array of InventoryItem
  * @throws Error with code 'INVENTORY_UNAVAILABLE' if inventory unavailable (HTTP 503)
  */
+// Shared cache for inventory items to prevent duplicate API calls
+const inventoryCache = new Map<string, { data: InventoryItem[]; timestamp: number }>();
+const loadingPromises = new Map<string, Promise<InventoryItem[]>>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 export async function fetchInventoryItems(
-  type: 'databases' | 'servers' | 'environments',
-  environment?: string
+  type: 'databases' | 'servers' | 'instances' | 'environments',
+  environment?: string,
+  /** Story 23.6 - Optional server names to filter instances/databases. */
+  options?: { server_names?: string[] }
 ): Promise<InventoryItem[]> {
-  const params = environment ? `?environment=${encodeURIComponent(environment)}` : '';
-  const cacheKey = `inventory_cache_${type}${environment ? `_${environment}` : ''}`;
+  // Story 23.6 - Build query string with optional server_names filter
+  const queryParams = new URLSearchParams();
+  if (environment) queryParams.set('environment', environment);
+  if (options?.server_names && options.server_names.length > 0) {
+    queryParams.set('server_names', options.server_names.join(','));
+  }
+  const params = queryParams.toString() ? `?${queryParams.toString()}` : '';
+  // MEDIUM-2 fix: Include server_names in cache key to prevent incorrect cache hits
+  // Story 23.6 - Cache must differentiate by server_names filter
+  const serverNamesSuffix = options?.server_names && options.server_names.length > 0
+    ? `_${options.server_names.join(',')}`
+    : '';
+  const cacheKey = `inventory_cache_${type}${environment ? `_${environment}` : ''}${serverNamesSuffix}`;
+  const apiKey = `${type}${params}`;
 
-  try {
-    const response = await fetch(`/api/v1/inventory/${type}${params}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-    });
-
-    if (!response.ok) {
-      if (response.status === 503) {
-        // Inventory unavailable - try to use localStorage cache if available (Task 4.2, 4.3)
-        const cached = localStorage.getItem(cacheKey);
-        if (cached) {
-          try {
-            const cachedData = JSON.parse(cached);
-            const cacheTime = cachedData.timestamp;
-            const now = Date.now();
-            // Use cache if less than 5 minutes old (Task 4.3)
-            if (now - cacheTime < 5 * 60 * 1000) {
-              const error = new Error('Inventaire temporairement indisponible — dernières valeurs en cache');
-              (error as Error & { code: string }).code = 'INVENTORY_UNAVAILABLE';
-              (error as Error & { useCache: boolean }).useCache = true;
-              (error as Error & { cachedItems: InventoryItem[] }).cachedItems = cachedData.items;
-              throw error;
-            }
-          } catch (parseError) {
-            // Invalid cache JSON or missing timestamp - log and continue to throw original error
-            console.warn('Invalid inventory cache format', parseError);
-          }
-        }
-        const error = new Error('Inventaire temporairement indisponible — dernières valeurs en cache');
-        (error as Error & { code: string }).code = 'INVENTORY_UNAVAILABLE';
-        throw error;
-      }
-      throw new Error(`Failed to fetch inventory: ${response.statusText}`);
+  // Special handling for environments: share cache with fetchEnvironments
+  if (type === 'environments' && !environment) {
+    if (import.meta.env.DEV) {
+      logger.debug('Shared cache - fetchInventoryItems(environments) using fetchEnvironments cache');
     }
-
-    const data = await response.json();
-    const items = data.data || [];
-
-    // Cache successful response in localStorage (Task 4.3)
-    if (items.length > 0) {
-      localStorage.setItem(
-        cacheKey,
-        JSON.stringify({
-          items,
-          timestamp: Date.now(),
-        })
-      );
-    }
-
+    const { fetchEnvironments } = await import('./reference_service');
+    const envStrings = await fetchEnvironments();
+    // Convert string[] to InventoryItem[] format
+    const items: InventoryItem[] = envStrings.map((env) => ({
+      id: env,
+      name: env.charAt(0).toUpperCase() + env.slice(1),
+      environment: null,
+    }));
+    // Cache in inventoryCache for consistency
+    inventoryCache.set(apiKey, { data: items, timestamp: Date.now() });
     return items;
-  } catch (err) {
-    // Re-throw with cache info if available
-    if (err instanceof Error && (err as Error & { useCache?: boolean }).useCache) {
+  }
+
+  // Check memory cache first
+  const cached = inventoryCache.get(apiKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.data;
+  }
+
+  // Check if request is already in progress
+  const existingPromise = loadingPromises.get(apiKey);
+  if (existingPromise) {
+    return existingPromise;
+  }
+
+  // Start new request
+  const promise = (async () => {
+    try {
+      const response = await fetch(`/api/v1/inventory/${type}${params}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        if (response.status === 503) {
+          // Inventory unavailable - try sessionStorage cache if available (Task 4.2, 4.3)
+          // Security (MED-5): sessionStorage mitigates XSS risk for infrastructure topology data
+          // (server names, DB names). localStorage persisted indefinitely → extended XSS exposure.
+          // sessionStorage auto-clears on tab close → limits attack window to active session.
+          // Risk: MEDIUM-HIGH (plaintext infra topology readable via DevTools if XSS present)
+          const cached = sessionStorage.getItem(cacheKey);
+          if (cached) {
+            let cachedData;
+            try {
+              cachedData = JSON.parse(cached);
+            } catch (parseError) {
+              // Invalid JSON - log and continue to throw original 503 error
+              logger.warn('Invalid inventory cache JSON', { error: parseError instanceof Error ? parseError.message : String(parseError) });
+            }
+
+            // Validate cache structure (defense against XSS-injected malformed data)
+            if (cachedData && typeof cachedData.timestamp === 'number' && Array.isArray(cachedData.items)) {
+              const cacheTime = cachedData.timestamp;
+              const now = Date.now();
+              // Use cache if less than TTL (Task 4.3) - FIXED: use CACHE_TTL constant
+              if (now - cacheTime < CACHE_TTL) {
+                const error = new Error('Inventaire temporairement indisponible — dernières valeurs en cache');
+                (error as Error & { code: string }).code = 'INVENTORY_UNAVAILABLE';
+                (error as Error & { useCache: boolean }).useCache = true;
+                (error as Error & { cachedItems: InventoryItem[] }).cachedItems = cachedData.items;
+                throw error;
+              }
+            } else if (cachedData) {
+              // Invalid cache structure - log warning
+              logger.warn('Invalid inventory cache structure (missing timestamp or items array)');
+            }
+          }
+          const error = new Error('Inventaire temporairement indisponible — dernières valeurs en cache');
+          (error as Error & { code: string }).code = 'INVENTORY_UNAVAILABLE';
+          throw error;
+        }
+        throw new Error(`Failed to fetch inventory: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const items = data.data || [];
+
+      // Update memory cache
+      inventoryCache.set(apiKey, { data: items, timestamp: Date.now() });
+      loadingPromises.delete(apiKey);
+
+      // Cache successful response in sessionStorage (Task 4.3, Story 22.17 MED-5)
+      // Security: sessionStorage limits XSS exposure — cache cleared on tab close
+      if (items.length > 0) {
+        sessionStorage.setItem(
+          cacheKey,
+          JSON.stringify({
+            items,
+            timestamp: Date.now(),
+          })
+        );
+      }
+
+      return items;
+    } catch (err) {
+      loadingPromises.delete(apiKey);
+      // Re-throw with cache info if available
+      if (err instanceof Error && (err as Error & { useCache?: boolean }).useCache) {
+        throw err;
+      }
       throw err;
     }
-    throw err;
-  }
+  })();
+
+  loadingPromises.set(apiKey, promise);
+  return promise;
 }

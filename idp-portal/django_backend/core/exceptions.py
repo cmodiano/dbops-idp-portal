@@ -1,5 +1,5 @@
 """
-Custom exceptions and exception handler for DRF to match FastAPI error format.
+Custom exceptions and exception handler for DRF.
 Story M.8 - Task 5: Enhanced error handling with structured logging.
 """
 
@@ -59,6 +59,24 @@ class ForbiddenError(Exception):
         super().__init__(self.message)
 
 
+class ServiceUnavailableError(Exception):
+    """Exception for 503 Service Unavailable errors (Story 21.6)."""
+    def __init__(self, code="SERVICE_UNAVAILABLE", message="Service unavailable", details=None):
+        self.code = code
+        self.message = message
+        self.details = details or {}
+        super().__init__(self.message)
+
+
+class ConflictError(Exception):
+    """Exception for 409 Conflict errors (Story 18.1)."""
+    def __init__(self, code="CONFLICT", message="Conflict", details=None):
+        self.code = code
+        self.message = message
+        self.details = details or {}
+        super().__init__(self.message)
+
+
 def _get_request_context(context):
     """Extract request context for logging."""
     request = context.get('request')
@@ -77,7 +95,7 @@ def _get_request_context(context):
 
 def custom_exception_handler(exc, context):
     """
-    Custom exception handler that formats errors like FastAPI:
+    Custom exception handler that formats errors:
     {
         "error": {
             "code": "NOT_FOUND",
@@ -200,9 +218,51 @@ def custom_exception_handler(exc, context):
         resp['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
         return resp
 
+    if isinstance(exc, ServiceUnavailableError):
+        logger.warning(
+            "handled_exception",
+            exception_type="ServiceUnavailableError",
+            code=exc.code,
+            message=exc.message,
+            **request_context
+        )
+        resp = Response(
+            {
+                "error": {
+                    "code": exc.code,
+                    "message": exc.message,
+                    "details": exc.details
+                }
+            },
+            status=status.HTTP_503_SERVICE_UNAVAILABLE
+        )
+        resp['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
+        return resp
+
+    if isinstance(exc, ConflictError):
+        logger.warning(
+            "handled_exception",
+            exception_type="ConflictError",
+            code=exc.code,
+            message=exc.message,
+            **request_context
+        )
+        resp = Response(
+            {
+                "error": {
+                    "code": exc.code,
+                    "message": exc.message,
+                    "details": exc.details
+                }
+            },
+            status=status.HTTP_409_CONFLICT
+        )
+        resp['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
+        return resp
+
     # Handle DRF exceptions
     if response is not None:
-        # Convert DRF error format to FastAPI format
+        # Convert DRF error format to standard error format
         if 'detail' in response.data:
             logger.warning(
                 "handled_exception",
@@ -212,7 +272,13 @@ def custom_exception_handler(exc, context):
                 **request_context
             )
             # Story 13.5: 401 auth failures must use UNAUTHORIZED, not VALIDATION_ERROR
-            error_code = "UNAUTHORIZED" if response.status_code == status.HTTP_401_UNAUTHORIZED else "VALIDATION_ERROR"
+            # Story 17.11: 429 throttled uses THROTTLED error code
+            if response.status_code == status.HTTP_401_UNAUTHORIZED:
+                error_code = "UNAUTHORIZED"
+            elif response.status_code == 429:
+                error_code = "THROTTLED"
+            else:
+                error_code = "VALIDATION_ERROR"
             resp = Response(
                 {
                     "error": {
@@ -224,6 +290,9 @@ def custom_exception_handler(exc, context):
                 status=response.status_code
             )
             resp['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
+            # Story 17.11: Propagate Retry-After header from DRF throttle response
+            if 'Retry-After' in response:
+                resp['Retry-After'] = response['Retry-After']
             return resp
 
         # Handle field validation errors

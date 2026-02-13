@@ -1,7 +1,7 @@
 """
 Performance and benchmark tests.
 
-Story M.9: Tests unitaires et d'intégration (parité avec FastAPI)
+Story M.9: Tests unitaires et d'intégration
 Uses pytest-benchmark for performance measurement.
 """
 
@@ -271,7 +271,7 @@ class TestActionCreationPerformance:
         assert result.id is not None
 
         # Verify steps stored
-        stored_steps = result.get_execution_steps()
+        stored_steps = result.execution_steps
         assert len(stored_steps) == 50
 
     def test_bulk_create_100_actions(self, benchmark):

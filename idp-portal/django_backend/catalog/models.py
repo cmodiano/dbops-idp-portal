@@ -1,9 +1,9 @@
-import json
 import logging
 from django.db import models
 from django.db.models import Count, Subquery
 from idp_auth.models import User
 from integrations.models import Integration
+from core.fields import OracleJSONField
 
 logger = logging.getLogger(__name__)
 
@@ -134,26 +134,28 @@ class Action(models.Model):
     description = models.CharField(max_length=4000, null=True, blank=True, db_column='DESCRIPTION')
     category = models.CharField(
         max_length=50,
-        choices=ActionCategory.choices,
-        db_column='CATEGORY'
+        null=True,
+        blank=True,
+        db_column='CATEGORY',
+        help_text='Category code (must exist in REF_CATEGORIES.CODE). Validated by application logic.'
     )
     engine = models.CharField(
         max_length=50,
-        choices=ActionEngine.choices,
-        db_column='ENGINE'
+        db_column='ENGINE',
+        help_text='Engine code (must exist in REF_ENGINES.CODE). Validated by application logic.'
     )
     platform = models.CharField(
         max_length=50,
-        choices=ActionPlatform.choices,
-        db_column='PLATFORM'
+        db_column='PLATFORM',
+        help_text='Platform code (must exist in REF_PLATFORMS.CODE). Validated by application logic.'
     )
-    # CLOB fields - using TextField with JSON serialization helpers
-    parameters_schema = models.TextField(null=True, blank=True, db_column='PARAMETERS_SCHEMA')
-    impact_rules = models.TextField(null=True, blank=True, db_column='IMPACT_RULES')
-    execution_steps = models.TextField(null=True, blank=True, db_column='EXECUTION_STEPS')  # Story M.3: Added for CRUD operations
-    change_type_config = models.TextField(null=True, blank=True, db_column='CHANGE_TYPE_CONFIG')
+    # CLOB fields - using OracleJSONField with automatic JSON handling (Story 17.4)
+    parameters_schema = OracleJSONField(null=True, blank=True, db_column='PARAMETERS_SCHEMA')
+    impact_rules = OracleJSONField(null=True, blank=True, db_column='IMPACT_RULES')
+    execution_steps = OracleJSONField(null=True, blank=True, db_column='EXECUTION_STEPS')
+    change_type_config = OracleJSONField(null=True, blank=True, db_column='CHANGE_TYPE_CONFIG')
     documentation_md = models.TextField(null=True, blank=True, db_column='DOCUMENTATION_MD')
-    remediation_rules = models.TextField(null=True, blank=True, db_column='REMEDIATION_RULES')
+    remediation_rules = OracleJSONField(null=True, blank=True, db_column='REMEDIATION_RULES')
     default_impact_level = models.CharField(
         max_length=20,
         choices=[
@@ -196,102 +198,44 @@ class Action(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
     updated_at = models.DateTimeField(null=True, blank=True, db_column='UPDATED_AT')
-    
+    # Story 18.1: Soft-delete columns for action deactivation
+    deleted_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        db_column='DELETED_BY',
+        related_name='deleted_actions',
+    )
+    deleted_at = models.DateTimeField(null=True, blank=True, db_column='DELETED_AT')
+    deletion_reason = models.CharField(max_length=500, null=True, blank=True, db_column='DELETION_REASON')
+
     # Custom manager
     objects = ActionManager()
 
     class Meta:
         db_table = 'ACTIONS_CATALOG'
         ordering = ['name']
+        indexes = [
+            models.Index(fields=['status'], name='idx_actions_status'),
+            models.Index(fields=['status', 'engine'], name='idx_actions_status_engine'),
+            models.Index(fields=['status', 'created_at'], name='idx_actions_status_created'),
+            # Story 18.1: Index for soft-delete queries
+            models.Index(fields=['deleted_at'], name='idx_actions_deleted_at'),
+        ]
+        constraints = [
+            # Story 18.1: Ensure consistency between status and deleted_at
+            models.CheckConstraint(
+                check=(
+                    models.Q(status='disabled', deleted_at__isnull=False)
+                    | models.Q(status__in=['draft', 'published'], deleted_at__isnull=True)
+                ),
+                name='ck_actions_soft_delete_consistency',
+            ),
+        ]
 
     def __str__(self):
         return self.name
-
-    # JSON field helpers for CLOB fields
-    def get_parameters_schema(self):
-        """Deserialize JSON from CLOB."""
-        if self.parameters_schema:
-            try:
-                return json.loads(self.parameters_schema)
-            except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"Failed to deserialize parameters_schema for Action {self.id}: {e}")
-                return None
-        return None
-
-    def set_parameters_schema(self, value):
-        """Serialize JSON to CLOB."""
-        if value is not None:
-            self.parameters_schema = json.dumps(value)
-        else:
-            self.parameters_schema = None
-
-    def get_impact_rules(self):
-        """Deserialize JSON from CLOB."""
-        if self.impact_rules:
-            try:
-                return json.loads(self.impact_rules)
-            except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"Failed to deserialize impact_rules for Action {self.id}: {e}")
-                return None
-        return None
-
-    def set_impact_rules(self, value):
-        """Serialize JSON to CLOB."""
-        if value is not None:
-            self.impact_rules = json.dumps(value)
-        else:
-            self.impact_rules = None
-
-    def get_change_type_config(self):
-        """Deserialize JSON from CLOB."""
-        if self.change_type_config:
-            try:
-                return json.loads(self.change_type_config)
-            except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"Failed to deserialize change_type_config for Action {self.id}: {e}")
-                return None
-        return None
-
-    def set_change_type_config(self, value):
-        """Serialize JSON to CLOB."""
-        if value is not None:
-            self.change_type_config = json.dumps(value)
-        else:
-            self.change_type_config = None
-
-    def get_remediation_rules(self):
-        """Deserialize JSON from CLOB."""
-        if self.remediation_rules:
-            try:
-                return json.loads(self.remediation_rules)
-            except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"Failed to deserialize remediation_rules for Action {self.id}: {e}")
-                return None
-        return None
-
-    def set_remediation_rules(self, value):
-        """Serialize JSON to CLOB."""
-        if value is not None:
-            self.remediation_rules = json.dumps(value)
-        else:
-            self.remediation_rules = None
-    
-    def get_execution_steps(self):
-        """Deserialize JSON from CLOB."""
-        if self.execution_steps:
-            try:
-                return json.loads(self.execution_steps)
-            except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"Failed to deserialize execution_steps for Action {self.id}: {e}")
-                return None
-        return None
-    
-    def set_execution_steps(self, value):
-        """Serialize JSON to CLOB."""
-        if value is not None:
-            self.execution_steps = json.dumps(value)
-        else:
-            self.execution_steps = None
 
 
 class Tag(models.Model):
@@ -359,3 +303,47 @@ class UserFavorite(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.action.name}"
+
+
+class ActionMutex(models.Model):
+    """
+    ActionMutex model mapping to Oracle ACTION_MUTEX table (V070).
+    Story 25.5: Defines mutual exclusion rules between actions.
+    Prevents incompatible operations from running simultaneously.
+    """
+    action = models.ForeignKey(
+        Action,
+        on_delete=models.CASCADE,
+        db_column='ACTION_ID',
+        related_name='mutex_rules'
+    )
+    incompatible_with = models.ForeignKey(
+        Action,
+        on_delete=models.CASCADE,
+        db_column='INCOMPATIBLE_WITH_ID',
+        related_name='incompatible_mutex_rules'
+    )
+    same_target = models.BooleanField(
+        db_column='SAME_TARGET',
+        help_text='If True: mutex applies only when targeting same target_id. If False: mutex applies globally.'
+    )
+    description = models.CharField(
+        max_length=500,
+        db_column='DESCRIPTION',
+        blank=True,
+        null=True,
+        help_text='Human-readable explanation of why these actions are incompatible'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        db_column='CREATED_AT'
+    )
+
+    class Meta:
+        db_table = 'ACTION_MUTEX'
+        unique_together = [['action', 'incompatible_with']]
+        ordering = ['action', 'incompatible_with']
+
+    def __str__(self):
+        scope = "same target" if self.same_target else "global"
+        return f"{self.action.name} ⊗ {self.incompatible_with.name} ({scope})"

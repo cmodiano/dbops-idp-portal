@@ -1,0 +1,22 @@
+-- V059: Create REF_CATEGORIES table for administrable action categories
+-- Story 2.30: Categories — Define on action and manage admin
+-- Pattern: identical to REF_ENGINES (V049) and REF_PLATFORMS (V051)
+
+CREATE TABLE REF_CATEGORIES (
+    ID            NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    CODE          VARCHAR2(50)  NOT NULL UNIQUE,
+    LABEL         VARCHAR2(100) NOT NULL,
+    DISPLAY_ORDER NUMBER(10)    DEFAULT 0 NOT NULL,
+    IS_ACTIVE     NUMBER(1)     DEFAULT 1 NOT NULL
+);
+
+-- Index for ordered active category queries
+CREATE INDEX IDX_REF_CATEGORIES_ACTIVE_ORDER ON REF_CATEGORIES (IS_ACTIVE, DISPLAY_ORDER);
+
+-- Seed initial categories (French labels)
+INSERT INTO REF_CATEGORIES (CODE, LABEL, DISPLAY_ORDER, IS_ACTIVE) VALUES ('provisioning', 'Approvisionnement', 10, 1);
+INSERT INTO REF_CATEGORIES (CODE, LABEL, DISPLAY_ORDER, IS_ACTIVE) VALUES ('patching', 'Correctifs', 20, 1);
+INSERT INTO REF_CATEGORIES (CODE, LABEL, DISPLAY_ORDER, IS_ACTIVE) VALUES ('administration', 'Administration', 30, 1);
+INSERT INTO REF_CATEGORIES (CODE, LABEL, DISPLAY_ORDER, IS_ACTIVE) VALUES ('monitoring', 'Surveillance', 40, 1);
+INSERT INTO REF_CATEGORIES (CODE, LABEL, DISPLAY_ORDER, IS_ACTIVE) VALUES ('backup', 'Sauvegarde', 50, 1);
+INSERT INTO REF_CATEGORIES (CODE, LABEL, DISPLAY_ORDER, IS_ACTIVE) VALUES ('autres', 'Autres', 99, 1);

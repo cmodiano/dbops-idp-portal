@@ -19,8 +19,9 @@ import {
   Form,
   theme,
   Switch,
+  Tooltip,
 } from 'antd';
-import { PlusOutlined, DeleteOutlined, HolderOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined, HolderOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import {
   DndContext,
   closestCenter,
@@ -38,9 +39,11 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { ParameterDefinition, ParameterSchemaType } from '../../types/api';
+import type { ParameterDefinition, ParameterSchemaType, InventorySourceType } from '../../types/api';
 
 const { Text } = Typography;
+
+const EMPTY_PARAMS: ParameterDefinition[] = [];
 
 export interface ParametersEditorProps {
   value?: ParameterDefinition[];
@@ -55,6 +58,19 @@ const PARAM_TYPE_OPTIONS: { value: ParameterSchemaType; label: string }[] = [
   { value: 'date', label: 'Date (date)' },
   { value: 'date-time', label: 'Date-heure (date-time)' },
   { value: 'select', label: 'Liste (select)' },
+];
+
+/** Story 23.5: Source options for parameter value origin. */
+const SOURCE_OPTIONS: { value: 'manual' | 'inventory'; label: string }[] = [
+  { value: 'manual', label: 'Saisie manuelle' },
+  { value: 'inventory', label: 'Inventaire' },
+];
+
+/** Story 23.5: Inventory entity type options. */
+const INVENTORY_TYPE_OPTIONS: { value: InventorySourceType; label: string }[] = [
+  { value: 'servers', label: 'Serveurs' },
+  { value: 'instances', label: 'Instances' },
+  { value: 'databases', label: 'Bases de données' },
 ];
 
 interface SortableParamCardProps {
@@ -198,12 +214,66 @@ const SortableParamCard: React.FC<SortableParamCardProps> = ({
             />
           </Form.Item>
         )}
+
+        {/* Story 23.5: Source and inventory_type fields */}
+        <Space wrap style={{ width: '100%' }} size="small">
+          <Form.Item
+            label={
+              <span>
+                Source{' '}
+                <Tooltip title="La source détermine comment la valeur sera fournie : saisie manuelle ou sélection depuis l'inventaire">
+                  <InfoCircleOutlined style={{ color: 'rgba(0,0,0,0.45)' }} />
+                </Tooltip>
+              </span>
+            }
+            style={{ marginBottom: 0 }}
+          >
+            <Select
+              value={param.source ?? 'manual'}
+              onChange={(v) => {
+                onParamChange(index, 'source', v);
+                if (v === 'manual') {
+                  onParamChange(index, 'inventory_type', undefined);
+                }
+              }}
+              options={SOURCE_OPTIONS}
+              style={{ width: 180 }}
+              placeholder="Choisir la source"
+              aria-label={`Source parametre ${index + 1}`}
+            />
+          </Form.Item>
+
+          {(param.source === 'inventory') && (
+            <Form.Item
+              label={
+                <span>
+                  Type d&apos;inventaire{' '}
+                  <Tooltip title="Serveurs : liste des serveurs filtrés par environnement. Instances : liste des instances liées au serveur sélectionné. Bases de données : liste des bases de données liées au serveur sélectionné.">
+                    <InfoCircleOutlined style={{ color: 'rgba(0,0,0,0.45)' }} />
+                  </Tooltip>
+                </span>
+              }
+              validateStatus={param.source === 'inventory' && !param.inventory_type ? 'error' : ''}
+              help={param.source === 'inventory' && !param.inventory_type ? "Le type d'inventaire est requis quand la source est 'Inventaire'" : ''}
+              style={{ marginBottom: 0 }}
+            >
+              <Select
+                value={param.inventory_type}
+                onChange={(v) => onParamChange(index, 'inventory_type', v)}
+                options={INVENTORY_TYPE_OPTIONS}
+                style={{ width: 200 }}
+                placeholder="Choisir le type d'entite"
+                aria-label={`Type inventaire parametre ${index + 1}`}
+              />
+            </Form.Item>
+          )}
+        </Space>
       </Space>
     </Card>
   );
 };
 
-export const ParametersEditor: React.FC<ParametersEditorProps> = ({ value = [], onChange }) => {
+export const ParametersEditor: React.FC<ParametersEditorProps> = ({ value = EMPTY_PARAMS, onChange }) => {
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -228,6 +298,12 @@ export const ParametersEditor: React.FC<ParametersEditorProps> = ({ value = [], 
     const current = { ...next[index] };
     if (field === 'enum') {
       current.enum = Array.isArray(fieldValue) ? fieldValue : [];
+    } else if (field === 'source') {
+      current.source = fieldValue as ParameterDefinition['source'];
+      // Story 23.5: Reset inventory_type when source changes to manual
+      if (fieldValue === 'manual') {
+        current.inventory_type = undefined;
+      }
     } else {
       (current as Record<string, unknown>)[field] = fieldValue;
     }

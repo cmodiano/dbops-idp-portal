@@ -1,24 +1,39 @@
 """
 InventoryService for inventory source resolution and target retrieval.
 Story 13.1 - AC1,2: Source inventaire via intégration, fallback DBOPS_INVENTORY.
+Story 23.1 - Config-driven multi-table mapping (servers, instances, databases).
 No local DB table - reads directly from external sources.
 """
+
+from __future__ import annotations
 
 import fnmatch
 import re
 import structlog
+from cachetools import TTLCache
 
 from django.db import connection
 
 from integrations.models import Integration, IntegrationType
+from inventory.mapper import InventoryMapper, MapperValidationError
 from inventory.models import Target, TargetEnvironment, TargetType
 from profiles.models import Profile
 from core.middleware import get_correlation_id
 
 logger = structlog.get_logger(__name__)
 
+# Cache for environments list (TTL 5 minutes to match catalog cache)
+_environments_cache: TTLCache[str, list[str]] = TTLCache(maxsize=1, ttl=300)
+
 # Maximum targets to load for in-memory RBAC filtering
 MAX_TARGETS_FOR_RBAC_FILTER = 5000
+
+# Maximum results from multi-table config queries (防止 DoS via unbounded queries)
+# Story 23.1 code review fix: prevent out-of-memory from million-row tables
+MAX_MULTI_TABLE_RESULTS = 10000
+
+# Maximum results from flat table fallback
+MAX_FLAT_TABLE_RESULTS = 10000
 
 # Whitelist of allowed table/synonym names pattern (alphanumeric, underscore, dot for schema.table)
 SAFE_TABLE_NAME_PATTERN = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$')
@@ -27,6 +42,69 @@ SAFE_TABLE_NAME_PATTERN = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-
 class InventoryServiceError(Exception):
     """Exception raised when inventory service encounters an error."""
     pass
+
+
+def _apply_attribute_filter(
+    servers: list[dict],
+    filter_by_attr: dict,
+    correlation_id: str = '',
+) -> list[dict]:
+    """
+    Apply attribute-based filtering to servers list.
+
+    Filters are cumulative (AND): server must match ALL criteria.
+    If an attribute is absent from server data, that criterion is ignored (WARNING logged).
+
+    Args:
+        servers: List of server dicts
+        filter_by_attr: Dict mapping attribute keys to allowed values.
+        correlation_id: Correlation ID for logging.
+
+    Returns:
+        Filtered list of servers matching all criteria.
+
+    Story 23.4 - AC2.
+    """
+    nb_before = len(servers)
+    if not filter_by_attr:
+        return servers
+
+    filtered = list(servers)
+
+    for attr_key, allowed_values in filter_by_attr.items():
+        if not allowed_values:
+            continue
+
+        # Check if attribute exists in any server
+        has_attribute = any(attr_key in srv for srv in servers)
+        if not has_attribute:
+            logger.warning(
+                "rbac_filter_attribute_not_found",
+                attribute=attr_key,
+                allowed_values=allowed_values,
+                correlation_id=correlation_id,
+            )
+            continue
+
+        # Case-insensitive matching for attribute values
+        allowed_lower = [str(v).lower() for v in allowed_values]
+        filtered = [
+            srv for srv in filtered
+            if str(srv.get(attr_key, '')).lower() in allowed_lower
+        ]
+
+    nb_after = len(filtered)
+
+    # Code review fix: Log filter application with nb_before/after per AC2
+    logger.info(
+        "rbac_filter_by_attribute_applied",
+        filter=filter_by_attr,
+        nb_servers_before=nb_before,
+        nb_servers_after=nb_after,
+        correlation_id=correlation_id,
+    )
+
+    return filtered
 
 
 class InventoryService:
@@ -272,6 +350,7 @@ class InventoryService:
             where_clause = "WHERE " + " AND ".join(conditions)
 
         # Count query
+        # nosec B608 - table_or_synonym validated by SAFE_TABLE_NAME_PATTERN above
         count_sql = f"SELECT COUNT(*) FROM {table_or_synonym} {where_clause}"
 
         # Data query with pagination
@@ -279,6 +358,7 @@ class InventoryService:
         params['offset'] = offset
         params['limit'] = page_size
 
+        # nosec B608 - table_or_synonym validated by SAFE_TABLE_NAME_PATTERN above
         data_sql = f"""
             SELECT NAME, ENVIRONMENT, TYPE
             FROM {table_or_synonym}
@@ -300,17 +380,18 @@ class InventoryService:
 
             results = []
             for row in rows:
-                # Normalize environment value (certif -> staging, case insensitive)
+                # Story 21.1: Use raw environment values - inventory is source of truth
+                # MEDIUM-1 FIX: Removed confusing "Oracle recursion" comment - no recursion here
+                # Normalization moved to RBAC layer (Story 21.2) for case-insensitive matching
                 raw_env = (row[1] or '').lower().strip()
-                normalized_env = self._normalize_environment(raw_env)
 
-                # Normalize target type
+                # Normalize target type (unchanged)
                 raw_type = (row[2] or '').lower().strip()
                 normalized_type = raw_type if raw_type in TargetType.VALUES else TargetType.SERVER
 
                 results.append({
                     'name': row[0],
-                    'environment': normalized_env,
+                    'environment': raw_env,
                     'target_type': normalized_type,
                     'metadata': None,
                 })
@@ -318,7 +399,7 @@ class InventoryService:
             logger.info(
                 "oracle_inventory_read",
                 source=table_or_synonym,
-                total_count=total_count,
+                total=total_count,
                 returned_count=len(results),
                 correlation_id=correlation_id
             )
@@ -329,11 +410,14 @@ class InventoryService:
             # Re-raise our own exceptions
             raise
         except Exception as e:
+            # Story 17.6: Justified broad catch - Oracle DB can raise various exceptions
             logger.error(
                 "oracle_inventory_read_error",
                 source=table_or_synonym,
                 error=str(e),
-                correlation_id=correlation_id
+                error_type=type(e).__name__,
+                correlation_id=correlation_id,
+                exc_info=True,
             )
             raise InventoryServiceError(
                 f"Failed to read inventory from {table_or_synonym}: {str(e)}"
@@ -380,52 +464,116 @@ class InventoryService:
         # Aggregate permissions from all profiles (RM6: cumul multi-profils)
         allowed_environments: set[str] = set()
         target_restrictions: list[tuple[str, list[str] | None]] = []
+        # Story 23.4: Collect attribute filters per profile for post-restriction filtering
+        attribute_filters: list[dict | None] = []
+        # Story 25.6: Collect exclusion patterns from all profiles (union = most restrictive)
+        all_exclusion_patterns: list[str] = []
         has_all_access = False
+        all_access_attribute_filters: list[dict | None] = []
 
         for profile in profiles:
             is_admin = getattr(profile, 'is_admin', 0) == 1
 
-            # Get action permissions for environments (normalize so certif/certification match staging)
+            # Story 21.2, Task 1.1: Build allowed_environments with both raw and normalized values
+            # This allows matching targets with raw values (e.g., certif) against profiles with aliases
             action_perm = getattr(profile, 'profileactionpermission', None)
             if action_perm:
                 envs = action_perm.get_environments()
                 if envs:
                     for e in envs:
                         if isinstance(e, str):
-                            allowed_environments.add(self._normalize_environment(e))
+                            raw_env = (e or '').strip().lower()
+                            normalized_env = self._normalize_environment(e)
+
+                            # Add normalized value (for alias handling: certif -> staging)
+                            allowed_environments.add(normalized_env)
+
+                            # Also add raw value to match targets with raw environments
+                            # Example: profile has "certif" -> adds both "staging" and "certif"
+                            if raw_env and raw_env != normalized_env:
+                                allowed_environments.add(raw_env)
             elif is_admin:
                 # Admin profiles without ProfileActionPermission: full environment access
-                allowed_environments.update(TargetEnvironment.VALUES)
+                # Story 13.7: Get environments from inventory instead of hardcoded list
+                try:
+                    allowed_environments.update(self.list_environments())
+                except InventoryServiceError:
+                    # Fallback to default environments if inventory unavailable
+                    allowed_environments.update(self.get_default_environments())
 
             # Get target permissions
             target_perm = getattr(profile, 'profiletargetpermission', None)
+            # Story 23.4: Get attribute filter for this profile
+            attr_filter = None
+            if target_perm:
+                try:
+                    attr_filter = target_perm.get_filter_by_attribute()
+                except Exception as e:
+                    logger.error(
+                        "rbac_filter_by_attribute_error",
+                        profile_id=profile.id,
+                        error=str(e),
+                        correlation_id=correlation_id
+                    )
+                
+                # Story 25.6: Get exclusion patterns for this profile
+                try:
+                    patterns = target_perm.get_exclusion_patterns()
+                    if patterns:
+                        all_exclusion_patterns.extend(patterns)
+                        logger.debug(
+                            "rbac_exclusion_patterns_collected",
+                            profile_id=profile.id,
+                            patterns=patterns,
+                            correlation_id=correlation_id
+                        )
+                except Exception as e:
+                    logger.warning(
+                        "rbac_exclusion_patterns_error",
+                        profile_id=profile.id,
+                        error=str(e),
+                        correlation_id=correlation_id
+                    )
+
             if target_perm:
                 perm_type = target_perm.permission_type
                 if perm_type == 'ALL':
                     has_all_access = True
+                    all_access_attribute_filters.append(attr_filter)
                 elif perm_type == 'PATTERN':
                     patterns = target_perm.get_target_patterns()
                     if patterns:
                         target_restrictions.append(('PATTERN', patterns))
+                        attribute_filters.append(attr_filter)
                 elif perm_type == 'LIST':
                     names = target_perm.get_target_names()
                     if names:
                         target_restrictions.append(('LIST', names))
+                        attribute_filters.append(attr_filter)
             elif is_admin:
                 # Admin profiles without ProfileTargetPermission: full target access
                 has_all_access = True
+                all_access_attribute_filters.append(None)
 
         # When admin profiles have actions_type=ALL but empty environments
         if not allowed_environments and any(getattr(p, 'is_admin', 0) == 1 for p in profiles):
-            allowed_environments = set(TargetEnvironment.VALUES)
+            # Story 13.7: Get environments from inventory instead of hardcoded list
+            try:
+                allowed_environments = set(self.list_environments())
+            except InventoryServiceError:
+                # Fallback to default environments if inventory unavailable
+                allowed_environments = set(self.get_default_environments())
 
-        # Apply environment filter if provided (normalize query param to match allowed set)
+        # Story 21.2, Task 1.3: Apply environment filter with case-insensitive matching
         if environment:
-            env_normalized = self._normalize_environment(environment) if isinstance(environment, str) else environment
-            if env_normalized not in allowed_environments:
+            env_lower = (environment or '').strip().lower()
+            # Check if user has access to this environment (case-insensitive)
+            allowed_lower = {e.lower() for e in allowed_environments}
+            if env_lower not in allowed_lower:
                 # User doesn't have access to this environment
                 return [], 0, False
-            allowed_environments = {env_normalized}
+            # Filter to only this environment (keep case-insensitive matching)
+            allowed_environments = {e for e in allowed_environments if e.lower() == env_lower}
 
         if not allowed_environments:
             logger.info(
@@ -435,18 +583,80 @@ class InventoryService:
             )
             return [], 0, False
 
-        # Get targets from source for RBAC filtering
-        # NOTE: RBAC filtering is done in-memory. For large inventories (>5000),
-        # consider implementing server-side RBAC filtering in the SQL query.
-        all_targets, total_available = self.list_targets(
-            environment=None,  # We'll filter ourselves
-            search=search,
-            target_type=target_type,
-            page=1,
-            page_size=MAX_TARGETS_FOR_RBAC_FILTER
-        )
+        # Story 23.2 AC4: Detect multi-table config and use list_servers if active
+        mapper = self._get_inventory_mapper()
+        use_multi_table = mapper is not None and mapper.is_multi_table
 
-        if total_available > MAX_TARGETS_FOR_RBAC_FILTER:
+        if use_multi_table:
+            # Multi-table path: use list_servers (no pagination, returns all for env)
+            # We pass environment=None equivalent by loading all servers then filtering
+            all_targets = []
+            failed_envs = []
+            for env in allowed_environments:
+                try:
+                    servers = self.list_servers(environment=env)
+                    # Normalize to Target-like dicts for compatibility
+                    # Story 23.4: Preserve all server attributes for attribute filtering
+                    for s in servers:
+                        target = {
+                            'name': s.get('name', ''),
+                            'environment': s.get('environment', ''),
+                            'target_type': 'server',
+                            'metadata': None,
+                        }
+                        # Carry over extra mapped attributes (engine_type, zone, etc.)
+                        for key, val in s.items():
+                            if key not in target:
+                                target[key] = val
+                        all_targets.append(target)
+                except InventoryServiceError as e:
+                    # Log and track failed environments
+                    failed_envs.append(env)
+                    logger.warning(
+                        "list_servers_failed_for_env",
+                        environment=env,
+                        user_id=user_id,
+                        error=str(e),
+                        correlation_id=correlation_id,
+                    )
+
+            # If ALL environments failed, raise error instead of silent empty result
+            if failed_envs and len(failed_envs) == len(allowed_environments):
+                logger.error(
+                    "list_targets_for_user_all_environments_failed",
+                    user_id=user_id,
+                    failed_environments=failed_envs,
+                    correlation_id=correlation_id,
+                )
+                raise InventoryServiceError(
+                    f"Failed to load servers from all {len(failed_envs)} allowed environments"
+                )
+
+            total_available = len(all_targets)
+            rbac_truncated = False
+
+            logger.info(
+                "rbac_using_multi_table_servers",
+                user_id=user_id,
+                environments_checked=len(allowed_environments),
+                environments_failed=len(failed_envs),
+                total_servers=total_available,
+                correlation_id=correlation_id,
+            )
+        else:
+            # Get targets from source for RBAC filtering (legacy path)
+            # NOTE: RBAC filtering is done in-memory. For large inventories (>5000),
+            # consider implementing server-side RBAC filtering in the SQL query.
+            all_targets, total_available = self.list_targets(
+                environment=None,  # We'll filter ourselves
+                search=search,
+                target_type=target_type,
+                page=1,
+                page_size=MAX_TARGETS_FOR_RBAC_FILTER
+            )
+            rbac_truncated = total_available > MAX_TARGETS_FOR_RBAC_FILTER
+
+        if total_available > MAX_TARGETS_FOR_RBAC_FILTER and not use_multi_table:
             logger.warning(
                 "rbac_filter_truncated",
                 total_available=total_available,
@@ -456,10 +666,11 @@ class InventoryService:
                 message="Inventory too large for in-memory RBAC filtering. Results may be incomplete."
             )
 
-        # Filter by environment
+        # Story 21.2, Task 1.2: Filter by environment with case-insensitive comparison
+        allowed_environments_lower = {e.lower() for e in allowed_environments}
         filtered_targets = [
             t for t in all_targets
-            if t['environment'] in allowed_environments
+            if (t.get('environment') or '').lower() in allowed_environments_lower
         ]
         env_filtered_count = len(filtered_targets)
 
@@ -472,14 +683,36 @@ class InventoryService:
                 filtered_targets, target_restrictions
             )
 
-        # Pagination
-        total_count = len(filtered_targets)
+        # Story 23.4: Apply attribute-based filtering per profile (OR between profiles)
+        filtered_targets = self._apply_attribute_filters_across_profiles(
+            filtered_targets,
+            has_all_access,
+            all_access_attribute_filters,
+            target_restrictions,
+            attribute_filters,
+            correlation_id,
+        )
+        after_attribute_filter_count = len(filtered_targets)
+
+        # Story 25.6: Apply exclusion patterns (deny explicit - applied AFTER inclusion and attributes)
+        if all_exclusion_patterns:
+            # Deduplicate patterns (union from multiple profiles)
+            unique_exclusion_patterns = list(set(all_exclusion_patterns))
+            filtered_targets = self._apply_exclusion_patterns(
+                filtered_targets,
+                unique_exclusion_patterns,
+                correlation_id
+            )
+
+        # Pagination (Story 22.6: renamed total_count → total)
+        total = len(filtered_targets)
         start_index = (page - 1) * page_size
         end_index = start_index + page_size
         page_results = filtered_targets[start_index:end_index]
-        rbac_truncated = total_available > MAX_TARGETS_FOR_RBAC_FILTER
+        # rbac_truncated already set above (multi-table: always False, legacy: based on count)
 
         # RBAC traceability log (Story 13.3, Subtask 1.5) - single consolidated log
+        # Story 25.6: Include exclusion step traceability
         logger.info(
             "rbac_targets_filtered",
             user_id=user_id,
@@ -487,16 +720,18 @@ class InventoryService:
             restriction_type=restriction_type,
             restriction_count=len(target_restrictions) if target_restrictions else 0,
             has_all_access=has_all_access,
+            exclusion_patterns_count=len(all_exclusion_patterns) if all_exclusion_patterns else 0,
             total_before_filter=len(all_targets),
             after_env_filter=env_filtered_count,
-            after_target_filter=len(filtered_targets),
-            total_count=total_count,
+            after_attribute_filter=after_attribute_filter_count,
+            after_exclusion_filter=len(filtered_targets),
+            total=total,
             returned_count=len(page_results),
             rbac_truncated=rbac_truncated,
             correlation_id=correlation_id
         )
 
-        return page_results, total_count, rbac_truncated
+        return page_results, total, rbac_truncated
 
     def _apply_target_restrictions(self, targets: list[dict],
                                    restrictions: list[tuple[str, list[str] | None]]) -> list[dict]:
@@ -538,50 +773,221 @@ class InventoryService:
 
         return result
 
+    def _apply_attribute_filters_across_profiles(
+        self,
+        targets: list[dict],
+        has_all_access: bool,
+        all_access_attribute_filters: list[dict | None],
+        target_restrictions: list[tuple[str, list[str] | None]],
+        attribute_filters: list[dict | None],
+        correlation_id: str,
+    ) -> list[dict]:
+        """
+        Apply attribute-based filters across profiles (OR between profiles).
+
+        Story 23.4 - AC2:
+        - Within a profile: attribute filters are cumulative (AND)
+        - Between profiles: results are additive (OR)
+        - If ANY profile has no attribute filter, its targets pass through unfiltered
+
+        Performance Note:
+            Applies each filter independently (O(n×m) where n=servers, m=filters).
+            May be slow with >1000 servers and >5 active filters.
+
+        Args:
+            targets: Pre-filtered targets (after env + target restrictions)
+            has_all_access: Whether any profile has ALL target access
+            all_access_attribute_filters: Attribute filters for ALL-access profiles
+            target_restrictions: List of (type, values) for non-ALL profiles
+            attribute_filters: Parallel list of attribute filters for non-ALL profiles
+            correlation_id: Correlation ID for logging
+
+        Returns:
+            Targets filtered by attribute filters (OR across profiles)
+        """
+        # Collect all active attribute filters
+        active_filters = []
+        has_unfiltered_profile = False
+
+        # Check ALL-access profiles
+        if has_all_access:
+            for af in all_access_attribute_filters:
+                if af:
+                    active_filters.append(af)
+                else:
+                    has_unfiltered_profile = True
+
+        # Check non-ALL profiles
+        for af in attribute_filters:
+            if af:
+                active_filters.append(af)
+            else:
+                has_unfiltered_profile = True
+
+        # If no attribute filters at all, or any profile has no filter, return as-is
+        if not active_filters or has_unfiltered_profile:
+            return targets
+
+        # Code review fix: Use tuple (name, environment) as key to avoid name collisions across environments
+        # Apply each filter independently and union results (OR between profiles)
+        result_set: set[tuple[str, str]] = set()
+        result_targets: dict[tuple[str, str], dict] = {}
+
+        for attr_filter in active_filters:
+            filtered = _apply_attribute_filter(targets, attr_filter, correlation_id)
+            for t in filtered:
+                name = t.get('name', '')
+                env = t.get('environment', '')
+                key = (name, env)
+                if key not in result_set:
+                    result_set.add(key)
+                    result_targets[key] = t
+
+        nb_before = len(targets)
+        nb_after = len(result_targets)
+
+        logger.info(
+            "rbac_filter_by_attribute_applied_across_profiles",
+            nb_filters=len(active_filters),
+            nb_servers_before=nb_before,
+            nb_servers_after=nb_after,
+            correlation_id=correlation_id,
+        )
+
+        # Preserve original order
+        return [t for t in targets if (t.get('name', ''), t.get('environment', '')) in result_set]
+
+    def _apply_exclusion_patterns(
+        self,
+        targets: list[dict],
+        exclusion_patterns: list[str],
+        correlation_id: str,
+    ) -> list[dict]:
+        """
+        Apply exclusion patterns to filter out targets matching any pattern.
+        
+        Story 25.6 - Deny explicit RBAC:
+        - Exclusion patterns are applied AFTER inclusion rules (LIST/PATTERN/ALL)
+        - Exclusion patterns are applied AFTER attribute filters
+        - If a target matches ANY exclusion pattern, it's removed from results
+        - Matching is case-insensitive using fnmatch (glob-style: *, ?, [abc])
+        
+        Code review fix: Log warning for patterns that never match any target (potential typo).
+        
+        Args:
+            targets: Pre-filtered targets (after inclusion + attributes)
+            exclusion_patterns: List of glob patterns to exclude
+            correlation_id: Correlation ID for logging
+        
+        Returns:
+            Targets with exclusions applied (subset of input)
+        """
+        if not exclusion_patterns:
+            return targets
+        
+        nb_before = len(targets)
+        result = []
+        excluded_count = 0
+        
+        # Code review fix: Track which patterns matched at least one target
+        pattern_match_count = {pattern: 0 for pattern in exclusion_patterns}
+        
+        for target in targets:
+            target_name = target.get('name', '').lower()
+            is_excluded = False
+            
+            for pattern in exclusion_patterns:
+                pattern_lower = pattern.lower()
+                if fnmatch.fnmatch(target_name, pattern_lower):
+                    is_excluded = True
+                    excluded_count += 1
+                    pattern_match_count[pattern] += 1
+                    logger.debug(
+                        "rbac_target_excluded",
+                        target_name=target.get('name'),
+                        exclusion_pattern=pattern,
+                        correlation_id=correlation_id
+                    )
+                    break
+            
+            if not is_excluded:
+                result.append(target)
+        
+        nb_after = len(result)
+        
+        # Code review fix: Warn about patterns that never matched anything (potential typo/misconfiguration)
+        unused_patterns = [p for p, count in pattern_match_count.items() if count == 0]
+        if unused_patterns:
+            logger.warning(
+                "rbac_exclusion_patterns_never_matched",
+                unused_patterns=unused_patterns,
+                nb_targets_checked=nb_before,
+                message="These exclusion patterns did not match any target (check for typos or misconfiguration)",
+                correlation_id=correlation_id,
+            )
+        
+        logger.info(
+            "rbac_exclusion_patterns_applied",
+            nb_patterns=len(exclusion_patterns),
+            patterns=exclusion_patterns,
+            nb_targets_before=nb_before,
+            nb_targets_excluded=excluded_count,
+            nb_targets_after=nb_after,
+            correlation_id=correlation_id,
+        )
+        
+        return result
+
     def _normalize_environment(self, raw_env: str) -> str:
         """
         Normalize environment value from external sources.
-        Handles aliases like 'certif' -> 'staging'.
+        Handles legacy aliases like 'certif' -> 'staging'.
+        
+        Story 21.1: Simplified to only apply aliases without recursion.
+        Inventory is the source of truth - unknown values are returned as-is.
 
         Args:
-            raw_env: Raw environment string from Oracle
+            raw_env: Raw environment string
 
         Returns:
-            Normalized environment value
+            Normalized environment value (alias applied or raw value)
         """
-        # Environment aliases mapping
+        # Environment aliases mapping (legacy compatibility)
         env_aliases = {
-            'certif': TargetEnvironment.STAGING,
-            'certification': TargetEnvironment.STAGING,
-            'stg': TargetEnvironment.STAGING,
-            'development': TargetEnvironment.DEV,
-            'production': TargetEnvironment.PROD,
+            'certif': 'staging',
+            'certification': 'staging',
+            'stg': 'staging',
+            'development': 'dev',
+            'production': 'prod',
         }
 
-        if raw_env in TargetEnvironment.VALUES:
-            return raw_env
-        if raw_env in env_aliases:
-            return env_aliases[raw_env]
-
-        # Default to dev for unknown values, but log warning
-        if raw_env:
-            logger.warning(
-                "unknown_environment_value_defaulted",
-                raw_value=raw_env,
-                defaulted_to=TargetEnvironment.DEV,
-                correlation_id=get_correlation_id()
-            )
-        return TargetEnvironment.DEV
+        # Normalize input
+        normalized = (raw_env or '').strip().lower()
+        
+        # Apply alias if exists
+        if normalized in env_aliases:
+            return env_aliases[normalized]
+        
+        # Return raw value - inventory is source of truth
+        return normalized
 
     def get_allowed_environments_for_user(self, ad_groups: list[str]) -> set[str]:
         """
         Get allowed environments for a user based on their profiles.
+        
+        Story 21.2, Task 2.1: Returns both raw and normalized values for consistency
+        with list_targets_for_user RBAC filtering.
+        
+        MEDIUM-2 FIX: This method returns a set that may contain both the normalized
+        form and raw form of aliased environments. For example, a profile with
+        ["certif"] will return {"staging", "certif"} because certif normalizes to staging.
 
         Args:
             ad_groups: User's AD groups
 
         Returns:
-            Set of allowed environment values
+            Set of allowed environment values (includes both raw and normalized).
+            Example: profile with ["certif", "lab"] returns {"staging", "certif", "lab"}
         """
         profiles = Profile.objects.find_by_ad_groups(ad_groups).prefetch_related(
             'profileactionpermission'
@@ -595,6 +1001,941 @@ class InventoryService:
                 if envs:
                     for e in envs:
                         if isinstance(e, str):
-                            allowed_environments.add(self._normalize_environment(e))
+                            raw_env = (e or '').strip().lower()
+                            normalized_env = self._normalize_environment(e)
+                            
+                            # Add normalized value (for alias handling)
+                            allowed_environments.add(normalized_env)
+                            
+                            # Also add raw value for consistency with RBAC filtering
+                            if raw_env and raw_env != normalized_env:
+                                allowed_environments.add(raw_env)
 
         return allowed_environments
+
+    def list_environments(self) -> list[str]:
+        """
+        List distinct environments from inventory.
+        Story 21.1: Returns raw environment values from inventory (e.g., dev, lab, staging, prod, certif).
+        Story 13.7 - AC2: Source of truth for environments is inventory.
+        Uses cache to prevent duplicate Oracle queries.
+
+        Returns:
+            List of distinct environment values (raw, not normalized)
+        """
+        correlation_id = get_correlation_id()
+        
+        # Check cache first
+        cache_key = 'environments_list'
+        if cache_key in _environments_cache:
+            cached_result = _environments_cache[cache_key]
+            logger.info(
+                "environments_listed_cached",
+                count=len(cached_result),
+                environments=cached_result,
+                correlation_id=correlation_id
+            )
+            return cached_result
+        
+        integration = self.get_active_inventory_integration()
+
+        # Get targets without filters to extract all environments
+        targets, _ = self.list_targets(
+            environment=None,
+            search=None,
+            target_type=None,
+            page=1,
+            page_size=10000  # Large page size to get all targets
+        )
+
+        # Extract distinct environments (normalized)
+        environments = set()
+        for target in targets:
+            env = target.get('environment')
+            if env:
+                environments.add(env)
+
+        # Sort for consistent ordering
+        result = sorted(environments)
+
+        # Cache result
+        _environments_cache[cache_key] = result
+
+        logger.info(
+            "environments_listed",
+            count=len(result),
+            environments=result,
+            correlation_id=correlation_id
+        )
+
+        return result
+
+    def get_default_environments(self) -> list[str]:
+        """
+        Get default environment values as fallback when inventory is unavailable.
+        Story 13.7 - Fallback to standard values if inventory service fails.
+
+        Returns:
+            List of default environment values (dev, staging, prod)
+        """
+        return ['dev', 'staging', 'prod']
+
+    # --- Story 23.2: Public multi-table inventory methods ---
+
+    def list_servers(
+        self,
+        environment: str,
+        engine_type: str | None = None,
+    ) -> list[dict]:
+        """
+        List servers from multi-table inventory or flat table fallback.
+
+        Performance Note:
+            Results are limited to MAX_MULTI_TABLE_RESULTS (10000).
+            A warning is logged if this limit is reached.
+
+        Args:
+            environment: Target environment (required)
+            engine_type: Optional filter by engine type (oracle, sqlserver, etc.)
+
+        Returns:
+            List of server dicts: [{ id, name, environment, engine_type? }]
+
+        Raises:
+            InventoryServiceError: If inventory source is unreachable or config invalid
+            ValueError: If environment is empty
+        """
+        if not environment or not environment.strip():
+            raise ValueError("environment is required")
+
+        correlation_id = get_correlation_id()
+
+        try:
+            servers = self._read_servers_from_config(environment, engine_type)
+
+            logger.info(
+                "inventory_list_servers",
+                environment=environment,
+                engine_type=engine_type,
+                nb_results=len(servers),
+                correlation_id=correlation_id,
+            )
+
+            if len(servers) >= MAX_MULTI_TABLE_RESULTS:
+                logger.warning(
+                    "inventory_result_limit_reached",
+                    entity="servers",
+                    limit=MAX_MULTI_TABLE_RESULTS,
+                    correlation_id=correlation_id,
+                )
+
+            return servers
+
+        except (InventoryServiceError, ValueError):
+            raise
+        except MapperValidationError as e:
+            logger.error(
+                "inventory_config_validation_failed",
+                entity="servers",
+                environment=environment,
+                error=str(e),
+                correlation_id=correlation_id,
+            )
+            raise InventoryServiceError("Invalid inventory configuration") from e
+        except Exception as e:
+            logger.error(
+                "inventory_list_servers_failed",
+                environment=environment,
+                error=str(e),
+                error_type=type(e).__name__,
+                correlation_id=correlation_id,
+            )
+            raise InventoryServiceError("Failed to list servers") from e
+
+    def list_instances(
+        self,
+        environment: str,
+        server_name: str | None = None,
+        server_names: list[str] | None = None,
+    ) -> list[dict]:
+        """
+        List instances from multi-table inventory.
+
+        NO RBAC FILTERING - caller must validate server_name against user's allowed servers.
+
+        Security Note:
+            This method does NOT apply RBAC filtering. The caller (API layer)
+            is responsible for:
+            1. Validating that user has access to specified server_name(s)
+            2. Only passing server_name(s) from the user's allowed servers list
+            3. Calling list_targets_for_user first to get allowed servers
+
+        Performance Note:
+            Results are limited to MAX_MULTI_TABLE_RESULTS (10000) per query.
+            A warning is logged if this limit is reached.
+
+        Args:
+            environment: Target environment (required)
+            server_name: Filter by single server (exclusive with server_names)
+            server_names: Filter by multiple servers (exclusive with server_name)
+
+        Returns:
+            List of instance dicts: [{ id, name, environment, server_ref, db_ref? }]
+
+        Raises:
+            InventoryServiceError: If inventory source is unreachable or config invalid
+            ValueError: If environment is empty or both server_name and server_names provided
+        """
+        if not environment or not environment.strip():
+            raise ValueError("environment is required")
+
+        if server_name and server_names:
+            raise ValueError("Cannot specify both server_name and server_names")
+
+        if server_names is not None and not server_names:
+            raise ValueError("server_names cannot be empty list")
+
+        correlation_id = get_correlation_id()
+
+        try:
+            if server_names:
+                # Multiple server filter: use optimized IN clause via _read_instances_from_config_multi
+                result = self._read_instances_from_config_multi(environment, server_names)
+            else:
+                result = self._read_instances_from_config(environment, server_name=server_name)
+
+            server_filter = server_name or (f"[{len(server_names)} servers]" if server_names else None)
+            logger.info(
+                "inventory_list_instances",
+                environment=environment,
+                server_filter=server_filter,
+                nb_results=len(result),
+                correlation_id=correlation_id,
+            )
+
+            if len(result) >= MAX_MULTI_TABLE_RESULTS:
+                logger.warning(
+                    "inventory_result_limit_reached",
+                    entity="instances",
+                    limit=MAX_MULTI_TABLE_RESULTS,
+                    correlation_id=correlation_id,
+                )
+
+            return result
+
+        except (InventoryServiceError, ValueError):
+            raise
+        except MapperValidationError as e:
+            logger.error(
+                "inventory_config_validation_failed",
+                entity="instances",
+                environment=environment,
+                error=str(e),
+                correlation_id=correlation_id,
+            )
+            raise InventoryServiceError("Invalid inventory configuration") from e
+        except Exception as e:
+            logger.error(
+                "inventory_list_instances_failed",
+                environment=environment,
+                error=str(e),
+                error_type=type(e).__name__,
+                correlation_id=correlation_id,
+            )
+            raise InventoryServiceError("Failed to list instances") from e
+
+    def list_databases(
+        self,
+        environment: str,
+        server_name: str | None = None,
+        server_names: list[str] | None = None,
+    ) -> list[dict]:
+        """
+        List databases from multi-table inventory.
+
+        NO RBAC FILTERING - caller must validate server_name against user's allowed servers.
+
+        Security Note:
+            This method does NOT apply RBAC filtering. The caller (API layer)
+            is responsible for:
+            1. Validating that user has access to specified server_name(s)
+            2. Only passing server_name(s) from the user's allowed servers list
+            3. Calling list_targets_for_user first to get allowed servers
+
+        Performance Note:
+            Results are limited to MAX_MULTI_TABLE_RESULTS (10000) per query.
+            A warning is logged if this limit is reached.
+
+        Args:
+            environment: Target environment (required)
+            server_name: Filter by single server (exclusive with server_names)
+            server_names: Filter by multiple servers (exclusive with server_name)
+
+        Returns:
+            List of database dicts: [{ id, name, environment }]
+
+        Raises:
+            InventoryServiceError: If inventory source is unreachable or config invalid
+            ValueError: If environment is empty or both server_name and server_names provided
+        """
+        if not environment or not environment.strip():
+            raise ValueError("environment is required")
+
+        if server_name and server_names:
+            raise ValueError("Cannot specify both server_name and server_names")
+
+        if server_names is not None and not server_names:
+            raise ValueError("server_names cannot be empty list")
+
+        correlation_id = get_correlation_id()
+
+        try:
+            if server_names:
+                # Multiple server filter: use optimized IN clause via _read_databases_from_config_multi
+                result = self._read_databases_from_config_multi(environment, server_names)
+            else:
+                result = self._read_databases_from_config(environment, server_name=server_name)
+
+            server_filter = server_name or (f"[{len(server_names)} servers]" if server_names else None)
+            logger.info(
+                "inventory_list_databases",
+                environment=environment,
+                server_filter=server_filter,
+                nb_results=len(result),
+                correlation_id=correlation_id,
+            )
+
+            if len(result) >= MAX_MULTI_TABLE_RESULTS:
+                logger.warning(
+                    "inventory_result_limit_reached",
+                    entity="databases",
+                    limit=MAX_MULTI_TABLE_RESULTS,
+                    correlation_id=correlation_id,
+                )
+
+            return result
+
+        except (InventoryServiceError, ValueError):
+            raise
+        except MapperValidationError as e:
+            logger.error(
+                "inventory_config_validation_failed",
+                entity="databases",
+                environment=environment,
+                error=str(e),
+                correlation_id=correlation_id,
+            )
+            raise InventoryServiceError("Invalid inventory configuration") from e
+        except Exception as e:
+            logger.error(
+                "inventory_list_databases_failed",
+                environment=environment,
+                error=str(e),
+                error_type=type(e).__name__,
+                correlation_id=correlation_id,
+            )
+            raise InventoryServiceError("Failed to list databases") from e
+
+    # --- Story 23.1: Config-driven multi-table entity reading ---
+
+    def _get_inventory_mapper(self) -> InventoryMapper | None:
+        """
+        Get InventoryMapper from active inventory_db integration config.
+
+        Returns:
+            InventoryMapper instance or None if no inventory_db integration
+        """
+        integration = Integration.objects.get_by_type(IntegrationType.INVENTORY_DB)
+        if not integration:
+            return None
+        config = integration.get_config() or {}
+        return InventoryMapper(config)
+
+    def _read_servers_from_config(
+        self,
+        environment: str | None = None,
+        engine_type: str | None = None,
+    ) -> list[dict]:
+        """
+        Read servers from config-driven multi-table or flat table fallback.
+        Story 23.1 AC3: Uses mapped table/columns for servers entity.
+
+        Args:
+            environment: Optional environment filter
+            engine_type: Optional engine type filter (Oracle, SQL Server, etc.)
+
+        Returns:
+            List of dicts with standardized keys (id, name, environment, engine_type)
+        """
+        correlation_id = get_correlation_id()
+        mapper = self._get_inventory_mapper()
+
+        if mapper is None or not mapper.is_multi_table:
+            # AC6 Fallback: use flat table with TYPE=server filter
+            return self._read_servers_flat_fallback(environment)
+
+        try:
+            table = mapper.get_table_name('servers')
+            select = mapper.build_select_clause('servers')
+
+            filters = {}
+            if environment:
+                filters['environment'] = environment
+            if engine_type:
+                filters['engine_type'] = engine_type
+
+            where_clause, params = mapper.build_where_clause('servers', filters)
+
+            # nosec B608 - table/columns validated by mapper via _validate_table_name/_validate_column_name
+            # Oracle subquery pattern to combine ORDER BY + ROWNUM limit (防止 DoS)
+            inner_sql = f"SELECT {select} FROM {table}"
+            if where_clause:
+                inner_sql += f" WHERE {where_clause}"
+            inner_sql += " ORDER BY name"
+            sql = f"SELECT * FROM ({inner_sql}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"
+
+            logger.info(
+                "reading_servers_from_config",
+                table=table,
+                has_env_filter=bool(environment),
+                has_engine_filter=bool(engine_type),
+                correlation_id=correlation_id,
+            )
+
+            return self._execute_mapped_query(sql, params)
+
+        except MapperValidationError as e:
+            logger.error(
+                "server_config_mapping_error",
+                error=str(e),
+                correlation_id=correlation_id,
+            )
+            raise InventoryServiceError(f"Server mapping config error: {e}")
+        except Exception as e:
+            logger.error(
+                "read_servers_from_config_error",
+                error=str(e),
+                error_type=type(e).__name__,
+                correlation_id=correlation_id,
+                exc_info=True,
+            )
+            raise InventoryServiceError(f"Failed to read servers: {e}")
+
+    def _read_instances_from_config(
+        self,
+        environment: str | None = None,
+        server_name: str | None = None,
+    ) -> list[dict]:
+        """
+        Read instances from config-driven multi-table mapping.
+        Story 23.1 AC4: Filters on server_ref column if server_name provided.
+
+        Args:
+            environment: Optional environment filter
+            server_name: Optional server name to filter instances by
+
+        Returns:
+            List of dicts with standardized keys (id, name, environment, server_ref, db_ref)
+        """
+        correlation_id = get_correlation_id()
+        mapper = self._get_inventory_mapper()
+
+        if mapper is None or not mapper.is_multi_table:
+            # AC6 Fallback: flat table mode - no instance concept
+            logger.info(
+                "instances_flat_fallback",
+                reason="no multi-table config",
+                correlation_id=correlation_id,
+            )
+            return []
+
+        entity_config = mapper.get_entity_config('instances')
+        if not entity_config:
+            logger.info(
+                "instances_entity_not_configured",
+                correlation_id=correlation_id,
+            )
+            return []
+
+        try:
+            table = mapper.get_table_name('instances')
+            select = mapper.build_select_clause('instances')
+
+            filters = {}
+            if environment:
+                filters['environment'] = environment
+            if server_name:
+                filters['server_ref'] = server_name
+
+            where_clause, params = mapper.build_where_clause('instances', filters)
+
+            # nosec B608 - table/columns validated by mapper via _validate_table_name/_validate_column_name
+            # Oracle subquery pattern to combine ORDER BY + ROWNUM limit (防止 DoS)
+            inner_sql = f"SELECT {select} FROM {table}"
+            if where_clause:
+                inner_sql += f" WHERE {where_clause}"
+            inner_sql += " ORDER BY name"
+            sql = f"SELECT * FROM ({inner_sql}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"
+
+            logger.info(
+                "reading_instances_from_config",
+                table=table,
+                has_env_filter=bool(environment),
+                has_server_filter=bool(server_name),
+                correlation_id=correlation_id,
+            )
+
+            return self._execute_mapped_query(sql, params)
+
+        except MapperValidationError as e:
+            logger.error(
+                "instance_config_mapping_error",
+                error=str(e),
+                correlation_id=correlation_id,
+            )
+            raise InventoryServiceError(f"Instance mapping config error: {e}")
+        except Exception as e:
+            logger.error(
+                "read_instances_from_config_error",
+                error=str(e),
+                error_type=type(e).__name__,
+                correlation_id=correlation_id,
+                exc_info=True,
+            )
+            raise InventoryServiceError(f"Failed to read instances: {e}")
+
+    def _read_instances_from_config_multi(
+        self,
+        environment: str,
+        server_names: list[str],
+    ) -> list[dict]:
+        """
+        Read instances from multi-table config filtered by multiple servers using IN clause.
+        Optimized version of _read_instances_from_config for server_names parameter.
+
+        Args:
+            environment: Target environment (required)
+            server_names: List of server names to filter by (non-empty)
+
+        Returns:
+            List of instance dicts (deduplicated by id+name)
+        """
+        correlation_id = get_correlation_id()
+        mapper = self._get_inventory_mapper()
+
+        if mapper is None or not mapper.is_multi_table:
+            return []
+
+        entity_config = mapper.get_entity_config('instances')
+        if not entity_config:
+            return []
+
+        try:
+            table = mapper.get_table_name('instances')
+            select = mapper.build_select_clause('instances')
+            server_ref_col = mapper.get_column('instances', 'server_ref')
+            env_col = mapper.get_column('instances', 'environment')
+
+            # Build IN clause with bind parameters
+            in_params = {f'p_server_{i}': sn for i, sn in enumerate(server_names)}
+            in_placeholders = ', '.join(f":{key}" for key in in_params.keys())
+
+            params = {**in_params, 'p_environment': environment}
+
+            # nosec B608 - table/columns validated by mapper
+            inner_sql = (
+                f"SELECT {select} FROM {table} "
+                f"WHERE UPPER({env_col}) = UPPER(:p_environment) "
+                f"AND UPPER({server_ref_col}) IN ({in_placeholders}) "
+                f"ORDER BY name"
+            )
+            sql = f"SELECT * FROM ({inner_sql}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"
+
+            logger.info(
+                "reading_instances_from_config_multi",
+                table=table,
+                server_count=len(server_names),
+                correlation_id=correlation_id,
+            )
+
+            return self._execute_mapped_query(sql, params)
+
+        except MapperValidationError as e:
+            logger.error(
+                "instance_config_mapping_error",
+                error=str(e),
+                correlation_id=correlation_id,
+            )
+            raise InventoryServiceError(f"Instance mapping config error: {e}")
+        except Exception as e:
+            logger.error(
+                "read_instances_from_config_multi_error",
+                error=str(e),
+                error_type=type(e).__name__,
+                correlation_id=correlation_id,
+                exc_info=True,
+            )
+            raise InventoryServiceError(f"Failed to read instances: {e}")
+
+    def _read_databases_from_config(
+        self,
+        environment: str | None = None,
+        server_name: str | None = None,
+    ) -> list[dict]:
+        """
+        Read databases from config-driven multi-table mapping.
+        Story 23.1 AC5: If server_name provided, joins via instances to find related DBs.
+
+        Args:
+            environment: Optional environment filter
+            server_name: Optional server name to filter databases via instance relations
+
+        Returns:
+            List of dicts with standardized keys (id, name, environment)
+        """
+        correlation_id = get_correlation_id()
+        mapper = self._get_inventory_mapper()
+
+        if mapper is None or not mapper.is_multi_table:
+            # AC6 Fallback: flat table mode - no database entity concept
+            logger.info(
+                "databases_flat_fallback",
+                reason="no multi-table config",
+                correlation_id=correlation_id,
+            )
+            return []
+
+        entity_config = mapper.get_entity_config('databases')
+        if not entity_config:
+            logger.info(
+                "databases_entity_not_configured",
+                correlation_id=correlation_id,
+            )
+            return []
+
+        try:
+            db_table = mapper.get_table_name('databases')
+            db_select = mapper.build_select_clause('databases')
+
+            if server_name and mapper.get_entity_config('instances'):
+                # AC5: Join via instances to find DBs related to server
+                return self._read_databases_via_instances(
+                    mapper, environment, server_name
+                )
+
+            # Simple query without server filter
+            filters = {}
+            if environment:
+                filters['environment'] = environment
+
+            where_clause, params = mapper.build_where_clause('databases', filters)
+
+            # nosec B608 - table/columns validated by mapper via _validate_table_name/_validate_column_name
+            # Oracle subquery pattern to combine ORDER BY + ROWNUM limit (防止 DoS)
+            inner_sql = f"SELECT {db_select} FROM {db_table}"
+            if where_clause:
+                inner_sql += f" WHERE {where_clause}"
+            inner_sql += " ORDER BY name"
+            sql = f"SELECT * FROM ({inner_sql}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"
+
+            logger.info(
+                "reading_databases_from_config",
+                table=db_table,
+                has_env_filter=bool(environment),
+                correlation_id=correlation_id,
+            )
+
+            return self._execute_mapped_query(sql, params)
+
+        except MapperValidationError as e:
+            logger.error(
+                "database_config_mapping_error",
+                error=str(e),
+                correlation_id=correlation_id,
+            )
+            raise InventoryServiceError(f"Database mapping config error: {e}")
+        except Exception as e:
+            logger.error(
+                "read_databases_from_config_error",
+                error=str(e),
+                error_type=type(e).__name__,
+                correlation_id=correlation_id,
+                exc_info=True,
+            )
+            raise InventoryServiceError(f"Failed to read databases: {e}")
+
+    def _read_databases_via_instances(
+        self,
+        mapper: InventoryMapper,
+        environment: str | None,
+        server_name: str,
+    ) -> list[dict]:
+        """
+        Read databases by joining through instances table.
+        Uses instance.server_ref = server_name AND instance.db_ref = db.name.
+
+        Args:
+            mapper: Configured InventoryMapper
+            environment: Optional environment filter
+            server_name: Server name to filter by
+
+        Returns:
+            List of database dicts
+        """
+        correlation_id = get_correlation_id()
+
+        db_table = mapper.get_table_name('databases')
+        inst_table = mapper.get_table_name('instances')
+        db_name_col = mapper.get_column('databases', 'name')
+        inst_db_ref_col = mapper.get_column('instances', 'db_ref')
+        inst_server_ref_col = mapper.get_column('instances', 'server_ref')
+        db_select = mapper.build_select_clause('databases')
+
+        # Prefix DB columns with alias 'd'
+        aliased_select = db_select.replace(
+            mapper.get_column('databases', 'name'),
+            f"d.{mapper.get_column('databases', 'name')}",
+            1,
+        )
+        # Replace other DB columns with 'd.' prefix
+        for concept, col in (mapper.get_entity_config('databases') or {}).get('columns', {}).items():
+            aliased_select = aliased_select.replace(col, f"d.{col}")
+        id_col = (mapper.get_entity_config('databases') or {}).get('id_column')
+        if id_col:
+            aliased_select = aliased_select.replace(id_col, f"d.{id_col}")
+
+        # nosec B608 - all identifiers validated by mapper via _validate_table_name/_validate_column_name
+        # Oracle subquery pattern to combine ORDER BY + ROWNUM limit (防止 DoS)
+        inner_sql = (
+            f"SELECT DISTINCT {aliased_select} "
+            f"FROM {db_table} d "
+            f"INNER JOIN {inst_table} i ON UPPER(i.{inst_db_ref_col}) = UPPER(d.{db_name_col}) "
+            f"WHERE UPPER(i.{inst_server_ref_col}) = UPPER(:p_server_name)"
+        )
+        params = {'p_server_name': server_name}
+
+        if environment:
+            db_env_col = mapper.get_column('databases', 'environment')
+            inner_sql += f" AND UPPER(d.{db_env_col}) = UPPER(:p_environment)"
+            params['p_environment'] = environment
+
+        inner_sql += f" ORDER BY d.{db_name_col}"
+        sql = f"SELECT * FROM ({inner_sql}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"
+
+        logger.info(
+            "reading_databases_via_instances",
+            db_table=db_table,
+            inst_table=inst_table,
+            server_name=server_name,
+            has_env_filter=bool(environment),
+            correlation_id=correlation_id,
+        )
+
+        return self._execute_mapped_query(sql, params)
+
+    def _read_databases_from_config_multi(
+        self,
+        environment: str,
+        server_names: list[str],
+    ) -> list[dict]:
+        """
+        Read databases from multi-table config filtered by multiple servers using IN clause.
+        Optimized version using JOIN with instances + IN for server_names.
+
+        Args:
+            environment: Target environment (required)
+            server_names: List of server names to filter by (non-empty)
+
+        Returns:
+            List of database dicts (deduplicated by id+name)
+        """
+        correlation_id = get_correlation_id()
+        mapper = self._get_inventory_mapper()
+
+        if mapper is None or not mapper.is_multi_table:
+            return []
+
+        entity_config = mapper.get_entity_config('databases')
+        if not entity_config or not mapper.get_entity_config('instances'):
+            return []
+
+        try:
+            db_table = mapper.get_table_name('databases')
+            inst_table = mapper.get_table_name('instances')
+            db_name_col = mapper.get_column('databases', 'name')
+            db_env_col = mapper.get_column('databases', 'environment')
+            inst_db_ref_col = mapper.get_column('instances', 'db_ref')
+            inst_server_ref_col = mapper.get_column('instances', 'server_ref')
+            db_select = mapper.build_select_clause('databases')
+
+            # Prefix DB columns with alias 'd'
+            aliased_select = db_select
+            for concept, col in entity_config.get('columns', {}).items():
+                aliased_select = aliased_select.replace(col, f"d.{col}")
+            id_col = entity_config.get('id_column')
+            if id_col:
+                aliased_select = aliased_select.replace(id_col, f"d.{id_col}")
+
+            # Build IN clause with bind parameters
+            in_params = {f'p_server_{i}': sn for i, sn in enumerate(server_names)}
+            in_placeholders = ', '.join(f":{key}" for key in in_params.keys())
+
+            params = {**in_params, 'p_environment': environment}
+
+            # nosec B608 - table/columns validated by mapper
+            inner_sql = (
+                f"SELECT DISTINCT {aliased_select} "
+                f"FROM {db_table} d "
+                f"INNER JOIN {inst_table} i ON UPPER(i.{inst_db_ref_col}) = UPPER(d.{db_name_col}) "
+                f"WHERE UPPER(d.{db_env_col}) = UPPER(:p_environment) "
+                f"AND UPPER(i.{inst_server_ref_col}) IN ({in_placeholders}) "
+                f"ORDER BY d.{db_name_col}"
+            )
+            sql = f"SELECT * FROM ({inner_sql}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"
+
+            logger.info(
+                "reading_databases_from_config_multi",
+                db_table=db_table,
+                inst_table=inst_table,
+                server_count=len(server_names),
+                correlation_id=correlation_id,
+            )
+
+            return self._execute_mapped_query(sql, params)
+
+        except MapperValidationError as e:
+            logger.error(
+                "database_config_mapping_error",
+                error=str(e),
+                correlation_id=correlation_id,
+            )
+            raise InventoryServiceError(f"Database mapping config error: {e}")
+        except Exception as e:
+            logger.error(
+                "read_databases_from_config_multi_error",
+                error=str(e),
+                error_type=type(e).__name__,
+                correlation_id=correlation_id,
+                exc_info=True,
+            )
+            raise InventoryServiceError(f"Failed to read databases: {e}")
+
+    def _read_servers_flat_fallback(self, environment: str | None = None) -> list[dict]:
+        """
+        Fallback: read servers from flat table (TYPE=server filter).
+        Story 23.1 AC6.
+
+        Args:
+            environment: Optional environment filter
+
+        Returns:
+            List of server dicts with standardized keys
+        """
+        correlation_id = get_correlation_id()
+
+        logger.info(
+            "reading_servers_flat_fallback",
+            correlation_id=correlation_id,
+        )
+
+        targets, _ = self._read_oracle_inventory(
+            'DBOPS_INVENTORY',
+            environment=environment,
+            target_type='server',
+            page=1,
+            page_size=MAX_FLAT_TABLE_RESULTS,
+        )
+        # Map flat results to standardized format
+        return [
+            {
+                'id': t.get('name', ''),
+                'name': t.get('name', ''),
+                'environment': t.get('environment', ''),
+                'engine_type': None,
+            }
+            for t in targets
+        ]
+
+    def _execute_mapped_query(self, sql: str, params: dict) -> list[dict]:
+        """
+        Execute a mapped SQL query and return results as list of dicts.
+        Column aliases from SELECT clause become dict keys.
+
+        Args:
+            sql: SQL query string with named bind parameters
+            params: Bind parameter dict
+
+        Returns:
+            List of dicts with column alias as keys
+        """
+        correlation_id = get_correlation_id()
+
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(sql, params)
+                columns = [col[0].lower() for col in cursor.description]
+                rows = cursor.fetchall()
+
+            results = [dict(zip(columns, row)) for row in rows]
+
+            logger.info(
+                "mapped_query_executed",
+                result_count=len(results),
+                correlation_id=correlation_id,
+            )
+
+            return results
+
+        except InventoryServiceError:
+            raise
+        except Exception as e:
+            logger.error(
+                "mapped_query_execution_error",
+                error=str(e),
+                error_type=type(e).__name__,
+                correlation_id=correlation_id,
+                exc_info=True,
+            )
+            raise InventoryServiceError(f"Query execution failed: {e}")
+
+    # --- Story 25.3: Maintenance window for gate evaluation ---
+
+    def get_next_maintenance_window(self, target_id: str) -> dict | None:
+        """
+        Get the next maintenance window for a target.
+
+        Story 25.3 AC7: Used by GateEvaluator to check maintenance_window gate conditions.
+
+        Currently returns None (no maintenance window defined) as the external inventory
+        API endpoint for maintenance windows is not yet available. This means maintenance_window
+        gates will always be satisfied (safe default for initial implementation).
+
+        When the inventory API supports maintenance windows, this method should call:
+        GET /api/inventory/servers/{target_id}/maintenance-window
+
+        Args:
+            target_id: Opaque target ID in the inventory
+
+        Returns:
+            dict | None:
+                {
+                    'is_active': bool,      # True if current time is within the window
+                    'start': datetime,       # Start of next window (if is_active=False)
+                    'end': datetime,         # End of the window
+                    'timezone': str,         # Window timezone
+                }
+                None if no maintenance window is defined for this target
+
+        Raises:
+            InventoryServiceError: If inventory API call fails
+        """
+        correlation_id = get_correlation_id()
+        logger.info(
+            "get_next_maintenance_window",
+            target_id=target_id,
+            correlation_id=correlation_id,
+        )
+
+        # TODO: Implement actual API call when inventory supports maintenance windows
+        # For now, return None → gate always satisfied (no window defined)
+        return None

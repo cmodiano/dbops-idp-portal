@@ -5,11 +5,13 @@ PUT /admin/integrations/{id}, DELETE /admin/integrations/{id}
 """
 
 import pytest
+from unittest.mock import patch
 from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework import status
 from idp_auth.models import User
 from integrations.models import Integration, AuthFlow
+from core.exceptions import InvalidStateError
 
 
 @pytest.mark.django_db
@@ -195,11 +197,130 @@ class TestIntegrationViewSet(TestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
     
     def test_delete_integration_with_linked_actions(self):
-        """Test DELETE /admin/integrations/{id} with linked actions → 400."""
-        # Note: This test requires Action model with integration_id foreign key
-        # For now, test will pass if no actions are linked
+        """Test DELETE /admin/integrations/{id} with linked actions → 400 DEPENDENCY_ERROR."""
+        from catalog.models import Action
+        Action.objects.create(
+            name='Linked Action',
+            integration=self.integration,
+            engine='aap',
+            platform='aap',
+        )
         self.client.force_authenticate(user=self.dbops_user)
         response = self.client.delete(f'/api/v1/admin/integrations/{self.integration.id}/')
-        
-        # Should succeed if no actions linked, or return 400 if actions exist
-        self.assertIn(response.status_code, [status.HTTP_204_NO_CONTENT, status.HTTP_400_BAD_REQUEST])
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('error', response.data)
+        self.assertEqual(response.data['error']['code'], 'DEPENDENCY_ERROR')
+
+    def test_create_integration_forbidden_non_dbops(self):
+        """Test POST /admin/integrations with non-DBOPS user → 403."""
+        self.client.force_authenticate(user=self.regular_user)
+        data = {'type': 'aap', 'name': 'Forbidden', 'base_url': 'https://a.com'}
+        response = self.client.post('/api/v1/admin/integrations/', data, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_update_integration_duplicate_name(self):
+        """Test PUT /admin/integrations/{id} with duplicate name → 400 DUPLICATE_NAME."""
+        Integration.objects.create(
+            type='servicenow', name='Taken Name', base_url='https://sn.com'
+        )
+        self.client.force_authenticate(user=self.dbops_user)
+        data = {'name': 'Taken Name'}
+        response = self.client.put(
+            f'/api/v1/admin/integrations/{self.integration.id}/',
+            data, format='json'
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('error', response.data)
+        self.assertEqual(response.data['error']['code'], 'DUPLICATE_NAME')
+
+    def test_get_integration_invalid_id(self):
+        """Test GET /admin/integrations/{id} with non-integer ID → 404."""
+        self.client.force_authenticate(user=self.dbops_user)
+        response = self.client.get('/api/v1/admin/integrations/not-a-number/')
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_update_integration_forbidden_non_dbops(self):
+        """Test PUT /admin/integrations/{id} with non-DBOPS user → 403."""
+        self.client.force_authenticate(user=self.regular_user)
+        data = {'name': 'Forbidden Update'}
+        response = self.client.put(
+            f'/api/v1/admin/integrations/{self.integration.id}/',
+            data, format='json'
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_delete_integration_forbidden_non_dbops(self):
+        """Test DELETE /admin/integrations/{id} with non-DBOPS user → 403."""
+        self.client.force_authenticate(user=self.regular_user)
+        response = self.client.delete(f'/api/v1/admin/integrations/{self.integration.id}/')
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_list_integrations_unauthenticated(self):
+        """Test GET /admin/integrations without authentication → 401."""
+        response = self.client.get('/api/v1/admin/integrations/')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_create_integration_invalid_config_reraises(self):
+        """Test POST /admin/integrations with INVALID_CONFIG from service → 400."""
+        self.client.force_authenticate(user=self.dbops_user)
+        data = {
+            'type': 'inventory_db',
+            'name': 'Bad Config',
+            'base_url': 'https://db.example.com',
+            'config': 'not-a-dict'
+        }
+        # config serializer accepts DictField so we need to mock the service
+        with patch(
+            'integrations.views.IntegrationService.create_integration',
+            side_effect=InvalidStateError(
+                code="INVALID_CONFIG",
+                message="Config invalide",
+                details={"field": "root"}
+            )
+        ):
+            response = self.client.post('/api/v1/admin/integrations/', {
+                'type': 'aap', 'name': 'Test Config',
+                'base_url': 'https://a.com', 'config': {'k': 'v'}
+            }, format='json')
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+            self.assertEqual(response.data['error']['code'], 'INVALID_CONFIG')
+
+    def test_update_integration_invalid_config_reraises(self):
+        """Test PUT /admin/integrations/{id} with INVALID_CONFIG from service → 400."""
+        self.client.force_authenticate(user=self.dbops_user)
+        with patch(
+            'integrations.views.IntegrationService.update_integration',
+            side_effect=InvalidStateError(
+                code="INVALID_CONFIG",
+                message="Config invalide",
+                details={"field": "root"}
+            )
+        ):
+            response = self.client.put(
+                f'/api/v1/admin/integrations/{self.integration.id}/',
+                {'config': {'bad': 'config'}},
+                format='json'
+            )
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+            self.assertEqual(response.data['error']['code'], 'INVALID_CONFIG')
+
+    def test_update_integration_invalid_pk(self):
+        """Test PUT /admin/integrations/{id} with non-integer ID → 404."""
+        self.client.force_authenticate(user=self.dbops_user)
+        response = self.client.put(
+            '/api/v1/admin/integrations/abc/',
+            {'name': 'X'}, format='json'
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_delete_integration_invalid_pk(self):
+        """Test DELETE /admin/integrations/{id} with non-integer ID → 404."""
+        self.client.force_authenticate(user=self.dbops_user)
+        response = self.client.delete('/api/v1/admin/integrations/abc/')
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

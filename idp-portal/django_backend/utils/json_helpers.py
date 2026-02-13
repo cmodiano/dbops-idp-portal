@@ -61,7 +61,7 @@ def deserialize_json(json_string: str | None, field_name: str = "field",
         return default
 
 
-def validate_json_schema(data: dict, schema: dict) -> tuple[bool, str | None]:
+def validate_json_schema(data: Any, schema: dict) -> tuple[bool, str | None]:
     """
     Validate JSON data against a JSON Schema.
     
@@ -69,7 +69,7 @@ def validate_json_schema(data: dict, schema: dict) -> tuple[bool, str | None]:
     consider using the 'jsonschema' library.
     
     Args:
-        data: Data to validate (dict)
+        data: Data to validate (dict for root/object, or primitive for property values)
         schema: JSON Schema dict (basic validation only)
     
     Returns:
@@ -77,40 +77,44 @@ def validate_json_schema(data: dict, schema: dict) -> tuple[bool, str | None]:
         - is_valid: True if data is valid, False otherwise
         - error_message: Error message if invalid, None if valid
     """
-    if not isinstance(data, dict):
-        return False, "Data must be a JSON object"
-    
-    if not isinstance(schema, dict):
-        return False, "Schema must be a JSON object"
-    
+    # When schema expects an object or has properties, data must be a dict
+    expected_type = schema.get("type")
+    has_properties = "properties" in schema and isinstance(schema["properties"], dict)
+    if expected_type == "object" or (expected_type is None and has_properties):
+        if not isinstance(data, dict):
+            return False, "Data must be a JSON object"
+
     # Basic type validation
-    if 'type' in schema:
-        expected_type = schema['type']
-        if expected_type == 'object' and not isinstance(data, dict):
+    if expected_type is not None:
+        if expected_type == "object" and not isinstance(data, dict):
             return False, f"Expected type 'object', got {type(data).__name__}"
-        elif expected_type == 'array' and not isinstance(data, list):
+        if expected_type == "array" and not isinstance(data, list):
             return False, f"Expected type 'array', got {type(data).__name__}"
-        elif expected_type == 'string' and not isinstance(data, str):
+        if expected_type == "string" and not isinstance(data, str):
             return False, f"Expected type 'string', got {type(data).__name__}"
-        elif expected_type == 'number' and not isinstance(data, (int, float)):
+        if expected_type == "number" and not isinstance(data, (int, float)):
             return False, f"Expected type 'number', got {type(data).__name__}"
-        elif expected_type == 'boolean' and not isinstance(data, bool):
+        if expected_type == "boolean" and not isinstance(data, bool):
             return False, f"Expected type 'boolean', got {type(data).__name__}"
-    
+
+    # Required fields and properties validation only apply to objects
+    if not isinstance(data, dict):
+        return True, None
+
     # Required fields validation
-    if 'required' in schema and isinstance(schema['required'], list):
-        for required_field in schema['required']:
+    if "required" in schema and isinstance(schema["required"], list):
+        for required_field in schema["required"]:
             if required_field not in data:
                 return False, f"Required field '{required_field}' is missing"
-    
+
     # Properties validation (basic)
-    if 'properties' in schema and isinstance(schema['properties'], dict):
-        for prop_name, prop_schema in schema['properties'].items():
+    if has_properties:
+        for prop_name, prop_schema in schema["properties"].items():
             if prop_name in data:
                 prop_valid, prop_error = validate_json_schema(data[prop_name], prop_schema)
                 if not prop_valid:
                     return False, f"Property '{prop_name}': {prop_error}"
-    
+
     return True, None
 
 

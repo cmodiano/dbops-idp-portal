@@ -1,32 +1,34 @@
 """
 Views for integrations CRUD endpoints.
-Matches FastAPI /admin/integrations endpoints.
 """
 
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, serializers as drf_serializers
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
+from drf_spectacular.utils import extend_schema, inline_serializer, OpenApiResponse
 from integrations.serializers import (
     IntegrationSerializer, IntegrationCreateSerializer,
     IntegrationUpdateSerializer, IntegrationListSerializer
 )
 from integrations.services import IntegrationService
+from integrations.validation_service import IntegrationValidationService
 from core.permissions import DBOPSProfilePermission
 from core.exceptions import NotFoundError, InvalidStateError
+from core.models import AuditActionType, AuditEntityType
+from core.services import AuditService
+from core.middleware import get_correlation_id
 
 
 class IntegrationViewSet(viewsets.ViewSet):
     """
     ViewSet for integrations CRUD operations.
-    Matches FastAPI /admin/integrations endpoints.
     """
     permission_classes = [IsAuthenticated, DBOPSProfilePermission]
     
     def list(self, request):
         """
         GET /admin/integrations - List all integrations.
-        Matches FastAPI list_integrations endpoint.
         """
         service = IntegrationService()
         integrations = service.list_all()
@@ -36,7 +38,6 @@ class IntegrationViewSet(viewsets.ViewSet):
     def retrieve(self, request, pk=None):
         """
         GET /admin/integrations/{id} - Get integration by ID.
-        Matches FastAPI get_integration endpoint.
         """
         try:
             integration_id = int(pk)
@@ -63,7 +64,6 @@ class IntegrationViewSet(viewsets.ViewSet):
     def create(self, request):
         """
         POST /admin/integrations - Create integration.
-        Matches FastAPI create_integration endpoint.
         Returns 201 Created.
         """
         serializer = IntegrationCreateSerializer(data=request.data)
@@ -94,15 +94,15 @@ class IntegrationViewSet(viewsets.ViewSet):
             raise
         
         response_serializer = IntegrationSerializer(integration)
-        return Response(
-            {'data': response_serializer.data},
-            status=status.HTTP_201_CREATED
-        )
+        response_data = {'data': response_serializer.data}
+        warnings = getattr(integration, '_warnings', [])
+        if warnings:
+            response_data['warnings'] = warnings
+        return Response(response_data, status=status.HTTP_201_CREATED)
     
     def update(self, request, pk=None):
         """
         PUT /admin/integrations/{id} - Update integration.
-        Matches FastAPI update_integration endpoint.
         """
         try:
             integration_id = int(pk)
@@ -149,12 +149,15 @@ class IntegrationViewSet(viewsets.ViewSet):
             )
         
         response_serializer = IntegrationSerializer(integration)
-        return Response({'data': response_serializer.data})
-    
+        response_data = {'data': response_serializer.data}
+        warnings = getattr(integration, '_warnings', [])
+        if warnings:
+            response_data['warnings'] = warnings
+        return Response(response_data)
+
     def destroy(self, request, pk=None):
         """
         DELETE /admin/integrations/{id} - Delete integration.
-        Matches FastAPI delete_integration endpoint.
         Returns 204 No Content.
         """
         try:
@@ -190,5 +193,104 @@ class IntegrationViewSet(viewsets.ViewSet):
                 message=f"Integration {integration_id} introuvable",
                 details={"integration_id": integration_id}
             )
-        
+
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @extend_schema(
+        summary="Validate a single integration against the type catalogue",
+        responses={
+            200: inline_serializer(
+                name='IntegrationValidationResponse',
+                fields={
+                    'integration_id': drf_serializers.IntegerField(),
+                    'integration_name': drf_serializers.CharField(),
+                    'integration_type': drf_serializers.CharField(),
+                    'current_status': drf_serializers.CharField(),
+                    'validation_details': drf_serializers.DictField(),
+                },
+            ),
+            404: OpenApiResponse(description='Integration not found'),
+        },
+    )
+    @action(detail=True, methods=['get'], url_path='validate')
+    def validate(self, request, pk=None):
+        """GET /admin/integrations/{id}/validate — Validate integration status."""
+        try:
+            integration_id = int(pk)
+        except (ValueError, TypeError):
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message=f"Integration {pk} introuvable",
+                details={"integration_id": pk},
+            )
+
+        service = IntegrationService()
+        integration = service.get_by_id(integration_id)
+
+        if integration is None:
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message=f"Integration {integration_id} introuvable",
+                details={"integration_id": integration_id},
+            )
+
+        details = IntegrationValidationService.get_integration_validation_details(integration)
+        computed_status = details['status']
+
+        # Update status in DB if changed
+        if integration.status != computed_status:
+            old_status = integration.status
+            integration.status = computed_status
+            integration.save(update_fields=['status', 'updated_at'])
+
+            AuditService.create_entry(
+                user_id=str(request.user.id) if request.user and hasattr(request.user, 'id') else 'system',
+                action_type=AuditActionType.INTEGRATION_STATUS_UPDATED,
+                entity_type=AuditEntityType.INTEGRATION,
+                entity_id=integration.id,
+                details={
+                    'previous_status': old_status,
+                    'new_status': computed_status,
+                    'validation_reason': details['validation_message'],
+                },
+                correlation_id=get_correlation_id(),
+            )
+
+        return Response({
+            'integration_id': integration.id,
+            'integration_name': integration.name,
+            'integration_type': integration.type,
+            'current_status': integration.status,
+            'validation_details': {
+                'status': details['status'],
+                'type_exists': details['type_exists'],
+                'type_is_active': details['type_is_active'],
+                'catalogue_version': details['catalogue_version'],
+                'validation_message': details['validation_message'],
+            },
+        })
+
+    @extend_schema(
+        summary="Validate all integrations against the type catalogue",
+        responses={
+            200: inline_serializer(
+                name='IntegrationValidateAllResponse',
+                fields={
+                    'valid': drf_serializers.IntegerField(),
+                    'invalid': drf_serializers.IntegerField(),
+                    'deprecated': drf_serializers.IntegerField(),
+                    'updated': drf_serializers.IntegerField(),
+                },
+            ),
+        },
+    )
+    @action(detail=False, methods=['post'], url_path='validate-all')
+    def validate_all(self, request):
+        """POST /admin/integrations/validate-all — Batch validate all integrations."""
+        triggered_by = str(request.user.id) if request.user and hasattr(request.user, 'id') else 'system'
+        correlation_id = get_correlation_id()
+        stats = IntegrationValidationService.validate_all_integrations(
+            triggered_by=triggered_by,
+            correlation_id=correlation_id,
+        )
+        return Response(stats)

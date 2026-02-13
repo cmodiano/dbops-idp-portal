@@ -1,0 +1,173 @@
+# Django Backend Configuration
+# Story 17.8: pyproject.toml + lockfile for reproducible builds
+# Story 15.1: Security audit configuration (Bandit)
+
+[project]
+name = "idp-portal-backend"
+version = "1.0.0"
+description = "Internal Developer Portal - Django REST API Backend"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "Proprietary"}
+authors = [
+    {name = "DB Automation Team"}
+]
+keywords = ["database", "automation", "portal", "devops"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Web Environment",
+    "Framework :: Django :: 5.1",
+    "Intended Audience :: Information Technology",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "cachetools>=5.3.0",
+    "croniter>=6.0.0",
+    "Django>=5.1.0,<6.0",
+    "django-cors-headers>=4.3.0",
+    "djangorestframework>=3.15.0",
+    "gunicorn>=22.0.0",
+    "oracledb>=3.4.1",
+    "python-dotenv>=1.0.0",
+    "python-jose[cryptography]>=3.3.0",
+    "python3-saml>=1.16.0",
+    "PyYAML>=6.0.0",
+    "requests>=2.32.5",
+    "structlog>=24.1.0",
+    "celery[redis]>=5.4.0",
+    "channels>=4.1.0",
+    "daphne>=4.1.0",
+    "redis>=5.0.0",
+    "drf-spectacular>=0.27.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "bandit[toml]>=1.7.5",
+    "coverage[toml]>=7.6.0",
+    "detect-secrets>=1.5.0",
+    "factory-boy>=3.3.0",
+    "Faker>=26.0.0",
+    "httpx>=0.27.0",
+    "django-stubs>=5.1.0",
+    "djangorestframework-stubs>=3.15.0",
+    "mypy>=1.10.0",
+    "types-cachetools>=5.3.0",
+    "types-PyYAML>=6.0.0",
+    "types-requests>=2.32.0",
+    "pip-audit>=2.7.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-benchmark>=4.0.0",
+    "pytest-cov>=5.0.0",
+    "pytest-django>=4.8.0",
+    "pytest-mock>=3.15.0",
+    "ruff>=0.8.0",
+]
+
+[project.urls]
+Homepage = "https://internal-portal.company.com"
+Documentation = "https://docs.internal-portal.company.com"
+Repository = "https://github.com/company/idp-portal"
+Issues = "https://github.com/company/idp-portal/issues"
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+# Story 15.1: Security audit configuration
+[tool.bandit]
+# Directories to exclude from analysis
+exclude_dirs = ["tests", "migrations", "__pycache__", ".git", ".venv", "venv"]
+
+# Tests to skip (known false positives for this codebase)
+# B104: hardcoded_bind_all_interfaces - Development settings only (DEBUG=True binds to 0.0.0.0)
+skips = ["B104"]
+
+# Severity targets
+# Configured via CLI: --severity-level medium for CI blocking
+
+[tool.bandit.assert_used]
+# Allow assert in test files only (already excluded via exclude_dirs)
+skips = ["*_test.py", "test_*.py"]
+
+# Story 17.9: Progressive mypy type checking configuration
+# Strategy: Start permissive globally, tighten per-module over time
+# Baseline approach: block NEW errors, tolerate existing ones
+[tool.mypy]
+python_version = "3.12"
+plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = "$MYPY_CONFIG_FILE_DIR"
+
+# Phase 1: Permissive global settings
+disallow_untyped_defs = false
+disallow_any_generics = false
+disallow_subclassing_any = false
+disallow_untyped_calls = false
+disallow_untyped_decorators = false
+disallow_incomplete_defs = false
+
+# Enabled checks (safe for Phase 1)
+check_untyped_defs = true
+no_implicit_reexport = true
+warn_return_any = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+# Exclusions
+exclude = [
+    "migrations/",
+    "tests/",
+    ".venv/",
+    "venv/",
+    "build/",
+    "dist/",
+    "__pycache__/",
+    ".*/tests\\.py$",
+    "test_settings\\.py$",
+]
+
+[tool.django-stubs]
+django_settings_module = "idp_backend.settings"
+strict_settings = false
+
+# Per-module overrides: stricter on newer modules
+[[tool.mypy.overrides]]
+module = "admin_analytics.*"
+disallow_untyped_defs = true
+
+# Story 22.19: Phase 2 - stricter checks on corrected modules
+# Status: Annotations complètes sur fonctions publiques (core.*, idp_auth.*, utils.*)
+# disallow_untyped_defs=true NOT activated yet due to 98 remaining errors in:
+#   - Private/internal functions (models, services, helpers)
+#   - Django model methods (save, __str__, Meta classes)
+#   - Middleware internal methods
+# Target: Phase 3 will annotate internal functions then activate strict mode
+#
+# Key public functions fully annotated:
+#   - core/: auth_utils, logging, middleware, pagination, consumers, throttling
+#   - idp_auth/: jwt_utils, authentication, models (Manager), views
+#   - utils/: json_helpers
+#
+# To activate strict mode (when internal functions annotated):
+# [[tool.mypy.overrides]]
+# module = ["core.*", "idp_auth.*", "utils.*"]
+# disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = [
+    "oracledb.*",
+    "onelogin.*",
+    "jose.*",
+    "croniter.*",
+]
+ignore_missing_imports = true

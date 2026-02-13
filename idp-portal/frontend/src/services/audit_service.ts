@@ -88,7 +88,7 @@ export async function exportAuditReport(
   filters: AuditExecutionFilters = {},
 ): Promise<void> {
   const params = new URLSearchParams();
-  params.set('format', format);
+  params.set('fmt', format);
 
   if (filters.from) {
     params.set('from', filters.from);
@@ -110,7 +110,7 @@ export async function exportAuditReport(
   }
 
   // Download file as blob with auth + 401 retry support.
-  const blob = await apiFetchBlob(`/audit/export?${params.toString()}`);
+  const blob = await apiFetchBlob(`/audit/export/?${params.toString()}`);
   const filename = `audit-export-${new Date().toISOString().split('T')[0]}.${format}`;
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement('a');

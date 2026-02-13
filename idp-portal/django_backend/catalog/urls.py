@@ -27,5 +27,5 @@ urlpatterns = [
     path('tags/', include(tags_router.urls)),
     
     # Catalog tags endpoint: /api/v1/catalog/tags (handled by TagViewSet.list_catalog_tags action)
-    path('catalog/tags', views.TagViewSet.as_view({'get': 'list_catalog_tags'}), name='catalog-tags-list'),
+    path('catalog/tags/', views.TagViewSet.as_view({'get': 'list_catalog_tags'}), name='catalog-tags-list'),
 ]

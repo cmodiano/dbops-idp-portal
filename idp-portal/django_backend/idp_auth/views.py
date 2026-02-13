@@ -1,6 +1,5 @@
 """
 Views for authentication endpoints.
-Matches FastAPI /auth/* endpoints.
 Story M.7 - Full SAML and JWT auth implementation.
 Story M.8 - Task 9: Structured logging with structlog.
 """
@@ -12,6 +11,7 @@ from django.shortcuts import redirect
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated, AllowAny
 
 from idp_auth.models import User
@@ -26,6 +26,8 @@ from core.exceptions import ForbiddenError, UnauthorizedError, NotFoundError
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id
+from core.throttling import AuthEndpointThrottle, TokenRefreshThrottle, PublicEndpointThrottle
+from core.utils import ensure_utc_isoformat
 from catalog.models import Action
 
 logger = structlog.get_logger(__name__)
@@ -66,6 +68,7 @@ class SAMLLoginView(APIView):
     When AUTH_DEV_BYPASS is true, skips IdP and redirects to frontend with dev JWT.
     """
     permission_classes = [AllowAny]
+    throttle_classes = [AuthEndpointThrottle]
 
     def get(self, request):
         """Initiate SAML login flow."""
@@ -101,7 +104,7 @@ class SAMLLoginView(APIView):
                 value=refresh_token,
                 httponly=True,
                 secure=settings.APP_ENV != "development",
-                samesite="lax",
+                samesite="Lax",
                 max_age=settings.JWT_REFRESH_TOKEN_EXPIRE_HOURS * 3600,
                 path="/api/v1/auth",
             )
@@ -130,7 +133,9 @@ class SAMLCallbackView(APIView):
     POST /auth/saml/callback - Receive SAML assertion from IdP.
     Validates assertion, creates/updates user, emits JWT tokens.
     """
+    parser_classes = [FormParser, MultiPartParser]
     permission_classes = [AllowAny]
+    throttle_classes = [AuthEndpointThrottle]
 
     def post(self, request):
         """Process SAML callback with assertion."""
@@ -244,7 +249,7 @@ class SAMLCallbackView(APIView):
             value=refresh_token,
             httponly=True,
             secure=settings.APP_ENV != "development",
-            samesite="lax",
+            samesite="Lax",
             max_age=settings.JWT_REFRESH_TOKEN_EXPIRE_HOURS * 3600,
             path="/api/v1/auth",
         )
@@ -254,7 +259,6 @@ class SAMLCallbackView(APIView):
 class CurrentUserProfileView(APIView):
     """
     GET /auth/me - Return current user profile with navigation permissions.
-    Matches FastAPI get_current_user_profile endpoint.
     """
     permission_classes = [IsAuthenticated]
 
@@ -291,13 +295,15 @@ class CurrentUserProfileView(APIView):
                 profile_service = ProfileService()
                 cumulative_permissions = profile_service.get_cumulative_permissions(user.id, ad_groups)
             except Exception as e:
-                # Log error but don't fail the request
+                # Story 17.6: Justified broad catch - ProfileService can raise various exceptions
                 correlation_id = get_correlation_id()
                 logger.error(
                     "failed_to_get_cumulative_permissions",
                     user_id=user.id,
                     error=str(e),
-                    correlation_id=correlation_id
+                    error_type=type(e).__name__,
+                    correlation_id=correlation_id,
+                    exc_info=True,
                 )
                 cumulative_permissions = None
 
@@ -309,6 +315,11 @@ class CurrentUserProfileView(APIView):
                 for p in profiles
             )
 
+        # Build navigation tabs, injecting 'audit' for auditors (Story 6.5)
+        navigation_tabs = list(get_user_navigation_permissions(profile_name))  # Copy to avoid mutating global
+        if is_auditor and 'audit' not in navigation_tabs:
+            navigation_tabs.append('audit')
+
         # Build user profile data
         profile_data = {
             'id': user.id,
@@ -318,7 +329,7 @@ class CurrentUserProfileView(APIView):
             'profile_ids': profile_ids,
             'cumulative_permissions': cumulative_permissions,
             'is_auditor': is_auditor,
-            'navigation_tabs': get_user_navigation_permissions(profile_name),
+            'navigation_tabs': navigation_tabs,
             'is_business_profile': is_business_profile(profile_name),
         }
 
@@ -331,6 +342,7 @@ class RefreshTokenView(APIView):
     POST /auth/refresh - Exchange refresh token for access token.
     """
     permission_classes = [AllowAny]
+    throttle_classes = [TokenRefreshThrottle]
 
     def post(self, request):
         """
@@ -397,6 +409,7 @@ class LogoutView(APIView):
     POST /auth/logout - Clear refresh token cookie.
     """
     permission_classes = [AllowAny]
+    throttle_classes = [PublicEndpointThrottle]
 
     def post(self, request):
         """
@@ -446,7 +459,7 @@ class UserFavoritesView(APIView):
         data = [
             {
                 "action_id": fav.action_id,
-                "created_at": fav.created_at.isoformat() if fav.created_at else None,
+                "created_at": ensure_utc_isoformat(fav.created_at),
             }
             for fav in favorites
         ]

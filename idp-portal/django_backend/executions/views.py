@@ -1,17 +1,21 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, date, timezone
+from datetime import datetime, timedelta, date
+from datetime import timezone as dt_timezone
 
 # Fixed-offset UTC (no name): Oracle Thin Mode does not support named timezones (DPY-3022)
-UTC = timezone(timedelta(0))
+UTC = dt_timezone(timedelta(0))
 
+from django.conf import settings
+from django.db import transaction
 from django.db.models import Q, Count
 from django.db.models.functions import TruncDate
 from django.utils import timezone
-from django.utils.dateparse import parse_datetime
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from core.utils import ensure_utc_isoformat
 
 from catalog.models import Action, ActionStatus
 from core.auth_utils import get_user_ad_groups
@@ -35,171 +39,36 @@ from executions.serializers import (
     RecurringPatternSerializer,
 )
 from executions.services import ExecutionService, SchedulingService
+from executions.utils import (
+    _get_env_config_case_insensitive,
+    _validate_environment_against_inventory,
+    _extract_workflow_referenced_action_ids,
+    _extract_workflow_step_map,
+    _validate_workflow_step_parameters,
+    _validate_workflow_referenced_actions,
+    _parse_int,
+    _parse_date,
+    _is_dba_or_dbops,
+    _get_allowed_action_ids_for_user,
+    _detect_request_source,
+    _apply_scope_filter,
+    _apply_execution_filters,
+    _parse_iso_datetime,
+    _calculate_next_execution_date,
+    validate_action_mutex,
+)
 from inventory.services import InventoryService, InventoryServiceError, MAX_TARGETS_FOR_RBAC_FILTER
-from profiles.services import ProfileService
+from core.throttling import ExecutionThrottle, GeneralAPIThrottle
 
-from croniter import croniter
+
+from croniter import croniter, CroniterBadCronError, CroniterBadDateError
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 import structlog
 
+# Story 17.14: Import adapter at module level (HIGH-3 fix)
+from adapters.aap_adapter import AAPAdapter
+
 exec_logger = structlog.get_logger(__name__)
-
-
-def _parse_int(value: str | None, default: int, *, name: str) -> int:
-    if value is None or value == "":
-        return default
-    try:
-        return int(value)
-    except (ValueError, TypeError):
-        raise BadRequestError(code="BAD_REQUEST", message=f"{name} invalide", details={name: value})
-
-
-def _parse_date(value: str | None, *, name: str) -> date | None:
-    if not value:
-        return None
-    try:
-        return datetime.strptime(value, "%Y-%m-%d").date()
-    except ValueError:
-        raise BadRequestError(code="BAD_REQUEST", message=f"{name} invalide (YYYY-MM-DD)", details={name: value})
-
-
-def _is_dba_or_dbops(user) -> bool:
-    profile = (getattr(user, "profile", "") or "").lower()
-    return profile == "dbops" or profile == "dba" or profile.startswith("dba")
-
-
-def _get_allowed_action_ids_for_user(user) -> set[int] | None:
-    """
-    Get action IDs the user has access to based on their profile permissions.
-
-    Story 13.6: DBA sees scheduled executions for actions their profile gives access to.
-
-    Returns:
-        Set of action IDs, or None if user has 'all' access (no filtering needed).
-    """
-    if not user or not user.is_authenticated:
-        return set()
-
-    ad_groups = get_user_ad_groups(user)
-    try:
-        profile_service = ProfileService()
-        permissions = profile_service.get_cumulative_permissions(user.id, ad_groups)
-    except Exception:
-        # ProfileService not available or error - no access
-        return set()
-
-    if not permissions or not permissions.get('action_permissions'):
-        return set()
-
-    # Aggregate action permissions (union across profiles)
-    action_ids = set()
-    tag_patterns = set()
-
-    for perm in permissions.get('action_permissions', []):
-        if perm.get('actions_type') == 'all':
-            # User has full access - no filtering needed
-            return None
-        action_ids.update(perm.get('action_ids', []) or [])
-        tag_patterns.update(perm.get('tag_patterns', []) or [])
-
-    # If there are tag patterns, we need to resolve them to action IDs
-    if tag_patterns:
-        from catalog.models import ActionTag
-        tag_action_ids = ActionTag.objects.filter(
-            tag__name__in=tag_patterns,
-            action__status=ActionStatus.PUBLISHED
-        ).values_list('action_id', flat=True)
-        action_ids.update(tag_action_ids)
-
-    return action_ids
-
-
-def _detect_request_source(request) -> str:
-    """
-    Detect if request comes from UI (frontend) or API (standalone).
-
-    Story 13.5, Subtask 3.2: Distinguish UI vs API requests for audit.
-
-    Heuristics:
-    - If Authorization: Bearer is present → "api" (API clients always send it)
-    - Else if X-Requested-With: XMLHttpRequest → "ui"
-    - Else if Referer or Origin present → "ui" (browser navigation)
-    - Otherwise → "api"
-    """
-    auth_header = request.META.get('HTTP_AUTHORIZATION', '')
-    if auth_header.strip().upper().startswith('BEARER '):
-        return 'api'
-
-    x_requested_with = request.META.get('HTTP_X_REQUESTED_WITH', '')
-    if x_requested_with.lower() == 'xmlhttprequest':
-        return 'ui'
-
-    referer = request.META.get('HTTP_REFERER', '')
-    origin = request.META.get('HTTP_ORIGIN', '')
-    if referer or origin:
-        return 'ui'
-
-    return 'api'
-
-
-def _apply_scope_filter(qs, *, user, scope: str) -> tuple[object, str]:
-    """
-    Return (qs, effective_scope) following FastAPI behavior:
-    - scope defaults to mine
-    - scope=all only if user is DBA/DBOPS, else fallback to mine
-    """
-    scope = (scope or "mine").lower()
-    if scope not in ("mine", "all"):
-        raise BadRequestError(code="BAD_REQUEST", message="scope invalide", details={"scope": scope})
-
-    can_view_all = _is_dba_or_dbops(user)
-    effective_scope = scope if (scope == "mine" or can_view_all) else "mine"
-    if effective_scope == "mine":
-        qs = qs.filter(user_id=user.id)
-    return qs, effective_scope
-
-
-def _apply_execution_filters(qs, *, request):
-    """
-    Apply advanced filters (Story 9.10) used by the frontend:
-    start_date, end_date, action_id, engine, tags (AND), status, environment.
-    """
-    start_date_s = request.query_params.get("start_date")
-    end_date_s = request.query_params.get("end_date")
-    start_d = _parse_date(start_date_s, name="start_date")
-    end_d = _parse_date(end_date_s, name="end_date")
-
-    if start_d:
-        start_dt = timezone.make_aware(datetime.combine(start_d, datetime.min.time()))
-        qs = qs.filter(created_at__gte=start_dt)
-    if end_d:
-        # inclusive end_date
-        end_exclusive = timezone.make_aware(datetime.combine(end_d + timedelta(days=1), datetime.min.time()))
-        qs = qs.filter(created_at__lt=end_exclusive)
-
-    action_id = request.query_params.get("action_id")
-    if action_id:
-        qs = qs.filter(action_id=_parse_int(action_id, 0, name="action_id"))
-
-    engine = request.query_params.get("engine")
-    if engine:
-        qs = qs.filter(action__engine=engine)
-
-    tags = request.query_params.get("tags")
-    if tags:
-        tag_list = [t.strip() for t in tags.split(",") if t and t.strip()]
-        if tag_list:
-            action_ids = Action.objects.search_by_tags(tag_list).values("id")
-            qs = qs.filter(action_id__in=action_ids)
-
-    status = request.query_params.get("status")
-    if status:
-        qs = qs.filter(status=status)
-
-    environment = request.query_params.get("environment")
-    if environment:
-        qs = qs.filter(environment=environment)
-
-    return qs, start_d, end_d
 
 
 class ExecutionsView(APIView):
@@ -211,21 +80,39 @@ class ExecutionsView(APIView):
     """
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [GeneralAPIThrottle, ExecutionThrottle]
 
+    @extend_schema(
+        tags=['executions'],
+        summary='Lister les exécutions',
+        description='Retourne la liste paginée des exécutions avec filtrage par scope, dates et statut.',
+        parameters=[
+            OpenApiParameter('limit', int, description='Nombre de résultats par page (défaut: 50)'),
+            OpenApiParameter('offset', int, description='Décalage pour la pagination'),
+            OpenApiParameter('scope', str, description='Scope: mine (défaut) ou all'),
+            OpenApiParameter('status', str, description='Filtrage par statut'),
+            OpenApiParameter('action_id', int, description='Filtrage par action'),
+            OpenApiParameter('start_date', str, description='Date de début (ISO 8601)'),
+            OpenApiParameter('end_date', str, description='Date de fin (ISO 8601)'),
+        ],
+        responses={200: ExecutionSerializer(many=True)},
+    )
     def get(self, request):
         limit = _parse_int(request.query_params.get("limit"), 50, name="limit")
         offset = _parse_int(request.query_params.get("offset"), 0, name="offset")
         if limit <= 0 or offset < 0:
             raise BadRequestError(code="BAD_REQUEST", message="Pagination invalide", details={"limit": limit, "offset": offset})
 
-        qs = Execution.objects.select_related("action", "user", "action__integration")
+        qs = Execution.objects.select_related(
+            "action", "user", "action__integration", "parent_execution__action"
+        ).prefetch_related("targets")
         qs, _effective_scope = _apply_scope_filter(qs, user=request.user, scope=request.query_params.get("scope") or "mine")
         qs, _start_d, _end_d = _apply_execution_filters(qs, request=request)
         qs = qs.order_by("-created_at")
 
-        total_count = qs.count()
+        total = qs.count()
         page = (offset // limit) + 1
-        total_pages = (total_count + limit - 1) // limit if limit else 1
+        total_pages = (total + limit - 1) // limit if limit else 1
 
         items = list(qs[offset: offset + limit])
         data = ExecutionSerializer(items, many=True).data
@@ -236,12 +123,18 @@ class ExecutionsView(APIView):
                 "pagination": {
                     "page": page,
                     "page_size": limit,
-                    "total_count": total_count,
+                    "total": total,
                     "total_pages": total_pages,
                 },
             }
         )
 
+    @extend_schema(
+        tags=['executions'],
+        summary='Créer une exécution',
+        description="Lance une nouvelle exécution d'action. target_names requis si requires_target=True.",
+        responses={201: ExecutionSerializer},
+    )
     def post(self, request):
         """
         Create a new execution.
@@ -254,6 +147,7 @@ class ExecutionsView(APIView):
         environment = payload.get("environment")
         target_names = payload.get("target_names")
         parameters = payload.get("parameters") or {}
+        workflow_step_parameters = payload.get("workflow_step_parameters")
         parent_execution_id = payload.get("parent_execution_id")
 
         correlation_id = request.META.get("HTTP_X_IDP_REQUEST_ID") or get_correlation_id()
@@ -300,8 +194,14 @@ class ExecutionsView(APIView):
                     message="environment ou target_names est requis",
                     details={"environment": environment, "target_names": target_names},
                 )
+            
+            # Story 13.7, AC2: Validate environment against inventory
+            if environment:
+                _validate_environment_against_inventory(environment, user_id=request.user.id)
 
         # Story 13.2, Task 5 & 6: Handle target_names with RBAC validation
+        # Story 25.5: Initialize validated_targets to avoid NameError for actions without targets
+        validated_targets = []
         if target_names:
             if not isinstance(target_names, list) or len(target_names) == 0:
                 raise BadRequestError(
@@ -401,18 +301,44 @@ class ExecutionsView(APIView):
                 correlation_id=correlation_id
             )
 
-        # Story 13.4, AC3: Get environment-specific config from action
-        env_upper = (environment or "").upper()
-
-        # Subtask 2.3: Get change_type_config for this environment
-        change_type_config = action.get_change_type_config() or {}
-        env_change_config = change_type_config.get(env_upper, {})
+        # Story 21.2, Task 4: Case-insensitive environment config lookup
+        # Get environment-specific config from action
+        change_type_config_raw = action.change_type_config
+        if change_type_config_raw is None:
+            change_type_config = {}
+        elif not isinstance(change_type_config_raw, dict):
+            # Defensive: misconfigured data should not crash execution creation.
+            exec_logger.warning(
+                "invalid_change_type_config_type_ignored",
+                action_id=action.id,
+                value_type=type(change_type_config_raw).__name__,
+                correlation_id=correlation_id,
+            )
+            change_type_config = {}
+        else:
+            change_type_config = change_type_config_raw
+        env_str: str = str(environment) if environment else ""
+        env_change_config = _get_env_config_case_insensitive(change_type_config, env_str)
         change_required = env_change_config.get("required", False)
         change_model_code = env_change_config.get("change_model_code")
 
-        # Subtask 2.4: Get impact_rules for this environment
-        impact_rules = action.get_impact_rules() or {}
-        env_impact_config = impact_rules.get(env_upper, {})
+        # Story 25.4: allowed=false → reject submission for this environment
+        allowed = env_change_config.get("allowed", True)
+        if allowed is False:
+            raise BadRequestError(
+                code="EXECUTION_NOT_ALLOWED_FOR_ENVIRONMENT",
+                message=f"L'exécution de cette action n'est pas autorisée pour l'environnement {env_str}.",
+                details={"environment": env_str, "action_id": action.id},
+            )
+
+        # Story 25.4: read requires_maintenance_window, requires_approval for downstream (gates, ServiceNow)
+        requires_maintenance_window = env_change_config.get("requires_maintenance_window", False)
+        requires_approval = env_change_config.get("requires_approval", False)
+
+        # Task 4.3: Get impact_rules for this environment (case-insensitive)
+        impact_rules = action.impact_rules or {}
+        env_impact_config = _get_env_config_case_insensitive(impact_rules, env_str)
+        # Task 4.4: Fallback to default_impact_level if no rule for environment
         impact_level = env_impact_config.get("impact_level") or env_impact_config.get("level") or action.default_impact_level
 
         exec_logger.info(
@@ -422,43 +348,151 @@ class ExecutionsView(APIView):
             change_required=change_required,
             change_model_code=change_model_code,
             impact_level=impact_level,
+            requires_maintenance_window=requires_maintenance_window,
+            requires_approval=requires_approval,
             correlation_id=correlation_id
         )
 
-        # Store environment config in parameters for downstream use
+        # Store environment config in parameters for downstream use (Story 25.4: + requires_maintenance_window, requires_approval)
         parameters = parameters.copy() if parameters else {}
         parameters['_env_config'] = {
             'change_required': change_required,
             'change_model_code': change_model_code,
             'impact_level': impact_level,
+            'requires_maintenance_window': requires_maintenance_window,
+            'requires_approval': requires_approval,
         }
 
         # Story 13.5: Detect source and capture IP for audit traceability
         source = _detect_request_source(request)
         ip_address = get_client_ip(request)
 
+        delegated_referenced_action_ids: list[int] | None = None
+        if action.item_type == "workflow":
+            # Story 4.11: delegation validation on workflow referenced actions
+            delegated_referenced_action_ids = _validate_workflow_referenced_actions(
+                workflow_action=action,
+                correlation_id=correlation_id,
+                user_id=request.user.id,
+                ip_address=ip_address,
+            )
+        else:
+            # Story 4.12: reject workflow_step_parameters on non-workflow actions
+            if workflow_step_parameters is not None:
+                raise BadRequestError(
+                    code="INVALID_WORKFLOW_STEP_PARAMETERS",
+                    message="workflow_step_parameters n'est autorisé que pour les workflows",
+                    details={"action_id": action.id, "item_type": action.item_type},
+                )
+
+        if action.item_type == "workflow" and workflow_step_parameters is not None:
+            normalized_wsp = _validate_workflow_step_parameters(
+                workflow_action=action,
+                workflow_step_parameters=workflow_step_parameters,
+            )
+            # Store for runtime (Story 4.12 AC5 will consume it)
+            parameters = parameters.copy() if parameters else {}
+            parameters["workflow_step_parameters"] = normalized_wsp
+
+        # Story 25.5: Validate action mutex rules before creating execution
+        # Extract target_ids from validated_targets for mutex check
+        target_ids_for_mutex = [t['name'] for t in validated_targets] if validated_targets else []
+        validate_action_mutex(
+            action=action,
+            target_ids=target_ids_for_mutex,
+            correlation_id=correlation_id,
+            user_id=str(request.user.id),
+        )
+
         execution = ExecutionService().create_execution(
             user=request.user,
             action=action,
-            environment=environment,
+            environment=env_str,
             parameters=parameters if parameters else None,
             parent_execution_id=parent_execution_id,
             correlation_id=correlation_id,
             source=source,
             ip_address=ip_address,
             targets=target_names if target_names else None,
+            delegated_referenced_action_ids=delegated_referenced_action_ids,
+            validated_targets=validated_targets if target_names else None,
         )
 
-        return Response(
-            {
-                "data": {
-                    "execution_id": execution.id,
-                    "status": execution.status,
-                    "created_at": execution.created_at.isoformat() if execution.created_at else None,
-                }
-            },
-            status=201,
-        )
+        try:
+            # Story 20.6 (AC1): Detect workflow type and branch to container engine
+            if action.item_type == "workflow":
+                from executions.container_workflow_runtime import ContainerWorkflowRuntime
+                runtime = ContainerWorkflowRuntime(execution)
+                runtime.run()  # Async: launches background thread, returns immediately
+                exec_logger.info(
+                    "container_workflow_execution_launched",
+                    execution_id=execution.id,
+                    correlation_id=correlation_id,
+                )
+            # Story 19.0: Simulation mode - create steps and start simulation
+            elif getattr(settings, 'SIMULATE_EXECUTION_DEV', False):
+                from executions.simulation_service import SimulationService
+                SimulationService.create_simulated_steps(execution)
+                SimulationService.start_simulation(execution)
+                exec_logger.info(
+                    "execution_simulation_started",
+                    execution_id=execution.id,
+                    correlation_id=correlation_id,
+                )
+            else:
+                # Story 18.6: Future integration call here (AAP, ServiceNow, etc.)
+                # When integration is implemented, this will trigger the platform:
+                # if action.integration:
+                #     integration_service = get_integration_service(action.integration)
+                #     integration_service.trigger_execution(execution)
+                pass
+        except Exception as e:
+            # Story 22.11: Justified broad catch - Execution creation wraps multiple services (workflow runtime, simulation, integrations)
+            exec_logger.error(
+                "integration_error_on_execution",
+                execution_id=execution.id,
+                action_id=action.id,
+                error_type=type(e).__name__,
+                error_message=str(e),
+                correlation_id=correlation_id,
+                exc_info=True,
+            )
+
+            # Use state machine for status transition (Story 22.12 review fix)
+            execution_service = ExecutionService()
+            try:
+                execution_service.update_status(
+                    execution.id,
+                    ExecutionStatus.INTEGRATION_ERROR,
+                    str(request.user.id)
+                )
+            except ValueError as ve:
+                # Should not happen - SUBMITTED → INTEGRATION_ERROR is valid
+                exec_logger.error(
+                    "unexpected_state_machine_error",
+                    execution_id=execution.id,
+                    error=str(ve),
+                    correlation_id=correlation_id,
+                )
+                # Fallback to direct update (defensive programming)
+                execution.status = ExecutionStatus.INTEGRATION_ERROR
+                execution.save(update_fields=["status"])
+
+            execution.error_message = str(e)
+            execution.save(update_fields=["error_message"])
+
+        # Build response data
+        response_data = {
+            "execution_id": execution.id,
+            "status": execution.status,
+            "created_at": ensure_utc_isoformat(execution.created_at),
+        }
+
+        # Include error_message if integration failed
+        if execution.status == ExecutionStatus.INTEGRATION_ERROR:
+            response_data["error_message"] = execution.error_message
+
+        return Response({"data": response_data}, status=201)
 
 
 class ExecutionDetailView(APIView):
@@ -466,9 +500,12 @@ class ExecutionDetailView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(tags=['executions'], summary="Détail d'une exécution", responses={200: ExecutionSerializer})
     def get(self, request, execution_id: int):
         try:
-            execution = Execution.objects.select_related("action", "user", "action__integration").get(id=execution_id)
+            execution = Execution.objects.select_related(
+                "action", "user", "action__integration", "parent_execution__action"
+            ).prefetch_related("targets").get(id=execution_id)
         except Execution.DoesNotExist:
             raise NotFoundError(code="NOT_FOUND", message="Execution non trouvée", details={"execution_id": execution_id})
 
@@ -479,11 +516,113 @@ class ExecutionDetailView(APIView):
         return Response({"data": ExecutionSerializer(execution).data})
 
 
+class ExecutionCancelView(APIView):
+    """PATCH /executions/{id}/cancel/ -> cancel an execution (AC3, AC4, AC5)"""
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [GeneralAPIThrottle]  # MEDIUM-1 fix: Add rate limiting
+
+    @extend_schema(tags=['executions'], summary='Annuler une exécution', responses={200: ExecutionSerializer})
+    def patch(self, request, execution_id: int):
+        try:
+            execution = Execution.objects.select_related("action", "user", "action__integration").get(id=execution_id)
+        except Execution.DoesNotExist:
+            raise NotFoundError(code="NOT_FOUND", message="Execution non trouvée", details={"execution_id": execution_id})
+
+        # RBAC: owner or DBA/DBOPS (AC3)
+        if execution.user_id != request.user.id and not _is_dba_or_dbops(request.user):
+            raise ForbiddenError(code="FORBIDDEN", message="Accès interdit", details={"execution_id": execution_id})
+
+        # Validate status is cancellable (AC5)
+        if execution.status not in (ExecutionStatus.SUBMITTED, ExecutionStatus.RUNNING):
+            raise BadRequestError(
+                code="INVALID_STATUS",
+                message=f"Impossible d'annuler une opération dans le statut {execution.status}",
+                details={"execution_id": execution_id, "current_status": execution.status},
+            )
+
+        # HIGH-2 fix: Wrap in transaction for ACID guarantees
+        with transaction.atomic():
+            # AC4: Attempt remote cancellation for RUNNING executions
+            if execution.status == ExecutionStatus.RUNNING:
+                self._attempt_remote_cancellation(execution)
+
+            # Use ExecutionService.update_status() for state machine validation + audit (AC3)
+            cancelled_by_admin = execution.user_id != request.user.id
+            try:
+                updated = ExecutionService().update_status(execution_id, ExecutionStatus.CANCELLED, str(request.user.id))
+            except ValueError as e:
+                raise BadRequestError(
+                    code="INVALID_STATUS",
+                    message=str(e),
+                    details={"execution_id": execution_id},
+                )
+
+            if updated is None:
+                raise NotFoundError(code="NOT_FOUND", message="Execution non trouvée", details={"execution_id": execution_id})
+
+            exec_logger.info(
+                "execution_cancelled",
+                execution_id=execution_id,
+                cancelled_by=request.user.id,
+                cancelled_by_admin=cancelled_by_admin,
+                previous_status=execution.status,
+                correlation_id=get_correlation_id(),
+            )
+
+            return Response({"data": ExecutionSerializer(updated).data})
+
+    def _attempt_remote_cancellation(self, execution: Execution) -> None:
+        """AC4: Best-effort remote cancellation on execution engine."""
+        platform_job_id = None
+        if execution.action and execution.action.integration:
+            params = execution.get_parameters() if hasattr(execution, 'get_parameters') else {}
+            platform_job_id = (params or {}).get('platform_job_id')
+
+        if not platform_job_id:
+            exec_logger.debug(
+                "remote_cancellation_skipped_no_job_id",
+                execution_id=execution.id,
+                correlation_id=get_correlation_id(),
+            )
+            return
+
+        try:
+            # HIGH-3 fix: Use module-level import
+            adapter = AAPAdapter()
+            adapter.cancel_execution(platform_job_id)
+            exec_logger.info(
+                "remote_cancellation_success",
+                execution_id=execution.id,
+                platform_job_id=platform_job_id,
+                correlation_id=get_correlation_id(),
+            )
+        except NotImplementedError:
+            exec_logger.warning(
+                "remote_cancellation_not_supported",
+                execution_id=execution.id,
+                platform_job_id=platform_job_id,
+                correlation_id=get_correlation_id(),
+            )
+        except Exception as e:
+            # Story 17.6: Justified broad catch - adapter may raise various exceptions
+            exec_logger.warning(
+                "remote_cancellation_failed",
+                execution_id=execution.id,
+                platform_job_id=platform_job_id,
+                error=str(e),
+                error_type=type(e).__name__,
+                correlation_id=get_correlation_id(),
+                exc_info=True,
+            )
+
+
 class ExecutionStepsView(APIView):
     """GET /executions/{id}/steps -> {data: ExecutionStepResponse[]}"""
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(tags=['executions'], summary="Étapes d'une exécution", responses={200: ExecutionStepSerializer(many=True)})
     def get(self, request, execution_id: int):
         try:
             execution = Execution.objects.get(id=execution_id)
@@ -502,6 +641,7 @@ class ExecutionStepLogsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(tags=['executions'], summary="Logs d'une étape d'exécution")
     def get(self, request, execution_id: int, step_id: int):
         try:
             step = ExecutionStep.objects.select_related("execution").get(id=step_id, execution_id=execution_id)
@@ -522,8 +662,8 @@ class ExecutionStepLogsView(APIView):
                     "step_id": step.id,
                     "output": step.get_output() if hasattr(step, "get_output") else None,
                     "error_message": step.error_message,
-                    "started_at": step.started_at.isoformat() if step.started_at else None,
-                    "completed_at": step.completed_at.isoformat() if step.completed_at else None,
+                    "started_at": ensure_utc_isoformat(step.started_at),
+                    "completed_at": ensure_utc_isoformat(step.completed_at),
                 }
             }
         )
@@ -534,6 +674,7 @@ class ExecutionStatsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(tags=['executions'], summary='Statistiques des exécutions')
     def get(self, request):
         qs = Execution.objects.select_related("action")
         qs, _effective_scope = _apply_scope_filter(qs, user=request.user, scope=request.query_params.get("scope") or "mine")
@@ -572,6 +713,7 @@ class ExecutionTimeSeriesView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(tags=['executions'], summary='Série temporelle des exécutions')
     def get(self, request):
         qs = Execution.objects.all()
         qs, _effective_scope = _apply_scope_filter(qs, user=request.user, scope=request.query_params.get("scope") or "mine")
@@ -615,6 +757,7 @@ class ExecutionTagsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(tags=['executions'], summary='Tags des actions exécutées')
     def get(self, request):
         action_ids = Execution.objects.values_list("action_id", flat=True).distinct()
         tags = (
@@ -632,6 +775,7 @@ class PendingApprovalsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(tags=['executions'], summary='Approbations en attente', responses={200: ExecutionSerializer(many=True)})
     def get(self, request):
         if not _is_dba_or_dbops(request.user):
             raise ForbiddenError(code="FORBIDDEN", message="Accès interdit", details={})
@@ -649,9 +793,9 @@ class PendingApprovalsView(APIView):
         if limit <= 0 or offset < 0:
             raise BadRequestError(code="BAD_REQUEST", message="Pagination invalide", details={"limit": limit, "offset": offset})
 
-        total_count = qs.count()
+        total = qs.count()
         page = (offset // limit) + 1
-        total_pages = (total_count + limit - 1) // limit if limit else 1
+        total_pages = (total + limit - 1) // limit if limit else 1
 
         items = list(qs[offset: offset + limit])
         data = ExecutionSerializer(items, many=True).data
@@ -662,7 +806,7 @@ class PendingApprovalsView(APIView):
                 "pagination": {
                     "page": page,
                     "page_size": limit,
-                    "total_count": total_count,
+                    "total": total,
                     "total_pages": total_pages,
                 },
             }
@@ -674,78 +818,6 @@ class PendingApprovalsView(APIView):
 # =============================================================================
 
 
-def _parse_iso_datetime(value: str | None, *, name: str) -> datetime | None:
-    if not value:
-        return None
-    dt = parse_datetime(value)
-    if dt is None:
-        raise BadRequestError(
-            code="BAD_REQUEST",
-            message=f"{name} invalide (ISO 8601)",
-            details={name: value},
-        )
-    if timezone.is_naive(dt):
-        # Assume UTC if no timezone info
-        dt = timezone.make_aware(dt, timezone=UTC)
-    else:
-        dt = dt.astimezone(UTC)
-    return dt
-
-
-def _calculate_next_execution_date(pattern_type: str, pattern_config: dict, reference: datetime) -> datetime:
-    """
-    Compute next execution datetime in UTC for daily/weekly/cron patterns.
-    """
-    if timezone.is_naive(reference):
-        reference = timezone.make_aware(reference, timezone=UTC)
-    else:
-        reference = reference.astimezone(UTC)
-
-    pattern_type = (pattern_type or "").lower()
-
-    if pattern_type == "daily":
-        hour = int(pattern_config.get("hour", 0))
-        minute = int(pattern_config.get("minute", 0))
-        candidate = reference.replace(hour=hour, minute=minute, second=0, microsecond=0)
-        if candidate <= reference:
-            candidate = candidate + timedelta(days=1)
-        return candidate
-
-    if pattern_type == "weekly":
-        day_of_week = int(pattern_config.get("day_of_week", 1))  # 1=Mon .. 7=Sun
-        hour = int(pattern_config.get("hour", 0))
-        minute = int(pattern_config.get("minute", 0))
-        # ISO weekday: Monday=1..Sunday=7
-        current_dow = reference.isoweekday()
-        days_ahead = (day_of_week - current_dow) % 7
-        candidate = (reference + timedelta(days=days_ahead)).replace(hour=hour, minute=minute, second=0, microsecond=0)
-        if candidate <= reference:
-            candidate = candidate + timedelta(days=7)
-        return candidate
-
-    if pattern_type == "cron":
-        expr = str(pattern_config.get("cron_expression", "")).strip()
-        if not expr or not croniter.is_valid(expr):
-            raise BadRequestError(
-                code="INVALID_CRON_EXPRESSION",
-                message="Expression cron invalide. Format attendu : minute hour day month day_of_week",
-                details={"expression": expr},
-            )
-        it = croniter(expr, reference)
-        nxt = it.get_next(datetime)
-        if timezone.is_naive(nxt):
-            nxt = timezone.make_aware(nxt, timezone=UTC)
-        else:
-            nxt = nxt.astimezone(UTC)
-        return nxt
-
-    raise BadRequestError(
-        code="BAD_REQUEST",
-        message="pattern_type invalide",
-        details={"pattern_type": pattern_type},
-    )
-
-
 class ScheduledExecutionsView(APIView):
     """
     GET /scheduled-executions (Story 11.6)
@@ -754,6 +826,7 @@ class ScheduledExecutionsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(tags=['scheduling'], summary='Lister les exécutions planifiées', responses={200: ScheduledExecutionListItemSerializer(many=True)})
     def get(self, request):
         limit = _parse_int(request.query_params.get("limit"), 50, name="limit")
         offset = _parse_int(request.query_params.get("offset"), 0, name="offset")
@@ -790,14 +863,9 @@ class ScheduledExecutionsView(APIView):
             qs = qs.filter(action_id=_parse_int(action_id, 0, name="action_id"))
 
         # Story 13.6: Filter by environment (from scheduled execution)
+        # Story 13.7, AC2: Validate against inventory instead of hardcoded list
         if environment_filter:
-            valid_envs = {'dev', 'staging', 'prod'}
-            if environment_filter.lower() not in valid_envs:
-                raise BadRequestError(
-                    code="INVALID_ENVIRONMENT",
-                    message=f"Environnement invalide: {environment_filter}",
-                    details={"environment": environment_filter, "valid_environments": sorted(valid_envs)},
-                )
+            _validate_environment_against_inventory(environment_filter, user_id=request.user.id)
             qs = qs.filter(environment=environment_filter.lower())
 
         # Story 13.6: Filter by engine (from action)
@@ -818,9 +886,9 @@ class ScheduledExecutionsView(APIView):
             )
 
         qs = qs.order_by("-created_at")
-        total_count = qs.count()
+        total = qs.count()
         page = (offset // limit) + 1
-        total_pages = (total_count + limit - 1) // limit if total_count > 0 else 1
+        total_pages = (total + limit - 1) // limit if total > 0 else 1
 
         items = list(qs[offset: offset + limit])
         data_items = ScheduledExecutionListItemSerializer(items, many=True).data
@@ -840,13 +908,14 @@ class ScheduledExecutionsView(APIView):
             "pagination": {
                 "page": page,
                 "page_size": limit,
-                "total_count": total_count,
+                "total": total,
                 "total_pages": total_pages,
             },
             "available_actions": available_actions,
         }
         return Response({"data": inner})
 
+    @extend_schema(tags=['scheduling'], summary='Créer une exécution planifiée', responses={201: ScheduledExecutionSerializer})
     def post(self, request):
         payload = request.data or {}
 
@@ -862,6 +931,9 @@ class ScheduledExecutionsView(APIView):
                 message="action_id et environment sont requis",
                 details={"action_id": action_id, "environment": environment},
             )
+        
+        # Story 13.7, AC2: Validate environment against inventory
+        _validate_environment_against_inventory(environment, user_id=request.user.id)
 
         # Validate mutual exclusivity
         if scheduled_at_raw and recurring_pattern:
@@ -979,8 +1051,8 @@ class ScheduledExecutionUpdateView(APIView):
                         "action_name": se.action.name if se.action else None,
                         "environment": se.environment,
                         "status": se.status,
-                        "scheduled_at": se.scheduled_at.isoformat() if se.scheduled_at else None,
-                        "created_at": se.created_at.isoformat() if se.created_at else None,
+                        "scheduled_at": ensure_utc_isoformat(se.scheduled_at),
+                        "created_at": ensure_utc_isoformat(se.created_at),
                     }
                 }
             )
@@ -998,20 +1070,22 @@ class ScheduledExecutionUpdateView(APIView):
                 raise BadRequestError(code="BAD_REQUEST", message="execution_id invalide", details={"execution_id": execution_id})
 
             # If recurring: recalc next date and keep status pending (next occurrence)
-            rp = getattr(se, "recurringpattern", None)
-            if rp is not None and bool(rp.is_active):
-                rp.next_execution_date = _calculate_next_execution_date(
-                    rp.pattern_type, rp.get_pattern_config() or {}, timezone.now()
-                )
-                rp.updated_at = timezone.now()
-                rp.save(update_fields=["next_execution_date", "updated_at"])
-                se.status = ScheduledExecutionStatus.PENDING
-            else:
-                se.status = ScheduledExecutionStatus.EXECUTED
+            # Wrap both operations in a single transaction to ensure atomicity
+            with transaction.atomic():
+                rp = getattr(se, "recurringpattern", None)
+                if rp is not None and bool(rp.is_active):
+                    rp.next_execution_date = _calculate_next_execution_date(
+                        rp.pattern_type, rp.get_pattern_config() or {}, timezone.now()
+                    )
+                    rp.updated_at = timezone.now()
+                    rp.save(update_fields=["next_execution_date", "updated_at"])
+                    se.status = ScheduledExecutionStatus.PENDING
+                else:
+                    se.status = ScheduledExecutionStatus.EXECUTED
 
-            se.execution_id = execution_id_int
-            se.updated_at = timezone.now()
-            se.save(update_fields=["status", "execution_id", "updated_at"])
+                se.execution_id = execution_id_int
+                se.updated_at = timezone.now()
+                se.save(update_fields=["status", "execution_id", "updated_at"])
             se = ScheduledExecution.objects.select_related("action").get(id=scheduled_execution_id)
             return Response(
                 {
@@ -1021,13 +1095,172 @@ class ScheduledExecutionUpdateView(APIView):
                         "action_name": se.action.name if se.action else None,
                         "environment": se.environment,
                         "status": se.status,
-                        "scheduled_at": se.scheduled_at.isoformat() if se.scheduled_at else None,
-                        "created_at": se.created_at.isoformat() if se.created_at else None,
+                        "scheduled_at": ensure_utc_isoformat(se.scheduled_at),
+                        "created_at": ensure_utc_isoformat(se.created_at),
                     }
                 }
             )
 
         raise BadRequestError(code="INVALID_STATUS", message="Statut invalide", details={"status": new_status})
+
+    def put(self, request, scheduled_execution_id: int):
+        """PUT /scheduled-executions/{id} - update pending scheduled execution (Story 13.8, AC4)."""
+        try:
+            se = ScheduledExecution.objects.select_related("action", "user").select_related("recurringpattern").get(
+                id=scheduled_execution_id
+            )
+        except ScheduledExecution.DoesNotExist:
+            raise NotFoundError(
+                code="SCHEDULED_EXECUTION_NOT_FOUND",
+                message="Exécution planifiée introuvable",
+                details={"scheduled_execution_id": scheduled_execution_id},
+            )
+
+        if (getattr(request.user, "profile", "") or "").lower() != "dbops" and se.user_id != request.user.id:
+            raise ForbiddenError(
+                code="PERMISSION_DENIED",
+                message="Vous n'avez pas la permission de modifier cette exécution planifiée",
+                details={"scheduled_execution_id": scheduled_execution_id},
+            )
+
+        if se.status != ScheduledExecutionStatus.PENDING:
+            raise InvalidStateError(
+                code="INVALID_STATUS",
+                message="Seules les exécutions planifiées en attente peuvent être modifiées",
+                details={"scheduled_execution_id": scheduled_execution_id, "status": se.status},
+            )
+
+        body = request.data if isinstance(request.data, dict) else {}
+        action = se.action
+        if not action:
+            raise NotFoundError(
+                code="ACTION_NOT_FOUND",
+                message="Action introuvable",
+                details={"action_id": se.action_id},
+            )
+
+        scheduled_at_raw = body.get("scheduled_at")
+        parameters = body.get("parameters")
+        environment = body.get("environment")
+        target_names = body.get("target_names")
+        recurring_pattern_payload = body.get("recurring_pattern")
+        now = timezone.now()
+        se.updated_at = now
+
+        # One-time: allow updating scheduled_at
+        rp = getattr(se, "recurringpattern", None)
+        if scheduled_at_raw is not None and rp is None:
+            scheduled_at = _parse_iso_datetime(scheduled_at_raw, name="scheduled_at")
+            if scheduled_at is not None and scheduled_at <= timezone.now().astimezone(UTC):
+                raise BadRequestError(
+                    code="INVALID_SCHEDULED_DATE",
+                    message="scheduled_at doit être dans le futur",
+                    details={"scheduled_at": scheduled_at_raw},
+                )
+            se.scheduled_at = scheduled_at
+
+        # Environment (validate against inventory)
+        if environment is not None:
+            _validate_environment_against_inventory(environment, user_id=request.user.id)
+            se.environment = environment.lower()
+
+        # Target names: RBAC validation and merge into parameters (empty list allowed = clear targets)
+        if target_names is not None:
+            if not isinstance(target_names, list):
+                raise BadRequestError(
+                    code="BAD_REQUEST",
+                    message="target_names doit être une liste",
+                    details={"target_names": target_names},
+                )
+            if len(target_names) == 0:
+                current_params = se.get_parameters() or {}
+                if not isinstance(current_params, dict):
+                    current_params = {}
+                new_params = {k: v for k, v in current_params.items() if k != "_targets"}
+                new_params["_targets"] = []
+                se.set_parameters(new_params)
+                if environment is not None:
+                    _validate_environment_against_inventory(environment, user_id=request.user.id)
+                    se.environment = environment.lower()
+            else:
+                ad_groups = get_user_ad_groups(request.user)
+                inventory_service = InventoryService()
+                try:
+                    allowed_targets, _total, inventory_truncated = inventory_service.list_targets_for_user(
+                        user_id=request.user.id,
+                        ad_groups=ad_groups,
+                        page=1,
+                        page_size=MAX_TARGETS_FOR_RBAC_FILTER,
+                    )
+                except InventoryServiceError as e:
+                    exec_logger.error(
+                        "inventory_service_error_during_scheduled_update",
+                        error=str(e),
+                        user_id=request.user.id,
+                    )
+                    raise BadRequestError(
+                        code="INVENTORY_UNAVAILABLE",
+                        message="Service inventaire indisponible",
+                        details={"error": str(e)},
+                    )
+                allowed_targets_map = {t["name"]: t for t in allowed_targets}
+                environments_found = set()
+                for name in target_names:
+                    if name not in allowed_targets_map:
+                        raise ForbiddenError(
+                            code="FORBIDDEN",
+                            message=f"Cible non autorisée: {name}",
+                            details={"target_name": name, "inventory_truncated": inventory_truncated},
+                        )
+                    environments_found.add(allowed_targets_map[name]["environment"])
+                if len(environments_found) > 1:
+                    raise BadRequestError(
+                        code="MIXED_ENVIRONMENTS",
+                        message="Les cibles doivent appartenir au même environnement",
+                        details={"environments": list(environments_found)},
+                    )
+                se.environment = list(environments_found)[0].lower()
+                current_params = se.get_parameters() or {}
+                if not isinstance(current_params, dict):
+                    current_params = {}
+                new_params = {**current_params, "_targets": target_names}
+                se.set_parameters(new_params)
+        elif parameters is not None:
+            current_params = se.get_parameters() or {}
+            if not isinstance(current_params, dict):
+                current_params = {}
+            # Security: do not allow client to set _targets via parameters; only via validated target_names
+            incoming = parameters if isinstance(parameters, dict) else {}
+            sanitized = {k: v for k, v in incoming.items() if not k.startswith("_")}
+            merged = {**current_params, **sanitized}
+            se.set_parameters(merged)
+
+        # Recurring pattern update
+        if recurring_pattern_payload is not None and rp is not None:
+            pattern_type = (recurring_pattern_payload.get("pattern_type") or "").lower()
+            pattern_config = recurring_pattern_payload.get("pattern_config") or {}
+            next_execution_date = _calculate_next_execution_date(
+                pattern_type, pattern_config, timezone.now()
+            )
+            rp.pattern_type = pattern_type
+            rp.set_pattern_config(pattern_config)
+            rp.next_execution_date = next_execution_date
+            rp.updated_at = now
+            rp.save(update_fields=["pattern_type", "pattern_config", "next_execution_date", "updated_at"])
+
+        update_fields = ["updated_at"]
+        if scheduled_at_raw is not None and rp is None:
+            update_fields.append("scheduled_at")
+        if environment is not None or target_names is not None:
+            update_fields.extend(["environment", "parameters"])
+        elif parameters is not None:
+            update_fields.append("parameters")
+        se.save(update_fields=list(dict.fromkeys(update_fields)))
+
+        se = ScheduledExecution.objects.select_related("action").select_related("recurringpattern").get(
+            id=scheduled_execution_id
+        )
+        return Response({"data": ScheduledExecutionSerializer(se).data})
 
 
 class ScheduledExecutionRecurringPatternView(APIView):
@@ -1104,7 +1337,13 @@ class ScheduledExecutionValidateCronView(APIView):
             it = croniter(expr, datetime.now(UTC))
             _ = it.get_next(datetime)
             return Response({"data": {"valid": True, "error": ""}})
-        except Exception as e:
+        except (CroniterBadCronError, CroniterBadDateError, ValueError) as e:
+            exec_logger.debug(
+                "cron_expression_validation_failed",
+                expression=expr,
+                error=str(e),
+                correlation_id=get_correlation_id(),
+            )
             return Response({"data": {"valid": False, "error": f"Expression cron invalide : {str(e)}"}})
 
 
@@ -1130,11 +1369,7 @@ class ScheduledExecutionCronNextExecutionsView(APIView):
         executions = []
         for _ in range(count):
             nxt = it.get_next(datetime)
-            if timezone.is_naive(nxt):
-                nxt = timezone.make_aware(nxt, timezone=UTC)
-            else:
-                nxt = nxt.astimezone(UTC)
-            executions.append(nxt.isoformat())
+            executions.append(ensure_utc_isoformat(nxt))
 
         return Response({"data": {"executions": executions}})
 

@@ -113,6 +113,112 @@ except Exception as e:
     raise
 ```
 
+## Gestion des exceptions (Story 17.6)
+
+### Règle : Éviter les `except Exception` trop larges
+
+**Mauvais :**
+
+```python
+try:
+    result = api.call()
+except Exception:
+    return None  # Masque toutes les erreurs silencieusement
+```
+
+**Bon - Exceptions spécifiques :**
+
+```python
+try:
+    result = api.call()
+except (requests.HTTPError, requests.Timeout) as e:
+    logger.error("api_call_failed", service="api", error=str(e), exc_info=True)
+    raise
+```
+
+**Acceptable - Broad catch justifié :**
+
+```python
+try:
+    result = dynamic_plugin.execute()
+except Exception as e:
+    # Story 17.6: Justified broad catch - Plugin can raise any exception
+    logger.error(
+        "plugin_execution_failed",
+        plugin=plugin_name,
+        error=str(e),
+        error_type=type(e).__name__,
+        correlation_id=get_correlation_id(),
+        exc_info=True,
+    )
+    return {"status": "failed", "error": str(e)}
+```
+
+### Pattern de gestion d'erreur standard
+
+1. **Exceptions spécifiques d'abord** (ex: `ValueError`, `KeyError`, `requests.HTTPError`)
+2. **Broad catch seulement si justifié** avec commentaire `# Story 17.6: Justified broad catch - [raison]`
+3. **Toujours capturer `as e`** pour permettre le logging
+4. **Logging obligatoire** avec `exc_info=True` pour erreurs inattendues
+5. **Toujours inclure `correlation_id`** pour traçabilité
+
+### Exceptions par domaine
+
+| Domaine | Exceptions spécifiques |
+|---------|----------------------|
+| Django ORM | `ObjectDoesNotExist`, `MultipleObjectsReturned`, `IntegrityError`, `ValidationError`, `DatabaseError`, `OperationalError` |
+| API externes | `requests.HTTPError`, `requests.Timeout`, `requests.ConnectionError` |
+| Validation données | `ValueError`, `KeyError`, `TypeError`, `AttributeError` |
+| Celery | `Retry`, `MaxRetriesExceededError`, `SoftTimeLimitExceeded` |
+| Croniter | `CroniterBadCronError`, `CroniterBadDateError` |
+
+### Story 22.11 — Complétion audit exception handling
+
+**Règles complémentaires Story 22.11 :**
+
+1. **OBLIGATOIRE :** Tous les `except Exception:` doivent avoir `as e` pour capturer la variable
+2. **OBLIGATOIRE :** Logging avec `exc_info=True` pour exceptions inattendues
+3. **OBLIGATOIRE :** Ajouter `error_type=type(e).__name__` dans tous les logs d'exception
+4. **OBLIGATOIRE :** Commentaire justification `# Story 22.11: Justified broad catch - [raison]` si broad catch nécessaire
+5. **OBLIGATOIRE :** Commentaire `# Story 17.6: Justified broad catch - [raison]` reste valide pour les broad catches existants
+
+**Exceptions ORM Django préférées :**
+
+```python
+from django.db import DatabaseError, IntegrityError, OperationalError
+from django.core.exceptions import ValidationError
+```
+
+Plus spécifiques que `Exception` pour erreurs DB.
+
+**Pattern Celery tasks :**
+
+```python
+from core.middleware import get_correlation_id
+
+try:
+    # ... task logic ...
+except (DatabaseError, IntegrityError) as e:
+    logger.error(
+        "task_db_error",
+        error=str(e),
+        error_type=type(e).__name__,
+        exc_info=True,
+        correlation_id=get_correlation_id(),  # OBLIGATOIRE pour traçabilité
+    )
+    raise  # Re-raise pour retry Celery
+except Exception as e:
+    # Story 22.11: Justified broad catch - Task must handle all failure modes
+    logger.error(
+        "task_unexpected_error",
+        error=str(e),
+        error_type=type(e).__name__,
+        exc_info=True,
+        correlation_id=get_correlation_id(),  # OBLIGATOIRE pour traçabilité
+    )
+    raise
+```
+
 ## Données sensibles
 
 **Ne jamais logger** :

@@ -1,17 +1,24 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, date
+from typing import Any
 
-from django.db.models import Q, Count
+from django.db.models import Q, Count, QuerySet
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.utils import ensure_utc_isoformat
+import structlog
+
 from catalog.models import Action, Tag
 from core.exceptions import BadRequestError
+from core.middleware import get_correlation_id
 from executions.models import Execution, ExecutionStatus
+
+logger = structlog.get_logger(__name__)
 
 
 def _parse_int(value: str | None, default: int, *, name: str) -> int:
@@ -58,13 +65,13 @@ def _get_period_bounds(request) -> tuple[datetime, datetime]:
     return start_dt, end_exclusive
 
 
-def _apply_common_filters(qs, *, request, include_status: bool) -> object:
+def _apply_common_filters(qs: QuerySet, *, request: Any, include_status: bool) -> QuerySet:
     """
     Apply common dashboard filters:
     - engine (Action.engine)
     - environment (Execution.environment)
     - tags (multi query params, OR semantics)
-    - status (Execution.status) (optional; FastAPI historically ignores it for dashboard stats)
+    - status (Execution.status) (optional; historically ignored for dashboard stats)
     """
     engine = request.query_params.get("engine")
     if engine:
@@ -98,7 +105,7 @@ class DashboardStatsView(APIView):
         if not _is_dba_or_dbops(request.user):
             qs_base = qs_base.filter(user_id=request.user.id)
 
-        # For dashboard stats, mimic FastAPI behavior: ignore status filter for consistency
+        # For dashboard stats, ignore status filter for consistency
         qs_base = _apply_common_filters(qs_base, request=request, include_status=False)
 
         period_start, period_end_exclusive = _get_period_bounds(request)
@@ -155,7 +162,7 @@ class DashboardRecentView(APIView):
                     "user_display_name": getattr(user, "display_name", None) or "Unknown",
                     "environment": e.environment,
                     "status": e.status,
-                    "created_at": e.created_at.isoformat() if e.created_at else None,
+                    "created_at": ensure_utc_isoformat(e.created_at),
                     "platform": getattr(action, "platform", None) if action else None,
                     "engine": getattr(action, "engine", None) if action else None,
                 }
@@ -350,7 +357,16 @@ def _stats_for_queryset(qs) -> dict:
             delta = (completed_at - started_at).total_seconds()
             if delta >= 0:
                 durations.append(delta)
-        except Exception:
+        except (TypeError, AttributeError) as e:
+            # Story 17.6: Specific catch for invalid timestamp data
+            logger.debug(
+                "execution_duration_calculation_skipped",
+                started_at=started_at,
+                completed_at=completed_at,
+                error=str(e),
+                error_type=type(e).__name__,
+                correlation_id=get_correlation_id(),
+            )
             continue
 
     avg_time = round(sum(durations) / len(durations), 2) if durations else None

@@ -8,6 +8,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { fetchRemediationSuggestions } from '../services/execution_service';
 import type { RemediationSuggestion, ExecutionStatusType } from '../types/api';
+import logger from '../services/logger';
 
 interface UseRemediationSuggestionsResult {
   suggestions: RemediationSuggestion[] | null;
@@ -49,7 +50,7 @@ export function useRemediationSuggestions(
       const result = await fetchRemediationSuggestions(executionId);
       setSuggestions(result);
     } catch (err) {
-      console.error('Failed to fetch remediation suggestions:', err);
+      logger.error('Failed to fetch remediation suggestions', { executionId, error: err instanceof Error ? err.message : String(err) });
       setError(err instanceof Error ? err : new Error('Unknown error'));
       setSuggestions(null);
     } finally {

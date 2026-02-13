@@ -174,6 +174,34 @@ describe('ActionCard', () => {
     expect(screen.queryByText(/exécution/)).not.toBeInTheDocument();
   });
 
+  // Story 5.7 / 20.6: Workflow icon and label tests
+  describe('workflow display (Story 5.7, AC3)', () => {
+    const workflowAction: ActionPreviewData = {
+      ...mockAction,
+      item_type: 'workflow',
+    };
+
+    it('renders aria-label with "Workflow:" prefix for workflow item_type', () => {
+      renderWithTheme(<ActionCard action={workflowAction} />);
+
+      const card = screen.getByRole('article');
+      expect(card).toHaveAttribute('aria-label', 'Workflow: Creer PDB Oracle, impact Moyen');
+    });
+
+    it('renders workflow icon (ApartmentOutlined) instead of engine icon', () => {
+      const { container } = renderWithTheme(<ActionCard action={workflowAction} />);
+
+      expect(container.querySelector('.anticon-apartment')).toBeInTheDocument();
+    });
+
+    it('renders standard engine icon when item_type is not workflow', () => {
+      renderWithTheme(<ActionCard action={mockAction} />);
+
+      const card = screen.getByRole('article');
+      expect(card).toHaveAttribute('aria-label', 'Action: Creer PDB Oracle, impact Moyen');
+    });
+  });
+
   // Story 7.1: Business variant tests
   describe('business variant (Story 7.1)', () => {
     const actionWithTechnicalTerms: ActionPreviewData = {

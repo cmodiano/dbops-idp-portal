@@ -19,6 +19,8 @@ import dayjs from 'dayjs';
 import type { ExecutionFilters, ActionListItem } from '../../types/api';
 import { fetchExecutionTags } from '../../services/execution_service';
 import { listActions } from '../../services/admin_service';
+import { useEngines } from '../../hooks/useEngines';
+import { useEnvironments } from '../../hooks/useEnvironments';
 
 const { RangePicker } = DatePicker;
 
@@ -33,22 +35,8 @@ const STATUS_OPTIONS = [
   { label: 'Rejetée', value: 'REJECTED' },
 ];
 
-/** Environment options. */
-const ENVIRONMENT_OPTIONS = [
-  { label: 'Développement', value: 'dev' },
-  { label: 'Staging', value: 'staging' },
-  { label: 'Production', value: 'prod' },
-];
-
-/** Technology/Engine options. */
-const ENGINE_OPTIONS = [
-  { label: 'Oracle', value: 'Oracle' },
-  { label: 'SQL Server', value: 'SQL Server' },
-  { label: 'DB2', value: 'DB2' },
-  { label: 'PostgreSQL', value: 'PostgreSQL' },
-  { label: 'MySQL', value: 'MySQL' },
-  { label: 'Workflow', value: 'Workflow' },
-];
+// Story 13.7: ENVIRONMENT_OPTIONS removed - use useEnvironments hook instead
+// Story 13.7: ENGINE_OPTIONS removed - use useEngines hook instead
 
 /** Date range presets. */
 const DATE_PRESETS: { label: string; value: [Dayjs, Dayjs] }[] = [
@@ -79,6 +67,11 @@ export function ExecutionsFiltersPanel({
   loading = false,
 }: ExecutionsFiltersPanelProps) {
   const { token } = theme.useToken();
+
+  // Story 13.7: Load engines from REF_ENGINES table
+  const { engineOptions, loading: enginesLoading } = useEngines();
+  // Story 13.7: Load environments from inventory
+  const { environmentOptions, loading: environmentsLoading } = useEnvironments();
 
   // Tags and actions for selects
   const [tags, setTags] = useState<string[]>([]);
@@ -208,8 +201,9 @@ export function ExecutionsFiltersPanel({
                 allowClear
                 value={filters.engine}
                 onChange={(value) => apply({ ...filters, engine: value ?? null })}
-                options={ENGINE_OPTIONS}
-                disabled={loading}
+                options={engineOptions}
+                disabled={loading || enginesLoading}
+                loading={enginesLoading}
                 data-testid="filter-engine"
               />
             </Form.Item>
@@ -258,8 +252,9 @@ export function ExecutionsFiltersPanel({
                 onChange={(value) =>
                   apply({ ...filters, environment: value ?? null })
                 }
-                options={ENVIRONMENT_OPTIONS}
-                disabled={loading}
+                options={environmentOptions}
+                disabled={loading || environmentsLoading}
+                loading={environmentsLoading}
                 data-testid="filter-environment"
               />
             </Form.Item>

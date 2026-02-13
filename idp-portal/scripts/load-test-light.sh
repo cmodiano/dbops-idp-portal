@@ -1,11 +1,11 @@
 #!/bin/bash
 # ============================================================================
 # Light Load Test Script
-# IDP Portal - FastAPI → Django Migration
+# IDP Portal - Django Backend Load Testing
 # ============================================================================
 #
 # This script performs a light load test (10 req/s for 1 minute) to validate
-# Django backend performance after switchover.
+# Django backend performance.
 #
 # Requirements:
 #   - curl

@@ -2,7 +2,7 @@
 Structured logging configuration using structlog.
 Story M.8 - Logging structuré JSON pour observabilité.
 
-This module configures structlog for Django to match FastAPI's logging format,
+This module configures structlog for Django with JSON output format,
 enabling unified log analysis in Splunk.
 
 Log levels follow architecture convention:
@@ -23,7 +23,7 @@ def configure_structlog() -> None:
     """
     Configure structlog with JSON output for structured logging.
 
-    This configuration mirrors FastAPI's structlog setup for consistency:
+    Configuration features:
     - JSON output format for Splunk ingestion
     - ISO8601 UTC timestamps
     - Context variable merging (correlation_id, user_id)
@@ -74,4 +74,4 @@ def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
     Returns:
         Configured structlog BoundLogger instance
     """
-    return structlog.get_logger(name)
+    return structlog.get_logger(name)  # type: ignore[no-any-return]  # structlog runtime returns BoundLogger

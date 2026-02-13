@@ -18,25 +18,18 @@ import dayjs from 'dayjs';
 import type { CalendarFilters } from '../../hooks/useCalendarFilters';
 import type { IntegrationResponse } from '../../types/api';
 import { getIntegrations } from '../../services/integrations_service';
+import { useEngines } from '../../hooks/useEngines';
+import { useEnvironments } from '../../hooks/useEnvironments';
+import { useAuth } from '../../contexts/AuthContext';
 
 const { RangePicker } = DatePicker;
 
-/** Environment options. */
-const ENVIRONMENT_OPTIONS = [
-  { label: 'Développement', value: 'dev' },
-  { label: 'Staging', value: 'staging' },
-  { label: 'Production', value: 'prod' },
-];
+// Story 13.7: ENVIRONMENT_OPTIONS removed - use useEnvironments hook instead
 
-/** Technology/Engine options (aligned with ExecutionsFiltersPanel). */
-const ENGINE_OPTIONS = [
-  { label: 'Oracle', value: 'Oracle' },
-  { label: 'SQL Server', value: 'SQL Server' },
-  { label: 'DB2', value: 'DB2' },
-  { label: 'PostgreSQL', value: 'PostgreSQL' },
-  { label: 'MySQL', value: 'MySQL' },
-  { label: 'Workflow', value: 'Workflow' },
-];
+// Story 13.7: ENGINE_OPTIONS removed - use useEngines hook instead
+// Story 13.7: ENVIRONMENT_OPTIONS removed - use useEnvironments hook instead
+
+const EMPTY_ACTIONS: { action_id: number; action_name: string }[] = [];
 
 export interface CalendarFiltersPanelProps {
   /** Current filter values (from useCalendarFilters). */
@@ -59,9 +52,15 @@ export function CalendarFiltersPanel({
   onResetFilters,
   activeFilterCount,
   loading = false,
-  availableActions = [],
+  availableActions = EMPTY_ACTIONS,
 }: CalendarFiltersPanelProps) {
   const { token } = theme.useToken();
+  const { user } = useAuth();
+
+  // Story 13.7: Load engines from REF_ENGINES table
+  const { engineOptions, loading: enginesLoading } = useEngines();
+  // Story 13.7: Load environments from inventory (only when authenticated to avoid 401)
+  const { environmentOptions, loading: environmentsLoading } = useEnvironments({ enabled: !!user });
 
   // Platforms for select
   const [integrations, setIntegrations] = useState<IntegrationResponse[]>([]);
@@ -160,8 +159,9 @@ export function CalendarFiltersPanel({
                 allowClear
                 value={filters.environment}
                 onChange={(value) => apply({ ...filters, environment: value ?? null })}
-                options={ENVIRONMENT_OPTIONS}
-                disabled={loading}
+                options={environmentOptions}
+                disabled={loading || environmentsLoading}
+                loading={environmentsLoading}
                 data-testid="filter-environment"
               />
             </Form.Item>
@@ -173,8 +173,9 @@ export function CalendarFiltersPanel({
                 allowClear
                 value={filters.engine}
                 onChange={(value) => apply({ ...filters, engine: value ?? null })}
-                options={ENGINE_OPTIONS}
-                disabled={loading}
+                options={engineOptions}
+                disabled={loading || enginesLoading}
+                loading={enginesLoading}
                 data-testid="filter-engine"
               />
             </Form.Item>
@@ -203,9 +204,10 @@ export function CalendarFiltersPanel({
                 style={{ width: '100%' }}
                 format="DD/MM/YYYY"
                 placeholder={['Date début', 'Date fin']}
-                value={dateRangeValue}
+                value={dateRangeValue || undefined}
                 onChange={handleDateRangeChange}
-                disabled={loading}
+                disabled={loading && dateRangeValue !== null}
+                allowClear
                 data-testid="filter-date-range"
               />
             </Form.Item>

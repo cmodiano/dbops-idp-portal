@@ -1,8 +1,56 @@
 # Migration Notes: FastAPI → Django REST Framework
 
+> **📦 Document d'archivage — Migration terminée**  
+> Ce document est conservé pour référence historique. La migration FastAPI→Django est complète (février 2026).  
+> Voir [MIGRATION_ARCHIVE.md](../../docs/MIGRATION_ARCHIVE.md) pour accéder au code FastAPI archivé.
+
 **Story:** M.4, M.5, M.7, M.8 - API REST — endpoints catalogue, admin (actions, tags), profils, auth, observabilité
 **Date:** 2026-02-03, 2026-02-04, 2026-02-05
-**Status:** Implementation Complete (M.8 Observability added)
+**Status:** Migration terminée — Document historique conservé
+
+## BREAKING CHANGES
+
+### Story 22.6 (2026-02-09) — Pagination field `total_count` renamed to `total`
+
+Le champ de pagination `total_count` a été renommé en `total` dans toutes les réponses API paginées pour aligner backend et frontend sur le standard DRF `CustomPageNumberPagination`.
+
+**Endpoints affectés :**
+- `GET /api/v1/executions/` — `pagination.total_count` → `pagination.total`
+- `GET /api/v1/executions/pending-approvals` — `pagination.total_count` → `pagination.total`
+- `GET /api/v1/scheduled-executions/` — `pagination.total_count` → `pagination.total`
+- `GET /api/v1/audit/executions/` — `pagination.total_count` → `pagination.total`
+- `GET /api/v1/inventory/targets/` — `total_count` → `total` (flat structure)
+- `CatalogService.list_all()` — `pagination_info['total_count']` → `pagination_info['total']`
+
+**Migration Guide pour clients externes :**
+
+**Avant (deprecated) :**
+```typescript
+const response = await fetch('/api/v1/executions/?limit=25&offset=0');
+const data = await response.json();
+const totalItems = data.pagination.total_count; // ❌ DEPRECATED
+```
+
+**Après (correct) :**
+```typescript
+const response = await fetch('/api/v1/executions/?limit=25&offset=0');
+const data = await response.json();
+const totalItems = data.pagination.total; // ✅ CORRECT
+```
+
+**Python clients :**
+```python
+# Avant
+response = requests.get('/api/v1/executions/', params={'limit': 25, 'offset': 0})
+total = response.json()['pagination']['total_count']  # ❌ KeyError
+
+# Après
+response = requests.get('/api/v1/executions/', params={'limit': 25, 'offset': 0})
+total = response.json()['pagination']['total']  # ✅ Correct
+```
+
+**Effective date :** 2026-02-09
+**Rollback instructions :** Non applicable — frontend TypeScript types enforce `total`, rollback would cause compilation errors.
 
 ## Vue d'ensemble
 
@@ -185,13 +233,26 @@ Les réponses DRF utilisent le même format que FastAPI:
 **Status:** Retourne les tags mais sans `action_count`  
 **Workaround:** Calculer côté client ou utiliser FastAPI endpoint
 
-### 3. ExecutionService.get_action_stats() non disponible
+### 3. ~~ExecutionService.get_action_stats() non disponible~~ (résolu Story 20.2)
 
 **Endpoint:** GET `/api/v1/catalog/actions/{id}/stats`  
-**Status:** Utilise un calcul simplifié au lieu de `ExecutionService.get_action_stats()`  
-**Impact:** Les stats peuvent différer légèrement de FastAPI
+**Status:** Délègue à `ExecutionService.get_action_stats(action_id, days=30)`. Format aligné (total_executions, incidents_count, success_rate, avg_execution_time_ms).  
+**Note:** `avg_execution_time_ms` est calculé depuis `started_at` et `completed_at` pour les executions COMPLETED uniquement. Retourne `None` si aucune execution complétée avec timestamps valides.  
+**Implementation:** Code review 2026-02-08 - `avg_execution_time_ms` implémenté (calcul depuis `started_at`/`completed_at`), validation `action_id`, optimisation requêtes (agrégation unique), format retour standardisé (toujours dict), logging structuré ajouté.
 
-**Solution:** Créer `ExecutionService.get_action_stats(action_id)` ou ajouter paramètre `action_id` à `get_stats()`.
+## Environnement et exécution catalog/tests (Story 20.2)
+
+**Prérequis:** Backend Django `idp-portal/django_backend`, environnement virtuel (`.venv` ou `venv`), `pytest` + `pytest-django`. Le fichier `pytest.ini` définit `DJANGO_SETTINGS_MODULE = idp_backend.test_settings`; aucune variable d'environnement supplémentaire n'est requise pour lancer les tests.
+
+**Commande recommandée:**
+```bash
+cd idp-portal/django_backend
+.venv/bin/python -m pytest catalog/tests/ -v
+```
+
+**Migrations:** Les tests utilisent une base SQLite en mémoire (config dans `idp_backend/test_settings`); les migrations sont appliquées automatiquement par pytest-django. Pas besoin de `--no-migrations` en conditions normales.
+
+**Documentation complémentaire:** Voir `tests/README.md` pour les patterns (factories, fixtures) et `tests/KNOWN_ISSUES.md` pour les échecs connus hors catalog.
 
 ## Tests
 
@@ -203,6 +264,10 @@ Les réponses DRF utilisent le même format que FastAPI:
 - `profiles/tests/test_profile_views.py` - Tests CRUD profiles (M.5)
 - `profiles/tests/test_permissions_views.py` - Tests permissions actions/targets (M.5)
 - `profiles/tests/test_import_export_views.py` - Tests import/export YAML (M.5)
+
+### Style des tests catalog (Story 20.2, AC4)
+
+Les tests dans `catalog/tests/*.py` utilisent **Django TestCase** + **APIClient** + **UserFactory/ActionFactory** (depuis `tests/factories.py`). Ce choix est conservé pour stabilité ; une migration vers un style 100 % pytest (fixtures, pas de sous-classes TestCase) reste optionnelle pour alignement avec d’autres modules. Voir `tests/README.md` pour les bonnes pratiques.
 
 ### Couverture
 
@@ -246,7 +311,7 @@ Pour valider que le frontend fonctionne avec les endpoints DRF:
 3. **Améliorations:** 
    - Implémenter filtrage par environnement dans `impact_rules`
    - Ajouter `action_count` à `list_catalog_tags()`
-   - Créer `ExecutionService.get_action_stats(action_id)`
+   - ~~Créer `ExecutionService.get_action_stats(action_id)`~~ (fait Story 20.2)
 
 4. **Tests:**
    - Exécuter tests profiles avec environnement Django configuré
@@ -257,6 +322,26 @@ Pour valider que le frontend fonctionne avec les endpoints DRF:
 4. **Documentation:**
    - Mettre à jour la documentation API
    - Créer guide de migration pour le frontend
+
+## Validation parité contractuelle (Task 12 M-4, Story 20.2)
+
+FastAPI ayant été décommissionné (Story 17-1), la parité est validée par :
+- **Tests automatisés** : `catalog/tests/` (178 tests) couvrent les endpoints admin/catalog/tags, formats de réponse et codes HTTP.
+- **URLs et codes HTTP** : préfixe `/api/v1/`, trailing slash géré par DRF ; 200/201/400/403/404 conformes au contrat.
+- **Format JSON** : enveloppe `{"data": ...}`, pagination `{"data": [...], "pagination": {...}}`, erreurs `{"error": {"code", "message", "details"}}`.
+
+Aucune comparaison côte à côte FastAPI/DRF n’est possible ; les régressions sont couvertes par la suite catalog et les tests frontend.
+
+## Fichiers modifiés par d'autres stories (post-M-4)
+
+Pour travailler sur catalog/admin/tags, les modules susceptibles d’avoir été modifiés par des stories après M-4 sont :
+- **core** : models, permissions, exceptions, pagination (core/models.py, core/fields.py, etc.)
+- **idp_auth** : User, auth (idp_auth/models.py, idp_auth/authentication.py, etc.)
+- **profiles** : ProfileService, permissions (profiles/services.py, profiles/models.py)
+- **integrations** : modèles et vues (integrations/models.py, integrations/views.py)
+- **executions** : ExecutionService (executions/services.py — utilisé par catalog pour get_action_stats)
+
+Consulter l’historique Git ou les stories 20-1, M-5, M-6, M-7, M-8, 17-* pour les changements récents.
 
 ## Fichiers modifiés
 

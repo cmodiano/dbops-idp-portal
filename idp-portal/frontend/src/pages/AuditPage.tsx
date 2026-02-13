@@ -9,7 +9,7 @@
  * AC8: Access restricted to auditors (is_auditor=true).
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Typography,
   Table,
@@ -24,8 +24,8 @@ import {
   Descriptions,
   Badge,
   Button,
+  App,
   Dropdown,
-  message,
 } from 'antd';
 import type { MenuProps } from 'antd';
 import { DownloadOutlined } from '@ant-design/icons';
@@ -105,6 +105,7 @@ function getActionName(entry: AuditExecutionEntry): string {
 }
 
 export default function AuditPage() {
+  const { message } = App.useApp();
   const { user } = useAuth();
 
   // Table data
@@ -306,6 +307,21 @@ export default function AuditPage() {
     },
   ];
 
+  // Group workflow children under parent (accordion-style)
+  const { topLevelEntries, childrenByParentId } = useMemo(() => {
+    const childrenMap = new Map<number, AuditExecutionEntry[]>();
+    for (const e of entries) {
+      if (e.parent_execution_id != null) {
+        const existing = childrenMap.get(e.parent_execution_id) ?? [];
+        existing.push(e);
+        childrenMap.set(e.parent_execution_id, existing);
+      }
+    }
+    // Top-level = entries without parent_execution_id
+    const topLevel = entries.filter((e) => e.parent_execution_id == null);
+    return { topLevelEntries: topLevel, childrenByParentId: childrenMap };
+  }, [entries]);
+
   // Access check (AC8)
   if (!user?.is_auditor) {
     return (
@@ -355,61 +371,63 @@ export default function AuditPage() {
 
       {/* Filters (AC2) */}
       <Card size="small" style={{ marginBottom: 16 }}>
-        <Space wrap>
-          <RangePicker
-            presets={PERIOD_PRESETS}
-            value={dateRange}
-            onChange={(dates) => setDateRange(dates || [null, null])}
-            placeholder={['Date début', 'Date fin']}
-            allowClear
-          />
-          <Select
-            placeholder="Environnement"
-            options={ENVIRONMENT_OPTIONS}
-            value={environment}
-            onChange={setEnvironment}
-            allowClear
-            style={{ width: 140 }}
-          />
-          <Select
-            placeholder="Statut"
-            options={STATUS_OPTIONS}
-            value={status}
-            onChange={setStatus}
-            allowClear
-            style={{ width: 120 }}
-          />
-          {pagination && (
-            <Badge
-              count={pagination.total_count}
-              overflowCount={99999}
-              style={{ backgroundColor: '#1890ff' }}
-              showZero
-            >
-              <Text type="secondary" style={{ marginLeft: 8 }}>
-                résultats
-              </Text>
-            </Badge>
-          )}
-          {/* Export button (Story 6.4, AC1) */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+          <Space wrap>
+            <RangePicker
+              presets={PERIOD_PRESETS}
+              value={dateRange}
+              onChange={(dates) => setDateRange(dates || [null, null])}
+              placeholder={['Date début', 'Date fin']}
+              allowClear
+            />
+            <Select
+              placeholder="Environnement"
+              options={ENVIRONMENT_OPTIONS}
+              value={environment}
+              onChange={setEnvironment}
+              allowClear
+              style={{ width: 140 }}
+            />
+            <Select
+              placeholder="Statut"
+              options={STATUS_OPTIONS}
+              value={status}
+              onChange={setStatus}
+              allowClear
+              style={{ width: 120 }}
+            />
+            {pagination && (
+              <Badge
+                count={pagination.total}
+                overflowCount={99999}
+                style={{ backgroundColor: '#1890ff' }}
+                showZero
+              >
+                <Text type="secondary" style={{ marginLeft: 8 }}>
+                  résultats
+                </Text>
+              </Badge>
+            )}
+          </Space>
+          {/* Export button — aligned right */}
           <Dropdown menu={{ items: exportMenuItems }} trigger={['click']}>
             <Button icon={<DownloadOutlined />} loading={exporting}>
               Exporter
             </Button>
           </Dropdown>
-        </Space>
+        </div>
       </Card>
 
-      {/* Table (AC1, AC4, AC5) */}
+      {/* Table (AC1, AC4, AC5) — with workflow accordion grouping */}
       <Table<AuditExecutionEntry>
-        dataSource={entries}
+        dataSource={topLevelEntries}
         columns={columns}
         rowKey="id"
         loading={loading}
         pagination={{
           current: currentPage,
           pageSize: PAGE_SIZE,
-          total: pagination?.total_count || 0,
+          total: pagination?.total || 0,
           showSizeChanger: false,
         }}
         onChange={handleTableChange}
@@ -417,6 +435,34 @@ export default function AuditPage() {
           onClick: () => handleRowClick(record),
           style: { cursor: 'pointer' },
         })}
+        expandable={{
+          rowExpandable: (record) =>
+            record.item_type === 'workflow' &&
+            (childrenByParentId.get(record.entity_id)?.length ?? 0) > 0,
+          expandedRowRender: (record) => {
+            const children = childrenByParentId.get(record.entity_id) ?? [];
+            if (children.length === 0) return null;
+            return (
+              <div style={{ padding: '8px 0 8px 24px' }}>
+                <Text type="secondary" style={{ fontSize: 12, marginBottom: 8, display: 'block' }}>
+                  Actions du workflow ({children.length})
+                </Text>
+                <Table<AuditExecutionEntry>
+                  dataSource={children}
+                  rowKey="id"
+                  size="small"
+                  pagination={false}
+                  showHeader={false}
+                  onRow={(childRecord) => ({
+                    onClick: (e) => { e.stopPropagation(); handleRowClick(childRecord); },
+                    style: { cursor: 'pointer' },
+                  })}
+                  columns={columns}
+                />
+              </div>
+            );
+          },
+        }}
         locale={{
           emptyText: 'Aucune entrée d\'audit trouvée',
         }}

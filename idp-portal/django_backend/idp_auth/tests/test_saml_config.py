@@ -134,8 +134,10 @@ class TestPrepareDjangoRequest(TestCase):
         request = self.factory.get('/api/v1/auth/saml/login?RelayState=/dashboard')
         result = prepare_django_request(request)
 
-        self.assertEqual(result['get_data'], {'RelayState': '/dashboard'})
+        # dict(QueryDict) returns lists as values
+        self.assertEqual(result['get_data'], {'RelayState': ['/dashboard']})
 
+    @override_settings(ALLOWED_HOSTS=['localhost', 'testserver'])
     def test_prepare_django_request_host_with_port(self):
         """Host with port is parsed correctly."""
         from idp_auth.saml_utils import prepare_django_request

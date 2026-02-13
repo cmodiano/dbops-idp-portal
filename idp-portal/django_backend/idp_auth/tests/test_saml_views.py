@@ -163,12 +163,10 @@ class TestSAMLCallbackView(TestCase):
             data={'SAMLResponse': 'invalid'}
         )
         view = SAMLCallbackView.as_view()
+        response = view(request)
 
-        from core.exceptions import ForbiddenError
-        with self.assertRaises(ForbiddenError) as context:
-            view(request)
-
-        self.assertEqual(context.exception.code, 'SAML_VALIDATION_FAILED')
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data['error']['code'], 'SAML_VALIDATION_FAILED')
 
     @patch('idp_auth.views.create_saml_auth')
     def test_saml_callback_not_authenticated_returns_403(self, mock_create_auth):
@@ -185,12 +183,10 @@ class TestSAMLCallbackView(TestCase):
             data={'SAMLResponse': 'base64data'}
         )
         view = SAMLCallbackView.as_view()
+        response = view(request)
 
-        from core.exceptions import ForbiddenError
-        with self.assertRaises(ForbiddenError) as context:
-            view(request)
-
-        self.assertEqual(context.exception.code, 'SAML_NOT_AUTHENTICATED')
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data['error']['code'], 'SAML_NOT_AUTHENTICATED')
 
     @patch('idp_auth.views.Profile')
     @patch('idp_auth.views.create_saml_auth')
@@ -216,12 +212,10 @@ class TestSAMLCallbackView(TestCase):
             data={'SAMLResponse': 'base64data'}
         )
         view = SAMLCallbackView.as_view()
+        response = view(request)
 
-        from core.exceptions import ForbiddenError
-        with self.assertRaises(ForbiddenError) as context:
-            view(request)
-
-        self.assertEqual(context.exception.code, 'NO_PROFILE')
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data['error']['code'], 'NO_PROFILE')
 
 
 class TestExtractAdGroups(TestCase):

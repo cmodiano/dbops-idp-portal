@@ -78,6 +78,7 @@ def main() -> None:
         # ---------------------------------------------------------------------
         # AUDIT_LOG: delete rows with "new" action types then restore constraint
         # ---------------------------------------------------------------------
+        # nosec B608 - allowed_sql is built from hardcoded list, no user input
         cur.execute(
             f"DELETE FROM AUDIT_LOG WHERE ACTION_TYPE NOT IN ({allowed_sql})"
         )

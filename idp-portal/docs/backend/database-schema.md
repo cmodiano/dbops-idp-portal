@@ -530,6 +530,41 @@ WHERE es.STATUS = 'FAILED';
 
 ---
 
+#### EXECUTION_TARGETS (V066)
+
+Table de liaison entre exécutions et cibles (serveurs, bases, instances). Fondation pour les condition gates, mutex et validation RBAC.
+
+| Colonne | Type | Contraintes | Description |
+|---------|------|-------------|-------------|
+| ID | NUMBER(19) | PK, IDENTITY | Identifiant unique |
+| EXECUTION_ID | NUMBER(19) | NOT NULL, FK → EXECUTIONS.ID ON DELETE CASCADE | Exécution parente |
+| TARGET_TYPE | VARCHAR2(50) | NOT NULL | Type de cible (SERVER, DATABASE, INSTANCE, SCHEMA, CLUSTER, OTHER) |
+| TARGET_ID | VARCHAR2(200) | NOT NULL | Identifiant opaque vers l'inventaire |
+| TARGET_NAME | VARCHAR2(255) | NOT NULL | Nom de la cible (snapshot immutable) |
+| TARGET_METADATA | CLOB | NULL | Métadonnées JSON (environnement, technologie, zone) |
+| CREATED_AT | TIMESTAMP | DEFAULT SYSTIMESTAMP | Date de création |
+
+**Contrainte unique:** `(EXECUTION_ID, TARGET_TYPE, TARGET_ID)` — pas de doublon cible par exécution
+
+**Index:**
+- `IDX_EXEC_TARGETS_EXEC (EXECUTION_ID)` — lookup forward : cibles d'une exécution
+- `IDX_EXEC_TARGETS_TARGET (TARGET_TYPE, TARGET_ID)` — lookup inverse : exécutions sur une cible
+
+**Requêtes courantes:**
+```sql
+-- Cibles d'une exécution
+SELECT * FROM EXECUTION_TARGETS WHERE EXECUTION_ID = 123;
+
+-- Exécutions sur un serveur spécifique
+SELECT et.*, e.STATUS FROM EXECUTION_TARGETS et
+JOIN EXECUTIONS e ON e.ID = et.EXECUTION_ID
+WHERE et.TARGET_TYPE = 'SERVER' AND et.TARGET_ID = 'srv-prod-01';
+```
+
+**Modèle Django:** `executions/models.py` - `class ExecutionTarget`
+
+---
+
 #### SCHEDULED_EXECUTIONS (V038, V041)
 
 Table des exécutions planifiées.

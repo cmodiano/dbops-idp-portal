@@ -8,6 +8,7 @@
 import { apiFetch } from './api_client';
 import type {
   ScheduledExecutionCreateRequest,
+  ScheduledExecutionUpdateRequest,
   ScheduledExecutionResponse,
   ScheduledExecutionFilters,
   ScheduledExecutionListResponse,
@@ -71,6 +72,28 @@ export async function listScheduledExecutions(
   const url = `/scheduled-executions${queryString ? `?${queryString}` : ''}`;
 
   return apiFetch<ScheduledExecutionListResponse>(url);
+}
+
+/**
+ * Update a pending scheduled execution (Story 13.8, AC4).
+ *
+ * Only pending executions can be updated. Creator or DBOPS only.
+ *
+ * @param scheduledExecutionId - ID of the scheduled execution
+ * @param data - Partial update (scheduled_at, parameters, environment, target_names, recurring_pattern)
+ * @returns Updated scheduled execution
+ */
+export async function updateScheduledExecution(
+  scheduledExecutionId: number,
+  data: ScheduledExecutionUpdateRequest
+): Promise<ScheduledExecutionResponse> {
+  return apiFetch<ScheduledExecutionResponse>(
+    `/scheduled-executions/${scheduledExecutionId}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }
+  );
 }
 
 /**

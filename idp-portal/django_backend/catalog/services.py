@@ -9,10 +9,12 @@ import structlog
 from django.db import transaction
 from django.db.models import Q, Prefetch
 from django.core.paginator import Paginator
+from django.utils import timezone
 from catalog.models import Action, ActionStatus, Tag, ActionTag, ActionItemType
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id
+from core.exceptions import ConflictError
 
 logger = structlog.get_logger(__name__)
 
@@ -88,6 +90,7 @@ class CatalogService:
         action = Action.objects.create(
             name=action_data['name'],
             description=action_data.get('description'),
+            category=action_data.get('category'),
             engine=action_data.get('engine'),
             platform=action_data.get('platform'),
             status=status,
@@ -107,17 +110,27 @@ class CatalogService:
             correlation_id=correlation_id
         )
         
-        # Set JSON fields using helper methods
+        # Set JSON fields (OracleJSONField handles serialization automatically)
+        # Normalize empty strings to None - OracleJSONField rejects "" as invalid JSON
+        def _json_value(val):
+            if val is None or (isinstance(val, str) and not val.strip()):
+                return None
+            return val
+
         if 'parameters_schema' in action_data:
-            action.set_parameters_schema(action_data['parameters_schema'])
+            action.parameters_schema = _json_value(action_data['parameters_schema'])
         if 'impact_rules' in action_data:
-            action.set_impact_rules(action_data['impact_rules'])
+            action.impact_rules = _json_value(action_data['impact_rules'])
         if 'execution_steps' in action_data:
-            action.set_execution_steps(action_data['execution_steps'])
+            action.execution_steps = _json_value(action_data['execution_steps'])
         if 'change_type_config' in action_data:
-            action.set_change_type_config(action_data['change_type_config'])
+            ctc = _json_value(action_data['change_type_config'])
+            if ctc is not None:
+                from catalog.validators import validate_change_type_config
+                validate_change_type_config(ctc)
+            action.change_type_config = ctc
         if 'remediation_rules' in action_data:
-            action.set_remediation_rules(action_data['remediation_rules'])
+            action.remediation_rules = _json_value(action_data['remediation_rules'])
         action.save()
         
         # Add tags if provided
@@ -194,7 +207,7 @@ class CatalogService:
         pagination_info = {
             'page': page,
             'page_size': page_size,
-            'total_count': paginator.count,
+            'total': paginator.count,
             'total_pages': paginator.num_pages,
         }
         
@@ -247,13 +260,13 @@ class CatalogService:
         if 'default_impact_level' in action_update_data:
             action.default_impact_level = action_update_data.get('default_impact_level')
         
-        # Update JSON fields
+        # Update JSON fields (OracleJSONField handles serialization automatically)
         if 'parameters_schema' in action_update_data:
-            action.set_parameters_schema(action_update_data['parameters_schema'])
+            action.parameters_schema = action_update_data['parameters_schema']
         if 'impact_rules' in action_update_data:
-            action.set_impact_rules(action_update_data['impact_rules'])
+            action.impact_rules = action_update_data['impact_rules']
         if 'remediation_rules' in action_update_data:
-            action.set_remediation_rules(action_update_data['remediation_rules'])
+            action.remediation_rules = action_update_data['remediation_rules']
         
         action.save()
         
@@ -323,57 +336,175 @@ class CatalogService:
         
         return action
     
+    def count_executions(self, action_id: int) -> int:
+        """Count total executions for an action."""
+        from executions.models import Execution
+        return Execution.objects.filter(action_id=action_id).count()
+
     @transaction.atomic
     def delete_action(self, action_id: int, user=None):
         """
-        Delete an action after checking dependencies.
-        
-        Args:
-            action_id: ID of the action to delete
-            user: Optional user instance for audit
-        
-        Returns:
-            True if deleted, False if not found
-        
+        Hard-delete an action — only allowed if execution_count == 0 (Story 18.1, AC1).
+
         Raises:
-            ValueError: If action has dependencies (executions in progress)
+            ConflictError: If action has any executions (past or current).
         """
         try:
             action = Action.objects.get(id=action_id)
         except Action.DoesNotExist:
             return False
-        
-        # Check for dependencies: executions in progress
-        from executions.models import Execution, ExecutionStatus
-        running_executions = Execution.objects.filter(
-            action_id=action_id,
-            status__in=[ExecutionStatus.SUBMITTED, ExecutionStatus.RUNNING, ExecutionStatus.PENDING_APPROVAL]
-        ).exists()
-        
-        if running_executions:
-            raise ValueError("Impossible de supprimer une action avec des exécutions en cours")
-        
-        # Store action details for audit before deletion
+
+        execution_count = self.count_executions(action_id)
+        if execution_count > 0:
+            raise ConflictError(
+                code="EXECUTION_EXISTS",
+                message="Impossible de supprimer une action ayant des exécutions passées",
+                details={"execution_count": execution_count},
+            )
+
         action_name = action.name
         action_status = action.status
-        
-        # Delete the action
         action.delete()
-        
-        # Audit
+
         if user:
+            correlation_id = get_correlation_id()
             AuditService.create_entry(
                 user_id=str(user.id),
                 action_type=AuditActionType.ACTION_DELETED,
                 entity_type=AuditEntityType.ACTION,
                 entity_id=action_id,
-                details={
-                    'name': action_name,
-                    'status': action_status,
-                }
+                details={'name': action_name, 'status': action_status},
+                correlation_id=correlation_id,
             )
-        
+
         return True
+
+    @transaction.atomic
+    def deactivate_action(self, action_id: int, user, deletion_reason: str | None = None):
+        """
+        Soft-delete (deactivate) an action (Story 18.1, AC2).
+        Sets status='disabled', fills deleted_at/deleted_by/deletion_reason.
+        Returns dict with action info and affected_workflows if any need confirmation.
+        """
+        try:
+            action = Action.objects.get(id=action_id)
+        except Action.DoesNotExist:
+            return None
+
+        if action.status == ActionStatus.DISABLED:
+            raise ConflictError(
+                code="ALREADY_DISABLED",
+                message="Cette action est déjà désactivée",
+                details={"action_id": action_id},
+            )
+
+        # Find workflows referencing this action (AC3)
+        affected_workflows = self._find_workflows_referencing_action(action_id)
+
+        # Perform deactivation
+        action.status = ActionStatus.DISABLED
+        action.deleted_at = timezone.now()
+        action.deleted_by = user
+        action.deletion_reason = deletion_reason
+        action.save()
+
+        correlation_id = get_correlation_id()
+        AuditService.create_entry(
+            user_id=str(user.id),
+            action_type=AuditActionType.ACTION_DEACTIVATED,
+            entity_type=AuditEntityType.ACTION,
+            entity_id=action_id,
+            details={
+                'name': action.name,
+                'deletion_reason': deletion_reason,
+            },
+            correlation_id=correlation_id,
+        )
+
+        # Cascade deactivation to workflows (AC3)
+        deactivated_workflows = []
+        for wf in affected_workflows:
+            wf.status = ActionStatus.DISABLED
+            wf.deleted_at = timezone.now()
+            wf.deleted_by = user
+            wf.deletion_reason = f"Cascade: action '{action.name}' désactivée"
+            wf.save()
+            deactivated_workflows.append({'id': wf.id, 'name': wf.name})
+            AuditService.create_entry(
+                user_id=str(user.id),
+                action_type=AuditActionType.ACTION_DEACTIVATED,
+                entity_type=AuditEntityType.ACTION,
+                entity_id=wf.id,
+                details={
+                    'name': wf.name,
+                    'cascade_from_action_id': action_id,
+                    'cascade_from_action_name': action.name,
+                },
+                correlation_id=correlation_id,
+            )
+
+        return {
+            'action': action,
+            'deactivated_workflows': deactivated_workflows,
+        }
+
+    @transaction.atomic
+    def reactivate_action(self, action_id: int, user):
+        """
+        Reactivate a disabled action (Story 18.1, AC5).
+        Resets status to 'published', clears soft-delete fields.
+        """
+        try:
+            action = Action.objects.get(id=action_id)
+        except Action.DoesNotExist:
+            return None
+
+        if action.status != ActionStatus.DISABLED:
+            raise ConflictError(
+                code="NOT_DISABLED",
+                message="Seule une action désactivée peut être réactivée",
+                details={"current_status": action.status},
+            )
+
+        action.status = ActionStatus.PUBLISHED
+        action.deleted_at = None
+        action.deleted_by = None
+        action.deletion_reason = None
+        action.save()
+
+        correlation_id = get_correlation_id()
+        AuditService.create_entry(
+            user_id=str(user.id),
+            action_type=AuditActionType.ACTION_REACTIVATED,
+            entity_type=AuditEntityType.ACTION,
+            entity_id=action_id,
+            details={'name': action.name},
+            correlation_id=correlation_id,
+        )
+
+        return action
+
+    def get_workflows_referencing_action(self, action_id: int):
+        """Return list of workflow dicts referencing the given action (Story 18.1, AC3)."""
+        workflows = self._find_workflows_referencing_action(action_id)
+        return [{'id': w.id, 'name': w.name, 'status': w.status} for w in workflows]
+
+    def _find_workflows_referencing_action(self, action_id: int):
+        """Find workflows whose execution_steps reference the given action_id."""
+        workflows = Action.objects.filter(
+            item_type=ActionItemType.WORKFLOW,
+            status__in=[ActionStatus.DRAFT, ActionStatus.PUBLISHED],
+        )
+        result = []
+        for wf in workflows:
+            steps = wf.execution_steps
+            if not steps or not isinstance(steps, list):
+                continue
+            for step in steps:
+                if isinstance(step, dict) and step.get('referenced_action_id') == action_id:
+                    result.append(wf)
+                    break
+        return result
     
     def add_tags(self, action_id: int, tag_names: list[str]):
         """
@@ -453,43 +584,60 @@ class CatalogService:
         return queryset.with_tags().with_creator()
     
     @transaction.atomic
-    def update_execution_steps(self, action_id: int, steps: list[dict], 
+    def update_execution_steps(self, action_id: int, steps: list[dict],
                                change_type_config: dict | None = None, user=None):
         """
         Update execution steps and change type config for an action.
-        Only allowed for actions in draft status.
-        
+        Only allowed for actions in draft or disabled status.
+
+        Story 16.2: Validates workflow steps with branches and retry configuration.
+
         Args:
             action_id: ID of the action
             steps: List of execution step dicts
             change_type_config: Optional change type config dict
             user: User instance (for audit)
-        
+
         Returns:
             Updated Action instance or None if not found
-        
+
         Raises:
             ValueError: If action is not in draft status
+            serializers.ValidationError: If workflow steps validation fails
         """
+        from catalog.validation import validate_workflow_steps
+
         try:
             action = Action.objects.get(id=action_id)
         except Action.DoesNotExist:
             return None
-        
-        # Check status: only draft actions can have execution steps updated
-        if action.status != ActionStatus.DRAFT:
-            raise ValueError("Les étapes ne peuvent être modifiées que pour une action en brouillon")
-        
+
+        # Check status: only draft or disabled actions can have execution steps updated
+        if action.status not in [ActionStatus.DRAFT, ActionStatus.DISABLED]:
+            raise ValueError("Les étapes ne peuvent être modifiées que pour une action en brouillon ou désactivée")
+
         # Update execution_steps if provided
         if steps is not None:
-            action.set_execution_steps(steps)
-        
-        # Update change_type_config if provided
+            # Story 16.2: Validate workflow steps if item_type is workflow
+            if action.item_type == ActionItemType.WORKFLOW:
+                steps = validate_workflow_steps(steps, action_id=action.id)
+
+            # Story 25.2: Validate gate_conditions in execution steps
+            from catalog.validators import validate_gate_conditions
+            for step in steps:
+                if isinstance(step, dict) and 'gate_conditions' in step:
+                    validate_gate_conditions(step['gate_conditions'])
+
+            action.execution_steps = steps
+
+        # Update change_type_config if provided (Story 25.4: validated)
         if change_type_config is not None:
-            action.set_change_type_config(change_type_config)
-        
+            from catalog.validators import validate_change_type_config
+            validate_change_type_config(change_type_config)
+            action.change_type_config = change_type_config
+
         action.save()
-        
+
         # Audit if user provided
         if user:
             AuditService.create_entry(
@@ -499,5 +647,5 @@ class CatalogService:
                 entity_id=action.id,
                 details={'updated_fields': ['execution_steps', 'change_type_config']}
             )
-        
+
         return action

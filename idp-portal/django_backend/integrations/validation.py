@@ -1,6 +1,5 @@
 """
 Integration config validation against JSON Schema.
-Matches FastAPI validate_integration_config functionality.
 """
 
 import json

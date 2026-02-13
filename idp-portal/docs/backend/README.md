@@ -80,7 +80,8 @@ source venv/bin/activate  # Linux/Mac
 # ou: venv\Scripts\activate  # Windows
 
 # Installer les dépendances
-pip install -r requirements.txt
+pip install uv
+uv pip install -r requirements-dev.lock
 
 # Configurer les variables d'environnement
 cp .env.template .env

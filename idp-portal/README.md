@@ -8,7 +8,7 @@ Internal Developer Platform pour les operations base de donnees.
 - **Backend** : Django 5.1+ / Django REST Framework 3.15+ (officiel depuis février 2026)
 - **Base de donnees** : Oracle 19c+ (dev local via Docker)
 
-> **Note:** Le backend FastAPI (legacy) est archivé dans la branche `legacy/fastapi-final`. Voir [docs/fastapi-to-django-migration.md](docs/fastapi-to-django-migration.md) pour les détails de la migration.
+> **Note:** Migration FastAPI→Django terminée. Le code FastAPI est archivé dans la branche `legacy/fastapi-final` et le tag `v1.0.0-fastapi`. Voir [docs/MIGRATION_ARCHIVE.md](docs/MIGRATION_ARCHIVE.md) pour référence historique.
 
 ## Environnement de developpement
 
@@ -41,7 +41,7 @@ Les migrations sont gerees par **Flyway** (Community). Format des fichiers : `V0
 - **CLI** : [Download Flyway](https://flywaydb.org/download) et placer `flyway` dans le PATH, ou  
 - **Sans install** : le script `run_migrations.sh` utilise l’image Docker `flyway/flyway` si la CLI n’est pas disponible.
 
-**Variables** (identiques au backend) : `ORACLE_DSN`, `ORACLE_USER`, `ORACLE_PASSWORD`. Ex. `ORACLE_DSN=localhost:1521/FREEPDB1`.
+**Variables** (identiques au backend Django) : `ORACLE_DSN`, `ORACLE_USER`, `ORACLE_PASSWORD`. Ex. `ORACLE_DSN=localhost:1521/FREEPDB1`.
 
 **Appliquer les migrations** (depuis la racine `idp-portal/`) :
 
@@ -70,7 +70,8 @@ Pour Oracle Docker, définir les variables d'environnement Oracle (voir section 
 cd django_backend
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+pip install uv
+uv pip install -r requirements-dev.lock  # ou --system si dans Docker/CI
 
 # Variables d'environnement (ou dans .env)
 export ORACLE_HOST=localhost
@@ -83,21 +84,9 @@ export ORACLE_PASSWORD=changeme
 python manage.py runserver
 ```
 
-Le backend Django utilise le même schéma Oracle que l'ancien backend FastAPI. Pas de migration de données nécessaire.
+Le backend Django utilise le schéma Oracle existant. Pas de migration de données nécessaire.
 
 **Configuration production :** Voir `django_backend/.env.production.template` et `django_backend/deployment/`.
-
-### Backend FastAPI (Legacy - Archivé)
-
-> **ATTENTION:** Le backend FastAPI est archivé. Utiliser Django pour tout nouveau développement.
-
-Le code FastAPI reste disponible dans la branche `legacy/fastapi-final` pour référence :
-
-```bash
-git checkout legacy/fastapi-final
-cd backend
-# ... (voir documentation legacy)
-```
 
 ### Frontend
 
@@ -114,14 +103,14 @@ Pour lancer les tests d'integration contre le container Oracle (depuis la racine
 ```bash
 docker compose up -d oracle
 # Attendre ~1-2 min
-cd backend && ORACLE_DSN=localhost:1521/FREEPDB1 ORACLE_USER=idp_app ORACLE_PASSWORD=changeme python3 -m pytest tests/unit tests/integration -v
+cd django_backend && ORACLE_DSN=localhost:1521/FREEPDB1 ORACLE_USER=idp_app ORACLE_PASSWORD=changeme python3 -m pytest tests/ -v
 ```
 
 Sans Oracle configure (ORACLE_DSN non defini), les tests d'integration sont ignores (skip).
 
 ## Seed de données de test (développement)
 
-Un script de seed insère des données de test pour valider le frontend. Il utilise les mêmes variables d'environnement que le backend (`ORACLE_DSN`, `ORACLE_USER`, `ORACLE_PASSWORD` — voir `backend/app/core/config.py`). À lancer une seule fois sur base vide, ou avec `--reset` pour réinsérer.
+Un script de seed insère des données de test pour valider le frontend. Il utilise les mêmes variables d'environnement que le backend Django (`ORACLE_DSN`, `ORACLE_USER`, `ORACLE_PASSWORD`). À lancer une seule fois sur base vide, ou avec `--reset` pour réinsérer.
 
 **Depuis la racine idp-portal/** (variables Oracle dans l'environnement ou dans un `.env` à la racine) :
 
@@ -129,10 +118,10 @@ Un script de seed insère des données de test pour valider le frontend. Il util
 python scripts/seed_dev_data.py --env=dev
 ```
 
-**Depuis le backend** (avec venv et variables Oracle déjà chargées) :
+**Depuis le backend Django** (avec venv et variables Oracle déjà chargées) :
 
 ```bash
-cd backend
+cd django_backend
 source .venv/bin/activate
 python ../scripts/seed_dev_data.py --env=dev
 ```
@@ -184,15 +173,67 @@ Le flag `is_business_profile` est retourné par l'API `/auth/me` et conditionne 
 
 **Important :** Ce script est réservé à la base de développement. Il refuse de s'exécuter si `APP_ENV` n'est pas `development` ou si `--env=dev` n'est pas spécifié. En cas d'échec du script après un `--reset`, la base reste vide (rollback automatique).
 
+## Build Docker Images
+
+### Build individuel
+
+```bash
+# Backend Django (Gunicorn)
+docker build -t idp-backend:latest ./django_backend
+
+# Frontend React/Vite (Nginx)
+docker build -t idp-frontend:latest ./frontend
+```
+
+### Docker Compose (orchestration complète)
+
+Démarrer tous les services (Oracle + Backend + Frontend) :
+
+```bash
+docker compose up -d
+```
+
+Démarrer uniquement la base de données :
+
+```bash
+docker compose up -d oracle-db
+```
+
+Builder et démarrer backend + frontend :
+
+```bash
+docker compose up -d --build backend frontend
+```
+
+### Ports exposés
+
+| Service | Port local | Description |
+|---------|-----------|-------------|
+| Oracle DB | 1521 | SQL*Net |
+| Backend | 8000 | API Django (Gunicorn) |
+| Frontend | 8080 | SPA React (Nginx) |
+
+### Variables d'environnement (production)
+
+Le backend nécessite des variables d'environnement pour les secrets et la configuration.
+Voir `django_backend/.env.production.template` pour la liste complète.
+
+En développement avec Docker Compose, les variables sont pré-configurées dans `docker-compose.yml`.
+
+### Notes production vs développement
+
+- **Développement** : `docker compose up -d` utilise les valeurs par défaut (Oracle local, AUTH_DEV_BYPASS=true)
+- **Production** : Construire les images et les déployer avec des variables d'environnement sécurisées (Vault, secrets CI/CD). Ne jamais utiliser `AUTH_DEV_BYPASS=true` en production.
+- Les images Docker ne contiennent pas de fichiers `.env` — les secrets sont injectés via variables d'environnement runtime.
+
 ## Structure
 
-- `frontend/` : Application React (inchangée)
-- `django_backend/` : API Django REST Framework (officiel)
-- `backend/` : API FastAPI (legacy - archivé dans branche `legacy/fastapi-final`)
+- `frontend/` : Application React
+- `django_backend/` : API Django REST Framework
 - `database/` : Migrations SQL Flyway (`migrations/`), script d'init utilisateur (`init/`)
 - `scripts/` : Scripts utilitaires (`run_migrations.sh`, `seed_dev_data.py`, `post-switchover-validation.sh`)
 - `docs/` : Documentation technique (migration, déploiement, architecture)
-- `docker-compose.yml` : Service Oracle pour le dev local
+- `docker-compose.yml` : Services Docker (Oracle, Backend, Frontend)
 
 ### Documentation
 
@@ -200,12 +241,13 @@ Le flag `is_business_profile` est retourné par l'API `/auth/me` et conditionne 
 - [Récapitulatif migration](docs/fastapi-to-django-migration.md)
 - [Parité schéma base de données](docs/schema-differences.md)
 - [Templates de communication](docs/communication-templates.md)
+- [Admin Intégrations — Restriction types via catalogue](docs/admin-integrations-type-restriction.md)
 
 ## API Integrations — champ config
 
 Lors de la création ou mise à jour d'une intégration (POST/PUT `/admin/integrations`), le champ optionnel `config` décrit le flow d'authentification par étapes. Il est validé côté backend contre un **JSON Schema** (draft-07).
 
-- **Schéma** : `backend/app/schemas/integration_config_schema.json`
+- **Schéma** : `django_backend/catalog/schemas/integration_config_schema.json`
 - **Règles** : `auth_flow` est un tableau d'étapes ; chaque étape a `step` ∈ `obtain_token` | `call_api`, optionnellement `url_ref` ∈ `base_url` | `token_url`, et `credentials` (référence `credential_ref` de l'intégration, pas de chemin Vault arbitraire). En cas de config invalide, l'API retourne **400** avec `code: "INVALID_CONFIG"` et détails (champ, message).
 
 Exemple de config valide :

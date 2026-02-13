@@ -39,6 +39,7 @@ import { ActionCard, type ActionCardProps } from '../components/catalog/ActionCa
 import { ActionDrawerPreview } from '../components/catalog/ActionDrawerPreview';
 import { ActionTable } from '../components/catalog/ActionTable';
 import { ExecutionWizard } from '../components/catalog/ExecutionWizard';
+import { ExecutionView } from '../components/execution/ExecutionView';
 import { TagCloud } from '../components/catalog/TagCloud';
 import { CategoryTabs, type CategoryKey } from '../components/catalog/CategoryTabs';
 import { HorizontalFilters } from '../components/catalog/HorizontalFilters';
@@ -59,6 +60,7 @@ import {
   type FavoriteEntry,
 } from '../services/catalog_service';
 import type { ActionPreviewData, ActionStats, ImpactLevel, RemediationSuggestion } from '../types/api';
+import logger from '../services/logger';
 
 const { Title, Text } = Typography;
 
@@ -91,6 +93,8 @@ function toPreviewData(action: CatalogAction, stats?: ActionStats | null): Actio
     tags: action.tags,
     execution_count: action.execution_count,
     stats: stats ?? null,
+    // Story 18.2: item_type for workflow vs action visual distinction
+    item_type: action.item_type,
   };
 }
 
@@ -117,8 +121,9 @@ export default function CatalogPage() {
   const [filterTags, setFilterTags] = useState<string[]>([]);
 
   // Story 8.7: Multi-select filters (replaces single-select)
+  // Story 18.4: filterEnvironments removed (environment = target property, not action)
+  // Filters remaining: Engines and Impacts only (2 columns layout sm=12)
   const [filterEngines, setFilterEngines] = useState<string[]>([]);
-  const [filterEnvironments, setFilterEnvironments] = useState<string[]>([]);
   const [filterImpacts, setFilterImpacts] = useState<string[]>([]);
 
   const [tagsWithCounts, setTagsWithCounts] = useState<CatalogTagWithCount[]>([]);
@@ -135,6 +140,8 @@ export default function CatalogPage() {
   const [drawerLoading, setDrawerLoading] = useState(false);
   const [executionWizardOpen, setExecutionWizardOpen] = useState(false);
   const [activeExecutionId, setActiveExecutionId] = useState<number | null>(null);
+  // Story 19.1: ExecutionView drawer state (replaces popup success message)
+  const [executionViewId, setExecutionViewId] = useState<number | null>(null);
   // Story 9.2, Task 19: Parent execution ID for remediation
   const [parentExecutionId, setParentExecutionId] = useState<number | null>(null);
   const lastFocusedCardRef = useRef<HTMLElement | null>(null);
@@ -143,15 +150,15 @@ export default function CatalogPage() {
     setLoading(true);
     try {
       // Story 8.7: Include category in API call
-      // NOTE: Backend API currently supports only single engine/environment/impact value (not arrays)
+      // Story 18.4: environment parameter removed (environment = target property)
+      // NOTE: Backend API currently supports only single engine/impact value (not arrays)
       // HorizontalFilters uses multi-select UI but we send only the first selected value
-      // TODO: Enhance backend to support multi-value filters (e.g., ?engine=Oracle&engine=SQL%20Server)
+      // Future enhancement: Support multi-value filters for engine and impact
       const [actionsData, favoritesData, tagsData] = await Promise.all([
         fetchCatalogActions({
           tags: filterTags.length > 0 ? filterTags : undefined,
           q: debouncedQ.trim() || undefined,
           engine: filterEngines.length > 0 ? filterEngines[0] : undefined,
-          environment: filterEnvironments.length > 0 ? filterEnvironments[0] : undefined,
           impact: filterImpacts.length > 0 ? filterImpacts[0] : undefined,
           category: activeCategory !== 'tout' && activeCategory !== 'mes-actions' ? activeCategory : undefined,
         }),
@@ -159,7 +166,7 @@ export default function CatalogPage() {
         // Story 8.7, AC3: Fetch tags filtered by category
         activeCategory !== 'mes-actions'
           ? fetchCatalogTags(activeCategory !== 'tout' ? activeCategory : undefined).catch((error) => {
-              console.error('Failed to load tags:', error);
+              logger.error('Failed to load tags', { error: error instanceof Error ? error.message : String(error) });
               message.warning('Impossible de charger les tags');
               return [] as CatalogTagWithCount[];
             })
@@ -169,30 +176,28 @@ export default function CatalogPage() {
       setFavorites(new Set(favoritesData.map((f) => f.action_id)));
       if (activeCategory !== 'mes-actions') setTagsWithCounts(tagsData);
     } catch (error) {
-      console.error('Failed to load catalog:', error);
+      logger.error('Failed to load catalog', { error: error instanceof Error ? error.message : String(error) });
       message.error('Erreur lors du chargement du catalogue');
     } finally {
       setLoading(false);
     }
-  }, [activeCategory, debouncedQ, filterTags, filterEngines, filterEnvironments, filterImpacts, message]);
+  }, [activeCategory, debouncedQ, filterTags, filterEngines, filterImpacts, message]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
   const hasActiveFilters =
-    filterTags.length > 0 ||
     filterEngines.length > 0 ||
-    filterEnvironments.length > 0 ||
     filterImpacts.length > 0 ||
-    searchText.trim().length > 0 ||
-    (activeCategory !== 'tout' && activeCategory !== 'mes-actions');
+    filterTags.length > 0 ||
+    (activeCategory !== 'tout' && activeCategory !== 'mes-actions') ||
+    searchText.trim().length > 0;
 
   const resetFilters = useCallback(() => {
     setSearchText('');
     setFilterTags([]);
     setFilterEngines([]);
-    setFilterEnvironments([]);
     setFilterImpacts([]);
     setActiveCategory('tout');
   }, []);
@@ -270,7 +275,7 @@ export default function CatalogPage() {
       setSelectedActionEnvs(detailResponse.allowed_environments);
       setSelectedActionStats(statsResponse);
     } catch (error) {
-      console.error('Failed to load action detail:', error);
+      logger.error('Failed to load action detail', { error: error instanceof Error ? error.message : String(error) });
       message.error('Erreur lors du chargement de l\'action');
       // Keep drawer open with basic info from list
     } finally {
@@ -302,18 +307,28 @@ export default function CatalogPage() {
     setExecutionWizardOpen(true);
   }, []);
 
-  // Handle execution success (Story 4.1, 4.6) — show timeline in wizard, do not close
+  // Handle execution success (Story 4.1, 4.6; Story 19.4 AC1, AC8: close wizard + open ExecutionView)
   const handleExecutionSuccess = useCallback((executionId: number) => {
-    setActiveExecutionId(executionId);
-    message.success(`Execution #${executionId} demarree`);
+    // Story 19.4 AC1: Close wizard and open ExecutionView drawer automatically
+    setExecutionWizardOpen(false);
+    setActiveExecutionId(null);
+    // Story 19.4 AC8: Reset wizard-related state (form resets via useEffect on open change)
+    setSelectedAction(null);
+    setSelectedActionDetail(null);
+    setDrawerVisible(false);
+    // Story 19.4 AC1: Open ExecutionView with returned executionId
+    setExecutionViewId(executionId);
+    logger.info('CatalogPage: Opening ExecutionView after execution created', { executionId });
     loadData();
-  }, [loadData, message]);
+  }, [loadData]);
 
-  // Back to catalog — close timeline and wizard (Story 4.6, Task 4.2; Story 9.2, Task 19)
+  // Back to catalog — close timeline, wizard, and execution view (Story 4.6, Task 4.2; Story 9.2, Task 19; Story 19.1)
   const handleBackToCatalog = useCallback(() => {
     setActiveExecutionId(null);
     setExecutionWizardOpen(false);
     setDrawerVisible(false);
+    // Story 19.1: Close ExecutionView drawer
+    setExecutionViewId(null);
     // Story 9.2, Task 19: Reset parent execution ID
     setParentExecutionId(null);
     loadData();
@@ -343,7 +358,7 @@ export default function CatalogPage() {
       // Keep wizard open with new action
       setExecutionWizardOpen(true);
     } catch (error) {
-      console.error('Failed to load suggested action:', error);
+      logger.error('Failed to load suggested action', { error: error instanceof Error ? error.message : String(error) });
       message.error('Erreur lors du chargement de l\'action corrective');
     }
   }, [message]);
@@ -356,19 +371,7 @@ export default function CatalogPage() {
     const cardVariant: ActionCardProps['variant'] = isBusinessProfile ? 'business' : 'default';
 
     return (
-      <div
-        key={action.id}
-        tabIndex={0}
-        role="button"
-        aria-label={`Voir détails: ${action.name}`}
-        onClick={(e) => handleActionClick(action, e)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            handleActionClick(action, e as unknown as React.MouseEvent);
-          }
-        }}
-      >
+      <div key={action.id}>
         <ActionCard
           action={preview}
           onClick={(e) => handleActionClick(action, e)}
@@ -396,7 +399,7 @@ export default function CatalogPage() {
     ) : (
       <Row gutter={[16, 16]}>
         {Array.from({ length: 6 }).map((_, i) => (
-          <Col key={i} xs={24} sm={12} lg={8} xl={6}>
+          <Col key={i} xs={24} sm={12} md={8} lg={8} xl={6}>
             <Card>
               <Skeleton active avatar={{ shape: 'square', size: 'small' }} paragraph={{ rows: 2 }} />
             </Card>
@@ -442,10 +445,8 @@ export default function CatalogPage() {
       {activeCategory !== 'mes-actions' && (
         <HorizontalFilters
           selectedEngines={filterEngines}
-          selectedEnvironments={filterEnvironments}
           selectedImpacts={filterImpacts}
           onEnginesChange={setFilterEngines}
-          onEnvironmentsChange={setFilterEnvironments}
           onImpactsChange={setFilterImpacts}
         />
       )}
@@ -455,12 +456,10 @@ export default function CatalogPage() {
         activeCategory={activeCategory}
         selectedTags={filterTags}
         selectedEngines={filterEngines}
-        selectedEnvironments={filterEnvironments}
         selectedImpacts={filterImpacts}
         onRemoveCategory={() => setActiveCategory('tout')}
         onRemoveTag={(tag) => setFilterTags((prev) => prev.filter((t) => t !== tag))}
         onRemoveEngine={(engine) => setFilterEngines((prev) => prev.filter((e) => e !== engine))}
-        onRemoveEnvironment={(env) => setFilterEnvironments((prev) => prev.filter((e) => e !== env))}
         onRemoveImpact={(impact) => setFilterImpacts((prev) => prev.filter((i) => i !== impact))}
         onClearAll={resetFilters}
       />
@@ -514,7 +513,7 @@ export default function CatalogPage() {
         ) : (
           <Row gutter={[16, 16]}>
             {filteredActions.map((action) => (
-              <Col key={action.id} xs={24} sm={12} lg={8} xl={6}>
+              <Col key={action.id} xs={24} sm={12} md={8} lg={8} xl={6}>
                 {renderActionCard(action)}
               </Col>
             ))}
@@ -584,6 +583,17 @@ export default function CatalogPage() {
         variant={isBusinessProfile ? 'simplified' : 'default'}
         onSuggestionClick={handleRemediationSuggestionClick}
         parentExecutionId={parentExecutionId}
+      />
+
+      {/* Story 19.4 AC1: ExecutionView drawer — replaces popup "Action démarrée" */}
+      <ExecutionView
+        executionId={executionViewId}
+        onClose={() => {
+          // Story 19.4 AC3: Close ExecutionView, stay on catalog
+          setExecutionViewId(null);
+          setParentExecutionId(null);
+        }}
+        onSuggestionClick={handleRemediationSuggestionClick}
       />
     </div>
   );

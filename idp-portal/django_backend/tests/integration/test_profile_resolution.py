@@ -1,7 +1,7 @@
 """
 Integration tests for profile resolution.
 
-Story M.9: Tests unitaires et d'intégration (parité avec FastAPI)
+Story M.9: Tests unitaires et d'intégration
 Tests: login SAML → résolution AD groups → permissions → accès API
 """
 

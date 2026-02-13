@@ -11,6 +11,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ExecutionTimeline } from './ExecutionTimeline';
 import { useWebSocket } from '../../hooks/useWebSocket';
+import { useExecutionPolling } from '../../hooks/useExecutionPolling';
 import { useRemediationSuggestions } from '../../hooks/useRemediationSuggestions';
 
 vi.mock('../../hooks/useWebSocket', () => ({
@@ -20,6 +21,15 @@ vi.mock('../../hooks/useWebSocket', () => ({
     loading: false,
     error: null,
     lastMessage: null,
+  })),
+}));
+
+vi.mock('../../hooks/useExecutionPolling', () => ({
+  useExecutionPolling: vi.fn(() => ({
+    execution: null,
+    steps: [],
+    isPolling: false,
+    error: null,
   })),
 }));
 
@@ -37,11 +47,18 @@ vi.mock('../../contexts/AuthContext', () => ({
 }));
 
 const mockUseWebSocket = useWebSocket as ReturnType<typeof vi.fn>;
+const mockUseExecutionPolling = useExecutionPolling as ReturnType<typeof vi.fn>;
 const mockUseRemediationSuggestions = useRemediationSuggestions as ReturnType<typeof vi.fn>;
 
 describe('ExecutionTimeline', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseExecutionPolling.mockReturnValue({
+      execution: null,
+      steps: [],
+      isPolling: false,
+      error: null,
+    });
     mockUseRemediationSuggestions.mockReturnValue({
       suggestions: null,
       loading: false,
@@ -159,7 +176,7 @@ describe('ExecutionTimeline', () => {
       expect(screen.getByText('Chargement...')).toBeInTheDocument();
     });
 
-    it('shows error state when WebSocket has error', () => {
+    it('falls back to polling when WebSocket has error (Story 19.0, AC8)', () => {
       mockUseWebSocket.mockReturnValue({
         steps: [],
         execution: null,
@@ -168,9 +185,35 @@ describe('ExecutionTimeline', () => {
         lastMessage: null,
       });
 
+      // Polling fallback returns data
+      mockUseExecutionPolling.mockReturnValue({
+        execution: { id: 42, status: 'RUNNING' },
+        steps: [
+          {
+            id: 1,
+            execution_id: 42,
+            step_order: 1,
+            step_name: 'Préparation',
+            step_type: 'prerequisite',
+            status: 'RUNNING',
+            started_at: '2026-02-08T10:00:00',
+            completed_at: null,
+            output: null,
+            platform_job_id: null,
+            error_message: null,
+          },
+        ],
+        isPolling: true,
+        error: null,
+      });
+
       render(<ExecutionTimeline executionId={42} mode="realtime" />);
 
-      expect(screen.getByText('Connexion WebSocket perdue')).toBeInTheDocument();
+      // Polling mode indicator shown
+      expect(screen.getByTestId('polling-mode-alert')).toBeInTheDocument();
+      expect(screen.getByText('Mode polling activé (dev)')).toBeInTheDocument();
+      // Steps from polling are rendered
+      expect(screen.getByText('Préparation')).toBeInTheDocument();
     });
 
     it('does not call useWebSocket when executionId is null', () => {
@@ -974,6 +1017,121 @@ describe('ExecutionTimeline', () => {
 
       const link = screen.getByRole('link', { name: /Voir exécution corrective/i });
       expect(link).toHaveAttribute('href', '/executions/100');
+    });
+  });
+
+  // Story 19.0: Polling fallback tests (AC8, AC10, AC12)
+  describe('Story 19.0 polling fallback', () => {
+    it('does not show polling indicator when WebSocket is connected', () => {
+      mockUseWebSocket.mockReturnValue({
+        steps: [],
+        execution: { id: 1, status: 'RUNNING' },
+        loading: false,
+        error: null,
+        lastMessage: null,
+      });
+
+      render(<ExecutionTimeline executionId={1} mode="realtime" />);
+
+      expect(screen.queryByTestId('polling-mode-alert')).not.toBeInTheDocument();
+    });
+
+    it('activates polling and shows indicator when WebSocket errors', () => {
+      mockUseWebSocket.mockReturnValue({
+        steps: [],
+        execution: null,
+        loading: false,
+        error: 'WebSocket error',
+        lastMessage: null,
+      });
+
+      mockUseExecutionPolling.mockReturnValue({
+        execution: { id: 1, status: 'RUNNING' },
+        steps: [],
+        isPolling: true,
+        error: null,
+      });
+
+      render(<ExecutionTimeline executionId={1} mode="realtime" />);
+
+      expect(screen.getByTestId('polling-mode-alert')).toBeInTheDocument();
+      // useExecutionPolling was called with enabled=true
+      expect(mockUseExecutionPolling).toHaveBeenCalledWith(
+        expect.objectContaining({ executionId: 1, enabled: true }),
+      );
+    });
+
+    it('uses polling data for steps and execution when polling is active', () => {
+      mockUseWebSocket.mockReturnValue({
+        steps: [],
+        execution: null,
+        loading: false,
+        error: 'WebSocket unavailable',
+        lastMessage: null,
+      });
+
+      mockUseExecutionPolling.mockReturnValue({
+        execution: { id: 1, status: 'COMPLETED', started_at: '2026-02-08T10:00:00Z', completed_at: '2026-02-08T10:01:00Z' },
+        steps: [
+          {
+            id: 1, execution_id: 1, step_order: 1, step_name: 'Préparation',
+            step_type: 'prerequisite', status: 'COMPLETED',
+            started_at: '2026-02-08T10:00:00Z', completed_at: '2026-02-08T10:00:05Z',
+            output: null, platform_job_id: null, error_message: null,
+          },
+          {
+            id: 2, execution_id: 1, step_order: 2, step_name: 'Vault',
+            step_type: 'vault', status: 'COMPLETED',
+            started_at: '2026-02-08T10:00:05Z', completed_at: '2026-02-08T10:00:10Z',
+            output: null, platform_job_id: null, error_message: null,
+          },
+        ],
+        isPolling: true,
+        error: null,
+      });
+
+      render(<ExecutionTimeline executionId={1} mode="realtime" />);
+
+      // Both steps from polling are rendered
+      expect(screen.getByText('Préparation')).toBeInTheDocument();
+      expect(screen.getByText('Vault')).toBeInTheDocument();
+      // Success banner from polling execution
+      expect(screen.getByText('Exécution terminée avec succès')).toBeInTheDocument();
+    });
+
+    it('does not activate polling in historical mode', () => {
+      render(
+        <ExecutionTimeline
+          mode="historical"
+          execution={{ id: 1, status: 'COMPLETED' } as any}
+          steps={[]}
+        />
+      );
+
+      expect(mockUseExecutionPolling).toHaveBeenCalledWith(
+        expect.objectContaining({ enabled: false }),
+      );
+    });
+
+    it('does not show polling indicator when not actively polling', () => {
+      mockUseWebSocket.mockReturnValue({
+        steps: [],
+        execution: { id: 1, status: 'RUNNING' },
+        loading: false,
+        error: null,
+        lastMessage: null,
+      });
+
+      mockUseExecutionPolling.mockReturnValue({
+        execution: null,
+        steps: [],
+        isPolling: false,
+        error: null,
+      });
+
+      render(<ExecutionTimeline executionId={1} mode="realtime" />);
+
+      expect(screen.queryByTestId('polling-mode-alert')).not.toBeInTheDocument();
     });
   });
 });

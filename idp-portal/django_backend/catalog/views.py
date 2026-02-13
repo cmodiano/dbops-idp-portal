@@ -1,16 +1,20 @@
 """
 DRF ViewSets for catalog app.
-Implements admin, catalog, and tags endpoints matching FastAPI contract.
+Implements admin, catalog, and tags endpoints.
 """
 
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.serializers import ValidationError as DRFValidationError
+from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
+from django.db import IntegrityError
 from django.db.models import Count, Q, OuterRef, Subquery, IntegerField, Value
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from cachetools import TTLCache
+from core.utils import ensure_utc_isoformat
 from catalog.models import Action, Tag, ActionStatus, ActionItemType
 from catalog.serializers import (
     ActionSerializer, ActionCreateSerializer, ActionListSerializer,
@@ -19,11 +23,15 @@ from catalog.serializers import (
 from catalog.services import CatalogService, InvalidTransitionError
 from core.pagination import CustomPageNumberPagination
 from core.permissions import DBOPSProfilePermission, OptionalUserPermission
-from core.exceptions import NotFoundError, BadRequestError, InvalidStateError
+from core.exceptions import NotFoundError, BadRequestError, InvalidStateError, ConflictError
 from core.auth_utils import get_user_ad_groups
 from executions.models import Execution
 from inventory.models import TargetEnvironment
 from profiles.services import ProfileService
+from core.middleware import get_correlation_id
+import structlog
+
+logger = structlog.get_logger(__name__)
 
 
 def _annotate_execution_count(queryset):
@@ -44,7 +52,7 @@ def _annotate_execution_count(queryset):
 
 def _filter_by_rbac(actions, cumulative_permissions):
     """
-    Filter actions by user's RBAC permissions (matches FastAPI _filter_by_rbac).
+    Filter actions by user's RBAC permissions.
 
     Args:
         actions: List of action dicts or QuerySet (must have prefetched tags via with_tags())
@@ -101,7 +109,7 @@ def _filter_by_rbac(actions, cumulative_permissions):
 
 def _check_rbac_for_action(action, cumulative_permissions):
     """
-    Check if user has RBAC permission for a specific action (matches FastAPI _check_rbac_for_action).
+    Check if user has RBAC permission for a specific action.
     
     Args:
         action: Action instance or dict
@@ -159,17 +167,25 @@ def _get_cumulative_permissions_for_user(user):
     try:
         profile_service = ProfileService()
         permissions = profile_service.get_cumulative_permissions(user.id, ad_groups)
-    except Exception:
-        # ProfileService not available or error - return None (no RBAC filtering)
+    except Exception as e:
+        # Story 17.6: Justified broad catch - ProfileService can raise various exceptions
+        logger.warning(
+            "profile_service_unavailable_no_rbac_filtering",
+            user_id=user.id,
+            error=str(e),
+            error_type=type(e).__name__,
+            correlation_id=get_correlation_id(),
+            exc_info=True,
+        )
         return None
     
     if not permissions or not permissions.get('action_permissions'):
         return None
     
     # Aggregate action permissions (union across profiles)
-    action_ids = set()
-    tag_patterns = set()
-    environments = set()
+    action_ids: set[int] = set()
+    tag_patterns: set[str] = set()
+    environments: set[str] = set()
     actions_type_all = False
     
     for perm in permissions.get('action_permissions', []):
@@ -189,9 +205,23 @@ def _get_cumulative_permissions_for_user(user):
         actions_type = 'list'
 
     # When profile has full action access (all) but no explicit environments,
-    # default to all standard environments (DBA/DBOPS typical setup).
+    # default to all environments from inventory (Story 13.7).
     if not environments and actions_type_all:
-        environments = set(TargetEnvironment.VALUES)
+        from inventory.services import InventoryService
+        try:
+            inventory_service = InventoryService()
+            environments = set(inventory_service.list_environments())
+        except Exception as e:
+            # Story 17.6: Justified broad catch - InventoryService can raise various exceptions
+            logger.warning(
+                "inventory_service_unavailable_fallback_environments",
+                user_id=user.id,
+                error=str(e),
+                error_type=type(e).__name__,
+                correlation_id=get_correlation_id(),
+                exc_info=True,
+            )
+            environments = {'dev', 'staging', 'prod'}
 
     return {
         'actions_type': actions_type,
@@ -201,10 +231,27 @@ def _get_cumulative_permissions_for_user(user):
     }
 
 
+@extend_schema_view(
+    list=extend_schema(
+        tags=['catalog'], summary='Lister les actions (admin)',
+        description='Retourne la liste paginée des actions avec filtrage et exécution_count.',
+        parameters=[
+            OpenApiParameter('include_disabled', bool, description='Inclure les actions désactivées'),
+            OpenApiParameter('search', str, description='Recherche par nom ou description'),
+            OpenApiParameter('status', str, description='Filtrage par statut (draft, published, disabled)'),
+            OpenApiParameter('engine', str, description='Filtrage par technologie'),
+            OpenApiParameter('platform', str, description='Filtrage par plateforme'),
+            OpenApiParameter('item_type', str, description='Filtrage par type (action, workflow)'),
+        ],
+    ),
+    create=extend_schema(tags=['catalog'], summary='Créer une action', request=ActionCreateSerializer),
+    retrieve=extend_schema(tags=['catalog'], summary='Détail d\'une action'),
+    update=extend_schema(tags=['catalog'], summary='Modifier une action'),
+    destroy=extend_schema(tags=['catalog'], summary='Supprimer une action (soft-delete)'),
+)
 class ActionViewSet(viewsets.ModelViewSet):
     """
     ViewSet for admin actions (CRUD operations).
-    Matches FastAPI /api/v1/admin/actions endpoints.
     """
     queryset = Action.objects.all()
     serializer_class = ActionSerializer
@@ -222,42 +269,55 @@ class ActionViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Filter queryset based on query parameters."""
         queryset = Action.objects.with_tags().with_creator()
-        
+
         # Annotate execution_count for list view
         if self.action == 'list':
             queryset = _annotate_execution_count(queryset)
-        
+
+        # Story 18.1 (AC4/AC5): include_disabled filter — default excludes disabled
+        include_disabled = self.request.query_params.get('include_disabled', 'false').lower() == 'true'
+        if self.action == 'list' and not include_disabled:
+            # Default: exclude disabled actions (AC4)
+            status_filter = self.request.query_params.get('status')
+            if not status_filter:
+                queryset = queryset.filter(status__in=[ActionStatus.DRAFT, ActionStatus.PUBLISHED])
+
         # Filters
         status_filter = self.request.query_params.get('status')
         if status_filter:
             queryset = queryset.filter(status=status_filter)
-        
+
         engine_filter = self.request.query_params.get('engine')
         if engine_filter:
             queryset = queryset.filter(engine=engine_filter)
-        
+
         item_type_filter = self.request.query_params.get('item_type')
         if item_type_filter:
             queryset = queryset.filter(item_type=item_type_filter)
-        
+
         return queryset.order_by('-created_at')
     
     def create(self, request, *args, **kwargs):
         """POST /admin/actions - Create a new action."""
         serializer = ActionCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
-        action = CatalogService().create_action(
-            action_data=serializer.validated_data,
-            created_by_user=request.user
-        )
-        
+        try:
+            action = CatalogService().create_action(
+                action_data=serializer.validated_data,
+                created_by_user=request.user
+            )
+        except IntegrityError as e:
+            err_msg = str(e).upper()
+            if 'UK_ACTIONS_CATALOG_NAME' in err_msg or ('UNIQUE' in err_msg and 'NAME' in err_msg):
+                raise DRFValidationError({'name': ['Une action avec ce nom existe déjà.']})
+            raise
         # Reload with relations
         action = CatalogService().get_by_id(action.id)
         response_serializer = ActionSerializer(action)
 
         # MEDIUM-1 fix: Invalidate cache after write
         _catalog_cache.clear()
+        _tags_cache.clear()
 
         return Response({"data": response_serializer.data}, status=status.HTTP_201_CREATED)
     
@@ -284,13 +344,17 @@ class ActionViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         serializer = ActionCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
-        action = CatalogService().update_action(
-            action_id=instance.id,
-            action_update_data=serializer.validated_data,
-            user=request.user
-        )
-        
+        try:
+            action = CatalogService().update_action(
+                action_id=instance.id,
+                action_update_data=serializer.validated_data,
+                user=request.user
+            )
+        except IntegrityError as e:
+            err_msg = str(e).upper()
+            if 'UK_ACTIONS_CATALOG_NAME' in err_msg or ('UNIQUE' in err_msg and 'NAME' in err_msg):
+                raise DRFValidationError({'name': ['Une action avec ce nom existe déjà.']})
+            raise
         if action is None:
             raise NotFoundError(
                 code="NOT_FOUND",
@@ -304,6 +368,7 @@ class ActionViewSet(viewsets.ModelViewSet):
 
         # MEDIUM-1 fix: Invalidate cache after write
         _catalog_cache.clear()
+        _tags_cache.clear()
 
         return Response({"data": response_serializer.data})
 
@@ -338,6 +403,7 @@ class ActionViewSet(viewsets.ModelViewSet):
 
         # MEDIUM-1 fix: Invalidate cache after write
         _catalog_cache.clear()
+        _tags_cache.clear()
 
         return Response({"data": response_serializer.data})
 
@@ -377,6 +443,7 @@ class ActionViewSet(viewsets.ModelViewSet):
 
         # MEDIUM-1 fix: Invalidate cache after write
         _catalog_cache.clear()
+        _tags_cache.clear()
 
         return Response({"data": response_serializer.data})
 
@@ -401,7 +468,7 @@ class ActionViewSet(viewsets.ModelViewSet):
                 message=str(e),
                 details={
                     "status": action.status,
-                    "required_status": "draft"
+                    "required_status": "draft or disabled"
                 }
             )
         
@@ -418,8 +485,24 @@ class ActionViewSet(viewsets.ModelViewSet):
 
         # MEDIUM-1 fix: Invalidate cache after write
         _catalog_cache.clear()
+        _tags_cache.clear()
 
         return Response({"data": response_serializer.data})
+
+    @action(detail=False, methods=['get'], url_path='name-available')
+    def name_available(self, request):
+        """GET /admin/actions/name-available/?name=...&exclude_id=... - Check if action name is available."""
+        name = (request.query_params.get('name') or '').strip()
+        if not name:
+            return Response({"available": True})
+        qs = Action.objects.filter(name__iexact=name)
+        exclude_id = request.query_params.get('exclude_id')
+        if exclude_id is not None:
+            try:
+                qs = qs.exclude(id=int(exclude_id))
+            except (ValueError, TypeError):
+                pass
+        return Response({"available": not qs.exists()})
 
     @action(detail=False, methods=['get'], url_path='eligible-for-workflow')
     def list_eligible_for_workflow(self, request):
@@ -458,11 +541,12 @@ class ActionViewSet(viewsets.ModelViewSet):
             )
 
         # Update remediation_rules
-        action.set_remediation_rules(remediation_rules)
+        action.remediation_rules = remediation_rules
         action.save()
 
         # Invalidate cache
         _catalog_cache.clear()
+        _tags_cache.clear()
 
         # Reload with relations
         action = CatalogService().get_by_id(action.id)
@@ -470,13 +554,213 @@ class ActionViewSet(viewsets.ModelViewSet):
 
         return Response({"data": response_serializer.data})
 
+    def destroy(self, request, *args, **kwargs):
+        """DELETE /admin/actions/{id} — Hard delete (only if execution_count=0). Story 18.1 AC1."""
+        instance = self.get_object()
+        service = CatalogService()
+        # ConflictError is raised if execution_count > 0 (propagated to exception handler → 409)
+        deleted = service.delete_action(instance.id, user=request.user)
+        if not deleted:
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message=f"Action {instance.id} introuvable",
+                details={"action_id": instance.id},
+            )
+        _catalog_cache.clear()
+        _tags_cache.clear()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['put'], url_path='deactivate')
+    def deactivate(self, request, pk=None):
+        """PUT /admin/actions/{id}/deactivate — Soft delete with cascade. Story 18.1 AC2/AC3."""
+        instance = self.get_object()
+        service = CatalogService()
+        confirmed = request.query_params.get('confirmed', 'false').lower() == 'true'
+        deletion_reason = request.data.get('deletion_reason')
+
+        # If not confirmed, check for affected workflows and ask for confirmation
+        if not confirmed:
+            affected = service.get_workflows_referencing_action(instance.id)
+            if affected:
+                return Response({
+                    "status": "requires_confirmation",
+                    "affected_workflows": affected,
+                }, status=status.HTTP_200_OK)
+
+        # ConflictError is raised if already disabled (propagated → 409)
+        result = service.deactivate_action(instance.id, user=request.user, deletion_reason=deletion_reason)
+        if result is None:
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message=f"Action {instance.id} introuvable",
+                details={"action_id": instance.id},
+            )
+
+        _catalog_cache.clear()
+        _tags_cache.clear()
+
+        action_obj = result['action']
+        reloaded = service.get_by_id(action_obj.id)
+        serializer = ActionSerializer(reloaded)
+        return Response({
+            "data": serializer.data,
+            "deactivated_workflows": result['deactivated_workflows'],
+        })
+
+    @action(detail=True, methods=['put'], url_path='reactivate')
+    def reactivate(self, request, pk=None):
+        """PUT /admin/actions/{id}/reactivate — Reactivate a disabled action. Story 18.1 AC5."""
+        instance = self.get_object()
+        service = CatalogService()
+        # ConflictError is raised if not disabled (propagated → 409)
+        reactivated = service.reactivate_action(instance.id, user=request.user)
+        if reactivated is None:
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message=f"Action {instance.id} introuvable",
+                details={"action_id": instance.id},
+            )
+
+        _catalog_cache.clear()
+        _tags_cache.clear()
+
+        reloaded = service.get_by_id(reactivated.id)
+        serializer = ActionSerializer(reloaded)
+        return Response({"data": serializer.data})
+
+    @action(detail=True, methods=['get', 'post'], url_path='mutex')
+    def mutex_rules(self, request, pk=None):
+        """
+        GET /admin/actions/{id}/mutex/ - List mutex rules for this action.
+        POST /admin/actions/{id}/mutex/ - Create a mutex rule.
+        Story 25.5, Task 4.1: CRUD operations for mutex rules.
+        """
+        from catalog.models import ActionMutex
+        from catalog.serializers import ActionMutexSerializer, ActionMutexCreateSerializer
+        
+        action = self.get_object()
+        
+        if request.method == 'GET':
+            # List rules where this action is involved (either side)
+            rules = ActionMutex.objects.filter(
+                Q(action=action) | Q(incompatible_with=action)
+            ).select_related('action', 'incompatible_with')
+            
+            serializer = ActionMutexSerializer(rules, many=True)
+            return Response({"data": serializer.data})
+        
+        elif request.method == 'POST':
+            # Create mutex rule
+            # Pass action_id to serializer context for validation
+            serializer = ActionMutexCreateSerializer(
+                data=request.data,
+                context={'action_id': action.id}
+            )
+            serializer.is_valid(raise_exception=True)
+            
+            # Create the primary rule (A→B)
+            # Code Review Fix HIGH-3: Allow NULL description instead of forcing empty string
+            mutex_rule = ActionMutex.objects.create(
+                action=action,
+                incompatible_with_id=serializer.validated_data['incompatible_with_id'],
+                same_target=serializer.validated_data['same_target'],
+                description=serializer.validated_data.get('description'),
+            )
+            
+            # Story 25.5, Task 2.3 Option A: Create symmetric rule (B→A) automatically
+            # Check if symmetric rule already exists
+            symmetric_exists = ActionMutex.objects.filter(
+                action_id=serializer.validated_data['incompatible_with_id'],
+                incompatible_with=action
+            ).exists()
+            
+            if not symmetric_exists:
+                ActionMutex.objects.create(
+                    action_id=serializer.validated_data['incompatible_with_id'],
+                    incompatible_with=action,
+                    same_target=serializer.validated_data['same_target'],
+                    description=serializer.validated_data.get('description'),
+                )
+                logger.info(
+                    "mutex_symmetric_rule_created",
+                    action_id=action.id,
+                    incompatible_with_id=serializer.validated_data['incompatible_with_id'],
+                    same_target=serializer.validated_data['same_target'],
+                    correlation_id=get_correlation_id(),
+                )
+            
+            response_serializer = ActionMutexSerializer(mutex_rule)
+            return Response({"data": response_serializer.data}, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['delete'], url_path='mutex/(?P<rule_id>[^/.]+)')
+    def delete_mutex_rule(self, request, pk=None, rule_id=None):
+        """
+        DELETE /admin/actions/{id}/mutex/{rule_id}/ - Delete a mutex rule.
+        Story 25.5, Task 4.1: Deletes rule and optionally its symmetric counterpart.
+        """
+        from catalog.models import ActionMutex
+        
+        action = self.get_object()
+        
+        # Find the rule
+        try:
+            mutex_rule = ActionMutex.objects.get(
+                id=rule_id,
+                action=action
+            )
+        except ActionMutex.DoesNotExist:
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message=f"Règle mutex {rule_id} non trouvée pour cette action",
+                details={"action_id": action.id, "rule_id": rule_id}
+            )
+        
+        # Store data for symmetric rule deletion
+        incompatible_with_id = mutex_rule.incompatible_with_id
+        same_target = mutex_rule.same_target
+        
+        # Delete the primary rule
+        mutex_rule.delete()
+        
+        # Task 2.3: Delete symmetric rule if it exists
+        # Story 25.5 Code Review Fix: Remove without strict same_target filter to handle inconsistencies
+        symmetric_rules = ActionMutex.objects.filter(
+            action_id=incompatible_with_id,
+            incompatible_with=action
+        )
+        
+        # Log warning if multiple symmetric rules found (data inconsistency)
+        if symmetric_rules.count() > 1:
+            logger.warning(
+                "mutex_multiple_symmetric_rules_found",
+                action_id=action.id,
+                incompatible_with_id=incompatible_with_id,
+                count=symmetric_rules.count(),
+                correlation_id=get_correlation_id(),
+            )
+        
+        if symmetric_rules.exists():
+            deleted_count = symmetric_rules.delete()[0]
+            logger.info(
+                "mutex_symmetric_rule_deleted",
+                action_id=action.id,
+                incompatible_with_id=incompatible_with_id,
+                deleted_count=deleted_count,
+                correlation_id=get_correlation_id(),
+            )
+        
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 # Story 3.1 AC10: in-memory cache for catalog, TTL 5 min (300s)
 _catalog_cache: TTLCache[str, list[dict]] = TTLCache(maxsize=1000, ttl=300)
 
+# Story 17.17: in-memory cache for catalog tags, TTL 5 min (300s)
+_tags_cache: TTLCache[str, list[dict]] = TTLCache(maxsize=200, ttl=300)
+
 
 def _get_cache_key(user_id, tags_filter, q=None, engine=None, environment=None, impact=None, category=None):
-    """Generate cache key for catalog query (matches FastAPI _get_cache_key)."""
+    """Generate cache key for catalog query."""
     user_part = f"user_{user_id}" if user_id else "anon"
     tags_part = ",".join(sorted(tags_filter)) if tags_filter else "all"
     q_part = q.strip() if q and q.strip() else ""
@@ -487,10 +771,22 @@ def _get_cache_key(user_id, tags_filter, q=None, engine=None, environment=None, 
     return f"{user_part}_{tags_part}_q{q_part}_e{engine_part}_env{env_part}_i{impact_part}_cat{category_part}"
 
 
+@extend_schema_view(
+    list=extend_schema(
+        tags=['catalog'], summary='Catalogue des actions (public)',
+        description='Retourne la liste paginée des actions publiées avec filtrage RBAC.',
+        parameters=[
+            OpenApiParameter('tags', str, description='Filtrage par tags (séparés par virgules)'),
+            OpenApiParameter('category', str, description='Filtrage par catégorie'),
+            OpenApiParameter('search', str, description='Recherche par nom ou description'),
+            OpenApiParameter('favorites_only', bool, description='Afficher uniquement les favoris'),
+        ],
+    ),
+    retrieve=extend_schema(tags=['catalog'], summary='Détail d\'une action du catalogue'),
+)
 class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for catalog actions (read-only, public with RBAC filtering).
-    Matches FastAPI /api/v1/catalog/actions endpoints.
     """
     queryset = Action.objects.filter(status=ActionStatus.PUBLISHED)
     serializer_class = ActionSerializer
@@ -640,46 +936,26 @@ class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
                     details={"action_id": action.id}
                 )
         
-        # TODO: Use ExecutionService.get_action_stats() when implemented
-        # For now, return None as per FastAPI contract (AC3: "Pas encore de donnees")
-        from executions.models import Execution, ExecutionStatus
-        from django.utils import timezone
-        from datetime import timedelta
-        
-        # Calculate stats over last 30 days
-        date_from = timezone.now() - timedelta(days=30)
-        executions = Execution.objects.filter(
-            action_id=action.id,
-            created_at__gte=date_from
-        )
-        
-        total = executions.count()
-        if total == 0:
-            return Response({"data": None})
-        
-        completed = executions.filter(status=ExecutionStatus.COMPLETED).count()
-        failed = executions.filter(status=ExecutionStatus.FAILED).count()
-        
-        # Calculate success rate
-        success_rate = (completed / (completed + failed) * 100) if (completed + failed) > 0 else None
-        
-        # Calculate avg execution time (simplified - would need proper calculation)
-        avg_time_ms = None
-        
-        stats = {
-            "success_rate": round(success_rate, 2) if success_rate is not None else None,
-            "avg_execution_time_ms": avg_time_ms,
-            "total_executions": total,
-            "incidents_count": failed
-        }
-        
+        from executions.services import ExecutionService
+        execution_service = ExecutionService()
+        try:
+            stats = execution_service.get_action_stats(action.id, days=30)
+        except ValueError as e:
+            # CRITICAL-3: Handle invalid action_id (should not happen since get_object() validated it)
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message=str(e),
+                details={"action_id": action.id}
+            )
         return Response({"data": stats})
 
 
+@extend_schema_view(
+    list=extend_schema(tags=['catalog'], summary='Lister tous les tags'),
+)
 class TagViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for tags (read-only, public).
-    Matches FastAPI /api/v1/tags and /api/v1/catalog/tags endpoints.
     """
     queryset = Tag.objects.all()
     serializer_class = TagSerializer
@@ -694,13 +970,20 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=['get'], url_path='catalog')
     def list_catalog_tags(self, request):
         """GET /catalog/tags - List tags with action_count and RBAC filtering."""
+        # Story 17.17: Cache tags endpoint (5min TTL, same as actions)
+        user_id = request.user.id if request.user and request.user.is_authenticated else None
+        category = request.query_params.get('category')
+        tags_cache_key = f"tags_user_{user_id}_cat_{category or 'all'}"
+
+        if tags_cache_key in _tags_cache:
+            return Response({"data": _tags_cache[tags_cache_key]})
+
         # HIGH-3 fix: Implement action_count and RBAC filtering
 
         # Get base queryset of published actions (filtered by RBAC if user authenticated)
         actions_queryset = Action.objects.filter(status=ActionStatus.PUBLISHED)
 
         # Optional category filter (Story 8.7): restrict to actions tagged with the category tag
-        category = request.query_params.get('category')
         if category and category.lower() not in ('tout', 'all', 'mes-actions'):
             from catalog.models import normalize_tag_name
             category_tag = normalize_tag_name(category)
@@ -743,7 +1026,10 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet):
                 'id': tag.id,
                 'name': tag.name,
                 'action_count': tag.action_count,
-                'created_at': tag.created_at.isoformat() if tag.created_at else None
+                'created_at': ensure_utc_isoformat(tag.created_at)
             })
+
+        # Cache result
+        _tags_cache[tags_cache_key] = data
 
         return Response({"data": data})

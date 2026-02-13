@@ -1,7 +1,7 @@
 """
 Integration tests for execution flow.
 
-Story M.9: Tests unitaires et d'intégration (parité avec FastAPI)
+Story M.9: Tests unitaires et d'intégration
 Tests: soumission execution → moteur → plateforme → résultat → audit
 """
 
@@ -17,6 +17,7 @@ from executions.models import (
     Execution, ExecutionStatus,
     ExecutionStep, ExecutionStepStatus, ExecutionStepType
 )
+from executions.services import ExecutionService
 from core.models import AuditLog
 
 
@@ -100,17 +101,9 @@ class TestExecutionFlow(TestCase):
             status=ExecutionStepStatus.PENDING
         )
 
-        # Step 3: Transition to RUNNING
-        execution.status = ExecutionStatus.RUNNING
-        execution.started_at = timezone.now()
-        execution.save()
-
-        AuditLog.objects.create_entry(
-            user_id=str(self.user.id),
-            action_type='EXECUTION_RUNNING',
-            entity_type='execution',
-            entity_id=execution.id
-        )
+        # Step 3: Transition to RUNNING (use state machine - Story 22.12 review fix)
+        execution_service = ExecutionService()
+        execution = execution_service.update_status(execution.id, ExecutionStatus.RUNNING, str(self.user.id))
 
         # Step 4: Complete each step
         step_vault.status = ExecutionStepStatus.COMPLETED
@@ -133,20 +126,10 @@ class TestExecutionFlow(TestCase):
         step_platform.set_output({'job_status': 'successful', 'changes_made': 5})
         step_platform.save()
 
-        # Step 5: Complete execution
-        execution.status = ExecutionStatus.COMPLETED
-        execution.completed_at = timezone.now()
-        execution.save()
-
-        AuditLog.objects.create_entry(
-            user_id=str(self.user.id),
-            action_type='EXECUTION_COMPLETED',
-            entity_type='execution',
-            entity_id=execution.id
-        )
+        # Step 5: Complete execution (use state machine - Story 22.12 review fix)
+        execution = execution_service.update_status(execution.id, ExecutionStatus.COMPLETED, str(self.user.id))
 
         # Verify final state
-        execution.refresh_from_db()
         self.assertEqual(execution.status, ExecutionStatus.COMPLETED)
         self.assertIsNotNone(execution.started_at)
         self.assertIsNotNone(execution.completed_at)
@@ -186,10 +169,9 @@ class TestExecutionFlow(TestCase):
             status=ExecutionStepStatus.PENDING
         )
 
-        # Start execution
-        execution.status = ExecutionStatus.RUNNING
-        execution.started_at = timezone.now()
-        execution.save()
+        # Start execution (use state machine - Story 22.12 review fix)
+        execution_service = ExecutionService()
+        execution_service.update_status(execution.id, ExecutionStatus.RUNNING, str(self.user.id))
 
         # First step completes
         step_vault.status = ExecutionStepStatus.COMPLETED
@@ -203,18 +185,8 @@ class TestExecutionFlow(TestCase):
         step_platform.error_message = 'Connection timeout to AAP server'
         step_platform.save()
 
-        # Execution fails
-        execution.status = ExecutionStatus.FAILED
-        execution.completed_at = timezone.now()
-        execution.save()
-
-        AuditLog.objects.create_entry(
-            user_id=str(self.user.id),
-            action_type='EXECUTION_FAILED',
-            entity_type='execution',
-            entity_id=execution.id,
-            details={'error': 'Connection timeout to AAP server'}
-        )
+        # Execution fails (use state machine - Story 22.12 review fix)
+        execution_service.update_status(execution.id, ExecutionStatus.FAILED, str(self.user.id))
 
         # Verify state
         execution.refresh_from_db()
@@ -225,7 +197,14 @@ class TestExecutionFlow(TestCase):
         self.assertIsNotNone(step_platform.error_message)
 
     def test_execution_approval_flow(self):
-        """Test execution flow with approval for production."""
+        """
+        Test execution flow with approval for production.
+
+        Story 22.12 review fix: Use state machine for status transitions.
+        Note: Approval workflow endpoints (/approve, /reject) are not yet implemented (Story 7.4).
+        This test simulates the approval by directly updating approval metadata and
+        transitioning to RUNNING via update_status().
+        """
         execution = Execution.objects.create(
             action=self.action,
             user=self.user,
@@ -241,21 +220,30 @@ class TestExecutionFlow(TestCase):
             details={'environment': 'prod', 'requires_approval': True}
         )
 
-        # Approver approves
+        # Approver approves (simulate approval metadata update)
         execution.approved_by = self.approver
         execution.approved_at = timezone.now()
         execution.approval_comment = 'Approved for prod deployment'
-        execution.status = ExecutionStatus.SUBMITTED
-        execution.save()
+        execution.save(update_fields=['approved_by', 'approved_at', 'approval_comment'])
 
-        # Verify approval
+        # Transition to RUNNING via state machine (Story 22.12 review fix)
+        # In production, this would be done by POST /api/v1/executions/{id}/approve endpoint
+        execution_service = ExecutionService()
+        execution_service.update_status(execution.id, ExecutionStatus.RUNNING, str(self.approver.id))
+
+        # Verify approval metadata
         execution.refresh_from_db()
         self.assertEqual(execution.approved_by_id, self.approver.id)
         self.assertIsNotNone(execution.approved_at)
         self.assertEqual(execution.approval_comment, 'Approved for prod deployment')
+        self.assertEqual(execution.status, ExecutionStatus.RUNNING)
 
     def test_execution_rejection_flow(self):
-        """Test execution rejection for production."""
+        """
+        Test execution rejection for production.
+
+        Story 22.12 review fix: Use state machine for status transitions.
+        """
         execution = Execution.objects.create(
             action=self.action,
             user=self.user,
@@ -263,27 +251,26 @@ class TestExecutionFlow(TestCase):
             status=ExecutionStatus.PENDING_APPROVAL
         )
 
-        # Approver rejects
+        # Approver rejects (simulate rejection metadata update)
         execution.approved_by = self.approver
         execution.approved_at = timezone.now()
         execution.approval_comment = 'Rejected - missing change window'
-        execution.status = ExecutionStatus.REJECTED
-        execution.save()
+        execution.save(update_fields=['approved_by', 'approved_at', 'approval_comment'])
 
-        AuditLog.objects.create_entry(
-            user_id=str(self.approver.id),
-            action_type='EXECUTION_REJECTED',
-            entity_type='execution',
-            entity_id=execution.id,
-            details={'reason': 'missing change window'}
-        )
+        # Transition to REJECTED via state machine (Story 22.12 review fix)
+        execution_service = ExecutionService()
+        execution_service.update_status(execution.id, ExecutionStatus.REJECTED, str(self.approver.id))
 
         # Verify rejection
         execution.refresh_from_db()
         self.assertEqual(execution.status, ExecutionStatus.REJECTED)
 
     def test_execution_cancellation(self):
-        """Test execution cancellation."""
+        """
+        Test execution cancellation.
+
+        Story 22.12 review fix: Use state machine for status transitions.
+        """
         execution = Execution.objects.create(
             action=self.action,
             user=self.user,
@@ -291,17 +278,9 @@ class TestExecutionFlow(TestCase):
             status=ExecutionStatus.RUNNING
         )
 
-        # User cancels
-        execution.status = ExecutionStatus.CANCELLED
-        execution.completed_at = timezone.now()
-        execution.save()
-
-        AuditLog.objects.create_entry(
-            user_id=str(self.user.id),
-            action_type='EXECUTION_CANCELLED',
-            entity_type='execution',
-            entity_id=execution.id
-        )
+        # User cancels (use state machine - Story 22.12 review fix)
+        execution_service = ExecutionService()
+        execution_service.update_status(execution.id, ExecutionStatus.CANCELLED, str(self.user.id))
 
         # Verify cancellation
         execution.refresh_from_db()

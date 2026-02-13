@@ -3,6 +3,7 @@ import type { NavigationTabKey, User } from '../types/common';
 import { BUSINESS_PROFILES } from '../types/common';
 import { setAuthAccessors } from '../services/api_client';
 import { refreshAccessToken, fetchCurrentUser as fetchUser, logoutApi } from '../services/auth_service';
+import logger from '../services/logger';
 
 // DEV MODE: Skip SAML authentication and use a mock DBOPS user
 // Enable by setting VITE_DEV_AUTH=true in .env.local or environment
@@ -14,7 +15,7 @@ const DEV_MOCK_USER: User = {
   username: 'dev.dbops',
   display_name: 'Dev DBOPS User',
   profile: 'dbops',
-  navigation_tabs: ['catalog', 'executions', 'dashboard', 'admin', 'audit'],
+  navigation_tabs: ['catalog', 'executions', 'calendar', 'dashboard', 'admin', 'audit'],
   is_auditor: true, // Story 6.3: enable audit tab in dev mode
 };
 
@@ -57,13 +58,70 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [accessToken]);
 
   const login = useCallback(() => {
-    window.location.href = '/api/v1/auth/saml/login';
+    window.location.href = '/api/v1/auth/saml/login/';
   }, []);
 
+  /** Promise-based mutex: prevents concurrent refresh calls (CRIT-3 fix).
+   *  When multiple 401 responses trigger simultaneous refresh attempts,
+   *  only the first creates a new refresh request — subsequent calls
+   *  return the same in-flight promise. Reset after completion to allow future refreshes.
+   *
+   *  Uses `useRef` instead of module-level variable to ensure one mutex per AuthProvider instance.
+   *  React guarantees `.current` stability across renders, so concurrent calls share the same ref. */
+  const refreshPromiseRef = useRef<Promise<string | null> | null>(null);
+  const cancelledRef = useRef(false);
+
+  /**
+   * Refresh the access token using the httpOnly refresh cookie.
+   * Uses a promise-based mutex so concurrent callers share a single request.
+   * @returns The new access token, or null if refresh failed.
+   */
   const refreshTokenFn = useCallback(async (): Promise<string | null> => {
-    const token = await refreshAccessToken();
-    setAccessToken(token);
-    return token;
+    const correlationId = crypto.randomUUID();
+
+    // If a refresh is already in progress, wait for the existing promise
+    if (refreshPromiseRef.current) {
+      logger.debug('Token refresh already in progress, waiting for existing promise', { correlation_id: correlationId });
+      return refreshPromiseRef.current;
+    }
+
+    // Create a new refresh promise and store it in the mutex
+    logger.debug('Starting token refresh', { correlation_id: correlationId });
+    const promise = refreshAccessToken()
+      .then((token) => {
+        // Check if component was unmounted during refresh
+        if (cancelledRef.current) {
+          logger.debug('Token refresh completed but component unmounted, skipping state update', { correlation_id: correlationId });
+          return null;
+        }
+
+        try {
+          setAccessToken(token);
+          logger.info('Token refresh completed', { success: !!token, correlation_id: correlationId });
+        } catch (err) {
+          logger.error('Failed to set access token after refresh', {
+            error: err instanceof Error ? err.message : String(err),
+            correlation_id: correlationId
+          });
+          return null;
+        }
+
+        // Reset mutex before returning (success path)
+        refreshPromiseRef.current = null;
+        return token;
+      })
+      .catch((err) => {
+        logger.error('Token refresh failed', {
+          error: err instanceof Error ? err.message : String(err),
+          correlation_id: correlationId
+        });
+        // Reset mutex before returning (failure path)
+        refreshPromiseRef.current = null;
+        return null;
+      });
+
+    refreshPromiseRef.current = promise;
+    return promise;
   }, []);
 
   const fetchCurrentUserFn = useCallback(async (token: string): Promise<User | null> => {
@@ -82,20 +140,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Wire api_client to use current token and refresh function
+  // Update whenever token or refresh function changes
   useEffect(() => {
     setAuthAccessors(() => tokenRef.current, refreshTokenFn);
-  }, [refreshTokenFn]);
+  }, [accessToken, refreshTokenFn]);
 
   // Silent refresh on mount to restore session from httpOnly cookie
   // In DEV_AUTH mode, skip API calls and use mock user
   useEffect(() => {
-    let cancelled = false;
+    cancelledRef.current = false;
 
     async function tryRestore() {
       // DEV MODE: Use mock user without API calls
       if (DEV_AUTH_ENABLED) {
-        if (!cancelled) {
-          console.log('[DEV AUTH] Using mock DBOPS user - SAML bypassed');
+        if (!cancelledRef.current) {
+          logger.debug('DEV AUTH - Using mock DBOPS user, SAML bypassed');
           setAccessToken(DEV_MOCK_TOKEN);
           setUser(DEV_MOCK_USER);
           setIsLoading(false);
@@ -104,21 +163,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const token = await refreshTokenFn();
-      if (cancelled) return;
+      if (cancelledRef.current) return;
 
       if (token) {
         const userData = await fetchCurrentUserFn(token);
-        if (!cancelled) {
+        if (!cancelledRef.current) {
           setUser(userData);
         }
       }
-      if (!cancelled) {
+      if (!cancelledRef.current) {
         setIsLoading(false);
       }
     }
 
     tryRestore();
-    return () => { cancelled = true; };
+    return () => { cancelledRef.current = true; };
   }, [refreshTokenFn, fetchCurrentUserFn]);
 
   // Handle auth callback: extract access_token from URL fragment (AC #4)

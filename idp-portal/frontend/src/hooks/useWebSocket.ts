@@ -3,6 +3,9 @@
  *
  * Connects to /ws/executions/{id}, receives step_update, execution_complete, execution_failed.
  * On reconnect: re-syncs via GET /api/v1/executions/{id} (AC3).
+ *
+ * Story 22.13: Token sent in first message after connection (not in URL query string).
+ * Sequence: connect → send {type:"auth", token} → receive {type:"auth_success"} → business messages.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -10,10 +13,14 @@ import { useAuth } from '../contexts/AuthContext';
 import { getExecution, getExecutionSteps } from '../services/execution_service';
 import type { ExecutionResponse } from '../types/api';
 import type { ExecutionStepResponse } from '../types/api';
+import logger from '../services/logger';
 
 const RECONNECT_DELAY_MS = 2000;
 const WS_PROTOCOL = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 const WS_BASE = typeof window !== 'undefined' ? `${WS_PROTOCOL}//${window.location.host}` : 'ws://localhost';
+
+/** WebSocket close code for authentication failure — do not reconnect. */
+const WS_AUTH_FAILED_CODE = 4001;
 
 export interface UseWebSocketResult {
   steps: ExecutionStepResponse[];
@@ -21,6 +28,7 @@ export interface UseWebSocketResult {
   loading: boolean;
   error: string | null;
   lastMessage: { type: string; execution_id?: number; data?: unknown } | null;
+  isAuthenticated: boolean;
 }
 
 export function useWebSocket(executionId: number | null): UseWebSocketResult {
@@ -30,6 +38,7 @@ export function useWebSocket(executionId: number | null): UseWebSocketResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastMessage, setLastMessage] = useState<UseWebSocketResult['lastMessage']>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -65,6 +74,7 @@ export function useWebSocket(executionId: number | null): UseWebSocketResult {
         setSteps([]);
         setExecution(null);
         setError(null);
+        setIsAuthenticated(false);
       });
       return;
     }
@@ -73,12 +83,18 @@ export function useWebSocket(executionId: number | null): UseWebSocketResult {
 
     const connect = () => {
       const token = accessToken;
-      const url = `${WS_BASE}/ws/executions/${executionId}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+      // Story 22.13 (AC1): No token in URL — auth sent via first message after connection
+      const url = `${WS_BASE}/ws/executions/${executionId}`;
       const ws = new WebSocket(url);
       wsRef.current = ws;
 
       ws.onopen = () => {
         setError(null);
+        // Story 22.13 (AC2): Send auth message immediately on connection
+        if (token) {
+          logger.info('WebSocket connection established, sending auth...');
+          ws.send(JSON.stringify({ type: 'auth', token }));
+        }
         // Re-sync full state on connect (AC3: reconnect → GET /executions/{id})
         reSyncState(executionId);
       };
@@ -88,10 +104,21 @@ export function useWebSocket(executionId: number | null): UseWebSocketResult {
           const msg = JSON.parse(event.data) as {
             type: string;
             execution_id?: number;
+            user_id?: string;
             data?: { step_order?: number; step_name?: string; status?: string; started_at?: string | null; completed_at?: string | null };
             status?: string;
             error_message?: string;
           };
+
+          // Story 22.13 (AC4): Handle auth_success confirmation
+          if (msg.type === 'auth_success') {
+            logger.info('WebSocket authentication successful');
+            if (isMountedRef.current) {
+              setIsAuthenticated(true);
+            }
+            return;
+          }
+
           setLastMessage(msg);
 
           if (msg.type === 'step_update' && msg.data) {
@@ -131,12 +158,23 @@ export function useWebSocket(executionId: number | null): UseWebSocketResult {
           }
         } catch (parseError) {
           // HIGH-3 FIX: Log parse errors instead of silently ignoring
-          console.warn('useWebSocket: Failed to parse message', parseError, event.data);
+          logger.warn('useWebSocket: Failed to parse message', { error: parseError instanceof Error ? parseError.message : String(parseError) });
         }
       };
 
-      ws.onclose = () => {
+      ws.onclose = (event) => {
         wsRef.current = null;
+        if (isMountedRef.current) {
+          setIsAuthenticated(false);
+        }
+        // Story 22.13 (AC5): Do NOT reconnect on auth failure (code 4001)
+        if (event.code === WS_AUTH_FAILED_CODE) {
+          logger.error('WebSocket authentication failed - invalid token', { code: event.code, reason: event.reason });
+          if (isMountedRef.current) {
+            setError('Échec d\'authentification WebSocket');
+          }
+          return;
+        }
         if (closed) return;
         reconnectTimeoutRef.current = setTimeout(() => {
           connect();
@@ -168,5 +206,5 @@ export function useWebSocket(executionId: number | null): UseWebSocketResult {
     };
   }, [executionId, accessToken, reSyncState]);
 
-  return { steps, execution, loading, error, lastMessage };
+  return { steps, execution, loading, error, lastMessage, isAuthenticated };
 }

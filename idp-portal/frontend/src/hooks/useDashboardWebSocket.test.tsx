@@ -1,5 +1,5 @@
 /**
- * Tests for useDashboardWebSocket hook (Story 5.2, Task 5.2).
+ * Tests for useDashboardWebSocket hook (Story 5.2, Task 5.2 + Story 22.13 auth tests).
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -12,14 +12,24 @@ vi.mock('../contexts/AuthContext', () => ({
   useAuth: () => ({ accessToken: 'test-token' }),
 }));
 
-// Mock WebSocket
+// Mock logger
+vi.mock('../services/logger', () => ({
+  default: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
+// Mock WebSocket with support for CloseEvent code
 class MockWebSocket {
   static instances: MockWebSocket[] = [];
   url: string;
   onopen: (() => void) | null = null;
   onmessage: ((event: { data: string }) => void) | null = null;
-  onclose: (() => void) | null = null;
+  onclose: ((event: { code: number; reason: string }) => void) | null = null;
   onerror: (() => void) | null = null;
+  send = vi.fn();
 
   constructor(url: string) {
     this.url = url;
@@ -27,10 +37,8 @@ class MockWebSocket {
   }
 
   close() {
-    this.onclose?.();
+    this.onclose?.({ code: 1000, reason: '' });
   }
-
-  send() {}
 
   // Helper to simulate server messages
   simulateMessage(data: unknown) {
@@ -40,6 +48,11 @@ class MockWebSocket {
   // Helper to simulate connection open
   simulateOpen() {
     this.onopen?.();
+  }
+
+  // Helper to simulate close with specific code (Story 22.13)
+  simulateClose(code: number, reason = '') {
+    this.onclose?.({ code, reason });
   }
 }
 
@@ -72,7 +85,8 @@ describe('useDashboardWebSocket', () => {
     vi.unstubAllGlobals();
   });
 
-  it('connects to /ws/dashboard with token (Task 2.1)', async () => {
+  // Story 22.13 (AC1): URL does NOT contain token query parameter
+  it('connects to /ws/dashboard WITHOUT token in URL (Story 22.13 AC1)', async () => {
     const onExecutionsUpdate = vi.fn();
 
     renderHook(() =>
@@ -87,7 +101,96 @@ describe('useDashboardWebSocket', () => {
     });
 
     expect(MockWebSocket.instances[0].url).toContain('/ws/dashboard');
-    expect(MockWebSocket.instances[0].url).toContain('token=test-token');
+    // Story 22.13: Token must NOT be in URL
+    expect(MockWebSocket.instances[0].url).not.toContain('token=');
+    expect(MockWebSocket.instances[0].url).not.toContain('?');
+  });
+
+  // Story 22.13 (AC2): Auth message sent on connection open
+  it('sends auth message on connection open (Story 22.13 AC2)', async () => {
+    const onExecutionsUpdate = vi.fn();
+
+    renderHook(() =>
+      useDashboardWebSocket({
+        recentExecutions: mockExecutions,
+        onExecutionsUpdate,
+      })
+    );
+
+    await waitFor(() => {
+      expect(MockWebSocket.instances.length).toBe(1);
+    });
+
+    act(() => {
+      MockWebSocket.instances[0].simulateOpen();
+    });
+
+    expect(MockWebSocket.instances[0].send).toHaveBeenCalledWith(
+      JSON.stringify({ type: 'auth', token: 'test-token' })
+    );
+  });
+
+  // Story 22.13 (AC4): Handle auth_success message
+  it('handles auth_success message and sets isAuthenticated (Story 22.13 AC4)', async () => {
+    const onExecutionsUpdate = vi.fn();
+
+    const { result } = renderHook(() =>
+      useDashboardWebSocket({
+        recentExecutions: mockExecutions,
+        onExecutionsUpdate,
+      })
+    );
+
+    await waitFor(() => {
+      expect(MockWebSocket.instances.length).toBe(1);
+    });
+
+    act(() => {
+      MockWebSocket.instances[0].simulateOpen();
+    });
+
+    act(() => {
+      MockWebSocket.instances[0].simulateMessage({
+        type: 'auth_success',
+        user_id: 'user123',
+      });
+    });
+
+    expect(result.current.isAuthenticated).toBe(true);
+    // auth_success should NOT be stored as lastMessage
+    expect(result.current.lastMessage).toBeNull();
+    expect(onExecutionsUpdate).not.toHaveBeenCalled();
+  });
+
+  // Story 22.13 (AC5): No reconnect on code 4001
+  it('does not reconnect on authentication failure code 4001 (Story 22.13 AC5)', async () => {
+    const onExecutionsUpdate = vi.fn();
+
+    const { result } = renderHook(() =>
+      useDashboardWebSocket({
+        recentExecutions: mockExecutions,
+        onExecutionsUpdate,
+      })
+    );
+
+    await waitFor(() => {
+      expect(MockWebSocket.instances.length).toBe(1);
+    });
+
+    act(() => {
+      MockWebSocket.instances[0].simulateOpen();
+    });
+
+    act(() => {
+      MockWebSocket.instances[0].simulateClose(4001, 'Invalid token');
+    });
+
+    // Should NOT have created a new WebSocket instance (no reconnect)
+    // Wait a bit to ensure no reconnect is scheduled
+    await new Promise((r) => setTimeout(r, 100));
+    expect(MockWebSocket.instances.length).toBe(1);
+    expect(result.current.error).toBe('Échec d\'authentification WebSocket');
+    expect(result.current.isAuthenticated).toBe(false);
   });
 
   it('sets connected=true on WebSocket open', async () => {
@@ -242,7 +345,7 @@ describe('useDashboardWebSocket', () => {
     expect(onExecutionsUpdate).not.toHaveBeenCalled();
   });
 
-  it('ignores executions not in current list', async () => {
+  it('inserts new executions not in current list', async () => {
     const onExecutionsUpdate = vi.fn();
 
     renderHook(() =>

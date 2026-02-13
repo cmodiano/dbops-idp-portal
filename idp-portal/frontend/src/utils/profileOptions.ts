@@ -3,6 +3,11 @@
  * Extracted to avoid duplication (Dev Notes recommendation).
  */
 
+/**
+ * @deprecated Use useEnvironments hook instead (Story 21.4).
+ * This constant is no longer used in the codebase.
+ * Will be removed in a future cleanup.
+ */
 export const ENVIRONMENT_OPTIONS = ['DEV', 'STAGING', 'PROD'] as const;
 
 /** Story 2.11: Mock inventory targets until Epic 4 (AC3). */

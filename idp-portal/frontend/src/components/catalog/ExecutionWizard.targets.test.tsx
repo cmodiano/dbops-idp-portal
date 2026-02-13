@@ -188,7 +188,7 @@ describe('ExecutionWizard - Target Selection (Story 13.2)', () => {
       );
 
       // Verify the options are from our mock data (check for environment groups)
-      expect(screen.getByText('Developpement')).toBeInTheDocument();
+      expect(screen.getByText('Développement')).toBeInTheDocument();
     });
   });
 
@@ -217,7 +217,7 @@ describe('ExecutionWizard - Target Selection (Story 13.2)', () => {
       );
 
       // Should show environment group headers (Developpement, Staging, Production)
-      expect(screen.getByText('Developpement')).toBeInTheDocument();
+      expect(screen.getByText('Développement')).toBeInTheDocument();
       expect(screen.getByText('Staging')).toBeInTheDocument();
       expect(screen.getByText('Production')).toBeInTheDocument();
     });

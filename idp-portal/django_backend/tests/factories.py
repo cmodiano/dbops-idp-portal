@@ -1,7 +1,7 @@
 """
 Factory classes for generating test data using factory-boy.
 
-Story M.9: Tests unitaires et d'intégration (parité avec FastAPI)
+Story M.9: Tests unitaires et d'intégration
 This module provides DjangoModelFactory subclasses for all Django models.
 """
 
@@ -234,6 +234,19 @@ class ExecutionStepFactory(DjangoModelFactory):
     error_message = None
 
 
+class ExecutionTargetFactory(DjangoModelFactory):
+    """Factory for executions.ExecutionTarget model. Story 25.3."""
+
+    class Meta:
+        model = 'executions.ExecutionTarget'
+
+    execution = factory.SubFactory(ExecutionFactory)
+    target_type = 'SERVER'
+    target_id = factory.Sequence(lambda n: f'srv-dev-{n:02d}')
+    target_name = factory.LazyAttribute(lambda o: o.target_id)
+    target_metadata = None
+
+
 class ScheduledExecutionFactory(DjangoModelFactory):
     """Factory for executions.ScheduledExecution model."""
 
@@ -287,6 +300,65 @@ class AuditLogFactory(DjangoModelFactory):
     }))
     ip_address = factory.LazyAttribute(lambda o: fake.ipv4())
     correlation_id = factory.LazyAttribute(lambda o: fake.uuid4())
+
+
+# ============================================================================
+# Feature Flag Factory (Story 17.12)
+# ============================================================================
+
+class FeatureFlagFactory(DjangoModelFactory):
+    """Factory for core.FeatureFlag model."""
+
+    class Meta:
+        model = 'core.FeatureFlag'
+
+    flag_key = factory.Sequence(lambda n: f'test_flag_{n}')
+    enabled = True
+    rollout_percent = 100
+    description = factory.LazyAttribute(lambda o: f'Test flag {o.flag_key}')
+    updated_by = 'test_admin'
+
+
+# ============================================================================
+# Integration Type Catalogue Factories (Story 24.1)
+# ============================================================================
+
+class IntegrationTypeCatalogueFactory(DjangoModelFactory):
+    """Factory for integrations.IntegrationTypeCatalogue model."""
+
+    class Meta:
+        model = 'integrations.IntegrationTypeCatalogue'
+
+    code = factory.Sequence(lambda n: f'type_{n}')
+    name = factory.LazyAttribute(lambda o: f'Type {o.code}')
+    description = factory.LazyAttribute(lambda o: f'Description for {o.code}')
+    version = '1.0'
+    is_active = True
+
+
+class IntegrationActionFactory(DjangoModelFactory):
+    """Factory for integrations.IntegrationAction model."""
+
+    class Meta:
+        model = 'integrations.IntegrationAction'
+
+    integration_type = factory.SubFactory(IntegrationTypeCatalogueFactory)
+    action_code = factory.Sequence(lambda n: f'action_{n}')
+    action_label = factory.LazyAttribute(lambda o: f'Label {o.action_code}')
+    description = factory.LazyAttribute(lambda o: f'Description for {o.action_code}')
+    required_params = factory.LazyFunction(lambda: json.dumps({
+        "type": "object",
+        "properties": {"param1": {"type": "string"}},
+        "required": ["param1"]
+    }))
+    optional_params = factory.LazyFunction(lambda: json.dumps({
+        "type": "object",
+        "properties": {"opt1": {"type": "string"}}
+    }))
+    response_format = factory.LazyFunction(lambda: json.dumps({
+        "result": "string", "status": "string"
+    }))
+    is_active = True
 
 
 # ============================================================================

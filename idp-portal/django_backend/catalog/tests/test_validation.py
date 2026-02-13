@@ -10,6 +10,7 @@ from rest_framework import status
 
 from catalog.models import Action
 from reference.models import RefEngine, RefPlatform
+from tests.factories import UserFactory
 
 class CatalogValidationTests(TestCase):
     """Tests for catalog validation against reference tables."""
@@ -17,7 +18,7 @@ class CatalogValidationTests(TestCase):
     def setUp(self):
         """Set up test data."""
         self.client = APIClient()
-        self.user = User.objects.create(
+        self.user = UserFactory(
             username='testuser',
             profile='DBOPS'
         )

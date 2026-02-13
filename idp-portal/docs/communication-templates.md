@@ -1,9 +1,14 @@
 # Templates de Communication - Migration FastAPI → Django
 
+> **📦 Document d'archivage — Migration terminée**  
+> Ce document est conservé pour référence historique. La migration FastAPI→Django est complète (février 2026).  
+> Voir [MIGRATION_ARCHIVE.md](MIGRATION_ARCHIVE.md) pour accéder au code FastAPI archivé.
+
 **Version:** 1.0
 **Date:** 2026-02-05
+**Statut:** Migration terminée — Templates historiques conservés
 
-Ce document contient tous les templates de communication pour la migration du backend IDP de FastAPI vers Django.
+Ce document contient tous les templates de communication utilisés lors de la migration du backend IDP de FastAPI vers Django.
 
 ---
 

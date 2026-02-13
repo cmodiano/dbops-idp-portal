@@ -30,14 +30,15 @@ import type {
 } from '../../types/api';
 import { schemaToParameterList, parameterListToSchema } from '../../utils/parametersSchema';
 import { impactRulesToList, listToImpactRules } from '../../utils/impactRulesSchema';
-import { ENGINE_OPTIONS, PLATFORM_OPTIONS } from '../../utils/actionOptions';
+import { useEngines } from '../../hooks/useEngines';
+import { usePlatforms } from '../../hooks/usePlatforms';
 import { StepsEditor } from './StepsEditor';
 import { ParametersEditor } from './ParametersEditor';
 import { ImpactRulesEditor } from './ImpactRulesEditor';
 import { ChangeTypeConfig } from './ChangeTypeConfig';
 import { RemediationRulesEditor, type RemediationRuleDefinition } from './RemediationRulesEditor';
 import { AdminPreview } from './AdminPreview';
-import { updateActionSteps, getTags, updateActionTags, updateRemediationRules } from '../../services/admin_service';
+import { updateActionSteps, getTags, updateActionTags, updateRemediationRules, checkActionNameAvailable } from '../../services/admin_service';
 
 const { Text } = Typography;
 
@@ -75,6 +76,11 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagsOptions, setTagsOptions] = useState<{ value: string; label: string }[]>([]);
   const [remediationRules, setRemediationRules] = useState<RemediationRuleDefinition[]>([]);
+  
+  // Story 13.7: Load engines from REF_ENGINES table
+  const { engineOptions, loading: enginesLoading } = useEngines();
+  // Story 13.7: Load platforms from REF_PLATFORMS table
+  const { platformOptions, loading: platformsLoading } = usePlatforms();
 
   const isEditMode = !!editAction;
   const isMin1280 = useMediaQuery(1280);
@@ -297,6 +303,11 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
                 {
                   required: e?.required ?? false,
                   change_model_code: e?.required ? (e.change_model_code?.trim() || null) : null,
+                  change_type: (e?.change_type ?? null) ? String(e.change_type).trim() || null : null,
+                  template_id: (e?.template_id ?? null) ? String(e.template_id).trim() || null : null,
+                  allowed: e?.allowed ?? true,
+                  requires_maintenance_window: e?.requires_maintenance_window ?? false,
+                  requires_approval: e?.requires_approval ?? false,
                 },
               ])
             )
@@ -380,9 +391,20 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
             <Form.Item
               name="name"
               label="Nom de l'action"
+              validateTrigger={['onBlur', 'onFinish']}
               rules={[
                 { required: true, message: 'Le nom est requis' },
                 { min: 1, max: 255, message: 'Le nom doit faire entre 1 et 255 caracteres' },
+                {
+                  validator: async (_, value) => {
+                    const name = value ? String(value).trim() : '';
+                    if (!name) return;
+                    const available = await checkActionNameAvailable(name, editAction?.id);
+                    if (!available) {
+                      return Promise.reject(new Error('Une action avec ce nom existe déjà.'));
+                    }
+                  },
+                },
               ]}
             >
               <Input
@@ -395,7 +417,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
             <Form.Item
               name="description"
               label="Description"
-              rules={[{ max: 4000, message: 'La description ne peut pas depasser 4000 caracteres' }]}
+              rules={[{ required: true, message: 'La description est requise' }, { max: 4000, message: 'La description ne peut pas depasser 4000 caracteres' }]}
             >
               <TextArea
                 rows={3}
@@ -427,9 +449,10 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
               rules={[{ required: true, message: 'Le moteur est requis' }]}
             >
               <Select
-                options={ENGINE_OPTIONS}
-                placeholder="Selectionnez un moteur"
+                options={engineOptions}
+                placeholder={enginesLoading ? "Chargement..." : "Selectionnez un moteur"}
                 aria-label="Moteur de base de donnees"
+                loading={enginesLoading}
               />
             </Form.Item>
 
@@ -439,9 +462,10 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
               rules={[{ required: true, message: 'La plateforme est requise' }]}
             >
               <Select
-                options={PLATFORM_OPTIONS}
-                placeholder="Selectionnez une plateforme"
+                options={platformOptions}
+                placeholder={platformsLoading ? "Chargement..." : "Selectionnez une plateforme"}
                 aria-label="Plateforme d'execution"
+                loading={platformsLoading}
               />
             </Form.Item>
 

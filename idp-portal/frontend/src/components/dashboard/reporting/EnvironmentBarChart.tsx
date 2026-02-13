@@ -33,7 +33,14 @@ const ENVIRONMENT_COLORS: Record<string, string> = {
   prod: '#EF4444',    // rouge
 };
 
-/** Get color for an environment (fallback to gray). */
+/**
+ * Get hex color for an environment (fallback to gray).
+ *
+ * NOTE: This is intentionally different from utils/environmentHelpers getEnvironmentColor(),
+ * which returns BadgeProps['status'] for Ant Design badges. This function returns hex codes
+ * for Recharts visualization. Story 21.5 does not consolidate this because the return types
+ * and use cases differ.
+ */
 function getEnvironmentColor(env: string): string {
   return ENVIRONMENT_COLORS[env.toLowerCase()] ?? '#6B7280';
 }

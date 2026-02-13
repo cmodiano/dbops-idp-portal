@@ -28,7 +28,8 @@ const DEFAULT_ENGINE_OPTIONS = [
   { label: 'Azure DevOps', value: 'azuredevops' },
 ];
 
-/** Default environment options (fallback if API fails). */
+// Story 13.7: DEFAULT_ENVIRONMENT_OPTIONS removed - use filterOptions from API or useEnvironments hook
+// Fallback kept for backward compatibility but should use useEnvironments hook
 const DEFAULT_ENVIRONMENT_OPTIONS = [
   { label: 'Développement', value: 'dev' },
   { label: 'Staging', value: 'staging' },

@@ -5,7 +5,7 @@
  * Pattern: ActionWizard (Story 2.22).
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Modal, Steps, Button, Form, Input, Select, Radio, Switch, Alert, Space, App } from 'antd';
 import type {
   ProfileCreate,
@@ -25,7 +25,8 @@ import {
   putProfileTargets,
 } from '../../services/profiles_service';
 import { listActions, getTags } from '../../services/admin_service';
-import { ENVIRONMENT_OPTIONS, MOCK_TARGET_OPTIONS } from '../../utils/profileOptions';
+import { MOCK_TARGET_OPTIONS } from '../../utils/profileOptions';
+import { useEnvironments } from '../../hooks/useEnvironments';
 
 const { TextArea } = Input;
 
@@ -72,6 +73,9 @@ export function ProfileWizard({
 
   const [actionsOptions, setActionsOptions] = useState<{ id: number; name: string }[]>([]);
   const [tagsOptions, setTagsOptions] = useState<string[]>([]);
+  
+  // Story 13.7: Load environments from inventory
+  const { environmentOptions, loading: environmentsLoading } = useEnvironments();
 
   const isEditMode = !!editProfile;
 
@@ -193,10 +197,12 @@ export function ProfileWizard({
         target_patterns: targetsType === 'pattern' ? (values.target_patterns ?? []) : [],
       };
 
-      // Save permissions
+      // Save permissions in parallel
       try {
-        await putProfileActions(profile.id, actionsPayload);
-        await putProfileTargets(profile.id, targetsPayload);
+        await Promise.all([
+          putProfileActions(profile.id, actionsPayload),
+          putProfileTargets(profile.id, targetsPayload),
+        ]);
       } catch (permErr) {
         // Profile created/updated but permissions failed - still call onSuccess
         notification.warning({
@@ -218,6 +224,16 @@ export function ProfileWizard({
 
   const actionsType = Form.useWatch('actions_type', form);
   const targetsType = Form.useWatch('targets_type', form);
+
+  // Story 21.6, AC6: Detect environments not in inventory for warning
+  const watchedEnvironments = Form.useWatch('environments', form);
+  const unknownEnvironments = useMemo(() => {
+    if (!watchedEnvironments?.length || !environmentOptions.length) return [];
+    const validEnvs = new Set(environmentOptions.map((e) => e.value.toLowerCase()));
+    return watchedEnvironments.filter(
+      (env: string) => !validEnvs.has(env.toLowerCase()),
+    );
+  }, [watchedEnvironments, environmentOptions]);
 
   const stepContent = () => {
     return (
@@ -308,12 +324,22 @@ export function ProfileWizard({
               </Form.Item>
             )}
 
+            {unknownEnvironments.length > 0 && (
+              <Alert
+                type="warning"
+                title="Attention : environnements non reconnus"
+                description={`Les environnements suivants ne sont pas dans l'inventaire : ${unknownEnvironments.join(', ')}. Validation finale au backend.`}
+                showIcon
+                style={{ marginBottom: 8 }}
+              />
+            )}
             <Form.Item name="environments" label="Environnements autorisés">
               <Select
                 mode="multiple"
-                placeholder="DEV, STAGING, PROD..."
-                options={ENVIRONMENT_OPTIONS.map((e) => ({ value: e, label: e }))}
+                placeholder={environmentsLoading ? "Chargement..." : "Sélectionnez les environnements"}
+                options={environmentOptions.map((e) => ({ value: e.value.toUpperCase(), label: e.label }))}
                 aria-label="Environnements autorisés"
+                loading={environmentsLoading}
               />
             </Form.Item>
           </Space>

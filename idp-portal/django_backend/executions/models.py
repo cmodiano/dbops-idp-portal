@@ -16,8 +16,23 @@ class ExecutionEnvironment(models.TextChoices):
 
 
 class ExecutionStatus(models.TextChoices):
-    """Execution status enum matching Oracle CHECK constraint (V023, V030)."""
+    """
+    Execution status enum matching Oracle CHECK constraint (V023, V030, V057).
+
+    Status flow:
+    - SUBMITTED: Successfully submitted to platform (AAP, ServiceNow, etc.)
+    - INTEGRATION_ERROR: Failed to submit to platform (platform unreachable, API error, etc.)
+      This is a PRE-execution failure — the execution never reached the platform.
+      Distinct from FAILED which means the platform received and processed the request but it failed.
+    - PENDING_APPROVAL: Waiting for approval (high-impact production actions)
+    - RUNNING: Execution in progress on platform
+    - COMPLETED: Execution finished successfully
+    - FAILED: Execution failed during/after platform processing
+    - CANCELLED: Execution cancelled by user
+    - REJECTED: Approval rejected
+    """
     SUBMITTED = 'SUBMITTED', 'Submitted'
+    INTEGRATION_ERROR = 'INTEGRATION_ERROR', 'Integration Error'  # Story 18.6 (V057)
     PENDING_APPROVAL = 'PENDING_APPROVAL', 'Pending Approval'
     RUNNING = 'RUNNING', 'Running'
     COMPLETED = 'COMPLETED', 'Completed'
@@ -142,16 +157,21 @@ class Execution(models.Model):
         related_name='child_executions',
         db_column='PARENT_EXECUTION_ID'
     )
+    # Story 18.6: Error message for integration failures
+    error_message = models.TextField(null=True, blank=True, db_column='ERROR_MESSAGE')
     started_at = models.DateTimeField(null=True, blank=True, db_column='STARTED_AT')
     completed_at = models.DateTimeField(null=True, blank=True, db_column='COMPLETED_AT')
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
-    
+
     # Custom manager
     objects = ExecutionManager()
 
     class Meta:
         db_table = 'EXECUTIONS'
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['action', 'created_at'], name='idx_exec_action_created'),
+        ]
 
     def __str__(self):
         return f"Execution {self.id} - {self.action.name} ({self.status})"
@@ -175,6 +195,64 @@ class Execution(models.Model):
             self.parameters = None
 
 
+class TargetType(models.TextChoices):
+    """Target type enum for ExecutionTarget."""
+    SERVER = 'SERVER', 'Server'
+    DATABASE = 'DATABASE', 'Database'
+    INSTANCE = 'INSTANCE', 'Instance'
+    SCHEMA = 'SCHEMA', 'Schema'
+    CLUSTER = 'CLUSTER', 'Cluster'
+    OTHER = 'OTHER', 'Other'
+
+
+class ExecutionTarget(models.Model):
+    """
+    ExecutionTarget model mapping to Oracle EXECUTION_TARGETS table.
+    Stores the explicit link between an execution and its targets (servers, databases, etc.).
+    Story 25.1: Foundation for condition gates, mutex, and RBAC validation.
+    """
+    id = models.BigAutoField(primary_key=True, db_column='ID')
+    execution = models.ForeignKey(
+        Execution,
+        on_delete=models.CASCADE,
+        related_name='targets',
+        db_column='EXECUTION_ID'
+    )
+    target_type = models.CharField(
+        max_length=50,
+        choices=TargetType.choices,
+        db_column='TARGET_TYPE'
+    )
+    target_id = models.CharField(max_length=200, db_column='TARGET_ID')
+    target_name = models.CharField(max_length=255, db_column='TARGET_NAME')
+    target_metadata = models.TextField(null=True, blank=True, db_column='TARGET_METADATA')
+    created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
+
+    class Meta:
+        db_table = 'EXECUTION_TARGETS'
+        unique_together = [['execution', 'target_type', 'target_id']]
+
+    def __str__(self):
+        return f"ExecutionTarget {self.id} - {self.target_type}:{self.target_name}"
+
+    def get_target_metadata(self) -> dict | None:
+        """Deserialize JSON from CLOB."""
+        if self.target_metadata:
+            try:
+                return json.loads(self.target_metadata)
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning(f"Failed to deserialize target_metadata for ExecutionTarget {self.id}: {e}")
+                return None
+        return None
+
+    def set_target_metadata(self, value: dict | None):
+        """Serialize JSON to CLOB."""
+        if value is not None:
+            self.target_metadata = json.dumps(value, ensure_ascii=False)
+        else:
+            self.target_metadata = None
+
+
 class ExecutionStepType(models.TextChoices):
     """Execution step type enum matching Oracle CHECK constraint."""
     VAULT = 'vault', 'Vault'
@@ -187,6 +265,7 @@ class ExecutionStepType(models.TextChoices):
 class ExecutionStepStatus(models.TextChoices):
     """Execution step status enum matching Oracle CHECK constraint."""
     PENDING = 'PENDING', 'Pending'
+    WAITING = 'WAITING', 'Waiting'
     RUNNING = 'RUNNING', 'Running'
     COMPLETED = 'COMPLETED', 'Completed'
     FAILED = 'FAILED', 'Failed'

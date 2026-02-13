@@ -22,9 +22,11 @@ import {
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import type { ImpactRuleDefinition, ImpactLevel } from '../../types/api';
 import { ImpactIndicator } from '../shared/ImpactIndicator';
-import { IMPACT_ENVIRONMENTS } from '../../utils/impactRulesSchema';
+import { useEnvironments } from '../../hooks/useEnvironments';
 
 const { Text } = Typography;
+
+const EMPTY_RULES: ImpactRuleDefinition[] = [];
 
 export interface ImpactRulesEditorProps {
   value?: ImpactRuleDefinition[];
@@ -38,15 +40,12 @@ const IMPACT_LEVEL_OPTIONS: { value: ImpactLevel; label: string }[] = [
   { value: 'critical', label: 'Critique (rouge fonce)' },
 ];
 
-const ENVIRONMENT_OPTIONS = IMPACT_ENVIRONMENTS.map((env) => ({
-  value: env,
-  label: env,
-}));
-
 interface RuleCardProps {
   rule: ImpactRuleDefinition;
   index: number;
   allRules: ImpactRuleDefinition[];
+  environmentOptions: { value: string; label: string }[];
+  environmentsLoading: boolean;
   onRuleChange: (index: number, field: keyof ImpactRuleDefinition, fieldValue: unknown) => void;
   onRemove: (index: number) => void;
 }
@@ -55,6 +54,8 @@ const RuleCard: React.FC<RuleCardProps> = ({
   rule,
   index,
   allRules,
+  environmentOptions,
+  environmentsLoading,
   onRuleChange,
   onRemove,
 }) => {
@@ -101,11 +102,13 @@ const RuleCard: React.FC<RuleCardProps> = ({
             <Select
               value={rule.environment || undefined}
               onChange={(v) => onRuleChange(index, 'environment', v)}
-              options={ENVIRONMENT_OPTIONS}
+              options={environmentOptions}
               placeholder="Selectionnez"
               style={{ width: 140 }}
               aria-label={`Environnement regle ${index + 1}`}
               allowClear={false}
+              loading={environmentsLoading}
+              disabled={environmentsLoading}
             />
           </Form.Item>
 
@@ -140,7 +143,9 @@ const RuleCard: React.FC<RuleCardProps> = ({
   );
 };
 
-export const ImpactRulesEditor: React.FC<ImpactRulesEditorProps> = ({ value = [], onChange }) => {
+export const ImpactRulesEditor: React.FC<ImpactRulesEditorProps> = ({ value = EMPTY_RULES, onChange }) => {
+  const { environmentOptions, loading: environmentsLoading } = useEnvironments();
+
   const handleAdd = () => {
     const newRule: ImpactRuleDefinition = {
       id: `rule-new-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -172,6 +177,8 @@ export const ImpactRulesEditor: React.FC<ImpactRulesEditorProps> = ({ value = []
             rule={rule}
             index={index}
             allRules={value}
+            environmentOptions={environmentOptions}
+            environmentsLoading={environmentsLoading}
             onRuleChange={handleRuleChange}
             onRemove={handleRemove}
           />

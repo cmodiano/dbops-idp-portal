@@ -540,3 +540,132 @@ class TestDataIsolation(TestCase):
         # Admin can see all (using all() instead of list_by_user)
         all_execs = Execution.objects.all()
         self.assertGreaterEqual(all_execs.count(), 2)
+
+
+@pytest.mark.django_db
+@pytest.mark.integration
+class TestNonSuperuserDBOPSAccessViaADGroup(TestCase):
+    """
+    Story 22.1 AC#5: Non-superuser with AD group 'GRP-IDP-DBOPS' can access
+    protected endpoints without the superuser flag.
+    """
+
+    def setUp(self):
+        """Set up DBOPS profile and non-superuser with AD group."""
+        self.client = APIClient()
+
+        # Create the DBOPS profile in DB (ad_group matches the AD group name)
+        self.profile_dbops = Profile.objects.create(
+            name='DBOPS',
+            ad_group='GRP-IDP-DBOPS',
+            is_admin=1,
+        )
+
+        # Create a non-superuser
+        self.user = User.objects.create(
+            username='dbops_ad_user',
+            profile='',  # No direct profile string — relies on AD groups
+        )
+        # Attach ad_groups dynamically (as JWT authentication does)
+        self.user.ad_groups = ['GRP-IDP-DBOPS']
+        self.user.is_superuser = False
+
+    def test_non_superuser_dbops_access_via_ad_group(self):
+        """AC#5: Non-superuser with AD group 'GRP-IDP-DBOPS' accesses admin endpoint."""
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get('/api/v1/admin/actions/')
+
+        # Should be 200 (not 403) — the DBOPS profile is resolved from AD groups
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_non_superuser_without_ad_group_denied(self):
+        """Non-superuser without matching AD group is denied admin access."""
+        denied_user = User.objects.create(
+            username='no_ad_user',
+            profile='',
+        )
+        denied_user.ad_groups = ['GRP-IDP-VIEWER']  # Not DBOPS
+        denied_user.is_superuser = False
+
+        self.client.force_authenticate(user=denied_user)
+
+        response = self.client.get('/api/v1/admin/actions/')
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_superuser_flag_not_needed_for_ad_group_dbops(self):
+        """AC#3: Verify superuser flag is NOT required when AD group grants DBOPS access."""
+        self.assertFalse(self.user.is_superuser)
+
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get('/api/v1/admin/actions/')
+
+        # AC#3: Non-superuser with AD group should access endpoint successfully
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_superuser_fallback_not_triggered_with_profile(self):
+        """Story 22.2 AC#6: security_rbac_bypass_superuser_fallback log is NOT emitted when
+        superuser has a DBOPS profile (profile resolves normally)."""
+        from django.test import override_settings
+
+        superuser = User.objects.create(
+            username='superuser_with_profile',
+            profile='DBOPS',  # Has DBOPS profile
+        )
+        superuser.ad_groups = []
+        superuser.is_superuser = True
+
+        self.client.force_authenticate(user=superuser)
+
+        import logging
+        with override_settings(ALLOW_SUPERUSER_FALLBACK=True):
+            # Story 22.2 LOW-2: Django 5.2.11 supports assertNoLogs, no fallback needed
+            with self.assertNoLogs('core.permissions', level='WARNING'):
+                response = self.client.get('/api/v1/admin/actions/')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_superuser_fallback_denied_in_production(self):
+        """Story 22.2 AC#6: Superuser without DBOPS profile receives 403
+        in production (ALLOW_SUPERUSER_FALLBACK=False)."""
+        from django.test import override_settings
+
+        superuser = User.objects.create(
+            username='superuser_no_profile_prod',
+            profile='',
+        )
+        superuser.ad_groups = []
+        superuser.is_superuser = True
+
+        self.client.force_authenticate(user=superuser)
+
+        with override_settings(ALLOW_SUPERUSER_FALLBACK=False):
+            response = self.client.get('/api/v1/admin/actions/')
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_superuser_fallback_allowed_in_dev(self):
+        """Story 22.2 AC#6: Superuser without DBOPS profile receives 200
+        in dev mode and security_rbac_bypass_superuser_fallback log is emitted."""
+        from django.test import override_settings
+
+        superuser = User.objects.create(
+            username='superuser_no_profile_dev',
+            profile='',
+        )
+        superuser.ad_groups = []
+        superuser.is_superuser = True
+
+        self.client.force_authenticate(user=superuser)
+
+        import logging
+        with override_settings(ALLOW_SUPERUSER_FALLBACK=True):
+            with self.assertLogs('core.permissions', level='WARNING') as logs:
+                response = self.client.get('/api/v1/admin/actions/')
+
+        # Verify security_rbac_bypass_superuser_fallback log was emitted (Story 22.2 HIGH-2: renamed event)
+        superuser_fallback_logs = [log for log in logs.output if 'security_rbac_bypass_superuser_fallback' in log]
+        self.assertGreater(len(superuser_fallback_logs), 0, "Superuser fallback SHOULD log when used")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)

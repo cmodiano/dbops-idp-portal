@@ -1,5 +1,5 @@
 """
-Custom pagination for DRF to match FastAPI format.
+Custom pagination for DRF.
 """
 
 from rest_framework.pagination import PageNumberPagination
@@ -8,7 +8,7 @@ from rest_framework.response import Response
 
 class CustomPageNumberPagination(PageNumberPagination):
     """
-    Custom pagination that matches FastAPI format:
+    Custom pagination format:
     {
         "data": [...],
         "pagination": {
@@ -23,8 +23,9 @@ class CustomPageNumberPagination(PageNumberPagination):
     page_size_query_param = 'page_size'
     max_page_size = 1000
     
-    def get_paginated_response(self, data):
-        """Return paginated response in FastAPI format."""
+    def get_paginated_response(self, data: list) -> Response:
+        """Return paginated response."""
+        assert self.page is not None, "paginate_queryset must be called first"
         return Response({
             "data": data,
             "pagination": {

@@ -1,6 +1,5 @@
 """
 Views for integration icon upload endpoint.
-Matches FastAPI POST /admin/integrations/upload-icon endpoint.
 """
 
 import uuid
@@ -21,7 +20,6 @@ logger = logging.getLogger(__name__)
 class UploadIconView(APIView):
     """
     POST /admin/integrations/upload-icon - Upload integration icon.
-    Matches FastAPI upload_icon endpoint.
     """
     parser_classes = [MultiPartParser]
     permission_classes = [IsAuthenticated, DBOPSProfilePermission]
