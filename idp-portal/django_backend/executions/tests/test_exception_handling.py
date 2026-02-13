@@ -1,5 +1,6 @@
 """
 Story 17.6: Tests for restricted exception catches.
+Story 26.10: Updated imports after function renaming.
 
 Validates that:
 - Workflow runtime logs unexpected exceptions with exc_info=True and correlation_id
@@ -190,14 +191,14 @@ class TestProfileServiceExceptionLogging:
 
     def test_profile_service_failure_logs_warning(self):
         """ProfileService exception logs warning with context."""
-        from executions.utils import _get_allowed_action_ids_for_user
+        from executions.utils import get_allowed_action_ids_for_user
 
         user = User.objects.create(username="test_profile_user")
 
         with patch('executions.utils.ProfileService') as mock_ps_class:
             mock_ps_class.return_value.get_cumulative_permissions.side_effect = ConnectionError("Service down")
             with patch('executions.utils.exec_logger') as mock_logger:
-                result = _get_allowed_action_ids_for_user(user)
+                result = get_allowed_action_ids_for_user(user)
 
                 assert result == set()
                 mock_logger.warning.assert_called_once()

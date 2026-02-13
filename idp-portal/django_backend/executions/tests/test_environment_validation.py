@@ -2,6 +2,7 @@
 Tests for execution environment validation against inventory.
 Story 13.7 - Tests for environment validation in executions.
 Story 21.3 - Comprehensive tests for raw environment values (lab, certif, etc.)
+Story 26.10 - Updated imports and patch paths after function renaming.
 """
 
 from unittest.mock import patch, MagicMock
@@ -39,7 +40,8 @@ class ExecutionEnvironmentValidationTests(TestCase):
             created_by=self.user
         )
 
-    @patch('executions.validators.payload_validator._validate_environment_against_inventory')
+    # Story 26.10: Fixed patch path (function is in utils.py, not payload_validator.py)
+    @patch('executions.utils.validate_environment_against_inventory')
     @patch('executions.views.execution_views.ExecutionService')
     def test_create_execution_with_valid_environment(self, mock_exec_service, mock_validate):
         """Test creating execution with valid environment."""
@@ -63,7 +65,8 @@ class ExecutionEnvironmentValidationTests(TestCase):
         # Should call validation
         mock_validate.assert_called_once_with('dev', user_id=self.user.id)
 
-    @patch('executions.validators.payload_validator._validate_environment_against_inventory')
+    # Story 26.10: Fixed patch path (function is in utils.py, not payload_validator.py)
+    @patch('executions.utils.validate_environment_against_inventory')
     def test_create_execution_with_invalid_environment(self, mock_validate):
         """Test creating execution with invalid environment returns 400."""
         from core.exceptions import BadRequestError
@@ -82,7 +85,7 @@ class ExecutionEnvironmentValidationTests(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    @patch('executions.views.scheduled_views._validate_environment_against_inventory')
+    @patch('executions.views.scheduled_views.validate_environment_against_inventory')
     @patch('executions.views.scheduled_views.SchedulingService')
     def test_create_scheduled_execution_with_valid_environment(self, mock_sched_service, mock_validate):
         """Test creating scheduled execution with valid environment."""
@@ -105,25 +108,25 @@ class ExecutionEnvironmentValidationTests(TestCase):
         Story 21.2, AC2 / Task 5.3: _validate_environment_against_inventory
         should validate 'lab' case-insensitively against inventory.
         """
-        from executions.utils import _validate_environment_against_inventory
+        from executions.utils import validate_environment_against_inventory
 
         mock_list_envs.return_value = ['dev', 'lab', 'staging', 'prod']
 
         # Should not raise - lab is valid
-        _validate_environment_against_inventory('lab')
-        _validate_environment_against_inventory('LAB')  # Case-insensitive
-        _validate_environment_against_inventory('Lab')  # Case-insensitive
+        validate_environment_against_inventory('lab')
+        validate_environment_against_inventory('LAB')  # Case-insensitive
+        validate_environment_against_inventory('Lab')  # Case-insensitive
 
     @patch('inventory.services.InventoryService.list_environments')
     def test_validate_environment_invalid_raises_error(self, mock_list_envs):
         """Story 21.2, AC2: Invalid environment should raise BadRequestError."""
-        from executions.utils import _validate_environment_against_inventory
+        from executions.utils import validate_environment_against_inventory
         from core.exceptions import BadRequestError
 
         mock_list_envs.return_value = ['dev', 'lab', 'staging', 'prod']
 
         with self.assertRaises(BadRequestError) as cm:
-            _validate_environment_against_inventory('invalid')
+            validate_environment_against_inventory('invalid')
 
         self.assertEqual(cm.exception.code, 'INVALID_ENVIRONMENT')
 
@@ -133,9 +136,9 @@ class EnvironmentConfigLookupTests(TestCase):
     Story 21.2, AC3 / Task 5.3: Tests for case-insensitive environment config lookup.
     """
 
-    def test_get_env_config_case_insensitive(self):
+    def testget_env_config_case_insensitive(self):
         """Helper should match environment keys case-insensitively."""
-        from executions.utils import _get_env_config_case_insensitive
+        from executions.utils import get_env_config_case_insensitive
 
         config = {
             "DEV": {"required": False},
@@ -144,44 +147,44 @@ class EnvironmentConfigLookupTests(TestCase):
         }
 
         # Lowercase lookup should work
-        result = _get_env_config_case_insensitive(config, "dev")
+        result = get_env_config_case_insensitive(config, "dev")
         self.assertEqual(result, {"required": False})
 
         # Uppercase lookup should work
-        result = _get_env_config_case_insensitive(config, "STAGING")
+        result = get_env_config_case_insensitive(config, "STAGING")
         self.assertEqual(result, {"required": True, "change_model_code": "STG-001"})
 
         # Mixed case should work
-        result = _get_env_config_case_insensitive(config, "Prod")
+        result = get_env_config_case_insensitive(config, "Prod")
         self.assertEqual(result, {"required": True, "change_model_code": "PRD-001"})
 
         # Not found should return empty dict
-        result = _get_env_config_case_insensitive(config, "unknown")
+        result = get_env_config_case_insensitive(config, "unknown")
         self.assertEqual(result, {})
 
     def test_get_env_config_with_lab_environment(self):
         """Story 21.2, AC3: Lab environment should be looked up case-insensitively."""
-        from executions.utils import _get_env_config_case_insensitive
+        from executions.utils import get_env_config_case_insensitive
 
         config = {
             "lab": {"required": False},
             "staging": {"required": True},
         }
 
-        result = _get_env_config_case_insensitive(config, "lab")
+        result = get_env_config_case_insensitive(config, "lab")
         self.assertEqual(result, {"required": False})
 
-        result = _get_env_config_case_insensitive(config, "LAB")
+        result = get_env_config_case_insensitive(config, "LAB")
         self.assertEqual(result, {"required": False})
 
     def test_get_env_config_empty_config(self):
         """Helper should handle empty config gracefully."""
-        from executions.utils import _get_env_config_case_insensitive
+        from executions.utils import get_env_config_case_insensitive
 
-        result = _get_env_config_case_insensitive({}, "dev")
+        result = get_env_config_case_insensitive({}, "dev")
         self.assertEqual(result, {})
 
-        result = _get_env_config_case_insensitive(None, "dev")
+        result = get_env_config_case_insensitive(None, "dev")
         self.assertEqual(result, {})
 
 
@@ -201,39 +204,39 @@ class ValidateEnvironmentAgainstInventoryTests(TestCase):
     @patch('inventory.services.InventoryService.list_environments')
     def test_validate_lab_success(self, mock_list_envs):
         """Valid 'lab' in inventory → no exception raised."""
-        from executions.utils import _validate_environment_against_inventory
+        from executions.utils import validate_environment_against_inventory
 
         mock_list_envs.return_value = ['dev', 'lab', 'staging', 'prod']
 
         # Should not raise
-        _validate_environment_against_inventory('lab')
+        validate_environment_against_inventory('lab')
 
     # -- Task 3.2: case-insensitive --
 
     @patch('inventory.services.InventoryService.list_environments')
     def test_validate_lab_case_insensitive_variants(self, mock_list_envs):
         """'LAB', 'Lab', 'lAb' all match 'lab' in inventory."""
-        from executions.utils import _validate_environment_against_inventory
+        from executions.utils import validate_environment_against_inventory
 
         mock_list_envs.return_value = ['dev', 'lab', 'staging', 'prod']
 
         # All case variants should pass
-        _validate_environment_against_inventory('LAB')
-        _validate_environment_against_inventory('Lab')
-        _validate_environment_against_inventory('lAb')
+        validate_environment_against_inventory('LAB')
+        validate_environment_against_inventory('Lab')
+        validate_environment_against_inventory('lAb')
 
     # -- Task 3.3: invalid environment --
 
     @patch('inventory.services.InventoryService.list_environments')
     def test_validate_invalid_environment_raises_bad_request(self, mock_list_envs):
         """Invalid env raises BadRequestError with INVALID_ENVIRONMENT code."""
-        from executions.utils import _validate_environment_against_inventory
+        from executions.utils import validate_environment_against_inventory
         from core.exceptions import BadRequestError
 
         mock_list_envs.return_value = ['dev', 'lab', 'staging', 'prod']
 
         with self.assertRaises(BadRequestError) as cm:
-            _validate_environment_against_inventory('invalid_env', user_id=123)
+            validate_environment_against_inventory('invalid_env', user_id=123)
 
         self.assertEqual(cm.exception.code, 'INVALID_ENVIRONMENT')
         self.assertIn('invalid_env', cm.exception.message)
@@ -244,13 +247,13 @@ class ValidateEnvironmentAgainstInventoryTests(TestCase):
     @patch('inventory.services.InventoryService.list_environments')
     def test_validate_inventory_unavailable_blocks_execution(self, mock_list_envs):
         """Inventory down → BadRequestError INVENTORY_UNAVAILABLE (SOC1 security)."""
-        from executions.utils import _validate_environment_against_inventory
+        from executions.utils import validate_environment_against_inventory
         from core.exceptions import BadRequestError
 
         mock_list_envs.side_effect = InventoryServiceError("Oracle connection refused")
 
         with self.assertRaises(BadRequestError) as cm:
-            _validate_environment_against_inventory('lab', user_id=123)
+            validate_environment_against_inventory('lab', user_id=123)
 
         self.assertEqual(cm.exception.code, 'INVENTORY_UNAVAILABLE')
 
@@ -260,13 +263,13 @@ class ValidateEnvironmentAgainstInventoryTests(TestCase):
     @patch('inventory.services.InventoryService.list_environments')
     def test_validate_invalid_env_creates_audit_entry(self, mock_list_envs, mock_audit):
         """Invalid environment attempt → audit trail with user_id (SOC1)."""
-        from executions.utils import _validate_environment_against_inventory
+        from executions.utils import validate_environment_against_inventory
         from core.exceptions import BadRequestError
 
         mock_list_envs.return_value = ['dev', 'staging', 'prod']
 
         with self.assertRaises(BadRequestError):
-            _validate_environment_against_inventory('invalid_env', user_id=456)
+            validate_environment_against_inventory('invalid_env', user_id=456)
 
         # Verify audit entry was created
         mock_audit.create_entry.assert_called_once()
@@ -277,11 +280,11 @@ class ValidateEnvironmentAgainstInventoryTests(TestCase):
     @patch('inventory.services.InventoryService.list_environments')
     def test_validate_empty_environment_skips_validation(self, mock_list_envs):
         """Empty environment → no validation (returns early)."""
-        from executions.utils import _validate_environment_against_inventory
+        from executions.utils import validate_environment_against_inventory
 
         # Should not raise, should not call list_environments
-        _validate_environment_against_inventory('')
-        _validate_environment_against_inventory(None)
+        validate_environment_against_inventory('')
+        validate_environment_against_inventory(None)
 
         mock_list_envs.assert_not_called()
 
@@ -290,14 +293,14 @@ class ValidateEnvironmentAgainstInventoryTests(TestCase):
     @patch('inventory.services.InventoryService.list_environments')
     def test_validate_qa_uat_certif_environments(self, mock_list_envs):
         """Non-standard envs (qa, uat, certif) pass if present in inventory."""
-        from executions.utils import _validate_environment_against_inventory
+        from executions.utils import validate_environment_against_inventory
 
         mock_list_envs.return_value = ['dev', 'lab', 'qa', 'uat', 'certif', 'staging', 'prod']
 
         # All should pass without exception
-        _validate_environment_against_inventory('qa')
-        _validate_environment_against_inventory('uat')
-        _validate_environment_against_inventory('certif')
+        validate_environment_against_inventory('qa')
+        validate_environment_against_inventory('uat')
+        validate_environment_against_inventory('certif')
 
 
 # =============================================================================
@@ -312,8 +315,8 @@ class EnvironmentConfigLookupAdvancedTests(TestCase):
     """
 
     def _get_helper(self):
-        from executions.utils import _get_env_config_case_insensitive
-        return _get_env_config_case_insensitive
+        from executions.utils import get_env_config_case_insensitive
+        return get_env_config_case_insensitive
 
     # -- Task 4.1: Case-insensitive match --
 

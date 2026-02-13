@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from core.exceptions import BadRequestError
-from executions.utils import _get_env_config_case_insensitive
+from executions.utils import get_env_config_case_insensitive
 
 import structlog
 
@@ -39,7 +39,7 @@ class EnvironmentConfigResolver:
             change_type_config = change_type_config_raw
 
         env_str: str = str(environment) if environment else ""
-        env_change_config = _get_env_config_case_insensitive(change_type_config, env_str)
+        env_change_config = get_env_config_case_insensitive(change_type_config, env_str)
         change_required = env_change_config.get("required", False)
         change_model_code = env_change_config.get("change_model_code")
 
@@ -57,7 +57,7 @@ class EnvironmentConfigResolver:
 
         # Impact level
         impact_rules = action.impact_rules or {}
-        env_impact_config = _get_env_config_case_insensitive(impact_rules, env_str)
+        env_impact_config = get_env_config_case_insensitive(impact_rules, env_str)
         impact_level = env_impact_config.get("impact_level") or env_impact_config.get("level") or action.default_impact_level
 
         logger.info(

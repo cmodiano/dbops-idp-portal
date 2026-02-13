@@ -348,7 +348,7 @@ development_status:
     26-7-creer-environment-normalizer: done # Story 26.7 — EnvironmentHelper centralizing case-insensitive logic, 26 tests, 100% coverage, 7 files migrated
     26-8-creer-permission-isdbaordbops: done # Story 26.8 — IsDBAOrDBOPS DRF permission, remplace _is_dba_or_dbops() fragile (13 occurrences), liste exhaustive ADMIN_PROFILES, has_permission + has_object_permission
     26-9-standardiser-format-reponse-api: done # 2026-02-13: data.data supprimé, serializer PATCH, apiFetchRaw frontend, 9 backend + 9 frontend tests
-    26-10-renommer-fonctions-underscore-exportees: backlog
+    26-10-renommer-fonctions-underscore-exportees: done # 2026-02-13: 14 fonctions renommées (retrait _), 15 fichiers modifiés, 48/48 test_utils pass, 0 régression — Code review: 4 HIGH/MEDIUM issues auto-fixed (docstrings Story 26.10, patch path, commentaire AC2, headers tests)
     26-11-standardiser-pagination-utilitaire: backlog
     26-12-unifier-checks-rbac-permission-mixin: backlog
     26-13-corriger-tous-tests-frontend-echec: backlog

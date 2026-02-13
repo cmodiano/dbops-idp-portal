@@ -34,11 +34,11 @@ from executions.serializers import (
 from core.environment import EnvironmentHelper
 from executions.services import SchedulingService
 from executions.utils import (
-    _parse_int,
-    _parse_iso_datetime,
-    _get_allowed_action_ids_for_user,
-    _validate_environment_against_inventory,
-    _calculate_next_execution_date,
+    parse_int,
+    parse_iso_datetime,
+    get_allowed_action_ids_for_user,
+    validate_environment_against_inventory,
+    calculate_next_execution_date,
 )
 from inventory.services import InventoryService, InventoryServiceError, MAX_TARGETS_FOR_RBAC_FILTER
 
@@ -59,22 +59,22 @@ class ScheduledExecutionsView(APIView):
 
     @extend_schema(tags=['scheduling'], summary='Lister les exécutions planifiées', responses={200: ScheduledExecutionListItemSerializer(many=True)})
     def get(self, request):
-        limit = _parse_int(request.query_params.get("limit"), 50, name="limit")
-        offset = _parse_int(request.query_params.get("offset"), 0, name="offset")
+        limit = parse_int(request.query_params.get("limit"), 50, name="limit")
+        offset = parse_int(request.query_params.get("offset"), 0, name="offset")
         if limit <= 0 or offset < 0 or limit > 100:
             raise BadRequestError(code="BAD_REQUEST", message="Pagination invalide", details={"limit": limit, "offset": offset})
 
         status_filter = request.query_params.get("status")
         action_id = request.query_params.get("action_id")
-        scheduled_from = _parse_iso_datetime(request.query_params.get("scheduled_from"), name="scheduled_from")
-        scheduled_to = _parse_iso_datetime(request.query_params.get("scheduled_to"), name="scheduled_to")
+        scheduled_from = parse_iso_datetime(request.query_params.get("scheduled_from"), name="scheduled_from")
+        scheduled_to = parse_iso_datetime(request.query_params.get("scheduled_to"), name="scheduled_to")
         environment_filter = request.query_params.get("environment")
         engine_filter = request.query_params.get("engine")
         platform_filter = request.query_params.get("platform")
 
         qs = ScheduledExecution.objects.select_related("action", "user").select_related("recurringpattern")
         if (getattr(request.user, "profile", "") or "").lower() != "dbops":
-            allowed_action_ids = _get_allowed_action_ids_for_user(request.user)
+            allowed_action_ids = get_allowed_action_ids_for_user(request.user)
             if allowed_action_ids is not None:
                 qs = qs.filter(action_id__in=allowed_action_ids)
 
@@ -89,10 +89,10 @@ class ScheduledExecutionsView(APIView):
             qs = qs.filter(status=status_filter)
 
         if action_id:
-            qs = qs.filter(action_id=_parse_int(action_id, 0, name="action_id"))
+            qs = qs.filter(action_id=parse_int(action_id, 0, name="action_id"))
 
         if environment_filter:
-            _validate_environment_against_inventory(environment_filter, user_id=request.user.id)
+            validate_environment_against_inventory(environment_filter, user_id=request.user.id)
             qs = qs.filter(environment=EnvironmentHelper.normalize(environment_filter))
 
         if engine_filter:
@@ -156,7 +156,7 @@ class ScheduledExecutionsView(APIView):
                 details={"action_id": action_id, "environment": environment},
             )
 
-        _validate_environment_against_inventory(environment, user_id=request.user.id)
+        validate_environment_against_inventory(environment, user_id=request.user.id)
 
         if scheduled_at_raw and recurring_pattern:
             raise BadRequestError(
@@ -180,7 +180,7 @@ class ScheduledExecutionsView(APIView):
 
         correlation_id = get_correlation_id()
 
-        scheduled_at = _parse_iso_datetime(scheduled_at_raw, name="scheduled_at") if scheduled_at_raw else None
+        scheduled_at = parse_iso_datetime(scheduled_at_raw, name="scheduled_at") if scheduled_at_raw else None
         if scheduled_at and scheduled_at <= timezone.now().astimezone(UTC):
             raise BadRequestError(
                 code="INVALID_SCHEDULED_DATE",
@@ -192,7 +192,7 @@ class ScheduledExecutionsView(APIView):
         if recurring_pattern:
             pattern_type = (recurring_pattern.get("pattern_type") or "").lower()
             pattern_config = recurring_pattern.get("pattern_config") or {}
-            next_execution_date = _calculate_next_execution_date(pattern_type, pattern_config, timezone.now())
+            next_execution_date = calculate_next_execution_date(pattern_type, pattern_config, timezone.now())
             recurring_pattern_data = {
                 "pattern_type": pattern_type,
                 "pattern_config": pattern_config,
@@ -285,7 +285,7 @@ class ScheduledExecutionUpdateView(APIView):
             with transaction.atomic():
                 rp = getattr(se, "recurringpattern", None)
                 if rp is not None and bool(rp.is_active):
-                    rp.next_execution_date = _calculate_next_execution_date(
+                    rp.next_execution_date = calculate_next_execution_date(
                         rp.pattern_type, rp.get_pattern_config() or {}, timezone.now()
                     )
                     rp.updated_at = timezone.now()
@@ -351,7 +351,7 @@ class ScheduledExecutionUpdateView(APIView):
 
         rp = getattr(se, "recurringpattern", None)
         if scheduled_at_raw is not None and rp is None:
-            scheduled_at = _parse_iso_datetime(scheduled_at_raw, name="scheduled_at")
+            scheduled_at = parse_iso_datetime(scheduled_at_raw, name="scheduled_at")
             if scheduled_at is not None and scheduled_at <= timezone.now().astimezone(UTC):
                 raise BadRequestError(
                     code="INVALID_SCHEDULED_DATE",
@@ -361,7 +361,7 @@ class ScheduledExecutionUpdateView(APIView):
             se.scheduled_at = scheduled_at
 
         if environment is not None:
-            _validate_environment_against_inventory(environment, user_id=request.user.id)
+            validate_environment_against_inventory(environment, user_id=request.user.id)
             se.environment = EnvironmentHelper.normalize(environment)
 
         if target_names is not None:
@@ -379,7 +379,7 @@ class ScheduledExecutionUpdateView(APIView):
                 new_params["_targets"] = []
                 se.set_parameters(new_params)
                 if environment is not None:
-                    _validate_environment_against_inventory(environment, user_id=request.user.id)
+                    validate_environment_against_inventory(environment, user_id=request.user.id)
                     se.environment = EnvironmentHelper.normalize(environment)
             else:
                 ad_groups = get_user_ad_groups(request.user)
@@ -436,7 +436,7 @@ class ScheduledExecutionUpdateView(APIView):
         if recurring_pattern_payload is not None and rp is not None:
             pattern_type = (recurring_pattern_payload.get("pattern_type") or "").lower()
             pattern_config = recurring_pattern_payload.get("pattern_config") or {}
-            next_execution_date = _calculate_next_execution_date(
+            next_execution_date = calculate_next_execution_date(
                 pattern_type, pattern_config, timezone.now()
             )
             rp.pattern_type = pattern_type
@@ -500,7 +500,7 @@ class ScheduledExecutionRecurringPatternView(APIView):
         rp.is_active = 1 if is_active else 0
 
         if is_active:
-            rp.next_execution_date = _calculate_next_execution_date(
+            rp.next_execution_date = calculate_next_execution_date(
                 rp.pattern_type, rp.get_pattern_config() or {}, timezone.now()
             )
 
@@ -550,7 +550,7 @@ class ScheduledExecutionCronNextExecutionsView(APIView):
 
     def get(self, request):
         expr = (request.query_params.get("expression") or "").strip()
-        count = _parse_int(request.query_params.get("count"), 5, name="count")
+        count = parse_int(request.query_params.get("count"), 5, name="count")
         if count < 1 or count > 10:
             raise BadRequestError(code="BAD_REQUEST", message="count invalide (1-10)", details={"count": count})
 

@@ -12,7 +12,7 @@ from core.exceptions import BadRequestError
 from core.permissions import IsDBAOrDBOPS
 from executions.models import Execution, ExecutionStatus
 from executions.serializers import ExecutionSerializer
-from executions.utils import _parse_int
+from executions.utils import parse_int
 
 from drf_spectacular.utils import extend_schema
 
@@ -33,8 +33,8 @@ class PendingApprovalsView(APIView):
         if count_only:
             return Response({"count": qs.count()})
 
-        limit = _parse_int(request.query_params.get("limit"), 50, name="limit")
-        offset = _parse_int(request.query_params.get("offset"), 0, name="offset")
+        limit = parse_int(request.query_params.get("limit"), 50, name="limit")
+        offset = parse_int(request.query_params.get("offset"), 0, name="offset")
         if limit <= 0 or offset < 0:
             raise BadRequestError(code="BAD_REQUEST", message="Pagination invalide", details={"limit": limit, "offset": offset})
 

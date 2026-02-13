@@ -50,30 +50,32 @@ import structlog
 
 exec_logger = structlog.get_logger(__name__)
 
+# AC2: Story 26.10 — Respect convention Python (fonctions publiques sans préfixe _)
 __all__ = [
-    "_get_env_config_case_insensitive",
-    "_validate_environment_against_inventory",
-    "_extract_workflow_referenced_action_ids",
-    "_extract_workflow_step_map",
-    "_validate_workflow_step_parameters",
-    "_validate_workflow_referenced_actions",
-    "_parse_int",
-    "_parse_date",
-    "_get_allowed_action_ids_for_user",
-    "_detect_request_source",
-    "_apply_scope_filter",
-    "_apply_execution_filters",
-    "_parse_iso_datetime",
-    "_calculate_next_execution_date",
+    "get_env_config_case_insensitive",
+    "validate_environment_against_inventory",
+    "extract_workflow_referenced_action_ids",
+    "extract_workflow_step_map",
+    "validate_workflow_step_parameters",
+    "validate_workflow_referenced_actions",
+    "parse_int",
+    "parse_date",
+    "get_allowed_action_ids_for_user",
+    "detect_request_source",
+    "apply_scope_filter",
+    "apply_execution_filters",
+    "parse_iso_datetime",
+    "calculate_next_execution_date",
     "validate_action_mutex",
 ]
 
 
-def _get_env_config_case_insensitive(config: dict, env: str) -> dict:
+def get_env_config_case_insensitive(config: dict, env: str) -> dict:
     """
     Story 21.2, Task 4.1: Helper to get environment-specific config with case-insensitive lookup.
     Story 25.4: Returned dict may include requires_maintenance_window, requires_approval, allowed.
     Story 26.7 AC2: Migrated to use EnvironmentHelper.find_in_dict().
+    Story 26.10: Renamed from _get_env_config_case_insensitive to respect Python convention (PEP 8).
 
     Args:
         config: Dictionary with environment keys (e.g., {"DEV": {...}, "STAGING": {...}})
@@ -105,11 +107,12 @@ def _get_env_config_case_insensitive(config: dict, env: str) -> dict:
     return value
 
 
-def _validate_environment_against_inventory(environment: str, *, user_id: int | None = None) -> None:
+def validate_environment_against_inventory(environment: str, *, user_id: int | None = None) -> None:
     """
     Validate environment against inventory (Story 13.7, AC2).
     Story 21.2, AC2 / Task 3: Case-insensitive validation, no fallback to dev.
     Story 26.7 AC2: Migrated to use EnvironmentHelper.is_in().
+    Story 26.10: Renamed from _validate_environment_against_inventory to respect Python convention (PEP 8).
     Raises BadRequestError if environment is not in inventory.
 
     Args:
@@ -163,9 +166,10 @@ def _validate_environment_against_inventory(environment: str, *, user_id: int | 
         )
 
 
-def _extract_workflow_referenced_action_ids(workflow_action: Action) -> list[int]:
+def extract_workflow_referenced_action_ids(workflow_action: Action) -> list[int]:
     """
     Extract referenced_action_id list from a workflow's execution_steps.
+    Story 26.10: Renamed from _extract_workflow_referenced_action_ids to respect Python convention (PEP 8).
 
     Expected format (Story 5.7 / 4.11):
         [
@@ -208,9 +212,10 @@ def _extract_workflow_referenced_action_ids(workflow_action: Action) -> list[int
     return ids
 
 
-def _extract_workflow_step_map(workflow_action: Action) -> dict[int, int]:
+def extract_workflow_step_map(workflow_action: Action) -> dict[int, int]:
     """
     Build mapping step_order -> referenced_action_id for a workflow.
+    Story 26.10: Renamed from _extract_workflow_step_map to respect Python convention (PEP 8).
     """
     steps = workflow_action.execution_steps or []
     if not isinstance(steps, list):
@@ -228,7 +233,7 @@ def _extract_workflow_step_map(workflow_action: Action) -> dict[int, int]:
     return out
 
 
-def _validate_workflow_step_parameters(
+def validate_workflow_step_parameters(
     *,
     workflow_action: Action,
     workflow_step_parameters: object,
@@ -237,6 +242,7 @@ def _validate_workflow_step_parameters(
     Story 4.12 (AC4):
       - Reject unknown step_order keys
       - Validate each step parameters against referenced action parameters_schema
+    Story 26.10: Renamed from _validate_workflow_step_parameters to respect Python convention (PEP 8).
     Returns normalized dict suitable for storage (keys as strings).
     """
     if workflow_step_parameters is None:
@@ -248,7 +254,7 @@ def _validate_workflow_step_parameters(
             details={"workflow_step_parameters": workflow_step_parameters},
         )
 
-    step_map = _extract_workflow_step_map(workflow_action)
+    step_map = extract_workflow_step_map(workflow_action)
     valid_orders = sorted(step_map.keys())
 
     invalid_orders: list[str] = []
@@ -337,7 +343,7 @@ def _validate_workflow_step_parameters(
     return normalized
 
 
-def _validate_workflow_referenced_actions(
+def validate_workflow_referenced_actions(
     *,
     workflow_action: Action,
     correlation_id: str | None,
@@ -349,13 +355,14 @@ def _validate_workflow_referenced_actions(
     - Validate referenced actions EXIST and are PUBLISHED.
     - Do NOT perform per-action RBAC checks (delegation).
     - Validation must happen BEFORE creating an execution (no partial execution).
+    Story 26.10: Renamed from _validate_workflow_referenced_actions to respect Python convention (PEP 8).
 
     Returns the ordered list of referenced_action_ids.
     Raises:
       - NotFoundError if any referenced action is missing
       - BadRequestError if any referenced action is not published
     """
-    referenced_action_ids = _extract_workflow_referenced_action_ids(workflow_action)
+    referenced_action_ids = extract_workflow_referenced_action_ids(workflow_action)
 
     # MEDIUM: Reject workflow with no referenced actions (Story 4.11 edge case)
     if not referenced_action_ids:
@@ -464,7 +471,11 @@ def _validate_workflow_referenced_actions(
     return referenced_action_ids
 
 
-def _parse_int(value: str | None, default: int, *, name: str) -> int:
+def parse_int(value: str | None, default: int, *, name: str) -> int:
+    """
+    Parse integer query parameter with default value.
+    Story 26.10: Renamed from _parse_int to respect Python convention (PEP 8).
+    """
     if value is None or value == "":
         return default
     try:
@@ -473,7 +484,11 @@ def _parse_int(value: str | None, default: int, *, name: str) -> int:
         raise BadRequestError(code="BAD_REQUEST", message=f"{name} invalide", details={name: value})
 
 
-def _parse_date(value: str | None, *, name: str) -> date | None:
+def parse_date(value: str | None, *, name: str) -> date | None:
+    """
+    Parse date string in YYYY-MM-DD format.
+    Story 26.10: Renamed from _parse_date to respect Python convention (PEP 8).
+    """
     if not value:
         return None
     try:
@@ -482,11 +497,11 @@ def _parse_date(value: str | None, *, name: str) -> date | None:
         raise BadRequestError(code="BAD_REQUEST", message=f"{name} invalide (YYYY-MM-DD)", details={name: value})
 
 
-def _get_allowed_action_ids_for_user(user) -> set[int] | None:
+def get_allowed_action_ids_for_user(user) -> set[int] | None:
     """
     Get action IDs the user has access to based on their profile permissions.
-
     Story 13.6: DBA sees scheduled executions for actions their profile gives access to.
+    Story 26.10: Renamed from _get_allowed_action_ids_for_user to respect Python convention (PEP 8).
 
     Returns:
         Set of action IDs, or None if user has 'all' access (no filtering needed).
@@ -536,11 +551,11 @@ def _get_allowed_action_ids_for_user(user) -> set[int] | None:
     return action_ids
 
 
-def _detect_request_source(request) -> str:
+def detect_request_source(request) -> str:
     """
     Detect if request comes from UI (frontend) or API (standalone).
-
     Story 13.5, Subtask 3.2: Distinguish UI vs API requests for audit.
+    Story 26.10: Renamed from _detect_request_source to respect Python convention (PEP 8).
 
     Heuristics:
     - If Authorization: Bearer is present → "api" (API clients always send it)
@@ -564,11 +579,12 @@ def _detect_request_source(request) -> str:
     return 'api'
 
 
-def _apply_scope_filter(qs: QuerySet, *, user: Any, scope: str) -> tuple[QuerySet, str]:
+def apply_scope_filter(qs: QuerySet, *, user: Any, scope: str) -> tuple[QuerySet, str]:
     """
     Return (qs, effective_scope):
     - scope defaults to mine
     - scope=all only if user is DBA/DBOPS, else fallback to mine
+    Story 26.10: Renamed from _apply_scope_filter to respect Python convention (PEP 8).
     """
     scope = (scope or "mine").lower()
     if scope not in ("mine", "all"):
@@ -583,15 +599,16 @@ def _apply_scope_filter(qs: QuerySet, *, user: Any, scope: str) -> tuple[QuerySe
     return qs, effective_scope
 
 
-def _apply_execution_filters(qs: QuerySet, *, request: Request) -> tuple[QuerySet, date | None, date | None]:
+def apply_execution_filters(qs: QuerySet, *, request: Request) -> tuple[QuerySet, date | None, date | None]:
     """
     Apply advanced filters (Story 9.10) used by the frontend:
     start_date, end_date, action_id, engine, tags (AND), status, environment.
+    Story 26.10: Renamed from _apply_execution_filters to respect Python convention (PEP 8).
     """
     start_date_s = request.query_params.get("start_date")
     end_date_s = request.query_params.get("end_date")
-    start_d = _parse_date(start_date_s, name="start_date")
-    end_d = _parse_date(end_date_s, name="end_date")
+    start_d = parse_date(start_date_s, name="start_date")
+    end_d = parse_date(end_date_s, name="end_date")
 
     if start_d:
         start_dt = timezone.make_aware(datetime.combine(start_d, datetime.min.time()))
@@ -603,7 +620,7 @@ def _apply_execution_filters(qs: QuerySet, *, request: Request) -> tuple[QuerySe
 
     action_id = request.query_params.get("action_id")
     if action_id:
-        qs = qs.filter(action_id=_parse_int(action_id, 0, name="action_id"))
+        qs = qs.filter(action_id=parse_int(action_id, 0, name="action_id"))
 
     engine = request.query_params.get("engine")
     if engine:
@@ -627,7 +644,11 @@ def _apply_execution_filters(qs: QuerySet, *, request: Request) -> tuple[QuerySe
     return qs, start_d, end_d
 
 
-def _parse_iso_datetime(value: str | None, *, name: str) -> datetime | None:
+def parse_iso_datetime(value: str | None, *, name: str) -> datetime | None:
+    """
+    Parse ISO 8601 datetime string with timezone handling.
+    Story 26.10: Renamed from _parse_iso_datetime to respect Python convention (PEP 8).
+    """
     if not value:
         return None
     dt = parse_datetime(value)
@@ -645,9 +666,10 @@ def _parse_iso_datetime(value: str | None, *, name: str) -> datetime | None:
     return dt
 
 
-def _calculate_next_execution_date(pattern_type: str, pattern_config: dict, reference: datetime) -> datetime:
+def calculate_next_execution_date(pattern_type: str, pattern_config: dict, reference: datetime) -> datetime:
     """
     Compute next execution datetime in UTC for daily/weekly/cron patterns.
+    Story 26.10: Renamed from _calculate_next_execution_date to respect Python convention (PEP 8).
     """
     if timezone.is_naive(reference):
         reference = timezone.make_aware(reference, timezone=UTC)

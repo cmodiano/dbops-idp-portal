@@ -3,10 +3,10 @@ from __future__ import annotations
 
 from core.exceptions import BadRequestError
 from executions.utils import (
-    _extract_workflow_referenced_action_ids,
-    _extract_workflow_step_map,
-    _validate_workflow_step_parameters,
-    _validate_workflow_referenced_actions,
+    extract_workflow_referenced_action_ids,
+    extract_workflow_step_map,
+    validate_workflow_step_parameters,
+    validate_workflow_referenced_actions,
 )
 
 
@@ -26,7 +26,7 @@ class WorkflowValidator:
         Returns:
             List of delegated referenced action IDs, or None.
         """
-        return _validate_workflow_referenced_actions(
+        return validate_workflow_referenced_actions(
             workflow_action=workflow_action,
             correlation_id=correlation_id,
             user_id=user_id,
@@ -47,7 +47,7 @@ class WorkflowValidator:
         Raises:
             BadRequestError: If parameters are invalid.
         """
-        return _validate_workflow_step_parameters(
+        return validate_workflow_step_parameters(
             workflow_action=workflow_action,
             workflow_step_parameters=workflow_step_parameters,
         )

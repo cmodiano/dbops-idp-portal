@@ -1,5 +1,6 @@
 """
 Tests for PUT /api/v1/scheduled-executions/{id} (Story 13.8, AC4).
+Story 26.10: Updated @patch decorators after function renaming.
 """
 
 from unittest.mock import patch
@@ -14,7 +15,7 @@ from executions.models import ScheduledExecution, ScheduledExecutionStatus, Recu
 from tests.factories import UserFactory
 
 
-@patch('executions.views.scheduled_views._validate_environment_against_inventory')
+@patch('executions.views.scheduled_views.validate_environment_against_inventory')
 class ScheduledExecutionPutTests(TestCase):
     """Tests for PUT scheduled execution (Story 13.8)."""
 

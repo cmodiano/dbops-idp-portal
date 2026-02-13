@@ -21,7 +21,7 @@ from executions.serializers import ExecutionSerializer, ExecutionStepSerializer
 from executions.services import ExecutionService
 from core.permissions import IsDBAOrDBOPS
 from executions.utils import (
-    _detect_request_source,
+    detect_request_source,
 )
 from executions.validators.payload_validator import ExecutionPayloadValidator
 from executions.validators.target_validator import TargetValidator
@@ -112,7 +112,7 @@ class ExecutionsCreateView(APIView):
         }
 
         # Step 4: Detect source and IP
-        source = _detect_request_source(request)
+        source = detect_request_source(request)
         ip_address = get_client_ip(request)
 
         # Step 5: Validate workflow (if applicable)

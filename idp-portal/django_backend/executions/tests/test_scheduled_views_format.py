@@ -1,5 +1,6 @@
 """
 Tests for Story 26.9: Standardiser le format de réponse API.
+Story 26.10: Updated @patch decorators after function renaming.
 
 Validates:
 - AC1: GET /scheduled-executions returns flat format (no data.data nesting)
@@ -19,8 +20,8 @@ from executions.models import ScheduledExecution, ScheduledExecutionStatus
 from tests.factories import UserFactory
 
 
-@patch('executions.views.scheduled_views._validate_environment_against_inventory')
-@patch('executions.views.scheduled_views._get_allowed_action_ids_for_user', return_value=None)
+@patch('executions.views.scheduled_views.validate_environment_against_inventory')
+@patch('executions.views.scheduled_views.get_allowed_action_ids_for_user', return_value=None)
 class ScheduledExecutionsListFormatTests(TestCase):
     """AC1/AC4: GET /scheduled-executions returns standard flat format."""
 
@@ -112,8 +113,8 @@ class ScheduledExecutionsListFormatTests(TestCase):
         self.assertEqual(set(data['pagination'].keys()), {'page', 'page_size', 'total', 'total_pages'})
 
 
-@patch('executions.views.scheduled_views._validate_environment_against_inventory')
-@patch('executions.views.scheduled_views._get_allowed_action_ids_for_user', return_value=None)
+@patch('executions.views.scheduled_views.validate_environment_against_inventory')
+@patch('executions.views.scheduled_views.get_allowed_action_ids_for_user', return_value=None)
 class ScheduledExecutionPatchFormatTests(TestCase):
     """AC2/AC4: PATCH /scheduled-executions/{id} uses ScheduledExecutionSerializer."""
 

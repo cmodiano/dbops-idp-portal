@@ -22,9 +22,9 @@ from core.throttling import ExecutionThrottle, GeneralAPIThrottle
 from executions.models import Execution, ExecutionStatus
 from executions.serializers import ExecutionSerializer
 from executions.utils import (
-    _parse_int,
-    _apply_scope_filter,
-    _apply_execution_filters,
+    parse_int,
+    apply_scope_filter,
+    apply_execution_filters,
 )
 
 from drf_spectacular.utils import extend_schema, OpenApiParameter
@@ -55,16 +55,16 @@ class ExecutionsListView(APIView):
         responses={200: ExecutionSerializer(many=True)},
     )
     def get(self, request):
-        limit = _parse_int(request.query_params.get("limit"), 50, name="limit")
-        offset = _parse_int(request.query_params.get("offset"), 0, name="offset")
+        limit = parse_int(request.query_params.get("limit"), 50, name="limit")
+        offset = parse_int(request.query_params.get("offset"), 0, name="offset")
         if limit <= 0 or offset < 0:
             raise BadRequestError(code="BAD_REQUEST", message="Pagination invalide", details={"limit": limit, "offset": offset})
 
         qs = Execution.objects.select_related(
             "action", "user", "action__integration", "parent_execution__action"
         ).prefetch_related("targets")
-        qs, _effective_scope = _apply_scope_filter(qs, user=request.user, scope=request.query_params.get("scope") or "mine")
-        qs, _start_d, _end_d = _apply_execution_filters(qs, request=request)
+        qs, _effective_scope = apply_scope_filter(qs, user=request.user, scope=request.query_params.get("scope") or "mine")
+        qs, _start_d, _end_d = apply_execution_filters(qs, request=request)
         qs = qs.order_by("-created_at")
 
         total = qs.count()
@@ -95,8 +95,8 @@ class ExecutionStatsView(APIView):
     @extend_schema(tags=['executions'], summary='Statistiques des exécutions')
     def get(self, request):
         qs = Execution.objects.select_related("action")
-        qs, _effective_scope = _apply_scope_filter(qs, user=request.user, scope=request.query_params.get("scope") or "mine")
-        qs, start_d, end_d = _apply_execution_filters(qs, request=request)
+        qs, _effective_scope = apply_scope_filter(qs, user=request.user, scope=request.query_params.get("scope") or "mine")
+        qs, start_d, end_d = apply_execution_filters(qs, request=request)
 
         if start_d or end_d:
             executions_jour = qs.count()
@@ -133,8 +133,8 @@ class ExecutionTimeSeriesView(APIView):
     @extend_schema(tags=['executions'], summary='Série temporelle des exécutions')
     def get(self, request):
         qs = Execution.objects.all()
-        qs, _effective_scope = _apply_scope_filter(qs, user=request.user, scope=request.query_params.get("scope") or "mine")
-        qs, start_d, end_d = _apply_execution_filters(qs, request=request)
+        qs, _effective_scope = apply_scope_filter(qs, user=request.user, scope=request.query_params.get("scope") or "mine")
+        qs, start_d, end_d = apply_execution_filters(qs, request=request)
 
         if not start_d:
             start_d = (timezone.now() - timedelta(days=7)).date()
