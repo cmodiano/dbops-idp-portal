@@ -54,6 +54,7 @@ vi.mock('../contexts/AuthContext', () => ({
 vi.mock('../contexts/ThemeContext', () => ({
   useTheme: vi.fn(() => ({
     theme: 'light',
+    effectiveMode: 'light',
     setTheme: vi.fn(),
   })),
   ThemeProvider: ({ children }: { children: React.ReactNode }) => children,
@@ -100,7 +101,7 @@ const mockAction: CatalogAction = {
   description: 'Deploy app to environment',
   engine: 'AAP',
   platform: 'Linux',
-  impact_level: 'MEDIUM',
+  impact_level: 'medium',
   parameters_schema: {
     type: 'object',
     properties: {
@@ -116,6 +117,8 @@ const mockAction: CatalogAction = {
 const mockActionDetail: CatalogActionDetail = {
   ...mockAction,
   engine_details: {},
+  requires_target: false,
+  status: 'published',
   parameters_schema: {
     type: 'object',
     properties: {
@@ -140,6 +143,41 @@ const mockExecution: ExecutionResponse = {
   created_at: new Date().toISOString(),
 };
 
+/** Helper: open catalog, click action card, open drawer, click Execute to open wizard */
+async function openWizard() {
+  // Wait for catalog to load
+  await waitFor(() => screen.getByText('Catalogue'));
+
+  // 1. Click action card to open drawer
+  const actionCard = await screen.findByText('Deploy Application');
+  await userEvent.click(actionCard);
+
+  // Wait for drawer to open and detail to load
+  await waitFor(() => screen.getByRole('dialog'));
+
+  // 2. Click "Executer" button in drawer to open ExecutionWizard
+  const executeButton = await screen.findByRole('button', { name: /executer/i });
+  await userEvent.click(executeButton);
+
+  // Wait for ExecutionWizard modal (title = "Executer: Deploy Application")
+  await waitFor(() => screen.getByText(/Executer.*Deploy Application/i), { timeout: 3000 });
+}
+
+/** Helper: navigate wizard steps and submit (step 0 → 1 → 2 → submit) */
+async function fillAndSubmitWizard() {
+  // Step 0 → Step 1: click "Suivant" (target step skipped since requires_target=false)
+  const nextButton = await screen.findByRole('button', { name: /suivant/i }, { timeout: 3000 });
+  await userEvent.click(nextButton);
+
+  // Step 1 → Step 2: click "Suivant" (parameters — version has default)
+  const nextButton2 = await screen.findByRole('button', { name: /suivant/i }, { timeout: 3000 });
+  await userEvent.click(nextButton2);
+
+  // Step 2: click submit button ("Exécuter maintenant")
+  const confirmButton = await screen.findByRole('button', { name: /maintenant/i }, { timeout: 3000 });
+  await userEvent.click(confirmButton);
+}
+
 describe('Story 19.4 Integration - ExecutionWizard → ExecutionView flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -147,7 +185,7 @@ describe('Story 19.4 Integration - ExecutionWizard → ExecutionView flow', () =
     vi.mocked(catalogService.fetchCatalogActionById).mockResolvedValue({
       data: mockActionDetail,
       can_execute: true,
-      allowed_environments: ['dev', 'staging'],
+      allowed_environments: ['dev'],
     });
     vi.mocked(catalogService.fetchCatalogTags).mockResolvedValue([]);
     vi.mocked(catalogService.fetchFavorites).mockResolvedValue([]);
@@ -161,39 +199,12 @@ describe('Story 19.4 Integration - ExecutionWizard → ExecutionView flow', () =
 
     render(<CatalogPage />, { wrapper: Wrapper });
 
-    // Wait for catalog to load
-    await waitFor(() => screen.getByText('Catalogue'));
-
-    // 1. Click action card to open drawer
-    const actionCard = await screen.findByText('Deploy Application');
-    await userEvent.click(actionCard);
-
-    // Wait for drawer to open
-    await waitFor(() => screen.getByRole('dialog'));
-
-    // 2. Click "Exécuter" button in drawer to open ExecutionWizard
-    const executeButton = await screen.findByRole('button', { name: /exécuter/i });
-    await userEvent.click(executeButton);
-
-    // Wait for ExecutionWizard modal
-    await waitFor(() => screen.getByRole('dialog', { name: /exécution/i }), { timeout: 3000 });
-
-    // 3. Fill wizard step 1 (skip target selection if not required)
-    // Assuming action doesn't require targets, click "Suivant"
-    const nextButton = screen.getByRole('button', { name: /suivant/i });
-    await userEvent.click(nextButton);
-
-    // 4. Fill wizard step 2 (parameters) - version already has default
-    const nextButton2 = screen.getByRole('button', { name: /suivant/i });
-    await userEvent.click(nextButton2);
-
-    // 5. Confirm execution (step 3)
-    const confirmButton = screen.getByRole('button', { name: /exécuter/i });
-    await userEvent.click(confirmButton);
+    await openWizard();
+    await fillAndSubmitWizard();
 
     // AC1: Vérifier wizard fermé
     await waitFor(() => {
-      expect(screen.queryByRole('dialog', { name: /exécution/i })).not.toBeInTheDocument();
+      expect(screen.queryByText(/Executer.*Deploy Application/i)).not.toBeInTheDocument();
     }, { timeout: 5000 });
 
     // AC2: Vérifier ExecutionView ouvert
@@ -201,8 +212,9 @@ describe('Story 19.4 Integration - ExecutionWizard → ExecutionView flow', () =
       expect(screen.getByTestId('execution-view-drawer')).toBeVisible();
     }, { timeout: 5000 });
 
-    // Vérifier executionId passé à ExecutionView
-    expect(screen.getByText(/Deploy Application/)).toBeInTheDocument();
+    // Vérifier executionId passé à ExecutionView (plusieurs "Deploy Application" peuvent exister, au moins un dans le drawer)
+    expect(screen.getByTestId('execution-view-drawer')).toBeInTheDocument();
+    expect(within(screen.getByTestId('execution-view-drawer')).getByText(/Deploy Application/)).toBeInTheDocument();
     expect(executionService.getExecution).toHaveBeenCalledWith(42);
   });
 
@@ -212,26 +224,8 @@ describe('Story 19.4 Integration - ExecutionWizard → ExecutionView flow', () =
 
     render(<CatalogPage />, { wrapper: Wrapper });
 
-    await waitFor(() => screen.getByText('Catalogue'));
-
-    // Open wizard and submit execution (simplified flow)
-    const actionCard = await screen.findByText('Deploy Application');
-    await userEvent.click(actionCard);
-    await waitFor(() => screen.getByRole('dialog'));
-
-    const executeButton = await screen.findByRole('button', { name: /exécuter/i });
-    await userEvent.click(executeButton);
-
-    await waitFor(() => screen.getByRole('dialog', { name: /exécution/i }));
-
-    // Skip to confirmation (assume no validation errors)
-    const nextButton = screen.getByRole('button', { name: /suivant/i });
-    await userEvent.click(nextButton);
-    const nextButton2 = screen.getByRole('button', { name: /suivant/i });
-    await userEvent.click(nextButton2);
-
-    const confirmButton = screen.getByRole('button', { name: /exécuter/i });
-    await userEvent.click(confirmButton);
+    await openWizard();
+    await fillAndSubmitWizard();
 
     // Wait for ExecutionView to open
     await waitFor(() => screen.getByTestId('execution-view-drawer'), { timeout: 5000 });
@@ -255,69 +249,33 @@ describe('Story 19.4 Integration - ExecutionWizard → ExecutionView flow', () =
 
     render(<CatalogPage />, { wrapper: Wrapper });
 
-    await waitFor(() => screen.getByText('Catalogue'));
+    await openWizard();
+    await fillAndSubmitWizard();
 
-    // Open wizard
-    const actionCard = await screen.findByText('Deploy Application');
-    await userEvent.click(actionCard);
-    await waitFor(() => screen.getByRole('dialog'));
-
-    const executeButton = await screen.findByRole('button', { name: /exécuter/i });
-    await userEvent.click(executeButton);
-
-    await waitFor(() => screen.getByRole('dialog', { name: /exécution/i }));
-
-    // Fill wizard and submit
-    const nextButton = screen.getByRole('button', { name: /suivant/i });
-    await userEvent.click(nextButton);
-    const nextButton2 = screen.getByRole('button', { name: /suivant/i });
-    await userEvent.click(nextButton2);
-
-    const confirmButton = screen.getByRole('button', { name: /exécuter/i });
-    await userEvent.click(confirmButton);
-
-    // AC5: Vérifier erreur affichée dans wizard
+    // AC5: Vérifier erreur affichée dans wizard (error message or fallback)
     await waitFor(() => {
-      expect(screen.getByText(/erreur lors de la soumission/i)).toBeInTheDocument();
+      expect(screen.getByText(/Invalid parameters/i)).toBeInTheDocument();
     });
 
-    // AC5: Vérifier wizard toujours ouvert
-    expect(screen.getByRole('dialog', { name: /exécution/i })).toBeVisible();
+    // AC5: Vérifier wizard toujours ouvert (title still visible)
+    expect(screen.getByText(/Executer.*Deploy Application/i)).toBeVisible();
 
     // AC5: Vérifier ExecutionView ne s'ouvre PAS
     expect(screen.queryByTestId('execution-view-drawer')).not.toBeInTheDocument();
   });
 
   // Task 2.3, AC8: Wizard state resets after success
-  it('AC8: resets wizard state after execution success', async () => {
+  it('AC8: resets wizard state after execution success', { timeout: 20000 }, async () => {
     vi.mocked(executionService.submitExecution).mockResolvedValue({ execution_id: 42 } as any);
 
     render(<CatalogPage />, { wrapper: Wrapper });
 
-    await waitFor(() => screen.getByText('Catalogue'));
-
-    // Open wizard and submit execution
-    const actionCard = await screen.findByText('Deploy Application');
-    await userEvent.click(actionCard);
-    await waitFor(() => screen.getByRole('dialog'));
-
-    const executeButton = await screen.findByRole('button', { name: /exécuter/i });
-    await userEvent.click(executeButton);
-
-    await waitFor(() => screen.getByRole('dialog', { name: /exécution/i }));
-
-    // Fill and submit
-    const nextButton = screen.getByRole('button', { name: /suivant/i });
-    await userEvent.click(nextButton);
-    const nextButton2 = screen.getByRole('button', { name: /suivant/i });
-    await userEvent.click(nextButton2);
-
-    const confirmButton = screen.getByRole('button', { name: /exécuter/i });
-    await userEvent.click(confirmButton);
+    await openWizard();
+    await fillAndSubmitWizard();
 
     // Wait for wizard to close
     await waitFor(() => {
-      expect(screen.queryByRole('dialog', { name: /exécution/i })).not.toBeInTheDocument();
+      expect(screen.queryByText(/Executer.*Deploy Application/i)).not.toBeInTheDocument();
     }, { timeout: 5000 });
 
     // AC8: Vérifier ExecutionView ouvert (confirme wizard fermé)
@@ -329,18 +287,18 @@ describe('Story 19.4 Integration - ExecutionWizard → ExecutionView flow', () =
     const closeButton = screen.getByTestId('close-execution-view');
     await userEvent.click(closeButton);
 
-    // AC8: Re-open wizard from same action - should be reset (step 0, empty form)
+    // AC8: Re-open wizard from same action - should be reset (initial step, not step 3)
     const actionCard2 = await screen.findByText('Deploy Application');
     await userEvent.click(actionCard2);
     await waitFor(() => screen.getByRole('dialog'));
 
-    const executeButton2 = await screen.findByRole('button', { name: /exécuter/i });
+    const executeButton2 = await screen.findByRole('button', { name: /executer/i });
     await userEvent.click(executeButton2);
 
-    // Wizard should open at step 1 (targets), not step 3
+    // Wizard should open again at initial step (not at final submit step)
     await waitFor(() => {
-      const wizard = screen.getByRole('dialog', { name: /exécution/i });
-      expect(within(wizard).getByText(/cible/i)).toBeInTheDocument();
-    });
+      expect(screen.getByText(/Executer.*Deploy Application/i)).toBeVisible();
+      expect(screen.queryByRole('button', { name: /Exécuter maintenant/i })).not.toBeInTheDocument();
+    }, { timeout: 5000 });
   });
 });

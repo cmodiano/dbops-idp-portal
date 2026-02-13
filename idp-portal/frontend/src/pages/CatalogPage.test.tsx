@@ -356,8 +356,8 @@ describe('CatalogPage', () => {
         expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
       });
 
-      // Find the card container (has tabIndex and role="button")
-      const cardContainer = screen.getByRole('button', { name: /Voir détails: Create PDB Oracle/i });
+      // Find the card container (has tabIndex and role="article")
+      const cardContainer = screen.getByRole('article', { name: /Action: Create PDB Oracle/i });
       await userEvent.click(cardContainer);
 
       await waitFor(() => {

@@ -37,7 +37,7 @@ describe('StartNode', () => {
     render(<StartNode {...makeProps()} />);
     const node = screen.getByRole('img', { name: 'Nœud de départ' });
     expect(node).toBeInTheDocument();
-    expect(node.style.border).toContain('#52c41a');
+    expect(node.style.border).toMatch(/#52c41a|rgb\(82,\s*196,\s*26\)/);
   });
 
   it('has a source handle at the bottom', () => {

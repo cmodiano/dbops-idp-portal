@@ -37,7 +37,7 @@ describe('EndNode', () => {
     render(<EndNode {...makeProps()} />);
     const node = screen.getByRole('img', { name: 'Nœud de fin' });
     expect(node).toBeInTheDocument();
-    expect(node.style.border).toContain('#8c8c8c');
+    expect(node.style.border).toMatch(/#8c8c8c|rgb\(140,\s*140,\s*140\)/);
   });
 
   it('has a target handle at the top', () => {

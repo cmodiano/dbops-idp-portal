@@ -487,11 +487,12 @@ describe('ExecutionsPage', () => {
 
     it('shows skeleton in drawer while loading detail', async () => {
       const user = userEvent.setup();
+      const loadDelayMs = 800;
       vi.mocked(executionService.getExecution).mockImplementation(
-        () => new Promise((resolve) => setTimeout(() => resolve(mockExecutions[0]), 200))
+        () => new Promise((resolve) => setTimeout(() => resolve(mockExecutions[0]), loadDelayMs))
       );
       vi.mocked(executionService.getExecutionSteps).mockImplementation(
-        () => new Promise((resolve) => setTimeout(() => resolve(mockSteps), 200))
+        () => new Promise((resolve) => setTimeout(() => resolve(mockSteps), loadDelayMs))
       );
 
       renderWithTheme(<ExecutionsPage />);
@@ -504,15 +505,16 @@ describe('ExecutionsPage', () => {
       const row = createPdbCell.closest('tr');
       await user.click(row!);
 
-      // Drawer opens with skeleton (check that drawer appears)
-      await waitFor(() => {
-        const drawer = screen.getByRole('dialog');
-        expect(drawer).toBeInTheDocument();
-      });
-
-      // Skeleton should be visible in the drawer while loading
-      const skeleton = document.querySelector('.ant-skeleton');
-      expect(skeleton).toBeInTheDocument();
+      // Drawer opens; skeleton should be visible while loading (before loadDelayMs)
+      await waitFor(
+        () => {
+          const drawer = screen.getByRole('dialog');
+          expect(drawer).toBeInTheDocument();
+          const skeleton = drawer.querySelector('.ant-skeleton');
+          expect(skeleton).toBeInTheDocument();
+        },
+        { timeout: 500 }
+      );
     });
 
     it('shows error in drawer when getExecution fails', async () => {
@@ -1149,8 +1151,9 @@ describe('ExecutionsPage', () => {
       const table = screen.getByRole('table');
       const headers = within(table).getAllByRole('columnheader');
 
-      // First column should be "Statut"
-      expect(headers[0]).toHaveTextContent('Statut');
+      // First data column should be "Statut" (index 0 is expand column)
+      const dataHeaders = headers.filter(h => h.textContent?.trim());
+      expect(dataHeaders[0]).toHaveTextContent('Statut');
     });
 
     it('renders columns in correct order (AC7)', async () => {
@@ -1164,14 +1167,15 @@ describe('ExecutionsPage', () => {
       const headers = within(table).getAllByRole('columnheader');
 
       // Story 9.9 AC7: Order should be Statut, Action, Technologie, Plateforme, Environnement, Date, Durée
-      // (Utilisateur only visible for scope=all)
-      expect(headers[0]).toHaveTextContent('Statut');
-      expect(headers[1]).toHaveTextContent('Action');
-      expect(headers[2]).toHaveTextContent('Technologie');
-      expect(headers[3]).toHaveTextContent('Plateforme');
-      expect(headers[4]).toHaveTextContent('Environnement');
-      expect(headers[5]).toHaveTextContent('Date');
-      expect(headers[6]).toHaveTextContent('Durée');
+      // (Utilisateur only visible for scope=all) — first column is expand icon (empty header)
+      const dataHeaders = headers.filter(h => h.textContent?.trim());
+      expect(dataHeaders[0]).toHaveTextContent('Statut');
+      expect(dataHeaders[1]).toHaveTextContent('Action');
+      expect(dataHeaders[2]).toHaveTextContent('Technologie');
+      expect(dataHeaders[3]).toHaveTextContent('Plateforme');
+      expect(dataHeaders[4]).toHaveTextContent('Environnement');
+      expect(dataHeaders[5]).toHaveTextContent('Date');
+      expect(dataHeaders[6]).toHaveTextContent('Durée');
     });
 
     it('renders Technologie column with engine icons (AC4)', async () => {
@@ -1315,8 +1319,10 @@ describe('ExecutionsPage', () => {
       const table = screen.getByRole('table');
       const headers = within(table).getAllByRole('columnheader');
 
-      // Should have 9 columns including Utilisateur and Actions (Story 17.14/17.15)
-      expect(headers.length).toBe(9);
+      // Should have 10 columns (expand + 9 data columns including Utilisateur and Actions)
+      // Filter to data columns (exclude expand column with empty header)
+      const dataHeaders = headers.filter(h => h.textContent?.trim());
+      expect(dataHeaders.length).toBe(9);
     });
   });
 
@@ -1379,8 +1385,9 @@ describe('ExecutionsPage', () => {
       const table = screen.getByRole('table');
       const headers = within(table).getAllByRole('columnheader');
 
-      // First column should be "Statut"
-      expect(headers[0]).toHaveTextContent('Statut');
+      // First data column should be "Statut" (index 0 is expand column)
+      const dataHeaders = headers.filter(h => h.textContent?.trim());
+      expect(dataHeaders[0]).toHaveTextContent('Statut');
     });
 
     it('renders technology column with Oracle icon (AC4)', async () => {
@@ -1447,13 +1454,15 @@ describe('ExecutionsPage', () => {
       const headers = within(table).getAllByRole('columnheader');
 
       // Story 9.9 AC7: Statut, Action, Technologie, Plateforme, Environnement, Date, Durée (no Utilisateur for scope=mine)
-      expect(headers[0]).toHaveTextContent('Statut');
-      expect(headers[1]).toHaveTextContent('Action');
-      expect(headers[2]).toHaveTextContent('Technologie');
-      expect(headers[3]).toHaveTextContent('Plateforme');
-      expect(headers[4]).toHaveTextContent('Environnement');
-      expect(headers[5]).toHaveTextContent('Date');
-      expect(headers[6]).toHaveTextContent('Durée');
+      // First column is expand icon (empty header)
+      const dataHeaders = headers.filter(h => h.textContent?.trim());
+      expect(dataHeaders[0]).toHaveTextContent('Statut');
+      expect(dataHeaders[1]).toHaveTextContent('Action');
+      expect(dataHeaders[2]).toHaveTextContent('Technologie');
+      expect(dataHeaders[3]).toHaveTextContent('Plateforme');
+      expect(dataHeaders[4]).toHaveTextContent('Environnement');
+      expect(dataHeaders[5]).toHaveTextContent('Date');
+      expect(dataHeaders[6]).toHaveTextContent('Durée');
     });
 
     it('status, technologie, plateforme columns are not sortable (AC7)', async () => {

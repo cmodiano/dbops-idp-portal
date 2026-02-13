@@ -395,17 +395,26 @@ describe('AuditPage', () => {
       const user = userEvent.setup();
       renderWithProviders(<AuditPage />);
 
+      // Wait for data to load and filters to appear (use testid for reliable Select in Ant 6.2)
       await waitFor(() => {
-        expect(screen.getByText('Audit des exécutions')).toBeInTheDocument();
+        expect(screen.getByTestId('audit-filter-environment')).toBeInTheDocument();
       });
 
       // Set environment filter
-      const envSelect = screen.getByPlaceholderText('Environnement');
+      const envSelect = screen.getByTestId('audit-filter-environment');
       await user.click(envSelect);
       await waitFor(() => {
-        expect(screen.getByText('PROD')).toBeInTheDocument();
+        const prodOptions = screen.getAllByText('PROD');
+        expect(prodOptions.length).toBeGreaterThan(0);
       });
-      await user.click(screen.getByText('PROD'));
+      // Click the option in the dropdown (not the one in the table)
+      const prodOptions = screen.getAllByText('PROD');
+      const dropdownOption = prodOptions.find((el) => el.closest('.ant-select-item'));
+      if (dropdownOption) {
+        await user.click(dropdownOption);
+      } else {
+        await user.click(prodOptions[0]);
+      }
 
       // Wait for filter to apply
       await waitFor(() => {

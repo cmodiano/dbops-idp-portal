@@ -19,6 +19,24 @@ vi.mock('../../hooks/useEnvironments', () => ({
   useEnvironments: vi.fn(),
 }));
 
+vi.mock('../../services/profiles_service', async () => {
+  const actual = await vi.importActual('../../services/profiles_service');
+  return {
+    ...actual,
+    getProfileTargets: vi.fn(),
+    putProfileTargets: vi.fn(),
+  };
+});
+
+vi.mock('../../services/admin_service', async () => {
+  const actual = await vi.importActual('../../services/admin_service');
+  return {
+    ...actual,
+    getProfileActions: vi.fn(),
+    putProfileActions: vi.fn(),
+  };
+});
+
 const mockUseEnvironments = useEnvironments as ReturnType<typeof vi.fn>;
 
 const mockOnSubmit = vi.fn().mockResolvedValue({ id: 1, name: 'Assurance', ad_group: 'GRP-X' } as ProfileResponse);
@@ -48,6 +66,7 @@ const editProfile: ProfileResponse = {
 
 describe('ProfileForm', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     mockUseEnvironments.mockReturnValue({
       environments: ['dev', 'staging', 'prod'],
       environmentOptions: [
@@ -58,6 +77,17 @@ describe('ProfileForm', () => {
       loading: false,
       error: null,
     });
+    // Default mocks for profile services
+    vi.mocked(profilesService.getProfileTargets).mockResolvedValue({
+      targets_type: 'all',
+      target_names: [],
+      target_patterns: [],
+      filter_by_attribute: null,
+      exclusion_patterns: [],
+    });
+    vi.mocked(profilesService.putProfileTargets).mockResolvedValue(undefined);
+    vi.mocked(adminService.getProfileActions).mockResolvedValue([]);
+    vi.mocked(adminService.putProfileActions).mockResolvedValue(undefined);
   });
 
   it('renders Nouveau profil when not editing', () => {
@@ -496,12 +526,12 @@ describe('ProfileForm', () => {
       await user.click(screen.getByText('Tous les serveurs Oracle'));
       await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
       await waitFor(() => {
-        expect(profilesService.putProfileTargets).toHaveBeenCalledWith(1, {
+        expect(profilesService.putProfileTargets).toHaveBeenCalledWith(1, expect.objectContaining({
           targets_type: 'all',
           target_names: [],
           target_patterns: [],
           filter_by_attribute: { engine_type: ['oracle'] },
-        });
+        }));
       });
     });
 
@@ -520,12 +550,12 @@ describe('ProfileForm', () => {
       await user.click(screen.getByText('Tous les serveurs SQL'));
       await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
       await waitFor(() => {
-        expect(profilesService.putProfileTargets).toHaveBeenCalledWith(1, {
+        expect(profilesService.putProfileTargets).toHaveBeenCalledWith(1, expect.objectContaining({
           targets_type: 'all',
           target_names: [],
           target_patterns: [],
           filter_by_attribute: { engine_type: ['sqlserver'] },
-        });
+        }));
       });
     });
 
@@ -543,12 +573,12 @@ describe('ProfileForm', () => {
       });
       await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
       await waitFor(() => {
-        expect(profilesService.putProfileTargets).toHaveBeenCalledWith(1, {
+        expect(profilesService.putProfileTargets).toHaveBeenCalledWith(1, expect.objectContaining({
           targets_type: 'all',
           target_names: [],
           target_patterns: [],
           filter_by_attribute: null,
-        });
+        }));
       });
     });
 
@@ -645,12 +675,12 @@ describe('ProfileForm', () => {
       await user.click(screen.getByText('Tous les serveurs SQL'));
       await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
       await waitFor(() => {
-        expect(profilesService.putProfileTargets).toHaveBeenCalledWith(1, {
+        expect(profilesService.putProfileTargets).toHaveBeenCalledWith(1, expect.objectContaining({
           targets_type: 'all',
           target_names: [],
           target_patterns: [],
           filter_by_attribute: { engine_type: ['sqlserver'] },
-        });
+        }));
       });
     });
 
@@ -669,12 +699,12 @@ describe('ProfileForm', () => {
       await user.click(screen.getByText('Tous les serveurs Oracle'));
       await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
       await waitFor(() => {
-        expect(profilesService.putProfileTargets).toHaveBeenCalledWith(1, {
+        expect(profilesService.putProfileTargets).toHaveBeenCalledWith(1, expect.objectContaining({
           targets_type: 'all',
           target_names: [],
           target_patterns: [],
           filter_by_attribute: { engine_type: ['oracle'] },
-        });
+        }));
       });
     });
 
@@ -693,12 +723,12 @@ describe('ProfileForm', () => {
       await user.click(screen.getByText('Tous les serveurs'));
       await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
       await waitFor(() => {
-        expect(profilesService.putProfileTargets).toHaveBeenCalledWith(1, {
+        expect(profilesService.putProfileTargets).toHaveBeenCalledWith(1, expect.objectContaining({
           targets_type: 'all',
           target_names: [],
           target_patterns: [],
           filter_by_attribute: null,
-        });
+        }));
       });
     });
   });

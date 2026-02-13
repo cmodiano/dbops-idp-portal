@@ -148,7 +148,12 @@ describe('ProfileImportModal (Story 2.26)', () => {
       await user.click(screen.getByTestId('download-template-btn'));
 
       expect(capturedBlob).not.toBeNull();
-      const blobText = await capturedBlob!.text();
+      // Use FileReader to read blob content in test environment
+      const blobText = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsText(capturedBlob!);
+      });
       expect(blobText).toBe(PROFILE_YAML_TEMPLATE);
       expect(blobText).toContain('profiles:');
     });

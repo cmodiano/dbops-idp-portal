@@ -382,11 +382,13 @@ export default function AuditPage() {
             />
             <Select
               placeholder="Environnement"
+              aria-label="Filtre Environnement"
               options={ENVIRONMENT_OPTIONS}
               value={environment}
               onChange={setEnvironment}
               allowClear
               style={{ width: 140 }}
+              data-testid="audit-filter-environment"
             />
             <Select
               placeholder="Statut"

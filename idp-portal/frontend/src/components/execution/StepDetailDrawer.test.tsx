@@ -4,7 +4,7 @@
  * AC4 (real-time updates), AC5 (close), AC9 (error card), AC10 (pending step).
  */
 
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { StepDetailDrawer } from './StepDetailDrawer';
@@ -151,7 +151,7 @@ describe('StepDetailDrawer', () => {
     expect(header.textContent).toContain('2m 15s');
   });
 
-  it('AC2: displays ExecutionTimeline for selected step', () => {
+  it('AC2: displays step detail content for selected step', () => {
     render(
       <StepDetailDrawer
         open
@@ -163,9 +163,10 @@ describe('StepDetailDrawer', () => {
       />,
     );
 
-    // ExecutionTimeline renders step name
-    const timeline = screen.getByRole('list', { name: /Timeline d'exécution/ });
-    expect(timeline).toBeInTheDocument();
+    // Step detail shows step info card with status
+    const header = screen.getByTestId('step-detail-header');
+    expect(header.textContent).toContain('Build');
+    expect(header.textContent).toContain('Terminé');
   });
 
   it('AC5: calls onClose when close button clicked', async () => {
@@ -246,7 +247,7 @@ describe('StepDetailDrawer', () => {
 
     const errorCard = screen.getByRole('alert');
     expect(errorCard).toBeInTheDocument();
-    expect(screen.getByText('Build failed: syntax error in main.py')).toBeInTheDocument();
+    expect(within(errorCard).getByText(/Build failed: syntax error in main\.py/)).toBeInTheDocument();
   });
 
   it('AC10: displays alert when step not yet executed (no matching ExecutionStep)', () => {

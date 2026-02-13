@@ -224,8 +224,8 @@ describe('CalendarPage', () => {
 
       // Verify actions from available_actions are shown
       await waitFor(() => {
-        expect(screen.getByText('Test Action Planifiée')).toBeInTheDocument();
-        expect(screen.getByText('Action Récurrente')).toBeInTheDocument();
+        expect(screen.getAllByText('Test Action Planifiée').length).toBeGreaterThan(0);
+        expect(screen.getAllByText('Action Récurrente').length).toBeGreaterThan(0);
       });
     });
 
@@ -249,20 +249,25 @@ describe('CalendarPage', () => {
       const actionSelect = screen.getByTestId('filter-action');
       await user.click(within(actionSelect).getByRole('combobox'));
 
-      // Select an action
+      // Wait for dropdown options and click the action by text (Ant Design renders options in a list)
       await waitFor(() => {
-        expect(screen.getByText('Test Action Planifiée')).toBeInTheDocument();
+        expect(screen.getAllByText('Test Action Planifiée').length).toBeGreaterThan(0);
       });
-      await user.click(screen.getByText('Test Action Planifiée'));
+      const options = screen.getAllByText('Test Action Planifiée');
+      const dropdownOption = options.find((el) => el.closest('[role="listbox"]') || el.closest('.ant-select-dropdown'));
+      await user.click(dropdownOption ?? options[0]);
 
-      // Verify API called with filter
-      await waitFor(() => {
-        expect(scheduledExecutionService.listScheduledExecutions).toHaveBeenCalledWith(
-          expect.objectContaining({ action_id: 100 }),
-          expect.any(Number),
-          expect.any(Number)
-        );
-      });
+      // Verify API was called with action filter (any call with action_id: 100)
+      await waitFor(
+        () => {
+          expect(scheduledExecutionService.listScheduledExecutions).toHaveBeenCalledWith(
+            expect.objectContaining({ action_id: 100 }),
+            100,
+            0
+          );
+        },
+        { timeout: 5000 }
+      );
     });
 
     it('resets filters when reset button clicked', async () => {

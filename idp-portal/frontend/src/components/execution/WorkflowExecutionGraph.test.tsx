@@ -13,6 +13,33 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { WorkflowExecutionGraph } from './WorkflowExecutionGraph';
 import type { WorkflowStep, ExecutionResponse, ExecutionStepResponse } from '../../types/api';
 
+// Mock d3-drag/d3-zoom to prevent JSDOM "Cannot read properties of null (reading 'document')" errors
+vi.mock('d3-drag', () => ({
+  drag: () => {
+    const dragBehavior = () => {};
+    dragBehavior.on = () => dragBehavior;
+    dragBehavior.filter = () => dragBehavior;
+    dragBehavior.subject = () => dragBehavior;
+    dragBehavior.container = () => dragBehavior;
+    return dragBehavior;
+  },
+}));
+
+vi.mock('d3-zoom', () => ({
+  zoom: () => {
+    const zoomBehavior = () => {};
+    zoomBehavior.on = () => zoomBehavior;
+    zoomBehavior.filter = () => zoomBehavior;
+    zoomBehavior.scaleExtent = () => zoomBehavior;
+    zoomBehavior.translateExtent = () => zoomBehavior;
+    zoomBehavior.extent = () => zoomBehavior;
+    zoomBehavior.transform = () => zoomBehavior;
+    return zoomBehavior;
+  },
+  zoomIdentity: { x: 0, y: 0, k: 1 },
+  zoomTransform: () => ({ x: 0, y: 0, k: 1 }),
+}));
+
 vi.mock('../../services/execution_service', () => ({
   getExecution: vi.fn(),
   getExecutionSteps: vi.fn(() => Promise.resolve([])),
@@ -69,6 +96,31 @@ class IntersectionObserverMock {
   disconnect = vi.fn();
 }
 global.IntersectionObserver = IntersectionObserverMock as unknown as typeof IntersectionObserver;
+
+// Suppress d3-drag/d3-zoom uncaught exceptions in JSDOM (view.document is null)
+const originalOnError = window.onerror;
+beforeEach(() => {
+  window.onerror = (message) => {
+    if (typeof message === 'string' && message.includes("Cannot read properties of null (reading 'document')")) {
+      return true; // Suppress d3-drag JSDOM error
+    }
+    return originalOnError ? (originalOnError as (...args: unknown[]) => boolean)(...([message] as unknown[])) : false;
+  };
+  // Also catch unhandled errors via addEventListener
+  window.addEventListener('error', d3ErrorHandler);
+});
+
+afterEach(() => {
+  window.onerror = originalOnError;
+  window.removeEventListener('error', d3ErrorHandler);
+});
+
+function d3ErrorHandler(event: ErrorEvent) {
+  if (event.message?.includes("Cannot read properties of null (reading 'document')")) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+}
 
 const Wrapper = ({ children }: { children: React.ReactNode }) => <App>{children}</App>;
 

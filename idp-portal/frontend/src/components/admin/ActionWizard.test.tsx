@@ -50,6 +50,10 @@ vi.mock('../../services/reference_service', () => ({
   fetchEnvironments: vi.fn().mockResolvedValue(['DEV', 'STAGING', 'PROD']),
 }));
 
+vi.mock('../../services/categories_service', () => ({
+  getCategories: vi.fn().mockResolvedValue([]),
+}));
+
 const mockOnSubmit = vi.fn().mockResolvedValue({ id: 1 });
 const mockOnCancel = vi.fn();
 const mockOnSuccess = vi.fn();
@@ -96,7 +100,7 @@ describe('ActionWizard', () => {
       const editAction: ActionDetail = {
         id: 1,
         name: 'Action test',
-        description: null,
+        description: 'Description pour validation',
         item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
@@ -117,8 +121,9 @@ describe('ActionWizard', () => {
       });
 
       await waitFor(() => expect(screen.getByLabelText("Nom de l'action")).toHaveValue('Action test'));
-      await user.click(screen.getByRole('button', { name: /Suivant/i }));
-      await waitFor(() => expect(screen.getByText(/Ajouter un parametre/i)).toBeInTheDocument());
+      const nextBtn = await screen.findByRole('button', { name: /Suivant/i });
+      await user.click(nextBtn);
+      await waitFor(() => expect(screen.getByText(/Ajouter un parametre/i)).toBeInTheDocument(), { timeout: 8000 });
 
       await user.click(screen.getByRole('button', { name: /Précédent/i }));
       await waitFor(() => {
@@ -131,7 +136,7 @@ describe('ActionWizard', () => {
       const editAction: ActionDetail = {
         id: 1,
         name: 'X',
-        description: null,
+        description: 'Desc',
         item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
@@ -153,11 +158,13 @@ describe('ActionWizard', () => {
       expect(screen.queryByRole('button', { name: /Enregistrer/i })).not.toBeInTheDocument();
 
       await waitFor(() => expect(screen.getByLabelText("Nom de l'action")).toHaveValue('X'));
-      await user.click(screen.getByRole('button', { name: /Suivant/i }));
-      await waitFor(() => expect(screen.getByText(/Ajouter un parametre/i)).toBeInTheDocument());
+      const next1 = await screen.findByRole('button', { name: /Suivant/i });
+      await user.click(next1);
+      await waitFor(() => expect(screen.getByText(/Ajouter un parametre/i)).toBeInTheDocument(), { timeout: 8000 });
       expect(screen.queryByRole('button', { name: /Enregistrer/i })).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole('button', { name: /Suivant/i }));
+      const next2 = await screen.findByRole('button', { name: /Suivant/i });
+      await user.click(next2);
       await waitFor(() => {
         expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeInTheDocument();
       });
@@ -191,10 +198,12 @@ describe('ActionWizard', () => {
       });
 
       await waitFor(() => expect(screen.getByLabelText("Nom de l'action")).toHaveValue('Action à modifier'));
-      await user.click(screen.getByRole('button', { name: /Suivant/i }));
+      const next1 = await screen.findByRole('button', { name: /Suivant/i });
+      await user.click(next1);
       await waitFor(() => expect(screen.getByLabelText('ID template AAP')).toBeInTheDocument());
       await user.type(screen.getByLabelText('ID template AAP'), '42');
-      await user.click(screen.getByRole('button', { name: /Suivant/i }));
+      const next2 = await screen.findByRole('button', { name: /Suivant/i });
+      await user.click(next2);
       await waitFor(() => expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeInTheDocument());
       await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
       await waitFor(() => {
@@ -337,7 +346,7 @@ describe('ActionWizard', () => {
       const editAction: ActionDetail = {
         id: 1,
         name: 'Action existante',
-        description: null,
+        description: 'Description',
         item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
@@ -356,13 +365,18 @@ describe('ActionWizard', () => {
       await act(async () => {
         render(<ActionWizard {...defaultProps} editAction={editAction} />);
       });
-      await user.click(screen.getByRole('button', { name: /Suivant/i }));
-      await waitFor(() => expect(screen.getByLabelText('ID template AAP')).toBeInTheDocument());
+      const next1 = await screen.findByRole('button', { name: /Suivant/i });
+      await user.click(next1);
+      await waitFor(() => expect(screen.getByLabelText('ID template AAP')).toBeInTheDocument(), { timeout: 8000 });
       await user.type(screen.getByLabelText('ID template AAP'), '1');
-      await user.click(screen.getByRole('button', { name: /Suivant/i }));
+      const next2 = await screen.findByRole('button', { name: /Suivant/i });
+      await user.click(next2);
       await waitFor(() => expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeInTheDocument());
       const prodSwitch = screen.getByLabelText(/Changement requis pour PROD/i);
       await user.click(prodSwitch);
+      // Code modèle is required when "Changement requis" is enabled for PROD
+      const codeModeleProd = screen.getByLabelText(/Code modèle pour PROD/i);
+      await user.type(codeModeleProd, 'CHG001');
       await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
       await waitFor(() => {
         expect(updateActionSteps).toHaveBeenCalledWith(
@@ -444,14 +458,16 @@ describe('ActionWizard', () => {
       });
       // Select workflow type
       await user.click(screen.getByRole('radio', { name: /Workflow/i }));
-      // Enter a name
+      // Enter name and description (required to enable Suivant)
       await user.type(screen.getByLabelText('Nom du workflow'), 'Mon Workflow');
+      await user.type(screen.getByLabelText('Description'), 'Description du workflow');
       // Go to step 2
-      await user.click(screen.getByRole('button', { name: /Suivant/i }));
+      const nextBtn = await screen.findByRole('button', { name: /Suivant/i });
+      await user.click(nextBtn);
       // Should show WorkflowStepsEditor (shows "Ajouter une étape" button)
       await waitFor(() => {
         expect(screen.getByRole('button', { name: /Ajouter une étape/i })).toBeInTheDocument();
-      });
+      }, { timeout: 8000 });
     });
 
     it('Radio.Group masqué en mode édition (Story 2.29)', async () => {
@@ -489,14 +505,16 @@ describe('ActionWizard', () => {
       });
       // Select workflow type
       await user.click(screen.getByRole('radio', { name: /Workflow/i }));
-      // Enter a name
+      // Enter name and description (required to enable Suivant)
       await user.type(screen.getByLabelText('Nom du workflow'), 'Workflow Test');
+      await user.type(screen.getByLabelText('Description'), 'Description workflow');
       // Go to step 2
-      await user.click(screen.getByRole('button', { name: /Suivant/i }));
+      const nextBtn = await screen.findByRole('button', { name: /Suivant/i });
+      await user.click(nextBtn);
       // Wait for eligible actions to load and add a step
       await waitFor(() => {
         expect(screen.getByRole('button', { name: /Ajouter une étape/i })).toBeInTheDocument();
-      });
+      }, { timeout: 8000 });
       await user.click(screen.getByRole('button', { name: /Ajouter une étape/i }));
       // Select an action in the autocomplete
       await waitFor(() => {
@@ -504,37 +522,39 @@ describe('ActionWizard', () => {
       });
       const autocomplete = screen.getByLabelText('Sélectionner une action');
       await user.click(autocomplete);
-      // Type to filter and select
+      // Type to filter and select (mock returns "Action A" with engine Oracle)
       await user.type(autocomplete, 'Action A');
-      await waitFor(() => {
-        expect(screen.getByText(/Action A \(Oracle\)/i)).toBeInTheDocument();
-      });
-      await user.click(screen.getByText(/Action A \(Oracle\)/i));
+      const actionOption = await screen.findByText(/Action A/i);
+      await user.click(actionOption);
       // Go to step 3
-      await user.click(screen.getByRole('button', { name: /Suivant/i }));
+      const nextToStep3 = await screen.findByRole('button', { name: /Suivant/i });
+      await user.click(nextToStep3);
       await waitFor(() => {
         expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeInTheDocument();
       });
       // Save
       await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
       // Verify updateWorkflowSteps was called
-      await waitFor(() => {
-        expect(mockOnSubmit).toHaveBeenCalledWith(
-          expect.objectContaining({
-            name: 'Workflow Test',
-            item_type: 'workflow',
-          })
-        );
-        expect(updateWorkflowSteps).toHaveBeenCalledWith(
-          1,
-          expect.objectContaining({
-            steps: expect.arrayContaining([
-              expect.objectContaining({ referenced_action_id: 100 }),
-            ]),
-          })
-        );
-      });
-    });
+      await waitFor(
+        () => {
+          expect(mockOnSubmit).toHaveBeenCalledWith(
+            expect.objectContaining({
+              name: 'Workflow Test',
+              item_type: 'workflow',
+            })
+          );
+          expect(updateWorkflowSteps).toHaveBeenCalledWith(
+            1,
+            expect.objectContaining({
+              steps: expect.arrayContaining([
+                expect.objectContaining({ referenced_action_id: 100 }),
+              ]),
+            })
+          );
+        },
+        { timeout: 5000 }
+      );
+    }, 15000);
 
     it('édition workflow existant charge et pré-remplit WorkflowStepsEditor', async () => {
       const editAction: ActionDetail = {

@@ -48,11 +48,11 @@ describe('categories_service', () => {
     it('sends POST request with category data', async () => {
       const newCat = { code: 'backup', label: 'Sauvegarde', display_order: 50, is_active: 1 };
       const mockResponse = { id: 3, ...newCat };
-      vi.spyOn(apiClient, 'apiFetch').mockResolvedValue(mockResponse as any);
+      vi.spyOn(apiClient, 'apiFetchRaw').mockResolvedValue(mockResponse as any);
 
       const result = await createCategory(newCat);
 
-      expect(apiClient.apiFetch).toHaveBeenCalledWith('/admin/categories/', {
+      expect(apiClient.apiFetchRaw).toHaveBeenCalledWith('/admin/categories/', {
         method: 'POST',
         body: JSON.stringify(newCat),
       });
@@ -64,11 +64,11 @@ describe('categories_service', () => {
     it('sends PATCH request with partial data', async () => {
       const updates = { label: 'Sauvegarde & Restauration', display_order: 55 };
       const mockResponse = { id: 3, code: 'backup', ...updates, is_active: 1 };
-      vi.spyOn(apiClient, 'apiFetch').mockResolvedValue(mockResponse as any);
+      vi.spyOn(apiClient, 'apiFetchRaw').mockResolvedValue(mockResponse as any);
 
       const result = await updateCategory(3, updates);
 
-      expect(apiClient.apiFetch).toHaveBeenCalledWith('/admin/categories/3/', {
+      expect(apiClient.apiFetchRaw).toHaveBeenCalledWith('/admin/categories/3/', {
         method: 'PATCH',
         body: JSON.stringify(updates),
       });

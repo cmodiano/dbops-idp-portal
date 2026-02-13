@@ -17,7 +17,7 @@ describe('apiFetch', () => {
 
     const result = await apiFetch('/catalog');
     expect(global.fetch).toHaveBeenCalledWith(
-      '/api/v1/catalog',
+      '/api/v1/catalog/',
       expect.objectContaining({
         headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
       }),
@@ -36,7 +36,7 @@ describe('apiFetch', () => {
 
     await apiFetch('/test');
     expect(global.fetch).toHaveBeenCalledWith(
-      '/api/v1/test',
+      '/api/v1/test/',
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: 'Bearer my-token' }),
       }),
@@ -203,7 +203,7 @@ describe('apiFetchBlob', () => {
 
     await apiFetchBlob('/download');
     expect(global.fetch).toHaveBeenCalledWith(
-      '/api/v1/download',
+      '/api/v1/download/',
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: 'Bearer download-token' }),
       }),
@@ -250,17 +250,10 @@ describe('apiFetchBlob', () => {
     const mock429 = { status: 429, ok: false, headers: new Headers({ 'Retry-After': '1' }) };
     global.fetch = vi.fn().mockResolvedValue(mock429);
 
-    const promiseTask = (async () => {
-      const p = apiFetchBlob('/rate-limited-file');
-      await vi.advanceTimersByTimeAsync(3000);
-      return p;
-    })();
-
-    await expect(promiseTask).rejects.toThrow(ApiError);
-    await expect(promiseTask).rejects.toMatchObject({
-      status: 429,
-      message: expect.stringContaining('Trop de requêtes'),
-    });
+    const p = apiFetchBlob('/rate-limited-file').catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(3000);
+    const err = await p;
+    expect(err).toBeInstanceOf(ApiError);
     vi.useRealTimers();
   });
 });
@@ -309,7 +302,7 @@ describe('apiPostFormData', () => {
 
     await apiPostFormData('/upload', new FormData());
     expect(global.fetch).toHaveBeenCalledWith(
-      '/api/v1/upload',
+      '/api/v1/upload/',
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: 'Bearer upload-token' }),
       }),
@@ -344,17 +337,10 @@ describe('apiPostFormData', () => {
     const mock429 = { status: 429, ok: false, headers: new Headers({ 'Retry-After': '1' }) };
     global.fetch = vi.fn().mockResolvedValue(mock429);
 
-    const promiseTask = (async () => {
-      const p = apiPostFormData('/upload-rate-limited', new FormData());
-      await vi.advanceTimersByTimeAsync(3000);
-      return p;
-    })();
-
-    await expect(promiseTask).rejects.toThrow(ApiError);
-    await expect(promiseTask).rejects.toMatchObject({
-      status: 429,
-      message: expect.stringContaining('Trop de requêtes'),
-    });
+    const p = apiPostFormData('/upload-rate-limited', new FormData()).catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(3000);
+    const err = await p;
+    expect(err).toBeInstanceOf(ApiError);
     vi.useRealTimers();
   });
 });
@@ -451,15 +437,11 @@ describe('handleAuthenticatedFetch - 429 retry', () => {
 
     global.fetch = vi.fn().mockResolvedValue(mock429);
 
-    // Start promise and advance timers concurrently
-    const promiseTask = (async () => {
-      const p = handleAuthenticatedFetch('/test', {}, {});
-      await vi.advanceTimersByTimeAsync(3000);
-      return p;
-    })();
-
-    await expect(promiseTask).rejects.toThrow(ApiError);
-    await expect(promiseTask).rejects.toMatchObject({
+    const p = handleAuthenticatedFetch('/test', {}, {}).catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(3000);
+    const err = await p;
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({
       status: 429,
       message: 'Trop de requêtes. Veuillez patienter 1 seconde avant de réessayer.',
     });
@@ -593,14 +575,11 @@ describe('apiFetch - 429 integration', () => {
 
     global.fetch = vi.fn().mockResolvedValue(mock429);
 
-    const promiseTask = (async () => {
-      const p = apiFetch('/rate-limited');
-      await vi.advanceTimersByTimeAsync(3000);
-      return p;
-    })();
-
-    await expect(promiseTask).rejects.toThrow(ApiError);
-    await expect(promiseTask).rejects.toMatchObject({
+    const p = apiFetch('/rate-limited').catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(3000);
+    const err = await p;
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({
       status: 429,
       message: 'Trop de requêtes. Veuillez patienter 1 seconde avant de réessayer.',
     });

@@ -394,6 +394,39 @@
 
 ---
 
+### Story 26.16 : Enforcer mypy sur tout le codebase + hook pre-commit
+
+**En tant que** développeur,  
+**je veux** appliquer le typage mypy sur l'intégralité du backend Django et configurer un hook pre-commit qui bloque les commits en cas d'erreur,  
+**afin de** garantir la qualité des types, détecter les erreurs tôt et éviter les régressions.
+
+**Contexte :** Story 17.9 et 22.19 ont mis en place mypy en mode progressif (baseline 89 → 29 erreurs). Un hook pre-commit existe dans `idp-portal/django_backend/` mais le baseline tolère encore des erreurs. L'objectif est d'atteindre 0 erreur et de rendre le hook bloquant.
+
+**Référence :** `docs/mypy-improvement-roadmap.md` — Phase 4 (baseline à 0, mode strict)
+
+**Acceptance Criteria:**
+- **Given** le backend Django (`idp-portal/django_backend/`)
+- **When** `mypy .` est exécuté
+- **Then** 0 erreur mypy (baseline supprimée ou à 0)
+- **And** les ~29 erreurs restantes (Phase 2) sont corrigées
+- **And** `disallow_untyped_defs = true` est activé sur les modules principaux (core, idp_auth, executions, catalog, inventory, etc.)
+- **And** le fichier `.mypy-baseline-count` est supprimé ou contient 0 (mécanisme baseline obsolète)
+- **And** un hook pre-commit exécute mypy et **bloque le commit** en cas d'erreur
+- **And** le hook est documenté (installation `pre-commit install`, chemin depuis la racine du projet)
+- **And** la CI exécute mypy en mode bloquant (sans `continue-on-error`)
+- **And** `docs/mypy-improvement-roadmap.md` et `docs/mypy-developer-guide.md` sont mis à jour (Phase 4 complétée)
+
+**Fichiers concernés :**
+- `idp-portal/django_backend/pyproject.toml` ([tool.mypy])
+- `idp-portal/django_backend/.pre-commit-config.yaml`
+- `idp-portal/django_backend/scripts/check_mypy_baseline.sh` (supprimer ou adapter pour mode strict)
+- `.mypy-baseline-count` (supprimer)
+- Code source : annotations de type à compléter
+- `.github/workflows/*.yml` (mypy sans continue-on-error)
+- `docs/mypy-improvement-roadmap.md`, `docs/mypy-developer-guide.md`
+
+---
+
 ## Priorisation recommandée
 
 ### Court terme (1-2 sprints)
@@ -414,6 +447,7 @@
 | 9 | 26.5, 26.6 — Refactor WorkflowBuilder + CalendarPage | Maintenabilité | M |
 | 10 | 26.11, 26.12 — Pagination + RBAC unifiés | DRY | S |
 | 11 | 26.13, 26.14, 26.15 — Tests verts + Linters propres | Fiabilité CI | M |
+| 12 | 26.16 — Mypy strict + pre-commit bloquant | Qualité types | M |
 
 ---
 

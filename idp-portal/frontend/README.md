@@ -80,6 +80,12 @@ src/pages/
 
 **Note:** Error Boundaries only catch render errors. Event handler errors, async errors, and API errors are handled by try-catch and `api_client.ts`.
 
+## Tests
+
+**Baseline (2026-02-13):** 2018 tests / 147 fichiers — 100% pass, ~124s, 76.22% couverture lignes.
+
+Voir [TESTING.md](TESTING.md) pour les details complets (stack, commandes, limitations connues).
+
 Currently, two official plugins are available:
 
 - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh

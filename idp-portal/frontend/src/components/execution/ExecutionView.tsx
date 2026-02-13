@@ -167,7 +167,7 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
   };
 
   const envBadge = ENV_BADGE[execution?.environment ?? 'dev'] ?? ENV_BADGE.dev;
-  const statusCfg = STATUS_CONFIG[execution?.status ?? 'SUBMITTED'];
+  const statusCfg = STATUS_CONFIG[execution?.status ?? 'SUBMITTED'] ?? STATUS_CONFIG.SUBMITTED;
   const isTerminal = execution ? TERMINAL_STATUSES.includes(execution.status) : false;
 
   return (

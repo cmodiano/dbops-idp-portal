@@ -34,7 +34,7 @@ describe('ImpactIndicator', () => {
   it('renders small size variant with smaller styling', () => {
     render(<ImpactIndicator level="low" size="small" />);
 
-    const tag = screen.getByText('Faible');
+    const tag = screen.getByText('Faible').closest('.ant-tag');
     expect(tag).toHaveStyle({ fontSize: '12px' });
   });
 

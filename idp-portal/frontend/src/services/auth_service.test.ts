@@ -15,7 +15,7 @@ describe('auth_service', () => {
     const result = await refreshAccessToken();
     expect(result).toBe('new-token');
     expect(global.fetch).toHaveBeenCalledWith(
-      '/api/v1/auth/refresh',
+      '/api/v1/auth/refresh/',
       expect.objectContaining({ method: 'POST', credentials: 'include' }),
     );
   });
@@ -41,7 +41,7 @@ describe('auth_service', () => {
     const result = await fetchCurrentUser('token123');
     expect(result).toEqual({ id: 1, username: 'marc' });
     expect(global.fetch).toHaveBeenCalledWith(
-      '/api/v1/auth/me',
+      '/api/v1/auth/me/',
       expect.objectContaining({ headers: { Authorization: 'Bearer token123' } }),
     );
   });
@@ -62,7 +62,7 @@ describe('auth_service', () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: true });
     await logoutApi();
     expect(global.fetch).toHaveBeenCalledWith(
-      '/api/v1/auth/logout',
+      '/api/v1/auth/logout/',
       expect.objectContaining({ method: 'POST', credentials: 'include' }),
     );
   });

@@ -116,8 +116,8 @@ describe('handleAuthenticatedFetch', () => {
 
     const res = await handleAuthenticatedFetch('/test', {}, { 'Content-Type': 'application/json' });
     expect(global.fetch).toHaveBeenCalledWith(
-      '/api/v1/test',
-      expect.objectContaining({ headers: { 'Content-Type': 'application/json' } }),
+      '/api/v1/test/',
+      expect.objectContaining({ headers: expect.objectContaining({ 'Content-Type': 'application/json' }) }),
     );
     expect(res).toBe(mockResponse);
   });
@@ -186,7 +186,7 @@ describe('handleAuthenticatedFetch', () => {
 
     await handleAuthenticatedFetch('/post', { method: 'POST', body: '{}' }, {});
     expect(global.fetch).toHaveBeenCalledWith(
-      '/api/v1/post',
+      '/api/v1/post/',
       expect.objectContaining({ method: 'POST', body: '{}' }),
     );
   });

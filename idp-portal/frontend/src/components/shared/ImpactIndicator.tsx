@@ -55,7 +55,7 @@ const IMPACT_CONFIG: Record<ImpactLevel, ImpactConfig> = {
 };
 
 export function ImpactIndicator({ level, size = 'default' }: ImpactIndicatorProps) {
-  const config = IMPACT_CONFIG[level];
+  const config = (level && IMPACT_CONFIG[level]) ?? IMPACT_CONFIG.medium;
 
   return (
     <span aria-label={`Impact: ${config.label}`} role="status">
