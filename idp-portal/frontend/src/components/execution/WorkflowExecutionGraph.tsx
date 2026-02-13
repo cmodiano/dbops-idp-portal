@@ -38,7 +38,7 @@ import {
   workflowStepsToReactFlow,
   START_NODE_ID,
   END_NODE_ID,
-} from '../admin/WorkflowBuilderCanvas';
+} from '../../utils/workflowConversion';
 import WorkflowStepNode from '../admin/WorkflowStepNode';
 import StartNode from '../admin/StartNode';
 import EndNode from '../admin/EndNode';

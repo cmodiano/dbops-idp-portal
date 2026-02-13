@@ -13,7 +13,7 @@ import {
   AimOutlined,
   CheckCircleOutlined,
 } from '@ant-design/icons';
-import type { ValidationResult } from './WorkflowBuilderCanvas';
+import type { ValidationResult } from '../../utils/workflowValidation';
 
 interface ValidationReportPanelProps {
   validation: ValidationResult | null;

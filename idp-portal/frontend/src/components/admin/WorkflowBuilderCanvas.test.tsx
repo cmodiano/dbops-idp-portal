@@ -19,10 +19,10 @@ import type { Node, Edge } from '@xyflow/react';
 import {
   workflowStepsToReactFlow,
   reactFlowToWorkflowSteps,
-  validateWorkflowGraph,
   START_NODE_ID,
   END_NODE_ID,
-} from './WorkflowBuilderCanvas';
+} from '../../utils/workflowConversion';
+import { validateWorkflowGraph } from '../../utils/workflowValidation';
 
 // Mock admin service
 vi.mock('../../services/admin_service', () => ({
@@ -380,8 +380,11 @@ describe('validateWorkflowGraph', () => {
   });
 
   it('detects orphan nodes (not reachable from start)', () => {
-    const nodes = [makeNode('a'), makeNode('b'), makeNode('c')];
+    const startNode = makeNode('__start__');
+    const endNode = makeNode('__end__');
+    const nodes = [startNode, makeNode('a'), makeNode('b'), makeNode('c'), endNode];
     const edges: Edge[] = [
+      { id: 'start_a', source: '__start__', target: 'a', sourceHandle: 'output' },
       { id: 'e1', source: 'a', target: 'b', sourceHandle: 'success' },
       // 'c' is not connected — orphan
     ];
@@ -413,8 +416,11 @@ describe('validateWorkflowGraph', () => {
   });
 
   it('valid graph with success and error branches', () => {
-    const nodes = [makeNode('start'), makeNode('success'), makeNode('error')];
+    const startNode = makeNode('__start__');
+    const endNode = makeNode('__end__');
+    const nodes = [startNode, makeNode('start'), makeNode('success'), makeNode('error'), endNode];
     const edges: Edge[] = [
+      { id: 'start_s', source: '__start__', target: 'start', sourceHandle: 'output' },
       { id: 'e1', source: 'start', target: 'success', sourceHandle: 'success' },
       { id: 'e2', source: 'start', target: 'error', sourceHandle: 'error' },
     ];
@@ -440,10 +446,13 @@ describe('validateWorkflowGraph', () => {
   });
 
   it('handles complex valid graph without false positives', () => {
-    // start → step1 (success) → step2 (success) → end
-    //                  (error) → step3 (success) → end
-    const nodes = [makeNode('start'), makeNode('step1'), makeNode('step2'), makeNode('step3')];
+    // __start__ → start → step1 (success) → step2 (success)
+    //                           (error) → step3 (success)
+    const startNode = makeNode('__start__');
+    const endNode = makeNode('__end__');
+    const nodes = [startNode, makeNode('start'), makeNode('step1'), makeNode('step2'), makeNode('step3'), endNode];
     const edges: Edge[] = [
+      { id: 'start_s', source: '__start__', target: 'start', sourceHandle: 'output' },
       { id: 'e1', source: 'start', target: 'step1', sourceHandle: 'success' },
       { id: 'e2', source: 'step1', target: 'step2', sourceHandle: 'success' },
       { id: 'e3', source: 'step1', target: 'step3', sourceHandle: 'error' },
