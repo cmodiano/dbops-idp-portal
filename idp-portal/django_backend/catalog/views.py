@@ -21,13 +21,12 @@ from catalog.serializers import (
     ActionTagsUpdateSerializer, StatusUpdateSerializer, TagSerializer
 )
 from catalog.services import CatalogService, InvalidTransitionError
+from catalog.rbac_service import CatalogRBACService
 from core.pagination import CustomPageNumberPagination
 from core.permissions import DBOPSProfilePermission, OptionalUserPermission
 from core.exceptions import NotFoundError, BadRequestError, InvalidStateError, ConflictError
-from core.auth_utils import get_user_ad_groups
 from executions.models import Execution
 from inventory.models import TargetEnvironment
-from profiles.services import ProfileService
 from core.middleware import get_correlation_id
 import structlog
 
@@ -48,187 +47,6 @@ def _annotate_execution_count(queryset):
     return queryset.annotate(
         execution_count=Coalesce(Subquery(subq, output_field=IntegerField()), Value(0))
     )
-
-
-def _filter_by_rbac(actions, cumulative_permissions):
-    """
-    Filter actions by user's RBAC permissions.
-
-    Args:
-        actions: List of action dicts or QuerySet (must have prefetched tags via with_tags())
-        cumulative_permissions: Dict with actions_type, action_ids, tag_patterns
-
-    Returns:
-        Filtered list of actions
-    """
-    if cumulative_permissions is None:
-        return actions
-
-    actions_type = cumulative_permissions.get('actions_type', 'all')
-    if actions_type == 'all':
-        return actions
-
-    action_ids = set(cumulative_permissions.get('action_ids', []) or [])
-    tag_patterns = set(cumulative_permissions.get('tag_patterns', []) or [])
-
-    # MEDIUM-2 fix: Pre-build action->tags map to avoid N+1 queries
-    # Tags should already be prefetched via with_tags() manager method
-    action_tags_map = {}
-    for action in actions:
-        if hasattr(action, 'id'):
-            # Use prefetched actiontag_set (already loaded, no extra query)
-            if hasattr(action, '_prefetched_objects_cache') and 'actiontag_set' in action._prefetched_objects_cache:
-                action_tags_map[action.id] = {at.tag.name for at in action.actiontag_set.all()}
-            elif hasattr(action, 'actiontag_set'):
-                # Fallback: tags might be in cache from prefetch_related
-                action_tags_map[action.id] = {at.tag.name for at in action.actiontag_set.all()}
-            else:
-                action_tags_map[action.id] = set()
-        else:
-            action_tags_map[action.get('id')] = set(action.get('tags', []) or [])
-
-    result = []
-    for action in actions:
-        if hasattr(action, 'id'):
-            action_id = action.id
-        else:
-            action_id = action.get('id')
-
-        # Check if action_id is in allowed list
-        if action_id in action_ids:
-            result.append(action)
-            continue
-
-        # Check if any tag matches pattern (using pre-built map)
-        action_tags = action_tags_map.get(action_id, set())
-        if action_tags & tag_patterns:
-            result.append(action)
-
-    return result
-
-
-def _check_rbac_for_action(action, cumulative_permissions):
-    """
-    Check if user has RBAC permission for a specific action.
-    
-    Args:
-        action: Action instance or dict
-        cumulative_permissions: Dict with actions_type, action_ids, tag_patterns
-    
-    Returns:
-        True if user has access, False otherwise
-    """
-    if cumulative_permissions is None:
-        return True
-    
-    actions_type = cumulative_permissions.get('actions_type', 'all')
-    if actions_type == 'all':
-        return True
-    
-    action_ids = set(cumulative_permissions.get('action_ids', []) or [])
-    tag_patterns = set(cumulative_permissions.get('tag_patterns', []) or [])
-    
-    # Get action ID and tags
-    if hasattr(action, 'id'):
-        action_id = action.id
-        if hasattr(action, 'actiontag_set'):
-            action_tags = {at.tag.name for at in action.actiontag_set.all()}
-        else:
-            action_tags = set()
-    else:
-        action_id = action.get('id')
-        action_tags = set(action.get('tags', []) or [])
-    
-    # Check if action_id is in allowed list
-    if action_id in action_ids:
-        return True
-    
-    # Check if any tag matches pattern
-    if action_tags & tag_patterns:
-        return True
-    
-    return False
-
-
-def _get_cumulative_permissions_for_user(user):
-    """
-    Get cumulative permissions for a user (aggregates across all profiles).
-
-    Args:
-        user: User instance
-
-    Returns:
-        Dict with actions_type, action_ids, tag_patterns, environments or None
-    """
-    if not user or not user.is_authenticated:
-        return None
-
-    ad_groups = get_user_ad_groups(user)
-    try:
-        profile_service = ProfileService()
-        permissions = profile_service.get_cumulative_permissions(user.id, ad_groups)
-    except Exception as e:
-        # Story 17.6: Justified broad catch - ProfileService can raise various exceptions
-        logger.warning(
-            "profile_service_unavailable_no_rbac_filtering",
-            user_id=user.id,
-            error=str(e),
-            error_type=type(e).__name__,
-            correlation_id=get_correlation_id(),
-            exc_info=True,
-        )
-        return None
-    
-    if not permissions or not permissions.get('action_permissions'):
-        return None
-    
-    # Aggregate action permissions (union across profiles)
-    action_ids: set[int] = set()
-    tag_patterns: set[str] = set()
-    environments: set[str] = set()
-    actions_type_all = False
-    
-    for perm in permissions.get('action_permissions', []):
-        if perm.get('actions_type') == 'all':
-            actions_type_all = True
-        else:
-            action_ids.update(perm.get('action_ids', []) or [])
-            tag_patterns.update(perm.get('tag_patterns', []) or [])
-        environments.update(perm.get('environments', []) or [])
-    
-    # Determine final actions_type
-    if actions_type_all:
-        actions_type = 'all'
-    elif tag_patterns:
-        actions_type = 'pattern'
-    else:
-        actions_type = 'list'
-
-    # When profile has full action access (all) but no explicit environments,
-    # default to all environments from inventory (Story 13.7).
-    if not environments and actions_type_all:
-        from inventory.services import InventoryService
-        try:
-            inventory_service = InventoryService()
-            environments = set(inventory_service.list_environments())
-        except Exception as e:
-            # Story 17.6: Justified broad catch - InventoryService can raise various exceptions
-            logger.warning(
-                "inventory_service_unavailable_fallback_environments",
-                user_id=user.id,
-                error=str(e),
-                error_type=type(e).__name__,
-                correlation_id=get_correlation_id(),
-                exc_info=True,
-            )
-            environments = {'dev', 'staging', 'prod'}
-
-    return {
-        'actions_type': actions_type,
-        'action_ids': sorted(action_ids),
-        'tag_patterns': sorted(tag_patterns),
-        'environments': sorted(environments),
-    }
 
 
 @extend_schema_view(
@@ -792,7 +610,13 @@ class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ActionSerializer
     permission_classes = [OptionalUserPermission]
     pagination_class = CustomPageNumberPagination  # HIGH-5 fix: Add pagination
-    
+
+    def _get_rbac_service(self):
+        """Get or create cached RBAC service instance (HIGH-1 fix: Story 26.3 review)."""
+        if not hasattr(self, '_rbac_service'):
+            self._rbac_service = CatalogRBACService()
+        return self._rbac_service
+
     def get_queryset(self):
         """Filter queryset based on query parameters and RBAC."""
         queryset = Action.objects.filter(status=ActionStatus.PUBLISHED).with_tags().with_creator()
@@ -835,11 +659,12 @@ class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(default_impact_level=impact)
         
         # RBAC filtering (if user authenticated)
-        cumulative_permissions = _get_cumulative_permissions_for_user(self.request.user)
+        rbac_service = self._get_rbac_service()
+        cumulative_permissions = rbac_service.get_permissions(self.request.user)
         if cumulative_permissions:
             # Convert queryset to list for filtering
             actions_list = list(queryset)
-            filtered_actions = _filter_by_rbac(actions_list, cumulative_permissions)
+            filtered_actions = rbac_service.filter_actions(actions_list, cumulative_permissions)
             # Get IDs of filtered actions and filter queryset
             filtered_ids = [a.id if hasattr(a, 'id') else a.get('id') for a in filtered_actions]
             queryset = queryset.filter(id__in=filtered_ids)
@@ -897,18 +722,22 @@ class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
         instance = self.get_object()
 
         # RBAC check (if user authenticated)
-        cumulative_permissions = _get_cumulative_permissions_for_user(self.request.user)
+        rbac_service = self._get_rbac_service()
+        cumulative_permissions = rbac_service.get_permissions(self.request.user)
         if cumulative_permissions:
-            if not _check_rbac_for_action(instance, cumulative_permissions):
+            if not rbac_service.check_action(instance, cumulative_permissions):
                 raise NotFoundError(
                     code="NOT_FOUND",
                     message="Action non trouvée",
-                    details={"action_id": instance.id}
+                    details={
+                        "action_id": instance.id,
+                        "correlation_id": get_correlation_id()  # HIGH-2 fix: Story 26.3 review
+                    }
                 )
-        
+
         serializer = self.get_serializer(instance)
         response_data = serializer.data
-        
+
         # Add can_execute and allowed_environments (if user authenticated)
         if cumulative_permissions:
             allowed_environments = cumulative_permissions.get('environments', [])
@@ -927,13 +756,17 @@ class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
         action = self.get_object()
 
         # RBAC check if user is authenticated
-        cumulative_permissions = _get_cumulative_permissions_for_user(self.request.user)
+        rbac_service = self._get_rbac_service()
+        cumulative_permissions = rbac_service.get_permissions(self.request.user)
         if cumulative_permissions:
-            if not _check_rbac_for_action(action, cumulative_permissions):
+            if not rbac_service.check_action(action, cumulative_permissions):
                 raise NotFoundError(
                     code="NOT_FOUND",
                     message="Action non trouvée",
-                    details={"action_id": action.id}
+                    details={
+                        "action_id": action.id,
+                        "correlation_id": get_correlation_id()  # HIGH-2 fix: Story 26.3 review
+                    }
                 )
         
         from executions.services import ExecutionService
@@ -991,7 +824,8 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet):
                 actions_queryset = actions_queryset.filter(actiontag__tag__name=category_tag).distinct()
 
         # Apply RBAC filtering if user is authenticated
-        cumulative_permissions = _get_cumulative_permissions_for_user(request.user)
+        rbac_service = CatalogRBACService()
+        cumulative_permissions = rbac_service.get_permissions(request.user)
         if cumulative_permissions and cumulative_permissions.get('actions_type') != 'all':
             # Get allowed action IDs based on RBAC
             action_ids = set(cumulative_permissions.get('action_ids', []) or [])

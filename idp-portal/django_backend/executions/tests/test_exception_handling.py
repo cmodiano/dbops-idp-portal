@@ -239,14 +239,15 @@ class TestCatalogProfileServiceExceptionLogging:
 
     def test_catalog_profile_service_failure_logs_warning(self):
         """Catalog ProfileService exception logs warning with context."""
-        from catalog.views import _get_cumulative_permissions_for_user
+        from catalog.rbac_service import CatalogRBACService
 
         user = User.objects.create(username="test_catalog_user")
 
-        with patch('catalog.views.ProfileService') as mock_ps_class:
+        with patch('catalog.rbac_service.ProfileService') as mock_ps_class:
             mock_ps_class.return_value.get_cumulative_permissions.side_effect = ConnectionError("Service down")
-            with patch('catalog.views.logger') as mock_logger:
-                result = _get_cumulative_permissions_for_user(user)
+            with patch('catalog.rbac_service.logger') as mock_logger:
+                service = CatalogRBACService()
+                result = service.get_permissions(user)
 
                 assert result is None
                 mock_logger.warning.assert_called_once()
