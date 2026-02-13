@@ -8,10 +8,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.exceptions import BadRequestError, ForbiddenError
+from core.exceptions import BadRequestError
+from core.permissions import IsDBAOrDBOPS
 from executions.models import Execution, ExecutionStatus
 from executions.serializers import ExecutionSerializer
-from executions.utils import _parse_int, _is_dba_or_dbops
+from executions.utils import _parse_int
 
 from drf_spectacular.utils import extend_schema
 
@@ -19,13 +20,11 @@ from drf_spectacular.utils import extend_schema
 class PendingApprovalsView(APIView):
     """GET /executions/pending-approvals (DBA/DBOPS only)"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsDBAOrDBOPS]  # AC2: Story 26.8
 
     @extend_schema(tags=['executions'], summary='Approbations en attente', responses={200: ExecutionSerializer(many=True)})
     def get(self, request):
-        if not _is_dba_or_dbops(request.user):
-            raise ForbiddenError(code="FORBIDDEN", message="Accès interdit", details={})
-
+        # AC2: Story 26.8 — Permission vérifiée par DRF via permission_classes
         count_only = (request.query_params.get("count_only") or "").lower() == "true"
         qs = Execution.objects.select_related("action", "user", "action__integration").filter(
             status=ExecutionStatus.PENDING_APPROVAL

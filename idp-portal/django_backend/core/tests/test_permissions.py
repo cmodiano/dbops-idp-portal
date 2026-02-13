@@ -1,8 +1,10 @@
 """
-Unit tests for core/permissions.py — DBOPSProfilePermission.
+Unit tests for core/permissions.py — DBOPSProfilePermission + IsDBAOrDBOPS.
 
 Story 22.1: CRIT-1 fix — verify Profile.objects.find_by_ad_groups() is used
 instead of the non-existent service.get_profiles_by_ad_groups().
+
+Story 26.8: IsDBAOrDBOPS permission — replaces fragile _is_dba_or_dbops() pattern.
 """
 
 import pytest
@@ -10,7 +12,7 @@ from unittest.mock import MagicMock, patch
 from django.db import OperationalError
 from django.test import override_settings
 
-from core.permissions import DBOPSProfilePermission
+from core.permissions import DBOPSProfilePermission, IsDBAOrDBOPS
 
 
 def _make_user(**kwargs):
@@ -307,3 +309,158 @@ class TestDBOPSProfilePermissionBasic:
 
         assert result is False
         mock_find.assert_called_once_with([])
+
+
+# ============================================================================
+# IsDBAOrDBOPS (Story 26.8)
+# ============================================================================
+
+@pytest.mark.unit
+class TestIsDBAOrDBOPSHasPermission:
+    """Tests for IsDBAOrDBOPS.has_permission() — view-level permission."""
+
+    def test_has_permission_dbops(self):
+        """User with profile='dbops' gets access."""
+        user = _make_user(profile="dbops")
+        request = _make_request(user)
+        assert IsDBAOrDBOPS().has_permission(request, None) is True
+
+    def test_has_permission_dba(self):
+        """User with profile='dba' gets access."""
+        user = _make_user(profile="dba")
+        request = _make_request(user)
+        assert IsDBAOrDBOPS().has_permission(request, None) is True
+
+    def test_has_permission_dba_applicatif(self):
+        """User with profile='dba_applicatif' gets access."""
+        user = _make_user(profile="dba_applicatif")
+        request = _make_request(user)
+        assert IsDBAOrDBOPS().has_permission(request, None) is True
+
+    def test_has_permission_dba_infrastructure(self):
+        """User with profile='dba_infrastructure' gets access."""
+        user = _make_user(profile="dba_infrastructure")
+        request = _make_request(user)
+        assert IsDBAOrDBOPS().has_permission(request, None) is True
+
+    def test_has_permission_business_denied(self):
+        """User with profile='business' is denied."""
+        user = _make_user(profile="business")
+        request = _make_request(user)
+        assert IsDBAOrDBOPS().has_permission(request, None) is False
+
+    def test_has_permission_dba_readonly_denied(self):
+        """CRITICAL: dba_readonly must NOT be accepted (was the bug with startswith)."""
+        user = _make_user(profile="dba_readonly")
+        request = _make_request(user)
+        assert IsDBAOrDBOPS().has_permission(request, None) is False
+
+    def test_has_permission_case_insensitive(self):
+        """Profile matching is case-insensitive."""
+        user = _make_user(profile="DBOPS")
+        request = _make_request(user)
+        assert IsDBAOrDBOPS().has_permission(request, None) is True
+
+        user2 = _make_user(profile="DBA_Applicatif")
+        request2 = _make_request(user2)
+        assert IsDBAOrDBOPS().has_permission(request2, None) is True
+
+    def test_has_permission_via_profiles_m2m(self):
+        """User gets access via profiles M2M relation."""
+        profile_obj = MagicMock()
+        profile_obj.name = "dba"
+        profiles_qs = MagicMock()
+        profiles_qs.all.return_value = [profile_obj]
+
+        user = _make_user(profile=None, profiles=profiles_qs)
+        request = _make_request(user)
+        assert IsDBAOrDBOPS().has_permission(request, None) is True
+
+    def test_has_permission_via_ad_groups(self):
+        """User gets access via AD groups → Profile resolution."""
+        user = _make_user(profile=None, ad_groups=['AD_DBOPS_GROUP'])
+        request = _make_request(user)
+
+        mock_profile = MagicMock()
+        mock_profile.name = "dbops"
+        with patch(FIND_BY_AD_GROUPS, return_value=[mock_profile]):
+            assert IsDBAOrDBOPS().has_permission(request, None) is True
+
+    def test_has_permission_unauthenticated(self):
+        """Unauthenticated user is denied."""
+        user = _make_user(is_authenticated=False)
+        request = _make_request(user)
+        assert IsDBAOrDBOPS().has_permission(request, None) is False
+
+    def test_has_permission_none_profile(self):
+        """User with no profile/profiles/ad_groups is denied."""
+        user = _make_user(profile=None, ad_groups=[])
+        request = _make_request(user)
+        with patch(FIND_BY_AD_GROUPS, return_value=[]):
+            assert IsDBAOrDBOPS().has_permission(request, None) is False
+
+    def test_has_permission_whitespace_profile(self):
+        """User with whitespace-only profile is denied (empty string after strip by getattr)."""
+        user = _make_user(profile="   ")
+        request = _make_request(user)
+        assert IsDBAOrDBOPS().has_permission(request, None) is False
+
+    def test_has_permission_empty_ad_groups(self):
+        """User with empty ad_groups list is denied."""
+        user = _make_user(profile=None, ad_groups=[])
+        request = _make_request(user)
+        with patch(FIND_BY_AD_GROUPS, return_value=[]):
+            assert IsDBAOrDBOPS().has_permission(request, None) is False
+
+    def test_has_permission_db_error_denies_access(self):
+        """DB error during ad_groups resolution denies access (safe denial)."""
+        user = _make_user(profile=None, ad_groups=["GRP-DBA"])
+        request = _make_request(user)
+        with patch(FIND_BY_AD_GROUPS, side_effect=OperationalError("DB unavailable")):
+            assert IsDBAOrDBOPS().has_permission(request, None) is False
+
+    def test_has_permission_database_profile(self):
+        """CRITICAL: 'database' profile must NOT be accepted (was possible with startswith('dba'))."""
+        user = _make_user(profile="database")
+        request = _make_request(user)
+        assert IsDBAOrDBOPS().has_permission(request, None) is False
+
+
+@pytest.mark.unit
+class TestIsDBAOrDBOPSHasObjectPermission:
+    """Tests for IsDBAOrDBOPS.has_object_permission() — object-level permission."""
+
+    def test_has_object_permission_admin(self):
+        """Admin (DBA/DBOPS profile) can access any object."""
+        user = _make_user(profile="dbops", id=1)
+        request = _make_request(user)
+        obj = MagicMock()
+        obj.user_id = 999  # Different owner
+        assert IsDBAOrDBOPS().has_object_permission(request, None, obj) is True
+
+    def test_has_object_permission_owner(self):
+        """Owner can access their own object."""
+        user = _make_user(profile="business", id=42)
+        request = _make_request(user)
+        obj = MagicMock()
+        obj.user_id = 42  # Same owner
+        assert IsDBAOrDBOPS().has_object_permission(request, None, obj) is True
+
+    def test_has_object_permission_denied(self):
+        """Non-owner non-admin is denied."""
+        user = _make_user(profile="business", id=1)
+        request = _make_request(user)
+        obj = MagicMock()
+        obj.user_id = 999  # Different owner
+        assert IsDBAOrDBOPS().has_object_permission(request, None, obj) is False
+
+    def test_has_object_permission_owner_via_user_attr(self):
+        """Owner check falls back to obj.user.id when obj.user_id is None."""
+        user = _make_user(profile="business", id=42)
+        request = _make_request(user)
+        obj = MagicMock(spec=[])
+        obj.user_id = None
+        obj_user = MagicMock()
+        obj_user.id = 42
+        obj.user = obj_user
+        assert IsDBAOrDBOPS().has_object_permission(request, None, obj) is True

@@ -19,8 +19,8 @@ from executions.builders.response_builder import ExecutionResponseBuilder
 from executions.models import Execution, ExecutionStep, ExecutionStatus
 from executions.serializers import ExecutionSerializer, ExecutionStepSerializer
 from executions.services import ExecutionService
+from core.permissions import IsDBAOrDBOPS
 from executions.utils import (
-    _is_dba_or_dbops,
     _detect_request_source,
 )
 from executions.validators.payload_validator import ExecutionPayloadValidator
@@ -36,6 +36,9 @@ import structlog
 from adapters.aap_adapter import AAPAdapter
 
 exec_logger = structlog.get_logger(__name__)
+
+# AC2: Story 26.8 — Instance shared across views for owner-or-admin object-level checks
+_dba_permission = IsDBAOrDBOPS()
 
 
 class ExecutionsCreateView(APIView):
@@ -232,7 +235,8 @@ class ExecutionDetailView(APIView):
         except Execution.DoesNotExist:
             raise NotFoundError(code="NOT_FOUND", message="Execution non trouvée", details={"execution_id": execution_id})
 
-        if execution.user_id != request.user.id and not _is_dba_or_dbops(request.user):
+        # AC2: Story 26.8 — owner-or-admin check via IsDBAOrDBOPS permission
+        if not _dba_permission.has_object_permission(request, self, execution):
             raise ForbiddenError(code="FORBIDDEN", message="Accès interdit", details={"execution_id": execution_id})
 
         return Response({"data": ExecutionSerializer(execution).data})
@@ -251,7 +255,8 @@ class ExecutionCancelView(APIView):
         except Execution.DoesNotExist:
             raise NotFoundError(code="NOT_FOUND", message="Execution non trouvée", details={"execution_id": execution_id})
 
-        if execution.user_id != request.user.id and not _is_dba_or_dbops(request.user):
+        # AC2: Story 26.8 — owner-or-admin check via IsDBAOrDBOPS permission
+        if not _dba_permission.has_object_permission(request, self, execution):
             raise ForbiddenError(code="FORBIDDEN", message="Accès interdit", details={"execution_id": execution_id})
 
         if execution.status not in (ExecutionStatus.SUBMITTED, ExecutionStatus.RUNNING):
@@ -345,7 +350,8 @@ class ExecutionStepsView(APIView):
         except Execution.DoesNotExist:
             raise NotFoundError(code="NOT_FOUND", message="Execution non trouvée", details={"execution_id": execution_id})
 
-        if execution.user_id != request.user.id and not _is_dba_or_dbops(request.user):
+        # AC2: Story 26.8 — owner-or-admin check via IsDBAOrDBOPS permission
+        if not _dba_permission.has_object_permission(request, self, execution):
             raise ForbiddenError(code="FORBIDDEN", message="Accès interdit", details={"execution_id": execution_id})
 
         steps = ExecutionStep.objects.filter(execution_id=execution_id).order_by("step_order")
@@ -369,7 +375,8 @@ class ExecutionStepLogsView(APIView):
             )
 
         execution = step.execution
-        if execution.user_id != request.user.id and not _is_dba_or_dbops(request.user):
+        # AC2: Story 26.8 — owner-or-admin check via IsDBAOrDBOPS permission
+        if not _dba_permission.has_object_permission(request, self, execution):
             raise ForbiddenError(code="FORBIDDEN", message="Accès interdit", details={"execution_id": execution_id})
 
         return Response(

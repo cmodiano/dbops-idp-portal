@@ -29,6 +29,7 @@ from django.utils.dateparse import parse_datetime
 from catalog.models import Action, ActionStatus
 from core.auth_utils import get_user_ad_groups
 from core.exceptions import BadRequestError, NotFoundError, ConflictError
+from core.permissions import IsDBAOrDBOPS
 from core.middleware import get_correlation_id
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
@@ -58,7 +59,6 @@ __all__ = [
     "_validate_workflow_referenced_actions",
     "_parse_int",
     "_parse_date",
-    "_is_dba_or_dbops",
     "_get_allowed_action_ids_for_user",
     "_detect_request_source",
     "_apply_scope_filter",
@@ -482,11 +482,6 @@ def _parse_date(value: str | None, *, name: str) -> date | None:
         raise BadRequestError(code="BAD_REQUEST", message=f"{name} invalide (YYYY-MM-DD)", details={name: value})
 
 
-def _is_dba_or_dbops(user) -> bool:
-    profile = (getattr(user, "profile", "") or "").lower()
-    return profile == "dbops" or profile == "dba" or profile.startswith("dba")
-
-
 def _get_allowed_action_ids_for_user(user) -> set[int] | None:
     """
     Get action IDs the user has access to based on their profile permissions.
@@ -579,7 +574,9 @@ def _apply_scope_filter(qs: QuerySet, *, user: Any, scope: str) -> tuple[QuerySe
     if scope not in ("mine", "all"):
         raise BadRequestError(code="BAD_REQUEST", message="scope invalide", details={"scope": scope})
 
-    can_view_all = _is_dba_or_dbops(user)
+    # AC4: Story 26.8 — Use IsDBAOrDBOPS.ADMIN_PROFILES for user-only check (no request object)
+    profile_str = (getattr(user, 'profile', '') or '').lower()
+    can_view_all = profile_str in IsDBAOrDBOPS.ADMIN_PROFILES
     effective_scope = scope if (scope == "mine" or can_view_all) else "mine"
     if effective_scope == "mine":
         qs = qs.filter(user_id=user.id)

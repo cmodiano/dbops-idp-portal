@@ -16,6 +16,7 @@ import structlog
 from catalog.models import Action, Tag
 from core.exceptions import BadRequestError
 from core.middleware import get_correlation_id
+from core.permissions import IsDBAOrDBOPS
 from executions.models import Execution, ExecutionStatus
 
 logger = structlog.get_logger(__name__)
@@ -39,9 +40,17 @@ def _parse_date(value: str | None, *, name: str) -> date | None:
         raise BadRequestError(code="BAD_REQUEST", message=f"{name} invalide (YYYY-MM-DD)", details={name: value})
 
 
-def _is_dba_or_dbops(user) -> bool:
-    profile = (getattr(user, "profile", "") or "").lower()
-    return profile == "dbops" or profile == "dba" or profile.startswith("dba")
+def _filter_queryset_by_ownership(qs: QuerySet, request, permission_class=IsDBAOrDBOPS) -> QuerySet:
+    """
+    Filter queryset to user's own objects unless user has admin permission.
+
+    Story 26.8 AC3: Extracted pattern from 6 dashboard views.
+    Story 26.12 will replace this with IsOwnerOrDBA mixin.
+    """
+    permission = permission_class()
+    if not permission.has_permission(request, None):
+        qs = qs.filter(user_id=request.user.id)
+    return qs
 
 
 def _get_period_bounds(request) -> tuple[datetime, datetime]:
@@ -102,8 +111,7 @@ class DashboardStatsView(APIView):
     def get(self, request):
         # Base queryset: scope = all for DBA/DBOPS, else mine
         qs_base = Execution.objects.select_related("action")
-        if not _is_dba_or_dbops(request.user):
-            qs_base = qs_base.filter(user_id=request.user.id)
+        qs_base = _filter_queryset_by_ownership(qs_base, request)  # AC3: Story 26.8
 
         # For dashboard stats, ignore status filter for consistency
         qs_base = _apply_common_filters(qs_base, request=request, include_status=False)
@@ -147,8 +155,7 @@ class DashboardRecentView(APIView):
     def get(self, request):
         limit = 10
         qs = Execution.objects.select_related("action", "user").order_by("-created_at")
-        if not _is_dba_or_dbops(request.user):
-            qs = qs.filter(user_id=request.user.id)
+        qs = _filter_queryset_by_ownership(qs, request)  # AC3: Story 26.8
 
         items = list(qs[:limit])
         data = []
@@ -177,8 +184,7 @@ class DashboardTimeSeriesView(APIView):
 
     def get(self, request):
         qs = Execution.objects.select_related("action")
-        if not _is_dba_or_dbops(request.user):
-            qs = qs.filter(user_id=request.user.id)
+        qs = _filter_queryset_by_ownership(qs, request)  # AC3: Story 26.8
 
         # Ignore status filter (timeseries always success/failed)
         qs = _apply_common_filters(qs, request=request, include_status=False)
@@ -215,8 +221,7 @@ class DashboardStatsByTechnologyView(APIView):
 
     def get(self, request):
         qs = Execution.objects.select_related("action")
-        if not _is_dba_or_dbops(request.user):
-            qs = qs.filter(user_id=request.user.id)
+        qs = _filter_queryset_by_ownership(qs, request)  # AC3: Story 26.8
 
         # Ignore status filter; engine is grouping key
         qs = _apply_common_filters(qs, request=request, include_status=False)
@@ -258,8 +263,7 @@ class DashboardStatsByEnvironmentView(APIView):
 
     def get(self, request):
         qs = Execution.objects.select_related("action")
-        if not _is_dba_or_dbops(request.user):
-            qs = qs.filter(user_id=request.user.id)
+        qs = _filter_queryset_by_ownership(qs, request)  # AC3: Story 26.8
 
         # Ignore status filter; environment is grouping key
         qs = _apply_common_filters(qs, request=request, include_status=False)
@@ -425,8 +429,7 @@ class DashboardCompareView(APIView):
             )
 
         qs_base = Execution.objects.select_related("action")
-        if not _is_dba_or_dbops(request.user):
-            qs_base = qs_base.filter(user_id=request.user.id)
+        qs_base = _filter_queryset_by_ownership(qs_base, request)  # AC3: Story 26.8
 
         if dimension in ("technology", "environment"):
             days = _parse_int(request.query_params.get("days"), 14, name="days")

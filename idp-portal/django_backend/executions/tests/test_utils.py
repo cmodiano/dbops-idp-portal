@@ -5,11 +5,12 @@ Covers:
 - _get_env_config_case_insensitive
 - _validate_environment_against_inventory
 - _parse_int, _parse_date
-- _is_dba_or_dbops
 - _detect_request_source
 - _apply_scope_filter
 - _parse_iso_datetime
 - _calculate_next_execution_date
+
+Story 26.8: _is_dba_or_dbops tests moved to core/tests/test_permissions.py (TestIsDBAOrDBOPS).
 """
 import pytest
 from datetime import datetime, date, timedelta, timezone as dt_timezone
@@ -24,7 +25,6 @@ from executions.utils import (
     _validate_environment_against_inventory,
     _parse_int,
     _parse_date,
-    _is_dba_or_dbops,
     _detect_request_source,
     _apply_scope_filter,
     _parse_iso_datetime,
@@ -181,46 +181,6 @@ class TestParseDate(TestCase):
     def test_invalid_value_raises_bad_request(self):
         with pytest.raises(BadRequestError):
             _parse_date("not-a-date", name="start_date")
-
-
-# ============================================================================
-# _is_dba_or_dbops
-# ============================================================================
-
-class TestIsDbaOrDbops(TestCase):
-    def test_dbops_profile(self):
-        user = MagicMock()
-        user.profile = "DBOPS"
-        assert _is_dba_or_dbops(user) is True
-
-    def test_dba_profile(self):
-        user = MagicMock()
-        user.profile = "DBA"
-        assert _is_dba_or_dbops(user) is True
-
-    def test_dba_prefixed_profile(self):
-        user = MagicMock()
-        user.profile = "DBA_SENIOR"
-        assert _is_dba_or_dbops(user) is True
-
-    def test_business_user_profile(self):
-        user = MagicMock()
-        user.profile = "business"
-        assert _is_dba_or_dbops(user) is False
-
-    def test_none_profile(self):
-        user = MagicMock()
-        user.profile = None
-        assert _is_dba_or_dbops(user) is False
-
-    def test_empty_profile(self):
-        user = MagicMock()
-        user.profile = ""
-        assert _is_dba_or_dbops(user) is False
-
-    def test_user_without_profile_attr(self):
-        user = MagicMock(spec=[])  # No attributes
-        assert _is_dba_or_dbops(user) is False
 
 
 # ============================================================================
