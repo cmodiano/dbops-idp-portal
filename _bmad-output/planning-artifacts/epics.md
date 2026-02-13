@@ -4375,3 +4375,15 @@ So que l'accès soit "allow then exclude" sans avoir à lister toutes les cibles
 **And** une migration ajoute le champ exclusion_patterns_json (TextField/JSON) à la table PROFILE_TARGET_PERMISSIONS (ou équivalent)
 **And** la logique existante list_targets_for_user (ou équivalent) est étendue pour appliquer l'exclusion après l'inclusion ; les appels API qui renvoient les cibles autorisées reflètent ce comportement
 **And** la documentation décrit la sémantique "allow first, then exclude" et les exemples de patterns
+
+---
+
+## Epic 26 : Qualité du Code — Correctifs Assessment 6 février 2026
+
+En tant qu'**équipe de développement**,
+je veux **traiter les problèmes de conception et opportunités de simplification identifiés dans l'évaluation qualité du code du 6 février 2026**,
+afin de **améliorer la maintenabilité, réduire les fichiers monolithiques, éliminer la duplication et atteindre un score de qualité A**.
+
+**Référence détaillée :** planning-artifacts/epic-26-qualite-code-assessment-fev-2026.md
+
+**Portée :** Split inventory/services.py (God Service 1941 LOC), split executions/views.py (1375 LOC), extraction RBAC catalog, refactoring ExecutionsPage/WorkflowBuilderCanvas/CalendarPage, EnvironmentNormalizer, permission IsDBAOrDBOPS, standardisation format réponse API, pagination réutilisable.

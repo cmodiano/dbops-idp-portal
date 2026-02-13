@@ -336,3 +336,19 @@ development_status:
     25-5-mutex-inter-actions-table-action-mutex-validation-soumission: done # Code review 2026-02-10: 6 fixes (3 CRITICAL + 3 HIGH) — validated_targets init, symmetric rules deletion robust, requires_target=False tests, disabled action validation, NULL description allowed — 23/23 tests
     25-6-deny-explicite-rbac-exclusion-patterns-profile-target-permission: done # Code review 2026-02-10: 7 issues fixed (3 HIGH + 4 MEDIUM) — max 100 patterns validation (backend + frontend), traceability for unused patterns, API behavior documented (null/omitted/[]), multi-profile union clarified — 30/30 backend tests + 9/9 frontend tests pass
     epic-25-retrospective: optional
+    # === Epic 26: Qualité du Code — Correctifs Assessment 6 février 2026 ===
+    # Réf: planning-artifacts/epic-26-qualite-code-assessment-fev-2026.md — inventory/services.py, executions/views.py, catalog RBAC, frontend volumineux, EnvironmentNormalizer, IsDBAOrDBOPS, format réponse API
+    epic-26: in-progress
+    26-1-split-inventory-services-3-classes: done # Code review adversarial 2026-02-13: 12 issues (4 HIGH + 5 MEDIUM + 3 LOW), 9 auto-fixed (H2-H4, M1-M5, L1), H1 AC2 LOC deviation documented (911 vs <700), 280/280 tests pass, 0 regression
+    26-2-split-executions-views-4-modules: backlog
+    26-3-extraire-rbac-catalog-service: backlog
+    26-4-refactoriser-executionspage-tsx: backlog
+    26-5-refactoriser-workflowbuildercanvas-tsx: backlog
+    26-6-refactoriser-calendarpage-tsx: backlog
+    26-7-creer-environment-normalizer: backlog
+    26-8-creer-permission-isdbaordbops: backlog
+    26-9-standardiser-format-reponse-api: backlog
+    26-10-renommer-fonctions-underscore-exportees: backlog
+    26-11-standardiser-pagination-utilitaire: backlog
+    26-12-unifier-checks-rbac-permission-mixin: backlog
+    epic-26-retrospective: optional

@@ -8,7 +8,8 @@ import pytest
 from django.test import TestCase
 from unittest.mock import patch, MagicMock, PropertyMock
 
-from inventory.services import _apply_attribute_filter, InventoryService
+from inventory.services import InventoryService
+from inventory.rbac_filter import InventoryRBACFilter
 from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
 
 
@@ -28,7 +29,7 @@ class TestApplyAttributeFilter(TestCase):
 
     def test_filter_by_single_attribute_single_value(self):
         """Filter by engine_type=oracle → only Oracle servers."""
-        result = _apply_attribute_filter(
+        result = InventoryRBACFilter._apply_attribute_filter(
             self.servers, {"engine_type": ["oracle"]}, 'test-cid'
         )
         self.assertEqual(len(result), 2)
@@ -36,7 +37,7 @@ class TestApplyAttributeFilter(TestCase):
 
     def test_filter_by_single_attribute_multiple_values(self):
         """Filter by engine_type=[oracle, sqlserver] → Oracle + SQL."""
-        result = _apply_attribute_filter(
+        result = InventoryRBACFilter._apply_attribute_filter(
             self.servers, {"engine_type": ["oracle", "sqlserver"]}, 'test-cid'
         )
         self.assertEqual(len(result), 4)
@@ -44,7 +45,7 @@ class TestApplyAttributeFilter(TestCase):
 
     def test_filter_by_multiple_attributes_and(self):
         """Filter by engine_type=oracle AND environment=prod → AND."""
-        result = _apply_attribute_filter(
+        result = InventoryRBACFilter._apply_attribute_filter(
             self.servers,
             {"engine_type": ["oracle"], "environment": ["prod"]},
             'test-cid'
@@ -54,38 +55,38 @@ class TestApplyAttributeFilter(TestCase):
 
     def test_empty_filter_returns_all(self):
         """Empty filter dict → all servers returned."""
-        result = _apply_attribute_filter(self.servers, {}, 'test-cid')
+        result = InventoryRBACFilter._apply_attribute_filter(self.servers, {}, 'test-cid')
         self.assertEqual(len(result), 5)
 
     def test_none_filter_returns_all(self):
         """None filter → all servers returned (via falsy check)."""
-        result = _apply_attribute_filter(self.servers, None, 'test-cid')
+        result = InventoryRBACFilter._apply_attribute_filter(self.servers, None, 'test-cid')
         self.assertEqual(len(result), 5)
 
     def test_all_servers_filtered_out(self):
         """Filter excludes all servers → returns empty list."""
-        result = _apply_attribute_filter(
+        result = InventoryRBACFilter._apply_attribute_filter(
             self.servers, {"engine_type": ["postgresql"]}, 'test-cid'
         )
         self.assertEqual(len(result), 0)
 
     def test_attribute_not_found_in_servers_ignored(self):
         """Attribute not in any server → filter ignored, all returned."""
-        result = _apply_attribute_filter(
+        result = InventoryRBACFilter._apply_attribute_filter(
             self.servers, {"nonexistent_attr": ["value"]}, 'test-cid'
         )
         self.assertEqual(len(result), 5)
 
     def test_case_insensitive_matching(self):
         """Filter values are matched case-insensitively."""
-        result = _apply_attribute_filter(
+        result = InventoryRBACFilter._apply_attribute_filter(
             self.servers, {"engine_type": ["Oracle"]}, 'test-cid'
         )
         self.assertEqual(len(result), 2)
 
     def test_empty_allowed_values_skipped(self):
         """Empty allowed values list → criterion skipped."""
-        result = _apply_attribute_filter(
+        result = InventoryRBACFilter._apply_attribute_filter(
             self.servers, {"engine_type": []}, 'test-cid'
         )
         self.assertEqual(len(result), 5)
@@ -93,7 +94,7 @@ class TestApplyAttributeFilter(TestCase):
     def test_preserves_original_list(self):
         """Filter does not mutate the original servers list."""
         original_len = len(self.servers)
-        _apply_attribute_filter(
+        InventoryRBACFilter._apply_attribute_filter(
             self.servers, {"engine_type": ["oracle"]}, 'test-cid'
         )
         self.assertEqual(len(self.servers), original_len)
