@@ -342,7 +342,7 @@ development_status:
     26-1-split-inventory-services-3-classes: done # Code review adversarial 2026-02-13: 12 issues (4 HIGH + 5 MEDIUM + 3 LOW), 9 auto-fixed (H2-H4, M1-M5, L1), H1 AC2 LOC deviation documented (911 vs <700), 280/280 tests pass, 0 regression
     26-2-split-executions-views-4-modules: done # Code review adversarial 2026-02-13: 10 CRIT issues found, 2 auto-fixed (CRIT-1 env validation blocking tests + CRIT-6 dict mutation), 374/453 tests pass (+10 vs baseline 364), 79 failures pre-existing. AC1-AC7 met (AC5 partial: scheduled_views.py 586 LOC vs <400 target, 5 cohesive views acceptable). Report: 26-2-code-review-report.md
     26-3-extraire-rbac-catalog-service: done # 2026-02-13: CatalogRBACService extrait (214 LOC), views.py réduit -178 LOC, 29 tests (96.10% coverage), 253/253 catalog tests pass, 0 régression — Code review adversarial: 8 issues (3 HIGH + 3 MEDIUM + 2 LOW), 6 auto-fixed, story marked done
-    26-4-refactoriser-executionspage-tsx: backlog
+    26-4-refactoriser-executionspage-tsx: done # 2026-02-13: ExecutionsPage 1023→298 LOC (-70.9%), 7 fichiers extraits (colonnes+3 hooks+2 composants), 61 tests, 0 régression
     26-5-refactoriser-workflowbuildercanvas-tsx: backlog
     26-6-refactoriser-calendarpage-tsx: backlog
     26-7-creer-environment-normalizer: backlog

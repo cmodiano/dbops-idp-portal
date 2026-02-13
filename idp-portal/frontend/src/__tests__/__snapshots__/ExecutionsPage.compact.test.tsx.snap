@@ -1124,6 +1124,9 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
               >
                 <colgroup>
                   <col
+                    class="ant-table-expand-icon-col"
+                  />
+                  <col
                     style="width: 100px;"
                   />
                   <col />
@@ -1142,11 +1145,17 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                   <col
                     style="width: 80px;"
                   />
+                  <col
+                    style="width: 100px;"
+                  />
                 </colgroup>
                 <thead
                   class="ant-table-thead"
                 >
                   <tr>
+                    <th
+                      class="ant-table-cell ant-table-row-expand-icon-cell"
+                    />
                     <th
                       class="ant-table-cell"
                       scope="col"
@@ -1309,6 +1318,13 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                     >
                       Durée
                     </th>
+                    <th
+                      class="ant-table-cell"
+                      scope="col"
+                      style="text-align: center;"
+                    >
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody
@@ -1319,6 +1335,16 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                     data-row-key="2"
                     style="cursor: pointer;"
                   >
+                    <td
+                      class="ant-table-cell ant-table-row-expand-icon-cell"
+                    >
+                      <button
+                        aria-expanded="false"
+                        aria-label="Expand row"
+                        class="ant-table-row-expand-icon ant-table-row-expand-icon-spaced"
+                        type="button"
+                      />
+                    </td>
                     <td
                       class="ant-table-cell"
                       style="text-align: center;"
@@ -1412,12 +1438,26 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                     >
                       —
                     </td>
+                    <td
+                      class="ant-table-cell"
+                      style="text-align: center;"
+                    />
                   </tr>
                   <tr
                     class="ant-table-row ant-table-row-level-0"
                     data-row-key="1"
                     style="cursor: pointer;"
                   >
+                    <td
+                      class="ant-table-cell ant-table-row-expand-icon-cell"
+                    >
+                      <button
+                        aria-expanded="false"
+                        aria-label="Expand row"
+                        class="ant-table-row-expand-icon ant-table-row-expand-icon-spaced"
+                        type="button"
+                      />
+                    </td>
                     <td
                       class="ant-table-cell"
                       style="text-align: center;"
@@ -1511,6 +1551,10 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                     >
                       5m
                     </td>
+                    <td
+                      class="ant-table-cell"
+                      style="text-align: center;"
+                    />
                   </tr>
                 </tbody>
               </table>
