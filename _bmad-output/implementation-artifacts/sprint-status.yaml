@@ -360,4 +360,10 @@ development_status:
     # AAP en premier : analyse doc, appels workflows/job templates, monitoring jobs (logs + statut via websocket). Consommation API ou frontend.
     epic-27: in-progress
     27-1-adapter-aap-doc-workflows-jobs-monitoring-websocket: done # Adapter AAP — analyse doc, workflows, job templates, monitoring logs + statut via websocket — 41/41 tests pass — Code review: 7 CRITICAL + MEDIUM fixes applied
+    27-2-adapter-ansible-tower-doc-workflows-jobs-monitoring-websocket: done # TowerAdapter séparé, poll_tower_job_status, 85/85 tests (33 adapter + 11 monitoring + 41 AAP non-régression)
+    27-3-adapter-azure-devops-pipelines-runs-monitoring: backlog # Adapter Azure DevOps — pipelines, runs, logs, statut temps réel (webhooks/polling)
+    27-4-adapter-github-actions-workflow-runs-monitoring: backlog # Adapter GitHub Actions — workflow runs, logs, statut temps réel (webhooks/polling)
+    27-5-adapter-terraform-cloud-runs-monitoring: backlog # Adapter Terraform Cloud — runs (plan/apply), logs, statut temps réel (webhooks/polling)
+    27-6-vault-service-hashicorp-vault-enterprise: backlog # VaultService — résolution credential_ref, retry, circuit breaker, cache, Vault Enterprise
+    27-7-admin-frontend-menu-integrations-adapters: backlog # Admin > Intégrations : tous les adapters disponibles, config backend éditable via UI (adapters indépendants du frontend)
     epic-27-retrospective: optional

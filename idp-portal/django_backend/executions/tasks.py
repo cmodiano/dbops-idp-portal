@@ -687,6 +687,161 @@ def poll_aap_job_status(
     return {"outcome": "polling", "status": idp_status, "aap_status": aap_status}
 
 
+# ---------------------------------------------------------------------------
+# Story 27.2: Tower/AWX job monitoring polling task
+# ---------------------------------------------------------------------------
+
+@shared_task(bind=True, max_retries=0)
+def poll_tower_job_status(
+    self: Any,
+    execution_id: int,
+    platform_job_id: str,
+    resource_type: str = "job_template",
+    base_url: str = "",
+    credential_ref: str = "",
+    auth_flow: str = "token",
+    poll_interval: int = 5,
+) -> dict:
+    """
+    Story 27.2 (AC4): Poll Tower/AWX for job status and logs, then broadcast
+    updates via Django Channels to the execution's WebSocket group.
+
+    Mirrors poll_aap_job_status but uses TowerAdapter.
+
+    Args:
+        execution_id: IDP Portal execution ID.
+        platform_job_id: Tower job ID to monitor.
+        resource_type: 'job_template' or 'workflow_job'.
+        base_url: Tower base URL (from integration).
+        credential_ref: Credential reference for auth.
+        auth_flow: Auth flow type (token, basic, pat).
+        poll_interval: Seconds between polls (default 5).
+
+    Returns:
+        dict with final status information.
+    """
+    import asyncio
+
+    correlation_id = get_correlation_id()
+
+    logger.info(
+        "poll_tower_job_status_start",
+        execution_id=execution_id,
+        platform_job_id=platform_job_id,
+        resource_type=resource_type,
+        correlation_id=correlation_id,
+    )
+
+    loop = None
+    try:
+        from adapters.tower_adapter import TowerAdapter
+
+        import base64 as _b64
+        if auth_flow == "basic":
+            _encoded = _b64.b64encode(credential_ref.encode()).decode()
+            auth_headers = {"Authorization": f"Basic {_encoded}"}
+        else:
+            auth_headers = {"Authorization": f"Bearer {credential_ref}"}
+
+        adapter = TowerAdapter(base_url=base_url, auth_headers=auth_headers)
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        status_data = loop.run_until_complete(
+            adapter.get_status(
+                platform_job_id=platform_job_id,
+                resource_type=resource_type,
+                correlation_id=correlation_id,
+            )
+        )
+
+        logs_data = loop.run_until_complete(
+            adapter.get_job_logs(
+                platform_job_id=platform_job_id,
+                resource_type=resource_type,
+                correlation_id=correlation_id,
+            )
+        )
+    except Exception as e:
+        logger.error(
+            "poll_tower_job_status_adapter_error",
+            execution_id=execution_id,
+            platform_job_id=platform_job_id,
+            error=str(e),
+            error_type=type(e).__name__,
+            correlation_id=correlation_id,
+        )
+        poll_tower_job_status.apply_async(
+            args=[execution_id, platform_job_id],
+            kwargs={
+                "resource_type": resource_type,
+                "base_url": base_url,
+                "credential_ref": credential_ref,
+                "auth_flow": auth_flow,
+                "poll_interval": poll_interval,
+            },
+            countdown=poll_interval,
+        )
+        return {"outcome": "error", "error": str(e)}
+    finally:
+        if loop is not None:
+            loop.close()
+
+    idp_status = status_data.get("status", "SUBMITTED")
+    tower_status = status_data.get("tower_status", "unknown")
+    is_terminal = tower_status in {"successful", "failed", "error", "canceled"}
+
+    _broadcast_execution_update(
+        execution_id=execution_id,
+        status_data=status_data,
+        logs_data=logs_data,
+        is_terminal=is_terminal,
+    )
+
+    _update_execution_from_poll(
+        execution_id=execution_id,
+        platform_job_id=platform_job_id,
+        idp_status=idp_status,
+        logs_content=logs_data.get("content", ""),
+        correlation_id=correlation_id,
+    )
+
+    if is_terminal:
+        logger.info(
+            "poll_tower_job_status_complete",
+            execution_id=execution_id,
+            platform_job_id=platform_job_id,
+            final_status=tower_status,
+            idp_status=idp_status,
+            correlation_id=correlation_id,
+        )
+        return {"outcome": "complete", "status": idp_status, "tower_status": tower_status}
+
+    poll_tower_job_status.apply_async(
+        args=[execution_id, platform_job_id],
+        kwargs={
+            "resource_type": resource_type,
+            "base_url": base_url,
+            "credential_ref": credential_ref,
+            "auth_flow": auth_flow,
+            "poll_interval": poll_interval,
+        },
+        countdown=poll_interval,
+    )
+
+    logger.info(
+        "poll_tower_job_status_rescheduled",
+        execution_id=execution_id,
+        platform_job_id=platform_job_id,
+        tower_status=tower_status,
+        next_poll_in=poll_interval,
+        correlation_id=correlation_id,
+    )
+
+    return {"outcome": "polling", "status": idp_status, "tower_status": tower_status}
+
+
 def _broadcast_execution_update(
     execution_id: int,
     status_data: dict,

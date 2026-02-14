@@ -4426,3 +4426,173 @@ So that **on puisse orchestrer et monitorer les runs Ansible sans dépendre dire
 
 **And** l'authentification AAP (token, OAuth, etc.) et le stockage des secrets (Vault) sont documentés ou implémentés selon les standards du projet
 **And** l'adapter est consommable depuis l'API backend et depuis une action déclenchée depuis le frontend
+
+### Story 27.2 : Adapter Ansible Tower — analyse doc, workflows, job templates, monitoring (logs + statut via websocket)
+
+As a **système backend** (ou utilisateur via le portail),
+I want **utiliser un adapter Ansible Tower pour lancer des workflows / job templates et suivre l'exécution des jobs en temps réel (logs + statut)**,
+So that **on puisse orchestrer et monitorer les runs Ansible sur des déploiements Tower (open source / upstream) sans dépendre directement des détails de l'API Tower**.
+
+**Acceptance Criteria:**
+
+**Given** la documentation officielle Ansible Tower (API REST v2 et mécanismes temps réel / événements)
+**When** on conçoit l'adapter
+**Then** une analyse/synthèse de la doc est disponible pour : workflows, job templates, jobs, logs, statuts
+**And** les points d'intégration (auth, endpoints, format des événements) sont identifiés
+
+**Given** une configuration d'intégration Ansible Tower valide (URL, credential_ref)
+**When** le backend lance une exécution
+**Then** l'adapter peut lancer un **workflow job** (workflow) et un **job** (job template) via l'API Tower
+**And** les paramètres nécessaires (extra_vars, limit, etc.) sont supportés selon la doc Tower
+
+**Given** un job Tower en cours
+**When** on suit ce job
+**Then** les **logs** du job sont récupérables (streaming ou polling selon la doc)
+**And** le **statut** du job (running, success, failed, etc.) est mis à jour en temps réel
+**And** les **websockets** (ou mécanisme équivalent côté Tower) sont utilisés pour recevoir les mises à jour et les exposer côté backend (ou relay vers le frontend selon l'architecture)
+
+**And** l'authentification Tower (token, OAuth, etc.) et le stockage des secrets (Vault) sont documentés ou implémentés selon les standards du projet
+**And** l'adapter est consommable depuis l'API backend et depuis une action déclenchée depuis le frontend
+**And** les différences éventuelles avec l'API AAP (compatibilité upstream) sont documentées pour faciliter réutilisation ou factorisation
+
+### Story 27.3 : Adapter Azure DevOps — analyse doc, pipelines/runs, monitoring (logs + statut temps réel)
+
+As a **système backend** (ou utilisateur via le portail),
+I want **utiliser un adapter Azure DevOps pour lancer des pipelines (runs) et suivre l'exécution en temps réel (logs + statut)**,
+So that **on puisse orchestrer et monitorer les runs Azure Pipelines sans dépendre directement des détails de l'API Azure DevOps**.
+
+**Acceptance Criteria:**
+
+**Given** la documentation officielle Azure DevOps (API REST Pipelines et mécanismes temps réel / webhooks)
+**When** on conçoit l'adapter
+**Then** une analyse/synthèse de la doc est disponible pour : pipelines, runs, logs, statuts
+**And** les points d'intégration (auth, endpoints, format des événements ou webhooks) sont identifiés
+
+**Given** une configuration d'intégration Azure DevOps valide (organisation, projet, URL, credential_ref)
+**When** le backend lance une exécution
+**Then** l'adapter peut lancer un **run** de pipeline via l'API Azure DevOps (POST runs)
+**And** les paramètres nécessaires (variables, branch, etc.) sont supportés selon la doc
+
+**Given** un run Azure DevOps en cours
+**When** on suit ce run
+**Then** les **logs** du run sont récupérables (streaming ou polling selon la doc)
+**And** le **statut** du run (running, completed, failed, etc.) est mis à jour en temps réel
+**And** les **webhooks** ou **polling** (ou mécanisme équivalent) sont utilisés pour recevoir les mises à jour et les exposer côté backend (ou relay vers le frontend via WebSocket portail)
+
+**And** l'authentification Azure DevOps (PAT, OAuth, etc.) et le stockage des secrets (Vault) sont documentés ou implémentés selon les standards du projet
+**And** l'adapter est consommable depuis l'API backend et depuis une action déclenchée depuis le frontend
+
+### Story 27.4 : Adapter GitHub Actions — analyse doc, workflow runs, monitoring (logs + statut temps réel)
+
+As a **système backend** (ou utilisateur via le portail),
+I want **utiliser un adapter GitHub Actions pour lancer des workflow runs et suivre l'exécution en temps réel (logs + statut)**,
+So that **on puisse orchestrer et monitorer les runs GitHub Actions sans dépendre directement des détails de l'API GitHub**.
+
+**Acceptance Criteria:**
+
+**Given** la documentation officielle GitHub Actions (API REST Actions et mécanismes temps réel / webhooks)
+**When** on conçoit l'adapter
+**Then** une analyse/synthèse de la doc est disponible pour : workflows, workflow runs, jobs, logs, statuts
+**And** les points d'intégration (auth, endpoints, format des événements ou webhooks) sont identifiés
+
+**Given** une configuration d'intégration GitHub valide (repo, URL, credential_ref)
+**When** le backend lance une exécution
+**Then** l'adapter peut lancer un **workflow run** via l'API GitHub (workflow_dispatch ou API Actions)
+**And** les paramètres nécessaires (ref, inputs, etc.) sont supportés selon la doc
+
+**Given** un workflow run GitHub en cours
+**When** on suit ce run
+**Then** les **logs** du run (jobs) sont récupérables (API logs ou polling)
+**And** le **statut** du run (queued, in_progress, completed, etc.) est mis à jour en temps réel
+**And** les **webhooks** ou **polling** sont utilisés pour recevoir les mises à jour et les exposer côté backend (relay vers le frontend via WebSocket portail)
+
+**And** l'authentification GitHub (PAT, GitHub App, etc.) et le stockage des secrets (Vault) sont documentés ou implémentés selon les standards du projet
+**And** l'adapter est consommable depuis l'API backend et depuis une action déclenchée depuis le frontend
+
+### Story 27.5 : Adapter Terraform Cloud — analyse doc, runs (plan/apply), monitoring (logs + statut temps réel)
+
+As a **système backend** (ou utilisateur via le portail),
+I want **utiliser un adapter Terraform Cloud pour lancer des runs (plan/apply) et suivre l'exécution en temps réel (logs + statut)**,
+So that **on puisse orchestrer et monitorer les runs Terraform sans dépendre directement des détails de l'API Terraform Cloud**.
+
+**Acceptance Criteria:**
+
+**Given** la documentation officielle Terraform Cloud (API REST Runs et mécanismes temps réel / webhooks)
+**When** on conçoit l'adapter
+**Then** une analyse/synthèse de la doc est disponible pour : workspaces, runs, plan/apply, logs, statuts
+**And** les points d'intégration (auth, endpoints, format des événements ou webhooks) sont identifiés
+
+**Given** une configuration d'intégration Terraform Cloud valide (organisation, workspace, URL, credential_ref)
+**When** le backend lance une exécution
+**Then** l'adapter peut lancer un **run** (plan ou plan-and-apply) via l'API Terraform Cloud (POST runs)
+**And** les paramètres nécessaires (workspace_id, variables, etc.) sont supportés selon la doc
+
+**Given** un run Terraform Cloud en cours
+**When** on suit ce run
+**Then** les **logs** du run (plan et/ou apply) sont récupérables (API ou polling)
+**And** le **statut** du run (pending, plan_running, apply_running, applied, etc.) est mis à jour en temps réel
+**And** les **webhooks** ou **polling** sont utilisés pour recevoir les mises à jour et les exposer côté backend (relay vers le frontend via WebSocket portail)
+
+**And** l'authentification Terraform Cloud (API token, etc.) et le stockage des secrets (Vault) sont documentés ou implémentés selon les standards du projet
+**And** l'adapter est consommable depuis l'API backend et depuis une action déclenchée depuis le frontend
+
+### Story 27.6 : Service client HashiCorp Vault (Open Source + Enterprise) — résolution credential_ref
+
+As a **système backend**,
+I want **un service client Vault (VaultService) qui résout les credential_ref (vault:secret/data/...) en secrets au moment de l'exécution**,
+So that **les adapters (AAP, Azure DevOps, etc.) obtiennent leurs credentials depuis Vault sans les stocker dans le portail, y compris avec Vault Enterprise (namespaces, etc.)**.
+
+**Acceptance Criteria:**
+
+**Given** la documentation HashiCorp Vault (API KV v2, auth Token et AppRole, Vault Enterprise namespaces)
+**When** on conçoit le VaultService
+**Then** une analyse/synthèse de la doc est disponible pour : lecture secrets KV v2, auth (token, AppRole), options Enterprise
+**And** les points d'intégration (VAULT_ADDR, namespace, chemins secret) sont identifiés
+
+**Given** une configuration Vault valide (URL, token ou AppRole via env / Vault)
+**When** le backend doit résoudre un credential_ref (format vault:secret/data/path#key ou équivalent)
+**Then** le VaultService retourne la valeur du secret (chaîne ou champ cible)
+**And** les paramètres nécessaires (path, key optionnel) sont supportés selon le format credential_ref documenté
+
+**Given** une indisponibilité ou erreur Vault temporaire
+**When** on appelle get_secret
+**Then** un **retry** avec backoff exponentiel est appliqué (ex. 3 tentatives)
+**And** un **circuit breaker** limite les appels répétés en échec (ex. 5 échecs → ouvert 60s)
+**And** une erreur explicite est remontée si Vault reste indisponible (NFR21 : pas de fallback silencieux)
+
+**Given** des appels répétés pour le même credential_ref
+**When** le secret est en cache
+**Then** un **cache** avec TTL (ex. 5 min) évite de surcharger Vault
+**And** l'invalidation ou TTL est documentée
+
+**And** l'authentification Vault (token, AppRole) et le stockage du token initial (env, Vault agent) sont documentés
+**And** les spécificités Vault Enterprise (namespaces, multi-tenancy) sont supportées ou documentées comme limitation
+**And** des tests unitaires et d'intégration (mock ou Vault dev) valident le comportement
+
+### Story 27.7 : Admin frontend — menu Intégrations expose tous les adapters (config backend, éditable via l'UI)
+
+As a **DBOPS admin**,
+I want **tous les types d'intégration (AAP, Tower, Azure DevOps, GitHub Actions, Terraform Cloud, Vault) être disponibles dans le menu Admin > Intégrations pour créer et éditer les configurations (URL, credential_ref, etc.)**,
+So that **je puisse gérer les intégrations depuis l'interface tout en sachant que les adapters fonctionnent indépendamment du frontend (config stockée côté backend)**.
+
+**Acceptance Criteria:**
+
+**Given** le catalogue backend des types d'intégration (IntegrationTypeCatalogue ou équivalent)
+**When** on consulte la liste des types exposés à l'Admin
+**Then** les types correspondant aux adapters sont présents : **aap**, **tower** (Ansible Tower), **azure_devops**, **github_actions**, **terraform_cloud**, **vault** (ou codes alignés avec le backend)
+**And** chaque type a les métadonnées nécessaires (libellé, actions autorisées, schéma config optionnel) pour le formulaire Admin
+
+**Given** un admin ouvre le menu Admin > Intégrations (existant)
+**When** il crée ou édite une intégration
+**Then** il peut choisir le type parmi tous les adapters ci-dessus
+**And** il peut renseigner **base_url** (URL de la plateforme) et **credential_ref** (référence au secret, ex. vault:secret/data/...)
+**And** les secrets ne sont jamais saisis ni affichés en clair dans le frontend — uniquement la référence (credential_ref) est éditée ; la résolution des secrets reste côté backend (VaultService, env)
+
+**Given** la configuration d'une intégration (URL, credential_ref, config optionnelle)
+**When** elle est sauvegardée via l'Admin (ou via l'API backend)
+**Then** elle est persistée côté **backend** (base de données, modèle Integration)
+**And** les **adapters fonctionnent sans le frontend** : une config créée ou mise à jour via API, migration ou script suffit pour que les adapters (AAP, etc.) utilisent cette config
+**And** le menu Admin Intégrations est un **moyen d'édition** de cette même config backend, pas une dépendance obligatoire
+
+**And** les champs spécifiques par type (ex. organisation, workspace_id pour Terraform Cloud ; owner/repo pour GitHub) sont documentés et, si nécessaire, exposés dans le formulaire ou dans config (JSON) éditable
+**And** des tests (backend + frontend) vérifient que les types sont bien listés et que la création/édition d'intégration persiste correctement
