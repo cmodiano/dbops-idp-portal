@@ -3,6 +3,7 @@ Celery tasks for workflow execution.
 Story 20.3: Asynchronous retry with Celery apply_async(countdown=...).
 Story 25.3: Periodic evaluation of WAITING gate conditions.
 Story 27.1: AAP job monitoring polling task.
+Story 27.4: GitHub Actions monitoring polling task (catch-up fallback).
 """
 from typing import Any
 
@@ -1141,3 +1142,174 @@ def _update_execution_from_poll(
             error_type=type(e).__name__,
             correlation_id=correlation_id,
         )
+
+
+# ---------------------------------------------------------------------------
+# Story 27.4: GitHub Actions polling task (catch-up fallback for webhooks)
+# ---------------------------------------------------------------------------
+
+
+@shared_task(bind=True, max_retries=0)
+def poll_github_actions_run_status(
+    self: Any,
+    execution_id: int,
+    platform_job_id: str,
+    owner: str = "",
+    repo: str = "",
+    base_url: str = "",
+    credential_ref: str = "",
+    poll_interval: int = 60,
+) -> dict:
+    """
+    Story 27.4 (AC4): Poll GitHub Actions for workflow run status and logs,
+    then broadcast updates via Django Channels to the execution's WebSocket group.
+
+    This is a catch-up fallback; webhooks are the primary real-time mechanism.
+    Self-scheduling: after each poll, if the run is still active, schedules
+    itself again with a countdown.
+
+    Args:
+        execution_id: IDP Portal execution ID.
+        platform_job_id: GitHub Actions run ID to monitor.
+        owner: GitHub repository owner.
+        repo: GitHub repository name.
+        base_url: GitHub API base URL (https://api.github.com).
+        credential_ref: Credential reference (PAT token).
+        poll_interval: Seconds between polls (default 60, longer since webhooks primary).
+
+    Returns:
+        dict with status information.
+    """
+    import asyncio
+
+    correlation_id = get_correlation_id()
+
+    logger.info(
+        "poll_github_actions_run_status_start",
+        execution_id=execution_id,
+        platform_job_id=platform_job_id,
+        owner=owner,
+        repo=repo,
+        correlation_id=correlation_id,
+    )
+
+    loop = None
+    try:
+        from adapters.github_actions_adapter import GitHubActionsAdapter
+
+        auth_headers = {"Authorization": f"Bearer {credential_ref}"}
+
+        adapter = GitHubActionsAdapter(
+            base_url=base_url,
+            auth_headers=auth_headers,
+            owner=owner,
+            repo=repo,
+        )
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        status_data = loop.run_until_complete(
+            adapter.get_status(
+                platform_job_id=platform_job_id,
+                correlation_id=correlation_id,
+            )
+        )
+
+        logs_data = loop.run_until_complete(
+            adapter.get_job_logs(
+                platform_job_id=platform_job_id,
+                correlation_id=correlation_id,
+            )
+        )
+    except Exception as e:
+        logger.error(
+            "poll_github_actions_run_status_adapter_error",
+            execution_id=execution_id,
+            platform_job_id=platform_job_id,
+            error=str(e),
+            error_type=type(e).__name__,
+            correlation_id=correlation_id,
+        )
+        poll_github_actions_run_status.apply_async(
+            args=[execution_id, platform_job_id],
+            kwargs={
+                "owner": owner,
+                "repo": repo,
+                "base_url": base_url,
+                "credential_ref": credential_ref,
+                "poll_interval": poll_interval,
+            },
+            countdown=poll_interval,
+        )
+        return {"outcome": "error", "error": str(e)}
+    finally:
+        if loop is not None:
+            loop.close()
+
+    idp_status = status_data.get("status", "SUBMITTED")
+    gh_status = status_data.get("github_actions_status", "queued")
+    gh_conclusion = status_data.get("github_actions_conclusion")
+    is_terminal = gh_status == "completed" and gh_conclusion in {
+        "success", "failure", "cancelled", "timed_out", "skipped"
+    }
+
+    _broadcast_execution_update(
+        execution_id=execution_id,
+        status_data=status_data,
+        logs_data=logs_data,
+        is_terminal=is_terminal,
+    )
+
+    _update_execution_from_poll(
+        execution_id=execution_id,
+        platform_job_id=platform_job_id,
+        idp_status=idp_status,
+        logs_content=logs_data.get("content", ""),
+        correlation_id=correlation_id,
+    )
+
+    if is_terminal:
+        logger.info(
+            "poll_github_actions_run_status_complete",
+            execution_id=execution_id,
+            platform_job_id=platform_job_id,
+            final_status=gh_status,
+            final_conclusion=gh_conclusion,
+            idp_status=idp_status,
+            correlation_id=correlation_id,
+        )
+        return {
+            "outcome": "complete",
+            "status": idp_status,
+            "github_actions_status": gh_status,
+            "github_actions_conclusion": gh_conclusion,
+        }
+
+    poll_github_actions_run_status.apply_async(
+        args=[execution_id, platform_job_id],
+        kwargs={
+            "owner": owner,
+            "repo": repo,
+            "base_url": base_url,
+            "credential_ref": credential_ref,
+            "poll_interval": poll_interval,
+        },
+        countdown=poll_interval,
+    )
+
+    logger.info(
+        "poll_github_actions_run_status_rescheduled",
+        execution_id=execution_id,
+        platform_job_id=platform_job_id,
+        github_actions_status=gh_status,
+        next_poll_in=poll_interval,
+        correlation_id=correlation_id,
+    )
+
+    return {
+        "outcome": "polling",
+        "status": idp_status,
+        "github_actions_status": gh_status,
+        "github_actions_conclusion": gh_conclusion,
+    }

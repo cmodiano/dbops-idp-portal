@@ -18,6 +18,7 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
+from executions.views.github_webhooks import github_webhook_workflow_run as _github_webhook_workflow_run
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -38,6 +39,12 @@ urlpatterns = [
     path('api/v1/reference/', include('reference.urls')),
     # Story 2.30: Admin CRUD categories
     path('api/v1/admin/', include('reference.admin_urls')),
+    # Story 27.4: GitHub Actions webhook (HMAC-secured, no DRF auth)
+    path(
+        'api/v1/webhooks/github/workflow_run',
+        _github_webhook_workflow_run,
+        name='github-webhook-workflow-run',
+    ),
 ]
 
 # Serve uploaded integration icons in development

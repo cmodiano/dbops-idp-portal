@@ -26,6 +26,9 @@ if not JWT_SECRET_KEY:  # noqa: F405
 if not ORACLE_PASSWORD:  # noqa: F405
     ORACLE_PASSWORD = 'test-oracle-password'  # noqa: F811
 
+# Story 27.4: GitHub webhook secret for tests
+GITHUB_WEBHOOK_SECRET = 'test-github-webhook-secret'
+
 # Story 22.2: Superuser fallback disabled by default in tests (fail-secure)
 # Enable per-test with @override_settings(ALLOW_SUPERUSER_FALLBACK=True) for dev-mode tests
 ALLOW_SUPERUSER_FALLBACK = False
