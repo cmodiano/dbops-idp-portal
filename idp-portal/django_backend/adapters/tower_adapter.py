@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 import httpx
 import structlog
 
+from adapters.base_adapter import BaseAdapter
 from core.exceptions import ServiceUnavailableError
 
 logger = structlog.get_logger(__name__)
@@ -34,7 +35,7 @@ TOWER_DEFAULT_TIMEOUT = 30.0
 TOWER_LOGS_TIMEOUT = 60.0
 
 
-class TowerAdapter:
+class TowerAdapter(BaseAdapter):
     """Adapter for interacting with Ansible Tower / AWX API v2.
 
     Requires base_url and auth_headers to be provided at init.

@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 import httpx
 import structlog
 
+from adapters.base_adapter import BaseAdapter
 from core.exceptions import ServiceUnavailableError
 
 logger = structlog.get_logger(__name__)
@@ -31,7 +32,7 @@ AAP_DEFAULT_TIMEOUT = 30.0
 AAP_LOGS_TIMEOUT = 60.0  # Longer timeout for potentially large log retrieval
 
 
-class AAPAdapter:
+class AAPAdapter(BaseAdapter):
     """Adapter for interacting with Ansible Automation Platform API v2.
 
     Requires base_url and auth_headers to be provided at init.
