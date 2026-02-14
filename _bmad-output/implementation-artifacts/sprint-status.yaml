@@ -356,3 +356,8 @@ development_status:
     26-15-corriger-deprecations-warnings-linters: done # Code review 2026-02-13: 10 issues found (3 CRIT + 4 HIGH + 3 MED), ALL auto-fixed — CRIT-1: 3 `except Exception:` → `as e` (test PASSES), CRIT-3: 19 Alert `message=` → `title=` (Ant Design 6.2), HIGH-1: mypy 29→80 documented as Epic 26 pre-existing — Ruff 0, ESLint 0, mypy baseline stable, 2247 backend + 2018 frontend tests ✅
     26-16-enforcer-mypy-codebase-pre-commit-hook: done # Code review 2026-02-13: 6 issues found (1 HIGH + 3 MEDIUM + 2 LOW), HIGH/MEDIUM auto-fixed — 0 mypy errors, strict mode on 7 modules, baseline removed, 2249 tests pass, CI/pre-commit blocking — Story COMPLETE ✅
     epic-26-retrospective: optional
+    # === Epic 27: Adapters d'intégration backend ===
+    # AAP en premier : analyse doc, appels workflows/job templates, monitoring jobs (logs + statut via websocket). Consommation API ou frontend.
+    epic-27: in-progress
+    27-1-adapter-aap-doc-workflows-jobs-monitoring-websocket: done # Adapter AAP — analyse doc, workflows, job templates, monitoring logs + statut via websocket — 41/41 tests pass — Code review: 7 CRITICAL + MEDIUM fixes applied
+    epic-27-retrospective: optional

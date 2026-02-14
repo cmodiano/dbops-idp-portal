@@ -2,6 +2,7 @@
 Celery tasks for workflow execution.
 Story 20.3: Asynchronous retry with Celery apply_async(countdown=...).
 Story 25.3: Periodic evaluation of WAITING gate conditions.
+Story 27.1: AAP job monitoring polling task.
 """
 from typing import Any
 
@@ -518,3 +519,300 @@ def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id:
         # Option 2: WorkflowRuntime polling task to detect completed steps
         # Option 3: Event-driven workflow engine (future architecture)
     )
+
+
+# ---------------------------------------------------------------------------
+# Story 27.1: AAP job monitoring polling task
+# ---------------------------------------------------------------------------
+
+@shared_task(bind=True, max_retries=0)
+def poll_aap_job_status(
+    self: Any,
+    execution_id: int,
+    platform_job_id: str,
+    resource_type: str = "job_template",
+    base_url: str = "",
+    credential_ref: str = "",
+    auth_flow: str = "token",
+    poll_interval: int = 5,
+) -> dict:
+    """
+    Story 27.1 (AC4): Poll AAP for job status and logs, then broadcast
+    updates via Django Channels to the execution's WebSocket group.
+
+    This task is designed to be self-scheduling: after each poll, if the
+    job is still running, it schedules itself again with a countdown.
+
+    Args:
+        execution_id: IDP Portal execution ID.
+        platform_job_id: AAP job ID to monitor.
+        resource_type: 'job_template' or 'workflow_job'.
+        base_url: AAP base URL (from integration).
+        credential_ref: Credential reference for auth.
+        auth_flow: Auth flow type (token, basic, pat).
+        poll_interval: Seconds between polls (default 5).
+
+    Returns:
+        dict with final status information.
+    """
+    import asyncio
+
+    correlation_id = get_correlation_id()
+
+    logger.info(
+        "poll_aap_job_status_start",
+        execution_id=execution_id,
+        platform_job_id=platform_job_id,
+        resource_type=resource_type,
+        correlation_id=correlation_id,
+    )
+
+    # CRITICAL-3 FIX: Initialize loop=None to prevent leak if exception before loop creation
+    loop = None
+    try:
+        # Build adapter
+        from adapters.aap_adapter import AAPAdapter
+        from adapters.utils import build_auth_headers as _build_headers_from_integration
+
+        # Build auth headers directly (we receive raw values, not an Integration object)
+        import base64 as _b64
+        if auth_flow == "basic":
+            _encoded = _b64.b64encode(credential_ref.encode()).decode()
+            auth_headers = {"Authorization": f"Basic {_encoded}"}
+        else:
+            auth_headers = {"Authorization": f"Bearer {credential_ref}"}
+
+        adapter = AAPAdapter(base_url=base_url, auth_headers=auth_headers)
+
+        # Run async adapter calls in sync Celery task
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)  # Set as current loop for this thread
+
+        status_data = loop.run_until_complete(
+            adapter.get_status(
+                platform_job_id=platform_job_id,
+                resource_type=resource_type,
+                correlation_id=correlation_id,
+            )
+        )
+
+        logs_data = loop.run_until_complete(
+            adapter.get_job_logs(
+                platform_job_id=platform_job_id,
+                resource_type=resource_type,
+                correlation_id=correlation_id,
+            )
+        )
+    except Exception as e:
+        logger.error(
+            "poll_aap_job_status_adapter_error",
+            execution_id=execution_id,
+            platform_job_id=platform_job_id,
+            error=str(e),
+            error_type=type(e).__name__,
+            correlation_id=correlation_id,
+        )
+        # Re-schedule despite error (transient failure)
+        poll_aap_job_status.apply_async(
+            args=[execution_id, platform_job_id],
+            kwargs={
+                "resource_type": resource_type,
+                "base_url": base_url,
+                "credential_ref": credential_ref,
+                "auth_flow": auth_flow,
+                "poll_interval": poll_interval,
+            },
+            countdown=poll_interval,
+        )
+        return {"outcome": "error", "error": str(e)}
+    finally:
+        # CRITICAL-3 FIX: Ensure loop is closed even if exception before loop creation
+        if loop is not None:
+            loop.close()
+
+    idp_status = status_data.get("status", "SUBMITTED")
+    aap_status = status_data.get("aap_status", "unknown")
+    is_terminal = aap_status in {"successful", "failed", "error", "canceled"}
+
+    # Broadcast updates via Django Channels
+    _broadcast_execution_update(
+        execution_id=execution_id,
+        status_data=status_data,
+        logs_data=logs_data,
+        is_terminal=is_terminal,
+    )
+
+    # Update execution step status in DB
+    _update_execution_from_poll(
+        execution_id=execution_id,
+        platform_job_id=platform_job_id,
+        idp_status=idp_status,
+        logs_content=logs_data.get("content", ""),
+        correlation_id=correlation_id,
+    )
+
+    if is_terminal:
+        logger.info(
+            "poll_aap_job_status_complete",
+            execution_id=execution_id,
+            platform_job_id=platform_job_id,
+            final_status=aap_status,
+            idp_status=idp_status,
+            correlation_id=correlation_id,
+        )
+        return {"outcome": "complete", "status": idp_status, "aap_status": aap_status}
+
+    # Re-schedule next poll
+    poll_aap_job_status.apply_async(
+        args=[execution_id, platform_job_id],
+        kwargs={
+            "resource_type": resource_type,
+            "base_url": base_url,
+            "credential_ref": credential_ref,
+            "auth_flow": auth_flow,
+            "poll_interval": poll_interval,
+        },
+        countdown=poll_interval,
+    )
+
+    logger.info(
+        "poll_aap_job_status_rescheduled",
+        execution_id=execution_id,
+        platform_job_id=platform_job_id,
+        aap_status=aap_status,
+        next_poll_in=poll_interval,
+        correlation_id=correlation_id,
+    )
+
+    return {"outcome": "polling", "status": idp_status, "aap_status": aap_status}
+
+
+def _broadcast_execution_update(
+    execution_id: int,
+    status_data: dict,
+    logs_data: dict,
+    is_terminal: bool,
+) -> None:
+    """Broadcast status and log updates to the execution's WebSocket group."""
+    try:
+        from channels.layers import get_channel_layer  # type: ignore[import-untyped]
+        from asgiref.sync import async_to_sync  # type: ignore[import-untyped]
+
+        channel_layer = get_channel_layer()
+        if channel_layer is None:
+            return
+
+        group_name = f"execution_{execution_id}"
+
+        # Send status update
+        async_to_sync(channel_layer.group_send)(
+            group_name,
+            {
+                "type": "status_update",
+                "data": {
+                    "execution_id": execution_id,
+                    "status": status_data.get("status"),
+                    "aap_status": status_data.get("aap_status"),
+                    "started": status_data.get("started"),
+                    "finished": status_data.get("finished"),
+                },
+            },
+        )
+
+        # Send log update
+        async_to_sync(channel_layer.group_send)(
+            group_name,
+            {
+                "type": "log_update",
+                "data": {
+                    "execution_id": execution_id,
+                    "content": logs_data.get("content", ""),
+                    "complete": logs_data.get("complete", False),
+                    "timestamp": logs_data.get("timestamp"),
+                },
+            },
+        )
+
+        # Send terminal event
+        if is_terminal:
+            event_type = "execution_complete" if status_data.get("status") == "COMPLETED" else "execution_failed"
+            async_to_sync(channel_layer.group_send)(
+                group_name,
+                {
+                    "type": event_type,
+                    "data": {
+                        "execution_id": execution_id,
+                        "status": status_data.get("status"),
+                        "aap_status": status_data.get("aap_status"),
+                        "finished": status_data.get("finished"),
+                    },
+                },
+            )
+    except ImportError:
+        logger.debug("poll_aap_broadcast_skipped_no_channels")
+    except Exception as e:
+        logger.warning(
+            "poll_aap_broadcast_error",
+            execution_id=execution_id,
+            error=str(e),
+            error_type=type(e).__name__,
+        )
+
+
+def _update_execution_from_poll(
+    execution_id: int,
+    platform_job_id: str,
+    idp_status: str,
+    logs_content: str,
+    correlation_id: str | None = None,
+) -> None:
+    """Update execution and step records based on polling results."""
+    try:
+        execution = Execution.objects.get(id=execution_id)
+
+        # Update execution status if it changed
+        current_status = execution.status
+        terminal_statuses = {ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED}
+
+        if current_status not in terminal_statuses and idp_status != current_status:
+            from executions.services import ExecutionService
+            svc = ExecutionService()
+            try:
+                svc.update_status(execution_id, idp_status, str(execution.user_id))
+            except ValueError as ve:
+                logger.warning(
+                    "poll_aap_status_transition_invalid",
+                    execution_id=execution_id,
+                    current=current_status,
+                    target=idp_status,
+                    error=str(ve),
+                    correlation_id=correlation_id,
+                )
+
+        # Update platform step logs
+        platform_step = (
+            ExecutionStep.objects.filter(
+                execution_id=execution_id,
+                platform_job_id=platform_job_id,
+            ).first()
+        )
+        if platform_step and logs_content:
+            output = platform_step.get_output() or {}
+            output["aap_logs"] = logs_content
+            platform_step.set_output(output)
+            platform_step.save()
+
+    except Execution.DoesNotExist:
+        logger.warning(
+            "poll_aap_execution_not_found",
+            execution_id=execution_id,
+            correlation_id=correlation_id,
+        )
+    except Exception as e:
+        logger.error(
+            "poll_aap_update_error",
+            execution_id=execution_id,
+            error=str(e),
+            error_type=type(e).__name__,
+            correlation_id=correlation_id,
+        )

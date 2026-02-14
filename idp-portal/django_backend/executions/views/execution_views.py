@@ -14,7 +14,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.auth_utils import get_user_ad_groups
-from core.exceptions import BadRequestError, NotFoundError, ForbiddenError
+from core.exceptions import BadRequestError, NotFoundError, ForbiddenError, ServiceUnavailableError
 from core.middleware import get_correlation_id, get_client_ip
 from core.throttling import ExecutionThrottle, GeneralAPIThrottle
 from core.utils import ensure_utc_isoformat
@@ -298,9 +298,20 @@ class ExecutionCancelView(APIView):
             return Response({"data": ExecutionSerializer(updated).data})
 
     def _attempt_remote_cancellation(self, execution: Any) -> None:
-        """Best-effort remote cancellation on execution engine."""
+        """Best-effort remote cancellation on execution engine.
+
+        Story 27.1: AAPAdapter now requires base_url + auth_headers from the
+        action's integration config.  When the integration is missing or
+        incomplete we skip silently (best-effort).
+
+        MEDIUM-3 FIX: Use asyncio.new_event_loop() instead of deprecated get_event_loop()
+        """
+        import asyncio
+
         platform_job_id = None
+        integration = None
         if execution.action and execution.action.integration:
+            integration = execution.action.integration
             params = execution.get_parameters() if hasattr(execution, 'get_parameters') else {}
             platform_job_id = (params or {}).get('platform_job_id')
 
@@ -312,24 +323,41 @@ class ExecutionCancelView(APIView):
             )
             return
 
+        if not integration or not integration.base_url:
+            exec_logger.debug(
+                "remote_cancellation_skipped_no_integration",
+                execution_id=execution.id,
+                correlation_id=get_correlation_id(),
+            )
+            return
+
+        loop = None
         try:
-            adapter = AAPAdapter()
-            adapter.cancel_execution(platform_job_id)
+            from adapters.utils import build_auth_headers
+            auth_headers = build_auth_headers(integration)
+            resource_type = (execution.get_parameters() or {}).get("resource_type", "job_template")
+            adapter = AAPAdapter(
+                base_url=integration.base_url,
+                auth_headers=auth_headers,
+            )
+            # MEDIUM-3 FIX: Create new event loop instead of get_event_loop() (deprecated Python 3.10+)
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(
+                adapter.cancel_execution(
+                    platform_job_id,
+                    resource_type=resource_type,
+                    correlation_id=get_correlation_id(),
+                )
+            )
             exec_logger.info(
                 "remote_cancellation_success",
                 execution_id=execution.id,
                 platform_job_id=platform_job_id,
                 correlation_id=get_correlation_id(),
             )
-        except NotImplementedError:
-            exec_logger.warning(
-                "remote_cancellation_not_supported",
-                execution_id=execution.id,
-                platform_job_id=platform_job_id,
-                correlation_id=get_correlation_id(),
-            )
         except Exception as e:
-            # Story 17.6: Justified broad catch - adapter may raise various exceptions
+            # Story 17.6: Justified broad catch — adapter may raise various exceptions
             exec_logger.warning(
                 "remote_cancellation_failed",
                 execution_id=execution.id,
@@ -339,6 +367,10 @@ class ExecutionCancelView(APIView):
                 correlation_id=get_correlation_id(),
                 exc_info=True,
             )
+        finally:
+            # MEDIUM-3 FIX: Ensure event loop is closed
+            if loop is not None:
+                loop.close()
 
 
 class ExecutionStepsView(APIView):
@@ -393,3 +425,126 @@ class ExecutionStepLogsView(APIView):
                 }
             }
         )
+
+
+class ExecutionLogsView(APIView):
+    """GET /executions/{id}/logs -> {data: ExecutionLogsResponse}
+
+    Story 27.1 (AC3): Retrieve AAP job logs for an execution via the adapter.
+    Returns logs from the AAP platform for the execution's platform_job_id.
+    Falls back to stored step output if no platform integration is available.
+    """
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [GeneralAPIThrottle]
+
+    @extend_schema(tags=['executions'], summary="Logs d'une exécution (AAP)")
+    def get(self, request: Request, execution_id: int) -> Response:
+        import asyncio
+        from adapters.utils import build_auth_headers
+
+        try:
+            execution = Execution.objects.select_related('action__integration').get(id=execution_id)
+        except Execution.DoesNotExist:
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message="Execution non trouvée",
+                details={"execution_id": execution_id},
+            )
+
+        # RBAC: owner or DBA/DBOPS
+        if not _dba_permission.has_object_permission(request, self, execution):
+            raise ForbiddenError(
+                code="FORBIDDEN",
+                message="Accès interdit",
+                details={"execution_id": execution_id},
+            )
+
+        correlation_id = get_correlation_id()
+        params = execution.get_parameters() or {}
+        platform_job_id = params.get("platform_job_id")
+        integration = getattr(execution.action, "integration", None) if execution.action else None
+
+        # If no platform_job_id or no AAP integration, return stored logs from steps
+        if not platform_job_id or not integration or not integration.base_url:
+            exec_logger.debug(
+                "execution_logs_fallback_to_steps",
+                execution_id=execution_id,
+                has_platform_job_id=bool(platform_job_id),
+                has_integration=bool(integration),
+                correlation_id=correlation_id,
+            )
+            steps = ExecutionStep.objects.filter(execution_id=execution_id).order_by("step_order")
+            step_logs = []
+            for step in steps:
+                output = step.get_output() if hasattr(step, "get_output") else None
+                step_logs.append({
+                    "step_id": step.id,
+                    "step_name": step.step_name,
+                    "step_order": step.step_order,
+                    "status": step.status,
+                    "output": output,
+                    "error_message": step.error_message,
+                })
+            return Response({"data": {"source": "steps", "logs": step_logs}})
+
+        # Fetch logs from AAP via adapter
+        resource_type = params.get("resource_type", "job_template")
+        auth_headers = build_auth_headers(integration)
+        adapter = AAPAdapter(
+            base_url=integration.base_url,
+            auth_headers=auth_headers,
+        )
+
+        # CRITICAL-4 FIX: Handle both ASGI (event loop running) and WSGI (no event loop) contexts
+        try:
+            # Check if there's already a running event loop (ASGI/Channels context)
+            try:
+                running_loop = asyncio.get_running_loop()
+                # Running loop exists → use async_to_sync pattern for Django Channels compatibility
+                from asgiref.sync import async_to_sync
+                logs = async_to_sync(adapter.get_job_logs)(
+                    platform_job_id=platform_job_id,
+                    resource_type=resource_type,
+                    correlation_id=correlation_id,
+                )
+            except RuntimeError:
+                # No running loop (WSGI context) → create new event loop
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    logs = loop.run_until_complete(
+                        adapter.get_job_logs(
+                            platform_job_id=platform_job_id,
+                            resource_type=resource_type,
+                            correlation_id=correlation_id,
+                        )
+                    )
+                finally:
+                    loop.close()
+        except ServiceUnavailableError:
+            raise
+        except Exception as e:
+            exec_logger.error(
+                "execution_logs_adapter_error",
+                execution_id=execution_id,
+                platform_job_id=platform_job_id,
+                error=str(e),
+                error_type=type(e).__name__,
+                correlation_id=correlation_id,
+            )
+            raise ServiceUnavailableError(
+                code="AAP_LOGS_UNAVAILABLE",
+                message="Impossible de récupérer les logs AAP",
+                details={"execution_id": execution_id, "platform_job_id": platform_job_id},
+            ) from e
+
+        exec_logger.info(
+            "execution_logs_retrieved",
+            execution_id=execution_id,
+            platform_job_id=platform_job_id,
+            log_length=len(logs.get("content", "")),
+            correlation_id=correlation_id,
+        )
+
+        return Response({"data": {"source": "aap", **logs}})

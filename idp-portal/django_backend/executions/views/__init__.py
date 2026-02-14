@@ -15,6 +15,7 @@ from .execution_views import (
     ExecutionCancelView,
     ExecutionStepsView,
     ExecutionStepLogsView,
+    ExecutionLogsView,
 )
 from .scheduled_views import (
     ScheduledExecutionsView,
@@ -40,6 +41,7 @@ __all__ = [
     'ExecutionCancelView',
     'ExecutionStepsView',
     'ExecutionStepLogsView',
+    'ExecutionLogsView',
     'PendingApprovalsView',
     'ScheduledExecutionsView',
     'ScheduledExecutionUpdateView',

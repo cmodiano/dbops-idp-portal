@@ -22,6 +22,11 @@ urlpatterns = [
         views.ExecutionStepLogsView.as_view(),
         name="execution-step-logs",
     ),
+    path(
+        "executions/<int:execution_id>/logs/",
+        views.ExecutionLogsView.as_view(),
+        name="execution-logs",
+    ),
 
     # Scheduled executions (Story 11.5-11.8)
     path("scheduled-executions/", views.ScheduledExecutionsView.as_view(), name="scheduled-executions"),

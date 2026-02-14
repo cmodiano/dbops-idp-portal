@@ -332,6 +332,12 @@ Intégrer les patterns DBOps dans le portail : modèle de cible générique (Exe
 **Phase :** Growth (Phase 2)
 **Référence :** implementation-artifacts/convergence-dbops-idp-portal.md
 
+### Epic 27 : Adapters d'intégration backend
+Exposer les intégrations (AAP en premier) via des adapters backend : appels API (workflows, job templates), suivi des jobs en cours (logs + statut) et mise à jour en temps réel (websockets). Consommation soit via l'API backend (déclenchement externe), soit via une action utilisateur dans le frontend.
+**FRs couvertes :** FR18 (routage plateformes d'exécution), FR19, FR20, FR23 (suivi temps réel, logs, callbacks)
+**NFRs couvertes :** NFR22 (pattern plugin/adapter)
+**Phase :** Growth (Phase 2)
+
 ---
 
 ## Epic 1 : Bootstrap Projet & Authentification
@@ -4387,3 +4393,36 @@ afin de **améliorer la maintenabilité, réduire les fichiers monolithiques, é
 **Référence détaillée :** planning-artifacts/epic-26-qualite-code-assessment-fev-2026.md
 
 **Portée :** Split inventory/services.py (God Service 1941 LOC), split executions/views.py (1375 LOC), extraction RBAC catalog, refactoring ExecutionsPage/WorkflowBuilderCanvas/CalendarPage, EnvironmentNormalizer, permission IsDBAOrDBOPS, standardisation format réponse API, pagination réutilisable.
+
+---
+
+## Epic 27 : Adapters d'intégration backend
+
+Exposer les intégrations (AAP en premier) via des adapters backend : appels API pour workflows et job templates, suivi des jobs en cours (logs + statut) et mise à jour en temps réel via websockets. Les exécutions peuvent être déclenchées soit via l'API backend, soit via une action utilisateur dans le frontend ; dans les deux cas le backend utilise l'adapter AAP pour lancer et suivre les jobs.
+
+### Story 27.1 : Adapter AAP — analyse doc, workflows, job templates, monitoring (logs + statut via websocket)
+
+As a **système backend** (ou utilisateur via le portail),
+I want **utiliser un adapter AAP pour lancer des workflows / job templates et suivre l'exécution des jobs en temps réel (logs + statut)**,
+So that **on puisse orchestrer et monitorer les runs Ansible sans dépendre directement des détails de l'API AAP**.
+
+**Acceptance Criteria:**
+
+**Given** la documentation officielle AAP (API REST et websockets / événements)
+**When** on conçoit l'adapter
+**Then** une analyse/synthèse de la doc est disponible pour : workflows, job templates, jobs, logs, statuts
+**And** les points d'intégration (auth, endpoints, format des événements) sont identifiés
+
+**Given** une configuration d'intégration AAP valide (URL, credential_ref)
+**When** le backend lance une exécution
+**Then** l'adapter peut lancer un **workflow job** (workflow) et un **job** (job template) via l'API AAP
+**And** les paramètres nécessaires (extra_vars, limit, etc.) sont supportés selon la doc AAP
+
+**Given** un job AAP en cours
+**When** on suit ce job
+**Then** les **logs** du job sont récupérables (streaming ou polling selon la doc)
+**And** le **statut** du job (running, success, failed, etc.) est mis à jour en temps réel
+**And** les **websockets** (ou mécanisme équivalent côté AAP) sont utilisés pour recevoir les mises à jour et les exposer côté backend (ou relay vers le frontend selon l'architecture)
+
+**And** l'authentification AAP (token, OAuth, etc.) et le stockage des secrets (Vault) sont documentés ou implémentés selon les standards du projet
+**And** l'adapter est consommable depuis l'API backend et depuis une action déclenchée depuis le frontend
