@@ -2,6 +2,7 @@
 Adapter utilities — shared helpers for building adapter configurations.
 
 Story 27.1: Centralizes auth header construction from Integration model.
+Story 27.6: Vault credential_ref resolution via VaultService.
 """
 from __future__ import annotations
 
@@ -17,15 +18,31 @@ if TYPE_CHECKING:
 logger = structlog.get_logger(__name__)
 
 
-def build_auth_headers(integration: Integration) -> dict[str, str]:
+def _resolve_credential(credential_ref: str, correlation_id: str | None = None) -> str:
+    """Resolve credential_ref — Vault path or direct token.
+
+    If *credential_ref* starts with ``vault:``, it is resolved via VaultService.
+    Otherwise it is returned as-is (direct token for dev/test).
+    """
+    if credential_ref.startswith("vault:"):
+        from core.vault_service import get_vault_service
+
+        return str(get_vault_service().get_secret(credential_ref, correlation_id))
+    return credential_ref
+
+
+def build_auth_headers(
+    integration: Integration,
+    correlation_id: str | None = None,
+) -> dict[str, str]:
     """Build HTTP auth headers from an Integration's auth_flow and credential_ref.
 
-    For now, returns a Bearer token header using credential_ref as the token value.
-    In production, credential_ref points to a Vault path and should be resolved
-    via VaultService. This helper provides the fallback/direct token usage.
+    If credential_ref is a Vault reference (``vault:…``), it is resolved via
+    VaultService at call time. Otherwise it is used directly as the token.
 
     Args:
         integration: Integration model instance.
+        correlation_id: Request correlation ID for Vault logging.
 
     Returns:
         Dict of HTTP headers (e.g. {"Authorization": "Bearer <token>"}).
@@ -59,17 +76,22 @@ def build_auth_headers(integration: Integration) -> dict[str, str]:
         )
 
     try:
+        # Story 27.6: Resolve Vault references via VaultService
+        resolved = _resolve_credential(credential_ref, correlation_id)
+
         if auth_flow == "basic":
-            # credential_ref expected as "username:password"
-            encoded = base64.b64encode(credential_ref.encode()).decode()
+            # resolved expected as "username:password"
+            encoded = base64.b64encode(resolved.encode()).decode()
             return {"Authorization": f"Basic {encoded}"}
 
         if auth_flow == "pat":
-            return {"Authorization": f"Bearer {credential_ref}"}
+            return {"Authorization": f"Bearer {resolved}"}
 
         # Default: token / basic_then_token — use Bearer
-        return {"Authorization": f"Bearer {credential_ref}"}
+        return {"Authorization": f"Bearer {resolved}"}
 
+    except BadRequestError:
+        raise
     except Exception as e:
         logger.error(
             "build_auth_headers_encoding_error",

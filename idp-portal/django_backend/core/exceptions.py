@@ -81,6 +81,37 @@ class ConflictError(Exception):
         super().__init__(self.message)
 
 
+# Story 27.6: Vault-specific exceptions
+class VaultError(ServiceUnavailableError):
+    """Base exception for Vault-related errors."""
+    def __init__(self, code: str = "VAULT_ERROR", message: str = "Vault error", details: dict | None = None) -> None:
+        super().__init__(code=code, message=message, details=details)
+
+
+class VaultUnavailableError(VaultError):
+    """Vault is unavailable (timeout, 500, 503, circuit breaker open)."""
+    def __init__(self, message: str = "Vault unavailable", details: dict | None = None) -> None:
+        super().__init__(code="VAULT_UNAVAILABLE", message=message, details=details)
+
+
+class VaultAuthError(VaultError):
+    """Vault authentication failed (invalid token, AppRole login failure)."""
+    def __init__(self, message: str = "Vault authentication failed", details: dict | None = None) -> None:
+        super().__init__(code="VAULT_AUTH_ERROR", message=message, details=details)
+
+
+class VaultSecretNotFoundError(VaultError):
+    """Secret not found in Vault (404)."""
+    def __init__(self, message: str = "Vault secret not found", details: dict | None = None) -> None:
+        super().__init__(code="VAULT_SECRET_NOT_FOUND", message=message, details=details)
+
+
+class VaultAccessDeniedError(VaultError):
+    """Access denied to Vault secret (403)."""
+    def __init__(self, message: str = "Vault access denied", details: dict | None = None) -> None:
+        super().__init__(code="VAULT_ACCESS_DENIED", message=message, details=details)
+
+
 def _get_request_context(context: dict[str, Any]) -> dict[str, Any]:
     """Extract request context for logging."""
     request = context.get('request')
