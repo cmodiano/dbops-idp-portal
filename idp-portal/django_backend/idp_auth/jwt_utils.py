@@ -21,8 +21,8 @@ class TokenPayload:
         ad_groups: list[str] | None = None,
         type: str = "access",
         exp: datetime | None = None,
-        **kwargs,  # Accept extra fields from JWT
-    ):
+        **kwargs: Any,  # Accept extra fields from JWT
+    ) -> None:
         self.sub = sub
         self.username = username
         self.profile = profile

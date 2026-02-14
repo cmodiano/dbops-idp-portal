@@ -1,6 +1,8 @@
 """Validation des workflows et de leurs paramètres par étape."""
 from __future__ import annotations
 
+from typing import Any
+
 from core.exceptions import BadRequestError
 from executions.utils import (
     validate_workflow_step_parameters,
@@ -13,9 +15,9 @@ class WorkflowValidator:
 
     @staticmethod
     def validate_referenced_actions(
-        workflow_action,
+        workflow_action: Any,
         correlation_id: str,
-        user_id,
+        user_id: Any,
         ip_address: str,
     ) -> list[int] | None:
         """
@@ -33,8 +35,8 @@ class WorkflowValidator:
 
     @staticmethod
     def validate_step_parameters(
-        workflow_action,
-        workflow_step_parameters,
+        workflow_action: Any,
+        workflow_step_parameters: Any,
     ) -> dict:
         """
         Validate and normalize workflow_step_parameters (Story 4.12).
@@ -51,7 +53,7 @@ class WorkflowValidator:
         )
 
     @staticmethod
-    def reject_step_parameters_for_non_workflow(action, workflow_step_parameters) -> None:
+    def reject_step_parameters_for_non_workflow(action: Any, workflow_step_parameters: Any) -> None:
         """Reject workflow_step_parameters on non-workflow actions (Story 4.12)."""
         if workflow_step_parameters is not None:
             raise BadRequestError(

@@ -179,14 +179,14 @@ class DatabaseFilterParamsSerializer(serializers.Serializer):
 
 class ServerListResponseSerializer(serializers.Serializer):
     """Wrapper for servers list response. Story 23.3 AC7 - OpenAPI documentation."""
-    data = ServerSerializer(many=True, help_text="List of servers")
+    data = ServerSerializer(many=True, help_text="List of servers")  # type: ignore[assignment]
 
 
 class InstanceListResponseSerializer(serializers.Serializer):
     """Wrapper for instances list response. Story 23.3 AC7 - OpenAPI documentation."""
-    data = InstanceSerializer(many=True, help_text="List of instances")
+    data = InstanceSerializer(many=True, help_text="List of instances")  # type: ignore[assignment]
 
 
 class DatabaseListResponseSerializer(serializers.Serializer):
     """Wrapper for databases list response. Story 23.3 AC7 - OpenAPI documentation."""
-    data = DatabaseSerializer(many=True, help_text="List of databases")
+    data = DatabaseSerializer(many=True, help_text="List of databases")  # type: ignore[assignment]

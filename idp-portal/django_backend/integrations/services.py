@@ -4,6 +4,8 @@ Handles complex operations like JSON Schema validation for config.
 Story M.8 - Task 9: Structured logging with structlog.
 """
 
+from typing import Any, cast
+
 import structlog
 
 from django.db import transaction
@@ -69,7 +71,7 @@ class IntegrationService:
         Returns:
             Parsed config dict or None
         """
-        return integration.get_config()
+        return cast("dict[Any, Any] | None", integration.get_config())
     
     @transaction.atomic
     def create_integration(self, integration_data, user=None):
@@ -133,7 +135,7 @@ class IntegrationService:
                 )
 
             # Attach warnings for API response
-            integration._warnings = warnings
+            integration._warnings = warnings  # type: ignore[attr-defined]
 
             return integration
         except IntegrityError:
@@ -260,10 +262,10 @@ class IntegrationService:
                 details={'name': integration.name}
             )
 
-        integration._warnings = warnings
+        integration._warnings = warnings  # type: ignore[attr-defined]
 
         return integration
-    
+
     @transaction.atomic
     def delete_integration(self, integration_id: int, user=None):
         """

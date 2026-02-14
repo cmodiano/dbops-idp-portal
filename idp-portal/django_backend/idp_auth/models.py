@@ -9,8 +9,8 @@ class UserManager(models.Manager["User"]):
     Provides query methods for common user queries.
     """
     
-    def create_or_update(self, username: str, display_name: str | None = None, 
-                        profile: str | None = None, saml_subject: str | None = None):
+    def create_or_update(self, username: str, display_name: str | None = None,
+                        profile: str | None = None, saml_subject: str | None = None) -> User:
         """
         Create or update a user (UPSERT on username).
         
@@ -33,7 +33,7 @@ class UserManager(models.Manager["User"]):
         )
         return user
     
-    def find_by_username(self, username: str):
+    def find_by_username(self, username: str) -> User | None:
         """
         Find user by username.
         
@@ -73,5 +73,5 @@ class User(models.Model):
         db_table = 'USERS'
         ordering = ['username']
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.username

@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import json
 import logging
+from typing import Any, cast
 from django.db import models
 from django.db.models import Q
 
@@ -12,7 +15,7 @@ class ProfileManager(models.Manager):
     Provides query methods for common profile queries.
     """
     
-    def find_by_ad_groups(self, ad_groups: list[str]):
+    def find_by_ad_groups(self, ad_groups: list[str]) -> models.QuerySet[Profile]:
         """
         Find profiles matching the given AD group identifiers.
 
@@ -33,7 +36,7 @@ class ProfileManager(models.Manager):
             QuerySet of profiles matching any of the AD groups, ordered by name
         """
         if not ad_groups:
-            return self.none()
+            return self.none()  # type: ignore[return-value]
 
         normalized: set[str] = set()
         for raw in ad_groups:
@@ -60,25 +63,25 @@ class ProfileManager(models.Manager):
                     pass
 
         if not normalized:
-            return self.none()
+            return self.none()  # type: ignore[return-value]
 
         q = Q()
         for val in normalized:
             q |= Q(ad_group__iexact=val) | Q(name__iexact=val)
 
-        return self.filter(q).order_by("name")
+        return self.filter(q).order_by("name")  # type: ignore[return-value]
     
-    def list_with_permissions_count(self):
+    def list_with_permissions_count(self) -> models.QuerySet[Profile]:
         """
         List all profiles with permission count annotation.
         Counts both action and target permissions.
-        
+
         Returns:
             QuerySet with permission_count annotation (used by ProfileListSerializer).
         """
         from django.db.models import Count, Q
-        
-        return self.annotate(
+
+        return self.annotate(  # type: ignore[no-any-return]
             permission_count=Count(
                 'profileactionpermission',
                 filter=Q(profileactionpermission__isnull=False),
@@ -112,7 +115,7 @@ class Profile(models.Model):
         db_table = 'PROFILES'
         ordering = ['name']
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
 
@@ -146,55 +149,55 @@ class ProfileActionPermission(models.Model):
     class Meta:
         db_table = 'PROFILE_ACTION_PERMISSIONS'
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.profile.name} - Action Permissions"
 
     # JSON field helpers
-    def get_action_ids(self):
+    def get_action_ids(self) -> list[int]:
         """Deserialize JSON array from CLOB."""
         if self.action_ids_json:
             try:
-                return json.loads(self.action_ids_json)
+                return json.loads(self.action_ids_json)  # type: ignore[no-any-return]
             except (json.JSONDecodeError, TypeError) as e:
                 logger.warning(f"Failed to deserialize action_ids for Profile {self.profile_id}: {e}")
                 return []
         return []
 
-    def set_action_ids(self, value):
+    def set_action_ids(self, value: list[int] | None) -> None:
         """Serialize JSON array to CLOB."""
         if value is not None:
             self.action_ids_json = json.dumps(value)
         else:
             self.action_ids_json = None
 
-    def get_tag_patterns(self):
+    def get_tag_patterns(self) -> list[str]:
         """Deserialize JSON array from CLOB."""
         if self.tag_patterns_json:
             try:
-                return json.loads(self.tag_patterns_json)
+                return json.loads(self.tag_patterns_json)  # type: ignore[no-any-return]
             except (json.JSONDecodeError, TypeError) as e:
                 logger.warning(f"Failed to deserialize tag_patterns for Profile {self.profile_id}: {e}")
                 return []
         return []
 
-    def set_tag_patterns(self, value):
+    def set_tag_patterns(self, value: list[str] | None) -> None:
         """Serialize JSON array to CLOB."""
         if value is not None:
             self.tag_patterns_json = json.dumps(value)
         else:
             self.tag_patterns_json = None
 
-    def get_environments(self):
+    def get_environments(self) -> list[str]:
         """Deserialize JSON array from CLOB."""
         if self.environments_json:
             try:
-                return json.loads(self.environments_json)
+                return json.loads(self.environments_json)  # type: ignore[no-any-return]
             except (json.JSONDecodeError, TypeError) as e:
                 logger.warning(f"Failed to deserialize environments for Profile {self.profile_id}: {e}")
                 return []
         return []
 
-    def set_environments(self, value):
+    def set_environments(self, value: list[str] | None) -> None:
         """Serialize JSON array to CLOB."""
         if value is not None:
             self.environments_json = json.dumps(value)
@@ -247,38 +250,38 @@ class ProfileTargetPermission(models.Model):
     class Meta:
         db_table = 'PROFILE_TARGET_PERMISSIONS'
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.profile.name} - Target Permissions"
 
     # JSON field helpers
-    def get_target_names(self):
+    def get_target_names(self) -> list[str]:
         """Deserialize JSON array from CLOB."""
         if self.target_names_json:
             try:
-                return json.loads(self.target_names_json)
+                return json.loads(self.target_names_json)  # type: ignore[no-any-return]
             except (json.JSONDecodeError, TypeError) as e:
                 logger.warning(f"Failed to deserialize target_names for Profile {self.profile_id}: {e}")
                 return []
         return []
 
-    def set_target_names(self, value):
+    def set_target_names(self, value: list[str] | None) -> None:
         """Serialize JSON array to CLOB."""
         if value is not None:
             self.target_names_json = json.dumps(value)
         else:
             self.target_names_json = None
 
-    def get_target_patterns(self):
+    def get_target_patterns(self) -> list[str]:
         """Deserialize JSON array from CLOB."""
         if self.target_patterns_json:
             try:
-                return json.loads(self.target_patterns_json)
+                return json.loads(self.target_patterns_json)  # type: ignore[no-any-return]
             except (json.JSONDecodeError, TypeError) as e:
                 logger.warning(f"Failed to deserialize target_patterns for Profile {self.profile_id}: {e}")
                 return []
         return []
 
-    def set_target_patterns(self, value):
+    def set_target_patterns(self, value: list[str] | None) -> None:
         """Serialize JSON array to CLOB."""
         if value is not None:
             self.target_patterns_json = json.dumps(value)
@@ -297,7 +300,7 @@ class ProfileTargetPermission(models.Model):
         """
         if self.filter_by_attribute_json:
             try:
-                return json.loads(self.filter_by_attribute_json)
+                return cast("dict[str, list[str]] | None", json.loads(self.filter_by_attribute_json))
             except (json.JSONDecodeError, TypeError) as e:
                 # Code review fix: JSON malformé = ERROR (corruption données), pas WARNING
                 logger.error(

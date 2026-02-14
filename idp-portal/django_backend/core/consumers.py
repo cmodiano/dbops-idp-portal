@@ -22,13 +22,13 @@ class AuthenticatedWebSocketConsumer(AsyncWebsocketConsumer):
     Subclasses implement handle_authenticated_message() for business logic.
     """
 
-    async def connect(self):
+    async def connect(self) -> None:
         await self.accept()
         self.authenticated = False
-        self.user_id = None
-        self.ad_groups = []
+        self.user_id: str | None = None
+        self.ad_groups: list[str] = []
 
-    async def receive(self, text_data=None, bytes_data=None):
+    async def receive(self, text_data: str | None = None, bytes_data: bytes | None = None) -> None:
         if text_data is None:
             await self.close(code=4002)
             return
@@ -71,9 +71,9 @@ class AuthenticatedWebSocketConsumer(AsyncWebsocketConsumer):
 
         await self.handle_authenticated_message(message)
 
-    async def handle_authenticated_message(self, message: dict):
+    async def handle_authenticated_message(self, message: dict) -> None:
         """Override in subclasses to handle business messages after auth."""
         pass
 
-    async def disconnect(self, code):
+    async def disconnect(self, code: int) -> None:
         pass

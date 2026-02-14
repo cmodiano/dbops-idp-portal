@@ -10,16 +10,16 @@ from django.db import models
 class RefEngineQuerySet(models.QuerySet):
     """Custom QuerySet for RefEngine model."""
 
-    def active(self):
+    def active(self) -> models.QuerySet["RefEngine"]:
         """Return only active engines."""
         return self.filter(is_active=1)
 
-    def ordered(self):
+    def ordered(self) -> models.QuerySet["RefEngine"]:  # type: ignore[override]
         """Return engines ordered by display_order."""
         return self.order_by('display_order', 'code')
 
 
-class RefEngineManager(models.Manager.from_queryset(RefEngineQuerySet)):
+class RefEngineManager(models.Manager.from_queryset(RefEngineQuerySet)):  # type: ignore[misc]
     """Custom manager for RefEngine model."""
 
 
@@ -42,23 +42,23 @@ class RefEngine(models.Model):
         verbose_name = 'Engine Reference'
         verbose_name_plural = 'Engine References'
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.code} ({'active' if self.is_active else 'inactive'})"
 
 
 class RefPlatformQuerySet(models.QuerySet):
     """Custom QuerySet for RefPlatform model."""
 
-    def active(self):
+    def active(self) -> models.QuerySet["RefPlatform"]:
         """Return only active platforms."""
         return self.filter(is_active=1)
 
-    def ordered(self):
+    def ordered(self) -> models.QuerySet["RefPlatform"]:  # type: ignore[override]
         """Return platforms ordered by display_order."""
         return self.order_by('display_order', 'code')
 
 
-class RefPlatformManager(models.Manager.from_queryset(RefPlatformQuerySet)):
+class RefPlatformManager(models.Manager.from_queryset(RefPlatformQuerySet)):  # type: ignore[misc]
     """Custom manager for RefPlatform model."""
 
 
@@ -81,18 +81,18 @@ class RefPlatform(models.Model):
         verbose_name = 'Platform Reference'
         verbose_name_plural = 'Platform References'
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.code} ({'active' if self.is_active else 'inactive'})"
 
 
 class RefCategoryQuerySet(models.QuerySet):
     """Custom QuerySet for RefCategory model."""
 
-    def active(self):
+    def active(self) -> models.QuerySet["RefCategory"]:
         """Return only active categories."""
         return self.filter(is_active=1)
 
-    def ordered(self):
+    def ordered(self) -> models.QuerySet["RefCategory"]:  # type: ignore[override]
         """Return categories ordered by display_order, code."""
         return self.order_by('display_order', 'code')
 
@@ -120,5 +120,5 @@ class RefCategory(models.Model):
         verbose_name = 'Category Reference'
         verbose_name_plural = 'Category References'
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.code} ({'active' if self.is_active else 'inactive'})"

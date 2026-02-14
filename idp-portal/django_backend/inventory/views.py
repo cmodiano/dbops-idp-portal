@@ -7,11 +7,14 @@ No local DB - reads from external sources.
 
 from __future__ import annotations
 
+from typing import Any
+
 import structlog
 
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, BasePermission
 
@@ -40,7 +43,7 @@ class IsAdminOrIntegration(BasePermission):
     Checks if user has admin profile or is_staff flag.
     """
 
-    def has_permission(self, request, view):
+    def has_permission(self, request: Any, view: Any) -> bool:
         user = request.user
         if not user or not user.is_authenticated:
             return False
@@ -60,7 +63,7 @@ class IsAdminOrIntegration(BasePermission):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def list_targets(request):
+def list_targets(request: Request) -> Response:
     """
     List targets with optional filters.
     Applies RBAC filtering based on user's profiles.
@@ -120,7 +123,7 @@ def list_targets(request):
     try:
         # Get targets with RBAC filtering (Story 22.6: returns total not total_count)
         targets, total, rbac_truncated = inventory_service.list_targets_for_user(
-            user_id=user.id,
+            user_id=user.id,  # type: ignore[arg-type]
             ad_groups=ad_groups,
             environment=environment,
             search=search,
@@ -155,7 +158,7 @@ def list_targets(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, IsAdminOrIntegration])
-def list_all_targets(request):
+def list_all_targets(request: Request) -> Response:
     """
     List all targets without RBAC filtering.
     Requires admin profile or is_staff flag (for service accounts).
@@ -246,7 +249,7 @@ def list_all_targets(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def list_environments(request):
+def list_environments(request: Request) -> Response:
     """
     List distinct environments from inventory.
     Story 13.7 - AC2: Source of truth for environments is inventory.
@@ -311,7 +314,7 @@ def _validate_server_access(
     ad_groups = get_user_ad_groups(user)
     try:
         allowed_targets, _, _ = inventory_service.list_targets_for_user(
-            user_id=user.id,
+            user_id=user.id,  # type: ignore[attr-defined]
             ad_groups=ad_groups,
             environment=environment,
             page=1,
@@ -322,7 +325,7 @@ def _validate_server_access(
     except (KeyError, TypeError, InventoryServiceError) as e:
         logger.error(
             "rbac_validation_failed",
-            user_id=user.id,
+            user_id=user.id,  # type: ignore[attr-defined]
             environment=environment,
             error=str(e),
             correlation_id=correlation_id,
@@ -333,7 +336,7 @@ def _validate_server_access(
         if server_name not in allowed_server_names:
             logger.warning(
                 "rbac_server_access_denied",
-                user_id=user.id,
+                user_id=user.id,  # type: ignore[attr-defined]
                 environment=environment,
                 requested_server=server_name,
                 correlation_id=correlation_id,
@@ -345,14 +348,14 @@ def _validate_server_access(
         if unauthorized:
             logger.warning(
                 "rbac_servers_access_denied",
-                user_id=user.id,
+                user_id=user.id,  # type: ignore[attr-defined]
                 environment=environment,
                 unauthorized_servers=unauthorized,
                 correlation_id=correlation_id,
             )
             raise PermissionDenied(f"Access denied to server: {unauthorized[0]}")
 
-    return list(allowed_server_names)
+    return list(s for s in allowed_server_names if s is not None)
 
 
 @extend_schema(
@@ -377,7 +380,7 @@ def _validate_server_access(
 )
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def list_servers(request):
+def list_servers(request: Request) -> Response:
     """List servers with RBAC filtering. Story 23.3 AC1."""
     correlation_id = get_correlation_id()
     user = request.user
@@ -398,7 +401,7 @@ def list_servers(request):
         # RBAC: get allowed servers for this user
         ad_groups = get_user_ad_groups(user)
         allowed_targets, _, _ = inventory_service.list_targets_for_user(
-            user_id=user.id,
+            user_id=user.id,  # type: ignore[arg-type]
             ad_groups=ad_groups,
             environment=environment,
             page=1,
@@ -465,7 +468,7 @@ def list_servers(request):
 )
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def list_instances(request):
+def list_instances(request: Request) -> Response:
     """List instances with optional server filter. Story 23.3 AC2."""
     correlation_id = get_correlation_id()
     user = request.user
@@ -547,7 +550,7 @@ def list_instances(request):
 )
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def list_databases(request):
+def list_databases(request: Request) -> Response:
     """List databases with optional server filter. Story 23.3 AC3."""
     correlation_id = get_correlation_id()
     user = request.user

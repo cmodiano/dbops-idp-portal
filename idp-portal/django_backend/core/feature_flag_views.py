@@ -4,7 +4,10 @@ Story 17.12: Feature Flag API views.
 Provides endpoints for listing, querying, and modifying feature flags.
 """
 
+from __future__ import annotations
+
 import re
+from typing import Any
 
 import structlog
 from django.utils import timezone
@@ -30,7 +33,7 @@ class FeatureFlagListView(APIView):
     """
     permission_classes = [IsAuthenticated, DBOPSProfilePermission]
 
-    def get(self, request):
+    def get(self, request: Any) -> Response:
         source = feature_flags._get_flags_source()
 
         if source == 'database':
@@ -69,7 +72,7 @@ class FeatureFlagStatusView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
+    def get(self, request: Any) -> Response:
         user = request.user
         context = {
             'user_id': str(user.id) if hasattr(user, 'id') else str(user),
@@ -87,7 +90,7 @@ class FeatureFlagUpdateView(APIView):
     """
     permission_classes = [IsAuthenticated, DBOPSProfilePermission]
 
-    def patch(self, request, flag_key):
+    def patch(self, request: Any, flag_key: str) -> Response:
         if not FLAG_KEY_PATTERN.match(flag_key):
             return Response(
                 {'error': {'code': 'INVALID_FLAG_KEY', 'message': 'Flag key must match [a-z0-9][a-z0-9_-]*'}},

@@ -4,9 +4,12 @@ Handles complex operations like SAML subject lookup and profile resolution.
 Story M.8 - Task 9: Structured logging with structlog.
 """
 
+from __future__ import annotations
+
 import structlog
 
 from django.db import transaction
+from django.db.models import QuerySet
 from idp_auth.models import User
 from profiles.models import Profile
 from catalog.models import UserFavorite, Action, ActionStatus
@@ -23,7 +26,7 @@ class AuthService:
     """
     
     def create_or_update_user(self, username: str, display_name: str | None = None,
-                             profile: str | None = None, saml_subject: str | None = None):
+                             profile: str | None = None, saml_subject: str | None = None) -> User:
         """
         Create or update a user (UPSERT on username).
         
@@ -56,25 +59,25 @@ class AuthService:
         
         return user
     
-    def get_by_username(self, username: str):
+    def get_by_username(self, username: str) -> User | None:
         """
         Get user by username.
-        
+
         Args:
             username: Username to search for
-        
+
         Returns:
             User instance or None
         """
         return User.objects.find_by_username(username)
-    
-    def get_by_id(self, user_id: int):
+
+    def get_by_id(self, user_id: int) -> User | None:
         """
         Get user by ID.
-        
+
         Args:
             user_id: ID of the user
-        
+
         Returns:
             User instance or None
         """
@@ -82,14 +85,14 @@ class AuthService:
             return User.objects.get(id=user_id)
         except User.DoesNotExist:
             return None
-    
-    def find_by_saml_subject(self, saml_subject: str):
+
+    def find_by_saml_subject(self, saml_subject: str) -> User | None:
         """
         Find user by SAML subject.
-        
+
         Args:
             saml_subject: SAML subject identifier
-        
+
         Returns:
             User instance or None
         """
@@ -97,8 +100,8 @@ class AuthService:
             return User.objects.get(saml_subject=saml_subject)
         except User.DoesNotExist:
             return None
-    
-    def resolve_user_profiles(self, user: User, ad_groups: list[str]):
+
+    def resolve_user_profiles(self, user: User, ad_groups: list[str]) -> QuerySet[Profile]:
         """
         Resolve user profiles based on AD groups.
         
@@ -113,14 +116,14 @@ class AuthService:
     
     # UserFavorite CRUD methods
     @transaction.atomic
-    def add_favorite(self, user_id: int, action_id: int):
+    def add_favorite(self, user_id: int, action_id: int) -> UserFavorite:
         """
         Add an action to user's favorites (idempotent).
-        
+
         Args:
             user_id: ID of the user
             action_id: ID of the action
-        
+
         Returns:
             UserFavorite instance
         """
@@ -150,14 +153,14 @@ class AuthService:
         return favorite
     
     @transaction.atomic
-    def remove_favorite(self, user_id: int, action_id: int):
+    def remove_favorite(self, user_id: int, action_id: int) -> bool:
         """
         Remove an action from user's favorites.
-        
+
         Args:
             user_id: ID of the user
             action_id: ID of the action
-        
+
         Returns:
             True if removed, False if not found
         """
@@ -179,7 +182,7 @@ class AuthService:
         except UserFavorite.DoesNotExist:
             return False
     
-    def list_favorites(self, user_id: int):
+    def list_favorites(self, user_id: int) -> QuerySet[UserFavorite]:
         """
         List all favorites for a user, excluding disabled actions.
 
@@ -201,7 +204,7 @@ class AuthService:
             .order_by('-created_at')
         )
     
-    def is_favorite(self, user_id: int, action_id: int):
+    def is_favorite(self, user_id: int, action_id: int) -> bool:
         """
         Check if an action is in user's favorites (excluding disabled actions).
 

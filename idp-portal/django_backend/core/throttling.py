@@ -8,6 +8,10 @@ IMPORTANT: All throttle class scopes MUST be globally unique to avoid cache key 
 Current scopes: auth, token_refresh, execution, general_api, public
 """
 
+from __future__ import annotations
+
+from typing import Any
+
 import structlog
 from django.conf import settings
 from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
@@ -30,10 +34,10 @@ class _RateLimitEnabledMixin:
         False: Throttle request (exceeded limit)
     """
 
-    def allow_request(self, request, view):
+    def allow_request(self, request: Any, view: Any) -> bool:
         if not getattr(settings, 'RATELIMIT_ENABLED', True):
             return True
-        return super().allow_request(request, view)  # type: ignore[misc]  # MRO resolves via concrete throttle class
+        return super().allow_request(request, view)  # type: ignore[misc,no-any-return]
 
 
 class AuthEndpointThrottle(_RateLimitEnabledMixin, AnonRateThrottle):
@@ -43,7 +47,7 @@ class AuthEndpointThrottle(_RateLimitEnabledMixin, AnonRateThrottle):
     """
     scope = 'auth'
 
-    def get_cache_key(self, request, view):
+    def get_cache_key(self, request: Any, view: Any) -> str:
         return self.cache_format % {
             'scope': self.scope,
             'ident': get_client_ip(request),
@@ -57,7 +61,7 @@ class TokenRefreshThrottle(_RateLimitEnabledMixin, AnonRateThrottle):
     """
     scope = 'token_refresh'
 
-    def get_cache_key(self, request, view):
+    def get_cache_key(self, request: Any, view: Any) -> str:
         return self.cache_format % {
             'scope': self.scope,
             'ident': get_client_ip(request),
@@ -87,7 +91,7 @@ class PublicEndpointThrottle(_RateLimitEnabledMixin, AnonRateThrottle):
     """
     scope = 'public'
 
-    def get_cache_key(self, request, view):
+    def get_cache_key(self, request: Any, view: Any) -> str:
         return self.cache_format % {
             'scope': self.scope,
             'ident': get_client_ip(request),

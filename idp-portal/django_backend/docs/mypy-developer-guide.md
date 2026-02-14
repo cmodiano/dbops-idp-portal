@@ -7,20 +7,23 @@
 - **Refactoring sûr** : les changements de signature sont vérifiés partout
 - **Documentation vivante** : les annotations de type documentent les contrats d'API
 
+## Mode strict activé (Story 26.16)
+
+Le projet est en **mode strict** depuis février 2026 :
+- `disallow_untyped_defs = true` sur les modules principaux (core, idp_auth, executions, catalog, inventory, profiles, reference)
+- **Toute erreur mypy bloque** le commit (pre-commit hook) et la CI
+- **0 erreur tolérée** — le mécanisme baseline a été supprimé
+
 ## Exécuter mypy localement
 
 ```bash
 cd django_backend
+source .venv/bin/activate
 
 # Vérifier les types (utilise pyproject.toml)
-source .venv/bin/activate
 mypy .
 
-# Vérifier par rapport au baseline (comme en CI)
-scripts/check_mypy_baseline.sh
-
-# Mettre à jour le baseline après corrections
-scripts/generate_mypy_baseline.sh
+# Doit retourner 0 erreur — sinon le commit sera bloqué
 ```
 
 ## Interpréter les erreurs mypy
@@ -34,6 +37,7 @@ scripts/generate_mypy_baseline.sh
 | `error: has no attribute` | Accès à un attribut inexistant | Vérifier le type de l'objet |
 | `error: Incompatible types` | Mauvais type passé | Corriger le type ou ajouter un cast |
 | `error: arg-type` | Argument de mauvais type | Vérifier la signature de la fonction |
+| `error: Function is missing a type annotation` | Fonction sans annotations | Ajouter types sur paramètres et retour |
 
 ### Ignorer une erreur spécifique
 
@@ -88,68 +92,27 @@ class ActionSerializer(serializers.ModelSerializer):
         return value
 ```
 
+### Vues DRF
+
+```python
+from rest_framework.request import Request
+from rest_framework.response import Response
+
+class ActionViewSet(viewsets.ModelViewSet):
+    def list(self, request: Request) -> Response:
+        ...
+
+    def create(self, request: Request) -> Response:
+        ...
+```
+
 ## Bonnes pratiques
 
-1. **Annoter les nouvelles fonctions** : toute nouvelle fonction doit avoir des annotations de type
-2. **Utiliser `Optional` correctement** : `str | None` au lieu de `Optional[str]` (Python 3.10+)
+1. **Annoter toutes les nouvelles fonctions** : paramètres ET retour obligatoires sur les modules principaux
+2. **Utiliser la syntaxe moderne** : `str | None` au lieu de `Optional[str]` (Python 3.10+)
 3. **Éviter `Any`** : utiliser des types concrets quand possible
 4. **Annoter les variables ambiguës** : `items: list[str] = []` au lieu de `items = []`
 5. **Utiliser les génériques Django** : `QuerySet["Model"]`, `Manager["Model"]`
+6. **Utiliser `from __future__ import annotations`** : pour les références circulaires
 
-## Contribuer à réduire le baseline
-
-Le baseline actuel est de 89 erreurs. Chaque correction réduit ce nombre :
-
-1. Choisir un fichier dans `mypy-report.txt`
-2. Corriger les erreurs de type
-3. Exécuter `scripts/generate_mypy_baseline.sh`
-4. Commiter le baseline mis à jour
-
-### Exemples de corrections réelles
-
-**Exemple 1 : Erreur `error: Returning Any from function`**
-
-```python
-# AVANT (erreur mypy)
-def get_user_permissions(user):
-    return user.permissions.all()
-
-# APRÈS (corrigé)
-from django.db.models import QuerySet
-from profiles.models import Permission
-
-def get_user_permissions(user) -> QuerySet[Permission]:
-    return user.permissions.all()
-```
-
-**Exemple 2 : Erreur `error: Need type annotation for 'items'`**
-
-```python
-# AVANT (erreur mypy)
-items = []
-for action in actions:
-    items.append(action.name)
-
-# APRÈS (corrigé)
-items: list[str] = []
-for action in actions:
-    items.append(action.name)
-```
-
-**Exemple 3 : Erreur `error: "None" has no attribute "id"`**
-
-```python
-# AVANT (erreur mypy)
-def process_action(action_id: int):
-    action = Action.objects.filter(id=action_id).first()
-    return action.name  # mypy: error si action est None
-
-# APRÈS (corrigé)
-def process_action(action_id: int) -> str | None:
-    action = Action.objects.filter(id=action_id).first()
-    if action is None:
-        return None
-    return action.name
-```
-
-Voir : [docs/mypy-improvement-roadmap.md](mypy-improvement-roadmap.md)
+Voir : [docs/mypy-improvement-roadmap.md](mypy-improvement-roadmap.md) pour l'historique des phases.

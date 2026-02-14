@@ -13,11 +13,13 @@ Story 23.1 - Config-driven multi-table mapping (servers, instances, databases).
 
 from __future__ import annotations
 
-import re  # noqa: F401 — backward compat for tests importing SAFE_TABLE_NAME_PATTERN
+import re  # noqa: F401 — backward compat
+from typing import Any, cast
 
 import structlog
 from cachetools import TTLCache
 from django.db import connection  # noqa: F401 — backward compat for tests patching inventory.services.connection
+from django.db.models import QuerySet
 
 from integrations.models import IntegrationType
 from inventory.mapper import InventoryMapper, MapperValidationError
@@ -27,6 +29,7 @@ from inventory.query_executor import (
     InventoryServiceError,
     MAX_MULTI_TABLE_RESULTS,
     MAX_FLAT_TABLE_RESULTS,
+    SAFE_TABLE_NAME_PATTERN,  # noqa: F401 — backward compat for tests
 )
 from inventory.rbac_filter import (
     InventoryRBACFilter,
@@ -35,6 +38,17 @@ from inventory.rbac_filter import (
 from profiles.models import Profile
 from core.environment import EnvironmentHelper
 from core.middleware import get_correlation_id
+
+__all__ = [
+    "InventoryService",
+    "InventoryServiceError",
+    "MAX_TARGETS_FOR_RBAC_FILTER",
+    "connection",
+    "MapperValidationError",
+    "MAX_MULTI_TABLE_RESULTS",
+    "MAX_FLAT_TABLE_RESULTS",
+    "SAFE_TABLE_NAME_PATTERN",
+]
 
 logger = structlog.get_logger(__name__)
 
@@ -57,7 +71,7 @@ class InventoryService:
 
     # --- Backward compatibility delegations ---
 
-    def get_active_inventory_integration(self):
+    def get_active_inventory_integration(self) -> Any:
         """Delegate to source_resolver."""
         return self.source_resolver.get_active_inventory_integration()
 
@@ -65,27 +79,33 @@ class InventoryService:
         """Delegate to query_executor."""
         return self.query_executor._get_inventory_mapper()
 
-    def _execute_mapped_query(self, sql: str, params: dict) -> list[dict]:
+    def _execute_mapped_query(self, sql: str, params: dict[str, Any]) -> list[dict[str, Any]]:
         """Delegate to query_executor."""
         return self.query_executor.execute_mapped_query(sql, params)
 
     def _read_oracle_inventory(self, table_or_synonym: str,
-                               environment=None, search=None, target_type=None,
-                               page: int = 1, page_size: int = 25):
+                               environment: str | None = None, search: str | None = None,
+                               target_type: str | None = None,
+                               page: int = 1, page_size: int = 25) -> tuple[list[dict[str, Any]], int]:
         """Delegate to query_executor."""
         return self.query_executor.read_oracle_inventory(
             table_or_synonym, environment, search, target_type, page, page_size
         )
 
-    def _read_servers_from_config(self, environment=None, engine_type=None):
+    def _read_servers_from_config(self, environment: str | None = None,
+                                   engine_type: str | None = None) -> list[dict[str, Any]]:
         """Delegate to query_executor.read_servers (backward compat)."""
         return self.query_executor.read_servers(environment, engine_type)
 
-    def _read_instances_from_config(self, environment=None, server_name=None, server_names=None):
+    def _read_instances_from_config(self, environment: str | None = None,
+                                     server_name: str | None = None,
+                                     server_names: list[str] | None = None) -> list[dict[str, Any]]:
         """Delegate to query_executor.read_instances (backward compat)."""
         return self.query_executor.read_instances(environment, server_name, server_names)
 
-    def _read_databases_from_config(self, environment=None, server_name=None, server_names=None):
+    def _read_databases_from_config(self, environment: str | None = None,
+                                     server_name: str | None = None,
+                                     server_names: list[str] | None = None) -> list[dict[str, Any]]:
         """Delegate to query_executor.read_databases (backward compat)."""
         return self.query_executor.read_databases(environment, server_name, server_names)
 
@@ -115,13 +135,15 @@ class InventoryService:
 
         if integration:
             if integration.type == IntegrationType.INVENTORY:
-                return self._list_targets_from_api(
+                result = self._list_targets_from_api(
                     integration, environment, search, target_type, page, page_size
                 )
+                return cast("tuple[list[dict], int]", result)
             elif integration.type == IntegrationType.INVENTORY_DB:
-                return self._list_targets_from_db_schema(
+                result = self._list_targets_from_db_schema(
                     integration, environment, search, target_type, page, page_size
                 )
+                return cast("tuple[list[dict], int]", result)
 
         # Fallback: DBOPS_INVENTORY synonym
         logger.info(
@@ -129,12 +151,13 @@ class InventoryService:
             fallback="DBOPS_INVENTORY",
             correlation_id=correlation_id
         )
-        return self._list_targets_from_fallback(
+        return cast("tuple[list[dict], int]", self._list_targets_from_fallback(
             environment, search, target_type, page, page_size
-        )
+        ))
 
-    def _list_targets_from_api(self, integration, environment=None, search=None,
-                                target_type=None, page=1, page_size=25):
+    def _list_targets_from_api(self, integration: Any, environment: str | None = None,
+                                search: str | None = None, target_type: str | None = None,
+                                page: int = 1, page_size: int = 25) -> tuple[list[dict[str, Any]], int]:
         """List targets from external API inventory (placeholder)."""
         correlation_id = get_correlation_id()
         logger.warning(
@@ -145,8 +168,9 @@ class InventoryService:
         )
         return [], 0
 
-    def _list_targets_from_db_schema(self, integration, environment=None, search=None,
-                                      target_type=None, page=1, page_size=25):
+    def _list_targets_from_db_schema(self, integration: Any, environment: str | None = None,
+                                      search: str | None = None, target_type: str | None = None,
+                                      page: int = 1, page_size: int = 25) -> tuple[list[dict[str, Any]], int]:
         """List targets from DB schema inventory."""
         correlation_id = get_correlation_id()
         config = integration.get_config() or {}
@@ -165,8 +189,9 @@ class InventoryService:
             environment, search, target_type, page, page_size
         )
 
-    def _list_targets_from_fallback(self, environment=None, search=None,
-                                     target_type=None, page=1, page_size=25):
+    def _list_targets_from_fallback(self, environment: str | None = None,
+                                     search: str | None = None, target_type: str | None = None,
+                                     page: int = 1, page_size: int = 25) -> tuple[list[dict[str, Any]], int]:
         """List targets from DBOPS_INVENTORY fallback."""
         return self.query_executor.read_oracle_inventory(
             'DBOPS_INVENTORY',
@@ -474,7 +499,7 @@ class InventoryService:
             return [], 0, False
 
         # Step 1: Aggregate permissions
-        permissions = self._aggregate_profile_permissions(profiles, environment, correlation_id)
+        permissions = self._aggregate_profile_permissions(profiles, environment, correlation_id or "")
         if permissions is None:
             return [], 0, False
 
@@ -482,12 +507,12 @@ class InventoryService:
 
         # Step 2: Load targets
         all_targets, rbac_truncated = self._load_targets(
-            permissions, allowed_environments, search, target_type, user_id, correlation_id
+            permissions, allowed_environments, search, target_type, user_id, correlation_id or ""
         )
 
         # Step 3: Apply RBAC chain
         filtered_targets = self._apply_rbac_chain_for_user(
-            all_targets, allowed_environments, permissions, user_id, correlation_id
+            all_targets, allowed_environments, permissions, user_id, correlation_id or ""
         )
 
         # Step 4: Paginate
@@ -514,8 +539,8 @@ class InventoryService:
         return page_results, total, rbac_truncated
 
     def _aggregate_profile_permissions(
-        self, profiles, environment: str | None, correlation_id: str
-    ) -> dict | None:
+        self, profiles: QuerySet[Profile], environment: str | None, correlation_id: str
+    ) -> dict[str, Any] | None:
         """
         Aggregate permissions from all user profiles.
 

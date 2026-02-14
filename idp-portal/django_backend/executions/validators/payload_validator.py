@@ -1,6 +1,8 @@
 """Validation du payload de création d'exécution."""
 from __future__ import annotations
 
+from typing import Any
+
 from catalog.models import Action
 from core.exceptions import BadRequestError, NotFoundError
 
@@ -13,7 +15,7 @@ class ExecutionPayloadValidator:
     """Valide la structure du payload de création d'exécution."""
 
     @staticmethod
-    def validate(payload: dict, request) -> dict:
+    def validate(payload: dict, request: Any) -> dict:
         """
         Validate execution creation payload.
 

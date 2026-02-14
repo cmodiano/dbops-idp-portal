@@ -37,7 +37,7 @@ Config format (stored in Integration.config JSON):
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, cast
 import structlog
 
 from core.middleware import get_correlation_id
@@ -118,7 +118,7 @@ class InventoryMapper:
                 f"Entity '{entity_name}' missing 'table' in config"
             )
         _validate_table_name(table)
-        return table
+        return cast(str, table)
 
     def get_column(self, entity_name: str, concept: str) -> str:
         """
@@ -146,7 +146,7 @@ class InventoryMapper:
                 f"Column concept '{concept}' not mapped for entity '{entity_name}'"
             )
         _validate_column_name(col)
-        return col
+        return cast(str, col)
 
     def get_id_column(self, entity_name: str) -> str:
         """
@@ -172,7 +172,7 @@ class InventoryMapper:
                 f"Entity '{entity_name}' missing 'id_column' in config"
             )
         _validate_column_name(id_col)
-        return id_col
+        return cast(str, id_col)
 
     def build_select_clause(self, entity_name: str) -> str:
         """

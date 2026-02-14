@@ -63,13 +63,9 @@ jobs:
         run: |
           uv pip install -r requirements-dev.lock --system
           pip install django-stubs djangorestframework-stubs
-      - name: Run mypy
+      - name: Run mypy type check (strict, blocking)
         working-directory: django_backend
-        run: |
-          mypy . --ignore-missing-imports --no-error-summary || {
-            echo "⚠️ Mypy found type issues (expected due to incomplete third-party stubs)"
-            exit 0
-          }
+        run: mypy . --no-error-summary
 
   typecheck-frontend:
     name: Type Check Frontend (tsc)

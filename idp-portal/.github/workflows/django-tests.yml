@@ -119,7 +119,6 @@ jobs:
         uv pip install -r requirements-dev.lock --system
         pip install django-stubs djangorestframework-stubs
 
-    - name: Run mypy type checker
+    - name: Run mypy type check (strict, blocking)
       working-directory: django_backend
-      run: mypy --ignore-missing-imports .
-      continue-on-error: true  # Type checking is advisory for now
+      run: mypy . --no-error-summary

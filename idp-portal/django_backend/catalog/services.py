@@ -4,16 +4,20 @@ Handles complex operations like status transitions, tag management, and validati
 Story M.8 - Task 9: Structured logging with structlog.
 """
 
-import structlog
+from __future__ import annotations
 
+import structlog
+from typing import cast, Any
 from django.db import transaction
 from django.core.paginator import Paginator
 from django.utils import timezone
+from django.db.models import QuerySet
 from catalog.models import Action, ActionStatus, Tag, ActionTag, ActionItemType
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id
 from core.exceptions import ConflictError
+from idp_auth.models import User
 
 logger = structlog.get_logger(__name__)
 
@@ -51,13 +55,13 @@ def _validate_transition(current_status: str, transition: str) -> str:
     Raises:
         InvalidTransitionError: If transition is invalid
     """
-    transitions = _VALID_TRANSITIONS.get(current_status, {})
+    transitions = _VALID_TRANSITIONS.get(current_status) or {}  # type: ignore[call-overload]
     if transition not in transitions:
         raise InvalidTransitionError(
             f"Transition '{transition}' invalide pour le statut '{current_status}'. "
             f"Transitions autorisées: {list(transitions.keys())}"
         )
-    return transitions[transition]
+    return cast(str, transitions[transition])
 
 
 class CatalogService:
@@ -67,7 +71,7 @@ class CatalogService:
     """
     
     @transaction.atomic
-    def create_action(self, action_data, created_by_user):
+    def create_action(self, action_data: dict[str, Any], created_by_user: User) -> Action:
         """
         Create a new action with tags and audit.
 
@@ -111,7 +115,7 @@ class CatalogService:
         
         # Set JSON fields (OracleJSONField handles serialization automatically)
         # Normalize empty strings to None - OracleJSONField rejects "" as invalid JSON
-        def _json_value(val):
+        def _json_value(val: Any) -> Any:
             if val is None or (isinstance(val, str) and not val.strip()):
                 return None
             return val
@@ -145,13 +149,13 @@ class CatalogService:
             details={'name': action.name, 'status': action.status},
             correlation_id=correlation_id
         )
-        
-        return action
+
+        return action  # type: ignore[no-any-return]
     
-    def _sync_tags(self, action, tag_names):
+    def _sync_tags(self, action: Action, tag_names: list[str]) -> None:
         """
         Synchronize tags for an action.
-        
+
         Args:
             action: Action instance
             tag_names: List of tag name strings
@@ -169,18 +173,24 @@ class CatalogService:
             tag, created = Tag.objects.get_or_create(name=normalized)
             ActionTag.objects.create(action=action, tag=tag)
     
-    def list_all(self, status=None, tags_filter=None, item_type=None, 
-                 page=1, page_size=25):
+    def list_all(
+        self,
+        status: str | None = None,
+        tags_filter: list[str] | None = None,
+        item_type: str | None = None,
+        page: int = 1,
+        page_size: int = 25
+    ) -> tuple[list[Action], dict[str, Any]]:
         """
         List all actions with pagination and filters.
-        
+
         Args:
             status: Optional status filter
             tags_filter: Optional list of tag names (AND logic)
             item_type: Optional item type filter (action or workflow)
             page: Page number (1-based)
             page_size: Number of items per page
-        
+
         Returns:
             Tuple of (list of Action instances, PaginationInfo dict)
         """
@@ -212,31 +222,31 @@ class CatalogService:
         
         return list(page_obj), pagination_info
     
-    def get_by_id(self, action_id: int):
+    def get_by_id(self, action_id: int) -> Action | None:
         """
         Get action by ID with prefetched relations.
-        
+
         Args:
             action_id: ID of the action
-        
+
         Returns:
             Action instance or None
         """
         try:
-            return Action.objects.with_tags().with_creator().get(id=action_id)
+            return Action.objects.with_tags().with_creator().get(id=action_id)  # type: ignore[no-any-return]
         except Action.DoesNotExist:
             return None
     
     @transaction.atomic
-    def update_action(self, action_id: int, action_update_data, user):
+    def update_action(self, action_id: int, action_update_data: dict[str, Any], user: User) -> Action | None:
         """
         Update action metadata (allowed for all statuses).
-        
+
         Args:
             action_id: ID of the action to update
             action_update_data: Dict with fields to update
             user: User instance performing the update
-        
+
         Returns:
             Updated Action instance or None if not found
         """
@@ -281,22 +291,22 @@ class CatalogService:
             entity_id=action.id,
             details={'name': action.name}
         )
-        
-        return action
-    
+
+        return action  # type: ignore[no-any-return]
+
     @transaction.atomic
-    def update_status(self, action_id: int, transition: str, user):
+    def update_status(self, action_id: int, transition: str, user: User) -> Action | None:
         """
         Update action status via a valid transition.
-        
+
         Args:
             action_id: ID of the action
             transition: Transition name (publish, disable, enable)
             user: User instance performing the transition
-        
+
         Returns:
             Updated Action instance or None if not found
-        
+
         Raises:
             InvalidTransitionError: If transition is invalid
         """
@@ -332,16 +342,16 @@ class CatalogService:
                 'transition': transition,
             }
         )
-        
-        return action
-    
+
+        return action  # type: ignore[no-any-return]
+
     def count_executions(self, action_id: int) -> int:
         """Count total executions for an action."""
         from executions.models import Execution
         return Execution.objects.filter(action_id=action_id).count()
 
     @transaction.atomic
-    def delete_action(self, action_id: int, user=None):
+    def delete_action(self, action_id: int, user: User | None = None) -> bool:
         """
         Hard-delete an action — only allowed if execution_count == 0 (Story 18.1, AC1).
 
@@ -379,7 +389,9 @@ class CatalogService:
         return True
 
     @transaction.atomic
-    def deactivate_action(self, action_id: int, user, deletion_reason: str | None = None):
+    def deactivate_action(
+        self, action_id: int, user: User, deletion_reason: str | None = None
+    ) -> dict[str, Any] | None:
         """
         Soft-delete (deactivate) an action (Story 18.1, AC2).
         Sets status='disabled', fills deleted_at/deleted_by/deletion_reason.
@@ -448,7 +460,7 @@ class CatalogService:
         }
 
     @transaction.atomic
-    def reactivate_action(self, action_id: int, user):
+    def reactivate_action(self, action_id: int, user: User) -> Action | None:
         """
         Reactivate a disabled action (Story 18.1, AC5).
         Resets status to 'published', clears soft-delete fields.
@@ -481,14 +493,14 @@ class CatalogService:
             correlation_id=correlation_id,
         )
 
-        return action
+        return action  # type: ignore[no-any-return]
 
-    def get_workflows_referencing_action(self, action_id: int):
+    def get_workflows_referencing_action(self, action_id: int) -> list[dict[str, Any]]:
         """Return list of workflow dicts referencing the given action (Story 18.1, AC3)."""
         workflows = self._find_workflows_referencing_action(action_id)
         return [{'id': w.id, 'name': w.name, 'status': w.status} for w in workflows]
 
-    def _find_workflows_referencing_action(self, action_id: int):
+    def _find_workflows_referencing_action(self, action_id: int) -> list[Action]:
         """Find workflows whose execution_steps reference the given action_id."""
         workflows = Action.objects.filter(
             item_type=ActionItemType.WORKFLOW,
@@ -505,10 +517,10 @@ class CatalogService:
                     break
         return result
     
-    def add_tags(self, action_id: int, tag_names: list[str]):
+    def add_tags(self, action_id: int, tag_names: list[str]) -> Action | None:
         """
         Add tags to an action.
-        
+
         Args:
             action_id: ID of the action
             tag_names: List of tag names to add
@@ -524,13 +536,13 @@ class CatalogService:
                 continue
             tag, created = Tag.objects.get_or_create(name=normalized)
             ActionTag.objects.get_or_create(action=action, tag=tag)
-        
-        return action
-    
-    def remove_tags(self, action_id: int, tag_names: list[str]):
+
+        return action  # type: ignore[no-any-return]
+
+    def remove_tags(self, action_id: int, tag_names: list[str]) -> Action | None:
         """
         Remove tags from an action.
-        
+
         Args:
             action_id: ID of the action
             tag_names: List of tag names to remove
@@ -547,13 +559,13 @@ class CatalogService:
                 ActionTag.objects.filter(action=action, tag=tag).delete()
             except Tag.DoesNotExist:
                 pass
-        
-        return action
-    
-    def sync_tags(self, action_id: int, tag_names: list[str]):
+
+        return action  # type: ignore[no-any-return]
+
+    def sync_tags(self, action_id: int, tag_names: list[str]) -> Action | None:
         """
         Synchronize tags for an action (replace all existing tags).
-        
+
         Args:
             action_id: ID of the action
             tag_names: List of tag names to set
@@ -562,29 +574,34 @@ class CatalogService:
             action = Action.objects.get(id=action_id)
         except Action.DoesNotExist:
             return None
-        
+
         self._sync_tags(action, tag_names)
-        return action
-    
-    def search_by_tags(self, tag_names: list[str], status=None):
+        return action  # type: ignore[no-any-return]
+
+    def search_by_tags(self, tag_names: list[str], status: str | None = None) -> QuerySet[Action]:
         """
         Search actions by tags with AND logic.
-        
+
         Args:
             tag_names: List of tag names (action must have all)
             status: Optional status filter
-        
+
         Returns:
             QuerySet of actions matching all tags
         """
         queryset = Action.objects.search_by_tags(tag_names)
         if status:
             queryset = queryset.filter(status=status)
-        return queryset.with_tags().with_creator()
+        return queryset.with_tags().with_creator()  # type: ignore[no-any-return]
     
     @transaction.atomic
-    def update_execution_steps(self, action_id: int, steps: list[dict],
-                               change_type_config: dict | None = None, user=None):
+    def update_execution_steps(
+        self,
+        action_id: int,
+        steps: list[dict[str, Any]],
+        change_type_config: dict[str, Any] | None = None,
+        user: User | None = None
+    ) -> Action | None:
         """
         Update execution steps and change type config for an action.
         Only allowed for actions in draft or disabled status.
@@ -647,4 +664,4 @@ class CatalogService:
                 details={'updated_fields': ['execution_steps', 'change_type_config']}
             )
 
-        return action
+        return action  # type: ignore[no-any-return]

@@ -1,6 +1,7 @@
 import json
 import logging
 from datetime import datetime
+from typing import Any, cast
 from django.db import models
 from idp_auth.models import User
 from catalog.models import Action
@@ -47,52 +48,52 @@ class ExecutionManager(models.Manager):
     Provides query methods for common execution queries.
     """
     
-    def list_by_user(self, user_id: int):
+    def list_by_user(self, user_id: int) -> models.QuerySet:
         """
         List executions for a specific user.
-        
+
         Args:
             user_id: ID of the user
-        
+
         Returns:
             QuerySet of executions for the user, ordered by created_at DESC
         """
         return self.filter(user_id=user_id).order_by('-created_at')
-    
-    def list_by_status(self, status: str):
+
+    def list_by_status(self, status: str) -> models.QuerySet:
         """
         Filter executions by status.
-        
+
         Args:
             status: Status value (SUBMITTED, RUNNING, COMPLETED, etc.)
-        
+
         Returns:
             QuerySet filtered by status
         """
         return self.filter(status=status)
-    
-    def get_recent(self, limit: int = 100):
+
+    def get_recent(self, limit: int = 100) -> models.QuerySet:
         """
         Get recent executions for dashboard.
         Optimized with select_related to avoid N+1 queries.
-        
+
         Args:
             limit: Maximum number of executions to return
-        
+
         Returns:
             QuerySet of recent executions with action and user prefetched
         """
         return self.select_related('action', 'user').order_by('-created_at')[:limit]
-    
-    def with_action(self):
+
+    def with_action(self) -> models.QuerySet:
         """Select related action to avoid N+1 queries."""
         return self.select_related('action')
-    
-    def with_user(self):
+
+    def with_user(self) -> models.QuerySet:
         """Select related user to avoid N+1 queries."""
         return self.select_related('user')
-    
-    def with_steps(self):
+
+    def with_steps(self) -> models.QuerySet:
         """Prefetch execution steps to avoid N+1 queries."""
         return self.prefetch_related('executionstep_set')
 
@@ -173,21 +174,21 @@ class Execution(models.Model):
             models.Index(fields=['action', 'created_at'], name='idx_exec_action_created'),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Execution {self.id} - {self.action.name} ({self.status})"
 
     # JSON field helper
-    def get_parameters(self):
+    def get_parameters(self) -> dict | None:
         """Deserialize JSON from CLOB."""
         if self.parameters:
             try:
-                return json.loads(self.parameters)
+                return json.loads(self.parameters)  # type: ignore[no-any-return]
             except (json.JSONDecodeError, TypeError) as e:
                 logger.warning(f"Failed to deserialize parameters for Execution {self.id}: {e}")
                 return None
         return None
 
-    def set_parameters(self, value):
+    def set_parameters(self, value: dict | None) -> None:
         """Serialize JSON to CLOB."""
         if value is not None:
             self.parameters = json.dumps(value)
@@ -232,20 +233,20 @@ class ExecutionTarget(models.Model):
         db_table = 'EXECUTION_TARGETS'
         unique_together = [['execution', 'target_type', 'target_id']]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"ExecutionTarget {self.id} - {self.target_type}:{self.target_name}"
 
     def get_target_metadata(self) -> dict | None:
         """Deserialize JSON from CLOB."""
         if self.target_metadata:
             try:
-                return json.loads(self.target_metadata)
+                return cast("dict[Any, Any] | None", json.loads(self.target_metadata))
             except (json.JSONDecodeError, TypeError) as e:
                 logger.warning(f"Failed to deserialize target_metadata for ExecutionTarget {self.id}: {e}")
                 return None
         return None
 
-    def set_target_metadata(self, value: dict | None):
+    def set_target_metadata(self, value: dict | None) -> None:
         """Serialize JSON to CLOB."""
         if value is not None:
             self.target_metadata = json.dumps(value, ensure_ascii=False)
@@ -314,21 +315,21 @@ class ExecutionStep(models.Model):
         unique_together = [['execution', 'step_order']]
         ordering = ['execution', 'step_order']
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Step {self.step_order} - {self.step_name} ({self.status})"
 
     # JSON field helper
-    def get_output(self):
+    def get_output(self) -> dict | None:
         """Deserialize JSON from CLOB."""
         if self.output:
             try:
-                return json.loads(self.output)
+                return json.loads(self.output)  # type: ignore[no-any-return]
             except (json.JSONDecodeError, TypeError) as e:
                 logger.warning(f"Failed to deserialize output for ExecutionStep {self.id}: {e}")
                 return None
         return None
 
-    def set_output(self, value):
+    def set_output(self, value: dict | None) -> None:
         """Serialize JSON to CLOB."""
         if value is not None:
             self.output = json.dumps(value)
@@ -349,15 +350,15 @@ class ScheduledExecutionManager(models.Manager):
     Provides query methods for common scheduled execution queries.
     """
     
-    def list_by_user(self, user_id: int):
+    def list_by_user(self, user_id: int) -> models.QuerySet:
         """List scheduled executions for a specific user."""
         return self.filter(user_id=user_id).order_by('-created_at')
-    
-    def list_by_status(self, status: str):
+
+    def list_by_status(self, status: str) -> models.QuerySet:
         """Filter scheduled executions by status."""
         return self.filter(status=status).order_by('-created_at')
-    
-    def list_pending(self, before_datetime: datetime):
+
+    def list_pending(self, before_datetime: datetime) -> models.QuerySet:
         """
         List pending scheduled executions for external scheduler.
         Includes one-time (scheduled_at <= before) and active recurring (next_execution_date <= before).
@@ -416,21 +417,21 @@ class ScheduledExecution(models.Model):
         db_table = 'SCHEDULED_EXECUTIONS'
         ordering = ['-created_at']
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Scheduled Execution {self.id} - {self.action.name} ({self.status})"
 
     # JSON field helper
-    def get_parameters(self):
+    def get_parameters(self) -> dict | None:
         """Deserialize JSON from CLOB."""
         if self.parameters:
             try:
-                return json.loads(self.parameters)
+                return json.loads(self.parameters)  # type: ignore[no-any-return]
             except (json.JSONDecodeError, TypeError) as e:
                 logger.warning(f"Failed to deserialize parameters for ScheduledExecution {self.id}: {e}")
                 return None
         return None
 
-    def set_parameters(self, value):
+    def set_parameters(self, value: dict | None) -> None:
         """Serialize JSON to CLOB."""
         if value is not None:
             self.parameters = json.dumps(value)
@@ -472,21 +473,21 @@ class RecurringPattern(models.Model):
     class Meta:
         db_table = 'RECURRING_PATTERNS'
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Recurring Pattern {self.id} - {self.pattern_type}"
 
     # JSON field helper
-    def get_pattern_config(self):
+    def get_pattern_config(self) -> dict | None:
         """Deserialize JSON from CLOB."""
         if self.pattern_config:
             try:
-                return json.loads(self.pattern_config)
+                return json.loads(self.pattern_config)  # type: ignore[no-any-return]
             except (json.JSONDecodeError, TypeError) as e:
                 logger.warning(f"Failed to deserialize pattern_config for RecurringPattern {self.id}: {e}")
                 return None
         return None
 
-    def set_pattern_config(self, value):
+    def set_pattern_config(self, value: dict | None) -> None:
         """Serialize JSON to CLOB."""
         if value is not None:
             self.pattern_config = json.dumps(value)

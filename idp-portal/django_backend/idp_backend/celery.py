@@ -41,7 +41,7 @@ if _gate_crontab:
             day_of_week=parts[4],
         )
     else:
-        logger.warning(
+        logger.warning(  # type: ignore[call-arg]
             "celery_beat_invalid_crontab_fallback_interval",
             crontab=_gate_crontab,
             fallback_interval=60.0,

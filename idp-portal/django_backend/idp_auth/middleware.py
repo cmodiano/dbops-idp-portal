@@ -6,6 +6,8 @@ Story M.8 - Task 8: Migrate to structlog for structured JSON logging.
 
 import structlog
 
+from typing import Any, Callable
+
 from core.middleware import get_correlation_id, get_client_ip
 
 logger = structlog.get_logger(__name__)
@@ -24,10 +26,10 @@ class AuditAuthMiddleware:
     authentication failures that don't reach the view layer.
     """
 
-    def __init__(self, get_response):
+    def __init__(self, get_response: Callable[[Any], Any]) -> None:
         self.get_response = get_response
 
-    def __call__(self, request):
+    def __call__(self, request: Any) -> Any:
         response = self.get_response(request)
 
         # Log 401 responses on auth endpoints (NFR10)

@@ -147,7 +147,7 @@ class InventoryRBACFilter:
             all_access_attribute_filters,
             target_restrictions,
             attribute_filters,
-            correlation_id,
+            correlation_id or "",
         )
 
         nb_after_attributes = len(targets)
@@ -156,7 +156,7 @@ class InventoryRBACFilter:
         if exclusion_patterns:
             unique_exclusion_patterns = list(set(exclusion_patterns))
             targets = self.apply_exclusion_patterns(
-                targets, unique_exclusion_patterns, correlation_id
+                targets, unique_exclusion_patterns, correlation_id or ""
             )
 
         nb_after_exclusions = len(targets)

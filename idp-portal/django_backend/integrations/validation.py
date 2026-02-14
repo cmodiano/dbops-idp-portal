@@ -7,7 +7,7 @@ import threading
 from pathlib import Path
 
 try:
-    import jsonschema
+    import jsonschema  # type: ignore[import-untyped]
     JSONSCHEMA_AVAILABLE = True
 except ImportError:
     JSONSCHEMA_AVAILABLE = False
@@ -39,8 +39,8 @@ def _load_schema() -> dict:
         return _SCHEMA_CACHE
     with _SCHEMA_LOCK:
         if _SCHEMA_CACHE is None:
-            if _SCHEMA_PATH.exists():
-                with open(_SCHEMA_PATH, encoding="utf-8") as f:
+            if _SCHEMA_PATH.exists():  # type: ignore[union-attr]
+                with open(_SCHEMA_PATH, encoding="utf-8") as f:  # type: ignore[arg-type]
                     _SCHEMA_CACHE = json.load(f)
             else:
                 # Fallback: return empty schema if file not found

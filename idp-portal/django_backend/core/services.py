@@ -4,12 +4,15 @@ Handles creation of immutable audit entries with context enrichment.
 Story M.8 - Task 9: Structured logging with structlog.
 """
 
+from __future__ import annotations
+
 import csv
 import json
 import structlog
 
 from datetime import datetime
 from io import StringIO
+from typing import Any
 from core.models import AuditLog
 from core.utils import ensure_utc_isoformat
 
@@ -23,9 +26,9 @@ class AuditService:
     """
     
     @staticmethod
-    def create_entry(user_id: str, action_type: str, entity_type: str, 
-                     entity_id: int, details: dict | None = None, 
-                     ip_address: str | None = None, correlation_id: str | None = None):
+    def create_entry(user_id: str, action_type: str, entity_type: str,
+                     entity_id: int, details: dict | None = None,
+                     ip_address: str | None = None, correlation_id: str | None = None) -> AuditLog:
         """
         Create a new audit log entry (immutable).
         
@@ -55,7 +58,7 @@ class AuditService:
     def list_all(user_id: str | None = None, action_type: str | None = None,
                 entity_type: str | None = None, entity_id: int | None = None,
                 date_from: datetime | None = None, date_to: datetime | None = None,
-                page: int = 1, page_size: int = 25):
+                page: int = 1, page_size: int = 25) -> tuple[list[AuditLog], int]:
         """
         List all audit entries with pagination and filters.
         
@@ -100,7 +103,7 @@ class AuditService:
         return results, total_count
     
     @staticmethod
-    def get_by_entity(entity_type: str, entity_id: int):
+    def get_by_entity(entity_type: str, entity_id: int) -> Any:
         """
         Get audit entries for a specific entity (history trace).
         
@@ -116,7 +119,7 @@ class AuditService:
     @staticmethod
     def export_to_csv(user_id: str | None = None, action_type: str | None = None,
                      entity_type: str | None = None, date_from: datetime | None = None,
-                     date_to: datetime | None = None):
+                     date_to: datetime | None = None) -> StringIO:
         """
         Export audit entries to CSV format.
         
@@ -179,7 +182,7 @@ class AuditService:
     @staticmethod
     def export_to_pdf(user_id: str | None = None, action_type: str | None = None,
                       entity_type: str | None = None, date_from: datetime | None = None,
-                      date_to: datetime | None = None):
+                      date_to: datetime | None = None) -> Any:
         """
         Export audit entries to PDF format.
         Note: This is a placeholder - full PDF generation would require a library like reportlab.

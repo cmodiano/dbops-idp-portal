@@ -3,6 +3,10 @@ Custom exceptions and exception handler for DRF.
 Story M.8 - Task 5: Enhanced error handling with structured logging.
 """
 
+from __future__ import annotations
+
+from typing import Any
+
 import structlog
 
 from rest_framework.views import exception_handler
@@ -16,7 +20,7 @@ logger = structlog.get_logger(__name__)
 
 class NotFoundError(Exception):
     """Exception for 404 Not Found errors."""
-    def __init__(self, code="NOT_FOUND", message="Resource not found", details=None):
+    def __init__(self, code: str = "NOT_FOUND", message: str = "Resource not found", details: dict | None = None) -> None:
         self.code = code
         self.message = message
         self.details = details or {}
@@ -25,7 +29,7 @@ class NotFoundError(Exception):
 
 class BadRequestError(Exception):
     """Exception for 400 Bad Request errors."""
-    def __init__(self, code="BAD_REQUEST", message="Bad request", details=None):
+    def __init__(self, code: str = "BAD_REQUEST", message: str = "Bad request", details: dict | None = None) -> None:
         self.code = code
         self.message = message
         self.details = details or {}
@@ -34,7 +38,7 @@ class BadRequestError(Exception):
 
 class InvalidStateError(Exception):
     """Exception for 400 Invalid State errors."""
-    def __init__(self, code="INVALID_STATE", message="Invalid state", details=None):
+    def __init__(self, code: str = "INVALID_STATE", message: str = "Invalid state", details: dict | None = None) -> None:
         self.code = code
         self.message = message
         self.details = details or {}
@@ -43,7 +47,7 @@ class InvalidStateError(Exception):
 
 class UnauthorizedError(Exception):
     """Exception for 401 Unauthorized errors."""
-    def __init__(self, code="UNAUTHORIZED", message="Unauthorized", details=None):
+    def __init__(self, code: str = "UNAUTHORIZED", message: str = "Unauthorized", details: dict | None = None) -> None:
         self.code = code
         self.message = message
         self.details = details or {}
@@ -52,7 +56,7 @@ class UnauthorizedError(Exception):
 
 class ForbiddenError(Exception):
     """Exception for 403 Forbidden errors."""
-    def __init__(self, code="FORBIDDEN", message="Forbidden", details=None):
+    def __init__(self, code: str = "FORBIDDEN", message: str = "Forbidden", details: dict | None = None) -> None:
         self.code = code
         self.message = message
         self.details = details or {}
@@ -61,7 +65,7 @@ class ForbiddenError(Exception):
 
 class ServiceUnavailableError(Exception):
     """Exception for 503 Service Unavailable errors (Story 21.6)."""
-    def __init__(self, code="SERVICE_UNAVAILABLE", message="Service unavailable", details=None):
+    def __init__(self, code: str = "SERVICE_UNAVAILABLE", message: str = "Service unavailable", details: dict | None = None) -> None:
         self.code = code
         self.message = message
         self.details = details or {}
@@ -70,14 +74,14 @@ class ServiceUnavailableError(Exception):
 
 class ConflictError(Exception):
     """Exception for 409 Conflict errors (Story 18.1)."""
-    def __init__(self, code="CONFLICT", message="Conflict", details=None):
+    def __init__(self, code: str = "CONFLICT", message: str = "Conflict", details: dict | None = None) -> None:
         self.code = code
         self.message = message
         self.details = details or {}
         super().__init__(self.message)
 
 
-def _get_request_context(context):
+def _get_request_context(context: dict[str, Any]) -> dict[str, Any]:
     """Extract request context for logging."""
     request = context.get('request')
     if request:
@@ -93,7 +97,7 @@ def _get_request_context(context):
     return {'correlation_id': get_correlation_id()}
 
 
-def custom_exception_handler(exc, context):
+def custom_exception_handler(exc: Exception, context: dict[str, Any]) -> Response | None:
     """
     Custom exception handler that formats errors:
     {

@@ -3,13 +3,17 @@ DRF ViewSets and APIViews for profiles app.
 Implements admin profiles endpoints (Story M.5).
 """
 
+from typing import Any
+
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser
 from drf_spectacular.utils import extend_schema, extend_schema_view
+from profiles.models import Profile
 from profiles.serializers import (
     ProfileSerializer,
     ProfileCreateSerializer,
@@ -24,7 +28,7 @@ from core.permissions import DBOPSProfilePermission
 from core.exceptions import NotFoundError, InvalidStateError
 
 
-def invalidate_permissions_cache():
+def invalidate_permissions_cache() -> None:
     """
     Invalidate RBAC permissions cache.
     TODO: Implement actual cache invalidation when RBAC service is migrated to Django.
@@ -47,16 +51,16 @@ class ProfileViewSet(viewsets.ViewSet):
     """
     permission_classes = [IsAuthenticated, DBOPSProfilePermission]
     
-    def _get_profile_id(self, pk):
+    def _get_profile_id(self, pk: Any) -> int:
         """
         Helper method to extract and validate profile ID from pk parameter.
-        
+
         Args:
             pk: Primary key (string or int)
-            
+
         Returns:
             int: Validated profile ID
-            
+
         Raises:
             NotFoundError: If pk cannot be converted to int
         """
@@ -68,17 +72,17 @@ class ProfileViewSet(viewsets.ViewSet):
                 message=f"Profil {pk} introuvable",
                 details={"profile_id": pk}
             )
-    
-    def _get_profile_or_404(self, profile_id):
+
+    def _get_profile_or_404(self, profile_id: int) -> Profile:
         """
         Helper method to get profile by ID or raise 404.
-        
+
         Args:
             profile_id: Profile ID (int)
-            
+
         Returns:
             Profile: Profile instance
-            
+
         Raises:
             NotFoundError: If profile not found
         """
@@ -91,23 +95,23 @@ class ProfileViewSet(viewsets.ViewSet):
                 details={"profile_id": profile_id}
             )
         return profile
-    
-    def get_serializer_class(self):
+
+    def get_serializer_class(self) -> type[ProfileCreateSerializer] | type[ProfileListSerializer] | type[ProfileSerializer]:
         """Return appropriate serializer based on action."""
         if self.action == 'create':
             return ProfileCreateSerializer
         elif self.action == 'list':
             return ProfileListSerializer
         return ProfileSerializer
-    
-    def list(self, request):
+
+    def list(self, request: Request) -> Response:
         """GET /admin/profiles - List all profiles."""
         service = ProfileService()
         profiles = service.list_all()
         serializer = ProfileListSerializer(profiles, many=True)
         return Response({"data": serializer.data})
-    
-    def create(self, request):
+
+    def create(self, request: Request) -> Response:
         """POST /admin/profiles - Create a new profile. Returns 201."""
         serializer = ProfileCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -127,15 +131,15 @@ class ProfileViewSet(viewsets.ViewSet):
         response_serializer = ProfileSerializer(profile)
         return Response({"data": response_serializer.data}, status=status.HTTP_201_CREATED)
     
-    def retrieve(self, request, pk=None):
+    def retrieve(self, request: Request, pk: Any = None) -> Response:
         """GET /admin/profiles/{id} - Get profile by ID."""
         profile_id = self._get_profile_id(pk)
         profile = self._get_profile_or_404(profile_id)
-        
+
         serializer = ProfileSerializer(profile)
         return Response({"data": serializer.data})
-    
-    def update(self, request, pk=None):
+
+    def update(self, request: Request, pk: Any = None) -> Response:
         """PUT /admin/profiles/{id} - Update profile."""
         profile_id = self._get_profile_id(pk)
         
@@ -164,25 +168,25 @@ class ProfileViewSet(viewsets.ViewSet):
         response_serializer = ProfileSerializer(profile)
         return Response({"data": response_serializer.data})
     
-    def destroy(self, request, pk=None):
+    def destroy(self, request: Request, pk: Any = None) -> Response:
         """DELETE /admin/profiles/{id} - Delete profile. Returns 204."""
         profile_id = self._get_profile_id(pk)
-        
+
         service = ProfileService()
         deleted = service.delete_profile(profile_id, user=request.user)
-        
+
         if not deleted:
             raise NotFoundError(
                 code="NOT_FOUND",
                 message=f"Profil {profile_id} introuvable",
                 details={"profile_id": profile_id}
             )
-        
+
         invalidate_permissions_cache()
         return Response(status=status.HTTP_204_NO_CONTENT)
-    
+
     @action(detail=True, methods=['get', 'put'])
-    def actions(self, request, pk=None):
+    def actions(self, request: Request, pk: Any = None) -> Response:
         """GET/PUT /admin/profiles/{id}/actions - Get/set action permissions."""
         profile_id = self._get_profile_id(pk)
         self._get_profile_or_404(profile_id)  # Verify profile exists
@@ -222,7 +226,7 @@ class ProfileViewSet(viewsets.ViewSet):
             return Response({"data": response_serializer.data})
     
     @action(detail=True, methods=['get', 'put'])
-    def targets(self, request, pk=None):
+    def targets(self, request: Request, pk: Any = None) -> Response:
         """GET/PUT /admin/profiles/{id}/targets - Get/set target permissions."""
         profile_id = self._get_profile_id(pk)
         self._get_profile_or_404(profile_id)  # Verify profile exists
@@ -266,7 +270,7 @@ class ProfileExportView(APIView):
     permission_classes = [IsAuthenticated, DBOPSProfilePermission]
 
     @extend_schema(tags=['profiles'], summary='Exporter les profils en YAML')
-    def get(self, request):
+    def get(self, request: Request) -> Any:
         """Export all profiles as YAML."""
         content = export_profiles_yaml()
         from django.http import HttpResponse
@@ -281,7 +285,7 @@ class ProfileImportView(APIView):
     parser_classes = [MultiPartParser]
 
     @extend_schema(tags=['profiles'], summary='Importer des profils depuis un fichier YAML')
-    def post(self, request):
+    def post(self, request: Request) -> Response:
         """Import profiles from YAML file."""
         file = request.FILES.get('file')
         if not file:

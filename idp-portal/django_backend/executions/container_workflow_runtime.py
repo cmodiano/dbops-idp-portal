@@ -480,7 +480,7 @@ class ContainerWorkflowRuntime:
         Execution.objects.filter(id=self.execution.id).update(**update_fields)
         # Sync in-memory
         self.execution.status = final_status
-        self.execution.completed_at = update_fields['completed_at']
+        self.execution.completed_at = update_fields['completed_at']  # type: ignore[assignment]
 
         # Audit trail
         audit_action_type = {

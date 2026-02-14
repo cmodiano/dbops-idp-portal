@@ -8,6 +8,8 @@ This helper provides case-insensitive comparison only.
 """
 from __future__ import annotations
 
+from typing import Any, cast
+
 
 class EnvironmentHelper:
     """
@@ -129,5 +131,5 @@ class EnvironmentHelper:
         normalized_env = EnvironmentHelper.normalize(env)
         for key, value in config.items():
             if EnvironmentHelper.normalize(key) == normalized_env:
-                return value
+                return cast("dict[Any, Any] | None", value)
         return None

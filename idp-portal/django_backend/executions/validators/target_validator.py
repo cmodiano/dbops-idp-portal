@@ -1,6 +1,8 @@
 """Validation des targets avec RBAC via InventoryService."""
 from __future__ import annotations
 
+from typing import Any
+
 from core.exceptions import BadRequestError, ForbiddenError
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
@@ -17,8 +19,8 @@ class TargetValidator:
     @staticmethod
     def validate_targets(
         target_names: list,
-        action_id,
-        user,
+        action_id: Any,
+        user: Any,
         ad_groups: list,
         correlation_id: str,
     ) -> tuple[list[dict], str]:

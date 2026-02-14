@@ -1,6 +1,8 @@
 """Construction de la réponse HTTP après création d'exécution."""
 from __future__ import annotations
 
+from typing import Any
+
 from rest_framework.response import Response
 
 from core.utils import ensure_utc_isoformat
@@ -11,7 +13,7 @@ class ExecutionResponseBuilder:
     """Construit la réponse HTTP après création de l'exécution."""
 
     @staticmethod
-    def build(execution, action) -> Response:
+    def build(execution: Any, action: Any) -> Response:
         """
         Build the HTTP response for a created execution.
 

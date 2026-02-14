@@ -5,6 +5,7 @@ Story 2.30 - Category reference serializer.
 """
 
 import re
+from typing import Any
 from rest_framework import serializers
 from reference.models import RefEngine, RefPlatform, RefCategory
 
@@ -40,19 +41,19 @@ class RefCategoryWriteSerializer(serializers.ModelSerializer):
         model = RefCategory
         fields = ['code', 'label', 'display_order', 'is_active']
 
-    def validate_code(self, value):
+    def validate_code(self, value: str) -> str:
         if not re.match(r'^[a-z0-9_-]+$', value):
             raise serializers.ValidationError(
                 "Le code doit contenir uniquement des lettres minuscules, chiffres, tirets et underscores."
             )
         return value
 
-    def validate_label(self, value):
+    def validate_label(self, value: str) -> str:
         if not value or not value.strip():
             raise serializers.ValidationError("Le libellé ne peut pas être vide.")
         return value.strip()
 
-    def validate_display_order(self, value):
+    def validate_display_order(self, value: int) -> int:
         if value < 0:
             raise serializers.ValidationError("L'ordre d'affichage doit être >= 0.")
         return value

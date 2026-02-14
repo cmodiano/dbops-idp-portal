@@ -3,14 +3,18 @@ DRF ViewSets for catalog app.
 Implements admin, catalog, and tags endpoints.
 """
 
+from __future__ import annotations
+
+from typing import Any
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.serializers import ValidationError as DRFValidationError
+from rest_framework.serializers import ValidationError as DRFValidationError, Serializer
+from rest_framework.request import Request
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
 from django.db import IntegrityError
-from django.db.models import Count, Q, OuterRef, Subquery, IntegerField, Value
+from django.db.models import Count, Q, OuterRef, Subquery, IntegerField, Value, QuerySet
 from django.db.models.functions import Coalesce
 from cachetools import TTLCache
 from core.utils import ensure_utc_isoformat
@@ -31,7 +35,7 @@ import structlog
 logger = structlog.get_logger(__name__)
 
 
-def _annotate_execution_count(queryset):
+def _annotate_execution_count(queryset: QuerySet[Action]) -> QuerySet[Action]:
     """
     Annotate actions with execution_count without GROUP BY on CLOB columns (Oracle limitation).
     Uses a correlated subquery instead of Count() over a join.
@@ -74,7 +78,7 @@ class ActionViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, DBOPSProfilePermission]
     pagination_class = CustomPageNumberPagination
     
-    def get_serializer_class(self):
+    def get_serializer_class(self) -> type[Serializer[Any]]:
         """Return appropriate serializer based on action."""
         if self.action == 'create':
             return ActionCreateSerializer
@@ -82,7 +86,7 @@ class ActionViewSet(viewsets.ModelViewSet):
             return ActionListSerializer
         return ActionSerializer
     
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[Action]:
         """Filter queryset based on query parameters."""
         queryset = Action.objects.with_tags().with_creator()
 
@@ -111,16 +115,16 @@ class ActionViewSet(viewsets.ModelViewSet):
         if item_type_filter:
             queryset = queryset.filter(item_type=item_type_filter)
 
-        return queryset.order_by('-created_at')
+        return queryset.order_by('-created_at')  # type: ignore[no-any-return]
     
-    def create(self, request, *args, **kwargs):
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """POST /admin/actions - Create a new action."""
         serializer = ActionCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
             action = CatalogService().create_action(
                 action_data=serializer.validated_data,
-                created_by_user=request.user
+                created_by_user=request.user  # type: ignore[arg-type]
             )
         except IntegrityError as e:
             err_msg = str(e).upper()
@@ -128,7 +132,7 @@ class ActionViewSet(viewsets.ModelViewSet):
                 raise DRFValidationError({'name': ['Une action avec ce nom existe déjà.']})
             raise
         # Reload with relations
-        action = CatalogService().get_by_id(action.id)
+        action = CatalogService().get_by_id(action.id)  # type: ignore[assignment]
         response_serializer = ActionSerializer(action)
 
         # MEDIUM-1 fix: Invalidate cache after write
@@ -137,7 +141,7 @@ class ActionViewSet(viewsets.ModelViewSet):
 
         return Response({"data": response_serializer.data}, status=status.HTTP_201_CREATED)
     
-    def list(self, request, *args, **kwargs):
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """GET /admin/actions - List all actions with pagination."""
         queryset = self.filter_queryset(self.get_queryset())
         
@@ -149,13 +153,13 @@ class ActionViewSet(viewsets.ModelViewSet):
         serializer = ActionListSerializer(queryset, many=True)
         return Response({"data": serializer.data})
     
-    def retrieve(self, request, *args, **kwargs):
+    def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """GET /admin/actions/{id} - Get action details."""
         instance = self.get_object()
         serializer = self.get_serializer(instance)
         return Response({"data": serializer.data})
     
-    def update(self, request, *args, **kwargs):
+    def update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """PUT /admin/actions/{id} - Update action metadata."""
         instance = self.get_object()
         serializer = ActionCreateSerializer(data=request.data)
@@ -164,7 +168,7 @@ class ActionViewSet(viewsets.ModelViewSet):
             action = CatalogService().update_action(
                 action_id=instance.id,
                 action_update_data=serializer.validated_data,
-                user=request.user
+                user=request.user  # type: ignore[arg-type]
             )
         except IntegrityError as e:
             err_msg = str(e).upper()
@@ -189,7 +193,7 @@ class ActionViewSet(viewsets.ModelViewSet):
         return Response({"data": response_serializer.data})
 
     @action(detail=True, methods=['put'], url_path='tags')
-    def update_tags(self, request, pk=None):
+    def update_tags(self, request: Request, pk: int | None = None) -> Response:
         """PUT /admin/actions/{id}/tags - Update action tags."""
         action = self.get_object()
         serializer = ActionTagsUpdateSerializer(data=request.data)
@@ -224,7 +228,7 @@ class ActionViewSet(viewsets.ModelViewSet):
         return Response({"data": response_serializer.data})
 
     @action(detail=True, methods=['patch'], url_path='status')
-    def update_status(self, request, pk=None):
+    def update_status(self, request: Request, pk: int | None = None) -> Response:
         """PATCH /admin/actions/{id}/status - Update action status."""
         action = self.get_object()
         serializer = StatusUpdateSerializer(data=request.data)
@@ -234,7 +238,7 @@ class ActionViewSet(viewsets.ModelViewSet):
             updated_action = CatalogService().update_status(
                 action_id=action.id,
                 transition=serializer.validated_data['transition'],
-                user=request.user
+                user=request.user  # type: ignore[arg-type]
             )
         except InvalidTransitionError as e:
             raise InvalidStateError(
@@ -264,7 +268,7 @@ class ActionViewSet(viewsets.ModelViewSet):
         return Response({"data": response_serializer.data})
 
     @action(detail=True, methods=['put'], url_path='execution-steps')
-    def update_execution_steps(self, request, pk=None):
+    def update_execution_steps(self, request: Request, pk: int | None = None) -> Response:
         """PUT /admin/actions/{id}/execution-steps - Update execution steps."""
         action = self.get_object()
         
@@ -274,9 +278,9 @@ class ActionViewSet(viewsets.ModelViewSet):
         try:
             updated_action = CatalogService().update_execution_steps(
                 action_id=action.id,
-                steps=steps,
+                steps=steps,  # type: ignore[arg-type]
                 change_type_config=change_type_config,
-                user=self.request.user
+                user=self.request.user  # type: ignore[arg-type]
             )
         except ValueError as e:
             raise InvalidStateError(
@@ -306,7 +310,7 @@ class ActionViewSet(viewsets.ModelViewSet):
         return Response({"data": response_serializer.data})
 
     @action(detail=False, methods=['get'], url_path='name-available')
-    def name_available(self, request):
+    def name_available(self, request: Request) -> Response:
         """GET /admin/actions/name-available/?name=...&exclude_id=... - Check if action name is available."""
         name = (request.query_params.get('name') or '').strip()
         if not name:
@@ -321,7 +325,7 @@ class ActionViewSet(viewsets.ModelViewSet):
         return Response({"available": not qs.exists()})
 
     @action(detail=False, methods=['get'], url_path='eligible-for-workflow')
-    def list_eligible_for_workflow(self, request):
+    def list_eligible_for_workflow(self, request: Request) -> Response:
         """GET /admin/actions/eligible-for-workflow - List published actions eligible for workflows."""
         queryset = Action.objects.filter(
             status=ActionStatus.PUBLISHED,
@@ -332,7 +336,7 @@ class ActionViewSet(viewsets.ModelViewSet):
         return Response({"data": serializer.data})
 
     @action(detail=True, methods=['put'], url_path='remediation-rules')
-    def update_remediation_rules(self, request, pk=None):
+    def update_remediation_rules(self, request: Request, pk: int | None = None) -> Response:
         """PUT /admin/actions/{id}/remediation-rules - Update remediation rules."""
         action = self.get_object()
 
@@ -370,12 +374,12 @@ class ActionViewSet(viewsets.ModelViewSet):
 
         return Response({"data": response_serializer.data})
 
-    def destroy(self, request, *args, **kwargs):
+    def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """DELETE /admin/actions/{id} — Hard delete (only if execution_count=0). Story 18.1 AC1."""
         instance = self.get_object()
         service = CatalogService()
         # ConflictError is raised if execution_count > 0 (propagated to exception handler → 409)
-        deleted = service.delete_action(instance.id, user=request.user)
+        deleted = service.delete_action(instance.id, user=request.user)  # type: ignore[arg-type]
         if not deleted:
             raise NotFoundError(
                 code="NOT_FOUND",
@@ -387,7 +391,7 @@ class ActionViewSet(viewsets.ModelViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=['put'], url_path='deactivate')
-    def deactivate(self, request, pk=None):
+    def deactivate(self, request: Request, pk: int | None = None) -> Response:
         """PUT /admin/actions/{id}/deactivate — Soft delete with cascade. Story 18.1 AC2/AC3."""
         instance = self.get_object()
         service = CatalogService()
@@ -404,7 +408,7 @@ class ActionViewSet(viewsets.ModelViewSet):
                 }, status=status.HTTP_200_OK)
 
         # ConflictError is raised if already disabled (propagated → 409)
-        result = service.deactivate_action(instance.id, user=request.user, deletion_reason=deletion_reason)
+        result = service.deactivate_action(instance.id, user=request.user, deletion_reason=deletion_reason)  # type: ignore[arg-type]
         if result is None:
             raise NotFoundError(
                 code="NOT_FOUND",
@@ -424,12 +428,12 @@ class ActionViewSet(viewsets.ModelViewSet):
         })
 
     @action(detail=True, methods=['put'], url_path='reactivate')
-    def reactivate(self, request, pk=None):
+    def reactivate(self, request: Request, pk: int | None = None) -> Response:
         """PUT /admin/actions/{id}/reactivate — Reactivate a disabled action. Story 18.1 AC5."""
         instance = self.get_object()
         service = CatalogService()
         # ConflictError is raised if not disabled (propagated → 409)
-        reactivated = service.reactivate_action(instance.id, user=request.user)
+        reactivated = service.reactivate_action(instance.id, user=request.user)  # type: ignore[arg-type]
         if reactivated is None:
             raise NotFoundError(
                 code="NOT_FOUND",
@@ -445,7 +449,7 @@ class ActionViewSet(viewsets.ModelViewSet):
         return Response({"data": serializer.data})
 
     @action(detail=True, methods=['get', 'post'], url_path='mutex')
-    def mutex_rules(self, request, pk=None):
+    def mutex_rules(self, request: Request, pk: int | None = None) -> Response:
         """
         GET /admin/actions/{id}/mutex/ - List mutex rules for this action.
         POST /admin/actions/{id}/mutex/ - Create a mutex rule.
@@ -468,7 +472,7 @@ class ActionViewSet(viewsets.ModelViewSet):
         elif request.method == 'POST':
             # Create mutex rule
             # Pass action_id to serializer context for validation
-            serializer = ActionMutexCreateSerializer(
+            serializer = ActionMutexCreateSerializer(  # type: ignore[assignment]
                 data=request.data,
                 context={'action_id': action.id}
             )
@@ -508,8 +512,11 @@ class ActionViewSet(viewsets.ModelViewSet):
             response_serializer = ActionMutexSerializer(mutex_rule)
             return Response({"data": response_serializer.data}, status=status.HTTP_201_CREATED)
 
+        # Mypy thinks this is unreachable but it handles unexpected HTTP methods
+        raise ValueError(f"Unsupported HTTP method: {request.method}")
+
     @action(detail=True, methods=['delete'], url_path='mutex/(?P<rule_id>[^/.]+)')
-    def delete_mutex_rule(self, request, pk=None, rule_id=None):
+    def delete_mutex_rule(self, request: Request, pk: int | None = None, rule_id: str | None = None) -> Response:
         """
         DELETE /admin/actions/{id}/mutex/{rule_id}/ - Delete a mutex rule.
         Story 25.5, Task 4.1: Deletes rule and optionally its symmetric counterpart.
@@ -521,7 +528,7 @@ class ActionViewSet(viewsets.ModelViewSet):
         # Find the rule
         try:
             mutex_rule = ActionMutex.objects.get(
-                id=rule_id,
+                id=rule_id,  # type: ignore[misc]
                 action=action
             )
         except ActionMutex.DoesNotExist:
@@ -574,7 +581,15 @@ _catalog_cache: TTLCache[str, list[dict]] = TTLCache(maxsize=1000, ttl=300)
 _tags_cache: TTLCache[str, list[dict]] = TTLCache(maxsize=200, ttl=300)
 
 
-def _get_cache_key(user_id, tags_filter, q=None, engine=None, environment=None, impact=None, category=None):
+def _get_cache_key(
+    user_id: int | None,
+    tags_filter: list[str] | None,
+    q: str | None = None,
+    engine: str | None = None,
+    environment: str | None = None,
+    impact: str | None = None,
+    category: str | None = None
+) -> str:
     """Generate cache key for catalog query."""
     user_part = f"user_{user_id}" if user_id else "anon"
     tags_part = ",".join(sorted(tags_filter)) if tags_filter else "all"
@@ -608,13 +623,13 @@ class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [OptionalUserPermission]
     pagination_class = CustomPageNumberPagination  # HIGH-5 fix: Add pagination
 
-    def _get_rbac_service(self):
+    def _get_rbac_service(self) -> CatalogRBACService:
         """Get or create cached RBAC service instance (HIGH-1 fix: Story 26.3 review)."""
         if not hasattr(self, '_rbac_service'):
             self._rbac_service = CatalogRBACService()
         return self._rbac_service
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[Action]:
         """Filter queryset based on query parameters and RBAC."""
         queryset = Action.objects.filter(status=ActionStatus.PUBLISHED).with_tags().with_creator()
         
@@ -657,7 +672,7 @@ class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
         
         # RBAC filtering (if user authenticated)
         rbac_service = self._get_rbac_service()
-        cumulative_permissions = rbac_service.get_permissions(self.request.user)
+        cumulative_permissions = rbac_service.get_permissions(self.request.user)  # type: ignore[arg-type]
         if cumulative_permissions:
             # Convert queryset to list for filtering
             actions_list = list(queryset)
@@ -665,10 +680,10 @@ class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
             # Get IDs of filtered actions and filter queryset
             filtered_ids = [a.id if hasattr(a, 'id') else a.get('id') for a in filtered_actions]
             queryset = queryset.filter(id__in=filtered_ids)
-        
-        return queryset.order_by('name')
+
+        return queryset.order_by('name')  # type: ignore[no-any-return]
     
-    def list(self, request, *args, **kwargs):
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """GET /catalog/actions - List published actions with cache."""
         # Build cache key
         user_id = request.user.id if request.user and request.user.is_authenticated else None
@@ -712,7 +727,7 @@ class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
         
         return Response({"data": data})
     
-    def retrieve(self, request, *args, **kwargs):
+    def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """GET /catalog/actions/{id} - Get published action details."""
         # MEDIUM-8 fix: Removed dead code - queryset already filters by PUBLISHED status
         # get_object() will raise 404 if action is not in queryset (i.e., not published)
@@ -720,7 +735,7 @@ class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
 
         # RBAC check (if user authenticated)
         rbac_service = self._get_rbac_service()
-        cumulative_permissions = rbac_service.get_permissions(self.request.user)
+        cumulative_permissions = rbac_service.get_permissions(self.request.user)  # type: ignore[arg-type]
         if cumulative_permissions:
             if not rbac_service.check_action(instance, cumulative_permissions):
                 raise NotFoundError(
@@ -747,14 +762,14 @@ class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
         return Response({"data": response_data})
     
     @action(detail=True, methods=['get'], url_path='stats')
-    def get_stats(self, request, pk=None):
+    def get_stats(self, request: Request, pk: int | None = None) -> Response:
         """GET /catalog/actions/{id}/stats - Get execution stats."""
         # MEDIUM-8 fix: Removed dead code - queryset already filters by PUBLISHED
         action = self.get_object()
 
         # RBAC check if user is authenticated
         rbac_service = self._get_rbac_service()
-        cumulative_permissions = rbac_service.get_permissions(self.request.user)
+        cumulative_permissions = rbac_service.get_permissions(self.request.user)  # type: ignore[arg-type]
         if cumulative_permissions:
             if not rbac_service.check_action(action, cumulative_permissions):
                 raise NotFoundError(
@@ -791,14 +806,14 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = TagSerializer
     permission_classes = [OptionalUserPermission]
     
-    def list(self, request, *args, **kwargs):
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """GET /tags - List all tags."""
         queryset = self.filter_queryset(self.get_queryset())
         serializer = self.get_serializer(queryset, many=True)
         return Response({"data": serializer.data})
     
     @action(detail=False, methods=['get'], url_path='catalog')
-    def list_catalog_tags(self, request):
+    def list_catalog_tags(self, request: Request) -> Response:
         """GET /catalog/tags - List tags with action_count and RBAC filtering."""
         # Story 17.17: Cache tags endpoint (5min TTL, same as actions)
         user_id = request.user.id if request.user and request.user.is_authenticated else None
@@ -822,7 +837,7 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet):
 
         # Apply RBAC filtering if user is authenticated
         rbac_service = CatalogRBACService()
-        cumulative_permissions = rbac_service.get_permissions(request.user)
+        cumulative_permissions = rbac_service.get_permissions(request.user)  # type: ignore[arg-type]
         if cumulative_permissions and cumulative_permissions.get('actions_type') != 'all':
             # Get allowed action IDs based on RBAC
             action_ids = set(cumulative_permissions.get('action_ids', []) or [])

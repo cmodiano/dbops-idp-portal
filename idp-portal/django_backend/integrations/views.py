@@ -2,6 +2,8 @@
 Views for integrations CRUD endpoints.
 """
 
+from typing import Any
+
 from rest_framework import viewsets, status, serializers as drf_serializers
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -94,7 +96,7 @@ class IntegrationViewSet(viewsets.ViewSet):
             raise
         
         response_serializer = IntegrationSerializer(integration)
-        response_data = {'data': response_serializer.data}
+        response_data: dict[str, Any] = {'data': response_serializer.data}
         warnings = getattr(integration, '_warnings', [])
         if warnings:
             response_data['warnings'] = warnings
@@ -149,7 +151,7 @@ class IntegrationViewSet(viewsets.ViewSet):
             )
         
         response_serializer = IntegrationSerializer(integration)
-        response_data = {'data': response_serializer.data}
+        response_data: dict[str, Any] = {'data': response_serializer.data}
         warnings = getattr(integration, '_warnings', [])
         if warnings:
             response_data['warnings'] = warnings

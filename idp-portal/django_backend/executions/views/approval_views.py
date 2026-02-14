@@ -5,6 +5,7 @@ Responsabilité : Endpoints liés aux approbations.
 from __future__ import annotations
 
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -24,7 +25,7 @@ class PendingApprovalsView(APIView):
     permission_classes = [IsAuthenticated, IsDBAOrDBOPS]  # AC2: Story 26.8
 
     @extend_schema(tags=['executions'], summary='Approbations en attente', responses={200: ExecutionSerializer(many=True)})
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         # AC2: Story 26.8 — Permission vérifiée par DRF via permission_classes
         count_only = (request.query_params.get("count_only") or "").lower() == "true"
         qs = Execution.objects.select_related("action", "user", "action__integration").filter(

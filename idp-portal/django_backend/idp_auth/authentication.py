@@ -3,6 +3,8 @@ DRF Authentication backend for JWT tokens.
 Story M.7 - Task 4.5-4.8
 """
 
+from typing import Any
+
 from django.conf import settings
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
@@ -24,7 +26,7 @@ class JWTAuthentication(BaseAuthentication):
         }
     """
 
-    def authenticate(self, request):
+    def authenticate(self, request: Any) -> tuple[User, None] | None:
         """
         Authenticate the request and return a two-tuple of (user, token).
 
@@ -79,7 +81,7 @@ class JWTAuthentication(BaseAuthentication):
 
         return (user, None)
 
-    def authenticate_header(self, request):
+    def authenticate_header(self, request: Any) -> str:
         """
         Return the WWW-Authenticate header value for 401 responses.
         """

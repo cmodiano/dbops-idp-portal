@@ -4,9 +4,12 @@ Responsabilité : Opérations CRUD sur les executions (create, retrieve, cancel,
 """
 from __future__ import annotations
 
+from typing import Any
+
 from django.conf import settings
 from django.db import transaction
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -53,7 +56,7 @@ class ExecutionsCreateView(APIView):
         description="Lance une nouvelle exécution d'action. target_names requis si requires_target=True.",
         responses={201: ExecutionSerializer},
     )
-    def post(self, request):
+    def post(self, request: Request) -> Response:
         """
         Create a new execution.
         Story 13.2: Supports target_names parameter for target-based execution.
@@ -72,7 +75,7 @@ class ExecutionsCreateView(APIView):
         correlation_id = validated['correlation_id']
 
         # Step 2: Validate targets (if applicable)
-        validated_targets = []
+        validated_targets: list[dict[str, Any]] = []
         if target_names:
             ad_groups = get_user_ad_groups(request.user)
             validated_targets, environment = TargetValidator.validate_targets(
@@ -146,7 +149,7 @@ class ExecutionsCreateView(APIView):
 
         # Step 7: Create execution
         execution = ExecutionService().create_execution(
-            user=request.user,
+            user=request.user,  # type: ignore[arg-type]
             action=action,
             environment=env_config['env_str'],
             parameters=parameters if parameters else None,
@@ -165,7 +168,7 @@ class ExecutionsCreateView(APIView):
         # Step 9: Build response
         return ExecutionResponseBuilder.build(execution, action)
 
-    def _launch_execution(self, execution, action, correlation_id: str, request) -> None:
+    def _launch_execution(self, execution: Any, action: Any, correlation_id: str, request: Request) -> None:
         """Launch the execution via the appropriate runtime."""
         try:
             if action.item_type == "workflow":
@@ -227,7 +230,7 @@ class ExecutionDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(tags=['executions'], summary="Détail d'une exécution", responses={200: ExecutionSerializer})
-    def get(self, request, execution_id: int):
+    def get(self, request: Request, execution_id: int) -> Response:
         try:
             execution = Execution.objects.select_related(
                 "action", "user", "action__integration", "parent_execution__action"
@@ -249,7 +252,7 @@ class ExecutionCancelView(APIView):
     throttle_classes = [GeneralAPIThrottle]
 
     @extend_schema(tags=['executions'], summary='Annuler une exécution', responses={200: ExecutionSerializer})
-    def patch(self, request, execution_id: int):
+    def patch(self, request: Request, execution_id: int) -> Response:
         try:
             execution = Execution.objects.select_related("action", "user", "action__integration").get(id=execution_id)
         except Execution.DoesNotExist:
@@ -294,7 +297,7 @@ class ExecutionCancelView(APIView):
 
             return Response({"data": ExecutionSerializer(updated).data})
 
-    def _attempt_remote_cancellation(self, execution: Execution) -> None:
+    def _attempt_remote_cancellation(self, execution: Any) -> None:
         """Best-effort remote cancellation on execution engine."""
         platform_job_id = None
         if execution.action and execution.action.integration:
@@ -344,7 +347,7 @@ class ExecutionStepsView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(tags=['executions'], summary="Étapes d'une exécution", responses={200: ExecutionStepSerializer(many=True)})
-    def get(self, request, execution_id: int):
+    def get(self, request: Request, execution_id: int) -> Response:
         try:
             execution = Execution.objects.get(id=execution_id)
         except Execution.DoesNotExist:
@@ -364,7 +367,7 @@ class ExecutionStepLogsView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(tags=['executions'], summary="Logs d'une étape d'exécution")
-    def get(self, request, execution_id: int, step_id: int):
+    def get(self, request: Request, execution_id: int, step_id: int) -> Response:
         try:
             step = ExecutionStep.objects.select_related("execution").get(id=step_id, execution_id=execution_id)
         except ExecutionStep.DoesNotExist:

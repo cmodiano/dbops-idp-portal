@@ -50,38 +50,39 @@ ruff check .
 ruff check . --fix
 ```
 
-### Type Checking (Story 17.9)
+### Type Checking (Story 26.16)
 
-**Mypy est configuré en mode bloquant progressif** : les nouvelles erreurs de type bloquent le CI, les 89 erreurs existantes sont tolérées via un baseline.
+**Mypy est configuré en mode strict bloquant** : toute erreur mypy bloque le commit (pre-commit hook) et la CI. Le mode `disallow_untyped_defs = true` est activé sur les modules principaux.
 
 ```bash
 # Vérifier les types localement
 mypy .
 
-# Vérifier par rapport au baseline (comme en CI)
-scripts/check_mypy_baseline.sh
-
-# Mettre à jour le baseline après corrections
-scripts/generate_mypy_baseline.sh
-git add .mypy-baseline-count
-git commit -m 'chore: update mypy baseline'
+# Doit retourner 0 erreur
 ```
 
 **Documentation mypy :**
 - [Guide développeur mypy](docs/mypy-developer-guide.md) - Comment ajouter des annotations de type
-- [Workflow baseline](docs/mypy-baseline-workflow.md) - Comment fonctionne le baseline
-- [Roadmap amélioration](docs/mypy-improvement-roadmap.md) - Plan de réduction du baseline
+- [Roadmap amélioration](docs/mypy-improvement-roadmap.md) - Historique des phases
 
 ### Pre-commit Hooks
 
+Le projet utilise pre-commit pour valider la qualité du code avant chaque commit.
+
 ```bash
-# Installer les hooks (recommandé)
+# Installation (une seule fois)
 pip install pre-commit
 pre-commit install
 
 # Exécuter manuellement
 pre-commit run --all-files
+
+# Bypasser (déconseillé)
+git commit --no-verify
 ```
+
+**Hooks configurés :**
+- **mypy** : vérification de type statique (bloquant — 0 erreur tolérée)
 
 ## Structure du projet
 
@@ -140,7 +141,7 @@ Voir [docs/integration-type-catalogue.md](docs/integration-type-catalogue.md) po
 
 Le pipeline GitHub Actions exécute :
 - **lint-backend** : Ruff
-- **typecheck-backend** : Mypy (bloquant avec baseline)
+- **typecheck-backend** : Mypy (bloquant strict — 0 erreur tolérée)
 - **test-backend** : Pytest
 - **security-*** : Scans de sécurité (Bandit, pip-audit, detect-secrets)
 

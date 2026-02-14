@@ -7,6 +7,8 @@ Story 26.1 - AC1: Separation of concerns from InventoryService.
 
 from __future__ import annotations
 
+from typing import cast
+
 import structlog
 
 from integrations.models import Integration, IntegrationType
@@ -46,7 +48,7 @@ class InventorySourceResolver:
                 integration_type=IntegrationType.INVENTORY,
                 correlation_id=correlation_id
             )
-            return integration
+            return cast("Integration | None", integration)
 
         integration = Integration.objects.get_by_type(IntegrationType.INVENTORY_DB)
         if integration:
@@ -56,7 +58,7 @@ class InventorySourceResolver:
                 integration_type=IntegrationType.INVENTORY_DB,
                 correlation_id=correlation_id
             )
-            return integration
+            return cast("Integration | None", integration)
 
         logger.info(
             "no_inventory_integration_configured",

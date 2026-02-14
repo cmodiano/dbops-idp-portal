@@ -93,7 +93,7 @@ def get_env_config_case_insensitive(config: dict, env: str) -> dict:
 
     # HIGH-5 FIX: Log warning if config value is not a dict
     if not isinstance(value, dict):
-        exec_logger.warning(
+        exec_logger.warning(  # type: ignore[unreachable]
             "invalid_env_config_value",
             env=env,
             value_type=type(value).__name__,
@@ -495,7 +495,7 @@ def parse_date(value: str | None, *, name: str) -> date | None:
         raise BadRequestError(code="BAD_REQUEST", message=f"{name} invalide (YYYY-MM-DD)", details={name: value})
 
 
-def get_allowed_action_ids_for_user(user) -> set[int] | None:
+def get_allowed_action_ids_for_user(user: Any) -> set[int] | None:
     """
     Get action IDs the user has access to based on their profile permissions.
     Story 13.6: DBA sees scheduled executions for actions their profile gives access to.
@@ -549,7 +549,7 @@ def get_allowed_action_ids_for_user(user) -> set[int] | None:
     return action_ids
 
 
-def detect_request_source(request) -> str:
+def detect_request_source(request: Any) -> str:
     """
     Detect if request comes from UI (frontend) or API (standalone).
     Story 13.5, Subtask 3.2: Distinguish UI vs API requests for audit.
@@ -720,7 +720,7 @@ def calculate_next_execution_date(pattern_type: str, pattern_config: dict, refer
 
 
 def validate_action_mutex(
-    action: Action,
+    action: Any,
     target_ids: list[str],
     correlation_id: str | None = None,
     user_id: str | None = None,

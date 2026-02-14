@@ -126,7 +126,7 @@ def _yaml_item_to_target_payload(item: dict) -> dict:
     }
 
 
-def _validate_yaml_schema(parsed: dict):
+def _validate_yaml_schema(parsed: dict[str, Any]) -> None:
     """
     Validate YAML schema structure.
     Raises InvalidStateError if validation fails.
@@ -250,7 +250,7 @@ def _validate_yaml_schema(parsed: dict):
             )
 
 
-def import_profiles_yaml(content: bytes, user=None) -> tuple[int, int]:
+def import_profiles_yaml(content: bytes, user: Any = None) -> tuple[int, int]:
     """
     Import profiles from YAML.
     

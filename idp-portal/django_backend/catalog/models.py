@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import logging
+from typing import Any
 from django.db import models
 from django.db.models import Count, Subquery
 from idp_auth.models import User
@@ -57,29 +60,29 @@ class ActionQuerySet(models.QuerySet):
     Exposes chainable helpers (works after .filter()).
     """
 
-    def list_published(self):
+    def list_published(self) -> ActionQuerySet:
         """Return QuerySet of published actions only."""
         return self.filter(status=ActionStatus.PUBLISHED)
 
-    def list_by_status(self, status: str):
+    def list_by_status(self, status: str) -> ActionQuerySet:
         """
         Filter actions by status.
-        
+
         Args:
             status: Status value (draft, published, disabled)
-        
+
         Returns:
             QuerySet filtered by status
         """
         return self.filter(status=status)
 
-    def search_by_tags(self, tag_names: list[str]):
+    def search_by_tags(self, tag_names: list[str]) -> ActionQuerySet:
         """
         Search actions by tags (AND logic - action must have all specified tags).
-        
+
         Args:
             tag_names: List of tag names to search for
-        
+
         Returns:
             QuerySet of actions matching all tags, distinct
         """
@@ -108,16 +111,16 @@ class ActionQuerySet(models.QuerySet):
         )
         return queryset.filter(id__in=Subquery(action_ids_subq))
 
-    def with_tags(self):
+    def with_tags(self) -> ActionQuerySet:
         """Prefetch tags to avoid N+1 queries."""
         return self.prefetch_related('actiontag_set__tag')
 
-    def with_creator(self):
+    def with_creator(self) -> ActionQuerySet:
         """Select related creator to avoid N+1 queries."""
         return self.select_related('created_by')
 
 
-class ActionManager(models.Manager.from_queryset(ActionQuerySet)):
+class ActionManager(models.Manager.from_queryset(ActionQuerySet)):  # type: ignore[misc]
     """
     Custom manager for Action model.
     Provides query methods for common action queries (and keeps them chainable).
@@ -234,7 +237,7 @@ class Action(models.Model):
             ),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
 
@@ -251,7 +254,7 @@ class Tag(models.Model):
         db_table = 'TAGS'
         ordering = ['name']
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
 
@@ -275,7 +278,7 @@ class ActionTag(models.Model):
         db_table = 'ACTION_TAGS'
         unique_together = [['action', 'tag']]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.action.name} - {self.tag.name}"
 
 
@@ -301,7 +304,7 @@ class UserFavorite(models.Model):
         unique_together = [['user', 'action']]
         ordering = ['-created_at']
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.user.username} - {self.action.name}"
 
 
@@ -344,6 +347,6 @@ class ActionMutex(models.Model):
         unique_together = [['action', 'incompatible_with']]
         ordering = ['action', 'incompatible_with']
 
-    def __str__(self):
+    def __str__(self) -> str:
         scope = "same target" if self.same_target else "global"
         return f"{self.action.name} ⊗ {self.incompatible_with.name} ({scope})"

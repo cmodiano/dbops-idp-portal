@@ -2,6 +2,10 @@
 Custom permissions for DRF RBAC.
 """
 
+from __future__ import annotations
+
+from typing import Any
+
 from django.conf import settings
 from django.db import OperationalError
 from rest_framework import permissions
@@ -48,7 +52,7 @@ class IsDBAOrDBOPS(permissions.BasePermission):
 
     ADMIN_PROFILES = {'dbops', 'dba', 'dba_applicatif', 'dba_infrastructure'}
 
-    def has_permission(self, request, view):
+    def has_permission(self, request: Any, view: Any) -> bool:
         """
         Check view-level permission : user a-t-il un profil admin DBA/DBOPS ?
 
@@ -93,7 +97,7 @@ class IsDBAOrDBOPS(permissions.BasePermission):
 
         return False
 
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(self, request: Any, view: Any, obj: Any) -> bool:
         """
         Check object-level permission : user est-il owner OU admin DBA/DBOPS ?
 
@@ -133,7 +137,7 @@ class DBOPSProfilePermission(permissions.BasePermission):
     Default is False (fail-secure). Set to True only in development for bootstrapping/convenience.
     """
 
-    def has_permission(self, request, view):
+    def has_permission(self, request: Any, view: Any) -> bool:
         """Check if user has DBOPS profile."""
         if not request.user or not request.user.is_authenticated:
             return False
@@ -204,7 +208,7 @@ class OptionalUserPermission(permissions.BasePermission):
     """
     Permission class that allows both authenticated and anonymous users.
     """
-    
-    def has_permission(self, request, view):
+
+    def has_permission(self, request: Any, view: Any) -> bool:
         """Allow all users (authenticated or anonymous)."""
         return True

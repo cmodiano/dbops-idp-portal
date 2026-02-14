@@ -1,5 +1,7 @@
 """DRF serializers for profiles and permissions API (Story M.5)."""
 
+from typing import Any
+
 import structlog
 from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_serializer
@@ -20,7 +22,7 @@ class ProfileSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'description', 'ad_group', 'is_admin', 'is_auditor', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
     
-    def to_representation(self, instance):
+    def to_representation(self, instance: Any) -> dict[str, Any]:
         """Convert is_admin/is_auditor from IntegerField (0/1) to boolean."""
         data = super().to_representation(instance)
         data['is_admin'] = bool(instance.is_admin)
@@ -30,21 +32,21 @@ class ProfileSerializer(serializers.ModelSerializer):
 
 class ProfileCreateSerializer(serializers.Serializer):
     """Serializer for POST /admin/profiles (validation: name, ad_group required)."""
-    
+
     name = serializers.CharField(min_length=1, max_length=255, trim_whitespace=True)
     description = serializers.CharField(max_length=4000, required=False, allow_null=True, allow_blank=True)
     ad_group = serializers.CharField(min_length=1, max_length=512, trim_whitespace=True)
     is_admin = serializers.BooleanField(default=False)
     is_auditor = serializers.BooleanField(default=False)
-    
-    def validate_name(self, value):
+
+    def validate_name(self, value: str) -> str:
         """Strip and validate name is not empty."""
         stripped = value.strip()
         if not stripped:
             raise serializers.ValidationError("name cannot be empty or whitespace only")
         return stripped
-    
-    def validate_ad_group(self, value):
+
+    def validate_ad_group(self, value: str) -> str:
         """Strip and validate ad_group is not empty."""
         stripped = value.strip()
         if not stripped:
@@ -54,21 +56,21 @@ class ProfileCreateSerializer(serializers.Serializer):
 
 class ProfileUpdateSerializer(serializers.Serializer):
     """Serializer for PUT /admin/profiles/{id} (all fields optional)."""
-    
+
     name = serializers.CharField(min_length=1, max_length=255, required=False, allow_null=True, trim_whitespace=True)
     description = serializers.CharField(max_length=4000, required=False, allow_null=True, allow_blank=True)
     ad_group = serializers.CharField(min_length=1, max_length=512, required=False, allow_null=True, trim_whitespace=True)
     is_admin = serializers.BooleanField(required=False, allow_null=True)
     is_auditor = serializers.BooleanField(required=False, allow_null=True)
-    
-    def validate_name(self, value):
+
+    def validate_name(self, value: str | None) -> str | None:
         """Strip name if provided."""
         if value is None:
             return None
         stripped = value.strip()
         return stripped if stripped else None
-    
-    def validate_ad_group(self, value):
+
+    def validate_ad_group(self, value: str | None) -> str | None:
         """Strip ad_group if provided."""
         if value is None:
             return None
@@ -78,17 +80,17 @@ class ProfileUpdateSerializer(serializers.Serializer):
 
 class ProfileListSerializer(serializers.ModelSerializer):
     """Serializer for GET /admin/profiles list (with permission_count)."""
-    
+
     is_admin = serializers.BooleanField()
     is_auditor = serializers.BooleanField()
     permission_count = serializers.IntegerField(read_only=True)
-    
+
     class Meta:
         model = Profile
         fields = ['id', 'name', 'ad_group', 'is_admin', 'is_auditor', 'permission_count', 'created_at']
         read_only_fields = ['id', 'permission_count', 'created_at']
-    
-    def to_representation(self, instance):
+
+    def to_representation(self, instance: Any) -> dict[str, Any]:
         """Convert is_admin/is_auditor from IntegerField (0/1) to boolean."""
         data = super().to_representation(instance)
         data['is_admin'] = bool(instance.is_admin)
@@ -142,18 +144,18 @@ class ProfileActionPermissionsSerializer(serializers.Serializer):
             # Re-raise ServiceUnavailableError as-is for HTTP 503 (handled by custom_exception_handler)
             raise
 
-    def validate(self, data):
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
         """Validate type/fields coherence (equivalent to Pydantic model_validator)."""
         actions_type = data.get('actions_type')
         action_ids = data.get('action_ids')
         tag_patterns = data.get('tag_patterns')
-        
+
         # Normalize empty lists to None for consistent validation
         if action_ids is not None and len(action_ids) == 0:
             action_ids = None
         if tag_patterns is not None and len(tag_patterns) == 0:
             tag_patterns = None
-        
+
         if actions_type == 'list':
             if not action_ids:
                 raise serializers.ValidationError({
@@ -177,10 +179,10 @@ class ProfileActionPermissionsSerializer(serializers.Serializer):
                 raise serializers.ValidationError({
                     'non_field_errors': 'action_ids and tag_patterns must be empty when actions_type is "all"'
                 })
-        
+
         return data
-    
-    def to_representation(self, instance):
+
+    def to_representation(self, instance: Any) -> dict[str, Any]:
         """Convert ProfileActionPermission model to serializer format."""
         if isinstance(instance, ProfileActionPermission):
             # Map permission_type (LIST/PATTERN/ALL) to actions_type (list/pattern/all)
@@ -233,7 +235,7 @@ class ProfileTargetPermissionsSerializer(serializers.Serializer):
         help_text="Deny patterns (applied after inclusion rules). Glob-style: PROD-CRITICAL-*, DR-*. Story 25.6"
     )
 
-    def validate_filter_by_attribute(self, value):
+    def validate_filter_by_attribute(self, value: dict[str, list[str]] | None) -> dict[str, list[str]] | None:
         """
         Validate filter_by_attribute keys against available inventory concepts.
         Story 23.4 - AC3.
@@ -272,7 +274,7 @@ class ProfileTargetPermissionsSerializer(serializers.Serializer):
 
         return value
 
-    def validate_exclusion_patterns(self, value):
+    def validate_exclusion_patterns(self, value: list[str] | None) -> list[str] | None:
         """
         Validate exclusion_patterns are non-empty strings.
         Story 25.6 - AC2.
@@ -288,10 +290,10 @@ class ProfileTargetPermissionsSerializer(serializers.Serializer):
         invalid_patterns = []
         for pattern in value:
             if not isinstance(pattern, str):
-                invalid_patterns.append(f"{pattern} (not a string)")
+                invalid_patterns.append(f"{pattern} (not a string)")  # type: ignore[unreachable]
             elif not pattern.strip():
                 invalid_patterns.append("(empty or whitespace)")
-        
+
         if invalid_patterns:
             raise serializers.ValidationError(
                 f"Invalid exclusion patterns: {', '.join(invalid_patterns)}. "
@@ -329,7 +331,7 @@ class ProfileTargetPermissionsSerializer(serializers.Serializer):
         
         return stripped_patterns
 
-    def validate(self, data):
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
         """Validate type/fields coherence (equivalent to Pydantic model_validator)."""
         targets_type = data.get('targets_type')
         target_names = data.get('target_names')
@@ -367,7 +369,7 @@ class ProfileTargetPermissionsSerializer(serializers.Serializer):
 
         return data
 
-    def to_representation(self, instance):
+    def to_representation(self, instance: Any) -> dict[str, Any]:
         """Convert ProfileTargetPermission model to serializer format."""
         if isinstance(instance, ProfileTargetPermission):
             # Map permission_type (LIST/PATTERN/ALL) to targets_type (list/pattern/all)

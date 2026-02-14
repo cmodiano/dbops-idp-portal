@@ -1,6 +1,8 @@
 """Résolution de la configuration d'environnement pour les exécutions."""
 from __future__ import annotations
 
+from typing import Any
+
 from core.exceptions import BadRequestError
 from executions.utils import get_env_config_case_insensitive
 
@@ -13,7 +15,7 @@ class EnvironmentConfigResolver:
     """Résout la configuration d'environnement (change_type_config, impact_rules, env_config)."""
 
     @staticmethod
-    def resolve(action, environment: str | None, correlation_id: str) -> dict:
+    def resolve(action: Any, environment: str | None, correlation_id: str) -> dict:
         """
         Resolve environment-specific config from action.
 
@@ -26,7 +28,7 @@ class EnvironmentConfigResolver:
         """
         change_type_config_raw = action.change_type_config
         if change_type_config_raw is None:
-            change_type_config = {}
+            change_type_config: dict[str, Any] = {}
         elif not isinstance(change_type_config_raw, dict):
             logger.warning(
                 "invalid_change_type_config_type_ignored",

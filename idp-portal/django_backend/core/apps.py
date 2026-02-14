@@ -5,7 +5,7 @@ class CoreConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'core'
 
-    def ready(self):
+    def ready(self) -> None:
         """Initialize structlog configuration and validate secrets on app startup."""
         from core.logging import configure_structlog
         configure_structlog()

@@ -4,9 +4,12 @@ Story 13.7 - Reference endpoints for engines and platforms.
 Story 2.30 - Category endpoints (list + CRUD admin).
 """
 
+from typing import Any
+
 import structlog
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
@@ -23,7 +26,7 @@ logger = structlog.get_logger(__name__)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def list_engines(request):
+def list_engines(request: Request) -> Response:
     """
     List all active engines from REF_ENGINES table.
     Returns engines ordered by display_order, code.
@@ -56,7 +59,7 @@ def list_engines(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def list_platforms(request):
+def list_platforms(request: Request) -> Response:
     """
     List all active platforms from REF_PLATFORMS table.
     Returns platforms ordered by display_order, code.
@@ -92,7 +95,7 @@ def list_platforms(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def list_categories(request):
+def list_categories(request: Request) -> Response:
     """
     List categories from REF_CATEGORIES table.
     Returns categories ordered by display_order, code.
@@ -107,8 +110,8 @@ def list_categories(request):
 
     queryset = RefCategory.objects.all()
     if active_only:
-        queryset = queryset.active()
-    queryset = queryset.ordered()
+        queryset = queryset.active()  # type: ignore[assignment]
+    queryset = queryset.ordered()  # type: ignore[assignment]
 
     serializer = RefCategorySerializer(queryset, many=True)
     return Response(serializer.data)
@@ -116,7 +119,7 @@ def list_categories(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, DBOPSProfilePermission])
-def create_category(request):
+def create_category(request: Request) -> Response:
     """Create a new category (DBOPS only). Story 2.30, AC5."""
     correlation_id = get_correlation_id()
     logger.info("creating_category", correlation_id=correlation_id)
@@ -131,7 +134,7 @@ def create_category(request):
 
 @api_view(['PATCH'])
 @permission_classes([IsAuthenticated, DBOPSProfilePermission])
-def update_category(request, pk):
+def update_category(request: Request, pk: Any) -> Response:
     """Update an existing category (DBOPS only). Story 2.30, AC5."""
     correlation_id = get_correlation_id()
     logger.info("updating_category", category_id=pk, correlation_id=correlation_id)
@@ -154,7 +157,7 @@ def update_category(request, pk):
 
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated, DBOPSProfilePermission])
-def delete_category(request, pk):
+def delete_category(request: Request, pk: Any) -> Response:
     """Soft-delete a category (set is_active=0). DBOPS only. Story 2.30, AC5."""
     correlation_id = get_correlation_id()
     logger.info("deleting_category", category_id=pk, correlation_id=correlation_id)

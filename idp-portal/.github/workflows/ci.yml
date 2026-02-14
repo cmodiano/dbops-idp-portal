@@ -76,55 +76,9 @@ jobs:
       - name: Install dependencies
         working-directory: django_backend
         run: uv pip install -r requirements-dev.lock --system
-      - name: Run mypy with baseline check
+      - name: Run mypy type check (strict, blocking)
         working-directory: django_backend
-        run: bash scripts/check_mypy_baseline.sh
-      - name: Check if baseline should be updated
-        if: success()
-        working-directory: django_backend
-        run: |
-          BASELINE_COUNT=$(cat .mypy-baseline-count | tr -d '[:space:]')
-          CURRENT_COUNT=$(wc -l < mypy-report.txt | tr -d ' ')
-          if [ "$CURRENT_COUNT" -lt "$BASELINE_COUNT" ]; then
-            echo "⚠️ WARNING: Type errors reduced from $BASELINE_COUNT to $CURRENT_COUNT"
-            echo "Please update baseline: scripts/generate_mypy_baseline.sh && git commit -m 'chore: update mypy baseline ($CURRENT_COUNT errors)'"
-            echo "::warning file=.mypy-baseline-count::Baseline should be updated ($BASELINE_COUNT → $CURRENT_COUNT errors fixed)"
-          fi
-      - name: Upload mypy report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: mypy-report
-          path: django_backend/mypy-report.txt
-          retention-days: 30
-
-  mypy-full-report:
-    name: Mypy Full Report (HTML)
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install uv
-        run: pip install uv
-      - name: Install dependencies
-        working-directory: django_backend
-        run: |
-          uv pip install -r requirements-dev.lock --system
-          pip install lxml
-      - name: Generate HTML report
-        working-directory: django_backend
-        run: |
-          export DJANGO_SETTINGS_MODULE=idp_backend.settings
-          mypy . --html-report mypy-html-report --ignore-missing-imports || true
-      - name: Upload HTML report
-        uses: actions/upload-artifact@v4
-        with:
-          name: mypy-html-report
-          path: django_backend/mypy-html-report/
-          retention-days: 7
+        run: mypy . --no-error-summary
 
   typecheck-frontend:
     name: Type Check Frontend (tsc)

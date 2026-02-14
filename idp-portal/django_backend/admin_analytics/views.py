@@ -6,6 +6,7 @@ from datetime import timedelta
 
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -23,7 +24,7 @@ class AdminAnalyticsView(APIView):
 
     permission_classes = [IsAuthenticated, DBOPSProfilePermission]
 
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         days_raw = request.query_params.get("days", "90")
         try:
             days = int(days_raw)

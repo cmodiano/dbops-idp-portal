@@ -4,10 +4,15 @@ Handles complex operations like cumulative permissions across multiple profiles 
 Story M.8 - Task 9: Structured logging with structlog.
 """
 
+from __future__ import annotations
+
+from typing import Any
+
 import structlog
 
 from django.db import transaction
 from django.db import IntegrityError
+from django.db.models import QuerySet
 from profiles.models import Profile, ProfileActionPermission, ProfileTargetPermission
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
@@ -23,7 +28,7 @@ class ProfileService:
     """
     
     @transaction.atomic
-    def create_profile(self, profile_data, user=None):
+    def create_profile(self, profile_data: dict[str, Any], user: Any = None) -> Profile:
         """
         Create a new profile with validation.
 
@@ -79,22 +84,22 @@ class ProfileService:
             )
             raise ValueError(f"Un profil avec le nom '{profile_data['name']}' existe déjà")
     
-    def list_all(self):
+    def list_all(self) -> QuerySet[Profile]:
         """
         List all profiles with permission count.
-        
+
         Returns:
             QuerySet of profiles with permission_count annotation
         """
         return Profile.objects.list_with_permissions_count()
-    
-    def get_by_id(self, profile_id: int):
+
+    def get_by_id(self, profile_id: int) -> Profile | None:
         """
         Get profile by ID with prefetched permissions.
-        
+
         Args:
             profile_id: ID of the profile
-        
+
         Returns:
             Profile instance or None
         """
@@ -105,8 +110,8 @@ class ProfileService:
             ).get(id=profile_id)
         except Profile.DoesNotExist:
             return None
-    
-    def get_by_name(self, name: str):
+
+    def get_by_name(self, name: str) -> Profile | None:
         """
         Get profile by name (for YAML import upsert).
         
@@ -122,7 +127,7 @@ class ProfileService:
             return None
     
     @transaction.atomic
-    def update_profile(self, profile_id: int, profile_update_data, user=None):
+    def update_profile(self, profile_id: int, profile_update_data: dict[str, Any], user: Any = None) -> Profile | None:
         """
         Update profile with validation.
         
@@ -172,7 +177,7 @@ class ProfileService:
         return profile
     
     @transaction.atomic
-    def delete_profile(self, profile_id: int, user=None):
+    def delete_profile(self, profile_id: int, user: Any = None) -> bool:
         """
         Delete profile with cascade deletion of permissions.
         
@@ -205,7 +210,7 @@ class ProfileService:
             return False
     
     @transaction.atomic
-    def set_action_permissions(self, profile_id: int, permission_data, user=None):
+    def set_action_permissions(self, profile_id: int, permission_data: dict[str, Any], user: Any = None) -> ProfileActionPermission | None:
         """
         Set action permissions for a profile (UPSERT).
         
@@ -245,13 +250,13 @@ class ProfileService:
         
         return perm
     
-    def get_action_permissions(self, profile_id: int):
+    def get_action_permissions(self, profile_id: int) -> ProfileActionPermission | None:
         """
         Get action permissions for a profile.
-        
+
         Args:
             profile_id: ID of the profile
-        
+
         Returns:
             ProfileActionPermission instance or None
         """
@@ -259,8 +264,8 @@ class ProfileService:
             return ProfileActionPermission.objects.get(profile_id=profile_id)
         except ProfileActionPermission.DoesNotExist:
             return None
-    
-    def delete_action_permissions(self, profile_id: int):
+
+    def delete_action_permissions(self, profile_id: int) -> bool:
         """
         Delete action permissions for a profile.
         
@@ -278,7 +283,7 @@ class ProfileService:
             return False
     
     @transaction.atomic
-    def set_target_permissions(self, profile_id: int, permission_data, user=None):
+    def set_target_permissions(self, profile_id: int, permission_data: dict[str, Any], user: Any = None) -> ProfileTargetPermission | None:
         """
         Set target permissions for a profile (UPSERT).
         
@@ -321,13 +326,13 @@ class ProfileService:
 
         return perm
     
-    def get_target_permissions(self, profile_id: int):
+    def get_target_permissions(self, profile_id: int) -> ProfileTargetPermission | None:
         """
         Get target permissions for a profile.
-        
+
         Args:
             profile_id: ID of the profile
-        
+
         Returns:
             ProfileTargetPermission instance or None
         """
@@ -335,14 +340,14 @@ class ProfileService:
             return ProfileTargetPermission.objects.get(profile_id=profile_id)
         except ProfileTargetPermission.DoesNotExist:
             return None
-    
-    def delete_target_permissions(self, profile_id: int):
+
+    def delete_target_permissions(self, profile_id: int) -> bool:
         """
         Delete target permissions for a profile.
-        
+
         Args:
             profile_id: ID of the profile
-        
+
         Returns:
             True if deleted, False if not found
         """
@@ -352,8 +357,8 @@ class ProfileService:
             return True
         except ProfileTargetPermission.DoesNotExist:
             return False
-    
-    def get_cumulative_permissions(self, user_id: int, ad_groups: list[str]):
+
+    def get_cumulative_permissions(self, user_id: int, ad_groups: list[str]) -> dict[str, Any]:
         """
         Get cumulative permissions for a user across all their profiles.
         Resolves profiles by AD groups and aggregates permissions.

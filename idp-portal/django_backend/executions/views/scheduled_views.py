@@ -11,6 +11,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -62,7 +63,7 @@ class ScheduledExecutionsView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(tags=['scheduling'], summary='Lister les exécutions planifiées', responses={200: ScheduledExecutionListItemSerializer(many=True)})
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         limit = parse_int(request.query_params.get("limit"), 50, name="limit")
         offset = parse_int(request.query_params.get("offset"), 0, name="offset")
         if limit <= 0 or offset < 0 or limit > 100:
@@ -125,7 +126,7 @@ class ScheduledExecutionsView(APIView):
         actions_qs = ScheduledExecution.objects.values("action_id", "action__name")
         # Story 26.12 — View-level permission: admins see all actions, non-admins see only their own
         if not _dba_permission.has_permission(request, self):
-            actions_qs = actions_qs.filter(user_id=request.user.id)
+            actions_qs = actions_qs.filter(user_id=request.user.id)  # type: ignore[misc]
         actions_qs = actions_qs.distinct().order_by("action__name")
         available_actions = [
             {"action_id": r["action_id"], "action_name": r["action__name"] or ""}
@@ -140,7 +141,7 @@ class ScheduledExecutionsView(APIView):
         })
 
     @extend_schema(tags=['scheduling'], summary='Créer une exécution planifiée', responses={201: ScheduledExecutionSerializer})
-    def post(self, request):
+    def post(self, request: Request) -> Response:
         payload = request.data or {}
 
         action_id = payload.get("action_id")
@@ -201,7 +202,7 @@ class ScheduledExecutionsView(APIView):
             }
 
         scheduled_execution = SchedulingService().create_scheduled_execution(
-            user=request.user,
+            user=request.user,  # type: ignore[arg-type]
             action=action,
             environment=environment,
             parameters=parameters,
@@ -226,7 +227,7 @@ class ScheduledExecutionUpdateView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(tags=['scheduling'], summary='Annuler ou marquer exécutée une scheduled execution', responses={200: ScheduledExecutionSerializer})
-    def patch(self, request, scheduled_execution_id: int):
+    def patch(self, request: Request, scheduled_execution_id: int) -> Response:
         try:
             se = ScheduledExecution.objects.select_related("action", "user").select_related("recurringpattern").get(
                 id=scheduled_execution_id
@@ -258,7 +259,7 @@ class ScheduledExecutionUpdateView(APIView):
             )
 
         if new_status == "cancelled":
-            se = SchedulingService().cancel_scheduled_execution(scheduled_execution_id, user_id=str(request.user.id))
+            se = SchedulingService().cancel_scheduled_execution(scheduled_execution_id, user_id=str(request.user.id))  # type: ignore[assignment]
             if se is None:
                 raise NotFoundError(
                     code="SCHEDULED_EXECUTION_NOT_FOUND",
@@ -306,7 +307,7 @@ class ScheduledExecutionUpdateView(APIView):
 
         raise BadRequestError(code="INVALID_STATUS", message="Statut invalide", details={"status": new_status})
 
-    def put(self, request, scheduled_execution_id: int):
+    def put(self, request: Request, scheduled_execution_id: int) -> Response:
         """PUT /scheduled-executions/{id} - update pending scheduled execution (Story 13.8, AC4)."""
         try:
             se = ScheduledExecution.objects.select_related("action", "user").select_related("recurringpattern").get(
@@ -376,19 +377,20 @@ class ScheduledExecutionUpdateView(APIView):
             if len(target_names) == 0:
                 current_params = se.get_parameters() or {}
                 if not isinstance(current_params, dict):
-                    current_params = {}
+                    current_params = {}  # type: ignore[unreachable]
                 new_params = {k: v for k, v in current_params.items() if k != "_targets"}
                 new_params["_targets"] = []
                 se.set_parameters(new_params)
                 if environment is not None:
                     validate_environment_against_inventory(environment, user_id=request.user.id)
                     se.environment = EnvironmentHelper.normalize(environment)
+                    se.environment = EnvironmentHelper.normalize(environment)
             else:
                 ad_groups = get_user_ad_groups(request.user)
                 inventory_service = InventoryService()
                 try:
                     allowed_targets, _total, inventory_truncated = inventory_service.list_targets_for_user(
-                        user_id=request.user.id,
+                        user_id=request.user.id,  # type: ignore[arg-type]
                         ad_groups=ad_groups,
                         page=1,
                         page_size=MAX_TARGETS_FOR_RBAC_FILTER,
@@ -423,13 +425,13 @@ class ScheduledExecutionUpdateView(APIView):
                 se.environment = EnvironmentHelper.normalize(list(environments_found)[0])
                 current_params = se.get_parameters() or {}
                 if not isinstance(current_params, dict):
-                    current_params = {}
+                    current_params = {}  # type: ignore[unreachable]
                 new_params = {**current_params, "_targets": target_names}
                 se.set_parameters(new_params)
         elif parameters is not None:
             current_params = se.get_parameters() or {}
             if not isinstance(current_params, dict):
-                current_params = {}
+                current_params = {}  # type: ignore[unreachable]
             incoming = parameters if isinstance(parameters, dict) else {}
             sanitized = {k: v for k, v in incoming.items() if not k.startswith("_")}
             merged = {**current_params, **sanitized}
@@ -467,7 +469,7 @@ class ScheduledExecutionRecurringPatternView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def patch(self, request, scheduled_execution_id: int):
+    def patch(self, request: Request, scheduled_execution_id: int) -> Response:
         try:
             se = ScheduledExecution.objects.select_related("user").select_related("recurringpattern").get(
                 id=scheduled_execution_id
@@ -518,7 +520,7 @@ class ScheduledExecutionValidateCronView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         expr = (request.query_params.get("expression") or "").strip()
         if not expr:
             raise BadRequestError(code="BAD_REQUEST", message="expression est requise", details={})
@@ -551,7 +553,7 @@ class ScheduledExecutionCronNextExecutionsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         expr = (request.query_params.get("expression") or "").strip()
         count = parse_int(request.query_params.get("count"), 5, name="count")
         if count < 1 or count > 10:

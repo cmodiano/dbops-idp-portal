@@ -9,7 +9,7 @@ import structlog
 
 from datetime import datetime, timedelta
 from django.db import transaction
-from django.db.models import Q, Count
+from django.db.models import Q, Count, QuerySet
 from django.utils import timezone
 from core.utils import ensure_utc_isoformat
 from executions.models import (
@@ -119,7 +119,7 @@ class ExecutionService:
                        source: str | None = None, ip_address: str | None = None,
                        targets: list[str] | None = None,
                        delegated_referenced_action_ids: list[int] | None = None,
-                       validated_targets: list[dict] | None = None):
+                       validated_targets: list[dict] | None = None) -> Execution:
         """
         Create an execution atomically.
 
@@ -169,7 +169,7 @@ class ExecutionService:
                        source: str | None = None, ip_address: str | None = None,
                        targets: list[str] | None = None,
                        delegated_referenced_action_ids: list[int] | None = None,
-                       validated_targets: list[dict] | None = None):
+                       validated_targets: list[dict] | None = None) -> Execution:
         """Internal atomic execution creation (after integration validation)."""
         execution = Execution.objects.create(
             action=action,
@@ -263,7 +263,7 @@ class ExecutionService:
                                    parameters: dict | None = None, steps_data: list[dict] | None = None,
                                    parent_execution_id: int | None = None, correlation_id: str | None = None,
                                    source: str | None = None, ip_address: str | None = None,
-                                   targets: list[str] | None = None):
+                                   targets: list[str] | None = None) -> Execution:
         """
         Create an execution with steps atomically.
         
@@ -304,7 +304,7 @@ class ExecutionService:
     def list_all(self, status: str | None = None, user_id: int | None = None,
                 action_id: int | None = None, environment: str | None = None,
                 date_from: datetime | None = None, date_to: datetime | None = None,
-                page: int = 1, page_size: int = 25):
+                page: int = 1, page_size: int = 25) -> tuple[list[Execution], int]:
         """
         List all executions with pagination and filters.
         
@@ -348,7 +348,7 @@ class ExecutionService:
         
         return results, total_count
     
-    def get_by_id(self, execution_id: int):
+    def get_by_id(self, execution_id: int) -> Execution | None:
         """
         Get execution by ID with steps preloaded.
         
@@ -364,7 +364,7 @@ class ExecutionService:
             return None
     
     @transaction.atomic
-    def update_status(self, execution_id: int, new_status: str, user_id: str):
+    def update_status(self, execution_id: int, new_status: str, user_id: str) -> Execution | None:
         """
         Update execution status with transition validation.
 
@@ -437,8 +437,8 @@ class ExecutionService:
             ExecutionStatus.INTEGRATION_ERROR: [],  # Terminal state (Story 18.6)
         }
 
-        if new_status not in valid_transitions.get(old_status, []):
-            valid_list = ", ".join(valid_transitions.get(old_status, []))
+        if new_status not in (valid_transitions.get(old_status) or []):  # type: ignore[call-overload]
+            valid_list = ", ".join(valid_transitions.get(old_status) or [])  # type: ignore[call-overload]
             raise ValueError(
                 f"Invalid transition from {old_status} to {new_status}. "
                 f"Valid transitions: {valid_list or 'none (terminal state)'}"
@@ -466,7 +466,7 @@ class ExecutionService:
             ExecutionStatus.PENDING_APPROVAL: AuditActionType.EXECUTION_PENDING_APPROVAL,
             ExecutionStatus.REJECTED: AuditActionType.EXECUTION_REJECTED,
         }
-        audit_action_type = status_to_audit_type.get(new_status)
+        audit_action_type = status_to_audit_type.get(new_status)  # type: ignore[call-overload]
         if not audit_action_type:
             logger.warning(
                 "unknown_execution_status_for_audit",
@@ -494,7 +494,7 @@ class ExecutionService:
     def list_by_user(self, user_id: int, status: str | None = None,
                     environment: str | None = None, action_id: int | None = None,
                     date_from: datetime | None = None, date_to: datetime | None = None,
-                    limit: int | None = None, offset: int = 0):
+                    limit: int | None = None, offset: int = 0) -> QuerySet:
         """
         List executions for a specific user with filters.
         
@@ -540,7 +540,7 @@ class ExecutionService:
         
         return queryset
     
-    def get_recent(self, limit: int = 10):
+    def get_recent(self, limit: int = 10) -> QuerySet:
         """
         Get recent executions for dashboard.
         
@@ -552,7 +552,7 @@ class ExecutionService:
         """
         return Execution.objects.get_recent(limit)
     
-    def get_stats(self, user_id: int | None = None, days: int = 30):
+    def get_stats(self, user_id: int | None = None, days: int = 30) -> dict:
         """
         Get execution statistics with aggregations.
         
@@ -594,7 +594,7 @@ class ExecutionService:
             'by_environment': list(by_environment),
         }
 
-    def get_action_stats(self, action_id: int, days: int = 30):
+    def get_action_stats(self, action_id: int, days: int = 30) -> dict:
         """
         Get execution statistics for a single action (Story 20.2, AC5).
 
@@ -652,6 +652,7 @@ class ExecutionService:
         durations = []
         for exec in completed_executions:
             try:
+                assert exec.completed_at is not None and exec.started_at is not None
                 delta = (exec.completed_at - exec.started_at).total_seconds() * 1000
                 if delta >= 0:
                     durations.append(delta)
@@ -693,7 +694,7 @@ class ExecutionService:
     # ExecutionStep CRUD methods
     @transaction.atomic
     def create_step(self, execution: Execution, step_order: int, step_name: str,
-                   step_type: str):
+                   step_type: str) -> ExecutionStep:
         """
         Create an execution step.
         
@@ -715,7 +716,7 @@ class ExecutionService:
         )
         return step
     
-    def get_steps_by_execution(self, execution_id: int):
+    def get_steps_by_execution(self, execution_id: int) -> QuerySet:
         """
         Get all steps for an execution.
         
@@ -727,7 +728,7 @@ class ExecutionService:
         """
         return ExecutionStep.objects.filter(execution_id=execution_id).order_by('step_order')
     
-    def get_step_by_id(self, step_id: int):
+    def get_step_by_id(self, step_id: int) -> ExecutionStep | None:
         """
         Get execution step by ID.
         
@@ -743,7 +744,7 @@ class ExecutionService:
             return None
     
     @transaction.atomic
-    def update_step_status(self, step_id: int, new_status: str, output: dict | None = None):
+    def update_step_status(self, step_id: int, new_status: str, output: dict | None = None) -> ExecutionStep | None:
         """
         Update execution step status and output.
         
@@ -779,7 +780,7 @@ class SchedulingService:
     @transaction.atomic
     def create_scheduled_execution(self, user: User, action: Action, environment: str,
                                   parameters: dict | None = None, scheduled_at: datetime | None = None,
-                                  recurring_pattern_data: dict | None = None):
+                                  recurring_pattern_data: dict | None = None) -> ScheduledExecution:
         """
         Create a scheduled execution, optionally with a recurring pattern.
         
@@ -847,7 +848,7 @@ class SchedulingService:
     
     def list_all(self, status: str | None = None, user_id: int | None = None,
                 action_id: int | None = None, scheduled_from: datetime | None = None,
-                scheduled_to: datetime | None = None, page: int = 1, page_size: int = 25):
+                scheduled_to: datetime | None = None, page: int = 1, page_size: int = 25) -> tuple[list[ScheduledExecution], int]:
         """
         List all scheduled executions with filters and pagination.
         
@@ -890,7 +891,7 @@ class SchedulingService:
         
         return results, total_count
     
-    def get_by_id(self, scheduled_execution_id: int):
+    def get_by_id(self, scheduled_execution_id: int) -> ScheduledExecution | None:
         """
         Get scheduled execution by ID with recurring pattern preloaded.
         
@@ -906,7 +907,7 @@ class SchedulingService:
             return None
     
     @transaction.atomic
-    def update_status(self, scheduled_execution_id: int, new_status: str, user_id: str):
+    def update_status(self, scheduled_execution_id: int, new_status: str, user_id: str) -> ScheduledExecution | None:
         """
         Update scheduled execution status.
         For recurring patterns, recalculates next_execution_date if needed.
@@ -945,7 +946,7 @@ class SchedulingService:
             ScheduledExecutionStatus.EXECUTED: AuditActionType.SCHEDULED_EXECUTION_EXECUTED,
             ScheduledExecutionStatus.CANCELLED: AuditActionType.SCHEDULED_EXECUTION_CANCELLED,
         }
-        audit_action_type = status_to_audit_type.get(new_status)
+        audit_action_type = status_to_audit_type.get(new_status)  # type: ignore[call-overload]
         if audit_action_type:
             AuditService.create_entry(
                 user_id=user_id,
@@ -962,7 +963,7 @@ class SchedulingService:
         
         return scheduled_execution
     
-    def list_pending(self, before_datetime: datetime | None = None):
+    def list_pending(self, before_datetime: datetime | None = None) -> QuerySet:
         """
         List scheduled executions pending for external scheduler.
         Includes one-time (scheduled_at <= before) and active recurring (next_execution_date <= before).
@@ -979,7 +980,7 @@ class SchedulingService:
         return ScheduledExecution.objects.list_pending(before_datetime)
     
     @transaction.atomic
-    def cancel_scheduled_execution(self, scheduled_execution_id: int, user_id: str):
+    def cancel_scheduled_execution(self, scheduled_execution_id: int, user_id: str) -> ScheduledExecution | None:
         """
         Cancel a scheduled execution.
         

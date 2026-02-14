@@ -144,12 +144,12 @@ class CatalogRBACService:
 
         # MEDIUM-2 fix: Validate permissions structure
         if not isinstance(permissions, dict):
-            logger.warning(
+            logger.warning(  # type: ignore[unreachable]
                 "filter_actions_invalid_permissions_type",
                 permissions_type=type(permissions).__name__,
                 correlation_id=get_correlation_id(),
             )
-            return actions  # Defensive: treat invalid permissions as no restrictions
+            return actions
 
         actions_type = permissions.get('actions_type', 'all')
         if actions_type == 'all':
@@ -165,7 +165,7 @@ class CatalogRBACService:
             if hasattr(act, 'id'):
                 # Use prefetched actiontag_set (already loaded, no extra query)
                 if hasattr(act, '_prefetched_objects_cache') and 'actiontag_set' in act._prefetched_objects_cache:
-                    action_tags_map[act.id] = {at.tag.name for at in act.actiontag_set.all()}
+                    action_tags_map[act.id] = {at.tag.name for at in act.actiontag_set.all()}  # type: ignore[union-attr]
                 elif hasattr(act, 'actiontag_set'):
                     # Fallback: tags might be in cache from prefetch_related
                     action_tags_map[act.id] = {at.tag.name for at in act.actiontag_set.all()}

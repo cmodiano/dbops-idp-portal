@@ -4,11 +4,15 @@ Story M.7 - Full SAML and JWT auth implementation.
 Story M.8 - Task 9: Structured logging with structlog.
 """
 
+from typing import Any
+
 import structlog
 
 from django.conf import settings
+from django.http import HttpResponse
 from django.shortcuts import redirect
 from rest_framework.views import APIView
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -70,7 +74,7 @@ class SAMLLoginView(APIView):
     permission_classes = [AllowAny]
     throttle_classes = [AuthEndpointThrottle]
 
-    def get(self, request):
+    def get(self, request: Request) -> HttpResponse:
         """Initiate SAML login flow."""
         # Dev bypass mode (for local development without IdP)
         if settings.AUTH_DEV_BYPASS:
@@ -137,7 +141,7 @@ class SAMLCallbackView(APIView):
     permission_classes = [AllowAny]
     throttle_classes = [AuthEndpointThrottle]
 
-    def post(self, request):
+    def post(self, request: Request) -> HttpResponse:
         """Process SAML callback with assertion."""
         post_data = dict(request.POST)
 
@@ -262,7 +266,7 @@ class CurrentUserProfileView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         """
         Return the authenticated user's profile with navigation permissions.
 
@@ -293,7 +297,7 @@ class CurrentUserProfileView(APIView):
         if profile_ids:
             try:
                 profile_service = ProfileService()
-                cumulative_permissions = profile_service.get_cumulative_permissions(user.id, ad_groups)
+                cumulative_permissions = profile_service.get_cumulative_permissions(user.id, ad_groups)  # type: ignore[arg-type]
             except Exception as e:
                 # Story 17.6: Justified broad catch - ProfileService can raise various exceptions
                 correlation_id = get_correlation_id()
@@ -344,7 +348,7 @@ class RefreshTokenView(APIView):
     permission_classes = [AllowAny]
     throttle_classes = [TokenRefreshThrottle]
 
-    def post(self, request):
+    def post(self, request: Request) -> Response:
         """
         Exchange refresh token (httpOnly cookie) for a new access token.
         """
@@ -411,7 +415,7 @@ class LogoutView(APIView):
     permission_classes = [AllowAny]
     throttle_classes = [PublicEndpointThrottle]
 
-    def post(self, request):
+    def post(self, request: Request) -> Response:
         """
         Clear the refresh token cookie.
         """
@@ -454,8 +458,8 @@ class UserFavoritesView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
-        favorites = AuthService().list_favorites(request.user.id)
+    def get(self, request: Request) -> Response:
+        favorites = AuthService().list_favorites(request.user.id)  # type: ignore[arg-type]
         data = [
             {
                 "action_id": fav.action_id,
@@ -473,9 +477,9 @@ class UserFavoriteItemView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
-    def post(self, request, action_id: int):
+    def post(self, request: Request, action_id: int) -> Response:
         try:
-            AuthService().add_favorite(request.user.id, action_id)
+            AuthService().add_favorite(request.user.id, action_id)  # type: ignore[arg-type]
         except Action.DoesNotExist:
             raise NotFoundError(
                 code="NOT_FOUND",
@@ -484,7 +488,7 @@ class UserFavoriteItemView(APIView):
             )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    def delete(self, request, action_id: int):
+    def delete(self, request: Request, action_id: int) -> Response:
         # Idempotent: removing a non-existing favorite is still 204
-        AuthService().remove_favorite(request.user.id, action_id)
+        AuthService().remove_favorite(request.user.id, action_id)  # type: ignore[arg-type]
         return Response(status=status.HTTP_204_NO_CONTENT)

@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import json
 import logging
+from typing import Any
 from django.db import models
 from django.db import IntegrityError
 
@@ -101,10 +104,10 @@ class AuditEntityType(models.TextChoices):
 class ImmutableQuerySet(models.QuerySet):
     """QuerySet that forbids update() and delete() for immutable audit logs (SOC1/NFR8)."""
 
-    def update(self, **kwargs):
+    def update(self, **kwargs: Any) -> None:  # type: ignore[override]
         raise IntegrityError("AUDIT_LOG is immutable - bulk updates are forbidden (SOC1/NFR8)")
 
-    def delete(self):
+    def delete(self) -> None:  # type: ignore[override]
         raise IntegrityError("AUDIT_LOG is immutable - bulk deletions are forbidden (SOC1/NFR8)")
 
 
@@ -115,15 +118,15 @@ class AuditLogManager(models.Manager):
     Uses ImmutableQuerySet to prevent bulk update/delete.
     """
 
-    def get_queryset(self):
+    def get_queryset(self) -> ImmutableQuerySet:
         return ImmutableQuerySet(self.model, using=self._db)
 
     def create_entry(self, user_id: str, action_type: str, entity_type: str,
                      entity_id: int, details: dict | None = None,
-                     ip_address: str | None = None, correlation_id: str | None = None):
+                     ip_address: str | None = None, correlation_id: str | None = None) -> AuditLog:
         """
         Create a new audit log entry.
-        
+
         Args:
             user_id: ID of the user performing the action
             action_type: Type of action (ACTION_CREATED, etc.)
@@ -132,7 +135,7 @@ class AuditLogManager(models.Manager):
             details: Optional JSON details
             ip_address: Optional IP address
             correlation_id: Optional correlation ID
-        
+
         Returns:
             AuditLog instance
         """
@@ -142,7 +145,7 @@ class AuditLogManager(models.Manager):
             import json
             details_json = json.dumps(details)
         
-        return self.create(
+        return self.create(  # type: ignore[return-value]
             user_id=user_id,
             action_type=action_type,
             entity_type=entity_type,
@@ -152,39 +155,39 @@ class AuditLogManager(models.Manager):
             correlation_id=correlation_id,
         )
     
-    def list_by_entity(self, entity_type: str, entity_id: int):
+    def list_by_entity(self, entity_type: str, entity_id: int) -> models.QuerySet[AuditLog]:
         """
         List audit entries for a specific entity.
-        
+
         Args:
             entity_type: Type of entity
             entity_id: ID of the entity
-        
+
         Returns:
             QuerySet of audit entries for the entity, ordered by timestamp DESC
         """
-        return self.filter(entity_type=entity_type, entity_id=entity_id).order_by('-timestamp')
+        return self.filter(entity_type=entity_type, entity_id=entity_id).order_by('-timestamp')  # type: ignore[return-value]
     
-    def list_by_user(self, user_id: str):
+    def list_by_user(self, user_id: str) -> models.QuerySet[AuditLog]:
         """
         List audit entries for a specific user.
-        
+
         Args:
             user_id: ID of the user
-        
+
         Returns:
             QuerySet of audit entries for the user, ordered by timestamp DESC
         """
-        return self.filter(user_id=user_id).order_by('-timestamp')
+        return self.filter(user_id=user_id).order_by('-timestamp')  # type: ignore[return-value]
     
-    def list_by_date_range(self, from_date=None, to_date=None):
+    def list_by_date_range(self, from_date: Any = None, to_date: Any = None) -> models.QuerySet[AuditLog]:
         """
         List audit entries within a date range.
-        
+
         Args:
             from_date: Start date (datetime)
             to_date: End date (datetime)
-        
+
         Returns:
             QuerySet of audit entries in the date range, ordered by timestamp DESC
         """
@@ -193,7 +196,7 @@ class AuditLogManager(models.Manager):
             queryset = queryset.filter(timestamp__gte=from_date)
         if to_date:
             queryset = queryset.filter(timestamp__lte=to_date)
-        return queryset.order_by('-timestamp')
+        return queryset.order_by('-timestamp')  # type: ignore[return-value]
 
 
 class AuditLog(models.Model):
@@ -227,28 +230,28 @@ class AuditLog(models.Model):
         db_table = 'AUDIT_LOG'
         ordering = ['-timestamp']
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         if self.pk:
             raise IntegrityError("AUDIT_LOG is immutable - updates are forbidden (SOC1/NFR8)")
         super().save(*args, **kwargs)
 
-    def delete(self, *args, **kwargs):
+    def delete(self, *args: Any, **kwargs: Any) -> None:  # type: ignore[override]
         raise IntegrityError("AUDIT_LOG is immutable - deletions are forbidden (SOC1/NFR8)")
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Audit {self.id} - {self.action_type} ({self.entity_type}:{self.entity_id})"
 
-    def get_details(self):
+    def get_details(self) -> dict | list | None:
         """Deserialize JSON from CLOB."""
         if self.details:
             try:
-                return json.loads(self.details)
+                return json.loads(self.details)  # type: ignore[no-any-return]
             except (json.JSONDecodeError, TypeError) as e:
                 logger.warning(f"Failed to deserialize details for AuditLog {self.id}: {e}")
                 return None
         return None
 
-    def set_details(self, value):
+    def set_details(self, value: dict | list | None) -> None:
         """Serialize JSON to CLOB."""
         if value is not None:
             self.details = json.dumps(value)
@@ -292,11 +295,11 @@ class FeatureFlag(models.Model):
         db_table = 'CORE_FEATURE_FLAGS'
         ordering = ['flag_key']
 
-    def __str__(self):
+    def __str__(self) -> str:
         status = 'ON' if self.enabled else 'OFF'
         return f"{self.flag_key} ({status}, {self.rollout_percent}%)"
 
-    def clean(self):
+    def clean(self) -> None:
         """Validate rollout_percent is 0-100."""
         from django.core.exceptions import ValidationError
         if self.rollout_percent < 0 or self.rollout_percent > 100:
@@ -304,7 +307,7 @@ class FeatureFlag(models.Model):
                 'rollout_percent': 'Rollout percent must be between 0 and 100.',
             })
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         """HIGH-3 fix: Call full_clean() before save to ensure validation."""
         self.full_clean()
         super().save(*args, **kwargs)

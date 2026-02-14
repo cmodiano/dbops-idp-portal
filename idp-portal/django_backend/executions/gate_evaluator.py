@@ -2,6 +2,7 @@
 GateEvaluator service for evaluating gate_conditions on WAITING ExecutionSteps.
 Story 25.3: Evaluates conditions and determines if a step can transition WAITING → RUNNING.
 """
+from typing import Any
 
 import structlog
 from django.utils import timezone
@@ -21,10 +22,10 @@ class GateEvaluator:
     - gate_status: dict with per-condition details and timeout info
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.inventory_service = InventoryService()
 
-    def evaluate(self, step) -> tuple[bool, dict]:
+    def evaluate(self, step: Any) -> tuple[bool, dict]:
         """
         Evaluate all gate_conditions for a WAITING ExecutionStep.
 
@@ -147,7 +148,7 @@ class GateEvaluator:
 
         return all_satisfied, {'gates': gate_status, 'timeout_triggered': False}
 
-    def _check_maintenance_window(self, step, condition: dict) -> tuple[bool, dict]:
+    def _check_maintenance_window(self, step: Any, condition: dict) -> tuple[bool, dict]:
         """
         Check that ALL execution targets are within their maintenance window.
 
@@ -239,7 +240,7 @@ class GateEvaluator:
 
         return all_in_window, context
 
-    def _check_timeout(self, step, condition: dict) -> tuple[bool, str | None]:
+    def _check_timeout(self, step: Any, condition: dict) -> tuple[bool, str | None]:
         """
         Check if timeout_hours has been exceeded for a WAITING step.
 

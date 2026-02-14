@@ -40,36 +40,32 @@
 - `type: ignore` ciblés avec codes spécifiques (attr-defined, import-untyped, misc)
 - Suppression de code inatteignable (json_helpers, idp_auth/views)
 
-**Note** : `disallow_untyped_defs = true` non activé — introduit 98 nouvelles erreurs dues aux fonctions internes non annotées. Reporté à Phase 3/4.
+**Note** : `disallow_untyped_defs = true` non activé — introduit 98 nouvelles erreurs dues aux fonctions internes non annotées. Reporté à Phase 4.
 
-## Phase 3 : Réduire baseline de 80% (Août 2026 - 6 mois cumulés)
+## Phase 4 : Baseline à 0, Mode strict (Story 26.16) - ✅ Complété (Février 2026)
 
-**Objectif** : Réduire de 89 à ~18 erreurs (-80%) — baseline actuel : 29
-**Date cible** : Août 2026
-**Erreurs restantes à corriger** : ~11
+**Date de complétion** : 2026-02-13
+**Résultat** : 29 → 0 erreurs (**-100%**), mode strict activé
 
-**Modules restants** :
-- `executions/` : ~15 erreurs (services, models, remaining views)
-- `reference/` : ~5 erreurs
-- `integrations/` : ~4 erreurs
-- `catalog/` : ~3 erreurs restantes
-- `inventory/` : ~2 erreurs
+**Actions réalisées** :
+- Correction des 80 erreurs mypy (régression depuis Phase 2 : 29 → 80 due aux stories 26.1-26.15)
+- Activation `disallow_untyped_defs = true` sur modules principaux (core, idp_auth, executions, catalog, inventory, profiles, reference)
+- Ajout d'annotations de type sur ~373 fonctions dans 52 fichiers
+- Suppression du mécanisme baseline (`scripts/check_mypy_baseline.sh`, `scripts/generate_mypy_baseline.sh`, `.mypy-baseline-count`)
+- CI mypy en mode bloquant direct (sans tolérance)
+- Pre-commit hook mypy bloquant (0 erreur tolérée)
 
-**Actions** :
-- Annoter fonctions dans executions/services et models
-- Corriger erreurs `override` (Manager/QuerySet)
-- Activer `disallow_untyped_defs = true` sur core/, idp_auth/, utils/ (fonctions internes à annoter d'abord)
+**Types de corrections** :
+- `no-any-return` : casts explicites pour `json.loads()`, `.first()`, `.get()`
+- `override` : `# type: ignore[override]` pour QuerySet.ordered() incompatible avec supertype
+- `misc` : `# type: ignore[misc]` pour Manager.from_queryset (limitation django-stubs)
+- `arg-type` : guards None vs str, `# type: ignore[arg-type]` pour request.user
+- `assignment` : `# type: ignore[assignment]` pour conflits types Serializer
+- `unreachable` : `# type: ignore[unreachable]` pour vérifications défensives isinstance()
+- `no-untyped-def` : ajout annotations complètes (paramètres + retour) sur toutes les fonctions publiques
 
-## Phase 4 : Baseline à 0, Mode strict (Février 2027 - 12 mois cumulés)
-
-**Objectif** : 0 erreurs, mode strict complet
-**Date cible** : Février 2027
-**Velocity cible** : ~6 erreurs corrigées/mois + refactoring strict
-
-**Actions** :
-- Corriger toutes les erreurs restantes
-- Activer `disallow_untyped_defs = true` globalement
-- Activer `disallow_any_generics = true`
-- Activer `strict_settings = true` dans django-stubs
-- Supprimer le mécanisme baseline (plus nécessaire)
-- Mypy en mode `--strict` sur tout le codebase
+**État final** :
+- **0 erreur mypy** sur l'intégralité du codebase
+- **Mode strict** activé sur 7 modules principaux
+- **CI et pre-commit** bloquants sans tolérance
+- **2249 tests backend** passent sans régression

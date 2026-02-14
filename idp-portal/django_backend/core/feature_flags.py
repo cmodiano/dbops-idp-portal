@@ -16,10 +16,13 @@ CRITICAL PRODUCTION REQUIREMENT:
   DO NOT use LocMemCache in production with FEATURE_FLAGS_SOURCE='database'.
 """
 
+from __future__ import annotations
+
 import hashlib
 import json
 import time
 import uuid
+from typing import Any
 
 import structlog
 from django.core.cache import cache
@@ -43,22 +46,22 @@ MAX_LOCK_WAIT = 3  # Same as lock timeout
 LOCK_WAIT_INTERVAL = 0.05  # 50ms
 
 
-def _get_cache_ttl():
+def _get_cache_ttl() -> int:
     """Get feature flags cache TTL from settings."""
     return getattr(settings, 'FEATURE_FLAGS_CACHE_TTL', DEFAULT_CACHE_TTL)
 
 
-def _get_flags_source():
+def _get_flags_source() -> str:
     """Get feature flags data source (env or database)."""
     return getattr(settings, 'FEATURE_FLAGS_SOURCE', 'env')
 
 
-def _get_flags_enabled():
+def _get_flags_enabled() -> bool:
     """Check if feature flags system is globally enabled."""
     return getattr(settings, 'FEATURE_FLAGS_ENABLED', True)
 
 
-def _get_lock_timeout():
+def _get_lock_timeout() -> int | float:
     """
     Get lock timeout for anti-thundering herd protection.
 
@@ -75,7 +78,7 @@ def _get_lock_timeout():
     return timeout
 
 
-def _load_flags_from_env():
+def _load_flags_from_env() -> dict[str, Any]:
     """Load feature flags from FEATURE_FLAGS env var (JSON)."""
     raw = getattr(settings, 'FEATURE_FLAGS', '{}')
     if not raw:
@@ -91,7 +94,7 @@ def _load_flags_from_env():
         return {}
 
 
-def _load_flags_from_database():
+def _load_flags_from_database() -> dict[str, Any]:
     """Load feature flags from database."""
     from core.models import FeatureFlag
     flags = {}
@@ -124,7 +127,7 @@ def _load_flags_from_database():
     return flags
 
 
-def _get_all_flags():
+def _get_all_flags() -> dict[str, Any]:
     """
     Get all flags from configured source, with caching.
 
@@ -155,7 +158,7 @@ def _get_all_flags():
 
     cached = cache.get(cache_key)
     if cached is not None:
-        return cached
+        return cached  # type: ignore[no-any-return]
 
     lock_timeout = _get_lock_timeout()
     lock_token = str(uuid.uuid4())  # Unique token to prevent deleting another worker's lock
@@ -198,7 +201,7 @@ def _get_all_flags():
                     cache_key=cache_key,
                     wait_duration_ms=round(wait_duration_ms, 2),
                 )
-                return cached
+                return cached  # type: ignore[no-any-return]
 
         # Timeout: log warning and load anyway (availability > consistency)
         wait_duration_ms = (time.monotonic() - wait_start) * 1000
@@ -214,13 +217,13 @@ def _get_all_flags():
         return _load_flags_from_env()
 
 
-def _get_flag_config(flag_key):
+def _get_flag_config(flag_key: str) -> dict[str, Any] | None:
     """Get configuration for a specific flag. Cache key includes source (MED-4)."""
     source = _get_flags_source()
     cache_key = f'feature_flag:{flag_key}:{source}'
     cached = cache.get(cache_key)
     if cached is not None:
-        return cached
+        return cached  # type: ignore[no-any-return]
 
     all_flags = _get_all_flags()
     flag_config = all_flags.get(flag_key)
@@ -231,7 +234,7 @@ def _get_flag_config(flag_key):
     return flag_config
 
 
-def is_enabled(flag_key, context=None):
+def is_enabled(flag_key: str, context: dict[str, Any] | None = None) -> bool:
     """
     Check if a feature flag is enabled.
 
@@ -279,7 +282,7 @@ def is_enabled(flag_key, context=None):
     return get_rollout_status(flag_key, str(user_id), rollout_percent)
 
 
-def get_rollout_status(flag_key, user_id, rollout_percent=None):
+def get_rollout_status(flag_key: str, user_id: str, rollout_percent: int | None = None) -> bool:
     """
     Determine if a user is in the rollout group using consistent hashing.
 
@@ -304,7 +307,7 @@ def get_rollout_status(flag_key, user_id, rollout_percent=None):
     return (hash_value % 100) < rollout_percent
 
 
-def get_all_flags_status(context=None):
+def get_all_flags_status(context: dict[str, Any] | None = None) -> dict[str, bool]:
     """
     Get the enabled/disabled status of all flags for a given context.
 
@@ -324,7 +327,7 @@ def get_all_flags_status(context=None):
     return result
 
 
-def invalidate_cache(flag_key=None):
+def invalidate_cache(flag_key: str | None = None) -> None:
     """
     Invalidate feature flag cache.
 

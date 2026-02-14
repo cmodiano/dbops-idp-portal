@@ -8,7 +8,7 @@ Story 26.1 - AC1, AC3: Separation of concerns + unification of _read_*_from_conf
 from __future__ import annotations
 
 import re
-from typing import Literal
+from typing import Any, Literal
 
 import structlog
 from django.db import DatabaseError, InterfaceError
@@ -21,7 +21,7 @@ from core.middleware import get_correlation_id
 logger = structlog.get_logger(__name__)
 
 
-def _get_connection():
+def _get_connection() -> Any:
     """
     Get the Django DB connection, resolving at call time to support test patching.
 
@@ -188,8 +188,8 @@ class InventoryQueryExecutor:
 
         # Data query with pagination
         offset = (page - 1) * page_size
-        params['offset'] = offset
-        params['limit'] = page_size
+        params['offset'] = offset  # type: ignore[assignment]
+        params['limit'] = page_size  # type: ignore[assignment]
 
         # nosec B608 - table_or_synonym validated by SAFE_TABLE_NAME_PATTERN above
         data_sql = f"""
@@ -316,7 +316,7 @@ class InventoryQueryExecutor:
             # Multi-server IN clause path (instances or databases)
             if server_names:
                 return self._read_entity_multi_server(
-                    mapper, entity_plural, environment, server_names
+                    mapper, entity_plural, environment or "", server_names
                 )
 
             # Standard single-entity query

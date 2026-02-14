@@ -121,10 +121,10 @@ class RequestResponseLoggingMiddleware:
     - ERROR: 5xx server errors
     """
 
-    def __init__(self, get_response):
+    def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
         self.get_response = get_response
 
-    def __call__(self, request):
+    def __call__(self, request: HttpRequest) -> HttpResponse:
         start_time = time.time()
         correlation_id = get_correlation_id()
 
@@ -186,7 +186,7 @@ class RequestResponseLoggingMiddleware:
             )
             raise
 
-    def _get_user_id(self, request) -> str | None:
+    def _get_user_id(self, request: HttpRequest) -> str | None:
         """Extract user ID from request if authenticated."""
         if hasattr(request, 'user') and request.user.is_authenticated:
             return str(request.user.id)
@@ -212,10 +212,10 @@ class RateLimitHeadersMiddleware:
     # Paths exempt from rate limit header injection (health checks, metrics)
     EXEMPT_PATHS = ('/api/v1/health', '/health', '/metrics')
 
-    def __init__(self, get_response):
+    def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
         self.get_response = get_response
 
-    def __call__(self, request):
+    def __call__(self, request: HttpRequest) -> HttpResponse:
         response = self.get_response(request)
 
         # Skip exempt paths
@@ -267,10 +267,10 @@ class SecurityHeadersMiddleware:
     but can be added here if needed.
     """
 
-    def __init__(self, get_response):
+    def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
         self.get_response = get_response
 
-    def __call__(self, request):
+    def __call__(self, request: HttpRequest) -> HttpResponse:
         response = self.get_response(request)
 
         # Security headers (NFR6)

@@ -3,6 +3,7 @@ Celery tasks for workflow execution.
 Story 20.3: Asynchronous retry with Celery apply_async(countdown=...).
 Story 25.3: Periodic evaluation of WAITING gate conditions.
 """
+from typing import Any
 
 import structlog
 from celery import shared_task  # type: ignore[import-untyped]
@@ -21,7 +22,7 @@ logger = structlog.get_logger(__name__)
 
 
 @shared_task(bind=True, max_retries=0)
-def retry_workflow_step(self, execution_id: int, step: dict, attempt: int):
+def retry_workflow_step(self: Any, execution_id: int, step: dict, attempt: int) -> dict:
     """
     Retry a workflow step asynchronously after a calculated delay.
 
@@ -216,7 +217,7 @@ def retry_workflow_step(self, execution_id: int, step: dict, attempt: int):
 
 
 @shared_task(bind=True, max_retries=0)
-def evaluate_waiting_gates(self):
+def evaluate_waiting_gates(self: Any) -> dict:
     """
     Story 25.3: Periodic Celery Beat task to evaluate WAITING gate conditions.
 
@@ -273,17 +274,17 @@ def evaluate_waiting_gates(self):
             # AC8: Timeout handling
             if gate_status.get('timeout_triggered'):
                 gate_status.get('action', 'FAILED')
-                _handle_gate_timeout(step, gate_status, correlation_id)
+                _handle_gate_timeout(step, gate_status, correlation_id or "")
                 errors += 1  # Count as "processed" but not unblocked
                 continue
 
             if all_satisfied:
                 # AC4: Transition WAITING → RUNNING
-                _transition_step_to_running(step, gate_status, correlation_id)
+                _transition_step_to_running(step, gate_status, correlation_id or "")
                 unblocked += 1
             else:
                 # AC5: Update waiting context
-                _update_waiting_context(step, gate_status, correlation_id)
+                _update_waiting_context(step, gate_status, correlation_id or "")
                 still_waiting += 1
 
         except Exception as e:
@@ -332,7 +333,7 @@ def evaluate_waiting_gates(self):
     }
 
 
-def _transition_step_to_running(step: ExecutionStep, gate_status: dict, correlation_id: str):
+def _transition_step_to_running(step: ExecutionStep, gate_status: dict, correlation_id: str) -> None:
     """
     Transition an ExecutionStep from WAITING to RUNNING and trigger execution.
 
@@ -422,7 +423,7 @@ def _transition_step_to_running(step: ExecutionStep, gate_status: dict, correlat
         )
 
 
-def _update_waiting_context(step: ExecutionStep, gate_status: dict, correlation_id: str):
+def _update_waiting_context(step: ExecutionStep, gate_status: dict, correlation_id: str) -> None:
     """
     Update the waiting context for a step whose conditions are NOT yet satisfied.
 
@@ -454,7 +455,7 @@ def _update_waiting_context(step: ExecutionStep, gate_status: dict, correlation_
     )
 
 
-def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id: str):
+def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id: str) -> None:
     """
     Handle a gate timeout condition — transition step to FAILED or SKIPPED.
 

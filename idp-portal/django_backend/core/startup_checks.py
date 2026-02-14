@@ -25,7 +25,7 @@ INSECURE_DEFAULTS = {
 PLACEHOLDER_PATTERN = re.compile(r'^CHANGE_[A-Z_]+$|^<[A-Z_]+>$|^TODO:')
 
 
-def validate_required_secrets(app_env: str, auth_dev_bypass: bool):
+def validate_required_secrets(app_env: str, auth_dev_bypass: bool) -> None:
     """
     Validate that all critical secrets are configured correctly.
 
@@ -117,7 +117,7 @@ RATE_FORMAT_PATTERN = re.compile(
 )
 
 
-def validate_rate_limit_config():
+def validate_rate_limit_config() -> None:
     """
     Validate rate limit configuration at startup.
 
@@ -160,7 +160,7 @@ def validate_rate_limit_config():
 
 
 # Story 17.12: Feature flags configuration validation
-def validate_feature_flags_config():
+def validate_feature_flags_config() -> None:
     """
     Validate feature flags configuration at startup.
 

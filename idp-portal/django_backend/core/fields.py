@@ -20,8 +20,11 @@ Args:
         ValidationError if invalid.
 """
 
+from __future__ import annotations
+
 import json
 import logging
+from typing import Any
 
 from django.db import models
 from django.core.exceptions import ValidationError
@@ -32,17 +35,17 @@ logger = logging.getLogger(__name__)
 class OracleJSONField(models.TextField):
     """Custom Django field for storing JSON in Oracle CLOB with automatic serialization."""
 
-    def __init__(self, *args, validator=None, **kwargs):
+    def __init__(self, *args: Any, validator: Any = None, **kwargs: Any) -> None:
         self.validator = validator
         super().__init__(*args, **kwargs)
 
-    def deconstruct(self):
+    def deconstruct(self) -> tuple[str, str, list, dict]:
         name, path, args, kwargs = super().deconstruct()
         if self.validator is not None:
             kwargs['validator'] = self.validator
-        return name, path, args, kwargs
+        return name, path, args, kwargs  # type: ignore[return-value]
 
-    def from_db_value(self, value, expression, connection):
+    def from_db_value(self, value: Any, expression: Any, connection: Any) -> dict | list | None:
         """
         Deserialize JSON from Oracle CLOB after SELECT.
 
@@ -57,12 +60,12 @@ class OracleJSONField(models.TextField):
         if isinstance(value, (dict, list)):
             return value
         try:
-            return json.loads(value)
+            return json.loads(value)  # type: ignore[no-any-return]
         except (json.JSONDecodeError, TypeError) as e:
             logger.warning("Failed to deserialize JSON field: %s", e)
             return None
 
-    def get_prep_value(self, value):
+    def get_prep_value(self, value: Any) -> str | None:
         """
         Serialize dict/list to JSON string before INSERT/UPDATE.
 
@@ -91,7 +94,7 @@ class OracleJSONField(models.TextField):
             logger.error("Failed to serialize value to JSON: %s", e)
             raise ValidationError(f"Cannot serialize value to JSON: {e}")
 
-    def to_python(self, value):
+    def to_python(self, value: Any) -> dict | list | None:
         """Convert value to Python dict/list for forms/validation."""
         if value is None:
             return None
@@ -106,5 +109,5 @@ class OracleJSONField(models.TextField):
                 raise ValidationError(f"Invalid JSON: {e}")
             if self.validator:
                 self.validator(parsed)
-            return parsed
+            return parsed  # type: ignore[no-any-return]
         raise ValidationError(f"Unsupported type for JSON field: {type(value)}")

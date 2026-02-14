@@ -3,7 +3,10 @@ Core views for health check and system status.
 Story M.8 - Task 6: Enhanced health check for observability.
 """
 
+from __future__ import annotations
+
 from datetime import datetime, timezone
+from typing import Any
 
 import requests
 import structlog
@@ -26,7 +29,7 @@ HEALTH_CHECK_TIMEOUT = getattr(settings, 'HEALTH_CHECK_TIMEOUT', 5)
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
-def health_check(request):
+def health_check(request: Any) -> Response:
     """
     Health check endpoint for monitoring and load balancer.
 

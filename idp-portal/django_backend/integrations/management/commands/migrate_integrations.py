@@ -130,18 +130,18 @@ class Command(BaseCommand):
             self.stdout.write(f'Mises à jour effectuées : {len(changes)}')
             with transaction.atomic():
                 for c in changes:
-                    integration = c['integration']
-                    integration.status = c['new_status']
-                    integration.save(update_fields=['status', 'updated_at'])
+                    integ: Integration = c['integration']  # type: ignore[assignment]
+                    integ.status = c['new_status']  # type: ignore[assignment]
+                    integ.save(update_fields=['status', 'updated_at'])
 
                     AuditService.create_entry(
                         user_id='system',
                         action_type=AuditActionType.INTEGRATION_STATUS_UPDATED,
                         entity_type=AuditEntityType.INTEGRATION,
-                        entity_id=integration.id,
+                        entity_id=integ.id,
                         details={
-                            'integration_id': integration.id,
-                            'integration_name': integration.name,
+                            'integration_id': integ.id,
+                            'integration_name': integ.name,
                             'old_status': c['old_status'],
                             'new_status': c['new_status'],
                             'reason': 'catalogue_validation',

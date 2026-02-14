@@ -3,6 +3,9 @@ DRF Serializers for catalog app.
 Maps Django models to JSON responses.
 """
 
+from __future__ import annotations
+
+from typing import Any
 from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_field, extend_schema_serializer, OpenApiExample
 from drf_spectacular.types import OpenApiTypes
@@ -16,7 +19,7 @@ from reference.models import RefEngine, RefPlatform, RefCategory
 VALID_INVENTORY_TYPES = ('servers', 'instances', 'databases')
 
 
-def validate_parameters_schema_inventory(value):
+def validate_parameters_schema_inventory(value: Any) -> Any:
     """
     Story 23.5: Validate inventory_type in parameters_schema properties.
 
@@ -71,7 +74,7 @@ class ActionTagsUpdateSerializer(serializers.Serializer):
         allow_null=True
     )
     
-    def validate(self, data):
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
         """Ensure either tag_ids or tag_names is provided, but not both."""
         tag_ids = data.get('tag_ids')
         tag_names = data.get('tag_names')
@@ -151,8 +154,8 @@ class ActionSerializer(serializers.ModelSerializer):
     # Story 2.30: Category code (optional, validated against REF_CATEGORIES)
     category = serializers.CharField(max_length=50, allow_null=True, required=False)
     item_type = serializers.ChoiceField(choices=ActionItemType.choices, default=ActionItemType.ACTION)
-    
-    def validate_engine(self, value):
+
+    def validate_engine(self, value: str | None) -> str | None:
         """Validate engine against REF_ENGINES table."""
         if value is None:
             return value
@@ -163,8 +166,8 @@ class ActionSerializer(serializers.ModelSerializer):
                 f"Invalid engine '{value}'. Must be one of: {', '.join(active_engines)}"
             )
         return value
-    
-    def validate_platform(self, value):
+
+    def validate_platform(self, value: str | None) -> str | None:
         """Validate platform against REF_PLATFORMS table."""
         if value is None:
             return value
@@ -176,7 +179,7 @@ class ActionSerializer(serializers.ModelSerializer):
             )
         return value
 
-    def validate_category(self, value):
+    def validate_category(self, value: str | None) -> str | None:
         """Validate category against REF_CATEGORIES table (Story 2.30)."""
         if value is None:
             return value
@@ -187,7 +190,7 @@ class ActionSerializer(serializers.ModelSerializer):
             )
         return value
 
-    def validate_parameters_schema(self, value):
+    def validate_parameters_schema(self, value: Any) -> Any:
         """Story 23.5: Validate inventory_type in parameters_schema."""
         return validate_parameters_schema_inventory(value)
 
@@ -215,7 +218,7 @@ class ActionSerializer(serializers.ModelSerializer):
         'retry_max_attempts': {'type': 'integer'}, 'retry_interval_seconds': {'type': 'integer'},
         'retry_backoff_multiplier': {'type': 'number'},
     }}, 'nullable': True})
-    def get_workflow_steps(self, obj):
+    def get_workflow_steps(self, obj: Action) -> list[dict[str, Any]] | None:
         """
         Convert execution_steps to workflow_steps format for workflows.
         Story 16.2: Include branch conditional and retry fields.
@@ -277,7 +280,7 @@ class ActionSerializer(serializers.ModelSerializer):
         return workflow_steps if workflow_steps else None
     
     @extend_schema_field({'type': 'array', 'items': {'type': 'string'}, 'example': ['oracle', 'patching']})
-    def get_tags(self, obj):
+    def get_tags(self, obj: Action) -> list[str]:
         """Get tag names from ActionTag relations."""
         # Use prefetched tags if available
         if hasattr(obj, 'actiontag_set'):
@@ -286,31 +289,31 @@ class ActionSerializer(serializers.ModelSerializer):
         return list(obj.actiontag_set.values_list('tag__name', flat=True))
 
     @extend_schema_field(OpenApiTypes.INT)
-    def get_created_by(self, obj):
+    def get_created_by(self, obj: Action) -> int | None:
         """Get created_by user ID."""
         return obj.created_by.id if obj.created_by else None
-    
-    def to_internal_value(self, data):
+
+    def to_internal_value(self, data: dict[str, Any]) -> dict[str, Any]:
         """Convert incoming JSON to model fields (for write operations)."""
         # Handle JSON fields - convert dict to JSON string for CLOB storage
         validated_data = super().to_internal_value(data)
         
         # Store JSON fields as-is (will be converted by model setters)
-        json_fields = ['parameters_schema', 'impact_rules', 'execution_steps', 
+        json_fields = ['parameters_schema', 'impact_rules', 'execution_steps',
                       'change_type_config', 'remediation_rules']
         for field in json_fields:
             if field in data:
                 validated_data[field] = data[field]  # Keep as dict, model will serialize
-        
-        return validated_data
-    
-    def create(self, validated_data):
+
+        return validated_data  # type: ignore[no-any-return]
+
+    def create(self, validated_data: dict[str, Any]) -> Action:
         """Create action - handled by ViewSet using CatalogService."""
         # This serializer is mainly for read operations
         # Create is handled by ActionCreateSerializer
         raise NotImplementedError("Use ActionCreateSerializer for creation")
-    
-    def update(self, instance, validated_data):
+
+    def update(self, instance: Action, validated_data: dict[str, Any]) -> Action:
         """Update action - handled by ViewSet using CatalogService."""
         # This serializer is mainly for read operations
         # Update is handled by ViewSet
@@ -328,7 +331,7 @@ class ActionCreateSerializer(serializers.Serializer):
     engine = serializers.CharField(max_length=50, required=False, allow_null=True)
     platform = serializers.CharField(max_length=50, required=False, allow_null=True)
 
-    def validate_category(self, value):
+    def validate_category(self, value: str | None) -> str | None:
         """Validate category against REF_CATEGORIES table (Story 2.30)."""
         if value is None:
             return value
@@ -339,7 +342,7 @@ class ActionCreateSerializer(serializers.Serializer):
             )
         return value
 
-    def validate_engine(self, value):
+    def validate_engine(self, value: str | None) -> str | None:
         """Validate engine against REF_ENGINES table."""
         if value is None:
             return value
@@ -350,8 +353,8 @@ class ActionCreateSerializer(serializers.Serializer):
                 f"Invalid engine '{value}'. Must be one of: {', '.join(active_engines)}"
             )
         return value
-    
-    def validate_platform(self, value):
+
+    def validate_platform(self, value: str | None) -> str | None:
         """Validate platform against REF_PLATFORMS table."""
         if value is None:
             return value
@@ -371,18 +374,18 @@ class ActionCreateSerializer(serializers.Serializer):
     )
     documentation_md = serializers.CharField(max_length=100_000, required=False, allow_null=True)
 
-    def validate_parameters_schema(self, value):
+    def validate_parameters_schema(self, value: Any) -> Any:
         """Story 23.5: Validate inventory_type in parameters_schema."""
         return validate_parameters_schema_inventory(value)
 
-    def validate_name(self, value):
+    def validate_name(self, value: str) -> str:
         """Strip whitespace and validate not empty."""
         stripped = value.strip()
         if not stripped:
             raise serializers.ValidationError("name cannot be empty or whitespace only")
         return stripped
-    
-    def validate(self, data):
+
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
         """Validate engine and platform required for action type."""
         item_type = data.get('item_type', ActionItemType.ACTION)
         if item_type == ActionItemType.ACTION:
@@ -410,17 +413,17 @@ class ActionListSerializer(serializers.ModelSerializer):
         ]
 
     @extend_schema_field({'type': 'array', 'items': {'type': 'string'}})
-    def get_tags(self, obj):
+    def get_tags(self, obj: Action) -> list[str]:
         """Get tag names from ActionTag relations."""
         if hasattr(obj, 'actiontag_set'):
             return [at.tag.name for at in obj.actiontag_set.all()]
         return list(obj.actiontag_set.values_list('tag__name', flat=True))
 
     @extend_schema_field(OpenApiTypes.INT)
-    def get_execution_count(self, obj):
+    def get_execution_count(self, obj: Action) -> int:
         """Get execution count from Execution model (computed field)."""
         if hasattr(obj, 'execution_count'):
-            return obj.execution_count
+            return obj.execution_count  # type: ignore[no-any-return]
         from executions.models import Execution
         return Execution.objects.filter(action_id=obj.id).count()
 
@@ -461,8 +464,8 @@ class ActionMutexCreateSerializer(serializers.ModelSerializer):
         allow_blank=True,
         max_length=500
     )
-    
-    def validate_incompatible_with_id(self, value):
+
+    def validate_incompatible_with_id(self, value: int) -> int:
         """Validate incompatible_with_id exists and is published."""
         try:
             action = Action.objects.get(id=value)
@@ -473,8 +476,8 @@ class ActionMutexCreateSerializer(serializers.ModelSerializer):
             return value
         except Action.DoesNotExist:
             raise serializers.ValidationError(f"Action {value} n'existe pas")
-    
-    def validate(self, data):
+
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
         """
         Cross-field validation:
         - Prevent action_id == incompatible_with_id (self-reference)
@@ -503,7 +506,7 @@ class ActionMutexCreateSerializer(serializers.ModelSerializer):
         # Check for duplicate rule
         from catalog.models import ActionMutex
         existing = ActionMutex.objects.filter(
-            action_id=action_id,
+            action_id=int(action_id),  # type: ignore[arg-type]
             incompatible_with_id=incompatible_with_id
         ).first()
         

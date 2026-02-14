@@ -10,6 +10,7 @@ from django.db.models import Q, Count
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -53,7 +54,7 @@ class ExecutionsListView(APIView):
         ],
         responses={200: ExecutionSerializer(many=True)},
     )
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         limit = parse_int(request.query_params.get("limit"), 50, name="limit")
         offset = parse_int(request.query_params.get("offset"), 0, name="offset")
         if limit <= 0 or offset < 0:
@@ -79,7 +80,7 @@ class ExecutionStatsView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(tags=['executions'], summary='Statistiques des exécutions')
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         qs = Execution.objects.select_related("action")
         qs, _effective_scope = apply_scope_filter(qs, user=request.user, scope=request.query_params.get("scope") or "mine")
         qs, start_d, end_d = apply_execution_filters(qs, request=request)
@@ -117,7 +118,7 @@ class ExecutionTimeSeriesView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(tags=['executions'], summary='Série temporelle des exécutions')
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         qs = Execution.objects.all()
         qs, _effective_scope = apply_scope_filter(qs, user=request.user, scope=request.query_params.get("scope") or "mine")
         qs, start_d, end_d = apply_execution_filters(qs, request=request)
@@ -160,7 +161,7 @@ class ExecutionTagsView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(tags=['executions'], summary='Tags des actions exécutées')
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         action_ids = Execution.objects.values_list("action_id", flat=True).distinct()
         tags = (
             Action.objects.filter(id__in=action_ids)

@@ -14,11 +14,11 @@ class ExecutionConsumer(AuthenticatedWebSocketConsumer):
     execution_complete, and execution_failed messages.
     """
 
-    async def connect(self):
+    async def connect(self) -> None:
         self.execution_id = self.scope["url_route"]["kwargs"].get("execution_id")
         await super().connect()
 
-    async def handle_authenticated_message(self, message: dict):
+    async def handle_authenticated_message(self, message: dict) -> None:
         pass
 
 
@@ -29,5 +29,5 @@ class DashboardConsumer(AuthenticatedWebSocketConsumer):
     for the dashboard.
     """
 
-    async def handle_authenticated_message(self, message: dict):
+    async def handle_authenticated_message(self, message: dict) -> None:
         pass

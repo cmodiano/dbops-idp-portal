@@ -354,5 +354,5 @@ development_status:
     26-13-corriger-tous-tests-frontend-echec: done # Code review 2026-02-13: 8 issues found (3 HIGH + 3 MEDIUM + 2 LOW), ALL auto-fixed — File List completed (27 files), TESTING.md typos corrected, Change Log reformatted, skip verification documented — 2018/2018 tests pass (100%), 76.22% coverage baseline
     26-14-corriger-tous-tests-backend-echec: done
     26-15-corriger-deprecations-warnings-linters: done # Code review 2026-02-13: 10 issues found (3 CRIT + 4 HIGH + 3 MED), ALL auto-fixed — CRIT-1: 3 `except Exception:` → `as e` (test PASSES), CRIT-3: 19 Alert `message=` → `title=` (Ant Design 6.2), HIGH-1: mypy 29→80 documented as Epic 26 pre-existing — Ruff 0, ESLint 0, mypy baseline stable, 2247 backend + 2018 frontend tests ✅
-    26-16-enforcer-mypy-codebase-pre-commit-hook: backlog
+    26-16-enforcer-mypy-codebase-pre-commit-hook: done # Code review 2026-02-13: 6 issues found (1 HIGH + 3 MEDIUM + 2 LOW), HIGH/MEDIUM auto-fixed — 0 mypy errors, strict mode on 7 modules, baseline removed, 2249 tests pass, CI/pre-commit blocking — Story COMPLETE ✅
     epic-26-retrospective: optional

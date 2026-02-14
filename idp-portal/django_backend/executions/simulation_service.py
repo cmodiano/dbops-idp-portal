@@ -100,9 +100,9 @@ class SimulationService:
         for step_config in SIMULATED_STEPS_ACTION:
             step = ExecutionStep.objects.create(
                 execution=execution,
-                step_order=step_config["step_order"],
-                step_name=step_config["step_name"],
-                step_type=step_config["step_type"],
+                step_order=step_config["step_order"],  # type: ignore[misc]
+                step_name=str(step_config["step_name"]),
+                step_type=str(step_config["step_type"]),
                 status=ExecutionStepStatus.PENDING,
                 output="",
             )
@@ -121,7 +121,7 @@ class SimulationService:
         return cls._create_action_steps(execution)
 
     @classmethod
-    def start_simulation(cls, execution: Execution):
+    def start_simulation(cls, execution: Execution) -> None:
         """Start background simulation thread for an execution."""
         if not cls.is_enabled():
             logger.warning("simulation_called_but_disabled", execution_id=execution.id)
@@ -143,7 +143,7 @@ class SimulationService:
         logger.info("simulation_started", execution_id=execution.id)
 
     @classmethod
-    def _run_simulation(cls, execution_id: int):
+    def _run_simulation(cls, execution_id: int) -> None:
         """Background simulation loop (runs in a thread)."""
         try:
             # Thread needs its own DB connection
@@ -191,7 +191,7 @@ class SimulationService:
 
                 if should_fail:
                     step.status = ExecutionStepStatus.FAILED
-                    step.output += "\n[ERROR] Échec de l'exécution (simulation)"
+                    step.output = (step.output or "") + "\n[ERROR] Échec de l'exécution (simulation)"
                     step.completed_at = timezone.now()
                     step.save(update_fields=['status', 'output', 'completed_at'])
 
@@ -245,7 +245,7 @@ class SimulationService:
             close_old_connections()
 
     @classmethod
-    def advance_simulation_sync(cls, execution_id: int):
+    def advance_simulation_sync(cls, execution_id: int) -> None:
         """
         Run simulation synchronously for tests only (no threading).
 
@@ -262,8 +262,9 @@ class SimulationService:
         """Return simulated log lines for a step type."""
         for step_config in SIMULATED_STEPS_ACTION:
             if step_config["step_name"] == step_name:
+                logs = step_config["logs"]
                 return [
-                    log.format(execution_id=execution_id)
-                    for log in step_config["logs"]
+                    str(log).format(execution_id=execution_id)
+                    for log in (logs if isinstance(logs, list) else [])
                 ]
         return ["[INFO] Étape en cours...", "[SUCCESS] Étape complétée"]

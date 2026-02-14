@@ -2,6 +2,7 @@
 Gate context builder for ExecutionStep WAITING status.
 Story 25.2: Build initial waiting context when an ExecutionStep has gate_conditions.
 """
+from typing import Any
 
 import structlog
 from django.utils import timezone
@@ -10,7 +11,7 @@ from core.middleware import get_correlation_id
 logger = structlog.get_logger(__name__)
 
 
-def build_waiting_context(exec_step, gate_conditions: list) -> dict:
+def build_waiting_context(exec_step: Any, gate_conditions: list) -> dict:
     """
     Build the initial waiting context for an ExecutionStep in WAITING status.
 
@@ -25,7 +26,7 @@ def build_waiting_context(exec_step, gate_conditions: list) -> dict:
         ValueError: If gate_conditions is not a list
     """
     if not isinstance(gate_conditions, list):
-        logger.error(
+        logger.error(  # type: ignore[unreachable]
             "build_waiting_context_invalid_type",
             gate_conditions_type=type(gate_conditions).__name__,
             correlation_id=get_correlation_id(),
