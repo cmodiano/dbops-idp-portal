@@ -19,6 +19,7 @@ from django.contrib import admin
 from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 from executions.views.github_webhooks import github_webhook_workflow_run as _github_webhook_workflow_run
+from executions.views.terraform_webhooks import terraform_webhook_run as _terraform_webhook_run
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -44,6 +45,12 @@ urlpatterns = [
         'api/v1/webhooks/github/workflow_run',
         _github_webhook_workflow_run,
         name='github-webhook-workflow-run',
+    ),
+    # Story 27.5: Terraform Cloud webhook (HMAC SHA-512 secured, no DRF auth)
+    path(
+        'api/v1/webhooks/terraform/run',
+        _terraform_webhook_run,
+        name='terraform-webhook-run',
     ),
 ]
 

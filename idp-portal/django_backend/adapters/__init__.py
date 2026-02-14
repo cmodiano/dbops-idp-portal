@@ -5,6 +5,7 @@ Story 27.1: AAPAdapter for Ansible Automation Platform.
 Story 27.2: TowerAdapter for Ansible Tower / AWX.
 Story 27.3: AzureDevOpsAdapter for Azure DevOps Pipelines.
 Story 27.4: GitHubActionsAdapter for GitHub Actions.
+Story 27.5: TerraformCloudAdapter for Terraform Cloud.
 """
 from __future__ import annotations
 
@@ -21,7 +22,7 @@ def get_platform_adapter(
     """Factory to instantiate the correct adapter for a given platform type.
 
     Args:
-        platform_type: Platform identifier ('aap', 'tower', 'azure_devops', or 'github_actions').
+        platform_type: Platform identifier ('aap', 'tower', 'azure_devops', 'github_actions', or 'terraform_cloud').
         base_url: Platform base URL.
         auth_headers: Pre-built auth headers dict.
         timeout: Optional custom timeout.
@@ -55,5 +56,12 @@ def get_platform_adapter(
         if "owner" not in kwargs or "repo" not in kwargs:
             raise ValueError("github_actions platform requires 'owner' and 'repo' parameters")
         return GitHubActionsAdapter(**kwargs)
+
+    if platform_type == "terraform_cloud":
+        from adapters.terraform_cloud_adapter import TerraformCloudAdapter
+        # Terraform Cloud requires organization
+        if "organization" not in kwargs or not kwargs["organization"]:
+            raise ValueError("terraform_cloud platform requires 'organization' parameter")
+        return TerraformCloudAdapter(**kwargs)
 
     raise ValueError(f"Unsupported platform_type: {platform_type}")
