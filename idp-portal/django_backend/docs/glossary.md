@@ -79,6 +79,23 @@ Les codes `REF_PLATFORMS` (ex. « AAP ») sont proches mais distincts des types 
 - `engine_type` (inventaire) = « Quelle techno DB **est** cette cible »
 - Même sémantique (ex. « oracle ») mais deux contextes distincts
 
+**Alignement recommandé (Story 29.3) :**
+
+Les valeurs `engine_type` **DOIVENT** être alignées sur les codes `REF_ENGINES` normalisés (minuscules + underscores) pour assurer la cohérence. Le système ne valide pas formellement mais la convention est **fortement recommandée** :
+
+| REF_ENGINES.CODE | engine_type recommandé |
+|------------------|----------------------|
+| `Oracle` | `oracle` |
+| `SQL Server` | `sql_server` |
+| `DB2` | `db2` |
+| `PostgreSQL` | `postgresql` |
+| `MySQL` | `mysql` |
+| `Workflow` | `workflow` |
+
+**Pourquoi pas de validation stricte :** Les sources d'inventaire externes sont multiples et utilisent des conventions variées. Imposer une contrainte référentielle empêcherait l'intégration de sources avec des conventions non standard. Le matching case-insensitive (`UPPER()`) absorbe les différences de casse, mais **la normalisation lors de la configuration InventoryMapper est la responsabilité de l'administrateur d'intégration**.
+
+**Recommandation :** Lors de la configuration d'un `InventoryMapper`, normaliser les valeurs `engine_type` selon la convention ci-dessus. Voir le [guide de mapping inventaire](../../docs/inventory-mapping-guide.md) pour les détails de configuration.
+
 ---
 
 ## Différence Plateforme vs Service

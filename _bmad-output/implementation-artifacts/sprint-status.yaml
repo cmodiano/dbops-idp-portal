@@ -380,6 +380,6 @@ development_status:
     epic-29: in-progress
     29-1-integration-role-platform-service-catalogue: done # integration_role (platform|service) dans IntegrationTypeCatalogue + fixtures + API — 21 BE + 6 FE tests, 0 régression — Code review adversarial 2026-02-15: 8 fixes (5 MEDIUM + 3 LOW), 32 tests pass (21 BE + 11 FE), documentation enrichie
     29-2-glossaire-plateforme-moteur-service: done # Glossaire produit et documentation — Code review 2026-02-15: 14 issues (4 CRITICAL + 7 MEDIUM + 3 LOW) auto-fixés, Task 6.1 validation équipe PENDING
-    29-3-alignement-ref-engines-engine-type-inventaire: backlog # REF_ENGINES ↔ engine_type inventaire, référentiel unique
+    29-3-alignement-ref-engines-engine-type-inventaire: done # REF_ENGINES ↔ engine_type inventaire, référentiel unique — Code review 2026-02-15: 12 issues found (7 HIGH + 5 MEDIUM + 3 LOW), ALL auto-fixed — normalized_code serializer added, E2E tests added, JSON doc validation, fixtures corrected, documentation enhanced — 10 alignment + 2 E2E + 3 JSON validation tests pass
     29-4-lien-ref-platforms-integration-type-catalogue: backlog # Lien explicite REF_PLATFORMS ↔ IntegrationTypeCatalogue
     epic-29-retrospective: optional

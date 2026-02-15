@@ -13,17 +13,29 @@ from reference.models import RefEngine, RefPlatform, RefCategory
 class RefEngineSerializer(serializers.ModelSerializer):
     """Serializer for RefEngine model."""
 
+    normalized_code = serializers.SerializerMethodField()
+
     class Meta:
         model = RefEngine
-        fields = ['id', 'code', 'label', 'display_order', 'is_active']
+        fields = ['id', 'code', 'label', 'display_order', 'is_active', 'normalized_code']
+
+    def get_normalized_code(self, obj: RefEngine) -> str:
+        """Retourne le code normalisé (minuscules + underscores) pour usage dans engine_type."""
+        return obj.code.lower().replace(' ', '_')
 
 
 class RefPlatformSerializer(serializers.ModelSerializer):
     """Serializer for RefPlatform model."""
 
+    normalized_code = serializers.SerializerMethodField()
+
     class Meta:
         model = RefPlatform
-        fields = ['id', 'code', 'label', 'display_order', 'is_active']
+        fields = ['id', 'code', 'label', 'display_order', 'is_active', 'normalized_code']
+
+    def get_normalized_code(self, obj: RefPlatform) -> str:
+        """Retourne le code normalisé (minuscules + underscores) pour cohérence avec conventions."""
+        return obj.code.lower().replace(' ', '_')
 
 
 class RefCategorySerializer(serializers.ModelSerializer):

@@ -65,16 +65,20 @@ class RefEnginesAPITests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_engine_serializer_fields(self):
-        """Test engine serializer includes all required fields."""
+        """Test engine serializer includes all required fields (Story 29.3: + normalized_code)."""
         response = self.client.get('/api/v1/reference/engines/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        
+
         engine = response.data[0]
         self.assertIn('id', engine)
         self.assertIn('code', engine)
         self.assertIn('label', engine)
         self.assertIn('display_order', engine)
         self.assertIn('is_active', engine)
+        self.assertIn('normalized_code', engine)  # Story 29.3
+
+        # Valider que normalized_code est bien normalisé (minuscules + underscores)
+        self.assertEqual(engine['normalized_code'], engine['code'].lower().replace(' ', '_'))
 
 
 class RefPlatformsAPITests(TestCase):

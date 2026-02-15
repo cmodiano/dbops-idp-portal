@@ -184,3 +184,4 @@ Ce rapport se limite à l'examen de l'existant ; aucune modification de code n'a
 ## 6. Références
 
 - **Glossaire IDP Portal :** [django_backend/docs/glossary.md](../django_backend/docs/glossary.md) — Définitions formelles des termes Moteur (Engine), Plateforme, Service, engine_type, avec tableau récapitulatif et exemples concrets.
+- **Guide de mapping inventaire :** [docs/inventory-mapping-guide.md](./inventory-mapping-guide.md) — Convention de normalisation engine_type, tableau de mapping REF_ENGINES → engine_type, configuration InventoryMapper.

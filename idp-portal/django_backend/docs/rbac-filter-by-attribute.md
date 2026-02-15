@@ -151,6 +151,66 @@ Les erreurs liées aux filtres attribut ne bloquent **jamais** l'authentificatio
 | `inventory/services.py` | `_apply_attribute_filter()` + `_apply_attribute_filters_across_profiles()` |
 | `profiles/migrations/0002_add_filter_by_attribute.py` | Migration Django |
 
+## Bonnes pratiques pour engine_type
+
+### Convention de valeurs recommandée
+
+Les valeurs `engine_type` dans `filter_by_attribute_json` **devraient** suivre la convention normalisée alignée sur `REF_ENGINES` :
+
+| REF_ENGINES.CODE | engine_type recommandé | Transformation |
+|------------------|----------------------|----------------|
+| `Oracle` | `oracle` | Minuscules |
+| `SQL Server` | `sql_server` | Minuscules + espace → underscore |
+| `DB2` | `db2` | Minuscules |
+| `PostgreSQL` | `postgresql` | Minuscules |
+| `MySQL` | `mysql` | Minuscules |
+| `Workflow` | `workflow` | Minuscules |
+
+### Exemples recommandés
+
+```json
+{"engine_type": ["oracle", "sql_server"]}
+```
+
+```json
+{"engine_type": ["oracle"], "zone": ["prod"]}
+```
+
+### Exemples à éviter
+
+```json
+{"engine_type": ["Oracle"]}
+```
+
+Fonctionne (matching case-insensitive) mais ne suit pas la convention minuscules.
+
+```json
+{"engine_type": ["MSSQL"]}
+```
+
+Ne correspond pas aux valeurs `REF_ENGINES` normalisées. Si la source d'inventaire utilise `MSSQL`, configurer la normalisation dans `InventoryMapper` (voir [guide de mapping inventaire](../../docs/inventory-mapping-guide.md)).
+
+### Matching case-insensitive
+
+Le filtrage RBAC compare les valeurs en `UPPER()` (implémenté dans `InventoryRBACFilter._apply_attribute_filter()`). Cela signifie que `"oracle"`, `"Oracle"`, et `"ORACLE"` sont tous équivalents.
+
+Néanmoins, il est **recommandé** d'utiliser systématiquement les valeurs normalisées (minuscules + underscores) pour la cohérence.
+
+### Cohérence avec l'API inventaire
+
+Les valeurs utilisées dans `filter_by_attribute_json` et celles utilisées pour filtrer l'API inventaire sont les **mêmes** :
+
+- Profil RBAC : `{"engine_type": ["oracle"]}` → restreint les cibles accessibles aux serveurs Oracle
+- API inventaire : `GET /api/v1/inventory/servers/?engine_type=oracle` → filtre les serveurs Oracle
+
+Les deux utilisent `InventoryMapper` pour résoudre le concept `engine_type` vers la colonne réelle.
+
+### Référence
+
+Pour un guide complet sur la normalisation `engine_type` et la configuration `InventoryMapper`, voir le [guide de mapping inventaire](../../docs/inventory-mapping-guide.md).
+
+---
+
 ## Logging structlog
 
 | Event | Niveau | Description |
