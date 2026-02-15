@@ -25,6 +25,7 @@ jobs:
       - name: Build backend image
         uses: docker/build-push-action@v6
         with:
+          # Backend is Django at idp-portal/django_backend (idp-portal/backend was FastAPI, decommissioned)
           context: idp-portal/django_backend
           push: false
           load: true
