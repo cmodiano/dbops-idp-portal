@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Count, Subquery
 from idp_auth.models import User
@@ -127,6 +128,47 @@ class ActionManager(models.Manager.from_queryset(ActionQuerySet)):  # type: igno
     """
 
 
+class BusinessRulePolicy(models.Model):
+    """
+    Story 28.4: Règle métier prédéfinie réutilisable par plusieurs actions.
+    Maps to Oracle BUSINESS_RULE_POLICIES table (V074).
+    """
+    id = models.AutoField(primary_key=True, db_column='ID')
+    name = models.CharField(max_length=200, unique=True, db_column='NAME')
+    description = models.TextField(max_length=500, null=True, blank=True, db_column='DESCRIPTION')
+    policy_json = OracleJSONField(db_column='POLICY_JSON')
+    is_active = models.BooleanField(default=True, db_column='IS_ACTIVE')
+    created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
+    updated_at = models.DateTimeField(auto_now=True, db_column='UPDATED_AT')
+    created_by = models.ForeignKey(User, on_delete=models.PROTECT, db_column='CREATED_BY_ID')
+
+    class Meta:
+        db_table = 'BUSINESS_RULE_POLICIES'
+        ordering = ['name']
+
+    def clean(self) -> None:
+        """Validate policy_json with validate_business_rule_policies()."""
+        from catalog.validators import validate_business_rule_policies
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        try:
+            validate_business_rule_policies(self.policy_json)
+        except (DjangoValidationError, ValueError, TypeError, KeyError) as e:
+            raise ValidationError({'policy_json': str(e)})
+
+    def __str__(self) -> str:
+        return self.name
+
+    @property
+    def step_type(self) -> str | None:
+        """Extract the primary step_type from policy_json (for UI filters)."""
+        if not self.policy_json or not isinstance(self.policy_json, dict):
+            return None
+        rules = self.policy_json.get('on_step_output')
+        if rules and isinstance(rules, list) and len(rules) > 0:
+            return rules[0].get('when', {}).get('step_type')
+        return None
+
+
 class Action(models.Model):
     """
     Action model mapping to Oracle ACTIONS_CATALOG table (V002, V017, V019, V022, V027, V031, V036, V046).
@@ -162,7 +204,16 @@ class Action(models.Model):
     # Story 28.1: Business rule policies evaluated on step output (post-step, before gate evaluation)
     business_rule_policies = OracleJSONField(
         null=True, blank=True, db_column='BUSINESS_RULE_POLICIES',
-        help_text='JSON schema defining business rule policies evaluated on step output'
+        help_text='JSON schema defining business rule policies evaluated on step output (legacy inline)'
+    )
+    # Story 28.4: FK to predefined business rule policy (catalogue)
+    business_rule_policy = models.ForeignKey(
+        BusinessRulePolicy,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='actions',
+        db_column='BUSINESS_RULE_POLICY_ID',
     )
     default_impact_level = models.CharField(
         max_length=20,
@@ -242,9 +293,33 @@ class Action(models.Model):
             ),
         ]
 
+    @property
+    def effective_business_rule_policies(self) -> dict | None:
+        """
+        Story 28.4: Return effective business rule policies for this action.
+        Priority: FK predefined > inline legacy > None.
+        """
+        if self.business_rule_policy_id:
+            policy = self.business_rule_policy
+            if policy and policy.is_active:
+                return policy.policy_json
+            logger.warning(
+                "business_rule_policy_inactive: action_id=%s, policy_id=%s",
+                self.id, self.business_rule_policy_id,
+            )
+            return None
+        return self.business_rule_policies
+
     def clean(self) -> None:
         """Validate model fields before save."""
         super().clean()
+        # Story 28.4: XOR constraint — only one of FK or inline
+        if self.business_rule_policy_id and self.business_rule_policies:
+            raise ValidationError(
+                'Une action ne peut avoir à la fois business_rule_policy_id et '
+                'business_rule_policies. Utilisez soit la règle prédéfinie (FK), '
+                'soit la règle inline (JSON).'
+            )
         if self.business_rule_policies:
             from catalog.validators import validate_business_rule_policies
             validate_business_rule_policies(self.business_rule_policies)
