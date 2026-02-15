@@ -37,8 +37,9 @@ import { ParametersEditor } from './ParametersEditor';
 import { ImpactRulesEditor } from './ImpactRulesEditor';
 import { ChangeTypeConfig } from './ChangeTypeConfig';
 import { RemediationRulesEditor, type RemediationRuleDefinition } from './RemediationRulesEditor';
+import { BusinessRulePoliciesEditor } from './BusinessRulePoliciesEditor';
 import { AdminPreview } from './AdminPreview';
-import { updateActionSteps, getTags, updateActionTags, updateRemediationRules, checkActionNameAvailable } from '../../services/admin_service';
+import { updateActionSteps, getTags, updateActionTags, updateRemediationRules, updateBusinessRulePolicies, checkActionNameAvailable } from '../../services/admin_service';
 
 const { Text } = Typography;
 
@@ -76,7 +77,9 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagsOptions, setTagsOptions] = useState<{ value: string; label: string }[]>([]);
   const [remediationRules, setRemediationRules] = useState<RemediationRuleDefinition[]>([]);
-  
+  // Story 28.1: Business rule policies JSON string for editor
+  const [businessRulePoliciesJson, setBusinessRulePoliciesJson] = useState<string>('');
+
   // Story 13.7: Load engines from REF_ENGINES table
   const { engineOptions, loading: enginesLoading } = useEngines();
   // Story 13.7: Load platforms from REF_PLATFORMS table
@@ -175,6 +178,12 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
           id: `rule-${i}-${Date.now()}`,
         }))
       );
+      // Story 28.1: Load business_rule_policies as JSON string
+      setBusinessRulePoliciesJson(
+        editAction.business_rule_policies
+          ? JSON.stringify(editAction.business_rule_policies, null, 2)
+          : ''
+      );
     } else if (!open) {
       form.resetFields();
       setExecutionSteps([]);
@@ -185,6 +194,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
       setPreviewEnvironment(null);
       setSelectedTags([]);
       setRemediationRules([]);
+      setBusinessRulePoliciesJson('');
       setStepsError(null);
     }
   }, [open, editAction, form]);
@@ -332,6 +342,14 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
           ? remediationRules.map(({ id, ...rule }) => rule as RemediationRule)
           : null;
         await updateRemediationRules(actionId, rulesToSave);
+      }
+
+      // Story 28.1: Save business rule policies
+      if (actionId) {
+        const policiesToSave = businessRulePoliciesJson.trim()
+          ? JSON.parse(businessRulePoliciesJson)
+          : null;
+        await updateBusinessRulePolicies(actionId, policiesToSave);
       }
 
       const done = (result as ActionDetail | ActionResponse) ?? editAction;
@@ -600,6 +618,31 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
                         value={remediationRules}
                         onChange={setRemediationRules}
                         currentActionId={editAction?.id}
+                      />
+                    </Form.Item>
+                  ),
+                },
+                {
+                  key: 'business-rule-policies',
+                  label: (
+                    <Text strong>
+                      Règles métier
+                      {businessRulePoliciesJson.trim() && (
+                        <Text type="secondary" style={{ marginLeft: 8 }}>
+                          (configuré)
+                        </Text>
+                      )}
+                    </Text>
+                  ),
+                  children: (
+                    <Form.Item
+                      label="Règles métier"
+                      tooltip="Définissez les politiques d'approbation automatique ou revue DBA basées sur la sortie des étapes d'exécution (ex. plan Terraform). Story 28.1."
+                      style={{ marginBottom: 16 }}
+                    >
+                      <BusinessRulePoliciesEditor
+                        value={businessRulePoliciesJson}
+                        onChange={setBusinessRulePoliciesJson}
                       />
                     </Form.Item>
                   ),

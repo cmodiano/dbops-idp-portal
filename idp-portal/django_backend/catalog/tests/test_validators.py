@@ -1,0 +1,438 @@
+"""
+Story 28.1: business_rule_policies validation tests (AC7).
+
+Tests for validate_business_rule_policies:
+- Valid schema passes
+- Missing 'when' key rejected
+- Missing 'policy.type' rejected
+- Invalid policy data rejected
+- null/empty allowed
+- Empty on_step_output array allowed
+"""
+import pytest
+from rest_framework.exceptions import ValidationError
+
+from catalog.validators import validate_business_rule_policies
+
+
+# --- Valid schema fixture ---
+VALID_TERRAFORM_POLICY = {
+    "on_step_output": [
+        {
+            "when": {
+                "step_type": "terraform_cloud",
+                "output_key": "plan_output"
+            },
+            "policy": {
+                "type": "review_if_modified",
+                "require_review_if_modified": [
+                    {
+                        "resource_type": "azurerm_sql_database",
+                        "attribute_paths": ["sku_name", "max_size_gb"]
+                    },
+                    {
+                        "resource_type": "azurerm_sql_server"
+                    },
+                    {
+                        "attribute_paths": ["backup_retention_days"]
+                    }
+                ],
+                "auto_approve_if_none_match": True
+            }
+        }
+    ]
+}
+
+
+class TestBusinessRulePoliciesValidSchema:
+    """test_business_rule_policies_valid_schema: valid JSON passes validation."""
+
+    def test_valid_terraform_policy(self):
+        """Full valid Terraform policy passes validation."""
+        validate_business_rule_policies(VALID_TERRAFORM_POLICY)
+
+    def test_valid_minimal_policy(self):
+        """Minimal valid policy (resource_type only) passes."""
+        value = {
+            "on_step_output": [
+                {
+                    "when": {"step_type": "aap"},
+                    "policy": {
+                        "type": "review_if_modified",
+                        "require_review_if_modified": [
+                            {"resource_type": "some_resource"}
+                        ]
+                    }
+                }
+            ]
+        }
+        validate_business_rule_policies(value)
+
+    def test_valid_attribute_paths_only(self):
+        """Policy with attribute_paths only (no resource_type) passes."""
+        value = {
+            "on_step_output": [
+                {
+                    "when": {"step_type": "aap", "output_key": "job_summary"},
+                    "policy": {
+                        "type": "review_if_modified",
+                        "require_review_if_modified": [
+                            {"attribute_paths": ["failed_tasks"]}
+                        ]
+                    }
+                }
+            ]
+        }
+        validate_business_rule_policies(value)
+
+    def test_valid_multiple_rules(self):
+        """Multiple on_step_output rules pass."""
+        value = {
+            "on_step_output": [
+                {
+                    "when": {"step_type": "terraform_cloud"},
+                    "policy": {
+                        "type": "review_if_modified",
+                        "require_review_if_modified": [
+                            {"resource_type": "azurerm_sql_database"}
+                        ]
+                    }
+                },
+                {
+                    "when": {"step_type": "aap"},
+                    "policy": {
+                        "type": "review_if_modified",
+                        "require_review_if_modified": [
+                            {"attribute_paths": ["failed_tasks"]}
+                        ]
+                    }
+                }
+            ]
+        }
+        validate_business_rule_policies(value)
+
+
+class TestBusinessRulePoliciesInvalidMissingWhen:
+    """test_business_rule_policies_invalid_missing_when: error if 'when' missing."""
+
+    def test_missing_when_key(self):
+        """Missing 'when' key raises ValidationError."""
+        value = {
+            "on_step_output": [
+                {
+                    "policy": {
+                        "type": "review_if_modified",
+                        "require_review_if_modified": [
+                            {"resource_type": "azurerm_sql_database"}
+                        ]
+                    }
+                }
+            ]
+        }
+        with pytest.raises(ValidationError, match="when"):
+            validate_business_rule_policies(value)
+
+    def test_when_not_dict(self):
+        """'when' as string raises ValidationError."""
+        value = {
+            "on_step_output": [
+                {
+                    "when": "terraform_cloud",
+                    "policy": {
+                        "type": "review_if_modified",
+                        "require_review_if_modified": [
+                            {"resource_type": "azurerm_sql_database"}
+                        ]
+                    }
+                }
+            ]
+        }
+        with pytest.raises(ValidationError, match="when"):
+            validate_business_rule_policies(value)
+
+    def test_when_missing_step_type(self):
+        """'when' without 'step_type' raises ValidationError."""
+        value = {
+            "on_step_output": [
+                {
+                    "when": {"output_key": "plan_output"},
+                    "policy": {
+                        "type": "review_if_modified",
+                        "require_review_if_modified": [
+                            {"resource_type": "azurerm_sql_database"}
+                        ]
+                    }
+                }
+            ]
+        }
+        with pytest.raises(ValidationError, match="step_type"):
+            validate_business_rule_policies(value)
+
+    def test_step_type_empty_string(self):
+        """Empty step_type raises ValidationError."""
+        value = {
+            "on_step_output": [
+                {
+                    "when": {"step_type": "  "},
+                    "policy": {
+                        "type": "review_if_modified",
+                        "require_review_if_modified": [
+                            {"resource_type": "azurerm_sql_database"}
+                        ]
+                    }
+                }
+            ]
+        }
+        with pytest.raises(ValidationError, match="non-empty string"):
+            validate_business_rule_policies(value)
+
+
+class TestBusinessRulePoliciesInvalidMissingPolicyType:
+    """test_business_rule_policies_invalid_missing_policy_type: error if policy.type missing."""
+
+    def test_missing_policy_key(self):
+        """Missing 'policy' key raises ValidationError."""
+        value = {
+            "on_step_output": [
+                {
+                    "when": {"step_type": "terraform_cloud"}
+                }
+            ]
+        }
+        with pytest.raises(ValidationError, match="policy"):
+            validate_business_rule_policies(value)
+
+    def test_policy_missing_type(self):
+        """Policy without 'type' raises ValidationError."""
+        value = {
+            "on_step_output": [
+                {
+                    "when": {"step_type": "terraform_cloud"},
+                    "policy": {
+                        "require_review_if_modified": [
+                            {"resource_type": "azurerm_sql_database"}
+                        ]
+                    }
+                }
+            ]
+        }
+        with pytest.raises(ValidationError, match="type"):
+            validate_business_rule_policies(value)
+
+    def test_policy_invalid_type(self):
+        """Unknown policy type raises ValidationError."""
+        value = {
+            "on_step_output": [
+                {
+                    "when": {"step_type": "terraform_cloud"},
+                    "policy": {
+                        "type": "unknown_type",
+                        "require_review_if_modified": []
+                    }
+                }
+            ]
+        }
+        with pytest.raises(ValidationError, match="review_if_modified"):
+            validate_business_rule_policies(value)
+
+
+class TestBusinessRulePoliciesInvalidPolicyData:
+    """test_business_rule_policies_invalid_policy_data: error if require_review_if_modified invalid."""
+
+    def test_missing_require_review_if_modified(self):
+        """review_if_modified without require_review_if_modified raises error."""
+        value = {
+            "on_step_output": [
+                {
+                    "when": {"step_type": "terraform_cloud"},
+                    "policy": {
+                        "type": "review_if_modified",
+                        "auto_approve_if_none_match": True
+                    }
+                }
+            ]
+        }
+        with pytest.raises(ValidationError, match="require_review_if_modified"):
+            validate_business_rule_policies(value)
+
+    def test_require_review_not_list(self):
+        """require_review_if_modified as dict raises error."""
+        value = {
+            "on_step_output": [
+                {
+                    "when": {"step_type": "terraform_cloud"},
+                    "policy": {
+                        "type": "review_if_modified",
+                        "require_review_if_modified": {"resource_type": "foo"}
+                    }
+                }
+            ]
+        }
+        with pytest.raises(ValidationError, match="must be an array"):
+            validate_business_rule_policies(value)
+
+    def test_criteria_missing_both_fields(self):
+        """Criteria without resource_type nor attribute_paths raises error."""
+        value = {
+            "on_step_output": [
+                {
+                    "when": {"step_type": "terraform_cloud"},
+                    "policy": {
+                        "type": "review_if_modified",
+                        "require_review_if_modified": [
+                            {"some_other_field": "value"}
+                        ]
+                    }
+                }
+            ]
+        }
+        with pytest.raises(ValidationError, match="resource_type.*attribute_paths"):
+            validate_business_rule_policies(value)
+
+    def test_attribute_paths_not_list(self):
+        """attribute_paths as string raises error."""
+        value = {
+            "on_step_output": [
+                {
+                    "when": {"step_type": "terraform_cloud"},
+                    "policy": {
+                        "type": "review_if_modified",
+                        "require_review_if_modified": [
+                            {"attribute_paths": "sku_name"}
+                        ]
+                    }
+                }
+            ]
+        }
+        with pytest.raises(ValidationError, match="attribute_paths must be an array"):
+            validate_business_rule_policies(value)
+
+    def test_attribute_paths_item_not_string(self):
+        """attribute_paths item as int raises error."""
+        value = {
+            "on_step_output": [
+                {
+                    "when": {"step_type": "terraform_cloud"},
+                    "policy": {
+                        "type": "review_if_modified",
+                        "require_review_if_modified": [
+                            {"attribute_paths": [123]}
+                        ]
+                    }
+                }
+            ]
+        }
+        with pytest.raises(ValidationError, match="attribute_paths.*must be a string"):
+            validate_business_rule_policies(value)
+
+    def test_auto_approve_not_boolean(self):
+        """auto_approve_if_none_match as string raises error."""
+        value = {
+            "on_step_output": [
+                {
+                    "when": {"step_type": "terraform_cloud"},
+                    "policy": {
+                        "type": "review_if_modified",
+                        "require_review_if_modified": [
+                            {"resource_type": "azurerm_sql_database"}
+                        ],
+                        "auto_approve_if_none_match": "true"
+                    }
+                }
+            ]
+        }
+        with pytest.raises(ValidationError, match="auto_approve_if_none_match must be a boolean"):
+            validate_business_rule_policies(value)
+
+
+class TestBusinessRulePoliciesNullAllowed:
+    """test_business_rule_policies_null_allowed: null or {} passes validation."""
+
+    def test_none_passes(self):
+        """None passes validation."""
+        validate_business_rule_policies(None)
+
+    def test_empty_dict_passes(self):
+        """Empty dict {} passes validation."""
+        validate_business_rule_policies({})
+
+
+class TestBusinessRulePoliciesEmptyArrayAllowed:
+    """test_business_rule_policies_empty_array_allowed: on_step_output=[] passes validation."""
+
+    def test_empty_on_step_output_array(self):
+        """on_step_output=[] passes validation."""
+        validate_business_rule_policies({"on_step_output": []})
+
+
+class TestBusinessRulePoliciesEdgeCases:
+    """Additional edge case tests for robustness."""
+
+    def test_not_dict_raises_error(self):
+        """Non-dict value raises ValidationError."""
+        with pytest.raises(ValidationError, match="must be a JSON object"):
+            validate_business_rule_policies("invalid")
+
+    def test_missing_on_step_output_key(self):
+        """Dict without on_step_output raises ValidationError."""
+        with pytest.raises(ValidationError, match="on_step_output"):
+            validate_business_rule_policies({"other_key": []})
+
+    def test_on_step_output_not_list(self):
+        """on_step_output as dict raises ValidationError."""
+        with pytest.raises(ValidationError, match="must be an array"):
+            validate_business_rule_policies({"on_step_output": {}})
+
+    def test_on_step_output_item_not_dict(self):
+        """on_step_output item as string raises ValidationError."""
+        with pytest.raises(ValidationError, match="must be an object"):
+            validate_business_rule_policies({"on_step_output": ["invalid"]})
+
+    def test_output_key_not_string(self):
+        """output_key as int raises ValidationError."""
+        value = {
+            "on_step_output": [
+                {
+                    "when": {"step_type": "terraform_cloud", "output_key": 123},
+                    "policy": {
+                        "type": "review_if_modified",
+                        "require_review_if_modified": [
+                            {"resource_type": "azurerm_sql_database"}
+                        ]
+                    }
+                }
+            ]
+        }
+        with pytest.raises(ValidationError, match="output_key must be a string"):
+            validate_business_rule_policies(value)
+
+    def test_resource_type_not_string(self):
+        """resource_type as int raises ValidationError."""
+        value = {
+            "on_step_output": [
+                {
+                    "when": {"step_type": "terraform_cloud"},
+                    "policy": {
+                        "type": "review_if_modified",
+                        "require_review_if_modified": [
+                            {"resource_type": 123}
+                        ]
+                    }
+                }
+            ]
+        }
+        with pytest.raises(ValidationError, match="resource_type must be a string"):
+            validate_business_rule_policies(value)
+
+    def test_policy_not_dict(self):
+        """policy as string raises ValidationError."""
+        value = {
+            "on_step_output": [
+                {
+                    "when": {"step_type": "terraform_cloud"},
+                    "policy": "review_if_modified"
+                }
+            ]
+        }
+        with pytest.raises(ValidationError, match="policy must be an object"):
+            validate_business_rule_policies(value)

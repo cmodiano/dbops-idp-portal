@@ -2,11 +2,15 @@
 Validators for catalog app.
 Story 25.2: gate_conditions validation for execution steps.
 Story 25.4: change_type_config validation (allowed, requires_maintenance_window, requires_approval).
+Story 28.1: business_rule_policies validation for step output policies.
 """
 
+import logging
 import re
 
 from rest_framework.exceptions import ValidationError
+
+logger = logging.getLogger(__name__)
 
 
 VALID_GATE_CONDITION_TYPES = (
@@ -170,3 +174,131 @@ def validate_change_type_config(change_type_config: dict | None) -> None:
                 raise ValidationError(
                     f"change_type_config.{env_key}: change_model_code max 50 caractères"
                 )
+
+
+# Story 28.1: Valid policy types for business_rule_policies
+VALID_POLICY_TYPES = ('review_if_modified',)
+
+
+def validate_business_rule_policies(value: dict | None) -> None:
+    """
+    Validate business_rule_policies JSON schema (Story 28.1).
+
+    Structure: {"on_step_output": [{when: {step_type, output_key?}, policy: {type, ...}}]}
+
+    Args:
+        value: business_rule_policies dict or None
+
+    Raises:
+        ValidationError: if schema is invalid
+    """
+    if value is None or value == {}:
+        return
+
+    if not isinstance(value, dict):
+        raise ValidationError("business_rule_policies must be a JSON object")
+
+    if "on_step_output" not in value:
+        raise ValidationError("business_rule_policies must contain 'on_step_output' key")
+
+    on_step_output = value["on_step_output"]
+    if not isinstance(on_step_output, list):
+        raise ValidationError("on_step_output must be an array")
+
+    for idx, rule in enumerate(on_step_output):
+        if not isinstance(rule, dict):
+            raise ValidationError(f"on_step_output[{idx}] must be an object")
+
+        # Validate 'when'
+        if "when" not in rule:
+            raise ValidationError(f"on_step_output[{idx}] must contain 'when' key")
+
+        when = rule["when"]
+        if not isinstance(when, dict):
+            raise ValidationError(f"on_step_output[{idx}].when must be an object")
+
+        if "step_type" not in when:
+            raise ValidationError(f"on_step_output[{idx}].when must contain 'step_type'")
+
+        if not isinstance(when["step_type"], str) or not when["step_type"].strip():
+            raise ValidationError(
+                f"on_step_output[{idx}].when.step_type must be a non-empty string"
+            )
+
+        if "output_key" in when:
+            if not isinstance(when["output_key"], str):
+                raise ValidationError(
+                    f"on_step_output[{idx}].when.output_key must be a string"
+                )
+
+        # Validate 'policy'
+        if "policy" not in rule:
+            raise ValidationError(f"on_step_output[{idx}] must contain 'policy' key")
+
+        policy = rule["policy"]
+        if not isinstance(policy, dict):
+            raise ValidationError(f"on_step_output[{idx}].policy must be an object")
+
+        if "type" not in policy:
+            raise ValidationError(f"on_step_output[{idx}].policy must contain 'type'")
+
+        policy_type = policy["type"]
+        if policy_type not in VALID_POLICY_TYPES:
+            raise ValidationError(
+                f"on_step_output[{idx}].policy.type must be one of: "
+                f"{', '.join(VALID_POLICY_TYPES)} (got: {policy_type})"
+            )
+
+        # Validate policy-specific fields
+        if policy_type == "review_if_modified":
+            _validate_review_if_modified_policy(policy, idx)
+
+    logger.debug(
+        "business_rule_policies validation passed",
+        extra={"num_rules": len(on_step_output)},
+    )
+
+
+def _validate_review_if_modified_policy(policy: dict, idx: int) -> None:
+    """Validate review_if_modified policy fields."""
+    if "require_review_if_modified" not in policy:
+        raise ValidationError(
+            f"on_step_output[{idx}].policy.require_review_if_modified "
+            f"is required for type 'review_if_modified'"
+        )
+
+    require_review = policy["require_review_if_modified"]
+    if not isinstance(require_review, list):
+        raise ValidationError(
+            f"on_step_output[{idx}].policy.require_review_if_modified must be an array"
+        )
+
+    for criteria_idx, criteria in enumerate(require_review):
+        prefix = f"on_step_output[{idx}].policy.require_review_if_modified[{criteria_idx}]"
+
+        if not isinstance(criteria, dict):
+            raise ValidationError(f"{prefix} must be an object")
+
+        if "resource_type" not in criteria and "attribute_paths" not in criteria:
+            raise ValidationError(
+                f"{prefix} must contain 'resource_type' or 'attribute_paths'"
+            )
+
+        if "resource_type" in criteria and not isinstance(criteria["resource_type"], str):
+            raise ValidationError(f"{prefix}.resource_type must be a string")
+
+        if "attribute_paths" in criteria:
+            attr_paths = criteria["attribute_paths"]
+            if not isinstance(attr_paths, list):
+                raise ValidationError(f"{prefix}.attribute_paths must be an array")
+            for ap_idx, ap in enumerate(attr_paths):
+                if not isinstance(ap, str):
+                    raise ValidationError(
+                        f"{prefix}.attribute_paths[{ap_idx}] must be a string"
+                    )
+
+    if "auto_approve_if_none_match" in policy:
+        if not isinstance(policy["auto_approve_if_none_match"], bool):
+            raise ValidationError(
+                f"on_step_output[{idx}].policy.auto_approve_if_none_match must be a boolean"
+            )

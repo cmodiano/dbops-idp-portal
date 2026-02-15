@@ -46,3 +46,24 @@ Contient les clients pour les **services transversaux** consommés par le portai
 - La factory `get_service_client()` est utilisée par les composants internes qui ont besoin d'un service transversal.
 
 Voir aussi : [glossary.md](glossary.md) pour la terminologie.
+
+## Règles et Politiques sur les Actions
+
+Le modèle `Action` (catalog/models.py) contient plusieurs types de règles/configurations JSON évaluées à différents moments du workflow d'exécution :
+
+| Champ | Évalué à | Objectif |
+|-------|----------|----------|
+| `impact_rules` | Soumission | Déterminer impact_level par environnement |
+| `change_type_config` | Soumission | Changement ServiceNow requis par environnement |
+| `gate_conditions` | Pré-étape (runtime) | Conditions bloquantes (maintenance_window, manual_approval) |
+| **`business_rule_policies`** | **Post-étape** | **Évaluer sortie d'étape → revue DBA ou auto-approbation** |
+| `remediation_rules` | Post-exécution | Suggérer/déclencher actions correctives si échec |
+
+### business_rule_policies (Story 28.1)
+
+Champ `OracleJSONField` nullable sur le modèle `Action`. Définit des politiques métier évaluées après la sortie d'une étape d'exécution (ex. plan Terraform) pour décider si une revue DBA est nécessaire ou si l'approbation automatique est possible.
+
+- **Validation** : `catalog/validators.py` → `validate_business_rule_policies()`
+- **API** : `PUT /api/v1/admin/actions/{id}/business-rule-policies/`
+- **UI Admin** : Section "Règles métier" dans ActionForm (éditeur JSON avec validation live)
+- **Documentation complète** : [business-rule-policies.md](business-rule-policies.md)

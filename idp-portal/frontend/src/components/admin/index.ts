@@ -15,6 +15,8 @@ export { ParametersEditor } from './ParametersEditor';
 export type { ParametersEditorProps } from './ParametersEditor';
 export { ImpactRulesEditor } from './ImpactRulesEditor';
 export type { ImpactRulesEditorProps } from './ImpactRulesEditor';
+export { BusinessRulePoliciesEditor } from './BusinessRulePoliciesEditor';
+export type { BusinessRulePoliciesEditorProps } from './BusinessRulePoliciesEditor';
 export { ProfileForm } from './ProfileForm';
 export type { ProfileFormProps, ProfileFormValues } from './ProfileForm';
 export { ProfileWizard } from './ProfileWizard';

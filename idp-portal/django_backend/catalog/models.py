@@ -159,6 +159,11 @@ class Action(models.Model):
     change_type_config = OracleJSONField(null=True, blank=True, db_column='CHANGE_TYPE_CONFIG')
     documentation_md = models.TextField(null=True, blank=True, db_column='DOCUMENTATION_MD')
     remediation_rules = OracleJSONField(null=True, blank=True, db_column='REMEDIATION_RULES')
+    # Story 28.1: Business rule policies evaluated on step output (post-step, before gate evaluation)
+    business_rule_policies = OracleJSONField(
+        null=True, blank=True, db_column='BUSINESS_RULE_POLICIES',
+        help_text='JSON schema defining business rule policies evaluated on step output'
+    )
     default_impact_level = models.CharField(
         max_length=20,
         choices=[
@@ -236,6 +241,13 @@ class Action(models.Model):
                 name='ck_actions_soft_delete_consistency',
             ),
         ]
+
+    def clean(self) -> None:
+        """Validate model fields before save."""
+        super().clean()
+        if self.business_rule_policies:
+            from catalog.validators import validate_business_rule_policies
+            validate_business_rule_policies(self.business_rule_policies)
 
     def __str__(self) -> str:
         return self.name

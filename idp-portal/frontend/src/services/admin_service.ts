@@ -16,6 +16,7 @@ import type {
   AdminAnalytics,
   RemediationRule,
   WorkflowStepsUpdate,
+  BusinessRulePoliciesData,
 } from '../types/api';
 
 /**
@@ -210,6 +211,23 @@ export async function updateWorkflowSteps(
   return apiFetch<ActionDetail>(`/admin/actions/${workflowId}/execution-steps/`, {
     method: 'PUT',
     body: JSON.stringify(data),
+  });
+}
+
+/**
+ * Update business rule policies for an action (Story 28.1).
+ * Requires DBOPS profile.
+ *
+ * @param actionId - Action ID
+ * @param policies - Business rule policies data (or null to clear)
+ */
+export async function updateBusinessRulePolicies(
+  actionId: number,
+  policies: BusinessRulePoliciesData | null
+): Promise<ActionDetail> {
+  return apiFetch<ActionDetail>(`/admin/actions/${actionId}/business-rule-policies/`, {
+    method: 'PUT',
+    body: JSON.stringify({ business_rule_policies: policies }),
   });
 }
 

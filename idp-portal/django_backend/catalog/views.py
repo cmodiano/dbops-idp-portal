@@ -160,10 +160,35 @@ class ActionViewSet(viewsets.ModelViewSet):
         return Response({"data": serializer.data})
     
     def update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        """PUT /admin/actions/{id} - Update action metadata."""
+        """PUT/PATCH /admin/actions/{id} - Update action metadata."""
         instance = self.get_object()
-        serializer = ActionCreateSerializer(data=request.data)
+        partial = kwargs.get('partial', False)
+
+        # Story 28.1 HIGH-1 fix: Handle business_rule_policies in PATCH requests
+        if 'business_rule_policies' in request.data:
+            from catalog.validators import validate_business_rule_policies
+            try:
+                validate_business_rule_policies(request.data['business_rule_policies'])
+            except Exception as e:
+                raise DRFValidationError({'business_rule_policies': [str(e)]})
+
+            # Update business_rule_policies field directly
+            instance.business_rule_policies = request.data['business_rule_policies']
+            instance.save()
+
+            # Invalidate cache
+            _catalog_cache.clear()
+            _tags_cache.clear()
+
+            # Reload and return
+            instance.refresh_from_db()
+            response_serializer = ActionSerializer(instance)
+            return Response({"data": response_serializer.data})
+
+        # Handle other fields via ActionCreateSerializer
+        serializer = ActionCreateSerializer(data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
+
         try:
             action = CatalogService().update_action(
                 action_id=instance.id,
@@ -181,7 +206,7 @@ class ActionViewSet(viewsets.ModelViewSet):
                 message=f"Action {instance.id} introuvable",
                 details={"action_id": instance.id}
             )
-        
+
         # Reload with relations
         action = CatalogService().get_by_id(action.id)
         response_serializer = ActionSerializer(action)

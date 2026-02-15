@@ -140,6 +140,11 @@ class ActionSerializer(serializers.ModelSerializer):
         required=False, allow_null=True,
         help_text="Règles de remédiation automatique en cas d'erreur"
     )
+    # Story 28.1: Business rule policies evaluated on step output
+    business_rule_policies = serializers.JSONField(
+        required=False, allow_null=True,
+        help_text="Politiques de règles métier évaluées sur la sortie d'étape (ex. revue si modification Terraform)"
+    )
     # Story 5.7: workflow_steps for workflows (converted from execution_steps)
     workflow_steps = serializers.SerializerMethodField()
     
@@ -194,6 +199,13 @@ class ActionSerializer(serializers.ModelSerializer):
         """Story 23.5: Validate inventory_type in parameters_schema."""
         return validate_parameters_schema_inventory(value)
 
+    def validate_business_rule_policies(self, value: Any) -> Any:
+        """Story 28.1: Validate business_rule_policies schema."""
+        if value is not None:
+            from catalog.validators import validate_business_rule_policies
+            validate_business_rule_policies(value)
+        return value
+
     class Meta:
         model = Action
         fields = [
@@ -202,6 +214,8 @@ class ActionSerializer(serializers.ModelSerializer):
             'status', 'created_by', 'created_at', 'updated_at',
             'tags', 'documentation_md', 'remediation_rules',
             'execution_steps', 'change_type_config', 'workflow_steps',
+            # Story 28.1: business_rule_policies
+            'business_rule_policies',
             # Story 13.2, AC3: requires_target field
             'requires_target'
         ]
@@ -300,7 +314,7 @@ class ActionSerializer(serializers.ModelSerializer):
         
         # Store JSON fields as-is (will be converted by model setters)
         json_fields = ['parameters_schema', 'impact_rules', 'execution_steps',
-                      'change_type_config', 'remediation_rules']
+                      'change_type_config', 'remediation_rules', 'business_rule_policies']
         for field in json_fields:
             if field in data:
                 validated_data[field] = data[field]  # Keep as dict, model will serialize

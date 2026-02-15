@@ -150,6 +150,30 @@ export interface ExecutionStepsUpdate {
   change_type_config: Record<string, ChangeTypeConfigEntry> | null;
 }
 
+/** Story 28.1: Business rule policy criteria for review_if_modified. */
+export interface BusinessRuleCriteria {
+  resource_type?: string;
+  attribute_paths?: string[];
+}
+
+/** Story 28.1: Business rule policy definition. */
+export interface BusinessRulePolicy {
+  when: {
+    step_type: string;
+    output_key?: string;
+  };
+  policy: {
+    type: string;
+    require_review_if_modified?: BusinessRuleCriteria[];
+    auto_approve_if_none_match?: boolean;
+  };
+}
+
+/** Story 28.1: Business rule policies JSON structure. */
+export interface BusinessRulePoliciesData {
+  on_step_output: BusinessRulePolicy[];
+}
+
 export interface ActionDetail extends ActionResponse {
   /** Story 2.14: rbac_policies removed — RBAC now managed via profiles. */
   execution_steps: ExecutionStep[] | null;
@@ -160,6 +184,8 @@ export interface ActionDetail extends ActionResponse {
   /* documentation_md is inherited from ActionResponse (Story 3.4) */
   /** Story 9.1: Remediation rules for auto-suggesting corrective actions. */
   remediation_rules?: RemediationRule[] | null;
+  /** Story 28.1: Business rule policies evaluated on step output. */
+  business_rule_policies?: BusinessRulePoliciesData | null;
 }
 
 // === Status Transition Types (Story 2.4) ===
