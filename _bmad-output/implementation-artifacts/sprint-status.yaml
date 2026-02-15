@@ -261,6 +261,7 @@ development_status:
     19-3-detail-etape-workflow-timeline-logs-au-clic: done # 2026-02-08: Code review — 8 issues fixed (Ant Design API, missing tests AC6/AC7, unused import), 20/20 tests pass
     19-4-integration-remplacement-popup-ouverture-vue-execution: done # 2026-02-08: Code review — 14 issues (8 HIGH + 4 MEDIUM + 2 LOW) tous fixés, 19/19 ExecutionView tests pass, 4 integration tests créés ✅
     19-5-differenciation-action-vs-workflow-page-execution: done # Badge/icône type (workflow vs action) dans header ExecutionView — réutilise getItemTypeIcon() Story 18.2
+    19-6-logs-etape-workflow-drawer-analyse-correction: review # Logs réels dans drawer étape workflow — exécution enfant sans steps en base, analyse + correction backend/frontend — Story créée avec analyse architecture complète
     epic-19-retrospective: optional
     # === Epic 20: Action items et suivi — Restant des stories "done" ===
     # Consolidation des follow-ups, known issues et action items documentés dans les stories marquées done

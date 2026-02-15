@@ -14,6 +14,7 @@ Tests:
 import pytest
 from unittest.mock import patch
 
+from django.test import override_settings
 
 from executions.container_workflow_runtime import ContainerWorkflowRuntime
 from executions.models import (
@@ -626,3 +627,167 @@ class TestContainerWorkflowIntegration:
         result = runtime.run_sync()
 
         assert result == ExecutionStatus.FAILED
+
+
+@pytest.mark.django_db
+class TestContainerWorkflowChildSteps:
+    """Story 19.6: Child executions get ExecutionSteps via SimulationService."""
+
+    def setup_method(self):
+        self.user = UserFactory(username="child_steps_test_user")
+        self.action_a = ActionFactory(
+            name="Child Steps Action A",
+            status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.ACTION,
+            created_by=self.user,
+        )
+        self.action_b = ActionFactory(
+            name="Child Steps Action B",
+            status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.ACTION,
+            created_by=self.user,
+        )
+        self.workflow_action = ActionFactory(
+            name="Child Steps Workflow",
+            status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.WORKFLOW,
+            execution_steps=_make_workflow_steps([
+                self.action_a.id, self.action_b.id,
+            ]),
+            created_by=self.user,
+        )
+
+    def _create_execution(self):
+        return Execution.objects.create(
+            action=self.workflow_action,
+            user=self.user,
+            environment='dev',
+            status=ExecutionStatus.SUBMITTED,
+        )
+
+    @override_settings(
+        SIMULATE_EXECUTION_DEV=True,
+        SIMULATE_EXECUTION_STEP_DURATION=0,
+        SIMULATE_EXECUTION_FAILURE_RATE=0,
+    )
+    @patch('executions.container_workflow_runtime.AuditService')
+    def test_child_executions_have_steps_with_simulation(self, mock_audit):
+        """AC2: With simulation enabled, child executions have ExecutionSteps."""
+        execution = self._create_execution()
+        runtime = ContainerWorkflowRuntime(execution)
+        runtime.run_sync()
+
+        assert len(runtime.child_executions) == 2
+
+        for child in runtime.child_executions:
+            child_steps = list(
+                ExecutionStep.objects.filter(execution_id=child.id).order_by('step_order')
+            )
+            assert len(child_steps) == 5  # 5 simulated steps per action
+
+            # HIGH-3: Validate sequential step_order and timestamps
+            for i, step in enumerate(child_steps, start=1):
+                assert step.step_order == i, f"Expected step_order {i}, got {step.step_order}"
+                assert step.status == ExecutionStepStatus.COMPLETED
+                assert step.output  # logs populated
+                assert step.started_at is not None, f"Step {i} missing started_at"
+                assert step.completed_at is not None, f"Step {i} missing completed_at"
+
+    @override_settings(
+        SIMULATE_EXECUTION_DEV=True,
+        SIMULATE_EXECUTION_STEP_DURATION=0,
+        SIMULATE_EXECUTION_FAILURE_RATE=0,
+    )
+    @patch('executions.container_workflow_runtime.AuditService')
+    def test_child_steps_all_completed_no_random_failure(self, mock_audit):
+        """AC2: Child steps use force_success — no random failure."""
+        execution = self._create_execution()
+        runtime = ContainerWorkflowRuntime(execution)
+        result = runtime.run_sync()
+
+        assert result == ExecutionStatus.COMPLETED
+        for child in runtime.child_executions:
+            child.refresh_from_db()
+            assert child.status == ExecutionStatus.COMPLETED
+
+    @override_settings(
+        SIMULATE_EXECUTION_DEV=True,
+        SIMULATE_EXECUTION_STEP_DURATION=0,
+        SIMULATE_EXECUTION_FAILURE_RATE=0,
+    )
+    @patch('executions.container_workflow_runtime.AuditService')
+    def test_parent_steps_still_track_child(self, mock_audit):
+        """AC2: Parent still has tracking steps with child_execution_id output."""
+        execution = self._create_execution()
+        runtime = ContainerWorkflowRuntime(execution)
+        runtime.run_sync()
+
+        parent_steps = ExecutionStep.objects.filter(
+            execution=execution,
+        ).order_by('step_order')
+        assert parent_steps.count() == 2
+
+        for i, parent_step in enumerate(parent_steps):
+            output = parent_step.get_output()
+            assert output['child_execution_id'] == runtime.child_executions[i].id
+            assert output['child_status'] == ExecutionStatus.COMPLETED
+
+    @patch('executions.container_workflow_runtime.AuditService')
+    def test_no_child_steps_without_simulation(self, mock_audit):
+        """AC4: Without simulation, child executions have no steps (non-regression)."""
+        execution = self._create_execution()
+        runtime = ContainerWorkflowRuntime(execution)
+        runtime.run_sync()
+
+        for child in runtime.child_executions:
+            child_steps = ExecutionStep.objects.filter(execution_id=child.id)
+            assert child_steps.count() == 0
+
+    @override_settings(
+        SIMULATE_EXECUTION_DEV=True,
+        SIMULATE_EXECUTION_STEP_DURATION=0,
+        SIMULATE_EXECUTION_FAILURE_RATE=0,
+    )
+    @patch('executions.container_workflow_runtime.AuditService')
+    def test_child_steps_have_logs_output(self, mock_audit):
+        """AC2: Child steps have simulated log output for frontend display."""
+        execution = self._create_execution()
+        runtime = ContainerWorkflowRuntime(execution)
+        runtime.run_sync()
+
+        child = runtime.child_executions[0]
+        first_step = ExecutionStep.objects.filter(
+            execution_id=child.id,
+        ).order_by('step_order').first()
+        assert first_step is not None
+        assert first_step.step_name == "Préparation"
+        assert "[INFO]" in first_step.output
+
+    @override_settings(
+        SIMULATE_EXECUTION_DEV=True,
+        SIMULATE_EXECUTION_STEP_DURATION=-5,  # Invalid negative duration
+        SIMULATE_EXECUTION_FAILURE_RATE=0,
+    )
+    @patch('executions.simulation_service.logger')
+    @patch('executions.container_workflow_runtime.AuditService')
+    def test_invalid_step_duration_uses_default_fallback(self, mock_audit, mock_logger):
+        """MEDIUM-3: Negative or zero step_duration falls back to 2s default."""
+        execution = self._create_execution()
+        runtime = ContainerWorkflowRuntime(execution)
+        runtime.run_sync()
+
+        # Should log warning about invalid step_duration
+        warning_calls = [call for call in mock_logger.warning.call_args_list
+                         if 'simulation_invalid_step_duration' in str(call)]
+        assert len(warning_calls) > 0, "Expected warning about invalid step_duration"
+
+        # Execution should complete successfully (fallback worked)
+        execution.refresh_from_db()
+        assert execution.status == ExecutionStatus.COMPLETED
+
+        # Child steps should be created and completed
+        for child in runtime.child_executions:
+            child_steps = ExecutionStep.objects.filter(execution_id=child.id)
+            assert child_steps.count() == 5
+            for step in child_steps:
+                assert step.status == ExecutionStepStatus.COMPLETED

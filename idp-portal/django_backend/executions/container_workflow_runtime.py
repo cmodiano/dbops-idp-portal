@@ -31,6 +31,7 @@ from executions.models import (
     ExecutionStepType,
 )
 from executions.services import ExecutionService
+from executions.simulation_service import SimulationService
 from executions.cancellation_cache import is_cancelled
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
@@ -267,32 +268,56 @@ class ContainerWorkflowRuntime:
             correlation_id=self.correlation_id,
         )
 
-        # Simulate child execution completion
-        # In production, this would be handled by the platform adapter
-        # triggering the referenced action and waiting for completion.
-        # For now (no adapter infrastructure), we simulate completion.
-        # Use queryset.update() for reliable saves in background threads (avoids ORM caching issues)
-        now = timezone.now()
-        Execution.objects.filter(id=child_execution.id).update(
-            status=ExecutionStatus.RUNNING,
-            started_at=now,
-        )
+        # Execute child: simulation mode creates steps with progressive logs,
+        # production mode would use platform adapter (pending).
+        # Story 19.6: Create ExecutionSteps for child so drawer can display timeline.
+        if SimulationService.is_enabled():
+            SimulationService.create_simulated_steps(child_execution)
+            # Run simulation synchronously (we're already in a background thread).
+            # force_success=True: parent workflow controls the outcome, not random failure.
+            # HIGH-2: Wrap simulation in try-except to handle failures explicitly
+            try:
+                SimulationService._run_simulation(child_execution.id, force_success=True)
+            except Exception as sim_error:
+                logger.error(
+                    "container_workflow_simulation_failed",
+                    child_execution_id=child_execution.id,
+                    parent_execution_id=self.execution.id,
+                    error=str(sim_error),
+                    error_type=type(sim_error).__name__,
+                    correlation_id=self.correlation_id,
+                    exc_info=True,
+                )
+                # Mark child as FAILED explicitly before refresh
+                Execution.objects.filter(id=child_execution.id).update(
+                    status=ExecutionStatus.FAILED,
+                    completed_at=timezone.now(),
+                    error_message=f"Simulation failed: {sim_error}",
+                )
+        else:
+            # Non-simulation fallback: mark child as completed directly
+            # MEDIUM-1: Add structured logging for production fallback
+            logger.info(
+                "container_workflow_child_no_simulation",
+                child_execution_id=child_execution.id,
+                parent_execution_id=self.execution.id,
+                referenced_action_id=referenced_action.id,
+                correlation_id=self.correlation_id,
+                message="Simulation disabled — using direct status update fallback",
+            )
+            now = timezone.now()
+            Execution.objects.filter(id=child_execution.id).update(
+                status=ExecutionStatus.RUNNING,
+                started_at=now,
+            )
+            completed_at = timezone.now()
+            Execution.objects.filter(id=child_execution.id).update(
+                status=ExecutionStatus.COMPLETED,
+                completed_at=completed_at,
+            )
 
-        # In simulation mode, add delay so duration is visible in UI
-        if getattr(settings, 'SIMULATE_EXECUTION_DEV', False):
-            step_duration = getattr(settings, 'SIMULATE_EXECUTION_STEP_DURATION', 2)
-            if step_duration > 0:
-                time.sleep(step_duration)
-
-        # Simulate success (adapter infrastructure pending)
-        completed_at = timezone.now()
-        Execution.objects.filter(id=child_execution.id).update(
-            status=ExecutionStatus.COMPLETED,
-            completed_at=completed_at,
-        )
-        # Refresh in-memory object for downstream status check
-        child_execution.status = ExecutionStatus.COMPLETED
-        child_execution.completed_at = completed_at
+        # Refresh in-memory object for downstream status check (after all updates)
+        child_execution.refresh_from_db()
 
         # Update parent step to reflect child outcome
         parent_step.status = ExecutionStepStatus.COMPLETED

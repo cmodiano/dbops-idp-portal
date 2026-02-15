@@ -217,6 +217,18 @@ Cet epic vise à remplacer ce flux par une **vue d'exécution immersive** qui s'
 
 ---
 
+### Story 19.6 : Logs étape workflow dans le drawer — Analyse et correction
+
+**En tant que** DBA,  
+**je veux** accéder aux **logs détaillés de l'action exécutée** lorsqu'une étape de workflow est cliquée (drawer),  
+**afin de** diagnostiquer le déroulement réel (timeline, sortie, erreurs) et non uniquement un résumé JSON.
+
+**Contexte :** Actuellement, pour les workflows conteneur, chaque étape crée une exécution enfant ; le drawer charge cette exécution mais l'enfant n'a **aucune étape** en base, donc « Aucune étape à afficher » + résumé JSON uniquement. Les vrais logs ne sont pas accessibles.
+
+**Acceptance Criteria:** Voir `_bmad-output/implementation-artifacts/19-6-logs-etape-workflow-drawer-analyse-correction.md`.
+
+---
+
 ## Dépendances techniques
 
 - **WebSocket** : `/ws/executions/{id}` (ou équivalent) pour les mises à jour temps réel — à vérifier dans l'architecture actuelle

@@ -319,11 +319,36 @@ export function StepDetailDrawer({
                   </>
                 )}
                 {showChildTimeline && childExecution && (
-                  <ExecutionTimeline
-                    execution={childExecution}
-                    steps={childSteps}
-                    mode="historical"
-                  />
+                  <>
+                    <ExecutionTimeline
+                      execution={childExecution}
+                      steps={childSteps}
+                      mode="historical"
+                      embedInWorkflowStepDrawer
+                    />
+                    {childSteps.length === 0 && stepLogs && (
+                      <Card size="small" title={<span style={{ fontSize: 13 }}>Résumé de l&apos;étape (output)</span>} style={{ marginTop: 16 }}>
+                        <pre
+                          style={{
+                            margin: 0,
+                            padding: 12,
+                            background: '#141414',
+                            color: '#d4d4d4',
+                            borderRadius: 6,
+                            fontSize: 12,
+                            fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
+                            lineHeight: 1.6,
+                            overflowX: 'auto',
+                            maxHeight: 300,
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word',
+                          }}
+                        >
+                          {stepLogs}
+                        </pre>
+                      </Card>
+                    )}
+                  </>
                 )}
               </Card>
             )}

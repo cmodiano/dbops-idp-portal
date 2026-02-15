@@ -143,8 +143,28 @@ class SimulationService:
         logger.info("simulation_started", execution_id=execution.id)
 
     @classmethod
-    def _run_simulation(cls, execution_id: int) -> None:
-        """Background simulation loop (runs in a thread)."""
+    def _run_simulation(
+        cls,
+        execution_id: int,
+        *,
+        force_success: bool = False,
+    ) -> None:
+        """Background simulation loop (runs in a thread).
+
+        Args:
+            execution_id: The execution to simulate.
+            force_success: If True, disable random failure (used for child executions
+                in container workflows where the parent controls the outcome).
+                MUST be a boolean — other types will raise TypeError.
+
+        Raises:
+            TypeError: If force_success is not a boolean.
+            DatabaseError: On database errors during simulation.
+        """
+        # HIGH-1: Validate force_success parameter type
+        if not isinstance(force_success, bool):
+            raise TypeError(f"force_success must be bool, got {type(force_success).__name__}")
+
         try:
             # Thread needs its own DB connection
             close_old_connections()
@@ -165,7 +185,9 @@ class SimulationService:
                 )
                 step_duration = 2
 
-            failure_rate = getattr(settings, 'SIMULATE_EXECUTION_FAILURE_RATE', 0.1)
+            failure_rate = 0.0 if force_success else getattr(
+                settings, 'SIMULATE_EXECUTION_FAILURE_RATE', 0.1,
+            )
 
             for i, step in enumerate(steps):
                 is_last_step = (i == len(steps) - 1)
