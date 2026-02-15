@@ -1054,6 +1054,173 @@ class PolicyDecision:
 
 ---
 
+## Architecture RuleEngine Multi-Plateforme (Story 28.3)
+
+### Vue d'Ensemble
+
+La Story 28.3 introduit une architecture extensible pour l'évaluation des règles métier sur les sorties de différentes plateformes (Terraform Cloud, AAP, et futures plateformes). Le `PolicyEvaluator` monolithique de la Story 28.2 est refactorisé en un `RuleEngine` générique qui délègue l'interprétation des sorties à des `OutputInterpreter` spécialisés.
+
+```mermaid
+graph TD
+    WR[WorkflowRuntime] --> PE[PolicyEvaluator]
+    PE --> RE[RuleEngine]
+    RE --> REG[OutputInterpreterRegistry]
+    REG -->|terraform_cloud| TPI[TerraformPlanInterpreter]
+    REG -->|aap| AAP[AAPOutputInterpreter]
+    REG -->|future...| FUT[FutureInterpreter]
+    TPI --> NA[NormalizedArtifact]
+    AAP --> NA
+    RE -->|match_criteria| PD[PolicyDecision]
+```
+
+### Composants
+
+#### RuleEngine (`executions/rule_engine.py`)
+
+Moteur central d'évaluation des règles métier. Responsable de :
+1. Charger les politiques depuis `Action.business_rule_policies` (dict ou CLOB JSON)
+2. Filtrer les règles par `step_type` de l'étape courante
+3. Déléguer l'interprétation de la sortie à l'`OutputInterpreter` approprié
+4. Évaluer les critères de revue contre l'artefact normalisé
+5. Retourner une `PolicyDecision`
+
+```python
+engine = RuleEngine()
+decision = engine.evaluate(action, execution_step, step_output)
+# → PolicyDecision(require_approval=True/False, ...)
+```
+
+#### OutputInterpreter (`executions/interpreters/base.py`)
+
+Interface abstraite (ABC) que chaque interpréteur de plateforme doit implémenter :
+
+```python
+class OutputInterpreter(ABC):
+    @abstractmethod
+    def interpret(self, step_type: str, step_output: dict | str) -> NormalizedArtifact:
+        """Transforme la sortie brute en artefact normalisé."""
+```
+
+#### NormalizedArtifact (`executions/interpreters/base.py`)
+
+Structure normalisée produite par chaque interpréteur :
+
+```python
+@dataclass(frozen=True)
+class NormalizedArtifact:
+    changes: list[dict]   # Liste de changements détectés
+    metadata: dict        # Métadonnées spécifiques à la plateforme
+```
+
+Chaque élément de `changes` est un dictionnaire dont la structure dépend de la plateforme :
+- **Terraform** : `{"resource_type", "actions", "changed_attributes", "resource_address"}`
+- **AAP** : `{"task_name", "host", "status"}`
+
+#### OutputInterpreterRegistry (`executions/interpreters/registry.py`)
+
+Registre singleton thread-safe associant chaque `step_type` à son interpréteur :
+
+```python
+registry = OutputInterpreterRegistry.get_instance()
+interpreter = registry.get("terraform_cloud")  # → TerraformPlanInterpreter
+```
+
+### Interpréteurs Fournis
+
+| step_type | Interpréteur | Fichier | Sortie attendue |
+|-----------|-------------|---------|-----------------|
+| `terraform_cloud` | `TerraformPlanInterpreter` | `executions/interpreters/terraform_plan_interpreter.py` | Plan JSON ou texte Terraform |
+| `aap` | `AAPOutputInterpreter` | `executions/interpreters/aap_output_interpreter.py` | Résultat de job AAP (JSON) |
+
+### Ajouter un Nouvel Interpréteur
+
+Pour supporter une nouvelle plateforme (ex. Azure DevOps) :
+
+1. Créer `executions/interpreters/azure_devops_interpreter.py` :
+```python
+from executions.interpreters.base import NormalizedArtifact, OutputInterpreter
+
+class AzureDevOpsInterpreter(OutputInterpreter):
+    def interpret(self, step_type: str, step_output: dict | str) -> NormalizedArtifact:
+        # Parser la sortie Azure DevOps
+        changes = [...]
+        metadata = {...}
+        return NormalizedArtifact(changes=changes, metadata=metadata)
+```
+
+2. Enregistrer dans `executions/interpreters/__init__.py` :
+```python
+from executions.interpreters.azure_devops_interpreter import AzureDevOpsInterpreter
+
+def register_default_interpreters() -> None:
+    registry = OutputInterpreterRegistry.get_instance()
+    registry.register("terraform_cloud", TerraformPlanInterpreter())
+    registry.register("aap", AAPOutputInterpreter())
+    registry.register("azure_devops", AzureDevOpsInterpreter())  # Nouveau
+```
+
+3. Configurer la politique sur l'Action :
+```json
+{
+  "on_step_output": [{
+    "when": {"step_type": "azure_devops"},
+    "policy": {
+      "type": "review_if_modified",
+      "require_review_if_modified": [{"resource_type": "..."}],
+      "auto_approve_if_none_match": true
+    }
+  }]
+}
+```
+
+### Séquence d'Évaluation Complète (Story 28.3)
+
+```mermaid
+sequenceDiagram
+    participant WR as WorkflowRuntime
+    participant PE as PolicyEvaluator
+    participant RE as RuleEngine
+    participant REG as Registry
+    participant INT as OutputInterpreter
+    participant AS as AuditService
+
+    WR->>PE: evaluate_policy(step, action, output)
+    PE->>RE: evaluate(action, step, output)
+    RE->>RE: _load_policies(action)
+    RE->>RE: filter rules by step_type
+    RE->>REG: get(step_type)
+    REG-->>RE: interpreter
+    RE->>INT: interpret(step_type, output)
+    INT-->>RE: NormalizedArtifact
+    RE->>RE: _match_criteria(artifact, policy)
+    RE-->>PE: PolicyDecision
+
+    alt require_approval = True
+        WR->>WR: step.status = WAITING
+        WR->>AS: APPROVAL_REQUIRED
+    else require_approval = False
+        WR->>WR: step.status = COMPLETED
+        WR->>AS: AUTO_APPROVED
+    end
+```
+
+### Fichiers Créés/Modifiés (Story 28.3)
+
+| Fichier | Action | Description |
+|---------|--------|-------------|
+| `executions/interpreters/__init__.py` | Créé | Package + auto-enregistrement |
+| `executions/interpreters/base.py` | Créé | OutputInterpreter ABC + NormalizedArtifact |
+| `executions/interpreters/registry.py` | Créé | OutputInterpreterRegistry singleton |
+| `executions/interpreters/terraform_plan_interpreter.py` | Créé | Interpréteur Terraform Cloud |
+| `executions/interpreters/aap_output_interpreter.py` | Créé | Interpréteur AAP |
+| `executions/rule_engine.py` | Créé | Moteur de règles générique |
+| `executions/policy_evaluator.py` | Modifié | Refactorisé → délègue au RuleEngine |
+| `executions/tests/test_rule_engine.py` | Créé | Tests unitaires RuleEngine |
+| `executions/tests/test_terraform_plan_interpreter.py` | Créé | Tests TerraformPlanInterpreter |
+| `executions/tests/test_aap_output_interpreter.py` | Créé | Tests AAPOutputInterpreter |
+
+---
+
 ## Voir aussi
 
 - [condition-gates.md](./backend/condition-gates.md) — Évaluation des gates pré-étape

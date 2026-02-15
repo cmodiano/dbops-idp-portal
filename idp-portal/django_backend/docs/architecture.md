@@ -59,11 +59,28 @@ Le modèle `Action` (catalog/models.py) contient plusieurs types de règles/conf
 | **`business_rule_policies`** | **Post-étape** | **Évaluer sortie d'étape → revue DBA ou auto-approbation** |
 | `remediation_rules` | Post-exécution | Suggérer/déclencher actions correctives si échec |
 
-### business_rule_policies (Story 28.1)
+### business_rule_policies (Stories 28.1–28.3)
 
-Champ `OracleJSONField` nullable sur le modèle `Action`. Définit des politiques métier évaluées après la sortie d'une étape d'exécution (ex. plan Terraform) pour décider si une revue DBA est nécessaire ou si l'approbation automatique est possible.
+Champ `OracleJSONField` nullable sur le modèle `Action`. Définit des politiques métier évaluées après la sortie d'une étape d'exécution (ex. plan Terraform, job AAP) pour décider si une revue DBA est nécessaire ou si l'approbation automatique est possible.
 
 - **Validation** : `catalog/validators.py` → `validate_business_rule_policies()`
 - **API** : `PUT /api/v1/admin/actions/{id}/business-rule-policies/`
 - **UI Admin** : Section "Règles métier" dans ActionForm (éditeur JSON avec validation live)
-- **Documentation complète** : [business-rule-policies.md](business-rule-policies.md)
+- **Documentation complète** : [business-rule-policies.md](../../docs/business-rule-policies.md)
+
+#### Architecture RuleEngine (Story 28.3)
+
+Le `PolicyEvaluator` délègue au `RuleEngine`, qui utilise des `OutputInterpreter` spécialisés par plateforme :
+
+```
+PolicyEvaluator → RuleEngine → OutputInterpreterRegistry → OutputInterpreter → NormalizedArtifact
+```
+
+| Composant | Fichier | Rôle |
+|-----------|---------|------|
+| `RuleEngine` | `executions/rule_engine.py` | Moteur d'évaluation des règles métier |
+| `OutputInterpreterRegistry` | `executions/interpreters/registry.py` | Registre singleton des interpréteurs |
+| `TerraformPlanInterpreter` | `executions/interpreters/terraform_plan_interpreter.py` | Interpréteur plans Terraform |
+| `AAPOutputInterpreter` | `executions/interpreters/aap_output_interpreter.py` | Interpréteur sorties AAP |
+
+Pour ajouter une nouvelle plateforme : implémenter `OutputInterpreter.interpret()` et enregistrer dans le registre.

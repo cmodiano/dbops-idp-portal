@@ -374,7 +374,7 @@ development_status:
     epic-28: in-progress
     28-1-modele-schema-regles-metier-business-rule-policies: done # Code review 2026-02-15: 7 issues (2 HIGH + 3 MEDIUM + 2 LOW), 6 auto-fixed (endpoint non-conforme AC3 corrigé, docs aligned, Ant Design API) — PATCH /actions/{id}/ validation complète, 37 tests pass ✅
     28-2-policy-evaluator-terraform-plan-review-if-modified: done # Code review adversarial 2026-02-15: 12/14 fixes auto-applied (CRIT-1, CRIT-2, MED-1/2/3/4/6/7, LOW-2/3/4), 37 tests (30 unit + 7 integration), 0 régression, rapport 28-2-code-review-report.md, CRIT-3 & MED-5 documentés Story 28.3 ✅
-    28-3-moteur-regles-metier-intelligent-multi-plateforme: backlog # RuleEngine + interpréteurs par plateforme (Terraform, AAP, …), extensible sans modifier le noyau
+    28-3-moteur-regles-metier-intelligent-multi-plateforme: done # Code review adversarial 2026-02-15: 30 issues (5 CRITICAL + 7 HIGH + 18 MEDIUM), TOUS auto-fixés — DoS protection (JSON 1MB limit, criteria 100 max), type safety, race condition fix, 56 tests pass ✅
     epic-28-retrospective: optional
     # === Epic 29: Clarification modèle Plateformes / Moteurs / Services ===
     epic-29: backlog

@@ -1,6 +1,7 @@
 """
 Integration tests for PolicyEvaluator with workflow runtime.
 Story 28.2 — AC9: Tests d'intégration end-to-end.
+Story 28.3 — Updated: mock paths for RuleEngine architecture, step_type=terraform_cloud.
 """
 from __future__ import annotations
 
@@ -66,7 +67,7 @@ TERRAFORM_PLAN_NO_SENSITIVE = {
 POLICY_REVIEW_SKU = {
     "on_step_output": [
         {
-            "when": {"step_type": "platform"},
+            "when": {"step_type": "terraform_cloud"},
             "policy": {
                 "type": "review_if_modified",
                 "require_review_if_modified": [
@@ -84,7 +85,7 @@ POLICY_REVIEW_SKU = {
 POLICY_REVIEW_NO_AUTO = {
     "on_step_output": [
         {
-            "when": {"step_type": "platform"},
+            "when": {"step_type": "terraform_cloud"},
             "policy": {
                 "type": "review_if_modified",
                 "require_review_if_modified": [
@@ -118,14 +119,15 @@ class TestPolicyWorkflowIntegration:
         execution = ExecutionFactory(action=action)
         step = ExecutionStepFactory(
             execution=execution,
-            step_type="platform",
+            step_type="terraform_cloud",
             status=ExecutionStepStatus.RUNNING,
         )
 
         evaluator = PolicyEvaluator()
 
-        with patch("executions.policy_evaluator.get_correlation_id", return_value="test-corr"):
-            decision = evaluator.evaluate_policy(step, action, TERRAFORM_PLAN_SENSITIVE)
+        with patch("executions.rule_engine.get_correlation_id", return_value="test-corr"):
+            with patch("executions.interpreters.terraform_plan_interpreter.get_correlation_id", return_value="test-corr"):
+                decision = evaluator.evaluate_policy(step, action, TERRAFORM_PLAN_SENSITIVE)
 
         assert decision.require_approval is True
         assert len(decision.matched_criteria) >= 1
@@ -169,14 +171,15 @@ class TestPolicyWorkflowIntegration:
         execution = ExecutionFactory(action=action)
         step = ExecutionStepFactory(
             execution=execution,
-            step_type="platform",
+            step_type="terraform_cloud",
             status=ExecutionStepStatus.RUNNING,
         )
 
         evaluator = PolicyEvaluator()
 
-        with patch("executions.policy_evaluator.get_correlation_id", return_value="test-corr"):
-            decision = evaluator.evaluate_policy(step, action, TERRAFORM_PLAN_NO_SENSITIVE)
+        with patch("executions.rule_engine.get_correlation_id", return_value="test-corr"):
+            with patch("executions.interpreters.terraform_plan_interpreter.get_correlation_id", return_value="test-corr"):
+                decision = evaluator.evaluate_policy(step, action, TERRAFORM_PLAN_NO_SENSITIVE)
 
         assert decision.require_approval is False
         assert "Auto-approved" in decision.decision_reason
@@ -216,14 +219,15 @@ class TestPolicyWorkflowIntegration:
         execution = ExecutionFactory(action=action)
         step = ExecutionStepFactory(
             execution=execution,
-            step_type="platform",
+            step_type="terraform_cloud",
             status=ExecutionStepStatus.RUNNING,
         )
 
         evaluator = PolicyEvaluator()
 
-        with patch("executions.policy_evaluator.get_correlation_id", return_value="test-corr"):
-            decision = evaluator.evaluate_policy(step, action, TERRAFORM_PLAN_SENSITIVE)
+        with patch("executions.rule_engine.get_correlation_id", return_value="test-corr"):
+            with patch("executions.interpreters.terraform_plan_interpreter.get_correlation_id", return_value="test-corr"):
+                decision = evaluator.evaluate_policy(step, action, TERRAFORM_PLAN_SENSITIVE)
 
         assert decision.require_approval is True
 
@@ -344,16 +348,17 @@ class TestSplunkCorrelationId:
         execution = ExecutionFactory(action=action)
         step = ExecutionStepFactory(
             execution=execution,
-            step_type="platform",
+            step_type="terraform_cloud",
             status=ExecutionStepStatus.RUNNING,
         )
 
         evaluator = PolicyEvaluator()
         test_corr_id = "test-splunk-corr-12345"
 
-        with patch("executions.policy_evaluator.get_correlation_id", return_value=test_corr_id):
-            with patch("executions.policy_evaluator.logger") as mock_logger:
-                evaluator.evaluate_policy(step, action, TERRAFORM_PLAN_SENSITIVE)
+        with patch("executions.rule_engine.get_correlation_id", return_value=test_corr_id):
+            with patch("executions.interpreters.terraform_plan_interpreter.get_correlation_id", return_value=test_corr_id):
+                with patch("executions.rule_engine.logger") as mock_logger:
+                    evaluator.evaluate_policy(step, action, TERRAFORM_PLAN_SENSITIVE)
 
         # Verify all info calls contain correlation_id
         for call in mock_logger.info.call_args_list:
@@ -361,3 +366,148 @@ class TestSplunkCorrelationId:
             assert kwargs.get("correlation_id") == test_corr_id, (
                 f"Missing or wrong correlation_id in log event: {call.args[0]}"
             )
+
+
+# ============================================================================
+# Story 28.3: RuleEngine integration tests
+# ============================================================================
+
+
+AAP_JOB_FAILED = {
+    "job_id": 999,
+    "status": "failed",
+    "failed": True,
+    "failed_tasks": [
+        {"name": "Deploy app", "host": "prod-server1"},
+    ],
+    "changed": 0,
+    "changed_hosts": [],
+}
+
+POLICY_AAP_REVIEW_IF_FAILED = {
+    "on_step_output": [{
+        "when": {"step_type": "aap"},
+        "policy": {
+            "type": "review_if_modified",
+            "require_review_if_modified": [
+                {"resource_type": "azurerm_sql_database"},
+            ],
+            "auto_approve_if_none_match": True,
+        },
+    }],
+}
+
+POLICY_TERRAFORM_AND_AAP = {
+    "on_step_output": [
+        {
+            "when": {"step_type": "terraform_cloud"},
+            "policy": {
+                "type": "review_if_modified",
+                "require_review_if_modified": [
+                    {"resource_type": "azurerm_sql_database", "attribute_paths": ["sku_name"]},
+                ],
+                "auto_approve_if_none_match": True,
+            },
+        },
+        {
+            "when": {"step_type": "aap"},
+            "policy": {
+                "type": "review_if_modified",
+                "require_review_if_modified": [
+                    {"resource_type": "azurerm_sql_database"},
+                ],
+                "auto_approve_if_none_match": True,
+            },
+        },
+    ],
+}
+
+
+@pytest.mark.django_db
+class TestRuleEngineIntegration:
+    """Story 28.3 AC5: Integration tests for RuleEngine with interpreters."""
+
+    def test_terraform_plan_rule_engine_integration(self) -> None:
+        """plan Terraform → RuleEngine → require_approval."""
+        from executions.rule_engine import RuleEngine
+
+        action = ActionFactory(
+            business_rule_policies=json.dumps(POLICY_REVIEW_SKU),
+        )
+        execution = ExecutionFactory(action=action)
+        step = ExecutionStepFactory(
+            execution=execution,
+            step_type="terraform_cloud",
+            status=ExecutionStepStatus.RUNNING,
+        )
+
+        engine = RuleEngine()
+
+        with patch("executions.rule_engine.get_correlation_id", return_value="test-integration"):
+            with patch("executions.interpreters.terraform_plan_interpreter.get_correlation_id", return_value="test-integration"):
+                decision = engine.evaluate(action, step, TERRAFORM_PLAN_SENSITIVE)
+
+        assert decision.require_approval is True
+        assert len(decision.matched_criteria) >= 1
+
+    def test_aap_job_rule_engine_integration(self) -> None:
+        """AAP job output → RuleEngine → auto_approved (no matching resource_type)."""
+        from executions.rule_engine import RuleEngine
+
+        action = ActionFactory(
+            business_rule_policies=json.dumps(POLICY_AAP_REVIEW_IF_FAILED),
+        )
+        execution = ExecutionFactory(action=action)
+        step = ExecutionStepFactory(
+            execution=execution,
+            step_type="aap",
+            status=ExecutionStepStatus.RUNNING,
+        )
+
+        engine = RuleEngine()
+
+        with patch("executions.rule_engine.get_correlation_id", return_value="test-integration"):
+            with patch("executions.interpreters.aap_output_interpreter.get_correlation_id", return_value="test-integration"):
+                decision = engine.evaluate(action, step, AAP_JOB_FAILED)
+
+        # AAP failed_tasks have no resource_type matching azurerm_sql_database → auto-approved
+        assert decision.require_approval is False
+        assert "Auto-approved" in decision.decision_reason
+
+    def test_multiple_step_types_same_action(self) -> None:
+        """action with rules Terraform + AAP → dispatch correct per step_type."""
+        from executions.rule_engine import RuleEngine
+
+        action = ActionFactory(
+            business_rule_policies=json.dumps(POLICY_TERRAFORM_AND_AAP),
+        )
+
+        # Terraform step → matches sku_name → require_approval
+        execution1 = ExecutionFactory(action=action)
+        tf_step = ExecutionStepFactory(
+            execution=execution1,
+            step_type="terraform_cloud",
+            status=ExecutionStepStatus.RUNNING,
+        )
+
+        engine = RuleEngine()
+
+        with patch("executions.rule_engine.get_correlation_id", return_value="test"):
+            with patch("executions.interpreters.terraform_plan_interpreter.get_correlation_id", return_value="test"):
+                tf_decision = engine.evaluate(action, tf_step, TERRAFORM_PLAN_SENSITIVE)
+
+        assert tf_decision.require_approval is True
+
+        # AAP step → no matching resource_type → auto-approved
+        execution2 = ExecutionFactory(action=action)
+        aap_step = ExecutionStepFactory(
+            execution=execution2,
+            step_type="aap",
+            status=ExecutionStepStatus.RUNNING,
+        )
+
+        with patch("executions.rule_engine.get_correlation_id", return_value="test"):
+            with patch("executions.interpreters.aap_output_interpreter.get_correlation_id", return_value="test"):
+                aap_decision = engine.evaluate(action, aap_step, AAP_JOB_FAILED)
+
+        assert aap_decision.require_approval is False
