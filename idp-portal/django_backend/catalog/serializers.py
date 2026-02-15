@@ -14,9 +14,65 @@ from catalog.models import (
     Action, Tag, ActionStatus, ActionItemType
 )
 from reference.models import RefEngine, RefPlatform, RefCategory
+from integrations.models import Integration, IntegrationTypeCatalogue, IntegrationRole
 
 
 VALID_INVENTORY_TYPES = ('servers', 'instances', 'databases')
+
+
+def _validate_platform_integration_consistency(
+    platform: str | None,
+    integration: Integration | None,
+    integration_id: int | None = None
+) -> None:
+    """
+    Story 29.4: Validate platform ↔ integration.type consistency (DRY helper).
+
+    Raises:
+        serializers.ValidationError: If platform and integration are inconsistent.
+    """
+    # Skip validation if either field is missing
+    if not platform or not integration:
+        return
+
+    # Get integration type catalogue entry
+    try:
+        integration_type_cat = IntegrationTypeCatalogue.objects.get(code=integration.type)
+    except IntegrationTypeCatalogue.DoesNotExist:
+        # If type not in catalogue, skip validation (backward compatibility)
+        return
+
+    # Only validate if integration is a platform (not a service)
+    if integration_type_cat.integration_role != IntegrationRole.PLATFORM:
+        raise serializers.ValidationError({
+            'integration_id': (
+                f"Integration '{integration.name}' is a service (type '{integration.type}'), "
+                f"but action.platform is set. Use integration for platforms only "
+                f"(AAP, GitHub Actions, etc.)."
+            )
+        })
+
+    # Normalize platform code for matching (lower, spaces→underscores)
+    normalized_platform = platform.lower().replace(' ', '_')
+
+    # Check if normalized platform matches integration.type
+    if normalized_platform != integration.type:
+        # Build clear error message with expected value
+        expected_platforms = {
+            'aap': 'AAP',
+            'tower': 'Tower',
+            'github_actions': 'GitHub Actions',
+            'azure_devops': 'Azure DevOps',
+            'terraform_cloud': 'Terraform Cloud',
+        }
+        expected_platform = expected_platforms.get(integration.type, integration_type_cat.name)
+
+        raise serializers.ValidationError({
+            'platform': (
+                f"Platform '{platform}' is inconsistent with integration type '{integration.type}'. "
+                f"Expected platform '{expected_platform}' for integration '{integration.name}'."
+            )
+        })
 
 
 def validate_parameters_schema_inventory(value: Any) -> Any:
@@ -159,6 +215,10 @@ class ActionSerializer(serializers.ModelSerializer):
     # Story 2.30: Category code (optional, validated against REF_CATEGORIES)
     category = serializers.CharField(max_length=50, allow_null=True, required=False)
     item_type = serializers.ChoiceField(choices=ActionItemType.choices, default=ActionItemType.ACTION)
+    # Story 29.4: integration_id for platform ↔ integration.type consistency validation
+    integration_id = serializers.IntegerField(
+        source='integration.id', read_only=True, allow_null=True
+    )
 
     def validate_engine(self, value: str | None) -> str | None:
         """Validate engine against REF_ENGINES table."""
@@ -206,6 +266,22 @@ class ActionSerializer(serializers.ModelSerializer):
             validate_business_rule_policies(value)
         return value
 
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Story 29.4: Validate platform ↔ integration.type consistency when both provided.
+
+        If both platform and integration are set, ensure consistency using DRY helper.
+        Normalization: REF_PLATFORMS.CODE (Title Case) → lower().replace(' ', '_') → IntegrationTypeCatalogue.code.
+        """
+        platform = data.get('platform')
+        # Get integration from instance (read-only field, set via model)
+        integration = getattr(self.instance, 'integration', None) if self.instance else None
+
+        # Use DRY helper for validation
+        _validate_platform_integration_consistency(platform, integration)
+
+        return data
+
     class Meta:
         model = Action
         fields = [
@@ -217,9 +293,11 @@ class ActionSerializer(serializers.ModelSerializer):
             # Story 28.1: business_rule_policies
             'business_rule_policies',
             # Story 13.2, AC3: requires_target field
-            'requires_target'
+            'requires_target',
+            # Story 29.4: integration_id for platform consistency validation
+            'integration_id',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'created_by']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'created_by', 'integration_id']
     
     # Story 17.4: Removed redundant get_parameters_schema, get_impact_rules, etc.
     # OracleJSONField handles deserialization automatically - no need for SerializerMethodField
@@ -344,6 +422,8 @@ class ActionCreateSerializer(serializers.Serializer):
     category = serializers.CharField(max_length=50, required=False, allow_null=True)
     engine = serializers.CharField(max_length=50, required=False, allow_null=True)
     platform = serializers.CharField(max_length=50, required=False, allow_null=True)
+    # Story 29.4: integration_id for platform ↔ integration.type consistency validation
+    integration_id = serializers.IntegerField(required=False, allow_null=True)
 
     def validate_category(self, value: str | None) -> str | None:
         """Validate category against REF_CATEGORIES table (Story 2.30)."""
@@ -400,13 +480,32 @@ class ActionCreateSerializer(serializers.Serializer):
         return stripped
 
     def validate(self, data: dict[str, Any]) -> dict[str, Any]:
-        """Validate engine and platform required for action type."""
+        """
+        Validate engine/platform required for action type.
+        Story 29.4: Validate platform ↔ integration.type consistency when both provided.
+        """
         item_type = data.get('item_type', ActionItemType.ACTION)
         if item_type == ActionItemType.ACTION:
             if not data.get('engine'):
                 raise serializers.ValidationError("engine is required for action type")
             if not data.get('platform'):
                 raise serializers.ValidationError("platform is required for action type")
+
+        # Story 29.4: Validate platform ↔ integration.type consistency
+        platform = data.get('platform')
+        integration_id = data.get('integration_id')
+
+        if platform and integration_id:
+            try:
+                integration = Integration.objects.get(id=integration_id)
+            except Integration.DoesNotExist:
+                raise serializers.ValidationError(
+                    {'integration_id': 'Integration not found'}
+                )
+
+            # Use DRY helper for validation
+            _validate_platform_integration_consistency(platform, integration, integration_id)
+
         return data
 
 

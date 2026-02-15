@@ -89,6 +89,16 @@ class CatalogService:
         if status not in [ActionStatus.DRAFT, ActionStatus.PUBLISHED]:
             raise ValueError("Statut initial doit être draft ou published")
 
+        # Story 29.4: Resolve integration_id to Integration FK
+        integration = None
+        integration_id = action_data.get('integration_id')
+        if integration_id:
+            from integrations.models import Integration
+            try:
+                integration = Integration.objects.get(id=integration_id)
+            except Integration.DoesNotExist:
+                pass  # Validation already handled by serializer
+
         # Create the action
         action = Action.objects.create(
             name=action_data['name'],
@@ -101,6 +111,7 @@ class CatalogService:
             created_by=created_by_user,
             documentation_md=action_data.get('documentation_md'),
             default_impact_level=action_data.get('default_impact_level'),
+            integration=integration,
         )
 
         # Log action creation
@@ -268,7 +279,18 @@ class CatalogService:
             action.documentation_md = action_update_data.get('documentation_md')
         if 'default_impact_level' in action_update_data:
             action.default_impact_level = action_update_data.get('default_impact_level')
-        
+        # Story 29.4 Code Review Fix MEDIUM-1: Update integration if provided
+        if 'integration_id' in action_update_data:
+            integration_id = action_update_data.get('integration_id')
+            if integration_id:
+                from integrations.models import Integration
+                try:
+                    action.integration = Integration.objects.get(id=integration_id)
+                except Integration.DoesNotExist:
+                    pass  # Validation already handled by serializer
+            else:
+                action.integration = None
+
         # Update JSON fields (OracleJSONField handles serialization automatically)
         if 'parameters_schema' in action_update_data:
             action.parameters_schema = action_update_data['parameters_schema']

@@ -52,11 +52,14 @@ Le codebase distingue **quatre notions** qui se recoupent partiellement et ne so
 - **Détermination des valeurs disponibles :**  
   **`GET /api/v1/reference/platforms?active_only=true`** → même principe que engines.
 
-**Recoupement avec les intégrations :**  
-Les **codes** REF_PLATFORMS (ex. « AAP », « GitHub Actions ») sont proches des **types** d’intégration (ex. `aap`, `github_actions`) mais :
-- **REF_PLATFORMS** = libellé/catégorie pour **décrire** l’action (catalogue).
-- **Integration.type** = type de l’**instance** d’intégration (config URL, credentials).  
-Une action pointe vers une **Integration** (FK `integration_id`) dont le **type** (aap, azure_devops, etc.) détermine quel adapter est utilisé à l’exécution. Il n’y a pas de liaison explicite REF_PLATFORMS ↔ IntegrationTypeCatalogue ; la cohérence (ex. action « AAP » → intégration type `aap`) est implicite.
+**Recoupement avec les intégrations (Story 29.4 — lien explicite) :**
+Les **codes** REF_PLATFORMS (ex. « AAP », « GitHub Actions ») sont proches des **types** d'intégration (ex. `aap`, `github_actions`) :
+- **REF_PLATFORMS** = libellé/catégorie pour **décrire** l'action (catalogue).
+- **Integration.type** = type de l'**instance** d'intégration (config URL, credentials).
+
+**Lien explicite (Story 29.4) :** La cohérence `action.platform` ↔ `integration.type` est maintenant **validée par le backend** quand les deux champs sont renseignés sur une action. La normalisation suit la convention `.lower().replace(' ', '_')` (ex. « GitHub Actions » → `github_actions`). Voir [platform-integration-mapping.md](../django_backend/docs/platform-integration-mapping.md) pour le mapping complet et les règles de validation.
+
+**Valeurs ajoutées (V073) :** Tower (Ansible Tower) et Terraform Cloud, pour couvrir tous les types plateforme du catalogue d'intégration (`IntegrationTypeCatalogue` où `integration_role='platform'`).
 
 ---
 
@@ -173,7 +176,7 @@ Une action pointe vers une **Integration** (FK `integration_id`) dont le **type*
 ## 5. Recommandations (sans modification de code)
 
 1. **Documenter un glossaire** (moteur, technologie, plateforme, type d’intégration, engine_type) et l’usage de chaque terme (catalogue vs inventaire vs exécution).
-2. **Clarifier la relation REF_PLATFORMS ↔ IntegrationTypeCatalogue** : soit documenter la convention (ex. mapping AAP ↔ aap, GitHub Actions ↔ github_actions), soit envisager un lien explicite si on veut une cohérence garantie.
+2. ~~**Clarifier la relation REF_PLATFORMS ↔ IntegrationTypeCatalogue**~~ → **FAIT (Story 29.4)** : Convention documentée dans [platform-integration-mapping.md](../django_backend/docs/platform-integration-mapping.md), validation backend implémentée, REF_PLATFORMS complété (V073: Tower, Terraform Cloud).
 3. **Centraliser « comment sont déterminées les listes disponibles »** dans un seul doc (comme ce rapport) avec les endpoints et sources (tables, fixtures).
 4. **engine_type (inventaire) :** soit documenter les valeurs attendues par source (ex. oracle, sqlserver), soit introduire plus tard une table ou un endpoint de référence si on veut des listes déroulantes homogènes.
 
@@ -185,3 +188,4 @@ Ce rapport se limite à l'examen de l'existant ; aucune modification de code n'a
 
 - **Glossaire IDP Portal :** [django_backend/docs/glossary.md](../django_backend/docs/glossary.md) — Définitions formelles des termes Moteur (Engine), Plateforme, Service, engine_type, avec tableau récapitulatif et exemples concrets.
 - **Guide de mapping inventaire :** [docs/inventory-mapping-guide.md](./inventory-mapping-guide.md) — Convention de normalisation engine_type, tableau de mapping REF_ENGINES → engine_type, configuration InventoryMapper.
+- **Mapping REF_PLATFORMS ↔ IntegrationTypeCatalogue :** [django_backend/docs/platform-integration-mapping.md](../django_backend/docs/platform-integration-mapping.md) — Convention de normalisation, tableau de mapping, règles de validation backend (Story 29.4).
