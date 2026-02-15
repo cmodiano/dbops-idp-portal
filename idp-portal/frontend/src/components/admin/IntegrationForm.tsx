@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Form, Input, Modal, Alert, Select, Avatar, Space, Button, Upload, App } from 'antd';
+import { Form, Input, Modal, Alert, Select, Avatar, Space, Button, Upload, App, Tag } from 'antd';
 import { useAuth } from '../../contexts/AuthContext';
 import type { UploadFile } from 'antd';
 import { UploadOutlined, ApiOutlined, InfoCircleOutlined, ExclamationCircleOutlined, WarningOutlined } from '@ant-design/icons';
@@ -217,13 +217,24 @@ export function IntegrationForm({
     <Avatar shape="square" size={32} icon={<ApiOutlined />} />
   );
 
-  // Story 24.2 AC2: Build Select options from catalogue
-  const typeOptions = integrationTypes
-    .filter((t) => t.is_active)
-    .map((t) => ({
-      value: t.code,
-      label: t.name,
-    }));
+  // Story 29.1: Build Select options grouped by integration_role
+  const activeTypes = integrationTypes.filter((t) => t.is_active);
+  const platforms = activeTypes.filter((t) => t.integration_role === 'platform');
+  const services = activeTypes.filter((t) => t.integration_role === 'service');
+  const ungrouped = activeTypes.filter((t) => !t.integration_role);
+
+  const typeOptions = [
+    ...(platforms.length > 0
+      ? [{ label: 'Plateformes', options: platforms.map((t) => ({ value: t.code, label: t.name })) }]
+      : []),
+    ...(services.length > 0
+      ? [{ label: 'Services', options: services.map((t) => ({ value: t.code, label: t.name })) }]
+      : []),
+    // Fix MEDIUM-5: Wrap ungrouped in a consistent group structure
+    ...(ungrouped.length > 0
+      ? [{ label: 'Autres', options: ungrouped.map((t) => ({ value: t.code, label: t.name })) }]
+      : []),
+  ];
 
   return (
     <Modal
@@ -299,6 +310,15 @@ export function IntegrationForm({
             aria-label="Type d'intégration"
           />
         </Form.Item>
+
+        {/* Story 29.1: Badge showing integration role */}
+        {selectedTypeData?.integration_role && (
+          <div style={{ marginBottom: 12 }}>
+            <Tag color={selectedTypeData.integration_role === 'platform' ? 'blue' : 'green'}>
+              {selectedTypeData.integration_role === 'platform' ? "Plateforme d'exécution" : 'Service consommé'}
+            </Tag>
+          </div>
+        )}
 
         {/* Story 24.2 AC6: Info message when type is disabled in edit mode */}
         {isEdit && (

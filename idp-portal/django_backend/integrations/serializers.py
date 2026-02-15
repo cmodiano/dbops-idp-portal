@@ -6,7 +6,8 @@ import json
 
 from rest_framework import serializers
 from integrations.models import (
-    Integration, AuthFlow, IntegrationType, IntegrationTypeCatalogue, IntegrationAction,
+    Integration, AuthFlow, IntegrationType, IntegrationRole,
+    IntegrationTypeCatalogue, IntegrationAction,
 )
 
 
@@ -289,6 +290,6 @@ class IntegrationTypeWithActionsSerializer(serializers.ModelSerializer):
         model = IntegrationTypeCatalogue
         fields = [
             'code', 'name', 'description', 'version',
-            'is_active', 'created_at', 'updated_at', 'actions',
+            'is_active', 'integration_role', 'created_at', 'updated_at', 'actions',
         ]
         read_only_fields = ['created_at', 'updated_at']

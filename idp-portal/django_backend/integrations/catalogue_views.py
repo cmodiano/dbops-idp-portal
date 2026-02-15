@@ -48,8 +48,19 @@ class IntegrationTypeCatalogueViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
 
     def list(self, request):
-        """GET /api/v1/integrations/types — List all active types with actions."""
-        types = IntegrationCatalogueService.list_all_types()
+        """GET /api/v1/integrations/types — List all active types with actions.
+
+        Query Parameters:
+            role (optional): Filter by integration_role. Accepts 'platform' or 'service'.
+                Returns 400 if an invalid value is provided.
+        """
+        role = request.query_params.get('role')
+        if role is not None and role not in ('platform', 'service'):
+            return Response(
+                {'error': f"Valeur de filtre 'role' invalide : '{role}'. Valeurs acceptées : 'platform', 'service'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        types = IntegrationCatalogueService.list_all_types(role=role)
         serializer = IntegrationTypeWithActionsSerializer(types, many=True)
         return Response({'data': serializer.data})
 

@@ -63,6 +63,12 @@ class IntegrationType(models.TextChoices):
     INVENTORY_DB = 'inventory_db', 'Inventaire (schéma BD)'
 
 
+class IntegrationRole(models.TextChoices):
+    """Story 29.1: Integration role — platform (execution) vs service (consumption)."""
+    PLATFORM = 'platform', "Plateforme d'exécution"
+    SERVICE = 'service', 'Service consommé'
+
+
 class IntegrationManager(models.Manager):
     """
     Custom manager for Integration model.
@@ -170,6 +176,12 @@ class IntegrationTypeCatalogue(models.Model):
     description = models.TextField(blank=True, default='', db_column='DESCRIPTION')
     version = models.CharField(max_length=20, default='1.0', db_column='VERSION')
     is_active = models.BooleanField(default=True, db_column='IS_ACTIVE')
+    integration_role = models.CharField(
+        max_length=20,
+        choices=IntegrationRole.choices,
+        default=IntegrationRole.PLATFORM,
+        db_column='INTEGRATION_ROLE',
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
     updated_at = models.DateTimeField(auto_now=True, db_column='UPDATED_AT')
 

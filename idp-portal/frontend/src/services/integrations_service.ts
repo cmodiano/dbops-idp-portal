@@ -13,9 +13,14 @@ import type {
   IntegrationValidateAllResponse,
 } from '../types/api';
 
-/** Story 24.2 AC1: Fetch integration type catalogue from backend. */
-export async function getIntegrationTypes(): Promise<IntegrationTypeCatalogue[]> {
-  const res = await apiFetch<IntegrationTypeCatalogue[]>('/integrations/types/');
+/** Story 24.2 AC1: Fetch integration type catalogue from backend.
+ * Story 29.1: Optional role filter ('platform' | 'service').
+ */
+export async function getIntegrationTypes(
+  role?: 'platform' | 'service',
+): Promise<IntegrationTypeCatalogue[]> {
+  const url = role ? `/integrations/types/?role=${role}` : '/integrations/types/';
+  const res = await apiFetch<IntegrationTypeCatalogue[]>(url);
   // MEDIUM-3 fix: Handle { data: null } case
   return Array.isArray(res) ? res : [];
 }

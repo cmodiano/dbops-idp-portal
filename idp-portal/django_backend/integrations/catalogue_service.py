@@ -14,17 +14,23 @@ class IntegrationCatalogueService:
     """Service providing read access to the integration type catalogue."""
 
     @staticmethod
-    def list_all_types():
-        """List all active integration types with prefetched actions."""
-        logger.info("catalogue.list_all_types", operation="list_all_types")
-        types = (
+    def list_all_types(role: str | None = None):
+        """List all active integration types with prefetched actions.
+
+        Args:
+            role: Optional filter by integration_role ('platform' or 'service').
+        """
+        logger.info("catalogue.list_all_types", operation="list_all_types", role=role)
+        queryset = (
             IntegrationTypeCatalogue.objects
             .filter(is_active=True)
             .prefetch_related('actions')
             .order_by('code')
         )
-        logger.info("catalogue.list_all_types.complete", type_count=types.count())
-        return types
+        if role in ('platform', 'service'):
+            queryset = queryset.filter(integration_role=role)
+        logger.info("catalogue.list_all_types.complete", type_count=queryset.count())
+        return queryset
 
     @staticmethod
     def get_type_by_code(code: str):

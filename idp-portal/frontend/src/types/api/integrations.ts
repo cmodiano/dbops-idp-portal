@@ -14,6 +14,9 @@ export interface IntegrationAction {
   updated_at: string;
 }
 
+/** Story 29.1: Integration role — platform (execution) vs service (consumption). */
+export type IntegrationRoleType = 'platform' | 'service';
+
 /** Story 24.2 AC1: Integration type catalogue entry from GET /api/v1/integrations/types. */
 export interface IntegrationTypeCatalogue {
   code: string;
@@ -21,6 +24,7 @@ export interface IntegrationTypeCatalogue {
   description: string;
   version: string;
   is_active: boolean;
+  integration_role?: IntegrationRoleType;
   created_at: string;
   updated_at: string;
   actions: IntegrationAction[];

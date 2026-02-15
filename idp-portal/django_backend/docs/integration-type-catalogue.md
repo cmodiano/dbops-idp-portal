@@ -28,6 +28,7 @@ IntegrationTypeCatalogue (1) ──── (N) IntegrationAction
 | `description` | TextField | Description du type d'intégration |
 | `version` | CharField(20) | Version du catalogue (ex: `1.0`) |
 | `is_active` | BooleanField | Actif/déprécié |
+| `integration_role` | CharField(20) | Rôle : `platform` (exécution) ou `service` (consommation). Défaut : `platform` |
 | `created_at` | DateTimeField | Date de création |
 | `updated_at` | DateTimeField | Date de mise à jour |
 
@@ -67,6 +68,7 @@ IntegrationTypeCatalogue (1) ──── (N) IntegrationAction
 
 > **Plateforme** = adaptateur dans `adapters/`, hérite de `BaseAdapter`, exécute des jobs via `get_platform_adapter()`.
 > **Service** = client dans `services/`, n'hérite pas de `BaseAdapter`, consommé via `get_service_client()`.
+> **Note Story 29.1** : Le champ `integration_role` permet de distinguer explicitement les plateformes (exécution) des services (consommation).
 
 ### AAP (Ansible Automation Platform)
 
@@ -202,6 +204,47 @@ Les champs `required_params` et `optional_params` utilisent un format JSON Schem
 }
 ```
 
+## Filtrage par rôle (Story 29.1)
+
+Le endpoint de catalogue supporte un paramètre de requête optionnel `?role=` pour filtrer les types par rôle d'intégration.
+
+**Endpoint :** `GET /api/v1/integrations/types/?role={platform|service}`
+
+### Exemples d'utilisation
+
+**1. Récupérer tous les types (sans filtre) :**
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://idp.example.com/api/v1/integrations/types/"
+```
+
+**2. Récupérer uniquement les plateformes :**
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://idp.example.com/api/v1/integrations/types/?role=platform"
+# Retourne : aap, tower, azure_devops, github_actions, terraform_cloud
+```
+
+**3. Récupérer uniquement les services :**
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://idp.example.com/api/v1/integrations/types/?role=service"
+# Retourne : vault, servicenow, jira, splunk
+```
+
+**4. Valeur invalide (400 Bad Request) :**
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://idp.example.com/api/v1/integrations/types/?role=invalid"
+# {"error": "Valeur de filtre 'role' invalide : 'invalid'. Valeurs acceptées : 'platform', 'service'."}
+```
+
+### Validation
+
+- **Valeurs acceptées :** `platform`, `service`
+- **Comportement invalide :** Si `role` ne correspond pas à `platform` ou `service`, le endpoint retourne `HTTP 400 Bad Request`
+- **Comportement vide :** Si `role=` (chaîne vide), retourne également `HTTP 400 Bad Request`
+
 ## Comment les types sont exposés au menu Admin (frontend)
 
 1. **Backend** : Les types affichés dans le formulaire « Nouvelle intégration » viennent **uniquement** du catalogue en base :
@@ -209,6 +252,8 @@ Les champs `required_params` et `optional_params` utilisent un format JSON Schem
    - Les enregistrements sont chargés via la fixture `integration_type_catalogue` (`python manage.py loaddata integration_type_catalogue`).
 
 2. **API** : Le frontend appelle `GET /api/v1/integrations/types/`. La vue `IntegrationTypeCatalogueViewSet.list` retourne tous les types actifs avec leurs actions (sérialiseur `IntegrationTypeWithActionsSerializer`).
+
+3. **Filtrage par rôle (Story 29.1)** : Le frontend peut utiliser `?role=platform` ou `?role=service` pour filtrer les types. Le formulaire Admin groupe les types par rôle (Plateformes / Services) dans le Select.
 
 3. **Frontend** : Le hook `useIntegrationTypes()` (appel à `getIntegrationTypes()` du service intégrations) récupère cette liste. Le composant `IntegrationForm` affiche un `Select` alimenté par ces types ; aucun type n’est codé en dur côté UI (sauf repli si l’API échoue).
 
@@ -223,9 +268,24 @@ Les champs `required_params` et `optional_params` utilisent un format JSON Schem
 
 Liste tous les types d'intégration actifs avec leurs actions.
 
+**Paramètres query optionnels :**
+
+| Paramètre | Valeurs | Description |
+|-----------|---------|-------------|
+| `role` | `platform`, `service` | Filtre par rôle d'intégration. Si omis, retourne tous les types. Valeur invalide → 400 Bad Request. |
+
 ```bash
+# Tous les types
 curl -H "Authorization: Bearer <token>" \
   http://localhost:8000/api/v1/integrations/types/
+
+# Plateformes uniquement
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8000/api/v1/integrations/types/?role=platform
+
+# Services uniquement
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:8000/api/v1/integrations/types/?role=service
 ```
 
 **Réponse 200 :**
@@ -238,6 +298,7 @@ curl -H "Authorization: Bearer <token>" \
       "description": "Exécution de jobs et workflows Ansible via AAP Controller",
       "version": "1.0",
       "is_active": true,
+      "integration_role": "platform",
       "created_at": "2026-02-10T10:00:00Z",
       "updated_at": "2026-02-10T10:00:00Z",
       "actions": [
@@ -291,6 +352,7 @@ curl -H "Authorization: Bearer <token>" \
        "description": "Gestion d'infrastructure via Terraform",
        "version": "1.0",
        "is_active": true,
+       "integration_role": "platform",
        "created_at": "2026-02-10T10:00:00Z",
        "updated_at": "2026-02-10T10:00:00Z"
      }

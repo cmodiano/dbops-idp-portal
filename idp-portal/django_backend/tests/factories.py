@@ -334,6 +334,7 @@ class IntegrationTypeCatalogueFactory(DjangoModelFactory):
     description = factory.LazyAttribute(lambda o: f'Description for {o.code}')
     version = '1.0'
     is_active = True
+    integration_role = 'platform'
 
 
 class IntegrationActionFactory(DjangoModelFactory):

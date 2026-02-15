@@ -110,5 +110,12 @@ class TestIntegrationTypeWithActionsSerializer:
     def test_fields_include_actions(self):
         t = IntegrationTypeCatalogueFactory()
         data = IntegrationTypeWithActionsSerializer(t).data
-        expected = {'code', 'name', 'description', 'version', 'is_active', 'created_at', 'updated_at', 'actions'}
+        expected = {'code', 'name', 'description', 'version', 'is_active', 'integration_role', 'created_at', 'updated_at', 'actions'}
         assert set(data.keys()) == expected
+
+    def test_integration_role_defaults_to_platform(self):
+        """Fix MEDIUM-2: Test regression — default integration_role when not explicitly set."""
+        t = IntegrationTypeCatalogueFactory(code='test_default')
+        data = IntegrationTypeWithActionsSerializer(t).data
+        assert 'integration_role' in data
+        assert data['integration_role'] == 'platform'  # Default value
