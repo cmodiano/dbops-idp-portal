@@ -63,6 +63,7 @@ IntegrationTypeCatalogue (1) ──── (N) IntegrationAction
 | HashiCorp Vault | `vault` | **Service** | 3 (get_secret, renew_token, lookup_token) | 1.0 | Story 27.6 |
 | ServiceNow ITSM | `servicenow` | **Service** | 3 (create_change, update_change, get_change_status) | 1.0 | Existant |
 | Splunk HEC | `splunk` | **Service** | 2 (send_event, send_batch) | 1.0 | Story 27.8 |
+| Jira | `jira` | **Service** | 4 (create_issue, update_issue, get_issue, add_comment) | 1.0 | Story 27.10 |
 
 > **Plateforme** = adaptateur dans `adapters/`, hérite de `BaseAdapter`, exécute des jobs via `get_platform_adapter()`.
 > **Service** = client dans `services/`, n'hérite pas de `BaseAdapter`, consommé via `get_service_client()`.
@@ -167,6 +168,22 @@ IntegrationTypeCatalogue (1) ──── (N) IntegrationAction
 **Exemple base_url :** `https://splunk.example.com:8088`
 
 Voir [splunk-integration.md](splunk-integration.md) pour la documentation complète.
+
+### Jira (jira)
+
+> **Service** (pas un adapter). Client : `JiraService` (`services/jira_service.py`, Story 27.10). Gestion d'issues via REST API v3/v2.
+
+| Action | Label | Paramètres obligatoires | Paramètres optionnels |
+|--------|-------|------------------------|----------------------|
+| `create_issue` | Créer une issue | `project_key` (string), `issue_type` (string), `summary` (string) | `description` (string), `assignee` (string), `labels` (array), `priority` (string) |
+| `update_issue` | Mettre à jour une issue | `issue_key` (string) | `status` (string), `assignee` (string), `labels` (array), `summary` (string) |
+| `get_issue` | Récupérer une issue | `issue_key` (string) | — |
+| `add_comment` | Ajouter un commentaire | `issue_key` (string), `comment` (string) | — |
+
+**Exemple credential_ref :** `vault:secret/data/jira/cloud#api_token`
+**Exemple base_url :** `https://instance.atlassian.net` (Cloud) ou `https://jira.company.com` (Server)
+
+Voir [jira-integration.md](jira-integration.md) pour la documentation complète.
 
 ## Format JSON Schema des Paramètres
 

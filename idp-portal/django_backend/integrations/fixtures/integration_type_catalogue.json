@@ -529,5 +529,77 @@
       "created_at": "2026-02-14T10:00:00Z",
       "updated_at": "2026-02-14T10:00:00Z"
     }
+  },
+  {
+    "model": "integrations.integrationtypecatalogue",
+    "pk": "jira",
+    "fields": {
+      "name": "Jira",
+      "description": "Jira — gestion d'issues (création, mise à jour, commentaires) via REST API v3 (Cloud) ou v2 (Server/Data Center)",
+      "version": "1.0",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "jira",
+      "action_code": "create_issue",
+      "action_label": "Créer une issue Jira",
+      "description": "Crée une issue Jira dans un projet donné",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"project_key\": {\"type\": \"string\", \"description\": \"Clé du projet Jira (ex: PROJ)\", \"minLength\": 1, \"maxLength\": 10}, \"issue_type\": {\"type\": \"string\", \"description\": \"Type d'issue (Bug, Task, Story, Epic, Improvement)\", \"enum\": [\"Bug\", \"Task\", \"Story\", \"Epic\", \"Improvement\"]}, \"summary\": {\"type\": \"string\", \"description\": \"Titre de l'issue\", \"minLength\": 1, \"maxLength\": 255}}, \"required\": [\"project_key\", \"issue_type\", \"summary\"]}",
+      "optional_params": "{\"type\": \"object\", \"properties\": {\"description\": {\"type\": \"string\", \"description\": \"Description détaillée de l'issue\"}, \"assignee\": {\"type\": \"string\", \"description\": \"Nom d'utilisateur de l'assigné\"}, \"labels\": {\"type\": \"array\", \"description\": \"Labels associés à l'issue\", \"items\": {\"type\": \"string\"}, \"maxItems\": 10}, \"priority\": {\"type\": \"string\", \"description\": \"Priorité de l'issue\", \"enum\": [\"Highest\", \"High\", \"Medium\", \"Low\", \"Lowest\"]}}}",
+      "response_format": "{\"type\": \"object\", \"properties\": {\"issue_key\": {\"type\": \"string\", \"description\": \"Clé unique de l'issue (ex: PROJ-123)\"}, \"issue_id\": {\"type\": \"string\", \"description\": \"ID numérique de l'issue\"}, \"url\": {\"type\": \"string\", \"description\": \"URL complète de l'issue dans Jira\"}}, \"required\": [\"issue_key\", \"issue_id\", \"url\"]}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "jira",
+      "action_code": "update_issue",
+      "action_label": "Mettre à jour une issue Jira",
+      "description": "Met à jour les champs d'une issue Jira existante",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"issue_key\": {\"type\": \"string\", \"description\": \"Clé de l'issue (ex: PROJ-123)\", \"minLength\": 1}}, \"required\": [\"issue_key\"]}",
+      "optional_params": "{\"type\": \"object\", \"properties\": {\"status\": {\"type\": \"string\", \"description\": \"Nouveau statut de l'issue\"}, \"assignee\": {\"type\": \"string\", \"description\": \"Nouvel assigné\"}, \"labels\": {\"type\": \"array\", \"description\": \"Nouveaux labels\", \"items\": {\"type\": \"string\"}}, \"summary\": {\"type\": \"string\", \"description\": \"Nouveau titre\"}}}",
+      "response_format": "{\"type\": \"object\", \"properties\": {\"issue_key\": {\"type\": \"string\"}, \"status\": {\"type\": \"string\"}}, \"required\": [\"issue_key\", \"status\"]}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "jira",
+      "action_code": "get_issue",
+      "action_label": "Récupérer une issue Jira",
+      "description": "Récupère les détails complets d'une issue Jira",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"issue_key\": {\"type\": \"string\", \"description\": \"Clé de l'issue (ex: PROJ-123)\", \"minLength\": 1}}, \"required\": [\"issue_key\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"type\": \"object\", \"properties\": {\"key\": {\"type\": \"string\"}, \"id\": {\"type\": \"string\"}, \"fields\": {\"type\": \"object\"}}, \"required\": [\"key\", \"id\"]}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "jira",
+      "action_code": "add_comment",
+      "action_label": "Ajouter un commentaire à une issue Jira",
+      "description": "Ajoute un commentaire à une issue Jira existante",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"issue_key\": {\"type\": \"string\", \"description\": \"Clé de l'issue (ex: PROJ-123)\", \"minLength\": 1}, \"comment\": {\"type\": \"string\", \"description\": \"Texte du commentaire\", \"minLength\": 1}}, \"required\": [\"issue_key\", \"comment\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"type\": \"object\", \"properties\": {\"comment_id\": {\"type\": \"string\"}, \"issue_key\": {\"type\": \"string\"}, \"url\": {\"type\": \"string\"}}, \"required\": [\"comment_id\", \"issue_key\"]}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
   }
 ]

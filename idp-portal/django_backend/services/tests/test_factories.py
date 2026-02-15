@@ -11,6 +11,7 @@ import pytest
 from adapters import get_platform_adapter
 from adapters.base_adapter import BaseAdapter
 from services import SERVICE_TYPES, get_service_client
+from services.jira_service import JiraService
 from services.splunk_service import SplunkService
 from services.vault_service import VaultService
 from services.servicenow_service import ServiceNowService
@@ -53,6 +54,27 @@ class TestGetServiceClient:
         assert isinstance(svc, ServiceNowService)
         assert svc.base_url == "https://instance.service-now.com"
 
+    def test_jira_service_creation(self) -> None:
+        """get_service_client('jira') returns JiraService instance."""
+        svc = get_service_client(
+            "jira",
+            base_url="https://jira.example.com",
+            auth_headers={"Authorization": "Basic dGVzdDp0ZXN0"},
+        )
+        assert isinstance(svc, JiraService)
+        assert svc.base_url == "https://jira.example.com"
+
+    def test_jira_service_creation_with_config(self) -> None:
+        """get_service_client('jira') with custom timeout."""
+        svc = get_service_client(
+            "jira",
+            base_url="https://jira.example.com",
+            auth_headers={"Authorization": "Basic dGVzdDp0ZXN0"},
+            timeout=60.0,
+        )
+        assert isinstance(svc, JiraService)
+        assert svc.timeout == 60.0
+
     def test_unknown_service_type_raises_value_error(self) -> None:
         """get_service_client with unknown type raises ValueError."""
         with pytest.raises(ValueError, match="Unsupported service_type: 'unknown'"):
@@ -63,7 +85,8 @@ class TestGetServiceClient:
         assert "vault" in SERVICE_TYPES
         assert "splunk" in SERVICE_TYPES
         assert "servicenow" in SERVICE_TYPES
-        assert len(SERVICE_TYPES) == 3
+        assert "jira" in SERVICE_TYPES
+        assert len(SERVICE_TYPES) == 4
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +198,12 @@ class TestPlatformServiceClassification:
             auth_headers={"Authorization": "Bearer token"},
         )
         assert not isinstance(servicenow, BaseAdapter)
+
+        jira = JiraService(
+            base_url="https://jira.example.com",
+            auth_headers={"Authorization": "Basic dGVzdDp0ZXN0"},
+        )
+        assert not isinstance(jira, BaseAdapter)
 
 
 # ---------------------------------------------------------------------------
