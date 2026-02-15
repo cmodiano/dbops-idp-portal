@@ -1,0 +1,74 @@
+[
+  {
+    "model": "integrations.integrationtypecatalogue",
+    "pk": "tower",
+    "fields": {
+      "name": "Ansible Tower",
+      "description": "Ansible Tower (Red Hat Ansible Tower) \u2014 ex\u00e9cution jobs et workflows Ansible via Tower API (version legacy avant AAP)",
+      "version": "1.0",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "tower",
+      "action_code": "start_job",
+      "action_label": "D\u00e9marrer un job template Tower",
+      "description": "Lance un job template sur Ansible Tower",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"job_template_id\": {\"type\": \"integer\", \"description\": \"ID du job template Tower\"}}, \"required\": [\"job_template_id\"]}",
+      "optional_params": "{\"type\": \"object\", \"properties\": {\"extra_vars\": {\"type\": \"object\", \"description\": \"Variables suppl\u00e9mentaires JSON\"}}}",
+      "response_format": "{\"job_id\": \"integer\", \"status\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "tower",
+      "action_code": "start_workflow",
+      "action_label": "D\u00e9marrer un workflow job Tower",
+      "description": "Lance un workflow job template sur Ansible Tower",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"workflow_job_template_id\": {\"type\": \"integer\", \"description\": \"ID du workflow job template Tower\"}}, \"required\": [\"workflow_job_template_id\"]}",
+      "optional_params": "{\"type\": \"object\", \"properties\": {\"extra_vars\": {\"type\": \"object\", \"description\": \"Variables suppl\u00e9mentaires JSON\"}}}",
+      "response_format": "{\"workflow_job_id\": \"integer\", \"status\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "tower",
+      "action_code": "get_job_status",
+      "action_label": "R\u00e9cup\u00e9rer statut job Tower",
+      "description": "R\u00e9cup\u00e8re le statut d'ex\u00e9cution d'un job Tower",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"job_id\": {\"type\": \"integer\", \"description\": \"ID du job Tower\"}}, \"required\": [\"job_id\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"job_id\": \"integer\", \"status\": \"string\", \"finished\": \"boolean\", \"failed\": \"boolean\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "tower",
+      "action_code": "cancel_job",
+      "action_label": "Annuler job Tower en cours",
+      "description": "Annule un job en cours d'ex\u00e9cution sur Ansible Tower",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"job_id\": {\"type\": \"integer\", \"description\": \"ID du job Tower \u00e0 annuler\"}}, \"required\": [\"job_id\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"job_id\": \"integer\", \"status\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  }
+]

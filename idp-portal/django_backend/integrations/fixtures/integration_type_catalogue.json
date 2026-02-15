@@ -4,7 +4,7 @@
     "pk": "aap",
     "fields": {
       "name": "Ansible Automation Platform",
-      "description": "Ex\u00e9cution de jobs et workflows Ansible via AAP Controller",
+      "description": "Exécution de jobs et workflows Ansible via AAP Controller",
       "version": "1.0",
       "is_active": true,
       "created_at": "2026-02-10T10:00:00Z",
@@ -28,10 +28,10 @@
     "fields": {
       "integration_type": "aap",
       "action_code": "start_job",
-      "action_label": "D\u00e9marrer un job",
-      "description": "Lance un job template AAP avec param\u00e8tres extra_vars",
+      "action_label": "Démarrer un job",
+      "description": "Lance un job template AAP avec paramètres extra_vars",
       "required_params": "{\"type\": \"object\", \"properties\": {\"job_template_id\": {\"type\": \"integer\", \"description\": \"ID du job template AAP\"}}, \"required\": [\"job_template_id\"]}",
-      "optional_params": "{\"type\": \"object\", \"properties\": {\"extra_vars\": {\"type\": \"object\", \"description\": \"Variables suppl\u00e9mentaires JSON\"}}}",
+      "optional_params": "{\"type\": \"object\", \"properties\": {\"extra_vars\": {\"type\": \"object\", \"description\": \"Variables supplémentaires JSON\"}}}",
       "response_format": "{\"job_id\": \"integer\", \"status\": \"string\"}",
       "is_active": true,
       "created_at": "2026-02-10T10:00:00Z",
@@ -43,10 +43,10 @@
     "fields": {
       "integration_type": "aap",
       "action_code": "start_workflow",
-      "action_label": "D\u00e9marrer un workflow",
+      "action_label": "Démarrer un workflow",
       "description": "Lance un workflow job template AAP",
       "required_params": "{\"type\": \"object\", \"properties\": {\"workflow_job_template_id\": {\"type\": \"integer\", \"description\": \"ID du workflow job template AAP\"}}, \"required\": [\"workflow_job_template_id\"]}",
-      "optional_params": "{\"type\": \"object\", \"properties\": {\"extra_vars\": {\"type\": \"object\", \"description\": \"Variables suppl\u00e9mentaires JSON\"}}}",
+      "optional_params": "{\"type\": \"object\", \"properties\": {\"extra_vars\": {\"type\": \"object\", \"description\": \"Variables supplémentaires JSON\"}}}",
       "response_format": "{\"workflow_job_id\": \"integer\", \"status\": \"string\"}",
       "is_active": true,
       "created_at": "2026-02-10T10:00:00Z",
@@ -58,8 +58,8 @@
     "fields": {
       "integration_type": "aap",
       "action_code": "get_job_status",
-      "action_label": "R\u00e9cup\u00e9rer le statut d'un job",
-      "description": "R\u00e9cup\u00e8re le statut d'ex\u00e9cution d'un job AAP",
+      "action_label": "Récupérer le statut d'un job",
+      "description": "Récupère le statut d'exécution d'un job AAP",
       "required_params": "{\"type\": \"object\", \"properties\": {\"job_id\": {\"type\": \"integer\", \"description\": \"ID du job AAP\"}}, \"required\": [\"job_id\"]}",
       "optional_params": "{}",
       "response_format": "{\"job_id\": \"integer\", \"status\": \"string\", \"finished\": \"boolean\", \"failed\": \"boolean\"}",
@@ -74,8 +74,8 @@
       "integration_type": "aap",
       "action_code": "cancel_job",
       "action_label": "Annuler un job",
-      "description": "Annule un job en cours d'ex\u00e9cution sur AAP",
-      "required_params": "{\"type\": \"object\", \"properties\": {\"job_id\": {\"type\": \"integer\", \"description\": \"ID du job AAP \u00e0 annuler\"}}, \"required\": [\"job_id\"]}",
+      "description": "Annule un job en cours d'exécution sur AAP",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"job_id\": {\"type\": \"integer\", \"description\": \"ID du job AAP à annuler\"}}, \"required\": [\"job_id\"]}",
       "optional_params": "{}",
       "response_format": "{\"job_id\": \"integer\", \"status\": \"string\"}",
       "is_active": true,
@@ -88,8 +88,8 @@
     "fields": {
       "integration_type": "servicenow",
       "action_code": "create_change",
-      "action_label": "Cr\u00e9er un changement",
-      "description": "Cr\u00e9e un change request ServiceNow",
+      "action_label": "Créer un changement",
+      "description": "Crée un change request ServiceNow",
       "required_params": "{\"type\": \"object\", \"properties\": {\"short_description\": {\"type\": \"string\"}, \"category\": {\"type\": \"string\"}, \"priority\": {\"type\": \"integer\"}}, \"required\": [\"short_description\", \"category\"]}",
       "optional_params": "{\"type\": \"object\", \"properties\": {\"description\": {\"type\": \"string\"}, \"work_notes\": {\"type\": \"string\"}}}",
       "response_format": "{\"change_id\": \"string\", \"number\": \"string\", \"state\": \"string\"}",
@@ -103,8 +103,8 @@
     "fields": {
       "integration_type": "servicenow",
       "action_code": "update_change",
-      "action_label": "Mettre \u00e0 jour un changement",
-      "description": "Met \u00e0 jour un change request ServiceNow existant",
+      "action_label": "Mettre à jour un changement",
+      "description": "Met à jour un change request ServiceNow existant",
       "required_params": "{\"type\": \"object\", \"properties\": {\"change_id\": {\"type\": \"string\", \"description\": \"ID du change request\"}, \"state\": {\"type\": \"string\"}}, \"required\": [\"change_id\"]}",
       "optional_params": "{\"type\": \"object\", \"properties\": {\"work_notes\": {\"type\": \"string\"}, \"close_notes\": {\"type\": \"string\"}}}",
       "response_format": "{\"change_id\": \"string\", \"state\": \"string\", \"updated\": \"boolean\"}",
@@ -118,14 +118,374 @@
     "fields": {
       "integration_type": "servicenow",
       "action_code": "get_change_status",
-      "action_label": "R\u00e9cup\u00e9rer le statut d'un changement",
-      "description": "R\u00e9cup\u00e8re le statut d'un change request ServiceNow",
+      "action_label": "Récupérer le statut d'un changement",
+      "description": "Récupère le statut d'un change request ServiceNow",
       "required_params": "{\"type\": \"object\", \"properties\": {\"change_id\": {\"type\": \"string\", \"description\": \"ID du change request\"}}, \"required\": [\"change_id\"]}",
       "optional_params": "{}",
       "response_format": "{\"change_id\": \"string\", \"number\": \"string\", \"state\": \"string\", \"priority\": \"integer\"}",
       "is_active": true,
       "created_at": "2026-02-10T10:00:00Z",
       "updated_at": "2026-02-10T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationtypecatalogue",
+    "pk": "azure_devops",
+    "fields": {
+      "name": "Azure DevOps Pipelines",
+      "description": "Azure DevOps — exécution pipelines CI/CD avec monitoring temps réel (polling 5s)",
+      "version": "1.0",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "azure_devops",
+      "action_code": "run_pipeline",
+      "action_label": "Exécuter un pipeline Azure DevOps",
+      "description": "Déclenche l'exécution d'un pipeline CI/CD Azure DevOps",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"pipeline_id\": {\"type\": \"integer\", \"description\": \"ID du pipeline Azure DevOps\"}, \"branch\": {\"type\": \"string\", \"description\": \"Branche source pour le pipeline\"}}, \"required\": [\"pipeline_id\", \"branch\"]}",
+      "optional_params": "{\"type\": \"object\", \"properties\": {\"variables\": {\"type\": \"object\", \"description\": \"Variables de pipeline\"}}}",
+      "response_format": "{\"run_id\": \"integer\", \"status\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "azure_devops",
+      "action_code": "get_run_status",
+      "action_label": "Récupérer statut exécution pipeline",
+      "description": "Récupère le statut d'une exécution de pipeline Azure DevOps",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"run_id\": {\"type\": \"integer\", \"description\": \"ID de l'exécution du pipeline\"}}, \"required\": [\"run_id\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"run_id\": \"integer\", \"status\": \"string\", \"result\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "azure_devops",
+      "action_code": "get_run_logs",
+      "action_label": "Récupérer logs exécution",
+      "description": "Récupère les logs d'une exécution de pipeline Azure DevOps",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"run_id\": {\"type\": \"integer\", \"description\": \"ID de l'exécution du pipeline\"}}, \"required\": [\"run_id\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"run_id\": \"integer\", \"logs\": \"array\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "azure_devops",
+      "action_code": "cancel_run",
+      "action_label": "Annuler exécution pipeline",
+      "description": "Annule une exécution de pipeline Azure DevOps en cours",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"run_id\": {\"type\": \"integer\", \"description\": \"ID de l'exécution à annuler\"}}, \"required\": [\"run_id\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"run_id\": \"integer\", \"status\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationtypecatalogue",
+    "pk": "github_actions",
+    "fields": {
+      "name": "GitHub Actions",
+      "description": "GitHub Actions — déclenchement workflows avec monitoring temps réel (webhooks + polling)",
+      "version": "1.0",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "github_actions",
+      "action_code": "trigger_workflow",
+      "action_label": "Déclencher un workflow GitHub Actions",
+      "description": "Déclenche un workflow GitHub Actions via workflow_dispatch",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"owner\": {\"type\": \"string\", \"description\": \"Propriétaire du repository\"}, \"repo\": {\"type\": \"string\", \"description\": \"Nom du repository\"}, \"workflow_id\": {\"type\": \"string\", \"description\": \"ID ou nom du fichier workflow\"}, \"ref\": {\"type\": \"string\", \"description\": \"Branche ou tag\"}}, \"required\": [\"owner\", \"repo\", \"workflow_id\", \"ref\"]}",
+      "optional_params": "{\"type\": \"object\", \"properties\": {\"inputs\": {\"type\": \"object\", \"description\": \"Inputs workflow\"}}}",
+      "response_format": "{\"run_id\": \"integer\", \"status\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "github_actions",
+      "action_code": "get_workflow_run_status",
+      "action_label": "Statut exécution workflow",
+      "description": "Récupère le statut d'une exécution de workflow GitHub Actions",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"run_id\": {\"type\": \"integer\", \"description\": \"ID de l'exécution workflow\"}}, \"required\": [\"run_id\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"run_id\": \"integer\", \"status\": \"string\", \"conclusion\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "github_actions",
+      "action_code": "get_workflow_run_logs",
+      "action_label": "Logs exécution workflow",
+      "description": "Récupère les logs d'une exécution de workflow GitHub Actions",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"run_id\": {\"type\": \"integer\", \"description\": \"ID de l'exécution workflow\"}}, \"required\": [\"run_id\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"run_id\": \"integer\", \"logs\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "github_actions",
+      "action_code": "cancel_workflow_run",
+      "action_label": "Annuler workflow en cours",
+      "description": "Annule une exécution de workflow GitHub Actions en cours",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"run_id\": {\"type\": \"integer\", \"description\": \"ID de l'exécution workflow à annuler\"}}, \"required\": [\"run_id\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"run_id\": \"integer\", \"status\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationtypecatalogue",
+    "pk": "terraform_cloud",
+    "fields": {
+      "name": "Terraform Cloud",
+      "description": "Terraform Cloud — exécution runs (plan/apply) avec monitoring temps réel (webhooks + polling)",
+      "version": "1.0",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "terraform_cloud",
+      "action_code": "create_run",
+      "action_label": "Créer et démarrer un run Terraform",
+      "description": "Crée et démarre un run Terraform (plan ou apply)",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"workspace_id\": {\"type\": \"string\", \"description\": \"ID du workspace Terraform Cloud\"}, \"message\": {\"type\": \"string\", \"description\": \"Message descriptif du run\"}}, \"required\": [\"workspace_id\", \"message\"]}",
+      "optional_params": "{\"type\": \"object\", \"properties\": {\"is_destroy\": {\"type\": \"boolean\", \"description\": \"Run de destruction\"}, \"variables\": {\"type\": \"object\", \"description\": \"Variables Terraform\"}}}",
+      "response_format": "{\"run_id\": \"string\", \"status\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "terraform_cloud",
+      "action_code": "get_run_status",
+      "action_label": "Statut run Terraform",
+      "description": "Récupère le statut d'un run Terraform Cloud",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"run_id\": {\"type\": \"string\", \"description\": \"ID du run Terraform\"}}, \"required\": [\"run_id\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"run_id\": \"string\", \"status\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "terraform_cloud",
+      "action_code": "get_run_logs",
+      "action_label": "Logs run Terraform",
+      "description": "Récupère les logs d'un run Terraform Cloud",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"run_id\": {\"type\": \"string\", \"description\": \"ID du run Terraform\"}}, \"required\": [\"run_id\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"run_id\": \"string\", \"logs\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "terraform_cloud",
+      "action_code": "cancel_run",
+      "action_label": "Annuler run Terraform",
+      "description": "Annule un run Terraform Cloud en cours",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"run_id\": {\"type\": \"string\", \"description\": \"ID du run Terraform à annuler\"}}, \"required\": [\"run_id\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"run_id\": \"string\", \"status\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "terraform_cloud",
+      "action_code": "apply_run",
+      "action_label": "Approuver et appliquer un plan Terraform",
+      "description": "Approuve et applique un plan Terraform en attente de confirmation",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"run_id\": {\"type\": \"string\", \"description\": \"ID du run Terraform à appliquer\"}}, \"required\": [\"run_id\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"run_id\": \"string\", \"status\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationtypecatalogue",
+    "pk": "tower",
+    "fields": {
+      "name": "Ansible Tower",
+      "description": "Ansible Tower (Red Hat Ansible Tower) — exécution jobs et workflows Ansible via Tower API (version legacy avant AAP)",
+      "version": "1.0",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "tower",
+      "action_code": "start_job",
+      "action_label": "Démarrer un job template Tower",
+      "description": "Lance un job template sur Ansible Tower",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"job_template_id\": {\"type\": \"integer\", \"description\": \"ID du job template Tower\"}}, \"required\": [\"job_template_id\"]}",
+      "optional_params": "{\"type\": \"object\", \"properties\": {\"extra_vars\": {\"type\": \"object\", \"description\": \"Variables supplémentaires JSON\"}}}",
+      "response_format": "{\"job_id\": \"integer\", \"status\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "tower",
+      "action_code": "start_workflow",
+      "action_label": "Démarrer un workflow job Tower",
+      "description": "Lance un workflow job template sur Ansible Tower",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"workflow_job_template_id\": {\"type\": \"integer\", \"description\": \"ID du workflow job template Tower\"}}, \"required\": [\"workflow_job_template_id\"]}",
+      "optional_params": "{\"type\": \"object\", \"properties\": {\"extra_vars\": {\"type\": \"object\", \"description\": \"Variables supplémentaires JSON\"}}}",
+      "response_format": "{\"workflow_job_id\": \"integer\", \"status\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "tower",
+      "action_code": "get_job_status",
+      "action_label": "Récupérer statut job Tower",
+      "description": "Récupère le statut d'exécution d'un job Tower",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"job_id\": {\"type\": \"integer\", \"description\": \"ID du job Tower\"}}, \"required\": [\"job_id\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"job_id\": \"integer\", \"status\": \"string\", \"finished\": \"boolean\", \"failed\": \"boolean\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "tower",
+      "action_code": "cancel_job",
+      "action_label": "Annuler job Tower en cours",
+      "description": "Annule un job en cours d'exécution sur Ansible Tower",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"job_id\": {\"type\": \"integer\", \"description\": \"ID du job Tower à annuler\"}}, \"required\": [\"job_id\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"job_id\": \"integer\", \"status\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationtypecatalogue",
+    "pk": "vault",
+    "fields": {
+      "name": "HashiCorp Vault",
+      "description": "HashiCorp Vault — résolution secrets (KV v2) avec auth Token ou AppRole, support Enterprise namespaces",
+      "version": "1.0",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "vault",
+      "action_code": "get_secret",
+      "action_label": "Résoudre credential_ref vers secret Vault",
+      "description": "Résout une référence credential_ref vers un secret HashiCorp Vault (KV v2)",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"path\": {\"type\": \"string\", \"description\": \"Path KV v2, ex: secret/data/myapp\"}}, \"required\": [\"path\"]}",
+      "optional_params": "{\"type\": \"object\", \"properties\": {\"key\": {\"type\": \"string\", \"description\": \"Clé spécifique à extraire\"}, \"namespace\": {\"type\": \"string\", \"description\": \"Namespace Vault Enterprise\"}}}",
+      "response_format": "{\"data\": \"object\", \"metadata\": \"object\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "vault",
+      "action_code": "renew_token",
+      "action_label": "Renouveler token Vault",
+      "description": "Renouvelle le token Vault avant expiration",
+      "required_params": "{}",
+      "optional_params": "{}",
+      "response_format": "{\"auth\": \"object\", \"ttl\": \"integer\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "vault",
+      "action_code": "lookup_token",
+      "action_label": "Vérifier validité token",
+      "description": "Vérifie la validité et l'expiration du token Vault configuré",
+      "required_params": "{}",
+      "optional_params": "{}",
+      "response_format": "{\"data\": \"object\", \"ttl\": \"integer\", \"renewable\": \"boolean\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
     }
   }
 ]

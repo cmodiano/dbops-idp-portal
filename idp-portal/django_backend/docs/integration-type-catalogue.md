@@ -49,7 +49,19 @@ IntegrationTypeCatalogue (1) ──── (N) IntegrationAction
 
 **Contrainte unique :** `(integration_type, action_code)`
 
-## Types Supportés
+## Types d'intégration supportés
+
+### Tableau récapitulatif
+
+| Type | Code | Actions disponibles | Version | Adapter Story |
+|------|------|---------------------|---------|---------------|
+| Ansible Automation Platform | `aap` | 4 (start_job, start_workflow, get_job_status, cancel_job) | 1.0 | Story 27.1 |
+| Ansible Tower | `tower` | 4 (start_job, start_workflow, get_job_status, cancel_job) | 1.0 | Story 27.2 |
+| Azure DevOps Pipelines | `azure_devops` | 4 (run_pipeline, get_run_status, get_run_logs, cancel_run) | 1.0 | Story 27.3 |
+| GitHub Actions | `github_actions` | 4 (trigger_workflow, get_workflow_run_status, get_workflow_run_logs, cancel_workflow_run) | 1.0 | Story 27.4 |
+| Terraform Cloud | `terraform_cloud` | 5 (create_run, get_run_status, get_run_logs, cancel_run, apply_run) | 1.0 | Story 27.5 |
+| HashiCorp Vault | `vault` | 3 (get_secret, renew_token, lookup_token) | 1.0 | Story 27.6 |
+| ServiceNow ITSM | `servicenow` | 3 (create_change, update_change, get_change_status) | 1.0 | Existant |
 
 ### AAP (Ansible Automation Platform)
 
@@ -59,6 +71,76 @@ IntegrationTypeCatalogue (1) ──── (N) IntegrationAction
 | `start_workflow` | Démarrer un workflow | `workflow_job_template_id` (integer) |
 | `get_job_status` | Récupérer le statut d'un job | `job_id` (integer) |
 | `cancel_job` | Annuler un job | `job_id` (integer) |
+
+### Ansible Tower (tower)
+
+> Version legacy avant AAP. Adapter: `TowerAdapter` (Story 27.2)
+
+| Action | Label | Paramètres obligatoires | Paramètres optionnels |
+|--------|-------|------------------------|----------------------|
+| `start_job` | Démarrer un job template Tower | `job_template_id` (integer) | `extra_vars` (object) |
+| `start_workflow` | Démarrer un workflow job Tower | `workflow_job_template_id` (integer) | `extra_vars` (object) |
+| `get_job_status` | Récupérer statut job Tower | `job_id` (integer) | — |
+| `cancel_job` | Annuler job Tower en cours | `job_id` (integer) | — |
+
+**Exemple credential_ref :** `vault:secret/data/tower/prod#token`
+**Exemple base_url :** `https://tower.example.com`
+
+### Azure DevOps Pipelines (azure_devops)
+
+> Adapter: `AzureDevOpsAdapter` (Story 27.3). Monitoring temps réel (polling 5s).
+
+| Action | Label | Paramètres obligatoires | Paramètres optionnels |
+|--------|-------|------------------------|----------------------|
+| `run_pipeline` | Exécuter un pipeline | `pipeline_id` (integer), `branch` (string) | `variables` (object) |
+| `get_run_status` | Statut exécution pipeline | `run_id` (integer) | — |
+| `get_run_logs` | Logs exécution | `run_id` (integer) | — |
+| `cancel_run` | Annuler exécution pipeline | `run_id` (integer) | — |
+
+**Exemple credential_ref :** `vault:secret/data/azure-devops/prod#token`
+**Exemple base_url :** `https://dev.azure.com/organization`
+
+### GitHub Actions (github_actions)
+
+> Adapter: `GitHubActionsAdapter` (Story 27.4). Monitoring webhooks + polling.
+
+| Action | Label | Paramètres obligatoires | Paramètres optionnels |
+|--------|-------|------------------------|----------------------|
+| `trigger_workflow` | Déclencher workflow | `owner` (string), `repo` (string), `workflow_id` (string), `ref` (string) | `inputs` (object) |
+| `get_workflow_run_status` | Statut workflow | `run_id` (integer) | — |
+| `get_workflow_run_logs` | Logs workflow | `run_id` (integer) | — |
+| `cancel_workflow_run` | Annuler workflow | `run_id` (integer) | — |
+
+**Exemple credential_ref :** `vault:secret/data/github/prod#token`
+**Exemple base_url :** `https://api.github.com`
+
+### Terraform Cloud (terraform_cloud)
+
+> Adapter: `TerraformCloudAdapter` (Story 27.5). Runs plan/apply, monitoring webhooks + polling.
+
+| Action | Label | Paramètres obligatoires | Paramètres optionnels |
+|--------|-------|------------------------|----------------------|
+| `create_run` | Créer et démarrer un run | `workspace_id` (string), `message` (string) | `is_destroy` (boolean), `variables` (object) |
+| `get_run_status` | Statut run | `run_id` (string) | — |
+| `get_run_logs` | Logs run | `run_id` (string) | — |
+| `cancel_run` | Annuler run | `run_id` (string) | — |
+| `apply_run` | Appliquer plan | `run_id` (string) | — |
+
+**Exemple credential_ref :** `vault:secret/data/terraform/prod#token`
+**Exemple base_url :** `https://app.terraform.io`
+
+### HashiCorp Vault (vault)
+
+> Adapter: `VaultService` (Story 27.6). Résolution secrets KV v2, auth Token ou AppRole.
+
+| Action | Label | Paramètres obligatoires | Paramètres optionnels |
+|--------|-------|------------------------|----------------------|
+| `get_secret` | Résoudre credential_ref | `path` (string) | `key` (string), `namespace` (string) |
+| `renew_token` | Renouveler token | — | — |
+| `lookup_token` | Vérifier validité token | — | — |
+
+**Exemple credential_ref :** `vault:secret/data/vault/prod#token`
+**Exemple base_url :** `https://vault.example.com`
 
 ### ServiceNow ITSM
 
@@ -84,6 +166,21 @@ Les champs `required_params` et `optional_params` utilisent un format JSON Schem
   "required": ["job_template_id"]
 }
 ```
+
+## Comment les types sont exposés au menu Admin (frontend)
+
+1. **Backend** : Les types affichés dans le formulaire « Nouvelle intégration » viennent **uniquement** du catalogue en base :
+   - Modèle `IntegrationTypeCatalogue` (table `INTEGRATION_TYPE_CATALOGUE`) avec `is_active=True`
+   - Les enregistrements sont chargés via la fixture `integration_type_catalogue` (`python manage.py loaddata integration_type_catalogue`).
+
+2. **API** : Le frontend appelle `GET /api/v1/integrations/types/`. La vue `IntegrationTypeCatalogueViewSet.list` retourne tous les types actifs avec leurs actions (sérialiseur `IntegrationTypeWithActionsSerializer`).
+
+3. **Frontend** : Le hook `useIntegrationTypes()` (appel à `getIntegrationTypes()` du service intégrations) récupère cette liste. Le composant `IntegrationForm` affiche un `Select` alimenté par ces types ; aucun type n’est codé en dur côté UI (sauf repli si l’API échoue).
+
+**Pour qu’un nouveau type (ex. Azure DevOps, GitHub Actions, Terraform Cloud, Tower, Vault) apparaisse dans le menu Admin :**
+- Ajouter le type et ses actions dans la fixture `integrations/fixtures/integration_type_catalogue.json`.
+- Ajouter le code du type dans l’enum `IntegrationType` dans `integrations/models.py` (pour que la création d’intégration accepte ce type).
+- Charger la fixture : `python manage.py loaddata integration_type_catalogue` (en dev ou au déploiement). Après rechargement, le type apparaît dans la liste déroulante « Type d’intégration » sans changement frontend.
 
 ## API Endpoints
 

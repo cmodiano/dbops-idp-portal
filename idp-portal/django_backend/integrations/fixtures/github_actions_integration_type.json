@@ -1,0 +1,74 @@
+[
+  {
+    "model": "integrations.integrationtypecatalogue",
+    "pk": "github_actions",
+    "fields": {
+      "name": "GitHub Actions",
+      "description": "GitHub Actions \u2014 d\u00e9clenchement workflows avec monitoring temps r\u00e9el (webhooks + polling)",
+      "version": "1.0",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "github_actions",
+      "action_code": "trigger_workflow",
+      "action_label": "D\u00e9clencher un workflow GitHub Actions",
+      "description": "D\u00e9clenche un workflow GitHub Actions via workflow_dispatch",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"owner\": {\"type\": \"string\", \"description\": \"Propri\u00e9taire du repository\"}, \"repo\": {\"type\": \"string\", \"description\": \"Nom du repository\"}, \"workflow_id\": {\"type\": \"string\", \"description\": \"ID ou nom du fichier workflow\"}, \"ref\": {\"type\": \"string\", \"description\": \"Branche ou tag\"}}, \"required\": [\"owner\", \"repo\", \"workflow_id\", \"ref\"]}",
+      "optional_params": "{\"type\": \"object\", \"properties\": {\"inputs\": {\"type\": \"object\", \"description\": \"Inputs workflow\"}}}",
+      "response_format": "{\"run_id\": \"integer\", \"status\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "github_actions",
+      "action_code": "get_workflow_run_status",
+      "action_label": "Statut ex\u00e9cution workflow",
+      "description": "R\u00e9cup\u00e8re le statut d'une ex\u00e9cution de workflow GitHub Actions",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"run_id\": {\"type\": \"integer\", \"description\": \"ID de l'ex\u00e9cution workflow\"}}, \"required\": [\"run_id\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"run_id\": \"integer\", \"status\": \"string\", \"conclusion\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "github_actions",
+      "action_code": "get_workflow_run_logs",
+      "action_label": "Logs ex\u00e9cution workflow",
+      "description": "R\u00e9cup\u00e8re les logs d'une ex\u00e9cution de workflow GitHub Actions",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"run_id\": {\"type\": \"integer\", \"description\": \"ID de l'ex\u00e9cution workflow\"}}, \"required\": [\"run_id\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"run_id\": \"integer\", \"logs\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "github_actions",
+      "action_code": "cancel_workflow_run",
+      "action_label": "Annuler workflow en cours",
+      "description": "Annule une ex\u00e9cution de workflow GitHub Actions en cours",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"run_id\": {\"type\": \"integer\", \"description\": \"ID de l'ex\u00e9cution workflow \u00e0 annuler\"}}, \"required\": [\"run_id\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"run_id\": \"integer\", \"status\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  }
+]

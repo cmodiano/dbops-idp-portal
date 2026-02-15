@@ -1,0 +1,74 @@
+[
+  {
+    "model": "integrations.integrationtypecatalogue",
+    "pk": "azure_devops",
+    "fields": {
+      "name": "Azure DevOps Pipelines",
+      "description": "Azure DevOps \u2014 ex\u00e9cution pipelines CI/CD avec monitoring temps r\u00e9el (polling 5s)",
+      "version": "1.0",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "azure_devops",
+      "action_code": "run_pipeline",
+      "action_label": "Ex\u00e9cuter un pipeline Azure DevOps",
+      "description": "D\u00e9clenche l'ex\u00e9cution d'un pipeline CI/CD Azure DevOps",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"pipeline_id\": {\"type\": \"integer\", \"description\": \"ID du pipeline Azure DevOps\"}, \"branch\": {\"type\": \"string\", \"description\": \"Branche source pour le pipeline\"}}, \"required\": [\"pipeline_id\", \"branch\"]}",
+      "optional_params": "{\"type\": \"object\", \"properties\": {\"variables\": {\"type\": \"object\", \"description\": \"Variables de pipeline\"}}}",
+      "response_format": "{\"run_id\": \"integer\", \"status\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "azure_devops",
+      "action_code": "get_run_status",
+      "action_label": "R\u00e9cup\u00e9rer statut ex\u00e9cution pipeline",
+      "description": "R\u00e9cup\u00e8re le statut d'une ex\u00e9cution de pipeline Azure DevOps",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"run_id\": {\"type\": \"integer\", \"description\": \"ID de l'ex\u00e9cution du pipeline\"}}, \"required\": [\"run_id\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"run_id\": \"integer\", \"status\": \"string\", \"result\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "azure_devops",
+      "action_code": "get_run_logs",
+      "action_label": "R\u00e9cup\u00e9rer logs ex\u00e9cution",
+      "description": "R\u00e9cup\u00e8re les logs d'une ex\u00e9cution de pipeline Azure DevOps",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"run_id\": {\"type\": \"integer\", \"description\": \"ID de l'ex\u00e9cution du pipeline\"}}, \"required\": [\"run_id\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"run_id\": \"integer\", \"logs\": \"array\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "azure_devops",
+      "action_code": "cancel_run",
+      "action_label": "Annuler ex\u00e9cution pipeline",
+      "description": "Annule une ex\u00e9cution de pipeline Azure DevOps en cours",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"run_id\": {\"type\": \"integer\", \"description\": \"ID de l'ex\u00e9cution \u00e0 annuler\"}}, \"required\": [\"run_id\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"run_id\": \"integer\", \"status\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  }
+]

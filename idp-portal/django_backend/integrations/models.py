@@ -51,9 +51,13 @@ class IntegrationType(models.TextChoices):
     AAP = 'aap', 'AAP'
     SERVICENOW = 'servicenow', 'ServiceNow'
     TERRAFORM = 'terraform', 'Terraform'
+    TERRAFORM_CLOUD = 'terraform_cloud', 'Terraform Cloud'
     AZUREDEVOPS = 'azuredevops', 'Azure DevOps'
+    AZURE_DEVOPS = 'azure_devops', 'Azure DevOps Pipelines'
     JIRA = 'jira', 'Jira'
     GITHUB_ACTIONS = 'github_actions', 'GitHub Actions'
+    TOWER = 'tower', 'Ansible Tower'
+    VAULT = 'vault', 'HashiCorp Vault'
     # Epic 13: inventory source for targets (serveurs, bases). inventory = API, inventory_db = schema DBOPS_INVENTORY
     INVENTORY = 'inventory', 'Inventaire (API)'
     INVENTORY_DB = 'inventory_db', 'Inventaire (schéma BD)'

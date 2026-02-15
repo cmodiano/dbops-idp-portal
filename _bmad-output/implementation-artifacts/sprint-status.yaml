@@ -365,5 +365,12 @@ development_status:
     27-4-adapter-github-actions-workflow-runs-monitoring: done # Adapter GitHub Actions — workflow runs, logs, statut temps réel (webhooks/polling) — 62 tests GitHub Actions + 88 non-régression = 150 tests pass
     27-5-adapter-terraform-cloud-runs-monitoring: done # Adapter Terraform Cloud — runs (plan/apply), logs, statut temps réel (webhooks/polling) — 71 tests (56 adapter + 15 webhook), 222/222 total pass — Code review adversarial: 9 issues (3 CRITICAL + 4 MEDIUM + 2 LOW) TOUS auto-fixés, robustesse/sécurité/performance optimisées
     27-6-vault-service-hashicorp-vault-enterprise: done # VaultService — résolution credential_ref, retry, circuit breaker, cache, Vault Enterprise — 46 tests, 91.64% coverage, 207 adapter non-regression tests pass — Code review adversarial: 10 issues (2 CRIT + 4 HIGH + 3 MED + 1 LOW), 7 auto-fixés, 3 documentés
-    27-7-admin-frontend-menu-integrations-adapters: backlog # Admin > Intégrations : tous les adapters disponibles, config backend éditable via UI (adapters indépendants du frontend)
+    27-7-admin-frontend-menu-integrations-adapters: done # 7 types (AAP, Tower, Azure DevOps, GitHub, Terraform, Vault, ServiceNow) + 27 actions, seed command, 49 backend + 19 frontend tests, docs enrichies
+    27-8-integration-splunk-logs-correlation-id: backlog # Splunk : envoi logs complets (correlation_id, acteur, execution_id), conservation résumés en base, recherche audit par correlation_id
     epic-27-retrospective: optional
+    # === Epic 28: Règles métier et politiques d'approbation sur les actions ===
+    epic-28: backlog
+    28-1-modele-schema-regles-metier-business-rule-policies: backlog # business_rule_policies (JSON sur Action), validation, menu dédié admin pour édition
+    28-2-policy-evaluator-terraform-plan-review-if-modified: backlog # PolicyEvaluator, require_review_if_modified (champs/types plan Terraform), approbation / auto-approve
+    28-3-moteur-regles-metier-intelligent-multi-plateforme: backlog # RuleEngine + interpréteurs par plateforme (Terraform, AAP, …), extensible sans modifier le noyau
+    epic-28-retrospective: optional

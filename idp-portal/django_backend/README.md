@@ -133,9 +133,9 @@ SIMULATE_EXECUTION_STEP_DURATION=2    # 2 secondes par étape
 
 Voir [docs/simulation-mode.md](docs/simulation-mode.md) pour la documentation complète.
 
-## Catalogue des Types d'Intégration (Epic 24)
+## Catalogue des Types d'Intégration (Epic 24 + 27)
 
-Voir [docs/integration-type-catalogue.md](docs/integration-type-catalogue.md) pour l'architecture du catalogue, les types supportés (AAP, ServiceNow), les endpoints API et le guide d'ajout de nouveaux types.
+Voir [docs/integration-type-catalogue.md](docs/integration-type-catalogue.md) pour l'architecture du catalogue, les 7 types supportés (AAP, Tower, Azure DevOps, GitHub Actions, Terraform Cloud, Vault, ServiceNow), les endpoints API et le guide d'ajout de nouveaux types.
 
 ## CI/CD
 
