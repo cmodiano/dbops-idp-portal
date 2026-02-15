@@ -56,7 +56,7 @@ jobs:
           # Wait for healthcheck to pass (max 90s: Dockerfile uses start-period=30s + interval=30s)
           for i in {1..18}; do
             sleep 5
-            docker inspect backend-test --format='{{.State.Health.Status}}' 2>/dev/null | grep -q healthy && break
+            docker inspect backend-test --format='{{.State.Health.Status}}' 2>/dev/null | grep -qx healthy && break
           done
           # Capture state before cleanup so we can fail the step if image is broken
           STATUS=$(docker inspect backend-test --format='{{.State.Status}}' 2>/dev/null || echo 'missing')
