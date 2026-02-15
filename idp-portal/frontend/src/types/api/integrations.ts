@@ -86,6 +86,7 @@ export interface IntegrationCreate {
   icon?: string | null;
   auth_flow?: AuthFlow | null; // Story 4.9 AC2: authentication flow
   config?: IntegrationConfigInventoryDb | Record<string, unknown> | null; // Story 13.1: inventory_db schema/table
+  secret_service_id?: number | null; // Story 27.11: FK Vault instance for secret resolution
 }
 
 export interface IntegrationUpdate {
@@ -96,6 +97,7 @@ export interface IntegrationUpdate {
   icon?: string | null;
   auth_flow?: AuthFlow | null; // Story 4.9 AC2: authentication flow
   config?: IntegrationConfigInventoryDb | Record<string, unknown> | null; // Story 13.1: inventory_db schema/table
+  secret_service_id?: number | null; // Story 27.11: FK Vault instance for secret resolution
 }
 
 /** Story 24.3: Integration validation status values. */
@@ -137,6 +139,7 @@ export interface IntegrationResponse {
   auth_flow: AuthFlow | null; // Story 4.9 AC2: authentication flow
   status?: IntegrationStatusType; // Story 24.3: validation status
   config?: IntegrationConfigInventoryDb | Record<string, unknown> | null; // Story 13.1: inventory_db schema/table
+  secret_service_id?: number | null; // Story 27.11: FK Vault instance for secret resolution
   created_at: string;
   updated_at: string;
 }

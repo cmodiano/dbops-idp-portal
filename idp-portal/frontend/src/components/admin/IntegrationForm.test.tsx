@@ -66,6 +66,16 @@ const mockTypes: IntegrationTypeCatalogue[] = [
     actions: [],
   },
   {
+    code: 'vault',
+    name: 'HashiCorp Vault',
+    description: 'Service de secrets',
+    version: '1.0',
+    is_active: true,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+    actions: [],
+  },
+  {
     code: 'deprecated_type',
     name: 'Deprecated Platform',
     description: 'Type inactif',
@@ -90,6 +100,17 @@ vi.mock('../../hooks/useIntegrationTypes', () => ({
 
 vi.mock('../../contexts/AuthContext', () => ({
   useAuth: () => ({ accessToken: 'test-token' }),
+}));
+
+// Mock useVaultIntegrations hook (Story 27.11)
+const mockUseVaultIntegrations = vi.fn().mockReturnValue({
+  vaultIntegrations: [],
+  loading: false,
+  error: null,
+});
+
+vi.mock('../../hooks/useVaultIntegrations', () => ({
+  useVaultIntegrations: () => mockUseVaultIntegrations(),
 }));
 
 // Wrapper to provide App context for useApp() hook
@@ -137,6 +158,11 @@ describe('IntegrationForm', () => {
       loading: false,
       error: null,
       isFallback: false,
+    });
+    mockUseVaultIntegrations.mockReturnValue({
+      vaultIntegrations: [],
+      loading: false,
+      error: null,
     });
   });
 
@@ -570,4 +596,100 @@ describe('IntegrationForm', () => {
     expect(screen.queryByText('Intégration invalide')).not.toBeInTheDocument();
     expect(screen.queryByText('Intégration dépréciée')).not.toBeInTheDocument();
   });
+
+  // === Story 27.11: Vault type behavior ===
+
+  it('27.11: hides credential_ref and shows secret 0 alert when type is vault', async () => {
+    const user = userEvent.setup();
+    renderWithApp(<IntegrationForm {...defaultProps} />);
+
+    await selectType(user, /Type d'intégration/, 'HashiCorp Vault');
+
+    await waitFor(() => {
+      expect(screen.getByText('Authentification Vault (secret 0)')).toBeInTheDocument();
+    });
+    expect(screen.queryByLabelText(/Référence credentials/)).not.toBeInTheDocument();
+  });
+
+  it('27.11: shows credential_ref for non-vault type', async () => {
+    const user = userEvent.setup();
+    renderWithApp(<IntegrationForm {...defaultProps} />);
+
+    await selectType(user, /Type d'intégration/, 'Ansible Automation Platform');
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Référence credentials/)).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Authentification Vault (secret 0)')).not.toBeInTheDocument();
+  });
+
+  it('27.11: shows secret_service_id select when vault integrations exist and type is non-vault', async () => {
+    mockUseVaultIntegrations.mockReturnValue({
+      vaultIntegrations: [
+        { id: 100, type: 'vault', name: 'Vault Prod', base_url: 'https://vault.example.com', credential_ref: null, icon: null, auth_flow: null, created_at: '', updated_at: '' },
+      ],
+      loading: false,
+      error: null,
+    });
+
+    const user = userEvent.setup();
+    renderWithApp(<IntegrationForm {...defaultProps} />);
+
+    await selectType(user, /Type d'intégration/, 'Ansible Automation Platform');
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Service de secrets/)).toBeInTheDocument();
+    });
+  });
+
+  it('27.11: hides secret_service_id select when type is vault', async () => {
+    mockUseVaultIntegrations.mockReturnValue({
+      vaultIntegrations: [
+        { id: 100, type: 'vault', name: 'Vault Prod', base_url: 'https://vault.example.com', credential_ref: null, icon: null, auth_flow: null, created_at: '', updated_at: '' },
+      ],
+      loading: false,
+      error: null,
+    });
+
+    const user = userEvent.setup();
+    renderWithApp(<IntegrationForm {...defaultProps} />);
+
+    await selectType(user, /Type d'intégration/, 'HashiCorp Vault');
+
+    await waitFor(() => {
+      expect(screen.getByText('Authentification Vault (secret 0)')).toBeInTheDocument();
+    });
+    expect(screen.queryByLabelText(/Service de secrets/)).not.toBeInTheDocument();
+  });
+
+  it('27.11: hides secret_service_id select when no vault integrations exist', async () => {
+    const user = userEvent.setup();
+    renderWithApp(<IntegrationForm {...defaultProps} />);
+
+    await selectType(user, /Type d'intégration/, 'Ansible Automation Platform');
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Référence credentials/)).toBeInTheDocument();
+    });
+    expect(screen.queryByLabelText(/Service de secrets/)).not.toBeInTheDocument();
+  });
+
+  it('27.11: submits credential_ref as null when type is vault', async () => {
+    const user = userEvent.setup();
+    renderWithApp(<IntegrationForm {...defaultProps} />);
+
+    await selectType(user, /Type d'intégration/, 'HashiCorp Vault');
+    await user.type(screen.getByLabelText(/^Nom/), 'Vault Prod');
+    await user.type(screen.getByLabelText(/URL de base/), 'https://vault.example.com');
+    await user.click(screen.getByRole('button', { name: /Créer/i }));
+
+    await waitFor(() => expect(mockOnSubmit).toHaveBeenCalled(), { timeout: 10000 });
+    expect(mockOnSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'vault',
+        credential_ref: null,
+        secret_service_id: null,
+      })
+    );
+  }, 15000);
 });

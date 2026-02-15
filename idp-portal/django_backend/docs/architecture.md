@@ -84,3 +84,38 @@ PolicyEvaluator → RuleEngine → OutputInterpreterRegistry → OutputInterpret
 | `AAPOutputInterpreter` | `executions/interpreters/aap_output_interpreter.py` | Interpréteur sorties AAP |
 
 Pour ajouter une nouvelle plateforme : implémenter `OutputInterpreter.interpret()` et enregistrer dans le registre.
+
+## Sécurité des secrets (Story 27.11)
+
+**Principe fondamental (NFR7, NFR21) :** Aucun secret n'est stocké en base de données.
+HashiCorp Vault est le **service de secrets principal**. Tous les credentials des intégrations
+sont résolus via `VaultService` au moment de l'exécution.
+
+### Architecture de résolution des secrets
+
+```
+Adapter/Service → build_auth_headers(integration) → resolve_credential(credential_ref, integration)
+                                                           │
+                                    ┌──────────────────────┤
+                                    │                      │
+                           secret_service_id?        secret_service_id = NULL
+                                    │                      │
+                                    ▼                      ▼
+                          VaultService(instance)   get_vault_service() (singleton)
+                                    │                      │
+                                    └──────────┬───────────┘
+                                               ▼
+                                         Vault API
+```
+
+### Bootstrap Vault (secret 0)
+
+Le « secret 0 » (credential pour s'authentifier à Vault) est fourni exclusivement
+par les variables d'environnement. Il n'est **jamais** stocké en base.
+Voir [vault-bootstrap-guide.md](vault-bootstrap-guide.md) pour les options de configuration.
+
+### Multi-instance Vault
+
+Le champ `Integration.secret_service_id` (Story 27.11, migration V077) permet
+de spécifier quelle instance Vault utiliser par intégration. Le cache est isolé
+par `instance_id` pour éviter les collisions entre instances.

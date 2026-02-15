@@ -4702,6 +4702,29 @@ So that **une action puisse appeler Jira (comme ServiceNow) pour créer une issu
 **And** le seed_integration_types ou équivalent inclut jira dans les types attendus
 **And** des tests unitaires (mock API Jira) valident le JiraService
 
+### Story 27.11 : Bootstrap Vault (secret 0) — résoudre l'œuf et la poule et clarifier le rôle Vault pour les secrets
+
+As a **DBOPS admin** (ou équipe déploiement),
+I want **une solution claire et documentée pour le credential d'accès initial à Vault (secret 0), une règle explicite que les autres intégrations obtiennent leurs secrets via un service de secrets, et la possibilité de spécifier quel service de secrets utiliser par intégration**,
+So that **la création d'une intégration de type HashiCorp ne pose pas de problème œuf/poule, que tout le monde sache où sont résolus les secrets, et que l'on puisse à terme gérer plusieurs instances Vault ou d'autres fournisseurs de secrets**.
+
+**Acceptance Criteria:**
+
+**AC1 — Options pour le secret 0 (bootstrap Vault)**  
+**Given** le portail doit s'authentifier à une ou plusieurs instances Vault (intégration type "vault"), **When** on analyse les options pour fournir le secret 0 (token ou AppRole), **Then** au moins les options suivantes sont documentées et comparées : (A) Variables d'environnement uniquement (VAULT_ADDR, VAULT_TOKEN ou VAULT_ROLE_ID + VAULT_SECRET_ID) ; (B) Secret 0 fourni par un mécanisme externe (injecté au déploiement) ; (C) Autres variantes pertinentes si applicable. **And** une **recommandation** est produite (option retenue + justification).
+
+**AC2 — Comportement Admin pour le type "vault"**  
+**Given** un admin crée ou édite une intégration de **type "vault"**, **When** le formulaire est affiché, **Then** le champ credential_ref pour cette intégration est soit **absent**, soit **explicitement optionnel** avec un libellé indiquant que l'accès utilise le secret 0 fourni par l'environnement (voir doc). **And** la documentation indique où et comment configurer le secret 0. **And** aucun flux ne laisse croire que le secret 0 peut être saisi ou stocké dans le catalogue.
+
+**AC3 — Clarifier que les autres intégrations utilisent un service de secrets (Vault)**  
+**Given** les intégrations (plateformes et services) qui ont besoin de credentials, **When** on consulte la documentation (PRD, architecture, glossaire, Admin), **Then** il est **explicite** que : HashiCorp Vault est le service de secrets principal ; les credentials sont résolus via un service de secrets au moment de l'exécution ; aucun secret n'est stocké en base. **And** cette règle est rappelée à un endroit visible. **And** si l'UI affiche credential_ref pour les types autres que "vault", un texte d'aide précise que la valeur doit être une référence vers le secret dans le service de secrets configuré (ex. vault:secret/data/...).
+
+**AC3b — Spécifier le service de secrets à utiliser par intégration**  
+**Given** le catalogue d'intégrations et au moins une intégration de type "vault", **When** un admin crée ou édite une intégration qui nécessite des credentials (AAP, Tower, ServiceNow, Splunk, Jira, etc.), **Then** il peut **spécifier quel service de secrets utiliser** (sélection d'une intégration de type "vault"). **And** si aucun n'est choisi, un comportement par défaut est défini et documenté. **And** le modèle backend/API supporte un champ optionnel (ex. secret_service_id) sur les intégrations concernées. **And** à l'exécution, le moteur utilise l'instance Vault référencée (ou le défaut) pour résoudre le credential_ref. **And** les intégrations de type "vault" n'ont pas ce champ (ou il est ignoré).
+
+**AC4 — Livrables**  
+**And** un document (ou section) décrit : (1) où vit le secret 0, (2) comment configurer le déploiement, (3) le fait que les autres intégrations obtiennent leurs secrets via un service de secrets, (4) la spécification du service de secrets par intégration (AC3b). **And** les changements éventuels de formulaire Admin (type "vault", champ « service de secrets » sur les autres types, textes d'aide) sont implémentés. **And** les tests ou checks manuels validant les flux et la cohérence de la doc sont exécutés.
+
 ---
 
 ## Epic 28 : Règles métier et politiques d'approbation sur les actions

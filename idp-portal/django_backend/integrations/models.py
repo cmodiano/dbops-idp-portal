@@ -125,6 +125,16 @@ class Integration(models.Model):
     token_url = models.CharField(max_length=2000, null=True, blank=True, db_column='TOKEN_URL')
     # CLOB field - using TextField with JSON serialization helper
     config = models.TextField(null=True, blank=True, db_column='CONFIG')
+    # Story 27.11: FK vers intégration Vault pour résoudre les secrets (NULL = Vault par défaut)
+    secret_service = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='dependent_integrations',
+        db_column='SECRET_SERVICE_ID',
+        limit_choices_to={'type': IntegrationType.VAULT},
+    )
     # Story 24.3: Validation status against type catalogue
     status = models.CharField(
         max_length=20,

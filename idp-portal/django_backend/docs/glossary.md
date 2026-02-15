@@ -207,6 +207,9 @@ Une action Terraform Cloud (`platform=Terraform`, `engine=Workflow`) qui :
 | **REF_ENGINES** | Table de référence (V049) contenant les moteurs/technologies de base de données supportés. Colonnes : `CODE`, `LABEL`, `DISPLAY_ORDER`, `IS_ACTIVE`. |
 | **REF_PLATFORMS** | Table de référence (V051) contenant les plateformes d'exécution supportées. Structure identique à `REF_ENGINES`. |
 | **IntegrationTypeCatalogue** | Modèle Django qui référence tous les types d'intégration supportés (plateformes et services) avec leurs actions disponibles. Champ `integration_role` (platform/service) depuis Story 29.1. |
-| **credential_ref** | Référence à un secret stocké dans Vault, au format `vault:mount/data/path#key`. Résolu au runtime par `VaultService`. |
+| **credential_ref** | Référence à un secret stocké dans Vault, au format `vault:mount/data/path#key`. Résolu au runtime par `VaultService`. Aucun secret n'est stocké en base. |
+| **Service de secrets** | Service externe (ex. HashiCorp Vault) qui stocke et résout les credentials de manière sécurisée au moment de l'exécution. Le portail IDP utilise Vault comme service de secrets principal. |
+| **Secret 0** | Credential initial permettant au portail de s'authentifier au service de secrets (bootstrap problem). Fourni par les variables d'environnement (VAULT_TOKEN ou VAULT_ROLE_ID + VAULT_SECRET_ID), jamais stocké en base. Voir [vault-bootstrap-guide.md](vault-bootstrap-guide.md). |
+| **secret_service_id** | Champ optionnel sur le modèle `Integration` (Story 27.11). FK vers une intégration de type `vault` spécifiant quelle instance Vault utiliser pour résoudre les secrets. NULL = Vault par défaut. |
 | **Circuit breaker** | Mécanisme de résilience qui coupe les appels vers un service indisponible après N échecs consécutifs. Utilisé par `VaultService` et `SplunkService`. |
 | **correlation_id** | Identifiant UUID unique qui relie tous les événements d'une même exécution, de bout en bout (logs, audit, Splunk). |

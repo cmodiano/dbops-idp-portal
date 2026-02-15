@@ -18,17 +18,60 @@ if TYPE_CHECKING:
 logger = structlog.get_logger(__name__)
 
 
-def _resolve_credential(credential_ref: str, correlation_id: str | None = None) -> str:
+def resolve_credential(
+    credential_ref: str,
+    correlation_id: str | None = None,
+    integration: "Integration | None" = None,
+) -> str:
     """Resolve credential_ref — Vault path or direct token.
+
+    Story 27.11: Supports multi-instance Vault via integration.secret_service_id.
+    If the integration has a secret_service_id, a VaultService is created
+    targeting that specific Vault instance. Otherwise, the default singleton is used.
 
     If *credential_ref* starts with ``vault:``, it is resolved via VaultService.
     Otherwise it is returned as-is (direct token for dev/test).
     """
-    if credential_ref.startswith("vault:"):
-        from services.vault_service import get_vault_service
+    if not credential_ref.startswith("vault:"):
+        return credential_ref
 
-        return str(get_vault_service().get_secret(credential_ref, correlation_id))
-    return credential_ref
+    from services.vault_service import VaultService, get_vault_service
+
+    # Story 27.11: Determine which Vault instance to use
+    if integration and getattr(integration, 'secret_service_id', None):
+        from integrations.models import Integration as IntegrationModel
+
+        try:
+            vault_integration = IntegrationModel.objects.get(
+                id=integration.secret_service_id
+            )
+        except IntegrationModel.DoesNotExist:
+            logger.error(
+                "resolve_credential_vault_not_found",
+                secret_service_id=integration.secret_service_id,
+                integration_id=getattr(integration, 'id', None),
+            )
+            raise BadRequestError(
+                code="VAULT_INTEGRATION_NOT_FOUND",
+                message=f"Vault integration id={integration.secret_service_id} not found",
+                details={"secret_service_id": integration.secret_service_id},
+            )
+
+        vault_config = vault_integration.get_config() or {}
+        vault_service = VaultService(
+            vault_addr=vault_integration.base_url,
+            vault_namespace=vault_config.get("namespace"),
+            instance_id=str(vault_integration.id),
+        )
+        logger.debug(
+            "resolve_credential_custom_vault",
+            vault_integration_id=vault_integration.id,
+            vault_addr=vault_integration.base_url,
+        )
+        return str(vault_service.get_secret(credential_ref, correlation_id))
+
+    # Default: use singleton VaultService
+    return str(get_vault_service().get_secret(credential_ref, correlation_id))
 
 
 def build_auth_headers(
@@ -76,8 +119,8 @@ def build_auth_headers(
         )
 
     try:
-        # Story 27.6: Resolve Vault references via VaultService
-        resolved = _resolve_credential(credential_ref, correlation_id)
+        # Story 27.6/27.11: Resolve Vault references via VaultService (multi-instance)
+        resolved = resolve_credential(credential_ref, correlation_id, integration)
 
         if auth_flow == "basic":
             # resolved expected as "username:password"

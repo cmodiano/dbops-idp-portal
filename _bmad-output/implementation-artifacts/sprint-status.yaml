@@ -371,6 +371,7 @@ development_status:
     27-8-integration-splunk-logs-correlation-id: done # Code review 2026-02-14: 10 issues (2 CRITICAL + 3 HIGH + 3 MEDIUM + 2 LOW) ALL auto-fixed — Splunk HEC adapter, SplunkLoggingHandler, correlation_id audit filter, 39 backend + 8 frontend tests pass, docs complètes
     27-9-refactoring-separer-adapters-plateformes-services: done # Code review 2026-02-14: 8 issues fixed (2 HIGH + 4 MEDIUM + 2 LOW) - except Exception: → as exc, execution_views fallback validation, ServiceNow TODO doc, services/README examples, 487/487 tests pass
     27-10-adapter-jira-service-fixture-jiraservice: done # Jira comme service : fixture, JiraService (create_issue, update_issue, get_issue, add_comment), Admin Intégrations
+    27-11-bootstrap-vault-secret-zero-et-clarte-role-vault-secrets: done # Bootstrap Vault (secret 0) — œuf/poule, secret_service_id multi-instance, doc vault-bootstrap-guide — 24 BE + 46 vault + 36 FE tests pass
     epic-27-retrospective: optional
     # === Epic 28: Règles métier et politiques d'approbation sur les actions ===
     epic-28: in-progress

@@ -673,6 +673,7 @@ class TestAdapterIntegration:
         integration.auth_flow = "token"
         integration.credential_ref = "vault:secret/data/platform/aap#token"
         integration.id = 1
+        integration.secret_service_id = None
 
         with patch("services.vault_service.get_vault_service") as mock_get:
             mock_svc = MagicMock()
@@ -692,6 +693,7 @@ class TestAdapterIntegration:
         integration.auth_flow = "pat"
         integration.credential_ref = "direct-token-xyz"
         integration.id = 2
+        integration.secret_service_id = None
 
         headers = build_auth_headers(integration)
         assert headers == {"Authorization": "Bearer direct-token-xyz"}
@@ -704,6 +706,7 @@ class TestAdapterIntegration:
         integration.auth_flow = "basic"
         integration.credential_ref = "vault:secret/data/platform/tower#creds"
         integration.id = 3
+        integration.secret_service_id = None
 
         with patch("services.vault_service.get_vault_service") as mock_get:
             mock_svc = MagicMock()

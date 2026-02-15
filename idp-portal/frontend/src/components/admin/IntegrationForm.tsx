@@ -1,7 +1,8 @@
 /**
- * IntegrationForm — création/édition d'intégration (Story 2.28, 4.9, 13.1, 24.2).
+ * IntegrationForm — création/édition d'intégration (Story 2.28, 4.9, 13.1, 24.2, 27.11).
  * Story 24.2: Type restreint au catalogue backend (Select), actions disponibles, mode édition disabled, validation type actif.
  * Story 13.1: Si type = inventory_db, champs Schéma et Table (config) pour inventaire BD.
+ * Story 27.11: credential_ref masqué si type vault, texte d'aide secret 0, champ secret_service_id pour types != vault.
  */
 
 import { useEffect, useState } from 'react';
@@ -13,6 +14,7 @@ import type { AuthFlow, IntegrationCreate, IntegrationUpdate, IntegrationRespons
 import { AUTH_FLOW_LABELS } from '../../types/api';
 import { getIconUrl } from '../../utils/iconUrl';
 import { useIntegrationTypes } from '../../hooks/useIntegrationTypes';
+import { useVaultIntegrations } from '../../hooks/useVaultIntegrations';
 import { AvailableActionsPanel } from './AvailableActionsPanel';
 
 /** Auth flow options for Select (Story 4.9 AC2). */
@@ -29,6 +31,7 @@ export interface IntegrationFormValues {
   auth_flow?: AuthFlow | null;
   schema?: string | null;
   table?: string | null;
+  secret_service_id?: number | null;
 }
 
 export interface IntegrationFormProps {
@@ -66,6 +69,10 @@ export function IntegrationForm({
   const watchIcon = Form.useWatch('icon', form);
   const watchType = Form.useWatch('type', form);
   const isInventoryDb = (watchType ?? '').trim().toLowerCase() === 'inventory_db';
+  const isVaultType = (watchType ?? '').trim().toLowerCase() === 'vault';
+
+  // Story 27.11: Load Vault integrations for secret service dropdown
+  const { vaultIntegrations } = useVaultIntegrations();
 
   // Story 24.3: Status-based UI restrictions
   const editStatus = editIntegration?.status;
@@ -89,6 +96,7 @@ export function IntegrationForm({
           auth_flow: editIntegration.auth_flow ?? undefined,
           schema: editConfig?.schema ?? undefined,
           table: editConfig?.table ?? undefined,
+          secret_service_id: editIntegration.secret_service_id ?? undefined,
         }
       : null;
 
@@ -108,6 +116,7 @@ export function IntegrationForm({
           auth_flow: editIntegration.auth_flow ?? undefined,
           schema: cfg?.schema ?? undefined,
           table: cfg?.table ?? undefined,
+          secret_service_id: editIntegration.secret_service_id ?? undefined,
         });
       }, 0);
       return () => clearTimeout(t);
@@ -126,6 +135,7 @@ export function IntegrationForm({
         auth_flow: undefined,
         schema: undefined,
         table: undefined,
+        secret_service_id: undefined,
       });
     }
   }, [open, editIntegration, form]);
@@ -158,9 +168,10 @@ export function IntegrationForm({
         type: values.type,
         name: values.name.trim(),
         base_url: values.base_url.trim(),
-        credential_ref: values.credential_ref?.trim() || null,
+        credential_ref: isVaultType ? null : (values.credential_ref?.trim() || null),
         icon: uploadedIconUrl || values.icon?.trim() || null,
         auth_flow: values.auth_flow || null,
+        secret_service_id: isVaultType ? null : (values.secret_service_id || null),
       };
       if (isInventoryDb && (values.schema?.trim() || values.table?.trim())) {
         (payload as IntegrationCreate).config = {
@@ -383,12 +394,43 @@ export function IntegrationForm({
         >
           <Input placeholder="https://example.com/api" aria-label="URL de base" />
         </Form.Item>
-        <Form.Item name="credential_ref" label="Référence credentials">
-          <Input
-            placeholder="secret/idp/aap-prod (optionnel)"
-            aria-label="Référence credentials"
+        {/* Story 27.11: credential_ref masqué pour type vault, texte d'aide pour types non-vault */}
+        {isVaultType ? (
+          <Alert
+            type="info"
+            showIcon
+            icon={<InfoCircleOutlined />}
+            message="Authentification Vault (secret 0)"
+            description="L'authentification à Vault utilise le secret 0 fourni par les variables d'environnement (VAULT_TOKEN ou VAULT_ROLE_ID + VAULT_SECRET_ID). Aucun credential n'est stocké en base. Voir la documentation vault-bootstrap-guide pour la configuration."
+            style={{ marginBottom: 16 }}
           />
-        </Form.Item>
+        ) : (
+          <Form.Item
+            name="credential_ref"
+            label="Référence credentials"
+            help="Référence vers un secret Vault (ex: vault:secret/data/aap/prod#token). Le secret est résolu au moment de l'exécution. Aucun secret n'est stocké en base."
+          >
+            <Input
+              placeholder="vault:secret/data/aap/prod#token"
+              aria-label="Référence credentials"
+            />
+          </Form.Item>
+        )}
+        {/* Story 27.11: Sélection du service de secrets pour types non-vault */}
+        {!isVaultType && vaultIntegrations.length > 0 && (
+          <Form.Item
+            name="secret_service_id"
+            label="Service de secrets"
+            help="Sélectionnez l'instance Vault utilisée pour résoudre les secrets de cette intégration (optionnel, défaut = Vault principal via variables d'environnement)"
+          >
+            <Select
+              placeholder="Vault principal (défaut)"
+              allowClear
+              options={vaultIntegrations.map((v) => ({ label: v.name, value: v.id }))}
+              aria-label="Service de secrets"
+            />
+          </Form.Item>
+        )}
         <Form.Item name="auth_flow" label="Flow d'authentification">
           <Select
             placeholder="Sélectionner un flow (optionnel)"

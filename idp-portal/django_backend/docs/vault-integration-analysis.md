@@ -260,3 +260,33 @@ path "secret/data/*" {
 1. Vérifier `renewable` et `lease_duration` du token
 2. Le VaultService renouvelle automatiquement si `renewable=true`
 3. Forcer un nouveau login : redémarrer le service
+
+## 10. Rôle de Vault dans l'architecture (Story 27.11)
+
+HashiCorp Vault est le **service de secrets principal** du portail IDP. Tous les credentials
+des intégrations (AAP, Tower, ServiceNow, Azure DevOps, GitHub Actions, Terraform Cloud, Jira, Splunk)
+sont **résolus via Vault au moment de l'exécution**. Aucun secret n'est stocké en base de données.
+
+### Flux de résolution des secrets
+
+```
+Integration → credential_ref → resolve_credential() → VaultService.get_secret() → Secret résolu
+```
+
+### Multi-instance Vault (Story 27.11)
+
+Le champ `secret_service_id` sur le modèle `Integration` permet de spécifier quelle instance
+Vault utiliser pour résoudre les secrets d'une intégration donnée :
+
+- **`secret_service_id = NULL`** : Vault par défaut (singleton, configuré via variables d'environnement)
+- **`secret_service_id = <id>`** : Instance Vault spécifique (référence vers une intégration de type `vault`)
+
+Le cache est isolé par instance via un `instance_id` dans la clé de cache.
+
+### Bootstrap Vault (secret 0)
+
+Le problème du « secret 0 » (œuf/poule) est documenté dans
+[vault-bootstrap-guide.md](vault-bootstrap-guide.md). En résumé :
+- Le secret 0 (VAULT_TOKEN ou VAULT_ROLE_ID + VAULT_SECRET_ID) est fourni par les variables d'environnement
+- Il n'est jamais stocké en base de données
+- Les intégrations de type `vault` dans l'Admin n'ont pas de champ `credential_ref`

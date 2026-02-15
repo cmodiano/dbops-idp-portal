@@ -152,7 +152,10 @@ class VaultService:
         cache_ttl: int | None = None,
         failure_threshold: int = 5,
         circuit_timeout: int = 60,
+        instance_id: str | None = None,
     ) -> None:
+        # Story 27.11: instance_id for multi-instance cache key isolation
+        self.instance_id = instance_id
         self.vault_addr = (vault_addr or os.getenv("VAULT_ADDR", "http://localhost:8200")).rstrip("/")
         self.vault_namespace = vault_namespace or os.getenv("VAULT_NAMESPACE") or None
         self._vault_token = vault_token or os.getenv("VAULT_TOKEN") or None
@@ -278,12 +281,16 @@ class VaultService:
             key=match.group("key"),
         )
 
-    @staticmethod
-    def _build_cache_key(parsed: ParsedCredentialRef) -> str:
-        """Build cache key including namespace to prevent collisions (HIGH-3 fix)."""
+    def _build_cache_key(self, parsed: ParsedCredentialRef) -> str:
+        """Build cache key including namespace and instance_id to prevent collisions.
+
+        HIGH-3 fix: namespace in key.
+        Story 27.11: instance_id in key for multi-instance Vault support.
+        """
+        instance = self.instance_id or "default"
         ns = parsed.namespace or "__default__"
         key_suffix = f"#{parsed.key}" if parsed.key else ""
-        return f"{ns}/{parsed.mount}/data/{parsed.path}{key_suffix}"
+        return f"vault:{instance}:{ns}/{parsed.mount}/data/{parsed.path}{key_suffix}"
 
     # ------------------------------------------------------------------
     # HTTP communication with Vault

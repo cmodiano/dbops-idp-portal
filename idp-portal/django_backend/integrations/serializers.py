@@ -5,10 +5,14 @@ Serializers for integrations endpoints.
 import json
 
 from rest_framework import serializers
+import structlog
+
 from integrations.models import (
     Integration, AuthFlow, IntegrationType, IntegrationRole,
     IntegrationTypeCatalogue, IntegrationAction,
 )
+
+logger = structlog.get_logger(__name__)
 
 
 def validate_url(value):
@@ -31,10 +35,18 @@ class IntegrationSerializer(serializers.ModelSerializer):
         model = Integration
         fields = [
             'id', 'type', 'name', 'base_url', 'credential_ref', 'icon',
-            'auth_flow', 'token_url', 'config', 'status', 'created_at', 'updated_at'
+            'auth_flow', 'token_url', 'config', 'status',
+            'secret_service_id', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'status']
-    
+
+    secret_service_id = serializers.PrimaryKeyRelatedField(
+        source='secret_service',
+        queryset=Integration.objects.filter(type=IntegrationType.VAULT),
+        required=False,
+        allow_null=True,
+    )
+
     def get_config(self, obj):
         """Deserialize config CLOB to dict."""
         return obj.get_config()
@@ -92,7 +104,13 @@ class IntegrationCreateSerializer(serializers.Serializer):
         allow_null=True,
         help_text="Optional JSON flow steps + credentials per step (validated against JSON Schema)"
     )
-    
+    # Story 27.11: Service de secrets (FK vers intégration Vault)
+    secret_service_id = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        help_text="ID de l'intégration Vault à utiliser pour résoudre les secrets (NULL = Vault par défaut)"
+    )
+
     def validate_type(self, value):
         """Validate type is a valid IntegrationType enum value."""
         if value not in [choice[0] for choice in IntegrationType.choices]:
@@ -100,21 +118,21 @@ class IntegrationCreateSerializer(serializers.Serializer):
                 f"type must be one of: {', '.join([c[0] for c in IntegrationType.choices])}"
             )
         return value
-    
+
     def validate_name(self, value):
         """Strip whitespace and validate not empty."""
         stripped = value.strip()
         if not stripped:
             raise serializers.ValidationError("name cannot be empty or whitespace only")
         return stripped
-    
+
     def validate_base_url(self, value):
         """Validate base_url is a valid URL format."""
         stripped = value.strip()
         if not stripped:
             raise serializers.ValidationError("base_url cannot be empty or whitespace only")
         return validate_url(stripped)
-    
+
     def validate_token_url(self, value):
         """Validate token_url is a valid http(s) URL when provided."""
         if not value:
@@ -123,6 +141,48 @@ class IntegrationCreateSerializer(serializers.Serializer):
         if not stripped:
             return None
         return validate_url(stripped)
+
+    def validate(self, attrs):
+        """Story 27.11: Cross-field validation for credential_ref and secret_service_id."""
+        attrs = super().validate(attrs)
+        integration_type = attrs.get('type', '')
+        credential_ref = attrs.get('credential_ref')
+        secret_service_id = attrs.get('secret_service_id')
+
+        # Vault integrations should not have credential_ref
+        if integration_type == IntegrationType.VAULT and credential_ref:
+            raise serializers.ValidationError({
+                'credential_ref': (
+                    "Les intégrations de type 'vault' n'ont pas besoin de credential_ref. "
+                    "L'authentification utilise le secret 0 (variables d'environnement)."
+                )
+            })
+
+        # Vault integrations should not have secret_service_id
+        if integration_type == IntegrationType.VAULT and secret_service_id:
+            raise serializers.ValidationError({
+                'secret_service_id': (
+                    "Les intégrations de type 'vault' ne peuvent pas avoir de service de secrets."
+                )
+            })
+
+        # secret_service_id must reference a vault integration
+        if secret_service_id is not None:
+            try:
+                vault_integration = Integration.objects.get(id=secret_service_id)
+                if vault_integration.type != IntegrationType.VAULT:
+                    raise serializers.ValidationError({
+                        'secret_service_id': (
+                            f"L'intégration référencée (id={secret_service_id}) n'est pas de type 'vault' "
+                            f"(type actuel: '{vault_integration.type}')."
+                        )
+                    })
+            except Integration.DoesNotExist:
+                raise serializers.ValidationError({
+                    'secret_service_id': f"Aucune intégration trouvée avec l'id {secret_service_id}."
+                })
+
+        return attrs
 
 
 class IntegrationUpdateSerializer(serializers.Serializer):
@@ -175,7 +235,13 @@ class IntegrationUpdateSerializer(serializers.Serializer):
         required=False,
         allow_null=True
     )
-    
+    # Story 27.11: Service de secrets (FK vers intégration Vault)
+    secret_service_id = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        help_text="ID de l'intégration Vault à utiliser pour résoudre les secrets (NULL = Vault par défaut)"
+    )
+
     def validate_type(self, value):
         """Validate type is a valid IntegrationType enum value."""
         if value is None:
@@ -220,12 +286,17 @@ class IntegrationListSerializer(serializers.ModelSerializer):
     Excludes config for performance.
     """
     auth_flow = serializers.CharField(required=False, allow_null=True)
+    secret_service_id = serializers.PrimaryKeyRelatedField(
+        source='secret_service',
+        read_only=True,
+    )
 
     class Meta:
         model = Integration
         fields = [
             'id', 'type', 'name', 'base_url', 'credential_ref', 'icon',
-            'auth_flow', 'token_url', 'status', 'created_at', 'updated_at'
+            'auth_flow', 'token_url', 'status', 'secret_service_id',
+            'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
