@@ -4,7 +4,7 @@ PATCH /api/v1/executions/{id}/cancel/
 """
 
 import pytest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from rest_framework.test import APIClient
 
 from tests.factories import UserFactory, ActionFactory, IntegrationFactory, ExecutionFactory
@@ -188,11 +188,12 @@ class TestCancelRemoteExecution:
         self.action = ActionFactory.create(status='published', integration=self.integration)
         self.client.force_authenticate(user=self.user)
 
-    @patch('executions.views.execution_views.AAPAdapter')
-    def test_remote_cancel_called_for_running_with_job_id(self, MockAdapter):
-        """2.6a: AAPAdapter.cancel_execution() called for RUNNING with platform_job_id."""
-        mock_instance = MockAdapter.return_value
-        mock_instance.cancel_execution.return_value = None
+    @patch('executions.views.execution_views.get_platform_adapter')
+    def test_remote_cancel_called_for_running_with_job_id(self, mock_factory):
+        """2.6a: Platform adapter cancel_execution() called for RUNNING with platform_job_id."""
+        mock_instance = MagicMock()
+        mock_instance.cancel_execution = AsyncMock(return_value=None)
+        mock_factory.return_value = mock_instance
 
         execution = ExecutionFactory.create(
             action=self.action, user=self.user,
@@ -206,16 +207,20 @@ class TestCancelRemoteExecution:
         response = self.client.patch(url)
 
         assert response.status_code == 200
-        mock_instance.cancel_execution.assert_called_once_with('job-123')
+        # Verify cancel was called with the platform_job_id
+        mock_instance.cancel_execution.assert_called_once()
+        call_args = mock_instance.cancel_execution.call_args
+        assert call_args[0][0] == 'job-123'
 
         execution.refresh_from_db()
         assert execution.status == ExecutionStatus.CANCELLED
 
-    @patch('executions.views.execution_views.AAPAdapter')
-    def test_remote_cancel_failure_still_cancels_locally(self, MockAdapter):
+    @patch('executions.views.execution_views.get_platform_adapter')
+    def test_remote_cancel_failure_still_cancels_locally(self, mock_factory):
         """2.6b: If remote cancel fails, execution is still CANCELLED locally with warning."""
-        mock_instance = MockAdapter.return_value
-        mock_instance.cancel_execution.side_effect = Exception("AAP unreachable")
+        mock_instance = MagicMock()
+        mock_instance.cancel_execution = AsyncMock(side_effect=Exception("AAP unreachable"))
+        mock_factory.return_value = mock_instance
 
         execution = ExecutionFactory.create(
             action=self.action, user=self.user,
@@ -231,11 +236,12 @@ class TestCancelRemoteExecution:
         execution.refresh_from_db()
         assert execution.status == ExecutionStatus.CANCELLED
 
-    @patch('executions.views.execution_views.AAPAdapter')
-    def test_remote_cancel_not_implemented_still_cancels(self, MockAdapter):
+    @patch('executions.views.execution_views.get_platform_adapter')
+    def test_remote_cancel_not_implemented_still_cancels(self, mock_factory):
         """2.6c: If adapter raises NotImplementedError, execution still cancelled."""
-        mock_instance = MockAdapter.return_value
-        mock_instance.cancel_execution.side_effect = NotImplementedError("Not supported")
+        mock_instance = MagicMock()
+        mock_instance.cancel_execution = AsyncMock(side_effect=NotImplementedError("Not supported"))
+        mock_factory.return_value = mock_instance
 
         execution = ExecutionFactory.create(
             action=self.action, user=self.user,
@@ -259,7 +265,7 @@ class TestCancelRemoteExecution:
         )
         url = f'/api/v1/executions/{execution.id}/cancel/'
 
-        with patch('executions.views.execution_views.AAPAdapter') as MockAdapter:
+        with patch('executions.views.execution_views.get_platform_adapter') as MockAdapter:
             response = self.client.patch(url)
 
         assert response.status_code == 200

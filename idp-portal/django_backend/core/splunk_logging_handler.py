@@ -46,7 +46,7 @@ def _get_config() -> dict[str, Any]:
             splunk_config = getattr(settings, "SPLUNK_CONFIG", {})
             hec_url = splunk_config.get("HEC_URL", "")
             hec_token = hec_token or splunk_config.get("HEC_TOKEN", "")
-        except Exception:
+        except Exception as exc:
             pass
 
     return {
@@ -156,7 +156,7 @@ class SplunkLoggingHandler(logging.Handler):
             if self._buffer.qsize() >= self.batch_size:
                 self.flush()
 
-        except Exception:
+        except Exception as exc:
             # Never let handler errors propagate to the application
             self.handleError(record)
 
@@ -208,9 +208,9 @@ class SplunkLoggingHandler(logging.Handler):
     def _send_to_splunk(self, events: list[dict]) -> None:
         """Send events to Splunk HEC. Drop events if Splunk is unavailable."""
         try:
-            from adapters.splunk_adapter import SplunkAdapter
+            from services.splunk_service import SplunkService
 
-            adapter = SplunkAdapter(
+            adapter = SplunkService(
                 base_url=self.hec_url,
                 auth_headers={"Authorization": f"Splunk {self.hec_token}"},
                 default_sourcetype=self.sourcetype,

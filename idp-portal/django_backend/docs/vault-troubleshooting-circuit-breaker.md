@@ -75,7 +75,7 @@ Si circuit ouvert :
 
 3. **Forcer reset du circuit breaker** (dev/staging uniquement) :
    ```python
-   from core.vault_service import get_vault_service
+   from services.vault_service import get_vault_service
    get_vault_service().circuit_breaker.reset()
    ```
 

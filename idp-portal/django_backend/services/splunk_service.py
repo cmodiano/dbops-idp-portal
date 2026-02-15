@@ -1,18 +1,17 @@
 """
-Splunk HEC (HTTP Event Collector) adapter for log ingestion.
+SplunkService — Splunk HEC (HTTP Event Collector) service for log ingestion.
 
 Story 27.8: Send structured events to Splunk HEC for observability and audit.
-Follows BaseAdapter pattern (Stories 27.1-27.6) for architectural consistency.
+Story 27.9: Reclassified as a Service (not a Platform adapter) — Splunk is
+consumed by the portal for logging, not for executing jobs.
 """
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
 
 import httpx
 import structlog
 
-from adapters.base_adapter import BaseAdapter
 from core.exceptions import ServiceUnavailableError
 
 logger = structlog.get_logger(__name__)
@@ -26,8 +25,11 @@ SPLUNK_RETRY_DELAY = 5.0
 _TRANSIENT_STATUS_CODES = frozenset({500, 503})
 
 
-class SplunkAdapter(BaseAdapter):
-    """Adapter for sending events to Splunk HTTP Event Collector.
+class SplunkService:
+    """Service for sending events to Splunk HTTP Event Collector.
+
+    Splunk is a consumed service (logging/observability), not a platform that
+    executes jobs. It does NOT implement BaseAdapter.
 
     Requires base_url (HEC endpoint) and auth_headers with Splunk token.
     Typically instantiated via integration config (base_url, credential_ref -> Vault).
@@ -147,26 +149,6 @@ class SplunkAdapter(BaseAdapter):
         )
 
         return {**result, "count": len(events)}
-
-    # ------------------------------------------------------------------
-    # BaseAdapter abstract methods (not used for Splunk, raise NotImplementedError)
-    # ------------------------------------------------------------------
-
-    async def trigger(self, **kwargs) -> dict:
-        """Not applicable for Splunk HEC adapter."""
-        raise NotImplementedError("SplunkAdapter does not support trigger()")
-
-    async def get_status(self, platform_job_id: str, **kwargs) -> dict:
-        """Not applicable for Splunk HEC adapter."""
-        raise NotImplementedError("SplunkAdapter does not support get_status()")
-
-    async def get_job_logs(self, platform_job_id: str, **kwargs) -> dict:
-        """Not applicable for Splunk HEC adapter."""
-        raise NotImplementedError("SplunkAdapter does not support get_job_logs()")
-
-    async def cancel_execution(self, platform_job_id: str, **kwargs) -> None:
-        """Not applicable for Splunk HEC adapter."""
-        raise NotImplementedError("SplunkAdapter does not support cancel_execution()")
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -297,3 +279,7 @@ class SplunkAdapter(BaseAdapter):
             message="Splunk HEC max retries exceeded",
             details={"url": url},
         ) from last_exc
+
+
+# Backward-compatible alias (Story 27.9 renamed SplunkAdapter → SplunkService)
+SplunkAdapter = SplunkService

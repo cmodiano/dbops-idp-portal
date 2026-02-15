@@ -1,8 +1,9 @@
 """
-Tests for SplunkAdapter — Splunk HEC integration.
+Tests for SplunkService — Splunk HEC integration.
 
 Story 27.8, AC8: 12+ tests covering send_event, send_batch, error handling,
-retry logic, credential_ref, BaseAdapter methods, and structured logging.
+retry logic, credential_ref, and structured logging.
+Story 27.9: Renamed SplunkService → SplunkService, moved to services/.
 """
 from __future__ import annotations
 
@@ -12,14 +13,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from adapters.splunk_adapter import SplunkAdapter
+from services.splunk_service import SplunkService
 from core.exceptions import ServiceUnavailableError
 
 
 @pytest.fixture
-def adapter() -> SplunkAdapter:
-    """Create a SplunkAdapter with test configuration."""
-    return SplunkAdapter(
+def adapter() -> SplunkService:
+    """Create a SplunkService with test configuration."""
+    return SplunkService(
         base_url="https://splunk.example.com:8088",
         auth_headers={"Authorization": "Splunk test-token-123"},
         timeout=10.0,
@@ -44,18 +45,18 @@ def _mock_httpx_response(status_code: int = 200, json_data: dict | None = None) 
     return response
 
 
-class TestSplunkAdapterInit:
-    """Test SplunkAdapter initialization."""
+class TestSplunkServiceInit:
+    """Test SplunkService initialization."""
 
     def test_init_strips_trailing_slash(self) -> None:
-        adapter = SplunkAdapter(
+        adapter = SplunkService(
             base_url="https://splunk.example.com:8088/",
             auth_headers={"Authorization": "Splunk token"},
         )
         assert adapter.base_url == "https://splunk.example.com:8088"
 
     def test_init_defaults(self) -> None:
-        adapter = SplunkAdapter(
+        adapter = SplunkService(
             base_url="https://splunk.example.com:8088",
             auth_headers={"Authorization": "Splunk token"},
         )
@@ -65,10 +66,10 @@ class TestSplunkAdapterInit:
 
 
 class TestSendEvent:
-    """Test SplunkAdapter.send_event()."""
+    """Test SplunkService.send_event()."""
 
     @pytest.mark.asyncio
-    async def test_send_event_success(self, adapter: SplunkAdapter) -> None:
+    async def test_send_event_success(self, adapter: SplunkService) -> None:
         """AC8 test 1: Mock POST HEC -> 200 -> event sent."""
         mock_response = _mock_httpx_response(200, {"text": "Success", "code": 0})
         mock_client = AsyncMock()
@@ -76,7 +77,7 @@ class TestSendEvent:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("adapters.splunk_adapter.httpx.AsyncClient", return_value=mock_client):
+        with patch("services.splunk_service.httpx.AsyncClient", return_value=mock_client):
             result = await adapter.send_event(
                 event={"event": "execution_started", "level": "INFO"},
                 correlation_id="test-corr-123",
@@ -87,7 +88,7 @@ class TestSendEvent:
         mock_client.post.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_send_event_with_correlation_id(self, adapter: SplunkAdapter) -> None:
+    async def test_send_event_with_correlation_id(self, adapter: SplunkService) -> None:
         """AC8 test 2: event contains correlation_id in fields."""
         mock_response = _mock_httpx_response(200, {"text": "Success", "code": 0})
         mock_client = AsyncMock()
@@ -102,7 +103,7 @@ class TestSendEvent:
             "execution_id": 42,
         }
 
-        with patch("adapters.splunk_adapter.httpx.AsyncClient", return_value=mock_client):
+        with patch("services.splunk_service.httpx.AsyncClient", return_value=mock_client):
             await adapter.send_event(event=event, correlation_id="abc-123-def-456")
 
         # Verify the posted body contains correlation_id in fields
@@ -113,7 +114,7 @@ class TestSendEvent:
         assert body["fields"]["execution_id"] == 42
 
     @pytest.mark.asyncio
-    async def test_send_event_hec_error_503(self, adapter: SplunkAdapter) -> None:
+    async def test_send_event_hec_error_503(self, adapter: SplunkService) -> None:
         """AC8 test 4: Mock POST HEC -> 503 after retries -> raise ServiceUnavailableError."""
         mock_response = _mock_httpx_response(503, {"text": "Service Unavailable", "code": 6})
         mock_client = AsyncMock()
@@ -121,8 +122,8 @@ class TestSendEvent:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("adapters.splunk_adapter.httpx.AsyncClient", return_value=mock_client):
-            with patch("adapters.splunk_adapter.asyncio.sleep", new_callable=AsyncMock):
+        with patch("services.splunk_service.httpx.AsyncClient", return_value=mock_client):
+            with patch("services.splunk_service.asyncio.sleep", new_callable=AsyncMock):
                 with pytest.raises(ServiceUnavailableError) as exc_info:
                     await adapter.send_event(
                         event={"event": "test"},
@@ -132,7 +133,7 @@ class TestSendEvent:
         assert "503" in str(exc_info.value.message)
 
     @pytest.mark.asyncio
-    async def test_send_event_sourcetype_index(self, adapter: SplunkAdapter) -> None:
+    async def test_send_event_sourcetype_index(self, adapter: SplunkService) -> None:
         """AC8 test 9: send_event with custom sourcetype and index."""
         mock_response = _mock_httpx_response(200, {"text": "Success", "code": 0})
         mock_client = AsyncMock()
@@ -140,7 +141,7 @@ class TestSendEvent:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("adapters.splunk_adapter.httpx.AsyncClient", return_value=mock_client):
+        with patch("services.splunk_service.httpx.AsyncClient", return_value=mock_client):
             await adapter.send_event(
                 event={"event": "adapter_call"},
                 sourcetype="idp:adapter",
@@ -153,7 +154,7 @@ class TestSendEvent:
         assert body["index"] == "test-idp"
 
     @pytest.mark.asyncio
-    async def test_send_event_event_format(self, adapter: SplunkAdapter) -> None:
+    async def test_send_event_event_format(self, adapter: SplunkService) -> None:
         """AC8 test 8: event dict contains required fields."""
         mock_response = _mock_httpx_response(200, {"text": "Success", "code": 0})
         mock_client = AsyncMock()
@@ -170,7 +171,7 @@ class TestSendEvent:
             "timestamp": "2026-02-14T10:30:00Z",
         }
 
-        with patch("adapters.splunk_adapter.httpx.AsyncClient", return_value=mock_client):
+        with patch("services.splunk_service.httpx.AsyncClient", return_value=mock_client):
             result = await adapter.send_event(event=event)
 
         assert result["code"] == 0
@@ -182,10 +183,10 @@ class TestSendEvent:
 
 
 class TestSendBatch:
-    """Test SplunkAdapter.send_batch()."""
+    """Test SplunkService.send_batch()."""
 
     @pytest.mark.asyncio
-    async def test_send_batch_success(self, adapter: SplunkAdapter) -> None:
+    async def test_send_batch_success(self, adapter: SplunkService) -> None:
         """AC8 test 3: Mock POST HEC batch -> 200 -> 10 events sent."""
         mock_response = _mock_httpx_response(200, {"text": "Success", "code": 0})
         mock_client = AsyncMock()
@@ -195,29 +196,29 @@ class TestSendBatch:
 
         events = [{"event": f"test_event_{i}", "level": "INFO"} for i in range(10)]
 
-        with patch("adapters.splunk_adapter.httpx.AsyncClient", return_value=mock_client):
+        with patch("services.splunk_service.httpx.AsyncClient", return_value=mock_client):
             result = await adapter.send_batch(events=events, correlation_id="batch-corr-123")
 
         assert result["count"] == 10
         assert result["code"] == 0
 
     @pytest.mark.asyncio
-    async def test_send_batch_empty(self, adapter: SplunkAdapter) -> None:
+    async def test_send_batch_empty(self, adapter: SplunkService) -> None:
         """send_batch with empty list returns immediately."""
         result = await adapter.send_batch(events=[], correlation_id="empty-batch")
         assert result["count"] == 0
         assert result["status"] == "success"
 
     @pytest.mark.asyncio
-    async def test_send_batch_timeout(self, adapter: SplunkAdapter) -> None:
+    async def test_send_batch_timeout(self, adapter: SplunkService) -> None:
         """AC8 test 5: Mock POST HEC -> timeout -> raise ServiceUnavailableError."""
         mock_client = AsyncMock()
         mock_client.post.side_effect = httpx.TimeoutException("Connection timed out")
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("adapters.splunk_adapter.httpx.AsyncClient", return_value=mock_client):
-            with patch("adapters.splunk_adapter.asyncio.sleep", new_callable=AsyncMock):
+        with patch("services.splunk_service.httpx.AsyncClient", return_value=mock_client):
+            with patch("services.splunk_service.asyncio.sleep", new_callable=AsyncMock):
                 with pytest.raises(ServiceUnavailableError) as exc_info:
                     await adapter.send_batch(
                         events=[{"event": "test"}],
@@ -231,7 +232,7 @@ class TestRetryAndErrorHandling:
     """Test retry logic and error handling."""
 
     @pytest.mark.asyncio
-    async def test_retry_on_500(self, adapter: SplunkAdapter) -> None:
+    async def test_retry_on_500(self, adapter: SplunkService) -> None:
         """AC8 test 10: 1st call 500, 2nd call 200 -> success after retry."""
         mock_response_500 = _mock_httpx_response(500, {"text": "Internal Error", "code": 8})
         # Override raise_for_status: 500 is transient, handled before raise_for_status
@@ -243,8 +244,8 @@ class TestRetryAndErrorHandling:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("adapters.splunk_adapter.httpx.AsyncClient", return_value=mock_client):
-            with patch("adapters.splunk_adapter.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+        with patch("services.splunk_service.httpx.AsyncClient", return_value=mock_client):
+            with patch("services.splunk_service.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
                 result = await adapter.send_event(
                     event={"event": "test_retry"},
                     correlation_id="retry-corr",
@@ -255,15 +256,15 @@ class TestRetryAndErrorHandling:
         mock_sleep.assert_called_once_with(5.0)
 
     @pytest.mark.asyncio
-    async def test_send_event_connection_error(self, adapter: SplunkAdapter) -> None:
+    async def test_send_event_connection_error(self, adapter: SplunkService) -> None:
         """Connection error after retries raises ServiceUnavailableError."""
         mock_client = AsyncMock()
         mock_client.post.side_effect = httpx.ConnectError("Connection refused")
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("adapters.splunk_adapter.httpx.AsyncClient", return_value=mock_client):
-            with patch("adapters.splunk_adapter.asyncio.sleep", new_callable=AsyncMock):
+        with patch("services.splunk_service.httpx.AsyncClient", return_value=mock_client):
+            with patch("services.splunk_service.asyncio.sleep", new_callable=AsyncMock):
                 with pytest.raises(ServiceUnavailableError) as exc_info:
                     await adapter.send_event(
                         event={"event": "test"},
@@ -287,7 +288,7 @@ class TestCredentialRefVault:
             "vault:secret/data/splunk/prod#token",
             correlation_id="vault-test",
         )
-        adapter = SplunkAdapter(
+        adapter = SplunkService(
             base_url="https://splunk.example.com:8088",
             auth_headers={"Authorization": f"Splunk {token}"},
         )
@@ -299,39 +300,34 @@ class TestCredentialRefVault:
         )
 
 
-class TestBaseAdapterMethods:
-    """Test BaseAdapter abstract methods raise NotImplementedError."""
+class TestServiceClassification:
+    """Test SplunkService is a Service, not a Platform adapter (Story 27.9)."""
 
-    @pytest.mark.asyncio
-    async def test_trigger_not_implemented(self, adapter: SplunkAdapter) -> None:
-        """AC8 test 7: trigger() raises NotImplementedError."""
-        with pytest.raises(NotImplementedError, match="trigger"):
-            await adapter.trigger()
+    def test_splunk_service_not_base_adapter(self, adapter: SplunkService) -> None:
+        """SplunkService should NOT inherit from BaseAdapter."""
+        from adapters.base_adapter import BaseAdapter
+        assert not isinstance(adapter, BaseAdapter)
 
-    @pytest.mark.asyncio
-    async def test_get_status_not_implemented(self, adapter: SplunkAdapter) -> None:
-        """AC8 test 7: get_status() raises NotImplementedError."""
-        with pytest.raises(NotImplementedError, match="get_status"):
-            await adapter.get_status(platform_job_id="123")
+    def test_splunk_service_has_no_trigger(self, adapter: SplunkService) -> None:
+        """SplunkService should not have trigger() method."""
+        assert not hasattr(adapter, "trigger")
 
-    @pytest.mark.asyncio
-    async def test_get_job_logs_not_implemented(self, adapter: SplunkAdapter) -> None:
-        """AC8 test 7: get_job_logs() raises NotImplementedError."""
-        with pytest.raises(NotImplementedError, match="get_job_logs"):
-            await adapter.get_job_logs(platform_job_id="123")
+    def test_splunk_service_has_send_event(self, adapter: SplunkService) -> None:
+        """SplunkService should have send_event() method."""
+        assert hasattr(adapter, "send_event")
+        assert callable(adapter.send_event)
 
-    @pytest.mark.asyncio
-    async def test_cancel_execution_not_implemented(self, adapter: SplunkAdapter) -> None:
-        """AC8 test 7: cancel_execution() raises NotImplementedError."""
-        with pytest.raises(NotImplementedError, match="cancel_execution"):
-            await adapter.cancel_execution(platform_job_id="123")
+    def test_backward_compat_alias(self) -> None:
+        """SplunkAdapter alias should still work for backward compatibility."""
+        from services.splunk_service import SplunkAdapter
+        assert SplunkAdapter is SplunkService
 
 
 class TestStructlogLogging:
     """Test structured logging."""
 
     @pytest.mark.asyncio
-    async def test_logging_structlog_send_event(self, adapter: SplunkAdapter) -> None:
+    async def test_logging_structlog_send_event(self, adapter: SplunkService) -> None:
         """AC8 test 12: send_event logs 'splunk_event_sent' with structlog."""
         mock_response = _mock_httpx_response(200, {"text": "Success", "code": 0})
         mock_client = AsyncMock()
@@ -339,8 +335,8 @@ class TestStructlogLogging:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("adapters.splunk_adapter.httpx.AsyncClient", return_value=mock_client):
-            with patch("adapters.splunk_adapter.logger") as mock_logger:
+        with patch("services.splunk_service.httpx.AsyncClient", return_value=mock_client):
+            with patch("services.splunk_service.logger") as mock_logger:
                 await adapter.send_event(
                     event={"event": "test_log"},
                     correlation_id="log-corr-123",

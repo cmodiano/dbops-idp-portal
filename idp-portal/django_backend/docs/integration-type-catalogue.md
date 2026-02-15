@@ -53,16 +53,19 @@ IntegrationTypeCatalogue (1) ──── (N) IntegrationAction
 
 ### Tableau récapitulatif
 
-| Type | Code | Actions disponibles | Version | Adapter Story |
-|------|------|---------------------|---------|---------------|
-| Ansible Automation Platform | `aap` | 4 (start_job, start_workflow, get_job_status, cancel_job) | 1.0 | Story 27.1 |
-| Ansible Tower | `tower` | 4 (start_job, start_workflow, get_job_status, cancel_job) | 1.0 | Story 27.2 |
-| Azure DevOps Pipelines | `azure_devops` | 4 (run_pipeline, get_run_status, get_run_logs, cancel_run) | 1.0 | Story 27.3 |
-| GitHub Actions | `github_actions` | 4 (trigger_workflow, get_workflow_run_status, get_workflow_run_logs, cancel_workflow_run) | 1.0 | Story 27.4 |
-| Terraform Cloud | `terraform_cloud` | 5 (create_run, get_run_status, get_run_logs, cancel_run, apply_run) | 1.0 | Story 27.5 |
-| HashiCorp Vault | `vault` | 3 (get_secret, renew_token, lookup_token) | 1.0 | Story 27.6 |
-| ServiceNow ITSM | `servicenow` | 3 (create_change, update_change, get_change_status) | 1.0 | Existant |
-| Splunk HEC | `splunk` | 2 (send_event, send_batch) | 1.0 | Story 27.8 |
+| Type | Code | Catégorie | Actions disponibles | Version | Story |
+|------|------|-----------|---------------------|---------|-------|
+| Ansible Automation Platform | `aap` | **Plateforme** | 4 (start_job, start_workflow, get_job_status, cancel_job) | 1.0 | Story 27.1 |
+| Ansible Tower | `tower` | **Plateforme** | 4 (start_job, start_workflow, get_job_status, cancel_job) | 1.0 | Story 27.2 |
+| Azure DevOps Pipelines | `azure_devops` | **Plateforme** | 4 (run_pipeline, get_run_status, get_run_logs, cancel_run) | 1.0 | Story 27.3 |
+| GitHub Actions | `github_actions` | **Plateforme** | 4 (trigger_workflow, get_workflow_run_status, get_workflow_run_logs, cancel_workflow_run) | 1.0 | Story 27.4 |
+| Terraform Cloud | `terraform_cloud` | **Plateforme** | 5 (create_run, get_run_status, get_run_logs, cancel_run, apply_run) | 1.0 | Story 27.5 |
+| HashiCorp Vault | `vault` | **Service** | 3 (get_secret, renew_token, lookup_token) | 1.0 | Story 27.6 |
+| ServiceNow ITSM | `servicenow` | **Service** | 3 (create_change, update_change, get_change_status) | 1.0 | Existant |
+| Splunk HEC | `splunk` | **Service** | 2 (send_event, send_batch) | 1.0 | Story 27.8 |
+
+> **Plateforme** = adaptateur dans `adapters/`, hérite de `BaseAdapter`, exécute des jobs via `get_platform_adapter()`.
+> **Service** = client dans `services/`, n'hérite pas de `BaseAdapter`, consommé via `get_service_client()`.
 
 ### AAP (Ansible Automation Platform)
 
@@ -132,7 +135,7 @@ IntegrationTypeCatalogue (1) ──── (N) IntegrationAction
 
 ### HashiCorp Vault (vault)
 
-> Adapter: `VaultService` (Story 27.6). Résolution secrets KV v2, auth Token ou AppRole.
+> **Service** (pas un adapter). Client : `VaultService` (`services/vault_service.py`, Story 27.6). Résolution secrets KV v2, auth Token ou AppRole.
 
 | Action | Label | Paramètres obligatoires | Paramètres optionnels |
 |--------|-------|------------------------|----------------------|
@@ -153,7 +156,7 @@ IntegrationTypeCatalogue (1) ──── (N) IntegrationAction
 
 ### Splunk HEC (splunk)
 
-> Adapter: `SplunkAdapter` (Story 27.8). Envoi logs structurés JSON vers Splunk HEC.
+> **Service** (pas un adapter). Client : `SplunkService` (`services/splunk_service.py`, Story 27.8). Envoi logs structurés JSON vers Splunk HEC.
 
 | Action | Label | Paramètres obligatoires | Paramètres optionnels |
 |--------|-------|------------------------|----------------------|

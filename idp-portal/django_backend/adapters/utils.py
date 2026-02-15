@@ -25,7 +25,7 @@ def _resolve_credential(credential_ref: str, correlation_id: str | None = None) 
     Otherwise it is returned as-is (direct token for dev/test).
     """
     if credential_ref.startswith("vault:"):
-        from core.vault_service import get_vault_service
+        from services.vault_service import get_vault_service
 
         return str(get_vault_service().get_secret(credential_ref, correlation_id))
     return credential_ref

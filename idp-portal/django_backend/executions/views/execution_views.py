@@ -35,8 +35,8 @@ from executions.validators.workflow_validator import WorkflowValidator
 from drf_spectacular.utils import extend_schema
 import structlog
 
-# Story 17.14: Import adapter at module level (HIGH-3 fix)
-from adapters.aap_adapter import AAPAdapter
+# Story 27.9: Use factory pattern for platform adapter instantiation
+from adapters import get_platform_adapter
 
 exec_logger = structlog.get_logger(__name__)
 
@@ -336,7 +336,16 @@ class ExecutionCancelView(APIView):
             from adapters.utils import build_auth_headers
             auth_headers = build_auth_headers(integration)
             resource_type = (execution.get_parameters() or {}).get("resource_type", "job_template")
-            adapter = AAPAdapter(
+            # Story 27.9: Get platform type from integration, use type field as fallback
+            platform_type = getattr(integration, "integration_type", None) or integration.type
+            if not platform_type:
+                raise BadRequestError(
+                    code="MISSING_INTEGRATION_TYPE",
+                    message="Integration missing type field",
+                    details={"integration_id": integration.id},
+                )
+            adapter = get_platform_adapter(
+                platform_type=platform_type,
                 base_url=integration.base_url,
                 auth_headers=auth_headers,
             )
@@ -491,7 +500,16 @@ class ExecutionLogsView(APIView):
         # Fetch logs from AAP via adapter
         resource_type = params.get("resource_type", "job_template")
         auth_headers = build_auth_headers(integration)
-        adapter = AAPAdapter(
+        # Story 27.9: Get platform type from integration, use type field as fallback
+        platform_type = getattr(integration, "integration_type", None) or integration.type
+        if not platform_type:
+            raise BadRequestError(
+                code="MISSING_INTEGRATION_TYPE",
+                message="Integration missing type field",
+                details={"integration_id": integration.id},
+            )
+        adapter = get_platform_adapter(
+            platform_type=platform_type,
             base_url=integration.base_url,
             auth_headers=auth_headers,
         )

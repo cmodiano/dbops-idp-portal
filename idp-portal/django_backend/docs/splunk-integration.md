@@ -14,8 +14,8 @@
                     └──────────────────────┘         │
                                                      ▼
                                             ┌────────────────┐
-                                            │  SplunkAdapter  │
-                                            │  (BaseAdapter)  │
+                                            │  SplunkService  │
+                                            │  (Service)  │
                                             │  send_batch()   │
                                             └────────┬───────┘
                                                      │ POST /services/collector/event
@@ -31,8 +31,8 @@
 
 | Composant | Fichier | Rôle |
 |-----------|---------|------|
-| `SplunkAdapter` | `adapters/splunk_adapter.py` | Envoi HTTP vers Splunk HEC (send_event, send_batch) |
-| `SplunkLoggingHandler` | `core/splunk_logging_handler.py` | Buffer + flush automatique vers SplunkAdapter |
+| `SplunkService` | `services/splunk_service.py` | Envoi HTTP vers Splunk HEC (send_event, send_batch) |
+| `SplunkLoggingHandler` | `core/splunk_logging_handler.py` | Buffer + flush automatique vers SplunkService |
 | Configuration structlog | `core/logging.py` | Intégration handler dans la chaîne structlog |
 
 ## Configuration

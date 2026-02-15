@@ -1,0 +1,61 @@
+# services/ — Services consommes
+
+Ce package contient les **clients de services externes** consommes par le
+portail IDP pour des fonctions transversales.
+
+## Principe
+
+Chaque service :
+- Encapsule l'acces a un service externe (secrets, logs, ITSM)
+- N'herite **pas** de `BaseAdapter` (ce ne sont pas des plateformes d'execution)
+- Possede sa propre interface adaptee a son domaine
+
+## Services disponibles
+
+| Service | Fichier | Role |
+|---------|---------|------|
+| `VaultService` | `vault_service.py` | Resolution des secrets via HashiCorp Vault (KV v2) |
+| `SplunkService` | `splunk_service.py` | Envoi de logs structures vers Splunk HEC |
+| `ServiceNowService` | `servicenow_service.py` | Gestion des changements ITSM ServiceNow |
+
+## Factory
+
+```python
+from services import get_service_client
+
+vault = get_service_client("vault", vault_addr="...", vault_token="...")
+splunk = get_service_client("splunk", base_url="...", auth_headers={...})
+```
+
+La factory `get_service_client()` retourne le client de service correspondant
+au type demande.
+
+**Note:** La factory `get_service_client()` est fournie pour symetrie avec
+`get_platform_adapter()` et pour faciliter les tests. Dans le code de production,
+les services sont generalement instancies directement ou via des singletons :
+- `VaultService` : via `get_vault_service()` (singleton, ligne 502 vault_service.py)
+- `SplunkService` : instancie directement dans `SplunkLoggingHandler`
+
+## Exemples d'utilisation
+
+### Utilisation directe (pattern actuel)
+```python
+from services.vault_service import get_vault_service
+
+vault = get_vault_service()
+secret = vault.get_secret("vault:secret/data/myapp/db#password")
+```
+
+### Utilisation via factory (tests, injection de dependances)
+```python
+from services import get_service_client
+
+vault = get_service_client("vault", vault_addr="http://vault:8200", vault_token="test")
+secret = vault.get_secret("vault:secret/data/myapp/db#password")
+```
+
+## A ne pas confondre
+
+Les **adaptateurs de plateforme** (AAP, Tower, Azure DevOps, GitHub Actions,
+Terraform Cloud) se trouvent dans le package `adapters/`. Ils heritent de
+`BaseAdapter` et executent des jobs sur des plateformes distantes.

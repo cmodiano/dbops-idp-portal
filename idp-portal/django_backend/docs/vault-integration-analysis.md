@@ -2,7 +2,7 @@
 
 ## 1. Vue d'ensemble
 
-Le **VaultService** (`core/vault_service.py`) est le client centralisé pour HashiCorp Vault.
+Le **VaultService** (`services/vault_service.py`) est le client centralisé pour HashiCorp Vault.
 Tous les adapters de plateforme (AAP, Tower, Azure DevOps, GitHub Actions, Terraform Cloud)
 l'utilisent via `build_auth_headers()` pour résoudre les `credential_ref` en secrets
 au moment de l'exécution.

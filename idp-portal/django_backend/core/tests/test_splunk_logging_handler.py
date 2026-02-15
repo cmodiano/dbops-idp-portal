@@ -137,7 +137,7 @@ class TestErrorHandling:
         async def mock_send_batch_error(*args, **kwargs):
             raise Exception("Connection refused")
 
-        with patch("adapters.splunk_adapter.SplunkAdapter") as MockAdapter:
+        with patch("services.splunk_service.SplunkService") as MockAdapter:
             mock_adapter = MockAdapter.return_value
             mock_adapter.send_batch = mock_send_batch_error
 
@@ -155,7 +155,7 @@ class TestErrorHandling:
         async def mock_send_batch_error(*args, **kwargs):
             raise Exception("Splunk down")
 
-        with patch("adapters.splunk_adapter.SplunkAdapter") as MockAdapter:
+        with patch("services.splunk_service.SplunkService") as MockAdapter:
             mock_adapter = MockAdapter.return_value
             mock_adapter.send_batch = mock_send_batch_error
 

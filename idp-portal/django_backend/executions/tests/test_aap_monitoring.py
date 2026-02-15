@@ -143,7 +143,7 @@ class TestExecutionLogsView:
         async def fake_get_job_logs(**kwargs):  # type: ignore[no-untyped-def]
             return mock_logs
 
-        with patch("executions.views.execution_views.AAPAdapter") as MockAdapter:
+        with patch("executions.views.execution_views.get_platform_adapter") as MockAdapter:
             mock_instance = MagicMock()
             MockAdapter.return_value = mock_instance
             mock_instance.get_job_logs = fake_get_job_logs

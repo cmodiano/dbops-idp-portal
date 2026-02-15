@@ -20,7 +20,7 @@ from core.exceptions import (
     VaultSecretNotFoundError,
     VaultUnavailableError,
 )
-from core.vault_service import (
+from services.vault_service import (
     CircuitBreaker,
     ParsedCredentialRef,
     VaultService,
@@ -92,7 +92,7 @@ class TestParseCredentialRef:
 class TestGetSecret:
     """Test VaultService.get_secret() — success paths."""
 
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.requests.Session")
     def test_get_secret_with_key(self, mock_session_cls):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -107,7 +107,7 @@ class TestGetSecret:
         assert "http://vault:8200/v1/secret/data/myapp/db" == call_args[0][0]
         assert call_args[1]["headers"]["X-Vault-Token"] == "test-token"
 
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.requests.Session")
     def test_get_secret_no_key_returns_dict(self, mock_session_cls):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -119,7 +119,7 @@ class TestGetSecret:
 
         assert result == data
 
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.requests.Session")
     def test_get_secret_key_not_in_data(self, mock_session_cls):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -137,8 +137,8 @@ class TestGetSecret:
 class TestRetry:
     """Test retry with exponential backoff."""
 
-    @patch("core.vault_service.time.sleep")
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.time.sleep")
+    @patch("services.vault_service.requests.Session")
     def test_retry_transient_then_success(self, mock_session_cls, mock_sleep):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -157,8 +157,8 @@ class TestRetry:
         mock_sleep.assert_any_call(1)  # 2^0
         mock_sleep.assert_any_call(2)  # 2^1
 
-    @patch("core.vault_service.time.sleep")
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.time.sleep")
+    @patch("services.vault_service.requests.Session")
     def test_retry_all_fail_raises(self, mock_session_cls, mock_sleep):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -172,8 +172,8 @@ class TestRetry:
         with pytest.raises(VaultUnavailableError, match="HTTP 503"):
             svc.get_secret("vault:secret/data/app#token")
 
-    @patch("core.vault_service.time.sleep")
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.time.sleep")
+    @patch("services.vault_service.requests.Session")
     def test_timeout_retry(self, mock_session_cls, mock_sleep):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -188,7 +188,7 @@ class TestRetry:
         assert result == "ok"
         assert mock_sleep.call_count == 1
 
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.requests.Session")
     def test_no_retry_on_404(self, mock_session_cls):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -200,7 +200,7 @@ class TestRetry:
 
         assert mock_session.get.call_count == 1  # No retry
 
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.requests.Session")
     def test_no_retry_on_403(self, mock_session_cls):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -212,8 +212,8 @@ class TestRetry:
 
         assert mock_session.get.call_count == 1  # No retry
 
-    @patch("core.vault_service.time.sleep")
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.time.sleep")
+    @patch("services.vault_service.requests.Session")
     def test_connection_error_retry(self, mock_session_cls, mock_sleep):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -272,7 +272,7 @@ class TestCircuitBreaker:
 
         assert call_count == 0  # func was NOT called
 
-    @patch("core.vault_service.time.monotonic")
+    @patch("services.vault_service.time.monotonic")
     def test_half_open_success_closes(self, mock_monotonic):
         cb = CircuitBreaker(failure_threshold=2, timeout=10)
 
@@ -295,7 +295,7 @@ class TestCircuitBreaker:
         assert cb.state == "closed"
         assert cb._state.failures == 0
 
-    @patch("core.vault_service.time.monotonic")
+    @patch("services.vault_service.time.monotonic")
     def test_half_open_failure_reopens(self, mock_monotonic):
         cb = CircuitBreaker(failure_threshold=2, timeout=10)
 
@@ -351,7 +351,7 @@ class TestCircuitBreaker:
 class TestCache:
     """Test cache hit, miss, invalidation."""
 
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.requests.Session")
     def test_cache_hit_no_vault_call(self, mock_session_cls):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -369,7 +369,7 @@ class TestCache:
         assert result2 == "cached-val"
         assert mock_session.get.call_count == 1  # Still 1 — no new Vault call
 
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.requests.Session")
     def test_clear_cache(self, mock_session_cls):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -385,7 +385,7 @@ class TestCache:
         svc.get_secret("vault:secret/data/app#token")
         assert mock_session.get.call_count == 2  # New Vault call after cache clear
 
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.requests.Session")
     def test_clear_secret_specific(self, mock_session_cls):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -413,7 +413,7 @@ class TestCache:
 class TestAuthToken:
     """Test Token authentication."""
 
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.requests.Session")
     def test_token_from_constructor(self, mock_session_cls):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -426,7 +426,7 @@ class TestAuthToken:
         assert headers["X-Vault-Token"] == "my-token"
 
     @patch.dict("os.environ", {"VAULT_TOKEN": "env-token"}, clear=False)
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.requests.Session")
     def test_token_from_env(self, mock_session_cls):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -438,7 +438,7 @@ class TestAuthToken:
         headers = mock_session.get.call_args[1]["headers"]
         assert headers["X-Vault-Token"] == "env-token"
 
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.requests.Session")
     def test_no_token_raises_auth_error(self, mock_session_cls):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -459,7 +459,7 @@ class TestAuthAppRole:
     """Test AppRole authentication."""
 
     @patch.dict("os.environ", {"VAULT_ROLE_ID": "role-123", "VAULT_SECRET_ID": "secret-456"}, clear=False)
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.requests.Session")
     def test_approle_login_success(self, mock_session_cls):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -484,7 +484,7 @@ class TestAuthAppRole:
         assert headers["X-Vault-Token"] == "approle-token"
 
     @patch.dict("os.environ", {"VAULT_ROLE_ID": "role-123", "VAULT_SECRET_ID": "bad-secret"}, clear=False)
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.requests.Session")
     def test_approle_login_failure(self, mock_session_cls):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -494,7 +494,7 @@ class TestAuthAppRole:
             VaultService(vault_addr="http://vault:8200")
 
     @patch.dict("os.environ", {"VAULT_ROLE_ID": "role-123", "VAULT_SECRET_ID": "secret-456"}, clear=False)
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.requests.Session")
     def test_approle_connection_error(self, mock_session_cls):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -511,8 +511,8 @@ class TestAuthAppRole:
 class TestTokenRenewal:
     """Test token auto-renewal."""
 
-    @patch("core.vault_service.time.monotonic")
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.time.monotonic")
+    @patch("services.vault_service.requests.Session")
     def test_renew_token_when_close_to_expiry(self, mock_session_cls, mock_monotonic):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -531,8 +531,8 @@ class TestTokenRenewal:
         mock_session.post.assert_called_once()
         assert svc._vault_token == "new-token"
 
-    @patch("core.vault_service.time.monotonic")
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.time.monotonic")
+    @patch("services.vault_service.requests.Session")
     def test_no_renewal_when_plenty_of_time(self, mock_session_cls, mock_monotonic):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -554,7 +554,7 @@ class TestTokenRenewal:
 class TestVaultEnterprise:
     """Test Vault Enterprise namespace support."""
 
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.requests.Session")
     def test_namespace_from_credential_ref(self, mock_session_cls):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -567,7 +567,7 @@ class TestVaultEnterprise:
         headers = mock_session.get.call_args[1]["headers"]
         assert headers["X-Vault-Namespace"] == "team-a"
 
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.requests.Session")
     def test_global_namespace_env(self, mock_session_cls):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -579,7 +579,7 @@ class TestVaultEnterprise:
         headers = mock_session.get.call_args[1]["headers"]
         assert headers["X-Vault-Namespace"] == "global-ns"
 
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.requests.Session")
     def test_credential_ref_namespace_overrides_global(self, mock_session_cls):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -591,7 +591,7 @@ class TestVaultEnterprise:
         headers = mock_session.get.call_args[1]["headers"]
         assert headers["X-Vault-Namespace"] == "override-ns"
 
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.requests.Session")
     def test_no_namespace_header_for_open_source(self, mock_session_cls):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -611,7 +611,7 @@ class TestVaultEnterprise:
 class TestErrorHandling:
     """Test error scenarios."""
 
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.requests.Session")
     def test_404_not_found(self, mock_session_cls):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -621,7 +621,7 @@ class TestErrorHandling:
         with pytest.raises(VaultSecretNotFoundError, match="Secret not found"):
             svc.get_secret("vault:secret/data/missing#key")
 
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.requests.Session")
     def test_403_forbidden(self, mock_session_cls):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -631,8 +631,8 @@ class TestErrorHandling:
         with pytest.raises(VaultAccessDeniedError, match="Access denied"):
             svc.get_secret("vault:secret/data/forbidden#key")
 
-    @patch("core.vault_service.time.sleep")
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.time.sleep")
+    @patch("services.vault_service.requests.Session")
     def test_500_internal_error(self, mock_session_cls, mock_sleep):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -644,8 +644,8 @@ class TestErrorHandling:
 
         assert mock_session.get.call_count == 3  # 3 retries
 
-    @patch("core.vault_service.time.sleep")
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.time.sleep")
+    @patch("services.vault_service.requests.Session")
     def test_timeout_exhausted(self, mock_session_cls, mock_sleep):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
@@ -674,7 +674,7 @@ class TestAdapterIntegration:
         integration.credential_ref = "vault:secret/data/platform/aap#token"
         integration.id = 1
 
-        with patch("core.vault_service.get_vault_service") as mock_get:
+        with patch("services.vault_service.get_vault_service") as mock_get:
             mock_svc = MagicMock()
             mock_get.return_value = mock_svc
             mock_svc.get_secret.return_value = "resolved-token-abc"
@@ -705,7 +705,7 @@ class TestAdapterIntegration:
         integration.credential_ref = "vault:secret/data/platform/tower#creds"
         integration.id = 3
 
-        with patch("core.vault_service.get_vault_service") as mock_get:
+        with patch("services.vault_service.get_vault_service") as mock_get:
             mock_svc = MagicMock()
             mock_get.return_value = mock_svc
             mock_svc.get_secret.return_value = "admin:password123"
@@ -724,12 +724,12 @@ class TestAdapterIntegration:
 class TestSingleton:
     """Test module-level singleton."""
 
-    @patch("core.vault_service.requests.Session")
+    @patch("services.vault_service.requests.Session")
     def test_get_vault_service_returns_same_instance(self, mock_session_cls):
         mock_session = MagicMock()
         mock_session_cls.return_value = mock_session
 
-        import core.vault_service as vs
+        import services.vault_service as vs
         vs._vault_service = None  # Reset singleton
 
         with patch.dict("os.environ", {"VAULT_TOKEN": "test"}, clear=False):
