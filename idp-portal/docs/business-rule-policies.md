@@ -886,6 +886,174 @@ Toutes les politiques sont validées via le validateur `catalog.validators.valid
 
 ---
 
+## PolicyEvaluator Implementation (Story 28.2)
+
+### Architecture
+
+Le service `PolicyEvaluator` (`executions/policy_evaluator.py`) évalue les `business_rule_policies` après qu'une étape a produit sa sortie. Il est injecté dans le `WorkflowRuntime._execute_step()` entre l'exécution de l'adapter et la finalisation du statut.
+
+```mermaid
+sequenceDiagram
+    participant WR as WorkflowRuntime
+    participant PE as PolicyEvaluator
+    participant ES as ExecutionStep
+    participant AS as AuditService
+
+    WR->>WR: Adapter exécute étape
+    WR->>PE: evaluate_policy(step, action, step_output)
+    PE->>PE: _parse_terraform_plan(plan_output)
+    PE->>PE: _match_criteria(resource_changes, policy)
+    PE-->>WR: PolicyDecision
+
+    alt require_approval = True
+        WR->>ES: status = WAITING
+        WR->>AS: EXECUTION_STEP_POLICY_APPROVAL_REQUIRED
+        Note over ES: DBA doit approuver
+        ES->>ES: DBA approve → COMPLETED
+    else require_approval = False
+        WR->>ES: status = COMPLETED (auto-approved)
+        WR->>AS: EXECUTION_STEP_POLICY_AUTO_APPROVED
+    end
+```
+
+### Terraform Plan Parsing
+
+PolicyEvaluator supporte deux formats de plan Terraform :
+
+**Format JSON (Terraform Cloud API)** — Méthode principale :
+- Extrait `plan["resource_changes"]` (liste)
+- Pour chaque resource : `type` → resource_type, `change.actions` → actions
+- Calcule `changed_attributes` en comparant `before` et `after`
+- Filtre les changements `no-op`
+
+**Format texte (Fallback)** — Parsing regex best-effort :
+- Pattern resource : `# <type>.<name> will be <action>`
+- Pattern attributs : `~ attr = "old" -> "new"` ou `+ attr` / `- attr`
+- Peut être incomplet mais ne crashe pas
+
+### Matching Logic
+
+Pour chaque critère dans `require_review_if_modified` :
+
+| Cas | Condition | Match si... |
+|-----|-----------|-------------|
+| resource_type seul | `{"resource_type": "azurerm_sql_database"}` | Toute ressource de ce type est modifiée |
+| resource_type + attribute_paths | `{"resource_type": "...", "attribute_paths": ["sku_name"]}` | Resource type ET au moins un attribut modifié |
+| attribute_paths seul | `{"attribute_paths": ["backup_retention_days"]}` | N'importe quelle ressource avec cet attribut modifié |
+
+### Décisions
+
+- **require_approval = True** : Au moins un critère matche → ExecutionStep WAITING + ApprovalRequest
+- **require_approval = False (auto)** : Aucun match + `auto_approve_if_none_match: true` → COMPLETED direct
+- **require_approval = False (no auto)** : Aucun match + `auto_approve_if_none_match: false` → COMPLETED + warning log
+
+### Dataclasses
+
+```python
+@dataclass(frozen=True)
+class ResourceChange:
+    resource_type: str          # "azurerm_sql_database"
+    actions: list[str]          # ["update"]
+    changed_attributes: set[str] # {"sku_name", "max_size_gb"}
+    resource_address: str        # "module.database.azurerm_sql_database.main"
+
+@dataclass(frozen=True)
+class PolicyDecision:
+    require_approval: bool
+    decision_reason: str
+    matched_criteria: list[dict]  # [{criterion, matched_resources, description}]
+```
+
+### Erreurs Courantes
+
+| Erreur | Cause | Solution |
+|--------|-------|----------|
+| `PolicyEvaluationError: missing 'resource_changes'` | Plan JSON sans clé `resource_changes` | Vérifier format plan Terraform Cloud |
+| `PolicyEvaluationError: unexpected data type` | Plan n'est ni dict ni str | Vérifier sortie adapter |
+| `Invalid business_rule_policies: criterion must have...` | Critère sans `resource_type` ni `attribute_paths` | Corriger configuration admin |
+
+### Audit Trail
+
+| Type | Quand | Détails |
+|------|-------|---------|
+| `EXECUTION_STEP_POLICY_APPROVAL_REQUIRED` | Critère matche → approbation requise | policy_decision JSON complet |
+| `EXECUTION_STEP_POLICY_AUTO_APPROVED` | Aucun match → auto-approuvé | decision_reason |
+| `EXECUTION_STEP_POLICY_EVALUATION_FAILED` | Erreur parsing/évaluation | error_message |
+
+### Exemple Complet (MED-6 FIX)
+
+**Contexte :** Action "Provisionner Azure SQL Database" avec politique requérant revue DBA si SKU modifié.
+
+**1. Configuration de la politique (Action.business_rule_policies) :**
+```json
+{
+  "on_step_output": [
+    {
+      "when": {
+        "step_type": "platform"
+      },
+      "policy": {
+        "type": "review_if_modified",
+        "require_review_if_modified": [
+          {
+            "resource_type": "azurerm_sql_database",
+            "attribute_paths": ["sku_name", "max_size_gb"]
+          }
+        ],
+        "auto_approve_if_none_match": true
+      }
+    }
+  ]
+}
+```
+
+**2. Plan Terraform reçu (step_output) :**
+```json
+{
+  "format_version": "1.2",
+  "resource_changes": [
+    {
+      "address": "module.database.azurerm_sql_database.prod_db",
+      "type": "azurerm_sql_database",
+      "change": {
+        "actions": ["update"],
+        "before": {"sku_name": "S0", "max_size_gb": 10, "backup_retention_days": 7},
+        "after": {"sku_name": "S3", "max_size_gb": 250, "backup_retention_days": 7}
+      }
+    }
+  ]
+}
+```
+
+**3. Évaluation PolicyEvaluator :**
+- **Parsing** : 1 ResourceChange extrait (`azurerm_sql_database` avec `changed_attributes={"sku_name", "max_size_gb"}`)
+- **Matching** : Critère matche (resource_type + sku_name modifié)
+- **Décision** : `require_approval=True`
+
+**4. PolicyDecision retournée :**
+```json
+{
+  "require_approval": true,
+  "decision_reason": "Matched 1 review criteria: resource_type=azurerm_sql_database, attributes=['sku_name', 'max_size_gb']",
+  "matched_criteria": [
+    {
+      "criteria_index": 0,
+      "criterion": {"resource_type": "azurerm_sql_database", "attribute_paths": ["sku_name", "max_size_gb"]},
+      "matched_resources": ["module.database.azurerm_sql_database.prod_db"],
+      "description": "resource_type=azurerm_sql_database, attributes=['sku_name', 'max_size_gb']"
+    }
+  ]
+}
+```
+
+**5. Conséquences :**
+- ExecutionStep.status → `WAITING`
+- Audit trail → `EXECUTION_STEP_POLICY_APPROVAL_REQUIRED` créé
+- ApprovalRequest créée pour DBA
+- DBA approuve → ExecutionStep.status → `COMPLETED` → Workflow continue
+
+---
+
 ## Voir aussi
 
 - [condition-gates.md](./backend/condition-gates.md) — Évaluation des gates pré-étape

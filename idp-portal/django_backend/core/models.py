@@ -81,6 +81,10 @@ class AuditActionType(models.TextChoices):
     EXECUTION_BLOCKED_INVALID_INTEGRATION = 'EXECUTION_BLOCKED_INVALID_INTEGRATION', 'Execution Blocked Invalid Integration'
     EXECUTION_DEPRECATED_INTEGRATION_WARNING = 'EXECUTION_DEPRECATED_INTEGRATION_WARNING', 'Execution Deprecated Integration Warning'
     WORKFLOW_STEP_BLOCKED_INVALID_INTEGRATION = 'WORKFLOW_STEP_BLOCKED_INVALID_INTEGRATION', 'Workflow Step Blocked Invalid Integration'
+    # Story 28.2: Policy evaluation audit types
+    EXECUTION_STEP_POLICY_APPROVAL_REQUIRED = 'EXECUTION_STEP_POLICY_APPROVAL_REQUIRED', 'Execution Step Policy Approval Required'
+    EXECUTION_STEP_POLICY_AUTO_APPROVED = 'EXECUTION_STEP_POLICY_AUTO_APPROVED', 'Execution Step Policy Auto Approved'
+    EXECUTION_STEP_POLICY_EVALUATION_FAILED = 'EXECUTION_STEP_POLICY_EVALUATION_FAILED', 'Execution Step Policy Evaluation Failed'
     # Additional types added in later migrations (V028-V035, V039-V041)
     # Note: Full list would include all types from migrations, but base types are sufficient for model
 

@@ -723,24 +723,37 @@ class WorkflowRuntime:
                 'platform': referenced_action.platform,
             }
 
+            # TODO Story 28.3: Replace simulated_adapter_response with real adapter output
+            # CRIT-3 KNOWN ISSUE: PolicyEvaluator currently receives simulated output,
+            # not real Terraform plan. Full integration requires adapter execution.
+            step_output_data = {
+                # Story 4.12 AC5: Payload is complete and ready for adapter ✓
+                'adapter_ready': True,
+                'adapter_payload_prepared': adapter_payload,
+                'adapter_response': simulated_adapter_response,
+                'step_id': step_id,
+                'step_name': step_name,
+                'outcome': StepOutcome.SUCCESS.value,
+                # Story 4.12 AC6: Audit trail with parameters used ✓
+                'parameters_used': step_parameters,
+                'delegated_from_workflow': True,
+                'referenced_action_id': referenced_action.id,
+                'referenced_action_name': referenced_action.name,
+            }
+
+            # Story 28.2: Evaluate business_rule_policies after step output
+            policy_result = self._evaluate_policy_if_needed(
+                execution_step, referenced_action, step_output_data,
+            )
+            if policy_result is not None:
+                # PolicyEvaluator decided — step is WAITING or auto-approved
+                execution_step.set_output(step_output_data)
+                execution_step.save()
+                return policy_result
+
             execution_step.status = ExecutionStepStatus.COMPLETED
             execution_step.completed_at = timezone.now()
-            execution_step.set_output(
-                {
-                    # Story 4.12 AC5: Payload is complete and ready for adapter ✓
-                    'adapter_ready': True,
-                    'adapter_payload_prepared': adapter_payload,
-                    'adapter_response': simulated_adapter_response,
-                    'step_id': step_id,
-                    'step_name': step_name,
-                    'outcome': StepOutcome.SUCCESS.value,
-                    # Story 4.12 AC6: Audit trail with parameters used ✓
-                    'parameters_used': step_parameters,
-                    'delegated_from_workflow': True,
-                    'referenced_action_id': referenced_action.id,
-                    'referenced_action_name': referenced_action.name,
-                }
-            )
+            execution_step.set_output(step_output_data)
             execution_step.save()
 
             logger.info(
@@ -816,6 +829,150 @@ class WorkflowRuntime:
                     'step_name': step_name,
                     'error_type': type(e).__name__,
                 }
+            )
+
+    def _evaluate_policy_if_needed(
+        self,
+        execution_step: ExecutionStep,
+        action: Any,
+        step_output: dict,
+    ) -> Optional[StepResult]:
+        """
+        Story 28.2: Evaluate business_rule_policies after step output.
+
+        If the action has policies matching this step type, evaluate them.
+        Returns a StepResult if the policy requires approval (WAITING) or
+        auto-approves with audit trail. Returns None if no policy applies.
+        """
+        from dataclasses import asdict
+        from executions.policy_evaluator import PolicyEvaluator, PolicyEvaluationError
+
+        policies = getattr(action, 'business_rule_policies', None)
+        if not policies:
+            return None
+
+        rules = policies.get("on_step_output", []) if isinstance(policies, dict) else []
+        if not rules:
+            return None
+
+        # Check if any rule matches this step type
+        step_type = execution_step.step_type
+        matching_rule = next(
+            (r for r in rules if r.get("when", {}).get("step_type") == step_type),
+            None,
+        )
+        if not matching_rule:
+            return None
+
+        try:
+            evaluator = PolicyEvaluator()
+            policy_decision = evaluator.evaluate_policy(
+                execution_step, action, step_output,
+            )
+        except PolicyEvaluationError as exc:
+            # Policy evaluation failed — mark step FAILED
+            execution_step.status = ExecutionStepStatus.FAILED
+            execution_step.completed_at = timezone.now()
+            execution_step.error_message = exc.message
+            execution_step.save()
+
+            AuditService.create_entry(
+                user_id=str(self.execution.user_id),
+                action_type=AuditActionType.EXECUTION_STEP_POLICY_EVALUATION_FAILED,
+                entity_type=AuditEntityType.EXECUTION,
+                entity_id=self.execution.id,
+                details={
+                    'step_id': execution_step.id,
+                    'step_name': execution_step.step_name,
+                    'error': exc.message,
+                },
+                correlation_id=self.correlation_id,
+            )
+
+            logger.error(
+                "policy_evaluation_error",
+                execution_id=self.execution.id,
+                step_id=execution_step.id,
+                error_message=exc.message,
+                correlation_id=self.correlation_id,
+            )
+
+            return StepResult(
+                outcome=StepOutcome.ERROR,
+                error_message=exc.message,
+                error_details={'policy_evaluation_failed': True},
+            )
+
+        # Store policy decision in step output
+        decision_dict = asdict(policy_decision)
+        step_output['policy_decision'] = decision_dict
+
+        if policy_decision.require_approval:
+            # Require approval — WAITING
+            execution_step.status = ExecutionStepStatus.WAITING
+            execution_step.save()
+
+            # Add gate_condition for manual approval
+            existing_output = execution_step.get_output() or {}
+            gate_conditions = existing_output.get('gate_conditions', [])
+            gate_conditions.append({
+                'type': 'approval_granted',
+                'reason': policy_decision.decision_reason,
+                'source': 'policy_evaluator',
+            })
+            step_output['gate_conditions'] = gate_conditions
+
+            AuditService.create_entry(
+                user_id=str(self.execution.user_id),
+                action_type=AuditActionType.EXECUTION_STEP_POLICY_APPROVAL_REQUIRED,
+                entity_type=AuditEntityType.EXECUTION,
+                entity_id=self.execution.id,
+                details={
+                    'step_id': execution_step.id,
+                    'step_name': execution_step.step_name,
+                    'policy_decision': decision_dict,
+                },
+                correlation_id=self.correlation_id,
+            )
+
+            # MED-7 FIX: Removed redundant logging (PolicyEvaluator already logs decision)
+
+            return StepResult(
+                outcome=StepOutcome.WAITING,
+                error_message="Step waiting for policy approval",
+                error_details={
+                    'waiting': True,
+                    'policy_decision': decision_dict,
+                },
+            )
+        else:
+            # Auto-approved — continue normally but record audit
+            execution_step.status = ExecutionStepStatus.COMPLETED
+            execution_step.completed_at = timezone.now()
+
+            AuditService.create_entry(
+                user_id=str(self.execution.user_id),
+                action_type=AuditActionType.EXECUTION_STEP_POLICY_AUTO_APPROVED,
+                entity_type=AuditEntityType.EXECUTION,
+                entity_id=self.execution.id,
+                details={
+                    'step_id': execution_step.id,
+                    'step_name': execution_step.step_name,
+                    'policy_decision': decision_dict,
+                },
+                correlation_id=self.correlation_id,
+            )
+
+            # MED-7 FIX: Removed redundant logging (PolicyEvaluator already logs decision)
+
+            # Return None — caller will continue with normal COMPLETED flow
+            # But we already set status, so return a SUCCESS result
+            return StepResult(
+                outcome=StepOutcome.SUCCESS,
+                output={
+                    'policy_decision': decision_dict,
+                    'auto_approved': True,
+                },
             )
 
     @transaction.atomic
