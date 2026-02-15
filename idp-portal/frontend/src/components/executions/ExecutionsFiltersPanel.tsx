@@ -16,9 +16,9 @@ import { Card, Form, Row, Col, DatePicker, Select, Button, Badge, Space, theme }
 import { FilterOutlined, ClearOutlined } from '@ant-design/icons';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
-import type { ExecutionFilters, ActionListItem } from '../../types/api';
+import type { ExecutionFilters } from '../../types/api';
 import { fetchExecutionTags } from '../../services/execution_service';
-import { listActions } from '../../services/admin_service';
+import { fetchCatalogActions, type CatalogAction } from '../../services/catalog_service';
 import { useEngines } from '../../hooks/useEngines';
 import { useEnvironments } from '../../hooks/useEnvironments';
 
@@ -76,7 +76,7 @@ export function ExecutionsFiltersPanel({
   // Tags and actions for selects
   const [tags, setTags] = useState<string[]>([]);
   const [tagsLoading, setTagsLoading] = useState(false);
-  const [actions, setActions] = useState<ActionListItem[]>([]);
+  const [actions, setActions] = useState<CatalogAction[]>([]);
   const [actionsLoading, setActionsLoading] = useState(false);
 
   const apply = useCallback(
@@ -105,11 +105,11 @@ export function ExecutionsFiltersPanel({
     };
   }, []);
 
-  // Load actions on mount (published only for execution filtering)
+  // Load actions on mount: use catalog (RBAC) so any user with execution access sees actions they can see
   useEffect(() => {
     let cancelled = false;
     setActionsLoading(true);
-    listActions('PUBLISHED')
+    fetchCatalogActions()
       .then((data) => {
         if (!cancelled) setActions(data);
       })

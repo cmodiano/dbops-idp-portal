@@ -119,7 +119,7 @@ describe('DashboardPage', () => {
 
     await waitFor(() => {
       // Story 9.10: Dashboard renamed to Analytics
-      expect(screen.getByRole('heading', { name: /Analytics/i })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /Statistiques/i })).toBeInTheDocument();
     });
   });
 
@@ -171,7 +171,7 @@ describe('DashboardPage', () => {
 
     await waitFor(() => {
       // Story 9.10: Wait for Analytics title
-      expect(screen.getByRole('heading', { name: /Analytics/i })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /Statistiques/i })).toBeInTheDocument();
     });
 
     // Should NOT have "Activite recente" card from old design
@@ -185,7 +185,7 @@ describe('DashboardPage', () => {
 
     await waitFor(() => {
       // Story 9.10: Wait for Analytics title
-      expect(screen.getByRole('heading', { name: /Analytics/i })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /Statistiques/i })).toBeInTheDocument();
     });
 
     // Story 8.8 AC3: PendingApprovalsList removed from Dashboard

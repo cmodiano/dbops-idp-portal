@@ -21,7 +21,7 @@ export default function DashboardPage() {
   return (
     <div style={{ padding: 24 }}>
       {/* Story 9.10: Renamed from Dashboard to Analytics */}
-      <Title level={2}>Analytics</Title>
+      <Title level={2}>Statistiques</Title>
 
       {/* Story 8.3: Reporting dashboard with statistics and charts */}
       {/* Story 9.4: StatCards moved to ExecutionsPage */}

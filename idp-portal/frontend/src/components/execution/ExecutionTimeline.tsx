@@ -53,6 +53,8 @@ export interface ExecutionTimelineProps {
   errorCardVariant?: 'default' | 'business';
   /** Callback when a remediation suggestion is clicked (Story 9.1, AC1). */
   onSuggestionClick?: (suggestion: RemediationSuggestion) => void;
+  /** When true, timeline is shown inside the workflow step drawer (child execution). Do not show "Voir le workflow parent". */
+  embedInWorkflowStepDrawer?: boolean;
 }
 
 export function ExecutionTimeline({
@@ -64,6 +66,7 @@ export function ExecutionTimeline({
   onContact,
   errorCardVariant = 'default',
   onSuggestionClick,
+  embedInWorkflowStepDrawer = false,
 }: ExecutionTimelineProps) {
   const useRealtime = mode === 'realtime' && executionId != null;
 
@@ -497,7 +500,9 @@ export function ExecutionTimeline({
           {statusAnnouncement}
         </div>
         {steps.length === 0 && (
-          execution?.parent_item_type === 'workflow' && execution?.parent_execution_id ? (
+          !embedInWorkflowStepDrawer &&
+          execution?.parent_item_type === 'workflow' &&
+          execution?.parent_execution_id ? (
             <Card size="small" style={{ maxWidth: 400 }}>
               <Space direction="vertical" size={8}>
                 <Text strong>Action du workflow</Text>

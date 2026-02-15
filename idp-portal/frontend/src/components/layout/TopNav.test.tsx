@@ -93,7 +93,7 @@ describe('TopNav', () => {
       // Story 13.6: Calendar menu visible for DBOPS
       expect(screen.getByText('Calendrier')).toBeInTheDocument();
       // Story 9.10: Dashboard renamed to Analytics
-      expect(screen.getByText('Analytics')).toBeInTheDocument();
+      expect(screen.getByText('Statistiques')).toBeInTheDocument();
       expect(screen.getByText('Admin')).toBeInTheDocument();
     });
   });
@@ -111,7 +111,7 @@ describe('TopNav', () => {
       // Story 13.6: Calendar menu visible for DBA
       expect(screen.getByText('Calendrier')).toBeInTheDocument();
       // Story 9.10: Dashboard renamed to Analytics
-      expect(screen.getByText('Analytics')).toBeInTheDocument();
+      expect(screen.getByText('Statistiques')).toBeInTheDocument();
       expect(screen.queryByText('Admin')).not.toBeInTheDocument();
     });
 
@@ -321,16 +321,16 @@ describe('TopNav', () => {
   });
 
   describe('Story 5.2 — Badge Analytics (AC2, AC3)', () => {
-    // Story 9.10: Dashboard renamed to Analytics
-    it('Analytics tab shows aria-label when there are unseen errors and user is not on analytics', async () => {
+      // Story 9.10: Dashboard renamed to Statistiques
+    it('Statistiques tab shows aria-label when there are unseen errors and user is not on analytics', async () => {
       mockAuthSession('dbops', ['catalog', 'executions', 'dashboard', 'admin']);
       renderTopNav('/catalog', true);
 
       await waitFor(() => {
-        expect(screen.getByText('Analytics')).toBeInTheDocument();
+        expect(screen.getByText('Statistiques')).toBeInTheDocument();
       });
       const analyticsButton = screen.getByRole('button', {
-        name: /Analytics \(1 erreur non vue\)/,
+        name: /Statistiques \(1 erreur non vue\)/,
       });
       expect(analyticsButton).toBeInTheDocument();
     });

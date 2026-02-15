@@ -23,13 +23,13 @@ import type { MenuProps } from 'antd';
 
 const { Text } = Typography;
 
-// Story 9.10: Dashboard renamed to Analytics (DBOPS only for advanced reporting)
+// Story 9.10: Dashboard renamed to Analytics (DBOPS only); label in French
 // Story 13.6: Calendar menu for DBA/DBOPS to view scheduled executions
 const TAB_CONFIG: Record<NavigationTabKey, { label: string; icon: React.ReactNode }> = {
   catalog: { label: 'Catalogue', icon: <AppstoreOutlined /> },
   executions: { label: 'Exécutions', icon: <PlayCircleOutlined /> },
   calendar: { label: 'Calendrier', icon: <CalendarOutlined /> },
-  dashboard: { label: 'Analytics', icon: <BarChartOutlined /> },
+  dashboard: { label: 'Statistiques', icon: <BarChartOutlined /> },
   admin: { label: 'Admin', icon: <SettingOutlined /> },
   audit: { label: 'Audit', icon: <AuditOutlined /> },
 };
@@ -158,7 +158,7 @@ export function TopNav() {
           const showBadge = key === 'dashboard' && unseenErrorCount > 0 && !isActive;
           const dashboardAriaLabel =
             key === 'dashboard' && unseenErrorCount > 0
-              ? `Analytics (${unseenErrorCount} erreur${unseenErrorCount > 1 ? 's' : ''} non vue${unseenErrorCount > 1 ? 's' : ''})`
+              ? `Statistiques (${unseenErrorCount} erreur${unseenErrorCount > 1 ? 's' : ''} non vue${unseenErrorCount > 1 ? 's' : ''})`
               : undefined;
           const buttonContent = (
             <button
