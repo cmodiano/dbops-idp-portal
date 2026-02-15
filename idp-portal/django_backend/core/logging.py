@@ -39,6 +39,9 @@ def configure_structlog() -> None:
         format="%(message)s",
     )
 
+    # Story 27.8: Add SplunkLoggingHandler to root logger if configured
+    _configure_splunk_handler(log_level)
+
     # Configure structlog
     structlog.configure(
         processors=[
@@ -62,6 +65,19 @@ def configure_structlog() -> None:
         logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,
     )
+
+
+def _configure_splunk_handler(log_level: int) -> None:
+    """Add SplunkLoggingHandler to root logger if SPLUNK_HEC_URL is configured.
+
+    Story 27.8, AC4: Non-blocking handler sends logs to Splunk HEC in batches.
+    """
+    from core.splunk_logging_handler import SplunkLoggingHandler
+
+    handler = SplunkLoggingHandler()
+    if handler.enabled:
+        handler.setLevel(log_level)
+        logging.getLogger().addHandler(handler)
 
 
 def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:

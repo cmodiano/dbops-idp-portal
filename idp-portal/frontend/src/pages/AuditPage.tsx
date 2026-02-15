@@ -15,6 +15,7 @@ import {
   Table,
   Drawer,
   Tag,
+  Input,
   Skeleton,
   Alert,
   DatePicker,
@@ -26,6 +27,7 @@ import {
   Button,
   App,
   Dropdown,
+  Tooltip,
 } from 'antd';
 import type { MenuProps } from 'antd';
 import { DownloadOutlined } from '@ant-design/icons';
@@ -118,6 +120,7 @@ export default function AuditPage() {
   const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null]>([null, null]);
   const [environment, setEnvironment] = useState<string | undefined>();
   const [status, setStatus] = useState<AuditStatusFilter | undefined>();
+  const [correlationId, setCorrelationId] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
   const [sortField, setSortField] = useState<string>('timestamp');
   const [sortOrder, setSortOrder] = useState<'ascend' | 'descend'>('descend');
@@ -145,6 +148,7 @@ export default function AuditPage() {
         to: dateRange[1]?.endOf('day').toISOString(),
         environment,
         status,
+        correlation_id: correlationId || undefined,
         sort: apiSortField,
         order: apiSortOrder,
         limit: PAGE_SIZE,
@@ -157,7 +161,7 @@ export default function AuditPage() {
     } finally {
       setLoading(false);
     }
-  }, [dateRange, environment, status, sortField, sortOrder]);
+  }, [dateRange, environment, status, correlationId, sortField, sortOrder]);
 
   // Initial load and filter changes
   useEffect(() => {
@@ -167,7 +171,7 @@ export default function AuditPage() {
   // Reset to page 1 when filters or sort change
   useEffect(() => {
     setCurrentPage(1);
-  }, [dateRange, environment, status, sortField, sortOrder]);
+  }, [dateRange, environment, status, correlationId, sortField, sortOrder]);
 
   // Open drawer with details (AC3)
   const handleRowClick = async (record: AuditExecutionEntry) => {
@@ -224,9 +228,7 @@ export default function AuditPage() {
         to: dateRange[1]?.endOf('day').toISOString(),
         environment,
         status,
-        // Note: action_id and user_id filters not yet in UI but passed for future compatibility
-        action_id: undefined,
-        user_id: undefined,
+        correlation_id: correlationId || undefined,
       });
       message.success('Rapport exporté — Télécharger', 3);
     } catch (err) {
@@ -398,6 +400,25 @@ export default function AuditPage() {
               allowClear
               style={{ width: 120 }}
             />
+            <Tooltip title="Rechercher toutes les traces d'une exécution par son identifiant de corrélation">
+              <Input
+                placeholder="Correlation ID"
+                value={correlationId}
+                onChange={(e) => setCorrelationId(e.target.value)}
+                allowClear
+                style={{ width: 220 }}
+                data-testid="audit-filter-correlation-id"
+              />
+            </Tooltip>
+            {correlationId && (
+              <Tag
+                closable
+                onClose={() => setCorrelationId('')}
+                color="blue"
+              >
+                Correlation ID: {correlationId}
+              </Tag>
+            )}
             {pagination && (
               <Badge
                 count={pagination.total}
@@ -478,7 +499,7 @@ export default function AuditPage() {
           setDrawerOpen(false);
           setDrawerError(null);
         }}
-        width={600}
+        size={600}
         destroyOnClose
       >
         {drawerLoading ? (

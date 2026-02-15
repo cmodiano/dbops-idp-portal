@@ -31,7 +31,7 @@ class Command(BaseCommand):
             IntegrationTypeCatalogue.objects.values_list('code', flat=True)
         )
         expected_types = {'aap', 'servicenow', 'tower', 'azure_devops',
-                          'github_actions', 'terraform_cloud', 'vault'}
+                          'github_actions', 'terraform_cloud', 'vault', 'splunk'}
 
         missing = expected_types - existing_types
 

@@ -487,5 +487,47 @@
       "created_at": "2026-02-14T10:00:00Z",
       "updated_at": "2026-02-14T10:00:00Z"
     }
+  },
+  {
+    "model": "integrations.integrationtypecatalogue",
+    "pk": "splunk",
+    "fields": {
+      "name": "Splunk HEC",
+      "description": "Splunk HTTP Event Collector — envoi logs structurés JSON vers Splunk pour observabilité et audit",
+      "version": "1.0",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "splunk",
+      "action_code": "send_event",
+      "action_label": "Envoyer événement vers Splunk HEC",
+      "description": "Envoie un événement unique JSON vers Splunk HTTP Event Collector pour indexation",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"event\": {\"type\": \"object\", \"description\": \"Événement JSON à indexer dans Splunk\"}}, \"required\": [\"event\"]}",
+      "optional_params": "{\"type\": \"object\", \"properties\": {\"sourcetype\": {\"type\": \"string\", \"description\": \"Type de source Splunk (défaut: idp:execution)\"}, \"index\": {\"type\": \"string\", \"description\": \"Index Splunk cible (défaut: prod-idp)\"}}}",
+      "response_format": "{\"text\": \"string\", \"code\": \"integer\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "splunk",
+      "action_code": "send_batch",
+      "action_label": "Envoyer batch événements vers Splunk HEC",
+      "description": "Envoie un lot d'événements JSON vers Splunk HTTP Event Collector (newline-delimited)",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"events\": {\"type\": \"array\", \"description\": \"Liste d'événements JSON à indexer\"}}, \"required\": [\"events\"]}",
+      "optional_params": "{\"type\": \"object\", \"properties\": {\"sourcetype\": {\"type\": \"string\", \"description\": \"Type de source Splunk (défaut: idp:execution)\"}, \"index\": {\"type\": \"string\", \"description\": \"Index Splunk cible (défaut: prod-idp)\"}}}",
+      "response_format": "{\"text\": \"string\", \"code\": \"integer\", \"count\": \"integer\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
   }
 ]

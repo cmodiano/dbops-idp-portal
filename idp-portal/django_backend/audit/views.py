@@ -140,6 +140,11 @@ def _build_audit_queryset(request):
             )
         qs = qs.filter(action_type__in=_STATUS_ACTION_TYPES[status_filter])
 
+    # Story 27.8: Filter by correlation_id (exact match)
+    correlation_id = (request.query_params.get("correlation_id") or "").strip()
+    if correlation_id:
+        qs = qs.filter(correlation_id=correlation_id)
+
     sort = (request.query_params.get("sort") or "timestamp").strip()
     order = (request.query_params.get("order") or "desc").strip().lower()
     sort_map = {
@@ -161,7 +166,17 @@ def _build_audit_queryset(request):
 
 class AuditExecutionsView(APIView):
     """
-    GET /audit/executions (Story 6.3)
+    GET /audit/executions (Story 6.3, Story 27.8)
+
+    Query parameters:
+      - from/to: ISO 8601 date range filter
+      - environment: Filter by execution environment
+      - action_id: Filter by action ID
+      - user_id: Filter by user ID
+      - status: Filter by derived status (success, failed, running)
+      - correlation_id: Filter by exact correlation ID (Story 27.8)
+      - sort/order: Sort field and direction
+      - limit/offset: Pagination
 
     Returns:
       { "data": AuditExecutionEntry[], "pagination": PaginationInfo }

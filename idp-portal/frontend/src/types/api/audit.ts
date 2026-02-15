@@ -40,6 +40,7 @@ export interface AuditExecutionFilters {
   action_id?: number;
   user_id?: string;
   status?: AuditStatusFilter;
+  correlation_id?: string;
   sort?: string; // Sort field: timestamp, user_id, action_type
   order?: string; // Sort order: asc, desc
   limit?: number;

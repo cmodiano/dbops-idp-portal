@@ -92,12 +92,17 @@ class CorrelationIdMiddleware:
         # Process request
         response = self.get_response(request)
 
+        # Bind user_id after authentication middleware has run (Story 27.8 AC2)
+        if hasattr(request, 'user') and request.user.is_authenticated:
+            user_id = str(getattr(request.user, 'pk', request.user.id))
+            structlog.contextvars.bind_contextvars(user_id=user_id)
+
         # Add to response headers
         response['X-Idp-Request-Id'] = correlation_id
 
         # Clear thread-local and structlog contextvars after request
         set_correlation_id(None)
-        structlog.contextvars.unbind_contextvars('correlation_id')
+        structlog.contextvars.unbind_contextvars('correlation_id', 'user_id', 'execution_id')
 
         return response
 
@@ -148,6 +153,10 @@ class RequestResponseLoggingMiddleware:
 
             # Get user_id again after auth middleware has run
             user_id = self._get_user_id(request)
+
+            # Story 27.8: Bind user_id to structlog contextvars for downstream log enrichment
+            if user_id:
+                structlog.contextvars.bind_contextvars(user_id=user_id)
 
             # Log request completed at appropriate level based on status code
             log_data = {

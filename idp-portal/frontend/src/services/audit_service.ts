@@ -38,6 +38,9 @@ function buildQueryString(filters: AuditExecutionFilters): string {
   if (filters.status) {
     params.set('status', filters.status);
   }
+  if (filters.correlation_id) {
+    params.set('correlation_id', filters.correlation_id);
+  }
   if (filters.sort) {
     params.set('sort', filters.sort);
   }
@@ -107,6 +110,9 @@ export async function exportAuditReport(
   }
   if (filters.status) {
     params.set('status', filters.status);
+  }
+  if (filters.correlation_id) {
+    params.set('correlation_id', filters.correlation_id);
   }
 
   // Download file as blob with auth + 401 retry support.

@@ -333,10 +333,20 @@ Intégrer les patterns DBOps dans le portail : modèle de cible générique (Exe
 **Référence :** implementation-artifacts/convergence-dbops-idp-portal.md
 
 ### Epic 27 : Adapters d'intégration backend
-Exposer les intégrations (AAP en premier) via des adapters backend : appels API (workflows, job templates), suivi des jobs en cours (logs + statut) et mise à jour en temps réel (websockets). Consommation soit via l'API backend (déclenchement externe), soit via une action utilisateur dans le frontend.
+Exposer les intégrations (AAP en premier) via des adapters backend : appels API (workflows, job templates), suivi des jobs en cours (logs + statut) et mise à jour en temps réel (websockets). Consommation soit via l'API backend (déclenchement externe), soit via une action utilisateur dans le frontend. Inclut : séparation plateformes vs services (refactoring), Jira comme service.
 **FRs couvertes :** FR18 (routage plateformes d'exécution), FR19, FR20, FR23 (suivi temps réel, logs, callbacks)
 **NFRs couvertes :** NFR22 (pattern plugin/adapter)
 **Phase :** Growth (Phase 2)
+
+### Epic 28 : Règles métier et politiques d'approbation sur les actions
+Clarifier et étendre le modèle des règles métier applicables à une action : schéma JSON (business_rule_policies) stocké en base, éditable via un menu dédié ; **moteur de règles métier intelligent** s'adaptant aux différentes plateformes (Terraform, AAP, Azure DevOps, etc.) via des interpréteurs de sortie d'étape ; évaluation des politiques pour déclencher revue DBA ou auto-approbation.
+**FRs couvertes :** FR27, FR28 (workflow d'approbation, règles par action et par environnement)
+**Phase :** Growth (Phase 2)
+
+### Epic 29 : Clarification modèle Plateformes / Moteurs / Services
+Clarifier le modèle de données des intégrations : distinguer **Plateformes** (où s'exécutent les actions : AAP, GitHub Actions, Azure DevOps, Terraform Cloud, Tower), **Moteurs** (technologies DB ciblées : Oracle, SQL Server, etc.) et **Services** (consommés : Vault, ServiceNow, Jira, Splunk). Champ integration_role dans le catalogue d'intégrations, glossaire produit, alignement REF_ENGINES ↔ engine_type inventaire, lien explicite REF_PLATFORMS ↔ IntegrationTypeCatalogue.
+**FRs couvertes :** FR1, FR2, FR18 (catalogue, étapes, routage plateformes)
+**Référence :** idp-portal/docs/rapport-bases-moteurs-technologies-integrations.md
 
 ---
 
@@ -4596,3 +4606,223 @@ So that **je puisse gérer les intégrations depuis l'interface tout en sachant 
 
 **And** les champs spécifiques par type (ex. organisation, workspace_id pour Terraform Cloud ; owner/repo pour GitHub) sont documentés et, si nécessaire, exposés dans le formulaire ou dans config (JSON) éditable
 **And** des tests (backend + frontend) vérifient que les types sont bien listés et que la création/édition d'intégration persiste correctement
+
+### Story 27.8 : Intégration Splunk — envoi des logs complets, correlation_id, et recherche audit par correlation_id
+
+As a **équipe ops et auditeurs**,
+I want **conserver les logs résumé (acteur, correlation_id) dans notre système tout en envoyant les logs complets (actions et workflows) vers Splunk, avec le correlation_id présent dans Splunk pour associer chaque événement à un run et à une personne**,
+So that **on dispose d'un audit détaillé dans Splunk tout en permettant une recherche par correlation_id dans l'audit du portail pour simplifier le travail d'audit**.
+
+**Acceptance Criteria:**
+
+**Given** les logs d'exécution (actions et workflows) générés par le portail
+**When** une exécution produit des logs (étapes, sorties plateforme, etc.)
+**Then** les **logs résumé** (acteur, correlation_id, métadonnées essentielles) restent stockés dans notre système comme aujourd'hui (AUDIT_LOG, EXECUTION_STEPS, etc.)
+**And** les **logs complets** (contenu détaillé des actions et workflows) sont **envoyés vers Splunk** (HEC ou API Splunk) de manière asynchrone ou synchrone selon la stratégie retenue
+
+**Given** chaque événement ou batch de logs envoyé à Splunk
+**When** on indexe dans Splunk
+**Then** le **correlation_id** est présent dans chaque événement (ou champ dédié) pour permettre la liaison avec notre système
+**And** l'**acteur** (user_id ou identifiant) et l'**execution_id** (run) sont présents pour associer run et personne dans Splunk
+**And** la structure des événements (index, champs communs) est documentée pour les requêtes Splunk et la conformité audit
+
+**Given** un auditeur consulte l'audit dans le portail (menu Audit)
+**When** il souhaite retrouver toutes les traces liées à une exécution ou un flux
+**Then** il peut **rechercher par correlation_id** (champ de recherche ou filtre dédié)
+**And** l'API audit (ex. GET /audit/executions) accepte un paramètre **correlation_id** et filtre les entrées correspondantes
+**And** le frontend Audit expose ce filtre (champ recherche correlation_id) pour simplifier le travail d'audit et le lien avec les logs détaillés dans Splunk
+
+**And** la configuration Splunk (URL, token HEC ou credential_ref) est gérée côté backend (intégration type "splunk" ou config dédiée) et optionnellement éditable via Admin > Intégrations
+**And** en cas d'indisponibilité Splunk, le comportement est documenté (file d'attente, drop, ou erreur explicite) sans perte des logs résumé côté portail
+**And** des tests (unitaires et d'intégration mock) valident l'envoi vers Splunk avec correlation_id et la recherche audit par correlation_id
+
+### Story 27.9 : Refactoring — séparer adapters plateformes et services
+
+As a **équipe de développement**,
+I want **une structure de code qui distingue clairement les plateformes d'exécution (adapters/) des services consommés (services/)**,
+So that **on sache où ajouter un nouvel intégration et que l'architecture reflète le modèle métier (plateforme = exécute, service = consommé)**.
+
+**Acceptance Criteria:**
+
+**Given** la structure actuelle (adapters/ avec AAP, Tower, Azure DevOps, GitHub Actions, Terraform Cloud ; core/vault_service ; ServiceNow dans le flux d'exécution)
+**When** on refactore
+**Then** les **plateformes** restent ou sont regroupées dans `adapters/platforms/` (ou `adapters/` dédié aux plateformes) : AAP, Tower, Azure DevOps, GitHub Actions, Terraform Cloud
+**And** les **services** sont regroupés dans un module `services/` (ou `adapters/services/`) : Vault (déplacé depuis core/), ServiceNow, Splunk (Story 27.8)
+**And** une factory ou point d'entrée permet d'obtenir le bon client selon le type (get_platform_adapter vs get_service_client ou équivalent)
+**And** les imports et références sont mis à jour (core.vault_service → services.vault, etc.)
+**And** la documentation (README, integration-type-catalogue) reflète la nouvelle structure
+
+**And** les tests existants continuent de passer sans régression
+**And** la distinction plateforme vs service est documentée (glossaire ou doc technique)
+
+### Story 27.10 : Adapter Jira comme service — fixture et JiraService
+
+As a **système backend** (ou action d'exécution),
+I want **un service Jira (JiraService) et une configuration d'intégration Jira dans le catalogue, pour créer et mettre à jour des issues depuis les étapes d'action**,
+So that **une action puisse appeler Jira (comme ServiceNow) pour créer une issue, mettre à jour son statut, etc.**.
+
+**Acceptance Criteria:**
+
+**Given** le catalogue d'intégration existant (IntegrationTypeCatalogue)
+**When** on ajoute Jira
+**Then** une **fixture** jira_integration_type (ou entrée dans integration_type_catalogue) définit le type `jira` avec les actions : create_issue, update_issue, get_issue_status (ou équivalent selon API Jira)
+**And** les paramètres requis et optionnels sont documentés (projet, type issue, résumé, description, statut, etc.)
+
+**Given** une configuration d'intégration Jira valide (base_url, credential_ref pour API token ou PAT)
+**When** une étape d'action appelle le service Jira
+**Then** le **JiraService** (ou JiraAdapter) implémente les actions : créer une issue, mettre à jour une issue, récupérer le statut
+**And** l'authentification Jira (API token, OAuth, Basic) est supportée selon les standards Jira Cloud / Server
+**And** le service est consommable depuis le moteur d'exécution (étape de type jira) comme ServiceNow
+
+**And** Jira apparaît dans le menu Admin > Intégrations (type jira) pour créer et éditer les configurations
+**And** le seed_integration_types ou équivalent inclut jira dans les types attendus
+**And** des tests unitaires (mock API Jira) valident le JiraService
+
+---
+
+## Epic 28 : Règles métier et politiques d'approbation sur les actions
+
+Clarifier et étendre le modèle des règles métier applicables à une action : schéma JSON (business_rule_policies) stocké en base, éditable via un menu dédié ; **moteur de règles métier intelligent** s'adaptant aux différentes plateformes (Terraform, AAP, Azure DevOps, etc.) via des interpréteurs de sortie d'étape (OutputInterpreter) enregistrés ; évaluation des politiques pour déclencher revue DBA ou auto-approbation.
+
+### Story 28.1 : Modèle et schéma des règles métier (business_rule_policies) — stockage et édition
+
+As a **DBOPS**,
+I want **définir des règles métier par action dans un schéma JSON (business_rule_policies) stocké en base et éditable via un menu dédié dans l'admin**,
+So that **il soit facile de configurer quelles politiques s'appliquent à une action (ex. revue si certains champs du plan Terraform sont modifiés) sans coder**.
+
+**Acceptance Criteria:**
+
+**Given** le modèle Action existant
+**When** on étend le modèle pour supporter les règles métier "politique sur sortie d'étape"
+**Then** un champ **business_rule_policies** (JSON, optionnel) est ajouté sur l'action (migration + modèle)
+**And** le schéma JSON est documenté : structure `on_step_output[]` avec `when` (step_type, output_key), `policy` (type, require_review_if_modified avec resource_type / attribute_paths, auto_approve_if_none_match)
+**And** une validation backend (validators) vérifie la conformité du JSON au schéma lors de la création/mise à jour de l'action
+
+**Given** un admin édite une action (catalogue admin)
+**When** il accède à la section ou menu dédié "Règles métier" (onglet ou page)
+**Then** il peut consulter et modifier le JSON business_rule_policies (formulaire structuré ou éditeur JSON avec schéma)
+**And** les modifications sont persistées via l'API existante (PATCH action ou endpoint dédié)
+**And** les règles ne sont pas liées à une plateforme globale mais à l'action ; le `when` peut référencer un step_type (ex. terraform_cloud) pour cibler l'étape concernée
+
+**And** la documentation décrit la typologie des règles (impact_rules, change_type_config, gate_conditions, remediation_rules, business_rule_policies) et quand chacune est évaluée
+**And** des tests unitaires valident la validation du schéma et la persistance
+
+### Story 28.2 : PolicyEvaluator et politique Terraform plan (revue si champs modifiés)
+
+As a **système**,
+I want **évaluer les politiques business_rule_policies après qu'une étape ait produit sa sortie (ex. plan Terraform) et déclencher revue DBA ou auto-approbation selon la liste des champs/types modifiés**,
+So that **les actions (ex. provisionnement Azure SQL) puissent exiger une revue uniquement quand des champs sensibles sont modifiés dans le plan**.
+
+**Acceptance Criteria:**
+
+**Given** une action avec business_rule_policies contenant une politique de type "review_if_modified" sur une étape Terraform Cloud (output plan)
+**When** l'étape Terraform Plan a produit sa sortie (plan output récupéré depuis Terraform Cloud)
+**Then** un **PolicyEvaluator** (ou service dédié) analyse le plan (JSON ou texte parsé) et compare les changements à la liste **require_review_if_modified**
+**And** les entrées peuvent être : resource_type seul (toute modif sur ce type), resource_type + attribute_paths (seulement ces attributs), ou attribute_paths seul (n'importe quelle ressource)
+**And** si au moins une entrée matche → la gate approbation est activée (require_approval, étape WAITING jusqu'à approbation DBA)
+**And** si aucune ne matche et auto_approve_if_none_match est true → la gate est considérée satisfaite (auto-approuvé)
+
+**Given** le PolicyEvaluator a déterminé "require_approval"
+**When** le moteur d'exécution traite l'étape
+**Then** l'ExecutionStep reste en WAITING et le flux d'approbation existant (Epic 7) est utilisé ; le DBA peut approuver ou rejeter
+**And** une fois approuvé, l'étape peut passer à RUNNING (ou l'étape suivante "Apply" peut être déclenchée selon le design du workflow)
+
+**And** le parsing du plan Terraform (format Terraform Cloud / plan JSON ou sortie texte) est documenté ou implémenté pour extraire resource changes et attribute paths
+**And** des tests unitaires (plan mock) valident la logique de matching et la décision require_approval vs auto_approve
+**And** des tests d'intégration (optionnel) valident le branchement avec le GateEvaluator ou le flux d'approbation existant
+
+### Story 28.3 : Moteur de règles métier intelligent multi-plateforme
+
+As a **équipe produit**,
+I want **un moteur de règles métier qui s'adapte aux différentes plateformes (Terraform Cloud, AAP, Azure DevOps, GitHub Actions, etc.) via des interpréteurs de sortie d'étape enregistrés**,
+So that **on puisse définir des politiques (revue, auto-approve, blocage) sur la sortie de n'importe quel type d'étape sans coder la logique en dur par plateforme dans le noyau**.
+
+**Acceptance Criteria:**
+
+**Given** une action avec business_rule_policies ciblant un `when.step_type` (ex. terraform_cloud, aap, azure_devops)
+**When** une étape de ce type a produit sa sortie (output)
+**Then** le **moteur de règles** (RuleEngine) charge les règles de l'action, identifie la règle dont le `when` matche (step_type, output_key)
+**And** il délègue à un **interpréteur** (OutputInterpreter) enregistré pour ce step_type : l'interpréteur transforme la sortie brute en un **artefact normalisé** (ex. pour Terraform : liste de changes avec resource_type, attribute_paths ; pour AAP : job_status, failed_tasks, etc.)
+**And** le moteur applique la **politique** (review_if_modified, ou autres types futurs) sur cet artefact et retourne la décision (require_approval, auto_approved, block, etc.)
+
+**Given** une nouvelle plateforme (ex. nouveau type d'étape)
+**When** on souhaite appliquer des règles métier sur sa sortie
+**Then** on peut **enregistrer un nouvel interpréteur** (classe ou module implémentant l'interface OutputInterpreter) sans modifier le noyau du moteur
+**And** le schéma des politiques peut rester générique ou accepter des critères spécifiques par type d'artefact (documentés par interpréteur)
+
+**And** au minimum les interpréteurs **Terraform Cloud** (plan output) et **AAP** (job status / logs) sont fournis ou documentés comme premiers cas ; l'architecture permet d'ajouter Azure DevOps, GitHub Actions, etc.
+**And** la documentation décrit l'architecture (RuleEngine, registre d'interpréteurs, format artefact normalisé) et comment ajouter un interpréteur pour une nouvelle plateforme
+**And** des tests valident le dispatch par step_type et l'évaluation de la politique sur l'artefact produit par chaque interpréteur
+
+---
+
+## Epic 29 : Clarification modèle Plateformes / Moteurs / Services
+
+Clarifier le modèle de données des intégrations : distinguer **Plateformes** (où s'exécutent les actions), **Moteurs** (technologies DB ciblées) et **Services** (consommés par les actions ou intégrations).
+
+### Story 29.1 : Champ integration_role (platform/service) dans IntegrationTypeCatalogue
+
+As a **DBOPS**,
+I want **que le catalogue d'intégrations distingue explicitement les plateformes d'exécution (AAP, GitHub Actions, etc.) des services consommés (Vault, ServiceNow, Jira, Splunk)**,
+So that **les formulaires et règles métier puissent traiter correctement chaque type d'intégration**.
+
+**Acceptance Criteria:**
+
+**Given** le modèle IntegrationTypeCatalogue existant
+**When** on étend le catalogue pour catégoriser les types
+**Then** un champ **integration_role** est ajouté avec les valeurs `platform` | `service`
+**And** les fixtures sont mises à jour : plateformes = aap, github_actions, azure_devops, terraform_cloud, tower ; services = vault, servicenow, jira, splunk
+**And** l'API GET /api/v1/integrations/types/ expose le champ integration_role
+**And** un paramètre optionnel `?role=platform` ou `?role=service` permet de filtrer les types
+
+**And** le frontend formulaire Admin Intégrations peut optionnellement grouper ou distinguer visuellement plateformes vs services
+**And** des tests valident le chargement des fixtures et la réponse API
+
+### Story 29.2 : Glossaire produit Plateforme / Moteur / Service
+
+As a **équipe produit et utilisateur**,
+I want **un glossaire documentant les trois concepts (Plateforme, Moteur, Service) avec des exemples concrets**,
+So that **tout le monde parle le même langage et évite les confusions**.
+
+**Acceptance Criteria:**
+
+**Given** un document de référence
+**When** on consulte le glossaire
+**Then** les trois termes sont définis clairement : Plateforme (où s'exécute), Moteur (techno DB ciblée), Service (consommé)
+**And** des exemples sont fournis pour chaque catégorie (liste Plateformes, Moteurs, Services)
+**And** le document explique la différence entre plateforme et service (exécution vs consommation)
+**And** le glossaire est intégré ou référencé dans la doc technique (docs/ ou implementation-artifacts/)
+
+### Story 29.3 : Alignement REF_ENGINES ↔ engine_type inventaire
+
+As a **système**,
+I want **un référentiel unique pour les moteurs de base de données (REF_ENGINES) utilisé à la fois par le catalogue d'actions et l'inventaire des cibles**,
+So that **les filtres et les profils RBAC par engine_type soient cohérents et alignés**.
+
+**Acceptance Criteria:**
+
+**Given** REF_ENGINES contient les moteurs (Oracle, SQL Server, Azure SQL, DB2, CosmosDB, etc.)
+**When** l'inventaire expose des cibles avec attribut engine_type
+**Then** engine_type doit être aligné sur les codes REF_ENGINES (convention : minuscules/snake_case, ex. oracle, sql_server)
+**And** la documentation du mapping inventaire (InventoryMapper) décrit comment mapper les colonnes sources vers les valeurs REF_ENGINES
+**And** GET /api/v1/reference/engines retourne la liste des valeurs valides pour engine_type
+**And** les profils (filter_by_attribute_json avec engine_type) et filtres API inventaire utilisent les mêmes valeurs
+
+**And** des tests valident la cohérence des valeurs engine_type avec REF_ENGINES
+
+### Story 29.4 : Lien explicite REF_PLATFORMS ↔ IntegrationTypeCatalogue
+
+As a **système**,
+I want **un lien formel entre REF_PLATFORMS (codes plateformes pour le catalogue d'actions) et les types d'intégration (IntegrationTypeCatalogue)**,
+So that **la cohérence action.platform ↔ integration.type soit garantie et documentée**.
+
+**Acceptance Criteria:**
+
+**Given** REF_PLATFORMS contient les plateformes (AAP, GitHub Actions, Azure DevOps, Terraform Cloud, Tower)
+**When** une action référence une intégration de type plateforme
+**Then** action.platform (REF_PLATFORMS.CODE) et integration.type (IntegrationTypeCatalogue) doivent être cohérents
+**And** un mapping explicite est documenté ou implémenté (table de liaison, config, ou convention documentée)
+**And** REF_PLATFORMS est complété si nécessaire (Tower, Terraform Cloud) pour couvrir tous les types plateforme du catalogue
+
+**And** la validation backend (création/édition action) vérifie la cohérence platform ↔ integration.type quand les deux sont renseignés
+**And** des tests valident le mapping et la validation

@@ -366,7 +366,9 @@ development_status:
     27-5-adapter-terraform-cloud-runs-monitoring: done # Adapter Terraform Cloud — runs (plan/apply), logs, statut temps réel (webhooks/polling) — 71 tests (56 adapter + 15 webhook), 222/222 total pass — Code review adversarial: 9 issues (3 CRITICAL + 4 MEDIUM + 2 LOW) TOUS auto-fixés, robustesse/sécurité/performance optimisées
     27-6-vault-service-hashicorp-vault-enterprise: done # VaultService — résolution credential_ref, retry, circuit breaker, cache, Vault Enterprise — 46 tests, 91.64% coverage, 207 adapter non-regression tests pass — Code review adversarial: 10 issues (2 CRIT + 4 HIGH + 3 MED + 1 LOW), 7 auto-fixés, 3 documentés
     27-7-admin-frontend-menu-integrations-adapters: done # 7 types (AAP, Tower, Azure DevOps, GitHub, Terraform, Vault, ServiceNow) + 27 actions, seed command, 49 backend + 19 frontend tests, docs enrichies
-    27-8-integration-splunk-logs-correlation-id: backlog # Splunk : envoi logs complets (correlation_id, acteur, execution_id), conservation résumés en base, recherche audit par correlation_id
+    27-8-integration-splunk-logs-correlation-id: done # Code review 2026-02-14: 10 issues (2 CRITICAL + 3 HIGH + 3 MEDIUM + 2 LOW) ALL auto-fixed — Splunk HEC adapter, SplunkLoggingHandler, correlation_id audit filter, 39 backend + 8 frontend tests pass, docs complètes
+    27-9-refactoring-separer-adapters-plateformes-services: backlog # Séparer adapters/platforms/ (AAP, Tower, etc.) et services/ (Vault, ServiceNow, Splunk)
+    27-10-adapter-jira-service-fixture-jiraservice: backlog # Jira comme service : fixture, JiraService (create_issue, update_issue, get_issue_status), Admin Intégrations
     epic-27-retrospective: optional
     # === Epic 28: Règles métier et politiques d'approbation sur les actions ===
     epic-28: backlog
@@ -374,3 +376,10 @@ development_status:
     28-2-policy-evaluator-terraform-plan-review-if-modified: backlog # PolicyEvaluator, require_review_if_modified (champs/types plan Terraform), approbation / auto-approve
     28-3-moteur-regles-metier-intelligent-multi-plateforme: backlog # RuleEngine + interpréteurs par plateforme (Terraform, AAP, …), extensible sans modifier le noyau
     epic-28-retrospective: optional
+    # === Epic 29: Clarification modèle Plateformes / Moteurs / Services ===
+    epic-29: backlog
+    29-1-integration-role-platform-service-catalogue: backlog # integration_role (platform|service) dans IntegrationTypeCatalogue + fixtures + API
+    29-2-glossaire-plateforme-moteur-service: backlog # Glossaire produit et documentation
+    29-3-alignement-ref-engines-engine-type-inventaire: backlog # REF_ENGINES ↔ engine_type inventaire, référentiel unique
+    29-4-lien-ref-platforms-integration-type-catalogue: backlog # Lien explicite REF_PLATFORMS ↔ IntegrationTypeCatalogue
+    epic-29-retrospective: optional

@@ -62,6 +62,7 @@ IntegrationTypeCatalogue (1) ──── (N) IntegrationAction
 | Terraform Cloud | `terraform_cloud` | 5 (create_run, get_run_status, get_run_logs, cancel_run, apply_run) | 1.0 | Story 27.5 |
 | HashiCorp Vault | `vault` | 3 (get_secret, renew_token, lookup_token) | 1.0 | Story 27.6 |
 | ServiceNow ITSM | `servicenow` | 3 (create_change, update_change, get_change_status) | 1.0 | Existant |
+| Splunk HEC | `splunk` | 2 (send_event, send_batch) | 1.0 | Story 27.8 |
 
 ### AAP (Ansible Automation Platform)
 
@@ -149,6 +150,20 @@ IntegrationTypeCatalogue (1) ──── (N) IntegrationAction
 | `create_change` | Créer un changement | `short_description`, `category` |
 | `update_change` | Mettre à jour un changement | `change_id` |
 | `get_change_status` | Récupérer le statut d'un changement | `change_id` |
+
+### Splunk HEC (splunk)
+
+> Adapter: `SplunkAdapter` (Story 27.8). Envoi logs structurés JSON vers Splunk HEC.
+
+| Action | Label | Paramètres obligatoires | Paramètres optionnels |
+|--------|-------|------------------------|----------------------|
+| `send_event` | Envoyer un événement | `event` (object) | `sourcetype` (string), `index` (string) |
+| `send_batch` | Envoyer un batch | `events` (array) | `sourcetype` (string), `index` (string) |
+
+**Exemple credential_ref :** `vault:secret/data/splunk/prod#token`
+**Exemple base_url :** `https://splunk.example.com:8088`
+
+Voir [splunk-integration.md](splunk-integration.md) pour la documentation complète.
 
 ## Format JSON Schema des Paramètres
 
