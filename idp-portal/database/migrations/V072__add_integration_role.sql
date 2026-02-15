@@ -8,9 +8,6 @@ ALTER TABLE INTEGRATION_TYPE_CATALOGUE
 ADD CONSTRAINT CHK_INTEGRATION_ROLE
     CHECK (INTEGRATION_ROLE IN ('platform', 'service'));
 
-COMMENT ON CONSTRAINT CHK_INTEGRATION_ROLE ON INTEGRATION_TYPE_CATALOGUE IS
-    'Validation du rôle (platform pour exécution ou service pour consommation)';
-
 COMMENT ON COLUMN INTEGRATION_TYPE_CATALOGUE.INTEGRATION_ROLE IS
     'Role de l''integration: platform (execution) ou service (consommation)';
 

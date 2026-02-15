@@ -511,3 +511,106 @@ class TestRuleEngineIntegration:
                 aap_decision = engine.evaluate(action, aap_step, AAP_JOB_FAILED)
 
         assert aap_decision.require_approval is False
+
+
+# ============================================================================
+# Story 28.4: RuleEngine with predefined BusinessRulePolicy
+# ============================================================================
+
+
+@pytest.mark.django_db
+class TestRuleEngineWithPredefinedPolicy:
+    """Story 28.4 AC7/AC9: RuleEngine loads policies from FK BusinessRulePolicy."""
+
+    def test_rule_engine_with_predefined_policy(self) -> None:
+        """Action with FK → RuleEngine loads policy_json from BusinessRulePolicy."""
+        from executions.rule_engine import RuleEngine
+        from catalog.models import BusinessRulePolicy
+
+        user = UserFactory(profile='DBOPS')
+        policy = BusinessRulePolicy.objects.create(
+            name='Predefined Terraform Policy',
+            policy_json=POLICY_REVIEW_SKU,
+            is_active=True,
+            created_by=user,
+        )
+        action = ActionFactory(
+            business_rule_policy=policy,
+            business_rule_policies=None,
+        )
+        execution = ExecutionFactory(action=action)
+        step = ExecutionStepFactory(
+            execution=execution,
+            step_type="terraform_cloud",
+            status=ExecutionStepStatus.RUNNING,
+        )
+
+        engine = RuleEngine()
+
+        with patch("executions.rule_engine.get_correlation_id", return_value="test-predefined"):
+            with patch("executions.interpreters.terraform_plan_interpreter.get_correlation_id", return_value="test-predefined"):
+                decision = engine.evaluate(action, step, TERRAFORM_PLAN_SENSITIVE)
+
+        assert decision.require_approval is True
+        assert len(decision.matched_criteria) >= 1
+
+    def test_rule_engine_with_inactive_policy(self) -> None:
+        """Action with FK to inactive policy → RuleEngine logs warning + no approval."""
+        from executions.rule_engine import RuleEngine
+        from catalog.models import BusinessRulePolicy
+
+        user = UserFactory(profile='DBOPS')
+        policy = BusinessRulePolicy.objects.create(
+            name='Inactive Terraform Policy',
+            policy_json=POLICY_REVIEW_SKU,
+            is_active=False,
+            created_by=user,
+        )
+        action = ActionFactory(
+            business_rule_policy=policy,
+            business_rule_policies=None,
+        )
+        execution = ExecutionFactory(action=action)
+        step = ExecutionStepFactory(
+            execution=execution,
+            step_type="terraform_cloud",
+            status=ExecutionStepStatus.RUNNING,
+        )
+
+        engine = RuleEngine()
+
+        with patch("executions.rule_engine.get_correlation_id", return_value="test-inactive"):
+            with patch("executions.rule_engine.logger") as mock_logger:
+                decision = engine.evaluate(action, step, TERRAFORM_PLAN_SENSITIVE)
+
+        # Inactive policy → no approval required
+        assert decision.require_approval is False
+        assert "No business rule policies defined" in decision.decision_reason
+
+        # Verify warning was logged
+        mock_logger.warning.assert_called()
+        warning_calls = [c for c in mock_logger.warning.call_args_list if c.args[0] == "predefined_policy_inactive"]
+        assert len(warning_calls) >= 1
+
+    def test_rule_engine_with_inline_policy_fallback(self) -> None:
+        """Action with inline only → RuleEngine loads inline (legacy fallback)."""
+        from executions.rule_engine import RuleEngine
+
+        action = ActionFactory(
+            business_rule_policy=None,
+            business_rule_policies=json.dumps(POLICY_REVIEW_SKU),
+        )
+        execution = ExecutionFactory(action=action)
+        step = ExecutionStepFactory(
+            execution=execution,
+            step_type="terraform_cloud",
+            status=ExecutionStepStatus.RUNNING,
+        )
+
+        engine = RuleEngine()
+
+        with patch("executions.rule_engine.get_correlation_id", return_value="test-inline"):
+            with patch("executions.interpreters.terraform_plan_interpreter.get_correlation_id", return_value="test-inline"):
+                decision = engine.evaluate(action, step, TERRAFORM_PLAN_SENSITIVE)
+
+        assert decision.require_approval is True

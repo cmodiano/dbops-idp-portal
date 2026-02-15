@@ -211,12 +211,60 @@ class RuleEngine:
     def _load_policies(self, action: Any) -> dict | None:
         """Load and parse business_rule_policies from action.
 
+        Story 28.4: Prioritizes FK predefined policy over inline legacy.
         Security: JSON parsing limited to MAX_POLICY_JSON_SIZE to prevent memory exhaustion.
         """
         correlation_id = get_correlation_id()
-        policies = getattr(action, 'business_rule_policies', None)
-        if not policies:
-            return None
+
+        # Story 28.4: Check FK predefined policy first
+        policy_fk_id = getattr(action, 'business_rule_policy_id', None)
+        if policy_fk_id:
+            policy_obj = getattr(action, 'business_rule_policy', None)
+            if policy_obj is None:
+                from catalog.models import BusinessRulePolicy
+                try:
+                    policy_obj = BusinessRulePolicy.objects.get(id=policy_fk_id)
+                except BusinessRulePolicy.DoesNotExist:
+                    logger.warning(
+                        "predefined_policy_not_found",
+                        policy_id=policy_fk_id,
+                        correlation_id=correlation_id,
+                    )
+                    return None
+
+            if not policy_obj.is_active:
+                logger.warning(
+                    "predefined_policy_inactive",
+                    policy_id=policy_fk_id,
+                    policy_name=policy_obj.name,
+                    correlation_id=correlation_id,
+                )
+                return None
+
+            logger.info(
+                "policy_loaded",
+                policy_source="predefined",
+                policy_id=policy_fk_id,
+                policy_name=policy_obj.name,
+                correlation_id=correlation_id,
+            )
+            policies = policy_obj.policy_json
+            if not policies:
+                return None
+            if isinstance(policies, dict):
+                return policies
+            # Fall through to string parsing if needed
+        else:
+            policies = getattr(action, 'business_rule_policies', None)
+            if not policies:
+                return None
+            if isinstance(policies, dict):
+                logger.info(
+                    "policy_loaded",
+                    policy_source="inline",
+                    correlation_id=correlation_id,
+                )
+                return policies
 
         if isinstance(policies, str):
             # Security: Check size before parsing to prevent memory exhaustion attacks
@@ -239,7 +287,6 @@ class RuleEngine:
                     error=str(exc),
                     correlation_id=correlation_id,
                 )
-                # Re-raise to surface configuration errors instead of silently returning None
                 raise PolicyEvaluationError(
                     message=f"Failed to parse business_rule_policies JSON: {exc}",
                 ) from exc

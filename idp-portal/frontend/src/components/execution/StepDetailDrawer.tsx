@@ -4,14 +4,17 @@
  * Opens as a right-side drawer when clicking on a workflow step node.
  * Displays step metadata header (AC3), timeline/logs (AC2), real-time updates (AC4),
  * and structured error display for FAILED steps (AC9).
- * No additional API fetch — uses data already loaded by WorkflowExecutionGraph (AC10).
+ * When step output contains child_execution_id, fetches and shows ExecutionTimeline
+ * of the child action instead of raw JSON.
  */
 
-import { useMemo } from 'react';
-import { Drawer, Space, Typography, Badge, Alert, Card } from 'antd';
+import { useMemo, useState, useEffect } from 'react';
+import { Drawer, Space, Typography, Badge, Alert, Card, Spin } from 'antd';
 import { CloseOutlined, CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import { StructuredErrorCard } from './StructuredErrorCard';
-import type { ExecutionStepResponse, WorkflowStep } from '../../types/api';
+import { ExecutionTimeline } from './ExecutionTimeline';
+import { getExecution, getExecutionSteps } from '../../services/execution_service';
+import type { ExecutionStepResponse, WorkflowStep, ExecutionResponse } from '../../types/api';
 
 const { Title, Text } = Typography;
 
@@ -97,7 +100,7 @@ export function StepDetailDrawer({
     return <ClockCircleOutlined style={{ color: '#8c8c8c', fontSize: 18 }} />;
   }, [executionStep?.status]);
 
-  // Parse step output (logs)
+  // Parse step output (logs) — raw JSON for fallback or when no child execution
   const stepLogs = useMemo(() => {
     if (!executionStep?.output) return null;
     if (typeof executionStep.output === 'string') return executionStep.output;
@@ -106,6 +109,53 @@ export function StepDetailDrawer({
     }
     return null;
   }, [executionStep?.output]);
+
+  // child_execution_id from step output — when present, show timeline of the child action
+  const childExecutionId = useMemo(() => {
+    if (!executionStep?.output || typeof executionStep.output !== 'object') return null;
+    const out = executionStep.output as { child_execution_id?: number };
+    const id = out?.child_execution_id;
+    return typeof id === 'number' && Number.isFinite(id) ? id : null;
+  }, [executionStep?.output]);
+
+  // Fetch child execution + steps when step has child_execution_id
+  const [childExecution, setChildExecution] = useState<ExecutionResponse | null>(null);
+  const [childSteps, setChildSteps] = useState<ExecutionStepResponse[]>([]);
+  const [childLoading, setChildLoading] = useState(false);
+  const [childError, setChildError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open || childExecutionId == null) {
+      setChildExecution(null);
+      setChildSteps([]);
+      setChildError(null);
+      return;
+    }
+    let cancelled = false;
+    setChildLoading(true);
+    setChildError(null);
+    Promise.all([getExecution(childExecutionId), getExecutionSteps(childExecutionId)])
+      .then(([exec, steps]) => {
+        if (!cancelled) {
+          setChildExecution(exec);
+          setChildSteps(steps);
+          setChildLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setChildError(err instanceof Error ? err.message : 'Erreur de chargement');
+          setChildExecution(null);
+          setChildSteps([]);
+          setChildLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, childExecutionId]);
+
+  const showChildTimeline = childExecutionId != null && childExecution != null && !childError;
 
   // Early return AFTER all hooks
   if (!open || !stepId || !selectedStep || !workflowStep) return null;
@@ -229,8 +279,57 @@ export function StepDetailDrawer({
               </Space>
             </Card>
 
-            {/* Logs — shown by default, no need to click */}
-            {stepLogs && (
+            {/* Timeline de l'action enfant (quand step output a child_execution_id) */}
+            {childExecutionId != null && (
+              <Card size="small" title={<span style={{ fontSize: 13 }}>Timeline de l'action</span>}>
+                {childLoading && (
+                  <div style={{ padding: 24, textAlign: 'center' }}>
+                    <Spin tip="Chargement de l'exécution..." />
+                  </div>
+                )}
+                {childError && (
+                  <>
+                    <Alert
+                      type="warning"
+                      showIcon
+                      message="Impossible de charger la timeline de l'action"
+                      description={childError}
+                      style={{ marginBottom: 12 }}
+                    />
+                    {stepLogs && (
+                      <pre
+                        style={{
+                          margin: 0,
+                          padding: 12,
+                          background: '#141414',
+                          color: '#d4d4d4',
+                          borderRadius: 6,
+                          fontSize: 12,
+                          fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
+                          lineHeight: 1.6,
+                          overflowX: 'auto',
+                          maxHeight: 400,
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word',
+                        }}
+                      >
+                        {stepLogs}
+                      </pre>
+                    )}
+                  </>
+                )}
+                {showChildTimeline && childExecution && (
+                  <ExecutionTimeline
+                    execution={childExecution}
+                    steps={childSteps}
+                    mode="historical"
+                  />
+                )}
+              </Card>
+            )}
+
+            {/* Logs (JSON) — when no child execution or as fallback */}
+            {stepLogs && childExecutionId == null && (
               <Card size="small" title={<span style={{ fontSize: 13 }}>Logs</span>}>
                 <pre
                   style={{

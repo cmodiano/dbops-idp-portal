@@ -139,7 +139,7 @@ export function BusinessRulePolicyModal({
 
   return (
     <Modal
-      title={isEdit ? 'Modifier la r\u00e8gle m\u00e9tier' : 'Cr\u00e9er une r\u00e8gle m\u00e9tier'}
+      title={isEdit ? 'Modifier la règle métier' : 'Créer une règle métier'}
       open={open}
       onCancel={onCancel}
       width={640}
@@ -148,7 +148,7 @@ export function BusinessRulePolicyModal({
         <Space>
           <Button onClick={onCancel}>Annuler</Button>
           <Button type="primary" onClick={handleSave} loading={saving}>
-            {isEdit ? 'Enregistrer' : 'Cr\u00e9er'}
+            {isEdit ? 'Enregistrer' : 'Créer'}
           </Button>
         </Space>
       }
@@ -174,7 +174,7 @@ export function BusinessRulePolicyModal({
           label="Nom"
           rules={[
             { required: true, message: 'Le nom est requis' },
-            { max: 200, message: 'Le nom ne peut pas d\u00e9passer 200 caract\u00e8res' },
+            { max: 200, message: 'Le nom ne peut pas dépasser 200 caractères' },
           ]}
         >
           <Input placeholder="Ex: Revue Terraform SQL sku_name" />
@@ -183,12 +183,12 @@ export function BusinessRulePolicyModal({
         <Form.Item
           name="description"
           label="Description"
-          rules={[{ max: 500, message: 'La description ne peut pas d\u00e9passer 500 caract\u00e8res' }]}
+          rules={[{ max: 500, message: 'La description ne peut pas dépasser 500 caractères' }]}
         >
-          <TextArea rows={2} placeholder="Description de la r\u00e8gle..." showCount maxLength={500} />
+          <TextArea rows={2} placeholder="Description de la règle..." showCount maxLength={500} />
         </Form.Item>
 
-        <Form.Item label="R\u00e8gle JSON" required>
+        <Form.Item label="Règle JSON" required>
           <Space style={{ marginBottom: 8 }}>
             {!policyJson.trim() && (
               <>
@@ -197,14 +197,14 @@ export function BusinessRulePolicyModal({
                   size="small"
                   onClick={() => handleJsonChange(JSON.stringify(TERRAFORM_EXAMPLE, null, 2))}
                 >
-                  Ins\u00e9rer exemple Terraform
+                  Insérer exemple Terraform
                 </Button>
                 <Button
                   icon={<FileAddOutlined />}
                   size="small"
                   onClick={() => handleJsonChange(JSON.stringify(AAP_EXAMPLE, null, 2))}
                 >
-                  Ins\u00e9rer exemple AAP
+                  Insérer exemple AAP
                 </Button>
               </>
             )}

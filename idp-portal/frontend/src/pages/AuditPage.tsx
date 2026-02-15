@@ -34,9 +34,12 @@ import { DownloadOutlined } from '@ant-design/icons';
 import type { TableProps } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { listExecutionAudit, exportAuditReport } from '../services/audit_service';
+import { fetchCatalogActions } from '../services/catalog_service';
+import type { CatalogAction } from '../services/catalog_service';
 import { getExecution, getExecutionSteps } from '../services/execution_service';
 import { ExecutionTimeline } from '../components/execution/ExecutionTimeline';
 import { useAuth } from '../contexts/AuthContext';
+import { useEngines } from '../hooks/useEngines';
 import type {
   AuditExecutionEntry,
   AuditStatusFilter,
@@ -48,7 +51,8 @@ import type {
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
 
-const PAGE_SIZE = 25;
+const DEFAULT_PAGE_SIZE = 50;
+const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
 // Ant Design 6.2: Extract table event types
 type TableOnChange<T> = NonNullable<TableProps<T>['onChange']>;
@@ -109,6 +113,7 @@ function getActionName(entry: AuditExecutionEntry): string {
 export default function AuditPage() {
   const { message } = App.useApp();
   const { user } = useAuth();
+  const { engineOptions, loading: enginesLoading } = useEngines();
 
   // Table data
   const [entries, setEntries] = useState<AuditExecutionEntry[]>([]);
@@ -119,11 +124,18 @@ export default function AuditPage() {
   // Filters (AC2)
   const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null]>([null, null]);
   const [environment, setEnvironment] = useState<string | undefined>();
+  const [engineType, setEngineType] = useState<string | undefined>();
+  const [actionId, setActionId] = useState<number | undefined>();
   const [status, setStatus] = useState<AuditStatusFilter | undefined>();
   const [correlationId, setCorrelationId] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [sortField, setSortField] = useState<string>('timestamp');
   const [sortOrder, setSortOrder] = useState<'ascend' | 'descend'>('descend');
+
+  // Actions list for filter (published catalog actions)
+  const [actions, setActions] = useState<CatalogAction[]>([]);
+  const [actionsLoading, setActionsLoading] = useState(false);
 
   // Drawer state (AC3)
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -138,7 +150,7 @@ export default function AuditPage() {
     setLoading(true);
     setError(null);
     try {
-      const offset = (page - 1) * PAGE_SIZE;
+      const offset = (page - 1) * pageSize;
       // Map frontend sort field names to API sort field names
       const apiSortField = sortField === 'action' ? 'action_type' : sortField;
       const apiSortOrder = sortOrder === 'ascend' ? 'asc' : 'desc';
@@ -147,11 +159,13 @@ export default function AuditPage() {
         from: dateRange[0]?.startOf('day').toISOString(),
         to: dateRange[1]?.endOf('day').toISOString(),
         environment,
+        engine_type: engineType,
+        action_id: actionId,
         status,
         correlation_id: correlationId || undefined,
         sort: apiSortField,
         order: apiSortOrder,
-        limit: PAGE_SIZE,
+        limit: pageSize,
         offset,
       });
       setEntries(result.data);
@@ -161,17 +175,36 @@ export default function AuditPage() {
     } finally {
       setLoading(false);
     }
-  }, [dateRange, environment, status, correlationId, sortField, sortOrder]);
+  }, [dateRange, environment, engineType, actionId, status, correlationId, sortField, sortOrder, pageSize]);
 
   // Initial load and filter changes
   useEffect(() => {
     fetchData(currentPage);
   }, [fetchData, currentPage]);
 
-  // Reset to page 1 when filters or sort change
+  // Reset to page 1 when filters, sort or page size change
   useEffect(() => {
     setCurrentPage(1);
-  }, [dateRange, environment, status, correlationId, sortField, sortOrder]);
+  }, [dateRange, environment, engineType, actionId, status, correlationId, sortField, sortOrder, pageSize]);
+
+  // Load published actions for filter dropdown
+  useEffect(() => {
+    let cancelled = false;
+    setActionsLoading(true);
+    fetchCatalogActions()
+      .then((data) => {
+        if (!cancelled) setActions(data);
+      })
+      .catch(() => {
+        if (!cancelled) setActions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setActionsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Open drawer with details (AC3)
   const handleRowClick = async (record: AuditExecutionEntry) => {
@@ -209,6 +242,10 @@ export default function AuditPage() {
     if (paginationConfig.current && paginationConfig.current !== currentPage) {
       setCurrentPage(paginationConfig.current);
     }
+    if (paginationConfig.pageSize && paginationConfig.pageSize !== pageSize) {
+      setPageSize(paginationConfig.pageSize);
+      setCurrentPage(1);
+    }
 
     const singleSorter = Array.isArray(sorter) ? sorter[0] : sorter;
     if (singleSorter?.field) {
@@ -227,6 +264,8 @@ export default function AuditPage() {
         from: dateRange[0]?.startOf('day').toISOString(),
         to: dateRange[1]?.endOf('day').toISOString(),
         environment,
+        engine_type: engineType,
+        action_id: actionId,
         status,
         correlation_id: correlationId || undefined,
       });
@@ -263,10 +302,11 @@ export default function AuditPage() {
     },
     {
       title: 'Utilisateur',
-      dataIndex: 'user_id',
+      dataIndex: 'user_name',
       key: 'user_id',
-      width: 120,
-      render: (userId: string) => userId || '—',
+      width: 140,
+      render: (_: string | null, record: AuditExecutionEntry) =>
+        record.user_name ?? record.user_id ?? '—',
     },
     {
       title: 'Environnement',
@@ -393,6 +433,30 @@ export default function AuditPage() {
               data-testid="audit-filter-environment"
             />
             <Select
+              placeholder="Moteur"
+              aria-label="Filtre Moteur (engine_type)"
+              options={engineOptions}
+              value={engineType}
+              onChange={setEngineType}
+              allowClear
+              style={{ width: 160 }}
+              loading={enginesLoading}
+              data-testid="audit-filter-engine-type"
+            />
+            <Select
+              placeholder="Action"
+              aria-label="Filtre Action"
+              options={actions.map((a) => ({ label: a.name, value: a.id }))}
+              value={actionId}
+              onChange={(v) => setActionId(v ?? undefined)}
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              loading={actionsLoading}
+              style={{ width: 200 }}
+              data-testid="audit-filter-action"
+            />
+            <Select
               placeholder="Statut"
               options={STATUS_OPTIONS}
               value={status}
@@ -449,9 +513,10 @@ export default function AuditPage() {
         loading={loading}
         pagination={{
           current: currentPage,
-          pageSize: PAGE_SIZE,
+          pageSize,
           total: pagination?.total || 0,
-          showSizeChanger: false,
+          showSizeChanger: true,
+          pageSizeOptions: PAGE_SIZE_OPTIONS.map(String),
         }}
         onChange={handleTableChange}
         onRow={(record) => ({
@@ -510,7 +575,7 @@ export default function AuditPage() {
           <div>
             {/* Audit entry details */}
             <Descriptions bordered column={1} size="small" style={{ marginBottom: 24 }}>
-              <Descriptions.Item label="Qui">{selectedEntry.user_id || '—'}</Descriptions.Item>
+              <Descriptions.Item label="Qui">{selectedEntry.user_name ?? selectedEntry.user_id ?? '—'}</Descriptions.Item>
               <Descriptions.Item label="Quoi">{getActionName(selectedEntry)}</Descriptions.Item>
               <Descriptions.Item label="Quand">{formatDate(selectedEntry.timestamp)}</Descriptions.Item>
               <Descriptions.Item label="Environnement">

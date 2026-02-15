@@ -32,6 +32,9 @@ function buildQueryString(filters: AuditExecutionFilters): string {
   if (filters.action_id !== undefined) {
     params.set('action_id', String(filters.action_id));
   }
+  if (filters.engine_type) {
+    params.set('engine_type', filters.engine_type);
+  }
   if (filters.user_id) {
     params.set('user_id', filters.user_id);
   }
@@ -104,6 +107,9 @@ export async function exportAuditReport(
   }
   if (filters.action_id !== undefined) {
     params.set('action_id', String(filters.action_id));
+  }
+  if (filters.engine_type) {
+    params.set('engine_type', filters.engine_type);
   }
   if (filters.user_id) {
     params.set('user_id', filters.user_id);

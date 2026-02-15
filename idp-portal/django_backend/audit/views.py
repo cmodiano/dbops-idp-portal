@@ -16,6 +16,7 @@ from core.exceptions import BadRequestError, ForbiddenError
 from core.utils import ensure_utc_isoformat
 from core.models import AuditLog, AuditEntityType, AuditActionType
 from executions.models import Execution
+from idp_auth.models import User
 from profiles.models import Profile
 
 
@@ -105,6 +106,33 @@ def _derive_status(action_type: str, details: dict | None) -> str:
     return "unknown"
 
 
+def _resolve_user_names(user_ids: list[str]) -> dict[str, str]:
+    """Resolve user_id list to display names (display_name or username). Returns map user_id -> name."""
+    result = {}
+    if not user_ids:
+        return result
+    numeric_ids = []
+    for uid in user_ids:
+        try:
+            numeric_ids.append(int(uid))
+        except (ValueError, TypeError):
+            pass
+    if numeric_ids:
+        for u in User.objects.filter(id__in=numeric_ids).only("id", "display_name", "username"):
+            result[str(u.id)] = (u.display_name or u.username or str(u.id))
+    for uid in user_ids:
+        if uid not in result:
+            try:
+                u = User.objects.filter(username=uid).only("display_name", "username").first()
+                if u:
+                    result[uid] = u.display_name or u.username
+            except Exception:
+                pass
+            if uid not in result:
+                result[uid] = uid
+    return result
+
+
 def _build_audit_queryset(request):
     qs = AuditLog.objects.filter(entity_type=AuditEntityType.EXECUTION)
 
@@ -124,6 +152,12 @@ def _build_audit_queryset(request):
     if action_id is not None and action_id != "":
         aid = _parse_int(action_id, 0, name="action_id")
         exec_ids = Execution.objects.filter(action_id=aid).values("id")
+        qs = qs.filter(entity_id__in=exec_ids)
+
+    # Filter by action engine (REF_ENGINES code)
+    engine_type = (request.query_params.get("engine_type") or "").strip()
+    if engine_type:
+        exec_ids = Execution.objects.filter(action__engine=engine_type).values("id")
         qs = qs.filter(entity_id__in=exec_ids)
 
     user_id = (request.query_params.get("user_id") or "").strip()
@@ -172,6 +206,7 @@ class AuditExecutionsView(APIView):
       - from/to: ISO 8601 date range filter
       - environment: Filter by execution environment
       - action_id: Filter by action ID
+      - engine_type: Filter by action engine (REF_ENGINES code, e.g. Oracle, SQL Server)
       - user_id: Filter by user ID
       - status: Filter by derived status (success, failed, running)
       - correlation_id: Filter by exact correlation ID (Story 27.8)
@@ -211,6 +246,8 @@ class AuditExecutionsView(APIView):
         )
         exec_by_id = {e.id: e for e in executions}
 
+        user_name_by_id = _resolve_user_names(list({r.user_id for r in rows if r.user_id}))
+
         data = []
         for r in rows:
             details = r.get_details()
@@ -241,6 +278,7 @@ class AuditExecutionsView(APIView):
                     "id": r.id,
                     "timestamp": ensure_utc_isoformat(r.timestamp),
                     "user_id": r.user_id,
+                    "user_name": user_name_by_id.get(r.user_id) if r.user_id else None,
                     "action_type": r.action_type,
                     "entity_type": r.entity_type,
                     "entity_id": int(r.entity_id),
@@ -318,6 +356,10 @@ class AuditExportView(APIView):
         )
         exec_by_id = {e.id: e for e in executions}
 
+        # Resolve user_id -> user_name for CSV
+        user_ids_export = list({r.user_id for r in rows if r.user_id})
+        user_name_by_id_export = _resolve_user_names(user_ids_export)
+
         buf = io.StringIO()
         writer = csv.writer(buf)
         writer.writerow(
@@ -325,6 +367,7 @@ class AuditExportView(APIView):
                 "id",
                 "timestamp",
                 "user_id",
+                "user_name",
                 "action_type",
                 "execution_id",
                 "action_id",
@@ -344,7 +387,8 @@ class AuditExportView(APIView):
                 [
                     r.id,
                     ensure_utc_isoformat(r.timestamp) or "",
-                    r.user_id,
+                    r.user_id or "",
+                    user_name_by_id_export.get(r.user_id) or r.user_id or "",
                     r.action_type,
                     int(r.entity_id),
                     details.get("action_id") or (exec_obj.action_id if exec_obj else ""),

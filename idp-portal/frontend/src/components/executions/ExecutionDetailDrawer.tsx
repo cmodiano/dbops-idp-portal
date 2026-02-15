@@ -36,8 +36,13 @@ export const ExecutionDetailDrawer: React.FC<ExecutionDetailDrawerProps> = ({
     title={execution ? `Exécution — ${execution.action_name || `Action #${execution.action_id}`}` : 'Détail exécution'}
     open={open}
     onClose={onClose}
-    size={execution?.item_type === 'workflow' && actionDetail?.workflow_steps ? 'large' : 'default'}
-    styles={execution?.item_type === 'workflow' && actionDetail?.workflow_steps ? { body: { width: 'min(90vw, 1400px)' } } : { body: { width: 480 } }}
+    width={execution?.item_type === 'workflow' && actionDetail?.workflow_steps ? '90%' : undefined}
+    size={execution?.item_type === 'workflow' && actionDetail?.workflow_steps ? undefined : 'default'}
+    styles={
+      execution?.item_type === 'workflow' && actionDetail?.workflow_steps
+        ? { body: { padding: 0, height: '100%', display: 'flex', flexDirection: 'column' } }
+        : { body: { width: 480 } }
+    }
     destroyOnClose
   >
     {loading ? (
@@ -56,12 +61,14 @@ export const ExecutionDetailDrawer: React.FC<ExecutionDetailDrawerProps> = ({
             </div>
           )}
         >
-          <WorkflowExecutionGraph
-            executionId={execution.id}
-            workflowSteps={actionDetail.workflow_steps}
-            execution={execution}
-            onExecutionUpdate={onExecutionUpdate}
-          />
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            <WorkflowExecutionGraph
+              executionId={execution.id}
+              workflowSteps={actionDetail.workflow_steps}
+              execution={execution}
+              onExecutionUpdate={onExecutionUpdate}
+            />
+          </div>
         </ErrorBoundary>
       ) : (
         <ErrorBoundary

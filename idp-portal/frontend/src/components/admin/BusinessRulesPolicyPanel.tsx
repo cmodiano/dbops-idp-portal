@@ -206,7 +206,7 @@ export function BusinessRulesPolicyPanel() {
             Actualiser
           </Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
-            Cr\u00e9er r\u00e8gle m\u00e9tier
+            Créer règle métier
           </Button>
         </Space>
       </Space>
@@ -218,7 +218,7 @@ export function BusinessRulesPolicyPanel() {
         rowKey="id"
         size="small"
         pagination={{ pageSize: 20 }}
-        locale={{ emptyText: 'Aucune r\u00e8gle m\u00e9tier configur\u00e9e' }}
+        locale={{ emptyText: 'Aucune règle métier configurée' }}
       />
 
       <BusinessRulePolicyModal

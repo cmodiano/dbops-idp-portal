@@ -10,6 +10,8 @@ export interface AuditExecutionEntry {
   id: number;
   timestamp: string;
   user_id: string;
+  /** Display name (or username) resolved from user_id by backend. */
+  user_name?: string | null;
   action_type: string;
   entity_type: string;
   entity_id: number; // execution_id
@@ -38,6 +40,8 @@ export interface AuditExecutionFilters {
   to?: string;
   environment?: string;
   action_id?: number;
+  /** Filter by action engine (REF_ENGINES code). */
+  engine_type?: string;
   user_id?: string;
   status?: AuditStatusFilter;
   correlation_id?: string;

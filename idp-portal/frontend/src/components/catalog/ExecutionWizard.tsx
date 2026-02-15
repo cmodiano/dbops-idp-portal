@@ -608,7 +608,7 @@ export function ExecutionWizard({
             {currentStep > 0 && <Button onClick={handlePrev}>Precedent</Button>}
             {currentStep < 2 && (
               <Button type="primary" onClick={handleNext}
-                disabled={(currentStep === 0 && (requiresTarget ? selectedTargets.length === 0 : !selectedEnvironment)) || (currentStep === 1 && isWorkflow && !isWorkflowStep2Valid)}>
+                disabled={(currentStep === 0 && (requiresTarget ? effectiveTargetNames.length === 0 : !selectedEnvironment)) || (currentStep === 1 && isWorkflow && !isWorkflowStep2Valid)}>
                 Suivant
               </Button>
             )}
