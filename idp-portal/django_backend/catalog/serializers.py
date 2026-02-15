@@ -11,7 +11,7 @@ from drf_spectacular.utils import extend_schema_field, extend_schema_serializer,
 from drf_spectacular.types import OpenApiTypes
 from catalog import models
 from catalog.models import (
-    Action, Tag, ActionStatus, ActionItemType
+    Action, Tag, ActionStatus, ActionItemType, BusinessRulePolicy
 )
 from reference.models import RefEngine, RefPlatform, RefCategory
 from integrations.models import Integration, IntegrationTypeCatalogue, IntegrationRole
@@ -219,6 +219,21 @@ class ActionSerializer(serializers.ModelSerializer):
     integration_id = serializers.IntegerField(
         source='integration.id', read_only=True, allow_null=True
     )
+    # Story 28.4: FK to predefined business rule policy
+    business_rule_policy_id = serializers.PrimaryKeyRelatedField(
+        queryset=BusinessRulePolicy.objects.all(),
+        source='business_rule_policy',
+        required=False, allow_null=True,
+    )
+    business_rule_policy_name = serializers.SerializerMethodField()
+
+    @extend_schema_field({'type': 'string', 'nullable': True})
+    def get_business_rule_policy_name(self, obj: Action) -> str | None:
+        """Story 28.4: Get predefined policy name if FK is set."""
+        if obj.business_rule_policy_id:
+            policy = obj.business_rule_policy
+            return policy.name if policy else None
+        return None
 
     def validate_engine(self, value: str | None) -> str | None:
         """Validate engine against REF_ENGINES table."""
@@ -269,9 +284,7 @@ class ActionSerializer(serializers.ModelSerializer):
     def validate(self, data: dict[str, Any]) -> dict[str, Any]:
         """
         Story 29.4: Validate platform ↔ integration.type consistency when both provided.
-
-        If both platform and integration are set, ensure consistency using DRY helper.
-        Normalization: REF_PLATFORMS.CODE (Title Case) → lower().replace(' ', '_') → IntegrationTypeCatalogue.code.
+        Story 28.4: Validate XOR between business_rule_policy_id and business_rule_policies.
         """
         platform = data.get('platform')
         # Get integration from instance (read-only field, set via model)
@@ -279,6 +292,14 @@ class ActionSerializer(serializers.ModelSerializer):
 
         # Use DRY helper for validation
         _validate_platform_integration_consistency(platform, integration)
+
+        # Story 28.4: XOR validation
+        has_policy_fk = data.get('business_rule_policy') is not None
+        has_policy_inline = data.get('business_rule_policies') is not None
+        if has_policy_fk and has_policy_inline:
+            raise serializers.ValidationError(
+                'Spécifiez soit business_rule_policy_id soit business_rule_policies, pas les deux.'
+            )
 
         return data
 
@@ -292,12 +313,14 @@ class ActionSerializer(serializers.ModelSerializer):
             'execution_steps', 'change_type_config', 'workflow_steps',
             # Story 28.1: business_rule_policies
             'business_rule_policies',
+            # Story 28.4: FK to predefined business rule policy
+            'business_rule_policy_id', 'business_rule_policy_name',
             # Story 13.2, AC3: requires_target field
             'requires_target',
             # Story 29.4: integration_id for platform consistency validation
             'integration_id',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'created_by', 'integration_id']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'created_by', 'integration_id', 'business_rule_policy_name']
     
     # Story 17.4: Removed redundant get_parameters_schema, get_impact_rules, etc.
     # OracleJSONField handles deserialization automatically - no need for SerializerMethodField
@@ -627,5 +650,48 @@ class ActionMutexCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 'incompatible_with_id': f"Une règle mutex existe déjà entre ces deux actions (ID: {existing.id})"
             })
-        
+
         return data
+
+
+class BusinessRulePolicyListSerializer(serializers.ModelSerializer):
+    """Story 28.4: List serializer for BusinessRulePolicy (AC#4)."""
+    step_type = serializers.SerializerMethodField()
+
+    class Meta:
+        model = BusinessRulePolicy
+        fields = ['id', 'name', 'description', 'is_active', 'step_type', 'created_at', 'updated_at']
+
+    @extend_schema_field({'type': 'string', 'nullable': True})
+    def get_step_type(self, obj: BusinessRulePolicy) -> str | None:
+        return obj.step_type
+
+
+class BusinessRulePolicySerializer(serializers.ModelSerializer):
+    """Story 28.4: Detail serializer for BusinessRulePolicy (AC#4)."""
+    step_type = serializers.SerializerMethodField()
+    policy_json = serializers.JSONField()
+    actions_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = BusinessRulePolicy
+        fields = [
+            'id', 'name', 'description', 'policy_json', 'is_active',
+            'step_type', 'actions_count', 'created_at', 'updated_at', 'created_by',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at', 'created_by']
+
+    @extend_schema_field({'type': 'string', 'nullable': True})
+    def get_step_type(self, obj: BusinessRulePolicy) -> str | None:
+        return obj.step_type
+
+    @extend_schema_field(OpenApiTypes.INT)
+    def get_actions_count(self, obj: BusinessRulePolicy) -> int:
+        return obj.actions.count()
+
+    def validate_policy_json(self, value: Any) -> Any:
+        """Validate policy_json using existing validator."""
+        if value is not None:
+            from catalog.validators import validate_business_rule_policies
+            validate_business_rule_policies(value)
+        return value

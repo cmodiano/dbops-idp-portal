@@ -184,8 +184,12 @@ export interface ActionDetail extends ActionResponse {
   /* documentation_md is inherited from ActionResponse (Story 3.4) */
   /** Story 9.1: Remediation rules for auto-suggesting corrective actions. */
   remediation_rules?: RemediationRule[] | null;
-  /** Story 28.1: Business rule policies evaluated on step output. */
+  /** Story 28.1: Business rule policies evaluated on step output (inline legacy). */
   business_rule_policies?: BusinessRulePoliciesData | null;
+  /** Story 28.4: FK to predefined business rule policy. */
+  business_rule_policy_id?: number | null;
+  /** Story 28.4: Name of the predefined business rule policy (computed). */
+  business_rule_policy_name?: string | null;
 }
 
 // === Status Transition Types (Story 2.4) ===

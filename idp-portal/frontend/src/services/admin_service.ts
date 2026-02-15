@@ -231,6 +231,21 @@ export async function updateBusinessRulePolicies(
   });
 }
 
+/**
+ * Patch action fields (partial update).
+ * Story 28.4: Used for business_rule_policy_id FK assignment.
+ * Requires DBOPS profile.
+ */
+export async function patchAction(
+  actionId: number,
+  data: Record<string, unknown>,
+): Promise<ActionDetail> {
+  return apiFetch<ActionDetail>(`/admin/actions/${actionId}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
 // ─── Story 18.1: Delete, Deactivate, Reactivate ───────────────────────────
 
 /** Response from deactivate when workflows need confirmation. */

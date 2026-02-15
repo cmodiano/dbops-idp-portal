@@ -85,6 +85,10 @@ class AuditActionType(models.TextChoices):
     EXECUTION_STEP_POLICY_APPROVAL_REQUIRED = 'EXECUTION_STEP_POLICY_APPROVAL_REQUIRED', 'Execution Step Policy Approval Required'
     EXECUTION_STEP_POLICY_AUTO_APPROVED = 'EXECUTION_STEP_POLICY_AUTO_APPROVED', 'Execution Step Policy Auto Approved'
     EXECUTION_STEP_POLICY_EVALUATION_FAILED = 'EXECUTION_STEP_POLICY_EVALUATION_FAILED', 'Execution Step Policy Evaluation Failed'
+    # Story 28.4: Business rule policy CRUD audit types
+    POLICY_CREATED = 'POLICY_CREATED', 'Policy Created'
+    POLICY_UPDATED = 'POLICY_UPDATED', 'Policy Updated'
+    POLICY_DELETED = 'POLICY_DELETED', 'Policy Deleted'
     # Additional types added in later migrations (V028-V035, V039-V041)
     # Note: Full list would include all types from migrations, but base types are sufficient for model
 
@@ -102,6 +106,8 @@ class AuditEntityType(models.TextChoices):
     # Story 24.1: Integration type catalogue entity types
     INTEGRATION_TYPE_CATALOGUE = 'integration_type_catalogue', 'Integration Type Catalogue'
     INTEGRATION_ACTION = 'integration_action', 'Integration Action'
+    # Story 28.4: Business rule policy entity type
+    BUSINESS_RULE_POLICY = 'business_rule_policy', 'Business Rule Policy'
     # Additional types may exist in later migrations
 
 

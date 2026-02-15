@@ -9,6 +9,7 @@ app_name = 'catalog'
 # Create routers for different endpoint groups
 admin_router = DefaultRouter()
 admin_router.register(r'actions', views.ActionViewSet, basename='admin-actions')
+admin_router.register(r'business-rule-policies', views.BusinessRulePolicyViewSet, basename='business-rule-policies')
 
 catalog_router = DefaultRouter()
 catalog_router.register(r'actions', views.CatalogActionViewSet, basename='catalog-actions')

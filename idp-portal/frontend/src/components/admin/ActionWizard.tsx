@@ -30,11 +30,12 @@ import { impactRulesToList, listToImpactRules } from '../../utils/impactRulesSch
 import { ParametersEditor } from './ParametersEditor';
 import { ImpactRulesEditor } from './ImpactRulesEditor';
 import { ChangeTypeConfig } from './ChangeTypeConfig';
+import { BusinessRulePolicySelector } from './BusinessRulePolicySelector';
 import { WorkflowStepsEditor } from './WorkflowStepsEditor';
 import { WorkflowBuilderCanvas } from './WorkflowBuilderCanvas';
 import { validateWorkflowGraph } from '../../utils/workflowValidation';
 import { workflowStepsToReactFlow } from '../../utils/workflowConversion';
-import { getTags, updateActionTags, updateActionSteps, updateWorkflowSteps, checkActionNameAvailable } from '../../services/admin_service';
+import { getTags, updateActionTags, updateActionSteps, updateWorkflowSteps, updateBusinessRulePolicies, patchAction, checkActionNameAvailable } from '../../services/admin_service';
 import { useEngines } from '../../hooks/useEngines';
 import { usePlatforms } from '../../hooks/usePlatforms';
 import { useCategories } from '../../hooks/useCategories';
@@ -55,7 +56,7 @@ function platformToConnector(platform: ActionPlatform): ConnectorType {
 const STEP_ITEMS = [
   { title: 'Général', content: 'Type, nom, moteur, plateforme, tags' },
   { title: 'Automatisme & Paramètres', content: 'Configuration selon le type' },
-  { title: 'Impact & Changement', content: 'Règles d\'impact et code modèle' },
+  { title: 'Impact & Changement', content: 'Règles d\'impact, changement ServiceNow, règles métier' },
 ];
 
 export interface ActionWizardProps {
@@ -91,6 +92,10 @@ export function ActionWizard({
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagsOptions, setTagsOptions] = useState<{ value: string; label: string }[]>([]);
   const [changeTypeConfig, setChangeTypeConfig] = useState<Record<string, ChangeTypeConfigEntry>>({});
+  /** Story 28.4: Predefined business rule policy ID (FK). */
+  const [businessRulePolicyId, setBusinessRulePolicyId] = useState<number | null>(null);
+  /** Story 28.1: Business rule policies inline JSON (legacy). */
+  const [businessRulePoliciesJson, setBusinessRulePoliciesJson] = useState<string>('');
   /** Pour AAP : type de ressource (job_template | workflow_job) et ID template. 1 action = 1 étape. */
   const [aapResourceType, setAapResourceType] = useState<'job_template' | 'workflow_job'>('job_template');
   const [aapTemplateId, setAapTemplateId] = useState<number | undefined>(undefined);
@@ -142,6 +147,13 @@ export function ActionWizard({
       setDefaultImpactLevel(editAction.default_impact_level ?? null);
       setSelectedTags(editAction.tags ?? []);
       setChangeTypeConfig(editAction.change_type_config ?? {});
+      // Story 28.4: Load business rule policy (FK or inline)
+      setBusinessRulePolicyId(editAction.business_rule_policy_id ?? null);
+      setBusinessRulePoliciesJson(
+        editAction.business_rule_policies
+          ? JSON.stringify(editAction.business_rule_policies, null, 2)
+          : ''
+      );
       // Story 9.5: Load workflow steps for workflows
       if (editAction.item_type === 'workflow' && editAction.workflow_steps) {
         setWorkflowSteps(editAction.workflow_steps);
@@ -169,6 +181,8 @@ export function ActionWizard({
       setDefaultImpactLevel(null);
       setSelectedTags([]);
       setChangeTypeConfig({});
+      setBusinessRulePolicyId(null);
+      setBusinessRulePoliciesJson('');
       setAapResourceType('job_template');
       setAapTemplateId(undefined);
       setWorkflowSteps([]);
@@ -365,6 +379,27 @@ export function ActionWizard({
       }
 
       if (actionId) {
+        // Story 28.4: Save business rule policy (FK predefined or inline)
+        try {
+          if (businessRulePolicyId) {
+            // Use predefined policy via FK — PATCH to clear inline
+            await updateBusinessRulePolicies(actionId, null);
+            await patchAction(actionId, { business_rule_policy_id: businessRulePolicyId });
+          } else if (businessRulePoliciesJson.trim()) {
+            // Use inline JSON (legacy)
+            const policiesToSave = JSON.parse(businessRulePoliciesJson) as { on_step_output?: unknown[] };
+            await updateBusinessRulePolicies(actionId, policiesToSave);
+          } else {
+            // Clear both
+            await updateBusinessRulePolicies(actionId, null);
+          }
+        } catch (policiesErr) {
+          notification.warning({
+            message: 'Règles métier non mises à jour',
+            description: policiesErr instanceof Error ? policiesErr.message : 'Les règles métier n\'ont pas pu être enregistrées. L\'action a bien été créée/modifiée.',
+          });
+        }
+
         // New workflows: always save steps. Existing: only if draft or disabled
         const canEditSteps = !editAction || editAction?.status === 'draft' || editAction?.status === 'disabled';
         
@@ -678,6 +713,19 @@ export function ActionWizard({
                 <ChangeTypeConfig value={changeTypeConfig} onChange={isReadOnly ? () => {} : setChangeTypeConfig} />
               </Form.Item>
             )}
+            {/* Story 28.4: Règles métier — sélecteur prédéfini ou inline */}
+            <Form.Item
+              label="Règles métier"
+              tooltip="Associez une règle prédéfinie du catalogue ou saisissez une règle personnalisée (inline JSON)."
+            >
+              <BusinessRulePolicySelector
+                policyId={businessRulePolicyId}
+                inlineJson={businessRulePoliciesJson}
+                onPolicyIdChange={setBusinessRulePolicyId}
+                onInlineJsonChange={setBusinessRulePoliciesJson}
+                disabled={isReadOnly}
+              />
+            </Form.Item>
           </Space>
         )}
       </Form>

@@ -16,6 +16,8 @@ vi.mock('../../services/admin_service', () => ({
   updateActionTags: vi.fn().mockResolvedValue({}),
   updateActionSteps: vi.fn().mockResolvedValue({}),
   updateWorkflowSteps: vi.fn().mockResolvedValue({}),
+  updateBusinessRulePolicies: vi.fn().mockResolvedValue({}),
+  patchAction: vi.fn().mockResolvedValue({}),
   checkActionNameAvailable: vi.fn().mockResolvedValue(true),
   getEligibleActionsForWorkflow: vi.fn().mockResolvedValue([
     { id: 100, name: 'Action A', engine: 'Oracle', status: 'published', created_at: '', execution_count: 0 },

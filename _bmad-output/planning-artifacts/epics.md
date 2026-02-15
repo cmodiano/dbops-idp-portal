@@ -339,7 +339,7 @@ Exposer les intégrations (AAP en premier) via des adapters backend : appels API
 **Phase :** Growth (Phase 2)
 
 ### Epic 28 : Règles métier et politiques d'approbation sur les actions
-Clarifier et étendre le modèle des règles métier applicables à une action : schéma JSON (business_rule_policies) stocké en base, éditable via un menu dédié ; **moteur de règles métier intelligent** s'adaptant aux différentes plateformes (Terraform, AAP, Azure DevOps, etc.) via des interpréteurs de sortie d'étape ; évaluation des politiques pour déclencher revue DBA ou auto-approbation.
+Clarifier et étendre le modèle des règles métier applicables à une action : schéma JSON (business_rule_policies) stocké en base, éditable via un menu dédié ; **moteur de règles métier intelligent** s'adaptant aux différentes plateformes (Terraform, AAP, Azure DevOps, etc.) via des interpréteurs de sortie d'étape ; évaluation des politiques pour déclencher revue DBA ou auto-approbation. Story 28.4 : catalogue de règles réutilisables (onglet Admin dédié) et association action ↔ règle prédéfinie.
 **FRs couvertes :** FR27, FR28 (workflow d'approbation, règles par action et par environnement)
 **Phase :** Growth (Phase 2)
 
@@ -4072,6 +4072,30 @@ afin de **restaurer la confiance dans la suite de tests et permettre les déploi
 
 **And** la CI (ou commande locale) exécute la suite complète avec succès ; les échecs connus sont documentés si des corrections sont reportées
 
+### Story 18.8 : ServiceNow — revue interface et clarification code modèle / template
+
+En tant que **DBOPS ou DBA**,
+je veux **une interface claire pour configurer le changement ServiceNow par environnement** dans la modification d’action,
+afin de **comprendre facilement quels champs renseigner et éviter la confusion entre « code modèle » et « template ID »**.
+
+**Contexte :** La section ServiceNow (Story 2.24, 25.4) est peu claire ; `change_model_code` et `template_id` semblent redondants (seul `change_model_code` est utilisé en exécution).
+
+**Acceptance Criteria:**
+
+**Given** l’équipe produit / ServiceNow valide l’usage réel des champs
+**When** on clarifie la différence ou l’équivalence entre code modèle et template ID
+**Then** on fusionne ou on documente avec labels et tooltips explicites
+
+**Given** le composant ChangeTypeConfig
+**When** j’accède à la section ServiceNow
+**Then** les colonnes sont ordonnées par pertinence, labels clairs, tooltips
+
+**Given** la décision sur les champs
+**When** on simplifie (fusion) ou on distingue (labels/tooltips)
+**Then** rétrocompatibilité assurée, champs non utilisés documentés ou retirés
+
+**And** documentation change-type-config.md et tests mis à jour
+
 ---
 
 ## Epic 21 : Inventaire — source unique des environnements
@@ -4753,6 +4777,39 @@ So that **on puisse définir des politiques (revue, auto-approve, blocage) sur l
 **And** au minimum les interpréteurs **Terraform Cloud** (plan output) et **AAP** (job status / logs) sont fournis ou documentés comme premiers cas ; l'architecture permet d'ajouter Azure DevOps, GitHub Actions, etc.
 **And** la documentation décrit l'architecture (RuleEngine, registre d'interpréteurs, format artefact normalisé) et comment ajouter un interpréteur pour une nouvelle plateforme
 **And** des tests valident le dispatch par step_type et l'évaluation de la politique sur l'artefact produit par chaque interpréteur
+
+### Story 28.4 : Catalogue de règles métier et association par action
+
+As a **DBOPS**,
+I want **définir des règles métier réutilisables dans un onglet Admin dédié, puis associer une règle prédéfinie à une action** (au lieu de saisir le JSON à chaque fois),
+So that **les mêmes règles (ex. « revue Terraform si sku_name modifié ») soient réutilisables sur plusieurs actions, et que la maintenance soit centralisée**.
+
+**Acceptance Criteria:**
+
+**Given** un nouvel onglet Admin « Règles métier »
+**When** un DBOPS y accède
+**Then** il peut créer, lister, modifier et supprimer des **règles métier prédéfinies** (nom, description, schéma JSON on_step_output)
+**And** chaque règle a un identifiant unique et un libellé pour faciliter la sélection
+**And** l'éditeur JSON (ou formulaire structuré) reprend le schéma business_rule_policies existant (when, policy, require_review_if_modified, etc.)
+
+**Given** une table ou modèle **BusinessRulePolicy** (ou équivalent)
+**When** on crée une règle
+**Then** elle est persistée avec : id, name, description, policy_json (CLOB), is_active, created_at, updated_at
+**And** l'API CRUD est exposée : GET/POST/PATCH/DELETE /api/v1/admin/business-rule-policies/
+
+**Given** le formulaire d'action (wizard ou formulaire)
+**When** on configure une action
+**Then** au lieu de l'éditeur JSON inline, on propose un **sélecteur** de règle prédéfinie (liste déroulante ou recherche)
+**And** l'action stocke une FK **business_rule_policy_id** (ou référence par code) vers la règle choisie
+**And** optionnellement : possibilité de « règle personnalisée » (inline) pour les cas avancés ou de transition
+
+**Given** le RuleEngine/PolicyEvaluator au moment de l'évaluation
+**When** il charge les politiques d'une action
+**Then** si l'action a **business_rule_policy_id**, il charge le policy_json de la règle référencée
+**And** si l'action a **business_rule_policies** inline (legacy), il l'utilise en fallback pour rétrocompatibilité
+
+**And** une migration de données permet de convertir les actions avec business_rule_policies inline en références vers des règles créées dans le catalogue (optionnel, peut être manuel)
+**And** des tests valident le CRUD des règles, l'association action↔règle, et l'évaluation au runtime
 
 ---
 

@@ -11,6 +11,7 @@ import {
   ActionsAdminPanel,
   ProfilesAdminPanel,
   IntegrationsAdminPanel,
+  BusinessRulesAdminPanel,
   CategoriesAdminPanel,
   MetricsAdminPanel,
   FeatureFlagsAdminPanel,
@@ -52,6 +53,11 @@ export default function AdminPage() {
             key: 'integrations',
             label: 'Intégrations',
             children: <IntegrationsAdminPanel notification={notification} />,
+          },
+          {
+            key: 'business-rules',
+            label: 'Règles métier',
+            children: <BusinessRulesAdminPanel />,
           },
           {
             key: 'categories',
