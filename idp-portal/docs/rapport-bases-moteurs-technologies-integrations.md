@@ -177,4 +177,10 @@ Une action pointe vers une **Integration** (FK `integration_id`) dont le **type*
 3. **Centraliser « comment sont déterminées les listes disponibles »** dans un seul doc (comme ce rapport) avec les endpoints et sources (tables, fixtures).
 4. **engine_type (inventaire) :** soit documenter les valeurs attendues par source (ex. oracle, sqlserver), soit introduire plus tard une table ou un endpoint de référence si on veut des listes déroulantes homogènes.
 
-Ce rapport se limite à l’examen de l’existant ; aucune modification de code n’a été effectuée.
+Ce rapport se limite à l'examen de l'existant ; aucune modification de code n'a été effectuée.
+
+---
+
+## 6. Références
+
+- **Glossaire IDP Portal :** [django_backend/docs/glossary.md](../django_backend/docs/glossary.md) — Définitions formelles des termes Moteur (Engine), Plateforme, Service, engine_type, avec tableau récapitulatif et exemples concrets.
