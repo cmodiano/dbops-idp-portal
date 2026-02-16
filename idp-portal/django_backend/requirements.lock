@@ -40,7 +40,9 @@ cffi==2.0.0
 channels==4.3.2
     # via idp-portal-backend (pyproject.toml)
 charset-normalizer==3.4.4
-    # via requests
+    # via
+    #   reportlab
+    #   requests
 click==8.3.1
     # via
     #   celery
@@ -65,6 +67,8 @@ cryptography==46.0.4
     #   python-jose
     #   service-identity
 daphne==4.2.1
+    # via idp-portal-backend (pyproject.toml)
+defusedxml==0.7.1
     # via idp-portal-backend (pyproject.toml)
 django==5.2.11
     # via
@@ -127,8 +131,12 @@ packaging==26.0
     #   gunicorn
     #   incremental
     #   kombu
+pillow==12.1.1
+    # via reportlab
 prompt-toolkit==3.0.52
     # via click-repl
+puremagic==1.30
+    # via idp-portal-backend (pyproject.toml)
 py-ubjson==0.16.1
     # via autobahn
 pyasn1==0.6.2
@@ -167,6 +175,8 @@ referencing==0.37.0
     # via
     #   jsonschema
     #   jsonschema-specifications
+reportlab==4.4.10
+    # via idp-portal-backend (pyproject.toml)
 requests==2.32.5
     # via idp-portal-backend (pyproject.toml)
 rpds-py==0.30.0

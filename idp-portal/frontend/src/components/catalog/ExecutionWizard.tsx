@@ -237,7 +237,7 @@ export function ExecutionWizard({
   useEffect(() => {
     if (open && action) {
       if (action.status !== 'published') {
-        notification.error({ message: 'Action non disponible', description: 'Cette action n\'est pas publiee et ne peut pas etre executee.' });
+        notification.error({ title: 'Action non disponible', description: 'Cette action n\'est pas publiee et ne peut pas etre executee.' });
         onCancel();
         return;
       }
@@ -385,12 +385,12 @@ export function ExecutionWizard({
     if (currentStep === 0) {
       if (requiresTarget) {
         if (effectiveTargetNames.length === 0) {
-          notification.warning({ message: targetInputMode === 'pattern' ? 'Entrez un pattern (ex: srv-dev-*) et attendez la resolution.' : targetInputMode === 'manual' ? 'Entrez une ou plusieurs cibles, separees par des virgules.' : 'Veuillez selectionner au moins une cible.' });
+          notification.warning({ title: targetInputMode === 'pattern' ? 'Entrez un pattern (ex: srv-dev-*) et attendez la resolution.' : targetInputMode === 'manual' ? 'Entrez une ou plusieurs cibles, separees par des virgules.' : 'Veuillez selectionner au moins une cible.' });
           return;
         }
-        if (hasMixedEnvironments) notification.warning({ message: 'Attention', description: 'Les cibles selectionnees appartiennent a des environnements differents.' });
+        if (hasMixedEnvironments) notification.warning({ title: 'Attention', description: 'Les cibles selectionnees appartiennent a des environnements differents.' });
       } else if (!selectedEnvironment) {
-        notification.warning({ message: 'Veuillez selectionner un environnement.' });
+        notification.warning({ title: 'Veuillez selectionner un environnement.' });
         return;
       }
     } else if (currentStep === 1) {
@@ -435,9 +435,9 @@ export function ExecutionWizard({
       return;
     }
     if (!action || (!derivedEnvironment && effectiveTargetNames.length === 0)) {
-      notification.warning({ message: 'Donnees incompletes', description: 'Veuillez completer toutes les etapes du wizard.' }); return;
+      notification.warning({ title: 'Donnees incompletes', description: 'Veuillez completer toutes les etapes du wizard.' }); return;
     }
-    if (action.status !== 'published') { const msg = 'Cette action n\'est plus publiee et ne peut pas etre executee.'; execSubmit.setSubmitError(msg); notification.error({ message: 'Action non disponible', description: msg }); return; }
+    if (action.status !== 'published') { const msg = 'Cette action n\'est plus publiee et ne peut pas etre executee.'; execSubmit.setSubmitError(msg); notification.error({ title: 'Action non disponible', description: msg }); return; }
 
     isSubmittingRef.current = true;
     try {
@@ -481,13 +481,13 @@ export function ExecutionWizard({
       logger.debug('Double-submit blocked in handleSubmitScheduled', { component: 'ExecutionWizard', action: 'double_submit_blocked' });
       return;
     }
-    if (!action || !derivedEnvironment) { notification.warning({ message: 'Données incomplètes', description: 'Veuillez compléter toutes les étapes du wizard.' }); return; }
+    if (!action || !derivedEnvironment) { notification.warning({ title: 'Données incomplètes', description: 'Veuillez compléter toutes les étapes du wizard.' }); return; }
     const { schedulingType, scheduledAt, cronExpression, cronIsValid, dailyHour, dailyMinute, weeklyDayOfWeek, weeklyHour, weeklyMinute } = execSubmit.scheduling;
     if (schedulingType === 'one-time') {
       if (!scheduledAt) { execSubmit.setSchedulingError('Veuillez sélectionner une date et heure'); return; }
       if (scheduledAt.isBefore(dayjs())) { execSubmit.setSchedulingError('La date planifiée doit être dans le futur'); return; }
     } else if (schedulingType === 'cron' && (!cronExpression || !cronIsValid)) { execSubmit.setSchedulingError('Veuillez saisir une expression cron valide'); return; }
-    if (action.status !== 'published') { const msg = "Cette action n'est plus publiée et ne peut pas être planifiée."; execSubmit.setSchedulingError(msg); notification.error({ message: 'Action non disponible', description: msg }); return; }
+    if (action.status !== 'published') { const msg = "Cette action n'est plus publiée et ne peut pas être planifiée."; execSubmit.setSchedulingError(msg); notification.error({ title: 'Action non disponible', description: msg }); return; }
 
     isSubmittingRef.current = true;
     try {
@@ -511,9 +511,9 @@ export function ExecutionWizard({
           if (schedulingType === 'daily') txt = `Tous les jours à ${pad(dailyHour)}:${pad(dailyMinute)} (heure locale)`;
           else if (schedulingType === 'weekly') txt = `Tous les ${['', 'lundis', 'mardis', 'mercredis', 'jeudis', 'vendredis', 'samedis', 'dimanches'][weeklyDayOfWeek]} à ${pad(weeklyHour)}:${pad(weeklyMinute)} (heure locale)`;
           else if (schedulingType === 'cron') txt = `Expression cron : ${cronExpression}`;
-          notification.success({ message: 'Exécution récurrente créée', description: txt });
+          notification.success({ title: 'Exécution récurrente créée', description: txt });
         } else {
-          notification.success({ message: 'Exécution planifiée', description: `Exécution planifiée pour le ${scheduledAt?.format('DD/MM/YYYY [à] HH:mm')} (heure locale)` });
+          notification.success({ title: 'Exécution planifiée', description: `Exécution planifiée pour le ${scheduledAt?.format('DD/MM/YYYY [à] HH:mm')} (heure locale)` });
         }
         onCancel(); if (onSuccess) onSuccess(scheduledId);
       }

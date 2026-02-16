@@ -109,14 +109,14 @@ export default function ExecutionsPage() {
         setCancellingId(executionId);
         try {
           await cancelExecution(executionId);
-          notification.success({ message: MESSAGES.CANCEL_SUCCESS });
+          notification.success({ title: MESSAGES.CANCEL_SUCCESS });
           if (!isRefreshingRef.current) {
             isRefreshingRef.current = true;
             try { await refetchCurrentState(); } finally { isRefreshingRef.current = false; }
           }
         } catch (err) {
           const message = err instanceof Error ? err.message : MESSAGES.CANCEL_ERROR_FALLBACK;
-          notification.error({ message: MESSAGES.CANCEL_ERROR_TITLE, description: message });
+          notification.error({ title: MESSAGES.CANCEL_ERROR_TITLE, description: message });
           logger.error('Cancel execution failed', { executionId, error: message });
         } finally {
           isCancellingRef.current = false;

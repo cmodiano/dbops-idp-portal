@@ -41,7 +41,7 @@ export function AdminAnalyticsDashboard() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erreur de chargement des metriques';
       setError(message);
-      notification.error({ message: 'Erreur', description: message });
+      notification.error({ title: 'Erreur', description: message });
     } finally {
       setLoading(false);
     }

@@ -249,10 +249,10 @@ export function ProfileForm({
       cancelButtonProps={{ disabled: loading }}
     >
       {error && (
-        <Alert type="error" message={error} style={{ marginBottom: 16 }} showIcon />
+        <Alert type="error" title={error} style={{ marginBottom: 16 }} showIcon />
       )}
       {permError && (
-        <Alert type="warning" message={permError} style={{ marginBottom: 16 }} showIcon />
+        <Alert type="warning" title={permError} style={{ marginBottom: 16 }} showIcon />
       )}
       <Form form={form} layout="vertical" preserve={false}>
         <Form.Item
@@ -324,7 +324,7 @@ export function ProfileForm({
             {unknownEnvironments.length > 0 && (
               <Alert
                 type="warning"
-                message="Attention : environnements non reconnus"
+                title="Attention : environnements non reconnus"
                 description={`Les environnements suivants ne sont pas dans l'inventaire : ${unknownEnvironments.join(', ')}. Validation finale au backend.`}
                 showIcon
                 style={{ marginBottom: 8 }}

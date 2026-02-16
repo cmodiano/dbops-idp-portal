@@ -91,7 +91,7 @@ export function IntegrationsTable({
       });
       onRefresh?.();
     } catch {
-      notification.error({ message: 'Erreur', description: 'Erreur lors de la validation batch' });
+      notification.error({ title: 'Erreur', description: 'Erreur lors de la validation batch' });
     } finally {
       setValidatingAll(false);
     }

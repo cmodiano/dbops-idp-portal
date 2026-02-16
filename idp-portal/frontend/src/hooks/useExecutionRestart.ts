@@ -46,7 +46,7 @@ export const useExecutionRestart = (
     logger.debug('Restart execution requested', { executionId: execution.id, actionId: execution.action_id });
 
     if (!execution.action_id) {
-      notification.error({ message: MESSAGES.RESTART_ERROR_TITLE, description: MESSAGES.RESTART_ACTION_UNAVAILABLE });
+      notification.error({ title: MESSAGES.RESTART_ERROR_TITLE, description: MESSAGES.RESTART_ACTION_UNAVAILABLE });
       logger.error('Restart failed: no action_id', { executionId: execution.id });
       return;
     }
@@ -57,7 +57,7 @@ export const useExecutionRestart = (
       const wizardParams = prepareWizardParamsFromExecution(execution);
 
       if (!wizardParams) {
-        notification.error({ message: MESSAGES.RESTART_ERROR_TITLE, description: MESSAGES.RESTART_ACTION_UNAVAILABLE });
+        notification.error({ title: MESSAGES.RESTART_ERROR_TITLE, description: MESSAGES.RESTART_ACTION_UNAVAILABLE });
         logger.error('Restart failed: could not prepare params', { executionId: execution.id });
         return;
       }
@@ -68,7 +68,7 @@ export const useExecutionRestart = (
       setRestartWizardOpen(true);
     } catch (err) {
       const message = err instanceof Error ? err.message : MESSAGES.RESTART_ERROR_FALLBACK;
-      notification.error({ message: MESSAGES.RESTART_ERROR_TITLE, description: message });
+      notification.error({ title: MESSAGES.RESTART_ERROR_TITLE, description: message });
       logger.error('Restart execution failed', { executionId: execution.id, error: message });
     } finally {
       setRestartLoadingId(null);

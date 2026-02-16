@@ -32,7 +32,7 @@ export function FeatureFlagsPanel() {
       setFlags(response.data);
     } catch (err) {
       logger.error('feature_flags_admin_load_error', { error: String(err) });
-      notification.error({ message: 'Erreur lors du chargement des feature flags' });
+      notification.error({ title: 'Erreur lors du chargement des feature flags' });
     } finally {
       setLoading(false);
     }
@@ -51,10 +51,10 @@ export function FeatureFlagsPanel() {
       );
       // MEDIUM-2 fix: Refresh global context to propagate change to other components
       await refreshGlobalContext();
-      notification.success({ message: `Flag "${flagKey}" ${enabled ? 'activé' : 'désactivé'}` });
+      notification.success({ title: `Flag "${flagKey}" ${enabled ? 'activé' : 'désactivé'}` });
     } catch (err) {
       logger.error('feature_flag_toggle_error', { flagKey, error: String(err) });
-      notification.error({ message: `Erreur lors de la modification de "${flagKey}"` });
+      notification.error({ title: `Erreur lors de la modification de "${flagKey}"` });
     } finally {
       setUpdatingKeys(prev => {
         const next = new Set(prev);
@@ -75,10 +75,10 @@ export function FeatureFlagsPanel() {
       );
       // MEDIUM-2 fix: Refresh global context to propagate change to other components
       await refreshGlobalContext();
-      notification.success({ message: `Rollout de "${flagKey}" mis à jour : ${rolloutPercent}%` });
+      notification.success({ title: `Rollout de "${flagKey}" mis à jour : ${rolloutPercent}%` });
     } catch (err) {
       logger.error('feature_flag_rollout_error', { flagKey, error: String(err) });
-      notification.error({ message: `Erreur lors de la modification du rollout de "${flagKey}"` });
+      notification.error({ title: `Erreur lors de la modification du rollout de "${flagKey}"` });
     } finally {
       setUpdatingKeys(prev => {
         const next = new Set(prev);

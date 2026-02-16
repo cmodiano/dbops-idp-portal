@@ -602,7 +602,7 @@ export function ActionWizard({
                   <Alert
                     type="info"
                     showIcon
-                    message="Un workflow enchaîne des actions existantes dans l'ordre défini. Aucun connecteur à configurer : chaque étape utilise le connecteur de l'action référencée."
+                    title="Un workflow enchaîne des actions existantes dans l'ordre défini. Aucun connecteur à configurer : chaque étape utilise le connecteur de l'action référencée."
                     style={{ marginBottom: 8 }}
                   />
                   <Radio.Group
@@ -751,10 +751,10 @@ export function ActionWizard({
       aria-label={modalTitle}
     >
       {error && (
-        <Alert message="Erreur" description={error} type="error" showIcon style={{ marginBottom: 16 }} />
+        <Alert title="Erreur" description={error} type="error" showIcon style={{ marginBottom: 16 }} />
       )}
       {submitError && (
-        <Alert message="Erreur" description={submitError} type="error" showIcon closable onClose={() => setSubmitError(null)} style={{ marginBottom: 16 }} role="alert" />
+        <Alert title="Erreur" description={submitError} type="error" showIcon closable onClose={() => setSubmitError(null)} style={{ marginBottom: 16 }} role="alert" />
       )}
 
       <Steps

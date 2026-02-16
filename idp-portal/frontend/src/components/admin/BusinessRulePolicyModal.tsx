@@ -157,7 +157,7 @@ export function BusinessRulePolicyModal({
         <Alert
           type="error"
           showIcon
-          message={submitError}
+          title={submitError}
           closable
           onClose={() => setSubmitError(null)}
           style={{ marginBottom: 16 }}
@@ -217,7 +217,7 @@ export function BusinessRulePolicyModal({
             style={{ fontFamily: 'monospace', fontSize: 12 }}
           />
           {jsonError && (
-            <Alert type="error" showIcon message={jsonError} style={{ marginTop: 8 }} />
+            <Alert type="error" showIcon title={jsonError} style={{ marginTop: 8 }} />
           )}
         </Form.Item>
 

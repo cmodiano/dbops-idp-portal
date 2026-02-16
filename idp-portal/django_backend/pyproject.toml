@@ -44,6 +44,8 @@ dependencies = [
     "redis>=5.0.0",
     "drf-spectacular>=0.27.0",
     "reportlab>=3.6.0",
+    "puremagic>=1.30",
+    "defusedxml>=0.7.1",
 ]
 
 [project.optional-dependencies]

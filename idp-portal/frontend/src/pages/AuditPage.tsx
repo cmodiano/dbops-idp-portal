@@ -371,7 +371,7 @@ export default function AuditPage() {
         <Title level={2}>Audit</Title>
         <Alert
           type="error"
-          message="Accès non autorisé"
+          title="Accès non autorisé"
           description="Cette page est réservée aux auditeurs."
           showIcon
         />
@@ -402,7 +402,7 @@ export default function AuditPage() {
     return (
       <div style={{ padding: 24 }}>
         <Title level={2}>Audit des exécutions</Title>
-        <Alert type="error" message="Erreur" description={error} showIcon />
+        <Alert type="error" title="Erreur" description={error} showIcon />
       </div>
     );
   }
@@ -570,7 +570,7 @@ export default function AuditPage() {
         {drawerLoading ? (
           <Skeleton active paragraph={{ rows: 8 }} />
         ) : drawerError ? (
-          <Alert type="error" message="Erreur de chargement" description={drawerError} showIcon />
+          <Alert type="error" title="Erreur de chargement" description={drawerError} showIcon />
         ) : selectedEntry ? (
           <div>
             {/* Audit entry details */}

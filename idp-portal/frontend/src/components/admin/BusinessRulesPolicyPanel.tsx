@@ -51,7 +51,7 @@ export function BusinessRulesPolicyPanel() {
       setPolicies(response.data ?? []);
     } catch (err) {
       logger.error('business_rule_policies_load_error', { error: String(err) });
-      notification.error({ message: 'Erreur lors du chargement des r\u00e8gles m\u00e9tier' });
+      notification.error({ title: 'Erreur lors du chargement des r\u00e8gles m\u00e9tier' });
     } finally {
       setLoading(false);
     }
@@ -72,7 +72,7 @@ export function BusinessRulesPolicyPanel() {
       setEditPolicy(detail);
       setModalOpen(true);
     } catch (err) {
-      notification.error({ message: 'Erreur lors du chargement de la r\u00e8gle' });
+      notification.error({ title: 'Erreur lors du chargement de la r\u00e8gle' });
       logger.error('business_rule_policy_load_error', { error: String(err) });
     }
   };
@@ -87,10 +87,10 @@ export function BusinessRulesPolicyPanel() {
       onOk: async () => {
         try {
           await deleteBusinessRulePolicy(record.id);
-          notification.success({ message: `R\u00e8gle \u00ab ${record.name} \u00bb supprim\u00e9e` });
+          notification.success({ title: `R\u00e8gle \u00ab ${record.name} \u00bb supprim\u00e9e` });
           fetchPolicies();
         } catch (err) {
-          notification.error({ message: 'Erreur lors de la suppression' });
+          notification.error({ title: 'Erreur lors de la suppression' });
           logger.error('business_rule_policy_delete_error', { error: String(err) });
         }
       },
@@ -102,10 +102,10 @@ export function BusinessRulesPolicyPanel() {
     try {
       if (editPolicy) {
         await updateBusinessRulePolicy(editPolicy.id, payload);
-        notification.success({ message: `R\u00e8gle \u00ab ${payload.name} \u00bb mise \u00e0 jour` });
+        notification.success({ title: `R\u00e8gle \u00ab ${payload.name} \u00bb mise \u00e0 jour` });
       } else {
         await createBusinessRulePolicy(payload);
-        notification.success({ message: `R\u00e8gle \u00ab ${payload.name} \u00bb cr\u00e9\u00e9e` });
+        notification.success({ title: `R\u00e8gle \u00ab ${payload.name} \u00bb cr\u00e9\u00e9e` });
       }
       setModalOpen(false);
       setEditPolicy(null);

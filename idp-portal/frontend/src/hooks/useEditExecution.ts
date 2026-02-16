@@ -125,7 +125,7 @@ export function useEditExecution(
 
       setEditLoading(true);
       await updateScheduledExecution(executionToEdit.scheduled_execution_id, payload);
-      notification.success({ message: 'Succès', description: 'Exécution planifiée modifiée avec succès' });
+      notification.success({ title: 'Succès', description: 'Exécution planifiée modifiée avec succès' });
       setEditModalVisible(false);
       setExecutionToEdit(null);
       onClosePopover?.();
@@ -147,13 +147,13 @@ export function useEditExecution(
         );
       }
       if (status === 403) {
-        notification.error({ message: 'Permission refusée', description: "Vous n'avez pas la permission de modifier cette exécution planifiée" });
+        notification.error({ title: 'Permission refusée', description: "Vous n'avez pas la permission de modifier cette exécution planifiée" });
       } else if (status === 404) {
-        notification.error({ message: 'Erreur', description: 'Exécution planifiée introuvable' });
+        notification.error({ title: 'Erreur', description: 'Exécution planifiée introuvable' });
       } else if (status === 400) {
-        notification.error({ message: 'Erreur de validation', description });
+        notification.error({ title: 'Erreur de validation', description });
       } else {
-        notification.error({ message: 'Erreur', description });
+        notification.error({ title: 'Erreur', description });
       }
     } finally {
       setEditLoading(false);

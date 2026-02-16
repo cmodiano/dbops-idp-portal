@@ -269,25 +269,93 @@
 
 ---
 
-## Récapitulatif des stories
+### Story 30.13 — HIGH : Restant BUG-FE-1 / BUG-FE-2 (notifications et Alert)
 
-| Story   | Priorité principale | Issues couvertes |
-|--------|----------------------|------------------|
-| 30.1   | CRITICAL             | API-MISS-1/2, BUG-BE-1, SEC-1/2/3 |
-| 30.2   | HIGH                 | API-MISS-3 à 6 |
-| 30.3   | HIGH                 | BUG-BE-2 à BUG-BE-7 |
-| 30.4   | HIGH                 | BUG-FE-1 à BUG-FE-5 |
-| 30.5   | HIGH / MEDIUM        | SEC-4 à SEC-11 |
-| 30.6   | HIGH                 | APIFMT-1 à 4 |
-| 30.7   | HIGH / MEDIUM        | RACE-1/2/3, CELERY-3/4/5 |
-| 30.8   | HIGH / MEDIUM        | ERR-1 à ERR-5 |
-| 30.9   | MEDIUM / LOW         | PERF-1 à PERF-4 |
-| 30.10  | LOW                  | DEAD-* (backend + frontend) |
-| 30.11  | HIGH                 | A11Y-1 à A11Y-3 |
-| 30.12  | MEDIUM / LOW         | INCON-1 à INCON-5 |
+**En tant que** utilisateur,  
+**je veux** que toutes les notifications et Alertes affichent correctement leur titre (prop `message` Ant Design),  
+**afin de** avoir un feedback cohérent partout.
 
-**Ordre recommandé :** 30.1 (critique + config) → 30.3, 30.4, 30.6, 30.8 (bugs et cohérence) → 30.2, 30.5, 30.7 (endpoints, sécurité, Celery) → 30.11 (A11Y) → 30.9, 30.10, 30.12 (perf, nettoyage, incohérences).
+**Constat post-30.4 :** Des occurrences restent non corrigées.
+
+**Issues :** BUG-FE-1 (restant), BUG-FE-2 (restant)
+
+**Acceptance Criteria:**
+- **Given** les fichiers listés dans le rapport (ex. `ActionsAdminPanel.tsx`, `IntegrationsAdminPanel.tsx` pour BUG-FE-1 ; 10 fichiers pour BUG-FE-2)
+- **When** une recherche globale est effectuée
+- **Then** toute utilisation de `notification.*({ title: ... })` est remplacée par `message:` (Ant Design)
+- **And** toute utilisation de `<Alert title=...>` est remplacée par `message=` (Ant Design)
+- **And** aucune régression visuelle ; les titres s'affichent correctement
+
+**Fichiers concernés :** `ActionsAdminPanel.tsx`, `IntegrationsAdminPanel.tsx`, et les 10 fichiers contenant `<Alert title=` (à identifier par grep).
 
 ---
 
-*Epic créée à partir de idp-portal/CODEBASE-REVIEW.md — 65 findings — 16 février 2026.*
+### Story 30.14 — MEDIUM : CatalogActionViewSet.get_queryset() et cache RBAC (NEW-1, NEW-3)
+
+**En tant que** utilisateur du catalogue,  
+**je veux** que les filtres category + tags soient appliqués ensemble et que l'invalidation du cache RBAC soit effective,  
+**afin de** éviter des résultats incorrects et des permissions obsolètes.
+
+**Issues :** NEW-1, NEW-3
+
+**Acceptance Criteria:**
+- **Given** `CatalogActionViewSet.get_queryset()` reçoit à la fois une category et des tags
+- **When** le queryset est construit
+- **Then** `search_by_tags()` est chaîné sur le queryset existant (pas de recréation qui écrase les filtres category)
+- **And** l'invalidation du cache RBAC n'est plus un `pass` placeholder : soit implémentation réelle (invalidate cache / TTL), soit stratégie documentée et ticket de suivi
+
+**Fichiers :** `catalog/views.py` (CatalogActionViewSet), code d'invalidation cache RBAC (à localiser).
+
+---
+
+### Story 30.15 — MEDIUM : TODO actifs et except trop larges (NEW-2, NEW-4)
+
+**En tant que** développeur et opérateur,  
+**je veux** que le code de production n'atteigne pas de stubs TODO (ServiceNow, platform adapter) et que les `except` trop larges soient ciblés,  
+**afin de** éviter des comportements inattendus et des erreurs avalées.
+
+**Issues :** NEW-2, NEW-4
+
+**Acceptance Criteria:**
+- **Given** les chemins de code atteignant des TODO pour ServiceNow et platform adapter
+- **When** ces chemins sont exécutés en production
+- **Then** les TODO sont soit implémentés, soit remplacés par une gestion d'erreur explicite / log + remontée (pas de stub silencieux)
+- **And** les blocs `except Exception:` (ou équivalent trop large) identifiés sont restreints à des exceptions spécifiques ou documentés (avec ticket si report)
+
+**Fichiers :** adapters ServiceNow, platform adapter, et fichiers contenant les `except` trop larges (rapport NEW-4).
+
+---
+
+### Story 30.16 — LOW : Restant doublon, styles inline, INCON-4 (BUG-BE-7, PERF-4, INCON-4)
+
+**En tant que** développeur,  
+**je veux** supprimer le doublon de normalisation restant, traiter les styles inline identifiés et clarifier INCON-4,  
+**afin de** finir le nettoyage et la cohérence documentée.
+
+**Issues :** BUG-BE-7 (restant), PERF-4 (restant), INCON-4
+
+**Acceptance Criteria:**
+- **Given** le doublon de ligne de normalisation (ex. `se.environment = ...` en double) et les composants avec `<style>` inline (PERF-4)
+- **When** le nettoyage est effectué
+- **Then** la ligne dupliquée est supprimée ; les styles inline sont déplacés vers CSS module / thème ou documentés en backlog
+- **And** INCON-4 (IntegerField pour booléens Oracle) est soit documenté comme choix intentionnel dans le code ou la doc technique, soit un ticket de refactor créé
+
+**Fichiers :** `executions/views/scheduled_views.py` (doublon), composants avec styles inline (ex. ActionTable, ExecutionTimeline), `profiles/models.py` / `executions/models.py` (INCON-4).
+
+---
+
+## Récapitulatif des stories (incl. restants post-code-review)
+
+| Story   | Priorité   | Issues couvertes |
+|---------|------------|------------------|
+| 30.1–30.12 | (voir doc) | 65 findings initiaux |
+| 30.13 | HIGH | BUG-FE-1/BUG-FE-2 restant (notifications, Alert) |
+| 30.14 | MEDIUM | NEW-1 (get_queryset), NEW-3 (cache RBAC) |
+| 30.15 | MEDIUM | NEW-2 (TODO stubs), NEW-4 (except trop larges) |
+| 30.16 | LOW | BUG-BE-7 restant, PERF-4 restant, INCON-4 |
+
+**Ordre recommandé pour 30.13–30.16 :** 30.13 (HIGH) → 30.14, 30.15 (MEDIUM) → 30.16 (LOW).
+
+---
+
+*Epic créée à partir de idp-portal/CODEBASE-REVIEW.md — 65 findings — 16 février 2026. Stories 30.13–30.16 ajoutées pour problèmes non résolus par les stories initiales.*

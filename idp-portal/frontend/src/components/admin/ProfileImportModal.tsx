@@ -37,7 +37,7 @@ export function ProfileImportModal({ open, onCancel, onSuccess }: ProfileImportM
   const handleSubmit = useCallback(async () => {
     const file = fileRef.current;
     if (!file) {
-      notification.warning({ message: 'Fichier requis', description: 'Veuillez selectionner un fichier .yaml ou .yml' });
+      notification.warning({ title: 'Fichier requis', description: 'Veuillez selectionner un fichier .yaml ou .yml' });
       return;
     }
     try {
@@ -47,7 +47,7 @@ export function ProfileImportModal({ open, onCancel, onSuccess }: ProfileImportM
       onSuccess(created, updated);
     } catch (err) {
       notification.error({
-        message: 'Erreur d\'import',
+        title: 'Erreur d\'import',
         description: err instanceof Error ? err.message : 'Erreur lors de l\'import YAML',
       });
     }

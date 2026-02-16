@@ -31,6 +31,7 @@ export interface IntegrationFormValues {
   auth_flow?: AuthFlow | null;
   schema?: string | null;
   table?: string | null;
+  config_advanced?: string | null;
   secret_service_id?: number | null;
 }
 
@@ -96,6 +97,10 @@ export function IntegrationForm({
           auth_flow: editIntegration.auth_flow ?? undefined,
           schema: editConfig?.schema ?? undefined,
           table: editConfig?.table ?? undefined,
+          config_advanced:
+            editConfig?.entities != null || editConfig?.flat_table != null
+              ? JSON.stringify(editConfig, null, 2)
+              : undefined,
           secret_service_id: editIntegration.secret_service_id ?? undefined,
         }
       : null;
@@ -106,7 +111,12 @@ export function IntegrationForm({
       setUploadedIconUrl(null);
       setFileList([]);
       const t = setTimeout(() => {
-        const cfg = editIntegration.config as { schema?: string; table?: string } | undefined;
+        const cfg = editIntegration.config as {
+          schema?: string;
+          table?: string;
+          entities?: Record<string, unknown>;
+          flat_table?: Record<string, unknown>;
+        } | undefined;
         form.setFieldsValue({
           type: editIntegration.type,
           name: editIntegration.name,
@@ -116,6 +126,10 @@ export function IntegrationForm({
           auth_flow: editIntegration.auth_flow ?? undefined,
           schema: cfg?.schema ?? undefined,
           table: cfg?.table ?? undefined,
+          config_advanced:
+            cfg?.entities != null || cfg?.flat_table != null
+              ? JSON.stringify(cfg, null, 2)
+              : undefined,
           secret_service_id: editIntegration.secret_service_id ?? undefined,
         });
       }, 0);
@@ -135,6 +149,7 @@ export function IntegrationForm({
         auth_flow: undefined,
         schema: undefined,
         table: undefined,
+        config_advanced: undefined,
         secret_service_id: undefined,
       });
     }
@@ -173,11 +188,26 @@ export function IntegrationForm({
         auth_flow: values.auth_flow || null,
         secret_service_id: isVaultType ? null : (values.secret_service_id || null),
       };
-      if (isInventoryDb && (values.schema?.trim() || values.table?.trim())) {
-        (payload as IntegrationCreate).config = {
-          schema: values.schema?.trim() || null,
-          table: values.table?.trim() || null,
-        };
+      if (isInventoryDb) {
+        if (values.config_advanced?.trim()) {
+          try {
+            const parsed = JSON.parse(values.config_advanced.trim()) as Record<string, unknown>;
+            if (typeof parsed === 'object' && parsed !== null && (parsed.entities != null || parsed.flat_table != null)) {
+              (payload as IntegrationCreate).config = parsed;
+            } else {
+              message.warning('Config JSON : utilisez "entities" (multi-tables) ou "flat_table" (une table). Voir le guide de mapping inventaire.');
+              return;
+            }
+          } catch {
+            message.error('Config JSON invalide. Vérifiez la syntaxe.');
+            return;
+          }
+        } else if (values.schema?.trim() || values.table?.trim()) {
+          (payload as IntegrationCreate).config = {
+            schema: values.schema?.trim() || null,
+            table: values.table?.trim() || null,
+          };
+        }
       }
       const res = await onSubmit(payload);
       if (res && onSuccess) onSuccess(res);
@@ -265,7 +295,7 @@ export function IntegrationForm({
       }
     >
       {error && (
-        <Alert type="error" message={error} style={{ marginBottom: 16 }} showIcon />
+        <Alert type="error" title={error} style={{ marginBottom: 16 }} showIcon />
       )}
       {/* Story 24.3: Alert if integration is invalid */}
       {isEdit && isInvalid && (
@@ -293,7 +323,7 @@ export function IntegrationForm({
       {isFallback && (
         <Alert
           type="warning"
-          message="Impossible de charger les types depuis le backend. Mode dégradé activé — la liste peut être incomplète."
+          title="Impossible de charger les types depuis le backend. Mode dégradé activé — la liste peut être incomplète."
           style={{ marginBottom: 16 }}
           showIcon
         />
@@ -372,6 +402,18 @@ export function IntegrationForm({
               rules={[{ pattern: /^$|^[A-Za-z_][A-Za-z0-9_]*$/, message: 'Alphanumérique et underscore uniquement' }]}
             >
               <Input placeholder="ex: INVENTORY_TARGETS" aria-label="Table ou vue" />
+            </Form.Item>
+            <Form.Item
+              name="config_advanced"
+              label="Config JSON (avancé)"
+              tooltip="Optionnel. Pour plusieurs tables avec références (serveurs → instances → bases), collez ici un JSON avec 'entities'. Si rempli, il remplace Schéma BD / Table ou vue. Voir docs/inventory-mapping-guide.md."
+            >
+              <Input.TextArea
+                placeholder='{"entities": {"servers": {"table": "DBOPS_SERVERS", "id_column": "SERVER_ID", "columns": {"name": "HOSTNAME", "environment": "ENV", "engine_type": "ENGINE"}}, "instances": {...}, "databases": {...}}}'
+                rows={6}
+                aria-label="Config JSON avancé"
+                style={{ fontFamily: 'monospace', fontSize: 12 }}
+              />
             </Form.Item>
           </>
         )}

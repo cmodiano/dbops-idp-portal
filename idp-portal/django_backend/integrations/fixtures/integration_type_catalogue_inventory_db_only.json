@@ -1,0 +1,15 @@
+[
+  {
+    "model": "integrations.integrationtypecatalogue",
+    "pk": "inventory_db",
+    "fields": {
+      "name": "Inventaire (schéma BD)",
+      "description": "Source d'inventaire (serveurs, instances, bases) depuis un schéma BD. Config = mapping InventoryMapper (entities ou flat_table).",
+      "version": "1.0",
+      "is_active": true,
+      "integration_role": "service",
+      "created_at": "2026-02-10T10:00:00Z",
+      "updated_at": "2026-02-10T10:00:00Z"
+    }
+  }
+]
