@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { Button, Tooltip, Space, Skeleton } from 'antd';
+import { Button, Tooltip, Space, Skeleton, theme } from 'antd';
 import { ToolOutlined } from '@ant-design/icons';
 import { sanitizeDescription } from '../../utils/businessLanguage';
 import type { RemediationSuggestion } from '../../types/api';
@@ -52,6 +52,7 @@ export function StructuredErrorCard({
   onSuggestionClick,
   suggestionsLoading,
 }: StructuredErrorCardProps) {
+  const { token } = theme.useToken();
   const firstOptionRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -82,16 +83,16 @@ export function StructuredErrorCard({
       <section aria-labelledby="structured-error-quoi-heading" style={{ marginBottom: 12 }}>
         <h3
           id="structured-error-quoi-heading"
-          style={{ margin: '0 0 4px 0', fontSize: 14, fontWeight: 600, color: '#374151' }}
+          style={{ margin: '0 0 4px 0', fontSize: 14, fontWeight: 600, color: token.colorTextSecondary }}
         >
           {quoiLabel}
         </h3>
-        <p style={{ margin: 0, fontSize: 14, color: '#1f2937' }}>{quoi}</p>
+        <p style={{ margin: 0, fontSize: 14, color: token.colorText }}>{quoi}</p>
       </section>
       <section aria-labelledby="structured-error-pourquoi-heading" style={{ marginBottom: 16 }}>
         <h3
           id="structured-error-pourquoi-heading"
-          style={{ margin: '0 0 4px 0', fontSize: 14, fontWeight: 600, color: '#374151' }}
+          style={{ margin: '0 0 4px 0', fontSize: 14, fontWeight: 600, color: token.colorTextSecondary }}
         >
           {pourquoiLabel}
         </h3>
@@ -101,7 +102,7 @@ export function StructuredErrorCard({
       {/* Story 9.1, AC1: Display remediation suggestions section when available */}
       {suggestionsLoading && (
         <section style={{ marginBottom: 16 }}>
-          <h3 style={{ margin: '0 0 8px 0', fontSize: 14, fontWeight: 600, color: '#374151' }}>
+          <h3 style={{ margin: '0 0 8px 0', fontSize: 14, fontWeight: 600, color: token.colorTextSecondary }}>
             Actions correctives suggérées
           </h3>
           <Space direction="vertical" style={{ width: '100%' }}>
@@ -119,7 +120,7 @@ export function StructuredErrorCard({
         >
           <h3
             id="structured-error-remediation-heading"
-            style={{ margin: '0 0 8px 0', fontSize: 14, fontWeight: 600, color: '#374151' }}
+            style={{ margin: '0 0 8px 0', fontSize: 14, fontWeight: 600, color: token.colorTextSecondary }}
           >
             Actions correctives suggérées
           </h3>
@@ -147,7 +148,7 @@ export function StructuredErrorCard({
       )}
 
       <section>
-        <h3 style={{ margin: '0 0 8px 0', fontSize: 14, fontWeight: 600, color: '#374151' }}>
+        <h3 style={{ margin: '0 0 8px 0', fontSize: 14, fontWeight: 600, color: token.colorTextSecondary }}>
           Options
         </h3>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>

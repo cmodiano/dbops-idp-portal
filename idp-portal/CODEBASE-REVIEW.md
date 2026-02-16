@@ -396,26 +396,30 @@ Tags `<style>` injectés dans le DOM à chaque render. Impact négligeable (pseu
 
 ## 10. Accessibilité & thème
 
-### A11Y-1 [HIGH] — Couleurs dark-theme hardcodées dans `StepDetailDrawer`
-**Fichier :** `components/execution/StepDetailDrawer.tsx:183-226`
+### A11Y-1 [HIGH] — ✅ RESOLVED (Story 30.11) — Couleurs dark-theme hardcodées dans `StepDetailDrawer`
+**Fichier :** `components/execution/StepDetailDrawer.tsx`
 
-`background: '#1f1f1f'`, `color: '#e8e8e8'` → illisible en thème clair.
+~~`background: '#1f1f1f'`, `color: '#e8e8e8'` → illisible en thème clair.~~
 
-**Fix :** Utiliser les tokens du thème Ant Design.
-
----
-
-### A11Y-2 [HIGH] — Status badges avec background dark hardcodé
-**Fichier :** `utils/executionRenderers.tsx:306-311`
-
-`rgba(26, 26, 36, 0.8)` → invisible en thème clair.
+**Fix appliqué :** `token.colorBgContainer`, `token.colorText`, `token.colorTextSecondary`, `token.colorBgElevated` via `theme.useToken()`.
 
 ---
 
-### A11Y-3 [MEDIUM] — `StructuredErrorCard` avec couleurs texte hardcodées
-**Fichier :** `components/execution/StructuredErrorCard.tsx:85-98`
+### A11Y-2 [HIGH] — ✅ RESOLVED (Story 30.11) — Status badges avec background dark hardcodé
+**Fichier :** `utils/executionRenderers.tsx`
 
-`#374151`, `#1f2937` → mauvais contraste en dark mode.
+~~`rgba(26, 26, 36, 0.8)` → invisible en thème clair.~~
+
+**Fix appliqué :** `token.colorBgElevated` via composant `StatusIndicator` utilisant `theme.useToken()`.
+
+---
+
+### A11Y-3 [MEDIUM] — ✅ RESOLVED (Story 30.11) — `StructuredErrorCard` avec couleurs texte hardcodées
+**Fichier :** `components/execution/StructuredErrorCard.tsx`
+
+~~`#374151`, `#1f2937` → mauvais contraste en dark mode.~~
+
+**Fix appliqué :** `token.colorTextSecondary`, `token.colorText` via `theme.useToken()`.
 
 ---
 
@@ -526,7 +530,7 @@ Intentionnel pour Oracle `NUMBER(1)`, mais fragile : tout le code doit comparer 
 | BUG-BE-2 | `secret_service_id` ignoré à la création | Backend | Trivial |
 | BUG-BE-3 | user_id structlog bindé après la réponse | Backend | Faible |
 | BUG-BE-4 | Récurrence placeholder `+1 jour` | Backend | Moyen |
-| A11Y-1/2 | Couleurs hardcodées dark theme | Frontend | Moyen |
+| ~~A11Y-1/2~~ | ~~Couleurs hardcodées dark theme~~ ✅ Story 30.11 | Frontend | — |
 | API-MISS-3/4 | Endpoints remediation manquants | Backend | Moyen |
 | API-MISS-5/6 | Endpoints export dashboard manquants | Backend | Moyen |
 | SEC-10 | CORS header `X-Correlation-ID` non autorisé | Config | Trivial |
@@ -547,7 +551,7 @@ Intentionnel pour Oracle `NUMBER(1)`, mais fragile : tout le code doit comparer 
 | BUG-FE-3/4/5 | Math.random key, infinite loop, deps manquantes | Frontend | Faible |
 | INCON-1/2/3 | Tags, audit hash, audit user | Backend | Moyen |
 | APIFMT-3/4 | Format réponse incohérent | Backend | Moyen |
-| A11Y-3 | Couleurs texte hardcodées | Frontend | Faible |
+| ~~A11Y-3~~ | ~~Couleurs texte hardcodées~~ ✅ Story 30.11 | Frontend | — |
 
 ### LOW (backlog)
 

@@ -10,7 +10,7 @@
 
 /* eslint-disable react-refresh/only-export-components */
 
-import { Badge, Tooltip, Avatar, Tag } from 'antd';
+import { Badge, Tooltip, Avatar, Tag, theme } from 'antd';
 import {
   DatabaseOutlined,
   CloudServerOutlined,
@@ -285,30 +285,26 @@ const STATUS_BADGE_CONFIG: Record<
 };
 
 /**
- * Render status indicator badge for Statut column (AC1, AC2, AC3).
- * 
- * Dark theme optimized: Uses dark background with colored border and text for better integration.
+ * StatusIndicator component for Statut column (AC1, AC2, AC3).
+ *
+ * Uses theme tokens for background/border/text colors (Story 30.11 AC2).
  * - Running states (SUBMITTED, PENDING_APPROVAL, RUNNING): Tag with pulsing dot indicator
  * - Terminal states (COMPLETED, FAILED, CANCELLED, REJECTED): Tag with colored dot
- *
- * @param status - Execution status
- * @returns React node with Tag containing badge dot + text label
  */
-export function renderStatusIndicator(status: ExecutionStatusType): React.ReactNode {
-  const config = STATUS_BADGE_CONFIG[status] || { 
-    status: 'default' as const, 
+function StatusIndicator({ status }: { status: ExecutionStatusType }): React.ReactNode {
+  const { token } = theme.useToken();
+  const config = STATUS_BADGE_CONFIG[status] || {
+    status: 'default' as const,
     label: 'Inconnu',
     color: '#9CA3AF'
   };
   const isRunning = config.status === 'processing';
 
-  // Dark theme colors: semi-transparent dark background with colored border
-  const bgColor = `rgba(26, 26, 36, 0.8)`;
   const borderColor = config.color;
-  const textColor = config.status === 'error' ? '#EF4444' : 
+  const textColor = config.status === 'error' ? '#EF4444' :
                     config.status === 'success' ? '#10B981' :
                     config.status === 'warning' ? '#F59E0B' :
-                    config.status === 'processing' ? config.color : '#f0f0f2';
+                    config.status === 'processing' ? config.color : token.colorText;
 
   return (
     <Tag
@@ -318,7 +314,7 @@ export function renderStatusIndicator(status: ExecutionStatusType): React.ReactN
         alignItems: 'center',
         gap: 8,
         border: `1px solid ${borderColor}`,
-        backgroundColor: bgColor,
+        backgroundColor: token.colorBgElevated,
         color: textColor,
         padding: '1px 6px',
         fontSize: '12px',
@@ -336,6 +332,17 @@ export function renderStatusIndicator(status: ExecutionStatusType): React.ReactN
       <span style={{ fontWeight: 500 }}>{config.label}</span>
     </Tag>
   );
+}
+
+/**
+ * Render status indicator badge for Statut column (AC1, AC2, AC3).
+ * Wrapper function for backward compatibility with column render functions.
+ *
+ * @param status - Execution status
+ * @returns React node with Tag containing badge dot + text label
+ */
+export function renderStatusIndicator(status: ExecutionStatusType): React.ReactNode {
+  return <StatusIndicator status={status} />;
 }
 
 /** Status config with icons for RecentExecutions component (legacy compatibility).

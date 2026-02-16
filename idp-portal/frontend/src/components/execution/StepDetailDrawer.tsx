@@ -9,7 +9,7 @@
  */
 
 import { useMemo, useState, useEffect } from 'react';
-import { Drawer, Space, Typography, Badge, Alert, Card, Spin } from 'antd';
+import { Drawer, Space, Typography, Badge, Alert, Card, Spin, theme } from 'antd';
 import { CloseOutlined, CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import { StructuredErrorCard } from './StructuredErrorCard';
 import { ExecutionTimeline } from './ExecutionTimeline';
@@ -57,6 +57,8 @@ export function StepDetailDrawer({
   workflowSteps,
   onClose,
 }: StepDetailDrawerProps) {
+  const { token } = theme.useToken();
+
   // AC10: Find selected step from data already loaded (no fetch)
   const selectedStep = useMemo(() => {
     if (!stepId || !workflowSteps?.length) return null;
@@ -94,10 +96,10 @@ export function StepDetailDrawer({
   // Status icon helper — MUST be before any early return (React hooks rule)
   const statusIcon = useMemo(() => {
     const status = executionStep?.status;
-    if (status === 'COMPLETED') return <CheckCircleOutlined style={{ color: '#389e0d', fontSize: 18 }} />;
-    if (status === 'FAILED') return <CloseCircleOutlined style={{ color: '#cf1322', fontSize: 18 }} />;
-    if (status === 'RUNNING') return <LoadingOutlined spin style={{ color: '#fa8c16', fontSize: 18 }} />;
-    return <ClockCircleOutlined style={{ color: '#8c8c8c', fontSize: 18 }} />;
+    if (status === 'COMPLETED') return <CheckCircleOutlined style={{ color: token.colorSuccess, fontSize: 18 }} />;
+    if (status === 'FAILED') return <CloseCircleOutlined style={{ color: token.colorError, fontSize: 18 }} />;
+    if (status === 'RUNNING') return <LoadingOutlined spin style={{ color: token.colorWarning, fontSize: 18 }} />;
+    return <ClockCircleOutlined style={{ color: token.colorTextQuaternary, fontSize: 18 }} />;
   }, [executionStep?.status]);
 
   // Parse step output (logs) — raw JSON for fallback or when no child execution
@@ -176,12 +178,12 @@ export function StepDetailDrawer({
       }}
       data-testid="step-detail-drawer"
     >
-      {/* AC3: Step metadata header — uses theme-safe colors */}
+      {/* AC3: Step metadata header — uses theme tokens (Story 30.11 AC1) */}
       <div
         style={{
           padding: '16px 24px',
-          borderBottom: '1px solid #303030',
-          background: '#1f1f1f',
+          borderBottom: `1px solid ${token.colorBorder}`,
+          background: token.colorBgContainer,
           position: 'sticky',
           top: 0,
           zIndex: 1,
@@ -192,11 +194,11 @@ export function StepDetailDrawer({
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Space size={8} align="center">
               {statusIcon}
-              <Title level={4} style={{ margin: 0, color: '#e8e8e8' }}>{stepTitle}</Title>
+              <Title level={4} style={{ margin: 0, color: token.colorText }}>{stepTitle}</Title>
             </Space>
             <CloseOutlined
               onClick={onClose}
-              style={{ cursor: 'pointer', fontSize: 16, color: '#999' }}
+              style={{ cursor: 'pointer', fontSize: 16, color: token.colorTextTertiary }}
               data-testid="step-detail-close"
               aria-label="Fermer le détail de l'étape"
             />
@@ -204,26 +206,26 @@ export function StepDetailDrawer({
 
           <Space size={16} wrap>
             <Space size={4}>
-              <Text style={{ color: '#999' }}>Ordre:</Text>
-              <Text strong style={{ color: '#e8e8e8' }}>#{workflowStep.order}</Text>
+              <Text style={{ color: token.colorTextSecondary }}>Ordre:</Text>
+              <Text strong style={{ color: token.colorText }}>#{workflowStep.order}</Text>
             </Space>
             {workflowStep.action_name && (
               <Space size={4}>
-                <Text style={{ color: '#999' }}>Action:</Text>
-                <Text style={{ color: '#e8e8e8' }}>{workflowStep.action_name}</Text>
+                <Text style={{ color: token.colorTextSecondary }}>Action:</Text>
+                <Text style={{ color: token.colorText }}>{workflowStep.action_name}</Text>
               </Space>
             )}
             <Space size={4}>
-              <Text style={{ color: '#999' }}>Statut:</Text>
+              <Text style={{ color: token.colorTextSecondary }}>Statut:</Text>
               <Badge
                 status={statusCfg.color as 'default' | 'processing' | 'success' | 'error' | 'warning'}
-                text={<span style={{ color: '#e8e8e8' }}>{statusCfg.label}</span>}
+                text={<span style={{ color: token.colorText }}>{statusCfg.label}</span>}
               />
             </Space>
             {duration && (
               <Space size={4}>
-                <Text style={{ color: '#999' }}>Durée:</Text>
-                <Text style={{ color: '#e8e8e8' }}>{duration}</Text>
+                <Text style={{ color: token.colorTextSecondary }}>Durée:</Text>
+                <Text style={{ color: token.colorText }}>{duration}</Text>
               </Space>
             )}
           </Space>
@@ -301,8 +303,8 @@ export function StepDetailDrawer({
                         style={{
                           margin: 0,
                           padding: 12,
-                          background: '#141414',
-                          color: '#d4d4d4',
+                          background: token.colorBgElevated,
+                          color: token.colorText,
                           borderRadius: 6,
                           fontSize: 12,
                           fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
@@ -332,8 +334,8 @@ export function StepDetailDrawer({
                           style={{
                             margin: 0,
                             padding: 12,
-                            background: '#141414',
-                            color: '#d4d4d4',
+                            background: token.colorBgElevated,
+                            color: token.colorText,
                             borderRadius: 6,
                             fontSize: 12,
                             fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
@@ -360,8 +362,8 @@ export function StepDetailDrawer({
                   style={{
                     margin: 0,
                     padding: 12,
-                    background: '#141414',
-                    color: '#d4d4d4',
+                    background: token.colorBgElevated,
+                    color: token.colorText,
                     borderRadius: 6,
                     fontSize: 12,
                     fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
@@ -378,7 +380,7 @@ export function StepDetailDrawer({
             )}
 
             {executionStep.error_message && (
-              <Card size="small" title={<span style={{ fontSize: 13, color: '#ff4d4f' }}>Message d'erreur</span>}>
+              <Card size="small" title={<span style={{ fontSize: 13, color: token.colorError }}>Message d'erreur</span>}>
                 <Text type="danger">{executionStep.error_message}</Text>
               </Card>
             )}

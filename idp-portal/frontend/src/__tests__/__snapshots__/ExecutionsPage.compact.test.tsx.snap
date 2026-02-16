@@ -1351,7 +1351,7 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                     >
                       <span
                         class="ant-tag ant-tag-filled css-dev-only-do-not-override-1d8anct css-var-root"
-                        style="margin: 0px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid rgb(59, 130, 246); background-color: rgba(26, 26, 36, 0.8); color: rgb(59, 130, 246); padding: 1px 6px; font-size: 12px; line-height: 20px;"
+                        style="margin: 0px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid rgb(59, 130, 246); background-color: rgb(255, 255, 255); color: rgb(59, 130, 246); padding: 1px 6px; font-size: 12px; line-height: 20px;"
                       >
                         <span
                           class="ant-badge ant-badge-status ant-badge-not-a-wrapper css-dev-only-do-not-override-1d8anct css-var-root"
@@ -1464,7 +1464,7 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                     >
                       <span
                         class="ant-tag ant-tag-filled css-dev-only-do-not-override-1d8anct css-var-root"
-                        style="margin: 0px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid rgb(16, 185, 129); background-color: rgba(26, 26, 36, 0.8); color: rgb(16, 185, 129); padding: 1px 6px; font-size: 12px; line-height: 20px;"
+                        style="margin: 0px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid rgb(16, 185, 129); background-color: rgb(255, 255, 255); color: rgb(16, 185, 129); padding: 1px 6px; font-size: 12px; line-height: 20px;"
                       >
                         <span
                           class="ant-badge ant-badge-status ant-badge-not-a-wrapper css-dev-only-do-not-override-1d8anct css-var-root"

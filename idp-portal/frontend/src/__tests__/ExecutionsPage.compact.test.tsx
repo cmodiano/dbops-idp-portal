@@ -165,12 +165,12 @@ describe('ExecutionsPage - Compact Mode (Story 17.13)', () => {
     expect(tag).toHaveStyle({ fontSize: '12px', lineHeight: '20px' });
   });
 
-  it('status badges maintain border and dark background styling (Task 3.4)', () => {
+  it('status badges maintain border and theme-aware background styling (Task 3.4, Story 30.11)', () => {
     const { container } = render(renderStatusIndicator('FAILED') as React.ReactElement);
     const tag = container.querySelector('.ant-tag');
     expect(tag).toBeInTheDocument();
-    // Verify glass morphism styling preserved: dark background + colored border
-    expect(tag).toHaveStyle({ backgroundColor: 'rgba(26, 26, 36, 0.8)' });
+    // Verify theme-aware background (uses token.colorBgElevated — white in default/test theme)
+    expect(tag).toHaveStyle({ backgroundColor: 'rgb(255, 255, 255)' });
     // Check border via style attribute (jsdom may not parse border shorthand)
     const style = tag?.getAttribute('style') ?? '';
     expect(style).toContain('border: 1px solid');
