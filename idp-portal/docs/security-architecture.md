@@ -377,13 +377,39 @@ AUTH_DEV_BYPASS = env.bool('AUTH_DEV_BYPASS', default=False)
 - Genere JWT sans SAML (username hardcode ou parametre)
 - **CRITIQUE :** TOUJOURS desactive en production (`if DEBUG`)
 
+**Guard production (Story 30.5 — SEC-7) :**
+- Si `AUTH_DEV_BYPASS=True` et `DEBUG=False` → log CRITICAL emis dans `SAMLLoginView.get()` et `JWTAuthentication.authenticate()`
+- Message : `"SECURITY ALERT: AUTH_DEV_BYPASS is enabled in production mode (DEBUG=False). This creates a critical security vulnerability."`
+- Permet la detection par les outils de monitoring (Splunk, Dynatrace)
+
+**Limitation connue (SEC-11) :** Le token d'acces est passe dans le fragment URL (`#access_token=...`) en mode dev bypass. Le fragment n'est pas envoye au serveur mais reste visible dans l'historique navigateur. Acceptable pour dev uniquement. Production utilise le flow SAML standard.
+
 **Tests de validation :**
 - 52 tests authentification JWT (Story 15.2)
+- 5 tests guard production (Story 30.5 — SEC-7)
 - `test_jwt_valid_token` : Token valide accepte
 - `test_jwt_expired_token` : Token expire rejete
 - `test_jwt_invalid_signature` : Signature incorrecte rejetee
 - `test_jwt_token_type_mismatch` : Refresh token comme access rejete
 - `test_jwt_corrupted_token` : Token corrompu rejete
+
+### File Upload Security (Story 30.5)
+
+**Fichier :** `django_backend/integrations/upload_views.py`
+
+**3 couches de validation :**
+
+1. **Extension allowlist (SEC-5)** : Seules les extensions `.png`, `.jpg`, `.jpeg`, `.svg`, `.gif` sont acceptees. Toute autre extension est rejetee avec erreur 400.
+
+2. **Magic bytes validation (SEC-10)** : Le contenu reel du fichier est verifie via `puremagic` (pure Python). Un fichier avec extension `.png` mais contenu executable est rejete. SVG exempte (format texte XML).
+
+3. **SVG sanitization (SEC-6)** : Les fichiers SVG sont parses avec `defusedxml` et sanitises :
+   - Balises `<script>` supprimees
+   - Attributs event handlers (`onclick`, `onerror`, `onload`, etc.) supprimes
+   - Balises `<style>` contenant du JavaScript supprimees
+   - Attributs `href`/`xlink:href` avec protocole `javascript:` supprimes
+
+**Tests :** 27 tests upload security (Story 30.5 — AC9)
 
 ---
 

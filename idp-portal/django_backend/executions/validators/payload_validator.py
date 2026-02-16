@@ -37,7 +37,12 @@ class ExecutionPayloadValidator:
         workflow_step_parameters = payload.get("workflow_step_parameters")
         parent_execution_id = payload.get("parent_execution_id")
 
-        correlation_id = request.META.get("HTTP_X_IDP_REQUEST_ID") or get_correlation_id()
+        # SEC-9: Read X-Correlation-ID (preferred) or X-Idp-Request-Id (legacy fallback)
+        correlation_id = (
+            request.META.get("HTTP_X_CORRELATION_ID")
+            or request.META.get("HTTP_X_IDP_REQUEST_ID")
+            or get_correlation_id()
+        )
 
         if not action_id:
             raise BadRequestError(

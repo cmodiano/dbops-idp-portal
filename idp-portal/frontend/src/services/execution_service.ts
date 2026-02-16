@@ -436,36 +436,25 @@ export async function fetchInventoryItems(
   // Start new request
   const promise = (async () => {
     try {
-      const response = await fetch(`/api/v1/inventory/${type}${params}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        if (response.status === 503) {
-          // Inventory unavailable - try sessionStorage cache if available (Task 4.2, 4.3)
-          // Security (MED-5): sessionStorage mitigates XSS risk for infrastructure topology data
-          // (server names, DB names). localStorage persisted indefinitely → extended XSS exposure.
-          // sessionStorage auto-clears on tab close → limits attack window to active session.
-          // Risk: MEDIUM-HIGH (plaintext infra topology readable via DevTools if XSS present)
+      // SEC-4: Use authenticated client with JWT token and correlation ID
+      let data: { data?: InventoryItem[] };
+      try {
+        data = await apiFetchRaw<{ data?: InventoryItem[] }>(`/inventory/${type}${params}`);
+      } catch (fetchError) {
+        // Handle 503 - Inventory unavailable, try sessionStorage cache
+        if (fetchError instanceof Error && fetchError.message.includes('503')) {
           const cached = sessionStorage.getItem(cacheKey);
           if (cached) {
             let cachedData;
             try {
               cachedData = JSON.parse(cached);
             } catch (parseError) {
-              // Invalid JSON - log and continue to throw original 503 error
               logger.warn('Invalid inventory cache JSON', { error: parseError instanceof Error ? parseError.message : String(parseError) });
             }
 
-            // Validate cache structure (defense against XSS-injected malformed data)
             if (cachedData && typeof cachedData.timestamp === 'number' && Array.isArray(cachedData.items)) {
               const cacheTime = cachedData.timestamp;
               const now = Date.now();
-              // Use cache if less than TTL (Task 4.3) - FIXED: use CACHE_TTL constant
               if (now - cacheTime < CACHE_TTL) {
                 const error = new Error('Inventaire temporairement indisponible — dernières valeurs en cache');
                 (error as Error & { code: string }).code = 'INVENTORY_UNAVAILABLE';
@@ -474,7 +463,6 @@ export async function fetchInventoryItems(
                 throw error;
               }
             } else if (cachedData) {
-              // Invalid cache structure - log warning
               logger.warn('Invalid inventory cache structure (missing timestamp or items array)');
             }
           }
@@ -482,10 +470,9 @@ export async function fetchInventoryItems(
           (error as Error & { code: string }).code = 'INVENTORY_UNAVAILABLE';
           throw error;
         }
-        throw new Error(`Failed to fetch inventory: ${response.statusText}`);
+        throw fetchError;
       }
 
-      const data = await response.json();
       const items = data.data || [];
 
       // Update memory cache

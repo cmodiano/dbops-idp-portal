@@ -59,10 +59,10 @@ def get_client_ip(request: HttpRequest) -> str:
 
 class CorrelationIdMiddleware:
     """
-    Middleware that generates and propagates X-Idp-Request-Id header.
+    Middleware that generates and propagates correlation ID header.
 
-    If the incoming request has an X-Idp-Request-Id header, it uses that value.
-    Otherwise, it generates a new UUID for the request.
+    SEC-9: Reads X-Correlation-ID (preferred) or X-Idp-Request-Id (legacy fallback).
+    Responds with X-Correlation-ID header (unified with frontend).
 
     The correlation ID is:
     - Stored in thread-local for access throughout the request
@@ -75,8 +75,11 @@ class CorrelationIdMiddleware:
         self.get_response = get_response
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
-        # Get or generate correlation ID
-        correlation_id = request.META.get('HTTP_X_IDP_REQUEST_ID')
+        # SEC-9: Read X-Correlation-ID (preferred) or X-Idp-Request-Id (legacy fallback)
+        correlation_id = (
+            request.META.get('HTTP_X_CORRELATION_ID')
+            or request.META.get('HTTP_X_IDP_REQUEST_ID')
+        )
         if not correlation_id:
             correlation_id = str(uuid.uuid4())
 
@@ -99,8 +102,8 @@ class CorrelationIdMiddleware:
         # Process request
         response = self.get_response(request)
 
-        # Add to response headers
-        response['X-Idp-Request-Id'] = correlation_id
+        # SEC-9: Respond with unified header name (X-Correlation-ID)
+        response['X-Correlation-ID'] = correlation_id
 
         # Clear thread-local and structlog contextvars after request
         set_correlation_id(None)

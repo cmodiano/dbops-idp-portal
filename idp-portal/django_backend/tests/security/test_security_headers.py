@@ -106,44 +106,44 @@ class TestCacheControl:
 @pytest.mark.django_db
 @pytest.mark.security
 class TestCorrelationIdPropagation:
-    """X-Idp-Request-Id is generated and propagated in responses."""
+    """X-Correlation-ID is generated and propagated in responses."""
 
     def test_correlation_id_in_response(self, anon_client):
-        """Response contains X-Idp-Request-Id header."""
+        """Response contains X-Correlation-ID header."""
         response = anon_client.get('/api/v1/health/')
-        correlation_id = response.get('X-Idp-Request-Id')
+        correlation_id = response.get('X-Correlation-ID')
         assert correlation_id is not None
         assert len(correlation_id) > 0
 
     def test_correlation_id_is_uuid_format(self, anon_client):
         """Correlation ID is a valid UUID."""
         response = anon_client.get('/api/v1/health/')
-        correlation_id = response.get('X-Idp-Request-Id')
+        correlation_id = response.get('X-Correlation-ID')
         # Should be parseable as UUID
         parsed = uuid.UUID(correlation_id)
         assert str(parsed) == correlation_id
 
     def test_custom_correlation_id_propagated(self, anon_client):
-        """When X-Idp-Request-Id is provided, it is echoed back."""
+        """When X-Correlation-ID is provided, it is echoed back."""
         custom_id = str(uuid.uuid4())
         response = anon_client.get(
             '/api/v1/health',
             HTTP_X_IDP_REQUEST_ID=custom_id,
         )
-        assert response.get('X-Idp-Request-Id') == custom_id
+        assert response.get('X-Correlation-ID') == custom_id
 
     def test_correlation_id_on_error(self, anon_client):
         """Correlation ID is present even on error responses."""
         response = anon_client.get('/api/v1/auth/me/')
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
-        assert response.get('X-Idp-Request-Id') is not None
+        assert response.get('X-Correlation-ID') is not None
 
     def test_unique_correlation_per_request(self, anon_client):
         """Each request gets a unique correlation ID."""
         r1 = anon_client.get('/api/v1/health/')
         r2 = anon_client.get('/api/v1/health/')
-        id1 = r1.get('X-Idp-Request-Id')
-        id2 = r2.get('X-Idp-Request-Id')
+        id1 = r1.get('X-Correlation-ID')
+        id2 = r2.get('X-Correlation-ID')
         assert id1 != id2
 
 

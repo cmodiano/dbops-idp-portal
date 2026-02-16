@@ -3,6 +3,7 @@ DRF Authentication backend for JWT tokens.
 Story M.7 - Task 4.5-4.8
 """
 
+import logging
 from typing import Any
 
 from django.conf import settings
@@ -11,6 +12,8 @@ from rest_framework.exceptions import AuthenticationFailed
 
 from idp_auth.jwt_utils import verify_token
 from idp_auth.models import User
+
+logger = logging.getLogger(__name__)
 
 
 class JWTAuthentication(BaseAuthentication):
@@ -53,6 +56,12 @@ class JWTAuthentication(BaseAuthentication):
         is_mock_token = token == 'dev-mock-token-for-testing'
         
         if is_dev_bypass and is_mock_token:
+            # SEC-7: Guard — log CRITICAL if dev bypass is active with DEBUG=False (production)
+            if not settings.DEBUG:
+                logger.critical(
+                    "SECURITY ALERT: AUTH_DEV_BYPASS is enabled in production mode "
+                    "(DEBUG=False). This creates a critical security vulnerability."
+                )
             # Get or create dev user (same as SAMLLoginView dev bypass)
             dev_user, _ = User.objects.get_or_create(
                 username="dev-user",

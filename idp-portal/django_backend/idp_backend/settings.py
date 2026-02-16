@@ -305,7 +305,7 @@ CORS_ALLOW_CREDENTIALS = True
 
 # Expose correlation ID header to frontend for debugging
 CORS_EXPOSE_HEADERS = [
-    'X-Idp-Request-Id',
+    'X-Correlation-ID',  # SEC-9: Unified with frontend (was X-Idp-Request-Id)
     'Retry-After',  # Story 17.11 - rate limit headers
     'X-RateLimit-Limit',
     'X-RateLimit-Remaining',
@@ -323,7 +323,7 @@ CORS_ALLOW_HEADERS = [
     'user-agent',
     'x-csrftoken',
     'x-requested-with',
-    'x-idp-request-id',  # Allow frontend to pass correlation ID
+    'x-correlation-id',  # SEC-9: Unified with frontend (was x-idp-request-id)
 ]
 
 # ============================================================================

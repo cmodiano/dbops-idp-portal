@@ -78,6 +78,12 @@ class SAMLLoginView(APIView):
         """Initiate SAML login flow."""
         # Dev bypass mode (for local development without IdP)
         if settings.AUTH_DEV_BYPASS:
+            # SEC-7: Guard — log CRITICAL if dev bypass is active with DEBUG=False (production)
+            if not settings.DEBUG:
+                logger.critical(
+                    "SECURITY ALERT: AUTH_DEV_BYPASS is enabled in production mode "
+                    "(DEBUG=False). This creates a critical security vulnerability."
+                )
             # Resolve real dev-user id so GET /auth/me finds the user (no user with id=0 in DB)
             dev_user, _ = User.objects.get_or_create(
                 username="dev-user",
@@ -100,6 +106,11 @@ class SAMLLoginView(APIView):
                 if settings.CORS_ALLOWED_ORIGINS and len(settings.CORS_ALLOWED_ORIGINS) > 0 
                 else 'http://localhost:5173'
             )
+            # KNOWN LIMITATION (SEC-11): Token in URL fragment is acceptable for dev bypass only.
+            # Production SAML flow uses standard session-based authentication.
+            # Fragment is NOT sent to the server (unlike query params) but is visible
+            # in browser history and JavaScript logs.
+            # Future: migrate to OAuth2 authorization code flow for enhanced security.
             redirect_url = f"{cors_origin}/auth/callback#access_token={access_token}"
 
             response = redirect(redirect_url)

@@ -39,9 +39,9 @@ class TestCorrelationIdMiddleware(TestCase):
         response = self.middleware(request)
 
         # Should have correlation ID header in response
-        assert 'X-Idp-Request-Id' in response
+        assert 'X-Correlation-ID' in response
         # Should be a valid UUID format
-        correlation_id = response['X-Idp-Request-Id']
+        correlation_id = response['X-Correlation-ID']
         uuid.UUID(correlation_id)  # Will raise if not valid UUID
 
     def test_preserves_correlation_id_from_header(self):
@@ -54,7 +54,7 @@ class TestCorrelationIdMiddleware(TestCase):
 
         response = self.middleware(request)
 
-        assert response['X-Idp-Request-Id'] == existing_id
+        assert response['X-Correlation-ID'] == existing_id
 
     def test_correlation_id_available_in_thread_local(self):
         """Test that correlation ID is available via get_correlation_id() during request."""
@@ -70,7 +70,7 @@ class TestCorrelationIdMiddleware(TestCase):
         response = middleware(request)
 
         assert captured_id is not None
-        assert response['X-Idp-Request-Id'] == captured_id
+        assert response['X-Correlation-ID'] == captured_id
 
     def test_correlation_id_cleared_after_request(self):
         """Test that correlation ID is cleared from thread-local after request."""

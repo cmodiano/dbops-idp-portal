@@ -166,7 +166,7 @@ def custom_exception_handler(exc: Exception, context: dict[str, Any]) -> Respons
             },
             status=status.HTTP_404_NOT_FOUND
         )
-        resp['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
+        resp['X-Correlation-ID'] = request_context.get('correlation_id', '')
         return resp
 
     if isinstance(exc, BadRequestError):
@@ -187,7 +187,7 @@ def custom_exception_handler(exc: Exception, context: dict[str, Any]) -> Respons
             },
             status=status.HTTP_400_BAD_REQUEST
         )
-        resp['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
+        resp['X-Correlation-ID'] = request_context.get('correlation_id', '')
         return resp
 
     if isinstance(exc, InvalidStateError):
@@ -208,7 +208,7 @@ def custom_exception_handler(exc: Exception, context: dict[str, Any]) -> Respons
             },
             status=status.HTTP_400_BAD_REQUEST
         )
-        resp['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
+        resp['X-Correlation-ID'] = request_context.get('correlation_id', '')
         return resp
 
     if isinstance(exc, UnauthorizedError):
@@ -229,7 +229,7 @@ def custom_exception_handler(exc: Exception, context: dict[str, Any]) -> Respons
             },
             status=status.HTTP_401_UNAUTHORIZED
         )
-        resp['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
+        resp['X-Correlation-ID'] = request_context.get('correlation_id', '')
         return resp
 
     if isinstance(exc, ForbiddenError):
@@ -250,7 +250,7 @@ def custom_exception_handler(exc: Exception, context: dict[str, Any]) -> Respons
             },
             status=status.HTTP_403_FORBIDDEN
         )
-        resp['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
+        resp['X-Correlation-ID'] = request_context.get('correlation_id', '')
         return resp
 
     if isinstance(exc, ServiceUnavailableError):
@@ -271,7 +271,7 @@ def custom_exception_handler(exc: Exception, context: dict[str, Any]) -> Respons
             },
             status=status.HTTP_503_SERVICE_UNAVAILABLE
         )
-        resp['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
+        resp['X-Correlation-ID'] = request_context.get('correlation_id', '')
         return resp
 
     if isinstance(exc, ConflictError):
@@ -292,7 +292,7 @@ def custom_exception_handler(exc: Exception, context: dict[str, Any]) -> Respons
             },
             status=status.HTTP_409_CONFLICT
         )
-        resp['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
+        resp['X-Correlation-ID'] = request_context.get('correlation_id', '')
         return resp
 
     # Handle DRF exceptions
@@ -324,7 +324,7 @@ def custom_exception_handler(exc: Exception, context: dict[str, Any]) -> Respons
                 },
                 status=response.status_code
             )
-            resp['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
+            resp['X-Correlation-ID'] = request_context.get('correlation_id', '')
             # Story 17.11: Propagate Retry-After header from DRF throttle response
             if 'Retry-After' in response:
                 resp['Retry-After'] = response['Retry-After']
@@ -349,11 +349,11 @@ def custom_exception_handler(exc: Exception, context: dict[str, Any]) -> Respons
                 },
                 status=response.status_code
             )
-            resp['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
+            resp['X-Correlation-ID'] = request_context.get('correlation_id', '')
             return resp
 
         # Add correlation_id to any other DRF response
-        response['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
+        response['X-Correlation-ID'] = request_context.get('correlation_id', '')
         return response
 
     # Unhandled exception - log full details but mask from client
@@ -376,5 +376,5 @@ def custom_exception_handler(exc: Exception, context: dict[str, Any]) -> Respons
         },
         status=status.HTTP_500_INTERNAL_SERVER_ERROR
     )
-    resp['X-Idp-Request-Id'] = request_context.get('correlation_id', '')
+    resp['X-Correlation-ID'] = request_context.get('correlation_id', '')
     return resp

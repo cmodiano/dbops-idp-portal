@@ -99,23 +99,24 @@ class TestUploadIconView(TestCase):
     def test_upload_icon_invalid_mime(self):
         """Test POST /admin/integrations/upload-icon with invalid MIME type → 400."""
         self.client.force_authenticate(user=self.dbops_user)
-        
-        # Create a test file with invalid MIME type
+
+        # Create a test file with invalid MIME type and extension
         invalid_file = SimpleUploadedFile(
             "test.txt",
             b'This is not an image',
             content_type='text/plain'
         )
-        
+
         response = self.client.post(
             '/api/v1/admin/integrations/upload-icon/',
             {'file': invalid_file},
             format='multipart'
         )
-        
+
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('error', response.data)
-        self.assertEqual(response.data['error']['code'], 'INVALID_FILE_TYPE')
+        # SEC-5: Extension is validated first, so INVALID_EXTENSION is returned
+        self.assertEqual(response.data['error']['code'], 'INVALID_EXTENSION')
     
     def test_upload_icon_too_large(self):
         """Test POST /admin/integrations/upload-icon with file > 2MB → 400."""

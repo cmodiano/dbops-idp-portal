@@ -214,77 +214,29 @@ Un secret JWT vide rend les tokens trivialement falsifiables.
 
 ---
 
-### SEC-4 [HIGH] — `fetchInventoryItems` contourne le client API (pas de token)
-**Fichier :** `frontend/src/services/execution_service.ts:439`
+### SEC-4 [HIGH] — ✅ RESOLVED (Story 30.5)
+`fetchInventoryItems` migré vers `apiFetchRaw()` avec token JWT et correlation ID. 1 test frontend.
 
-Utilise `fetch()` natif au lieu de `apiFetch()` → pas de header `Authorization: Bearer`, pas de retry 401, pas de correlation ID.
+### SEC-5 [MEDIUM] — ✅ RESOLVED (Story 30.5)
+Extension allowlist ajoutée : `.png`, `.jpg`, `.jpeg`, `.svg`, `.gif`. 11 tests.
 
-**Fix :** Migrer vers `apiFetchRaw()`.
+### SEC-6 [MEDIUM] — ✅ RESOLVED (Story 30.5)
+Validation magic bytes via `puremagic`. Fichiers avec contenu non-image rejetés. 5 tests.
 
----
+### SEC-7 [MEDIUM] — ✅ RESOLVED (Story 30.5)
+SVG sanitisé via `defusedxml` : `<script>`, event handlers, `javascript:` href supprimés. 11 tests.
 
-### SEC-5 [MEDIUM] — Extension fichier prise du nom client (upload icons)
-**Fichier :** `integrations/upload_views.py:73`
-```python
-file_ext = Path(file.name).suffix or '.png'
-```
-Un attaquant peut uploader `icon.html` ou `icon.php`. Si le serveur statique interprète ces extensions → XSS ou exécution de code.
+### SEC-8 [MEDIUM] — ✅ RESOLVED (Story 30.5)
+Guard production : log CRITICAL si `AUTH_DEV_BYPASS=True` + `DEBUG=False`. 5 tests.
 
-**Fix :** Allowlist d'extensions : `.png`, `.jpg`, `.jpeg`, `.svg`, `.gif`.
+### SEC-9 [MEDIUM] — ✅ RESOLVED (Story 30.5, validation)
+Credentials Celery : déjà conforme. `credential_ref` (format `vault:...`) stocké, résolu via `VaultService` dans la tâche. 3 tests validation.
 
----
+### SEC-10 [MEDIUM] — ✅ RESOLVED (Story 30.5)
+CORS unifié sur `X-Correlation-ID` (middleware, CORS config, exception handlers). Fallback legacy `X-Idp-Request-Id` maintenu. 4 tests.
 
-### SEC-6 [MEDIUM] — Validation MIME basée uniquement sur le header Content-Type
-**Fichier :** `integrations/upload_views.py:48-57`
-
-Le Content-Type est fourni par le client et facilement falsifiable. Pas de vérification magic bytes.
-
-**Fix :** Utiliser `python-magic` pour valider le contenu réel du fichier.
-
----
-
-### SEC-7 [MEDIUM] — Upload SVG permet XSS
-**Fichier :** `integrations/upload_views.py`
-
-Les SVG peuvent contenir du JavaScript embarqué. Si servis inline → XSS.
-
-**Fix :** Sanitiser les SVG (strip `<script>`, event handlers) ou servir avec `Content-Disposition: attachment`.
-
----
-
-### SEC-8 [MEDIUM] — Dev bypass crée un user full-privilege
-**Fichier :** `idp_auth/views.py:80-121`
-
-`AUTH_DEV_BYPASS=True` crée un user avec le profil "dbops" (admin complet).
-
-**Fix :** Guard dur : bloquer si `APP_ENV=production`.
-
----
-
-### SEC-9 [MEDIUM] — Credentials en clair dans les arguments Celery
-**Fichier :** `executions/tasks.py:536-537, 700-701, 856-857, 1160-1161, 1330-1331`
-
-`credential_ref` passé comme paramètre string dans les tâches Celery → visible dans le broker Redis, dans Flower, potentiellement dans les logs.
-
-**Fix :** Résoudre les credentials dans la tâche (via Vault), pas en paramètre.
-
----
-
-### SEC-10 [MEDIUM] — Headers CORS : `X-Correlation-ID` pas dans `CORS_ALLOW_HEADERS`
-**Fichier :** `idp_backend/settings.py` (CORS) vs `frontend/src/services/api_client.ts:98`
-
-Le frontend envoie `X-Correlation-ID` mais le backend n'autorise que `x-idp-request-id` dans CORS. Le header est strippé par le middleware CORS.
-
-**Fix :** Ajouter `'x-correlation-id'` à `CORS_ALLOW_HEADERS`, ou aligner le nom du header.
-
----
-
-### SEC-11 [LOW] — Token d'accès dans le fragment URL
-**Fichier :** `idp_auth/views.py:103,248`
-```python
-redirect_url = f"{cors_origin}/auth/callback#access_token={access_token}"
-```
-Visible dans l'historique navigateur, extensions, shoulder surfing. Préférer un code d'autorisation échangeable.
+### SEC-11 [LOW] — ✅ RESOLVED (Story 30.5, documentation)
+Token fragment URL documenté comme limitation connue (dev bypass only). Commentaire ajouté dans code + `docs/security-architecture.md`.
 
 ---
 
