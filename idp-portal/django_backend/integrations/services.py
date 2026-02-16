@@ -95,7 +95,12 @@ class IntegrationService:
                 integration_data['config'],
                 integration_data.get('type', '')
             )
-        
+
+        # CRIT-8 fix: Validate secret_service_id FK exists before creating
+        if 'secret_service_id' in integration_data and integration_data['secret_service_id']:
+            if not Integration.objects.filter(id=integration_data['secret_service_id']).exists():
+                raise ValueError(f"secret_service with ID {integration_data['secret_service_id']} not found")
+
         try:
             integration = Integration.objects.create(
                 type=integration_data['type'],
@@ -105,6 +110,7 @@ class IntegrationService:
                 icon=integration_data.get('icon'),
                 auth_flow=integration_data.get('auth_flow'),
                 token_url=integration_data.get('token_url'),
+                secret_service_id=integration_data.get('secret_service_id'),
             )
             
             # Set config if provided
@@ -217,6 +223,13 @@ class IntegrationService:
             integration.auth_flow = integration_update_data.get('auth_flow')
         if 'token_url' in integration_update_data:
             integration.token_url = integration_update_data.get('token_url')
+        if 'secret_service_id' in integration_update_data:
+            # MED-3 fix: Validate secret_service_id FK exists
+            secret_service_id = integration_update_data.get('secret_service_id')
+            if secret_service_id is not None:
+                if not Integration.objects.filter(id=secret_service_id).exists():
+                    raise ValueError(f"secret_service with ID {secret_service_id} not found")
+            integration.secret_service_id = secret_service_id
         if 'config' in integration_update_data:
             integration.set_config(integration_update_data['config'])
         

@@ -89,13 +89,15 @@ class CorrelationIdMiddleware:
         # Bind to structlog contextvars for automatic inclusion in all logs
         structlog.contextvars.bind_contextvars(correlation_id=correlation_id)
 
+        # Bind user_id BEFORE get_response so all logs during request contain user_id
+        # (Story 30.3 BUG-BE-3: AuthenticationMiddleware runs before this middleware)
+        # CRIT-4 fix: Simplify user_id extraction (request.user.id always available if authenticated)
+        if hasattr(request, 'user') and request.user.is_authenticated:
+            user_id = str(request.user.id)
+            structlog.contextvars.bind_contextvars(user_id=user_id)
+
         # Process request
         response = self.get_response(request)
-
-        # Bind user_id after authentication middleware has run (Story 27.8 AC2)
-        if hasattr(request, 'user') and request.user.is_authenticated:
-            user_id = str(getattr(request.user, 'pk', request.user.id))
-            structlog.contextvars.bind_contextvars(user_id=user_id)
 
         # Add to response headers
         response['X-Idp-Request-Id'] = correlation_id

@@ -23,6 +23,7 @@ from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.exceptions import BadRequestError
 from core.middleware import get_correlation_id
+from executions.utils import calculate_next_execution_date
 from integrations.models import IntegrationStatus
 
 logger = structlog.get_logger(__name__)
@@ -932,12 +933,12 @@ class SchedulingService:
         
         # If it's a recurring pattern and status changed to EXECUTED, update next_execution_date
         if hasattr(scheduled_execution, 'recurringpattern') and new_status == ScheduledExecutionStatus.EXECUTED:
-            # Recalculate next_execution_date based on pattern_config
-            # This is a simplified version - full implementation would parse pattern_config
-            # For now, just add 1 day as a placeholder
             pattern = scheduled_execution.recurringpattern
             if pattern.is_active:
-                pattern.next_execution_date = timezone.now() + timedelta(days=1)
+                pattern_config = pattern.get_pattern_config() or {}
+                pattern.next_execution_date = calculate_next_execution_date(
+                    pattern.pattern_type, pattern_config, timezone.now()
+                )
                 pattern.updated_at = timezone.now()
                 pattern.save()
         

@@ -736,7 +736,9 @@ def _get_cache_key(
     engine: str | None = None,
     environment: str | None = None,
     impact: str | None = None,
-    category: str | None = None
+    category: str | None = None,
+    page: str | None = None,
+    page_size: str | None = None,
 ) -> str:
     """Generate cache key for catalog query."""
     user_part = f"user_{user_id}" if user_id else "anon"
@@ -746,7 +748,9 @@ def _get_cache_key(
     env_part = environment or ""
     impact_part = impact or ""
     category_part = category or ""
-    return f"{user_part}_{tags_part}_q{q_part}_e{engine_part}_env{env_part}_i{impact_part}_cat{category_part}"
+    page_part = page or "1"
+    limit_part = page_size or "20"
+    return f"{user_part}_{tags_part}_q{q_part}_e{engine_part}_env{env_part}_i{impact_part}_cat{category_part}:page_{page_part}:limit_{limit_part}"
 
 
 @extend_schema_view(
@@ -848,6 +852,9 @@ class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
                 if tag_name not in tags_filter:
                     tags_filter.append(tag_name)
         
+        page_param = request.query_params.get('page', '1')
+        page_size_param = request.query_params.get('limit', request.query_params.get('page_size', '20'))
+
         cache_key = _get_cache_key(
             user_id=user_id,
             tags_filter=tags_filter,
@@ -855,24 +862,35 @@ class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
             engine=request.query_params.get('engine'),
             environment=request.query_params.get('environment'),
             impact=request.query_params.get('impact'),
-            category=request.query_params.get('category')
+            category=request.query_params.get('category'),
+            page=page_param,
+            page_size=page_size_param,
         )
-        
-        # Check cache
+
+        # Check cache (CRIT-1/CRIT-2 fix: return paginated response format on cache hit)
         if cache_key in _catalog_cache:
-            return Response({"data": _catalog_cache[cache_key]})
-        
+            # Cache contains paginated data, return in DRF paginated format
+            return self.get_paginated_response(_catalog_cache[cache_key])
+
         queryset = self.filter_queryset(self.get_queryset())
-        
+
         # Annotate execution_count
         queryset = _annotate_execution_count(queryset)
-        
+
+        # Paginate before serializing and caching
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            data = serializer.data
+            _catalog_cache[cache_key] = data
+            return self.get_paginated_response(data)
+
         serializer = self.get_serializer(queryset, many=True)
         data = serializer.data
-        
+
         # Cache result
         _catalog_cache[cache_key] = data
-        
+
         return Response({"data": data})
     
     def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:

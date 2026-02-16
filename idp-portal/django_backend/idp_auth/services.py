@@ -132,9 +132,7 @@ class AuthService:
             raise ValueError(f"User with ID {user_id} not found")
         
         action = Action.objects.get(id=action_id)
-        if not action:
-            raise ValueError(f"Action with ID {action_id} not found")
-        
+
         favorite, created = UserFavorite.objects.get_or_create(
             user=user,
             action=action
