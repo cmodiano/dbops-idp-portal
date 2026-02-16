@@ -793,17 +793,15 @@ class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
         tags_filter = self.request.query_params.get('tags')
         if tags_filter:
             tag_names = [t.strip() for t in tags_filter.split(',')]
-            queryset = Action.objects.search_by_tags(tag_names)
-            queryset = queryset.filter(status=ActionStatus.PUBLISHED).with_tags().with_creator()
-        
+            queryset = queryset.search_by_tags(tag_names)
+
         category = self.request.query_params.get('category')
         if category and category.lower() not in ('tout', 'all', 'mes-actions'):
             # Category maps to tag
             from catalog.models import normalize_tag_name
             tag_name = normalize_tag_name(category)
             if tag_name:
-                queryset = Action.objects.search_by_tags([tag_name])
-                queryset = queryset.filter(status=ActionStatus.PUBLISHED).with_tags().with_creator()
+                queryset = queryset.search_by_tags([tag_name])
         
         q = self.request.query_params.get('q')
         if q:

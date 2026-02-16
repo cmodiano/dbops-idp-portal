@@ -79,7 +79,8 @@ La configuration `InventoryMapper` permet de mapper la colonne source contenant 
       "columns": {
         "name": "INSTANCE_NAME",
         "environment": "ENV",
-        "server_ref": "SERVER_NAME"
+        "server_ref": "SERVER_ID",
+        "db_ref": "DB_ID"
       }
     },
     "databases": {
@@ -95,6 +96,8 @@ La configuration `InventoryMapper` permet de mapper la colonne source contenant 
 ```
 
 La colonne `ENGINE` de la table source `DBOPS_SERVERS` sera exposée comme `engine_type` dans l'API inventaire.
+
+**Table de jointure `instances` :** la table des instances fait le lien entre serveurs et bases. Elle contient typiquement `SERVER_ID` et `DB_ID` (ou des colonnes de type nom). Les concepts `server_ref` et `db_ref` dans la config mappent vers ces colonnes ; le portail les utilise pour les jointures et pour filtrer (ex. toutes les instances d’un serveur donné).
 
 ### 3.2 Requête SQL générée
 

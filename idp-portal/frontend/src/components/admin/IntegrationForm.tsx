@@ -406,11 +406,11 @@ export function IntegrationForm({
             <Form.Item
               name="config_advanced"
               label="Config JSON (avancé)"
-              tooltip="Optionnel. Pour plusieurs tables avec références (serveurs → instances → bases), collez ici un JSON avec 'entities'. Si rempli, il remplace Schéma BD / Table ou vue. Voir docs/inventory-mapping-guide.md."
+              tooltip="Optionnel. Pour plusieurs tables : servers, instances (table de jointure avec server_id et db_id), databases. Les concepts server_ref et db_ref dans instances mappent vers vos colonnes (ex. SERVER_ID, DB_ID). Si rempli, remplace Schéma BD / Table ou vue. Voir docs/inventory-mapping-guide.md."
             >
               <Input.TextArea
-                placeholder='{"entities": {"servers": {"table": "DBOPS_SERVERS", "id_column": "SERVER_ID", "columns": {"name": "HOSTNAME", "environment": "ENV", "engine_type": "ENGINE"}}, "instances": {...}, "databases": {...}}}'
-                rows={6}
+                placeholder={`{\n  "entities": {\n    "servers": { "table": "DBOPS_SERVERS", "id_column": "SERVER_ID", "columns": { "name": "HOSTNAME", "environment": "ENV", "engine_type": "ENGINE" } },\n    "instances": { "table": "DBOPS_INSTANCES", "id_column": "INSTANCE_ID", "columns": { "name": "INSTANCE_NAME", "environment": "ENV", "server_ref": "SERVER_ID", "db_ref": "DB_ID" } },\n    "databases": { "table": "DBOPS_DATABASES", "id_column": "DB_ID", "columns": { "name": "DB_NAME", "environment": "ENV" } }\n  }\n}`}
+                rows={8}
                 aria-label="Config JSON avancé"
                 style={{ fontFamily: 'monospace', fontSize: 12 }}
               />

@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from unittest.mock import patch, MagicMock
 
+from django.core.cache import cache
+
 from catalog.rbac_service import CatalogRBACService
 
 
@@ -14,6 +16,7 @@ class TestGetPermissions:
     """Tests for CatalogRBACService.get_permissions()."""
 
     def setup_method(self):
+        cache.clear()
         self.service = CatalogRBACService()
 
     def test_returns_none_if_user_is_none(self):

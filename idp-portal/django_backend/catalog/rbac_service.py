@@ -7,12 +7,15 @@ filtering, and single-action access checks.
 """
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING
 
 import structlog
+from django.core.cache import cache
 
 from core.auth_utils import get_user_ad_groups
 from core.middleware import get_correlation_id
+from profiles.cache import RBAC_CACHE_VERSION_KEY, RBAC_CACHE_TTL
 from profiles.services import ProfileService
 
 if TYPE_CHECKING:
@@ -34,6 +37,10 @@ class CatalogRBACService:
         """
         Get cumulative RBAC permissions for user across all profiles.
 
+        Uses Django cache with a version key for invalidation. When profiles or
+        permissions are modified, invalidate_permissions_cache() deletes the version
+        key, causing all user caches to miss on the next request.
+
         Args:
             user: Django User instance or None.
 
@@ -46,9 +53,22 @@ class CatalogRBACService:
             Returns None if user invalid or no permissions.
 
         Story 26.3 - AC2: Migrated from _get_cumulative_permissions_for_user.
+        Story 30.14 - AC3: Added cache with invalidation via version key.
         """
         if not user or not user.is_authenticated:
             return None
+
+        # Check cache: version key + user-specific key
+        try:
+            cache_version = cache.get(RBAC_CACHE_VERSION_KEY)
+            if cache_version is not None:
+                cache_key = f'rbac:permissions:user:{user.id}:v:{cache_version}'
+                cached = cache.get(cache_key)
+                if cached is not None:
+                    return cached
+        except Exception:
+            # Cache unavailability should not break permission lookups
+            pass
 
         ad_groups = get_user_ad_groups(user)
         try:
@@ -111,12 +131,27 @@ class CatalogRBACService:
                 )
                 environments = {'dev', 'staging', 'prod'}
 
-        return {
+        result = {
             'actions_type': actions_type,
             'action_ids': sorted(action_ids),
             'tag_patterns': sorted(tag_patterns),
             'environments': sorted(environments),
         }
+
+        # Cache the result with version key (atomic get_or_set to avoid race condition)
+        try:
+            cache_version = cache.get_or_set(
+                RBAC_CACHE_VERSION_KEY,
+                default=str(int(time.time())),
+                timeout=RBAC_CACHE_TTL,
+            )
+            cache_key = f'rbac:permissions:user:{user.id}:v:{cache_version}'
+            cache.set(cache_key, result, RBAC_CACHE_TTL)
+        except Exception:
+            # Cache unavailability should not break permission lookups
+            pass
+
+        return result
 
     def filter_actions(
         self,
