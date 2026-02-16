@@ -286,7 +286,7 @@ class ScheduledExecutionUpdateView(APIView):
 
             with transaction.atomic():
                 rp = getattr(se, "recurringpattern", None)
-                if rp is not None and bool(rp.is_active):
+                if rp is not None and rp.is_active == 1:
                     rp.next_execution_date = calculate_next_execution_date(
                         rp.pattern_type, rp.get_pattern_config() or {}, timezone.now()
                     )

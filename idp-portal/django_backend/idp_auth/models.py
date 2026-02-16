@@ -62,8 +62,13 @@ class User(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
     updated_at = models.DateTimeField(auto_now=True, db_column='UPDATED_AT')
 
-    # Compatibility with middleware and exception handler (request.user.is_authenticated).
-    # AnonymousUser has is_authenticated = False; our User instances are always authenticated.
+    # Story 30.12 (AC5): Class attribute (not a property/method) for Django compatibility.
+    # Django's auth middleware checks request.user.is_authenticated. Since this is a custom
+    # User model (not django.contrib.auth.User), we set it as a class attribute:
+    # - All User instances are always authenticated (SAML 2.0 guarantees identity).
+    # - AnonymousUser (Django built-in) has is_authenticated = False automatically.
+    # - No soft-delete exists on User; deactivation is handled at AD/SAML level.
+    # If soft-delete is added later, convert to @property checking is_deleted.
     is_authenticated = True
 
     # Custom manager

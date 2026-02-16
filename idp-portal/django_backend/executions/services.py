@@ -934,7 +934,7 @@ class SchedulingService:
         # If it's a recurring pattern and status changed to EXECUTED, update next_execution_date
         if hasattr(scheduled_execution, 'recurringpattern') and new_status == ScheduledExecutionStatus.EXECUTED:
             pattern = scheduled_execution.recurringpattern
-            if pattern.is_active:
+            if pattern.is_active == 1:
                 pattern_config = pattern.get_pattern_config() or {}
                 pattern.next_execution_date = calculate_next_execution_date(
                     pattern.pattern_type, pattern_config, timezone.now()

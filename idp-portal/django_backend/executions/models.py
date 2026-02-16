@@ -473,6 +473,11 @@ class RecurringPattern(models.Model):
     class Meta:
         db_table = 'RECURRING_PATTERNS'
 
+    @property
+    def is_active_bool(self) -> bool:
+        """Oracle NUMBER(1) → bool (1 = True, 0 = False)."""
+        return self.is_active == 1
+
     def __str__(self) -> str:
         return f"Recurring Pattern {self.id} - {self.pattern_type}"
 

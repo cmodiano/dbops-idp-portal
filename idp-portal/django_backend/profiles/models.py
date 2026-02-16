@@ -115,6 +115,16 @@ class Profile(models.Model):
         db_table = 'PROFILES'
         ordering = ['name']
 
+    @property
+    def is_admin_bool(self) -> bool:
+        """Oracle NUMBER(1) → bool (1 = True, 0 = False)."""
+        return self.is_admin == 1
+
+    @property
+    def is_auditor_bool(self) -> bool:
+        """Oracle NUMBER(1) → bool (1 = True, 0 = False)."""
+        return self.is_auditor == 1
+
     def __str__(self) -> str:
         return self.name
 

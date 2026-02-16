@@ -401,5 +401,5 @@ development_status:
     30-9-performance-n-plus-1-regex-styles-inline: done # PERF-1 à PERF-4 — N+1 queries audit batch, workflows DB-side filter, regex pré-compilées, styles inline backlog — Code review 2026-02-16: 9 issues (3 HIGH + 4 MEDIUM + 2 LOW), 7 auto-fixed
     30-10-code-mort-deprecations: done # DEAD-BE-1 à 5, DEAD-FE-1 à 6 — code mort supprimé, dépréciations retirées/migrées, factorisation stepDescriptions
     30-11-accessibilite-theme-couleurs-hardcodees: done # A11Y-1 à A11Y-3 — tokens thème Ant Design, 144 tests pass, guide accessibilité créé
-    30-12-incoherences-modeles-serializers-tags-audit: backlog # INCON-1 à INCON-5
+    30-12-incoherences-modeles-serializers-tags-audit: done # INCON-1 à 5 corrigés, 30 tests, code review: 7 issues fixés (3 HIGH + 3 MEDIUM + 1 LOW), 122 tests passent
     epic-30-retrospective: optional

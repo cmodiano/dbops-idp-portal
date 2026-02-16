@@ -323,12 +323,10 @@ class CurrentUserProfileView(APIView):
                 cumulative_permissions = None
 
         # Check if user is auditor
+        # Story 30.12 AC4: Use explicit == 1 comparison (not truthiness) for Oracle IntegerField
         is_auditor = False
         if profiles:
-            is_auditor = any(
-                getattr(p, 'is_auditor', False) or (hasattr(p, 'is_auditor') and p.is_auditor == 1)
-                for p in profiles
-            )
+            is_auditor = any(p.is_auditor == 1 for p in profiles if hasattr(p, 'is_auditor'))
 
         # Build navigation tabs, injecting 'audit' for auditors (Story 6.5)
         navigation_tabs = list(get_user_navigation_permissions(profile_name))  # Copy to avoid mutating global

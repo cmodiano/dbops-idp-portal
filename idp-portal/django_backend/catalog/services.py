@@ -12,7 +12,7 @@ from django.db import transaction
 from django.core.paginator import Paginator
 from django.utils import timezone
 from django.db.models import QuerySet
-from catalog.models import Action, ActionStatus, Tag, ActionTag, ActionItemType
+from catalog.models import Action, ActionStatus, Tag, ActionTag, ActionItemType, normalize_tag_name
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id
@@ -183,11 +183,10 @@ class CatalogService:
         
         # Create or retrieve tags and associate them
         for tag_name in tag_names:
-            # Normalize tag name (lowercase, no spaces)
-            normalized = tag_name.lower().strip().replace(' ', '_')
+            normalized = normalize_tag_name(tag_name)
             if not normalized:
                 continue
-            
+
             tag, created = Tag.objects.get_or_create(name=normalized)
             ActionTag.objects.create(action=action, tag=tag)
     
@@ -600,7 +599,7 @@ class CatalogService:
             return None
         
         for tag_name in tag_names:
-            normalized = tag_name.lower().strip().replace(' ', '_')
+            normalized = normalize_tag_name(tag_name)
             if not normalized:
                 continue
             tag, created = Tag.objects.get_or_create(name=normalized)
@@ -622,7 +621,7 @@ class CatalogService:
             return None
         
         for tag_name in tag_names:
-            normalized = tag_name.lower().strip().replace(' ', '_')
+            normalized = normalize_tag_name(tag_name)
             try:
                 tag = Tag.objects.get(name=normalized)
                 ActionTag.objects.filter(action=action, tag=tag).delete()

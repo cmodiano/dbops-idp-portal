@@ -9,12 +9,14 @@ import time
 import uuid
 from collections.abc import Callable
 from threading import local
+from typing import Any
 
 import structlog
 from django.http import HttpRequest, HttpResponse
 
-# Thread-local storage for correlation ID
+# Thread-local storage for correlation ID and current user
 _correlation_id = local()
+_current_user = local()
 
 # Get structlog logger for this module
 logger = structlog.get_logger(__name__)
@@ -28,6 +30,20 @@ def get_correlation_id() -> str | None:
 def set_correlation_id(correlation_id: str | None) -> None:
     """Set the correlation ID in thread-local storage."""
     _correlation_id.value = correlation_id
+
+
+def get_current_user() -> Any | None:
+    """Get the current request's user from thread-local storage.
+
+    Story 30.12 (AC3): Allows signals and services to access the authenticated
+    user without a direct reference to the request object.
+    """
+    return getattr(_current_user, 'value', None)
+
+
+def set_current_user(user: Any | None) -> None:
+    """Set the current user in thread-local storage."""
+    _current_user.value = user
 
 
 def get_client_ip(request: HttpRequest) -> str:
@@ -98,6 +114,8 @@ class CorrelationIdMiddleware:
         if hasattr(request, 'user') and request.user.is_authenticated:
             user_id = str(request.user.id)
             structlog.contextvars.bind_contextvars(user_id=user_id)
+            # Story 30.12 (AC3): Store user in thread-local for signal access
+            set_current_user(request.user)
 
         # Process request
         response = self.get_response(request)
@@ -107,6 +125,7 @@ class CorrelationIdMiddleware:
 
         # Clear thread-local and structlog contextvars after request
         set_correlation_id(None)
+        set_current_user(None)
         structlog.contextvars.unbind_contextvars('correlation_id', 'user_id', 'execution_id')
 
         return response
