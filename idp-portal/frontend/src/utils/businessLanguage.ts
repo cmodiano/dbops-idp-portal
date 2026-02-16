@@ -4,6 +4,9 @@
  * Replaces technical jargon with accessible terms for business users.
  * The goal is to make the portal feel like a "black box" - users see what actions do,
  * not how they work internally.
+ *
+ * Story 30.9 (PERF-3): Regex patterns are pre-compiled at module level
+ * instead of being recreated on every function call (~70 patterns).
  */
 
 /** Mapping of technical terms to business-friendly equivalents (Story 7.1). */
@@ -23,7 +26,7 @@ const TECHNICAL_TERMS_MAP: Record<string, string> = {
   ansible: 'automatisation',
   terraform: 'infrastructure',
   api: 'interface',
-  endpoint: 'point d\'acces',
+  endpoint: "point d'acces",
   script: 'programme',
   deploy: 'deployer',
   deployment: 'deploiement',
@@ -68,7 +71,7 @@ const TECHNICAL_TERMS_MAP: Record<string, string> = {
   ssh: 'connexion securisee',
   ssl: 'securise',
   tls: 'securise',
-  token: 'jeton d\'acces',
+  token: "jeton d'acces",
   auth: 'authentification',
   authentication: 'authentification',
   authorization: 'autorisation',
@@ -79,6 +82,24 @@ const TECHNICAL_TERMS_MAP: Record<string, string> = {
   sudo: 'privileges eleves',
   root: 'administrateur systeme',
 };
+
+/**
+ * Pre-compiled regex patterns for sanitizeDescription (Story 30.9, PERF-3).
+ * Compiled once at module load instead of on every function call (~60 patterns).
+ * Note: 'g' flag is safe here since .replace() resets lastIndex automatically
+ */
+const SANITIZE_PATTERNS: ReadonlyArray<readonly [RegExp, string]> = Object.entries(
+  TECHNICAL_TERMS_MAP,
+).map(([technical, friendly]) => [new RegExp(`\\b${technical}\\b`, 'gi'), friendly] as const);
+
+/**
+ * Pre-compiled regex patterns for containsTechnicalTerms (Story 30.9, PERF-3).
+ * Uses 'i' flag (not 'g') since we only need to test for presence.
+ * Note: 'g' flag is intentionally omitted to avoid stateful regex behavior with .test()
+ */
+const DETECT_PATTERNS: ReadonlyArray<RegExp> = Object.keys(TECHNICAL_TERMS_MAP).map(
+  (term) => new RegExp(`\\b${term}\\b`, 'i'),
+);
 
 /**
  * Sanitize a description by replacing technical terms with business-friendly equivalents.
@@ -95,11 +116,8 @@ export function sanitizeDescription(text: string | null | undefined): string {
 
   let result = text;
 
-  // Replace technical terms (case-insensitive, whole words only)
-  for (const [technical, friendly] of Object.entries(TECHNICAL_TERMS_MAP)) {
-    // Use word boundaries to avoid partial replacements
-    const regex = new RegExp(`\\b${technical}\\b`, 'gi');
-    result = result.replace(regex, friendly);
+  for (const [pattern, replacement] of SANITIZE_PATTERNS) {
+    result = result.replace(pattern, replacement);
   }
 
   return result;
@@ -114,9 +132,5 @@ export function sanitizeDescription(text: string | null | undefined): string {
 export function containsTechnicalTerms(text: string | null | undefined): boolean {
   if (!text) return false;
 
-  const lowerText = text.toLowerCase();
-  return Object.keys(TECHNICAL_TERMS_MAP).some((term) => {
-    const regex = new RegExp(`\\b${term}\\b`, 'i');
-    return regex.test(lowerText);
-  });
+  return DETECT_PATTERNS.some((regex) => regex.test(text));
 }

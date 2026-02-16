@@ -102,3 +102,21 @@ describe('containsTechnicalTerms', () => {
     expect(containsTechnicalTerms('pIpElInE')).toBe(true);
   });
 });
+
+describe('regex pre-compilation (Story 30.9, PERF-3)', () => {
+  it('produces identical output across 100 consecutive calls (no state mutation)', () => {
+    const input = 'Execute the Ansible playbook to deploy the pipeline';
+    const expected = sanitizeDescription(input);
+
+    for (let i = 0; i < 100; i++) {
+      expect(sanitizeDescription(input)).toBe(expected);
+    }
+  });
+
+  it('containsTechnicalTerms is stable across repeated calls', () => {
+    for (let i = 0; i < 100; i++) {
+      expect(containsTechnicalTerms('Run the pipeline')).toBe(true);
+      expect(containsTechnicalTerms('Simple text')).toBe(false);
+    }
+  });
+});

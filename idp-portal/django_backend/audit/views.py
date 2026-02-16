@@ -107,29 +107,37 @@ def _derive_status(action_type: str, details: dict | None) -> str:
 
 
 def _resolve_user_names(user_ids: list[str]) -> dict[str, str]:
-    """Resolve user_id list to display names (display_name or username). Returns map user_id -> name."""
-    result = {}
+    """Resolve user_id list to display names (display_name or username). Returns map user_id -> name.
+
+    Optimized: uses batch queries (1 for numeric IDs, 1 for usernames) instead of N individual queries.
+    Performance: 2-pass algorithm (categorize + fill missing) instead of 3 loops.
+    """
+    result: dict[str, str] = {}
     if not user_ids:
         return result
-    numeric_ids = []
+
+    numeric_ids: list[int] = []
+    non_numeric_ids: list[str] = []
+
+    # Pass 1: Categorize and pre-fill result with fallback values
     for uid in user_ids:
         try:
             numeric_ids.append(int(uid))
+            result[uid] = uid  # Fallback if not found in DB
         except (ValueError, TypeError):
-            pass
+            non_numeric_ids.append(uid)
+            result[uid] = uid  # Fallback if not found in DB
+
+    # Pass 2a: Batch query for numeric IDs and override fallback
     if numeric_ids:
         for u in User.objects.filter(id__in=numeric_ids).only("id", "display_name", "username"):
-            result[str(u.id)] = (u.display_name or u.username or str(u.id))
-    for uid in user_ids:
-        if uid not in result:
-            try:
-                u = User.objects.filter(username=uid).only("display_name", "username").first()
-                if u:
-                    result[uid] = u.display_name or u.username
-            except Exception:
-                pass
-            if uid not in result:
-                result[uid] = uid
+            result[str(u.id)] = u.display_name or u.username or str(u.id)
+
+    # Pass 2b: Batch query for non-numeric IDs (usernames) and override fallback
+    if non_numeric_ids:
+        for u in User.objects.filter(username__in=non_numeric_ids).only("username", "display_name"):
+            result[u.username] = u.display_name or u.username
+
     return result
 
 

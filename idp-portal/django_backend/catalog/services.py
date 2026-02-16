@@ -557,13 +557,26 @@ class CatalogService:
         return [{'id': w.id, 'name': w.name, 'status': w.status} for w in workflows]
 
     def _find_workflows_referencing_action(self, action_id: int) -> list[Action]:
-        """Find workflows whose execution_steps reference the given action_id."""
-        workflows = Action.objects.filter(
+        """Find workflows whose execution_steps reference the given action_id.
+
+        Optimized: uses DB-side text filter on execution_steps (OracleJSONField stored as CLOB)
+        to pre-filter candidates, then validates in Python for exact match accuracy.
+        This avoids loading ALL workflows into memory.
+
+        Performance trade-off: execution_steps__contains=str(action_id) may return false positives
+        (e.g., action_id=42 matches "421" or "step_42" in JSON). Python validation filters these out.
+        In worst case (many false positives), this still outperforms loading all workflows.
+        For tighter filtering, consider raw SQL with JSON_EXISTS (Oracle 19c+).
+        """
+        # DB-side pre-filter: execution_steps CLOB contains the action_id string
+        # This may include false positives, which are filtered out below
+        candidates = Action.objects.filter(
             item_type=ActionItemType.WORKFLOW,
             status__in=[ActionStatus.DRAFT, ActionStatus.PUBLISHED],
+            execution_steps__contains=str(action_id),
         )
         result = []
-        for wf in workflows:
+        for wf in candidates:
             steps = wf.execution_steps
             if not steps or not isinstance(steps, list):
                 continue

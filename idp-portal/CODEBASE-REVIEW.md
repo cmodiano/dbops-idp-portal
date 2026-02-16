@@ -335,33 +335,37 @@ Les autres endpoints list retournent `{"data": [...], "pagination": {...}}`.
 
 ## 8. Performance (N+1, caches, re-renders)
 
-### PERF-1 [MEDIUM] — N+1 queries dans `_resolve_user_names`
-**Fichier :** `audit/views.py:123-131`
+### PERF-1 [MEDIUM] — ✅ RESOLVED (Story 30.9) — N+1 queries dans `_resolve_user_names`
+**Fichier :** `audit/views.py:109-133`
 
-Pour chaque user_id non-numérique, une requête SQL individuelle est exécutée.
+~~Pour chaque user_id non-numérique, une requête SQL individuelle est exécutée.~~
 
----
-
-### PERF-2 [MEDIUM] — Tous les workflows chargés en mémoire
-**Fichier :** `catalog/services.py:527-540`
-
-`_find_workflows_referencing_action()` charge TOUS les workflows actifs en mémoire puis itère en Python.
-
-**Fix :** Filtre côté DB avec un `JSONField` lookup ou une requête raw optimisée.
+**Fix appliqué :** Batch query avec `User.objects.filter(username__in=non_numeric_ids)` — 1 requête au lieu de N.
 
 ---
 
-### PERF-3 [MEDIUM] — 80 RegExp créées à chaque appel de `sanitizeDescription()`
-**Fichier :** `frontend/src/utils/businessLanguage.ts:99-103`
+### PERF-2 [MEDIUM] — ✅ RESOLVED (Story 30.9) — Tous les workflows chargés en mémoire
+**Fichier :** `catalog/services.py:559-582`
 
-**Fix :** Pré-compiler les regex au niveau module.
+~~`_find_workflows_referencing_action()` charge TOUS les workflows actifs en mémoire puis itère en Python.~~
+
+**Fix appliqué :** Filtre DB-side avec `execution_steps__contains` pré-filtre les candidats, validation Python pour exactitude.
 
 ---
 
-### PERF-4 [LOW] — `<style>` inline dans les fonctions render
+### PERF-3 [MEDIUM] — ✅ RESOLVED (Story 30.9) — 80 RegExp créées à chaque appel de `sanitizeDescription()`
+**Fichier :** `frontend/src/utils/businessLanguage.ts`
+
+~~Regex compilées à chaque appel de la fonction.~~
+
+**Fix appliqué :** Regex pré-compilées au niveau module (`SANITIZE_PATTERNS` et `DETECT_PATTERNS`).
+
+---
+
+### PERF-4 [LOW] — BACKLOG (Story 30.9) — `<style>` inline dans les fonctions render
 **Fichiers :** `components/catalog/ActionTable.tsx:295-307`, `components/execution/ExecutionTimeline.tsx:670-675`
 
-Tags `<style>` injectés dans le DOM à chaque render.
+Tags `<style>` injectés dans le DOM à chaque render. Impact négligeable (pseudo-classes, media queries, keyframes). Reporté à Story 30.11 (A11Y).
 
 ---
 
