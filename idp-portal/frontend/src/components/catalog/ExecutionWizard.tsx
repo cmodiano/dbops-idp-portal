@@ -237,7 +237,7 @@ export function ExecutionWizard({
   useEffect(() => {
     if (open && action) {
       if (action.status !== 'published') {
-        notification.error({ title: 'Action non disponible', description: 'Cette action n\'est pas publiee et ne peut pas etre executee.' });
+        notification.error({ message: 'Action non disponible', description: 'Cette action n\'est pas publiee et ne peut pas etre executee.' });
         onCancel();
         return;
       }

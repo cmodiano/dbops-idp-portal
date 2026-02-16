@@ -393,7 +393,7 @@ development_status:
     30-1-endpoints-approve-reject-bug-filtres-catalogue-config-securite: done # CRITICAL: API-MISS-1/2, BUG-BE-1, SEC-1/2/3 — Implémentation + code review (6 fixes: 1 HIGH, 3 MED, 2 LOW) — 26 tests (24 pass + 2 skipped), 0 régression
     30-2-endpoints-remediation-export-dashboard: done # API-MISS-3 à 6 — 4 endpoints, 34 tests pass, code review 9 fixes (4 HIGH + 4 MEDIUM + 1 LOW)
     30-3-bugs-logiques-backend: done # BUG-BE-2 à BUG-BE-7 — 6 bugs logiques backend (secret_service_id, structlog user_id, recurrence, cache pagination, code mort, ligne dupliquée)
-    30-4-bugs-logiques-frontend-notifications-alert-rowkey-hooks: backlog # BUG-FE-1 à BUG-FE-5
+    30-4-bugs-logiques-frontend-notifications-alert-rowkey-hooks: done # BUG-FE-1 à BUG-FE-5 — notifications title→message (20+), Alert props (20+), rowKey Math.random, useEffect dependencies (2 hooks) — Code review: 5 additional fixes applied
     30-5-securite-auth-uploads-dev-bypass-cors-celery-token: backlog # SEC-4 à SEC-11
     30-6-incoherences-api-format-reponse: backlog # APIFMT-1 à 4
     30-7-race-conditions-celery-polling-caches-partages: backlog # RACE-1/2/3, CELERY-3/4/5

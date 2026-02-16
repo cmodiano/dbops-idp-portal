@@ -309,7 +309,7 @@ export function ActionTable({
         columns={columns}
         dataSource={actions}
         loading={loading}
-        rowKey={(record) => record.id ?? `temp-${record.name}-${Math.random()}`} // H5 fix: fallback for missing ID
+        rowKey={(record) => record.id ?? `temp-${record.name}`}
         onRow={(record) => ({
           onClick: () => onActionClick(record),
           className: 'catalog-table-row',

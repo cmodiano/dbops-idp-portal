@@ -69,14 +69,14 @@ export function useWorkflowExportImport({
     const currentSteps = reactFlowToWorkflowSteps(nodes, edges);
     logger.debug('Export JSON', { stepCount: currentSteps.length, workflowName: getMetadata().name });
     exportWorkflowAsJSON(currentSteps, getMetadata());
-    notification.success({ title: 'Export JSON réussi', duration: 3 });
+    notification.success({ message: 'Export JSON réussi', duration: 3 });
   }, [nodes, edges, getMetadata, notification]);
 
   const handleExportYAML = useCallback(() => {
     const currentSteps = reactFlowToWorkflowSteps(nodes, edges);
     logger.debug('Export YAML', { stepCount: currentSteps.length, workflowName: getMetadata().name });
     exportWorkflowAsYAML(currentSteps, getMetadata());
-    notification.success({ title: 'Export YAML réussi', duration: 3 });
+    notification.success({ message: 'Export YAML réussi', duration: 3 });
   }, [nodes, edges, getMetadata, notification]);
 
   const handleExportImage = useCallback(async () => {
@@ -84,11 +84,11 @@ export function useWorkflowExportImport({
     setExporting(true);
     try {
       await exportWorkflowAsImage(reactFlowWrapperRef.current, getMetadata().name);
-      notification.success({ title: 'Export image réussi', duration: 3 });
+      notification.success({ message: 'Export image réussi', duration: 3 });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erreur inconnue';
       notification.error({
-        title: 'Erreur lors de l\'export image',
+        message: 'Erreur lors de l\'export image',
         description: errorMessage,
         duration: 5,
       });
@@ -116,7 +116,7 @@ export function useWorkflowExportImport({
         tags: importData.workflow.tags,
       });
     }
-    notification.success({ title: 'Workflow importé avec succès', duration: 3 });
+    notification.success({ message: 'Workflow importé avec succès', duration: 3 });
   }, [onWorkflowLoad, onMetadataImport, onClearValidation, notification]);
 
   const handleImportFile = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -127,7 +127,7 @@ export function useWorkflowExportImport({
     const maxSizeBytes = 5 * 1024 * 1024;
     if (file.size > maxSizeBytes) {
       notification.error({
-        title: 'Fichier trop volumineux',
+        message: 'Fichier trop volumineux',
         description: `La taille maximale autorisée est de 5 MB. Votre fichier fait ${(file.size / 1024 / 1024).toFixed(2)} MB.`,
         duration: 5,
       });
@@ -141,7 +141,7 @@ export function useWorkflowExportImport({
     reader.onload = (e) => {
       const content = e.target?.result as string;
       if (!content) {
-        notification.error({ title: 'Le fichier est vide', duration: 5 });
+        notification.error({ message: 'Le fichier est vide', duration: 5 });
         return;
       }
 
@@ -188,7 +188,7 @@ export function useWorkflowExportImport({
     };
 
     reader.onerror = () => {
-      notification.error({ title: 'Erreur lors de la lecture du fichier', duration: 5 });
+      notification.error({ message: 'Erreur lors de la lecture du fichier', duration: 5 });
     };
 
     reader.readAsText(file);

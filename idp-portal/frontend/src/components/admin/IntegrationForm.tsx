@@ -265,7 +265,7 @@ export function IntegrationForm({
       }
     >
       {error && (
-        <Alert type="error" title={error} style={{ marginBottom: 16 }} showIcon />
+        <Alert type="error" message={error} style={{ marginBottom: 16 }} showIcon />
       )}
       {/* Story 24.3: Alert if integration is invalid */}
       {isEdit && isInvalid && (
@@ -293,7 +293,7 @@ export function IntegrationForm({
       {isFallback && (
         <Alert
           type="warning"
-          title="Impossible de charger les types depuis le backend. Mode dégradé activé — la liste peut être incomplète."
+          message="Impossible de charger les types depuis le backend. Mode dégradé activé — la liste peut être incomplète."
           style={{ marginBottom: 16 }}
           showIcon
         />
@@ -337,7 +337,7 @@ export function IntegrationForm({
             type="info"
             showIcon
             icon={<InfoCircleOutlined />}
-            title="Le type d'une intégration ne peut pas être modifié après sa création"
+            message="Le type d'une intégration ne peut pas être modifié après sa création"
             style={{ marginBottom: 16 }}
           />
         )}

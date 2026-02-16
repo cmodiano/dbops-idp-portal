@@ -25,7 +25,7 @@ export function ProfilesAdminPanel({ notification }: ProfilesAdminPanelProps) {
       setProfiles(list);
     } catch (err) {
       notification.error({
-        title: 'Erreur',
+        message: 'Erreur',
         description: err instanceof Error ? err.message : 'Erreur de chargement des profils',
       });
     } finally {
@@ -44,7 +44,7 @@ export function ProfilesAdminPanel({ notification }: ProfilesAdminPanelProps) {
       setProfileModalOpen(true);
     } catch (err) {
       notification.error({
-        title: 'Erreur',
+        message: 'Erreur',
         description: err instanceof Error ? err.message : 'Impossible de charger le profil',
       });
     }
@@ -53,11 +53,11 @@ export function ProfilesAdminPanel({ notification }: ProfilesAdminPanelProps) {
   const handleProfileDelete = async (record: ProfileListItem) => {
     try {
       await deleteProfile(record.id);
-      notification.success({ title: 'Succes', description: `Profil "${record.name}" supprime` });
+      notification.success({ message: 'Succes', description: `Profil "${record.name}" supprime` });
       fetchProfiles();
     } catch (err) {
       notification.error({
-        title: 'Erreur',
+        message: 'Erreur',
         description: err instanceof Error ? err.message : 'Impossible de supprimer le profil',
       });
     }
@@ -67,7 +67,7 @@ export function ProfilesAdminPanel({ notification }: ProfilesAdminPanelProps) {
     setProfileModalOpen(false);
     setEditProfile(null);
     notification.success({
-      title: 'Succes',
+      message: 'Succes',
       description: editProfile ? `Profil "${profile.name}" mis a jour` : `Profil "${profile.name}" cree`,
     });
     fetchProfiles();
@@ -81,10 +81,10 @@ export function ProfilesAdminPanel({ notification }: ProfilesAdminPanelProps) {
   const handleExportYaml = useCallback(async () => {
     try {
       await exportProfilesYaml();
-      notification.success({ title: 'Export YAML', description: 'Fichier profiles.yaml téléchargé.' });
+      notification.success({ message: 'Export YAML', description: 'Fichier profiles.yaml téléchargé.' });
     } catch (err) {
       notification.error({
-        title: 'Erreur',
+        message: 'Erreur',
         description: err instanceof Error ? err.message : 'Erreur lors de l\'export YAML',
       });
     }
@@ -97,7 +97,7 @@ export function ProfilesAdminPanel({ notification }: ProfilesAdminPanelProps) {
   const handleImportYamlSuccess = useCallback((created: number, updated: number) => {
     setImportYamlModalOpen(false);
     notification.success({
-      title: 'Import YAML',
+      message: 'Import YAML',
       description: `Import reussi : ${created} cree(s), ${updated} mis a jour.`,
     });
     fetchProfiles();

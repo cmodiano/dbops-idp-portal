@@ -19,11 +19,11 @@ export const WorkflowValidationAlert: React.FC<WorkflowValidationAlertProps> = (
   return (
     <div style={{ padding: '4px 12px' }}>
       {validation.valid ? (
-        <Alert type="success" title="Workflow valide" showIcon banner />
+        <Alert type="success" message="Workflow valide" showIcon banner />
       ) : (
         <Alert
           type="error"
-          title={`${validation.errors.filter((e) => e.type === 'error').length} erreur(s), ${validation.errors.filter((e) => e.type === 'warning').length} avertissement(s)`}
+          message={`${validation.errors.filter((e) => e.type === 'error').length} erreur(s), ${validation.errors.filter((e) => e.type === 'warning').length} avertissement(s)`}
           showIcon
           banner
           icon={<WarningOutlined />}

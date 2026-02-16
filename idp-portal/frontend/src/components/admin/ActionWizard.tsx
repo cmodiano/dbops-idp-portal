@@ -751,10 +751,10 @@ export function ActionWizard({
       aria-label={modalTitle}
     >
       {error && (
-        <Alert title="Erreur" description={error} type="error" showIcon style={{ marginBottom: 16 }} />
+        <Alert message="Erreur" description={error} type="error" showIcon style={{ marginBottom: 16 }} />
       )}
       {submitError && (
-        <Alert title="Erreur" description={submitError} type="error" showIcon closable onClose={() => setSubmitError(null)} style={{ marginBottom: 16 }} role="alert" />
+        <Alert message="Erreur" description={submitError} type="error" showIcon closable onClose={() => setSubmitError(null)} style={{ marginBottom: 16 }} role="alert" />
       )}
 
       <Steps

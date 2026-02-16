@@ -44,6 +44,9 @@ export function useTargetInventory({
   const lastInventoryEnvRef = useRef<string | null>(null);
   // Story 23.6 - Track previous selectedServerNames for cache invalidation
   const lastServerNamesRef = useRef<string[] | null>(null);
+  // Story 30.4 - Ref to avoid inventoryData in useEffect deps (prevents infinite loop)
+  const inventoryDataRef = useRef(inventoryData);
+  inventoryDataRef.current = inventoryData;
 
   // Load environments (cached, loaded once)
   useEffect(() => {
@@ -107,8 +110,9 @@ export function useTargetInventory({
       const needsRefetch = source === 'instances' || source === 'databases'
         ? envChanged || serverNamesChanged
         : envChanged;
-      if (!needsRefetch && inventoryData[source] && inventoryData[source].length > 0) {
-        cached[source] = inventoryData[source];
+      const currentData = inventoryDataRef.current;
+      if (!needsRefetch && currentData[source] && currentData[source].length > 0) {
+        cached[source] = currentData[source];
       } else {
         toFetch.push(source);
       }
@@ -147,7 +151,8 @@ export function useTargetInventory({
         setInventoryData(data);
       })
       .finally(() => setLoadingInventory(false));
-  }, [open, currentStep, parameterFields, environment, inventoryData, selectedServerNames]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- inventoryData excluded: read via ref to avoid infinite loop (effect calls setInventoryData)
+  }, [open, currentStep, parameterFields, environment, selectedServerNames]);
 
   return {
     environmentsCache,

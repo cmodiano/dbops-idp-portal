@@ -182,7 +182,7 @@ export function CalendarPage() {
       </div>
 
       {error && (
-        <Alert type="error" title={error} showIcon closable style={{ marginBottom: 16 }} data-testid="error-alert" />
+        <Alert type="error" message={error} showIcon closable style={{ marginBottom: 16 }} data-testid="error-alert" />
       )}
 
       {loading && (

@@ -4,7 +4,7 @@
  * Story 26.4 - AC2: Extracted from ExecutionsPage.tsx to encapsulate drawer logic.
  * Handles loading execution details, steps, and action metadata for the drawer.
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router';
 import type {
   ExecutionResponse,
@@ -40,7 +40,7 @@ export const useExecutionDetail = (): UseExecutionDetailReturn => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadExecutionDetail = async (id: number) => {
+  const loadExecutionDetail = useCallback(async (id: number) => {
     setDrawerOpen(true);
     setLoading(true);
     setError(null);
@@ -69,7 +69,7 @@ export const useExecutionDetail = (): UseExecutionDetailReturn => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const openExecution = async (record: ExecutionResponse) => {
     await loadExecutionDetail(record.id);
@@ -93,7 +93,7 @@ export const useExecutionDetail = (): UseExecutionDetailReturn => {
     const id = parseInt(openExecutionId, 10);
     if (isNaN(id)) return;
     loadExecutionDetail(id);
-  }, [openExecutionId]);
+  }, [openExecutionId, loadExecutionDetail]);
 
   return {
     drawerOpen,

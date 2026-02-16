@@ -206,7 +206,7 @@ export function ProfileWizard({
       } catch (permErr) {
         // Profile created/updated but permissions failed - still call onSuccess
         notification.warning({
-          title: 'Permissions non enregistrées',
+          message: 'Permissions non enregistrées',
           description: permErr instanceof Error ? permErr.message : 'Les permissions n\'ont pas pu être enregistrées. Éditez le profil pour réessayer.',
         });
         onSuccess?.(profile);
@@ -327,7 +327,7 @@ export function ProfileWizard({
             {unknownEnvironments.length > 0 && (
               <Alert
                 type="warning"
-                title="Attention : environnements non reconnus"
+                message="Attention : environnements non reconnus"
                 description={`Les environnements suivants ne sont pas dans l'inventaire : ${unknownEnvironments.join(', ')}. Validation finale au backend.`}
                 showIcon
                 style={{ marginBottom: 8 }}
@@ -420,7 +420,7 @@ export function ProfileWizard({
       aria-label={isEditMode ? 'Modifier le profil' : 'Nouveau profil'}
     >
       {submitError && (
-        <Alert title="Erreur" description={submitError} type="error" showIcon style={{ marginBottom: 16 }} />
+        <Alert message="Erreur" description={submitError} type="error" showIcon style={{ marginBottom: 16 }} />
       )}
 
       <Steps
