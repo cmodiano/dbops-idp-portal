@@ -308,3 +308,32 @@ class TestCatalogService(TestCase):
 
         # Verify action was not created
         self.assertFalse(Action.objects.filter(name='Test Action').exists())
+
+    def test_create_action_invalid_integration_id_raises(self):
+        """Story 30.8 ERR-3: create_action raises ValueError for invalid integration_id."""
+        action_data = {
+            'name': 'Action With Bad Integration',
+            'engine': 'Oracle',
+            'platform': 'AAP',
+            'status': ActionStatus.DRAFT,
+            'item_type': ActionItemType.ACTION,
+            'integration_id': 99999,
+        }
+        # Fix HIGH-4: assertRaises msg parameter is failure message, not exception match
+        with self.assertRaises(ValueError) as cm:
+            self.service.create_action(action_data, self.user)
+        self.assertIn("Integration 99999 not found", str(cm.exception))
+        # Verify no action was created (transaction rolled back)
+        self.assertFalse(Action.objects.filter(name='Action With Bad Integration').exists())
+
+    def test_update_action_invalid_integration_id_raises(self):
+        """Story 30.8 ERR-3: update_action raises ValueError for invalid integration_id."""
+        action = self.service.create_action(
+            {'name': 'Test Update Integration', 'engine': 'Oracle', 'platform': 'AAP'},
+            self.user
+        )
+        with self.assertRaises(ValueError) as cm:
+            self.service.update_action(
+                action.id, {'integration_id': 99999}, self.user
+            )
+        self.assertIn("Integration 99999 not found", str(cm.exception))

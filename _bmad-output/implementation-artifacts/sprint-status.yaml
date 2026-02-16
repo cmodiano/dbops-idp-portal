@@ -397,7 +397,7 @@ development_status:
     30-5-securite-auth-uploads-dev-bypass-cors-celery-token: done # SEC-4 à SEC-11 — auth frontend, uploads validation (extension+magic bytes+SVG sanitization), dev bypass guard, CORS, Celery credentials, token fragment
     30-6-incoherences-api-format-reponse: done # APIFMT-1 à 4 corrigés + code review (6 issues: 1 CRIT + 3 MED + 2 LOW), 130 BE + 6 FE tests pass
     30-7-race-conditions-celery-polling-caches-partages: done # 2026-02-16: Code review: 7 issues (2 HIGH, 3 MEDIUM, 2 LOW) auto-fixed, 22/22 tests pass, all ACs implemented # RACE-1/2/3, CELERY-3/4/5 — Story 30.7 complétée
-    30-8-gestion-erreurs-frontend-backend: backlog # ERR-1 à ERR-5
+    30-8-gestion-erreurs-frontend-backend: done # ERR-1 à ERR-5 — 13 tests, IntegrationVaultValidationMixin, Option A audit strict, CODEBASE-REVIEW.md updated — Code review: 10 issues (7 HIGH, 3 MEDIUM) auto-fixed
     30-9-performance-n-plus-1-regex-styles-inline: backlog # PERF-1 à PERF-4
     30-10-code-mort-deprecations: backlog # DEAD-BE-*, DEAD-FE-*
     30-11-accessibilite-theme-couleurs-hardcodees: backlog # A11Y-1 à A11Y-3

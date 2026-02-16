@@ -303,45 +303,33 @@ Les autres endpoints list retournent `{"data": [...], "pagination": {...}}`.
 
 ## 7. Gestion d'erreurs
 
-### ERR-1 [HIGH] — `.catch(() => {})` avale les erreurs silencieusement
+### ✅ ERR-1 [HIGH] — `.catch(() => {})` avale les erreurs silencieusement — RESOLVED (Story 30.8)
 **Fichier :** `frontend/src/components/execution/WorkflowExecutionGraph.tsx:146`
-```typescript
-getExecutionSteps(executionId).then(setStaticSteps).catch(() => {});
-```
-Erreur réseau → aucun feedback utilisateur, pas de retry, pas de log.
+**Fix :** Error catch remplacé par logger.error + Alert UI avec message d'erreur. 2 tests ajoutés.
 
 ---
 
-### ERR-2 [HIGH] — Validation croisée absente sur `IntegrationUpdateSerializer`
-**Fichier :** `integrations/serializers.py:188-281`
-
-`IntegrationCreateSerializer` valide les règles métier (vault + credential_ref, secret_service_id). `IntegrationUpdateSerializer` n'a **aucune** méthode `validate()` → un update peut violer les contraintes.
-
-**Fix :** Dupliquer ou factoriser la validation croisée dans le serializer d'update.
+### ✅ ERR-2 [HIGH] — Validation croisée absente sur `IntegrationUpdateSerializer` — RESOLVED (Story 30.8)
+**Fichier :** `integrations/serializers.py`
+**Fix :** `IntegrationVaultValidationMixin` extrait, partagé entre Create et Update serializers. Merge instance data pour partial updates. 7 tests ajoutés.
 
 ---
 
-### ERR-3 [MEDIUM] — `create_action()` ignore silencieusement un `integration_id` invalide
-**Fichier :** `catalog/services.py:97-100`
-```python
-except Integration.DoesNotExist:
-    pass  # Validation already handled by serializer
-```
-Si le service est appelé depuis un autre contexte que la vue, l'action sera créée avec `integration=None`.
+### ✅ ERR-3 [MEDIUM] — `create_action()` ignore silencieusement un `integration_id` invalide — RESOLVED (Story 30.8)
+**Fichier :** `catalog/services.py`
+**Fix :** `pass` remplacé par `raise ValueError(...)` avec log structlog.warning dans create_action et update_action. 2 tests ajoutés.
 
 ---
 
-### ERR-4 [MEDIUM] — Audit signals swallowed silencieusement
-**Fichier :** `integrations/signals.py:56-57,81-82`
-
-Si la création d'entrée d'audit échoue, l'exception est catchée et loggée. Le save du modèle réussit sans trace d'audit → violation du principe d'audit immuable.
+### ✅ ERR-4 [MEDIUM] — Audit signals swallowed silencieusement — RESOLVED (Story 30.8)
+**Fichier :** `integrations/signals.py`
+**Fix :** Option A (strict SOC1) — Exception re-raised après logger.critical. Save échoue si audit échoue. 2 tests ajoutés.
 
 ---
 
-### ERR-5 [MEDIUM] — Workflow bloqué après timeout de gate
+### ✅ ERR-5 [MEDIUM] — Workflow bloqué après timeout de gate — RESOLVED (Story 30.7)
 **Fichier :** `executions/tasks.py:506-522`
-
-Après un timeout de gate, le code log un TODO mais ne continue pas le workflow. L'exécution reste bloquée indéfiniment.
+**Fix :** Story 30.7 (CELERY-4/5) — Après timeout: SKIPPED→next step triggered, FAILED→execution marked failed. Audit trail ajouté.
 
 ---
 

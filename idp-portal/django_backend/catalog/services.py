@@ -90,6 +90,7 @@ class CatalogService:
             raise ValueError("Statut initial doit être draft ou published")
 
         # Story 29.4: Resolve integration_id to Integration FK
+        # Story 30.8 ERR-3: Raise ValidationError instead of silent pass
         integration = None
         integration_id = action_data.get('integration_id')
         if integration_id:
@@ -97,7 +98,13 @@ class CatalogService:
             try:
                 integration = Integration.objects.get(id=integration_id)
             except Integration.DoesNotExist:
-                pass  # Validation already handled by serializer
+                logger.warning(
+                    "integration_not_found",
+                    integration_id=integration_id,
+                    user_id=created_by_user.id,
+                    correlation_id=correlation_id,
+                )
+                raise ValueError(f"Integration {integration_id} not found")
 
         # Create the action
         action = Action.objects.create(
@@ -291,6 +298,7 @@ class CatalogService:
         if 'default_impact_level' in action_update_data:
             action.default_impact_level = action_update_data.get('default_impact_level')
         # Story 29.4 Code Review Fix MEDIUM-1: Update integration if provided
+        # Story 30.8 ERR-3: Raise ValueError instead of silent pass
         if 'integration_id' in action_update_data:
             integration_id = action_update_data.get('integration_id')
             if integration_id:
@@ -298,7 +306,15 @@ class CatalogService:
                 try:
                     action.integration = Integration.objects.get(id=integration_id)
                 except Integration.DoesNotExist:
-                    pass  # Validation already handled by serializer
+                    # Fix MEDIUM-1: Add correlation_id for consistency
+                    correlation_id = get_correlation_id()
+                    logger.warning(
+                        "integration_not_found",
+                        integration_id=integration_id,
+                        user_id=user.id,
+                        correlation_id=correlation_id,
+                    )
+                    raise ValueError(f"Integration {integration_id} not found")
             else:
                 action.integration = None
 

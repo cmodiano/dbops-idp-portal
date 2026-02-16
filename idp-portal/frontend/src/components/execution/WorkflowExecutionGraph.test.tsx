@@ -9,7 +9,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from 'antd';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { WorkflowExecutionGraph } from './WorkflowExecutionGraph';
 import type { WorkflowStep, ExecutionResponse, ExecutionStepResponse } from '../../types/api';
 
@@ -322,6 +322,83 @@ describe('WorkflowExecutionGraph', () => {
     // Start/End nodes should be rendered
     expect(screen.getByText('Départ')).toBeInTheDocument();
     expect(screen.getByText('Fin')).toBeInTheDocument();
+  });
+
+  // Story 30.8 ERR-1: Error handling for getExecutionSteps
+  describe('Story 30.8: Error handling for terminal execution steps', () => {
+    it('ERR-1: displays error alert when getExecutionSteps fails for terminal execution', async () => {
+      const { getExecutionSteps } = await import('../../services/execution_service');
+      vi.mocked(getExecutionSteps).mockRejectedValueOnce(new Error('Network error'));
+
+      const { useExecutionPolling } = await import('../../hooks/useExecutionPolling');
+      vi.mocked(useExecutionPolling).mockReturnValue({
+        execution: null,
+        steps: [],
+        isPolling: false,
+        error: null,
+      });
+
+      const terminalExecution: ExecutionResponse = {
+        ...mockExecution,
+        status: 'COMPLETED',
+        completed_at: new Date().toISOString(),
+      };
+
+      render(
+        <WorkflowExecutionGraph
+          executionId={1}
+          workflowSteps={mockWorkflowSteps}
+          execution={terminalExecution}
+        />,
+        { wrapper: Wrapper },
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Erreur de chargement des étapes')).toBeInTheDocument();
+        expect(screen.getByText('Network error')).toBeInTheDocument();
+      });
+    });
+
+    it('ERR-1: logs error via logger when getExecutionSteps fails', async () => {
+      const { getExecutionSteps } = await import('../../services/execution_service');
+      vi.mocked(getExecutionSteps).mockRejectedValueOnce(new Error('API timeout'));
+
+      const loggerModule = await import('../../services/logger');
+      const mockLogger = loggerModule.default;
+
+      const { useExecutionPolling } = await import('../../hooks/useExecutionPolling');
+      vi.mocked(useExecutionPolling).mockReturnValue({
+        execution: null,
+        steps: [],
+        isPolling: false,
+        error: null,
+      });
+
+      const terminalExecution: ExecutionResponse = {
+        ...mockExecution,
+        status: 'FAILED',
+        completed_at: new Date().toISOString(),
+      };
+
+      render(
+        <WorkflowExecutionGraph
+          executionId={1}
+          workflowSteps={mockWorkflowSteps}
+          execution={terminalExecution}
+        />,
+        { wrapper: Wrapper },
+      );
+
+      await waitFor(() => {
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          'Failed to load execution steps',
+          expect.objectContaining({
+            executionId: 1,
+            error: 'API timeout',
+          }),
+        );
+      });
+    });
   });
 
   // Story 19.3: Step selection and drawer integration

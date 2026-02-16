@@ -1,10 +1,13 @@
 """
 Story 24.1: Tests for audit trail signals on catalogue models.
+Story 30.8 ERR-4: Tests for audit signal re-raise behavior.
 """
 
 import pytest
+from unittest.mock import patch
 
 from core.models import AuditLog, AuditActionType, AuditEntityType
+from core.services import AuditService
 from tests.factories import IntegrationTypeCatalogueFactory, IntegrationActionFactory
 
 
@@ -71,3 +74,21 @@ class TestCatalogueAuditSignals:
         ).first()
         details = entry.get_details()
         assert details['is_active'] is False
+
+    def test_err4_type_catalogue_audit_failure_raises(self):
+        """Story 30.8 ERR-4: Audit failure on IntegrationTypeCatalogue re-raises."""
+        with patch.object(
+            AuditService, 'create_entry', side_effect=RuntimeError('DB connection failed')
+        ):
+            with pytest.raises(RuntimeError, match='DB connection failed'):
+                IntegrationTypeCatalogueFactory(code='fail_audit')
+
+    def test_err4_action_audit_failure_raises(self):
+        """Story 30.8 ERR-4: Audit failure on IntegrationAction re-raises."""
+        # Create the type first (needs to succeed for FK)
+        t = IntegrationTypeCatalogueFactory(code='aap_err4')
+        with patch.object(
+            AuditService, 'create_entry', side_effect=RuntimeError('Audit DB down')
+        ):
+            with pytest.raises(RuntimeError, match='Audit DB down'):
+                IntegrationActionFactory(integration_type=t, action_code='test_fail')

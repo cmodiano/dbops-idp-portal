@@ -52,7 +52,64 @@ class IntegrationSerializer(serializers.ModelSerializer):
         return obj.get_config()
 
 
-class IntegrationCreateSerializer(serializers.Serializer):
+class IntegrationVaultValidationMixin:
+    """Story 30.8 ERR-2: Shared cross-field validation for credential_ref and secret_service_id."""
+
+    def _validate_vault_constraints(self, attrs: dict, instance=None) -> dict:
+        """
+        Validate cross-field constraints for Vault integrations.
+
+        For update serializers, merges provided attrs with existing instance
+        data so partial updates are validated correctly.
+        """
+        if instance:
+            integration_type = attrs.get('type', instance.type)
+            credential_ref = attrs.get('credential_ref', instance.credential_ref)
+            # Fix HIGH-3: Use secret_service.id for FK relation, not secret_service_id attribute
+            existing_secret_service_id = instance.secret_service.id if instance.secret_service else None
+            secret_service_id = attrs.get('secret_service_id', existing_secret_service_id)
+        else:
+            integration_type = attrs.get('type', '')
+            credential_ref = attrs.get('credential_ref')
+            secret_service_id = attrs.get('secret_service_id')
+
+        # Vault integrations should not have credential_ref
+        if integration_type == IntegrationType.VAULT and credential_ref:
+            raise serializers.ValidationError({
+                'credential_ref': (
+                    "Les intégrations de type 'vault' n'ont pas besoin de credential_ref. "
+                    "L'authentification utilise le secret 0 (variables d'environnement)."
+                )
+            })
+
+        # Vault integrations should not have secret_service_id
+        if integration_type == IntegrationType.VAULT and secret_service_id:
+            raise serializers.ValidationError({
+                'secret_service_id': (
+                    "Les intégrations de type 'vault' ne peuvent pas avoir de service de secrets."
+                )
+            })
+
+        # secret_service_id must reference a vault integration
+        if secret_service_id is not None:
+            try:
+                vault_integration = Integration.objects.get(id=secret_service_id)
+                if vault_integration.type != IntegrationType.VAULT:
+                    raise serializers.ValidationError({
+                        'secret_service_id': (
+                            f"L'intégration référencée (id={secret_service_id}) n'est pas de type 'vault' "
+                            f"(type actuel: '{vault_integration.type}')."
+                        )
+                    })
+            except Integration.DoesNotExist:
+                raise serializers.ValidationError({
+                    'secret_service_id': f"Aucune intégration trouvée avec l'id {secret_service_id}."
+                })
+
+        return attrs
+
+
+class IntegrationCreateSerializer(IntegrationVaultValidationMixin, serializers.Serializer):
     """
     Serializer for creating integrations (POST /admin/integrations).
     """
@@ -143,49 +200,12 @@ class IntegrationCreateSerializer(serializers.Serializer):
         return validate_url(stripped)
 
     def validate(self, attrs):
-        """Story 27.11: Cross-field validation for credential_ref and secret_service_id."""
+        """Cross-field validation for credential_ref and secret_service_id."""
         attrs = super().validate(attrs)
-        integration_type = attrs.get('type', '')
-        credential_ref = attrs.get('credential_ref')
-        secret_service_id = attrs.get('secret_service_id')
-
-        # Vault integrations should not have credential_ref
-        if integration_type == IntegrationType.VAULT and credential_ref:
-            raise serializers.ValidationError({
-                'credential_ref': (
-                    "Les intégrations de type 'vault' n'ont pas besoin de credential_ref. "
-                    "L'authentification utilise le secret 0 (variables d'environnement)."
-                )
-            })
-
-        # Vault integrations should not have secret_service_id
-        if integration_type == IntegrationType.VAULT and secret_service_id:
-            raise serializers.ValidationError({
-                'secret_service_id': (
-                    "Les intégrations de type 'vault' ne peuvent pas avoir de service de secrets."
-                )
-            })
-
-        # secret_service_id must reference a vault integration
-        if secret_service_id is not None:
-            try:
-                vault_integration = Integration.objects.get(id=secret_service_id)
-                if vault_integration.type != IntegrationType.VAULT:
-                    raise serializers.ValidationError({
-                        'secret_service_id': (
-                            f"L'intégration référencée (id={secret_service_id}) n'est pas de type 'vault' "
-                            f"(type actuel: '{vault_integration.type}')."
-                        )
-                    })
-            except Integration.DoesNotExist:
-                raise serializers.ValidationError({
-                    'secret_service_id': f"Aucune intégration trouvée avec l'id {secret_service_id}."
-                })
-
-        return attrs
+        return self._validate_vault_constraints(attrs)
 
 
-class IntegrationUpdateSerializer(serializers.Serializer):
+class IntegrationUpdateSerializer(IntegrationVaultValidationMixin, serializers.Serializer):
     """
     Serializer for updating integrations (PUT /admin/integrations/{id}).
     All fields optional for partial update.
@@ -278,6 +298,13 @@ class IntegrationUpdateSerializer(serializers.Serializer):
         if not stripped:
             return None
         return validate_url(stripped)
+
+    def validate(self, attrs):
+        """Story 30.8 ERR-2: Cross-field validation for partial updates."""
+        attrs = super().validate(attrs)
+        # Merge with instance data for partial update validation
+        instance = getattr(self, 'instance', None)
+        return self._validate_vault_constraints(attrs, instance=instance)
 
 
 class IntegrationListSerializer(serializers.ModelSerializer):

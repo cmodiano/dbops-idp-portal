@@ -53,8 +53,18 @@ def audit_integration_type_catalogue(sender, instance, created, **kwargs):
             },
             correlation_id=get_correlation_id(),  # Fix Issue #3
         )
-    except Exception as e:
-        logger.exception("Failed to create audit entry for IntegrationTypeCatalogue %s", instance.code)
+    except Exception as exc:
+        # Story 30.8 ERR-4 (Option A — strict): Re-raise to prevent save without audit.
+        # SOC1 compliance requires immutable audit trail.
+        logger.critical(
+            "audit_entry_creation_failed",
+            extra={
+                'entity_type': 'IntegrationTypeCatalogue',
+                'entity_code': instance.code,
+                'error': str(exc),
+            },
+        )
+        raise
 
 
 @receiver(post_save, sender=IntegrationAction)
@@ -78,5 +88,14 @@ def audit_integration_action(sender, instance, created, **kwargs):
             },
             correlation_id=get_correlation_id(),  # Fix Issue #3
         )
-    except Exception as e:
-        logger.exception("Failed to create audit entry for IntegrationAction %s", instance.action_code)
+    except Exception as exc:
+        # Story 30.8 ERR-4 (Option A — strict): Re-raise to prevent save without audit.
+        logger.critical(
+            "audit_entry_creation_failed",
+            extra={
+                'entity_type': 'IntegrationAction',
+                'action_code': instance.action_code,
+                'error': str(exc),
+            },
+        )
+        raise

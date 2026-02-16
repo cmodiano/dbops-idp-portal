@@ -17,6 +17,7 @@
 
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { getExecutionSteps } from '../../services/execution_service';
+import logger from '../../services/logger';
 import {
   ReactFlow,
   Controls,
@@ -141,9 +142,23 @@ function WorkflowExecutionGraphInner({
 
   // One-time fetch for terminal executions (load steps without WS/polling)
   const [staticSteps, setStaticSteps] = useState<ExecutionStepResponse[]>([]);
+  const [stepsError, setStepsError] = useState<string | null>(null);
   useEffect(() => {
     if (isTerminal && executionId) {
-      getExecutionSteps(executionId).then(setStaticSteps).catch(() => {});
+      setStepsError(null);
+      getExecutionSteps(executionId)
+        .then((steps) => {
+          setStaticSteps(steps);
+          setStepsError(null);
+        })
+        .catch((err: unknown) => {
+          const message = err instanceof Error ? err.message : 'Erreur inconnue';
+          logger.error('Failed to load execution steps', {
+            executionId,
+            error: message,
+          });
+          setStepsError(message);
+        });
     }
   }, [isTerminal, executionId]);
 
@@ -321,6 +336,17 @@ function WorkflowExecutionGraphInner({
 
   return (
     <div data-testid="workflow-execution-graph" style={{ height: 'calc(100vh - 160px)', minHeight: 500, position: 'relative' }}>
+      {stepsError && (
+        <Alert
+          type="error"
+          showIcon
+          closable
+          title="Erreur de chargement des étapes"
+          description={stepsError}
+          style={{ marginBottom: 8 }}
+          onClose={() => setStepsError(null)}
+        />
+      )}
       {/* AC10: Legend */}
       <Card
         size="small"

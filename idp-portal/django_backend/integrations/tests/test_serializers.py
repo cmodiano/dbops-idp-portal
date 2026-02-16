@@ -179,6 +179,71 @@ class TestIntegrationUpdateSerializer(TestCase):
 
 
 @pytest.mark.django_db
+class TestIntegrationUpdateSerializerVaultValidation(TestCase):
+    """Story 30.8 ERR-2: Cross-field validation for IntegrationUpdateSerializer."""
+
+    def test_update_vault_type_with_credential_ref_rejected(self):
+        """Updating to vault type with credential_ref should be rejected."""
+        data = {'type': 'vault', 'credential_ref': 'vault:secret/path'}
+        s = IntegrationUpdateSerializer(data=data)
+        self.assertFalse(s.is_valid())
+        self.assertIn('credential_ref', s.errors)
+
+    def test_update_vault_type_with_secret_service_id_rejected(self):
+        """Updating to vault type with secret_service_id should be rejected."""
+        vault = Integration.objects.create(
+            type='vault', name='Vault Instance', base_url='https://vault.example.com'
+        )
+        data = {'type': 'vault', 'secret_service_id': vault.id}
+        s = IntegrationUpdateSerializer(data=data)
+        self.assertFalse(s.is_valid())
+        self.assertIn('secret_service_id', s.errors)
+
+    def test_update_secret_service_id_invalid_rejected(self):
+        """Referencing a non-existent secret_service_id should be rejected."""
+        data = {'secret_service_id': 99999}
+        s = IntegrationUpdateSerializer(data=data)
+        self.assertFalse(s.is_valid())
+        self.assertIn('secret_service_id', s.errors)
+
+    def test_update_secret_service_id_non_vault_rejected(self):
+        """Referencing a non-vault integration as secret_service_id should be rejected."""
+        aap = Integration.objects.create(
+            type='aap', name='AAP Instance', base_url='https://aap.example.com'
+        )
+        data = {'secret_service_id': aap.id}
+        s = IntegrationUpdateSerializer(data=data)
+        self.assertFalse(s.is_valid())
+        self.assertIn('secret_service_id', s.errors)
+
+    def test_update_valid_secret_service_id_accepted(self):
+        """Referencing a valid vault integration should be accepted."""
+        vault = Integration.objects.create(
+            type='vault', name='Vault OK', base_url='https://vault.example.com'
+        )
+        data = {'secret_service_id': vault.id}
+        s = IntegrationUpdateSerializer(data=data)
+        self.assertTrue(s.is_valid(), s.errors)
+
+    def test_update_partial_no_vault_fields_accepted(self):
+        """A partial update without vault fields should pass."""
+        data = {'name': 'Updated Name'}
+        s = IntegrationUpdateSerializer(data=data)
+        self.assertTrue(s.is_valid(), s.errors)
+
+    def test_update_with_instance_merges_for_vault_check(self):
+        """When instance exists, validation merges instance data with update data."""
+        instance = Integration.objects.create(
+            type='vault', name='Vault', base_url='https://vault.example.com'
+        )
+        # Partial update: only credential_ref, but instance.type is vault → should reject
+        data = {'credential_ref': 'vault:secret/path'}
+        s = IntegrationUpdateSerializer(data=data, instance=instance)
+        self.assertFalse(s.is_valid())
+        self.assertIn('credential_ref', s.errors)
+
+
+@pytest.mark.django_db
 class TestIntegrationReadSerializers(TestCase):
     """Tests for IntegrationSerializer and IntegrationListSerializer."""
 
