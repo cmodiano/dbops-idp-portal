@@ -381,9 +381,6 @@ class ScheduledExecutionUpdateView(APIView):
                 new_params = {k: v for k, v in current_params.items() if k != "_targets"}
                 new_params["_targets"] = []
                 se.set_parameters(new_params)
-                if environment is not None:
-                    validate_environment_against_inventory(environment, user_id=request.user.id)
-                    se.environment = EnvironmentHelper.normalize(environment)
             else:
                 ad_groups = get_user_ad_groups(request.user)
                 inventory_service = InventoryService()

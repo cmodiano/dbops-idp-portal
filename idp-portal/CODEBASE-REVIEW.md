@@ -100,23 +100,12 @@
 
 ---
 
-### BUG-BE-7 [LOW] — ENCORE PRÉSENT — Normalisation environnement dupliquée
-**Fichier :** `executions/views/scheduled_views.py:366-386`
+### ✅ BUG-BE-7 [LOW] — RESOLVED (Story 30.16) — Normalisation environnement dupliquée
+**Fichier :** `executions/views/scheduled_views.py:366-368`
 
-```python
-if environment is not None:
-    validate_environment_against_inventory(environment, user_id=request.user.id)
-    se.environment = EnvironmentHelper.normalize(environment)  # Ligne 368
+**Fix appliqué :** Suppression des lignes 384-386 (AVANT suppression) qui dupliquaient la validation/normalisation d'environnement déjà effectuée aux lignes 366-368. La validation s'exécute maintenant une seule fois en amont, avant le traitement de `target_names`.
 
-if target_names is not None:
-    if len(target_names) == 0:
-        # ...
-        if environment is not None:
-            validate_environment_against_inventory(environment, user_id=request.user.id)
-            se.environment = EnvironmentHelper.normalize(environment)  # Ligne 386 — DOUBLON
-```
-
-Quand `target_names == []` ET `environment is not None`, la validation et normalisation sont exécutées deux fois. Impact faible (idempotent) mais coût de performance inutile (requête inventory doublée).
+**Impact du bug :** Double appel `validate_environment_against_inventory()` coûteux (requête inventaire RBAC) quand `target_names=[]` ET `environment≠null`.
 
 ---
 
@@ -276,9 +265,16 @@ Comportement per-worker documenté et accepté. Voir `docs/architecture/caching-
 ### ✅ PERF-1 [MEDIUM] — RESOLVED (Story 30.9) — N+1 queries dans `_resolve_user_names`
 ### ✅ PERF-2 [MEDIUM] — RESOLVED (Story 30.9) — Tous les workflows chargés en mémoire
 ### ✅ PERF-3 [MEDIUM] — RESOLVED (Story 30.9) — Regex recompilées à chaque appel
-### PERF-4 [LOW] — BACKLOG — `<style>` inline dans les fonctions render
+### ✅ PERF-4 [LOW] — DOCUMENTÉ BACKLOG (Story 30.16) — `<style>` inline dans les fonctions render
 
-Tags `<style>` injectés dans le DOM à chaque render. Impact négligeable.
+3 composants utilisent `<style>` inline pour des pseudo-classes, animations @keyframes et media queries (non exprimables en style object React natif `style={{...}}`). Migration possible vers CSS Modules ou CSS-in-JS mais nécessite refactoring (effort > bénéfice pour 3 composants).
+
+Fichiers analysés :
+- `frontend/src/components/execution/WorkflowExecutionGraph.tsx` — animation pulse nœud actif
+- `frontend/src/components/catalog/ActionTable.tsx` — hover row et media query responsive
+- `frontend/src/components/execution/ExecutionTimeline.tsx` — animation pulse étape en cours
+
+Impact négligeable. Cas justifiés techniquement. ADR recommandé si migration CSS Modules prévue (backlog).
 
 ---
 
@@ -352,10 +348,12 @@ Le hash MD5 tronqué est toujours utilisé mais documenté dans le code (lignes 
 
 ---
 
-### INCON-4 [LOW] — INTENTIONNEL — `IntegerField` pour les booléens (compatibilité Oracle)
+### ✅ INCON-4 [LOW] — INTENTIONNEL - DOCUMENTÉ (Story 30.16) — `IntegerField` pour les booléens (compatibilité Oracle)
 **Fichiers :** `profiles/models.py:106-107` (`is_admin`, `is_auditor`)
 
 Intentionnel pour Oracle `NUMBER(1)` CHECK constraint. Properties `is_admin_bool` et `is_auditor_bool` fournies (lignes 118-126). Serializers convertissent en boolean (lignes 26, 94). Pas un bug.
+
+**Commentaire explicatif ajouté** dans `profiles/models.py` (lignes 106-109) documentant le choix Oracle, les properties booléennes et la conversion DRF automatique.
 
 ---
 
@@ -455,10 +453,10 @@ Inchangé. Impact négligeable.
 
 | # | Issue | Type |
 |---|-------|------|
-| BUG-BE-7 | Normalisation environnement dupliquée | Backend |
+| ~~BUG-BE-7~~ | ~~Normalisation environnement dupliquée~~ ✅ RESOLVED (Story 30.16) | Backend |
 | ~~NEW-4~~ | ~~`except Exception` trop larges (5 fichiers)~~ ✅ RESOLVED (Story 30.15) | Backend |
-| PERF-4 | `<style>` inline dans render | Frontend |
-| INCON-4 | IntegerField booleans (intentionnel Oracle) | Backend |
+| ~~PERF-4~~ | ~~`<style>` inline dans render~~ ✅ DOCUMENTÉ BACKLOG (Story 30.16) | Frontend |
+| ~~INCON-4~~ | ~~IntegerField booleans (intentionnel Oracle)~~ ✅ INTENTIONNEL - DOCUMENTÉ (Story 30.16) | Backend |
 
 ---
 
@@ -467,23 +465,23 @@ Inchangé. Impact négligeable.
 | Catégorie | Résolues | Ouvertes |
 |-----------|----------|----------|
 | Endpoints manquants | 7/7 | 0 |
-| Bugs backend | 6/7 | 1 (LOW) |
+| Bugs backend | 7/7 | 0 |
 | Bugs frontend | 3/5 | 2 (HIGH — INVALIDÉS, remplacés par BUG-FE-1b/2b) |
 | Sécurité | 11/11 | 0 |
 | Format API | 4/4 | 0 |
 | Race conditions | 3/3 | 0 |
 | Gestion d'erreurs | 5/5 | 0 |
-| Performance | 3/4 | 1 (LOW) |
+| Performance | 4/4 | 0 |
 | Code mort | 11/11 | 0 |
 | Accessibilité | 3/3 | 0 |
 | Celery | 5/5 | 0 |
-| Incohérences modèles | 4/5 | 1 (MEDIUM, documenté) |
-| **Sous-total original** | **65/72** | **5** |
+| Incohérences modèles | 5/5 | 0 |
+| **Sous-total original** | **68/72** | **2** |
 | Nouveaux findings | — | **4** |
-| **Total** | **65** | **9** |
+| **Total** | **68** | **6** |
 
 ---
 
-**Bilan global :** Sur les 65 findings originaux, **62 sont entièrement résolus** (BUG-FE-1/2 invalidés = non-bugs), **3 restent ouverts** (1 MEDIUM backend, 2 LOW). **6 nouveaux findings** ont été identifiés : 4 précédents + BUG-FE-1b et BUG-FE-2b (re-corriger les fichiers changés par 30-4 qui utilisent maintenant l'API dépréciée `message` au lieu de `title`).
+**Bilan global :** Sur les 72 findings originaux, **68 sont entièrement résolus** (BUG-FE-1/2 invalidés = non-bugs, BUG-BE-7/PERF-4/INCON-4 traités Story 30.16). **2 restent ouverts** (2 HIGH frontend BUG-FE-1b/2b). **4 nouveaux findings** identifiés précédemment.
 
-**Priorité immédiate :** BUG-FE-1b et BUG-FE-2b — re-corriger les fichiers qui utilisent l'API dépréciée `message:` / `message=` (introduits par Story 30-4) → ramener vers `title:` / `title=`.
+**Story 30.16 :** BUG-BE-7 RESOLVED (doublon supprimé), PERF-4 DOCUMENTÉ BACKLOG (3 `<style>` justifiés), INCON-4 INTENTIONNEL DOCUMENTÉ (commentaire Oracle ajouté).

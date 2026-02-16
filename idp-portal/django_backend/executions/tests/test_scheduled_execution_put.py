@@ -152,3 +152,37 @@ class ScheduledExecutionPutTests(TestCase):
         params = se.get_parameters()
         self.assertEqual(params.get('_targets'), ['allowed'])
         self.assertEqual(params.get('x'), 2)
+
+    def test_put_environment_with_empty_targets_validates_once(self, mock_validate):
+        """
+        Story 30.16 AC1: Validate environment normalization called ONCE when target_names=[] AND environment≠null.
+        Regression test for BUG-BE-7 (duplicate validation at lines 384-386 BEFORE fix).
+        """
+        mock_validate.return_value = None
+        future = timezone.now() + timedelta(days=1)
+        se = ScheduledExecution.objects.create(
+            action=self.action,
+            user=self.user,
+            environment='dev',
+            scheduled_at=future,
+            status=ScheduledExecutionStatus.PENDING,
+        )
+        se.set_parameters({'_targets': ['t1']})
+        se.save(update_fields=['parameters'])
+
+        # Clear targets AND update environment
+        response = self.client.put(
+            f'/api/v1/scheduled-executions/{se.id}/',
+            {'target_names': [], 'environment': 'prod'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # BUG-BE-7 fix verification: validate_environment_against_inventory called ONCE (not twice)
+        self.assertEqual(mock_validate.call_count, 1)
+        mock_validate.assert_called_once_with('prod', user_id=self.user.id)
+
+        se.refresh_from_db()
+        self.assertEqual(se.environment, 'prod')  # EnvironmentHelper.normalize('prod') applied once
+        params = se.get_parameters()
+        self.assertEqual(params.get('_targets'), [])

@@ -103,8 +103,14 @@ class Profile(models.Model):
     name = models.CharField(max_length=255, unique=True, db_column='NAME')
     description = models.CharField(max_length=4000, null=True, blank=True, db_column='DESCRIPTION')
     ad_group = models.CharField(max_length=512, db_column='AD_GROUP')
-    is_admin = models.IntegerField(default=0, db_column='IS_ADMIN')  # Oracle NUMBER(1) CHECK: 0, 1
-    is_auditor = models.IntegerField(default=0, db_column='IS_AUDITOR')  # Oracle NUMBER(1) CHECK: 0, 1
+    # INCON-4 (Story 30.16): IntegerField intentionnel pour compatibilité Oracle.
+    # Oracle n'a pas de type BOOLEAN natif — ces champs mappent NUMBER(1) avec CHECK (val IN (0, 1)).
+    # Schema legacy Oracle existant (migrations Flyway V001-V075). BooleanField Django créerait une incohérence.
+    # CHECK constraint défini dans migration Flyway (gérée par DBA, pas Django ORM).
+    # L'API Python utilise les properties is_admin_bool / is_auditor_bool (ci-dessous).
+    # Les serializers DRF font la conversion int ↔ bool automatiquement.
+    is_admin = models.IntegerField(default=0, db_column='IS_ADMIN')
+    is_auditor = models.IntegerField(default=0, db_column='IS_AUDITOR')
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
     updated_at = models.DateTimeField(auto_now=True, db_column='UPDATED_AT')
     

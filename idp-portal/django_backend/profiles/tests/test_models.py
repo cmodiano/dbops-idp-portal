@@ -43,6 +43,41 @@ class ProfileModelTest(TestCase):
         )
         self.assertEqual(str(profile), 'DBA')
 
+    def test_profile_is_admin_bool_property(self):
+        """
+        Story 30.16 AC3: Test is_admin_bool property conversion (Oracle NUMBER(1) → Python bool).
+        Validates INCON-4 intentional IntegerField with boolean property wrapper.
+        """
+        profile = Profile.objects.create(
+            name='DBA',
+            ad_group='GRP-IDP-DBA',
+            is_admin=1,
+            is_auditor=0
+        )
+        # Test property conversion
+        self.assertIsInstance(profile.is_admin_bool, bool)
+        self.assertTrue(profile.is_admin_bool)
+        self.assertFalse(profile.is_auditor_bool)
+
+        # Test property after update
+        profile.is_admin = 0
+        profile.is_auditor = 1
+        self.assertFalse(profile.is_admin_bool)
+        self.assertTrue(profile.is_auditor_bool)
+
+    def test_profile_is_auditor_bool_property(self):
+        """
+        Story 30.16 AC3: Test is_auditor_bool property edge cases.
+        """
+        profile = Profile.objects.create(
+            name='AUDITOR',
+            ad_group='GRP-IDP-AUDITOR',
+            is_admin=0,
+            is_auditor=1
+        )
+        self.assertTrue(profile.is_auditor_bool)
+        self.assertFalse(profile.is_admin_bool)
+
 
 @pytest.mark.django_db
 class ProfileActionPermissionModelTest(TestCase):
