@@ -22,6 +22,10 @@ from core.models import AuditActionType, AuditEntityType
 
 logger = structlog.get_logger(__name__)
 
+# Story 30.7 (RACE-1): Maximum polling retries before marking execution as FAILED.
+# 20 retries × 5s default interval ≈ 100s minimum; sufficient for transient failures.
+MAX_POLLING_RETRIES = 20
+
 
 @shared_task(bind=True, max_retries=0)
 def retry_workflow_step(self: Any, execution_id: int, step: dict, attempt: int) -> dict:
@@ -462,16 +466,21 @@ def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id:
     Handle a gate timeout condition — transition step to FAILED or SKIPPED.
 
     Story 25.3: Based on on_timeout value, transitions the step and creates audit trail.
-    Also triggers workflow continuation (on_error_step_id or next step).
+    Story 30.7 (CELERY-4/CELERY-5): Actually continue the workflow after timeout
+    instead of leaving it blocked. SKIPPED steps get an explicit error_message.
     """
     timeout_action = gate_status.get('action', 'FAILED')
     timeout_hours = gate_status.get('timeout_hours')
 
+    # Story 30.7 (CELERY-5): Always set error_message, even for SKIPPED steps
+    error_msg = f"Gate timeout exceeded after {timeout_hours}h"
+
     if timeout_action == 'SKIPPED':
         step.status = ExecutionStepStatus.SKIPPED
+        step.error_message = error_msg
     else:
         step.status = ExecutionStepStatus.FAILED
-        step.error_message = f'Gate timeout after {timeout_hours}h'
+        step.error_message = error_msg
 
     step.completed_at = timezone.now()
     step.save()
@@ -482,6 +491,7 @@ def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id:
         execution_id=step.execution_id,
         timeout_hours=timeout_hours,
         timeout_action=timeout_action,
+        error_message=error_msg,
         correlation_id=correlation_id,
     )
 
@@ -498,28 +508,140 @@ def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id:
             'step_name': step.step_name,
             'timeout_hours': timeout_hours,
             'on_timeout': timeout_action,
+            'error_message': error_msg,
             'waiting_duration_seconds': round(waiting_duration, 1),
         },
         correlation_id=correlation_id,
     )
 
-    # Story 25.3 code review fix MEDIUM-3: Continue workflow after timeout
-    # If FAILED → follow on_error_step_id logic (if defined)
-    # If SKIPPED → continue to next step
-    # This requires triggering the workflow runtime to process the next step.
-    # For now, log a TODO to notify WorkflowRuntime to poll for completed steps.
-    # Full implementation would require a task queue or workflow engine notification.
-    logger.info(
-        "evaluate_waiting_gates_step_timeout_workflow_continuation_needed",
-        step_id=step.id,
-        execution_id=step.execution_id,
-        timeout_action=timeout_action,
+    # Story 30.7 (CELERY-4): Continue workflow after gate timeout.
+    # If FAILED → mark execution as FAILED.
+    # If SKIPPED → trigger next step execution.
+    if timeout_action == 'SKIPPED':
+        # Find the next step definition and trigger it
+        action = step.execution.action
+        execution_steps = action.execution_steps or []
+        next_step_def = None
+        found_current = False
+        for s in execution_steps:
+            if isinstance(s, dict) and s.get('name') == step.step_name:
+                found_current = True
+                continue
+            if found_current and isinstance(s, dict):
+                next_step_def = s
+                break
+
+        if next_step_def and next_step_def.get('name'):
+            # Story 30.7 Code Review: Validate next_step_def has required fields
+            retry_workflow_step.apply_async(
+                args=[step.execution_id, next_step_def, 1],
+            )
+            logger.info(
+                "evaluate_waiting_gates_step_timeout_next_step_triggered",
+                step_id=step.id,
+                execution_id=step.execution_id,
+                next_step_name=next_step_def.get('name'),
+                correlation_id=correlation_id,
+            )
+        else:
+            logger.info(
+                "evaluate_waiting_gates_step_timeout_no_next_step",
+                step_id=step.id,
+                execution_id=step.execution_id,
+                correlation_id=correlation_id,
+            )
+    else:
+        # FAILED → mark execution as FAILED
+        try:
+            execution = step.execution
+            if execution.status not in {ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED}:
+                execution.status = ExecutionStatus.FAILED
+                execution.completed_at = timezone.now()
+                execution.save()
+                logger.info(
+                    "evaluate_waiting_gates_step_timeout_execution_failed",
+                    execution_id=execution.id,
+                    step_id=step.id,
+                    correlation_id=correlation_id,
+                )
+        except Exception as exc:
+            logger.error(
+                "evaluate_waiting_gates_step_timeout_execution_update_error",
+                execution_id=step.execution_id,
+                error=str(exc),
+                correlation_id=correlation_id,
+            )
+
+
+def _mark_execution_polling_exhausted(
+    execution_id: int,
+    platform_job_id: str,
+    retry_count: int,
+    error: str,
+    correlation_id: str | None = None,
+) -> None:
+    """
+    Story 30.7 (RACE-1): Mark execution as FAILED when polling retries are exhausted.
+    Creates an audit entry with EXECUTION_POLLING_EXHAUSTED action type.
+    """
+    logger.error(
+        "polling_exhausted",
+        execution_id=execution_id,
+        platform_job_id=platform_job_id,
+        retry_count=retry_count,
+        max_retries=MAX_POLLING_RETRIES,
+        error=error,
         correlation_id=correlation_id,
-        # TODO Story 25.3b: Implement workflow continuation after gate timeout
-        # Option 1: Trigger retry_workflow_step with next step
-        # Option 2: WorkflowRuntime polling task to detect completed steps
-        # Option 3: Event-driven workflow engine (future architecture)
     )
+
+    try:
+        execution = Execution.objects.get(id=execution_id)
+        terminal_statuses = {ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED}
+
+        if execution.status not in terminal_statuses:
+            execution.status = ExecutionStatus.FAILED
+            execution.completed_at = timezone.now()
+            execution.save()
+
+        # Update the platform step with error
+        platform_step = ExecutionStep.objects.filter(
+            execution_id=execution_id,
+            platform_job_id=platform_job_id,
+        ).first()
+        if platform_step and platform_step.status not in {
+            ExecutionStepStatus.COMPLETED, ExecutionStepStatus.FAILED
+        }:
+            platform_step.status = ExecutionStepStatus.FAILED
+            platform_step.error_message = f"Polling exhausted after {retry_count} retries: {error}"
+            platform_step.completed_at = timezone.now()
+            platform_step.save()
+
+        AuditService.create_entry(
+            user_id=str(execution.user_id),
+            action_type=AuditActionType.EXECUTION_POLLING_EXHAUSTED,
+            entity_type=AuditEntityType.EXECUTION,
+            entity_id=execution_id,
+            details={
+                'platform_job_id': platform_job_id,
+                'retry_count': retry_count,
+                'max_retries': MAX_POLLING_RETRIES,
+                'last_error': error,
+            },
+            correlation_id=correlation_id,
+        )
+    except Execution.DoesNotExist:
+        logger.warning(
+            "polling_exhausted_execution_not_found",
+            execution_id=execution_id,
+            correlation_id=correlation_id,
+        )
+    except Exception as exc:
+        logger.error(
+            "polling_exhausted_update_error",
+            execution_id=execution_id,
+            error=str(exc),
+            correlation_id=correlation_id,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -536,13 +658,14 @@ def poll_aap_job_status(
     credential_ref: str = "",
     auth_flow: str = "token",
     poll_interval: int = 5,
+    retry_count: int = 0,
 ) -> dict:
     """
     Story 27.1 (AC4): Poll AAP for job status and logs, then broadcast
     updates via Django Channels to the execution's WebSocket group.
 
-    This task is designed to be self-scheduling: after each poll, if the
-    job is still running, it schedules itself again with a countdown.
+    Story 30.7 (RACE-1): Added retry_count / MAX_POLLING_RETRIES to prevent
+    infinite re-scheduling on persistent adapter errors.
 
     Args:
         execution_id: IDP Portal execution ID.
@@ -552,6 +675,7 @@ def poll_aap_job_status(
         credential_ref: Credential reference for auth.
         auth_flow: Auth flow type (token, basic, pat).
         poll_interval: Seconds between polls (default 5).
+        retry_count: Current error retry count (Story 30.7).
 
     Returns:
         dict with final status information.
@@ -565,17 +689,15 @@ def poll_aap_job_status(
         execution_id=execution_id,
         platform_job_id=platform_job_id,
         resource_type=resource_type,
+        retry_count=retry_count,
+        max_retries=MAX_POLLING_RETRIES,
         correlation_id=correlation_id,
     )
 
-    # CRITICAL-3 FIX: Initialize loop=None to prevent leak if exception before loop creation
-    loop = None
     try:
         # Build adapter
         from adapters.aap_adapter import AAPAdapter
-        from adapters.utils import build_auth_headers as _build_headers_from_integration
 
-        # Build auth headers directly (we receive raw values, not an Integration object)
         import base64 as _b64
         if auth_flow == "basic":
             _encoded = _b64.b64encode(credential_ref.encode()).decode()
@@ -585,11 +707,8 @@ def poll_aap_job_status(
 
         adapter = AAPAdapter(base_url=base_url, auth_headers=auth_headers)
 
-        # Run async adapter calls in sync Celery task
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)  # Set as current loop for this thread
-
-        status_data = loop.run_until_complete(
+        # Story 30.7 (CELERY-3): Use asyncio.run() instead of manual event loop
+        status_data = asyncio.run(
             adapter.get_status(
                 platform_job_id=platform_job_id,
                 resource_type=resource_type,
@@ -597,7 +716,7 @@ def poll_aap_job_status(
             )
         )
 
-        logs_data = loop.run_until_complete(
+        logs_data = asyncio.run(
             adapter.get_job_logs(
                 platform_job_id=platform_job_id,
                 resource_type=resource_type,
@@ -611,9 +730,20 @@ def poll_aap_job_status(
             platform_job_id=platform_job_id,
             error=str(e),
             error_type=type(e).__name__,
+            retry_count=retry_count,
+            max_retries=MAX_POLLING_RETRIES,
             correlation_id=correlation_id,
         )
-        # Re-schedule despite error (transient failure)
+        # Story 30.7 (RACE-1): Check max retries before re-scheduling
+        if retry_count >= MAX_POLLING_RETRIES:
+            _mark_execution_polling_exhausted(
+                execution_id=execution_id,
+                platform_job_id=platform_job_id,
+                retry_count=retry_count,
+                error=str(e),
+                correlation_id=correlation_id,
+            )
+            return {"outcome": "exhausted", "error": str(e), "retry_count": retry_count}
         poll_aap_job_status.apply_async(
             args=[execution_id, platform_job_id],
             kwargs={
@@ -622,14 +752,11 @@ def poll_aap_job_status(
                 "credential_ref": credential_ref,
                 "auth_flow": auth_flow,
                 "poll_interval": poll_interval,
+                "retry_count": retry_count + 1,
             },
             countdown=poll_interval,
         )
-        return {"outcome": "error", "error": str(e)}
-    finally:
-        # CRITICAL-3 FIX: Ensure loop is closed even if exception before loop creation
-        if loop is not None:
-            loop.close()
+        return {"outcome": "error", "error": str(e), "retry_count": retry_count}
 
     idp_status = status_data.get("status", "SUBMITTED")
     aap_status = status_data.get("aap_status", "unknown")
@@ -663,7 +790,7 @@ def poll_aap_job_status(
         )
         return {"outcome": "complete", "status": idp_status, "aap_status": aap_status}
 
-    # Re-schedule next poll
+    # Re-schedule next poll (reset retry_count on success)
     poll_aap_job_status.apply_async(
         args=[execution_id, platform_job_id],
         kwargs={
@@ -672,6 +799,7 @@ def poll_aap_job_status(
             "credential_ref": credential_ref,
             "auth_flow": auth_flow,
             "poll_interval": poll_interval,
+            "retry_count": 0,
         },
         countdown=poll_interval,
     )
@@ -702,24 +830,11 @@ def poll_tower_job_status(
     credential_ref: str = "",
     auth_flow: str = "token",
     poll_interval: int = 5,
+    retry_count: int = 0,
 ) -> dict:
     """
-    Story 27.2 (AC4): Poll Tower/AWX for job status and logs, then broadcast
-    updates via Django Channels to the execution's WebSocket group.
-
-    Mirrors poll_aap_job_status but uses TowerAdapter.
-
-    Args:
-        execution_id: IDP Portal execution ID.
-        platform_job_id: Tower job ID to monitor.
-        resource_type: 'job_template' or 'workflow_job'.
-        base_url: Tower base URL (from integration).
-        credential_ref: Credential reference for auth.
-        auth_flow: Auth flow type (token, basic, pat).
-        poll_interval: Seconds between polls (default 5).
-
-    Returns:
-        dict with final status information.
+    Story 27.2 (AC4): Poll Tower/AWX for job status and logs.
+    Story 30.7 (RACE-1): retry_count / MAX_POLLING_RETRIES.
     """
     import asyncio
 
@@ -730,10 +845,11 @@ def poll_tower_job_status(
         execution_id=execution_id,
         platform_job_id=platform_job_id,
         resource_type=resource_type,
+        retry_count=retry_count,
+        max_retries=MAX_POLLING_RETRIES,
         correlation_id=correlation_id,
     )
 
-    loop = None
     try:
         from adapters.tower_adapter import TowerAdapter
 
@@ -746,10 +862,8 @@ def poll_tower_job_status(
 
         adapter = TowerAdapter(base_url=base_url, auth_headers=auth_headers)
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-        status_data = loop.run_until_complete(
+        # Story 30.7 (CELERY-3): Use asyncio.run() instead of manual event loop
+        status_data = asyncio.run(
             adapter.get_status(
                 platform_job_id=platform_job_id,
                 resource_type=resource_type,
@@ -757,7 +871,7 @@ def poll_tower_job_status(
             )
         )
 
-        logs_data = loop.run_until_complete(
+        logs_data = asyncio.run(
             adapter.get_job_logs(
                 platform_job_id=platform_job_id,
                 resource_type=resource_type,
@@ -771,8 +885,19 @@ def poll_tower_job_status(
             platform_job_id=platform_job_id,
             error=str(e),
             error_type=type(e).__name__,
+            retry_count=retry_count,
+            max_retries=MAX_POLLING_RETRIES,
             correlation_id=correlation_id,
         )
+        if retry_count >= MAX_POLLING_RETRIES:
+            _mark_execution_polling_exhausted(
+                execution_id=execution_id,
+                platform_job_id=platform_job_id,
+                retry_count=retry_count,
+                error=str(e),
+                correlation_id=correlation_id,
+            )
+            return {"outcome": "exhausted", "error": str(e), "retry_count": retry_count}
         poll_tower_job_status.apply_async(
             args=[execution_id, platform_job_id],
             kwargs={
@@ -781,13 +906,11 @@ def poll_tower_job_status(
                 "credential_ref": credential_ref,
                 "auth_flow": auth_flow,
                 "poll_interval": poll_interval,
+                "retry_count": retry_count + 1,
             },
             countdown=poll_interval,
         )
-        return {"outcome": "error", "error": str(e)}
-    finally:
-        if loop is not None:
-            loop.close()
+        return {"outcome": "error", "error": str(e), "retry_count": retry_count}
 
     idp_status = status_data.get("status", "SUBMITTED")
     tower_status = status_data.get("tower_status", "unknown")
@@ -827,6 +950,7 @@ def poll_tower_job_status(
             "credential_ref": credential_ref,
             "auth_flow": auth_flow,
             "poll_interval": poll_interval,
+            "retry_count": 0,
         },
         countdown=poll_interval,
     )
@@ -857,25 +981,11 @@ def poll_azure_devops_run_status(
     credential_ref: str = "",
     auth_flow: str = "basic",
     poll_interval: int = 5,
+    retry_count: int = 0,
 ) -> dict:
     """
-    Story 27.3 (AC4): Poll Azure DevOps for pipeline run status and logs,
-    then broadcast updates via Django Channels to the execution's WebSocket group.
-
-    Self-scheduling: after each poll, if the run is still active, schedules
-    itself again with a countdown.
-
-    Args:
-        execution_id: IDP Portal execution ID.
-        platform_job_id: Azure DevOps run ID to monitor.
-        pipeline_id: Azure DevOps pipeline ID.
-        base_url: Azure DevOps base URL (https://dev.azure.com/{org}/{project}).
-        credential_ref: Credential reference for auth (PAT or token).
-        auth_flow: Auth flow type (basic for PAT, pat/token for Bearer).
-        poll_interval: Seconds between polls (default 5).
-
-    Returns:
-        dict with status information.
+    Story 27.3 (AC4): Poll Azure DevOps for pipeline run status and logs.
+    Story 30.7 (RACE-1): retry_count / MAX_POLLING_RETRIES.
     """
     import asyncio
 
@@ -886,10 +996,11 @@ def poll_azure_devops_run_status(
         execution_id=execution_id,
         platform_job_id=platform_job_id,
         pipeline_id=pipeline_id,
+        retry_count=retry_count,
+        max_retries=MAX_POLLING_RETRIES,
         correlation_id=correlation_id,
     )
 
-    loop = None
     try:
         from adapters.azure_devops_adapter import AzureDevOpsAdapter
 
@@ -902,10 +1013,8 @@ def poll_azure_devops_run_status(
 
         adapter = AzureDevOpsAdapter(base_url=base_url, auth_headers=auth_headers)
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-        status_data = loop.run_until_complete(
+        # Story 30.7 (CELERY-3): Use asyncio.run() instead of manual event loop
+        status_data = asyncio.run(
             adapter.get_status(
                 platform_job_id=platform_job_id,
                 pipeline_id=pipeline_id,
@@ -913,7 +1022,7 @@ def poll_azure_devops_run_status(
             )
         )
 
-        logs_data = loop.run_until_complete(
+        logs_data = asyncio.run(
             adapter.get_job_logs(
                 platform_job_id=platform_job_id,
                 pipeline_id=pipeline_id,
@@ -927,8 +1036,19 @@ def poll_azure_devops_run_status(
             platform_job_id=platform_job_id,
             error=str(e),
             error_type=type(e).__name__,
+            retry_count=retry_count,
+            max_retries=MAX_POLLING_RETRIES,
             correlation_id=correlation_id,
         )
+        if retry_count >= MAX_POLLING_RETRIES:
+            _mark_execution_polling_exhausted(
+                execution_id=execution_id,
+                platform_job_id=platform_job_id,
+                retry_count=retry_count,
+                error=str(e),
+                correlation_id=correlation_id,
+            )
+            return {"outcome": "exhausted", "error": str(e), "retry_count": retry_count}
         poll_azure_devops_run_status.apply_async(
             args=[execution_id, platform_job_id],
             kwargs={
@@ -937,13 +1057,11 @@ def poll_azure_devops_run_status(
                 "credential_ref": credential_ref,
                 "auth_flow": auth_flow,
                 "poll_interval": poll_interval,
+                "retry_count": retry_count + 1,
             },
             countdown=poll_interval,
         )
-        return {"outcome": "error", "error": str(e)}
-    finally:
-        if loop is not None:
-            loop.close()
+        return {"outcome": "error", "error": str(e), "retry_count": retry_count}
 
     idp_status = status_data.get("status", "SUBMITTED")
     azure_state = status_data.get("azure_devops_state", "inProgress")
@@ -992,6 +1110,7 @@ def poll_azure_devops_run_status(
             "credential_ref": credential_ref,
             "auth_flow": auth_flow,
             "poll_interval": poll_interval,
+            "retry_count": 0,
         },
         countdown=poll_interval,
     )
@@ -1159,26 +1278,11 @@ def poll_github_actions_run_status(
     base_url: str = "",
     credential_ref: str = "",
     poll_interval: int = 60,
+    retry_count: int = 0,
 ) -> dict:
     """
-    Story 27.4 (AC4): Poll GitHub Actions for workflow run status and logs,
-    then broadcast updates via Django Channels to the execution's WebSocket group.
-
-    This is a catch-up fallback; webhooks are the primary real-time mechanism.
-    Self-scheduling: after each poll, if the run is still active, schedules
-    itself again with a countdown.
-
-    Args:
-        execution_id: IDP Portal execution ID.
-        platform_job_id: GitHub Actions run ID to monitor.
-        owner: GitHub repository owner.
-        repo: GitHub repository name.
-        base_url: GitHub API base URL (https://api.github.com).
-        credential_ref: Credential reference (PAT token).
-        poll_interval: Seconds between polls (default 60, longer since webhooks primary).
-
-    Returns:
-        dict with status information.
+    Story 27.4 (AC4): Poll GitHub Actions for workflow run status and logs.
+    Story 30.7 (RACE-1): retry_count / MAX_POLLING_RETRIES.
     """
     import asyncio
 
@@ -1190,10 +1294,11 @@ def poll_github_actions_run_status(
         platform_job_id=platform_job_id,
         owner=owner,
         repo=repo,
+        retry_count=retry_count,
+        max_retries=MAX_POLLING_RETRIES,
         correlation_id=correlation_id,
     )
 
-    loop = None
     try:
         from adapters.github_actions_adapter import GitHubActionsAdapter
 
@@ -1206,17 +1311,15 @@ def poll_github_actions_run_status(
             repo=repo,
         )
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-        status_data = loop.run_until_complete(
+        # Story 30.7 (CELERY-3): Use asyncio.run() instead of manual event loop
+        status_data = asyncio.run(
             adapter.get_status(
                 platform_job_id=platform_job_id,
                 correlation_id=correlation_id,
             )
         )
 
-        logs_data = loop.run_until_complete(
+        logs_data = asyncio.run(
             adapter.get_job_logs(
                 platform_job_id=platform_job_id,
                 correlation_id=correlation_id,
@@ -1229,8 +1332,19 @@ def poll_github_actions_run_status(
             platform_job_id=platform_job_id,
             error=str(e),
             error_type=type(e).__name__,
+            retry_count=retry_count,
+            max_retries=MAX_POLLING_RETRIES,
             correlation_id=correlation_id,
         )
+        if retry_count >= MAX_POLLING_RETRIES:
+            _mark_execution_polling_exhausted(
+                execution_id=execution_id,
+                platform_job_id=platform_job_id,
+                retry_count=retry_count,
+                error=str(e),
+                correlation_id=correlation_id,
+            )
+            return {"outcome": "exhausted", "error": str(e), "retry_count": retry_count}
         poll_github_actions_run_status.apply_async(
             args=[execution_id, platform_job_id],
             kwargs={
@@ -1239,13 +1353,11 @@ def poll_github_actions_run_status(
                 "base_url": base_url,
                 "credential_ref": credential_ref,
                 "poll_interval": poll_interval,
+                "retry_count": retry_count + 1,
             },
             countdown=poll_interval,
         )
-        return {"outcome": "error", "error": str(e)}
-    finally:
-        if loop is not None:
-            loop.close()
+        return {"outcome": "error", "error": str(e), "retry_count": retry_count}
 
     idp_status = status_data.get("status", "SUBMITTED")
     gh_status = status_data.get("github_actions_status", "queued")
@@ -1294,6 +1406,7 @@ def poll_github_actions_run_status(
             "base_url": base_url,
             "credential_ref": credential_ref,
             "poll_interval": poll_interval,
+            "retry_count": 0,
         },
         countdown=poll_interval,
     )
@@ -1329,25 +1442,11 @@ def poll_terraform_cloud_run_status(
     base_url: str = "",
     credential_ref: str = "",
     poll_interval: int = 60,
+    retry_count: int = 0,
 ) -> dict:
     """
-    Story 27.5 (AC4): Poll Terraform Cloud for run status and logs,
-    then broadcast updates via Django Channels to the execution's WebSocket group.
-
-    This is a catch-up fallback; webhooks are the primary real-time mechanism.
-    Self-scheduling: after each poll, if the run is still active, schedules
-    itself again with a countdown.
-
-    Args:
-        execution_id: IDP Portal execution ID.
-        platform_job_id: Terraform Cloud run ID to monitor.
-        organization: Terraform Cloud organization name.
-        base_url: Terraform Cloud API base URL.
-        credential_ref: Credential reference (API token).
-        poll_interval: Seconds between polls (default 60, longer since webhooks primary).
-
-    Returns:
-        dict with status information.
+    Story 27.5 (AC4): Poll Terraform Cloud for run status and logs.
+    Story 30.7 (RACE-1): retry_count / MAX_POLLING_RETRIES.
     """
     import asyncio
 
@@ -1358,10 +1457,11 @@ def poll_terraform_cloud_run_status(
         execution_id=execution_id,
         platform_job_id=platform_job_id,
         organization=organization,
+        retry_count=retry_count,
+        max_retries=MAX_POLLING_RETRIES,
         correlation_id=correlation_id,
     )
 
-    loop = None
     try:
         from adapters.terraform_cloud_adapter import (
             TerraformCloudAdapter,
@@ -1376,17 +1476,15 @@ def poll_terraform_cloud_run_status(
             organization=organization,
         )
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-        status_data = loop.run_until_complete(
+        # Story 30.7 (CELERY-3): Use asyncio.run() instead of manual event loop
+        status_data = asyncio.run(
             adapter.get_status(
                 platform_job_id=platform_job_id,
                 correlation_id=correlation_id,
             )
         )
 
-        logs_data = loop.run_until_complete(
+        logs_data = asyncio.run(
             adapter.get_job_logs(
                 platform_job_id=platform_job_id,
                 correlation_id=correlation_id,
@@ -1399,8 +1497,19 @@ def poll_terraform_cloud_run_status(
             platform_job_id=platform_job_id,
             error=str(e),
             error_type=type(e).__name__,
+            retry_count=retry_count,
+            max_retries=MAX_POLLING_RETRIES,
             correlation_id=correlation_id,
         )
+        if retry_count >= MAX_POLLING_RETRIES:
+            _mark_execution_polling_exhausted(
+                execution_id=execution_id,
+                platform_job_id=platform_job_id,
+                retry_count=retry_count,
+                error=str(e),
+                correlation_id=correlation_id,
+            )
+            return {"outcome": "exhausted", "error": str(e), "retry_count": retry_count}
         poll_terraform_cloud_run_status.apply_async(
             args=[execution_id, platform_job_id],
             kwargs={
@@ -1408,13 +1517,11 @@ def poll_terraform_cloud_run_status(
                 "base_url": base_url,
                 "credential_ref": credential_ref,
                 "poll_interval": poll_interval,
+                "retry_count": retry_count + 1,
             },
             countdown=poll_interval,
         )
-        return {"outcome": "error", "error": str(e)}
-    finally:
-        if loop is not None:
-            loop.close()
+        return {"outcome": "error", "error": str(e), "retry_count": retry_count}
 
     idp_status = status_data.get("status", "SUBMITTED")
     tc_status = status_data.get("terraform_cloud_status", "pending")
@@ -1457,6 +1564,7 @@ def poll_terraform_cloud_run_status(
             "base_url": base_url,
             "credential_ref": credential_ref,
             "poll_interval": poll_interval,
+            "retry_count": 0,
         },
         countdown=poll_interval,
     )

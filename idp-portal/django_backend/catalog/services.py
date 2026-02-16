@@ -272,10 +272,11 @@ class CatalogService:
             Updated Action instance or None if not found
         """
         try:
-            action = Action.objects.get(id=action_id)
+            # Story 30.7 (RACE-2): select_for_update() serializes concurrent updates
+            action = Action.objects.select_for_update().get(id=action_id)
         except Action.DoesNotExist:
             return None
-        
+
         # Update fields
         if 'name' in action_update_data:
             action.name = action_update_data['name']
@@ -331,6 +332,9 @@ class CatalogService:
         """
         Update action status via a valid transition.
 
+        Story 30.7 (RACE-2): Uses select_for_update() to serialize concurrent
+        status transitions on the same action.
+
         Args:
             action_id: ID of the action
             transition: Transition name (publish, disable, enable)
@@ -343,7 +347,8 @@ class CatalogService:
             InvalidTransitionError: If transition is invalid
         """
         try:
-            action = Action.objects.get(id=action_id)
+            # Story 30.7 (RACE-2): select_for_update() serializes concurrent transitions
+            action = Action.objects.select_for_update().get(id=action_id)
         except Action.DoesNotExist:
             return None
         
@@ -387,11 +392,14 @@ class CatalogService:
         """
         Hard-delete an action — only allowed if execution_count == 0 (Story 18.1, AC1).
 
+        Story 30.7 (RACE-2): Uses select_for_update() to serialize concurrent deletes.
+
         Raises:
             ConflictError: If action has any executions (past or current).
         """
         try:
-            action = Action.objects.get(id=action_id)
+            # Story 30.7 (RACE-2): select_for_update() serializes concurrent deletes
+            action = Action.objects.select_for_update().get(id=action_id)
         except Action.DoesNotExist:
             return False
 
@@ -426,11 +434,11 @@ class CatalogService:
     ) -> dict[str, Any] | None:
         """
         Soft-delete (deactivate) an action (Story 18.1, AC2).
-        Sets status='disabled', fills deleted_at/deleted_by/deletion_reason.
-        Returns dict with action info and affected_workflows if any need confirmation.
+        Story 30.7 (RACE-2): Uses select_for_update() to serialize concurrent deactivations.
         """
         try:
-            action = Action.objects.get(id=action_id)
+            # Story 30.7 (RACE-2): select_for_update() serializes concurrent deactivations
+            action = Action.objects.select_for_update().get(id=action_id)
         except Action.DoesNotExist:
             return None
 

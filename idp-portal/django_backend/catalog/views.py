@@ -724,9 +724,12 @@ class BusinessRulePolicyViewSet(viewsets.ModelViewSet):
 
 # Story 3.1 AC10: in-memory cache for catalog, TTL 5 min (300s)
 # Story 30.6: Cache stores complete response dict {"data": [...], "pagination": {...}}
+# Story 30.7 (RACE-3): Per-worker cache (not shared between Gunicorn workers).
+# See docs/architecture/caching-strategy.md for rationale and limitations.
 _catalog_cache: TTLCache[str, dict[str, Any]] = TTLCache(maxsize=1000, ttl=300)
 
 # Story 17.17: in-memory cache for catalog tags, TTL 5 min (300s)
+# Story 30.7 (RACE-3): Per-worker cache — see docs/architecture/caching-strategy.md
 _tags_cache: TTLCache[str, list[dict]] = TTLCache(maxsize=200, ttl=300)
 
 

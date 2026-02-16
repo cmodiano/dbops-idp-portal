@@ -90,6 +90,8 @@ class AuditActionType(models.TextChoices):
     POLICY_CREATED = 'POLICY_CREATED', 'Policy Created'
     POLICY_UPDATED = 'POLICY_UPDATED', 'Policy Updated'
     POLICY_DELETED = 'POLICY_DELETED', 'Policy Deleted'
+    # Story 30.7: Polling exhaustion audit type
+    EXECUTION_POLLING_EXHAUSTED = 'EXECUTION_POLLING_EXHAUSTED', 'Execution Polling Exhausted'
     # Additional types added in later migrations (V028-V035, V039-V041)
     # Note: Full list would include all types from migrations, but base types are sufficient for model
 

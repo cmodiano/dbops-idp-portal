@@ -53,6 +53,7 @@ __all__ = [
 logger = structlog.get_logger(__name__)
 
 # Cache for environments list (TTL 5 minutes to match catalog cache)
+# Story 30.7 (RACE-3): Per-worker cache — see docs/architecture/caching-strategy.md
 _environments_cache: TTLCache[str, list[str]] = TTLCache(maxsize=1, ttl=300)
 
 

@@ -274,30 +274,30 @@ Les autres endpoints list retournent `{"data": [...], "pagination": {...}}`.
 
 ## 6. Race conditions & concurrence
 
-### RACE-1 [HIGH] — Polling infini sans limite de retry
+### ✅ RACE-1 [HIGH] — Polling infini sans limite de retry — RESOLVED (Story 30.7)
 **Fichier :** `executions/tasks.py` (5 tâches de polling)
 
-Toutes les tâches de polling (`poll_aap_job_status`, `poll_tower_job_status`, `poll_azure_devops_run_status`, `poll_github_actions_run_status`, `poll_terraform_cloud_run_status`) se re-planifient sur erreur sans compteur de retry. Si la plateforme distante est down, elles polleront indéfiniment.
+~~Toutes les tâches de polling se re-planifient sur erreur sans compteur de retry.~~
 
-**Fix :** Ajouter un `max_retries` et passer l'exécution en `FAILED` après dépassement.
-
----
-
-### RACE-2 [MEDIUM] — `update_action()` sans `select_for_update()`
-**Fichier :** `catalog/services.py:264-265`
-
-Dans un `@transaction.atomic`, le `get()` n'acquiert pas de verrou. Deux requêtes concurrentes → last-write-wins. Même pattern dans `update_status()`, `delete_action()`, `deactivate_action()`.
-
-**Fix :** `Action.objects.select_for_update().get(id=action_id)`.
+**Résolu :** `retry_count` + `MAX_POLLING_RETRIES=20` ajoutés aux 5 tâches de polling. Après dépassement, l'exécution est marquée `FAILED` avec audit `EXECUTION_POLLING_EXHAUSTED`.
 
 ---
 
-### RACE-3 [MEDIUM] — Caches in-memory module-level non partagés entre workers
+### ✅ RACE-2 [MEDIUM] — `update_action()` sans `select_for_update()` — RESOLVED (Story 30.7)
+**Fichier :** `catalog/services.py`
+
+~~Dans un `@transaction.atomic`, le `get()` n'acquiert pas de verrou.~~
+
+**Résolu :** `select_for_update()` ajouté dans `update_action()`, `update_status()`, `delete_action()`, `deactivate_action()`.
+
+---
+
+### ✅ RACE-3 [MEDIUM] — Caches in-memory module-level non partagés entre workers — RESOLVED (Story 30.7)
 **Fichiers :** `catalog/views.py` (`_catalog_cache`, `_tags_cache`), `inventory/services.py` (`_environments_cache`)
 
-`cachetools.TTLCache` au niveau module → chaque worker Gunicorn a son propre cache. Données incohérentes entre requêtes routées vers différents workers.
+~~Données incohérentes entre requêtes routées vers différents workers.~~
 
-**Fix :** Utiliser Redis comme cache partagé, ou accepter l'incohérence avec un TTL court.
+**Résolu :** Comportement per-worker documenté et accepté (TTL 5min, données non-critiques). Voir `docs/architecture/caching-strategy.md`.
 
 ---
 
@@ -443,24 +443,29 @@ Voir [SEC-9](#sec-9-medium--credentials-en-clair-dans-les-arguments-celery).
 
 ---
 
-### CELERY-3 [MEDIUM] — Nouveau event loop asyncio créé à chaque cycle de polling
-**Fichier :** `executions/tasks.py:589-590, 749-750, 905-906, 1209-1210, 1379-1380`
+### ✅ CELERY-3 [MEDIUM] — Nouveau event loop asyncio créé à chaque cycle de polling — RESOLVED (Story 30.7)
+**Fichier :** `executions/tasks.py`
 
-`asyncio.new_event_loop()` + `set_event_loop()` à chaque poll. Coûteux.
+~~`asyncio.new_event_loop()` + `set_event_loop()` à chaque poll.~~
 
-**Fix :** Utiliser `asyncio.run()`.
-
----
-
-### CELERY-4 [MEDIUM] — Gate timeout ne continue pas le workflow
-Voir [ERR-5](#err-5-medium--workflow-bloqué-après-timeout-de-gate).
+**Résolu :** Remplacé par `asyncio.run()` dans les 5 tâches de polling.
 
 ---
 
-### CELERY-5 [LOW] — Gate timeout SKIPPED sans message d'erreur
-**Fichier :** `executions/tasks.py:470-474`
+### ✅ CELERY-4 [MEDIUM] — Gate timeout ne continue pas le workflow — RESOLVED (Story 30.7)
 
-Step mise en `SKIPPED` sans `error_message` → impossible de savoir pourquoi dans l'historique.
+~~Après un timeout de gate, le workflow reste bloqué.~~
+
+**Résolu :** SKIPPED → déclenche le step suivant via `retry_workflow_step`. FAILED → marque l'exécution en FAILED.
+
+---
+
+### ✅ CELERY-5 [LOW] — Gate timeout SKIPPED sans message d'erreur — RESOLVED (Story 30.7)
+**Fichier :** `executions/tasks.py`
+
+~~Step mise en `SKIPPED` sans `error_message`.~~
+
+**Résolu :** `error_message = "Gate timeout exceeded after {hours}h"` ajouté pour tous les cas (SKIPPED et FAILED).
 
 ---
 
