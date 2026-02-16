@@ -22,12 +22,6 @@ export interface FavoriteEntry {
   created_at: string;
 }
 
-/** Recent action entry from API. */
-export interface RecentAction {
-  action_id: number;
-  name: string;
-  last_executed_at: string;
-}
 
 /** Filters for catalog query (Story 3.3, AC9; Story 8.7: category added back). */
 export interface CatalogFilters {
@@ -132,15 +126,6 @@ export async function removeFavorite(actionId: number): Promise<void> {
   await apiFetch(`/users/me/favorites/${actionId}`, { method: 'DELETE' });
 }
 
-/**
- * Fetch recent actions (AC5).
- * @deprecated Story 9.6: No longer used in CatalogPage "Mes actions" tab (favorites only).
- * Recent actions are now available in "Mes exécutions" tab on ExecutionsPage (Story 8.9).
- * This function can be removed if not used elsewhere.
- */
-export async function fetchRecentActions(limit = 10): Promise<RecentAction[]> {
-  return apiFetch<RecentAction[]>(`/users/me/recent-actions?limit=${limit}`);
-}
 
 /**
  * Fetch single action detail by ID (Story 3.2, AC1, AC3, AC6).

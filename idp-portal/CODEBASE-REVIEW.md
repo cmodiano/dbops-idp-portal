@@ -375,22 +375,22 @@ Tags `<style>` injectés dans le DOM à chaque render. Impact négligeable (pseu
 
 | # | Fichier | Description |
 |---|---------|-------------|
-| DEAD-BE-1 | `catalog/models.py:51-55` | `normalize_tag_name()` jamais utilisé (services.py utilise sa propre logique) |
-| DEAD-BE-2 | `idp_auth/services.py:134-136` | `if not action` après `get()` — jamais exécuté |
-| DEAD-BE-3 | `executions/tasks.py:278` | `gate_status.get('action', 'FAILED')` — résultat non assigné |
-| DEAD-BE-4 | `core/models.py:155` | `import json` redondant (déjà importé ligne 3) |
-| DEAD-BE-5 | `inventory/services.py:16,21,33` | Imports `# noqa: F401` backward compat |
+| DEAD-BE-1 | `catalog/models.py:51-55` | ✅ RESOLVED (Story 30.10) — `normalize_tag_name()` alignée sur normalisation services.py (espaces → `_`) |
+| DEAD-BE-2 | `idp_auth/services.py:134-136` | ✅ RESOLVED (Story 30.3) — code mort déjà supprimé |
+| DEAD-BE-3 | `executions/tasks.py:278` | ✅ RESOLVED (Story 30.10) — appel inutile `gate_status.get('action', 'FAILED')` supprimé |
+| DEAD-BE-4 | `core/models.py:155` | ✅ RESOLVED (Story 30.10) — import json doublon supprimé |
+| DEAD-BE-5 | `inventory/services.py:16,21,33` | ✅ RESOLVED (Story 30.10) — imports documentés comme backward compat (90+ tests patch via inventory.services), `re` inutilisé supprimé |
 
 ### Frontend
 
 | # | Fichier | Description |
 |---|---------|-------------|
-| DEAD-FE-1 | `services/catalog_service.ts:141` | `fetchRecentActions` — `@deprecated` |
-| DEAD-FE-2 | `services/admin_service.ts` | `listActions` — `@deprecated` |
-| DEAD-FE-3 | `types/api.ts` | Fichier entier — `@deprecated`, barrel re-export |
-| DEAD-FE-4 | `utils/profileOptions.ts` | Fichier entier — `@deprecated` |
-| DEAD-FE-5 | `utils/impactRulesSchema.ts:87` | `IMPACT_ENVIRONMENTS` — `@deprecated` |
-| DEAD-FE-6 | 3 fichiers | `STEP_DESCRIPTIONS_SIMPLIFIED` dupliqué dans `TargetSelectionStep`, `ParametersFormStep`, `ConfirmationStep` |
+| DEAD-FE-1 | `services/catalog_service.ts:141` | ✅ RESOLVED (Story 30.10) — `fetchRecentActions` et `RecentAction` supprimés |
+| DEAD-FE-2 | `services/admin_service.ts` | ✅ RESOLVED (Story 30.10) — `listActions` supprimée, appelants migrés vers `getAdminActions()` |
+| DEAD-FE-3 | `types/api.ts` | ✅ RESOLVED (Story 30.10) — barrel re-export intentionnel (213 imports), deprecation retirée, documentation clarifiée |
+| DEAD-FE-4 | `utils/profileOptions.ts` | ✅ RESOLVED (Story 30.10) — `ENVIRONMENT_OPTIONS` deprecated supprimé, `MOCK_TARGET_OPTIONS` conservé (utilisé) |
+| DEAD-FE-5 | `utils/impactRulesSchema.ts:87` | ✅ RESOLVED (Story 30.10) — `IMPACT_ENVIRONMENTS` supprimé, tests mis à jour |
+| DEAD-FE-6 | 3 fichiers | ✅ RESOLVED (Story 30.10) — factorisé dans `utils/stepDescriptions.ts`, 3 composants migrés |
 
 ---
 

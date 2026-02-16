@@ -94,7 +94,7 @@ describe('CatalogPage', () => {
     vi.mocked(catalogService.addFavorite).mockResolvedValue(undefined);
     vi.mocked(catalogService.removeFavorite).mockResolvedValue(undefined);
     vi.mocked(catalogService.fetchActionStats).mockResolvedValue(null); // Story 8.1 stats mock
-    vi.mocked(catalogService.fetchRecentActions).mockResolvedValue([]); // Story 9.6: Mock to verify it's not called
+
 
     // Mock matchMedia for ThemeProvider
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
@@ -793,21 +793,6 @@ describe('CatalogPage', () => {
         expect(screen.getByText(/Ajoutez des favoris pour les retrouver ici/i)).toBeInTheDocument();
         // Should NOT mention executing actions (old message)
         expect(screen.queryByText(/executez des actions/i)).not.toBeInTheDocument();
-      });
-    });
-
-    it('should not call fetchRecentActions in loadData (AC4)', async () => {
-      vi.mocked(catalogService.fetchCatalogActions).mockResolvedValue(mockActions);
-      vi.mocked(catalogService.fetchFavorites).mockResolvedValue(mockFavorites);
-      vi.mocked(catalogService.fetchCatalogTags).mockResolvedValue([]);
-
-      renderWithTheme(<CatalogPage />);
-
-      await waitFor(() => {
-        expect(catalogService.fetchCatalogActions).toHaveBeenCalled();
-        expect(catalogService.fetchFavorites).toHaveBeenCalled();
-        // fetchRecentActions should NOT be called anymore (Story 9.6 optimization)
-        expect(catalogService.fetchRecentActions).not.toHaveBeenCalled();
       });
     });
 

@@ -49,14 +49,6 @@ export async function getAdminActions(filters?: AdminActionsFilters): Promise<Ac
   return apiFetchRaw<ActionListResponse>(`/admin/actions/${queryString ? `?${queryString}` : ''}`);
 }
 
-/**
- * @deprecated Use getAdminActions() instead
- */
-export async function listActions(status?: string): Promise<ActionListItem[]> {
-  const filters: AdminActionsFilters | undefined = status ? { status: status as ActionStatus } : undefined;
-  const response = await getAdminActions(filters);
-  return response.data;
-}
 
 /**
  * Check if an action name is available (no other action has this name).

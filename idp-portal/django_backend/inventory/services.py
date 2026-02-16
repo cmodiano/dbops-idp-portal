@@ -13,12 +13,11 @@ Story 23.1 - Config-driven multi-table mapping (servers, instances, databases).
 
 from __future__ import annotations
 
-import re  # noqa: F401 — backward compat
 from typing import Any, cast
 
 import structlog
 from cachetools import TTLCache
-from django.db import connection  # noqa: F401 — backward compat for tests patching inventory.services.connection
+from django.db import connection  # noqa: F401 — backward compat: 90+ tests patch inventory.services.connection
 from django.db.models import QuerySet
 
 from integrations.models import IntegrationType
@@ -29,7 +28,7 @@ from inventory.query_executor import (
     InventoryServiceError,
     MAX_MULTI_TABLE_RESULTS,
     MAX_FLAT_TABLE_RESULTS,
-    SAFE_TABLE_NAME_PATTERN,  # noqa: F401 — backward compat for tests
+    SAFE_TABLE_NAME_PATTERN,  # noqa: F401 — backward compat: tests import from inventory.services
 )
 from inventory.rbac_filter import (
     InventoryRBACFilter,

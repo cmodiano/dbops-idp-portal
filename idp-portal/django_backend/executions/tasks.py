@@ -279,7 +279,6 @@ def evaluate_waiting_gates(self: Any) -> dict:
 
             # AC8: Timeout handling
             if gate_status.get('timeout_triggered'):
-                gate_status.get('action', 'FAILED')
                 _handle_gate_timeout(step, gate_status, correlation_id or "")
                 errors += 1  # Count as "processed" but not unblocked
                 continue

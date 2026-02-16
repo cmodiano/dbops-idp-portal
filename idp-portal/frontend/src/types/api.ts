@@ -1,14 +1,9 @@
 /**
- * @deprecated This file is kept for backward compatibility.
- * Please import from specific domain files under 'types/api/' for better tree-shaking:
- * - types/api/catalog for action-related types
- * - types/api/executions for execution-related types
- * - types/api/profiles for profile/RBAC types
- * - types/api/integrations for integration types
- * - types/api/audit for audit types
- * - types/api/analytics for analytics/dashboard types
- * - types/api/scheduled for scheduled execution types
- * - types/api/inventory for inventory types
- * - types/api/remediation for remediation types
+ * Barrel re-export for API types.
+ *
+ * This file re-exports all types from domain-specific files under 'types/api/'.
+ * It is intentionally kept as the primary import path for convenience.
+ * For tree-shaking benefits, you may import from domain files directly:
+ * - types/api/catalog, types/api/executions, types/api/profiles, etc.
  */
 export * from './api/index';

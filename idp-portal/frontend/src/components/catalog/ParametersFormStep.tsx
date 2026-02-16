@@ -17,11 +17,7 @@ import { sanitizeDescription } from '../../utils/businessLanguage';
 import { renderFieldInput } from './renderFieldInput';
 import { WorkflowStepsRenderer } from './WorkflowStepsRenderer';
 
-const STEP_DESCRIPTIONS_SIMPLIFIED = [
-  'Selectionnez la cible sur laquelle executer l\'action. L\'environnement sera derive automatiquement.',
-  'Remplissez les informations necessaires. Tous les champs marques sont obligatoires.',
-  'Verifiez que tout est correct avant de lancer l\'action.',
-];
+import { STEP_DESCRIPTIONS_SIMPLIFIED } from '../../utils/stepDescriptions';
 
 export interface ParametersFormStepProps {
   form: FormInstance;

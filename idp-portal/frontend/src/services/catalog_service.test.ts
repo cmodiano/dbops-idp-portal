@@ -101,28 +101,6 @@ describe('catalog_service', () => {
     });
   });
 
-  describe('fetchRecentActions', () => {
-    it('fetches recent actions with default limit (AC5)', async () => {
-      const mockRecent = [
-        { action_id: 1, name: 'Recent Action', last_executed_at: '2026-01-29T12:00:00' },
-      ];
-      vi.mocked(apiClient.apiFetch).mockResolvedValue(mockRecent);
-
-      const result = await catalogService.fetchRecentActions();
-
-      expect(apiClient.apiFetch).toHaveBeenCalledWith('/users/me/recent-actions?limit=10');
-      expect(result).toEqual(mockRecent);
-    });
-
-    it('fetches recent actions with custom limit', async () => {
-      vi.mocked(apiClient.apiFetch).mockResolvedValue([]);
-
-      await catalogService.fetchRecentActions(5);
-
-      expect(apiClient.apiFetch).toHaveBeenCalledWith('/users/me/recent-actions?limit=5');
-    });
-  });
-
   describe('fetchCatalogActionById (Story 3.2)', () => {
     it('fetches action detail by ID using apiFetchRaw with auth (AC1, AC6)', async () => {
       const mockResponse = {

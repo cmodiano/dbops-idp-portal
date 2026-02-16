@@ -19,7 +19,7 @@ import type {
   ProfileTargetPermissionsResponse,
 } from '../../types/api';
 import { getProfileActions, putProfileActions, getProfileTargets, putProfileTargets } from '../../services/profiles_service';
-import { listActions, getTags } from '../../services/admin_service';
+import { getAdminActions, getTags } from '../../services/admin_service';
 import { MOCK_TARGET_OPTIONS } from '../../utils/profileOptions';
 import { useEnvironments } from '../../hooks/useEnvironments';
 
@@ -161,7 +161,7 @@ export function ProfileForm({
       Promise.all([
         getProfileActions(editProfile.id),
         getProfileTargets(editProfile.id),
-        listActions(),
+        getAdminActions().then((r) => r.data),
         getTags(),
       ])
         .then(([perms, targetsPerms, actions, tags]) => {

@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { impactRulesToList, listToImpactRules, IMPACT_ENVIRONMENTS } from './impactRulesSchema';
+import { impactRulesToList, listToImpactRules } from './impactRulesSchema';
 import type { ImpactRuleDefinition } from '../types/api';
 
 describe('impactRulesToList', () => {
@@ -141,14 +141,6 @@ describe('round-trip conversion', () => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- omit id for comparison
     const originalWithoutIds = original.map(({ id: _, ...rest }) => rest);
     expect(withoutIds).toEqual(originalWithoutIds);
-  });
-});
-
-describe('IMPACT_ENVIRONMENTS', () => {
-  it('contains expected environments', () => {
-    expect(IMPACT_ENVIRONMENTS).toContain('DEV');
-    expect(IMPACT_ENVIRONMENTS).toContain('STAGING');
-    expect(IMPACT_ENVIRONMENTS).toContain('PROD');
   });
 });
 

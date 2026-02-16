@@ -155,7 +155,6 @@ class AuditLogManager(models.Manager):
         # Serialize details to JSON string if provided
         details_json = None
         if details is not None:
-            import json
             details_json = json.dumps(details)
         
         return self.create(  # type: ignore[return-value]

@@ -46,7 +46,7 @@ describe('ProfileForm - exclusion_patterns field', () => {
       error: null,
     });
 
-    vi.spyOn(adminService, 'listActions').mockResolvedValue([]);
+    vi.spyOn(adminService, 'getAdminActions').mockResolvedValue({ data: [], pagination: { page: 1, page_size: 10, total: 0, total_pages: 0 } });
     vi.spyOn(adminService, 'getTags').mockResolvedValue([]);
     vi.spyOn(profilesService, 'getProfileActions').mockResolvedValue({
       actions_type: 'all',

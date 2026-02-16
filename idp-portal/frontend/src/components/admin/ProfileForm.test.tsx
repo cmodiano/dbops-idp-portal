@@ -23,7 +23,9 @@ vi.mock('../../services/profiles_service', async () => {
   const actual = await vi.importActual('../../services/profiles_service');
   return {
     ...actual,
+    getProfileActions: vi.fn(),
     getProfileTargets: vi.fn(),
+    putProfileActions: vi.fn(),
     putProfileTargets: vi.fn(),
   };
 });
@@ -32,8 +34,8 @@ vi.mock('../../services/admin_service', async () => {
   const actual = await vi.importActual('../../services/admin_service');
   return {
     ...actual,
-    getProfileActions: vi.fn(),
-    putProfileActions: vi.fn(),
+    getAdminActions: vi.fn(),
+    getTags: vi.fn(),
   };
 });
 
@@ -86,8 +88,10 @@ describe('ProfileForm', () => {
       exclusion_patterns: [],
     });
     vi.mocked(profilesService.putProfileTargets).mockResolvedValue(undefined);
-    vi.mocked(adminService.getProfileActions).mockResolvedValue([]);
-    vi.mocked(adminService.putProfileActions).mockResolvedValue(undefined);
+    vi.mocked(profilesService.getProfileActions).mockResolvedValue({ actions_type: 'all', action_ids: [], tag_patterns: [], environments: [] });
+    vi.mocked(profilesService.putProfileActions).mockResolvedValue(undefined);
+    vi.mocked(adminService.getAdminActions).mockResolvedValue({ data: [], pagination: { page: 1, page_size: 10, total: 0, total_pages: 0 } });
+    vi.mocked(adminService.getTags).mockResolvedValue([]);
   });
 
   it('renders Nouveau profil when not editing', () => {
@@ -165,7 +169,7 @@ describe('ProfileForm', () => {
         target_names: [],
         target_patterns: [],
       });
-      vi.spyOn(adminService, 'listActions').mockResolvedValue([]);
+      vi.spyOn(adminService, 'getAdminActions').mockResolvedValue({ data: [], pagination: { page: 1, page_size: 10, total: 0, total_pages: 0 } });
       vi.spyOn(adminService, 'getTags').mockResolvedValue([]);
       vi.spyOn(profilesService, 'putProfileActions').mockResolvedValue({
         actions_type: 'all',
@@ -269,7 +273,7 @@ describe('ProfileForm', () => {
         target_names: [],
         target_patterns: [],
       });
-      vi.spyOn(adminService, 'listActions').mockResolvedValue([]);
+      vi.spyOn(adminService, 'getAdminActions').mockResolvedValue({ data: [], pagination: { page: 1, page_size: 10, total: 0, total_pages: 0 } });
       vi.spyOn(adminService, 'getTags').mockResolvedValue([]);
       vi.spyOn(profilesService, 'putProfileActions').mockResolvedValue({
         actions_type: 'all',
@@ -360,7 +364,7 @@ describe('ProfileForm', () => {
         tag_patterns: [],
         environments: [],
       });
-      vi.spyOn(adminService, 'listActions').mockResolvedValue([]);
+      vi.spyOn(adminService, 'getAdminActions').mockResolvedValue({ data: [], pagination: { page: 1, page_size: 10, total: 0, total_pages: 0 } });
       vi.spyOn(adminService, 'getTags').mockResolvedValue([]);
       vi.spyOn(profilesService, 'putProfileActions').mockResolvedValue({
         actions_type: 'all',

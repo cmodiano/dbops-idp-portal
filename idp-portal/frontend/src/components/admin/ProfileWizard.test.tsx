@@ -83,7 +83,7 @@ describe('ProfileWizard', () => {
       loading: false,
       error: null,
     });
-    mockAdminService.listActions.mockResolvedValue(mockActions);
+    mockAdminService.getAdminActions.mockResolvedValue({ data: mockActions, pagination: { page: 1, page_size: 10, total: mockActions.length, total_pages: 1 } });
     mockAdminService.getTags.mockResolvedValue(mockTags);
     mockProfilesService.createProfile.mockResolvedValue(mockProfile);
     mockProfilesService.updateProfile.mockResolvedValue(mockProfile);

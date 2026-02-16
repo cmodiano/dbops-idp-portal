@@ -24,7 +24,7 @@ import {
   putProfileActions,
   putProfileTargets,
 } from '../../services/profiles_service';
-import { listActions, getTags } from '../../services/admin_service';
+import { getAdminActions, getTags } from '../../services/admin_service';
 import { MOCK_TARGET_OPTIONS } from '../../utils/profileOptions';
 import { useEnvironments } from '../../hooks/useEnvironments';
 
@@ -89,7 +89,7 @@ export function ProfileWizard({
       Promise.all([
         getProfileActions(editProfile.id),
         getProfileTargets(editProfile.id),
-        listActions(),
+        getAdminActions().then((r) => r.data),
         getTags(),
       ])
         .then(([actionsPerms, targetsPerms, actions, tags]) => {
@@ -117,7 +117,7 @@ export function ProfileWizard({
         .finally(() => setLoadingData(false));
     } else {
       // Create mode: load reference data only (form has initial values)
-      Promise.all([listActions(), getTags()])
+      Promise.all([getAdminActions().then((r) => r.data), getTags()])
         .then(([actions, tags]) => {
           setActionsOptions(actions.map((a) => ({ id: a.id, name: a.name })));
           setTagsOptions(tags.map((t) => t.name));

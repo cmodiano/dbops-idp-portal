@@ -49,10 +49,13 @@ class ActionItemType(models.TextChoices):
 
 
 def normalize_tag_name(name: str) -> str:
-    """Normalize tag name: lowercase, strip, replace spaces with nothing."""
+    """Normalize tag name: lowercase, strip, replace spaces with underscores.
+
+    Matches the normalization used in CatalogService._sync_tags().
+    """
     if not name or not isinstance(name, str):
         return ""
-    return name.strip().lower().replace(" ", "")
+    return name.strip().lower().replace(" ", "_")
 
 
 class ActionQuerySet(models.QuerySet):
