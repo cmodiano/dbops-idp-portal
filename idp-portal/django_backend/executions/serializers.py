@@ -229,3 +229,44 @@ class ScheduledExecutionListItemSerializer(serializers.Serializer):
 
         return data
 
+
+# Story 30.2: Remediation endpoint serializers (MEDIUM-2 fix)
+
+
+class RemediationMatchingRuleSerializer(serializers.Serializer):
+    """Schema for matching_rule in remediation suggestions."""
+
+    error_pattern = serializers.CharField()
+    environments = serializers.ListField(child=serializers.CharField())
+    risk_level = serializers.CharField()
+    auto_trigger = serializers.BooleanField()
+
+
+class RemediationSuggestionSerializer(serializers.Serializer):
+    """Response schema for GET /executions/{id}/remediation."""
+
+    action_id = serializers.IntegerField()
+    action_name = serializers.CharField()
+    action_description = serializers.CharField()
+    matching_rule = RemediationMatchingRuleSerializer()
+
+
+class RemediationActionSerializer(serializers.Serializer):
+    """Schema for remediation_actions in remediation context."""
+
+    id = serializers.IntegerField()
+    action_id = serializers.IntegerField()
+    action_name = serializers.CharField(allow_null=True)
+    status = serializers.CharField()
+    created_at = serializers.CharField(allow_null=True)
+    completed_at = serializers.CharField(allow_null=True)
+    error_message = serializers.CharField(allow_null=True)
+
+
+class RemediationContextSerializer(serializers.Serializer):
+    """Response schema for GET /executions/{id}/remediation-context."""
+
+    has_remediation = serializers.BooleanField()
+    successful_remediation = serializers.BooleanField()
+    remediation_actions = RemediationActionSerializer(many=True)
+

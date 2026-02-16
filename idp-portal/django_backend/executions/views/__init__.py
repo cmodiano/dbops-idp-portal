@@ -25,6 +25,7 @@ from .scheduled_views import (
     ScheduledExecutionCronNextExecutionsView,
 )
 from .approval_views import PendingApprovalsView, ApproveExecutionView, RejectExecutionView
+from .remediation_views import ExecutionRemediationSuggestionsView, ExecutionRemediationContextView
 
 
 class ExecutionsView(ExecutionsListView, ExecutionsCreateView):
@@ -50,4 +51,6 @@ __all__ = [
     'ScheduledExecutionRecurringPatternView',
     'ScheduledExecutionValidateCronView',
     'ScheduledExecutionCronNextExecutionsView',
+    'ExecutionRemediationSuggestionsView',
+    'ExecutionRemediationContextView',
 ]

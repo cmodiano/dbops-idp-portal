@@ -29,6 +29,17 @@ urlpatterns = [
         views.ExecutionLogsView.as_view(),
         name="execution-logs",
     ),
+    # Story 30.2: Remediation endpoints
+    path(
+        "executions/<int:execution_id>/remediation",
+        views.ExecutionRemediationSuggestionsView.as_view(),
+        name="execution-remediation",
+    ),
+    path(
+        "executions/<int:execution_id>/remediation-context",
+        views.ExecutionRemediationContextView.as_view(),
+        name="execution-remediation-context",
+    ),
 
     # Scheduled executions (Story 11.5-11.8)
     path("scheduled-executions/", views.ScheduledExecutionsView.as_view(), name="scheduled-executions"),

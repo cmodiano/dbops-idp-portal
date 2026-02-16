@@ -5,6 +5,7 @@ URL configuration for dashboard endpoints.
 from django.urls import path
 
 from dashboard import views
+from dashboard.export_views import DashboardExportCSVView, DashboardExportPDFView
 
 app_name = "dashboard"
 
@@ -17,5 +18,8 @@ urlpatterns = [
     path("dashboard/compare/", views.DashboardCompareView.as_view(), name="dashboard-compare"),
     # NOTE: This endpoint returns the object directly (no {"data": ...}) per frontend apiFetchRaw usage.
     path("dashboard/filter-options/", views.DashboardFilterOptionsView.as_view(), name="dashboard-filter-options"),
+    # Story 30.2: Dashboard export endpoints
+    path("dashboard/export/csv", DashboardExportCSVView.as_view(), name="dashboard-export-csv"),
+    path("dashboard/export/pdf", DashboardExportPDFView.as_view(), name="dashboard-export-pdf"),
 ]
 
