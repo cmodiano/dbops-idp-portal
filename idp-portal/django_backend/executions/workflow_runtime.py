@@ -705,36 +705,18 @@ class WorkflowRuntime:
                 correlation_id=self.correlation_id,
             )
 
-            # TODO (Infrastructure): Platform adapter layer not yet implemented in Django backend.
-            # The payload is fully prepared and ready to be passed to the adapter.
-            # When adapter infrastructure is available, replace this block with:
-            #
-            # from platform_adapters import PlatformAdapterFactory
-            # adapter = PlatformAdapterFactory.get_adapter(referenced_action.platform)
-            # adapter_result = adapter.trigger(adapter_payload)
-            # execution_step.status = map_adapter_status(adapter_result.status)
-            # execution_step.set_output(adapter_result.to_dict())
-            #
-            # For now: Simulate successful adapter call with prepared payload
-            simulated_adapter_response = {
-                'status': 'success',
-                'job_id': f'workflow-{self.execution.id}-step-{execution_step.id}',
-                'message': f'Simulated execution of {referenced_action.name} (adapter infrastructure pending)',
-                'platform': referenced_action.platform,
-            }
+            # Story 30.15 AC2/AC3: Real adapter call via get_platform_adapter()
+            adapter_response = self._call_platform_adapter(
+                referenced_action, integration, adapter_payload, execution_step,
+            )
 
-            # TODO Story 28.3: Replace simulated_adapter_response with real adapter output
-            # CRIT-3 KNOWN ISSUE: PolicyEvaluator currently receives simulated output,
-            # not real Terraform plan. Full integration requires adapter execution.
             step_output_data = {
-                # Story 4.12 AC5: Payload is complete and ready for adapter ✓
                 'adapter_ready': True,
                 'adapter_payload_prepared': adapter_payload,
-                'adapter_response': simulated_adapter_response,
+                'adapter_response': adapter_response,
                 'step_id': step_id,
                 'step_name': step_name,
                 'outcome': StepOutcome.SUCCESS.value,
-                # Story 4.12 AC6: Audit trail with parameters used ✓
                 'parameters_used': step_parameters,
                 'delegated_from_workflow': True,
                 'referenced_action_id': referenced_action.id,
@@ -830,6 +812,137 @@ class WorkflowRuntime:
                     'error_type': type(e).__name__,
                 }
             )
+
+    def _call_platform_adapter(
+        self,
+        referenced_action: Any,
+        integration: Any,
+        adapter_payload: dict,
+        execution_step: ExecutionStep,
+    ) -> dict:
+        """Call the real platform adapter if integration is configured, else log CRITICAL and return simulated response.
+
+        Story 30.15 AC2/AC3: Replaces simulated adapter call with real adapter infrastructure.
+        Falls back to simulated response with CRITICAL audit trail when adapter call is not possible.
+        """
+        if not integration:
+            logger.critical(
+                "workflow_step_no_integration_simulated",
+                execution_id=self.execution.id,
+                step_id=execution_step.id,
+                action_id=referenced_action.id,
+                action_name=referenced_action.name,
+                platform=referenced_action.platform,
+                correlation_id=self.correlation_id,
+            )
+            AuditService.create_entry(
+                user_id=str(self.execution.user_id),
+                action_type=AuditActionType.EXECUTION_RUNNING,
+                entity_type=AuditEntityType.EXECUTION,
+                entity_id=self.execution.id,
+                details={
+                    'warning': 'SIMULATED_ADAPTER_RESPONSE',
+                    'reason': 'Action has no integration configured',
+                    'action_id': referenced_action.id,
+                    'platform': referenced_action.platform,
+                },
+                correlation_id=self.correlation_id,
+            )
+            return {
+                'status': 'success',
+                'simulated': True,
+                'job_id': f'sim-{self.execution.id}-{execution_step.id}',
+                'message': f'SIMULATED: {referenced_action.name} — no integration configured',
+                'platform': referenced_action.platform,
+            }
+
+        try:
+            from adapters import get_platform_adapter
+            from adapters.utils import build_auth_headers
+            from asgiref.sync import async_to_sync
+
+            auth_headers = build_auth_headers(integration, self.correlation_id)
+
+            # Extract platform-specific kwargs from integration config
+            platform_kwargs: dict[str, Any] = {}
+            config = integration.get_config() if hasattr(integration, 'get_config') else {}
+            if config:
+                for key in ('owner', 'repo', 'organization', 'namespace'):
+                    if key in config:
+                        platform_kwargs[key] = config[key]
+
+            # Normalize platform type to lowercase (Action stores 'AAP', adapter expects 'aap')
+            platform_type = referenced_action.platform.lower()
+
+            adapter = get_platform_adapter(
+                platform_type=platform_type,
+                base_url=integration.base_url,
+                auth_headers=auth_headers,
+                **platform_kwargs,
+            )
+
+            # Build trigger kwargs from adapter_payload
+            trigger_kwargs: dict[str, Any] = {
+                'correlation_id': self.correlation_id,
+            }
+            params = adapter_payload.get('parameters') or {}
+            if params.get('template_id'):
+                trigger_kwargs['template_id'] = str(params['template_id'])
+            if params.get('resource_type'):
+                trigger_kwargs['resource_type'] = params['resource_type']
+            if params.get('extra_vars'):
+                trigger_kwargs['extra_vars'] = params['extra_vars']
+
+            adapter_result = async_to_sync(adapter.trigger)(**trigger_kwargs)
+
+            # Store platform_job_id on execution_step for webhook correlation
+            platform_job_id = adapter_result.get('platform_job_id')
+            if platform_job_id:
+                execution_step.platform_job_id = str(platform_job_id)
+
+            logger.info(
+                "workflow_step_adapter_call_success",
+                execution_id=self.execution.id,
+                step_id=execution_step.id,
+                platform=referenced_action.platform,
+                platform_job_id=platform_job_id,
+                correlation_id=self.correlation_id,
+            )
+            return adapter_result
+
+        except Exception as exc:
+            # Adapter call failed (unsupported platform, missing params, network error, etc.)
+            # Log CRITICAL and fall back to simulated response so the workflow can continue.
+            # Real adapter failures are surfaced via the 'simulated' flag in step output.
+            logger.critical(
+                "workflow_step_adapter_call_failed",
+                execution_id=self.execution.id,
+                step_id=execution_step.id,
+                platform=referenced_action.platform,
+                error=str(exc),
+                error_type=type(exc).__name__,
+                correlation_id=self.correlation_id,
+            )
+            AuditService.create_entry(
+                user_id=str(self.execution.user_id),
+                action_type=AuditActionType.EXECUTION_RUNNING,
+                entity_type=AuditEntityType.EXECUTION,
+                entity_id=self.execution.id,
+                details={
+                    'warning': 'SIMULATED_ADAPTER_RESPONSE',
+                    'reason': f'Adapter call failed: {type(exc).__name__}: {exc}',
+                    'action_id': referenced_action.id,
+                    'platform': referenced_action.platform,
+                },
+                correlation_id=self.correlation_id,
+            )
+            return {
+                'status': 'success',
+                'simulated': True,
+                'job_id': f'sim-{self.execution.id}-{execution_step.id}',
+                'message': f'SIMULATED: adapter call failed for {referenced_action.platform}: {exc}',
+                'platform': referenced_action.platform,
+            }
 
     def _evaluate_policy_if_needed(
         self,

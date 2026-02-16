@@ -404,6 +404,6 @@ development_status:
     30-12-incoherences-modeles-serializers-tags-audit: done # INCON-1 à 5 corrigés, 30 tests, code review: 7 issues fixés (3 HIGH + 3 MEDIUM + 1 LOW), 122 tests passent
     30-13-restant-bug-fe-1-fe-2-notifications-alert: done # Code review adversarial — découverte 73 bugs dépréciation introduits par Story 30-4 (message→title), tous fixés automatiquement, CODEBASE-REVIEW.md mis à jour ✅
     30-14-catalog-viewset-get-queryset-cache-rbac: done # Code review adversarial — 5 MEDIUM fixes (race condition cache get_or_set, import time top-level, couplage profiles.cache.py, docstrings) — 42/42 tests ✅
-    30-15-todo-stubs-except-trop-larges: backlog # MEDIUM — NEW-2 TODO ServiceNow/platform adapter, NEW-4 except trop larges
+    30-15-todo-stubs-except-trop-larges: done # MEDIUM — NEW-2 TODO ServiceNow/platform adapter, NEW-4 except trop larges
     30-16-restant-doublon-styles-inline-incon-4: backlog # LOW — BUG-BE-7 doublon, PERF-4 style inline, INCON-4 IntegerField Oracle
     epic-30-retrospective: optional

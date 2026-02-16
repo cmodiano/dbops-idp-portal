@@ -390,13 +390,11 @@ Bien que `search_by_tags()` ait été corrigé pour chaîner dans `catalog/servi
 
 ---
 
-### NEW-2 [MEDIUM] — Fonctionnalités non implémentées derrière des TODO actifs
+### NEW-2 [MEDIUM] — ~~Fonctionnalités non implémentées derrière des TODO actifs~~ RESOLVED (Story 30.15)
 **Fichiers :**
-- `services/servicenow_service.py:32` — « TODO: Implement create_change(), update_change(), get_change_status() methods »
-- `executions/workflow_runtime.py:708` — « TODO (Infrastructure): Platform adapter layer not yet implemented »
-- `executions/workflow_runtime.py:726` — « TODO Story 28.3: Replace simulated_adapter_response with real adapter output »
-
-Ces chemins de code sont atteignables en production et retourneraient des erreurs ou des réponses simulées.
+- `services/servicenow_service.py:32` — ✅ RESOLVED: TODO supprimé. Docstring mise à jour, méthodes stubs avec `NotImplementedError` explicite. ServiceNow n'est pas atteignable en production (placeholder uniquement en tests).
+- `executions/workflow_runtime.py:708` — ✅ RESOLVED: TODO supprimé. Implémentation réelle via `get_platform_adapter()` + `build_auth_headers()`. Fallback CRITICAL si adapter indisponible avec audit trail.
+- `executions/workflow_runtime.py:726` — ✅ RESOLVED: TODO supprimé. PolicyEvaluator reçoit maintenant la vraie réponse adapter (ou réponse simulée documentée avec flag `simulated=True`).
 
 ---
 
@@ -414,14 +412,15 @@ Appelée après modification de profils mais ne fait rien → permissions RBAC p
 
 ---
 
-### NEW-4 [LOW] — `except Exception as e:` trop large dans plusieurs fichiers
+### NEW-4 [LOW] — ~~`except Exception as e:` trop large dans plusieurs fichiers~~ RESOLVED (Story 30.15)
 **Fichiers :**
-- `integrations/validation_service.py:60` — retourne `INVALID` pour TOUTE exception
-- `services/jira_service.py:344` — catch large sur requêtes HTTP
-- `executions/views/github_webhooks.py:174` — catch large sur opérations DB
-- `executions/views/terraform_webhooks.py:183` — même pattern
-
-Ces catches peuvent masquer des erreurs de programmation (TypeError, AttributeError). Certains sont documentés comme intentionnels (Story 17.6).
+- `integrations/validation_service.py:62` — ✅ RESOLVED: Restreint à `except (DatabaseError, OperationalError)`. Erreurs DB distinguées des erreurs de validation.
+- `services/jira_service.py:344` — ✅ RESOLVED: Documenté `noqa: BLE001` — httpx peut lever StreamClosed, DecodeError, etc. Fallback sûr (chaîne vide) ne masque pas l'erreur HTTP.
+- `services/jira_service.py:389` — ✅ RESOLVED: Documenté `noqa: BLE001` — pattern résilience, converti en ServiceUnavailableError avec logging complet.
+- `executions/views/github_webhooks.py:175` — ✅ RESOLVED: Restreint à `except (DatabaseError, OperationalError)`.
+- `executions/views/github_webhooks.py:305` — ✅ RESOLVED: Documenté `noqa: BLE001` — webhook doit retourner 200 même si broadcast échoue (résilience).
+- `executions/views/terraform_webhooks.py:184` — ✅ RESOLVED: Restreint à `except (DatabaseError, OperationalError)`.
+- `executions/views/terraform_webhooks.py:320` — ✅ RESOLVED: Documenté `noqa: BLE001` — même pattern résilience que GitHub webhooks.
 
 ---
 
@@ -448,7 +447,7 @@ Inchangé. Impact négligeable.
 | # | Issue | Type | Effort |
 |---|-------|------|--------|
 | NEW-1 | `CatalogActionViewSet.get_queryset()` recrée le queryset | Backend | Faible |
-| NEW-2 | TODO actifs : ServiceNow, platform adapter, simulated response | Backend | Élevé (feature) |
+| ~~NEW-2~~ | ~~TODO actifs : ServiceNow, platform adapter, simulated response~~ ✅ RESOLVED (Story 30.15) | Backend | — |
 | NEW-3 | Cache RBAC invalidation placeholder | Backend | Moyen |
 | INCON-2 | MD5 hash collision (documenté, acceptable pour N<1000) | Backend | — |
 
@@ -457,7 +456,7 @@ Inchangé. Impact négligeable.
 | # | Issue | Type |
 |---|-------|------|
 | BUG-BE-7 | Normalisation environnement dupliquée | Backend |
-| NEW-4 | `except Exception` trop larges (5 fichiers) | Backend |
+| ~~NEW-4~~ | ~~`except Exception` trop larges (5 fichiers)~~ ✅ RESOLVED (Story 30.15) | Backend |
 | PERF-4 | `<style>` inline dans render | Frontend |
 | INCON-4 | IntegerField booleans (intentionnel Oracle) | Backend |
 

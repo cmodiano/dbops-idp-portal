@@ -6,6 +6,8 @@ Follows ADR-003 Service pattern (static methods, structlog logging).
 import uuid
 import structlog
 
+from django.db import DatabaseError, OperationalError
+
 from integrations.models import Integration, IntegrationStatus, IntegrationTypeCatalogue
 from core.models import AuditActionType, AuditEntityType
 from core.services import AuditService
@@ -57,11 +59,12 @@ class IntegrationValidationService:
             )
             return IntegrationStatus.VALID
 
-        except Exception as e:
+        except (DatabaseError, OperationalError) as e:
             logger.error(
-                "integration_validation_error",
+                "integration_validation_db_error",
                 integration_id=integration.id,
                 error=str(e),
+                error_type=type(e).__name__,
             )
             return IntegrationStatus.INVALID
 

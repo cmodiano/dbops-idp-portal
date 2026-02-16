@@ -12,6 +12,7 @@ import json
 
 import structlog
 from django.conf import settings
+from django.db import DatabaseError, OperationalError
 from rest_framework import status
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.request import Request
@@ -180,11 +181,12 @@ def terraform_webhook_run(request: Request) -> Response:
             execution = None
         else:
             execution = step.execution
-    except Exception as e:
+    except (DatabaseError, OperationalError) as e:
         logger.error(
             "terraform_webhook_db_error",
             run_id=run_id,
             error=str(e),
+            error_type=type(e).__name__,
             correlation_id=correlation_id,
         )
         return Response(
@@ -315,7 +317,7 @@ def _broadcast_terraform_webhook_update(
             execution_id=execution_id,
             correlation_id=correlation_id,
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — broad catch justified: webhook must return 200 even if broadcast fails (resilience)
         logger.error(
             "terraform_webhook_broadcast_error",
             execution_id=execution_id,

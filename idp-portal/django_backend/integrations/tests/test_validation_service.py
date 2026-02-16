@@ -201,3 +201,49 @@ class GetIntegrationValidationDetailsTest(TestCase):
         assert details['type_is_active'] is False
         assert details['catalogue_version'] is None
         assert 'not found in catalogue' in details['validation_message']
+
+
+@pytest.mark.django_db
+class ValidateIntegrationDBErrorTest(TestCase):
+    """Story 30.15 AC4: validate_integration returns INVALID on DatabaseError/OperationalError."""
+
+    def setUp(self):
+        self.integration = Integration.objects.create(
+            type='aap', name='DB Error Test', base_url='https://aap.example.com'
+        )
+        IntegrationTypeCatalogue.objects.create(
+            code='aap', name='AAP', version='1.0', is_active=True
+        )
+
+    def test_database_error_returns_invalid(self):
+        from unittest.mock import patch
+        from django.db import DatabaseError
+
+        with patch.object(
+            IntegrationTypeCatalogue.objects, 'filter',
+            side_effect=DatabaseError("ORA-12541: TNS:no listener"),
+        ):
+            result = IntegrationValidationService.validate_integration(self.integration)
+        assert result == IntegrationStatus.INVALID
+
+    def test_operational_error_returns_invalid(self):
+        from unittest.mock import patch
+        from django.db import OperationalError
+
+        with patch.object(
+            IntegrationTypeCatalogue.objects, 'filter',
+            side_effect=OperationalError("connection timed out"),
+        ):
+            result = IntegrationValidationService.validate_integration(self.integration)
+        assert result == IntegrationStatus.INVALID
+
+    def test_attribute_error_is_not_caught(self):
+        """Verify that non-DB exceptions are NOT silently swallowed (Story 30.15 AC4)."""
+        from unittest.mock import patch
+
+        with patch.object(
+            IntegrationTypeCatalogue.objects, 'filter',
+            side_effect=AttributeError("unexpected"),
+        ):
+            with pytest.raises(AttributeError):
+                IntegrationValidationService.validate_integration(self.integration)

@@ -773,3 +773,104 @@ class TestStepResult:
         assert not result.is_success
         assert result.error_message == "Something went wrong"
         assert result.error_details == {'code': 500}
+
+
+@pytest.mark.django_db
+class TestCallPlatformAdapter:
+    """Story 30.15 AC2/AC3: _call_platform_adapter real adapter call and fallback."""
+
+    def setup_method(self):
+        self.user = UserFactory(username="adapter_test_user")
+        self.ref_action = ActionFactory(
+            name="Adapter Test Action",
+            category="Administration",
+            engine="Oracle",
+            platform="AAP",
+            status=ActionStatus.PUBLISHED,
+        )
+        self.workflow = ActionFactory(
+            name="Adapter Workflow",
+            category="Administration",
+            engine="Oracle",
+            platform="AAP",
+            status=ActionStatus.PUBLISHED,
+            item_type=ActionItemType.WORKFLOW,
+        )
+        self.workflow.execution_steps = ([{
+            "step_id": "s1", "order": 1, "name": "Step 1",
+            "referenced_action_id": self.ref_action.id,
+            "on_success_step_id": None,
+        }])
+        self.workflow.save()
+        self.execution = Execution.objects.create(
+            action=self.workflow, user=self.user,
+            environment="dev", status=ExecutionStatus.SUBMITTED,
+        )
+        self.runtime = WorkflowRuntime(self.execution)
+
+    def test_no_integration_returns_simulated_with_audit(self):
+        """When action has no integration, return simulated response + CRITICAL log."""
+        step = ExecutionStep.objects.create(
+            execution=self.execution, step_order=1,
+            step_name="Test", step_type="platform",
+            status=ExecutionStepStatus.RUNNING,
+        )
+        with patch("executions.workflow_runtime.AuditService.create_entry") as audit:
+            result = self.runtime._call_platform_adapter(
+                self.ref_action, None, {"parameters": {}}, step,
+            )
+        assert result["simulated"] is True
+        assert "SIMULATED" in result["message"]
+        audit.assert_called_once()
+        assert audit.call_args.kwargs["details"]["warning"] == "SIMULATED_ADAPTER_RESPONSE"
+
+    def test_adapter_call_success(self):
+        """When adapter exists and works, return real adapter result."""
+        from unittest.mock import AsyncMock, MagicMock
+        step = ExecutionStep.objects.create(
+            execution=self.execution, step_order=1,
+            step_name="Test", step_type="platform",
+            status=ExecutionStepStatus.RUNNING,
+        )
+        integration = MagicMock()
+        integration.base_url = "https://aap.example.com"
+        integration.get_config.return_value = {}
+
+        mock_adapter = MagicMock()
+        mock_adapter.trigger = AsyncMock(return_value={
+            "platform_job_id": "42", "status": "launched",
+        })
+
+        with patch("adapters.get_platform_adapter", return_value=mock_adapter):
+            with patch("adapters.utils.build_auth_headers", return_value={"Authorization": "Bearer x"}):
+                result = self.runtime._call_platform_adapter(
+                    self.ref_action, integration,
+                    {"parameters": {}, "correlation_id": "test-123"},
+                    step,
+                )
+        assert result["platform_job_id"] == "42"
+        assert result.get("simulated") is None
+
+    def test_adapter_call_failure_falls_back_to_simulated(self):
+        """When adapter raises, fall back to simulated response with CRITICAL audit."""
+        from unittest.mock import MagicMock
+        step = ExecutionStep.objects.create(
+            execution=self.execution, step_order=1,
+            step_name="Test", step_type="platform",
+            status=ExecutionStepStatus.RUNNING,
+        )
+        integration = MagicMock()
+        integration.base_url = "https://aap.example.com"
+        integration.get_config.return_value = {}
+
+        with patch("adapters.get_platform_adapter", side_effect=ImportError("no adapter")):
+            with patch("adapters.utils.build_auth_headers", return_value={}):
+                with patch("executions.workflow_runtime.AuditService.create_entry") as audit:
+                    result = self.runtime._call_platform_adapter(
+                        self.ref_action, integration,
+                        {"parameters": {}}, step,
+                    )
+        assert result["simulated"] is True
+        assert "adapter call failed" in result["message"]
+        audit.assert_called_once()
+        assert audit.call_args.kwargs["details"]["warning"] == "SIMULATED_ADAPTER_RESPONSE"
