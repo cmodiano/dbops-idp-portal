@@ -723,7 +723,8 @@ class BusinessRulePolicyViewSet(viewsets.ModelViewSet):
 
 
 # Story 3.1 AC10: in-memory cache for catalog, TTL 5 min (300s)
-_catalog_cache: TTLCache[str, list[dict]] = TTLCache(maxsize=1000, ttl=300)
+# Story 30.6: Cache stores complete response dict {"data": [...], "pagination": {...}}
+_catalog_cache: TTLCache[str, dict[str, Any]] = TTLCache(maxsize=1000, ttl=300)
 
 # Story 17.17: in-memory cache for catalog tags, TTL 5 min (300s)
 _tags_cache: TTLCache[str, list[dict]] = TTLCache(maxsize=200, ttl=300)
@@ -867,10 +868,9 @@ class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
             page_size=page_size_param,
         )
 
-        # Check cache (CRIT-1/CRIT-2 fix: return paginated response format on cache hit)
+        # Check cache: cache stores complete response dict with data+pagination
         if cache_key in _catalog_cache:
-            # Cache contains paginated data, return in DRF paginated format
-            return self.get_paginated_response(_catalog_cache[cache_key])
+            return Response(_catalog_cache[cache_key])
 
         queryset = self.filter_queryset(self.get_queryset())
 
@@ -881,17 +881,28 @@ class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
-            data = serializer.data
-            _catalog_cache[cache_key] = data
-            return self.get_paginated_response(data)
+            response = self.get_paginated_response(serializer.data)
+            _catalog_cache[cache_key] = response.data
+            return response
 
         serializer = self.get_serializer(queryset, many=True)
         data = serializer.data
 
-        # Cache result
-        _catalog_cache[cache_key] = data
+        total = len(data)
+        response_data = {
+            "data": data,
+            "pagination": {
+                "page": 1,
+                "page_size": total,
+                "total": total,
+                "total_pages": 1,
+            },
+        }
 
-        return Response({"data": data})
+        # Cache complete response
+        _catalog_cache[cache_key] = response_data
+
+        return Response(response_data)
     
     def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """GET /catalog/actions/{id} - Get published action details."""

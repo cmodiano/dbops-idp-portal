@@ -1,5 +1,6 @@
 """
 Story 24.3: Tests for validate and validate-all API endpoints.
+Story 30.6: Updated to verify {"data": ...} response format (APIFMT-1/APIFMT-2 fix).
 """
 
 import pytest
@@ -35,9 +36,10 @@ class TestValidateEndpoint(TestCase):
     def test_validate_valid_integration(self):
         response = self.client.get(f'/api/v1/admin/integrations/{self.integration.id}/validate/')
         assert response.status_code == status.HTTP_200_OK
-        assert response.data['current_status'] == 'valid'
-        assert response.data['validation_details']['type_exists'] is True
-        assert response.data['validation_details']['type_is_active'] is True
+        data = response.data['data']
+        assert data['current_status'] == 'valid'
+        assert data['validation_details']['type_exists'] is True
+        assert data['validation_details']['type_is_active'] is True
 
     def test_validate_deprecated_integration(self):
         integration = Integration.objects.create(
@@ -45,7 +47,7 @@ class TestValidateEndpoint(TestCase):
         )
         response = self.client.get(f'/api/v1/admin/integrations/{integration.id}/validate/')
         assert response.status_code == status.HTTP_200_OK
-        assert response.data['current_status'] == 'deprecated'
+        assert response.data['data']['current_status'] == 'deprecated'
 
     def test_validate_invalid_integration(self):
         integration = Integration.objects.create(
@@ -53,8 +55,9 @@ class TestValidateEndpoint(TestCase):
         )
         response = self.client.get(f'/api/v1/admin/integrations/{integration.id}/validate/')
         assert response.status_code == status.HTTP_200_OK
-        assert response.data['current_status'] == 'invalid'
-        assert response.data['validation_details']['type_exists'] is False
+        data = response.data['data']
+        assert data['current_status'] == 'invalid'
+        assert data['validation_details']['type_exists'] is False
 
     def test_validate_updates_status_and_creates_audit(self):
         integration = Integration.objects.create(
@@ -63,7 +66,7 @@ class TestValidateEndpoint(TestCase):
         )
         response = self.client.get(f'/api/v1/admin/integrations/{integration.id}/validate/')
         assert response.status_code == status.HTTP_200_OK
-        assert response.data['current_status'] == 'deprecated'
+        assert response.data['data']['current_status'] == 'deprecated'
 
         # DB updated
         integration.refresh_from_db()
@@ -81,13 +84,16 @@ class TestValidateEndpoint(TestCase):
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
     def test_validate_response_structure(self):
+        """Story 30.6 APIFMT-1: Verify response is wrapped in {"data": {...}}."""
         response = self.client.get(f'/api/v1/admin/integrations/{self.integration.id}/validate/')
-        assert 'integration_id' in response.data
-        assert 'integration_name' in response.data
-        assert 'integration_type' in response.data
-        assert 'current_status' in response.data
-        assert 'validation_details' in response.data
-        details = response.data['validation_details']
+        assert 'data' in response.data
+        data = response.data['data']
+        assert 'integration_id' in data
+        assert 'integration_name' in data
+        assert 'integration_type' in data
+        assert 'current_status' in data
+        assert 'validation_details' in data
+        details = data['validation_details']
         assert 'status' in details
         assert 'type_exists' in details
         assert 'type_is_active' in details
@@ -118,11 +124,19 @@ class TestValidateAllEndpoint(TestCase):
 
         response = self.client.post('/api/v1/admin/integrations/validate-all/')
         assert response.status_code == status.HTTP_200_OK
-        assert response.data['valid'] == 1
-        assert response.data['invalid'] == 1
-        assert response.data['updated'] == 1
+        data = response.data['data']
+        assert data['valid'] == 1
+        assert data['invalid'] == 1
+        assert data['updated'] == 1
 
     def test_validate_all_empty_returns_zeros(self):
         response = self.client.post('/api/v1/admin/integrations/validate-all/')
         assert response.status_code == status.HTTP_200_OK
-        assert response.data == {'valid': 0, 'invalid': 0, 'deprecated': 0, 'updated': 0}
+        assert response.data['data'] == {'valid': 0, 'invalid': 0, 'deprecated': 0, 'updated': 0}
+
+    def test_validate_all_response_has_data_wrapper(self):
+        """Story 30.6 APIFMT-2: Verify response is wrapped in {"data": {...}}."""
+        response = self.client.post('/api/v1/admin/integrations/validate-all/')
+        assert response.status_code == status.HTTP_200_OK
+        assert 'data' in response.data
+        assert isinstance(response.data['data'], dict)

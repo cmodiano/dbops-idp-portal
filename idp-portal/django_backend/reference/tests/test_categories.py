@@ -65,19 +65,21 @@ class RefCategoriesListAPITests(TestCase):
     def test_list_active_only_default(self):
         response = self.client.get('/api/v1/reference/categories/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIsInstance(response.data, list)
-        self.assertEqual(len(response.data), 2)
-        codes = [c['code'] for c in response.data]
+        self.assertIn('data', response.data)
+        data = response.data['data']
+        self.assertIsInstance(data, list)
+        self.assertEqual(len(data), 2)
+        codes = [c['code'] for c in data]
         self.assertNotIn('deprecated', codes)
 
     def test_list_all_including_inactive(self):
         response = self.client.get('/api/v1/reference/categories/?active_only=false')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 3)
+        self.assertEqual(len(response.data['data']), 3)
 
     def test_list_ordered_by_display_order(self):
         response = self.client.get('/api/v1/reference/categories/')
-        codes = [c['code'] for c in response.data]
+        codes = [c['code'] for c in response.data['data']]
         self.assertEqual(codes, ['provisioning', 'patching'])
 
     def test_requires_authentication(self):
@@ -87,7 +89,7 @@ class RefCategoriesListAPITests(TestCase):
 
     def test_serializer_fields(self):
         response = self.client.get('/api/v1/reference/categories/')
-        cat = response.data[0]
+        cat = response.data['data'][0]
         for field in ['id', 'code', 'label', 'display_order', 'is_active']:
             self.assertIn(field, cat)
 
@@ -109,8 +111,8 @@ class RefCategoriesCRUDAPITests(TestCase):
             'is_active': 1,
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data['code'], 'backup')
-        self.assertEqual(response.data['label'], 'Sauvegarde')
+        self.assertEqual(response.data['data']['code'], 'backup')
+        self.assertEqual(response.data['data']['label'], 'Sauvegarde')
         self.assertTrue(RefCategory.objects.filter(code='backup').exists())
 
     def test_create_requires_dbops(self):
@@ -146,8 +148,8 @@ class RefCategoriesCRUDAPITests(TestCase):
             'display_order': 55,
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['label'], 'Sauvegarde & Restauration')
-        self.assertEqual(response.data['display_order'], 55)
+        self.assertEqual(response.data['data']['label'], 'Sauvegarde & Restauration')
+        self.assertEqual(response.data['data']['display_order'], 55)
 
     def test_update_requires_dbops(self):
         cat = RefCategory.objects.create(code='backup', label='Sauvegarde', display_order=50, is_active=1)

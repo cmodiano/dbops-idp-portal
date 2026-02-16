@@ -3,7 +3,7 @@
  * Loads engines and platforms from reference tables.
  */
 
-import { apiFetchRaw } from './api_client';
+import { apiFetch, apiFetchRaw } from './api_client';
 import logger from './logger';
 
 // Global cache for environments endpoint to prevent duplicate calls
@@ -31,14 +31,14 @@ export interface RefPlatform {
  * Fetch active engines from REF_ENGINES table.
  */
 export async function fetchEngines(): Promise<RefEngine[]> {
-  return apiFetchRaw<RefEngine[]>('/reference/engines?active_only=true');
+  return apiFetch<RefEngine[]>('/reference/engines?active_only=true');
 }
 
 /**
  * Fetch active platforms from REF_PLATFORMS table.
  */
 export async function fetchPlatforms(): Promise<RefPlatform[]> {
-  return apiFetchRaw<RefPlatform[]>('/reference/platforms?active_only=true');
+  return apiFetch<RefPlatform[]>('/reference/platforms?active_only=true');
 }
 
 /**

@@ -63,6 +63,9 @@ class FeatureFlagListView(APIView):
                 for key, config in all_flags.items()
             ]
 
+        # Story 30.6 note: This endpoint returns {"data": [...], "source": "..."} format
+        # which differs from standard {"data": [...]} but is intentional for admin context.
+        # Frontend uses apiFetchRaw to handle this custom format.
         return Response({'data': data, 'source': source})
 
 

@@ -258,7 +258,7 @@ class IntegrationViewSet(viewsets.ViewSet):
                 correlation_id=get_correlation_id(),
             )
 
-        return Response({
+        return Response({"data": {
             'integration_id': integration.id,
             'integration_name': integration.name,
             'integration_type': integration.type,
@@ -270,7 +270,7 @@ class IntegrationViewSet(viewsets.ViewSet):
                 'catalogue_version': details['catalogue_version'],
                 'validation_message': details['validation_message'],
             },
-        })
+        }})
 
     @extend_schema(
         summary="Validate all integrations against the type catalogue",
@@ -295,4 +295,4 @@ class IntegrationViewSet(viewsets.ViewSet):
             triggered_by=triggered_by,
             correlation_id=correlation_id,
         )
-        return Response(stats)
+        return Response({"data": stats})

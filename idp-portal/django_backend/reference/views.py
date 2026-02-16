@@ -54,7 +54,7 @@ def list_engines(request: Request) -> Response:
     # Serialize
     serializer = RefEngineSerializer(queryset, many=True)
     
-    return Response(serializer.data)
+    return Response({"data": serializer.data})
 
 
 @api_view(['GET'])
@@ -87,7 +87,7 @@ def list_platforms(request: Request) -> Response:
     # Serialize
     serializer = RefPlatformSerializer(queryset, many=True)
 
-    return Response(serializer.data)
+    return Response({"data": serializer.data})
 
 
 # ─── Story 2.30: Category endpoints ────────────────────────────────────────
@@ -114,7 +114,7 @@ def list_categories(request: Request) -> Response:
     queryset = queryset.ordered()  # type: ignore[assignment]
 
     serializer = RefCategorySerializer(queryset, many=True)
-    return Response(serializer.data)
+    return Response({"data": serializer.data})
 
 
 @api_view(['POST'])
@@ -129,7 +129,7 @@ def create_category(request: Request) -> Response:
     category = serializer.save()
 
     logger.info("category_created", category_id=category.id, code=category.code, correlation_id=correlation_id)
-    return Response(RefCategorySerializer(category).data, status=status.HTTP_201_CREATED)
+    return Response({"data": RefCategorySerializer(category).data}, status=status.HTTP_201_CREATED)
 
 
 @api_view(['PATCH'])
@@ -152,7 +152,7 @@ def update_category(request: Request, pk: Any) -> Response:
     category = serializer.save()
 
     logger.info("category_updated", category_id=category.id, code=category.code, correlation_id=correlation_id)
-    return Response(RefCategorySerializer(category).data)
+    return Response({"data": RefCategorySerializer(category).data})
 
 
 @api_view(['DELETE'])

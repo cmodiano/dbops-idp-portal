@@ -1,5 +1,6 @@
 /**
  * Tests for categories_service (Story 2.30).
+ * Story 30.6: Updated to use apiFetch (APIFMT-3 fix).
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -16,11 +17,11 @@ describe('categories_service', () => {
       const mockCategories = [
         { id: 1, code: 'patching', label: 'Correctifs', display_order: 20, is_active: 1 },
       ];
-      vi.spyOn(apiClient, 'apiFetchRaw').mockResolvedValue(mockCategories as any);
+      vi.spyOn(apiClient, 'apiFetch').mockResolvedValue(mockCategories as any);
 
       const result = await getCategories();
 
-      expect(apiClient.apiFetchRaw).toHaveBeenCalledWith('/reference/categories?active_only=true');
+      expect(apiClient.apiFetch).toHaveBeenCalledWith('/reference/categories?active_only=true');
       expect(result).toEqual(mockCategories);
     });
 
@@ -29,16 +30,16 @@ describe('categories_service', () => {
         { id: 1, code: 'patching', label: 'Correctifs', display_order: 20, is_active: 1 },
         { id: 2, code: 'deprecated', label: 'Obsolète', display_order: 99, is_active: 0 },
       ];
-      vi.spyOn(apiClient, 'apiFetchRaw').mockResolvedValue(mockCategories as any);
+      vi.spyOn(apiClient, 'apiFetch').mockResolvedValue(mockCategories as any);
 
       const result = await getCategories(false);
 
-      expect(apiClient.apiFetchRaw).toHaveBeenCalledWith('/reference/categories?active_only=false');
+      expect(apiClient.apiFetch).toHaveBeenCalledWith('/reference/categories?active_only=false');
       expect(result).toEqual(mockCategories);
     });
 
     it('propagates API errors', async () => {
-      vi.spyOn(apiClient, 'apiFetchRaw').mockRejectedValue(new Error('Network Error'));
+      vi.spyOn(apiClient, 'apiFetch').mockRejectedValue(new Error('Network Error'));
 
       await expect(getCategories()).rejects.toThrow('Network Error');
     });
@@ -48,11 +49,11 @@ describe('categories_service', () => {
     it('sends POST request with category data', async () => {
       const newCat = { code: 'backup', label: 'Sauvegarde', display_order: 50, is_active: 1 };
       const mockResponse = { id: 3, ...newCat };
-      vi.spyOn(apiClient, 'apiFetchRaw').mockResolvedValue(mockResponse as any);
+      vi.spyOn(apiClient, 'apiFetch').mockResolvedValue(mockResponse as any);
 
       const result = await createCategory(newCat);
 
-      expect(apiClient.apiFetchRaw).toHaveBeenCalledWith('/admin/categories/', {
+      expect(apiClient.apiFetch).toHaveBeenCalledWith('/admin/categories/', {
         method: 'POST',
         body: JSON.stringify(newCat),
       });
@@ -64,11 +65,11 @@ describe('categories_service', () => {
     it('sends PATCH request with partial data', async () => {
       const updates = { label: 'Sauvegarde & Restauration', display_order: 55 };
       const mockResponse = { id: 3, code: 'backup', ...updates, is_active: 1 };
-      vi.spyOn(apiClient, 'apiFetchRaw').mockResolvedValue(mockResponse as any);
+      vi.spyOn(apiClient, 'apiFetch').mockResolvedValue(mockResponse as any);
 
       const result = await updateCategory(3, updates);
 
-      expect(apiClient.apiFetchRaw).toHaveBeenCalledWith('/admin/categories/3/', {
+      expect(apiClient.apiFetch).toHaveBeenCalledWith('/admin/categories/3/', {
         method: 'PATCH',
         body: JSON.stringify(updates),
       });

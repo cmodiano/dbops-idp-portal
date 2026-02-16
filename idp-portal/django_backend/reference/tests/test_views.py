@@ -1,6 +1,7 @@
 """
 Tests for reference API views.
 Story 13.7 - Tests for GET /api/v1/reference/engines and /api/v1/reference/platforms.
+Story 30.6 - Updated to verify {"data": [...]} response format (APIFMT-3 fix).
 """
 
 from django.test import TestCase
@@ -35,10 +36,12 @@ class RefEnginesAPITests(TestCase):
         """Test listing active engines only (default)."""
         response = self.client.get('/api/v1/reference/engines/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIsInstance(response.data, list)
-        self.assertEqual(len(response.data), 3)  # Only active engines
-        
-        codes = [e['code'] for e in response.data]
+        self.assertIn('data', response.data)
+        data = response.data['data']
+        self.assertIsInstance(data, list)
+        self.assertEqual(len(data), 3)  # Only active engines
+
+        codes = [e['code'] for e in data]
         self.assertIn('Oracle', codes)
         self.assertIn('SQL Server', codes)
         self.assertIn('DB2', codes)
@@ -48,14 +51,14 @@ class RefEnginesAPITests(TestCase):
         """Test listing all engines including inactive."""
         response = self.client.get('/api/v1/reference/engines/?active_only=false')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 4)  # All engines including inactive
+        self.assertEqual(len(response.data['data']), 4)  # All engines including inactive
 
     def test_list_engines_ordered(self):
         """Test engines are ordered by display_order, then code."""
         response = self.client.get('/api/v1/reference/engines/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-        codes = [e['code'] for e in response.data]
+        codes = [e['code'] for e in response.data['data']]
         self.assertEqual(codes, ['Oracle', 'SQL Server', 'DB2'])  # Ordered by display_order
 
     def test_list_engines_requires_authentication(self):
@@ -69,7 +72,7 @@ class RefEnginesAPITests(TestCase):
         response = self.client.get('/api/v1/reference/engines/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-        engine = response.data[0]
+        engine = response.data['data'][0]
         self.assertIn('id', engine)
         self.assertIn('code', engine)
         self.assertIn('label', engine)
@@ -79,6 +82,13 @@ class RefEnginesAPITests(TestCase):
 
         # Valider que normalized_code est bien normalisé (minuscules + underscores)
         self.assertEqual(engine['normalized_code'], engine['code'].lower().replace(' ', '_'))
+
+    def test_response_format_has_data_wrapper(self):
+        """Story 30.6 APIFMT-3: Verify response is wrapped in {"data": [...]}."""
+        response = self.client.get('/api/v1/reference/engines/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('data', response.data)
+        self.assertIsInstance(response.data['data'], list)
 
 
 class RefPlatformsAPITests(TestCase):
@@ -103,10 +113,12 @@ class RefPlatformsAPITests(TestCase):
         """Test listing active platforms only (default)."""
         response = self.client.get('/api/v1/reference/platforms/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIsInstance(response.data, list)
-        self.assertEqual(len(response.data), 3)  # Only active platforms
-        
-        codes = [p['code'] for p in response.data]
+        self.assertIn('data', response.data)
+        data = response.data['data']
+        self.assertIsInstance(data, list)
+        self.assertEqual(len(data), 3)  # Only active platforms
+
+        codes = [p['code'] for p in data]
         self.assertIn('AAP', codes)
         self.assertIn('GitHub Actions', codes)
         self.assertIn('Azure DevOps', codes)
@@ -116,14 +128,14 @@ class RefPlatformsAPITests(TestCase):
         """Test listing all platforms including inactive."""
         response = self.client.get('/api/v1/reference/platforms/?active_only=false')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 4)  # All platforms including inactive
+        self.assertEqual(len(response.data['data']), 4)  # All platforms including inactive
 
     def test_list_platforms_ordered(self):
         """Test platforms are ordered by display_order, then code."""
         response = self.client.get('/api/v1/reference/platforms/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-        codes = [p['code'] for p in response.data]
+        codes = [p['code'] for p in response.data['data']]
         self.assertEqual(codes, ['AAP', 'GitHub Actions', 'Azure DevOps'])  # Ordered by display_order
 
     def test_list_platforms_requires_authentication(self):
@@ -136,10 +148,17 @@ class RefPlatformsAPITests(TestCase):
         """Test platform serializer includes all required fields."""
         response = self.client.get('/api/v1/reference/platforms/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        
-        platform = response.data[0]
+
+        platform = response.data['data'][0]
         self.assertIn('id', platform)
         self.assertIn('code', platform)
         self.assertIn('label', platform)
         self.assertIn('display_order', platform)
         self.assertIn('is_active', platform)
+
+    def test_response_format_has_data_wrapper(self):
+        """Story 30.6 APIFMT-3: Verify response is wrapped in {"data": [...]}."""
+        response = self.client.get('/api/v1/reference/platforms/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('data', response.data)
+        self.assertIsInstance(response.data['data'], list)
