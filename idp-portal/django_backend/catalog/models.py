@@ -81,13 +81,28 @@ class ActionQuerySet(models.QuerySet):
         """
         Search actions by tags (AND logic - action must have all specified tags).
 
+        IMPORTANT: This method filters ONLY on PUBLISHED status by default.
+        Use case: Public catalog search (only show published actions).
+
+        If you need to search across all statuses, filter status first:
+            Action.objects.filter(status=...).search_by_tags(['tag1'])
+
+        Note (Code Review 30.1): search_by_tags() now preserves queryset chain.
+        Previously, it would reset the queryset, breaking combined filters.
+
         Args:
             tag_names: List of tag names to search for
 
         Returns:
             QuerySet of actions matching all tags, distinct
         """
-        queryset = self.filter(status=ActionStatus.PUBLISHED)
+        # Start with current queryset (preserves previous filters)
+        queryset = self
+
+        # Apply PUBLISHED filter only if no status filter exists yet
+        # Check if 'status' is in the query filters
+        if 'status' not in str(queryset.query.where):
+            queryset = queryset.filter(status=ActionStatus.PUBLISHED)
 
         # Normalize / drop empties
         tag_names = [t for t in (tag_names or []) if t and str(t).strip()]

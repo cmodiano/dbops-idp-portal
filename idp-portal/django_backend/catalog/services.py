@@ -212,7 +212,17 @@ class CatalogService:
         if item_type:
             queryset = queryset.filter(item_type=item_type)
         if tags_filter:
-            queryset = Action.objects.search_by_tags(tags_filter)
+            # Code Review 30.1: Log filter application for observability
+            logger.debug(
+                "catalog_list_all_applying_tags_filter",
+                tags_filter=tags_filter,
+                current_queryset_count=queryset.count(),
+            )
+            queryset = queryset.search_by_tags(tags_filter)
+            logger.debug(
+                "catalog_list_all_after_tags_filter",
+                result_count=queryset.count(),
+            )
         
         # Prefetch tags to avoid N+1
         queryset = queryset.with_tags().with_creator()

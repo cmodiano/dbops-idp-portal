@@ -37,6 +37,7 @@ class AuditActionType(models.TextChoices):
     EXECUTION_FAILED = 'EXECUTION_FAILED', 'Execution Failed'
     EXECUTION_CANCELLED = 'EXECUTION_CANCELLED', 'Execution Cancelled'
     EXECUTION_PENDING_APPROVAL = 'EXECUTION_PENDING_APPROVAL', 'Execution Pending Approval'
+    EXECUTION_APPROVED = 'EXECUTION_APPROVED', 'Execution Approved'  # Story 30.1
     EXECUTION_REJECTED = 'EXECUTION_REJECTED', 'Execution Rejected'
     # Story 13.2, Task 6.3: Unauthorized target attempt (audit trail for SOC1)
     EXECUTION_TARGET_FORBIDDEN = 'EXECUTION_TARGET_FORBIDDEN', 'Execution Target Forbidden'

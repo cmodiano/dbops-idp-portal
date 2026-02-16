@@ -387,3 +387,19 @@ development_status:
     29-3-alignement-ref-engines-engine-type-inventaire: done # REF_ENGINES ↔ engine_type inventaire, référentiel unique — Code review 2026-02-15: 12 issues found (7 HIGH + 5 MEDIUM + 3 LOW), ALL auto-fixed — normalized_code serializer added, E2E tests added, JSON doc validation, fixtures corrected, documentation enhanced — 10 alignment + 2 E2E + 3 JSON validation tests pass
     29-4-lien-ref-platforms-integration-type-catalogue: done # Lien explicite REF_PLATFORMS ↔ IntegrationTypeCatalogue — V073 migration idempotente, validation backend DRY helper, 19 tests (16 unit + 3 E2E), documentation mapping, code review adversarial 8 issues ALL fixed
     epic-29-retrospective: optional
+    # === Epic 30: Corrections exhaustives — Codebase Review IDP Portal (16 février 2026) ===
+    # Réf: idp-portal/CODEBASE-REVIEW.md, planning-artifacts/epic-30-codebase-review-corrections-fev-2026.md — 65 findings (5 CRIT, 16 HIGH, 23 MED, 21 LOW)
+    epic-30: in-progress
+    30-1-endpoints-approve-reject-bug-filtres-catalogue-config-securite: done # CRITICAL: API-MISS-1/2, BUG-BE-1, SEC-1/2/3 — Implémentation + code review (6 fixes: 1 HIGH, 3 MED, 2 LOW) — 26 tests (24 pass + 2 skipped), 0 régression
+    30-2-endpoints-remediation-export-dashboard: backlog # API-MISS-3 à 6
+    30-3-bugs-logiques-backend: backlog # BUG-BE-2 à BUG-BE-7
+    30-4-bugs-logiques-frontend-notifications-alert-rowkey-hooks: backlog # BUG-FE-1 à BUG-FE-5
+    30-5-securite-auth-uploads-dev-bypass-cors-celery-token: backlog # SEC-4 à SEC-11
+    30-6-incoherences-api-format-reponse: backlog # APIFMT-1 à 4
+    30-7-race-conditions-celery-polling-caches-partages: backlog # RACE-1/2/3, CELERY-3/4/5
+    30-8-gestion-erreurs-frontend-backend: backlog # ERR-1 à ERR-5
+    30-9-performance-n-plus-1-regex-styles-inline: backlog # PERF-1 à PERF-4
+    30-10-code-mort-deprecations: backlog # DEAD-BE-*, DEAD-FE-*
+    30-11-accessibilite-theme-couleurs-hardcodees: backlog # A11Y-1 à A11Y-3
+    30-12-incoherences-modeles-serializers-tags-audit: backlog # INCON-1 à INCON-5
+    epic-30-retrospective: optional

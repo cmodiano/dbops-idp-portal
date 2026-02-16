@@ -1,0 +1,620 @@
+# Revue Exhaustive du Codebase — IDP Portal
+
+**Date :** 2026-02-16
+**Scope :** Backend Django + Frontend React
+**Auteur :** Claude Code (revue automatisée)
+
+---
+
+## Table des matières
+
+1. [Endpoints manquants (Frontend ↔ Backend)](#1-endpoints-manquants-frontend--backend)
+2. [Bugs logiques — Backend](#2-bugs-logiques--backend)
+3. [Bugs logiques — Frontend](#3-bugs-logiques--frontend)
+4. [Problèmes de sécurité](#4-problèmes-de-sécurité)
+5. [Incohérences API (format de réponse)](#5-incohérences-api-format-de-réponse)
+6. [Race conditions & concurrence](#6-race-conditions--concurrence)
+7. [Gestion d'erreurs](#7-gestion-derreurs)
+8. [Performance (N+1, caches, re-renders)](#8-performance-n1-caches-re-renders)
+9. [Code mort](#9-code-mort)
+10. [Accessibilité & thème](#10-accessibilité--thème)
+11. [Problèmes Celery / tâches async](#11-problèmes-celery--tâches-async)
+12. [Incohérences modèles & serializers](#12-incohérences-modèles--serializers)
+13. [Récapitulatif par priorité](#13-récapitulatif-par-priorité)
+
+---
+
+## 1. Endpoints manquants (Frontend ↔ Backend)
+
+Le frontend appelle des endpoints qui **n'existent pas** côté backend.
+
+| # | Endpoint | Fichier frontend | Impact |
+|---|----------|-----------------|--------|
+| **API-MISS-1** | `POST /executions/{id}/approve` | `execution_service.ts:229` | Workflow d'approbation cassé — 404 systématique |
+| **API-MISS-2** | `POST /executions/{id}/reject` | `execution_service.ts:256` | Workflow de rejet cassé — 404 systématique |
+| **API-MISS-3** | `GET /executions/{id}/remediation` | `execution_service.ts:351` | Suggestions de remédiation inaccessibles |
+| **API-MISS-4** | `GET /executions/{id}/remediation-context` | `execution_service.ts:369` | Contexte de remédiation inaccessible |
+| **API-MISS-5** | `GET /dashboard/export/csv` | `dashboard_service.ts:172` | Export CSV dashboard impossible |
+| **API-MISS-6** | `GET /dashboard/export/pdf` | `dashboard_service.ts:189` | Export PDF dashboard impossible |
+| **API-MISS-7** | `GET /users/me/recent-actions` | `catalog_service.ts:142` | Marqué `@deprecated` — faible impact |
+
+**Action :** Implémenter les endpoints manquants côté backend (stories à créer pour API-MISS-1 à API-MISS-6), ou retirer les appels frontend si la fonctionnalité n'est pas prévue.
+
+---
+
+## 2. Bugs logiques — Backend
+
+### BUG-BE-1 [CRITICAL] — Filtres écrasés quand `tags_filter` est fourni
+**Fichier :** `catalog/services.py:208-215`
+```python
+queryset = Action.objects.all()
+if status:
+    queryset = queryset.filter(status=status)
+if item_type:
+    queryset = queryset.filter(item_type=item_type)
+if tags_filter:
+    queryset = Action.objects.search_by_tags(tags_filter)  # Écrase tout !
+```
+Le queryset filtré par `status`/`item_type` est remplacé par un nouveau queryset. Les filtres précédents sont perdus.
+
+**Fix :** `queryset = queryset.search_by_tags(tags_filter)` (chaîner au lieu de remplacer).
+
+---
+
+### BUG-BE-2 [HIGH] — `secret_service_id` silencieusement ignoré à la création
+**Fichier :** `integrations/services.py:100-108`
+
+Le champ `secret_service_id` est accepté par le serializer mais jamais passé à `Integration.objects.create()`. Il sera toujours `None`.
+
+**Fix :** Ajouter `secret_service_id=integration_data.get('secret_service_id')` dans le `create()`.
+
+---
+
+### BUG-BE-3 [HIGH] — Binding `user_id` dans structlog après la réponse
+**Fichier :** `core/middleware.py:95-98`
+
+Le `CorrelationIdMiddleware` bind `user_id` dans structlog contextvars **après** `self.get_response(request)`. Le user_id n'est donc jamais présent dans les logs de la requête.
+
+**Fix :** Déplacer le bind avant `self.get_response(request)`, après l'authentification (utiliser un middleware séparé avec un ordre de priorité plus bas).
+
+---
+
+### BUG-BE-4 [HIGH] — Calcul récurrence placeholder `+1 jour`
+**Fichier :** `executions/services.py:934-942`
+```python
+# For now, just add 1 day as a placeholder
+pattern.next_execution_date = timezone.now() + timedelta(days=1)
+```
+Les exécutions planifiées hebdomadaires, mensuelles, ou cron auront toutes un `next_execution_date` incorrect.
+
+**Fix :** Implémenter le vrai calcul basé sur `pattern.pattern_type` et `pattern.cron_expression`.
+
+---
+
+### BUG-BE-5 [MEDIUM] — Cache catalogue contourne la pagination
+**Fichier :** `catalog/views.py:862-863`
+
+Quand le cache a un hit, le résultat complet est retourné sans pagination. Même le code path sans cache ne pagine pas.
+
+**Fix :** Appliquer la pagination systématiquement, avant ou après le cache.
+
+---
+
+### BUG-BE-6 [LOW] — `Action.objects.get()` suivi d'un `if not action` (dead code)
+**Fichier :** `idp_auth/services.py:134-136`
+
+`get()` lève `DoesNotExist`, ne retourne jamais `None`. Le `if not action` est du code mort.
+
+---
+
+### BUG-BE-7 [LOW] — Ligne dupliquée
+**Fichier :** `executions/views/scheduled_views.py:386-387`
+```python
+se.environment = EnvironmentHelper.normalize(environment)
+se.environment = EnvironmentHelper.normalize(environment)  # Doublon
+```
+
+---
+
+## 3. Bugs logiques — Frontend
+
+### BUG-FE-1 [HIGH] — `notification({ title: ... })` au lieu de `message` (42+ occurrences)
+
+Ant Design `notification.success/error/warning` utilise `message` comme propriété de titre, pas `title`. La prop `title` est ignorée silencieusement → notifications sans titre visible.
+
+**Fichiers affectés :**
+- `hooks/useWorkflowExportImport.tsx` (8 occurrences)
+- `pages/admin/ActionsAdminPanel.tsx` (13 occurrences)
+- `pages/admin/ProfilesAdminPanel.tsx` (8 occurrences)
+- `pages/admin/IntegrationsAdminPanel.tsx` (5 occurrences)
+- `components/admin/ProfileImportModal.tsx` (2 occurrences)
+- `components/admin/ProfileWizard.tsx` (1 occurrence)
+- `components/admin/analytics/AdminAnalyticsDashboard.tsx` (1 occurrence)
+- `components/catalog/ExecutionWizard.tsx` (1 occurrence)
+- + autres
+
+**Fix :** Rechercher-remplacer global : `title:` → `message:` dans tous les appels `notification.*()`.
+
+---
+
+### BUG-FE-2 [HIGH] — `<Alert title=...>` au lieu de `message=` (14+ occurrences)
+
+Même problème avec le composant `<Alert>`. `title` devient un tooltip HTML natif au lieu du titre de l'alerte.
+
+**Fichiers affectés :**
+- `components/admin/ProfileForm.tsx:252,255`
+- `components/admin/ActionWizard.tsx:754,757`
+- `components/execution/ExecutionTimeline.tsx:222,235,254,302,334`
+- `components/executions/ExecutionDetailDrawer.tsx:51,59,77`
+- `components/catalog/WorkflowStepsRenderer.tsx:56,65`
+- `pages/AuditPage.tsx:405,573`
+- + autres
+
+**Fix :** Rechercher-remplacer : `<Alert title=` → `<Alert message=`.
+
+---
+
+### BUG-FE-3 [MEDIUM] — `Math.random()` dans un `rowKey` React
+**Fichier :** `components/catalog/ActionTable.tsx:312`
+```tsx
+rowKey={(record) => record.id ?? `temp-${record.name}-${Math.random()}`}
+```
+Provoque un remontage complet du composant à chaque render. Perte d'état, flickering.
+
+**Fix :** Utiliser un identifiant stable : `record.id ?? \`temp-${record.name}\``.
+
+---
+
+### BUG-FE-4 [MEDIUM] — Boucle infinie potentielle dans `useTargetInventory`
+**Fichier :** `hooks/useTargetInventory.ts:~150`
+
+`inventoryData` dans les dépendances d'un `useEffect` qui appelle `setInventoryData`. Objet comparé par référence → re-trigger à chaque render.
+
+---
+
+### BUG-FE-5 [MEDIUM] — Dépendance manquante dans useEffect
+**Fichier :** `hooks/useExecutionDetail.ts:96`
+
+`loadExecutionDetail` absent du tableau de dépendances → closures stale possibles.
+
+---
+
+## 4. Problèmes de sécurité
+
+### SEC-1 [HIGH] — `DEBUG` par défaut à `True`
+**Fichier :** `idp_backend/settings.py:35`
+```python
+DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
+```
+Si `DEBUG` n'est pas défini en production, Django expose les stack traces, settings, et variables locales.
+
+**Fix :** `os.getenv('DEBUG', 'False')`. Opt-in explicite.
+
+---
+
+### SEC-2 [HIGH] — `SECRET_KEY` fallback en dur
+**Fichier :** `idp_backend/settings.py:32`
+```python
+SECRET_KEY = 'django-insecure-dev-fallback-will-be-validated'
+```
+Si `DJANGO_SECRET_KEY` n'est pas défini, Django tourne avec une clé connue.
+
+**Fix :** `ImproperlyConfigured` au chargement des settings si env var absente.
+
+---
+
+### SEC-3 [HIGH] — `JWT_SECRET_KEY` par défaut à chaîne vide
+**Fichier :** `idp_backend/settings.py:346`
+```python
+JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', '')
+```
+Un secret JWT vide rend les tokens trivialement falsifiables.
+
+**Fix :** Lever une erreur au chargement si vide.
+
+---
+
+### SEC-4 [HIGH] — `fetchInventoryItems` contourne le client API (pas de token)
+**Fichier :** `frontend/src/services/execution_service.ts:439`
+
+Utilise `fetch()` natif au lieu de `apiFetch()` → pas de header `Authorization: Bearer`, pas de retry 401, pas de correlation ID.
+
+**Fix :** Migrer vers `apiFetchRaw()`.
+
+---
+
+### SEC-5 [MEDIUM] — Extension fichier prise du nom client (upload icons)
+**Fichier :** `integrations/upload_views.py:73`
+```python
+file_ext = Path(file.name).suffix or '.png'
+```
+Un attaquant peut uploader `icon.html` ou `icon.php`. Si le serveur statique interprète ces extensions → XSS ou exécution de code.
+
+**Fix :** Allowlist d'extensions : `.png`, `.jpg`, `.jpeg`, `.svg`, `.gif`.
+
+---
+
+### SEC-6 [MEDIUM] — Validation MIME basée uniquement sur le header Content-Type
+**Fichier :** `integrations/upload_views.py:48-57`
+
+Le Content-Type est fourni par le client et facilement falsifiable. Pas de vérification magic bytes.
+
+**Fix :** Utiliser `python-magic` pour valider le contenu réel du fichier.
+
+---
+
+### SEC-7 [MEDIUM] — Upload SVG permet XSS
+**Fichier :** `integrations/upload_views.py`
+
+Les SVG peuvent contenir du JavaScript embarqué. Si servis inline → XSS.
+
+**Fix :** Sanitiser les SVG (strip `<script>`, event handlers) ou servir avec `Content-Disposition: attachment`.
+
+---
+
+### SEC-8 [MEDIUM] — Dev bypass crée un user full-privilege
+**Fichier :** `idp_auth/views.py:80-121`
+
+`AUTH_DEV_BYPASS=True` crée un user avec le profil "dbops" (admin complet).
+
+**Fix :** Guard dur : bloquer si `APP_ENV=production`.
+
+---
+
+### SEC-9 [MEDIUM] — Credentials en clair dans les arguments Celery
+**Fichier :** `executions/tasks.py:536-537, 700-701, 856-857, 1160-1161, 1330-1331`
+
+`credential_ref` passé comme paramètre string dans les tâches Celery → visible dans le broker Redis, dans Flower, potentiellement dans les logs.
+
+**Fix :** Résoudre les credentials dans la tâche (via Vault), pas en paramètre.
+
+---
+
+### SEC-10 [MEDIUM] — Headers CORS : `X-Correlation-ID` pas dans `CORS_ALLOW_HEADERS`
+**Fichier :** `idp_backend/settings.py` (CORS) vs `frontend/src/services/api_client.ts:98`
+
+Le frontend envoie `X-Correlation-ID` mais le backend n'autorise que `x-idp-request-id` dans CORS. Le header est strippé par le middleware CORS.
+
+**Fix :** Ajouter `'x-correlation-id'` à `CORS_ALLOW_HEADERS`, ou aligner le nom du header.
+
+---
+
+### SEC-11 [LOW] — Token d'accès dans le fragment URL
+**Fichier :** `idp_auth/views.py:103,248`
+```python
+redirect_url = f"{cors_origin}/auth/callback#access_token={access_token}"
+```
+Visible dans l'historique navigateur, extensions, shoulder surfing. Préférer un code d'autorisation échangeable.
+
+---
+
+## 5. Incohérences API (format de réponse)
+
+### APIFMT-1 [HIGH] — `validateIntegration` : `apiFetch` unwrap `.data` mais backend retourne objet nu
+**Fichier frontend :** `integrations_service.ts:59`
+**Fichier backend :** `integrations/views.py:261`
+
+`apiFetch` extrait `body.data` → retourne `undefined` car le backend retourne l'objet directement.
+
+**Fix :** Utiliser `apiFetchRaw` côté frontend, ou wrapper dans `{"data": ...}` côté backend.
+
+---
+
+### APIFMT-2 [HIGH] — `validateAllIntegrations` : même problème
+**Fichier frontend :** `integrations_service.ts:64`
+**Fichier backend :** `integrations/views.py:298`
+
+---
+
+### APIFMT-3 [MEDIUM] — Endpoints `/reference/*` retournent des arrays nus
+**Fichier :** `reference/views.py:57,90,117`
+
+Tous les endpoints reference retournent `Response(serializer.data)` (array direct) au lieu du format `{"data": [...]}` utilisé partout ailleurs. Le frontend utilise `apiFetchRaw` pour compenser — ça fonctionne mais c'est incohérent.
+
+---
+
+### APIFMT-4 [MEDIUM] — Catalogue list retourne `{"data": [...]}` sans info de pagination
+**Fichier :** `catalog/views.py:862-876`
+
+Les autres endpoints list retournent `{"data": [...], "pagination": {...}}`.
+
+---
+
+## 6. Race conditions & concurrence
+
+### RACE-1 [HIGH] — Polling infini sans limite de retry
+**Fichier :** `executions/tasks.py` (5 tâches de polling)
+
+Toutes les tâches de polling (`poll_aap_job_status`, `poll_tower_job_status`, `poll_azure_devops_run_status`, `poll_github_actions_run_status`, `poll_terraform_cloud_run_status`) se re-planifient sur erreur sans compteur de retry. Si la plateforme distante est down, elles polleront indéfiniment.
+
+**Fix :** Ajouter un `max_retries` et passer l'exécution en `FAILED` après dépassement.
+
+---
+
+### RACE-2 [MEDIUM] — `update_action()` sans `select_for_update()`
+**Fichier :** `catalog/services.py:264-265`
+
+Dans un `@transaction.atomic`, le `get()` n'acquiert pas de verrou. Deux requêtes concurrentes → last-write-wins. Même pattern dans `update_status()`, `delete_action()`, `deactivate_action()`.
+
+**Fix :** `Action.objects.select_for_update().get(id=action_id)`.
+
+---
+
+### RACE-3 [MEDIUM] — Caches in-memory module-level non partagés entre workers
+**Fichiers :** `catalog/views.py` (`_catalog_cache`, `_tags_cache`), `inventory/services.py` (`_environments_cache`)
+
+`cachetools.TTLCache` au niveau module → chaque worker Gunicorn a son propre cache. Données incohérentes entre requêtes routées vers différents workers.
+
+**Fix :** Utiliser Redis comme cache partagé, ou accepter l'incohérence avec un TTL court.
+
+---
+
+## 7. Gestion d'erreurs
+
+### ERR-1 [HIGH] — `.catch(() => {})` avale les erreurs silencieusement
+**Fichier :** `frontend/src/components/execution/WorkflowExecutionGraph.tsx:146`
+```typescript
+getExecutionSteps(executionId).then(setStaticSteps).catch(() => {});
+```
+Erreur réseau → aucun feedback utilisateur, pas de retry, pas de log.
+
+---
+
+### ERR-2 [HIGH] — Validation croisée absente sur `IntegrationUpdateSerializer`
+**Fichier :** `integrations/serializers.py:188-281`
+
+`IntegrationCreateSerializer` valide les règles métier (vault + credential_ref, secret_service_id). `IntegrationUpdateSerializer` n'a **aucune** méthode `validate()` → un update peut violer les contraintes.
+
+**Fix :** Dupliquer ou factoriser la validation croisée dans le serializer d'update.
+
+---
+
+### ERR-3 [MEDIUM] — `create_action()` ignore silencieusement un `integration_id` invalide
+**Fichier :** `catalog/services.py:97-100`
+```python
+except Integration.DoesNotExist:
+    pass  # Validation already handled by serializer
+```
+Si le service est appelé depuis un autre contexte que la vue, l'action sera créée avec `integration=None`.
+
+---
+
+### ERR-4 [MEDIUM] — Audit signals swallowed silencieusement
+**Fichier :** `integrations/signals.py:56-57,81-82`
+
+Si la création d'entrée d'audit échoue, l'exception est catchée et loggée. Le save du modèle réussit sans trace d'audit → violation du principe d'audit immuable.
+
+---
+
+### ERR-5 [MEDIUM] — Workflow bloqué après timeout de gate
+**Fichier :** `executions/tasks.py:506-522`
+
+Après un timeout de gate, le code log un TODO mais ne continue pas le workflow. L'exécution reste bloquée indéfiniment.
+
+---
+
+## 8. Performance (N+1, caches, re-renders)
+
+### PERF-1 [MEDIUM] — N+1 queries dans `_resolve_user_names`
+**Fichier :** `audit/views.py:123-131`
+
+Pour chaque user_id non-numérique, une requête SQL individuelle est exécutée.
+
+---
+
+### PERF-2 [MEDIUM] — Tous les workflows chargés en mémoire
+**Fichier :** `catalog/services.py:527-540`
+
+`_find_workflows_referencing_action()` charge TOUS les workflows actifs en mémoire puis itère en Python.
+
+**Fix :** Filtre côté DB avec un `JSONField` lookup ou une requête raw optimisée.
+
+---
+
+### PERF-3 [MEDIUM] — 80 RegExp créées à chaque appel de `sanitizeDescription()`
+**Fichier :** `frontend/src/utils/businessLanguage.ts:99-103`
+
+**Fix :** Pré-compiler les regex au niveau module.
+
+---
+
+### PERF-4 [LOW] — `<style>` inline dans les fonctions render
+**Fichiers :** `components/catalog/ActionTable.tsx:295-307`, `components/execution/ExecutionTimeline.tsx:670-675`
+
+Tags `<style>` injectés dans le DOM à chaque render.
+
+---
+
+## 9. Code mort
+
+### Backend
+
+| # | Fichier | Description |
+|---|---------|-------------|
+| DEAD-BE-1 | `catalog/models.py:51-55` | `normalize_tag_name()` jamais utilisé (services.py utilise sa propre logique) |
+| DEAD-BE-2 | `idp_auth/services.py:134-136` | `if not action` après `get()` — jamais exécuté |
+| DEAD-BE-3 | `executions/tasks.py:278` | `gate_status.get('action', 'FAILED')` — résultat non assigné |
+| DEAD-BE-4 | `core/models.py:155` | `import json` redondant (déjà importé ligne 3) |
+| DEAD-BE-5 | `inventory/services.py:16,21,33` | Imports `# noqa: F401` backward compat |
+
+### Frontend
+
+| # | Fichier | Description |
+|---|---------|-------------|
+| DEAD-FE-1 | `services/catalog_service.ts:141` | `fetchRecentActions` — `@deprecated` |
+| DEAD-FE-2 | `services/admin_service.ts` | `listActions` — `@deprecated` |
+| DEAD-FE-3 | `types/api.ts` | Fichier entier — `@deprecated`, barrel re-export |
+| DEAD-FE-4 | `utils/profileOptions.ts` | Fichier entier — `@deprecated` |
+| DEAD-FE-5 | `utils/impactRulesSchema.ts:87` | `IMPACT_ENVIRONMENTS` — `@deprecated` |
+| DEAD-FE-6 | 3 fichiers | `STEP_DESCRIPTIONS_SIMPLIFIED` dupliqué dans `TargetSelectionStep`, `ParametersFormStep`, `ConfirmationStep` |
+
+---
+
+## 10. Accessibilité & thème
+
+### A11Y-1 [HIGH] — Couleurs dark-theme hardcodées dans `StepDetailDrawer`
+**Fichier :** `components/execution/StepDetailDrawer.tsx:183-226`
+
+`background: '#1f1f1f'`, `color: '#e8e8e8'` → illisible en thème clair.
+
+**Fix :** Utiliser les tokens du thème Ant Design.
+
+---
+
+### A11Y-2 [HIGH] — Status badges avec background dark hardcodé
+**Fichier :** `utils/executionRenderers.tsx:306-311`
+
+`rgba(26, 26, 36, 0.8)` → invisible en thème clair.
+
+---
+
+### A11Y-3 [MEDIUM] — `StructuredErrorCard` avec couleurs texte hardcodées
+**Fichier :** `components/execution/StructuredErrorCard.tsx:85-98`
+
+`#374151`, `#1f2937` → mauvais contraste en dark mode.
+
+---
+
+**Point positif :** Bonne utilisation globale de `role`, `aria-label`, `aria-live`, `aria-expanded`, et gestion clavier (Enter/Space) sur les éléments interactifs.
+
+---
+
+## 11. Problèmes Celery / tâches async
+
+### CELERY-1 [HIGH] — Polling infini sans retry limit
+Voir [RACE-1](#race-1-high--polling-infini-sans-limite-de-retry).
+
+---
+
+### CELERY-2 [MEDIUM] — Credentials en clair dans les arguments
+Voir [SEC-9](#sec-9-medium--credentials-en-clair-dans-les-arguments-celery).
+
+---
+
+### CELERY-3 [MEDIUM] — Nouveau event loop asyncio créé à chaque cycle de polling
+**Fichier :** `executions/tasks.py:589-590, 749-750, 905-906, 1209-1210, 1379-1380`
+
+`asyncio.new_event_loop()` + `set_event_loop()` à chaque poll. Coûteux.
+
+**Fix :** Utiliser `asyncio.run()`.
+
+---
+
+### CELERY-4 [MEDIUM] — Gate timeout ne continue pas le workflow
+Voir [ERR-5](#err-5-medium--workflow-bloqué-après-timeout-de-gate).
+
+---
+
+### CELERY-5 [LOW] — Gate timeout SKIPPED sans message d'erreur
+**Fichier :** `executions/tasks.py:470-474`
+
+Step mise en `SKIPPED` sans `error_message` → impossible de savoir pourquoi dans l'historique.
+
+---
+
+## 12. Incohérences modèles & serializers
+
+### INCON-1 [MEDIUM] — Normalisation de tags incohérente
+- `catalog/models.py:55` : remplace espaces par `""` (rien)
+- `catalog/services.py:180` : remplace espaces par `"_"` (underscore)
+
+Tags créés différemment selon le chemin d'exécution.
+
+---
+
+### INCON-2 [MEDIUM] — Audit : hash MD5 collisions pour les PK string
+**Fichier :** `integrations/signals.py:40`
+```python
+entity_id = int(hashlib.md5(instance.code.encode()).hexdigest()[:8], 16) % (10**9)
+```
+Collisions possibles entre différents codes → requêtes d'audit peu fiables.
+
+---
+
+### INCON-3 [MEDIUM] — Audit signals retournent toujours `user_id='system'`
+**Fichier :** `integrations/signals.py:19-27`
+
+TODO non implémenté. Impossible de tracer quel utilisateur a modifié les catalogues d'intégration.
+
+---
+
+### INCON-4 [LOW] — `IntegerField` pour les booléens (compatibilité Oracle)
+**Fichiers :** `profiles/models.py` (`is_admin`, `is_auditor`), `executions/models.py` (`RecurringPattern.is_active`)
+
+Intentionnel pour Oracle `NUMBER(1)`, mais fragile : tout le code doit comparer `== 1` au lieu de truthiness.
+
+---
+
+### INCON-5 [LOW] — `User.is_authenticated = True` en attribut de classe
+**Fichier :** `idp_auth/models.py:67`
+
+`True` pour toutes les instances, y compris les users soft-deleted. Contrairement au User Django natif qui utilise une méthode.
+
+---
+
+## 13. Récapitulatif par priorité
+
+### CRITICAL (à traiter immédiatement)
+
+| # | Issue | Type | Effort |
+|---|-------|------|--------|
+| API-MISS-1/2 | Endpoints approve/reject manquants | Backend | Moyen |
+| BUG-BE-1 | Filtres écrasés dans `CatalogService.list_all()` | Backend | Faible |
+| SEC-1 | `DEBUG` par défaut à `True` | Config | Trivial |
+| SEC-2 | `SECRET_KEY` fallback hardcodé | Config | Trivial |
+| SEC-3 | `JWT_SECRET_KEY` vide par défaut | Config | Trivial |
+
+### HIGH (à traiter cette semaine)
+
+| # | Issue | Type | Effort |
+|---|-------|------|--------|
+| BUG-FE-1 | `notification({ title })` → `message` (42+ lieux) | Frontend | Faible (search-replace) |
+| BUG-FE-2 | `<Alert title=...>` → `message=` (14+ lieux) | Frontend | Faible (search-replace) |
+| SEC-4 | `fetchInventoryItems` sans auth token | Frontend | Faible |
+| APIFMT-1/2 | `validateIntegration` retourne `undefined` | Frontend/Backend | Faible |
+| RACE-1 | Polling Celery infini sans retry limit | Backend | Moyen |
+| ERR-2 | Validation croisée manquante update integration | Backend | Faible |
+| BUG-BE-2 | `secret_service_id` ignoré à la création | Backend | Trivial |
+| BUG-BE-3 | user_id structlog bindé après la réponse | Backend | Faible |
+| BUG-BE-4 | Récurrence placeholder `+1 jour` | Backend | Moyen |
+| A11Y-1/2 | Couleurs hardcodées dark theme | Frontend | Moyen |
+| API-MISS-3/4 | Endpoints remediation manquants | Backend | Moyen |
+| API-MISS-5/6 | Endpoints export dashboard manquants | Backend | Moyen |
+| SEC-10 | CORS header `X-Correlation-ID` non autorisé | Config | Trivial |
+| ERR-1 | `.catch(() => {})` avale les erreurs | Frontend | Trivial |
+
+### MEDIUM (à planifier dans le sprint suivant)
+
+| # | Issue | Type | Effort |
+|---|-------|------|--------|
+| SEC-5/6/7 | Upload fichiers : extension, MIME, SVG XSS | Backend | Moyen |
+| SEC-8 | Dev bypass sans guard production | Backend | Faible |
+| SEC-9 | Credentials Celery en clair | Backend | Moyen |
+| RACE-2 | `select_for_update()` manquant | Backend | Faible |
+| RACE-3 | Caches in-memory non partagés | Backend | Moyen |
+| ERR-3/4/5 | Gestion d'erreurs silencieuse | Backend | Moyen |
+| PERF-1/2 | N+1 queries audit/workflows | Backend | Moyen |
+| PERF-3 | Regex recompilées à chaque appel | Frontend | Trivial |
+| BUG-FE-3/4/5 | Math.random key, infinite loop, deps manquantes | Frontend | Faible |
+| INCON-1/2/3 | Tags, audit hash, audit user | Backend | Moyen |
+| APIFMT-3/4 | Format réponse incohérent | Backend | Moyen |
+| A11Y-3 | Couleurs texte hardcodées | Frontend | Faible |
+
+### LOW (backlog)
+
+| # | Issue | Type |
+|---|-------|------|
+| BUG-BE-6/7 | Code mort, ligne dupliquée | Backend |
+| DEAD-* | Code deprecated à nettoyer | Les deux |
+| INCON-4/5 | IntegerField booleans, is_authenticated | Backend |
+| CELERY-3/5 | Event loop, gate skip message | Backend |
+| SEC-11 | Token dans fragment URL | Backend |
+| PERF-4 | Style tags inline | Frontend |
+
+---
+
+**Total : 65 findings**
+- Critical : 5
+- High : 16
+- Medium : 23
+- Low : 21

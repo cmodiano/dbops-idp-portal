@@ -46,6 +46,7 @@ services:
       - DEBUG=true
       - AUTH_DEV_BYPASS=true
       - SECRET_KEY=dev-secret-key-change-in-production
+      - JWT_SECRET_KEY=dev-jwt-secret-key-change-in-production
       - ALLOWED_HOSTS=*
       - CORS_ORIGIN=http://localhost:8080
       - ORACLE_DSN=oracle-db:1521/FREEPDB1
