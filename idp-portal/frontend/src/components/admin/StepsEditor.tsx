@@ -13,11 +13,11 @@ import {
   Button,
   Input,
   Select,
-  Switch,
   Space,
   Card,
   Typography,
   Form,
+  theme,
 } from 'antd';
 import { PlusOutlined, DeleteOutlined, HolderOutlined } from '@ant-design/icons';
 import {
@@ -37,9 +37,12 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { ExecutionStep, ExecutionStepType } from '../../types/api';
+import type { ExecutionStep, ExecutionStepType, ConnectorType } from '../../types/api';
+import { useEnvironments } from '../../hooks/useEnvironments';
 
 const { Text } = Typography;
+
+const EMPTY_STEPS: ExecutionStep[] = [];
 
 interface StepsEditorProps {
   value?: ExecutionStep[];
@@ -52,12 +55,23 @@ const STEP_TYPE_OPTIONS: { value: ExecutionStepType; label: string }[] = [
   { value: 'verification', label: 'Verification' },
 ];
 
-const ENVIRONMENT_OPTIONS = ['DEV', 'STAGING', 'PROD'];
+/** Connector options for execution steps (Story 2.7). Aligned with backend. */
+const CONNECTOR_OPTIONS: { value: ConnectorType; label: string }[] = [
+  { value: 'none', label: 'Aucun' },
+  { value: 'servicenow', label: 'ServiceNow' },
+  { value: 'aap', label: 'AAP' },
+  { value: 'azuredevops', label: 'Azure DevOps' },
+  { value: 'jira', label: 'Jira' },
+  { value: 'github_actions', label: 'GitHub Actions' },
+  { value: 'terraform', label: 'Terraform' },
+];
 
 /** Props for the sortable step card */
 interface SortableStepCardProps {
   step: ExecutionStep;
   index: number;
+  environmentOptions: { value: string; label: string }[];
+  environmentsLoading: boolean;
   onStepChange: (index: number, field: keyof ExecutionStep, fieldValue: unknown) => void;
   onRemoveStep: (index: number) => void;
   /** When false, remove button is disabled (at least one step required). */
@@ -68,10 +82,13 @@ interface SortableStepCardProps {
 const SortableStepCard: React.FC<SortableStepCardProps> = ({
   step,
   index,
+  environmentOptions,
+  environmentsLoading,
   onStepChange,
   onRemoveStep,
   canRemove,
 }) => {
+  const { token } = theme.useToken();
   const {
     attributes,
     listeners,
@@ -97,13 +114,13 @@ const SortableStepCard: React.FC<SortableStepCardProps> = ({
         body: { padding: '12px' },
       }}
     >
-      <Space direction="vertical" style={{ width: '100%' }}>
+      <Space orientation="vertical" style={{ width: '100%' }}>
         <Space align="center" style={{ width: '100%', justifyContent: 'space-between' }}>
           <Space>
             <HolderOutlined
               {...attributes}
               {...listeners}
-              style={{ cursor: isDragging ? 'grabbing' : 'grab', color: '#999', touchAction: 'none' }}
+              style={{ cursor: isDragging ? 'grabbing' : 'grab', color: token.colorTextTertiary, touchAction: 'none' }}
               aria-label={`Glisser pour reordonner etape ${step.order}`}
             />
             <Text strong>Etape {step.order}</Text>
@@ -144,25 +161,27 @@ const SortableStepCard: React.FC<SortableStepCardProps> = ({
             />
           </Form.Item>
 
-          <Form.Item label="Changement ServiceNow" style={{ marginBottom: 0 }}>
-            <Switch
-              checked={step.is_servicenow_change}
-              onChange={(checked) => onStepChange(index, 'is_servicenow_change', checked)}
-              aria-label={`Changement ServiceNow etape ${step.order}`}
+          <Form.Item label="Connecteur" style={{ marginBottom: 0 }}>
+            <Select
+              value={step.connector_type ?? 'none'}
+              onChange={(val) => onStepChange(index, 'connector_type', val)}
+              options={CONNECTOR_OPTIONS}
+              style={{ width: 160 }}
+              aria-label={`Connecteur etape ${step.order}`}
             />
           </Form.Item>
 
-          {step.is_servicenow_change && (
+          {step.connector_type === 'servicenow' && (
             <Form.Item
               label="Environnements"
               validateStatus={
-                step.is_servicenow_change &&
+                step.connector_type === 'servicenow' &&
                 (!step.conditional_environments || step.conditional_environments.length === 0)
                   ? 'error'
                   : ''
               }
               help={
-                step.is_servicenow_change &&
+                step.connector_type === 'servicenow' &&
                 (!step.conditional_environments || step.conditional_environments.length === 0)
                   ? 'Selectionnez au moins un environnement'
                   : ''
@@ -175,10 +194,88 @@ const SortableStepCard: React.FC<SortableStepCardProps> = ({
                 onChange={(val) => onStepChange(index, 'conditional_environments', val)}
                 placeholder="Environnements conditionnes"
                 style={{ minWidth: 180 }}
-                options={ENVIRONMENT_OPTIONS.map((env) => ({ value: env, label: env }))}
+                options={environmentOptions}
+                loading={environmentsLoading}
+                disabled={environmentsLoading}
                 aria-label={`Environnements conditionnes etape ${step.order}`}
               />
             </Form.Item>
+          )}
+
+          {/* Story 4.10 AC4: Type de ressource AAP (job template | workflow job) */}
+          {step.connector_type === 'aap' && (
+            <>
+              <Form.Item label="Type de ressource" style={{ marginBottom: 0 }}>
+                <Select
+                  value={(step.connector_config?.resource_type as string) ?? 'job_template'}
+                  onChange={(val) =>
+                    onStepChange(index, 'connector_config', {
+                      ...(step.connector_config || {}),
+                      resource_type: val,
+                    })
+                  }
+                  options={[
+                    { value: 'job_template', label: 'Job template' },
+                    { value: 'workflow_job', label: 'Workflow job' },
+                  ]}
+                  style={{ width: 160 }}
+                  aria-label={`Type ressource AAP etape ${step.order}`}
+                />
+              </Form.Item>
+              <Form.Item
+                label="ID template"
+                validateStatus={
+                  step.connector_type === 'aap' &&
+                  (step.connector_config?.resource_type === 'workflow_job'
+                    ? (step.connector_config?.workflow_job_template_id == null ||
+                        step.connector_config?.workflow_job_template_id === '' ||
+                        step.connector_config?.workflow_job_template_id === 0)
+                    : (step.connector_config?.job_template_id == null ||
+                        step.connector_config?.job_template_id === '' ||
+                        step.connector_config?.job_template_id === 0))
+                    ? 'error'
+                    : ''
+                }
+                help={
+                  step.connector_type === 'aap' &&
+                  (step.connector_config?.resource_type === 'workflow_job'
+                    ? (step.connector_config?.workflow_job_template_id == null ||
+                        step.connector_config?.workflow_job_template_id === '' ||
+                        step.connector_config?.workflow_job_template_id === 0)
+                    : (step.connector_config?.job_template_id == null ||
+                        step.connector_config?.job_template_id === '' ||
+                        step.connector_config?.job_template_id === 0))
+                    ? 'ID template requis pour une etape AAP'
+                    : ''
+                }
+                style={{ marginBottom: 0 }}
+              >
+                <Input
+                  type="number"
+                  min={1}
+                  value={
+                    (step.connector_config?.resource_type === 'workflow_job'
+                      ? step.connector_config?.workflow_job_template_id
+                      : step.connector_config?.job_template_id) ?? ''
+                  }
+                  onChange={(e) => {
+                    const v = e.target.value ? Number(e.target.value) : undefined;
+                    const cfg = { ...(step.connector_config || {}), resource_type: step.connector_config?.resource_type ?? 'job_template' };
+                    if (cfg.resource_type === 'workflow_job') {
+                      cfg.workflow_job_template_id = v;
+                      delete cfg.job_template_id;
+                    } else {
+                      cfg.job_template_id = v;
+                      delete cfg.workflow_job_template_id;
+                    }
+                    onStepChange(index, 'connector_config', cfg);
+                  }}
+                  placeholder="ID du template AAP"
+                  style={{ width: 120 }}
+                  aria-label={`ID template AAP etape ${step.order}`}
+                />
+              </Form.Item>
+            </>
           )}
         </Space>
       </Space>
@@ -186,7 +283,9 @@ const SortableStepCard: React.FC<SortableStepCardProps> = ({
   );
 };
 
-export const StepsEditor: React.FC<StepsEditorProps> = ({ value = [], onChange }) => {
+export const StepsEditor: React.FC<StepsEditorProps> = ({ value = EMPTY_STEPS, onChange }) => {
+  const { environmentOptions, loading: environmentsLoading } = useEnvironments();
+
   // Configure dnd-kit sensors for pointer and keyboard interaction
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -200,7 +299,8 @@ export const StepsEditor: React.FC<StepsEditorProps> = ({ value = [], onChange }
       order: value.length + 1,
       name: '',
       type: 'execution',
-      is_servicenow_change: false,
+      connector_type: 'none',
+      connector_config: null,
       conditional_environments: null,
     };
     onChange?.([...value, newStep]);
@@ -218,8 +318,8 @@ export const StepsEditor: React.FC<StepsEditorProps> = ({ value = [], onChange }
     const newSteps = [...value];
     newSteps[index] = { ...newSteps[index], [field]: fieldValue };
 
-    // If ServiceNow is unchecked, clear conditional_environments
-    if (field === 'is_servicenow_change' && !fieldValue) {
+    // If connector is no longer servicenow, clear conditional_environments (Story 2.7)
+    if (field === 'connector_type' && fieldValue !== 'servicenow') {
       newSteps[index].conditional_environments = null;
     }
 
@@ -247,7 +347,7 @@ export const StepsEditor: React.FC<StepsEditorProps> = ({ value = [], onChange }
 
   return (
     <div>
-      <Space direction="vertical" style={{ width: '100%' }}>
+      <Space orientation="vertical" style={{ width: '100%' }}>
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -259,6 +359,8 @@ export const StepsEditor: React.FC<StepsEditorProps> = ({ value = [], onChange }
                 key={step.order}
                 step={step}
                 index={index}
+                environmentOptions={environmentOptions}
+                environmentsLoading={environmentsLoading}
                 onStepChange={handleStepChange}
                 onRemoveStep={handleRemoveStep}
                 canRemove={value.length > 1}

@@ -1,0 +1,329 @@
+import type { PaginationInfo } from './common';
+import type { RemediationRule } from './remediation';
+
+// === Catalog Action Types (Story 2.1) ===
+// Story 2.30: RefCategory type for administrable categories.
+export interface RefCategory {
+  id: number;
+  code: string;
+  label: string;
+  display_order: number;
+  is_active: number;
+}
+
+// Story 13.7: These types are now dynamic (loaded from REF_ENGINES and REF_PLATFORMS tables).
+// The union types below are kept for backward compatibility, but values come from API.
+// Consider using `string` instead for new code.
+export type ActionEngine = 'Oracle' | 'SQL Server' | 'DB2' | string;
+export type ActionPlatform = 'AAP' | 'GitHub Actions' | 'Azure DevOps' | 'Terraform' | string;
+export type ActionStatus = 'draft' | 'published' | 'disabled';
+/** Impact level for actions (Story 2.5, 2.18). */
+export type ImpactLevel = 'low' | 'medium' | 'high' | 'critical';
+/** Item type: action or workflow (Story 5.7, AC1). */
+export type ItemType = 'action' | 'workflow';
+
+export interface ActionCreate {
+  name: string;
+  description?: string | null;
+  /** Story 5.7: item type (action or workflow). Default: action. */
+  item_type?: ItemType;
+  /** Story 2.30: Category code (optional, validated against REF_CATEGORIES). */
+  category?: string | null;
+  /** Engine is required for actions, optional for workflows (Story 5.7). */
+  engine?: ActionEngine | null;
+  /** Platform is required for actions, optional for workflows (Story 5.7). */
+  platform?: ActionPlatform | null;
+  parameters_schema?: Record<string, unknown> | null;
+  /** Story 2.18: impact_rules includes criteria field. */
+  impact_rules?: Record<string, { level: ImpactLevel; criteria?: string | null }> | null;
+  /** Story 2.18 AC5: Default impact level when no rule matches the environment. */
+  default_impact_level?: ImpactLevel | null;
+  /** Story 2.24: change_model_code removed; change_type_config is in ExecutionStepsUpdate only. */
+  /** Story 3.4 FR12: Markdown documentation for contextual help. */
+  documentation_md?: string | null;
+}
+
+export interface ActionResponse {
+  id: number;
+  name: string;
+  description: string | null;
+  /** Story 5.7: item type (action or workflow). */
+  item_type: ItemType;
+  /** Story 2.30: Category code (nullable). */
+  category?: string | null;
+  /** Engine (nullable for workflows). */
+  engine: ActionEngine | null;
+  /** Platform (nullable for workflows). */
+  platform: ActionPlatform | null;
+  parameters_schema: Record<string, unknown> | null;
+  /** Story 2.18: impact_rules includes criteria field. */
+  impact_rules: Record<string, { level: ImpactLevel; criteria?: string | null }> | null;
+  /** Story 2.18 AC5: Default impact level when no rule matches the environment. */
+  default_impact_level: ImpactLevel | null;
+  /** Story 2.24: change_model_code removed from action level. */
+  status: ActionStatus;
+  created_by: number | null;
+  created_at: string;
+  updated_at: string | null;
+  tags?: string[];
+  /** Story 3.4 FR12: Markdown documentation for contextual help. */
+  documentation_md?: string | null;
+  /**
+   * Story 13.2, AC3: Whether action requires target selection (default true).
+   * Story 22.18: MED-6 fix (code-quality-assessment-2026-02-08.md:442-445).
+   * Optional because frontend uses defensive logic (!== false) to assume true by default,
+   * consistent with backend models.BooleanField(default=True).
+   */
+  requires_target?: boolean;
+}
+
+/** Per-environment change config (Story 2.24; Story 25.4: + requires_maintenance_window, requires_approval, allowed). */
+export interface ChangeTypeConfigEntry {
+  required: boolean;
+  change_model_code?: string | null;
+  /** Story 25.4 AC2: Optional ServiceNow change type (e.g. standard/normal/emergency). */
+  change_type?: string | null;
+  /** Story 25.4 AC2: Optional ServiceNow template ID (if applicable). */
+  template_id?: string | null;
+  /** Story 25.4: If false, execution refused for this env. Default true. */
+  allowed?: boolean;
+  /** Story 25.4: Require maintenance window gate. Default false. */
+  requires_maintenance_window?: boolean;
+  /** Story 25.4: Require approval before execution. Default false. */
+  requires_approval?: boolean;
+}
+
+/** Workflow step - reference to an existing action (Story 5.7, AC2; Story 16.2 branches & retry). */
+export interface WorkflowStep {
+  order: number;
+  name: string | null;
+  referenced_action_id: number;
+  /** Story 18.3: Real action name from backend (resolved from referenced_action). */
+  action_name?: string | null;
+  /** Story 16.2: Stable ID for referencing in branches (optional for backward compatibility). */
+  step_id?: string | null;
+  /** Story 16.2: Next step ID on success (nullable = exit or continue to next by order). */
+  on_success_step_id?: string | null;
+  /** Story 16.2: Next step ID on error (nullable = workflow fails). */
+  on_error_step_id?: string | null;
+  /** Story 16.2: Enable retry for this step. */
+  retry_enabled?: boolean;
+  /** Story 16.2: Max retry attempts (default: 3). */
+  retry_max_attempts?: number | null;
+  /** Story 16.2: Retry interval in seconds (default: 60). */
+  retry_interval_seconds?: number | null;
+  /** Story 16.2: Backoff multiplier for exponential backoff (default: 2.0). */
+  retry_backoff_multiplier?: number | null;
+}
+
+/** Request to update workflow steps (Story 5.7, AC2). */
+export interface WorkflowStepsUpdate {
+  steps: WorkflowStep[];
+}
+
+// === Execution Steps Types (Story 2.2; Story 2.7 connector_type) ===
+
+export type ExecutionStepType = 'prerequisite' | 'execution' | 'verification';
+
+/** Connector type for execution steps (Story 2.7). Aligned with backend ConnectorType. */
+export type ConnectorType =
+  | 'aap'
+  | 'servicenow'
+  | 'azuredevops'
+  | 'jira'
+  | 'github_actions'
+  | 'terraform'
+  | 'none';
+
+export interface ExecutionStep {
+  order: number;
+  name: string;
+  type: ExecutionStepType;
+  connector_type: ConnectorType;
+  connector_config?: Record<string, unknown> | null;
+  conditional_environments: string[] | null;
+}
+
+export interface ExecutionStepsUpdate {
+  steps: ExecutionStep[];
+  /** Story 2.24: per-env { required, change_model_code }. */
+  change_type_config: Record<string, ChangeTypeConfigEntry> | null;
+}
+
+/** Story 28.1: Business rule policy criteria for review_if_modified. */
+export interface BusinessRuleCriteria {
+  resource_type?: string;
+  attribute_paths?: string[];
+}
+
+/** Story 28.1: Business rule policy definition. */
+export interface BusinessRulePolicy {
+  when: {
+    step_type: string;
+    output_key?: string;
+  };
+  policy: {
+    type: string;
+    require_review_if_modified?: BusinessRuleCriteria[];
+    auto_approve_if_none_match?: boolean;
+  };
+}
+
+/** Story 28.1: Business rule policies JSON structure. */
+export interface BusinessRulePoliciesData {
+  on_step_output: BusinessRulePolicy[];
+}
+
+export interface ActionDetail extends ActionResponse {
+  /** Story 2.14: rbac_policies removed — RBAC now managed via profiles. */
+  execution_steps: ExecutionStep[] | null;
+  /** Story 5.7: workflow steps for workflows (action references). */
+  workflow_steps: WorkflowStep[] | null;
+  /** Story 2.24: per-env { required, change_model_code }. */
+  change_type_config: Record<string, ChangeTypeConfigEntry> | null;
+  /* documentation_md is inherited from ActionResponse (Story 3.4) */
+  /** Story 9.1: Remediation rules for auto-suggesting corrective actions. */
+  remediation_rules?: RemediationRule[] | null;
+  /** Story 28.1: Business rule policies evaluated on step output (inline legacy). */
+  business_rule_policies?: BusinessRulePoliciesData | null;
+  /** Story 28.4: FK to predefined business rule policy. */
+  business_rule_policy_id?: number | null;
+  /** Story 28.4: Name of the predefined business rule policy (computed). */
+  business_rule_policy_name?: string | null;
+}
+
+// === Status Transition Types (Story 2.4) ===
+// Note: Story 2.3 RBAC by action types (UserProfileType, EnvironmentPermission, RbacPolicies,
+// RbacPoliciesUpdate) removed in Story 2.14 — RBAC now managed via profiles.
+
+export type StatusTransition = 'publish' | 'disable' | 'enable';
+
+export interface StatusUpdateRequest {
+  transition: StatusTransition;
+}
+
+export interface ActionListItem {
+  id: number;
+  name: string;
+  /** Story 5.7: item type for workflow icon display. */
+  item_type?: ItemType;
+  /** Story 2.30: Category code (nullable). */
+  category?: string | null;
+  status: ActionStatus;
+  /** Engine (nullable for workflows). */
+  engine: ActionEngine | null;
+  created_at: string;
+  execution_count: number;
+  tags?: string[];
+  /** Story 18.1: soft-delete fields (present when include_disabled=true). */
+  deleted_at?: string | null;
+  deleted_by?: number | null;
+  deletion_reason?: string | null;
+  /** Story 22.18: MED-6 fix — Whether action requires target selection (default true). */
+  requires_target?: boolean;
+}
+
+export interface AdminActionsFilters {
+  status?: ActionStatus;
+  engine?: ActionEngine;
+  /** Story 5.7: filter by item type (action or workflow). */
+  item_type?: ItemType;
+  page?: number;
+  page_size?: number;
+  /** Story 18.1 (AC4/AC5): include disabled actions. Default false. */
+  include_disabled?: boolean;
+}
+
+export interface ActionListResponse {
+  data: ActionListItem[];
+  pagination: PaginationInfo | null;
+}
+
+// === Preview Types (Story 2.5) ===
+// Note: ImpactLevel moved to top of file (before ActionCreate) for Story 2.18.
+
+// === Impact Rules Editor (Story 2.18) ===
+
+/** Single impact rule definition for the visual editor (AC1–AC6). */
+export interface ImpactRuleDefinition {
+  /** Optional stable id for React key; assigned when adding or loading. */
+  id?: string;
+  /** Environment name: DEV, STAGING, PROD, etc. */
+  environment: string;
+  /** Impact level for this environment. */
+  level: ImpactLevel;
+  /** Justification / criteria for this impact level. */
+  criteria: string | null;
+}
+
+// === Parameters Editor (Story 2.17) ===
+
+/** JSON Schema type / format for a single parameter. Aligns with backend validate_parameters_schema. */
+export type ParameterSchemaType =
+  | 'string'
+  | 'number'
+  | 'integer'
+  | 'boolean'
+  | 'date'
+  | 'date-time'
+  | 'select';
+
+/** Inventory source type for parameter fields (Story 23.5). */
+export type InventorySourceType = 'servers' | 'instances' | 'databases';
+
+/** Single parameter definition for the visual editor (AC2). */
+export interface ParameterDefinition {
+  /** Optional stable id for React key / DnD; assigned when adding or loading. */
+  id?: string;
+  name: string;
+  type: ParameterSchemaType;
+  required: boolean;
+  default?: string;
+  description?: string;
+  /** When type is 'select', list of enum options. */
+  enum?: string[];
+  /** Story 23.5: Parameter value source — manual input or inventory selection. */
+  source?: 'manual' | 'inventory';
+  /** Story 23.5: Inventory entity type when source is 'inventory'. */
+  inventory_type?: InventorySourceType;
+}
+
+/**
+ * Subset of ActionDetail used for real-time preview in admin form.
+ * Contains all fields needed to render ActionCard and ActionDrawerPreview.
+ * Story 2.23: category removed — use tags for categorization.
+ */
+export interface ActionPreviewData {
+  name: string;
+  description: string | null;
+  /** Story 5.7: item type for workflow icon display. */
+  item_type?: ItemType;
+  engine: ActionEngine | null;
+  platform: ActionPlatform | null;
+  impact_level: ImpactLevel | null;
+  parameters_schema: Record<string, unknown> | null;
+  tags?: string[];
+  /** Nombre d'exécutions (affiché si disponible, Task 1.1). */
+  execution_count?: number | null;
+  /** Story 3.4 FR12: Markdown documentation for contextual help. */
+  documentation_md?: string | null;
+  /** Story 8.1: Performance stats for action scorecard (optional, loaded separately). */
+  stats?: ActionStats | null;
+  /** Story 22.18: MED-6 fix — Whether action requires target selection (default true). */
+  requires_target?: boolean;
+}
+
+/**
+ * Action performance statistics (Story 8.1, AC1, AC4).
+ * Aggregated metrics over the last 30 days.
+ */
+export interface ActionStats {
+  /** Success rate percentage (COMPLETED / (COMPLETED + FAILED) * 100). Null if no finished executions. */
+  success_rate: number | null;
+  /** Average execution time in milliseconds for COMPLETED executions. Null if no completed executions. */
+  avg_execution_time_ms: number | null;
+  /** Total number of executions in the period. */
+  total_executions: number;
+  /** Number of FAILED executions (incidents). */
+  incidents_count: number;
+}

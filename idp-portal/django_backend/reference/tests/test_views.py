@@ -1,0 +1,164 @@
+"""
+Tests for reference API views.
+Story 13.7 - Tests for GET /api/v1/reference/engines and /api/v1/reference/platforms.
+Story 30.6 - Updated to verify {"data": [...]} response format (APIFMT-3 fix).
+"""
+
+from django.test import TestCase
+from django.contrib.auth import get_user_model
+from rest_framework.test import APIClient
+from rest_framework import status
+
+from reference.models import RefEngine, RefPlatform
+
+User = get_user_model()
+
+
+class RefEnginesAPITests(TestCase):
+    """Tests for GET /api/v1/reference/engines endpoint."""
+
+    def setUp(self):
+        """Set up test data."""
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username='testuser',
+            password='testpass123'
+        )
+        self.client.force_authenticate(user=self.user)
+
+        # Create test engines
+        RefEngine.objects.create(code='Oracle', label='Oracle', display_order=1, is_active=1)
+        RefEngine.objects.create(code='SQL Server', label='SQL Server', display_order=2, is_active=1)
+        RefEngine.objects.create(code='DB2', label='DB2', display_order=3, is_active=1)
+        RefEngine.objects.create(code='PostgreSQL', label='PostgreSQL', display_order=4, is_active=0)  # Inactive
+
+    def test_list_engines_active_only(self):
+        """Test listing active engines only (default)."""
+        response = self.client.get('/api/v1/reference/engines/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('data', response.data)
+        data = response.data['data']
+        self.assertIsInstance(data, list)
+        self.assertEqual(len(data), 3)  # Only active engines
+
+        codes = [e['code'] for e in data]
+        self.assertIn('Oracle', codes)
+        self.assertIn('SQL Server', codes)
+        self.assertIn('DB2', codes)
+        self.assertNotIn('PostgreSQL', codes)
+
+    def test_list_engines_all(self):
+        """Test listing all engines including inactive."""
+        response = self.client.get('/api/v1/reference/engines/?active_only=false')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data['data']), 4)  # All engines including inactive
+
+    def test_list_engines_ordered(self):
+        """Test engines are ordered by display_order, then code."""
+        response = self.client.get('/api/v1/reference/engines/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        codes = [e['code'] for e in response.data['data']]
+        self.assertEqual(codes, ['Oracle', 'SQL Server', 'DB2'])  # Ordered by display_order
+
+    def test_list_engines_requires_authentication(self):
+        """Test endpoint requires authentication."""
+        self.client.force_authenticate(user=None)
+        response = self.client.get('/api/v1/reference/engines/')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_engine_serializer_fields(self):
+        """Test engine serializer includes all required fields (Story 29.3: + normalized_code)."""
+        response = self.client.get('/api/v1/reference/engines/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        engine = response.data['data'][0]
+        self.assertIn('id', engine)
+        self.assertIn('code', engine)
+        self.assertIn('label', engine)
+        self.assertIn('display_order', engine)
+        self.assertIn('is_active', engine)
+        self.assertIn('normalized_code', engine)  # Story 29.3
+
+        # Valider que normalized_code est bien normalisé (minuscules + underscores)
+        self.assertEqual(engine['normalized_code'], engine['code'].lower().replace(' ', '_'))
+
+    def test_response_format_has_data_wrapper(self):
+        """Story 30.6 APIFMT-3: Verify response is wrapped in {"data": [...]}."""
+        response = self.client.get('/api/v1/reference/engines/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('data', response.data)
+        self.assertIsInstance(response.data['data'], list)
+
+
+class RefPlatformsAPITests(TestCase):
+    """Tests for GET /api/v1/reference/platforms endpoint."""
+
+    def setUp(self):
+        """Set up test data."""
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username='testuser',
+            password='testpass123'
+        )
+        self.client.force_authenticate(user=self.user)
+
+        # Create test platforms
+        RefPlatform.objects.create(code='AAP', label='AAP (Ansible Automation Platform)', display_order=1, is_active=1)
+        RefPlatform.objects.create(code='GitHub Actions', label='GitHub Actions', display_order=2, is_active=1)
+        RefPlatform.objects.create(code='Azure DevOps', label='Azure DevOps', display_order=3, is_active=1)
+        RefPlatform.objects.create(code='Terraform', label='Terraform', display_order=4, is_active=0)  # Inactive
+
+    def test_list_platforms_active_only(self):
+        """Test listing active platforms only (default)."""
+        response = self.client.get('/api/v1/reference/platforms/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('data', response.data)
+        data = response.data['data']
+        self.assertIsInstance(data, list)
+        self.assertEqual(len(data), 3)  # Only active platforms
+
+        codes = [p['code'] for p in data]
+        self.assertIn('AAP', codes)
+        self.assertIn('GitHub Actions', codes)
+        self.assertIn('Azure DevOps', codes)
+        self.assertNotIn('Terraform', codes)
+
+    def test_list_platforms_all(self):
+        """Test listing all platforms including inactive."""
+        response = self.client.get('/api/v1/reference/platforms/?active_only=false')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data['data']), 4)  # All platforms including inactive
+
+    def test_list_platforms_ordered(self):
+        """Test platforms are ordered by display_order, then code."""
+        response = self.client.get('/api/v1/reference/platforms/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        codes = [p['code'] for p in response.data['data']]
+        self.assertEqual(codes, ['AAP', 'GitHub Actions', 'Azure DevOps'])  # Ordered by display_order
+
+    def test_list_platforms_requires_authentication(self):
+        """Test endpoint requires authentication."""
+        self.client.force_authenticate(user=None)
+        response = self.client.get('/api/v1/reference/platforms/')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_platform_serializer_fields(self):
+        """Test platform serializer includes all required fields."""
+        response = self.client.get('/api/v1/reference/platforms/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        platform = response.data['data'][0]
+        self.assertIn('id', platform)
+        self.assertIn('code', platform)
+        self.assertIn('label', platform)
+        self.assertIn('display_order', platform)
+        self.assertIn('is_active', platform)
+
+    def test_response_format_has_data_wrapper(self):
+        """Story 30.6 APIFMT-3: Verify response is wrapped in {"data": [...]}."""
+        response = self.client.get('/api/v1/reference/platforms/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('data', response.data)
+        self.assertIsInstance(response.data['data'], list)

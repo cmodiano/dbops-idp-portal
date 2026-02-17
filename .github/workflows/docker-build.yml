@@ -1,0 +1,128 @@
+name: Docker Build
+
+on:
+  workflow_dispatch:  # Exécution manuelle uniquement (Actions > Docker Build > Run workflow)
+  # push:
+  #   branches: [main, develop]
+  # pull_request:
+  #   branches: [main]
+
+env:
+  BACKEND_IMAGE: idp-backend
+  FRONTEND_IMAGE: idp-frontend
+
+jobs:
+  build-backend:
+    name: Build Backend Image
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          # Backend is Django at idp-portal/django_backend (idp-portal/backend was FastAPI, decommissioned)
+          context: idp-portal/django_backend
+          push: false
+          load: true
+          tags: |
+            ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+            ${{ env.BACKEND_IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Check image size
+        run: |
+          SIZE=$(docker image inspect ${{ env.BACKEND_IMAGE }}:${{ github.sha }} --format='{{.Size}}')
+          SIZE_MB=$((SIZE / 1024 / 1024))
+          echo "Backend image size: ${SIZE_MB}MB"
+          if [ "$SIZE_MB" -gt 500 ]; then
+            echo "::warning::Backend image exceeds 500MB limit (${SIZE_MB}MB)"
+          fi
+
+      - name: Smoke test - healthcheck
+        run: |
+          docker run -d --name backend-test \
+            -e SECRET_KEY=ci-test-only \
+            -e AUTH_DEV_BYPASS=true \
+            -e DEBUG=false \
+            -e ALLOWED_HOSTS=* \
+            -p 8000:8000 \
+            ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+          # Wait for healthcheck to pass (max 90s: Dockerfile uses start-period=30s + interval=30s)
+          for i in {1..18}; do
+            sleep 5
+            docker inspect backend-test --format='{{.State.Health.Status}}' 2>/dev/null | grep -qx healthy && break
+          done
+          # Capture state before cleanup so we can fail the step if image is broken
+          STATUS=$(docker inspect backend-test --format='{{.State.Status}}' 2>/dev/null || echo 'missing')
+          HEALTH=$(docker inspect backend-test --format='{{.State.Health.Status}}' 2>/dev/null || echo 'none')
+          docker logs backend-test
+          docker stop backend-test || true
+          docker rm backend-test || true
+          if [ "$STATUS" != "running" ]; then
+            echo "::error::Backend container is not running (status=$STATUS). Image may be broken."
+            exit 1
+          fi
+          if [ "$HEALTH" != "healthy" ]; then
+            echo "::error::Backend container did not become healthy (health=$HEALTH). Image may be broken."
+            exit 1
+          fi
+
+  build-frontend:
+    name: Build Frontend Image
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: idp-portal/frontend
+          push: false
+          load: true
+          tags: |
+            ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+            ${{ env.FRONTEND_IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Check image size
+        run: |
+          SIZE=$(docker image inspect ${{ env.FRONTEND_IMAGE }}:${{ github.sha }} --format='{{.Size}}')
+          SIZE_MB=$((SIZE / 1024 / 1024))
+          echo "Frontend image size: ${SIZE_MB}MB"
+          if [ "$SIZE_MB" -gt 200 ]; then
+            echo "::warning::Frontend image exceeds 200MB limit (${SIZE_MB}MB)"
+          fi
+
+      - name: Smoke test - healthcheck
+        run: |
+          docker run -d --name frontend-test \
+            -p 8080:80 \
+            ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+          sleep 5
+          # Capture state before cleanup so we can fail the step if image is broken
+          STATUS=$(docker inspect frontend-test --format='{{.State.Status}}' 2>/dev/null || echo 'missing')
+          # Try curl but capture exit code instead of failing immediately
+          curl -f --connect-timeout 5 --max-time 10 http://localhost:8080/ || CURL_EXIT=$?
+          CURL_EXIT=${CURL_EXIT:-0}
+          docker logs frontend-test
+          docker stop frontend-test || true
+          docker rm frontend-test || true
+          if [ "$STATUS" != "running" ]; then
+            echo "::error::Frontend container is not running (status=$STATUS). Image may be broken."
+            exit 1
+          fi
+          if [ "$CURL_EXIT" -ne 0 ]; then
+            echo "::error::Frontend container did not respond to HTTP request (curl exit code=$CURL_EXIT). Image may be broken."
+            exit 1
+          fi

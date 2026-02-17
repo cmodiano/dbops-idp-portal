@@ -1,0 +1,50 @@
+# Story 6.5 : Restaurer la visibilité du menu Audit pour les auditeurs
+
+Status: backlog
+
+<!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
+
+## Story
+
+**En tant que** auditeur (profil avec is_auditor=true),
+**je veux** voir l'onglet « Audit » dans la barre de navigation principale,
+**afin de** accéder à la page Audit sans saisir manuellement l'URL.
+
+## Contexte / Root cause
+
+La Story 6.3 (Task 4.2) prévoyait d'afficher l'entrée "Audit" dans TopNav pour les profils auditeurs. Or le menu Audit a disparu car :
+
+1. **Backend** (`idp_auth/views.py`) : `navigation_tabs` provient uniquement de `get_user_navigation_permissions(profile_name)` (via `core/rbac.py`). La `_NAVIGATION_MAP` n'inclut jamais `'audit'` pour aucun profil (dbops, dba, etc.). Le champ `is_auditor` est retourné séparément mais n'est jamais fusionné dans `navigation_tabs`.
+
+2. **Frontend** (`TopNav.tsx`) : Les onglets affichés viennent de `user?.navigation_tabs ?? []`. Comme le backend n'envoie jamais `'audit'` dans `navigation_tabs`, l'onglet Audit n'apparaît pas, même si `user.is_auditor === true`.
+
+## Acceptance Criteria
+
+1. **AC1** — Given un utilisateur avec `is_auditor=true` (profil marqué Auditeur dans Admin), When il charge l'application, Then l'onglet « Audit » apparaît dans la barre TopNav entre Admin et les autres onglets.
+
+2. **AC2** — Given un utilisateur avec `is_auditor=false`, When il charge l'application, Then l'onglet « Audit » n'apparaît pas dans la barre TopNav.
+
+3. **AC3** — Given un utilisateur auditeur, When il clique sur l'onglet Audit, Then il est redirigé vers `/audit` et peut consulter la page Audit (comportement existant AuditGuard).
+
+## Tasks / Subtasks
+
+- [ ] **Task 1** (AC: 1, 2) — Backend : inclure `'audit'` dans navigation_tabs quand is_auditor
+  - [ ] 1.1 Dans `CurrentUserProfileView` (idp_auth/views.py), après calcul de `navigation_tabs = get_user_navigation_permissions(...)` et `is_auditor`, si `is_auditor` et `'audit'` not in navigation_tabs, ajouter `'audit'` à la liste (avant sérialisation).
+  - [ ] 1.2 Tests : GET /auth/me avec profil auditeur retourne `navigation_tabs` contenant `'audit'` ; profil non-auditeur ne contient pas `'audit'`.
+
+- [ ] **Task 2** (AC: 1, 2) — Frontend : fallback si backend ne renvoie pas audit (rétrocompatibilité)
+  - [ ] 2.1 Dans `TopNav.tsx`, calculer `effectiveTabs = [...(user?.navigation_tabs ?? [])]` ; si `user?.is_auditor && !effectiveTabs.includes('audit')`, push `'audit'`. Utiliser `effectiveTabs` pour le rendu au lieu de `navigationTabs`.
+  - [ ] 2.2 Tests TopNav : utilisateur auditeur sans 'audit' dans navigation_tabs voit quand même l'onglet Audit ; non-auditeur ne le voit pas.
+
+## Fichiers concernés
+
+- `idp-portal/django_backend/idp_auth/views.py` — CurrentUserProfileView
+- `idp-portal/django_backend/core/rbac.py` — _NAVIGATION_MAP (optionnel : ajouter 'audit' pour un profil "audit" si existant)
+- `idp-portal/frontend/src/components/layout/TopNav.tsx`
+- `idp-portal/django_backend/idp_auth/tests/test_auth_views.py`
+- `idp-portal/frontend/src/components/layout/TopNav.test.tsx`
+
+## Références
+
+- Story 6.3 Task 4.2 : afficher l'entrée Audit uniquement pour profils auditeurs
+- docs/frontend/routing.md : AuditGuard — accès si `navigation_tabs` contient 'audit' OU `is_auditor`

@@ -1,0 +1,60 @@
+[
+  {
+    "model": "integrations.integrationtypecatalogue",
+    "pk": "vault",
+    "fields": {
+      "name": "HashiCorp Vault",
+      "description": "HashiCorp Vault \u2014 r\u00e9solution secrets (KV v2) avec auth Token ou AppRole, support Enterprise namespaces",
+      "version": "1.0",
+      "is_active": true,
+      "integration_role": "service",
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "vault",
+      "action_code": "get_secret",
+      "action_label": "R\u00e9soudre credential_ref vers secret Vault",
+      "description": "R\u00e9sout une r\u00e9f\u00e9rence credential_ref vers un secret HashiCorp Vault (KV v2)",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"path\": {\"type\": \"string\", \"description\": \"Path KV v2, ex: secret/data/myapp\"}}, \"required\": [\"path\"]}",
+      "optional_params": "{\"type\": \"object\", \"properties\": {\"key\": {\"type\": \"string\", \"description\": \"Cl\u00e9 sp\u00e9cifique \u00e0 extraire\"}, \"namespace\": {\"type\": \"string\", \"description\": \"Namespace Vault Enterprise\"}}}",
+      "response_format": "{\"data\": \"object\", \"metadata\": \"object\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "vault",
+      "action_code": "renew_token",
+      "action_label": "Renouveler token Vault",
+      "description": "Renouvelle le token Vault avant expiration",
+      "required_params": "{}",
+      "optional_params": "{}",
+      "response_format": "{\"auth\": \"object\", \"ttl\": \"integer\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "vault",
+      "action_code": "lookup_token",
+      "action_label": "V\u00e9rifier validit\u00e9 token",
+      "description": "V\u00e9rifie la validit\u00e9 et l'expiration du token Vault configur\u00e9",
+      "required_params": "{}",
+      "optional_params": "{}",
+      "response_format": "{\"data\": \"object\", \"ttl\": \"integer\", \"renewable\": \"boolean\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  }
+]

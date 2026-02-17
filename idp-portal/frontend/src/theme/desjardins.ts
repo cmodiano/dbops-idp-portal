@@ -1,70 +1,183 @@
-import type { ThemeConfig } from 'antd';
+import { theme, type ThemeConfig } from 'antd';
+
+const { defaultAlgorithm, darkAlgorithm } = theme;
 
 /**
  * Desjardins theme configuration for Ant Design 6.
- * 
- * AC #3: Configures primary color (#00874E), bordures, and spacings
- * according to UX design specification.
- * 
- * Design tokens:
- * - Primary color: #00874E (Desjardins green)
- * - Background: #FAFBFC (light gray)
- * - Border: #E5E7EB (light gray, 1px)
- * - Spacing: 8px base unit (xs=4px, sm=8px, md=16px, lg=24px, xl=32px, 2xl=48px)
- * - Border radius: 6px (modern, not childish)
+ * Story 2-15: Modern UI Theme System (Light/Dark)
+ *
+ * Design tokens from UX spec:
+ * - Primary color: #00874E (Desjardins green) - preserved in both themes
+ * - Border radius: 8px cards, 6px buttons/inputs
+ * - Typography: Clean sans-serif, high contrast
+ * - Spacing: Generous (16-24px padding)
  */
-export const desjardinsTheme: ThemeConfig = {
+
+// === Shared tokens (same for light and dark) ===
+const sharedTokens = {
+  // Primary color - Desjardins green (AC #7)
+  colorPrimary: '#00874E',
+
+  // Border radius - modern style
+  borderRadius: 6,
+  borderRadiusLG: 8, // Cards
+
+  // Spacing - base unit 8px
+  paddingXS: 4,
+  paddingSM: 8,
+  padding: 16,
+  paddingMD: 16,
+  paddingLG: 24,
+  paddingXL: 32,
+  paddingXXL: 48,
+  marginXS: 4,
+  marginSM: 8,
+  margin: 16,
+  marginMD: 16,
+  marginLG: 24,
+  marginXL: 32,
+  marginXXL: 48,
+
+  // Typography
+  fontFamily:
+    "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+  fontSize: 14,
+  fontSizeSM: 12,
+  fontSizeLG: 16,
+  fontSizeXL: 18,
+  fontSizeHeading1: 24,
+  lineHeight: 1.5,
+  lineWidth: 1,
+};
+
+// === Shared component config ===
+const sharedComponents = {
+  Tabs: {
+    inkBarColor: '#00874E',
+    itemSelectedColor: '#00874E',
+  },
+  Card: {
+    borderRadius: 8,
+    paddingLG: 24,
+  },
+  Button: {
+    borderRadius: 6,
+    controlHeight: 36,
+  },
+};
+
+/**
+ * Light theme configuration.
+ * Clean, minimal design with high contrast and liquid glass feel.
+ */
+export const lightTheme: ThemeConfig = {
+  algorithm: defaultAlgorithm,
   token: {
-    // Colors (AC #3)
-    colorPrimary: '#00874E',
-    colorBgLayout: '#FAFBFC',
-    
-    // Borders (AC #3)
-    borderRadius: 6, // 6px - modern without being childish
-    colorBorder: '#E5E7EB', // Light gray borders
-    colorBorderSecondary: '#F3F4F6', // Lighter borders for subtle separators
-    lineWidth: 1, // 1px fine borders
-    
-    // Spacings (AC #3) - base unit 8px
-    paddingXS: 4, // xs: 4px
-    paddingSM: 8, // sm: 8px
-    padding: 16, // md: 16px (default)
-    paddingMD: 16, // md: 16px
-    paddingLG: 24, // lg: 24px
-    paddingXL: 32, // xl: 32px
-    paddingXXL: 48, // 2xl: 48px
-    marginXS: 4,
-    marginSM: 8,
-    margin: 16,
-    marginMD: 16,
-    marginLG: 24,
-    marginXL: 32,
-    marginXXL: 48,
-    
-    // Typography
-    fontFamily:
-      "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
-    fontSize: 14, // Body text
-    fontSizeSM: 12, // Small text
-    fontSizeLG: 16, // Subsection
-    fontSizeXL: 18, // Section title
-    fontSizeHeading1: 24, // Page title
-    lineHeight: 1.5, // Body line-height
+    ...sharedTokens,
+    // Colors - Light mode (AC #4, #5)
+    // Cooler, darker gray background for better contrast with white surfaces
+    // Story 3-7: Enhanced contrast - fond plus grisé pour distinguer les cartes
+    colorBgBase: '#e5eaef',
+    colorBgContainer: '#FFFFFF',
+    colorBgElevated: '#FFFFFF',
+    colorBgLayout: '#e5eaef',
+    colorText: '#1a1a2e',
+    colorTextSecondary: '#5c5c6d',
+    colorTextTertiary: '#8c8c9a',
+    colorBorder: '#e8eaed',
+    colorBorderSecondary: '#f0f2f5',
+    // Primary hover - darker for light mode
+    colorPrimaryHover: '#006b3e',
+    // Liquid glass shadows - soft, diffused, multi-layer with subtle highlight
+    // Story 3-7: Enhanced shadow intensity for better depth perception
+    boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.8)',
+    boxShadowSecondary: '0 2px 6px rgba(0,0,0,0.10), 0 8px 24px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.9)',
+    boxShadowTertiary: '0 4px 10px rgba(0,0,0,0.12), 0 16px 40px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,1)',
   },
   components: {
+    ...sharedComponents,
     Tabs: {
-      inkBarColor: '#00874E',
-      itemSelectedColor: '#00874E',
-      itemColor: '#6B7280',
-      itemHoverColor: '#1A1A2E',
+      ...sharedComponents.Tabs,
+      itemColor: '#5c5c6d',
+      itemHoverColor: '#1a1a2e',
+    },
+    Layout: {
+      headerBg: '#FFFFFF',
+      bodyBg: '#e5eaef',
+      siderBg: '#FFFFFF',
     },
     Card: {
-      borderRadius: 8, // Cards have slightly more rounded corners (8px)
-      paddingLG: 24, // Card padding matches lg spacing
+      ...sharedComponents.Card,
+      colorBgContainer: '#FFFFFF',
     },
-    Button: {
-      borderRadius: 6,
-      controlHeight: 36, // Minimum 36px height for accessibility
+    Table: {
+      headerBg: '#f0f3f6',
+      rowHoverBg: '#f5f7f9',
     },
   },
 };
+
+/**
+ * Dark theme configuration.
+ * Same structure as light, only colors change.
+ * Inspired by modern 2026 dark UI with liquid glass effects.
+ */
+export const darkTheme: ThemeConfig = {
+  algorithm: darkAlgorithm,
+  token: {
+    ...sharedTokens,
+    // Colors - Dark mode (AC #4, #5)
+    // Deeper, richer dark backgrounds for more contrast
+    colorBgBase: '#0f0f14',
+    colorBgContainer: '#1a1a24',
+    colorBgElevated: '#242430',
+    colorBgLayout: '#0f0f14',
+    // Brighter text for better readability
+    colorText: '#f0f0f2',
+    colorTextSecondary: '#a8a8b3',
+    colorTextTertiary: '#8a8a96',
+    // Subtle borders with slight luminosity for glass effect
+    colorBorder: '#2d2d3a',
+    colorBorderSecondary: '#252532',
+    // Primary hover - brighter for dark mode
+    colorPrimaryHover: '#00b85e',
+    // Liquid glass shadows - soft, diffused, multi-layer
+    boxShadow: '0 2px 4px rgba(0,0,0,0.3), 0 8px 16px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.03)',
+    boxShadowSecondary: '0 4px 8px rgba(0,0,0,0.3), 0 12px 32px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.04)',
+    boxShadowTertiary: '0 8px 16px rgba(0,0,0,0.35), 0 24px 48px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05)',
+  },
+  components: {
+    ...sharedComponents,
+    Tabs: {
+      ...sharedComponents.Tabs,
+      itemColor: '#a8a8b3',
+      itemHoverColor: '#f0f0f2',
+    },
+    Layout: {
+      headerBg: '#1a1a24',
+      bodyBg: '#0f0f14',
+      siderBg: '#1a1a24',
+    },
+    Card: {
+      ...sharedComponents.Card,
+      colorBgContainer: '#1a1a24',
+      colorBorderSecondary: '#2d2d3a',
+    },
+    Table: {
+      headerBg: '#1a1a24',
+      rowHoverBg: '#222230',
+      borderColor: '#2d2d3a',
+    },
+    Button: {
+      ...sharedComponents.Button,
+      defaultBg: '#242430',
+      defaultBorderColor: '#3d3d4a',
+    },
+  },
+};
+
+/**
+ * @deprecated Use lightTheme or darkTheme instead.
+ * Kept for backwards compatibility during migration.
+ */
+export const desjardinsTheme = lightTheme;

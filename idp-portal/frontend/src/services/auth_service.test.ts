@@ -15,13 +15,19 @@ describe('auth_service', () => {
     const result = await refreshAccessToken();
     expect(result).toBe('new-token');
     expect(global.fetch).toHaveBeenCalledWith(
-      '/api/v1/auth/refresh',
+      '/api/v1/auth/refresh/',
       expect.objectContaining({ method: 'POST', credentials: 'include' }),
     );
   });
 
   it('refreshAccessToken returns null on failure', async () => {
-    global.fetch = vi.fn().mockResolvedValue({ ok: false });
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      headers: { get: () => 'application/json' },
+      json: async () => ({ error: { message: 'Invalid refresh token' } }),
+    });
     const result = await refreshAccessToken();
     expect(result).toBeNull();
   });
@@ -35,13 +41,19 @@ describe('auth_service', () => {
     const result = await fetchCurrentUser('token123');
     expect(result).toEqual({ id: 1, username: 'marc' });
     expect(global.fetch).toHaveBeenCalledWith(
-      '/api/v1/auth/me',
+      '/api/v1/auth/me/',
       expect.objectContaining({ headers: { Authorization: 'Bearer token123' } }),
     );
   });
 
   it('fetchCurrentUser returns null on failure', async () => {
-    global.fetch = vi.fn().mockResolvedValue({ ok: false });
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      statusText: 'Forbidden',
+      headers: { get: () => 'application/json' },
+      json: async () => ({ error: { message: 'Access denied' } }),
+    });
     const result = await fetchCurrentUser('bad');
     expect(result).toBeNull();
   });
@@ -50,7 +62,7 @@ describe('auth_service', () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: true });
     await logoutApi();
     expect(global.fetch).toHaveBeenCalledWith(
-      '/api/v1/auth/logout',
+      '/api/v1/auth/logout/',
       expect.objectContaining({ method: 'POST', credentials: 'include' }),
     );
   });

@@ -1,0 +1,418 @@
+from __future__ import annotations
+
+import csv
+import io
+from datetime import datetime
+from math import ceil
+
+from django.http import HttpResponse
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from core.exceptions import BadRequestError, ForbiddenError
+from core.utils import ensure_utc_isoformat
+from core.models import AuditLog, AuditEntityType, AuditActionType
+from executions.models import Execution
+from idp_auth.models import User
+from profiles.models import Profile
+
+
+def _parse_int(value: str | None, default: int, *, name: str) -> int:
+    if value is None or value == "":
+        return default
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        raise BadRequestError(code="BAD_REQUEST", message=f"{name} invalide", details={name: value})
+
+
+def _parse_dt(value: str | None, *, name: str) -> datetime | None:
+    if not value:
+        return None
+    dt = parse_datetime(value)
+    if not dt:
+        raise BadRequestError(code="BAD_REQUEST", message=f"{name} invalide (ISO 8601)", details={name: value})
+    if timezone.is_naive(dt):
+        dt = timezone.make_aware(dt)
+    return dt
+
+
+def _is_auditor(user) -> bool:
+    """
+    Determine if user is auditor based on resolved profiles.
+    Mirrors logic used in /auth/me.
+    """
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+
+    ad_groups = getattr(user, "ad_groups", None)
+    if not isinstance(ad_groups, list) or not ad_groups:
+        profile_name = getattr(user, "profile", "") or ""
+        if profile_name:
+            ad_groups = [profile_name]
+        else:
+            ad_groups = []
+
+    profiles = Profile.objects.find_by_ad_groups(ad_groups) if ad_groups else []
+    return any(getattr(p, "is_auditor", 0) == 1 for p in profiles)
+
+
+_STATUS_ACTION_TYPES = {
+    "success": [AuditActionType.EXECUTION_COMPLETED],
+    "failed": [
+        AuditActionType.EXECUTION_FAILED,
+        AuditActionType.EXECUTION_REJECTED,
+        AuditActionType.EXECUTION_CANCELLED,
+    ],
+    "running": [
+        AuditActionType.EXECUTION_SUBMITTED,
+        AuditActionType.EXECUTION_RUNNING,
+        AuditActionType.EXECUTION_PENDING_APPROVAL,
+    ],
+}
+
+
+def _derive_status(action_type: str, details: dict | None) -> str:
+    # Prefer explicit status in details when present
+    if details and isinstance(details, dict):
+        s = details.get("status")
+        if isinstance(s, str):
+            s_up = s.upper()
+            if s_up in ("COMPLETED",):
+                return "success"
+            if s_up in ("FAILED", "REJECTED", "CANCELLED"):
+                return "failed"
+            if s_up in ("SUBMITTED", "RUNNING", "PENDING_APPROVAL"):
+                return "running"
+
+    # Fallback to action_type
+    if action_type == AuditActionType.EXECUTION_COMPLETED:
+        return "success"
+    if action_type in (
+        AuditActionType.EXECUTION_FAILED,
+        AuditActionType.EXECUTION_REJECTED,
+        AuditActionType.EXECUTION_CANCELLED,
+    ):
+        return "failed"
+    if action_type in (
+        AuditActionType.EXECUTION_SUBMITTED,
+        AuditActionType.EXECUTION_RUNNING,
+        AuditActionType.EXECUTION_PENDING_APPROVAL,
+    ):
+        return "running"
+    return "unknown"
+
+
+def _resolve_user_names(user_ids: list[str]) -> dict[str, str]:
+    """Resolve user_id list to display names (display_name or username). Returns map user_id -> name.
+
+    Optimized: uses batch queries (1 for numeric IDs, 1 for usernames) instead of N individual queries.
+    Performance: 2-pass algorithm (categorize + fill missing) instead of 3 loops.
+    """
+    result: dict[str, str] = {}
+    if not user_ids:
+        return result
+
+    numeric_ids: list[int] = []
+    non_numeric_ids: list[str] = []
+
+    # Pass 1: Categorize and pre-fill result with fallback values
+    for uid in user_ids:
+        try:
+            numeric_ids.append(int(uid))
+            result[uid] = uid  # Fallback if not found in DB
+        except (ValueError, TypeError):
+            non_numeric_ids.append(uid)
+            result[uid] = uid  # Fallback if not found in DB
+
+    # Pass 2a: Batch query for numeric IDs and override fallback
+    if numeric_ids:
+        for u in User.objects.filter(id__in=numeric_ids).only("id", "display_name", "username"):
+            result[str(u.id)] = u.display_name or u.username or str(u.id)
+
+    # Pass 2b: Batch query for non-numeric IDs (usernames) and override fallback
+    if non_numeric_ids:
+        for u in User.objects.filter(username__in=non_numeric_ids).only("username", "display_name"):
+            result[u.username] = u.display_name or u.username
+
+    return result
+
+
+def _build_audit_queryset(request):
+    qs = AuditLog.objects.filter(entity_type=AuditEntityType.EXECUTION)
+
+    dt_from = _parse_dt(request.query_params.get("from"), name="from")
+    dt_to = _parse_dt(request.query_params.get("to"), name="to")
+    if dt_from:
+        qs = qs.filter(timestamp__gte=dt_from)
+    if dt_to:
+        qs = qs.filter(timestamp__lte=dt_to)
+
+    environment = (request.query_params.get("environment") or "").strip()
+    if environment:
+        exec_ids = Execution.objects.filter(environment=environment).values("id")
+        qs = qs.filter(entity_id__in=exec_ids)
+
+    action_id = request.query_params.get("action_id")
+    if action_id is not None and action_id != "":
+        aid = _parse_int(action_id, 0, name="action_id")
+        exec_ids = Execution.objects.filter(action_id=aid).values("id")
+        qs = qs.filter(entity_id__in=exec_ids)
+
+    # Filter by action engine (REF_ENGINES code)
+    engine_type = (request.query_params.get("engine_type") or "").strip()
+    if engine_type:
+        exec_ids = Execution.objects.filter(action__engine=engine_type).values("id")
+        qs = qs.filter(entity_id__in=exec_ids)
+
+    user_id = (request.query_params.get("user_id") or "").strip()
+    if user_id:
+        qs = qs.filter(user_id=user_id)
+
+    status_filter = (request.query_params.get("status") or "").strip()
+    if status_filter:
+        if status_filter not in _STATUS_ACTION_TYPES:
+            raise BadRequestError(
+                code="BAD_REQUEST",
+                message="status invalide",
+                details={"status": status_filter},
+            )
+        qs = qs.filter(action_type__in=_STATUS_ACTION_TYPES[status_filter])
+
+    # Story 27.8: Filter by correlation_id (exact match)
+    correlation_id = (request.query_params.get("correlation_id") or "").strip()
+    if correlation_id:
+        qs = qs.filter(correlation_id=correlation_id)
+
+    sort = (request.query_params.get("sort") or "timestamp").strip()
+    order = (request.query_params.get("order") or "desc").strip().lower()
+    sort_map = {
+        "timestamp": "timestamp",
+        "user_id": "user_id",
+        "action_type": "action_type",
+    }
+    if sort not in sort_map:
+        raise BadRequestError(code="BAD_REQUEST", message="sort invalide", details={"sort": sort})
+    if order not in ("asc", "desc"):
+        raise BadRequestError(code="BAD_REQUEST", message="order invalide", details={"order": order})
+    ordering = sort_map[sort]
+    if order == "desc":
+        ordering = f"-{ordering}"
+    qs = qs.order_by(ordering)
+
+    return qs
+
+
+class AuditExecutionsView(APIView):
+    """
+    GET /audit/executions (Story 6.3, Story 27.8)
+
+    Query parameters:
+      - from/to: ISO 8601 date range filter
+      - environment: Filter by execution environment
+      - action_id: Filter by action ID
+      - engine_type: Filter by action engine (REF_ENGINES code, e.g. Oracle, SQL Server)
+      - user_id: Filter by user ID
+      - status: Filter by derived status (success, failed, running)
+      - correlation_id: Filter by exact correlation ID (Story 27.8)
+      - sort/order: Sort field and direction
+      - limit/offset: Pagination
+
+    Returns:
+      { "data": AuditExecutionEntry[], "pagination": PaginationInfo }
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _is_auditor(request.user):
+            raise ForbiddenError(
+                code="FORBIDDEN",
+                message="Accès réservé aux auditeurs",
+                details={},
+            )
+
+        limit = _parse_int(request.query_params.get("limit"), 25, name="limit")
+        offset = _parse_int(request.query_params.get("offset"), 0, name="offset")
+        if limit <= 0 or limit > 500:
+            raise BadRequestError(code="BAD_REQUEST", message="limit invalide", details={"limit": limit})
+        if offset < 0:
+            raise BadRequestError(code="BAD_REQUEST", message="offset invalide", details={"offset": offset})
+
+        qs = _build_audit_queryset(request)
+        total = qs.count()
+
+        rows = list(qs[offset : offset + limit])
+        execution_ids = [r.entity_id for r in rows if r.entity_id]
+        executions = (
+            Execution.objects.filter(id__in=execution_ids)
+            .select_related("action")
+            .only("id", "environment", "status", "servicenow_change_id", "parameters", "action_id", "action__name", "parent_execution_id")
+        )
+        exec_by_id = {e.id: e for e in executions}
+
+        user_name_by_id = _resolve_user_names(list({r.user_id for r in rows if r.user_id}))
+
+        data = []
+        for r in rows:
+            details = r.get_details()
+            exec_obj = exec_by_id.get(r.entity_id)
+
+            if details is None and exec_obj is not None:
+                details = {
+                    "action_id": exec_obj.action_id,
+                    "environment": exec_obj.environment,
+                    "status": exec_obj.status,
+                    "parameters": exec_obj.get_parameters(),
+                    "servicenow_change_id": exec_obj.servicenow_change_id,
+                }
+            elif details is not None and exec_obj is not None:
+                # Always enrich with current execution status (not stale audit-time status)
+                details["status"] = exec_obj.status
+
+            action_name = None
+            if exec_obj is not None and getattr(exec_obj, "action", None) is not None:
+                action_name = exec_obj.action.name
+
+            # Derive parent_execution_id and item_type for frontend grouping
+            parent_execution_id = getattr(exec_obj, "parent_execution_id", None) if exec_obj else None
+            item_type = getattr(exec_obj.action, "item_type", None) if exec_obj and getattr(exec_obj, "action", None) else None
+
+            data.append(
+                {
+                    "id": r.id,
+                    "timestamp": ensure_utc_isoformat(r.timestamp),
+                    "user_id": r.user_id,
+                    "user_name": user_name_by_id.get(r.user_id) if r.user_id else None,
+                    "action_type": r.action_type,
+                    "entity_type": r.entity_type,
+                    "entity_id": int(r.entity_id),
+                    "action_name": action_name,
+                    "details": details,
+                    "ip_address": r.ip_address,
+                    "correlation_id": r.correlation_id,
+                    "derived_status": _derive_status(r.action_type, details),
+                    "parent_execution_id": parent_execution_id,
+                    "item_type": item_type,
+                }
+            )
+
+        page = (offset // limit) + 1
+        total_pages = int(ceil(total / limit)) if total else 1
+
+        return Response(
+            {
+                "data": data,
+                "pagination": {
+                    "page": page,
+                    "page_size": limit,
+                    "total": int(total),
+                    "total_pages": total_pages,
+                },
+            }
+        )
+
+
+class AuditExportView(APIView):
+    """
+    GET /audit/export (Story 6.4)
+    format=csv|pdf
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _is_auditor(request.user):
+            raise ForbiddenError(
+                code="FORBIDDEN",
+                message="Accès réservé aux auditeurs",
+                details={},
+            )
+
+        # Use 'fmt' param (not 'format') to avoid DRF content negotiation conflict
+        fmt = (request.query_params.get("fmt") or request.query_params.get("export_format") or "").strip().lower()
+        if fmt not in ("csv", "pdf"):
+            raise BadRequestError(code="BAD_REQUEST", message="format invalide (use ?fmt=csv or ?fmt=pdf)", details={"fmt": fmt})
+
+        qs = _build_audit_queryset(request)
+        total = qs.count()
+        if total > 10_000:
+            raise BadRequestError(
+                code="EXPORT_LIMIT_EXCEEDED",
+                message="Limite d'export dépassée (maximum 10 000 lignes). Veuillez appliquer des filtres supplémentaires.",
+                details={"total": int(total), "max": 10_000},
+            )
+
+        # PDF export not implemented without a PDF library
+        if fmt == "pdf":
+            raise BadRequestError(
+                code="NOT_IMPLEMENTED",
+                message="Export PDF non disponible (utiliser CSV)",
+                details={},
+            )
+
+        # Build CSV
+        rows = list(qs[:10_000])
+        execution_ids = [r.entity_id for r in rows if r.entity_id]
+        executions = (
+            Execution.objects.filter(id__in=execution_ids)
+            .select_related("action")
+            .only("id", "environment", "status", "servicenow_change_id", "action_id", "action__name")
+        )
+        exec_by_id = {e.id: e for e in executions}
+
+        # Resolve user_id -> user_name for CSV
+        user_ids_export = list({r.user_id for r in rows if r.user_id})
+        user_name_by_id_export = _resolve_user_names(user_ids_export)
+
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(
+            [
+                "id",
+                "timestamp",
+                "user_id",
+                "user_name",
+                "action_type",
+                "execution_id",
+                "action_id",
+                "action_name",
+                "environment",
+                "status",
+                "servicenow_change_id",
+                "ip_address",
+                "correlation_id",
+            ]
+        )
+
+        for r in rows:
+            details = r.get_details() or {}
+            exec_obj = exec_by_id.get(r.entity_id)
+            writer.writerow(
+                [
+                    r.id,
+                    ensure_utc_isoformat(r.timestamp) or "",
+                    r.user_id or "",
+                    user_name_by_id_export.get(r.user_id) or r.user_id or "",
+                    r.action_type,
+                    int(r.entity_id),
+                    details.get("action_id") or (exec_obj.action_id if exec_obj else ""),
+                    (exec_obj.action.name if exec_obj and getattr(exec_obj, "action", None) else ""),
+                    details.get("environment") or (exec_obj.environment if exec_obj else ""),
+                    details.get("status") or (exec_obj.status if exec_obj else ""),
+                    details.get("servicenow_change_id") or (exec_obj.servicenow_change_id if exec_obj else ""),
+                    r.ip_address or "",
+                    r.correlation_id or "",
+                ]
+            )
+
+        content = buf.getvalue().encode("utf-8")
+        filename = f"audit-export-{timezone.now().date().isoformat()}.csv"
+
+        resp = HttpResponse(content, content_type="text/csv; charset=utf-8")
+        resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return resp
+

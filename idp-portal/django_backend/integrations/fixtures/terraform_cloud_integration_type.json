@@ -1,0 +1,90 @@
+[
+  {
+    "model": "integrations.integrationtypecatalogue",
+    "pk": "terraform_cloud",
+    "fields": {
+      "name": "Terraform Cloud",
+      "description": "Terraform Cloud \u2014 ex\u00e9cution runs (plan/apply) avec monitoring temps r\u00e9el (webhooks + polling)",
+      "version": "1.0",
+      "is_active": true,
+      "integration_role": "platform",
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "terraform_cloud",
+      "action_code": "create_run",
+      "action_label": "Cr\u00e9er et d\u00e9marrer un run Terraform",
+      "description": "Cr\u00e9e et d\u00e9marre un run Terraform (plan ou apply)",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"workspace_id\": {\"type\": \"string\", \"description\": \"ID du workspace Terraform Cloud\"}, \"message\": {\"type\": \"string\", \"description\": \"Message descriptif du run\"}}, \"required\": [\"workspace_id\", \"message\"]}",
+      "optional_params": "{\"type\": \"object\", \"properties\": {\"is_destroy\": {\"type\": \"boolean\", \"description\": \"Run de destruction\"}, \"variables\": {\"type\": \"object\", \"description\": \"Variables Terraform\"}}}",
+      "response_format": "{\"run_id\": \"string\", \"status\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "terraform_cloud",
+      "action_code": "get_run_status",
+      "action_label": "Statut run Terraform",
+      "description": "R\u00e9cup\u00e8re le statut d'un run Terraform Cloud",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"run_id\": {\"type\": \"string\", \"description\": \"ID du run Terraform\"}}, \"required\": [\"run_id\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"run_id\": \"string\", \"status\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "terraform_cloud",
+      "action_code": "get_run_logs",
+      "action_label": "Logs run Terraform",
+      "description": "R\u00e9cup\u00e8re les logs d'un run Terraform Cloud",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"run_id\": {\"type\": \"string\", \"description\": \"ID du run Terraform\"}}, \"required\": [\"run_id\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"run_id\": \"string\", \"logs\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "terraform_cloud",
+      "action_code": "cancel_run",
+      "action_label": "Annuler run Terraform",
+      "description": "Annule un run Terraform Cloud en cours",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"run_id\": {\"type\": \"string\", \"description\": \"ID du run Terraform \u00e0 annuler\"}}, \"required\": [\"run_id\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"run_id\": \"string\", \"status\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  },
+  {
+    "model": "integrations.integrationaction",
+    "fields": {
+      "integration_type": "terraform_cloud",
+      "action_code": "apply_run",
+      "action_label": "Approuver et appliquer un plan Terraform",
+      "description": "Approuve et applique un plan Terraform en attente de confirmation",
+      "required_params": "{\"type\": \"object\", \"properties\": {\"run_id\": {\"type\": \"string\", \"description\": \"ID du run Terraform \u00e0 appliquer\"}}, \"required\": [\"run_id\"]}",
+      "optional_params": "{}",
+      "response_format": "{\"run_id\": \"string\", \"status\": \"string\"}",
+      "is_active": true,
+      "created_at": "2026-02-14T10:00:00Z",
+      "updated_at": "2026-02-14T10:00:00Z"
+    }
+  }
+]

@@ -1,0 +1,8 @@
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Hexagone vert Desjardins simplifie -->
+  <polygon points="16,1 30,8.5 30,23.5 16,31 2,23.5 2,8.5" fill="#00874E"/>
+  <!-- Icone DB simplifiee -->
+  <ellipse cx="16" cy="11" rx="8" ry="3" fill="white"/>
+  <path d="M8,11 v6 a8,3 0 0,0 16,0 v-6" fill="none" stroke="white" stroke-width="1.5"/>
+  <path d="M8,17 v5 a8,3 0 0,0 16,0 v-5" fill="none" stroke="white" stroke-width="1.5"/>
+</svg>

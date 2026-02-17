@@ -1,0 +1,371 @@
+/**
+ * Execution renderers - Reusable utilities for rendering execution table columns (Story 9.9).
+ *
+ * Extracted from RecentExecutions.tsx for reuse across:
+ * - ExecutionsPage.tsx (main executions table)
+ * - RecentExecutions.tsx (dashboard widget)
+ *
+ * AC8: Same mapping engine → icon + color, same integration → Avatar, same tooltips/fallbacks.
+ */
+
+/* eslint-disable react-refresh/only-export-components */
+
+import { Badge, Tooltip, Avatar, Tag, theme } from 'antd';
+import {
+  DatabaseOutlined,
+  CloudServerOutlined,
+  HddOutlined,
+  ApartmentOutlined,
+  ApiOutlined,
+  RocketOutlined,
+  ThunderboltOutlined,
+  CloudOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  ClockCircleOutlined,
+  SyncOutlined,
+  PauseCircleOutlined,
+  StopOutlined,
+  MinusCircleOutlined,
+  ExclamationCircleOutlined,
+} from '@ant-design/icons';
+import type { ActionEngine, ActionPlatform, ItemType, ExecutionStatusType } from '../types/api';
+import { STYLE_TOKENS } from '../theme/styleTokens';
+import { getIconUrl } from './iconUrl';
+
+/** Engine icon size in execution tables (px) - clearly visible vendor logos.
+ * Increased from 44px to 56px for better visibility and proportion with platform icons.
+ */
+const ENGINE_ICON_SIZE = 56;
+
+/** Compact icon size for execution tables (Story 17.13) - aligned with size="small" row height. */
+const ENGINE_ICON_SIZE_COMPACT = 40;
+
+/** SVG URLs for database engine icons (real vendor logos from svgrepo.com). */
+const ENGINE_SVG_SOURCES: Partial<Record<ActionEngine, string>> = {
+  Oracle: 'https://www.svgrepo.com/show/354152/oracle.svg',
+  'SQL Server': 'https://www.svgrepo.com/show/303229/microsoft-sql-server-logo.svg',
+  DB2: '/icons/engines/db2.svg',
+};
+
+/** Engine icons mapping: engine name → Icon component + color (Story 9.9 AC4). Fallback when SVG not used. */
+const ENGINE_ICONS: Record<ActionEngine, { Icon: React.ComponentType<{ style?: React.CSSProperties }>; color: string }> = {
+  Oracle: { Icon: DatabaseOutlined, color: STYLE_TOKENS.engineIconColor.Oracle },
+  'SQL Server': { Icon: CloudServerOutlined, color: STYLE_TOKENS.engineIconColor['SQL Server'] },
+  DB2: { Icon: HddOutlined, color: STYLE_TOKENS.engineIconColor.DB2 },
+};
+
+/** Workflow icon color (violet). */
+const WORKFLOW_ICON_COLOR = '#722ed1';
+
+/** Platform (execution) icons: platform name → Icon + color. Action.platform is mandatory for actions. */
+const PLATFORM_ICONS: Record<ActionPlatform, { Icon: React.ComponentType<{ style?: React.CSSProperties }>; color: string }> = {
+  AAP: { Icon: RocketOutlined, color: STYLE_TOKENS.platformIconColor.AAP },
+  'GitHub Actions': { Icon: ThunderboltOutlined, color: STYLE_TOKENS.platformIconColor['GitHub Actions'] },
+  'Azure DevOps': { Icon: CloudOutlined, color: STYLE_TOKENS.platformIconColor['Azure DevOps'] },
+  Terraform: { Icon: ApartmentOutlined, color: STYLE_TOKENS.platformIconColor.Terraform },
+};
+
+/**
+ * Render execution platform icon for Plateforme column (AC5).
+ * Uses action.platform (mandatory for actions) — distinct from integration, which may not be a platform.
+ *
+ * @param platform - Execution platform from Action (AAP, GitHub Actions, Azure DevOps, Terraform)
+ */
+export function renderPlatformIcon(platform: ActionPlatform | string | null | undefined): React.ReactNode {
+  if (!platform) {
+    return <span style={{ color: '#d9d9d9' }}>—</span>;
+  }
+
+  const config = PLATFORM_ICONS[platform as ActionPlatform];
+  if (!config) {
+    return (
+      <Tooltip title={platform}>
+        <span title={platform} style={{ fontSize: 12, opacity: 0.6 }}>{platform}</span>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <Tooltip title={platform}>
+      <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+        <config.Icon style={{ fontSize: ENGINE_ICON_SIZE_COMPACT, color: config.color }} />
+      </div>
+    </Tooltip>
+  );
+}
+
+/** Map integration name or type → icon URL. Used as fallback when execution has no integration_icon. */
+export type IntegrationIconsMap = Record<string, string | null | undefined>;
+
+/**
+ * Render Plateforme column icon (AC5).
+ * Prefers integration icon when defined; otherwise falls back to integrationIconsMap (from integrations list)
+ * when provided, then to execution platform icon.
+ *
+ * @param integrationName - Integration name (from action.integration)
+ * @param integrationIcon - Integration icon URL (user-defined in integration)
+ * @param platform - Execution platform from Action (fallback when no integration icon)
+ * @param integrationIconsMap - Optional map name/type → icon URL (from GET /admin/integrations) for fallback
+ */
+export function renderPlateformeIcon(
+  integrationName: string | null | undefined,
+  integrationIcon: string | null | undefined,
+  platform?: ActionPlatform | string | null,
+  integrationIconsMap?: IntegrationIconsMap | null,
+): React.ReactNode {
+  // Prefer integration icon when available (user-defined in integration)
+  const iconFromApi = getIconUrl(integrationIcon);
+  if (iconFromApi) {
+    return renderIntegrationIcon(integrationName, integrationIcon, platform);
+  }
+  // Fallback: look up in integrationIconsMap by integration name or platform (matches integration page)
+  if (integrationIconsMap) {
+    const fallbackIcon = (integrationName && getIconUrl(integrationIconsMap[integrationName]))
+      || (platform && getIconUrl(integrationIconsMap[platform]));
+    if (fallbackIcon) {
+      const label = integrationName || platform;
+      return (
+        <Tooltip title={label ?? undefined}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Avatar
+              src={fallbackIcon}
+              shape="square"
+              size={ENGINE_ICON_SIZE_COMPACT}
+              icon={<ApiOutlined />}
+              style={{ flexShrink: 0 }}
+            />
+          </div>
+        </Tooltip>
+      );
+    }
+  }
+  return renderPlatformIcon(platform);
+}
+
+/**
+ * Render engine icon for Technologie column (AC4).
+ *
+ * @param engine - Engine name (Oracle, SQL Server, DB2) or null
+ * @param itemType - Item type (action or workflow)
+ * @returns React node with icon + tooltip
+ */
+export function renderEngineIcon(
+  engine: ActionEngine | null | undefined,
+  itemType: ItemType | undefined,
+): React.ReactNode {
+  // Workflow takes priority over engine
+  if (itemType === 'workflow') {
+    return (
+      <Tooltip title="Workflow (chaîne d'actions)">
+        <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+          <ApartmentOutlined style={{ fontSize: ENGINE_ICON_SIZE_COMPACT, color: WORKFLOW_ICON_COLOR }} />
+        </div>
+      </Tooltip>
+    );
+  }
+
+  // No engine - fallback
+  if (!engine) {
+    return <span style={{ color: '#d9d9d9' }}>—</span>;
+  }
+
+  // Known engine
+  const config = ENGINE_ICONS[engine as ActionEngine];
+  const svgSrc = ENGINE_SVG_SOURCES[engine as ActionEngine];
+  if (!config) {
+    // Unknown engine - show text
+    return <span title={engine} style={{ fontSize: 12, opacity: 0.6 }}>{engine}</span>;
+  }
+
+  if (svgSrc) {
+    // Dark theme: Use dark semi-transparent background instead of white for better integration
+    const needsBackground = engine === 'SQL Server' || engine === 'Oracle';
+    // SQL Server has black text that needs to be inverted/lightened for dark theme
+    const isSqlServer = engine === 'SQL Server';
+    return (
+      <Tooltip title={engine}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: needsBackground ? '6px' : '0',
+              backgroundColor: needsBackground ? 'rgba(26, 26, 36, 0.6)' : 'transparent',
+              borderRadius: needsBackground ? '4px' : '0',
+              border: needsBackground ? '1px solid rgba(255, 255, 255, 0.1)' : 'none',
+            }}
+          >
+            <img
+              src={svgSrc}
+              alt=""
+              width={ENGINE_ICON_SIZE_COMPACT}
+              height={ENGINE_ICON_SIZE_COMPACT}
+              style={{ 
+                flexShrink: 0, 
+                verticalAlign: 'middle',
+                filter: isSqlServer 
+                  ? 'brightness(0) invert(1) contrast(1.2)' // Invert black text to white for SQL Server
+                  : needsBackground 
+                    ? 'brightness(1.1) contrast(1.1)' // Light enhancement for Oracle
+                    : 'none',
+              }}
+              aria-hidden
+            />
+          </div>
+        </div>
+      </Tooltip>
+    );
+  }
+  return (
+    <Tooltip title={engine}>
+      <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+        <config.Icon style={{ fontSize: ENGINE_ICON_SIZE_COMPACT, color: config.color }} />
+      </div>
+    </Tooltip>
+  );
+}
+
+/**
+ * Render integration icon for Plateforme column (AC5).
+ * Uses integration when available, falls back to action.platform when integration is null.
+ *
+ * @param integrationName - Integration name for tooltip (from INTEGRATIONS)
+ * @param integrationIcon - Integration icon URL (from INTEGRATIONS.ICON)
+ * @param platform - Action platform (AAP, GitHub Actions, etc.) - fallback when no integration
+ */
+export function renderIntegrationIcon(
+  integrationName: string | null | undefined,
+  integrationIcon: string | null | undefined,
+  platform?: string | null,
+): React.ReactNode {
+  const label = integrationName || platform;
+  if (!label) {
+    return <span style={{ color: '#d9d9d9' }}>—</span>;
+  }
+
+  const iconSrc = getIconUrl(integrationIcon);
+
+  return (
+    <Tooltip title={label}>
+      <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Avatar
+          src={iconSrc}
+          shape="square"
+          size={ENGINE_ICON_SIZE}
+          icon={<ApiOutlined />}
+          style={{ flexShrink: 0 }}
+        />
+      </div>
+    </Tooltip>
+  );
+}
+
+/** Status badge configuration for status indicator (AC2, AC3).
+ * - processing: Pulsing animation for running states
+ * - success/error/default/warning: Fixed color for terminal states
+ */
+const STATUS_BADGE_CONFIG: Record<
+  ExecutionStatusType,
+  { 
+    status: 'processing' | 'success' | 'error' | 'default' | 'warning'; 
+    label: string;
+    color: string;
+  }
+> = {
+  SUBMITTED: { status: 'processing', label: 'Soumise', color: '#3B82F6' },
+  INTEGRATION_ERROR: { status: 'error', label: 'Erreur intégration', color: '#EF4444' },
+  PENDING_APPROVAL: { status: 'processing', label: 'En attente', color: '#F59E0B' },
+  RUNNING: { status: 'processing', label: 'En cours', color: '#3B82F6' },
+  COMPLETED: { status: 'success', label: 'Terminée', color: '#10B981' },
+  FAILED: { status: 'error', label: 'Échouée', color: '#EF4444' },
+  CANCELLED: { status: 'default', label: 'Annulée', color: '#9CA3AF' },
+  REJECTED: { status: 'warning', label: 'Rejetée', color: '#F59E0B' },
+};
+
+/**
+ * StatusIndicator component for Statut column (AC1, AC2, AC3).
+ *
+ * Uses theme tokens for background/border/text colors (Story 30.11 AC2).
+ * - Running states (SUBMITTED, PENDING_APPROVAL, RUNNING): Tag with pulsing dot indicator
+ * - Terminal states (COMPLETED, FAILED, CANCELLED, REJECTED): Tag with colored dot
+ */
+function StatusIndicator({ status }: { status: ExecutionStatusType }): React.ReactNode {
+  const { token } = theme.useToken();
+  const config = STATUS_BADGE_CONFIG[status] || {
+    status: 'default' as const,
+    label: 'Inconnu',
+    color: '#9CA3AF'
+  };
+  const isRunning = config.status === 'processing';
+
+  const borderColor = config.color;
+  const textColor = config.status === 'error' ? '#EF4444' :
+                    config.status === 'success' ? '#10B981' :
+                    config.status === 'warning' ? '#F59E0B' :
+                    config.status === 'processing' ? config.color : token.colorText;
+
+  return (
+    <Tag
+      style={{
+        margin: 0,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 8,
+        border: `1px solid ${borderColor}`,
+        backgroundColor: token.colorBgElevated,
+        color: textColor,
+        padding: '1px 6px',
+        fontSize: '12px',
+        lineHeight: '20px',
+        backdropFilter: 'blur(8px)',
+      }}
+    >
+      <Badge
+        status={config.status}
+        style={{
+          transform: isRunning ? 'scale(2.0)' : 'scale(1.3)',
+          display: 'inline-block',
+        }}
+      />
+      <span style={{ fontWeight: 500 }}>{config.label}</span>
+    </Tag>
+  );
+}
+
+/**
+ * Render status indicator badge for Statut column (AC1, AC2, AC3).
+ * Wrapper function for backward compatibility with column render functions.
+ *
+ * @param status - Execution status
+ * @returns React node with Tag containing badge dot + text label
+ */
+export function renderStatusIndicator(status: ExecutionStatusType): React.ReactNode {
+  return <StatusIndicator status={status} />;
+}
+
+/** Status config with icons for RecentExecutions component (legacy compatibility).
+ * Includes Icon component for full status display with text. */
+export const STATUS_CONFIG: Record<
+  ExecutionStatusType,
+  { label: string; Icon: React.ComponentType<{ spin?: boolean; style?: React.CSSProperties }>; color: string }
+> = {
+  SUBMITTED: { label: 'Soumise', Icon: ClockCircleOutlined, color: '#3B82F6' },
+  INTEGRATION_ERROR: { label: 'Erreur intégration', Icon: ExclamationCircleOutlined, color: '#EF4444' },
+  PENDING_APPROVAL: { label: 'En attente', Icon: PauseCircleOutlined, color: '#F59E0B' },
+  RUNNING: { label: 'En cours', Icon: SyncOutlined, color: '#3B82F6' },
+  COMPLETED: { label: 'Terminée', Icon: CheckCircleOutlined, color: '#10B981' },
+  FAILED: { label: 'Échouée', Icon: CloseCircleOutlined, color: '#EF4444' },
+  CANCELLED: { label: 'Annulée', Icon: StopOutlined, color: '#9CA3AF' },
+  REJECTED: { label: 'Rejetée', Icon: MinusCircleOutlined, color: '#F59E0B' },
+};
+
+/** Engine icons config for RecentExecutions component (legacy compatibility). */
+export const ENGINE_ICONS_CONFIG = ENGINE_ICONS;
+/** Engine SVG sources for custom icons (Oracle, SQL Server, DB2). */
+export { ENGINE_SVG_SOURCES };
+/** Platform icons config for tests. */
+export const PLATFORM_ICONS_CONFIG = PLATFORM_ICONS;
+export const ENGINE_ICON_SIZE_VALUE = ENGINE_ICON_SIZE;
+export const ENGINE_ICON_SIZE_COMPACT_VALUE = ENGINE_ICON_SIZE_COMPACT;

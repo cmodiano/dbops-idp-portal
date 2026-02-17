@@ -1,0 +1,240 @@
+/**
+ * PendingApprovalsList - List of executions pending DBA approval (Story 7.4).
+ *
+ * AC2: Display pending approvals with action, requester, environment, parameters, created_at.
+ * AC6: Approve/Reject buttons with confirmation modal.
+ */
+
+import { useState } from 'react';
+import { App, Table, Button, Space, Modal, Input, Tag, Typography, Tooltip } from 'antd';
+import type { TableProps } from 'antd';
+import {
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  ClockCircleOutlined,
+  ExclamationCircleOutlined,
+} from '@ant-design/icons';
+
+import type { ExecutionResponse } from '../../types/api';
+import { approveExecution, rejectExecution } from '../../services/execution_service';
+
+const { Text } = Typography;
+const { TextArea } = Input;
+
+interface PendingApprovalsListProps {
+  executions: ExecutionResponse[];
+  loading: boolean;
+  onActionComplete: () => void;
+}
+
+export function PendingApprovalsList({
+  executions,
+  loading,
+  onActionComplete,
+}: PendingApprovalsListProps) {
+  const { message } = App.useApp();
+  const [approveModalOpen, setApproveModalOpen] = useState(false);
+  const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [selectedExecution, setSelectedExecution] = useState<ExecutionResponse | null>(null);
+  const [comment, setComment] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const handleApproveClick = (execution: ExecutionResponse) => {
+    setSelectedExecution(execution);
+    setComment('');
+    setApproveModalOpen(true);
+  };
+
+  const handleRejectClick = (execution: ExecutionResponse) => {
+    setSelectedExecution(execution);
+    setComment('');
+    setRejectModalOpen(true);
+  };
+
+  const handleApproveConfirm = async () => {
+    if (!selectedExecution) return;
+    setActionLoading(true);
+    try {
+      await approveExecution(selectedExecution.id, comment || undefined);
+      message.success(`Exécution #${selectedExecution.id} approuvée`);
+      setApproveModalOpen(false);
+      onActionComplete();
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erreur lors de l\'approbation';
+      message.error(errorMessage);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleRejectConfirm = async () => {
+    if (!selectedExecution) return;
+    setActionLoading(true);
+    try {
+      await rejectExecution(selectedExecution.id, comment || undefined);
+      message.success(`Exécution #${selectedExecution.id} refusée`);
+      setRejectModalOpen(false);
+      onActionComplete();
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erreur lors du refus';
+      message.error(errorMessage);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const columns: TableProps<ExecutionResponse>['columns'] = [
+    {
+      title: 'Action',
+      dataIndex: 'action_name',
+      key: 'action_name',
+      render: (name: string | null, record: ExecutionResponse) => (
+        <Tooltip title={`ID: ${record.action_id}`}>
+          <Text strong>{name || `Action #${record.action_id}`}</Text>
+        </Tooltip>
+      ),
+    },
+    {
+      title: 'Demandeur',
+      dataIndex: 'user_display_name',
+      key: 'user_display_name',
+      render: (displayName: string | null, record: ExecutionResponse) => (
+        <Text>{displayName || `Utilisateur #${record.user_id}`}</Text>
+      ),
+    },
+    {
+      title: 'Environnement',
+      dataIndex: 'environment',
+      key: 'environment',
+      render: (env: string) => (
+        <Tag color={env === 'prod' ? 'red' : env === 'staging' ? 'orange' : 'green'}>
+          {env.toUpperCase()}
+        </Tag>
+      ),
+    },
+    {
+      title: 'Date de soumission',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      render: (date: string) => (
+        <Tooltip title={new Date(date).toLocaleString()}>
+          <Space>
+            <ClockCircleOutlined />
+            {new Date(date).toLocaleDateString()}
+          </Space>
+        </Tooltip>
+      ),
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      render: (_: unknown, record: ExecutionResponse) => (
+        <Space>
+          <Button
+            type="primary"
+            icon={<CheckCircleOutlined />}
+            size="small"
+            onClick={() => handleApproveClick(record)}
+            style={{ backgroundColor: '#10B981', borderColor: '#10B981' }}
+          >
+            Approuver
+          </Button>
+          <Button
+            danger
+            icon={<CloseCircleOutlined />}
+            size="small"
+            onClick={() => handleRejectClick(record)}
+          >
+            Refuser
+          </Button>
+        </Space>
+      ),
+    },
+  ];
+
+  return (
+    <>
+      <Table<ExecutionResponse>
+        columns={columns}
+        dataSource={executions}
+        rowKey="id"
+        loading={loading}
+        pagination={false}
+        locale={{ emptyText: 'Aucune approbation en attente' }}
+        size="small"
+      />
+
+      {/* Approve confirmation modal */}
+      <Modal
+        title={
+          <Space>
+            <CheckCircleOutlined style={{ color: '#10B981' }} />
+            Confirmer l'approbation
+          </Space>
+        }
+        open={approveModalOpen}
+        onCancel={() => setApproveModalOpen(false)}
+        onOk={handleApproveConfirm}
+        confirmLoading={actionLoading}
+        okText="Approuver"
+        okButtonProps={{ style: { backgroundColor: '#10B981', borderColor: '#10B981' } }}
+        cancelText="Annuler"
+      >
+        {selectedExecution && (
+          <div style={{ marginBottom: 16 }}>
+            <p>
+              Vous êtes sur le point d'approuver l'exécution de{' '}
+              <strong>{selectedExecution.action_name || `Action #${selectedExecution.action_id}`}</strong>{' '}
+              en environnement <Tag color="red">{selectedExecution.environment.toUpperCase()}</Tag>
+            </p>
+            <p style={{ color: '#666', fontSize: 13 }}>
+              L'exécution sera lancée immédiatement après approbation.
+            </p>
+          </div>
+        )}
+        <TextArea
+          placeholder="Commentaire (optionnel)"
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          rows={3}
+        />
+      </Modal>
+
+      {/* Reject confirmation modal */}
+      <Modal
+        title={
+          <Space>
+            <ExclamationCircleOutlined style={{ color: '#EF4444' }} />
+            Confirmer le refus
+          </Space>
+        }
+        open={rejectModalOpen}
+        onCancel={() => setRejectModalOpen(false)}
+        onOk={handleRejectConfirm}
+        confirmLoading={actionLoading}
+        okText="Refuser"
+        okButtonProps={{ danger: true }}
+        cancelText="Annuler"
+      >
+        {selectedExecution && (
+          <div style={{ marginBottom: 16 }}>
+            <p>
+              Vous êtes sur le point de refuser l'exécution de{' '}
+              <strong>{selectedExecution.action_name || `Action #${selectedExecution.action_id}`}</strong>{' '}
+              en environnement <Tag color="red">{selectedExecution.environment.toUpperCase()}</Tag>
+            </p>
+            <p style={{ color: '#666', fontSize: 13 }}>
+              Le demandeur sera notifié du refus.
+            </p>
+          </div>
+        )}
+        <TextArea
+          placeholder="Motif du refus (optionnel)"
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          rows={3}
+        />
+      </Modal>
+    </>
+  );
+}

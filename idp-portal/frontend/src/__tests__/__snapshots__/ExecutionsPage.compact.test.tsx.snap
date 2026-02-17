@@ -1,0 +1,1647 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches snapshot (Task 5.5) 1`] = `
+<div
+  style="padding: 24px;"
+>
+  <h2
+    class="ant-typography css-dev-only-do-not-override-1d8anct css-var-root"
+  >
+    Exécutions
+  </h2>
+  <div
+    class="ant-row css-dev-only-do-not-override-1d8anct css-var-root"
+    style="margin-inline: -8px; row-gap: 16px; margin-bottom: 16px;"
+  >
+    <div
+      class="ant-col ant-col-xs-24 ant-col-sm-12 ant-col-md-6 css-dev-only-do-not-override-1d8anct css-var-root"
+      style="padding-inline: 8px;"
+    >
+      <div
+        class="ant-card ant-card-bordered css-dev-only-do-not-override-1d8anct css-var-root"
+        style="border-left: 4px solid rgb(217, 217, 217); height: 100%;"
+      >
+        <div
+          class="ant-card-body"
+          style="padding: 16px;"
+        >
+          <span
+            class="ant-typography ant-typography-secondary css-dev-only-do-not-override-1d8anct css-var-root"
+            style="font-size: 13px; margin-bottom: 4px; display: block;"
+          >
+            Exécutions du jour
+          </span>
+          <div
+            style="display: flex; align-items: center; gap: 8px;"
+          >
+            <span
+              style="color: rgba(0, 0, 0, 0.88); font-size: 24px;"
+            >
+              <span
+                aria-label="rocket"
+                class="anticon anticon-rocket"
+                role="img"
+              >
+                <svg
+                  aria-hidden="true"
+                  data-icon="rocket"
+                  fill="currentColor"
+                  focusable="false"
+                  height="1em"
+                  viewBox="64 64 896 896"
+                  width="1em"
+                >
+                  <path
+                    d="M864 736c0-111.6-65.4-208-160-252.9V317.3c0-15.1-5.3-29.7-15.1-41.2L536.5 95.4C530.1 87.8 521 84 512 84s-18.1 3.8-24.5 11.4L335.1 276.1a63.97 63.97 0 00-15.1 41.2v165.8C225.4 528 160 624.4 160 736h156.5c-2.3 7.2-3.5 15-3.5 23.8 0 22.1 7.6 43.7 21.4 60.8a97.2 97.2 0 0043.1 30.6c23.1 54 75.6 88.8 134.5 88.8 29.1 0 57.3-8.6 81.4-24.8 23.6-15.8 41.9-37.9 53-64a97 97 0 0043.1-30.5 97.52 97.52 0 0021.4-60.8c0-8.4-1.1-16.4-3.1-23.8H864zM762.3 621.4c9.4 14.6 17 30.3 22.5 46.6H700V558.7a211.6 211.6 0 0162.3 62.7zM388 483.1V318.8l124-147 124 147V668H388V483.1zM239.2 668c5.5-16.3 13.1-32 22.5-46.6 16.3-25.2 37.5-46.5 62.3-62.7V668h-84.8zm388.9 116.2c-5.2 3-11.2 4.2-17.1 3.4l-19.5-2.4-2.8 19.4c-5.4 37.9-38.4 66.5-76.7 66.5-38.3 0-71.3-28.6-76.7-66.5l-2.8-19.5-19.5 2.5a27.7 27.7 0 01-17.1-3.5c-8.7-5-14.1-14.3-14.1-24.4 0-10.6 5.9-19.4 14.6-23.8h231.3c8.8 4.5 14.6 13.3 14.6 23.8-.1 10.2-5.5 19.6-14.2 24.5zM464 400a48 48 0 1096 0 48 48 0 10-96 0z"
+                  />
+                </svg>
+              </span>
+            </span>
+            <h3
+              class="ant-typography css-dev-only-do-not-override-1d8anct css-var-root"
+              style="margin: 0px; color: rgba(0, 0, 0, 0.88); font-weight: 600;"
+            >
+              10
+            </h3>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div
+      class="ant-col ant-col-xs-24 ant-col-sm-12 ant-col-md-6 css-dev-only-do-not-override-1d8anct css-var-root"
+      style="padding-inline: 8px;"
+    >
+      <div
+        class="ant-card ant-card-bordered css-dev-only-do-not-override-1d8anct css-var-root"
+        style="border-left: 4px solid rgb(16, 185, 129); height: 100%;"
+      >
+        <div
+          class="ant-card-body"
+          style="padding: 16px;"
+        >
+          <span
+            class="ant-typography ant-typography-secondary css-dev-only-do-not-override-1d8anct css-var-root"
+            style="font-size: 13px; margin-bottom: 4px; display: block;"
+          >
+            Taux de succès
+          </span>
+          <div
+            style="display: flex; align-items: center; gap: 8px;"
+          >
+            <span
+              style="color: rgb(16, 185, 129); font-size: 24px;"
+            >
+              <span
+                aria-label="check-circle"
+                class="anticon anticon-check-circle"
+                role="img"
+              >
+                <svg
+                  aria-hidden="true"
+                  data-icon="check-circle"
+                  fill="currentColor"
+                  focusable="false"
+                  height="1em"
+                  viewBox="64 64 896 896"
+                  width="1em"
+                >
+                  <path
+                    d="M699 353h-46.9c-10.2 0-19.9 4.9-25.9 13.3L469 584.3l-71.2-98.8c-6-8.3-15.6-13.3-25.9-13.3H325c-6.5 0-10.3 7.4-6.5 12.7l124.6 172.8a31.8 31.8 0 0051.7 0l210.6-292c3.9-5.3.1-12.7-6.4-12.7z"
+                  />
+                  <path
+                    d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm0 820c-205.4 0-372-166.6-372-372s166.6-372 372-372 372 166.6 372 372-166.6 372-372 372z"
+                  />
+                </svg>
+              </span>
+            </span>
+            <h3
+              class="ant-typography css-dev-only-do-not-override-1d8anct css-var-root"
+              style="margin: 0px; color: rgb(16, 185, 129); font-weight: 600;"
+            >
+              85.5
+              %
+            </h3>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div
+      class="ant-col ant-col-xs-24 ant-col-sm-12 ant-col-md-6 css-dev-only-do-not-override-1d8anct css-var-root"
+      style="padding-inline: 8px;"
+    >
+      <div
+        class="ant-card ant-card-bordered css-dev-only-do-not-override-1d8anct css-var-root"
+        style="border-left: 4px solid rgb(59, 130, 246); height: 100%;"
+      >
+        <div
+          class="ant-card-body"
+          style="padding: 16px;"
+        >
+          <span
+            class="ant-typography ant-typography-secondary css-dev-only-do-not-override-1d8anct css-var-root"
+            style="font-size: 13px; margin-bottom: 4px; display: block;"
+          >
+            En cours
+          </span>
+          <div
+            style="display: flex; align-items: center; gap: 8px;"
+          >
+            <span
+              style="color: rgb(59, 130, 246); font-size: 24px;"
+            >
+              <span
+                aria-label="sync"
+                class="anticon anticon-sync anticon-spin"
+                role="img"
+              >
+                <svg
+                  aria-hidden="true"
+                  data-icon="sync"
+                  fill="currentColor"
+                  focusable="false"
+                  height="1em"
+                  viewBox="64 64 896 896"
+                  width="1em"
+                >
+                  <path
+                    d="M168 504.2c1-43.7 10-86.1 26.9-126 17.3-41 42.1-77.7 73.7-109.4S337 212.3 378 195c42.4-17.9 87.4-27 133.9-27s91.5 9.1 133.8 27A341.5 341.5 0 01755 268.8c9.9 9.9 19.2 20.4 27.8 31.4l-60.2 47a8 8 0 003 14.1l175.7 43c5 1.2 9.9-2.6 9.9-7.7l.8-180.9c0-6.7-7.7-10.5-12.9-6.3l-56.4 44.1C765.8 155.1 646.2 92 511.8 92 282.7 92 96.3 275.6 92 503.8a8 8 0 008 8.2h60c4.4 0 7.9-3.5 8-7.8zm756 7.8h-60c-4.4 0-7.9 3.5-8 7.8-1 43.7-10 86.1-26.9 126-17.3 41-42.1 77.8-73.7 109.4A342.45 342.45 0 01512.1 856a342.24 342.24 0 01-243.2-100.8c-9.9-9.9-19.2-20.4-27.8-31.4l60.2-47a8 8 0 00-3-14.1l-175.7-43c-5-1.2-9.9 2.6-9.9 7.7l-.7 181c0 6.7 7.7 10.5 12.9 6.3l56.4-44.1C258.2 868.9 377.8 932 512.2 932c229.2 0 415.5-183.7 419.8-411.8a8 8 0 00-8-8.2z"
+                  />
+                </svg>
+              </span>
+            </span>
+            <h3
+              class="ant-typography css-dev-only-do-not-override-1d8anct css-var-root"
+              style="margin: 0px; color: rgb(59, 130, 246); font-weight: 600;"
+            >
+              1
+            </h3>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div
+      class="ant-col ant-col-xs-24 ant-col-sm-12 ant-col-md-6 css-dev-only-do-not-override-1d8anct css-var-root"
+      style="padding-inline: 8px;"
+    >
+      <div
+        class="ant-card ant-card-bordered css-dev-only-do-not-override-1d8anct css-var-root"
+        style="border-left: 4px solid rgb(239, 68, 68); height: 100%;"
+      >
+        <div
+          class="ant-card-body"
+          style="padding: 16px;"
+        >
+          <span
+            class="ant-typography ant-typography-secondary css-dev-only-do-not-override-1d8anct css-var-root"
+            style="font-size: 13px; margin-bottom: 4px; display: block;"
+          >
+            En erreur
+          </span>
+          <div
+            style="display: flex; align-items: center; gap: 8px;"
+          >
+            <span
+              style="color: rgb(239, 68, 68); font-size: 24px;"
+            >
+              <span
+                aria-label="exclamation-circle"
+                class="anticon anticon-exclamation-circle"
+                role="img"
+              >
+                <svg
+                  aria-hidden="true"
+                  data-icon="exclamation-circle"
+                  fill="currentColor"
+                  focusable="false"
+                  height="1em"
+                  viewBox="64 64 896 896"
+                  width="1em"
+                >
+                  <path
+                    d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm0 820c-205.4 0-372-166.6-372-372s166.6-372 372-372 372 166.6 372 372-166.6 372-372 372z"
+                  />
+                  <path
+                    d="M464 688a48 48 0 1096 0 48 48 0 10-96 0zm24-112h48c4.4 0 8-3.6 8-8V296c0-4.4-3.6-8-8-8h-48c-4.4 0-8 3.6-8 8v272c0 4.4 3.6 8 8 8z"
+                  />
+                </svg>
+              </span>
+            </span>
+            <h3
+              class="ant-typography css-dev-only-do-not-override-1d8anct css-var-root"
+              style="margin: 0px; color: rgb(239, 68, 68); font-weight: 600;"
+            >
+              0
+            </h3>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div
+    style="margin-bottom: 16px;"
+  >
+    <div
+      class="ant-card ant-card-bordered ant-card-small css-dev-only-do-not-override-1d8anct css-var-root"
+    >
+      <div
+        class="ant-card-head"
+      >
+        <div
+          class="ant-card-head-wrapper"
+        >
+          <div
+            class="ant-card-head-title"
+          >
+            Tendances temporelles
+          </div>
+        </div>
+      </div>
+      <div
+        class="ant-card-body"
+      >
+        <div
+          class="css-dev-only-do-not-override-1d8anct css-var-root ant-empty ant-empty-normal"
+        >
+          <div
+            class="ant-empty-image"
+          >
+            <svg
+              height="41"
+              viewBox="0 0 64 41"
+              width="64"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <title>
+                No data
+              </title>
+              <g
+                fill="none"
+                fill-rule="evenodd"
+                transform="translate(0 1)"
+              >
+                <ellipse
+                  cx="32"
+                  cy="33"
+                  fill="#f5f5f5"
+                  rx="32"
+                  ry="7"
+                />
+                <g
+                  fill-rule="nonzero"
+                  stroke="#d9d9d9"
+                >
+                  <path
+                    d="M55 12.8 44.9 1.3Q44 0 42.9 0H21.1q-1.2 0-2 1.3L9 12.8V22h46z"
+                  />
+                  <path
+                    d="M41.6 16c0-1.7 1-3 2.2-3H55v18.1c0 2.2-1.3 3.9-3 3.9H12c-1.7 0-3-1.7-3-3.9V13h11.2c1.2 0 2.2 1.3 2.2 3s1 2.9 2.2 2.9h14.8c1.2 0 2.2-1.4 2.2-3"
+                    fill="#fafafa"
+                  />
+                </g>
+              </g>
+            </svg>
+          </div>
+          <div
+            class="ant-empty-description"
+          >
+            Aucune donnee sur la periode
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div
+    class="ant-card ant-card-bordered ant-card-small css-dev-only-do-not-override-1d8anct css-var-root"
+    data-testid="executions-filters-panel"
+    style="margin-bottom: 16px;"
+  >
+    <div
+      class="ant-card-head"
+    >
+      <div
+        class="ant-card-head-wrapper"
+      >
+        <div
+          class="ant-card-head-title"
+        >
+          <div
+            class="ant-space css-dev-only-do-not-override-1d8anct ant-space-horizontal ant-space-align-center ant-space-gap-row-small ant-space-gap-col-small css-var-root"
+          >
+            <div
+              class="ant-space-item"
+            >
+              <span
+                aria-label="filter"
+                class="anticon anticon-filter"
+                role="img"
+              >
+                <svg
+                  aria-hidden="true"
+                  data-icon="filter"
+                  fill="currentColor"
+                  focusable="false"
+                  height="1em"
+                  viewBox="64 64 896 896"
+                  width="1em"
+                >
+                  <path
+                    d="M880.1 154H143.9c-24.5 0-39.8 26.7-27.5 48L349 597.4V838c0 17.7 14.2 32 31.8 32h262.4c17.6 0 31.8-14.3 31.8-32V597.4L907.7 202c12.2-21.3-3.1-48-27.6-48zM603.4 798H420.6V642h182.9v156zm9.6-236.6l-9.5 16.6h-183l-9.5-16.6L212.7 226h598.6L613 561.4z"
+                  />
+                </svg>
+              </span>
+            </div>
+            <div
+              class="ant-space-item"
+            >
+              Filtres avancés
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div
+      class="ant-card-body"
+    >
+      <form
+        class="ant-form ant-form-vertical css-var-root ant-form-css-var css-dev-only-do-not-override-1d8anct"
+      >
+        <div
+          class="ant-row css-dev-only-do-not-override-1d8anct css-var-root"
+          style="margin-inline: -8px;"
+        >
+          <div
+            class="ant-col ant-col-xs-24 ant-col-md-8 css-dev-only-do-not-override-1d8anct css-var-root"
+            style="padding-inline: 8px;"
+          >
+            <div
+              class="ant-form-item css-var-root ant-form-css-var css-dev-only-do-not-override-1d8anct ant-form-item-vertical"
+              style="margin-bottom: 12px;"
+            >
+              <div
+                class="ant-row ant-form-item-row css-dev-only-do-not-override-1d8anct css-var-root"
+              >
+                <div
+                  class="ant-col ant-form-item-label css-dev-only-do-not-override-1d8anct css-var-root"
+                >
+                  <label
+                    class=""
+                    title="Période"
+                  >
+                    Période
+                  </label>
+                </div>
+                <div
+                  class="ant-col ant-form-item-control css-dev-only-do-not-override-1d8anct css-var-root"
+                >
+                  <div
+                    class="ant-form-item-control-input"
+                  >
+                    <div
+                      class="ant-form-item-control-input-content"
+                    >
+                      <div
+                        class="ant-picker ant-picker-range ant-picker-outlined css-dev-only-do-not-override-1d8anct css-var-root ant-picker-css-var"
+                        style="width: 100%;"
+                      >
+                        <div
+                          class="ant-picker-input ant-picker-input-start"
+                        >
+                          <input
+                            aria-invalid="false"
+                            autocomplete="off"
+                            data-testid="filter-date-range"
+                            date-range="start"
+                            placeholder="Date début"
+                            size="12"
+                            value=""
+                          />
+                        </div>
+                        <div
+                          class="ant-picker-range-separator"
+                        >
+                          <span
+                            aria-label="to"
+                            class="ant-picker-separator"
+                          >
+                            <span
+                              aria-label="swap-right"
+                              class="anticon anticon-swap-right"
+                              role="img"
+                            >
+                              <svg
+                                aria-hidden="true"
+                                data-icon="swap-right"
+                                fill="currentColor"
+                                focusable="false"
+                                height="1em"
+                                viewBox="0 0 1024 1024"
+                                width="1em"
+                              >
+                                <path
+                                  d="M873.1 596.2l-164-208A32 32 0 00684 376h-64.8c-6.7 0-10.4 7.7-6.3 13l144.3 183H152c-4.4 0-8 3.6-8 8v60c0 4.4 3.6 8 8 8h695.9c26.8 0 41.7-30.8 25.2-51.8z"
+                                />
+                              </svg>
+                            </span>
+                          </span>
+                        </div>
+                        <div
+                          class="ant-picker-input ant-picker-input-end"
+                        >
+                          <input
+                            aria-invalid="false"
+                            autocomplete="off"
+                            data-testid="filter-date-range"
+                            date-range="end"
+                            placeholder="Date fin"
+                            size="12"
+                            value=""
+                          />
+                        </div>
+                        <div
+                          class="ant-picker-active-bar"
+                          style="position: absolute; width: 0px;"
+                        />
+                        <span
+                          class="ant-picker-suffix"
+                        >
+                          <span
+                            aria-label="calendar"
+                            class="anticon anticon-calendar"
+                            role="img"
+                          >
+                            <svg
+                              aria-hidden="true"
+                              data-icon="calendar"
+                              fill="currentColor"
+                              focusable="false"
+                              height="1em"
+                              viewBox="64 64 896 896"
+                              width="1em"
+                            >
+                              <path
+                                d="M880 184H712v-64c0-4.4-3.6-8-8-8h-56c-4.4 0-8 3.6-8 8v64H384v-64c0-4.4-3.6-8-8-8h-56c-4.4 0-8 3.6-8 8v64H144c-17.7 0-32 14.3-32 32v664c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V216c0-17.7-14.3-32-32-32zm-40 656H184V460h656v380zM184 392V256h128v48c0 4.4 3.6 8 8 8h56c4.4 0 8-3.6 8-8v-48h256v48c0 4.4 3.6 8 8 8h56c4.4 0 8-3.6 8-8v-48h128v136H184z"
+                              />
+                            </svg>
+                          </span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div
+            class="ant-col ant-col-xs-24 ant-col-md-8 css-dev-only-do-not-override-1d8anct css-var-root"
+            style="padding-inline: 8px;"
+          >
+            <div
+              class="ant-form-item css-var-root ant-form-css-var css-dev-only-do-not-override-1d8anct ant-form-item-vertical"
+              style="margin-bottom: 12px;"
+            >
+              <div
+                class="ant-row ant-form-item-row css-dev-only-do-not-override-1d8anct css-var-root"
+              >
+                <div
+                  class="ant-col ant-form-item-label css-dev-only-do-not-override-1d8anct css-var-root"
+                >
+                  <label
+                    class=""
+                    title="Action"
+                  >
+                    Action
+                  </label>
+                </div>
+                <div
+                  class="ant-col ant-form-item-control css-dev-only-do-not-override-1d8anct css-var-root"
+                >
+                  <div
+                    class="ant-form-item-control-input"
+                  >
+                    <div
+                      class="ant-form-item-control-input-content"
+                    >
+                      <div
+                        class="ant-select ant-select-outlined ant-select-in-form-item css-var-root ant-select-css-var css-dev-only-do-not-override-1d8anct ant-select-single ant-select-show-arrow ant-select-show-search"
+                        data-testid="filter-action"
+                      >
+                        <div
+                          class="ant-select-content"
+                        >
+                          <div
+                            class="ant-select-placeholder"
+                            style="visibility: visible;"
+                          >
+                            Toutes les actions
+                          </div>
+                          <input
+                            aria-autocomplete="list"
+                            aria-expanded="false"
+                            aria-haspopup="listbox"
+                            autocomplete="off"
+                            class="ant-select-input"
+                            id="test-id"
+                            role="combobox"
+                            type="search"
+                            value=""
+                          />
+                        </div>
+                        <div
+                          class="ant-select-suffix"
+                        >
+                          <span
+                            aria-label="down"
+                            class="anticon anticon-down"
+                            role="img"
+                          >
+                            <svg
+                              aria-hidden="true"
+                              data-icon="down"
+                              fill="currentColor"
+                              focusable="false"
+                              height="1em"
+                              viewBox="64 64 896 896"
+                              width="1em"
+                            >
+                              <path
+                                d="M884 256h-75c-5.1 0-9.9 2.5-12.9 6.6L512 654.2 227.9 262.6c-3-4.1-7.8-6.6-12.9-6.6h-75c-6.5 0-10.3 7.4-6.5 12.7l352.6 486.1c12.8 17.6 39 17.6 51.7 0l352.6-486.1c3.9-5.3.1-12.7-6.4-12.7z"
+                              />
+                            </svg>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div
+            class="ant-col ant-col-xs-24 ant-col-md-8 css-dev-only-do-not-override-1d8anct css-var-root"
+            style="padding-inline: 8px;"
+          >
+            <div
+              class="ant-form-item css-var-root ant-form-css-var css-dev-only-do-not-override-1d8anct ant-form-item-vertical"
+              style="margin-bottom: 12px;"
+            >
+              <div
+                class="ant-row ant-form-item-row css-dev-only-do-not-override-1d8anct css-var-root"
+              >
+                <div
+                  class="ant-col ant-form-item-label css-dev-only-do-not-override-1d8anct css-var-root"
+                >
+                  <label
+                    class=""
+                    title="Technologie"
+                  >
+                    Technologie
+                  </label>
+                </div>
+                <div
+                  class="ant-col ant-form-item-control css-dev-only-do-not-override-1d8anct css-var-root"
+                >
+                  <div
+                    class="ant-form-item-control-input"
+                  >
+                    <div
+                      class="ant-form-item-control-input-content"
+                    >
+                      <div
+                        class="ant-select ant-select-outlined ant-select-in-form-item css-var-root ant-select-css-var css-dev-only-do-not-override-1d8anct ant-select-single ant-select-show-arrow"
+                        data-testid="filter-engine"
+                      >
+                        <div
+                          class="ant-select-content"
+                        >
+                          <div
+                            class="ant-select-placeholder"
+                            style="visibility: visible;"
+                          >
+                            Toutes les technologies
+                          </div>
+                          <input
+                            aria-autocomplete="list"
+                            aria-expanded="false"
+                            aria-haspopup="listbox"
+                            autocomplete="off"
+                            class="ant-select-input"
+                            id="test-id"
+                            readonly=""
+                            role="combobox"
+                            type="search"
+                            value=""
+                          />
+                        </div>
+                        <div
+                          class="ant-select-suffix"
+                        >
+                          <span
+                            aria-label="down"
+                            class="anticon anticon-down"
+                            role="img"
+                          >
+                            <svg
+                              aria-hidden="true"
+                              data-icon="down"
+                              fill="currentColor"
+                              focusable="false"
+                              height="1em"
+                              viewBox="64 64 896 896"
+                              width="1em"
+                            >
+                              <path
+                                d="M884 256h-75c-5.1 0-9.9 2.5-12.9 6.6L512 654.2 227.9 262.6c-3-4.1-7.8-6.6-12.9-6.6h-75c-6.5 0-10.3 7.4-6.5 12.7l352.6 486.1c12.8 17.6 39 17.6 51.7 0l352.6-486.1c3.9-5.3.1-12.7-6.4-12.7z"
+                              />
+                            </svg>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div
+          class="ant-row ant-row-bottom css-dev-only-do-not-override-1d8anct css-var-root"
+          style="margin-inline: -8px;"
+        >
+          <div
+            class="ant-col ant-col-xs-24 ant-col-md-6 css-dev-only-do-not-override-1d8anct css-var-root"
+            style="padding-inline: 8px;"
+          >
+            <div
+              class="ant-form-item css-var-root ant-form-css-var css-dev-only-do-not-override-1d8anct ant-form-item-vertical"
+              style="margin-bottom: 12px;"
+            >
+              <div
+                class="ant-row ant-form-item-row css-dev-only-do-not-override-1d8anct css-var-root"
+              >
+                <div
+                  class="ant-col ant-form-item-label css-dev-only-do-not-override-1d8anct css-var-root"
+                >
+                  <label
+                    class=""
+                    title="Tags"
+                  >
+                    Tags
+                  </label>
+                </div>
+                <div
+                  class="ant-col ant-form-item-control css-dev-only-do-not-override-1d8anct css-var-root"
+                >
+                  <div
+                    class="ant-form-item-control-input"
+                  >
+                    <div
+                      class="ant-form-item-control-input-content"
+                    >
+                      <div
+                        class="ant-select ant-select-outlined ant-select-in-form-item css-var-root ant-select-css-var css-dev-only-do-not-override-1d8anct ant-select-multiple ant-select-show-arrow ant-select-show-search"
+                        data-testid="filter-tags"
+                      >
+                        <div
+                          class="ant-select-content"
+                        >
+                          <div
+                            class="ant-select-content-item ant-select-content-item-prefix"
+                            style="opacity: 1;"
+                          >
+                            <div
+                              class="ant-select-placeholder"
+                              style="visibility: visible;"
+                            >
+                              Tous les tags
+                            </div>
+                          </div>
+                          <div
+                            class="ant-select-content-item ant-select-content-item-suffix"
+                            style="opacity: 1;"
+                          >
+                            <input
+                              aria-autocomplete="list"
+                              aria-expanded="false"
+                              aria-haspopup="listbox"
+                              autocomplete="off"
+                              class="ant-select-input"
+                              id="test-id"
+                              role="combobox"
+                              style="--select-input-width: 0;"
+                              type="search"
+                              value=""
+                            />
+                          </div>
+                        </div>
+                        <div
+                          class="ant-select-suffix"
+                        >
+                          <span
+                            aria-label="down"
+                            class="anticon anticon-down"
+                            role="img"
+                          >
+                            <svg
+                              aria-hidden="true"
+                              data-icon="down"
+                              fill="currentColor"
+                              focusable="false"
+                              height="1em"
+                              viewBox="64 64 896 896"
+                              width="1em"
+                            >
+                              <path
+                                d="M884 256h-75c-5.1 0-9.9 2.5-12.9 6.6L512 654.2 227.9 262.6c-3-4.1-7.8-6.6-12.9-6.6h-75c-6.5 0-10.3 7.4-6.5 12.7l352.6 486.1c12.8 17.6 39 17.6 51.7 0l352.6-486.1c3.9-5.3.1-12.7-6.4-12.7z"
+                              />
+                            </svg>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div
+            class="ant-col ant-col-xs-24 ant-col-md-5 css-dev-only-do-not-override-1d8anct css-var-root"
+            style="padding-inline: 8px;"
+          >
+            <div
+              class="ant-form-item css-var-root ant-form-css-var css-dev-only-do-not-override-1d8anct ant-form-item-vertical"
+              style="margin-bottom: 12px;"
+            >
+              <div
+                class="ant-row ant-form-item-row css-dev-only-do-not-override-1d8anct css-var-root"
+              >
+                <div
+                  class="ant-col ant-form-item-label css-dev-only-do-not-override-1d8anct css-var-root"
+                >
+                  <label
+                    class=""
+                    title="Statut"
+                  >
+                    Statut
+                  </label>
+                </div>
+                <div
+                  class="ant-col ant-form-item-control css-dev-only-do-not-override-1d8anct css-var-root"
+                >
+                  <div
+                    class="ant-form-item-control-input"
+                  >
+                    <div
+                      class="ant-form-item-control-input-content"
+                    >
+                      <div
+                        class="ant-select ant-select-outlined ant-select-in-form-item css-var-root ant-select-css-var css-dev-only-do-not-override-1d8anct ant-select-single ant-select-show-arrow"
+                        data-testid="filter-status"
+                      >
+                        <div
+                          class="ant-select-content"
+                        >
+                          <div
+                            class="ant-select-placeholder"
+                            style="visibility: visible;"
+                          >
+                            Tous les statuts
+                          </div>
+                          <input
+                            aria-autocomplete="list"
+                            aria-expanded="false"
+                            aria-haspopup="listbox"
+                            autocomplete="off"
+                            class="ant-select-input"
+                            id="test-id"
+                            readonly=""
+                            role="combobox"
+                            type="search"
+                            value=""
+                          />
+                        </div>
+                        <div
+                          class="ant-select-suffix"
+                        >
+                          <span
+                            aria-label="down"
+                            class="anticon anticon-down"
+                            role="img"
+                          >
+                            <svg
+                              aria-hidden="true"
+                              data-icon="down"
+                              fill="currentColor"
+                              focusable="false"
+                              height="1em"
+                              viewBox="64 64 896 896"
+                              width="1em"
+                            >
+                              <path
+                                d="M884 256h-75c-5.1 0-9.9 2.5-12.9 6.6L512 654.2 227.9 262.6c-3-4.1-7.8-6.6-12.9-6.6h-75c-6.5 0-10.3 7.4-6.5 12.7l352.6 486.1c12.8 17.6 39 17.6 51.7 0l352.6-486.1c3.9-5.3.1-12.7-6.4-12.7z"
+                              />
+                            </svg>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div
+            class="ant-col ant-col-xs-24 ant-col-md-5 css-dev-only-do-not-override-1d8anct css-var-root"
+            style="padding-inline: 8px;"
+          >
+            <div
+              class="ant-form-item css-var-root ant-form-css-var css-dev-only-do-not-override-1d8anct ant-form-item-vertical"
+              style="margin-bottom: 12px;"
+            >
+              <div
+                class="ant-row ant-form-item-row css-dev-only-do-not-override-1d8anct css-var-root"
+              >
+                <div
+                  class="ant-col ant-form-item-label css-dev-only-do-not-override-1d8anct css-var-root"
+                >
+                  <label
+                    class=""
+                    title="Environnement"
+                  >
+                    Environnement
+                  </label>
+                </div>
+                <div
+                  class="ant-col ant-form-item-control css-dev-only-do-not-override-1d8anct css-var-root"
+                >
+                  <div
+                    class="ant-form-item-control-input"
+                  >
+                    <div
+                      class="ant-form-item-control-input-content"
+                    >
+                      <div
+                        class="ant-select ant-select-outlined ant-select-in-form-item css-var-root ant-select-css-var css-dev-only-do-not-override-1d8anct ant-select-single ant-select-show-arrow"
+                        data-testid="filter-environment"
+                      >
+                        <div
+                          class="ant-select-content"
+                        >
+                          <div
+                            class="ant-select-placeholder"
+                            style="visibility: visible;"
+                          >
+                            Tous les env.
+                          </div>
+                          <input
+                            aria-autocomplete="list"
+                            aria-expanded="false"
+                            aria-haspopup="listbox"
+                            autocomplete="off"
+                            class="ant-select-input"
+                            id="test-id"
+                            readonly=""
+                            role="combobox"
+                            type="search"
+                            value=""
+                          />
+                        </div>
+                        <div
+                          class="ant-select-suffix"
+                        >
+                          <span
+                            aria-label="down"
+                            class="anticon anticon-down"
+                            role="img"
+                          >
+                            <svg
+                              aria-hidden="true"
+                              data-icon="down"
+                              fill="currentColor"
+                              focusable="false"
+                              height="1em"
+                              viewBox="64 64 896 896"
+                              width="1em"
+                            >
+                              <path
+                                d="M884 256h-75c-5.1 0-9.9 2.5-12.9 6.6L512 654.2 227.9 262.6c-3-4.1-7.8-6.6-12.9-6.6h-75c-6.5 0-10.3 7.4-6.5 12.7l352.6 486.1c12.8 17.6 39 17.6 51.7 0l352.6-486.1c3.9-5.3.1-12.7-6.4-12.7z"
+                              />
+                            </svg>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div
+            class="ant-col ant-col-xs-24 ant-col-md-8 css-dev-only-do-not-override-1d8anct css-var-root"
+            style="padding-inline: 8px;"
+          >
+            <div
+              class="ant-form-item css-var-root ant-form-css-var css-dev-only-do-not-override-1d8anct ant-form-item-vertical"
+              style="margin-bottom: 12px;"
+            >
+              <div
+                class="ant-row ant-form-item-row css-dev-only-do-not-override-1d8anct css-var-root"
+              >
+                <div
+                  class="ant-col ant-form-item-label css-dev-only-do-not-override-1d8anct css-var-root"
+                >
+                  <label
+                    class=""
+                    title=" "
+                  >
+                     
+                  </label>
+                </div>
+                <div
+                  class="ant-col ant-form-item-control css-dev-only-do-not-override-1d8anct css-var-root"
+                >
+                  <div
+                    class="ant-form-item-control-input"
+                  >
+                    <div
+                      class="ant-form-item-control-input-content"
+                    >
+                      <button
+                        class="ant-btn css-dev-only-do-not-override-1d8anct css-var-root ant-btn-default ant-btn-color-default ant-btn-variant-outlined"
+                        data-testid="filter-reset"
+                        disabled=""
+                        type="button"
+                      >
+                        <span
+                          class="ant-btn-icon"
+                        >
+                          <span
+                            aria-label="clear"
+                            class="anticon anticon-clear"
+                            role="img"
+                          >
+                            <svg
+                              aria-hidden="true"
+                              data-icon="clear"
+                              fill="currentColor"
+                              focusable="false"
+                              height="1em"
+                              viewBox="64 64 896 896"
+                              width="1em"
+                            >
+                              <defs>
+                                <style />
+                              </defs>
+                              <path
+                                d="M899.1 869.6l-53-305.6H864c14.4 0 26-11.6 26-26V346c0-14.4-11.6-26-26-26H618V138c0-14.4-11.6-26-26-26H432c-14.4 0-26 11.6-26 26v182H160c-14.4 0-26 11.6-26 26v192c0 14.4 11.6 26 26 26h17.9l-53 305.6a25.95 25.95 0 0025.6 30.4h723c1.5 0 3-.1 4.4-.4a25.88 25.88 0 0021.2-30zM204 390h272V182h72v208h272v104H204V390zm468 440V674c0-4.4-3.6-8-8-8h-48c-4.4 0-8 3.6-8 8v156H416V674c0-4.4-3.6-8-8-8h-48c-4.4 0-8 3.6-8 8v156H202.8l45.1-260H776l45.1 260H672z"
+                              />
+                            </svg>
+                          </span>
+                        </span>
+                        <span>
+                          Réinitialiser
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div
+    class="ant-tabs ant-tabs-top css-dev-only-do-not-override-1d8anct css-var-root ant-tabs-css-var"
+    style="margin-bottom: 16px;"
+  >
+    <div
+      aria-orientation="horizontal"
+      class="ant-tabs-nav"
+      role="tablist"
+      style="border-bottom: 1px solid rgb(232, 232, 232);"
+    >
+      <div
+        class="ant-tabs-nav-wrap"
+      >
+        <div
+          class="ant-tabs-nav-list"
+          style="transform: translate(0px, 0px);"
+        >
+          <div
+            class="ant-tabs-tab ant-tabs-tab-active"
+            data-node-key="mine"
+          >
+            <div
+              aria-controls="rc-tabs-test-panel-mine"
+              aria-selected="true"
+              class="ant-tabs-tab-btn"
+              id="rc-tabs-test-tab-mine"
+              role="tab"
+              tabindex="0"
+            >
+              Mes exécutions
+            </div>
+          </div>
+          <div
+            class="ant-tabs-ink-bar ant-tabs-ink-bar-animated"
+            style="left: 0px; transform: translateX(-50%);"
+          />
+        </div>
+      </div>
+      <div
+        class="ant-tabs-nav-operations ant-tabs-nav-operations-hidden"
+        style="border-bottom: 1px solid rgb(232, 232, 232);"
+      >
+        <button
+          aria-controls="rc-tabs-test-more-popup"
+          aria-expanded="false"
+          aria-haspopup="listbox"
+          class="ant-tabs-nav-more"
+          id="rc-tabs-test-more"
+          style="visibility: hidden; order: 1;"
+          type="button"
+        >
+          <span
+            aria-label="ellipsis"
+            class="anticon anticon-ellipsis"
+            role="img"
+          >
+            <svg
+              aria-hidden="true"
+              data-icon="ellipsis"
+              fill="currentColor"
+              focusable="false"
+              height="1em"
+              viewBox="64 64 896 896"
+              width="1em"
+            >
+              <path
+                d="M176 511a56 56 0 10112 0 56 56 0 10-112 0zm280 0a56 56 0 10112 0 56 56 0 10-112 0zm280 0a56 56 0 10112 0 56 56 0 10-112 0z"
+              />
+            </svg>
+          </span>
+        </button>
+      </div>
+    </div>
+    <div
+      class="ant-tabs-content-holder"
+    >
+      <div
+        class="ant-tabs-content ant-tabs-content-top"
+      >
+        <div
+          aria-hidden="false"
+          aria-labelledby="rc-tabs-test-tab-mine"
+          class="ant-tabs-tabpane ant-tabs-tabpane-active"
+          id="rc-tabs-test-panel-mine"
+          role="tabpanel"
+          tabindex="-1"
+        />
+      </div>
+    </div>
+  </div>
+  <div
+    class="css-var-root ant-table-css-var ant-table-wrapper css-dev-only-do-not-override-1d8anct"
+  >
+    <div
+      class="ant-spin-nested-loading css-dev-only-do-not-override-1d8anct css-var-root"
+    >
+      <div
+        class="ant-spin-container"
+      >
+        <div
+          class="ant-table ant-table-small css-var-root ant-table-css-var css-dev-only-do-not-override-1d8anct"
+        >
+          <div
+            class="ant-table-container"
+          >
+            <div
+              class="ant-table-content"
+            >
+              <table
+                style="table-layout: auto;"
+              >
+                <colgroup>
+                  <col
+                    class="ant-table-expand-icon-col"
+                  />
+                  <col
+                    style="width: 100px;"
+                  />
+                  <col />
+                  <col
+                    style="width: 100px;"
+                  />
+                  <col
+                    style="width: 100px;"
+                  />
+                  <col
+                    style="width: 120px;"
+                  />
+                  <col
+                    style="width: 160px;"
+                  />
+                  <col
+                    style="width: 80px;"
+                  />
+                  <col
+                    style="width: 100px;"
+                  />
+                </colgroup>
+                <thead
+                  class="ant-table-thead"
+                >
+                  <tr>
+                    <th
+                      class="ant-table-cell ant-table-row-expand-icon-cell"
+                    />
+                    <th
+                      class="ant-table-cell"
+                      scope="col"
+                      style="text-align: center;"
+                    >
+                      Statut
+                    </th>
+                    <th
+                      aria-description="sortable"
+                      aria-label="Action"
+                      class="ant-table-cell ant-table-column-has-sorters"
+                      scope="col"
+                      tabindex="0"
+                    >
+                      <div
+                        class="ant-table-column-sorters"
+                      >
+                        <span
+                          class="ant-table-column-title"
+                        >
+                          Action
+                        </span>
+                        <span
+                          class="ant-table-column-sorter ant-table-column-sorter-full"
+                        >
+                          <span
+                            aria-hidden="true"
+                            class="ant-table-column-sorter-inner"
+                          >
+                            <span
+                              aria-label="caret-up"
+                              class="anticon anticon-caret-up ant-table-column-sorter-up"
+                              role="img"
+                            >
+                              <svg
+                                aria-hidden="true"
+                                data-icon="caret-up"
+                                fill="currentColor"
+                                focusable="false"
+                                height="1em"
+                                viewBox="0 0 1024 1024"
+                                width="1em"
+                              >
+                                <path
+                                  d="M858.9 689L530.5 308.2c-9.4-10.9-27.5-10.9-37 0L165.1 689c-12.2 14.2-1.2 35 18.5 35h656.8c19.7 0 30.7-20.8 18.5-35z"
+                                />
+                              </svg>
+                            </span>
+                            <span
+                              aria-label="caret-down"
+                              class="anticon anticon-caret-down ant-table-column-sorter-down"
+                              role="img"
+                            >
+                              <svg
+                                aria-hidden="true"
+                                data-icon="caret-down"
+                                fill="currentColor"
+                                focusable="false"
+                                height="1em"
+                                viewBox="0 0 1024 1024"
+                                width="1em"
+                              >
+                                <path
+                                  d="M840.4 300H183.6c-19.7 0-30.7 20.8-18.5 35l328.4 380.8c9.4 10.9 27.5 10.9 37 0L858.9 335c12.2-14.2 1.2-35-18.5-35z"
+                                />
+                              </svg>
+                            </span>
+                          </span>
+                        </span>
+                      </div>
+                    </th>
+                    <th
+                      class="ant-table-cell"
+                      scope="col"
+                      style="text-align: center;"
+                    >
+                      Technologie
+                    </th>
+                    <th
+                      class="ant-table-cell"
+                      scope="col"
+                      style="text-align: center;"
+                    >
+                      Plateforme
+                    </th>
+                    <th
+                      class="ant-table-cell"
+                      scope="col"
+                    >
+                      Environnement
+                    </th>
+                    <th
+                      aria-description="sortable"
+                      aria-label="Date"
+                      aria-sort="descending"
+                      class="ant-table-cell ant-table-column-sort ant-table-column-has-sorters"
+                      scope="col"
+                      tabindex="0"
+                    >
+                      <div
+                        class="ant-table-column-sorters"
+                      >
+                        <span
+                          class="ant-table-column-title"
+                        >
+                          Date
+                        </span>
+                        <span
+                          class="ant-table-column-sorter ant-table-column-sorter-full"
+                        >
+                          <span
+                            aria-hidden="true"
+                            class="ant-table-column-sorter-inner"
+                          >
+                            <span
+                              aria-label="caret-up"
+                              class="anticon anticon-caret-up ant-table-column-sorter-up"
+                              role="img"
+                            >
+                              <svg
+                                aria-hidden="true"
+                                data-icon="caret-up"
+                                fill="currentColor"
+                                focusable="false"
+                                height="1em"
+                                viewBox="0 0 1024 1024"
+                                width="1em"
+                              >
+                                <path
+                                  d="M858.9 689L530.5 308.2c-9.4-10.9-27.5-10.9-37 0L165.1 689c-12.2 14.2-1.2 35 18.5 35h656.8c19.7 0 30.7-20.8 18.5-35z"
+                                />
+                              </svg>
+                            </span>
+                            <span
+                              aria-label="caret-down"
+                              class="anticon anticon-caret-down ant-table-column-sorter-down active"
+                              role="img"
+                            >
+                              <svg
+                                aria-hidden="true"
+                                data-icon="caret-down"
+                                fill="currentColor"
+                                focusable="false"
+                                height="1em"
+                                viewBox="0 0 1024 1024"
+                                width="1em"
+                              >
+                                <path
+                                  d="M840.4 300H183.6c-19.7 0-30.7 20.8-18.5 35l328.4 380.8c9.4 10.9 27.5 10.9 37 0L858.9 335c12.2-14.2 1.2-35-18.5-35z"
+                                />
+                              </svg>
+                            </span>
+                          </span>
+                        </span>
+                      </div>
+                    </th>
+                    <th
+                      class="ant-table-cell"
+                      scope="col"
+                    >
+                      Durée
+                    </th>
+                    <th
+                      class="ant-table-cell"
+                      scope="col"
+                      style="text-align: center;"
+                    >
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody
+                  class="ant-table-tbody"
+                >
+                  <tr
+                    class="ant-table-row ant-table-row-level-0"
+                    data-row-key="2"
+                    style="cursor: pointer;"
+                  >
+                    <td
+                      class="ant-table-cell ant-table-row-expand-icon-cell"
+                    >
+                      <button
+                        aria-expanded="false"
+                        aria-label="Expand row"
+                        class="ant-table-row-expand-icon ant-table-row-expand-icon-spaced"
+                        type="button"
+                      />
+                    </td>
+                    <td
+                      class="ant-table-cell"
+                      style="text-align: center;"
+                    >
+                      <span
+                        class="ant-tag ant-tag-filled css-dev-only-do-not-override-1d8anct css-var-root"
+                        style="margin: 0px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid rgb(59, 130, 246); background-color: rgb(255, 255, 255); color: rgb(59, 130, 246); padding: 1px 6px; font-size: 12px; line-height: 20px;"
+                      >
+                        <span
+                          class="ant-badge ant-badge-status ant-badge-not-a-wrapper css-dev-only-do-not-override-1d8anct css-var-root"
+                          style="transform: scale(2.0); display: inline-block;"
+                        >
+                          <span
+                            class="ant-badge-status-dot ant-badge-status-processing"
+                          />
+                        </span>
+                        <span
+                          style="font-weight: 500;"
+                        >
+                          En cours
+                        </span>
+                      </span>
+                    </td>
+                    <td
+                      class="ant-table-cell"
+                    >
+                      Apply Patch
+                    </td>
+                    <td
+                      class="ant-table-cell"
+                      style="text-align: center;"
+                    >
+                      <div
+                        style="display: inline-flex; align-items: center; justify-content: center;"
+                      >
+                        <div
+                          style="display: inline-flex; align-items: center; justify-content: center; padding: 6px; background-color: rgba(26, 26, 36, 0.6); border-radius: 4px; border: 1px solid rgba(255, 255, 255, 0.1);"
+                        >
+                          <img
+                            alt=""
+                            aria-hidden="true"
+                            height="40"
+                            src="https://www.svgrepo.com/show/303229/microsoft-sql-server-logo.svg"
+                            style="flex-shrink: 0; vertical-align: middle; filter: brightness(0) invert(1) contrast(1.2);"
+                            width="40"
+                          />
+                        </div>
+                      </div>
+                    </td>
+                    <td
+                      class="ant-table-cell"
+                      style="text-align: center;"
+                    >
+                      <div
+                        style="display: inline-flex; align-items: center; justify-content: center;"
+                      >
+                        <span
+                          aria-label="rocket"
+                          class="anticon anticon-rocket"
+                          role="img"
+                          style="font-size: 40px; color: rgb(238, 0, 0);"
+                        >
+                          <svg
+                            aria-hidden="true"
+                            data-icon="rocket"
+                            fill="currentColor"
+                            focusable="false"
+                            height="1em"
+                            viewBox="64 64 896 896"
+                            width="1em"
+                          >
+                            <path
+                              d="M864 736c0-111.6-65.4-208-160-252.9V317.3c0-15.1-5.3-29.7-15.1-41.2L536.5 95.4C530.1 87.8 521 84 512 84s-18.1 3.8-24.5 11.4L335.1 276.1a63.97 63.97 0 00-15.1 41.2v165.8C225.4 528 160 624.4 160 736h156.5c-2.3 7.2-3.5 15-3.5 23.8 0 22.1 7.6 43.7 21.4 60.8a97.2 97.2 0 0043.1 30.6c23.1 54 75.6 88.8 134.5 88.8 29.1 0 57.3-8.6 81.4-24.8 23.6-15.8 41.9-37.9 53-64a97 97 0 0043.1-30.5 97.52 97.52 0 0021.4-60.8c0-8.4-1.1-16.4-3.1-23.8H864zM762.3 621.4c9.4 14.6 17 30.3 22.5 46.6H700V558.7a211.6 211.6 0 0162.3 62.7zM388 483.1V318.8l124-147 124 147V668H388V483.1zM239.2 668c5.5-16.3 13.1-32 22.5-46.6 16.3-25.2 37.5-46.5 62.3-62.7V668h-84.8zm388.9 116.2c-5.2 3-11.2 4.2-17.1 3.4l-19.5-2.4-2.8 19.4c-5.4 37.9-38.4 66.5-76.7 66.5-38.3 0-71.3-28.6-76.7-66.5l-2.8-19.5-19.5 2.5a27.7 27.7 0 01-17.1-3.5c-8.7-5-14.1-14.3-14.1-24.4 0-10.6 5.9-19.4 14.6-23.8h231.3c8.8 4.5 14.6 13.3 14.6 23.8-.1 10.2-5.5 19.6-14.2 24.5zM464 400a48 48 0 1096 0 48 48 0 10-96 0z"
+                            />
+                          </svg>
+                        </span>
+                      </div>
+                    </td>
+                    <td
+                      class="ant-table-cell"
+                    >
+                      PROD
+                    </td>
+                    <td
+                      class="ant-table-cell ant-table-column-sort"
+                    >
+                      29/01/2026 09:00
+                    </td>
+                    <td
+                      class="ant-table-cell"
+                    >
+                      —
+                    </td>
+                    <td
+                      class="ant-table-cell"
+                      style="text-align: center;"
+                    />
+                  </tr>
+                  <tr
+                    class="ant-table-row ant-table-row-level-0"
+                    data-row-key="1"
+                    style="cursor: pointer;"
+                  >
+                    <td
+                      class="ant-table-cell ant-table-row-expand-icon-cell"
+                    >
+                      <button
+                        aria-expanded="false"
+                        aria-label="Expand row"
+                        class="ant-table-row-expand-icon ant-table-row-expand-icon-spaced"
+                        type="button"
+                      />
+                    </td>
+                    <td
+                      class="ant-table-cell"
+                      style="text-align: center;"
+                    >
+                      <span
+                        class="ant-tag ant-tag-filled css-dev-only-do-not-override-1d8anct css-var-root"
+                        style="margin: 0px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid rgb(16, 185, 129); background-color: rgb(255, 255, 255); color: rgb(16, 185, 129); padding: 1px 6px; font-size: 12px; line-height: 20px;"
+                      >
+                        <span
+                          class="ant-badge ant-badge-status ant-badge-not-a-wrapper css-dev-only-do-not-override-1d8anct css-var-root"
+                          style="transform: scale(1.3); display: inline-block;"
+                        >
+                          <span
+                            class="ant-badge-status-dot ant-badge-status-success"
+                          />
+                        </span>
+                        <span
+                          style="font-weight: 500;"
+                        >
+                          Terminée
+                        </span>
+                      </span>
+                    </td>
+                    <td
+                      class="ant-table-cell"
+                    >
+                      Create PDB
+                    </td>
+                    <td
+                      class="ant-table-cell"
+                      style="text-align: center;"
+                    >
+                      <div
+                        style="display: inline-flex; align-items: center; justify-content: center;"
+                      >
+                        <div
+                          style="display: inline-flex; align-items: center; justify-content: center; padding: 6px; background-color: rgba(26, 26, 36, 0.6); border-radius: 4px; border: 1px solid rgba(255, 255, 255, 0.1);"
+                        >
+                          <img
+                            alt=""
+                            aria-hidden="true"
+                            height="40"
+                            src="https://www.svgrepo.com/show/354152/oracle.svg"
+                            style="flex-shrink: 0; vertical-align: middle; filter: brightness(1.1) contrast(1.1);"
+                            width="40"
+                          />
+                        </div>
+                      </div>
+                    </td>
+                    <td
+                      class="ant-table-cell"
+                      style="text-align: center;"
+                    >
+                      <div
+                        style="display: inline-flex; align-items: center; justify-content: center;"
+                      >
+                        <span
+                          aria-label="rocket"
+                          class="anticon anticon-rocket"
+                          role="img"
+                          style="font-size: 40px; color: rgb(238, 0, 0);"
+                        >
+                          <svg
+                            aria-hidden="true"
+                            data-icon="rocket"
+                            fill="currentColor"
+                            focusable="false"
+                            height="1em"
+                            viewBox="64 64 896 896"
+                            width="1em"
+                          >
+                            <path
+                              d="M864 736c0-111.6-65.4-208-160-252.9V317.3c0-15.1-5.3-29.7-15.1-41.2L536.5 95.4C530.1 87.8 521 84 512 84s-18.1 3.8-24.5 11.4L335.1 276.1a63.97 63.97 0 00-15.1 41.2v165.8C225.4 528 160 624.4 160 736h156.5c-2.3 7.2-3.5 15-3.5 23.8 0 22.1 7.6 43.7 21.4 60.8a97.2 97.2 0 0043.1 30.6c23.1 54 75.6 88.8 134.5 88.8 29.1 0 57.3-8.6 81.4-24.8 23.6-15.8 41.9-37.9 53-64a97 97 0 0043.1-30.5 97.52 97.52 0 0021.4-60.8c0-8.4-1.1-16.4-3.1-23.8H864zM762.3 621.4c9.4 14.6 17 30.3 22.5 46.6H700V558.7a211.6 211.6 0 0162.3 62.7zM388 483.1V318.8l124-147 124 147V668H388V483.1zM239.2 668c5.5-16.3 13.1-32 22.5-46.6 16.3-25.2 37.5-46.5 62.3-62.7V668h-84.8zm388.9 116.2c-5.2 3-11.2 4.2-17.1 3.4l-19.5-2.4-2.8 19.4c-5.4 37.9-38.4 66.5-76.7 66.5-38.3 0-71.3-28.6-76.7-66.5l-2.8-19.5-19.5 2.5a27.7 27.7 0 01-17.1-3.5c-8.7-5-14.1-14.3-14.1-24.4 0-10.6 5.9-19.4 14.6-23.8h231.3c8.8 4.5 14.6 13.3 14.6 23.8-.1 10.2-5.5 19.6-14.2 24.5zM464 400a48 48 0 1096 0 48 48 0 10-96 0z"
+                            />
+                          </svg>
+                        </span>
+                      </div>
+                    </td>
+                    <td
+                      class="ant-table-cell"
+                    >
+                      DEV
+                    </td>
+                    <td
+                      class="ant-table-cell ant-table-column-sort"
+                    >
+                      28/01/2026 05:00
+                    </td>
+                    <td
+                      class="ant-table-cell"
+                    >
+                      5m
+                    </td>
+                    <td
+                      class="ant-table-cell"
+                      style="text-align: center;"
+                    />
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <ul
+          class="ant-pagination ant-pagination-small ant-pagination-mini ant-table-pagination ant-table-pagination-end css-dev-only-do-not-override-1d8anct css-var-root"
+        >
+          <li
+            aria-disabled="true"
+            class="ant-pagination-prev ant-pagination-disabled"
+            title="Previous Page"
+          >
+            <button
+              class="ant-pagination-item-link"
+              disabled=""
+              tabindex="-1"
+              type="button"
+            >
+              <span
+                aria-label="left"
+                class="anticon anticon-left"
+                role="img"
+              >
+                <svg
+                  aria-hidden="true"
+                  data-icon="left"
+                  fill="currentColor"
+                  focusable="false"
+                  height="1em"
+                  viewBox="64 64 896 896"
+                  width="1em"
+                >
+                  <path
+                    d="M724 218.3V141c0-6.7-7.7-10.4-12.9-6.3L260.3 486.8a31.86 31.86 0 000 50.3l450.8 352.1c5.3 4.1 12.9.4 12.9-6.3v-77.3c0-4.9-2.3-9.6-6.1-12.6l-360-281 360-281.1c3.8-3 6.1-7.7 6.1-12.6z"
+                  />
+                </svg>
+              </span>
+            </button>
+          </li>
+          <li
+            class="ant-pagination-item ant-pagination-item-1 ant-pagination-item-active"
+            tabindex="0"
+            title="1"
+          >
+            <a
+              rel="nofollow"
+            >
+              1
+            </a>
+          </li>
+          <li
+            aria-disabled="true"
+            class="ant-pagination-next ant-pagination-disabled"
+            title="Next Page"
+          >
+            <button
+              class="ant-pagination-item-link"
+              disabled=""
+              tabindex="-1"
+              type="button"
+            >
+              <span
+                aria-label="right"
+                class="anticon anticon-right"
+                role="img"
+              >
+                <svg
+                  aria-hidden="true"
+                  data-icon="right"
+                  fill="currentColor"
+                  focusable="false"
+                  height="1em"
+                  viewBox="64 64 896 896"
+                  width="1em"
+                >
+                  <path
+                    d="M765.7 486.8L314.9 134.7A7.97 7.97 0 00302 141v77.3c0 4.9 2.3 9.6 6.1 12.6l360 281.1-360 281.1c-3.9 3-6.1 7.7-6.1 12.6V883c0 6.7 7.7 10.4 12.9 6.3l450.8-352.1a31.96 31.96 0 000-50.4z"
+                  />
+                </svg>
+              </span>
+            </button>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+`;

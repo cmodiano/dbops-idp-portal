@@ -1,0 +1,208 @@
+"""
+Tests for profiles API endpoints (DRF ViewSets).
+Tests: GET /admin/profiles, POST /admin/profiles, GET /admin/profiles/{id}, PUT /admin/profiles/{id}, DELETE /admin/profiles/{id}
+"""
+
+import pytest
+from unittest.mock import patch
+from django.test import TestCase
+from rest_framework.test import APIClient
+from rest_framework import status
+from idp_auth.models import User
+from profiles.models import Profile
+
+
+@pytest.mark.django_db
+class TestProfileViewSet(TestCase):
+    """Tests for ProfileViewSet (admin profiles endpoints)."""
+    
+    def setUp(self):
+        """Set up test data."""
+        self.client = APIClient()
+        
+        # Create DBOPS user (required for admin endpoints)
+        self.dbops_user = User.objects.create(
+            username='dbops_user',
+            profile='dbops'
+        )
+        
+        # Create non-DBOPS user
+        self.regular_user = User.objects.create(
+            username='regular_user',
+            profile='dba'
+        )
+        
+        # Create test profile
+        self.profile = Profile.objects.create(
+            name='Test Profile',
+            description='Test Description',
+            ad_group='GRP-TEST',
+            is_admin=0,
+            is_auditor=0
+        )
+    
+    def test_list_profiles_authenticated_dbops(self):
+        """Test GET /admin/profiles with DBOPS user."""
+        self.client.force_authenticate(user=self.dbops_user)
+        response = self.client.get('/api/v1/admin/profiles/')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('data', response.data)
+        self.assertIsInstance(response.data['data'], list)
+        self.assertGreaterEqual(len(response.data['data']), 1)
+    
+    def test_list_profiles_unauthenticated(self):
+        """Test GET /admin/profiles without authentication returns 401."""
+        response = self.client.get('/api/v1/admin/profiles/')
+        
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+    
+    def test_list_profiles_forbidden_non_dbops(self):
+        """Test GET /admin/profiles with non-DBOPS user returns 403."""
+        self.client.force_authenticate(user=self.regular_user)
+        response = self.client.get('/api/v1/admin/profiles/')
+        
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+    
+    def test_create_profile_forbidden_non_dbops(self):
+        """Test POST /admin/profiles with non-DBOPS user returns 403."""
+        self.client.force_authenticate(user=self.regular_user)
+        data = {
+            'name': 'New Profile',
+            'ad_group': 'GRP-NEW',
+        }
+        response = self.client.post('/api/v1/admin/profiles/', data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+    
+    def test_get_profile_forbidden_non_dbops(self):
+        """Test GET /admin/profiles/{id} with non-DBOPS user returns 403."""
+        self.client.force_authenticate(user=self.regular_user)
+        response = self.client.get(f'/api/v1/admin/profiles/{self.profile.id}/')
+        
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+    
+    def test_update_profile_forbidden_non_dbops(self):
+        """Test PUT /admin/profiles/{id} with non-DBOPS user returns 403."""
+        self.client.force_authenticate(user=self.regular_user)
+        data = {'name': 'Updated Profile'}
+        response = self.client.put(f'/api/v1/admin/profiles/{self.profile.id}/', data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+    
+    def test_delete_profile_forbidden_non_dbops(self):
+        """Test DELETE /admin/profiles/{id} with non-DBOPS user returns 403."""
+        self.client.force_authenticate(user=self.regular_user)
+        response = self.client.delete(f'/api/v1/admin/profiles/{self.profile.id}/')
+        
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+    
+    def test_create_profile(self):
+        """Test POST /admin/profiles creates profile and returns 201."""
+        self.client.force_authenticate(user=self.dbops_user)
+        data = {
+            'name': 'New Profile',
+            'description': 'New Description',
+            'ad_group': 'GRP-NEW',
+            'is_admin': False,
+            'is_auditor': False
+        }
+        response = self.client.post('/api/v1/admin/profiles/', data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn('data', response.data)
+        self.assertEqual(response.data['data']['name'], 'New Profile')
+        self.assertEqual(response.data['data']['ad_group'], 'GRP-NEW')
+    
+    def test_create_profile_duplicate_name(self):
+        """Test POST /admin/profiles with duplicate name returns 400."""
+        self.client.force_authenticate(user=self.dbops_user)
+        data = {
+            'name': 'Test Profile',  # Already exists
+            'ad_group': 'GRP-DUPLICATE',
+        }
+        response = self.client.post('/api/v1/admin/profiles/', data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+    
+    def test_get_profile(self):
+        """Test GET /admin/profiles/{id} returns profile."""
+        self.client.force_authenticate(user=self.dbops_user)
+        response = self.client.get(f'/api/v1/admin/profiles/{self.profile.id}/')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('data', response.data)
+        self.assertEqual(response.data['data']['id'], self.profile.id)
+        self.assertEqual(response.data['data']['name'], 'Test Profile')
+    
+    def test_get_profile_not_found(self):
+        """Test GET /admin/profiles/{id} with invalid ID returns 404."""
+        self.client.force_authenticate(user=self.dbops_user)
+        response = self.client.get('/api/v1/admin/profiles/99999/')
+        
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertIn('error', response.data)
+    
+    def test_update_profile(self):
+        """Test PUT /admin/profiles/{id} updates profile."""
+        self.client.force_authenticate(user=self.dbops_user)
+        data = {
+            'name': 'Updated Profile',
+            'description': 'Updated Description'
+        }
+        response = self.client.put(f'/api/v1/admin/profiles/{self.profile.id}/', data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('data', response.data)
+        self.assertEqual(response.data['data']['name'], 'Updated Profile')
+        self.assertEqual(response.data['data']['description'], 'Updated Description')
+    
+    def test_delete_profile(self):
+        """Test DELETE /admin/profiles/{id} deletes profile and returns 204."""
+        self.client.force_authenticate(user=self.dbops_user)
+        profile_id = self.profile.id
+        response = self.client.delete(f'/api/v1/admin/profiles/{profile_id}/')
+        
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        # Verify profile is deleted
+        self.assertFalse(Profile.objects.filter(id=profile_id).exists())
+    
+    def test_delete_profile_not_found(self):
+        """Test DELETE /admin/profiles/{id} with invalid ID returns 404."""
+        self.client.force_authenticate(user=self.dbops_user)
+        response = self.client.delete('/api/v1/admin/profiles/99999/')
+        
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+    
+    @patch('profiles.views.invalidate_permissions_cache')
+    def test_create_profile_invalidates_cache(self, mock_invalidate):
+        """Test POST /admin/profiles invalidates RBAC cache (Task 7.6)."""
+        self.client.force_authenticate(user=self.dbops_user)
+        data = {
+            'name': 'Cache Test Profile',
+            'ad_group': 'GRP-CACHE',
+        }
+        response = self.client.post('/api/v1/admin/profiles/', data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        mock_invalidate.assert_called_once()
+    
+    @patch('profiles.views.invalidate_permissions_cache')
+    def test_update_profile_invalidates_cache(self, mock_invalidate):
+        """Test PUT /admin/profiles/{id} invalidates RBAC cache (Task 7.6)."""
+        self.client.force_authenticate(user=self.dbops_user)
+        data = {'name': 'Updated Cache Test'}
+        response = self.client.put(f'/api/v1/admin/profiles/{self.profile.id}/', data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        mock_invalidate.assert_called_once()
+    
+    @patch('profiles.views.invalidate_permissions_cache')
+    def test_delete_profile_invalidates_cache(self, mock_invalidate):
+        """Test DELETE /admin/profiles/{id} invalidates RBAC cache (Task 7.6)."""
+        self.client.force_authenticate(user=self.dbops_user)
+        profile_id = self.profile.id
+        response = self.client.delete(f'/api/v1/admin/profiles/{profile_id}/')
+        
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        mock_invalidate.assert_called_once()

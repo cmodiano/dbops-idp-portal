@@ -1,0 +1,187 @@
+/**
+ * CalendarPage styles (Story 13.6, AC2, Task 8).
+ *
+ * Styling for FullCalendar to match Ant Design theme.
+ * Supports both light and dark modes.
+ */
+
+.calendar-page {
+  padding: 0;
+}
+
+/* FullCalendar container styling */
+.calendar-container {
+  overflow: hidden;
+}
+
+/* FullCalendar theme overrides */
+.fc {
+  --fc-border-color: var(--ant-color-border, #d9d9d9);
+  --fc-page-bg-color: transparent;
+  --fc-neutral-bg-color: var(--ant-color-bg-container-disabled, #f5f5f5);
+  --fc-list-event-hover-bg-color: var(--ant-color-bg-text-hover, #0000000a);
+  --fc-today-bg-color: var(--ant-color-primary-bg, #e6f7f2);
+  --fc-now-indicator-color: var(--ant-color-primary, #00874e);
+}
+
+/* Dark mode adjustments */
+:root.dark .fc {
+  --fc-border-color: var(--ant-color-border, #424242);
+  --fc-neutral-bg-color: var(--ant-color-bg-container-disabled, #262626);
+  --fc-list-event-hover-bg-color: var(--ant-color-bg-text-hover, #ffffff0f);
+  --fc-today-bg-color: rgba(0, 135, 78, 0.1);
+}
+
+/* Header toolbar */
+.fc .fc-toolbar-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--ant-color-text, rgba(0, 0, 0, 0.88));
+}
+
+:root.dark .fc .fc-toolbar-title {
+  color: var(--ant-color-text, rgba(255, 255, 255, 0.85));
+}
+
+/* Buttons */
+.fc .fc-button {
+  background: var(--ant-color-bg-container, #fff);
+  border: 1px solid var(--ant-color-border, #d9d9d9);
+  color: var(--ant-color-text, rgba(0, 0, 0, 0.88));
+  font-size: 14px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.fc .fc-button:hover {
+  color: var(--ant-color-primary, #00874e);
+  border-color: var(--ant-color-primary, #00874e);
+  background: var(--ant-color-bg-container, #fff);
+}
+
+.fc .fc-button-primary:not(:disabled).fc-button-active,
+.fc .fc-button-primary:not(:disabled):active {
+  background: var(--ant-color-primary, #00874e);
+  border-color: var(--ant-color-primary, #00874e);
+  color: #fff;
+}
+
+:root.dark .fc .fc-button {
+  background: var(--ant-color-bg-container, #1f1f1f);
+  border-color: var(--ant-color-border, #424242);
+  color: var(--ant-color-text, rgba(255, 255, 255, 0.85));
+}
+
+:root.dark .fc .fc-button:hover {
+  color: var(--ant-color-primary, #00d27a);
+  border-color: var(--ant-color-primary, #00d27a);
+}
+
+/* Time grid slots */
+.fc .fc-timegrid-slot {
+  height: 2.5em;
+}
+
+.fc .fc-timegrid-slot-label {
+  color: var(--ant-color-text-secondary, rgba(0, 0, 0, 0.45));
+  font-size: 12px;
+}
+
+:root.dark .fc .fc-timegrid-slot-label {
+  color: var(--ant-color-text-secondary, rgba(255, 255, 255, 0.45));
+}
+
+/* Day headers */
+.fc .fc-col-header-cell {
+  padding: 8px;
+  font-weight: 500;
+}
+
+.fc .fc-col-header-cell-cushion {
+  color: var(--ant-color-text, rgba(0, 0, 0, 0.88));
+}
+
+:root.dark .fc .fc-col-header-cell-cushion {
+  color: var(--ant-color-text, rgba(255, 255, 255, 0.85));
+}
+
+/* Events */
+.fc .fc-event {
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.2s;
+}
+
+.fc .fc-event:hover {
+  transform: scale(1.02);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Day grid (month view) events */
+.fc .fc-daygrid-event {
+  margin-top: 2px;
+}
+
+/* Now indicator */
+.fc .fc-timegrid-now-indicator-line {
+  border-color: var(--ant-color-primary, #00874e);
+  border-width: 2px;
+}
+
+.fc .fc-timegrid-now-indicator-arrow {
+  border-color: var(--ant-color-primary, #00874e);
+  border-top-color: transparent;
+  border-bottom-color: transparent;
+}
+
+/* Scrollbar styling */
+.fc .fc-scroller::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.fc .fc-scroller::-webkit-scrollbar-thumb {
+  background: var(--ant-color-border, #d9d9d9);
+  border-radius: 3px;
+}
+
+.fc .fc-scroller::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+:root.dark .fc .fc-scroller::-webkit-scrollbar-thumb {
+  background: var(--ant-color-border, #424242);
+}
+
+/* Day cells */
+.fc .fc-day-today {
+  background: var(--fc-today-bg-color) !important;
+}
+
+.fc .fc-daygrid-day-number {
+  color: var(--ant-color-text, rgba(0, 0, 0, 0.88));
+  padding: 8px;
+}
+
+:root.dark .fc .fc-daygrid-day-number {
+  color: var(--ant-color-text, rgba(255, 255, 255, 0.85));
+}
+
+/* Environment color badges in events */
+.fc-event-env-dev {
+  background-color: #1890ff !important;
+  border-color: #1890ff !important;
+}
+
+.fc-event-env-staging {
+  background-color: #fa8c16 !important;
+  border-color: #fa8c16 !important;
+}
+
+.fc-event-env-prod {
+  background-color: #f5222d !important;
+  border-color: #f5222d !important;
+}

@@ -31,3 +31,12 @@ Thumbs.db
 coverage/
 htmlcov/
 .coverage
+
+# Mypy
+.mypy_cache/
+mypy-report.txt
+mypy-html-report/
+
+# User uploads (dynamic content should be in object storage, not git)
+# TODO: Migrate existing icons to S3/CDN and remove committed files
+django_backend/static/icons/

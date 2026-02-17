@@ -1,0 +1,32 @@
+-- Story 25.5: Create ACTION_MUTEX table
+-- Defines mutual exclusion rules between actions
+-- Prevents incompatible operations from running simultaneously on same targets
+
+CREATE TABLE ACTION_MUTEX (
+    ID NUMBER(19) GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    ACTION_ID NUMBER(19) NOT NULL,
+    INCOMPATIBLE_WITH_ID NUMBER(19) NOT NULL,
+    SAME_TARGET NUMBER(1) NOT NULL,
+    DESCRIPTION VARCHAR2(500),
+    CREATED_AT TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    CONSTRAINT FK_ACTION_MUTEX_ACTION FOREIGN KEY (ACTION_ID) REFERENCES ACTIONS_CATALOG(ID) ON DELETE CASCADE,
+    CONSTRAINT FK_ACTION_MUTEX_INCOMPATIBLE FOREIGN KEY (INCOMPATIBLE_WITH_ID) REFERENCES ACTIONS_CATALOG(ID) ON DELETE CASCADE,
+    CONSTRAINT UQ_ACTION_MUTEX_ACTION_INCOMPATIBLE UNIQUE (ACTION_ID, INCOMPATIBLE_WITH_ID),
+    CONSTRAINT CHK_ACTION_MUTEX_SAME_TARGET CHECK (SAME_TARGET IN (0, 1)),
+    CONSTRAINT CHK_ACTION_MUTEX_NOT_SELF CHECK (ACTION_ID != INCOMPATIBLE_WITH_ID)
+);
+
+COMMENT ON TABLE ACTION_MUTEX IS 'Mutual exclusion rules between actions (Story 25.5)';
+COMMENT ON COLUMN ACTION_MUTEX.ACTION_ID IS 'Primary action that cannot run with incompatible action';
+COMMENT ON COLUMN ACTION_MUTEX.INCOMPATIBLE_WITH_ID IS 'Action that is incompatible with primary action';
+COMMENT ON COLUMN ACTION_MUTEX.SAME_TARGET IS 'If 1: mutex applies only when targeting same target_id; If 0: mutex applies globally';
+COMMENT ON COLUMN ACTION_MUTEX.DESCRIPTION IS 'Human-readable explanation of why these actions are incompatible';
+
+-- Forward lookup: "What actions are incompatible with action A?"
+CREATE INDEX IDX_ACTION_MUTEX_ACTION ON ACTION_MUTEX(ACTION_ID);
+
+-- Reverse lookup: "What actions consider action B incompatible?"
+CREATE INDEX IDX_ACTION_MUTEX_INCOMPATIBLE ON ACTION_MUTEX(INCOMPATIBLE_WITH_ID);
+
+-- Note: Composite index (ACTION_ID, INCOMPATIBLE_WITH_ID) is automatically created
+-- by the UNIQUE constraint UQ_ACTION_MUTEX_ACTION_INCOMPATIBLE, so no need to create it explicitly

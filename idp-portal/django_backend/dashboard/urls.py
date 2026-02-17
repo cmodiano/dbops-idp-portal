@@ -1,0 +1,25 @@
+"""
+URL configuration for dashboard endpoints.
+"""
+
+from django.urls import path
+
+from dashboard import views
+from dashboard.export_views import DashboardExportCSVView, DashboardExportPDFView
+
+app_name = "dashboard"
+
+urlpatterns = [
+    path("dashboard/stats/", views.DashboardStatsView.as_view(), name="dashboard-stats"),
+    path("dashboard/recent/", views.DashboardRecentView.as_view(), name="dashboard-recent"),
+    path("dashboard/timeseries/", views.DashboardTimeSeriesView.as_view(), name="dashboard-timeseries"),
+    path("dashboard/stats-by-technology/", views.DashboardStatsByTechnologyView.as_view(), name="dashboard-stats-by-technology"),
+    path("dashboard/stats-by-environment/", views.DashboardStatsByEnvironmentView.as_view(), name="dashboard-stats-by-environment"),
+    path("dashboard/compare/", views.DashboardCompareView.as_view(), name="dashboard-compare"),
+    # NOTE: This endpoint returns the object directly (no {"data": ...}) per frontend apiFetchRaw usage.
+    path("dashboard/filter-options/", views.DashboardFilterOptionsView.as_view(), name="dashboard-filter-options"),
+    # Story 30.2: Dashboard export endpoints
+    path("dashboard/export/csv", DashboardExportCSVView.as_view(), name="dashboard-export-csv"),
+    path("dashboard/export/pdf", DashboardExportPDFView.as_view(), name="dashboard-export-pdf"),
+]
+
