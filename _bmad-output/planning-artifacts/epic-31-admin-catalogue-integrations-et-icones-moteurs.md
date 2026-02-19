@@ -172,6 +172,28 @@
 
 ---
 
+### Story 31.8 : Service de notification multi-destinations (email, Teams, page)
+
+**En tant que** DBOPS / utilisateur du portail,  
+**je veux** un **service de notification** au même niveau que les services Jira, Splunk, Vault, ServiceNow, exposant plusieurs **types de destinations** (courriel, Teams, page individuel, page DBA), **paramétrable au niveau de l’action** et avec une **option à l’exécution** pour le page individuel,  
+**afin de** livrer les outputs de jobs par courriel au demandeur, alerter l’équipe (Teams) en cas d’erreur, et paginer (support ou individu ou DBA) pour les jobs critiques en production.
+
+**Acceptance Criteria:**
+
+- **Given** le package `services/` (Vault, Splunk, Jira, ServiceNow)
+- **When** on introduit un nouveau service de notification
+- **Then** un **NotificationService** (ou équivalent) est ajouté dans `services/` avec une interface unifiée permettant d’envoyer une notification vers une **destination** donnée
+- **And** les types de destinations supportés sont : **email** (livraison d’output au demandeur), **Teams** (message canal équipe, ex. erreur), **page individuel** (API interne, identité + nom du demandeur), **page DBA** (API interne fournie pour paginer le DBA on-call)
+- **And** la configuration des notifications (quels canaux, dans quelles conditions) est **paramétrable au niveau de l’action** (ex. champs ou section dédiée dans le catalogue d’actions)
+- **And** le **page individuel** est une **option à l’exécution** : la personne qui lance l’action peut choisir « être pagé en cas d’échec » ; son **nom et identité** sont transmis à l’API interne de page
+- **And** le déclenchement d’un **page** (individuel, support ou DBA) n’a lieu **que si le target d’exécution est la production** et que le niveau est **critique** (ou selon règle métier définie)
+- **And** le service s’intègre à la factory existante (`get_service_client("notification", ...)` ou instanciation dédiée) et est documenté dans `services/README.md`
+- **And** des tests (unitaires et/ou d’intégration) valident l’envoi vers chaque type de destination (avec mocks pour les APIs internes et Teams/email)
+
+**Fichiers / zones :** `services/notification_service.py` (ou `notification/` avec backends par type), configuration d’action (catalog) pour les options de notification, exécution (passage option « page moi » + target + niveau critique), `services/README.md`, `__init__.py` / factory si applicable.
+
+---
+
 ## FRs / NFRs couverts
 
 - **FR1, FR6 :** Création/édition d’actions avec une liste d’intégrations cohérente et désactivation prévisible lors de la suppression d’une intégration.
@@ -188,3 +210,4 @@
 - Story 31.5 : amélioration UX pour la configuration AAP — sélection du template par liste (depuis l’API AAP) ou par nom avec résolution dynamique de l’ID, au lieu de la saisie manuelle de l’ID.
 - Story 31.6 : configuration des gates (étape dédiée : quels gates, quel service/intégration par gate quand service externe ; ex. plusieurs ServiceNow → choix de laquelle la gate appelle) ; création du changement ServiceNow avant exécution avec annulation si échec.
 - Story 31.7 : aide contextuelle (tooltip court + popover Markdown) alimentée par le backend (fichiers MD dans docs/help/, API GET /api/v1/help/<topic_id>/), composant SectionHelp réutilisable.
+- Story 31.8 : service de notification multi-destinations (email, Teams, page individuel, page DBA), au même niveau que Jira/Splunk/Vault/ServiceNow ; config au niveau action, option page à l’exécution, page uniquement en production et niveau critique.

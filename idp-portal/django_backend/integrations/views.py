@@ -159,8 +159,8 @@ class IntegrationViewSet(viewsets.ViewSet):
 
     def destroy(self, request, pk=None):
         """
-        DELETE /admin/integrations/{id} - Delete integration.
-        Returns 204 No Content.
+        DELETE /admin/integrations/{id} - Delete integration and disable linked actions.
+        Returns 200 with disabled_actions_count if actions were disabled, 204 otherwise.
         """
         try:
             integration_id = int(pk)
@@ -170,32 +170,23 @@ class IntegrationViewSet(viewsets.ViewSet):
                 message=f"Integration {pk} introuvable",
                 details={"integration_id": pk}
             )
-        
+
         service = IntegrationService()
-        
-        try:
-            deleted = service.delete_integration(integration_id, user=request.user)
-        except ValueError as e:
-            error_msg = str(e)
-            if "actions liées" in error_msg:
-                raise InvalidStateError(
-                    code="DEPENDENCY_ERROR",
-                    message=error_msg,
-                    details={"integration_id": integration_id}
-                )
-            raise InvalidStateError(
-                code="VALIDATION_ERROR",
-                message=error_msg,
-                details={}
-            )
-        
-        if not deleted:
+
+        result = service.delete_integration(integration_id, user=request.user)
+
+        if not result:
             raise NotFoundError(
                 code="NOT_FOUND",
                 message=f"Integration {integration_id} introuvable",
                 details={"integration_id": integration_id}
             )
 
+        if result['disabled_actions_count'] > 0:
+            return Response(
+                {'disabled_actions_count': result['disabled_actions_count']},
+                status=status.HTTP_200_OK,
+            )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @extend_schema(

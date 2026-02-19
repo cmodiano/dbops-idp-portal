@@ -16,6 +16,7 @@ class AuditActionType(models.TextChoices):
     ACTION_UPDATED = 'ACTION_UPDATED', 'Action Updated'
     ACTION_PUBLISHED = 'ACTION_PUBLISHED', 'Action Published'
     ACTION_DISABLED = 'ACTION_DISABLED', 'Action Disabled'
+    ACTION_DISABLED_INTEGRATION_DELETED = 'ACTION_DISABLED_INTEGRATION_DELETED', 'Action Disabled - Integration Deleted'
     ACTION_ENABLED = 'ACTION_ENABLED', 'Action Enabled'
     ACTION_DELETED = 'ACTION_DELETED', 'Action Deleted'
     # Story 18.1: Deactivation/reactivation audit types

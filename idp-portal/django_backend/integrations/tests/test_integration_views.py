@@ -172,45 +172,58 @@ class TestIntegrationViewSet(TestCase):
         
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
     
-    def test_delete_integration(self):
-        """Test DELETE /admin/integrations/{id} deletes integration → 204."""
-        # Create a separate integration for deletion
+    def test_delete_integration_no_linked_actions(self):
+        """Test DELETE /admin/integrations/{id} without linked actions → 204."""
         integration_to_delete = Integration.objects.create(
             type='terraform',
             name='Terraform Integration',
             base_url='https://terraform.example.com'
         )
-        
+
         self.client.force_authenticate(user=self.dbops_user)
         response = self.client.delete(f'/api/v1/admin/integrations/{integration_to_delete.id}/')
-        
+
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-        
-        # Verify integration is deleted
         self.assertFalse(Integration.objects.filter(id=integration_to_delete.id).exists())
-    
+
     def test_delete_integration_not_found(self):
         """Test DELETE /admin/integrations/{id} with non-existent ID → 404."""
         self.client.force_authenticate(user=self.dbops_user)
         response = self.client.delete('/api/v1/admin/integrations/99999/')
-        
+
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-    
-    def test_delete_integration_with_linked_actions(self):
-        """Test DELETE /admin/integrations/{id} with linked actions → 400 DEPENDENCY_ERROR."""
+
+    def test_delete_integration_with_linked_actions_disables_and_returns_count(self):
+        """Test DELETE /admin/integrations/{id} with linked actions → 200 with disabled_actions_count."""
         from catalog.models import Action
         Action.objects.create(
-            name='Linked Action',
-            integration=self.integration,
-            engine='aap',
-            platform='aap',
+            name='Linked Action 1', integration=self.integration, engine='aap', platform='aap',
+        )
+        Action.objects.create(
+            name='Linked Action 2', integration=self.integration, engine='aap', platform='aap',
         )
         self.client.force_authenticate(user=self.dbops_user)
         response = self.client.delete(f'/api/v1/admin/integrations/{self.integration.id}/')
 
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn('error', response.data)
-        self.assertEqual(response.data['error']['code'], 'DEPENDENCY_ERROR')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['disabled_actions_count'], 2)
+        # Integration is deleted
+        self.assertFalse(Integration.objects.filter(id=self.integration.id).exists())
+
+    def test_delete_integration_with_linked_actions_actions_disabled(self):
+        """Test DELETE verifies actions are actually disabled with integration_id=NULL."""
+        from catalog.models import Action, ActionStatus
+        action = Action.objects.create(
+            name='Action To Disable', integration=self.integration, engine='aap', platform='aap',
+        )
+        self.client.force_authenticate(user=self.dbops_user)
+        self.client.delete(f'/api/v1/admin/integrations/{self.integration.id}/')
+
+        action.refresh_from_db()
+        self.assertEqual(action.status, ActionStatus.DISABLED)
+        self.assertIsNone(action.integration_id)
+        self.assertIsNotNone(action.deleted_at)
+        self.assertIn('Intégration supprimée', action.deletion_reason)
 
     def test_create_integration_forbidden_non_dbops(self):
         """Test POST /admin/integrations with non-DBOPS user → 403."""

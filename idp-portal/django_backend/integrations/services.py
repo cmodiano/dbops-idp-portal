@@ -282,44 +282,74 @@ class IntegrationService:
     @transaction.atomic
     def delete_integration(self, integration_id: int, user=None):
         """
-        Delete integration after checking dependencies.
-        
+        Delete integration and disable all linked actions.
+
         Args:
             integration_id: ID of the integration
             user: Optional user instance for audit
-        
+
         Returns:
-            True if deleted, False if not found
-        
-        Raises:
-            ValueError: If integration has dependencies (actions linked)
+            dict with 'deleted' (bool) and 'disabled_actions_count' (int),
+            or False if not found
         """
         try:
             integration = Integration.objects.get(id=integration_id)
         except Integration.DoesNotExist:
             return False
-        
-        # Check for dependencies: actions linked to this integration
-        from catalog.models import Action
-        linked_actions = Action.objects.filter(integration_id=integration_id).exists()
-        
-        if linked_actions:
-            raise ValueError("Impossible de supprimer une intégration avec des actions liées")
-        
-        integration_name = integration.name  # Save name before deletion for audit
+
+        integration_name = integration.name
+
+        # Disable all linked actions before deletion
+        from catalog.models import Action, ActionStatus
+        from django.utils import timezone
+
+        linked_actions = list(Action.objects.filter(integration_id=integration_id))
+        now = timezone.now()
+        disabled_count = 0
+
+        for action in linked_actions:
+            action.status = ActionStatus.DISABLED
+            action.deleted_at = now
+            action.updated_at = now
+            action.deletion_reason = f"Intégration supprimée : {integration_name}"
+            fields = ['status', 'deleted_at', 'updated_at', 'deletion_reason']
+            if user and hasattr(action, 'deleted_by_id'):
+                action.deleted_by = user
+                fields.append('deleted_by')
+            action.save(update_fields=fields)
+            disabled_count += 1
+
+            if user:
+                AuditService.create_entry(
+                    user_id=str(user.id),
+                    action_type=AuditActionType.ACTION_DISABLED_INTEGRATION_DELETED,
+                    entity_type=AuditEntityType.ACTION,
+                    entity_id=action.id,
+                    details={
+                        'action_name': action.name,
+                        'integration_id': integration_id,
+                        'integration_name': integration_name,
+                        'reason': 'integration_deleted',
+                    }
+                )
+
+        # Delete integration (SET_NULL sets integration_id=NULL on actions)
         integration.delete()
-        
-        # Audit if user provided
+
+        # Audit the deletion with disabled count
         if user:
             AuditService.create_entry(
                 user_id=str(user.id),
                 action_type=AuditActionType.INTEGRATION_DELETED,
                 entity_type=AuditEntityType.INTEGRATION,
                 entity_id=integration_id,
-                details={'name': integration_name}
+                details={
+                    'name': integration_name,
+                    'disabled_actions_count': disabled_count,
+                }
             )
-        
-        return True
+
+        return {'deleted': True, 'disabled_actions_count': disabled_count}
     
     def get_by_type(self, integration_type: str):
         """

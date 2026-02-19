@@ -228,7 +228,7 @@ class TestIntegrationServiceUpdate(TestCase):
 
 @pytest.mark.django_db
 class TestIntegrationServiceDelete(TestCase):
-    """Tests for IntegrationService.delete_integration()."""
+    """Tests for IntegrationService.delete_integration(). Story 31.2."""
 
     def setUp(self):
         self.service = IntegrationService()
@@ -237,14 +237,14 @@ class TestIntegrationServiceDelete(TestCase):
             type='aap', name='To Delete', base_url='https://aap.example.com'
         )
 
-    def test_delete_integration(self):
-        """delete_integration() deletes and returns True."""
+    def test_delete_integration_no_linked_actions(self):
+        """delete_integration() without linked actions returns dict with disabled_actions_count=0."""
         result = self.service.delete_integration(self.integration.id, user=self.user)
-        self.assertTrue(result)
+        self.assertEqual(result, {'deleted': True, 'disabled_actions_count': 0})
         self.assertFalse(Integration.objects.filter(id=self.integration.id).exists())
 
     def test_delete_integration_with_audit(self):
-        """delete_integration() with user creates audit."""
+        """delete_integration() with user creates INTEGRATION_DELETED audit with disabled_actions_count."""
         integration_id = self.integration.id
         self.service.delete_integration(integration_id, user=self.user)
         audit = AuditLog.objects.filter(
@@ -253,24 +253,102 @@ class TestIntegrationServiceDelete(TestCase):
             action_type=AuditActionType.INTEGRATION_DELETED
         ).first()
         self.assertIsNotNone(audit)
+        details = audit.get_details()
+        self.assertIn('disabled_actions_count', details)
+        self.assertEqual(details['disabled_actions_count'], 0)
 
     def test_delete_integration_not_found(self):
         """delete_integration() returns False for non-existent ID."""
         result = self.service.delete_integration(99999)
         self.assertFalse(result)
 
-    def test_delete_integration_with_linked_actions_raises(self):
-        """delete_integration() raises ValueError when actions are linked."""
+    def test_delete_integration_with_linked_actions_disables_them(self):
+        """delete_integration() with linked actions disables them and returns count."""
+        from catalog.models import Action, ActionStatus
+        action1 = Action.objects.create(
+            name='Action 1', integration=self.integration, engine='aap', platform='aap',
+        )
+        action2 = Action.objects.create(
+            name='Action 2', integration=self.integration, engine='aap', platform='aap',
+        )
+
+        result = self.service.delete_integration(self.integration.id, user=self.user)
+
+        self.assertEqual(result, {'deleted': True, 'disabled_actions_count': 2})
+        # Integration is deleted
+        self.assertFalse(Integration.objects.filter(id=self.integration.id).exists())
+        # Actions are disabled with soft-delete fields set
+        action1.refresh_from_db()
+        action2.refresh_from_db()
+        self.assertEqual(action1.status, ActionStatus.DISABLED)
+        self.assertEqual(action2.status, ActionStatus.DISABLED)
+        self.assertIsNotNone(action1.deleted_at)
+        self.assertIsNotNone(action2.deleted_at)
+        self.assertIsNotNone(action1.updated_at)
+        self.assertIsNotNone(action2.updated_at)
+        self.assertIn('Intégration supprimée', action1.deletion_reason)
+        self.assertEqual(action1.deleted_by, self.user)
+        # integration_id is SET_NULL after integration.delete()
+        self.assertIsNone(action1.integration_id)
+        self.assertIsNone(action2.integration_id)
+
+    def test_delete_integration_with_linked_actions_audit_per_action(self):
+        """delete_integration() creates ACTION_DISABLED_INTEGRATION_DELETED audit for each action."""
+        from catalog.models import Action
+        action1 = Action.objects.create(
+            name='Audited Action', integration=self.integration, engine='aap', platform='aap',
+        )
+
+        self.service.delete_integration(self.integration.id, user=self.user)
+
+        # Audit for action disabled
+        action_audit = AuditLog.objects.filter(
+            entity_type=AuditEntityType.ACTION,
+            entity_id=action1.id,
+            action_type=AuditActionType.ACTION_DISABLED_INTEGRATION_DELETED,
+        ).first()
+        self.assertIsNotNone(action_audit)
+        details = action_audit.get_details()
+        self.assertEqual(details['action_name'], 'Audited Action')
+        self.assertEqual(details['reason'], 'integration_deleted')
+
+    def test_delete_integration_audit_includes_disabled_count(self):
+        """INTEGRATION_DELETED audit includes disabled_actions_count in details."""
         from catalog.models import Action
         Action.objects.create(
-            name='Linked Action',
-            integration=self.integration,
-            engine='aap',
-            platform='aap',
+            name='A1', integration=self.integration, engine='aap', platform='aap',
         )
-        with self.assertRaises(ValueError) as ctx:
-            self.service.delete_integration(self.integration.id)
-        self.assertIn("actions liées", str(ctx.exception))
+        Action.objects.create(
+            name='A2', integration=self.integration, engine='aap', platform='aap',
+        )
+
+        self.service.delete_integration(self.integration.id, user=self.user)
+
+        audit = AuditLog.objects.filter(
+            entity_type=AuditEntityType.INTEGRATION,
+            entity_id=self.integration.id,
+            action_type=AuditActionType.INTEGRATION_DELETED,
+        ).first()
+        self.assertIsNotNone(audit)
+        details = audit.get_details()
+        self.assertEqual(details['disabled_actions_count'], 2)
+
+    def test_delete_integration_already_disabled_actions(self):
+        """delete_integration() with already disabled actions still counts and processes them."""
+        from catalog.models import Action, ActionStatus
+        from django.utils import timezone
+        action = Action.objects.create(
+            name='Already Disabled', integration=self.integration,
+            engine='aap', platform='aap',
+            status=ActionStatus.DISABLED, deleted_at=timezone.now(),
+            deletion_reason='Previously disabled',
+        )
+
+        result = self.service.delete_integration(self.integration.id, user=self.user)
+
+        self.assertEqual(result['disabled_actions_count'], 1)
+        action.refresh_from_db()
+        self.assertIn('Intégration supprimée', action.deletion_reason)
 
 
 @pytest.mark.django_db

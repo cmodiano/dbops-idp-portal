@@ -3,7 +3,7 @@
  * Uses apiFetch, routes /admin/integrations and /admin/integrations/{id}. Requires DBOPS profile.
  */
 
-import { apiFetch } from './api_client';
+import { apiFetch, apiFetchRaw } from './api_client';
 import type {
   IntegrationCreate,
   IntegrationUpdate,
@@ -51,8 +51,13 @@ export async function updateIntegration(
   });
 }
 
-export async function deleteIntegration(id: number): Promise<void> {
-  await apiFetch<void>(`/admin/integrations/${id}/`, { method: 'DELETE' });
+/** Story 31.2: Returns disabled_actions_count (0 if no actions were disabled). */
+export async function deleteIntegration(id: number): Promise<{ disabled_actions_count: number }> {
+  const res = await apiFetchRaw<{ disabled_actions_count: number } | undefined>(
+    `/admin/integrations/${id}/`,
+    { method: 'DELETE' },
+  );
+  return res ?? { disabled_actions_count: 0 };
 }
 
 /** Story 24.3: Validate a single integration against the type catalogue. */

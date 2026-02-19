@@ -5026,3 +5026,21 @@ So that **comprendre rapidement une section ou consulter une doc détaillée san
 **Backend :** Répertoire `docs/help/` avec MD par topic (frontmatter `short` optionnel). GET /api/v1/help/<topic_id>/ → { topic_id, short, markdown } ; 404 si inconnu ; mapping restreint ; auth. Réf. docs/help-contextual-design.md.
 **Frontend :** Composant SectionHelp (topicId, mode: tooltip | popover | both). Tooltip = short au survol ; Popover = markdown rendu (react-markdown) au clic. getHelpContent(topicId) + cache. Accessibilité.
 **Intégration :** Au moins 2–3 sections pilotes (Intégration, Changement ServiceNow, Gates) avec icône d'aide et fichiers MD.
+
+### Story 31.8 : Service de notification multi-destinations (email, Teams, page)
+
+As a **DBOPS / utilisateur du portail**,
+I want **un service de notification au même niveau que Jira, Splunk, Vault, ServiceNow**, avec plusieurs **types de destinations** (courriel, Teams, page individuel, page DBA), **paramétrable au niveau de l'action** et **option page à l'exécution** pour le page individuel,
+So that **livrer les outputs par courriel au demandeur, alerter l'équipe (Teams) en cas d'erreur, et paginer (support / individu / DBA) pour les jobs critiques en production**.
+
+**Acceptance Criteria:**
+
+**Given** le package `services/` (Vault, Splunk, Jira, ServiceNow)
+**When** on introduit le service de notification
+**Then** un **NotificationService** est ajouté dans `services/` avec interface unifiée (envoi vers une destination donnée)
+**And** destinations supportées : **email** (output au demandeur), **Teams** (message canal, ex. erreur), **page individuel** (API interne, nom + identité), **page DBA** (API interne fournie)
+**And** la config des notifications est **paramétrable au niveau de l'action** (quels canaux, conditions)
+**And** **page individuel** = **option à l'exécution** (la personne qui lance choisit « être pagé en cas d'échec » ; nom + identité → API interne)
+**And** le **page** ne se déclenche **que si target = production** et niveau **critique**
+**And** le service est intégré à la factory ou instanciation existante et documenté dans `services/README.md`
+**And** des tests valident l'envoi vers chaque type de destination (mocks pour APIs internes et Teams/email)
