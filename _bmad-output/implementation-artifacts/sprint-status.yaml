@@ -413,7 +413,7 @@ development_status:
     31-1-formulaire-action-liste-integrations-label-integration: done # 2026-02-19: code-review — 7 issues corrigées (AC6 ActionForm, Alert.title→message, tests AC6, Tower type)
     31-2-suppression-integration-desactiver-actions: done # 2026-02-19: code-review — 1 HIGH + 2 MEDIUM fixes (updated_at action, code mort view, assertion test)
     31-3-icones-moteurs-ref-engines: done # 2026-02-19: code-review — 7 issues (1H + 2M + 4L) auto-fixées (race condition SAML prefetch, EngineIconCell moteurs inconnus, APITestCase, test null, docs)
-    31-4-refonte-ux-panneau-changement-servicenow-gates: backlog
+    31-4-refonte-ux-panneau-changement-servicenow-gates: done # 2026-02-19: Code review adversarial — 4 issues auto-fixés (H1: regex ^[A-Za-z0-9_-]+$, H2: validation template_id, M4: messages erreur, M5: tests Gates switches) — 16/16 tests ✅
     31-5-aap-selection-template-liste-ou-nom: backlog
     31-6-config-gates-choix-service-creation-changement-servicenow: backlog
     31-7-aide-contextuelle-tooltip-popover-markdown-backend: backlog

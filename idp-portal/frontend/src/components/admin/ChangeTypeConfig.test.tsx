@@ -1,6 +1,7 @@
 /**
- * Tests for ChangeTypeConfig (Story 2.24 + Story 21.4: dynamic environments).
- * Per-env Switch « Changement requis » + Code modèle, with environments from useEnvironments hook.
+ * Tests for ChangeTypeConfig (Story 2.24 + Story 21.4 + Story 31.4).
+ * Two-block layout: Gates (allowed, maintenance, approval) + ServiceNow (required, model/template, change type).
+ * Unified "Modèle / Template ID" field merging Code modèle + Template ID.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -35,24 +36,41 @@ describe('ChangeTypeConfig', () => {
   it('renders table with environments from hook', () => {
     render(<ChangeTypeConfig value={{}} onChange={() => {}} />);
     expect(screen.getByRole('table', { name: /Configuration type de changement/i })).toBeInTheDocument();
-    expect(screen.getByText('Développement')).toBeInTheDocument();
-    expect(screen.getByText('Staging')).toBeInTheDocument();
-    expect(screen.getByText('Production')).toBeInTheDocument();
+    // Each env appears twice (once per block)
+    expect(screen.getAllByText('Développement')).toHaveLength(2);
+    expect(screen.getAllByText('Staging')).toHaveLength(2);
+    expect(screen.getAllByText('Production')).toHaveLength(2);
   });
 
-  it('renders Switch and Code modèle column headers', () => {
+  // Story 31.4: two-block layout with separate headers
+  it('renders two-block headers: Gates and Changement ServiceNow', () => {
     render(<ChangeTypeConfig value={{}} onChange={() => {}} />);
+    // Bloc 1 — Gates
+    expect(screen.getByRole('group', { name: /Gates/i })).toBeInTheDocument();
+    expect(screen.getByText('Autorisé')).toBeInTheDocument();
+    expect(screen.getByText('Plage maintenance')).toBeInTheDocument();
+    expect(screen.getByText('Approbation')).toBeInTheDocument();
+    // Bloc 2 — ServiceNow
+    expect(screen.getByRole('group', { name: /Changement ServiceNow/i })).toBeInTheDocument();
     expect(screen.getByText('Changement requis')).toBeInTheDocument();
-    expect(screen.getByText('Code modèle')).toBeInTheDocument();
+    expect(screen.getByText('Modèle / Template ID')).toBeInTheDocument();
+    expect(screen.getByText('Change type')).toBeInTheDocument();
   });
 
-  it('when required is true for prod, shows input for code', () => {
+  // Story 31.4: no more separate "Code modèle" and "Template ID" columns
+  it('does not render separate Code modèle or Template ID column headers', () => {
+    render(<ChangeTypeConfig value={{}} onChange={() => {}} />);
+    expect(screen.queryByText('Code modèle')).not.toBeInTheDocument();
+    expect(screen.queryByText('Template ID')).not.toBeInTheDocument();
+  });
+
+  it('when required is true for prod, shows unified model/template input', () => {
     render(
       <ChangeTypeConfig value={{ prod: { required: true, change_model_code: '1516B' } }} onChange={() => {}} />
     );
-    const prodCodeInput = screen.getByLabelText(/Code modèle pour prod/i);
-    expect(prodCodeInput).toBeInTheDocument();
-    expect(prodCodeInput).toHaveValue('1516B');
+    const prodInput = screen.getByLabelText(/Modèle \/ Template ID pour prod/i);
+    expect(prodInput).toBeInTheDocument();
+    expect(prodInput).toHaveValue('1516B');
   });
 
   it('calls onChange when toggling Switch', async () => {
@@ -64,15 +82,75 @@ describe('ChangeTypeConfig', () => {
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ dev: expect.objectContaining({ required: true }) }));
   });
 
-  it('calls onChange when typing code', async () => {
+  // Story 31.4: Gates block switches
+  it('calls onChange when toggling Autorisé switch', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<ChangeTypeConfig value={{}} onChange={onChange} />);
+    const devSwitch = screen.getByLabelText(/Exécution autorisée pour dev/i);
+    await user.click(devSwitch);
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ dev: expect.objectContaining({ allowed: false }) }));
+  });
+
+  it('calls onChange when toggling Plage maintenance switch', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<ChangeTypeConfig value={{}} onChange={onChange} />);
+    const devSwitch = screen.getByLabelText(/Plage de maintenance requise pour dev/i);
+    await user.click(devSwitch);
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ dev: expect.objectContaining({ requires_maintenance_window: true }) })
+    );
+  });
+
+  it('calls onChange when toggling Approbation switch', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<ChangeTypeConfig value={{}} onChange={onChange} />);
+    const devSwitch = screen.getByLabelText(/Approbation requise pour dev/i);
+    await user.click(devSwitch);
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ dev: expect.objectContaining({ requires_approval: true }) })
+    );
+  });
+
+  it('calls onChange when typing in unified model/template field', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(
       <ChangeTypeConfig value={{ prod: { required: true, change_model_code: '' } }} onChange={onChange} />
     );
-    const input = screen.getByLabelText(/Code modèle pour prod/i);
-    await user.type(input, '1516B');
+    const input = screen.getByLabelText(/Modèle \/ Template ID pour prod/i);
+    await user.type(input, 'CHG_TPL');
     expect(onChange).toHaveBeenCalled();
+    // Verify both fields are written
+    const lastCall = onChange.mock.calls[onChange.mock.calls.length - 1][0];
+    expect(lastCall.prod.change_model_code).toBeDefined();
+    expect(lastCall.prod.template_id).toBeDefined();
+    expect(lastCall.prod.change_model_code).toBe(lastCall.prod.template_id);
+  });
+
+  // Story 31.4: unified field reads template_id with fallback to change_model_code
+  it('displays template_id value in the unified field (priority over change_model_code)', () => {
+    render(
+      <ChangeTypeConfig
+        value={{ prod: { required: true, template_id: 'TPL_A', change_model_code: 'CODE_B' } }}
+        onChange={() => {}}
+      />
+    );
+    const input = screen.getByLabelText(/Modèle \/ Template ID pour prod/i);
+    expect(input).toHaveValue('TPL_A');
+  });
+
+  it('falls back to change_model_code when template_id is empty', () => {
+    render(
+      <ChangeTypeConfig
+        value={{ prod: { required: true, change_model_code: 'CODE_B' } }}
+        onChange={() => {}}
+      />
+    );
+    const input = screen.getByLabelText(/Modèle \/ Template ID pour prod/i);
+    expect(input).toHaveValue('CODE_B');
   });
 
   // Story 21.4 tests
@@ -92,14 +170,14 @@ describe('ChangeTypeConfig', () => {
 
       render(<ChangeTypeConfig value={{}} onChange={() => {}} />);
 
-      expect(screen.getByText('Développement')).toBeInTheDocument();
-      expect(screen.getByText('Staging')).toBeInTheDocument();
-      expect(screen.getByText('Production')).toBeInTheDocument();
-      expect(screen.getByText('Lab')).toBeInTheDocument();
-      // 4 rows (one per environment)
+      // Each env appears twice (once per block)
+      expect(screen.getAllByText('Développement')).toHaveLength(2);
+      expect(screen.getAllByText('Staging')).toHaveLength(2);
+      expect(screen.getAllByText('Production')).toHaveLength(2);
+      expect(screen.getAllByText('Lab')).toHaveLength(2);
+      // Two blocks: Gates header + 4 data rows + ServiceNow header + 4 data rows = 10
       const rows = screen.getAllByRole('row');
-      // header row + 4 data rows = 5
-      expect(rows.length).toBe(5);
+      expect(rows.length).toBe(10);
     });
 
     it('renders 1 environment when hook returns 1', () => {
@@ -114,10 +192,10 @@ describe('ChangeTypeConfig', () => {
 
       render(<ChangeTypeConfig value={{}} onChange={() => {}} />);
 
-      expect(screen.getByText('Développement')).toBeInTheDocument();
+      expect(screen.getAllByText('Développement')).toHaveLength(2);
       const rows = screen.getAllByRole('row');
-      // header + 1 data row = 2
-      expect(rows.length).toBe(2);
+      // 2 header rows + 2 × 1 data row = 4
+      expect(rows.length).toBe(4);
     });
 
     it('shows skeleton when loading', () => {
@@ -128,7 +206,6 @@ describe('ChangeTypeConfig', () => {
 
       render(<ChangeTypeConfig value={{}} onChange={() => {}} />);
 
-      // Skeleton active = Ant Design skeleton element
       expect(screen.queryByRole('table')).not.toBeInTheDocument();
     });
 
@@ -140,11 +217,9 @@ describe('ChangeTypeConfig', () => {
 
       render(<ChangeTypeConfig value={{}} onChange={() => {}} />);
 
-      // Shows warning alert
       expect(screen.getByText(/Erreur de chargement des environnements/i)).toBeInTheDocument();
-      // But still renders grid with fallback environments
       expect(screen.getByRole('table')).toBeInTheDocument();
-      expect(screen.getByText('Développement')).toBeInTheDocument();
+      expect(screen.getAllByText('Développement')).toHaveLength(2);
     });
 
     it('renders new env with default values (not required)', () => {
@@ -160,7 +235,6 @@ describe('ChangeTypeConfig', () => {
         error: null,
       });
 
-      // Existing config only has dev and prod
       render(
         <ChangeTypeConfig
           value={{ dev: { required: true, change_model_code: 'A1' }, prod: { required: true, change_model_code: 'B2' } }}
@@ -168,9 +242,7 @@ describe('ChangeTypeConfig', () => {
         />
       );
 
-      // lab should appear but with default "not required" (dash shown)
-      expect(screen.getByText('Lab')).toBeInTheDocument();
-      // Switch for lab should exist and be unchecked (not required by default)
+      expect(screen.getAllByText('Lab')).toHaveLength(2);
       const labSwitch = screen.getByLabelText(/Changement requis pour lab/i);
       expect(labSwitch).toBeInTheDocument();
       expect(labSwitch).not.toBeChecked();

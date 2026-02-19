@@ -266,20 +266,22 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
         }
       }
 
-      // Story 2.24 AC2: validate change_type_config — when required=true, change_model_code required and alphanumeric max 50
+      // Story 2.24 AC2 + Story 31.4: validate change_type_config — when required=true, model/template ID required
+      // Read template_id first (priority), fall back to change_model_code (rétrocompatibilité)
+      // Pattern relaxed in Story 31.4 to allow underscores and hyphens (e.g. CHG_TPL_001)
       for (const [env, entry] of Object.entries(changeTypeConfig)) {
         if (entry?.required) {
-          const code = (entry.change_model_code ?? '').trim();
+          const code = (entry.template_id ?? entry.change_model_code ?? '').trim();
           if (!code) {
-            setStepsError(`Le code modèle est obligatoire pour ${env} lorsque « Changement requis » est activé.`);
+            setStepsError(`Le modèle / Template ID est obligatoire pour ${env} lorsque « Changement requis » est activé.`);
             return;
           }
-          if (!/^[A-Za-z0-9]+$/.test(code)) {
-            setStepsError(`Le code modèle pour ${env} doit être alphanumérique uniquement.`);
+          if (!/^[A-Za-z0-9_-]+$/.test(code)) {
+            setStepsError(`Le modèle / Template ID pour ${env} doit être alphanumérique (tirets et underscores autorisés).`);
             return;
           }
           if (code.length > 50) {
-            setStepsError(`Le code modèle pour ${env} ne peut pas dépasser 50 caractères.`);
+            setStepsError(`Le modèle / Template ID pour ${env} ne peut pas dépasser 50 caractères.`);
             return;
           }
         }
@@ -613,7 +615,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
 
                       <Form.Item
                         label="Changement ServiceNow par environnement"
-                        tooltip="Pour chaque environnement : activer « Changement requis » et, si actif, saisir le code modèle (alphanumérique, max 50). Story 2.24."
+                        tooltip="Pour chaque environnement : configurer les gates (autorisé, plage maintenance, approbation) et le changement ServiceNow (requis, modèle/template ID)."
                         style={{ marginBottom: 16 }}
                       >
                         <ChangeTypeConfig value={changeTypeConfig} onChange={setChangeTypeConfig} />
