@@ -1,9 +1,10 @@
 /**
  * Story 28.4, AC#10: Tests for BusinessRulePolicySelector.
+ * Inline option removed — only "Aucune" and "Règle prédéfinie", filtered by stepType.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from 'antd';
 import { BusinessRulePolicySelector } from './BusinessRulePolicySelector';
@@ -43,9 +44,8 @@ function renderWithApp(ui: React.ReactElement) {
 describe('BusinessRulePolicySelector', () => {
   const defaultProps = {
     policyId: null as number | null,
-    inlineJson: '',
     onPolicyIdChange: vi.fn(),
-    onInlineJsonChange: vi.fn(),
+    stepType: 'terraform_cloud',
   };
 
   beforeEach(() => {
@@ -56,13 +56,13 @@ describe('BusinessRulePolicySelector', () => {
     });
   });
 
-  it('renders three radio options', async () => {
+  it('renders two radio options (Aucune, Règle prédéfinie)', async () => {
     await act(async () => {
       renderWithApp(<BusinessRulePolicySelector {...defaultProps} />);
     });
 
     const radios = screen.getAllByRole('radio');
-    expect(radios).toHaveLength(3);
+    expect(radios).toHaveLength(2);
   });
 
   it('defaults to "none" mode when no policy selected', async () => {
@@ -71,7 +71,6 @@ describe('BusinessRulePolicySelector', () => {
     });
 
     const radios = screen.getAllByRole('radio');
-    // First radio "Aucune" should be checked
     expect(radios[0]).toBeChecked();
   });
 
@@ -83,50 +82,38 @@ describe('BusinessRulePolicySelector', () => {
     });
 
     const radios = screen.getAllByRole('radio');
-    // Second radio "Règle prédéfinie" should be checked
     expect(radios[1]).toBeChecked();
   });
 
-  it('selects "inline" mode when inlineJson is set', async () => {
+  it('fetches policies with step_type when stepType is provided', async () => {
     await act(async () => {
-      renderWithApp(
-        <BusinessRulePolicySelector
-          {...defaultProps}
-          inlineJson='{"on_step_output": []}'
-        />,
-      );
+      renderWithApp(<BusinessRulePolicySelector {...defaultProps} />);
     });
 
-    const radios = screen.getAllByRole('radio');
-    // Third radio "Règle personnalisée" should be checked
-    expect(radios[2]).toBeChecked();
+    expect(getBusinessRulePolicies).toHaveBeenCalledWith({
+      is_active: true,
+      step_type: 'terraform_cloud',
+    });
   });
 
-  it('shows inline editor when "inline" mode is selected', async () => {
+  it('does not fetch when stepType is empty', async () => {
     await act(async () => {
-      renderWithApp(
-        <BusinessRulePolicySelector
-          {...defaultProps}
-          inlineJson='{"on_step_output": []}'
-        />,
-      );
+      renderWithApp(<BusinessRulePolicySelector {...defaultProps} stepType="" />);
     });
 
-    expect(screen.getByLabelText('Éditeur de règles métier')).toBeInTheDocument();
+    expect(getBusinessRulePolicies).not.toHaveBeenCalled();
   });
 
-  it('clears both values when switching to "none"', async () => {
+  it('clears policy when switching to "none"', async () => {
     const user = userEvent.setup();
     const onPolicyIdChange = vi.fn();
-    const onInlineJsonChange = vi.fn();
 
     await act(async () => {
       renderWithApp(
         <BusinessRulePolicySelector
+          {...defaultProps}
           policyId={1}
-          inlineJson=""
           onPolicyIdChange={onPolicyIdChange}
-          onInlineJsonChange={onInlineJsonChange}
         />,
       );
     });
@@ -135,48 +122,26 @@ describe('BusinessRulePolicySelector', () => {
     await user.click(radios[0]); // "Aucune"
 
     expect(onPolicyIdChange).toHaveBeenCalledWith(null);
-    expect(onInlineJsonChange).toHaveBeenCalledWith('');
   });
 
-  it('clears inline when switching to "predefined"', async () => {
-    const user = userEvent.setup();
-    const onInlineJsonChange = vi.fn();
-
+  it('shows message when stepType is empty in predefined mode', async () => {
     await act(async () => {
       renderWithApp(
         <BusinessRulePolicySelector
+          {...defaultProps}
+          stepType=""
           policyId={null}
-          inlineJson='{"on_step_output": []}'
-          onPolicyIdChange={vi.fn()}
-          onInlineJsonChange={onInlineJsonChange}
         />,
       );
     });
-
-    const radios = screen.getAllByRole('radio');
-    await user.click(radios[1]); // "Règle prédéfinie"
-
-    expect(onInlineJsonChange).toHaveBeenCalledWith('');
-  });
-
-  it('clears policyId when switching to "inline"', async () => {
-    const user = userEvent.setup();
-    const onPolicyIdChange = vi.fn();
 
     await act(async () => {
-      renderWithApp(
-        <BusinessRulePolicySelector
-          policyId={1}
-          inlineJson=""
-          onPolicyIdChange={onPolicyIdChange}
-          onInlineJsonChange={vi.fn()}
-        />,
-      );
+      const radios = screen.getAllByRole('radio');
+      await userEvent.setup().click(radios[1]); // "Règle prédéfinie"
     });
 
-    const radios = screen.getAllByRole('radio');
-    await user.click(radios[2]); // "Règle personnalisée"
-
-    expect(onPolicyIdChange).toHaveBeenCalledWith(null);
+    expect(
+      screen.getByText(/Sélectionnez une intégration.*pour afficher les règles métier/),
+    ).toBeInTheDocument();
   });
 });

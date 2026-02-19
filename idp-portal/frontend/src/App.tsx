@@ -8,6 +8,7 @@ import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { DashboardProvider } from './contexts/DashboardContext';
 import { FeatureFlagProvider } from './contexts/FeatureFlagContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { prefetchEngineIcons } from './utils/engineIconCache';
 import './styles/glass.css';
 
 const CatalogPage = lazy(() => import('./pages/CatalogPage'));
@@ -65,6 +66,13 @@ function CalendarGuard({ children }: { children: React.ReactNode }) {
 function ThemedApp() {
   const { effectiveMode } = useTheme();
   const currentTheme = effectiveMode === 'dark' ? darkTheme : lightTheme;
+
+  // Story 31.3: Warm engine icon cache after first render (auth context available).
+  // Called here instead of module-level to avoid 401 during SAML auth flow
+  // (auth/callback page loads before JWT is stored in storage).
+  useEffect(() => {
+    prefetchEngineIcons();
+  }, []);
 
   // Liquid glass: body gradient so frosted panels have depth; theme class for CSS
   useEffect(() => {

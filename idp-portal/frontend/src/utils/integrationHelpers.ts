@@ -37,3 +37,18 @@ const INTEGRATION_TYPE_TO_CONNECTOR: Record<string, ConnectorType> = {
 export function integrationToConnector(integrationType: string): ConnectorType {
   return INTEGRATION_TYPE_TO_CONNECTOR[integrationType] ?? 'none';
 }
+
+/**
+ * Map platform code (REF_PLATFORMS / backend) to step_type for business rule policy filtering.
+ */
+const PLATFORM_CODE_TO_STEP_TYPE: Record<string, string> = {
+  AAP: 'aap',
+  Tower: 'aap',
+  Terraform: 'terraform_cloud',
+  'Terraform Cloud': 'terraform_cloud',
+  'Azure DevOps': 'azure_devops',
+};
+
+export function platformCodeToStepType(platformCode: string): string {
+  return PLATFORM_CODE_TO_STEP_TYPE[platformCode] ?? platformCode.toLowerCase().replace(/\s+/g, '_');
+}

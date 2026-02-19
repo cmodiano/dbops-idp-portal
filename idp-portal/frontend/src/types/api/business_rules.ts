@@ -39,7 +39,10 @@ export interface BusinessRulePolicyListResponse {
 
 /** Filters for listing business rule policies. */
 export interface BusinessRulePolicyFilters {
+  /** Filter by step_type from policy JSON (e.g. aap, terraform_cloud, azure_devops). */
   step_type?: string;
+  /** Filter by platform code (backend maps to step_type). */
+  platform?: string;
   is_active?: boolean;
   page?: number;
   page_size?: number;

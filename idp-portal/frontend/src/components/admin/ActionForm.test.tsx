@@ -14,6 +14,7 @@ vi.mock('../../services/admin_service', () => ({
   updateActionTags: vi.fn().mockResolvedValue({}),
   updateRemediationRules: vi.fn().mockResolvedValue({}),
   updateBusinessRulePolicies: vi.fn().mockResolvedValue({}),
+  patchAction: vi.fn().mockResolvedValue({}),
   checkActionNameAvailable: vi.fn().mockResolvedValue(true),
 }));
 

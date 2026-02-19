@@ -38,7 +38,7 @@ import { getTags, updateActionTags, updateActionSteps, updateWorkflowSteps, upda
 import { useEngines } from '../../hooks/useEngines';
 import { usePlatformIntegrations } from '../../hooks/usePlatformIntegrations';
 import { useCategories } from '../../hooks/useCategories';
-import { integrationTypeToPlatformCode, integrationToConnector } from '../../utils/integrationHelpers';
+import { integrationTypeToPlatformCode, integrationToConnector, platformCodeToStepType } from '../../utils/integrationHelpers';
 
 const { TextArea } = Input;
 
@@ -83,10 +83,8 @@ export function ActionWizard({
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagsOptions, setTagsOptions] = useState<{ value: string; label: string }[]>([]);
   const [changeTypeConfig, setChangeTypeConfig] = useState<Record<string, ChangeTypeConfigEntry>>({});
-  /** Story 28.4: Predefined business rule policy ID (FK). */
+  /** Story 28.4: Predefined business rule policy ID (FK). Inline rules removed — only catalogue. */
   const [businessRulePolicyId, setBusinessRulePolicyId] = useState<number | null>(null);
-  /** Story 28.1: Business rule policies inline JSON (legacy). */
-  const [businessRulePoliciesJson, setBusinessRulePoliciesJson] = useState<string>('');
   /** Pour AAP : type de ressource (job_template | workflow_job) et ID template. 1 action = 1 étape. */
   const [aapResourceType, setAapResourceType] = useState<'job_template' | 'workflow_job'>('job_template');
   const [aapTemplateId, setAapTemplateId] = useState<number | undefined>(undefined);
@@ -142,13 +140,8 @@ export function ActionWizard({
       setDefaultImpactLevel(editAction.default_impact_level ?? null);
       setSelectedTags(editAction.tags ?? []);
       setChangeTypeConfig(editAction.change_type_config ?? {});
-      // Story 28.4: Load business rule policy (FK or inline)
+      // Story 28.4: Load business rule policy (FK only; inline removed)
       setBusinessRulePolicyId(editAction.business_rule_policy_id ?? null);
-      setBusinessRulePoliciesJson(
-        editAction.business_rule_policies
-          ? JSON.stringify(editAction.business_rule_policies, null, 2)
-          : ''
-      );
       // Story 9.5: Load workflow steps for workflows
       if (editAction.item_type === 'workflow' && editAction.workflow_steps) {
         setWorkflowSteps(editAction.workflow_steps);
@@ -177,7 +170,6 @@ export function ActionWizard({
       setSelectedTags([]);
       setChangeTypeConfig({});
       setBusinessRulePolicyId(null);
-      setBusinessRulePoliciesJson('');
       setAapResourceType('job_template');
       setAapTemplateId(undefined);
       setWorkflowSteps([]);
@@ -381,19 +373,14 @@ export function ActionWizard({
       }
 
       if (actionId) {
-        // Story 28.4: Save business rule policy (FK predefined or inline)
+        // Story 28.4: Save business rule policy (predefined only)
         try {
           if (businessRulePolicyId) {
-            // Use predefined policy via FK — PATCH to clear inline
             await updateBusinessRulePolicies(actionId, null);
             await patchAction(actionId, { business_rule_policy_id: businessRulePolicyId });
-          } else if (businessRulePoliciesJson.trim()) {
-            // Use inline JSON (legacy)
-            const policiesToSave = JSON.parse(businessRulePoliciesJson) as { on_step_output?: unknown[] };
-            await updateBusinessRulePolicies(actionId, policiesToSave);
           } else {
-            // Clear both
             await updateBusinessRulePolicies(actionId, null);
+            await patchAction(actionId, { business_rule_policy_id: null });
           }
         } catch (policiesErr) {
           notification.warning({
@@ -736,16 +723,19 @@ export function ActionWizard({
                 <ChangeTypeConfig value={changeTypeConfig} onChange={isReadOnly ? () => {} : setChangeTypeConfig} />
               </Form.Item>
             )}
-            {/* Story 28.4: Règles métier — sélecteur prédéfini ou inline */}
+            {/* Story 28.4: Règles métier — sélecteur prédéfini (filtré par plateforme) */}
             <Form.Item
               label="Règles métier"
-              tooltip="Associez une règle prédéfinie du catalogue ou saisissez une règle personnalisée (inline JSON)."
+              tooltip="Choisissez une règle prédéfinie du catalogue (Admin → Règles métier). Seules les règles liées à votre plateforme d'exécution sont proposées."
             >
               <BusinessRulePolicySelector
                 policyId={businessRulePolicyId}
-                inlineJson={businessRulePoliciesJson}
                 onPolicyIdChange={setBusinessRulePolicyId}
-                onInlineJsonChange={setBusinessRulePoliciesJson}
+                stepType={
+                  selectedIntegration?.type
+                  ?? (editAction?.integration_id ? getIntegrationById(editAction.integration_id)?.type : undefined)
+                  ?? (editAction?.platform ? platformCodeToStepType(editAction.platform) : undefined)
+                }
                 disabled={isReadOnly}
               />
             </Form.Item>

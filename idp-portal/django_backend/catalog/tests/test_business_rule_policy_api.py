@@ -121,6 +121,19 @@ class TestBusinessRulePolicyAPI(TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]['step_type'], 'terraform_cloud')
 
+    def test_filter_by_platform(self):
+        """GET ?platform=AAP → maps to step_type=aap and returns matching policies."""
+        self._create_policy(name='Terraform Policy')
+        self._create_policy(name='AAP Policy', policy_json=AAP_POLICY_JSON)
+
+        response = self.client.get(f'{self.url}?platform=AAP')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data['data']
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]['step_type'], 'aap')
+        self.assertEqual(results[0]['name'], 'AAP Policy')
+
     def test_filter_by_is_active(self):
         """GET ?is_active=true → active only."""
         self._create_policy(name='Active Policy', is_active=True)

@@ -17,6 +17,7 @@ export interface RefEngine {
   label: string;
   display_order: number;
   is_active: number;
+  icon_url: string | null;
 }
 
 export interface RefPlatform {

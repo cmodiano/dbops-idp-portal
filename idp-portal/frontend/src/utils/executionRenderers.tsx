@@ -34,6 +34,7 @@ import type { ActionEngine, ActionPlatform, ItemType, ExecutionStatusType } from
 import { STYLE_TOKENS } from '../theme/styleTokens';
 import { useTheme } from '../contexts/ThemeContext';
 import { getIconUrl } from './iconUrl';
+import { getEngineIconUrl } from './engineIconCache';
 
 /** Engine icon size in execution tables (px) - clearly visible vendor logos.
  * Increased from 44px to 56px for better visibility and proportion with platform icons.
@@ -188,14 +189,17 @@ function EngineIconSvgCell({ engine, svgSrc }: { engine: ActionEngine; svgSrc: s
 
 /**
  * Render engine icon for Technologie column (AC4).
+ * Story 31.3: Fallback cascade — 1) icon_url from API, 2) ENGINE_SVG_SOURCES hardcoded, 3) ENGINE_ICONS Ant Design.
  *
  * @param engine - Engine name (Oracle, SQL Server, DB2) or null
  * @param itemType - Item type (action or workflow)
+ * @param iconUrl - Optional icon_url from API (takes priority over ENGINE_SVG_SOURCES)
  * @returns React node with icon + tooltip
  */
 export function renderEngineIcon(
   engine: ActionEngine | null | undefined,
   itemType: ItemType | undefined,
+  iconUrl?: string | null,
 ): React.ReactNode {
   // Workflow takes priority over engine
   if (itemType === 'workflow') {
@@ -215,9 +219,28 @@ export function renderEngineIcon(
 
   // Known engine
   const config = ENGINE_ICONS[engine as ActionEngine];
-  const svgSrc = ENGINE_SVG_SOURCES[engine as ActionEngine];
+  // Story 31.3: Fallback cascade for SVG source
+  const apiIconUrl = iconUrl?.trim() || getEngineIconUrl(engine) || undefined;
+  const svgSrc = apiIconUrl || ENGINE_SVG_SOURCES[engine as ActionEngine];
+
   if (!config) {
-    // Unknown engine - show text
+    // Unknown engine — still try API icon_url before showing text
+    if (svgSrc) {
+      return (
+        <Tooltip title={engine}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+            <img
+              src={svgSrc}
+              alt=""
+              width={ENGINE_ICON_SIZE_COMPACT}
+              height={ENGINE_ICON_SIZE_COMPACT}
+              style={{ flexShrink: 0, verticalAlign: 'middle' }}
+              aria-hidden
+            />
+          </div>
+        </Tooltip>
+      );
+    }
     return <span title={engine} style={{ fontSize: 12, opacity: 0.6 }}>{engine}</span>;
   }
 

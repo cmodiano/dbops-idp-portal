@@ -33,6 +33,7 @@ class RefEngine(models.Model):
     label = models.CharField(max_length=100, db_column='LABEL')
     display_order = models.IntegerField(default=0, db_column='DISPLAY_ORDER')
     is_active = models.IntegerField(default=1, db_column='IS_ACTIVE')
+    icon_url = models.CharField(max_length=500, null=True, blank=True, db_column='ICON_URL')
 
     objects = RefEngineManager()
 

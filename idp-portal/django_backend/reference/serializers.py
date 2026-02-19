@@ -17,11 +17,19 @@ class RefEngineSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = RefEngine
-        fields = ['id', 'code', 'label', 'display_order', 'is_active', 'normalized_code']
+        fields = ['id', 'code', 'label', 'display_order', 'is_active', 'normalized_code', 'icon_url']
 
     def get_normalized_code(self, obj: RefEngine) -> str:
         """Retourne le code normalisé (minuscules + underscores) pour usage dans engine_type."""
         return obj.code.lower().replace(' ', '_')
+
+
+class RefEngineWriteSerializer(serializers.ModelSerializer):
+    """Write serializer for RefEngine admin updates (Story 31.3, AC6)."""
+
+    class Meta:
+        model = RefEngine
+        fields = ['label', 'display_order', 'is_active', 'icon_url']
 
 
 class RefPlatformSerializer(serializers.ModelSerializer):

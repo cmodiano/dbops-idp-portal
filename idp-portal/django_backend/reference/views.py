@@ -15,7 +15,8 @@ from rest_framework.permissions import IsAuthenticated
 
 from reference.models import RefEngine, RefPlatform, RefCategory
 from reference.serializers import (
-    RefEngineSerializer, RefPlatformSerializer,
+    RefEngineSerializer, RefEngineWriteSerializer,
+    RefPlatformSerializer,
     RefCategorySerializer, RefCategoryWriteSerializer,
 )
 from core.middleware import get_correlation_id
@@ -88,6 +89,39 @@ def list_platforms(request: Request) -> Response:
     serializer = RefPlatformSerializer(queryset, many=True)
 
     return Response({"data": serializer.data})
+
+
+# ─── Story 31.3: Engine admin endpoint ─────────────────────────────────────
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated, DBOPSProfilePermission])
+def update_engine(request: Request, pk: int) -> Response:
+    """
+    PATCH /api/v1/admin/engines/{pk}/
+    Update engine fields (icon_url, label, display_order, is_active).
+    DBOPS only. Story 31.3, AC6.
+    """
+    correlation_id = get_correlation_id()
+    logger.info("updating_engine", engine_id=pk, correlation_id=correlation_id)
+
+    try:
+        engine = RefEngine.objects.get(pk=pk)
+    except RefEngine.DoesNotExist:
+        return Response(
+            {"detail": "Moteur introuvable."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    serializer = RefEngineWriteSerializer(engine, data=request.data, partial=True)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    serializer.save()
+    logger.info("engine_updated", engine_id=pk, correlation_id=correlation_id)
+    # Returns engine object directly (no {"data":...} wrapper) per convention for PATCH endpoints.
+    # Note: update_category wraps in {"data":...} for historical reasons — known inconsistency (code-review M2).
+    return Response(RefEngineSerializer(engine).data)
 
 
 # ─── Story 2.30: Category endpoints ────────────────────────────────────────

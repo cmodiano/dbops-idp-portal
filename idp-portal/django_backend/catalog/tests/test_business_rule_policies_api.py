@@ -131,6 +131,40 @@ class TestBusinessRulePoliciesAPI(TestCase):
         self.action.refresh_from_db()
         self.assertIsNone(self.action.business_rule_policies)
 
+    def test_put_business_rule_policies_endpoint(self):
+        """PUT /admin/actions/{id}/business-rule-policies/ → 200 + persisted (Story 28.1)."""
+        put_url = f'/api/v1/admin/actions/{self.action.id}/business-rule-policies/'
+        response = self.client.put(
+            put_url,
+            {'business_rule_policies': VALID_TERRAFORM_POLICY},
+            format='json'
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.action.refresh_from_db()
+        self.assertIsNone(self.action.business_rule_policy_id)
+        self.assertIsNotNone(self.action.business_rule_policies)
+        self.assertEqual(
+            self.action.business_rule_policies['on_step_output'][0]['when']['step_type'],
+            'terraform_cloud'
+        )
+
+    def test_put_business_rule_policies_endpoint_clear(self):
+        """PUT /admin/actions/{id}/business-rule-policies/ with null → 200 + cleared."""
+        self.action.business_rule_policies = VALID_TERRAFORM_POLICY
+        self.action.save()
+
+        put_url = f'/api/v1/admin/actions/{self.action.id}/business-rule-policies/'
+        response = self.client.put(
+            put_url,
+            {'business_rule_policies': None},
+            format='json'
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.action.refresh_from_db()
+        self.assertIsNone(self.action.business_rule_policies)
+
     def test_get_action_includes_business_rule_policies(self):
         """GET /admin/actions/{id}/ returns business_rule_policies in response."""
         # Set business_rule_policies

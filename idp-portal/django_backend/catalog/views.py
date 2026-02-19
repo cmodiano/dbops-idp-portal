@@ -409,6 +409,32 @@ class ActionViewSet(viewsets.ModelViewSet):
 
         return Response({"data": response_serializer.data})
 
+    @action(detail=True, methods=['put'], url_path='business-rule-policies')
+    def update_business_rule_policies(self, request: Request, pk: int | None = None) -> Response:
+        """PUT /admin/actions/{id}/business-rule-policies/ - Set inline business rule policies (Story 28.1)."""
+        instance = self.get_object()
+        brp_inline = request.data.get('business_rule_policies')
+
+        # Clear predefined FK when setting inline or clearing
+        instance.business_rule_policy_id = None
+        if brp_inline is None:
+            instance.business_rule_policies = None
+        else:
+            from catalog.validators import validate_business_rule_policies
+            from django.core.exceptions import ValidationError as DjangoValidationError
+            try:
+                validate_business_rule_policies(brp_inline)
+            except (DjangoValidationError, ValueError, TypeError, KeyError) as e:
+                raise DRFValidationError({'business_rule_policies': [str(e)]})
+            instance.business_rule_policies = brp_inline
+
+        instance.save()
+        _catalog_cache.clear()
+        _tags_cache.clear()
+        instance.refresh_from_db()
+        response_serializer = ActionSerializer(instance)
+        return Response({"data": response_serializer.data})
+
     def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """DELETE /admin/actions/{id} — Hard delete (only if execution_count=0). Story 18.1 AC1."""
         instance = self.get_object()
@@ -639,8 +665,21 @@ class BusinessRulePolicyViewSet(viewsets.ModelViewSet):
         if is_active is not None:
             queryset = queryset.filter(is_active=is_active.lower() == 'true')
 
-        # Filter by step_type (extracted from policy_json)
+        # Filter by step_type (extracted from policy_json) or by platform (mapped to step_type)
         step_type_filter = self.request.query_params.get('step_type')
+        platform_param = self.request.query_params.get('platform')
+        if platform_param and not step_type_filter:
+            # Map platform code (REF_PLATFORMS / integration) to step_type for filtering
+            _PLATFORM_TO_STEP_TYPE = {
+                'AAP': 'aap',
+                'Tower': 'aap',
+                'Terraform': 'terraform_cloud',
+                'Terraform Cloud': 'terraform_cloud',
+                'Azure DevOps': 'azure_devops',
+            }
+            step_type_filter = _PLATFORM_TO_STEP_TYPE.get(
+                platform_param, platform_param.lower().replace(' ', '_')
+            )
         if step_type_filter:
             # Filter in Python since step_type is computed from JSON
             # HIGH-1: Potential N+1 queries — load all policies before filtering
