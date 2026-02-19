@@ -21,7 +21,6 @@ import type {
   ImpactLevel,
   ChangeTypeConfigEntry,
   ExecutionStep,
-  ConnectorType,
   ItemType,
   WorkflowStep,
 } from '../../types/api';
@@ -37,24 +36,16 @@ import { validateWorkflowGraph } from '../../utils/workflowValidation';
 import { workflowStepsToReactFlow } from '../../utils/workflowConversion';
 import { getTags, updateActionTags, updateActionSteps, updateWorkflowSteps, updateBusinessRulePolicies, patchAction, checkActionNameAvailable } from '../../services/admin_service';
 import { useEngines } from '../../hooks/useEngines';
-import { usePlatforms } from '../../hooks/usePlatforms';
+import { usePlatformIntegrations } from '../../hooks/usePlatformIntegrations';
 import { useCategories } from '../../hooks/useCategories';
+import { integrationTypeToPlatformCode, integrationToConnector } from '../../utils/integrationHelpers';
 
 const { TextArea } = Input;
 
-/** Plateforme (step 1) définit le connecteur. 1 action = 1 step. */
-function platformToConnector(platform: ActionPlatform): ConnectorType {
-  const map: Record<ActionPlatform, ConnectorType> = {
-    AAP: 'aap',
-    'GitHub Actions': 'github_actions',
-    'Azure DevOps': 'azuredevops',
-    Terraform: 'terraform',
-  };
-  return map[platform] ?? 'none';
-}
+/** Story 31.1: Derive connector from integration type (replaces platformToConnector). */
 
 const STEP_ITEMS = [
-  { title: 'Général', content: 'Type, nom, moteur, plateforme, tags' },
+  { title: 'Général', content: 'Type, nom, moteur, intégration, tags' },
   { title: 'Automatisme & Paramètres', content: 'Configuration selon le type' },
   { title: 'Impact & Changement', content: 'Règles d\'impact, changement ServiceNow, règles métier' },
 ];
@@ -107,18 +98,21 @@ export function ActionWizard({
   const isEditMode = !!editAction;
   // Read-only if editing a published action (draft and disabled actions can be edited)
   const isReadOnly = isEditMode && editAction?.status === 'published';
-  const platform = Form.useWatch<ActionPlatform>('platform', form);
+  const integrationId = Form.useWatch<number>('integration_id', form);
   const itemType = Form.useWatch<ItemType>('item_type', form);
-  const isPlatformAAP = platform === 'AAP';
   const isWorkflow = itemType === 'workflow' || (!isEditMode && initialItemType === 'workflow' && itemType == null);
   const showTypeSelector = !initialItemType && !isEditMode;
 
   // Story 13.7: Load engines from REF_ENGINES table
   const { engineOptions, loading: enginesLoading } = useEngines();
-  // Story 13.7: Load platforms from REF_PLATFORMS table
-  const { platformOptions, loading: platformsLoading } = usePlatforms();
+  // Story 31.1: Load platform integrations (replaces usePlatforms)
+  const { integrationOptions, loading: integrationsLoading, getIntegrationById } = usePlatformIntegrations();
   // Story 2.30: Load categories from REF_CATEGORIES table
   const { categoryOptions, loading: categoriesLoading } = useCategories();
+
+  // Story 31.1: Derive AAP check from selected integration
+  const selectedIntegration = integrationId ? getIntegrationById(integrationId) : undefined;
+  const isPlatformAAP = selectedIntegration?.type === 'aap' || selectedIntegration?.type === 'tower';
 
   useEffect(() => {
     if (!open) return;
@@ -135,7 +129,8 @@ export function ActionWizard({
         description: editAction.description,
         category: editAction.category ?? undefined,
         engine: editAction.engine,
-        platform: editAction.platform,
+        // Story 31.1: Pre-fill integration_id from editAction
+        integration_id: editAction.integration_id ?? undefined,
       });
       setParameterList(
         schemaToParameterList(editAction.parameters_schema ?? undefined).map((p, i) => ({
@@ -235,9 +230,9 @@ export function ActionWizard({
   const handleNext = async () => {
     if (currentStep === 0) {
       const fieldsToValidate = ['name', 'description'];
-      // Only validate engine/platform for actions, not workflows
+      // Only validate engine/integration for actions, not workflows
       if (!isWorkflow) {
-        fieldsToValidate.push('engine', 'platform');
+        fieldsToValidate.push('engine', 'integration_id');
       }
       try {
         await form.validateFields(fieldsToValidate);
@@ -262,7 +257,7 @@ export function ActionWizard({
     const currentItemType = form.getFieldValue('item_type') as ItemType;
     const isWorkflowSave = currentItemType === 'workflow';
 
-    let values: { name: string; description?: string; engine?: ActionEngine; platform?: ActionPlatform; item_type: ItemType };
+    let values: { name: string; description?: string; engine?: ActionEngine; integration_id?: number; item_type: ItemType };
     try {
       values = await form.validateFields();
     } catch {
@@ -329,8 +324,11 @@ export function ActionWizard({
         }
       }
 
-      if (values.platform === 'AAP' && (aapTemplateId == null || aapTemplateId < 1)) {
-        setSubmitError('Pour la plateforme AAP, l\'ID du template (job ou workflow) est requis.');
+      // Story 31.1: Check AAP via integration type instead of platform
+      const saveIntegration = values.integration_id ? getIntegrationById(values.integration_id) : undefined;
+      const isSaveAAP = saveIntegration?.type === 'aap' || saveIntegration?.type === 'tower';
+      if (isSaveAAP && (aapTemplateId == null || aapTemplateId < 1)) {
+        setSubmitError('Pour une intégration AAP/Tower, l\'ID du template (job ou workflow) est requis.');
         return;
       }
     } else {
@@ -349,13 +347,17 @@ export function ActionWizard({
         // impact_rules and default_impact_level apply to both actions and workflows
         impact_rules: listToImpactRules(impactRulesList),
         default_impact_level: defaultImpactLevel,
-        // Only include engine/platform/parameters_schema/category for actions
+        // Only include engine/platform/integration_id/parameters_schema/category for actions
         ...(isWorkflowSave
           ? {}
           : {
               category: (values as Record<string, unknown>).category as string | undefined ?? null,
               engine: values.engine,
-              platform: values.platform,
+              // Story 31.1: Derive platform from integration type, send both
+              integration_id: values.integration_id,
+              platform: values.integration_id
+                ? (integrationTypeToPlatformCode(getIntegrationById(values.integration_id)?.type ?? '') as ActionPlatform)
+                : undefined,
               parameters_schema: parameterListToSchema(parameterList),
             }),
       };
@@ -448,7 +450,10 @@ export function ActionWizard({
             : null;
           
           if (canEditSteps) {
-            const connector = platformToConnector(values.platform!);
+            // Story 31.1: Derive connector from integration type
+            const connector = values.integration_id
+              ? integrationToConnector(getIntegrationById(values.integration_id)?.type ?? '')
+              : 'none';
             const connector_config =
               connector === 'aap' && aapTemplateId != null && aapTemplateId >= 1
                 ? aapResourceType === 'workflow_job'
@@ -498,7 +503,7 @@ export function ActionWizard({
       <Form
         form={form}
         layout="vertical"
-        initialValues={{ item_type: initialItemType ?? 'action', name: '', description: '', engine: undefined, platform: undefined }}
+        initialValues={{ item_type: initialItemType ?? 'action', name: '', description: '', engine: undefined }}
       >
         <div style={{ display: currentStep === 0 ? 'block' : 'none' }}>
           {/* Story 9.5 / 2.29: Type selector — hidden when initialItemType is set or in edit mode */}
@@ -567,15 +572,33 @@ export function ActionWizard({
                   disabled={isReadOnly}
                 />
               </Form.Item>
-              <Form.Item name="platform" label="Plateforme d'exécution" rules={[{ required: true, message: 'La plateforme est requise' }]}>
-                <Select 
-                  options={platformOptions} 
-                  placeholder={platformsLoading ? "Chargement..." : "Sélectionnez une plateforme"} 
-                  aria-label="Plateforme"
-                  loading={platformsLoading}
+              <Form.Item name="integration_id" label="Intégration" rules={[{ required: true, message: "L'intégration est requise" }]}>
+                <Select
+                  options={integrationOptions}
+                  placeholder={integrationsLoading ? "Chargement..." : "Sélectionnez une intégration"}
+                  aria-label="Intégration"
+                  loading={integrationsLoading}
                   disabled={isReadOnly}
                 />
               </Form.Item>
+              {/* Story 31.1 AC4: Alert when no platform integrations available */}
+              {!integrationsLoading && integrationOptions.length === 0 && (
+                <Alert
+                  type="warning"
+                  showIcon
+                  message="Aucune intégration de type plateforme n'est disponible. Créez-en une dans Admin > Intégrations."
+                  style={{ marginBottom: 16 }}
+                />
+              )}
+              {/* Story 31.1 AC6: Degraded mode for legacy actions without integration_id */}
+              {isEditMode && !editAction?.integration_id && editAction?.platform && (
+                <Alert
+                  type="info"
+                  showIcon
+                  message={`Cette action utilise l'ancienne plateforme « ${editAction.platform} ». Sélectionnez une intégration pour la mettre à jour.`}
+                  style={{ marginBottom: 16 }}
+                />
+              )}
             </>
           )}
           <Form.Item label="Tags" tooltip="Tags existants ou saisie libre + Entrée pour en créer un nouveau.">
@@ -602,7 +625,7 @@ export function ActionWizard({
                   <Alert
                     type="info"
                     showIcon
-                    title="Un workflow enchaîne des actions existantes dans l'ordre défini. Aucun connecteur à configurer : chaque étape utilise le connecteur de l'action référencée."
+                    message="Un workflow enchaîne des actions existantes dans l'ordre défini. Aucun connecteur à configurer : chaque étape utilise le connecteur de l'action référencée."
                     style={{ marginBottom: 8 }}
                   />
                   <Radio.Group

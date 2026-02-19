@@ -50,18 +50,18 @@ html.light .ant-card {
     0 -1px 0 rgba(0, 0, 0, 0.02) inset;
 }
 
-/* Dark: bordure verre + double inset */
+/* Dark: surface plus visible pour distinguer cards du fond (UX lisibilité + démarcation) */
 html.dark .ant-card {
-  background: rgba(20, 20, 30, 0.42) !important;
+  background: rgba(30, 30, 42, 0.92) !important;
   backdrop-filter: blur(44px) saturate(1.15);
   -webkit-backdrop-filter: blur(44px) saturate(1.15);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.2),
+    0 0 0 1px rgba(0, 0, 0, 0.25),
     0 0 60px rgba(0, 0, 0, 0.2),
-    0 8px 32px rgba(0, 0, 0, 0.25),
-    0 1px 0 rgba(255, 255, 255, 0.06) inset,
-    0 -1px 0 rgba(0, 0, 0, 0.15) inset;
+    0 8px 32px rgba(0, 0, 0, 0.28),
+    0 1px 0 rgba(255, 255, 255, 0.08) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.12) inset;
 }
 
 /* Hover: subtle lift + enhanced shadow */
@@ -80,13 +80,13 @@ html.light .ant-card:hover:not(.card-preview) {
 }
 
 html.dark .ant-card:hover:not(.card-preview) {
-  border-color: rgba(255, 255, 255, 0.1);
-  background: rgba(26, 26, 38, 0.58) !important;
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(38, 38, 52, 0.95) !important;
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.3),
     0 0 80px rgba(0, 0, 0, 0.25),
     0 16px 48px rgba(0, 0, 0, 0.35),
-    0 1px 0 rgba(255, 255, 255, 0.06) inset;
+    0 1px 0 rgba(255, 255, 255, 0.08) inset;
 }
 
 /* Glass highlight on top edge */
@@ -109,13 +109,13 @@ html.dark .ant-card:hover:not(.card-preview) {
   z-index: 1;
 }
 
-/* Dark mode: subtler highlight */
+/* Dark mode: highlight un peu plus visible pour renforcer la démarcation */
 html.dark .ant-card::before {
   background: linear-gradient(90deg,
     transparent,
-    rgba(255, 255, 255, 0.05) 20%,
-    rgba(255, 255, 255, 0.1) 50%,
-    rgba(255, 255, 255, 0.05) 80%,
+    rgba(255, 255, 255, 0.08) 20%,
+    rgba(255, 255, 255, 0.14) 50%,
+    rgba(255, 255, 255, 0.08) 80%,
     transparent
   );
 }

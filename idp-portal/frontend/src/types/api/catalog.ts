@@ -15,7 +15,7 @@ export interface RefCategory {
 // The union types below are kept for backward compatibility, but values come from API.
 // Consider using `string` instead for new code.
 export type ActionEngine = 'Oracle' | 'SQL Server' | 'DB2' | string;
-export type ActionPlatform = 'AAP' | 'GitHub Actions' | 'Azure DevOps' | 'Terraform' | string;
+export type ActionPlatform = 'AAP' | 'Tower' | 'GitHub Actions' | 'Azure DevOps' | 'Terraform' | string;
 export type ActionStatus = 'draft' | 'published' | 'disabled';
 /** Impact level for actions (Story 2.5, 2.18). */
 export type ImpactLevel = 'low' | 'medium' | 'high' | 'critical';
@@ -33,6 +33,8 @@ export interface ActionCreate {
   engine?: ActionEngine | null;
   /** Platform is required for actions, optional for workflows (Story 5.7). */
   platform?: ActionPlatform | null;
+  /** Story 31.1: Integration FK (optional, derived from integration selection). */
+  integration_id?: number | null;
   parameters_schema?: Record<string, unknown> | null;
   /** Story 2.18: impact_rules includes criteria field. */
   impact_rules?: Record<string, { level: ImpactLevel; criteria?: string | null }> | null;
@@ -55,6 +57,8 @@ export interface ActionResponse {
   engine: ActionEngine | null;
   /** Platform (nullable for workflows). */
   platform: ActionPlatform | null;
+  /** Story 31.1: Integration FK (nullable). */
+  integration_id?: number | null;
   parameters_schema: Record<string, unknown> | null;
   /** Story 2.18: impact_rules includes criteria field. */
   impact_rules: Record<string, { level: ImpactLevel; criteria?: string | null }> | null;

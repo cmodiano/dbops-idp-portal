@@ -31,7 +31,8 @@ import type {
 import { schemaToParameterList, parameterListToSchema } from '../../utils/parametersSchema';
 import { impactRulesToList, listToImpactRules } from '../../utils/impactRulesSchema';
 import { useEngines } from '../../hooks/useEngines';
-import { usePlatforms } from '../../hooks/usePlatforms';
+import { usePlatformIntegrations } from '../../hooks/usePlatformIntegrations';
+import { integrationTypeToPlatformCode } from '../../utils/integrationHelpers';
 import { StepsEditor } from './StepsEditor';
 import { ParametersEditor } from './ParametersEditor';
 import { ImpactRulesEditor } from './ImpactRulesEditor';
@@ -82,8 +83,8 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
 
   // Story 13.7: Load engines from REF_ENGINES table
   const { engineOptions, loading: enginesLoading } = useEngines();
-  // Story 13.7: Load platforms from REF_PLATFORMS table
-  const { platformOptions, loading: platformsLoading } = usePlatforms();
+  // Story 31.1: Load platform integrations (replaces usePlatforms)
+  const { integrationOptions, loading: integrationsLoading, getIntegrationById } = usePlatformIntegrations();
 
   const isEditMode = !!editAction;
   const isMin1280 = useMediaQuery(1280);
@@ -92,7 +93,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
   const watchedName = Form.useWatch('name', form);
   const watchedDescription = Form.useWatch('description', form);
   const watchedEngine = Form.useWatch('engine', form);
-  const watchedPlatform = Form.useWatch('platform', form);
+  const watchedIntegrationId = Form.useWatch('integration_id', form);
   const watchedDocumentationMd = Form.useWatch('documentation_md', form);
 
   // Load tags for autocomplete when modal opens (Story 2.6, AC #1)
@@ -129,13 +130,16 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
       name: (watchedName as string) || '',
       description: (watchedDescription as string) || null,
       engine: (watchedEngine as ActionEngine) || null,
-      platform: (watchedPlatform as ActionPlatform) || null,
+      // Story 31.1: Derive platform from selected integration for preview
+      platform: (watchedIntegrationId
+        ? (integrationTypeToPlatformCode(getIntegrationById(watchedIntegrationId as number)?.type ?? '') as ActionPlatform)
+        : null),
       impact_level: impactLevel,
       parameters_schema: parsedSchema,
       tags: selectedTags,
       documentation_md: (watchedDocumentationMd as string) || null,
     };
-  }, [watchedName, watchedDescription, watchedEngine, watchedPlatform, parameterList, impactRulesList, previewEnvironment, defaultImpactLevel, selectedTags, watchedDocumentationMd]);
+  }, [watchedName, watchedDescription, watchedEngine, watchedIntegrationId, parameterList, impactRulesList, previewEnvironment, defaultImpactLevel, selectedTags, watchedDocumentationMd, getIntegrationById]);
 
   // Focus on name input when modal opens (AC #7 accessibility)
   useEffect(() => {
@@ -154,7 +158,8 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
         name: editAction.name,
         description: editAction.description,
         engine: editAction.engine,
-        platform: editAction.platform,
+        // Story 31.1: Pre-fill integration_id from editAction
+        integration_id: editAction.integration_id ?? undefined,
         documentation_md: editAction.documentation_md,
       } as unknown as ActionFormValues);
       setExecutionSteps(editAction.execution_steps || []);
@@ -283,11 +288,18 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
         }
       }
 
+      // Story 31.1: Derive platform from integration type, send both
+      const selectedIntegration = values.integration_id ? getIntegrationById(values.integration_id) : undefined;
+      const derivedPlatform = selectedIntegration
+        ? (integrationTypeToPlatformCode(selectedIntegration.type) as ActionPlatform)
+        : undefined;
+
       const action: ActionCreate = {
         name: values.name,
         description: values.description,
         engine: values.engine,
-        platform: values.platform,
+        integration_id: values.integration_id,
+        platform: derivedPlatform,
         parameters_schema: parameterListToSchema(parameterList),
         impact_rules: listToImpactRules(impactRulesList),
         default_impact_level: defaultImpactLevel,
@@ -476,17 +488,35 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
             </Form.Item>
 
             <Form.Item
-              name="platform"
-              label="Plateforme d'execution"
-              rules={[{ required: true, message: 'La plateforme est requise' }]}
+              name="integration_id"
+              label="Intégration"
+              rules={[{ required: true, message: "L'intégration est requise" }]}
             >
               <Select
-                options={platformOptions}
-                placeholder={platformsLoading ? "Chargement..." : "Selectionnez une plateforme"}
-                aria-label="Plateforme d'execution"
-                loading={platformsLoading}
+                options={integrationOptions}
+                placeholder={integrationsLoading ? "Chargement..." : "Sélectionnez une intégration"}
+                aria-label="Intégration"
+                loading={integrationsLoading}
               />
             </Form.Item>
+            {/* Story 31.1 AC4: Alert when no platform integrations available */}
+            {!integrationsLoading && integrationOptions.length === 0 && (
+              <Alert
+                type="warning"
+                showIcon
+                message="Aucune intégration de type plateforme n'est disponible. Créez-en une dans Admin > Intégrations."
+                style={{ marginBottom: 16 }}
+              />
+            )}
+            {/* Story 31.1 AC6: Degraded mode for legacy actions without integration_id */}
+            {isEditMode && !editAction?.integration_id && editAction?.platform && (
+              <Alert
+                type="info"
+                showIcon
+                message={`Cette action utilise l'ancienne plateforme « ${editAction.platform} ». Sélectionnez une intégration pour la mettre à jour.`}
+                style={{ marginBottom: 16 }}
+              />
+            )}
 
             {/* Story 2.17: Parametres — editeur visuel (AC1–AC6) */}
             <Form.Item

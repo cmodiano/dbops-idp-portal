@@ -7,12 +7,12 @@
 
 import React from 'react';
 import {
-  ApartmentOutlined,
   DatabaseOutlined,
   CloudServerOutlined,
   HddOutlined,
 } from '@ant-design/icons';
 import { Tooltip } from 'antd';
+import { WorkflowIcon } from '../components/icons/WorkflowIcon';
 import type { ActionEngine, ItemType } from '../types/api';
 import { STYLE_TOKENS } from '../theme/styleTokens';
 
@@ -46,8 +46,8 @@ export function getItemTypeIcon(
   if (itemType === 'workflow') {
     const label = "Workflow (chaîne d'actions)";
     const iconNode = (
-      <ApartmentOutlined
-        style={{ fontSize, color: WORKFLOW_COLOR }}
+      <WorkflowIcon
+        fontSize={fontSize}
         aria-label="Type: Workflow"
       />
     );

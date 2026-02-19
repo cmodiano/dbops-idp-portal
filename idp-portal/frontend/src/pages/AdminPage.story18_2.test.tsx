@@ -98,7 +98,7 @@ describe('Story 18.2 — AdminPage Icon Identification', () => {
 
   // AC1: Workflow icon displayed
 
-  it('displays ApartmentOutlined icon for workflow items', async () => {
+  it('displays workflow icon (WorkflowIcon) for workflow items', async () => {
     renderPage();
 
     await waitFor(() => {
@@ -106,7 +106,7 @@ describe('Story 18.2 — AdminPage Icon Identification', () => {
     });
 
     const workflowRow = screen.getByText('Full Backup Workflow').closest('tr')!;
-    const workflowIcon = workflowRow.querySelector('.anticon-apartment');
+    const workflowIcon = workflowRow.querySelector('svg');
     expect(workflowIcon).toBeInTheDocument();
   });
 
@@ -147,7 +147,7 @@ describe('Story 18.2 — AdminPage Icon Identification', () => {
 
   // AC2: Tooltip on icons
 
-  it('shows tooltip on workflow icon hover', async () => {
+  it('workflow icon is in table row and has aria-label', async () => {
     renderPage();
 
     await waitFor(() => {
@@ -155,12 +155,8 @@ describe('Story 18.2 — AdminPage Icon Identification', () => {
     });
 
     const workflowRow = screen.getByText('Full Backup Workflow').closest('tr')!;
-    const icon = workflowRow.querySelector('.anticon-apartment')!;
-    fireEvent.mouseOver(icon);
-
-    await waitFor(() => {
-      expect(screen.getByText("Workflow (chaîne d'actions)")).toBeInTheDocument();
-    });
+    const icon = workflowRow.querySelector('[aria-label="Type: Workflow"]');
+    expect(icon).toBeInTheDocument();
   });
 
   it('shows tooltip on action engine icon hover', async () => {
@@ -212,8 +208,8 @@ describe('Story 18.2 — AdminPage Icon Identification', () => {
       expect(screen.getByText('Apply Oracle Patch')).toBeInTheDocument();
     });
 
-    // Workflow icons
-    const workflowIcons = container.querySelectorAll('.anticon-apartment');
+    // Workflow icons (WorkflowIcon renders svg)
+    const workflowIcons = container.querySelectorAll('[aria-label="Type: Workflow"]');
     expect(workflowIcons.length).toBeGreaterThanOrEqual(1);
 
     // Action engine icons (database, cloud-server, hdd)

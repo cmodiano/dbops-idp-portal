@@ -7,8 +7,10 @@
  * AC5: renderPlatformIcon - Platform column with execution platform icons (action.platform).
  */
 
+import React from 'react';
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { ThemeProvider } from '../contexts/ThemeContext';
 import {
   renderStatusIndicator,
   renderEngineIcon,
@@ -19,6 +21,9 @@ import {
   PLATFORM_ICONS_CONFIG,
 } from './executionRenderers';
 import type { ExecutionStatusType, ActionEngine, ActionPlatform } from '../types/api';
+
+const renderWithTheme = (ui: React.ReactElement) =>
+  render(<ThemeProvider>{ui}</ThemeProvider>);
 
 describe('executionRenderers', () => {
   describe('renderStatusIndicator (AC1-AC3)', () => {
@@ -93,14 +98,14 @@ describe('executionRenderers', () => {
 
   describe('renderEngineIcon (AC4)', () => {
     it('renders Oracle icon (SVG)', () => {
-      const { container } = render(<>{renderEngineIcon('Oracle', 'action')}</>);
+      const { container } = renderWithTheme(<>{renderEngineIcon('Oracle', 'action')}</>);
       const img = container.querySelector('img[src*="oracle"]');
       expect(img).toBeInTheDocument();
       expect(img).toHaveAttribute('width', '40');
     });
 
     it('renders SQL Server icon (SVG)', () => {
-      const { container } = render(<>{renderEngineIcon('SQL Server', 'action')}</>);
+      const { container } = renderWithTheme(<>{renderEngineIcon('SQL Server', 'action')}</>);
       const img = container.querySelector('img[src*="microsoft-sql-server"]');
       expect(img).toBeInTheDocument();
     });
@@ -111,17 +116,16 @@ describe('executionRenderers', () => {
       expect(img).toBeInTheDocument();
     });
 
-    it('renders workflow icon with purple color when item_type is workflow', () => {
-      const { container } = render(<>{renderEngineIcon('Oracle', 'workflow')}</>);
-      const icon = container.querySelector('[class*="anticon-apartment"]');
-      expect(icon).toBeInTheDocument();
-      expect(icon).toHaveStyle({ color: '#722ed1' });
+    it('renders workflow icon (WorkflowIcon SVG) when item_type is workflow', () => {
+      const { container } = renderWithTheme(<>{renderEngineIcon('Oracle', 'workflow')}</>);
+      const svg = container.querySelector('svg');
+      expect(svg).toBeInTheDocument();
+      expect(container.querySelector('[aria-label="Workflow"]')).toBeInTheDocument();
     });
 
     it('renders workflow icon even when engine is null', () => {
-      const { container } = render(<>{renderEngineIcon(null, 'workflow')}</>);
-      const icon = container.querySelector('[class*="anticon-apartment"]');
-      expect(icon).toBeInTheDocument();
+      const { container } = renderWithTheme(<>{renderEngineIcon(null, 'workflow')}</>);
+      expect(container.querySelector('svg')).toBeInTheDocument();
     });
 
     it('renders fallback dash when engine is null and item_type is action', () => {

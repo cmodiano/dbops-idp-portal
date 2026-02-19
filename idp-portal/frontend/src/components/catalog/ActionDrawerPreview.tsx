@@ -27,7 +27,8 @@
  */
 
 import { Card, Typography, Button, Descriptions, Space, Empty, Tag, Tooltip, Divider, Badge, Alert, theme, Spin } from 'antd';
-import { PlayCircleOutlined, FileTextOutlined, ApartmentOutlined, BarChartOutlined } from '@ant-design/icons';
+import { PlayCircleOutlined, FileTextOutlined, BarChartOutlined } from '@ant-design/icons';
+import { WorkflowIcon } from '../icons/WorkflowIcon';
 import { lazy, Suspense } from 'react';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
@@ -146,7 +147,7 @@ export function ActionDrawerPreview({
             {isWorkflow && (
               <Tooltip title="Workflow (chaîne d'actions)">
                 <Badge
-                  count={<ApartmentOutlined style={{ color: '#722ed1' }} />}
+                  count={<WorkflowIcon fontSize={16} aria-label="Workflow" />}
                   style={{ backgroundColor: 'transparent' }}
                 />
               </Tooltip>

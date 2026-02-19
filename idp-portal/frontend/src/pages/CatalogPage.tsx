@@ -399,7 +399,7 @@ export default function CatalogPage() {
     ) : (
       <Row gutter={[16, 16]}>
         {Array.from({ length: 6 }).map((_, i) => (
-          <Col key={i} xs={24} sm={12} md={8} lg={8} xl={6}>
+          <Col key={i} xs={24} sm={12} md={8} lg={8} xl={6} xxl={4}>
             <Card>
               <Skeleton active avatar={{ shape: 'square', size: 'small' }} paragraph={{ rows: 2 }} />
             </Card>
@@ -430,8 +430,12 @@ export default function CatalogPage() {
     );
   };
 
+  // UX: limit content width on large screens so grid doesn't stretch and gaps feel balanced
+  const contentMaxWidth = 1600;
+
   return (
     <div style={{ padding: 24 }}>
+      <div style={{ maxWidth: contentMaxWidth, margin: '0 auto' }}>
       <Title level={2}>Catalogue</Title>
 
       {/* Story 8.7: Category Tabs (AC1, AC2) */}
@@ -513,7 +517,7 @@ export default function CatalogPage() {
         ) : (
           <Row gutter={[16, 16]}>
             {filteredActions.map((action) => (
-              <Col key={action.id} xs={24} sm={12} md={8} lg={8} xl={6}>
+              <Col key={action.id} xs={24} sm={12} md={8} lg={8} xl={6} xxl={4}>
                 {renderActionCard(action)}
               </Col>
             ))}
@@ -531,6 +535,8 @@ export default function CatalogPage() {
           showFavoriteButton={isAuthenticated}
         />
       )}
+
+      </div>
 
       {/* Action Detail Drawer (Story 3.2, AC1, AC2, AC4, AC5) */}
       <Drawer

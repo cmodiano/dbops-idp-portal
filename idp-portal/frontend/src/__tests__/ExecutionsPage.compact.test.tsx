@@ -144,12 +144,13 @@ describe('ExecutionsPage - Compact Mode (Story 17.13)', () => {
   });
 
   it('workflow icons render at 40px compact size (Task 2)', () => {
-    const { container } = render(renderEngineIcon(null, 'workflow') as React.ReactElement);
-    const icon = container.querySelector('[class*="anticon-apartment"]');
-    expect(icon).toBeInTheDocument();
-    // Icon font-size should be 40px
-    const svg = icon?.closest('[style]');
-    expect(svg).toHaveStyle({ fontSize: '40px' });
+    const { container } = render(
+      <ThemeProvider>{renderEngineIcon(null, 'workflow') as React.ReactElement}</ThemeProvider>
+    );
+    const svg = container.querySelector('svg');
+    expect(svg).toBeInTheDocument();
+    expect(svg).toHaveAttribute('width', '40');
+    expect(svg).toHaveAttribute('height', '40');
   });
 
   it('status badges have compact padding 1px 6px (Task 3)', () => {

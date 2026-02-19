@@ -407,3 +407,14 @@ development_status:
     30-15-todo-stubs-except-trop-larges: done # MEDIUM — NEW-2 TODO ServiceNow/platform adapter, NEW-4 except trop larges
     30-16-restant-doublon-styles-inline-incon-4: done # LOW — BUG-BE-7 doublon supprimé, PERF-4 documenté backlog, INCON-4 commentaire enrichi + tests (code review: 12/15 auto-fixes)
     epic-30-retrospective: optional
+    # === Epic 31: Admin catalogue — Intégrations alignées et icônes moteurs (février 2026) ===
+    # Réf: planning-artifacts/epic-31-admin-catalogue-integrations-et-icones-moteurs.md
+    epic-31: in-progress
+    31-1-formulaire-action-liste-integrations-label-integration: done # 2026-02-19: code-review — 7 issues corrigées (AC6 ActionForm, Alert.title→message, tests AC6, Tower type)
+    31-2-suppression-integration-desactiver-actions: backlog
+    31-3-icones-moteurs-ref-engines: backlog
+    31-4-refonte-ux-panneau-changement-servicenow-gates: backlog
+    31-5-aap-selection-template-liste-ou-nom: backlog
+    31-6-config-gates-choix-service-creation-changement-servicenow: backlog
+    31-7-aide-contextuelle-tooltip-popover-markdown-backend: backlog
+    epic-31-retrospective: optional

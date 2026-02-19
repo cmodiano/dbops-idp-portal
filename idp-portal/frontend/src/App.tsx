@@ -74,7 +74,7 @@ function ThemedApp() {
     document.body.style.transition = 'background 0.4s ease';
     if (isDark) {
       document.body.style.background =
-        'linear-gradient(165deg, #0d0d12 0%, #12121a 35%, #0f0f16 70%, #0a0a0f 100%)';
+        'linear-gradient(165deg, #0f0f16 0%, #12121a 35%, #14141e 70%, #12121a 100%)';
     } else {
       document.body.style.background =
         'linear-gradient(165deg, #e8ecf2 0%, #e2e8f0 40%, #dde4ed 70%, #d8e0ea 100%)';
