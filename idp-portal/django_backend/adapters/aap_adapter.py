@@ -44,10 +44,20 @@ class AAPAdapter(BaseAdapter):
         base_url: str,
         auth_headers: dict[str, str],
         timeout: float = AAP_DEFAULT_TIMEOUT,
+        ssl_verify: bool = True,
+        ca_bundle_path: str | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.auth_headers = auth_headers
         self.timeout = timeout
+        # verify: use CA bundle path if set, otherwise ssl_verify boolean
+        self._verify = (ca_bundle_path or "").strip() or ssl_verify
+        if self._verify is False:
+            logger.warning(
+                "aap_adapter_ssl_verify_disabled",
+                base_url=self.base_url,
+                message="SSL verification is disabled for this AAP integration; connection is not verified.",
+            )
 
     # ------------------------------------------------------------------
     # Trigger (launch) — job template or workflow job template
@@ -99,7 +109,7 @@ class AAPAdapter(BaseAdapter):
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=self.timeout,
-                verify=False,  # noqa: S501 — corporate CAs handled externally
+                verify=self._verify,
             ) as client:
                 response = await client.post(url, json=payload)
                 response.raise_for_status()
@@ -199,7 +209,7 @@ class AAPAdapter(BaseAdapter):
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=self.timeout,
-                verify=False,  # noqa: S501
+                verify=self._verify,
             ) as client:
                 response = await client.get(url)
                 response.raise_for_status()
@@ -279,7 +289,7 @@ class AAPAdapter(BaseAdapter):
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=AAP_LOGS_TIMEOUT,
-                verify=False,  # noqa: S501
+                verify=self._verify,
             ) as client:
                 # Fetch stdout as plain text
                 stdout_response = await client.get(
@@ -417,7 +427,7 @@ class AAPAdapter(BaseAdapter):
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=self.timeout,
-                verify=False,  # noqa: S501 — corporate CAs handled externally
+                verify=self._verify,
             ) as client:
                 resp = await client.get(url, params=params)
                 resp.raise_for_status()
@@ -492,7 +502,7 @@ class AAPAdapter(BaseAdapter):
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=self.timeout,
-                verify=False,  # noqa: S501
+                verify=self._verify,
             ) as client:
                 response = await client.post(url)
                 response.raise_for_status()

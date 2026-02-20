@@ -870,6 +870,10 @@ class WorkflowRuntime:
                 for key in ('owner', 'repo', 'organization', 'namespace'):
                     if key in config:
                         platform_kwargs[key] = config[key]
+                if 'ssl_verify' in config:
+                    platform_kwargs['ssl_verify'] = config['ssl_verify']
+                if config.get('ca_bundle_path'):
+                    platform_kwargs['ca_bundle_path'] = config['ca_bundle_path']
 
             # Normalize platform type to lowercase (Action stores 'AAP', adapter expects 'aap')
             platform_type = referenced_action.platform.lower()

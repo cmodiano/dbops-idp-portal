@@ -193,7 +193,7 @@ async def list_templates(
         async with httpx.AsyncClient(
             headers=self.auth_headers,
             timeout=self.timeout,
-            verify=False,  # Pattern existant dans trigger()
+            verify=self._verify,  # From integration config: ssl_verify (bool) or ca_bundle_path (str)
         ) as client:
             resp = await client.get(url, params=params)
             resp.raise_for_status()

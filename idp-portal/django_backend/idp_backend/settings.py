@@ -475,8 +475,10 @@ WORKFLOW_RETRY_USE_CANCELLATION_CACHE = os.getenv(
 # Vault configuration for health check
 VAULT_ADDR = os.getenv('VAULT_ADDR', 'http://localhost:8200')
 
-# ServiceNow configuration for health check
+# ServiceNow configuration for health check and ITSM integration
 SERVICENOW_INSTANCE_URL = os.getenv('SERVICENOW_INSTANCE_URL', 'https://instance.service-now.com')
+# TLS verification for ServiceNow API calls (default True); set SERVICENOW_VERIFY_TLS=false to disable
+SERVICENOW_VERIFY_TLS = os.getenv('SERVICENOW_VERIFY_TLS', 'true').lower() == 'true'
 
 # Story 31.8: Notification service configuration
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'idp-portal@example.com')

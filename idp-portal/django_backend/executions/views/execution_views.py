@@ -356,10 +356,17 @@ class ExecutionCancelView(APIView):
                     message="Integration missing type field",
                     details={"integration_id": integration.id},
                 )
+            config = getattr(integration, "get_config", lambda: None)() or {}
+            platform_kwargs = {}
+            if "ssl_verify" in config:
+                platform_kwargs["ssl_verify"] = config["ssl_verify"]
+            if config.get("ca_bundle_path"):
+                platform_kwargs["ca_bundle_path"] = config["ca_bundle_path"]
             adapter = get_platform_adapter(
                 platform_type=platform_type,
                 base_url=integration.base_url,
                 auth_headers=auth_headers,
+                **platform_kwargs,
             )
             # MEDIUM-3 FIX: Create new event loop instead of get_event_loop() (deprecated Python 3.10+)
             loop = asyncio.new_event_loop()
@@ -520,10 +527,17 @@ class ExecutionLogsView(APIView):
                 message="Integration missing type field",
                 details={"integration_id": integration.id},
             )
+        config = getattr(integration, "get_config", lambda: None)() or {}
+        platform_kwargs = {}
+        if "ssl_verify" in config:
+            platform_kwargs["ssl_verify"] = config["ssl_verify"]
+        if config.get("ca_bundle_path"):
+            platform_kwargs["ca_bundle_path"] = config["ca_bundle_path"]
         adapter = get_platform_adapter(
             platform_type=platform_type,
             base_url=integration.base_url,
             auth_headers=auth_headers,
+            **platform_kwargs,
         )
 
         # CRITICAL-4 FIX: Handle both ASGI (event loop running) and WSGI (no event loop) contexts

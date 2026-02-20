@@ -73,9 +73,10 @@ class ServiceNowService:
             payload["chg_model"] = change_model_code
 
         timeout = getattr(settings, 'SERVICENOW_TIMEOUT', 30)
+        verify_tls = getattr(settings, 'SERVICENOW_VERIFY_TLS', True)
 
         try:
-            with httpx.Client(headers=self.auth_headers, timeout=timeout, verify=False) as client:
+            with httpx.Client(headers=self.auth_headers, timeout=timeout, verify=verify_tls) as client:
                 resp = client.post(url, json=payload)
                 resp.raise_for_status()
                 result = resp.json().get('result', {})
