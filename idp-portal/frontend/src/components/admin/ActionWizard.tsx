@@ -24,6 +24,7 @@ import type {
   ItemType,
   WorkflowStep,
   GateConfig,
+  NotificationConfig,
 } from '../../types/api';
 import { schemaToParameterList, parameterListToSchema } from '../../utils/parametersSchema';
 import { impactRulesToList, listToImpactRules } from '../../utils/impactRulesSchema';
@@ -31,6 +32,7 @@ import { ParametersEditor } from './ParametersEditor';
 import { ImpactRulesEditor } from './ImpactRulesEditor';
 import { ChangeTypeConfig } from './ChangeTypeConfig';
 import { BusinessRulePolicySelector } from './BusinessRulePolicySelector';
+import { NotificationConfigSection } from './NotificationConfigSection';
 import { WorkflowStepsEditor } from './WorkflowStepsEditor';
 import { WorkflowBuilderCanvas } from './WorkflowBuilderCanvas';
 import { validateWorkflowGraph } from '../../utils/workflowValidation';
@@ -200,6 +202,8 @@ export function ActionWizard({
   const [changeTypeConfig, setChangeTypeConfig] = useState<Record<string, ChangeTypeConfigEntry>>({});
   // Story 31.6: Gate configuration (integration selection per gate type)
   const [gateConfig, setGateConfig] = useState<GateConfig | null>(null);
+  // Story 31.8: Notification configuration (email, teams, page)
+  const [notificationConfig, setNotificationConfig] = useState<NotificationConfig | null>(null);
   /** Story 28.4: Predefined business rule policy ID (FK). Inline rules removed — only catalogue. */
   const [businessRulePolicyId, setBusinessRulePolicyId] = useState<number | null>(null);
   /** Pour AAP : type de ressource (job_template | workflow_job) et ID template. 1 action = 1 étape. */
@@ -261,6 +265,8 @@ export function ActionWizard({
       setChangeTypeConfig(editAction.change_type_config ?? {});
       // Story 31.6: Load gate configuration
       setGateConfig(editAction.gate_config ?? null);
+      // Story 31.8: Load notification configuration
+      setNotificationConfig(editAction.notification_config ?? null);
       // Story 28.4: Load business rule policy (FK only; inline removed)
       setBusinessRulePolicyId(editAction.business_rule_policy_id ?? null);
       // Story 9.5: Load workflow steps for workflows
@@ -291,6 +297,7 @@ export function ActionWizard({
       setSelectedTags([]);
       setChangeTypeConfig({});
       setGateConfig(null);
+      setNotificationConfig(null);
       setBusinessRulePolicyId(null);
       setAapResourceType('job_template');
       setAapTemplateId(undefined);
@@ -474,6 +481,8 @@ export function ActionWizard({
         default_impact_level: defaultImpactLevel,
         // Story 31.6: Gate configuration
         gate_config: gateConfig,
+        // Story 31.8: Notification configuration
+        notification_config: notificationConfig,
         // Only include engine/platform/integration_id/parameters_schema/category for actions
         ...(isWorkflowSave
           ? {}
@@ -857,6 +866,16 @@ export function ActionWizard({
                   ?? (editAction?.platform ? platformCodeToStepType(editAction.platform) : undefined)
                 }
                 disabled={isReadOnly}
+              />
+            </Form.Item>
+            {/* Story 31.8: Notification configuration */}
+            <Form.Item
+              label="Notifications"
+              tooltip="Configurez les canaux de notification (email, Teams, page) et leurs conditions."
+            >
+              <NotificationConfigSection
+                value={notificationConfig}
+                onChange={isReadOnly ? () => {} : setNotificationConfig}
               />
             </Form.Item>
           </Space>

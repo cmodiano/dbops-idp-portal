@@ -20,6 +20,8 @@ export interface SubmitImmediateParams {
   parameters: Record<string, unknown> | null;
   workflow_step_parameters?: Record<string, { parameters: Record<string, unknown> }>;
   parent_execution_id?: number | null;
+  /** Story 31.8: Page me on failure. */
+  page_me?: boolean;
 }
 
 export interface SubmitScheduledParams {
@@ -30,6 +32,8 @@ export interface SubmitScheduledParams {
   workflow_step_parameters?: Record<string, { parameters: Record<string, unknown> }>;
   scheduled_at?: string | null;
   recurring_pattern?: RecurringPatternRequest;
+  /** Story 31.8: Page me on failure. */
+  page_me?: boolean;
 }
 
 export interface SchedulingState {
@@ -123,6 +127,7 @@ export function useExecutionSubmit(): UseExecutionSubmitReturn {
         parameters: params.parameters,
         workflow_step_parameters: params.workflow_step_parameters,
         parent_execution_id: params.parent_execution_id ?? null,
+        page_me: params.page_me,
       });
 
       // Story 19.4 AC1: No success notification — ExecutionView opens automatically
@@ -159,6 +164,7 @@ export function useExecutionSubmit(): UseExecutionSubmitReturn {
         scheduled_at: params.scheduled_at,
         recurring_pattern: params.recurring_pattern,
         target_names: params.target_names,
+        page_me: params.page_me,
       });
 
       if (import.meta.env.DEV) {

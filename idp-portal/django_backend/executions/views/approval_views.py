@@ -21,6 +21,7 @@ from core.permissions import IsDBAOrDBOPS
 from core.services import AuditService
 from executions.models import Execution, ExecutionStatus
 from executions.serializers import ExecutionSerializer
+from executions.services import ExecutionService
 from executions.utils import parse_int
 
 from drf_spectacular.utils import extend_schema
@@ -114,11 +115,19 @@ class ApproveExecutionView(APIView):
         execution = _get_and_validate_pending_execution(execution_id)
 
         old_status = execution.status
-        execution.status = ExecutionStatus.SUBMITTED
-        execution.save(update_fields=["status"])
-
         correlation_id = get_correlation_id()
         user_id = str(request.user.id) if request.user and hasattr(request.user, 'id') else "unknown"
+
+        # State machine: PENDING_APPROVAL → RUNNING (Story 7.4). Transition then launch workflow.
+        execution_service = ExecutionService()
+        updated = execution_service.update_status(execution.id, ExecutionStatus.RUNNING, user_id)
+        if not updated:
+            raise NotFoundError(
+                code="EXECUTION_NOT_FOUND",
+                message="Exécution introuvable",
+                details={"execution_id": execution_id},
+            )
+        execution = updated
 
         AuditService.create_entry(
             user_id=user_id,
@@ -129,7 +138,7 @@ class ApproveExecutionView(APIView):
                 "action_id": execution.action_id,
                 "action_name": execution.action.name if execution.action else None,
                 "previous_status": old_status,
-                "new_status": ExecutionStatus.SUBMITTED,
+                "new_status": ExecutionStatus.RUNNING,
             },
             correlation_id=correlation_id,
         )
@@ -140,6 +149,30 @@ class ApproveExecutionView(APIView):
             user_id=user_id,
             correlation_id=correlation_id,
         )
+
+        # Launch the workflow (same as post-execution create when not PENDING_APPROVAL)
+        try:
+            ExecutionService.launch_workflow(execution, correlation_id)
+        except Exception as e:
+            logger.error(
+                "integration_error_on_approval_launch",
+                execution_id=execution.id,
+                error_type=type(e).__name__,
+                error_message=str(e),
+                correlation_id=correlation_id,
+                exc_info=True,
+            )
+            execution_service.update_status(
+                execution.id,
+                ExecutionStatus.INTEGRATION_ERROR,
+                user_id,
+            )
+            execution.refresh_from_db()
+            raise BadRequestError(
+                code="LAUNCH_FAILED",
+                message=f"L'exécution a été approuvée mais le lancement a échoué : {e!s}",
+                details={"execution_id": execution_id},
+            )
 
         return Response({"data": ExecutionSerializer(execution).data})
 
@@ -162,9 +195,19 @@ class RejectExecutionView(APIView):
         rejection_reason = (request.data or {}).get("rejection_reason", "")
 
         old_status = execution.status
-        execution.status = ExecutionStatus.FAILED
-        execution.error_message = rejection_reason or "Execution rejected by user"
-        execution.save(update_fields=["status", "error_message"])
+        # State machine: PENDING_APPROVAL → REJECTED (Story 7.4)
+        execution_service = ExecutionService()
+        updated = execution_service.update_status(
+            execution.id, ExecutionStatus.REJECTED, str(request.user.id)
+        )
+        if updated:
+            execution = updated
+            execution.error_message = rejection_reason or "Execution rejected by user"
+            execution.save(update_fields=["error_message"])
+        else:
+            execution.status = ExecutionStatus.REJECTED
+            execution.error_message = rejection_reason or "Execution rejected by user"
+            execution.save(update_fields=["status", "error_message"])
 
         correlation_id = get_correlation_id()
         user_id = str(request.user.id) if request.user and hasattr(request.user, 'id') else "unknown"
@@ -178,7 +221,7 @@ class RejectExecutionView(APIView):
                 "action_id": execution.action_id,
                 "action_name": execution.action.name if execution.action else None,
                 "previous_status": old_status,
-                "new_status": ExecutionStatus.FAILED,
+                "new_status": ExecutionStatus.REJECTED,
                 "rejection_reason": rejection_reason or None,
             },
             correlation_id=correlation_id,

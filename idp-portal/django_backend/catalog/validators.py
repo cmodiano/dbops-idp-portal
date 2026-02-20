@@ -222,6 +222,78 @@ def validate_gate_config(gate_config: dict | None) -> None:
         )
 
 
+# Story 31.8: Valid notification channel types and conditions
+VALID_CHANNEL_TYPES = ('email', 'teams', 'page_dba')
+VALID_CONDITIONS = ('on_failure', 'on_success', 'always')
+
+
+def validate_notification_config(notification_config: dict | None) -> None:
+    """
+    Validate notification_config JSON structure (Story 31.8).
+
+    Structure:
+        {
+            "channels": [{"type": "email"|"teams"|"page_dba", "enabled": bool, "conditions": [...], ...}],
+            "page_individual_enabled": bool
+        }
+
+    Raises:
+        ValidationError: If validation fails
+    """
+    if notification_config is None:
+        return
+    if not isinstance(notification_config, dict):
+        raise ValidationError("notification_config doit être un objet JSON")
+
+    channels = notification_config.get("channels", [])
+    if not isinstance(channels, list):
+        raise ValidationError("notification_config.channels doit être une liste")
+
+    for i, channel in enumerate(channels):
+        if not isinstance(channel, dict):
+            raise ValidationError(f"notification_config.channels[{i}] doit être un objet")
+
+        ch_type = channel.get("type")
+        if ch_type not in VALID_CHANNEL_TYPES:
+            raise ValidationError(
+                f"notification_config.channels[{i}].type invalide : '{ch_type}'. "
+                f"Valeurs acceptées : {', '.join(VALID_CHANNEL_TYPES)}"
+            )
+
+        if "enabled" in channel and not isinstance(channel["enabled"], bool):
+            raise ValidationError(
+                f"notification_config.channels[{i}].enabled doit être un booléen"
+            )
+
+        conditions = channel.get("conditions", [])
+        if not isinstance(conditions, list):
+            raise ValidationError(
+                f"notification_config.channels[{i}].conditions doit être une liste"
+            )
+        for cond in conditions:
+            if cond not in VALID_CONDITIONS:
+                raise ValidationError(
+                    f"notification_config.channels[{i}].conditions contient "
+                    f"une valeur invalide : '{cond}'. "
+                    f"Valeurs acceptées : {', '.join(VALID_CONDITIONS)}"
+                )
+
+        # Validate webhook_url_ref for Teams: direct URLs must use HTTPS (SSRF mitigation)
+        if ch_type == "teams":
+            webhook_url_ref = channel.get("webhook_url_ref", "")
+            if webhook_url_ref and not webhook_url_ref.startswith("vault:"):
+                if not webhook_url_ref.startswith("https://"):
+                    raise ValidationError(
+                        f"notification_config.channels[{i}].webhook_url_ref : "
+                        f"les URLs directes doivent commencer par 'https://'. "
+                        f"Pour les secrets, utilisez le format 'vault:secret/...'"
+                    )
+
+    page_individual = notification_config.get("page_individual_enabled")
+    if page_individual is not None and not isinstance(page_individual, bool):
+        raise ValidationError("notification_config.page_individual_enabled doit être un booléen")
+
+
 # Story 28.1: Valid policy types for business_rule_policies
 VALID_POLICY_TYPES = ('review_if_modified',)
 

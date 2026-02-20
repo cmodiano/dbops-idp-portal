@@ -86,7 +86,8 @@ class TestGetServiceClient:
         assert "splunk" in SERVICE_TYPES
         assert "servicenow" in SERVICE_TYPES
         assert "jira" in SERVICE_TYPES
-        assert len(SERVICE_TYPES) == 4
+        assert "notification" in SERVICE_TYPES
+        assert len(SERVICE_TYPES) == 5
 
 
 # ---------------------------------------------------------------------------

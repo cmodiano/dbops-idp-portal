@@ -163,6 +163,44 @@ class TestIntegrationViewSet(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('data', response.data)
         self.assertEqual(response.data['data']['name'], 'Updated AAP')
+
+    def test_update_integration_persists_icon(self):
+        """Test PUT /admin/integrations/{id} with icon saves to INTEGRATIONS.ICON."""
+        self.client.force_authenticate(user=self.dbops_user)
+        new_icon_url = '/static/icons/aap-custom.png'
+        data = {
+            'name': self.integration.name,
+            'base_url': self.integration.base_url,
+            'icon': new_icon_url,
+        }
+        response = self.client.put(
+            f'/api/v1/admin/integrations/{self.integration.id}/',
+            data,
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['data']['icon'], new_icon_url)
+        self.integration.refresh_from_db()
+        self.assertEqual(self.integration.icon, new_icon_url)
+
+    def test_update_integration_clear_icon(self):
+        """Test PUT with icon null clears ICON column."""
+        self.client.force_authenticate(user=self.dbops_user)
+        self.assertEqual(self.integration.icon, '/static/icons/test.png')
+        data = {
+            'name': self.integration.name,
+            'base_url': self.integration.base_url,
+            'icon': None,
+        }
+        response = self.client.put(
+            f'/api/v1/admin/integrations/{self.integration.id}/',
+            data,
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(response.data['data']['icon'])
+        self.integration.refresh_from_db()
+        self.assertIsNone(self.integration.icon)
     
     def test_update_integration_not_found(self):
         """Test PUT /admin/integrations/{id} with non-existent ID → 404."""

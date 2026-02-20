@@ -138,6 +138,16 @@ class ExecutionsCreateView(APIView):
             parameters = parameters.copy() if parameters else {}
             parameters["workflow_step_parameters"] = normalized_wsp
 
+        # Step 5b (Story 31.8): Inject page_me parameters if requested
+        page_me = validated.get('page_me', False)
+        if page_me:
+            parameters = parameters.copy() if parameters else {}
+            parameters['__page_me'] = True
+            parameters['__page_me_user_id'] = str(request.user.username)
+            parameters['__page_me_user_name'] = getattr(
+                request.user, 'display_name', str(request.user.username)
+            )
+
         # Step 6: Validate mutex
         target_ids_for_mutex = [t['name'] for t in validated_targets] if validated_targets else []
         MutexValidator.validate(
@@ -162,8 +172,10 @@ class ExecutionsCreateView(APIView):
             validated_targets=validated_targets if target_names else None,
         )
 
-        # Step 8: Launch execution
-        self._launch_execution(execution, action, correlation_id, request)
+        # Step 8: Launch execution (skip when requires_approval → PENDING_APPROVAL; DBA will launch via /approve)
+        from executions.models import ExecutionStatus
+        if execution.status != ExecutionStatus.PENDING_APPROVAL:
+            self._launch_execution(execution, action, correlation_id, request)
 
         # Step 9: Build response
         return ExecutionResponseBuilder.build(execution, action)

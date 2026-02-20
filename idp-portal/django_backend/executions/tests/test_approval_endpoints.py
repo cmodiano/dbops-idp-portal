@@ -21,7 +21,7 @@ class TestApproveExecution:
         self.client.force_authenticate(user=self.admin)
 
     def test_approve_pending_approval_returns_200(self):
-        """Approve valid PENDING_APPROVAL → SUBMITTED, HTTP 200."""
+        """Approve valid PENDING_APPROVAL → RUNNING (and workflow launched), HTTP 200 (Story 7.4)."""
         execution = ExecutionFactory.create(
             action=self.action,
             user=UserFactory.create(profile='DBA', username='requester'),
@@ -34,10 +34,10 @@ class TestApproveExecution:
 
         assert response.status_code == 200
         data = response.json()['data']
-        assert data['status'] == ExecutionStatus.SUBMITTED
+        assert data['status'] == ExecutionStatus.RUNNING
 
         execution.refresh_from_db()
-        assert execution.status == ExecutionStatus.SUBMITTED
+        assert execution.status == ExecutionStatus.RUNNING
 
     def test_approve_creates_audit_log(self):
         """Approve creates EXECUTION_APPROVED audit log with user_id and correlation_id."""
@@ -114,7 +114,7 @@ class TestApproveExecution:
         assert 'data' in body
         assert 'id' in body['data']
         assert 'status' in body['data']
-        assert body['data']['status'] == ExecutionStatus.SUBMITTED
+        assert body['data']['status'] == ExecutionStatus.RUNNING
 
 
 @pytest.mark.django_db
@@ -129,7 +129,7 @@ class TestRejectExecution:
         self.client.force_authenticate(user=self.admin)
 
     def test_reject_with_reason_returns_200(self):
-        """Reject with rejection_reason → FAILED, reason stored in error_message."""
+        """Reject with rejection_reason → REJECTED, reason stored in error_message (Story 7.4)."""
         execution = ExecutionFactory.create(
             action=self.action,
             user=UserFactory.create(profile='DBA', username='requester_r1'),
@@ -142,14 +142,14 @@ class TestRejectExecution:
 
         assert response.status_code == 200
         data = response.json()['data']
-        assert data['status'] == ExecutionStatus.FAILED
+        assert data['status'] == ExecutionStatus.REJECTED
 
         execution.refresh_from_db()
-        assert execution.status == ExecutionStatus.FAILED
+        assert execution.status == ExecutionStatus.REJECTED
         assert execution.error_message == 'Non conforme à la politique'
 
     def test_reject_without_reason_uses_default(self):
-        """Reject without rejection_reason → FAILED, default error_message."""
+        """Reject without rejection_reason → REJECTED, default error_message (Story 7.4)."""
         execution = ExecutionFactory.create(
             action=self.action,
             user=UserFactory.create(profile='DBA', username='requester_r2'),
@@ -162,7 +162,7 @@ class TestRejectExecution:
 
         assert response.status_code == 200
         execution.refresh_from_db()
-        assert execution.status == ExecutionStatus.FAILED
+        assert execution.status == ExecutionStatus.REJECTED
         assert execution.error_message == 'Execution rejected by user'
 
     def test_reject_creates_audit_log_with_reason(self):
@@ -240,7 +240,7 @@ class TestRejectExecution:
         assert 'data' in body
         assert 'id' in body['data']
         assert 'status' in body['data']
-        assert body['data']['status'] == ExecutionStatus.FAILED
+        assert body['data']['status'] == ExecutionStatus.REJECTED
 
 
 @pytest.mark.django_db(transaction=True)
@@ -304,9 +304,9 @@ class TestConcurrentApprovalRejection:
         assert 200 in results, "At least one approve should succeed"
         assert 400 in results, "Second approve should fail with HTTP 400 (already approved)"
 
-        # Verify final status is SUBMITTED
+        # Verify final status is RUNNING (approved and launched)
         execution.refresh_from_db()
-        assert execution.status == ExecutionStatus.SUBMITTED
+        assert execution.status == ExecutionStatus.RUNNING
 
     def test_concurrent_approve_and_reject_only_one_succeeds(self):
         """Concurrent approve + reject — only one should succeed."""
@@ -348,7 +348,7 @@ class TestConcurrentApprovalRejection:
         assert success_count == 1, "Exactly one request should succeed"
         assert fail_count == 1, "Exactly one request should fail with HTTP 400"
 
-        # Verify final status is either SUBMITTED or FAILED (but not PENDING_APPROVAL)
+        # Verify final status is either RUNNING (approved) or REJECTED (rejected), not PENDING_APPROVAL
         execution.refresh_from_db()
-        assert execution.status in [ExecutionStatus.SUBMITTED, ExecutionStatus.FAILED]
+        assert execution.status in [ExecutionStatus.RUNNING, ExecutionStatus.REJECTED]
         assert execution.status != ExecutionStatus.PENDING_APPROVAL

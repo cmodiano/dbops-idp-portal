@@ -9,6 +9,7 @@ import { memo } from 'react';
 import {
   Alert,
   Badge,
+  Checkbox,
   Descriptions,
   Typography,
 } from 'antd';
@@ -40,6 +41,10 @@ export interface ConfirmationStepProps {
   schedulingError: string | null;
   submitting: boolean;
   schedulingValidation: UseSchedulingValidationReturn;
+  /** Story 31.8: Page me checkbox state. */
+  pageMeEnabled: boolean;
+  /** Story 31.8: Page me checkbox handler. */
+  onPageMeChange: (checked: boolean) => void;
 }
 
 export const ConfirmationStep = memo(function ConfirmationStep({
@@ -57,6 +62,8 @@ export const ConfirmationStep = memo(function ConfirmationStep({
   schedulingError,
   submitting,
   schedulingValidation,
+  pageMeEnabled,
+  onPageMeChange,
 }: ConfirmationStepProps) {
   const changeConfig = action?.change_type_config?.[derivedEnvironment?.toUpperCase() ?? ''];
   const isChangeRequired = changeConfig?.required ?? false;
@@ -120,6 +127,18 @@ export const ConfirmationStep = memo(function ConfirmationStep({
             ))}
           </Descriptions>
         </>
+      )}
+
+      {/* Story 31.8: Page me checkbox — shown only if page_individual_enabled */}
+      {action?.notification_config?.page_individual_enabled && (
+        <div style={{ marginTop: 16 }}>
+          <Checkbox
+            checked={pageMeEnabled}
+            onChange={(e) => onPageMeChange(e.target.checked)}
+          >
+            Être pagé en cas d&apos;échec (production + critique uniquement)
+          </Checkbox>
+        </div>
       )}
 
       {submitError && (

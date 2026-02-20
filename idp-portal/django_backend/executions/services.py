@@ -171,12 +171,22 @@ class ExecutionService:
                        targets: list[str] | None = None,
                        delegated_referenced_action_ids: list[int] | None = None,
                        validated_targets: list[dict] | None = None) -> Execution:
-        """Internal atomic execution creation (after integration validation)."""
+        """Internal atomic execution creation (after integration validation).
+        Story 25.4 / 7.4: If requires_approval for this environment, create as PENDING_APPROVAL
+        so the execution waits for DBA approval before being launched.
+        """
+        requires_approval = bool(
+            (parameters or {}).get("_env_config", {}).get("requires_approval", False)
+        )
+        initial_status = (
+            ExecutionStatus.PENDING_APPROVAL if requires_approval else ExecutionStatus.SUBMITTED
+        )
+
         execution = Execution.objects.create(
             action=action,
             user=user,
             environment=environment,
-            status=ExecutionStatus.SUBMITTED,
+            status=initial_status,
             parent_execution_id=parent_execution_id,
         )
 
@@ -246,10 +256,15 @@ class ExecutionService:
             audit_details['referenced_action_ids'] = delegated_referenced_action_ids
             audit_details['validation_result'] = 'success'
 
-        # Audit
+        # Audit (Story 25.4: PENDING_APPROVAL when requires_approval for env)
+        audit_action = (
+            AuditActionType.EXECUTION_PENDING_APPROVAL
+            if initial_status == ExecutionStatus.PENDING_APPROVAL
+            else AuditActionType.EXECUTION_SUBMITTED
+        )
         AuditService.create_entry(
             user_id=str(user.id),
-            action_type=AuditActionType.EXECUTION_SUBMITTED,
+            action_type=audit_action,
             entity_type=AuditEntityType.EXECUTION,
             entity_id=execution.id,
             details=audit_details,
@@ -363,6 +378,34 @@ class ExecutionService:
             return Execution.objects.select_related('action', 'user').prefetch_related('executionstep_set').get(id=execution_id)
         except Execution.DoesNotExist:
             return None
+
+    @staticmethod
+    def launch_workflow(execution: Execution, correlation_id: str | None = None) -> None:
+        """
+        Start the workflow runtime for an execution (Story 7.4 / 25.4).
+        Used after creation (when not PENDING_APPROVAL) and after DBA approval.
+        """
+        from django.conf import settings
+        action = execution.action
+        if not action:
+            return
+        if action.item_type == "workflow":
+            from executions.container_workflow_runtime import ContainerWorkflowRuntime
+            ContainerWorkflowRuntime(execution).run()
+            logger.info(
+                "container_workflow_execution_launched",
+                execution_id=execution.id,
+                correlation_id=correlation_id,
+            )
+        elif getattr(settings, "SIMULATE_EXECUTION_DEV", False):
+            from executions.simulation_service import SimulationService
+            SimulationService.create_simulated_steps(execution)
+            SimulationService.start_simulation(execution)
+            logger.info(
+                "execution_simulation_started",
+                execution_id=execution.id,
+                correlation_id=correlation_id,
+            )
     
     @transaction.atomic
     def update_status(self, execution_id: int, new_status: str, user_id: str) -> Execution | None:
@@ -489,7 +532,51 @@ class ExecutionService:
                 'new_status': new_status,
             }
         )
-        
+
+        # Story 31.8: Trigger notifications on terminal states (non-blocking).
+        # Use transaction.on_commit() to avoid holding the DB connection open during
+        # potentially slow HTTP calls (httpx.post timeout=10s per destination).
+        if new_status in (ExecutionStatus.COMPLETED, ExecutionStatus.FAILED):
+            try:
+                from services.notification_service import NotificationService
+                from django.db import transaction as _tx
+                event = "on_success" if new_status == ExecutionStatus.COMPLETED else "on_failure"
+                params: dict = execution.get_parameters() or {}
+                page_me = bool(params.get('__page_me', False))
+                page_me_user_id = params.get('__page_me_user_id')
+                page_me_user_name = params.get('__page_me_user_name')
+                _correlation_id = get_correlation_id()
+                _execution_id_snap = execution_id
+
+                def _send_notifications() -> None:
+                    try:
+                        notif_service = NotificationService()
+                        notif_service.notify_execution_event(
+                            execution=execution,
+                            action=execution.action,
+                            event=event,
+                            page_me=page_me,
+                            page_me_user_id=page_me_user_id,
+                            page_me_user_name=page_me_user_name,
+                            correlation_id=_correlation_id,
+                        )
+                    except Exception as exc:
+                        logger.error(
+                            "notification_dispatch_failed",
+                            execution_id=_execution_id_snap,
+                            error=str(exc),
+                            correlation_id=_correlation_id,
+                        )
+
+                _tx.on_commit(_send_notifications)
+            except Exception as exc:
+                logger.error(
+                    "notification_setup_failed",
+                    execution_id=execution_id,
+                    error=str(exc),
+                    correlation_id=get_correlation_id(),
+                )
+
         return execution
     
     def list_by_user(self, user_id: int, status: str | None = None,

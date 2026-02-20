@@ -3,7 +3,7 @@
  * Tests dynamic environment labels, badge colors, and case-insensitive production detection.
  */
 
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { App } from 'antd';
 import { ConfirmationStep, type ConfirmationStepProps } from './ConfirmationStep';
@@ -61,6 +61,8 @@ const defaultProps: ConfirmationStepProps = {
   schedulingError: null,
   submitting: false,
   schedulingValidation: { isValid: true, errors: [] } as unknown as ConfirmationStepProps['schedulingValidation'],
+  pageMeEnabled: false,
+  onPageMeChange: vi.fn(),
 };
 
 describe('ConfirmationStep - Story 21.5', () => {
@@ -230,5 +232,83 @@ describe('ConfirmationStep - Story 21.5', () => {
 
       expect(screen.getByText('Qa')).toBeInTheDocument();
     });
+  });
+});
+
+describe('ConfirmationStep - Story 31.8 page_me', () => {
+  const actionWithPageMe = {
+    ...mockAction,
+    notification_config: {
+      channels: [],
+      page_individual_enabled: true,
+    },
+  } as unknown as ConfirmationStepProps['action'];
+
+  it('does not show page_me checkbox when notification_config is null', () => {
+    render(
+      <TestWrapper>
+        <ConfirmationStep {...defaultProps} />
+      </TestWrapper>,
+    );
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+  });
+
+  it('does not show page_me checkbox when page_individual_enabled is false', () => {
+    const action = {
+      ...mockAction,
+      notification_config: {
+        channels: [],
+        page_individual_enabled: false,
+      },
+    } as unknown as ConfirmationStepProps['action'];
+    render(
+      <TestWrapper>
+        <ConfirmationStep {...defaultProps} action={action} />
+      </TestWrapper>,
+    );
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+  });
+
+  it('shows page_me checkbox when page_individual_enabled is true', () => {
+    render(
+      <TestWrapper>
+        <ConfirmationStep {...defaultProps} action={actionWithPageMe} />
+      </TestWrapper>,
+    );
+    expect(screen.getByRole('checkbox')).toBeInTheDocument();
+    expect(screen.getByText(/pagé en cas d'échec/i)).toBeInTheDocument();
+  });
+
+  it('checkbox is unchecked when pageMeEnabled is false', () => {
+    render(
+      <TestWrapper>
+        <ConfirmationStep {...defaultProps} action={actionWithPageMe} pageMeEnabled={false} />
+      </TestWrapper>,
+    );
+    expect(screen.getByRole('checkbox')).not.toBeChecked();
+  });
+
+  it('checkbox is checked when pageMeEnabled is true', () => {
+    render(
+      <TestWrapper>
+        <ConfirmationStep {...defaultProps} action={actionWithPageMe} pageMeEnabled={true} />
+      </TestWrapper>,
+    );
+    expect(screen.getByRole('checkbox')).toBeChecked();
+  });
+
+  it('calls onPageMeChange when checkbox is clicked', () => {
+    const onPageMeChange = vi.fn();
+    render(
+      <TestWrapper>
+        <ConfirmationStep
+          {...defaultProps}
+          action={actionWithPageMe}
+          onPageMeChange={onPageMeChange}
+        />
+      </TestWrapper>,
+    );
+    fireEvent.click(screen.getByRole('checkbox'));
+    expect(onPageMeChange).toHaveBeenCalledWith(true);
   });
 });

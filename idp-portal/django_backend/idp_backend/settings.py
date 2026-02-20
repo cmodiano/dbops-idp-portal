@@ -474,3 +474,8 @@ VAULT_ADDR = os.getenv('VAULT_ADDR', 'http://localhost:8200')
 
 # ServiceNow configuration for health check
 SERVICENOW_INSTANCE_URL = os.getenv('SERVICENOW_INSTANCE_URL', 'https://instance.service-now.com')
+
+# Story 31.8: Notification service configuration
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'idp-portal@example.com')
+PAGE_INDIVIDUAL_API_URL = os.getenv('PAGE_INDIVIDUAL_API_URL', '')
+PAGE_DBA_API_URL = os.getenv('PAGE_DBA_API_URL', '')

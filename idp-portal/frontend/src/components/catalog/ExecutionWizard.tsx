@@ -151,6 +151,8 @@ export function ExecutionWizard({
   const [manualTargetInput, setManualTargetInput] = useState('');
   const [selectedEnvironment, setSelectedEnvironment] = useState<ExecutionEnvironment | null>(null);
   const [parameters, setParameters] = useState<Record<string, unknown>>({});
+  // Story 31.8: Page me opt-in checkbox state
+  const [pageMeEnabled, setPageMeEnabled] = useState(false);
 
   // Pattern resolution (Story 20.4: extracted to usePatternResolver)
   const { resolvedTargets: resolvedPatternTargets, isResolving: patternResolving } = usePatternResolver({
@@ -241,7 +243,7 @@ export function ExecutionWizard({
         onCancel();
         return;
       }
-      setCurrentStep(0); setParameters({}); setSubmitError(null); isSubmittingRef.current = false;
+      setCurrentStep(0); setParameters({}); setPageMeEnabled(false); setSubmitError(null); isSubmittingRef.current = false;
       setWorkflowStepActions({}); setWorkflowStepActionsError(null);
       setWorkflowInvalidStepOrders([]); setWorkflowValidationSummary(null);
       form.resetFields();
@@ -448,12 +450,13 @@ export function ExecutionWizard({
         parameters: isWorkflow ? null : (Object.keys(parameters).length > 0 ? parameters : null),
         workflow_step_parameters: buildWorkflowStepParams(parameters, isWorkflow),
         parent_execution_id: parentExecutionId ?? null,
+        page_me: pageMeEnabled || undefined,
       });
       if (executionId != null) onSuccess?.(executionId);
     } finally {
       isSubmittingRef.current = false;
     }
-  }, [action, derivedEnvironment, effectiveTargetNames, parameters, notification, onSuccess, parentExecutionId, isWorkflow, execSubmit]);
+  }, [action, derivedEnvironment, effectiveTargetNames, parameters, notification, onSuccess, parentExecutionId, isWorkflow, execSubmit, pageMeEnabled]);
 
   /**
    * Submit scheduled execution with double-submit protection.
@@ -503,6 +506,7 @@ export function ExecutionWizard({
         scheduled_at: schedulingType === 'one-time' ? scheduledAt?.utc().toISOString() : null,
         recurring_pattern: recurringPattern,
         target_names: selectedTargets.length > 0 ? selectedTargets.map((t) => t.name) : undefined,
+        page_me: pageMeEnabled || undefined,
       });
 
       if (scheduledId != null) {
@@ -520,7 +524,7 @@ export function ExecutionWizard({
     } finally {
       isSubmittingRef.current = false;
     }
-  }, [action, derivedEnvironment, selectedTargets, parameters, notification, onCancel, onSuccess, isWorkflow, execSubmit]);
+  }, [action, derivedEnvironment, selectedTargets, parameters, notification, onCancel, onSuccess, isWorkflow, execSubmit, pageMeEnabled]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape') onCancel();
@@ -598,6 +602,7 @@ export function ExecutionWizard({
               isScheduling={scheduling.isScheduling} scheduling={scheduling}
               onSchedulingChange={execSubmit.updateScheduling} schedulingError={execSubmit.schedulingError}
               submitting={submitting} schedulingValidation={schedulingValidation}
+              pageMeEnabled={pageMeEnabled} onPageMeChange={setPageMeEnabled}
             />
           )}
         </div>

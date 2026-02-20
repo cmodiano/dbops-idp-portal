@@ -87,6 +87,9 @@ class ExecutionPayloadValidator:
             # Environment validation is handled downstream in EnvironmentConfigResolver.resolve()
             # which gracefully handles missing inventory in tests
 
+        # Story 31.8: Extract page_me option (bool, default False)
+        page_me = bool(payload.get("page_me", False))
+
         return {
             'action': action,
             'action_id': action_id,
@@ -97,4 +100,5 @@ class ExecutionPayloadValidator:
             'parent_execution_id': parent_execution_id,
             'correlation_id': correlation_id,
             'requires_target': requires_target,
+            'page_me': page_me,
         }

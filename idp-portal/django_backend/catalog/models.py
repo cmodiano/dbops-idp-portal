@@ -220,6 +220,8 @@ class Action(models.Model):
     change_type_config = OracleJSONField(null=True, blank=True, db_column='CHANGE_TYPE_CONFIG')
     # Story 31.6: Gate configuration — integration selection per gate type (e.g., servicenow_change.integration_id)
     gate_config = OracleJSONField(null=True, blank=True, db_column='GATE_CONFIG')
+    # Story 31.8: Notification channels configuration (email, teams, page_individual, page_dba)
+    notification_config = OracleJSONField(null=True, blank=True, db_column='NOTIFICATION_CONFIG')
     documentation_md = models.TextField(null=True, blank=True, db_column='DOCUMENTATION_MD')
     remediation_rules = OracleJSONField(null=True, blank=True, db_column='REMEDIATION_RULES')
     # Story 28.1: Business rule policies evaluated on step output (post-step, before gate evaluation)

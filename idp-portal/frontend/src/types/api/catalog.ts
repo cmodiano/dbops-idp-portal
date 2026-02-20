@@ -45,6 +45,8 @@ export interface ActionCreate {
   documentation_md?: string | null;
   /** Story 31.6: Gate configuration — integration selection per gate type. */
   gate_config?: GateConfig | null;
+  /** Story 31.8: Notification channels configuration. */
+  notification_config?: NotificationConfig | null;
 }
 
 export interface ActionResponse {
@@ -91,6 +93,25 @@ export interface GateConfigServiceNow {
 /** Story 31.6: Gate configuration — integration selection per gate type. */
 export interface GateConfig {
   servicenow_change?: GateConfigServiceNow;
+}
+
+/** Story 31.8: Notification channel configuration. */
+export interface NotificationChannel {
+  type: 'email' | 'teams' | 'page_dba';
+  enabled: boolean;
+  conditions: ('on_failure' | 'on_success' | 'always')[];
+  /** Email only: "requester" or direct email address. */
+  recipient?: string;
+  /** Teams only: webhook URL or Vault reference. */
+  webhook_url_ref?: string;
+  /** Page DBA only: API URL (optional, falls back to settings). */
+  api_url?: string;
+}
+
+/** Story 31.8: Notification configuration for actions. */
+export interface NotificationConfig {
+  channels: NotificationChannel[];
+  page_individual_enabled: boolean;
 }
 
 /** Per-environment change config (Story 2.24; Story 25.4: + requires_maintenance_window, requires_approval, allowed). */
@@ -199,6 +220,8 @@ export interface ActionDetail extends ActionResponse {
   change_type_config: Record<string, ChangeTypeConfigEntry> | null;
   /** Story 31.6: Gate configuration — integration selection per gate type. */
   gate_config?: GateConfig | null;
+  /** Story 31.8: Notification channels configuration. */
+  notification_config?: NotificationConfig | null;
   /* documentation_md is inherited from ActionResponse (Story 3.4) */
   /** Story 9.1: Remediation rules for auto-suggesting corrective actions. */
   remediation_rules?: RemediationRule[] | null;

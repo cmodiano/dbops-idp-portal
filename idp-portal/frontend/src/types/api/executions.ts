@@ -23,6 +23,8 @@ export interface ExecutionCreateRequest {
   workflow_step_parameters?: Record<string, { parameters: Record<string, unknown> }>;
   /** Story 9.2: Parent execution ID for remediation (optional). */
   parent_execution_id?: number | null;
+  /** Story 31.8: Page me on failure (opt-in at execution time). */
+  page_me?: boolean;
 }
 
 /** Response from POST /executions (Story 4.1, Task 1.1). */

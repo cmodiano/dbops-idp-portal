@@ -28,6 +28,7 @@ import type {
   ImpactRuleDefinition,
   RemediationRule,
   GateConfig,
+  NotificationConfig,
 } from '../../types/api';
 import { schemaToParameterList, parameterListToSchema } from '../../utils/parametersSchema';
 import { impactRulesToList, listToImpactRules } from '../../utils/impactRulesSchema';
@@ -41,6 +42,7 @@ import { ImpactRulesEditor } from './ImpactRulesEditor';
 import { ChangeTypeConfig } from './ChangeTypeConfig';
 import { RemediationRulesEditor, type RemediationRuleDefinition } from './RemediationRulesEditor';
 import { BusinessRulePolicySelector } from './BusinessRulePolicySelector';
+import { NotificationConfigSection } from './NotificationConfigSection';
 import SectionHelp from '../common/SectionHelp';
 import { AdminPreview } from './AdminPreview';
 import { ApiError } from '../../services/api_client';
@@ -87,6 +89,8 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
   const [businessRulePolicyId, setBusinessRulePolicyId] = useState<number | null>(null);
   // Story 31.6: Gate configuration (integration selection per gate type)
   const [gateConfig, setGateConfig] = useState<GateConfig | null>(null);
+  // Story 31.8: Notification configuration (email, teams, page)
+  const [notificationConfig, setNotificationConfig] = useState<NotificationConfig | null>(null);
 
   // Story 13.7: Load engines from REF_ENGINES table
   const { engineOptions, loading: enginesLoading } = useEngines();
@@ -196,6 +200,8 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
       setBusinessRulePolicyId(editAction.business_rule_policy_id ?? null);
       // Story 31.6: Load gate configuration
       setGateConfig(editAction.gate_config ?? null);
+      // Story 31.8: Load notification configuration
+      setNotificationConfig(editAction.notification_config ?? null);
     } else if (!open) {
       form.resetFields();
       setExecutionSteps([]);
@@ -208,6 +214,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
       setRemediationRules([]);
       setBusinessRulePolicyId(null);
       setGateConfig(null);
+      setNotificationConfig(null);
       setStepsError(null);
     }
   }, [open, editAction, form]);
@@ -327,6 +334,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
         default_impact_level: defaultImpactLevel,
         documentation_md: values.documentation_md || null,
         gate_config: gateConfig,
+        notification_config: notificationConfig,
       };
 
       const result = await onSubmit(action);
@@ -712,6 +720,31 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
                           getIntegrationById(watchedIntegrationId ?? editAction?.integration_id ?? 0)?.type
                           ?? (editAction?.platform ? platformCodeToStepType(editAction.platform) : undefined)
                         }
+                      />
+                    </Form.Item>
+                  ),
+                },
+                {
+                  key: 'notifications',
+                  label: (
+                    <Text strong>
+                      Notifications
+                      {notificationConfig && (notificationConfig.channels.some(ch => ch.enabled) || notificationConfig.page_individual_enabled) && (
+                        <Text type="secondary" style={{ marginLeft: 8 }}>
+                          (configuré)
+                        </Text>
+                      )}
+                    </Text>
+                  ),
+                  children: (
+                    <Form.Item
+                      label="Configuration des notifications"
+                      tooltip="Configurez les canaux de notification (email, Teams, page) et leurs conditions de déclenchement."
+                      style={{ marginBottom: 16 }}
+                    >
+                      <NotificationConfigSection
+                        value={notificationConfig}
+                        onChange={setNotificationConfig}
                       />
                     </Form.Item>
                   ),

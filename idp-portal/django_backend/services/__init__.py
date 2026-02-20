@@ -23,6 +23,7 @@ SERVICE_TYPES: dict[str, str] = {
     "splunk": "services.splunk_service.SplunkService",
     "servicenow": "services.servicenow_service.ServiceNowService",
     "jira": "services.jira_service.JiraService",
+    "notification": "services.notification_service.NotificationService",
 }
 
 
@@ -57,6 +58,10 @@ def get_service_client(
     if service_type == "jira":
         from services.jira_service import JiraService
         return JiraService(**config)
+
+    if service_type == "notification":
+        from services.notification_service import NotificationService
+        return NotificationService(**config)
 
     available = list(SERVICE_TYPES.keys())
     raise ValueError(
