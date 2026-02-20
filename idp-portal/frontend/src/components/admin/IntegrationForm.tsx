@@ -233,7 +233,7 @@ export function IntegrationForm({
       const headers: Record<string, string> = {};
       if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
 
-      const response = await fetch('/api/v1/admin/integrations/upload-icon', {
+      const response = await fetch('/api/v1/admin/integrations/upload-icon/', {
         method: 'POST',
         body: formData,
         credentials: 'include',

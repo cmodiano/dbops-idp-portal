@@ -136,6 +136,23 @@ class UploadIconView(APIView):
             HTTP 201 with {"data": {"icon_url": "/static/icons/{uuid}.{ext}"}}
             HTTP 400 if validation fails
         """
+        try:
+            return self._do_upload(request)
+        except (BadRequestError, InvalidStateError):
+            raise
+        except Exception as e:
+            logger.exception(
+                "icon_upload_unexpected_error",
+                extra={"error": str(e), "error_type": type(e).__name__},
+            )
+            raise InvalidStateError(
+                code="UPLOAD_FAILED",
+                message="Échec de l'upload de l'icône. Vérifiez le fichier ou les droits d'écriture du serveur.",
+                details={"error_type": type(e).__name__},
+            )
+
+    def _do_upload(self, request):
+        """Perform icon upload validation and file write."""
         file = request.FILES.get('file')
         if not file:
             raise BadRequestError(
@@ -230,7 +247,18 @@ class UploadIconView(APIView):
             static_root = Path(static_root)
 
         icons_dir = static_root / 'icons'
-        icons_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            icons_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            logger.error(
+                "icon_upload_dir_failed",
+                extra={"error": str(e), "icons_dir": str(icons_dir)},
+            )
+            raise InvalidStateError(
+                code="UPLOAD_FAILED",
+                message="Impossible de créer le répertoire des icônes. Vérifiez les droits d'écriture du serveur.",
+                details={"error_type": type(e).__name__},
+            )
 
         # Write file to disk with error handling
         icon_path = icons_dir / unique_filename

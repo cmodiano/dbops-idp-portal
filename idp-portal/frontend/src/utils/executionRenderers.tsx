@@ -44,10 +44,10 @@ const ENGINE_ICON_SIZE = 56;
 /** Compact icon size for execution tables (Story 17.13) - aligned with size="small" row height. */
 const ENGINE_ICON_SIZE_COMPACT = 40;
 
-/** SVG URLs for database engine icons (real vendor logos from svgrepo.com). */
+/** SVG URLs for database engine icons (served from frontend public/icons/engines/). */
 const ENGINE_SVG_SOURCES: Partial<Record<ActionEngine, string>> = {
-  Oracle: 'https://www.svgrepo.com/show/354152/oracle.svg',
-  'SQL Server': 'https://www.svgrepo.com/show/303229/microsoft-sql-server-logo.svg',
+  Oracle: '/icons/engines/oracle.svg',
+  'SQL Server': '/icons/engines/sqlserver.svg',
   DB2: '/icons/engines/db2.svg',
 };
 

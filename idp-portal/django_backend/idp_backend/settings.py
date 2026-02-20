@@ -165,9 +165,12 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 
-# Include BASE_DIR/static for uploaded icons (integration icons in static/icons/)
-# Directory is created by upload endpoint on first icon upload
-STATICFILES_DIRS = [BASE_DIR / 'static'] if (BASE_DIR / 'static').exists() else []
+# Ensure static/icons/ directory exists so STATICFILES_DIRS always includes it.
+# Without this, if Django starts before any icon is uploaded, the dir doesn't exist,
+# STATICFILES_DIRS becomes [] and StaticFilesHandler can't serve uploaded icons
+# even after they're written to disk (finders are loaded once at startup).
+(BASE_DIR / 'static' / 'icons').mkdir(parents=True, exist_ok=True)
+STATICFILES_DIRS = [BASE_DIR / 'static']
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

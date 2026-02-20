@@ -4,7 +4,10 @@ Views for integrations CRUD endpoints.
 
 import asyncio
 import base64 as _b64
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from rest_framework import viewsets, status, serializers as drf_serializers
 from rest_framework.response import Response
@@ -96,6 +99,16 @@ class IntegrationViewSet(viewsets.ViewSet):
         except InvalidStateError:
             # Re-raise InvalidStateError (e.g., INVALID_CONFIG from JSON Schema validation)
             raise
+        except Exception as e:
+            logger.exception(
+                "create_integration_unexpected_error",
+                extra={"error": str(e), "error_type": type(e).__name__},
+            )
+            raise InvalidStateError(
+                code="VALIDATION_ERROR",
+                message="Impossible d'enregistrer l'intégration. Réessayez ou contactez l'administrateur.",
+                details={}
+            )
         
         response_serializer = IntegrationSerializer(integration)
         response_data: dict[str, Any] = {'data': response_serializer.data}
@@ -144,6 +157,16 @@ class IntegrationViewSet(viewsets.ViewSet):
         except InvalidStateError:
             # Re-raise InvalidStateError (e.g., INVALID_CONFIG from JSON Schema validation)
             raise
+        except Exception as e:
+            logger.exception(
+                "update_integration_unexpected_error",
+                extra={"error": str(e), "error_type": type(e).__name__},
+            )
+            raise InvalidStateError(
+                code="VALIDATION_ERROR",
+                message="Impossible d'enregistrer l'intégration. Réessayez ou contactez l'administrateur.",
+                details={}
+            )
         
         if integration is None:
             raise NotFoundError(
