@@ -3,6 +3,7 @@
  *
  * Bloc 1 — Gates : Autorisé, Plage maintenance, Approbation (conditions d'exécution)
  * Bloc 2 — Changement ServiceNow : Changement requis, Modèle / Template ID (unifié), Change type
+ *   Story 31.6: + Sélecteur intégration ServiceNow (quand required=true)
  *
  * Le champ « Modèle / Template ID » fusionne l'ancien Code modèle et Template ID.
  * Lecture : template_id ?? change_model_code ?? ''
@@ -10,9 +11,10 @@
  */
 
 import React from 'react';
-import { Switch, Input, Space, Typography, theme, Skeleton, Alert, Divider } from 'antd';
-import type { ChangeTypeConfigEntry } from '../../types/api';
+import { Switch, Input, Select, Space, Typography, theme, Skeleton, Alert, Divider } from 'antd';
+import type { ChangeTypeConfigEntry, GateConfig } from '../../types/api';
 import { useEnvironments } from '../../hooks/useEnvironments';
+import { useServiceNowIntegrations } from '../../hooks/useServiceNowIntegrations';
 
 const { Text } = Typography;
 
@@ -24,19 +26,32 @@ const EMPTY_CONFIG: Record<string, ChangeTypeConfigEntry> = {};
 export interface ChangeTypeConfigProps {
   value?: Record<string, ChangeTypeConfigEntry>;
   onChange?: (config: Record<string, ChangeTypeConfigEntry>) => void;
+  /** Story 31.6: Gate configuration (integration selection per gate type). */
+  gateConfig?: GateConfig | null;
+  /** Story 31.6: Callback when gate config changes. */
+  onGateConfigChange?: (gateConfig: GateConfig) => void;
 }
 
 export const ChangeTypeConfig: React.FC<ChangeTypeConfigProps> = ({
   value = EMPTY_CONFIG,
   onChange,
+  gateConfig,
+  onGateConfigChange,
 }) => {
   const { token } = theme.useToken();
   const { environments, environmentOptions, loading, error } = useEnvironments();
+  const {
+    integrationOptions: snOptions,
+    loading: snLoading,
+  } = useServiceNowIntegrations();
 
   const getEntry = (env: string): ChangeTypeConfigEntry => {
     const e = value[env];
     return e ?? { required: false };
   };
+
+  // Check if any environment has required=true (for showing the integration selector)
+  const hasAnyRequired = environments.some((env) => getEntry(env).required);
 
   const handleAllowedChange = (env: string, allowed: boolean) => {
     const entry = getEntry(env);
@@ -83,6 +98,13 @@ export const ChangeTypeConfig: React.FC<ChangeTypeConfigProps> = ({
     onChange?.(newConfig);
   };
 
+  const handleIntegrationChange = (integrationId: number | undefined) => {
+    onGateConfigChange?.({
+      ...gateConfig,
+      servicenow_change: { integration_id: integrationId ?? null },
+    });
+  };
+
   if (loading) {
     return <Skeleton active paragraph={{ rows: 3 }} />;
   }
@@ -111,6 +133,8 @@ export const ChangeTypeConfig: React.FC<ChangeTypeConfigProps> = ({
     alignItems: 'center',
     borderBottom: `1px solid ${token.colorBorderSecondary}`,
   };
+
+  const selectedIntegrationId = gateConfig?.servicenow_change?.integration_id ?? undefined;
 
   return (
     <div>
@@ -173,6 +197,39 @@ export const ChangeTypeConfig: React.FC<ChangeTypeConfigProps> = ({
           {/* Bloc 2 — Changement ServiceNow */}
           <div role="group" aria-label="Changement ServiceNow par environnement">
             <Text strong style={{ fontSize: 14 }}>Changement ServiceNow par environnement</Text>
+
+            {/* Story 31.6: ServiceNow integration selector (shown when any env has required=true) */}
+            {hasAnyRequired && (
+              <div style={{ marginTop: 8, marginBottom: 8 }}>
+                <Text style={{ marginRight: 8 }}>Intégration ServiceNow :</Text>
+                {snOptions.length === 0 ? (
+                  <Text type="secondary">
+                    Aucune intégration ServiceNow configurée — créez-en une dans Admin &gt; Intégrations
+                  </Text>
+                ) : (
+                  <Select
+                    value={selectedIntegrationId}
+                    onChange={handleIntegrationChange}
+                    options={snOptions}
+                    placeholder="Sélectionnez une intégration ServiceNow"
+                    style={{ minWidth: 280 }}
+                    loading={snLoading}
+                    allowClear
+                    aria-label="Intégration ServiceNow"
+                  />
+                )}
+                {snOptions.length > 0 && !selectedIntegrationId && (
+                  <Alert
+                    title="Intégration non sélectionnée"
+                    description="Recommandé : sélectionnez l'intégration ServiceNow à utiliser pour créer le changement."
+                    type="warning"
+                    showIcon
+                    style={{ marginTop: 8 }}
+                  />
+                )}
+              </div>
+            )}
+
             <div
               style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr 1fr', gap: '8px', ...headerStyle, marginTop: 8 }}
               role="row"

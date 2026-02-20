@@ -150,6 +150,12 @@ class CatalogService:
                 from catalog.validators import validate_change_type_config
                 validate_change_type_config(ctc)
             action.change_type_config = ctc
+        if 'gate_config' in action_data:
+            gc = _json_value(action_data['gate_config'])
+            if gc is not None:
+                from catalog.validators import validate_gate_config
+                validate_gate_config(gc)
+            action.gate_config = gc
         if 'remediation_rules' in action_data:
             action.remediation_rules = _json_value(action_data['remediation_rules'])
         action.save()
@@ -324,7 +330,10 @@ class CatalogService:
             action.impact_rules = action_update_data['impact_rules']
         if 'remediation_rules' in action_update_data:
             action.remediation_rules = action_update_data['remediation_rules']
-        
+        # Story 31.6: gate_config (validated by serializer)
+        if 'gate_config' in action_update_data:
+            action.gate_config = action_update_data['gate_config']
+
         action.save()
         
         # Update tags if provided

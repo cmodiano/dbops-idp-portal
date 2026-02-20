@@ -23,6 +23,7 @@ import type {
   ExecutionStep,
   ItemType,
   WorkflowStep,
+  GateConfig,
 } from '../../types/api';
 import { schemaToParameterList, parameterListToSchema } from '../../utils/parametersSchema';
 import { impactRulesToList, listToImpactRules } from '../../utils/impactRulesSchema';
@@ -35,14 +36,126 @@ import { WorkflowBuilderCanvas } from './WorkflowBuilderCanvas';
 import { validateWorkflowGraph } from '../../utils/workflowValidation';
 import { workflowStepsToReactFlow } from '../../utils/workflowConversion';
 import { getTags, updateActionTags, updateActionSteps, updateWorkflowSteps, updateBusinessRulePolicies, patchAction, checkActionNameAvailable } from '../../services/admin_service';
+import { useAAPTemplates } from '../../hooks/useAAPTemplates';
 import { useEngines } from '../../hooks/useEngines';
 import { usePlatformIntegrations } from '../../hooks/usePlatformIntegrations';
 import { useCategories } from '../../hooks/useCategories';
+import { useServiceNowIntegrations } from '../../hooks/useServiceNowIntegrations';
 import { integrationTypeToPlatformCode, integrationToConnector, platformCodeToStepType } from '../../utils/integrationHelpers';
 
 const { TextArea } = Input;
 
 /** Story 31.1: Derive connector from integration type (replaces platformToConnector). */
+
+/** Story 31.5: AAP template selector for wizard — uses hook in a proper component. */
+interface WizardAAPTemplateSectionProps {
+  integrationId: number | undefined;
+  aapResourceType: 'job_template' | 'workflow_job';
+  aapTemplateId: number | undefined;
+  onResourceTypeChange: (v: 'job_template' | 'workflow_job') => void;
+  onTemplateIdChange: (v: number | undefined) => void;
+  isReadOnly: boolean;
+}
+
+function WizardAAPTemplateSection({
+  integrationId,
+  aapResourceType,
+  aapTemplateId,
+  onResourceTypeChange,
+  onTemplateIdChange,
+  isReadOnly,
+}: WizardAAPTemplateSectionProps) {
+  // H3 fix: debounced search for server-side filtering (AC3)
+  const [searchInput, setSearchInput] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchInput), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  const { templates, loading, fallback, error } = useAAPTemplates(integrationId, aapResourceType, debouncedSearch || undefined);
+
+  // Build options with retrocompatibility
+  const options = templates.map((t) => ({ value: t.id, label: t.name }));
+  if (aapTemplateId && !templates.find((t) => t.id === aapTemplateId) && templates.length > 0) {
+    options.unshift({ value: aapTemplateId, label: `Template #${aapTemplateId} (introuvable)` });
+  }
+
+  return (
+    <Form.Item label="Quel automatisme appeler ?" style={{ marginBottom: 0 }}>
+      <Space wrap>
+        <Form.Item label="Type de ressource" style={{ marginBottom: 0 }}>
+          <Select
+            value={aapResourceType}
+            onChange={onResourceTypeChange}
+            options={[
+              { value: 'job_template', label: 'Job template' },
+              { value: 'workflow_job', label: 'Workflow job' },
+            ]}
+            style={{ width: 160 }}
+            aria-label="Type ressource AAP"
+            disabled={isReadOnly}
+          />
+        </Form.Item>
+        {fallback ? (
+          <>
+            {(error || !integrationId) && (
+              <Alert
+                type="warning"
+                showIcon
+                title="Saisie manuelle — liste non disponible"
+                style={{ marginBottom: 8 }}
+              />
+            )}
+            <Form.Item
+              label="ID template (manuel)"
+              required
+              validateStatus={aapTemplateId == null || aapTemplateId < 1 ? 'error' : ''}
+              help={aapTemplateId == null || aapTemplateId < 1 ? 'ID du job template ou workflow job template AAP' : ''}
+              style={{ marginBottom: 0 }}
+            >
+              <Input
+                type="number"
+                min={1}
+                value={aapTemplateId ?? ''}
+                onChange={(e) => onTemplateIdChange(e.target.value ? Number(e.target.value) : undefined)}
+                placeholder="ID template AAP"
+                style={{ width: 120 }}
+                aria-label="ID template AAP"
+                disabled={isReadOnly}
+              />
+            </Form.Item>
+          </>
+        ) : (
+          <Form.Item
+            label="Template AAP"
+            required
+            validateStatus={aapTemplateId == null || aapTemplateId < 1 ? 'error' : ''}
+            help={aapTemplateId == null || aapTemplateId < 1 ? 'Selectionnez un template AAP' : ''}
+            style={{ marginBottom: 0 }}
+          >
+            <Select
+              showSearch
+              loading={loading}
+              style={{ minWidth: 240 }}
+              value={aapTemplateId ?? undefined}
+              onChange={(val) => onTemplateIdChange(val)}
+              onSearch={setSearchInput}
+              placeholder="Selectionnez un template"
+              filterOption={(input, opt) =>
+                ((opt?.label as string) ?? '').toLowerCase().includes(input.toLowerCase())
+              }
+              options={options}
+              aria-label="Template AAP"
+              notFoundContent={loading ? 'Chargement...' : 'Aucun template'}
+              disabled={isReadOnly}
+            />
+          </Form.Item>
+        )}
+      </Space>
+    </Form.Item>
+  );
+}
 
 const STEP_ITEMS = [
   { title: 'Général', content: 'Type, nom, moteur, intégration, tags' },
@@ -83,6 +196,8 @@ export function ActionWizard({
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagsOptions, setTagsOptions] = useState<{ value: string; label: string }[]>([]);
   const [changeTypeConfig, setChangeTypeConfig] = useState<Record<string, ChangeTypeConfigEntry>>({});
+  // Story 31.6: Gate configuration (integration selection per gate type)
+  const [gateConfig, setGateConfig] = useState<GateConfig | null>(null);
   /** Story 28.4: Predefined business rule policy ID (FK). Inline rules removed — only catalogue. */
   const [businessRulePolicyId, setBusinessRulePolicyId] = useState<number | null>(null);
   /** Pour AAP : type de ressource (job_template | workflow_job) et ID template. 1 action = 1 étape. */
@@ -105,6 +220,8 @@ export function ActionWizard({
   const { engineOptions, loading: enginesLoading } = useEngines();
   // Story 31.1: Load platform integrations (replaces usePlatforms)
   const { integrationOptions, loading: integrationsLoading, getIntegrationById } = usePlatformIntegrations();
+  // Story 31.6: Load ServiceNow integrations for gate config validation (AC #3)
+  const { integrationOptions: snIntegrationOptions } = useServiceNowIntegrations();
   // Story 2.30: Load categories from REF_CATEGORIES table
   const { categoryOptions, loading: categoriesLoading } = useCategories();
 
@@ -140,6 +257,8 @@ export function ActionWizard({
       setDefaultImpactLevel(editAction.default_impact_level ?? null);
       setSelectedTags(editAction.tags ?? []);
       setChangeTypeConfig(editAction.change_type_config ?? {});
+      // Story 31.6: Load gate configuration
+      setGateConfig(editAction.gate_config ?? null);
       // Story 28.4: Load business rule policy (FK only; inline removed)
       setBusinessRulePolicyId(editAction.business_rule_policy_id ?? null);
       // Story 9.5: Load workflow steps for workflows
@@ -169,6 +288,7 @@ export function ActionWizard({
       setDefaultImpactLevel(null);
       setSelectedTags([]);
       setChangeTypeConfig({});
+      setGateConfig(null);
       setBusinessRulePolicyId(null);
       setAapResourceType('job_template');
       setAapTemplateId(undefined);
@@ -297,6 +417,15 @@ export function ActionWizard({
         }
       }
 
+      // Story 31.6 AC #3: Block save if required=true, SN integrations exist, but none selected
+      const hasRequiredEnv = Object.values(changeTypeConfig).some((e) => e?.required);
+      if (hasRequiredEnv && snIntegrationOptions.length > 0 && !gateConfig?.servicenow_change?.integration_id) {
+        setSubmitError(
+          "Une intégration ServiceNow doit être sélectionnée lorsque « Changement requis » est activé et que des intégrations ServiceNow sont configurées."
+        );
+        return;
+      }
+
       // Story 25.4 + Story 31.4: validate change_type_config — when required=true, model/template ID required
       // Read template_id first (priority), fall back to change_model_code (rétrocompatibilité)
       // Pattern relaxed in Story 31.4 to allow underscores and hyphens (e.g. CHG_TPL_001)
@@ -341,6 +470,8 @@ export function ActionWizard({
         // impact_rules and default_impact_level apply to both actions and workflows
         impact_rules: listToImpactRules(impactRulesList),
         default_impact_level: defaultImpactLevel,
+        // Story 31.6: Gate configuration
+        gate_config: gateConfig,
         // Only include engine/platform/integration_id/parameters_schema/category for actions
         ...(isWorkflowSave
           ? {}
@@ -645,43 +776,14 @@ export function ActionWizard({
             ) : (
               <>
                 {isPlatformAAP && (
-                  <>
-                    <Form.Item label="Quel automatisme appeler ?" style={{ marginBottom: 0 }}>
-                      <Space wrap>
-                        <Form.Item label="Type de ressource" style={{ marginBottom: 0 }}>
-                          <Select
-                            value={aapResourceType}
-                            onChange={setAapResourceType}
-                            options={[
-                              { value: 'job_template', label: 'Job template' },
-                              { value: 'workflow_job', label: 'Workflow job' },
-                            ]}
-                            style={{ width: 160 }}
-                            aria-label="Type ressource AAP"
-                            disabled={isReadOnly}
-                          />
-                        </Form.Item>
-                        <Form.Item
-                          label="ID template"
-                          required
-                          validateStatus={isPlatformAAP && (aapTemplateId == null || aapTemplateId < 1) ? 'error' : ''}
-                          help={isPlatformAAP && (aapTemplateId == null || aapTemplateId < 1) ? 'ID du job template ou workflow job template AAP' : ''}
-                          style={{ marginBottom: 0 }}
-                        >
-                          <Input
-                            type="number"
-                            min={1}
-                            value={aapTemplateId ?? ''}
-                            onChange={(e) => setAapTemplateId(e.target.value ? Number(e.target.value) : undefined)}
-                            placeholder="ID template AAP"
-                            style={{ width: 120 }}
-                            aria-label="ID template AAP"
-                            disabled={isReadOnly}
-                          />
-                        </Form.Item>
-                      </Space>
-                    </Form.Item>
-                  </>
+                  <WizardAAPTemplateSection
+                    integrationId={integrationId}
+                    aapResourceType={aapResourceType}
+                    aapTemplateId={aapTemplateId}
+                    onResourceTypeChange={setAapResourceType}
+                    onTemplateIdChange={setAapTemplateId}
+                    isReadOnly={!!isReadOnly}
+                  />
                 )}
                 <Form.Item label="Paramètres" tooltip="Définissez les paramètres de l'action (extra_vars, etc.).">
                   {/* TODO: Add disabled prop to ParametersEditor */}
@@ -722,7 +824,7 @@ export function ActionWizard({
                 tooltip="Pour chaque environnement : configurer les gates (autorisé, plage maintenance, approbation) et le changement ServiceNow (requis, modèle/template ID)."
               >
                 {/* TODO: Add disabled prop to ChangeTypeConfig */}
-                <ChangeTypeConfig value={changeTypeConfig} onChange={isReadOnly ? () => {} : setChangeTypeConfig} />
+                <ChangeTypeConfig value={changeTypeConfig} onChange={isReadOnly ? () => {} : setChangeTypeConfig} gateConfig={gateConfig} onGateConfigChange={isReadOnly ? undefined : setGateConfig} />
               </Form.Item>
             )}
             {/* Story 28.4: Règles métier — sélecteur prédéfini (filtré par plateforme) */}

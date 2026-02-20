@@ -195,14 +195,15 @@ class ActionViewSet(viewsets.ModelViewSet):
             response_serializer = ActionSerializer(instance)
             return Response({"data": response_serializer.data})
 
-        # Handle other fields via ActionCreateSerializer
+        # Handle other fields via ActionCreateSerializer (includes gate_config via Story 31.6)
         serializer = ActionCreateSerializer(data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
+        update_data = serializer.validated_data
 
         try:
             action = CatalogService().update_action(
                 action_id=instance.id,
-                action_update_data=serializer.validated_data,
+                action_update_data=update_data,
                 user=request.user  # type: ignore[arg-type]
             )
         except IntegrityError as e:

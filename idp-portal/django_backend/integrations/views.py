@@ -2,13 +2,15 @@
 Views for integrations CRUD endpoints.
 """
 
+import asyncio
+import base64 as _b64
 from typing import Any
 
 from rest_framework import viewsets, status, serializers as drf_serializers
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
-from drf_spectacular.utils import extend_schema, inline_serializer, OpenApiResponse
+from drf_spectacular.utils import extend_schema, inline_serializer, OpenApiResponse, OpenApiParameter
 from integrations.serializers import (
     IntegrationSerializer, IntegrationCreateSerializer,
     IntegrationUpdateSerializer, IntegrationListSerializer
@@ -262,6 +264,83 @@ class IntegrationViewSet(viewsets.ViewSet):
                 'validation_message': details['validation_message'],
             },
         }})
+
+    @extend_schema(
+        summary="Liste les templates AAP (job ou workflow) d'une intégration",
+        parameters=[
+            OpenApiParameter('resource_type', str, description="job_template | workflow_job", default='job_template'),
+            OpenApiParameter('search', str, description="Filtre par nom (optionnel)", required=False),
+        ],
+        responses={
+            200: inline_serializer(name='AAPTemplatesResponse', fields={
+                'data': drf_serializers.ListField(child=drf_serializers.DictField()),
+            }),
+            400: OpenApiResponse(description='Invalid resource_type or non-AAP integration'),
+            404: OpenApiResponse(description='Integration not found'),
+            503: OpenApiResponse(description='AAP API unavailable'),
+        },
+    )
+    @action(detail=True, methods=['get'], url_path='aap-templates')
+    def aap_templates(self, request, pk=None):
+        """GET /admin/integrations/{id}/aap-templates/ — Liste templates AAP."""
+        from adapters.aap_adapter import AAPAdapter
+        from core.exceptions import ServiceUnavailableError as _ServiceUnavailableError
+
+        # Validate resource_type
+        resource_type = request.query_params.get('resource_type', 'job_template')
+        if resource_type not in ('job_template', 'workflow_job'):
+            return Response(
+                {'error': f"resource_type invalide: {resource_type!r}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        search = request.query_params.get('search') or None
+
+        # Get integration
+        try:
+            integration_id = int(pk)
+        except (ValueError, TypeError):
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message=f"Integration {pk} introuvable",
+                details={"integration_id": pk},
+            )
+
+        service = IntegrationService()
+        integration = service.get_by_id(integration_id)
+
+        if integration is None:
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message=f"Integration {integration_id} introuvable",
+                details={"integration_id": integration_id},
+            )
+
+        # Verify type AAP (includes tower)
+        if integration.type not in ('aap', 'tower'):
+            return Response(
+                {'error': f"L'intégration {integration_id} n'est pas de type AAP (type={integration.type!r})"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Resolve credentials (pattern from executions/tasks.py)
+        credential_ref = integration.credential_ref or ''
+        auth_flow = integration.auth_flow or 'token'
+        if auth_flow == 'basic':
+            _encoded = _b64.b64encode(credential_ref.encode()).decode()
+            auth_headers = {'Authorization': f'Basic {_encoded}'}
+        else:
+            auth_headers = {'Authorization': f'Bearer {credential_ref}'}
+
+        adapter = AAPAdapter(base_url=integration.base_url, auth_headers=auth_headers)
+        try:
+            templates = asyncio.run(adapter.list_templates(resource_type=resource_type, search=search))
+            return Response({'data': templates})
+        except _ServiceUnavailableError:
+            return Response(
+                {'data': [], 'fallback': True, 'error': 'API AAP indisponible'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
     @extend_schema(
         summary="Validate all integrations against the type catalogue",

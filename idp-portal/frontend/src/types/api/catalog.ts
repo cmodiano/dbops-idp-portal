@@ -43,6 +43,8 @@ export interface ActionCreate {
   /** Story 2.24: change_model_code removed; change_type_config is in ExecutionStepsUpdate only. */
   /** Story 3.4 FR12: Markdown documentation for contextual help. */
   documentation_md?: string | null;
+  /** Story 31.6: Gate configuration — integration selection per gate type. */
+  gate_config?: GateConfig | null;
 }
 
 export interface ActionResponse {
@@ -79,6 +81,16 @@ export interface ActionResponse {
    * consistent with backend models.BooleanField(default=True).
    */
   requires_target?: boolean;
+}
+
+/** Story 31.6: ServiceNow gate configuration. */
+export interface GateConfigServiceNow {
+  integration_id?: number | null;
+}
+
+/** Story 31.6: Gate configuration — integration selection per gate type. */
+export interface GateConfig {
+  servicenow_change?: GateConfigServiceNow;
 }
 
 /** Per-environment change config (Story 2.24; Story 25.4: + requires_maintenance_window, requires_approval, allowed). */
@@ -185,6 +197,8 @@ export interface ActionDetail extends ActionResponse {
   workflow_steps: WorkflowStep[] | null;
   /** Story 2.24: per-env { required, change_model_code }. */
   change_type_config: Record<string, ChangeTypeConfigEntry> | null;
+  /** Story 31.6: Gate configuration — integration selection per gate type. */
+  gate_config?: GateConfig | null;
   /* documentation_md is inherited from ActionResponse (Story 3.4) */
   /** Story 9.1: Remediation rules for auto-suggesting corrective actions. */
   remediation_rules?: RemediationRule[] | null;

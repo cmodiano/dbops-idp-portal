@@ -277,17 +277,17 @@ class TestIntegrationServiceDelete(TestCase):
         self.assertEqual(result, {'deleted': True, 'disabled_actions_count': 2})
         # Integration is deleted
         self.assertFalse(Integration.objects.filter(id=self.integration.id).exists())
-        # Actions are disabled with soft-delete fields set
+        # Actions are disabled (status + updated_at only); deleted_at/deletion_reason stay NULL
         action1.refresh_from_db()
         action2.refresh_from_db()
         self.assertEqual(action1.status, ActionStatus.DISABLED)
         self.assertEqual(action2.status, ActionStatus.DISABLED)
-        self.assertIsNotNone(action1.deleted_at)
-        self.assertIsNotNone(action2.deleted_at)
+        self.assertIsNone(action1.deleted_at)
+        self.assertIsNone(action2.deleted_at)
+        self.assertIsNone(action1.deletion_reason)
+        self.assertIsNone(action2.deletion_reason)
         self.assertIsNotNone(action1.updated_at)
         self.assertIsNotNone(action2.updated_at)
-        self.assertIn('Intégration supprimée', action1.deletion_reason)
-        self.assertEqual(action1.deleted_by, self.user)
         # integration_id is SET_NULL after integration.delete()
         self.assertIsNone(action1.integration_id)
         self.assertIsNone(action2.integration_id)
@@ -334,7 +334,7 @@ class TestIntegrationServiceDelete(TestCase):
         self.assertEqual(details['disabled_actions_count'], 2)
 
     def test_delete_integration_already_disabled_actions(self):
-        """delete_integration() with already disabled actions still counts and processes them."""
+        """delete_integration() with already disabled actions still counts them; does not overwrite soft-delete fields."""
         from catalog.models import Action, ActionStatus
         from django.utils import timezone
         action = Action.objects.create(
@@ -348,7 +348,10 @@ class TestIntegrationServiceDelete(TestCase):
 
         self.assertEqual(result['disabled_actions_count'], 1)
         action.refresh_from_db()
-        self.assertIn('Intégration supprimée', action.deletion_reason)
+        self.assertEqual(action.status, ActionStatus.DISABLED)
+        # Service only sets status and updated_at; existing soft-delete fields unchanged
+        self.assertIsNotNone(action.deleted_at)
+        self.assertEqual(action.deletion_reason, 'Previously disabled')
 
 
 @pytest.mark.django_db

@@ -176,6 +176,52 @@ def validate_change_type_config(change_type_config: dict | None) -> None:
                 )
 
 
+def validate_gate_config(gate_config: dict | None) -> None:
+    """
+    Validate gate_config JSON structure (Story 31.6).
+
+    Structure: {"servicenow_change": {"integration_id": <int>}}
+
+    Rules:
+    - gate_config must be a dict (or None)
+    - servicenow_change.integration_id must reference an existing integration of type 'servicenow'
+
+    Raises:
+        ValidationError: If validation fails
+    """
+    if gate_config is None:
+        return
+    if not isinstance(gate_config, dict):
+        raise ValidationError("gate_config doit être un objet JSON")
+
+    sn_change = gate_config.get('servicenow_change')
+    if sn_change is None:
+        return
+    if not isinstance(sn_change, dict):
+        raise ValidationError("gate_config.servicenow_change doit être un objet")
+
+    integration_id = sn_change.get('integration_id')
+    if integration_id is None:
+        return
+
+    if not isinstance(integration_id, int):
+        raise ValidationError("gate_config.servicenow_change.integration_id doit être un entier")
+
+    from integrations.models import Integration
+    try:
+        integration = Integration.objects.get(id=integration_id)
+    except Integration.DoesNotExist:
+        raise ValidationError(
+            f"gate_config.servicenow_change.integration_id: intégration {integration_id} introuvable"
+        )
+
+    if integration.type != 'servicenow':
+        raise ValidationError(
+            f"gate_config.servicenow_change.integration_id: l'intégration {integration_id} "
+            f"est de type '{integration.type}', attendu 'servicenow'"
+        )
+
+
 # Story 28.1: Valid policy types for business_rule_policies
 VALID_POLICY_TYPES = ('review_if_modified',)
 

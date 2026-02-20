@@ -211,7 +211,7 @@ class TestIntegrationViewSet(TestCase):
         self.assertFalse(Integration.objects.filter(id=self.integration.id).exists())
 
     def test_delete_integration_with_linked_actions_actions_disabled(self):
-        """Test DELETE verifies actions are actually disabled with integration_id=NULL."""
+        """Test DELETE verifies actions are disabled (status + updated_at only); deleted_at/deletion_reason stay NULL."""
         from catalog.models import Action, ActionStatus
         action = Action.objects.create(
             name='Action To Disable', integration=self.integration, engine='aap', platform='aap',
@@ -222,8 +222,8 @@ class TestIntegrationViewSet(TestCase):
         action.refresh_from_db()
         self.assertEqual(action.status, ActionStatus.DISABLED)
         self.assertIsNone(action.integration_id)
-        self.assertIsNotNone(action.deleted_at)
-        self.assertIn('Intégration supprimée', action.deletion_reason)
+        self.assertIsNone(action.deleted_at)
+        self.assertIsNone(action.deletion_reason)
 
     def test_create_integration_forbidden_non_dbops(self):
         """Test POST /admin/integrations with non-DBOPS user → 403."""
@@ -316,6 +316,128 @@ class TestIntegrationViewSet(TestCase):
             )
             self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
             self.assertEqual(response.data['error']['code'], 'INVALID_CONFIG')
+
+
+@pytest.mark.django_db
+class TestAAPTemplatesEndpoint(TestCase):
+    """Tests for GET /admin/integrations/{id}/aap-templates/ — Story 31.5."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.dbops_user = User.objects.create(username='dbops_tpl', profile='dbops')
+        self.aap_integration = Integration.objects.create(
+            type='aap',
+            name='AAP Templates Test',
+            base_url='https://aap.example.com',
+            credential_ref='test-token',
+            auth_flow=AuthFlow.TOKEN,
+        )
+        self.sn_integration = Integration.objects.create(
+            type='servicenow',
+            name='ServiceNow Test',
+            base_url='https://sn.example.com',
+        )
+
+    def test_list_templates_job_template(self):
+        """GET aap-templates with resource_type=job_template → 200 + data."""
+        self.client.force_authenticate(user=self.dbops_user)
+        mock_templates = [
+            {"id": 10, "name": "Deploy", "description": "Deploy job"},
+        ]
+        with patch('integrations.views.asyncio.run', return_value=mock_templates):
+            response = self.client.get(
+                f'/api/v1/admin/integrations/{self.aap_integration.id}/aap-templates/',
+                {'resource_type': 'job_template'},
+            )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data['data']), 1)
+        self.assertEqual(response.data['data'][0]['id'], 10)
+
+    def test_list_templates_workflow_job(self):
+        """GET aap-templates with resource_type=workflow_job → 200."""
+        self.client.force_authenticate(user=self.dbops_user)
+        mock_templates = [
+            {"id": 42, "name": "Full Provision", "description": ""},
+        ]
+        with patch('integrations.views.asyncio.run', return_value=mock_templates):
+            response = self.client.get(
+                f'/api/v1/admin/integrations/{self.aap_integration.id}/aap-templates/',
+                {'resource_type': 'workflow_job'},
+            )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['data'][0]['id'], 42)
+
+    def test_list_templates_with_search(self):
+        """GET aap-templates with search param passes it to adapter.list_templates().
+        M1 fix: verifies search kwarg reaches the adapter, not just asyncio.run called.
+        """
+        from unittest.mock import AsyncMock as _AsyncMock
+        self.client.force_authenticate(user=self.dbops_user)
+        with patch('adapters.aap_adapter.AAPAdapter.list_templates', new_callable=_AsyncMock, return_value=[]) as mock_list:
+            response = self.client.get(
+                f'/api/v1/admin/integrations/{self.aap_integration.id}/aap-templates/',
+                {'resource_type': 'job_template', 'search': 'deploy'},
+            )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        mock_list.assert_called_once_with(resource_type='job_template', search='deploy')
+
+    def test_list_templates_aap_unavailable(self):
+        """GET aap-templates when AAP is down → 503 + fallback=true."""
+        from core.exceptions import ServiceUnavailableError
+        self.client.force_authenticate(user=self.dbops_user)
+        with patch(
+            'integrations.views.asyncio.run',
+            side_effect=ServiceUnavailableError(
+                code="AAP_TIMEOUT", message="AAP API timeout", details={},
+            ),
+        ):
+            response = self.client.get(
+                f'/api/v1/admin/integrations/{self.aap_integration.id}/aap-templates/',
+            )
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertTrue(response.data['fallback'])
+        self.assertEqual(response.data['data'], [])
+
+    def test_list_templates_integration_not_found(self):
+        """GET aap-templates with non-existent integration → 404."""
+        self.client.force_authenticate(user=self.dbops_user)
+        response = self.client.get('/api/v1/admin/integrations/99999/aap-templates/')
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_list_templates_non_aap_integration(self):
+        """GET aap-templates on ServiceNow integration → 400."""
+        self.client.force_authenticate(user=self.dbops_user)
+        response = self.client.get(
+            f'/api/v1/admin/integrations/{self.sn_integration.id}/aap-templates/',
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('pas de type AAP', response.data['error'])
+
+    def test_list_templates_invalid_resource_type(self):
+        """GET aap-templates with invalid resource_type → 400."""
+        self.client.force_authenticate(user=self.dbops_user)
+        response = self.client.get(
+            f'/api/v1/admin/integrations/{self.aap_integration.id}/aap-templates/',
+            {'resource_type': 'invalid'},
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('resource_type invalide', response.data['error'])
+
+    def test_list_templates_unauthenticated(self):
+        """GET aap-templates without authentication → 401. M2 fix."""
+        response = self.client.get(
+            f'/api/v1/admin/integrations/{self.aap_integration.id}/aap-templates/',
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_list_templates_non_dbops_forbidden(self):
+        """GET aap-templates with non-DBOPS user → 403. M2 fix."""
+        regular_user = User.objects.create(username='regular_aap_test', profile='dba_applicatif')
+        self.client.force_authenticate(user=regular_user)
+        response = self.client.get(
+            f'/api/v1/admin/integrations/{self.aap_integration.id}/aap-templates/',
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_update_integration_invalid_pk(self):
         """Test PUT /admin/integrations/{id} with non-integer ID → 404."""

@@ -9,12 +9,25 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ChangeTypeConfig } from './ChangeTypeConfig';
 import { useEnvironments } from '../../hooks/useEnvironments';
+import { useServiceNowIntegrations } from '../../hooks/useServiceNowIntegrations';
 
 vi.mock('../../hooks/useEnvironments', () => ({
   useEnvironments: vi.fn(),
 }));
 
+vi.mock('../../hooks/useServiceNowIntegrations', () => ({
+  useServiceNowIntegrations: vi.fn(),
+}));
+
 const mockUseEnvironments = useEnvironments as ReturnType<typeof vi.fn>;
+const mockUseServiceNowIntegrations = useServiceNowIntegrations as ReturnType<typeof vi.fn>;
+
+const defaultSnMock = {
+  integrations: [],
+  integrationOptions: [],
+  loading: false,
+  error: null,
+};
 
 const defaultEnvMock = {
   environments: ['dev', 'staging', 'prod'],
@@ -31,6 +44,7 @@ describe('ChangeTypeConfig', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseEnvironments.mockReturnValue(defaultEnvMock);
+    mockUseServiceNowIntegrations.mockReturnValue(defaultSnMock);
   });
 
   it('renders table with environments from hook', () => {
@@ -246,6 +260,118 @@ describe('ChangeTypeConfig', () => {
       const labSwitch = screen.getByLabelText(/Changement requis pour lab/i);
       expect(labSwitch).toBeInTheDocument();
       expect(labSwitch).not.toBeChecked();
+    });
+  });
+
+  // Story 31.6: ServiceNow integration selector tests
+  describe('Story 31.6: ServiceNow integration selector', () => {
+    it('shows integration selector when any env has required=true and integrations available', () => {
+      mockUseServiceNowIntegrations.mockReturnValue({
+        integrations: [{ id: 1, name: 'SN Prod', type: 'servicenow', status: 'active' }],
+        integrationOptions: [{ value: 1, label: 'SN Prod (servicenow)' }],
+        loading: false,
+        error: null,
+      });
+
+      render(
+        <ChangeTypeConfig
+          value={{ prod: { required: true, change_model_code: 'A1' } }}
+          onChange={() => {}}
+          gateConfig={null}
+          onGateConfigChange={() => {}}
+        />
+      );
+
+      expect(screen.getByText('Intégration ServiceNow :')).toBeInTheDocument();
+      expect(screen.getByLabelText('Intégration ServiceNow')).toBeInTheDocument();
+    });
+
+    it('does not show integration selector when no env has required=true', () => {
+      mockUseServiceNowIntegrations.mockReturnValue({
+        integrations: [{ id: 1, name: 'SN Prod', type: 'servicenow', status: 'active' }],
+        integrationOptions: [{ value: 1, label: 'SN Prod (servicenow)' }],
+        loading: false,
+        error: null,
+      });
+
+      render(
+        <ChangeTypeConfig value={{}} onChange={() => {}} gateConfig={null} onGateConfigChange={() => {}} />
+      );
+
+      expect(screen.queryByText('Intégration ServiceNow :')).not.toBeInTheDocument();
+    });
+
+    it('shows warning when integrations available but none selected', () => {
+      mockUseServiceNowIntegrations.mockReturnValue({
+        integrations: [{ id: 1, name: 'SN Prod', type: 'servicenow', status: 'active' }],
+        integrationOptions: [{ value: 1, label: 'SN Prod (servicenow)' }],
+        loading: false,
+        error: null,
+      });
+
+      render(
+        <ChangeTypeConfig
+          value={{ prod: { required: true, change_model_code: 'A1' } }}
+          onChange={() => {}}
+          gateConfig={null}
+          onGateConfigChange={() => {}}
+        />
+      );
+
+      expect(screen.getByText('Intégration non sélectionnée')).toBeInTheDocument();
+    });
+
+    it('shows "no integrations" message when none configured', () => {
+      render(
+        <ChangeTypeConfig
+          value={{ prod: { required: true, change_model_code: 'A1' } }}
+          onChange={() => {}}
+          gateConfig={null}
+          onGateConfigChange={() => {}}
+        />
+      );
+
+      expect(screen.getByText(/Aucune intégration ServiceNow configurée/)).toBeInTheDocument();
+    });
+
+    // Task 10.4: onGateConfigChange called with correct integration_id on selection
+    it('calls onGateConfigChange with correct integration_id when selecting an integration', async () => {
+      const user = userEvent.setup();
+      const onGateConfigChange = vi.fn();
+
+      mockUseServiceNowIntegrations.mockReturnValue({
+        integrations: [
+          { id: 1, name: 'SN Prod', type: 'servicenow', status: 'active' },
+          { id: 2, name: 'SN Dev', type: 'servicenow', status: 'active' },
+        ],
+        integrationOptions: [
+          { value: 1, label: 'SN Prod (servicenow)' },
+          { value: 2, label: 'SN Dev (servicenow)' },
+        ],
+        loading: false,
+        error: null,
+      });
+
+      render(
+        <ChangeTypeConfig
+          value={{ prod: { required: true, change_model_code: 'A1' } }}
+          onChange={() => {}}
+          gateConfig={null}
+          onGateConfigChange={onGateConfigChange}
+        />
+      );
+
+      // Open the Select and choose the first option
+      const select = screen.getByLabelText('Intégration ServiceNow');
+      await user.click(select);
+      const option = await screen.findByText('SN Prod (servicenow)');
+      await user.click(option);
+
+      expect(onGateConfigChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          servicenow_change: expect.objectContaining({ integration_id: 1 }),
+        })
+      );
     });
   });
 });

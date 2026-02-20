@@ -320,6 +320,134 @@ class TestCancelExecution:
 
 
 # ---------------------------------------------------------------------------
+# list_templates — Story 31.5
+# ---------------------------------------------------------------------------
+
+class TestListTemplates:
+    """Tests for AAPAdapter.list_templates() — Story 31.5."""
+
+    @pytest.mark.asyncio
+    async def test_list_templates_job_template(self, adapter: AAPAdapter) -> None:
+        """Success: list job templates returns structured data."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "count": 2,
+            "results": [
+                {"id": 10, "name": "Deploy DB", "description": "Deploy database"},
+                {"id": 20, "name": "Patch OS", "description": ""},
+            ],
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("adapters.aap_adapter.httpx.AsyncClient", return_value=mock_client):
+            result = await adapter.list_templates(resource_type="job_template")
+
+        assert len(result) == 2
+        assert result[0] == {"id": 10, "name": "Deploy DB", "description": "Deploy database"}
+        assert result[1] == {"id": 20, "name": "Patch OS", "description": ""}
+        # Verify correct URL called
+        call_args = mock_client.get.call_args
+        assert "/api/v2/job_templates/" in call_args.args[0]
+
+    @pytest.mark.asyncio
+    async def test_list_templates_workflow_job(self, adapter: AAPAdapter) -> None:
+        """Success: list workflow job templates uses correct endpoint."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "count": 1,
+            "results": [
+                {"id": 42, "name": "Full Provision", "description": "Full provisioning workflow"},
+            ],
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("adapters.aap_adapter.httpx.AsyncClient", return_value=mock_client):
+            result = await adapter.list_templates(resource_type="workflow_job")
+
+        assert len(result) == 1
+        assert result[0]["id"] == 42
+        call_args = mock_client.get.call_args
+        assert "/api/v2/workflow_job_templates/" in call_args.args[0]
+
+    @pytest.mark.asyncio
+    async def test_list_templates_with_search(self, adapter: AAPAdapter) -> None:
+        """Search parameter is passed to AAP API."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"count": 0, "results": []}
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("adapters.aap_adapter.httpx.AsyncClient", return_value=mock_client):
+            await adapter.list_templates(resource_type="job_template", search="deploy")
+
+        call_kwargs = mock_client.get.call_args.kwargs
+        assert call_kwargs["params"]["search"] == "deploy"
+
+    @pytest.mark.asyncio
+    async def test_list_templates_invalid_resource_type(self, adapter: AAPAdapter) -> None:
+        """Invalid resource_type raises ValueError."""
+        with pytest.raises(ValueError, match="resource_type invalide"):
+            await adapter.list_templates(resource_type="invalid")
+
+    @pytest.mark.asyncio
+    async def test_list_templates_timeout(self, adapter: AAPAdapter) -> None:
+        """Timeout raises ServiceUnavailableError."""
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("adapters.aap_adapter.httpx.AsyncClient", return_value=mock_client):
+            with pytest.raises(ServiceUnavailableError):
+                await adapter.list_templates()
+
+    @pytest.mark.asyncio
+    async def test_list_templates_http_error(self, adapter: AAPAdapter) -> None:
+        """HTTP 500 from AAP raises ServiceUnavailableError."""
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        error = httpx.HTTPStatusError("Server Error", request=MagicMock(), response=mock_response)
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=error)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("adapters.aap_adapter.httpx.AsyncClient", return_value=mock_client):
+            with pytest.raises(ServiceUnavailableError):
+                await adapter.list_templates()
+
+    @pytest.mark.asyncio
+    async def test_list_templates_connection_error(self, adapter: AAPAdapter) -> None:
+        """Network error raises ServiceUnavailableError."""
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("adapters.aap_adapter.httpx.AsyncClient", return_value=mock_client):
+            with pytest.raises(ServiceUnavailableError):
+                await adapter.list_templates()
+
+
+# ---------------------------------------------------------------------------
 # AAP_STATUS_MAP
 # ---------------------------------------------------------------------------
 

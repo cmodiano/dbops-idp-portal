@@ -369,6 +369,94 @@ class AAPAdapter(BaseAdapter):
         }
 
     # ------------------------------------------------------------------
+    # List templates — Story 31.5
+    # ------------------------------------------------------------------
+
+    async def list_templates(
+        self,
+        resource_type: str = "job_template",
+        search: str | None = None,
+        page_size: int = 200,
+    ) -> list[dict]:
+        """List job templates or workflow job templates from AAP API v2.
+
+        Args:
+            resource_type: 'job_template' or 'workflow_job'.
+            search: Optional search string (name filter).
+            page_size: Max results per page (default 200, AAP max 200).
+
+        Returns:
+            List of dicts with keys: id, name, description.
+
+        Raises:
+            ValueError: If resource_type is invalid.
+            ServiceUnavailableError: If AAP API is unreachable or returns error.
+        """
+        if resource_type not in ("job_template", "workflow_job"):
+            raise ValueError(f"resource_type invalide: {resource_type!r}")
+
+        endpoint_map = {
+            "job_template": "job_templates",
+            "workflow_job": "workflow_job_templates",
+        }
+        endpoint = endpoint_map[resource_type]
+        url = f"{self.base_url}/api/v2/{endpoint}/"
+
+        params: dict[str, str | int] = {"page_size": page_size}
+        if search:
+            params["search"] = search
+
+        logger.info(
+            "aap_list_templates_request",
+            url=url,
+            resource_type=resource_type,
+            search=search,
+        )
+
+        try:
+            async with httpx.AsyncClient(
+                headers=self.auth_headers,
+                timeout=self.timeout,
+                verify=False,  # noqa: S501 — corporate CAs handled externally
+            ) as client:
+                resp = await client.get(url, params=params)
+                resp.raise_for_status()
+                data = resp.json()
+                return [
+                    {
+                        "id": item["id"],
+                        "name": item["name"],
+                        "description": item.get("description", ""),
+                    }
+                    for item in data.get("results", [])
+                ]
+        except httpx.TimeoutException as exc:
+            logger.warning("aap_list_templates_timeout", url=url, error=str(exc))
+            raise ServiceUnavailableError(
+                code="AAP_TIMEOUT",
+                message="AAP API timeout",
+                details={"url": url},
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            logger.warning(
+                "aap_list_templates_http_error",
+                url=url,
+                status=exc.response.status_code,
+            )
+            raise ServiceUnavailableError(
+                code="AAP_HTTP_ERROR",
+                message=f"AAP API erreur {exc.response.status_code}",
+                details={"url": url, "status_code": exc.response.status_code},
+            ) from exc
+        except httpx.RequestError as exc:
+            logger.warning("aap_list_templates_request_error", url=url, error=str(exc))
+            raise ServiceUnavailableError(
+                code="AAP_CONNECTION_ERROR",
+                message="AAP API indisponible",
+                details={"url": url},
+            ) from exc
+
+    # ------------------------------------------------------------------
     # Cancel execution
     # ------------------------------------------------------------------
 

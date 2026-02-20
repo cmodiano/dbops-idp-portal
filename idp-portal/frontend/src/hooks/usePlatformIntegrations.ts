@@ -4,7 +4,7 @@
  * with integration_role='platform' from the IntegrationTypeCatalogue.
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { getIntegrations, getIntegrationTypes } from '../services/integrations_service';
 import type { IntegrationResponse } from '../types/api';
 
@@ -57,8 +57,11 @@ export function usePlatformIntegrations(): UsePlatformIntegrationsReturn {
     label: `${i.name} — ${i.type}`,
   }));
 
-  const getIntegrationById = (id: number): IntegrationResponse | undefined =>
-    integrations.find((i) => i.id === id);
+  const getIntegrationById = useCallback(
+    (id: number): IntegrationResponse | undefined =>
+      integrations.find((i) => i.id === id),
+    [integrations],
+  );
 
   return { integrations, integrationOptions, loading, error, getIntegrationById };
 }

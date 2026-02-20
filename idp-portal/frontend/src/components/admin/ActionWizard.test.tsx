@@ -77,6 +77,21 @@ vi.mock('../../services/categories_service', () => ({
   getCategories: vi.fn().mockResolvedValue([]),
 }));
 
+// M3 fix: mock useAAPTemplates to avoid real API calls in WizardAAPTemplateSection tests
+vi.mock('../../hooks/useAAPTemplates', () => ({
+  useAAPTemplates: vi.fn(),
+}));
+
+import { useAAPTemplates } from '../../hooks/useAAPTemplates';
+const mockUseAAPTemplates = useAAPTemplates as ReturnType<typeof vi.fn>;
+
+const defaultAAPMockWizard = {
+  templates: [],
+  loading: false,
+  fallback: true,
+  error: null,
+};
+
 const mockOnSubmit = vi.fn().mockResolvedValue({ id: 1 });
 const mockOnCancel = vi.fn();
 const mockOnSuccess = vi.fn();
@@ -94,6 +109,8 @@ const defaultProps = {
 describe('ActionWizard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // M3 fix: default AAP mock (fallback = manual input)
+    mockUseAAPTemplates.mockReturnValue(defaultAAPMockWizard);
   });
 
   describe('AC1: Ouverture du wizard', () => {
@@ -840,6 +857,71 @@ describe('ActionWizard', () => {
       });
       await waitFor(() => {
         expect(screen.getByText(/ancienne plateforme.*AAP/i)).toBeInTheDocument();
+      });
+    });
+  });
+
+  // Story 31.5: WizardAAPTemplateSection tests — M3 fix
+  describe('Story 31.5: WizardAAPTemplateSection', () => {
+    const navigateToStep2WithAAP = async (user: ReturnType<typeof userEvent.setup>) => {
+      // Fill step 1: name, description, engine, integration (AAP id=1)
+      await user.type(screen.getByLabelText(/Nom de l'action/i), 'Test AAP Action');
+      await user.type(screen.getByLabelText(/Description/i), 'Description test');
+      // Select engine (Oracle)
+      const engineSelect = screen.getByLabelText('Moteur');
+      await user.click(engineSelect);
+      const oracleOpt = await screen.findByText('Oracle');
+      await user.click(oracleOpt);
+      // Select integration (AAP-PROD = id 1)
+      const integrationSelect = screen.getByLabelText('Intégration');
+      await user.click(integrationSelect);
+      const aapOpt = await screen.findByText('AAP-PROD — aap');
+      await user.click(aapOpt);
+      // Navigate to step 2
+      const next = screen.getByRole('button', { name: /Suivant/i });
+      await user.click(next);
+    };
+
+    it('affiche le sélecteur de template AAP (liste) quand templates disponibles', async () => {
+      mockUseAAPTemplates.mockReturnValue({
+        templates: [
+          { id: 10, name: 'Deploy DB', description: '' },
+          { id: 20, name: 'Patch OS', description: '' },
+        ],
+        loading: false,
+        fallback: false,
+        error: null,
+      });
+      const user = userEvent.setup();
+      await act(async () => { render(<ActionWizard {...defaultProps} />); });
+      await navigateToStep2WithAAP(user);
+      await waitFor(() => {
+        expect(screen.getByLabelText('Template AAP')).toBeInTheDocument();
+      });
+    });
+
+    it('affiche la saisie manuelle (fallback) quand API indisponible', async () => {
+      mockUseAAPTemplates.mockReturnValue(defaultAAPMockWizard);
+      const user = userEvent.setup();
+      await act(async () => { render(<ActionWizard {...defaultProps} />); });
+      await navigateToStep2WithAAP(user);
+      await waitFor(() => {
+        expect(screen.getByLabelText('ID template AAP')).toBeInTheDocument();
+      });
+    });
+
+    it('affiche une alerte quand API retourne une erreur', async () => {
+      mockUseAAPTemplates.mockReturnValue({
+        templates: [],
+        loading: false,
+        fallback: true,
+        error: 'API indisponible',
+      });
+      const user = userEvent.setup();
+      await act(async () => { render(<ActionWizard {...defaultProps} />); });
+      await navigateToStep2WithAAP(user);
+      await waitFor(() => {
+        expect(screen.getByText(/Saisie manuelle/i)).toBeInTheDocument();
       });
     });
   });

@@ -27,11 +27,13 @@ import type {
   ParameterDefinition,
   ImpactRuleDefinition,
   RemediationRule,
+  GateConfig,
 } from '../../types/api';
 import { schemaToParameterList, parameterListToSchema } from '../../utils/parametersSchema';
 import { impactRulesToList, listToImpactRules } from '../../utils/impactRulesSchema';
 import { useEngines } from '../../hooks/useEngines';
 import { usePlatformIntegrations } from '../../hooks/usePlatformIntegrations';
+import { useServiceNowIntegrations } from '../../hooks/useServiceNowIntegrations';
 import { integrationTypeToPlatformCode } from '../../utils/integrationHelpers';
 import { StepsEditor } from './StepsEditor';
 import { ParametersEditor } from './ParametersEditor';
@@ -81,11 +83,15 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
   const [remediationRules, setRemediationRules] = useState<RemediationRuleDefinition[]>([]);
   // Story 28.4: Predefined business rule policy ID (inline removed)
   const [businessRulePolicyId, setBusinessRulePolicyId] = useState<number | null>(null);
+  // Story 31.6: Gate configuration (integration selection per gate type)
+  const [gateConfig, setGateConfig] = useState<GateConfig | null>(null);
 
   // Story 13.7: Load engines from REF_ENGINES table
   const { engineOptions, loading: enginesLoading } = useEngines();
   // Story 31.1: Load platform integrations (replaces usePlatforms)
   const { integrationOptions, loading: integrationsLoading, getIntegrationById } = usePlatformIntegrations();
+  // Story 31.6: Load ServiceNow integrations for gate config validation (AC #3)
+  const { integrationOptions: snIntegrationOptions } = useServiceNowIntegrations();
 
   const isEditMode = !!editAction;
   const isMin1280 = useMediaQuery(1280);
@@ -186,6 +192,8 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
       );
       // Story 28.4: Load business rule policy FK
       setBusinessRulePolicyId(editAction.business_rule_policy_id ?? null);
+      // Story 31.6: Load gate configuration
+      setGateConfig(editAction.gate_config ?? null);
     } else if (!open) {
       form.resetFields();
       setExecutionSteps([]);
@@ -197,6 +205,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
       setSelectedTags([]);
       setRemediationRules([]);
       setBusinessRulePolicyId(null);
+      setGateConfig(null);
       setStepsError(null);
     }
   }, [open, editAction, form]);
@@ -266,6 +275,15 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
         }
       }
 
+      // Story 31.6 AC #3: Block save if required=true, SN integrations exist, but none selected
+      const hasRequiredEnv = Object.values(changeTypeConfig).some((e) => e?.required);
+      if (hasRequiredEnv && snIntegrationOptions.length > 0 && !gateConfig?.servicenow_change?.integration_id) {
+        setStepsError(
+          "Une intégration ServiceNow doit être sélectionnée lorsque « Changement requis » est activé et que des intégrations ServiceNow sont configurées."
+        );
+        return;
+      }
+
       // Story 2.24 AC2 + Story 31.4: validate change_type_config — when required=true, model/template ID required
       // Read template_id first (priority), fall back to change_model_code (rétrocompatibilité)
       // Pattern relaxed in Story 31.4 to allow underscores and hyphens (e.g. CHG_TPL_001)
@@ -289,9 +307,12 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
 
       // Story 31.1: Derive platform from integration type, send both
       const selectedIntegration = values.integration_id ? getIntegrationById(values.integration_id) : undefined;
-      const derivedPlatform = selectedIntegration
-        ? (integrationTypeToPlatformCode(selectedIntegration.type) as ActionPlatform)
-        : undefined;
+      const rawPlatform =
+        selectedIntegration?.type && String(selectedIntegration.type).trim() !== ''
+          ? integrationTypeToPlatformCode(selectedIntegration.type)
+          : undefined;
+      const derivedPlatform =
+        rawPlatform !== undefined && rawPlatform !== '' ? (rawPlatform as ActionPlatform) : undefined;
 
       const action: ActionCreate = {
         name: values.name,
@@ -303,6 +324,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
         impact_rules: listToImpactRules(impactRulesList),
         default_impact_level: defaultImpactLevel,
         documentation_md: values.documentation_md || null,
+        gate_config: gateConfig,
       };
 
       const result = await onSubmit(action);
@@ -610,7 +632,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
                         tooltip="Definissez les etapes d'execution de l'action (AC #1, #2)"
                         style={{ marginBottom: 16 }}
                       >
-                        <StepsEditor value={executionSteps} onChange={setExecutionSteps} />
+                        <StepsEditor value={executionSteps} onChange={setExecutionSteps} integrationId={form.getFieldValue('integration_id')} />
                       </Form.Item>
 
                       <Form.Item
@@ -618,7 +640,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
                         tooltip="Pour chaque environnement : configurer les gates (autorisé, plage maintenance, approbation) et le changement ServiceNow (requis, modèle/template ID)."
                         style={{ marginBottom: 16 }}
                       >
-                        <ChangeTypeConfig value={changeTypeConfig} onChange={setChangeTypeConfig} />
+                        <ChangeTypeConfig value={changeTypeConfig} onChange={setChangeTypeConfig} gateConfig={gateConfig} onGateConfigChange={setGateConfig} />
                       </Form.Item>
                     </>
                   ),

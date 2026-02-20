@@ -299,7 +299,7 @@ class IntegrationService:
 
         integration_name = integration.name
 
-        # Disable all linked actions before deletion
+        # Disable all linked actions before deletion (status + updated_at only; no soft-delete fields)
         from catalog.models import Action, ActionStatus
         from django.utils import timezone
 
@@ -309,14 +309,8 @@ class IntegrationService:
 
         for action in linked_actions:
             action.status = ActionStatus.DISABLED
-            action.deleted_at = now
             action.updated_at = now
-            action.deletion_reason = f"Intégration supprimée : {integration_name}"
-            fields = ['status', 'deleted_at', 'updated_at', 'deletion_reason']
-            if user and hasattr(action, 'deleted_by_id'):
-                action.deleted_by = user
-                fields.append('deleted_by')
-            action.save(update_fields=fields)
+            action.save(update_fields=['status', 'updated_at'])
             disabled_count += 1
 
             if user:

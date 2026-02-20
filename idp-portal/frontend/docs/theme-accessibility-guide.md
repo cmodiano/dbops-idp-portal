@@ -103,7 +103,7 @@ color: token.colorText,           // Contraste garanti
 Les tokens du thème Desjardins garantissent le contraste WCAG AA :
 
 - **Light :** `colorText` (#1a1a2e) sur `colorBgContainer` (#FFFFFF) = 15.8:1
-- **Dark :** `colorText` (#f5f5f7) sur `colorBgContainer` (#1e1e2a) — contraste élevé pour lisibilité sur tous les écrans
+- **Dark :** `colorText` (#f5f5f7) sur `colorBgContainer` (#1e1e2a) = 15.11:1
 
 ## Cas particulier : fonctions utilitaires (non-composants)
 

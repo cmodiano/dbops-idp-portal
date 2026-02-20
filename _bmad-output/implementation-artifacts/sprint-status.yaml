@@ -414,8 +414,8 @@ development_status:
     31-2-suppression-integration-desactiver-actions: done # 2026-02-19: code-review — 1 HIGH + 2 MEDIUM fixes (updated_at action, code mort view, assertion test)
     31-3-icones-moteurs-ref-engines: done # 2026-02-19: code-review — 7 issues (1H + 2M + 4L) auto-fixées (race condition SAML prefetch, EngineIconCell moteurs inconnus, APITestCase, test null, docs)
     31-4-refonte-ux-panneau-changement-servicenow-gates: done # 2026-02-19: Code review adversarial — 4 issues auto-fixés (H1: regex ^[A-Za-z0-9_-]+$, H2: validation template_id, M4: messages erreur, M5: tests Gates switches) — 16/16 tests ✅
-    31-5-aap-selection-template-liste-ou-nom: backlog
-    31-6-config-gates-choix-service-creation-changement-servicenow: backlog
+    31-5-aap-selection-template-liste-ou-nom: done # 2026-02-19: code-review — 7 fixes (H1 service erreur, H2 race condition, H3 search AC3, M1 test search, M2 auth tests, M3 WizardAAP tests) — 18 BE + 14 FE tests pass
+    31-6-config-gates-choix-service-creation-changement-servicenow: done # 2026-02-19: code-review — 6 fixes (H1 validation bloquante AC#3, H2 ActionListSerializer gate_config, H3 test 10.4, M1 filtre API type, M2 ActionCreateSerializer, M3 File List + Alert)
     31-7-aide-contextuelle-tooltip-popover-markdown-backend: backlog
     31-8-service-notification-multi-destinations-email-teams-page: backlog
     epic-31-retrospective: optional
