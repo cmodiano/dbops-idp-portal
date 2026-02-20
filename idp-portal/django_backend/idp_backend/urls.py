@@ -38,6 +38,7 @@ urlpatterns = [
     path('api/v1/admin/', include('profiles.urls')),
     path('api/v1/inventory/', include('inventory.urls')),
     path('api/v1/reference/', include('reference.urls')),
+    path('api/v1/', include('help.urls')),  # Story 31.7 - Aide contextuelle
     # Story 2.30: Admin CRUD categories
     path('api/v1/admin/', include('reference.admin_urls')),
     # Story 27.4: GitHub Actions webhook (HMAC-secured, no DRF auth)

@@ -35,6 +35,7 @@ import { WorkflowStepsEditor } from './WorkflowStepsEditor';
 import { WorkflowBuilderCanvas } from './WorkflowBuilderCanvas';
 import { validateWorkflowGraph } from '../../utils/workflowValidation';
 import { workflowStepsToReactFlow } from '../../utils/workflowConversion';
+import { ApiError } from '../../services/api_client';
 import { getTags, updateActionTags, updateActionSteps, updateWorkflowSteps, updateBusinessRulePolicies, patchAction, checkActionNameAvailable } from '../../services/admin_service';
 import { useAAPTemplates } from '../../hooks/useAAPTemplates';
 import { useEngines } from '../../hooks/useEngines';
@@ -42,6 +43,7 @@ import { usePlatformIntegrations } from '../../hooks/usePlatformIntegrations';
 import { useCategories } from '../../hooks/useCategories';
 import { useServiceNowIntegrations } from '../../hooks/useServiceNowIntegrations';
 import { integrationTypeToPlatformCode, integrationToConnector, platformCodeToStepType } from '../../utils/integrationHelpers';
+import SectionHelp from '../common/SectionHelp';
 
 const { TextArea } = Input;
 
@@ -612,6 +614,20 @@ export function ActionWizard({
 
       if (done) onSuccess?.(done);
     } catch (err) {
+      if (err instanceof ApiError && err.status === 400 && err.responseBody?.error?.details) {
+        const details = err.responseBody.error.details as Record<string, string[] | string | unknown>;
+        if (details && typeof details === 'object' && !Array.isArray(details)) {
+          const fieldErrors = Object.entries(details).flatMap(([field, messages]) => {
+            const list = Array.isArray(messages) ? messages : [String(messages ?? '')];
+            return list.length ? [{ name: field, errors: list }] : [];
+          });
+          if (fieldErrors.length > 0) {
+            form.setFields(fieldErrors);
+            setSubmitError('Veuillez corriger les erreurs indiquées dans le formulaire.');
+            return;
+          }
+        }
+      }
       setSubmitError(err instanceof Error ? err.message : 'Erreur lors de l\'enregistrement');
     } finally {
       setSaving(false);
@@ -692,7 +708,7 @@ export function ActionWizard({
                   disabled={isReadOnly}
                 />
               </Form.Item>
-              <Form.Item name="integration_id" label="Intégration" rules={[{ required: true, message: "L'intégration est requise" }]}>
+              <Form.Item name="integration_id" label={<span>Intégration <SectionHelp topicId="action-form-integration" /></span>} rules={[{ required: true, message: "L'intégration est requise" }]}>
                 <Select
                   options={integrationOptions}
                   placeholder={integrationsLoading ? "Chargement..." : "Sélectionnez une intégration"}
@@ -820,7 +836,7 @@ export function ActionWizard({
             {/* Only show change config for actions, not workflows */}
             {!isWorkflow && (
               <Form.Item
-                label="Changement ServiceNow par environnement"
+                label={<span>Changement ServiceNow par environnement <SectionHelp topicId="action-form-changement-servicenow" /></span>}
                 tooltip="Pour chaque environnement : configurer les gates (autorisé, plage maintenance, approbation) et le changement ServiceNow (requis, modèle/template ID)."
               >
                 {/* TODO: Add disabled prop to ChangeTypeConfig */}

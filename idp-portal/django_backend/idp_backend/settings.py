@@ -67,6 +67,7 @@ INSTALLED_APPS = [
     'executions',
     'inventory',
     'reference',
+    'help',  # Story 31.7 - Aide contextuelle
 ]
 
 MIDDLEWARE = [

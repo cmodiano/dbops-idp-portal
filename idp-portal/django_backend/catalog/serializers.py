@@ -454,16 +454,16 @@ class ActionCreateSerializer(serializers.Serializer):
     description = serializers.CharField(max_length=4000, required=False, allow_null=True)
     item_type = serializers.ChoiceField(choices=ActionItemType.choices, default=ActionItemType.ACTION)
     # Story 2.30: Category code (optional, validated against REF_CATEGORIES)
-    category = serializers.CharField(max_length=50, required=False, allow_null=True)
+    category = serializers.CharField(max_length=50, required=False, allow_null=True, allow_blank=True)
     engine = serializers.CharField(max_length=50, required=False, allow_null=True)
     platform = serializers.CharField(max_length=50, required=False, allow_null=True)
     # Story 29.4: integration_id for platform ↔ integration.type consistency validation
     integration_id = serializers.IntegerField(required=False, allow_null=True)
 
     def validate_category(self, value: str | None) -> str | None:
-        """Validate category against REF_CATEGORIES table (Story 2.30)."""
-        if value is None:
-            return value
+        """Validate category against REF_CATEGORIES table (Story 2.30). Blank string → null."""
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
         if not RefCategory.objects.filter(code=value, is_active=1).exists():
             active_categories = list(RefCategory.objects.active().values_list('code', flat=True))
             raise serializers.ValidationError(

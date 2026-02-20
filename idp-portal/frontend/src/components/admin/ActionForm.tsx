@@ -41,7 +41,9 @@ import { ImpactRulesEditor } from './ImpactRulesEditor';
 import { ChangeTypeConfig } from './ChangeTypeConfig';
 import { RemediationRulesEditor, type RemediationRuleDefinition } from './RemediationRulesEditor';
 import { BusinessRulePolicySelector } from './BusinessRulePolicySelector';
+import SectionHelp from '../common/SectionHelp';
 import { AdminPreview } from './AdminPreview';
+import { ApiError } from '../../services/api_client';
 import { updateActionSteps, getTags, updateActionTags, updateRemediationRules, updateBusinessRulePolicies, patchAction, checkActionNameAvailable } from '../../services/admin_service';
 import { platformCodeToStepType } from '../../utils/integrationHelpers';
 
@@ -386,6 +388,20 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
       const done = (result as ActionDetail | ActionResponse) ?? editAction;
       if (done) onSuccess?.(done);
     } catch (err) {
+      if (err instanceof ApiError && err.status === 400 && err.responseBody?.error?.details) {
+        const details = err.responseBody.error.details as Record<string, string[] | string | unknown>;
+        if (details && typeof details === 'object' && !Array.isArray(details)) {
+          const fieldErrors = Object.entries(details).flatMap(([field, messages]) => {
+            const list = Array.isArray(messages) ? messages : [String(messages ?? '')];
+            return list.length ? [{ name: field, errors: list }] : [];
+          });
+          if (fieldErrors.length > 0) {
+            form.setFields(fieldErrors);
+            setStepsError('Veuillez corriger les erreurs indiquées dans le formulaire.');
+            return;
+          }
+        }
+      }
       setStepsError(err instanceof Error ? err.message : 'Erreur lors de la mise à jour des étapes');
     } finally {
       setSaving(false);
@@ -508,7 +524,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
 
             <Form.Item
               name="integration_id"
-              label="Intégration"
+              label={<span>Intégration <SectionHelp topicId="action-form-integration" /></span>}
               rules={[{ required: true, message: "L'intégration est requise" }]}
             >
               <Select
@@ -636,7 +652,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
                       </Form.Item>
 
                       <Form.Item
-                        label="Changement ServiceNow par environnement"
+                        label={<span>Changement ServiceNow par environnement <SectionHelp topicId="action-form-changement-servicenow" /></span>}
                         tooltip="Pour chaque environnement : configurer les gates (autorisé, plage maintenance, approbation) et le changement ServiceNow (requis, modèle/template ID)."
                         style={{ marginBottom: 16 }}
                       >
