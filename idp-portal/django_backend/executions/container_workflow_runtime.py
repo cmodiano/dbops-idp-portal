@@ -33,6 +33,7 @@ from executions.models import (
 from executions.services import ExecutionService
 from executions.simulation_service import SimulationService
 from executions.cancellation_cache import is_cancelled
+from core.exceptions import ServiceUnavailableError
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id
@@ -472,9 +473,10 @@ class ContainerWorkflowRuntime:
         4. Store change number in execution.servicenow_change_id
 
         Raises:
-            ServiceUnavailableError: if create_change() fails
+            ServiceUnavailableError: if no ServiceNow integration is available when required,
+                or if create_change() fails
         """
-        import base64 as _b64
+        from adapters.utils import build_auth_headers
         from services.servicenow_service import ServiceNowService
         from integrations.services import IntegrationService
 
@@ -511,17 +513,18 @@ class ContainerWorkflowRuntime:
                 execution_id=self.execution.id,
                 environment=environment,
             )
-            return  # No ServiceNow integration — existing behavior, skip
+            # env_config['required'] is truthy here; missing integration is a hard failure
+            raise ServiceUnavailableError(
+                code="SERVICENOW_INTEGRATION_MISSING",
+                message=(
+                    f"ServiceNow change is required for environment {environment!r} but no "
+                    "ServiceNow integration is configured or available. Configure an integration in "
+                    "Admin > Intégrations and select it in the action's gate config."
+                ),
+                details={"execution_id": self.execution.id, "environment": environment},
+            )
 
-        # Resolve credentials (same pattern as tasks.py L700-705)
-        credential_ref = integration.credential_ref or ''
-        auth_flow = integration.auth_flow or 'token'
-        if auth_flow == 'basic':
-            _encoded = _b64.b64encode(credential_ref.encode()).decode()
-            auth_headers = {'Authorization': f'Basic {_encoded}'}
-        else:
-            auth_headers = {'Authorization': f'Bearer {credential_ref}'}
-
+        auth_headers = build_auth_headers(integration, get_correlation_id())
         svc = ServiceNowService(base_url=integration.base_url, auth_headers=auth_headers)
         change_number = svc.create_change(
             change_model_code=env_config.get('change_model_code') or env_config.get('template_id'),

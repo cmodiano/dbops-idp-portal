@@ -658,6 +658,8 @@ def poll_aap_job_status(
     auth_flow: str = "token",
     poll_interval: int = 5,
     retry_count: int = 0,
+    ssl_verify: bool = True,
+    ca_bundle_path: str | None = None,
 ) -> dict:
     """
     Story 27.1 (AC4): Poll AAP for job status and logs, then broadcast
@@ -696,15 +698,15 @@ def poll_aap_job_status(
     try:
         # Build adapter
         from adapters.aap_adapter import AAPAdapter
+        from adapters.utils import build_auth_headers_from_credentials
 
-        import base64 as _b64
-        if auth_flow == "basic":
-            _encoded = _b64.b64encode(credential_ref.encode()).decode()
-            auth_headers = {"Authorization": f"Basic {_encoded}"}
-        else:
-            auth_headers = {"Authorization": f"Bearer {credential_ref}"}
-
-        adapter = AAPAdapter(base_url=base_url, auth_headers=auth_headers)
+        auth_headers = build_auth_headers_from_credentials(credential_ref, auth_flow)
+        adapter = AAPAdapter(
+            base_url=base_url,
+            auth_headers=auth_headers,
+            ssl_verify=ssl_verify,
+            ca_bundle_path=ca_bundle_path,
+        )
 
         # Story 30.7 (CELERY-3): Use asyncio.run() instead of manual event loop
         status_data = asyncio.run(
@@ -752,6 +754,8 @@ def poll_aap_job_status(
                 "auth_flow": auth_flow,
                 "poll_interval": poll_interval,
                 "retry_count": retry_count + 1,
+                "ssl_verify": ssl_verify,
+                "ca_bundle_path": ca_bundle_path,
             },
             countdown=poll_interval,
         )
@@ -799,6 +803,8 @@ def poll_aap_job_status(
             "auth_flow": auth_flow,
             "poll_interval": poll_interval,
             "retry_count": 0,
+            "ssl_verify": ssl_verify,
+            "ca_bundle_path": ca_bundle_path,
         },
         countdown=poll_interval,
     )
@@ -851,14 +857,9 @@ def poll_tower_job_status(
 
     try:
         from adapters.tower_adapter import TowerAdapter
+        from adapters.utils import build_auth_headers_from_credentials
 
-        import base64 as _b64
-        if auth_flow == "basic":
-            _encoded = _b64.b64encode(credential_ref.encode()).decode()
-            auth_headers = {"Authorization": f"Basic {_encoded}"}
-        else:
-            auth_headers = {"Authorization": f"Bearer {credential_ref}"}
-
+        auth_headers = build_auth_headers_from_credentials(credential_ref, auth_flow)
         adapter = TowerAdapter(base_url=base_url, auth_headers=auth_headers)
 
         # Story 30.7 (CELERY-3): Use asyncio.run() instead of manual event loop
@@ -1002,14 +1003,9 @@ def poll_azure_devops_run_status(
 
     try:
         from adapters.azure_devops_adapter import AzureDevOpsAdapter
+        from adapters.utils import build_auth_headers_from_credentials
 
-        import base64 as _b64
-        if auth_flow == "basic":
-            _encoded = _b64.b64encode(credential_ref.encode()).decode()
-            auth_headers = {"Authorization": f"Basic {_encoded}"}
-        else:
-            auth_headers = {"Authorization": f"Bearer {credential_ref}"}
-
+        auth_headers = build_auth_headers_from_credentials(credential_ref, auth_flow)
         adapter = AzureDevOpsAdapter(base_url=base_url, auth_headers=auth_headers)
 
         # Story 30.7 (CELERY-3): Use asyncio.run() instead of manual event loop

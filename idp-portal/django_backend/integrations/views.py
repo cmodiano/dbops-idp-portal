@@ -2,10 +2,10 @@
 Views for integrations CRUD endpoints.
 """
 
-import asyncio
-import base64 as _b64
 import logging
 from typing import Any
+
+from asgiref.sync import async_to_sync
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +36,11 @@ class IntegrationViewSet(viewsets.ViewSet):
     def list(self, request):
         """
         GET /admin/integrations - List all integrations.
+        GET /admin/integrations/?type=... - List integrations filtered by type.
         """
         service = IntegrationService()
-        integrations = service.list_all()
+        integration_type = request.query_params.get('type')
+        integrations = service.list_all(integration_type=integration_type)
         serializer = IntegrationListSerializer(integrations, many=True)
         return Response({'data': serializer.data})
     
@@ -307,6 +309,7 @@ class IntegrationViewSet(viewsets.ViewSet):
     def aap_templates(self, request, pk=None):
         """GET /admin/integrations/{id}/aap-templates/ — Liste templates AAP."""
         from adapters.aap_adapter import AAPAdapter
+        from adapters.utils import build_auth_headers
         from core.exceptions import ServiceUnavailableError as _ServiceUnavailableError
 
         # Validate resource_type
@@ -346,18 +349,22 @@ class IntegrationViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Resolve credentials (pattern from executions/tasks.py)
-        credential_ref = integration.credential_ref or ''
-        auth_flow = integration.auth_flow or 'token'
-        if auth_flow == 'basic':
-            _encoded = _b64.b64encode(credential_ref.encode()).decode()
-            auth_headers = {'Authorization': f'Basic {_encoded}'}
-        else:
-            auth_headers = {'Authorization': f'Bearer {credential_ref}'}
-
-        adapter = AAPAdapter(base_url=integration.base_url, auth_headers=auth_headers)
+        auth_headers = build_auth_headers(integration, get_correlation_id())
+        config = integration.get_config() if hasattr(integration, "get_config") else None
+        config = config or {}
+        ssl_verify = config.get("ssl_verify", True)
+        ca_bundle_path = config.get("ca_bundle_path") or None
+        adapter = AAPAdapter(
+            base_url=integration.base_url,
+            auth_headers=auth_headers,
+            ssl_verify=ssl_verify,
+            ca_bundle_path=ca_bundle_path,
+        )
         try:
-            templates = asyncio.run(adapter.list_templates(resource_type=resource_type, search=search))
+            templates = async_to_sync(adapter.list_templates)(
+                resource_type=resource_type,
+                search=search,
+            )
             return Response({'data': templates})
         except _ServiceUnavailableError:
             return Response(

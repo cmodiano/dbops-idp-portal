@@ -1,4 +1,4 @@
-import { apiFetch } from './api_client';
+import { apiFetchRaw } from './api_client';
 
 export interface HelpContent {
   topic_id: string;
@@ -30,7 +30,14 @@ export async function getHelpContent(topicId: string): Promise<HelpContent> {
   }
 
   try {
-    const data = await apiFetch<HelpContent>(`/api/v1/help/${topicId}/`);
+    const raw = await apiFetchRaw<{ topic_id?: string; short?: string; markdown?: string }>(
+      `help/${topicId}/`
+    );
+    const data: HelpContent = {
+      topic_id: raw.topic_id ?? topicId,
+      short: raw.short ?? '',
+      markdown: raw.markdown ?? '',
+    };
     sessionStorage.setItem(
       cacheKey,
       JSON.stringify({ data, timestamp: Date.now() })

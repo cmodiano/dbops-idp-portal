@@ -74,6 +74,30 @@ def resolve_credential(
     return str(get_vault_service().get_secret(credential_ref, correlation_id))
 
 
+def build_auth_headers_from_credentials(
+    credential_ref: str,
+    auth_flow: str = "token",
+) -> dict[str, str]:
+    """Build HTTP auth headers from raw credential_ref and auth_flow (no Vault resolution).
+
+    Used by Celery polling tasks where credentials are passed as task args.
+    For request/Integration-based flows use build_auth_headers(integration) instead.
+
+    Args:
+        credential_ref: Already-resolved credential (e.g. token or "user:pass" for basic).
+        auth_flow: "basic", "pat", or "token" (default).
+
+    Returns:
+        Dict of HTTP headers (e.g. {"Authorization": "Bearer <token>"}).
+    """
+    auth_flow = auth_flow or "token"
+    if auth_flow == "basic":
+        encoded = base64.b64encode(credential_ref.encode()).decode()
+        return {"Authorization": f"Basic {encoded}"}
+    # pat and token (default): Bearer
+    return {"Authorization": f"Bearer {credential_ref}"}
+
+
 def build_auth_headers(
     integration: Integration,
     correlation_id: str | None = None,
@@ -121,18 +145,7 @@ def build_auth_headers(
     try:
         # Story 27.6/27.11: Resolve Vault references via VaultService (multi-instance)
         resolved = resolve_credential(credential_ref, correlation_id, integration)
-
-        if auth_flow == "basic":
-            # resolved expected as "username:password"
-            encoded = base64.b64encode(resolved.encode()).decode()
-            return {"Authorization": f"Basic {encoded}"}
-
-        if auth_flow == "pat":
-            return {"Authorization": f"Bearer {resolved}"}
-
-        # Default: token / basic_then_token — use Bearer
-        return {"Authorization": f"Bearer {resolved}"}
-
+        return build_auth_headers_from_credentials(resolved, auth_flow)
     except BadRequestError:
         raise
     except Exception as e:

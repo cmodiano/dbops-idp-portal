@@ -10,7 +10,7 @@
  * Écriture : les deux champs sont écrits simultanément pour rétrocompatibilité.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Switch, Input, Select, Space, Typography, theme, Skeleton, Alert, Divider } from 'antd';
 import type { ChangeTypeConfigEntry, GateConfig } from '../../types/api';
 import { useEnvironments } from '../../hooks/useEnvironments';
@@ -45,6 +45,8 @@ export const ChangeTypeConfig: React.FC<ChangeTypeConfigProps> = ({
     loading: snLoading,
   } = useServiceNowIntegrations();
 
+  const [modelTemplateErrors, setModelTemplateErrors] = useState<Record<string, string>>({});
+
   const getEntry = (env: string): ChangeTypeConfigEntry => {
     const e = value[env];
     return e ?? { required: false };
@@ -72,6 +74,13 @@ export const ChangeTypeConfig: React.FC<ChangeTypeConfigProps> = ({
   };
 
   const handleRequiredChange = (env: string, required: boolean) => {
+    if (!required) {
+      setModelTemplateErrors((prev) => {
+        const next = { ...prev };
+        delete next[env];
+        return next;
+      });
+    }
     const entry = getEntry(env);
     const modelValue = required ? (entry.template_id ?? entry.change_model_code ?? '') : undefined;
     const newConfig = {
@@ -82,8 +91,25 @@ export const ChangeTypeConfig: React.FC<ChangeTypeConfigProps> = ({
   };
 
   const handleModelTemplateChange = (env: string, v: string) => {
-    if (v.length > CODE_MAX_LENGTH) return;
-    if (v && !CODE_PATTERN.test(v)) return;
+    if (v.length > CODE_MAX_LENGTH) {
+      setModelTemplateErrors((prev) => ({
+        ...prev,
+        [env]: `Maximum ${CODE_MAX_LENGTH} caractères.`,
+      }));
+      return;
+    }
+    if (v && !CODE_PATTERN.test(v)) {
+      setModelTemplateErrors((prev) => ({
+        ...prev,
+        [env]: 'Caractères autorisés : lettres, chiffres, tirets et underscores (A-Z, a-z, 0-9, -, _).',
+      }));
+      return;
+    }
+    setModelTemplateErrors((prev) => {
+      const next = { ...prev };
+      delete next[env];
+      return next;
+    });
     const entry = getEntry(env);
     const newConfig = {
       ...value,
@@ -260,13 +286,27 @@ export const ChangeTypeConfig: React.FC<ChangeTypeConfigProps> = ({
                   </div>
                   <div role="cell">
                     {required ? (
-                      <Input
-                        value={modelTemplateValue}
-                        onChange={(e) => handleModelTemplateChange(env, e.target.value)}
-                        placeholder="Ex: CHG_TPL_001"
-                        maxLength={CODE_MAX_LENGTH}
-                        aria-label={`Modèle / Template ID pour ${env}`}
-                      />
+                      <div>
+                        <Input
+                          value={modelTemplateValue}
+                          onChange={(e) => handleModelTemplateChange(env, e.target.value)}
+                          placeholder="Ex: CHG_TPL_001"
+                          maxLength={CODE_MAX_LENGTH}
+                          status={modelTemplateErrors[env] ? 'error' : undefined}
+                          aria-label={`Modèle / Template ID pour ${env}`}
+                          aria-invalid={!!modelTemplateErrors[env]}
+                          aria-describedby={modelTemplateErrors[env] ? `model-template-error-${env}` : undefined}
+                        />
+                        {modelTemplateErrors[env] && (
+                          <div
+                            id={`model-template-error-${env}`}
+                            role="alert"
+                            style={{ fontSize: 12, color: token.colorError, marginTop: 4 }}
+                          >
+                            {modelTemplateErrors[env]}
+                          </div>
+                        )}
+                      </div>
                     ) : (
                       <Text type="secondary">—</Text>
                     )}

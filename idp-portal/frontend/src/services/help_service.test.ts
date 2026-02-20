@@ -3,7 +3,7 @@ import { getHelpContent } from './help_service';
 import * as apiClient from './api_client';
 
 vi.mock('./api_client', () => ({
-  apiFetch: vi.fn(),
+  apiFetchRaw: vi.fn(),
 }));
 
 describe('help_service', () => {
@@ -19,12 +19,12 @@ describe('help_service', () => {
         short: 'Texte court',
         markdown: '# Titre\n\nCorps.',
       };
-      vi.mocked(apiClient.apiFetch).mockResolvedValue(mockData);
+      vi.mocked(apiClient.apiFetchRaw).mockResolvedValue(mockData);
 
       const result = await getHelpContent('action-form-integration');
 
-      expect(apiClient.apiFetch).toHaveBeenCalledWith(
-        '/api/v1/help/action-form-integration/'
+      expect(apiClient.apiFetchRaw).toHaveBeenCalledWith(
+        'help/action-form-integration/'
       );
       expect(result).toEqual(mockData);
 
@@ -48,7 +48,7 @@ describe('help_service', () => {
 
       const result = await getHelpContent('action-form-integration');
 
-      expect(apiClient.apiFetch).not.toHaveBeenCalled();
+      expect(apiClient.apiFetchRaw).not.toHaveBeenCalled();
       expect(result).toEqual(mockData);
     });
 
@@ -71,16 +71,16 @@ describe('help_service', () => {
         short: 'New',
         markdown: '# New',
       };
-      vi.mocked(apiClient.apiFetch).mockResolvedValue(newData);
+      vi.mocked(apiClient.apiFetchRaw).mockResolvedValue(newData);
 
       const result = await getHelpContent('action-form-integration');
 
-      expect(apiClient.apiFetch).toHaveBeenCalled();
+      expect(apiClient.apiFetchRaw).toHaveBeenCalled();
       expect(result).toEqual(newData);
     });
 
     it('returns empty content on 404 error', async () => {
-      vi.mocked(apiClient.apiFetch).mockRejectedValue(new Error('Not found'));
+      vi.mocked(apiClient.apiFetchRaw).mockRejectedValue(new Error('Not found'));
 
       const result = await getHelpContent('unknown-topic');
 
@@ -92,7 +92,7 @@ describe('help_service', () => {
     });
 
     it('returns empty content on network error', async () => {
-      vi.mocked(apiClient.apiFetch).mockRejectedValue(
+      vi.mocked(apiClient.apiFetchRaw).mockRejectedValue(
         new Error('Network error')
       );
 
