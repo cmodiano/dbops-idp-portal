@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { apiFetch, apiFetchRaw, apiFetchBlob, apiPostFormData, setAuthAccessors, ApiError, handleAuthenticatedFetch, calculateRetryDelay, parseErrorResponse } from './api_client';
+import { apiFetch, apiFetchRaw, apiFetchBlob, apiPostFormData, setAuthAccessors, ApiError, handleAuthenticatedFetch, calculateRetryDelay, parseErrorResponse, isDbUnavailable503 } from './api_client';
 import logger from './logger';
 
 describe('apiFetch', () => {
@@ -583,5 +583,248 @@ describe('apiFetch - 429 integration', () => {
       status: 429,
       message: 'Trop de requêtes. Veuillez patienter 1 seconde avant de réessayer.',
     });
+  });
+});
+
+// ============================================================================
+// Story 32.3 — 503 DB_UNAVAILABLE retry tests (Task 5)
+// ============================================================================
+
+const DB_UNAVAILABLE_BODY = {
+  error: {
+    code: 'DB_UNAVAILABLE',
+    message: 'Base de données temporairement indisponible après bascule. Veuillez réessayer dans quelques instants.',
+    correlation_id: 'test-corr-503',
+  },
+};
+
+function mock503(retryAfterSeconds?: number): Response {
+  const headers = new Headers({ 'Content-Type': 'application/json' });
+  if (retryAfterSeconds !== undefined) {
+    headers.set('Retry-After', String(retryAfterSeconds));
+  }
+  return {
+    status: 503,
+    ok: false,
+    headers,
+    clone() { return this; },
+    json: async () => DB_UNAVAILABLE_BODY,
+    text: async () => JSON.stringify(DB_UNAVAILABLE_BODY),
+  } as unknown as Response;
+}
+
+function mock200(): Response {
+  return {
+    status: 200,
+    ok: true,
+    headers: new Headers({ 'Content-Type': 'application/json' }),
+    json: async () => ({ data: { items: [] } }),
+  } as unknown as Response;
+}
+
+describe('isDbUnavailable503', () => {
+  it('returns true for 503 with DB_UNAVAILABLE code', async () => {
+    const response = mock503(30);
+    expect(await isDbUnavailable503(response)).toBe(true);
+  });
+
+  it('returns false for 503 without DB_UNAVAILABLE code', async () => {
+    const response = {
+      status: 503,
+      clone() { return this; },
+      json: async () => ({ error: { code: 'SERVICE_UNAVAILABLE', message: 'Maintenance' } }),
+    } as unknown as Response;
+    expect(await isDbUnavailable503(response)).toBe(false);
+  });
+
+  it('returns false for non-503 response', async () => {
+    const response = { status: 200, ok: true } as unknown as Response;
+    expect(await isDbUnavailable503(response)).toBe(false);
+  });
+
+  it('returns false if body is not valid JSON', async () => {
+    const response = {
+      status: 503,
+      clone() { return { json: async () => { throw new SyntaxError('bad json'); } }; },
+    } as unknown as Response;
+    expect(await isDbUnavailable503(response)).toBe(false);
+  });
+});
+
+describe('handleAuthenticatedFetch - 503 DB_UNAVAILABLE retry (Task 5)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.restoreAllMocks();
+    setAuthAccessors(() => null, async () => null);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // Task 5.1: retry après Retry-After: 30, succès au 2ème appel
+  it('retries after Retry-After delay on 503 DB_UNAVAILABLE, succeeds on 2nd call', async () => {
+    const mock503Response = mock503(30);
+    const mock200Response = mock200();
+
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(mock503Response)
+      .mockResolvedValueOnce(mock200Response);
+
+    const promise = handleAuthenticatedFetch('/catalog/actions', {}, {});
+    // Advance past the 30s retry delay
+    await vi.advanceTimersByTimeAsync(30_000);
+    const response = await promise;
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(response.status).toBe(200);
+  });
+
+  // Task 5.2: 3× 503 (initial + 2 retries) → ApiError with status 503
+  it('throws ApiError with status 503 after MAX_503_RETRIES exhausted', async () => {
+    const mock503Response = mock503(1);
+
+    global.fetch = vi.fn().mockResolvedValue(mock503Response);
+
+    const p = apiFetch('/catalog/actions').catch((e: unknown) => e);
+    // Advance time past 2 retry delays (1s each)
+    await vi.advanceTimersByTimeAsync(5_000);
+    const err = await p;
+
+    // 1 initial + 2 retries = 3 total fetch calls
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(503);
+  });
+
+  // Task 5.3: 503 sans Retry-After → utilise backoff par défaut 5s
+  it('uses default 5s delay when Retry-After header is absent', async () => {
+    const mock503NoHeader = mock503(); // No Retry-After
+    const mock200Response = mock200();
+
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(mock503NoHeader)
+      .mockResolvedValueOnce(mock200Response);
+
+    const promise = handleAuthenticatedFetch('/actions', {}, {});
+
+    // Should not resolve before 5s
+    await vi.advanceTimersByTimeAsync(4_999);
+    // At this point, fetch was called once but retry not yet triggered
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    // After 5s, retry triggers
+    await vi.advanceTimersByTimeAsync(1);
+    const response = await promise;
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(response.status).toBe(200);
+  });
+
+  // Task 5.4: body DB_UNAVAILABLE est parsé comme message français
+  it('propagates French message from DB_UNAVAILABLE body as ApiError message', async () => {
+    const mock503Response = mock503(1);
+
+    global.fetch = vi.fn().mockResolvedValue(mock503Response);
+
+    const p = apiFetch('/executions').catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(10_000);
+    const err = await p;
+
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).message).toContain('indisponible');
+    expect((err as ApiError).message).toContain('bascule');
+  });
+
+  // Task 5.5: notification.warning au 1er retry, notification.error si épuisé
+  it('shows warning notification on first retry, error notification on exhaustion', async () => {
+    const { notification } = await import('antd');
+    const warnSpy = vi.spyOn(notification, 'warning');
+    const errorSpy = vi.spyOn(notification, 'error');
+
+    const mock503Response = mock503(1);
+    global.fetch = vi.fn().mockResolvedValue(mock503Response);
+
+    const p = apiFetch('/actions').catch(() => {});
+    await vi.advanceTimersByTimeAsync(10_000);
+    await p;
+
+    // Warning shown exactly once (1st retry only)
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(expect.objectContaining({
+      message: 'Service temporairement indisponible',
+    }));
+
+    // Error shown exactly once (on exhaustion)
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalledWith(expect.objectContaining({
+      message: 'Base de données temporairement indisponible',
+    }));
+  });
+
+  it('shows no notification if 503 retry succeeds', async () => {
+    const { notification } = await import('antd');
+    const warnSpy = vi.spyOn(notification, 'warning');
+    const errorSpy = vi.spyOn(notification, 'error');
+
+    const mock503Response = mock503(1);
+    const mock200Response = mock200();
+
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(mock503Response)
+      .mockResolvedValueOnce(mock200Response);
+
+    const promise = handleAuthenticatedFetch('/actions', {}, {});
+    await vi.advanceTimersByTimeAsync(2_000);
+    const response = await promise;
+
+    expect(response.status).toBe(200);
+    // Warning shown (retry triggered), no error (retry succeeded)
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('logs api_503_retry event with correct attributes', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn');
+
+    const mock503Response = mock503(30);
+    const mock200Response = mock200();
+
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(mock503Response)
+      .mockResolvedValueOnce(mock200Response);
+
+    const promise = handleAuthenticatedFetch('/catalog/actions', {}, {});
+    await vi.advanceTimersByTimeAsync(30_000);
+    await promise;
+
+    expect(warnSpy).toHaveBeenCalledWith('api_503_retry', expect.objectContaining({
+      attempt: 1,
+      max_retries: 2,
+      retry_after_seconds: 30,
+      endpoint: '/catalog/actions',
+      correlation_id: expect.any(String),
+    }));
+  });
+
+  it('does not retry 503 that is NOT DB_UNAVAILABLE', async () => {
+    const non503DbResponse = {
+      status: 503,
+      ok: false,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      clone() { return this; },
+      json: async () => ({ error: { code: 'MAINTENANCE', message: 'Scheduled maintenance' } }),
+      text: async () => 'Scheduled maintenance',
+    } as unknown as Response;
+
+    global.fetch = vi.fn().mockResolvedValue(non503DbResponse);
+
+    const p = apiFetch('/actions').catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(100);
+    const err = await p;
+
+    // Only 1 fetch call — no retry for non-DB_UNAVAILABLE 503
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(503);
   });
 });

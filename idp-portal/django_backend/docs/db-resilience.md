@@ -207,3 +207,121 @@ Data Guard FSFO : **< 1 minute**. Pendant cette fenêtre :
 - Après 3 tentatives (par défaut), retourne 503 avec header `Retry-After: 30`
 - Les requêtes en lecture sont toujours retentées
 - Les requêtes en écriture sont retentées uniquement si l'erreur est pré-commit (idempotence protégée)
+
+---
+
+## Comportement pendant un failover Data Guard
+
+> Story 32.3 — NFR/Runbook : impact utilisateur et consommateurs API pendant un failover/switchover
+
+### Du point de vue du portail (utilisateur humain)
+
+Lors d'un failover Data Guard, un utilisateur du portail peut observer :
+
+**Timeline typique (fenêtre < 1 min) :**
+
+```
+t=0s   Bascule Data Guard FSFO déclenche (automatique)
+t=0-5s Connexions DB existantes invalidées — prochaines requêtes échouent
+t=5s   DatabaseResilienceMiddleware intercepte OperationalError/InterfaceError
+t=5s   Tentative 1 (immédiate) : close_old_connections() + ensure_connection()
+       → échoue si le nouveau primary n'est pas encore prêt
+t=5.5s Tentative 2 (0.5s backoff)
+t=6.5s Tentative 3 (1.0s backoff)
+       → en général, le primary est prêt — reconnexion réussie → HTTP 200/201 normal
+t=6.5s Si toutes les tentatives échouent : HTTP 503 DB_UNAVAILABLE + Retry-After: 30
+       → le frontend React affiche un avertissement et retente automatiquement (×2, délai 30s)
+t=~60s La bascule est complète ; toutes les nouvelles requêtes réussissent normalement
+```
+
+**Ce que voit l'utilisateur :**
+
+- **Cas nominal (tentative réussit < 6.5s)** : aucun impact visible — la réponse est légèrement plus lente mais renvoie le résultat correct (HTTP 200/201).
+- **Cas 503 (bascule lente ou surcharge)** : une notification Ant Design apparaît en haut à droite :
+  - Premier retry : `⚠️ Service temporairement indisponible. Nouvelle tentative en cours...`
+  - Après épuisement des retries : `❌ Base de données temporairement indisponible après bascule. Veuillez réessayer dans quelques instants.`
+  - L'utilisateur peut réessayer manuellement après ~30 secondes.
+
+**Endpoints protégés (exemples) :**
+
+| Endpoint | Méthode | Protection |
+|----------|---------|------------|
+| `/api/v1/catalog/actions/` | GET | Retry automatique, toujours safe |
+| `/api/v1/executions/` | POST | Retry si erreur pré-commit (idempotence) |
+| `/api/v1/scheduled-executions/` | GET | Retry automatique, toujours safe |
+
+### Du point de vue d'un consommateur API (système externe)
+
+Un consommateur API (Control-M, script Python, autre système) utilise le même endpoint HTTP avec un header `Authorization: Bearer <token>`. Le middleware `DatabaseResilienceMiddleware` s'applique **identiquement** — il n'y a aucune distinction entre une requête portail et une requête API.
+
+**Comportement attendu :**
+
+1. **Tentatives internes (backend)** : le middleware retente l'opération jusqu'à `DB_RETRY_MAX_ATTEMPTS` fois (défaut : 3) avec backoff exponentiel. Le consommateur ne voit rien pendant cette phase — il attend simplement la réponse.
+2. **Réponse 503** (si toutes les tentatives backend échouent) :
+
+```http
+HTTP/1.1 503 Service Unavailable
+Content-Type: application/json
+Retry-After: 30
+
+{
+  "error": {
+    "code": "DB_UNAVAILABLE",
+    "message": "Base de données temporairement indisponible après bascule. Veuillez réessayer dans quelques instants.",
+    "correlation_id": "abc-123-def-456"
+  }
+}
+```
+
+**Recommandations pour les consommateurs API :**
+
+- Implémenter un retry avec backoff en cas de réception d'un HTTP 503 avec `"code": "DB_UNAVAILABLE"`.
+- Lire le header `Retry-After` et attendre la durée indiquée (30 secondes) avant de réessayer.
+- Limiter les retries à 2-3 tentatives supplémentaires maximum pour éviter les boucles si la DB reste indisponible.
+- Tracer le `correlation_id` de la réponse 503 pour faciliter le diagnostic côté ops.
+- **Ne pas** retenter les 503 sans vérifier `error.code === "DB_UNAVAILABLE"` — d'autres 503 (maintenance planifiée, surcharge) ne doivent pas être retentés automatiquement.
+
+**Exemple Python (client API externe) :**
+
+```python
+import time
+import requests
+
+MAX_503_RETRIES = 2
+
+def api_call_with_resilience(url, headers, data=None):
+    for attempt in range(MAX_503_RETRIES + 1):
+        resp = requests.post(url, headers=headers, json=data, timeout=30)
+        if resp.status_code != 503:
+            return resp
+        body = resp.json()
+        if body.get("error", {}).get("code") != "DB_UNAVAILABLE":
+            resp.raise_for_status()  # Autre 503 — ne pas retenter
+        retry_after = int(resp.headers.get("Retry-After", 30))
+        if attempt < MAX_503_RETRIES:
+            time.sleep(retry_after)
+    resp.raise_for_status()
+```
+
+### Fenêtre de bascule et impact utilisateur
+
+| Phase | Durée typique | Comportement observé |
+|-------|--------------|----------------------|
+| Déclenchement failover | t=0 | Connexions DB invalides |
+| Retry backend (tentatives 1-3) | 0–6.5s | Réponse plus lente, mais transparente si succès |
+| 503 renvoyé au client | t=6.5s+ | HTTP 503 + Retry-After: 30 |
+| Retry frontend (portail) | +0–60s | Notification warning, re-tentative automatique ×2 |
+| Bascule complète | < 60s | Toutes les requêtes réussissent normalement |
+| Reconnexion complète | < 90s | Pool de connexions reconstitué |
+
+**Codes d'erreur possibles pendant un failover :**
+
+| Code d'erreur | Source | Description |
+|--------------|--------|-------------|
+| `DB_UNAVAILABLE` | Backend middleware | Retries épuisés — DB non joignable |
+| ORA-03113 | Oracle | End-of-file on communication channel |
+| ORA-03135 | Oracle | Connection lost contact |
+| ORA-12541 | Oracle | TNS: no listener (primary pas encore prêt) |
+| ORA-01033 | Oracle | ORACLE initialization or shutdown in progress |
+
+**SLO cible :** < 1 minute d'indisponibilité observable (Data Guard FSFO). Les requêtes en lecture et en écriture pré-commit sont récupérées automatiquement dans la grande majorité des cas.
