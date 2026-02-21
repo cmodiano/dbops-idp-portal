@@ -45,6 +45,11 @@ def health_check(request: Any) -> Response:
                 "status": "healthy" | "degraded",
                 "timestamp": "2026-02-05T14:30:05.123Z",
                 "oracle": "connected" | "disconnected",
+                "db_pool_status": {
+                    "conn_max_age": 600,
+                    "conn_health_checks": true,
+                    "connection_usable": true
+                },
                 "vault": "reachable" | "unreachable",
                 "servicenow": "reachable" | "unreachable"
             }
@@ -57,11 +62,19 @@ def health_check(request: Any) -> Response:
         "timestamp": ensure_utc_isoformat(datetime.now(timezone.utc)),
     }
 
-    # Test database connection
+    # Test database connection + pool status (Story 32.1)
     try:
         with connection.cursor() as cursor:
             cursor.execute("SELECT 1 FROM DUAL")
             health_data["oracle"] = "connected"
+
+        # Story 32.1 Task 4: DB pool status info
+        db_settings = settings.DATABASES.get('default', {})
+        health_data["db_pool_status"] = {
+            "conn_max_age": db_settings.get('CONN_MAX_AGE', 0),
+            "conn_health_checks": db_settings.get('CONN_HEALTH_CHECKS', False),
+            "connection_usable": connection.is_usable(),
+        }
     except Exception as e:
         # Story 17.6: Justified broad catch - DB connection can raise various exceptions
         logger.error(
@@ -74,6 +87,11 @@ def health_check(request: Any) -> Response:
         )
         health_data["oracle"] = "disconnected"
         health_data["status"] = "degraded"
+        health_data["db_pool_status"] = {
+            "conn_max_age": settings.DATABASES.get('default', {}).get('CONN_MAX_AGE', 0),
+            "conn_health_checks": settings.DATABASES.get('default', {}).get('CONN_HEALTH_CHECKS', False),
+            "connection_usable": False,
+        }
 
     # Test Vault connection (optional - only if configured)
     vault_addr = getattr(settings, 'VAULT_ADDR', None)

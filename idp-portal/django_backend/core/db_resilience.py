@@ -1,0 +1,151 @@
+"""
+Database resilience middleware for Data Guard failover/switchover detection.
+
+Story 32.1: Detects DB connection loss (OperationalError, InterfaceError, DatabaseError)
+and attempts recovery by purging dead connections and retrying the request once.
+
+This middleware is a safety net — Django's CONN_HEALTH_CHECKS (4.1+) handles most cases
+by validating connections before reuse. This catches errors that slip through.
+"""
+from __future__ import annotations
+
+from collections.abc import Callable
+
+import structlog
+from django.db import OperationalError, close_old_connections, connection
+from django.db.utils import DatabaseError, InterfaceError
+from django.http import HttpRequest, HttpResponse
+
+from core.middleware import get_correlation_id
+
+logger = structlog.get_logger(__name__)
+
+# ORA error codes indicating connection/network issues (Data Guard failover)
+CONNECTION_ERROR_CODES = frozenset({
+    3113,   # ORA-03113: end-of-file on communication channel
+    3114,   # ORA-03114: not connected to ORACLE
+    1033,   # ORA-01033: ORACLE initialization or shutdown in progress
+    12541,  # ORA-12541: TNS:no listener
+    12543,  # ORA-12543: TNS:destination host unreachable
+    3135,   # ORA-03135: connection lost contact
+    12571,  # ORA-12571: TNS:packet writer failure
+    28,     # ORA-00028: your session has been killed
+    1012,   # ORA-01012: not logged on
+    12170,  # ORA-12170: TNS:connect timeout occurred
+    12514,  # ORA-12514: TNS:listener does not currently know of service
+})
+
+
+def _is_connection_error(exc: Exception) -> bool:
+    """Determine if an exception is a DB connection error (vs. query/logic error)."""
+    if isinstance(exc, InterfaceError):
+        return True
+    if isinstance(exc, (OperationalError, DatabaseError)):
+        error_str = str(exc)
+        # Check for ORA codes
+        for code in CONNECTION_ERROR_CODES:
+            if f"ORA-{code:05d}" in error_str:
+                return True
+        # Generic connection loss patterns
+        lower = error_str.lower()
+        if any(pattern in lower for pattern in (
+            'not connected',
+            'connection lost',
+            'end-of-file',
+            'lost contact',
+            'no listener',
+        )):
+            return True
+    return False
+
+
+def _extract_ora_code(exc: Exception) -> str | None:
+    """Extract ORA error code from exception message."""
+    error_str = str(exc)
+    for code in CONNECTION_ERROR_CODES:
+        ora_str = f"ORA-{code:05d}"
+        if ora_str in error_str:
+            return ora_str
+    return None
+
+
+class DatabaseResilienceMiddleware:
+    """
+    Middleware that detects DB connection loss and attempts recovery.
+
+    On connection error:
+    1. Logs db_connection_lost event
+    2. Closes dead connections via close_old_connections()
+    3. Retries the request once
+    4. Logs db_connection_restored or db_connection_retry_failed
+
+    Placed after CorrelationIdMiddleware to have correlation_id available.
+    """
+
+    def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
+        self.get_response = get_response
+
+    def __call__(self, request: HttpRequest) -> HttpResponse:
+        try:
+            return self.get_response(request)
+        except (OperationalError, InterfaceError, DatabaseError) as exc:
+            if not _is_connection_error(exc):
+                raise
+
+            correlation_id = get_correlation_id()
+            ora_code = _extract_ora_code(exc)
+
+            logger.warning(
+                "db_connection_lost",
+                correlation_id=correlation_id,
+                error_type=type(exc).__name__,
+                error_code=ora_code,
+                error=str(exc),
+                method=request.method,
+                path=request.path,
+            )
+
+            # Purge dead connections
+            close_old_connections()
+
+            # Verify new connection is usable
+            try:
+                connection.ensure_connection()
+            except Exception as reconnect_exc:
+                logger.error(
+                    "db_connection_retry_failed",
+                    correlation_id=correlation_id,
+                    error_type=type(reconnect_exc).__name__,
+                    error=str(reconnect_exc),
+                    original_error_code=ora_code,
+                    method=request.method,
+                    path=request.path,
+                )
+                raise exc from reconnect_exc
+
+            # Retry request once.
+            # WARNING: This re-executes the entire downstream middleware chain + view.
+            # Side effects (emails, writes) from the first attempt may be duplicated.
+            # Safe for read-only requests; for mutating requests, Story 32.2 adds
+            # transactional retry with idempotency protection.
+            try:
+                response = self.get_response(request)
+                logger.info(
+                    "db_connection_restored",
+                    correlation_id=correlation_id,
+                    method=request.method,
+                    path=request.path,
+                    original_error_code=ora_code,
+                )
+                return response
+            except (OperationalError, InterfaceError, DatabaseError) as retry_exc:
+                logger.error(
+                    "db_connection_retry_failed",
+                    correlation_id=correlation_id,
+                    error_type=type(retry_exc).__name__,
+                    error=str(retry_exc),
+                    original_error_code=ora_code,
+                    method=request.method,
+                    path=request.path,
+                )
+                raise

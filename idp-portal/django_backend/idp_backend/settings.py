@@ -73,6 +73,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'core.middleware.CorrelationIdMiddleware',  # Story M.7 - correlation ID first
+    'core.db_resilience.DatabaseResilienceMiddleware',  # Story 32.1 - DB failover detection + retry
     'core.middleware.RequestResponseLoggingMiddleware',  # Story M.8 - request/response logging
     'core.middleware.RateLimitHeadersMiddleware',  # Story 17.11 - rate limit headers + logging
     'core.middleware.SecurityHeadersMiddleware',  # Story M.7 - security headers
@@ -119,12 +120,22 @@ ORACLE_USER = os.getenv('ORACLE_USER', 'idp_app')
 # Story 17.5: No hardcoded default - fail-fast if missing in production
 ORACLE_PASSWORD = os.getenv('ORACLE_PASSWORD', '')
 
+# Story 32.1: DB resilience settings for Data Guard failover/switchover
+# CONN_MAX_AGE: Max lifetime of a DB connection (seconds). After failover,
+# new requests get fresh connections once old ones expire.
+DB_CONN_MAX_AGE = int(os.getenv('DB_CONN_MAX_AGE', '600'))
+# CONN_HEALTH_CHECKS: Django 4.1+ — validates connection before reuse.
+# If dead (post-failover), Django silently recreates it. Key resilience mechanism.
+DB_CONN_HEALTH_CHECKS = os.getenv('DB_CONN_HEALTH_CHECKS', 'True').lower() in ('true', '1', 'yes')
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.oracle',
         'NAME': ORACLE_DSN,
         'USER': ORACLE_USER,
         'PASSWORD': ORACLE_PASSWORD,
+        'CONN_MAX_AGE': DB_CONN_MAX_AGE,
+        'CONN_HEALTH_CHECKS': DB_CONN_HEALTH_CHECKS,
     }
 }
 
