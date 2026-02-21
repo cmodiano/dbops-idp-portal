@@ -432,7 +432,7 @@ development_status:
     epic-33: in-progress
     33-1-ocp-registry-pattern-adapters-services: done # code-review 2026-02-21: 5 fixes (M1 unregister, M2 SERVICE_TYPES assert, B1 overwrite warning, B2 __all__ exports, B3 list_types doc) — 50/50 tests pass
     33-2-srp-decouper-executions-tasks: done
-    33-3-srp-decouper-catalog-views: backlog
+    33-3-srp-decouper-catalog-views: done # code-review 2026-02-21: 1 HIGH + 3 MEDIUM + 3 LOW fixes — partial default, dict constant, double subquery, duplicate read, comment cleanup — 369/374 tests pass
     33-4-dip-injection-dependances-services: backlog
     33-5-srp-reduire-actionform-actionwizard: backlog
     33-6-documentation-checklist-solid: backlog
