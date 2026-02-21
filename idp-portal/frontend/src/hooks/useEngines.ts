@@ -105,3 +105,13 @@ export function useEngines(): UseEnginesResult {
 
   return { engines, loading, error, engineOptions };
 }
+
+/**
+ * Invalidate the shared engines cache (Story 31.10, AC3).
+ * Forces next useEngines() mount to re-fetch from API.
+ */
+export function invalidateEnginesCache(): void {
+  cachedEngines = null;
+  loadingPromise = null;
+  cacheError = null;
+}

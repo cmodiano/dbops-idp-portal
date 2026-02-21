@@ -51,3 +51,12 @@ export function getEngineIconUrl(engineCode: string): string | null {
 export function prefetchEngineIcons(): void {
   getEngineIconMap().catch(() => {});
 }
+
+/**
+ * Invalidate the engine icon cache (Story 31.10, AC3).
+ * Forces next getEngineIconMap() call to re-fetch from API.
+ */
+export function invalidateEngineIconCache(): void {
+  cache = null;
+  loadingPromise = null;
+}

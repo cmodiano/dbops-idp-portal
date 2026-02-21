@@ -418,8 +418,8 @@ development_status:
     31-6-config-gates-choix-service-creation-changement-servicenow: done # 2026-02-19: code-review — 6 fixes (H1 validation bloquante AC#3, H2 ActionListSerializer gate_config, H3 test 10.4, M1 filtre API type, M2 ActionCreateSerializer, M3 File List + Alert)
     31-7-aide-contextuelle-tooltip-popover-markdown-backend: done # 2026-02-19: App help Django, 3 topics MD, SectionHelp composant, intégration ActionForm/ActionWizard — 6 BE + 16 FE tests pass. Code review: 0H + 4M + 3L fixes appliqués
     31-8-service-notification-multi-destinations-email-teams-page: done # 2026-02-19: Code review adversarial — 6 issues corrigées (H1: on_commit, H2: File List, M1: get_parameters(), M2: PII email, M3: URL SSRF, L1: Teams title) — 140 BE tests pass
-    31-9-suppression-doublon-ref-platforms: backlog # Une seule source de vérité : IntegrationTypeCatalogue + intégrations ; supprimer REF_PLATFORMS (réf. analyse-facilite-integrations-adapters.md §7)
-    31-10-admin-ui-moteurs-et-reproductibilite-icones: backlog # Onglet Admin Moteurs (éditer icon_url, label, etc.) + doc/seed pour répliquer config icônes (engines + intégrations) entre envs
+    31-9-suppression-doublon-ref-platforms: done # 2026-02-21: RefPlatform supprimé, validate_platform → IntegrationTypeCatalogue, API /reference/platforms → catalogue, bug workflow_runtime fixé, 158 tests pass — Code review: 3 fixes (M1 docs stales, M2 _PLATFORM_ALIAS DRY, L1 docstring)
+    31-10-admin-ui-moteurs-et-reproductibilite-icones: done # code-review 2026-02-21: 7 issues (1H+5M+1L), 6 auto-fixés (doc seed inexistante, Avatar fallback, URL validation, 2 tests ajoutés, doc PK corrigée) — 19 FE tests pass
     epic-31-retrospective: optional
     # === Epic 32: Résilience Data Guard (failover / switchover) ===
     # Réf: planning-artifacts/epic-32-resilience-dataguard.md — Backend détecte coupure DB, reconnexion, retry transaction, portail + API
