@@ -13,12 +13,13 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
-from reference.models import RefEngine, RefPlatform, RefCategory
+from reference.models import RefEngine, RefCategory
 from reference.serializers import (
     RefEngineSerializer, RefEngineWriteSerializer,
-    RefPlatformSerializer,
+    PlatformTypeCatalogueSerializer,
     RefCategorySerializer, RefCategoryWriteSerializer,
 )
+from integrations.models import IntegrationTypeCatalogue, IntegrationRole
 from core.middleware import get_correlation_id
 from core.permissions import DBOPSProfilePermission
 
@@ -62,31 +63,30 @@ def list_engines(request: Request) -> Response:
 @permission_classes([IsAuthenticated])
 def list_platforms(request: Request) -> Response:
     """
-    List all active platforms from REF_PLATFORMS table.
-    Returns platforms ordered by display_order, code.
-    
+    Story 31.9: List platform types from IntegrationTypeCatalogue (role=platform).
+    Replaces the former REF_PLATFORMS source. URL unchanged for backward compatibility.
+
     Query params:
-        active_only: If true (default), return only active platforms (is_active=1)
+        active_only: If true (default), return only active platform types
     """
     correlation_id = get_correlation_id()
-    
-    # Parse query params
+
     active_only = request.query_params.get('active_only', 'true').lower() == 'true'
-    
+
     logger.info(
         "listing_platforms",
         active_only=active_only,
         correlation_id=correlation_id
     )
-    
-    # Query platforms
-    queryset = RefPlatform.objects.all()
+
+    queryset = IntegrationTypeCatalogue.objects.filter(
+        integration_role=IntegrationRole.PLATFORM
+    )
     if active_only:
-        queryset = queryset.active()
-    queryset = queryset.ordered()
-    
-    # Serialize
-    serializer = RefPlatformSerializer(queryset, many=True)
+        queryset = queryset.filter(is_active=True)
+    queryset = queryset.order_by('code')
+
+    serializer = PlatformTypeCatalogueSerializer(queryset, many=True)
 
     return Response({"data": serializer.data})
 

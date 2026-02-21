@@ -24,8 +24,14 @@ from adapters.terraform_cloud_adapter import (
 )
 from core.middleware import get_correlation_id
 from executions.models import Execution, ExecutionStatus, ExecutionStep
+from executions.services import ExecutionService
 
 logger = structlog.get_logger(__name__)
+
+# Story 33.4 (DIP): module-level factory, overridable in tests via:
+#   import executions.views.terraform_webhooks as m
+#   m._execution_service_factory = lambda: MockExecutionService()
+_execution_service_factory = ExecutionService
 
 
 def _verify_terraform_signature(payload_body: bytes, signature_header: str, secret: str) -> bool:
@@ -210,8 +216,7 @@ def terraform_webhook_run(request: Request) -> Response:
     }
     if execution.status not in terminal_statuses and idp_status != execution.status:
         try:
-            from executions.services import ExecutionService
-            svc = ExecutionService()
+            svc = _execution_service_factory()
             svc.update_status(execution.id, idp_status, str(execution.user_id))
         except ValueError as ve:
             logger.warning(

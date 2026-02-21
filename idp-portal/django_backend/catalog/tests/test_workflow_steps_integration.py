@@ -8,7 +8,8 @@ from rest_framework.test import APIClient
 from rest_framework import status
 
 from catalog.models import Action, ActionItemType, ActionStatus
-from reference.models import RefEngine, RefPlatform
+from reference.models import RefEngine
+from integrations.models import IntegrationTypeCatalogue, IntegrationRole
 from tests.factories import UserFactory
 
 
@@ -26,7 +27,7 @@ class WorkflowStepsIntegrationTests(TestCase):
 
         # Create reference data
         RefEngine.objects.create(code='Oracle', label='Oracle', display_order=1, is_active=1)
-        RefPlatform.objects.create(code='AAP', label='AAP', display_order=1, is_active=1)
+        IntegrationTypeCatalogue.objects.create(code='aap', name='AAP', integration_role=IntegrationRole.PLATFORM, is_active=True)
 
         # Create test actions for workflow references
         self.action1 = Action.objects.create(

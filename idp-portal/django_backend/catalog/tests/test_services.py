@@ -9,6 +9,7 @@ from django.utils import timezone
 from integrations.models import Integration
 from catalog.models import Action, Tag, ActionTag, ActionStatus, ActionItemType
 from catalog.services import CatalogService
+from core.exceptions import BadRequestError
 from core.models import AuditLog
 from tests.factories import UserFactory
 
@@ -264,6 +265,55 @@ class TestCatalogService(TestCase):
 
         self.assertIsNotNone(result)
         self.assertEqual(result.status, ActionStatus.PUBLISHED)
+
+    def test_publish_workflow_fails_when_referenced_action_disabled(self):
+        """Publishing a workflow whose step action is disabled raises BadRequestError."""
+        ref_action = Action.objects.create(
+            name='Ref Action',
+            engine='Oracle',
+            platform='AAP',
+            status=ActionStatus.DISABLED,
+            deleted_at=timezone.now(),
+            created_by=self.user,
+            item_type=ActionItemType.ACTION,
+        )
+        workflow = Action.objects.create(
+            name='Workflow With Disabled Ref',
+            status=ActionStatus.DRAFT,
+            item_type=ActionItemType.WORKFLOW,
+            created_by=self.user,
+            execution_steps=[
+                {'order': 1, 'name': 'Step 1', 'referenced_action_id': ref_action.id, 'step_id': 's1'},
+            ],
+        )
+        with self.assertRaises(BadRequestError) as cm:
+            self.service.update_status(workflow.id, 'publish', self.user)
+        self.assertEqual(cm.exception.code, 'REFERENCED_ACTION_NOT_PUBLISHED')
+        self.assertIn('Ref Action', cm.exception.message)
+        workflow.refresh_from_db()
+        self.assertEqual(workflow.status, ActionStatus.DRAFT)
+
+    def test_publish_workflow_succeeds_when_all_referenced_actions_published(self):
+        """Publishing a workflow succeeds when all referenced actions are published."""
+        ref_action = Action.objects.create(
+            name='Ref Action Published',
+            engine='Oracle',
+            platform='AAP',
+            status=ActionStatus.PUBLISHED,
+            created_by=self.user,
+            item_type=ActionItemType.ACTION,
+        )
+        workflow = Action.objects.create(
+            name='Workflow Ok',
+            status=ActionStatus.DRAFT,
+            item_type=ActionItemType.WORKFLOW,
+            created_by=self.user,
+            execution_steps=[
+                {'order': 1, 'name': 'Step 1', 'referenced_action_id': ref_action.id, 'step_id': 's1'},
+            ],
+        )
+        updated = self.service.update_status(workflow.id, 'publish', self.user)
+        self.assertEqual(updated.status, ActionStatus.PUBLISHED)
 
     def test_delete_action(self):
         """Test delete_action() deletes action and creates audit."""

@@ -168,54 +168,71 @@ export const ChangeTypeConfig: React.FC<ChangeTypeConfigProps> = ({
       <div role="table" aria-label="Configuration type de changement par environnement">
         <Space orientation="vertical" style={{ width: '100%' }}>
 
-          {/* Bloc 1 — Gates */}
+          {/* Bloc 1 — Gates : une seule grille pour aligner en-têtes et cellules */}
           <div role="group" aria-label="Gates — Conditions d'exécution par environnement">
             <Text strong style={{ fontSize: 14 }}>Gates — Conditions d&apos;exécution par environnement</Text>
             <div
-              style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '8px', ...headerStyle, marginTop: 8 }}
-              role="row"
+              role="table"
+              aria-label="Gates par environnement"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr auto auto auto',
+                gap: '8px',
+                marginTop: 8,
+                alignItems: 'center',
+              }}
             >
-              <Text strong role="columnheader">Environnement</Text>
-              <Text strong role="columnheader">Autorisé</Text>
-              <Text strong role="columnheader">Plage maintenance</Text>
-              <Text strong role="columnheader">Approbation</Text>
-            </div>
-            {environments.map((env) => {
-              const entry = getEntry(env);
-              const allowed = entry.allowed ?? true;
-              const requiresMaintenanceWindow = entry.requires_maintenance_window ?? false;
-              const requiresApproval = entry.requires_approval ?? false;
-              return (
-                <div
-                  key={env}
-                  style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '8px', ...rowStyle }}
-                  role="row"
-                >
-                  <Text role="cell">{getLabel(env)}</Text>
-                  <div role="cell">
-                    <Switch
-                      checked={allowed}
-                      onChange={(checked) => handleAllowedChange(env, checked)}
-                      aria-label={`Exécution autorisée pour ${env}`}
-                    />
-                  </div>
-                  <div role="cell">
-                    <Switch
-                      checked={requiresMaintenanceWindow}
-                      onChange={(checked) => handleRequiresMaintenanceWindowChange(env, checked)}
-                      aria-label={`Plage de maintenance requise pour ${env}`}
-                    />
-                  </div>
-                  <div role="cell">
-                    <Switch
-                      checked={requiresApproval}
-                      onChange={(checked) => handleRequiresApprovalChange(env, checked)}
-                      aria-label={`Approbation requise pour ${env}`}
-                    />
-                  </div>
+              {/* En-têtes (première ligne) — display:contents garde l'alignement grille */}
+              <div style={{ display: 'contents' }} role="row">
+                <div style={headerStyle} role="columnheader">
+                  <Text strong>Environnement</Text>
                 </div>
-              );
-            })}
+                <div style={headerStyle} role="columnheader">
+                  <Text strong>Autorisé</Text>
+                </div>
+                <div style={headerStyle} role="columnheader">
+                  <Text strong>Plage maintenance</Text>
+                </div>
+                <div style={headerStyle} role="columnheader">
+                  <Text strong>Approbation</Text>
+                </div>
+              </div>
+              {/* Lignes (4 cellules par environnement) */}
+              {environments.map((env) => {
+                const entry = getEntry(env);
+                const allowed = entry.allowed ?? true;
+                const requiresMaintenanceWindow = entry.requires_maintenance_window ?? false;
+                const requiresApproval = entry.requires_approval ?? false;
+                return (
+                  <div key={env} style={{ display: 'contents' }} role="row">
+                    <div style={rowStyle} role="cell">
+                      <Text>{getLabel(env)}</Text>
+                    </div>
+                    <div style={rowStyle} role="cell">
+                      <Switch
+                        checked={allowed}
+                        onChange={(checked) => handleAllowedChange(env, checked)}
+                        aria-label={`Exécution autorisée pour ${env}`}
+                      />
+                    </div>
+                    <div style={rowStyle} role="cell">
+                      <Switch
+                        checked={requiresMaintenanceWindow}
+                        onChange={(checked) => handleRequiresMaintenanceWindowChange(env, checked)}
+                        aria-label={`Plage de maintenance requise pour ${env}`}
+                      />
+                    </div>
+                    <div style={rowStyle} role="cell">
+                      <Switch
+                        checked={requiresApproval}
+                        onChange={(checked) => handleRequiresApprovalChange(env, checked)}
+                        aria-label={`Approbation requise pour ${env}`}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           <Divider style={{ margin: '12px 0' }} />
@@ -257,71 +274,88 @@ export const ChangeTypeConfig: React.FC<ChangeTypeConfigProps> = ({
             )}
 
             <div
-              style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr 1fr', gap: '8px', ...headerStyle, marginTop: 8 }}
-              role="row"
+              role="table"
+              aria-label="Changement ServiceNow par environnement"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr auto 1fr 1fr',
+                gap: '8px',
+                marginTop: 8,
+                alignItems: 'center',
+              }}
             >
-              <Text strong role="columnheader">Environnement</Text>
-              <Text strong role="columnheader">Changement requis</Text>
-              <Text strong role="columnheader">Modèle / Template ID</Text>
-              <Text strong role="columnheader">Change type</Text>
-            </div>
-            {environments.map((env) => {
-              const entry = getEntry(env);
-              const required = entry.required ?? false;
-              const modelTemplateValue = entry.template_id ?? entry.change_model_code ?? '';
-              const changeType = entry.change_type ?? '';
-              return (
-                <div
-                  key={env}
-                  style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr 1fr', gap: '8px', ...rowStyle }}
-                  role="row"
-                >
-                  <Text role="cell">{getLabel(env)}</Text>
-                  <div role="cell">
-                    <Switch
-                      checked={required}
-                      onChange={(checked) => handleRequiredChange(env, checked)}
-                      aria-label={`Changement requis pour ${env}`}
-                    />
-                  </div>
-                  <div role="cell">
-                    {required ? (
-                      <div>
-                        <Input
-                          value={modelTemplateValue}
-                          onChange={(e) => handleModelTemplateChange(env, e.target.value)}
-                          placeholder="Ex: CHG_TPL_001"
-                          maxLength={CODE_MAX_LENGTH}
-                          status={modelTemplateErrors[env] ? 'error' : undefined}
-                          aria-label={`Modèle / Template ID pour ${env}`}
-                          aria-invalid={!!modelTemplateErrors[env]}
-                          aria-describedby={modelTemplateErrors[env] ? `model-template-error-${env}` : undefined}
-                        />
-                        {modelTemplateErrors[env] && (
-                          <div
-                            id={`model-template-error-${env}`}
-                            role="alert"
-                            style={{ fontSize: 12, color: token.colorError, marginTop: 4 }}
-                          >
-                            {modelTemplateErrors[env]}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <Text type="secondary">—</Text>
-                    )}
-                  </div>
-                  <div role="cell">
-                    <Input
-                      value={changeType}
-                      onChange={(e) => handleChangeTypeChange(env, e.target.value)}
-                      placeholder="Ex: normal"
-                      aria-label={`Change type pour ${env}`}
-                    />
-                  </div>
+              {/* En-têtes */}
+              <div style={{ display: 'contents' }} role="row">
+                <div style={headerStyle} role="columnheader">
+                  <Text strong>Environnement</Text>
                 </div>
-              );
-            })}
+                <div style={headerStyle} role="columnheader">
+                  <Text strong>Changement requis</Text>
+                </div>
+                <div style={headerStyle} role="columnheader">
+                  <Text strong>Modèle / Template ID</Text>
+                </div>
+                <div style={headerStyle} role="columnheader">
+                  <Text strong>Change type</Text>
+                </div>
+              </div>
+              {/* Lignes */}
+              {environments.map((env) => {
+                const entry = getEntry(env);
+                const required = entry.required ?? false;
+                const modelTemplateValue = entry.template_id ?? entry.change_model_code ?? '';
+                const changeType = entry.change_type ?? '';
+                return (
+                  <div key={env} style={{ display: 'contents' }} role="row">
+                    <div style={rowStyle} role="cell">
+                      <Text>{getLabel(env)}</Text>
+                    </div>
+                    <div style={rowStyle} role="cell">
+                      <Switch
+                        checked={required}
+                        onChange={(checked) => handleRequiredChange(env, checked)}
+                        aria-label={`Changement requis pour ${env}`}
+                      />
+                    </div>
+                    <div style={rowStyle} role="cell">
+                      {required ? (
+                        <div>
+                          <Input
+                            value={modelTemplateValue}
+                            onChange={(e) => handleModelTemplateChange(env, e.target.value)}
+                            placeholder="Ex: CHG_TPL_001"
+                            maxLength={CODE_MAX_LENGTH}
+                            status={modelTemplateErrors[env] ? 'error' : undefined}
+                            aria-label={`Modèle / Template ID pour ${env}`}
+                            aria-invalid={!!modelTemplateErrors[env]}
+                            aria-describedby={modelTemplateErrors[env] ? `model-template-error-${env}` : undefined}
+                          />
+                          {modelTemplateErrors[env] && (
+                            <div
+                              id={`model-template-error-${env}`}
+                              role="alert"
+                              style={{ fontSize: 12, color: token.colorError, marginTop: 4 }}
+                            >
+                              {modelTemplateErrors[env]}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <Text type="secondary">—</Text>
+                      )}
+                    </div>
+                    <div style={rowStyle} role="cell">
+                      <Input
+                        value={changeType}
+                        onChange={(e) => handleChangeTypeChange(env, e.target.value)}
+                        placeholder="Ex: normal"
+                        aria-label={`Change type pour ${env}`}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
         </Space>

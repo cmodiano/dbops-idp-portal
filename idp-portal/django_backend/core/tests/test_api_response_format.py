@@ -15,8 +15,8 @@ from rest_framework.test import APIClient
 from rest_framework import status
 
 from idp_auth.models import User
-from reference.models import RefEngine, RefPlatform, RefCategory
-from integrations.models import Integration, IntegrationTypeCatalogue
+from reference.models import RefEngine, RefCategory
+from integrations.models import Integration, IntegrationTypeCatalogue, IntegrationRole
 
 
 @pytest.mark.django_db
@@ -30,13 +30,10 @@ class TestAPIResponseFormatConsistency(TestCase):
 
         # Reference data
         RefEngine.objects.create(code='Oracle', label='Oracle', display_order=1, is_active=1)
-        RefPlatform.objects.create(code='AAP', label='AAP', display_order=1, is_active=1)
-        RefCategory.objects.create(code='patching', label='Correctifs', display_order=10, is_active=1)
-
-        # Integration data
         IntegrationTypeCatalogue.objects.create(
-            code='aap', name='AAP', version='1.0', is_active=True,
+            code='aap', name='AAP', integration_role=IntegrationRole.PLATFORM, is_active=True,
         )
+        RefCategory.objects.create(code='patching', label='Correctifs', display_order=10, is_active=1)
         self.integration = Integration.objects.create(
             type='aap', name='Test AAP', base_url='https://aap.example.com',
         )

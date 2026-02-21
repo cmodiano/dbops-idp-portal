@@ -36,7 +36,7 @@ export interface ImpactRulesEditorProps {
 const IMPACT_LEVEL_OPTIONS: { value: ImpactLevel; label: string }[] = [
   { value: 'low', label: 'Faible (vert)' },
   { value: 'medium', label: 'Moyen (orange)' },
-  { value: 'high', label: 'Eleve (rouge)' },
+  { value: 'high', label: 'Élevé (rouge)' },
   { value: 'critical', label: 'Critique (rouge fonce)' },
 ];
 

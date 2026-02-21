@@ -17,19 +17,10 @@ from drf_spectacular.utils import extend_schema, extend_schema_view
 from django.db.models import QuerySet
 
 from catalog.models import BusinessRulePolicy
-from catalog.serializers import BusinessRulePolicySerializer, BusinessRulePolicyListSerializer
+from catalog.serializers import BusinessRulePolicySerializer, BusinessRulePolicyListSerializer, _PLATFORM_ALIAS
 from core.pagination import CustomPageNumberPagination
 from core.permissions import DBOPSProfilePermission
 from core.middleware import get_correlation_id
-
-# Mapping platform codes (REF_PLATFORMS / integration) → step_type for filtering
-_PLATFORM_TO_STEP_TYPE: dict[str, str] = {
-    'AAP': 'aap',
-    'Tower': 'aap',
-    'Terraform': 'terraform_cloud',
-    'Terraform Cloud': 'terraform_cloud',
-    'Azure DevOps': 'azure_devops',
-}
 
 
 @extend_schema_view(
@@ -66,9 +57,8 @@ class BusinessRulePolicyViewSet(viewsets.ModelViewSet):
         step_type_filter = self.request.query_params.get('step_type')
         platform_param = self.request.query_params.get('platform')
         if platform_param and not step_type_filter:
-            step_type_filter = _PLATFORM_TO_STEP_TYPE.get(
-                platform_param, platform_param.lower().replace(' ', '_')
-            )
+            normalized = platform_param.lower().replace(' ', '_')
+            step_type_filter = _PLATFORM_ALIAS.get(normalized, normalized)
         if step_type_filter:
             # Filter in Python since step_type is computed from JSON
             # HIGH-1: Potential N+1 queries — load all policies before filtering

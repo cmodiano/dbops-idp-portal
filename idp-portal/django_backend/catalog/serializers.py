@@ -13,8 +13,15 @@ from catalog import models
 from catalog.models import (
     Action, Tag, ActionStatus, ActionItemType, BusinessRulePolicy
 )
-from reference.models import RefEngine, RefPlatform, RefCategory
+from reference.models import RefEngine, RefCategory
 from integrations.models import Integration, IntegrationTypeCatalogue, IntegrationRole
+
+# Story 31.9: Alias mapping for legacy platform codes → catalogue codes
+# Canonical source — also used by business_rule_views.py
+_PLATFORM_ALIAS: dict[str, str] = {
+    'terraform': 'terraform_cloud',
+    'tower': 'aap',
+}
 
 
 VALID_INVENTORY_TYPES = ('servers', 'instances', 'databases')
@@ -52,25 +59,16 @@ def _validate_platform_integration_consistency(
             )
         })
 
-    # Normalize platform code for matching (lower, spaces→underscores)
+    # Story 31.9: Normalize platform code for matching (lower, spaces→underscores, alias)
     normalized_platform = platform.lower().replace(' ', '_')
+    normalized_platform = _PLATFORM_ALIAS.get(normalized_platform, normalized_platform)
 
     # Check if normalized platform matches integration.type
     if normalized_platform != integration.type:
-        # Build clear error message with expected value
-        expected_platforms = {
-            'aap': 'AAP',
-            'tower': 'Tower',
-            'github_actions': 'GitHub Actions',
-            'azure_devops': 'Azure DevOps',
-            'terraform_cloud': 'Terraform Cloud',
-        }
-        expected_platform = expected_platforms.get(integration.type, integration_type_cat.name)
-
         raise serializers.ValidationError({
             'platform': (
                 f"Platform '{platform}' is inconsistent with integration type '{integration.type}'. "
-                f"Expected platform '{expected_platform}' for integration '{integration.name}'."
+                f"Expected platform '{integration_type_cat.name}' for integration '{integration.name}'."
             )
         })
 
@@ -258,14 +256,21 @@ class ActionSerializer(serializers.ModelSerializer):
         return value
 
     def validate_platform(self, value: str | None) -> str | None:
-        """Validate platform against REF_PLATFORMS table."""
+        """Story 31.9: Validate platform against IntegrationTypeCatalogue (role=platform)."""
         if value is None:
             return value
-        # Check if platform exists in REF_PLATFORMS
-        if not RefPlatform.objects.filter(code=value, is_active=1).exists():
-            active_platforms = list(RefPlatform.objects.active().values_list('code', flat=True))
+        normalized = value.lower().replace(' ', '_')
+        normalized = _PLATFORM_ALIAS.get(normalized, normalized)
+        if not IntegrationTypeCatalogue.objects.filter(
+            code=normalized, is_active=True, integration_role=IntegrationRole.PLATFORM
+        ).exists():
+            active_codes = list(
+                IntegrationTypeCatalogue.objects.filter(
+                    is_active=True, integration_role=IntegrationRole.PLATFORM
+                ).values_list('code', flat=True)
+            )
             raise serializers.ValidationError(
-                f"Invalid platform '{value}'. Must be one of: {', '.join(active_platforms)}"
+                f"Invalid platform '{value}'. Must be one of: {', '.join(active_codes)}"
             )
         return value
 
@@ -497,14 +502,21 @@ class ActionCreateSerializer(serializers.Serializer):
         return value
 
     def validate_platform(self, value: str | None) -> str | None:
-        """Validate platform against REF_PLATFORMS table."""
+        """Story 31.9: Validate platform against IntegrationTypeCatalogue (role=platform)."""
         if value is None:
             return value
-        # Check if platform exists in REF_PLATFORMS
-        if not RefPlatform.objects.filter(code=value, is_active=1).exists():
-            active_platforms = list(RefPlatform.objects.active().values_list('code', flat=True))
+        normalized = value.lower().replace(' ', '_')
+        normalized = _PLATFORM_ALIAS.get(normalized, normalized)
+        if not IntegrationTypeCatalogue.objects.filter(
+            code=normalized, is_active=True, integration_role=IntegrationRole.PLATFORM
+        ).exists():
+            active_codes = list(
+                IntegrationTypeCatalogue.objects.filter(
+                    is_active=True, integration_role=IntegrationRole.PLATFORM
+                ).values_list('code', flat=True)
+            )
             raise serializers.ValidationError(
-                f"Invalid platform '{value}'. Must be one of: {', '.join(active_platforms)}"
+                f"Invalid platform '{value}'. Must be one of: {', '.join(active_codes)}"
             )
         return value
     parameters_schema = serializers.DictField(required=False, allow_null=True)

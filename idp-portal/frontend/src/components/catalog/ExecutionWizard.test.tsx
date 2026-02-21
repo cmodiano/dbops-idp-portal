@@ -261,7 +261,7 @@ describe('ExecutionWizard', () => {
       await user.click(screen.getByText('Production'));
 
       // Should show high impact
-      expect(screen.getByText('Eleve')).toBeInTheDocument();
+      expect(screen.getByText('Élevé')).toBeInTheDocument();
     });
 
     it('only shows allowed environments', async () => {
@@ -488,7 +488,7 @@ describe('ExecutionWizard', () => {
         expect(screen.getByText('Create PDB Oracle')).toBeInTheDocument();
         expect(screen.getByText('Production')).toBeInTheDocument();
         expect(screen.getByText('CAB requis')).toBeInTheDocument(); // PROD has required change
-        expect(screen.getByText('Eleve')).toBeInTheDocument(); // High impact for PROD
+        expect(screen.getByText('Élevé')).toBeInTheDocument(); // High impact for PROD
       });
     });
 

@@ -14,12 +14,4 @@ export const ENGINE_OPTIONS_DEPRECATED: { value: string; label: string }[] = [
   { value: 'DB2', label: 'DB2' },
 ];
 
-// Story 13.7: PLATFORM_OPTIONS removed - use usePlatforms hook instead
-// This constant is kept for backward compatibility but should not be used.
-// Components should use usePlatforms() hook to load platforms from API.
-export const PLATFORM_OPTIONS_DEPRECATED: { value: string; label: string }[] = [
-  { value: 'AAP', label: 'AAP (Ansible Automation Platform)' },
-  { value: 'GitHub Actions', label: 'GitHub Actions' },
-  { value: 'Azure DevOps', label: 'Azure DevOps' },
-  { value: 'Terraform', label: 'Terraform' },
-];
+// Story 31.9: PLATFORM_OPTIONS_DEPRECATED removed — use usePlatformIntegrations hook instead.

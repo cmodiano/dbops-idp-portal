@@ -232,7 +232,7 @@ describe('ChangeTypeConfig', () => {
       render(<ChangeTypeConfig value={{}} onChange={() => {}} />);
 
       expect(screen.getByText(/Erreur de chargement des environnements/i)).toBeInTheDocument();
-      expect(screen.getByRole('table')).toBeInTheDocument();
+      expect(screen.getByRole('table', { name: /Gates par environnement/i })).toBeInTheDocument();
       expect(screen.getAllByText('Développement')).toHaveLength(2);
     });
 

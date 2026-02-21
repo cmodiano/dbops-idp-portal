@@ -211,7 +211,7 @@ class Action(models.Model):
     platform = models.CharField(
         max_length=50,
         db_column='PLATFORM',
-        help_text='Platform code (must exist in REF_PLATFORMS.CODE). Validated by application logic.'
+        help_text='Platform code (validated against IntegrationTypeCatalogue, role=platform). Story 31.9.'
     )
     # CLOB fields - using OracleJSONField with automatic JSON handling (Story 17.4)
     parameters_schema = OracleJSONField(null=True, blank=True, db_column='PARAMETERS_SCHEMA')

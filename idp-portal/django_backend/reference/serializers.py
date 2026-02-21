@@ -7,7 +7,8 @@ Story 2.30 - Category reference serializer.
 import re
 from typing import Any
 from rest_framework import serializers
-from reference.models import RefEngine, RefPlatform, RefCategory
+from reference.models import RefEngine, RefCategory
+from integrations.models import IntegrationTypeCatalogue
 
 
 class RefEngineSerializer(serializers.ModelSerializer):
@@ -32,18 +33,16 @@ class RefEngineWriteSerializer(serializers.ModelSerializer):
         fields = ['label', 'display_order', 'is_active', 'icon_url']
 
 
-class RefPlatformSerializer(serializers.ModelSerializer):
-    """Serializer for RefPlatform model."""
+class PlatformTypeCatalogueSerializer(serializers.ModelSerializer):
+    """Story 31.9: Serializer for IntegrationTypeCatalogue (role=platform).
+    Replaces RefPlatformSerializer. Compatible response format."""
 
-    normalized_code = serializers.SerializerMethodField()
+    label = serializers.CharField(source='name')
+    normalized_code = serializers.CharField(source='code')
 
     class Meta:
-        model = RefPlatform
-        fields = ['id', 'code', 'label', 'display_order', 'is_active', 'normalized_code']
-
-    def get_normalized_code(self, obj: RefPlatform) -> str:
-        """Retourne le code normalisé (minuscules + underscores) pour cohérence avec conventions."""
-        return obj.code.lower().replace(' ', '_')
+        model = IntegrationTypeCatalogue
+        fields = ['code', 'label', 'is_active', 'normalized_code']
 
 
 class RefCategorySerializer(serializers.ModelSerializer):

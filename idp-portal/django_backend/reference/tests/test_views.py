@@ -9,7 +9,8 @@ from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from rest_framework import status
 
-from reference.models import RefEngine, RefPlatform
+from reference.models import RefEngine
+from integrations.models import IntegrationTypeCatalogue, IntegrationRole
 
 User = get_user_model()
 
@@ -91,11 +92,11 @@ class RefEnginesAPITests(TestCase):
         self.assertIsInstance(response.data['data'], list)
 
 
-class RefPlatformsAPITests(TestCase):
-    """Tests for GET /api/v1/reference/platforms endpoint."""
+class PlatformTypeCatalogueAPITests(TestCase):
+    """Story 31.9: Tests for GET /api/v1/reference/platforms endpoint (now backed by IntegrationTypeCatalogue)."""
 
     def setUp(self):
-        """Set up test data."""
+        """Set up test data using IntegrationTypeCatalogue."""
         self.client = APIClient()
         self.user = User.objects.create_user(
             username='testuser',
@@ -103,14 +104,31 @@ class RefPlatformsAPITests(TestCase):
         )
         self.client.force_authenticate(user=self.user)
 
-        # Create test platforms
-        RefPlatform.objects.create(code='AAP', label='AAP (Ansible Automation Platform)', display_order=1, is_active=1)
-        RefPlatform.objects.create(code='GitHub Actions', label='GitHub Actions', display_order=2, is_active=1)
-        RefPlatform.objects.create(code='Azure DevOps', label='Azure DevOps', display_order=3, is_active=1)
-        RefPlatform.objects.create(code='Terraform', label='Terraform', display_order=4, is_active=0)  # Inactive
+        # Create IntegrationTypeCatalogue entries (role=platform)
+        IntegrationTypeCatalogue.objects.create(
+            code='aap', name='AAP (Ansible Automation Platform)',
+            integration_role=IntegrationRole.PLATFORM, is_active=True,
+        )
+        IntegrationTypeCatalogue.objects.create(
+            code='github_actions', name='GitHub Actions',
+            integration_role=IntegrationRole.PLATFORM, is_active=True,
+        )
+        IntegrationTypeCatalogue.objects.create(
+            code='azure_devops', name='Azure DevOps',
+            integration_role=IntegrationRole.PLATFORM, is_active=True,
+        )
+        IntegrationTypeCatalogue.objects.create(
+            code='terraform_cloud', name='Terraform Cloud',
+            integration_role=IntegrationRole.PLATFORM, is_active=False,  # Inactive
+        )
+        # Service type — should NOT appear in /reference/platforms
+        IntegrationTypeCatalogue.objects.create(
+            code='servicenow', name='ServiceNow',
+            integration_role=IntegrationRole.SERVICE, is_active=True,
+        )
 
     def test_list_platforms_active_only(self):
-        """Test listing active platforms only (default)."""
+        """Test listing active platform types only (default)."""
         response = self.client.get('/api/v1/reference/platforms/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('data', response.data)
@@ -119,24 +137,26 @@ class RefPlatformsAPITests(TestCase):
         self.assertEqual(len(data), 3)  # Only active platforms
 
         codes = [p['code'] for p in data]
-        self.assertIn('AAP', codes)
-        self.assertIn('GitHub Actions', codes)
-        self.assertIn('Azure DevOps', codes)
-        self.assertNotIn('Terraform', codes)
+        self.assertIn('aap', codes)
+        self.assertIn('github_actions', codes)
+        self.assertIn('azure_devops', codes)
+        self.assertNotIn('terraform_cloud', codes)  # Inactive
+        self.assertNotIn('servicenow', codes)  # Service, not platform
 
     def test_list_platforms_all(self):
         """Test listing all platforms including inactive."""
         response = self.client.get('/api/v1/reference/platforms/?active_only=false')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['data']), 4)  # All platforms including inactive
+        # 4 platforms (active+inactive), NOT the service
+        self.assertEqual(len(response.data['data']), 4)
 
     def test_list_platforms_ordered(self):
-        """Test platforms are ordered by display_order, then code."""
+        """Test platforms are ordered by code."""
         response = self.client.get('/api/v1/reference/platforms/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         codes = [p['code'] for p in response.data['data']]
-        self.assertEqual(codes, ['AAP', 'GitHub Actions', 'Azure DevOps'])  # Ordered by display_order
+        self.assertEqual(codes, sorted(codes))
 
     def test_list_platforms_requires_authentication(self):
         """Test endpoint requires authentication."""
@@ -145,16 +165,15 @@ class RefPlatformsAPITests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_platform_serializer_fields(self):
-        """Test platform serializer includes all required fields."""
+        """Test platform serializer includes required fields."""
         response = self.client.get('/api/v1/reference/platforms/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         platform = response.data['data'][0]
-        self.assertIn('id', platform)
         self.assertIn('code', platform)
         self.assertIn('label', platform)
-        self.assertIn('display_order', platform)
         self.assertIn('is_active', platform)
+        self.assertIn('normalized_code', platform)
 
     def test_response_format_has_data_wrapper(self):
         """Story 30.6 APIFMT-3: Verify response is wrapped in {"data": [...]}."""

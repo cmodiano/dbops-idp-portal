@@ -107,7 +107,7 @@ describe('ActionDrawerPreview', () => {
   it('renders impact indicator when impact_level is provided', () => {
     renderWithTheme(<ActionDrawerPreview action={mockAction} />);
 
-    expect(screen.getByText('Eleve')).toBeInTheDocument();
+    expect(screen.getByText('Élevé')).toBeInTheDocument();
   });
 
   it('renders engine and platform metadata (Story 2.23: category removed)', () => {
@@ -326,7 +326,7 @@ describe('ActionDrawerPreview', () => {
       );
 
       // Should have an Alert component with impact information
-      expect(screen.getByText("Niveau d'impact: Eleve")).toBeInTheDocument();
+      expect(screen.getByText("Niveau d'impact: Élevé")).toBeInTheDocument();
     });
 
     it('does not show impact Alert for default variant', () => {
@@ -334,7 +334,7 @@ describe('ActionDrawerPreview', () => {
         <ActionDrawerPreview action={actionWithTechnicalTerms} variant="default" />
       );
 
-      // No alert with impact label (the badge shows "Eleve" but not in Alert format)
+      // No alert with impact label (the badge shows "Élevé" but not in Alert format)
       expect(screen.queryByText("Niveau d'impact:")).not.toBeInTheDocument();
     });
 

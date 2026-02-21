@@ -875,8 +875,9 @@ class WorkflowRuntime:
                 if config.get('ca_bundle_path'):
                     platform_kwargs['ca_bundle_path'] = config['ca_bundle_path']
 
-            # Normalize platform type to lowercase (Action stores 'AAP', adapter expects 'aap')
-            platform_type = referenced_action.platform.lower()
+            # Story 31.9: Derive platform_type from integration.type (already normalized)
+            # instead of action.platform to avoid mismatch (e.g. "GitHub Actions" → "github actions" ≠ "github_actions")
+            platform_type = integration.type
 
             adapter = get_platform_adapter(
                 platform_type=platform_type,

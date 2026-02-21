@@ -1,6 +1,6 @@
 """
 Tests for catalog validation against reference tables.
-Story 13.7 - Tests for engine/platform validation against REF_ENGINES/REF_PLATFORMS.
+Story 13.7 - Tests for engine/platform validation against REF_ENGINES and IntegrationTypeCatalogue.
 """
 
 import pytest
@@ -14,7 +14,8 @@ from catalog.validation import (
     validate_retry_constraints,
     _detect_workflow_cycles
 )
-from reference.models import RefEngine, RefPlatform
+from reference.models import RefEngine
+from integrations.models import IntegrationTypeCatalogue, IntegrationRole
 from tests.factories import UserFactory
 
 class CatalogValidationTests(TestCase):
@@ -32,8 +33,8 @@ class CatalogValidationTests(TestCase):
         # Create reference data
         RefEngine.objects.create(code='Oracle', label='Oracle', display_order=1, is_active=1)
         RefEngine.objects.create(code='SQL Server', label='SQL Server', display_order=2, is_active=1)
-        RefPlatform.objects.create(code='AAP', label='AAP', display_order=1, is_active=1)
-        RefPlatform.objects.create(code='GitHub Actions', label='GitHub Actions', display_order=2, is_active=1)
+        IntegrationTypeCatalogue.objects.create(code='aap', name='AAP', integration_role=IntegrationRole.PLATFORM, is_active=True)
+        IntegrationTypeCatalogue.objects.create(code='github_actions', name='GitHub Actions', integration_role=IntegrationRole.PLATFORM, is_active=True)
 
     def test_create_action_with_valid_engine(self):
         """Test creating action with valid engine."""
@@ -93,13 +94,60 @@ class CatalogValidationTests(TestCase):
     def test_create_action_with_inactive_platform(self):
         """Test creating action with inactive platform returns 400."""
         # Create inactive platform
-        RefPlatform.objects.create(code='InactivePlatform', label='Inactive', display_order=99, is_active=0)
-        
+        IntegrationTypeCatalogue.objects.create(code='inactive_platform', name='Inactive', integration_role=IntegrationRole.PLATFORM, is_active=False)
+
         response = self.client.post('/api/v1/admin/actions/', {
             'name': 'Test Action',
             'engine': 'Oracle',
             'platform': 'InactivePlatform',
             'item_type': 'action'
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_validate_platform_catalogue_codes_normalized(self):
+        """Story 31.9 (5.5): validate_platform accepts catalogue codes with normalization."""
+        IntegrationTypeCatalogue.objects.create(
+            code='terraform_cloud', name='Terraform Cloud',
+            integration_role=IntegrationRole.PLATFORM, is_active=True,
+        )
+        # Human-readable label → normalized catalogue code
+        for platform_label in ['AAP', 'GitHub Actions', 'Terraform Cloud']:
+            response = self.client.post('/api/v1/admin/actions/', {
+                'name': f'Action {platform_label}',
+                'engine': 'Oracle',
+                'platform': platform_label,
+                'item_type': 'action',
+            }, format='json')
+            self.assertEqual(
+                response.status_code, status.HTTP_201_CREATED,
+                f"Platform '{platform_label}' should be accepted: {response.data}"
+            )
+
+    def test_validate_platform_alias_terraform(self):
+        """Story 31.9 (5.5): validate_platform resolves alias 'Terraform' → 'terraform_cloud'."""
+        IntegrationTypeCatalogue.objects.create(
+            code='terraform_cloud', name='Terraform Cloud',
+            integration_role=IntegrationRole.PLATFORM, is_active=True,
+        )
+        response = self.client.post('/api/v1/admin/actions/', {
+            'name': 'Terraform Alias Action',
+            'engine': 'Oracle',
+            'platform': 'Terraform',
+            'item_type': 'action',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_validate_platform_rejects_service_code(self):
+        """Story 31.9 (5.5): validate_platform rejects service-type catalogue codes."""
+        IntegrationTypeCatalogue.objects.create(
+            code='servicenow', name='ServiceNow',
+            integration_role=IntegrationRole.SERVICE, is_active=True,
+        )
+        response = self.client.post('/api/v1/admin/actions/', {
+            'name': 'ServiceNow Action',
+            'engine': 'Oracle',
+            'platform': 'ServiceNow',
+            'item_type': 'action',
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 

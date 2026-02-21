@@ -79,7 +79,7 @@ See `tests/README.md` for comprehensive testing guidelines.
 - ❌ **DON'T:** Manually create Actions with JSON string fields
 - ✅ **DO:** Add trailing slash to API URLs in tests (`/api/v1/executions/`)
 - ❌ **DON'T:** Use URLs without trailing slash (`/api/v1/executions`)
-- ✅ **DO:** Create `RefEngine`/`RefPlatform` entries before testing admin API endpoints
+- ✅ **DO:** Create `RefEngine` + `IntegrationTypeCatalogue` (role=platform) entries before testing admin API endpoints
 - ❌ **DON'T:** Skip reference data setup — serializer validates against reference tables
 - ✅ **DO:** Add `referenced_action_id` to workflow steps (required since Story 4.12)
 - ❌ **DON'T:** Create workflow steps without `referenced_action_id`
