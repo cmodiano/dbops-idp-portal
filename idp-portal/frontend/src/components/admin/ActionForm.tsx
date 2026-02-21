@@ -3,59 +3,52 @@
  *
  * Features:
  * - Inline validation (AC #6)
- * - JSON validation for schema and impact_rules
  * - Execution steps editor (Story 2.2, AC #1, #2)
  * - Change type config (Story 2.2, AC #3)
  * - Real-time preview with split view layout (Story 2.5, AC #1, #3)
  * - Documentation Markdown editor (Story 3.4)
  * - Accessibility: aria-labels, focus management, aria-live preview
+ *
+ * Story 33.5: Refactored — state in useActionFormState, validation in useActionFormValidation,
+ * collapse sections in ActionFormCollapseSections, impact legend in ImpactLevelsLegend.
  */
 
-import { useEffect, useRef, useState, useMemo } from 'react';
-import { Form, Input, Select, Modal, Alert, Collapse, Typography, Row, Col } from 'antd';
+import { Form, Input, Select, Modal, Alert, Row, Col } from 'antd';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import type {
   ActionCreate,
-  ActionEngine,
-  ActionPlatform,
   ActionDetail,
   ActionResponse,
-  ExecutionStep,
-  ChangeTypeConfigEntry,
-  ActionPreviewData,
   ImpactLevel,
-  ParameterDefinition,
-  ImpactRuleDefinition,
   RemediationRule,
-  GateConfig,
-  NotificationConfig,
 } from '../../types/api';
-import { schemaToParameterList, parameterListToSchema } from '../../utils/parametersSchema';
-import { impactRulesToList, listToImpactRules } from '../../utils/impactRulesSchema';
+import { parameterListToSchema } from '../../utils/parametersSchema';
+import { listToImpactRules } from '../../utils/impactRulesSchema';
 import { useEngines } from '../../hooks/useEngines';
 import { usePlatformIntegrations } from '../../hooks/usePlatformIntegrations';
 import { useServiceNowIntegrations } from '../../hooks/useServiceNowIntegrations';
 import { integrationTypeToPlatformCode } from '../../utils/integrationHelpers';
-import { StepsEditor } from './StepsEditor';
 import { ParametersEditor } from './ParametersEditor';
 import { ImpactRulesEditor } from './ImpactRulesEditor';
-import { ChangeTypeConfig } from './ChangeTypeConfig';
-import { RemediationRulesEditor, type RemediationRuleDefinition } from './RemediationRulesEditor';
-import { BusinessRulePolicySelector } from './BusinessRulePolicySelector';
-import { NotificationConfigSection } from './NotificationConfigSection';
 import SectionHelp from '../common/SectionHelp';
+import { ImpactLevelsLegend } from './ImpactLevelsLegend';
+import { ActionFormCollapseSections } from './ActionFormCollapseSections';
 import { AdminPreview } from './AdminPreview';
 import { ApiError } from '../../services/api_client';
-import { updateActionSteps, getTags, updateActionTags, updateRemediationRules, updateBusinessRulePolicies, patchAction, checkActionNameAvailable } from '../../services/admin_service';
-import { platformCodeToStepType } from '../../utils/integrationHelpers';
-
-const { Text } = Typography;
+import {
+  updateActionSteps,
+  updateActionTags,
+  updateRemediationRules,
+  updateBusinessRulePolicies,
+  patchAction,
+  checkActionNameAvailable,
+} from '../../services/admin_service';
+import { useActionFormState } from '../../hooks/useActionFormState';
+import { useActionFormValidation } from '../../hooks/useActionFormValidation';
 
 const { TextArea } = Input;
 
 interface ActionFormValues extends ActionCreate {
-  execution_steps?: ExecutionStep[];
-  change_type_config?: Record<string, ChangeTypeConfigEntry>;
   documentation_md?: string | null;
 }
 
@@ -73,245 +66,70 @@ interface ActionFormProps {
 
 export function ActionForm({ open, onCancel, onSubmit, loading, error, editAction, onSuccess }: ActionFormProps) {
   const [form] = Form.useForm<ActionFormValues>();
-  const nameInputRef = useRef<HTMLInputElement>(null);
-  const [stepsError, setStepsError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [executionSteps, setExecutionSteps] = useState<ExecutionStep[]>([]);
-  const [changeTypeConfig, setChangeTypeConfig] = useState<Record<string, ChangeTypeConfigEntry>>({});
-  const [parameterList, setParameterList] = useState<ParameterDefinition[]>([]);
-  const [impactRulesList, setImpactRulesList] = useState<ImpactRuleDefinition[]>([]);
-  const [defaultImpactLevel, setDefaultImpactLevel] = useState<ImpactLevel | null>(null);
-  const [previewEnvironment, setPreviewEnvironment] = useState<string | null>(null);
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [tagsOptions, setTagsOptions] = useState<{ value: string; label: string }[]>([]);
-  const [remediationRules, setRemediationRules] = useState<RemediationRuleDefinition[]>([]);
-  // Story 28.4: Predefined business rule policy ID (inline removed)
-  const [businessRulePolicyId, setBusinessRulePolicyId] = useState<number | null>(null);
-  // Story 31.6: Gate configuration (integration selection per gate type)
-  const [gateConfig, setGateConfig] = useState<GateConfig | null>(null);
-  // Story 31.8: Notification configuration (email, teams, page)
-  const [notificationConfig, setNotificationConfig] = useState<NotificationConfig | null>(null);
 
   // Story 13.7: Load engines from REF_ENGINES table
   const { engineOptions, loading: enginesLoading } = useEngines();
-  // Story 31.1: Load platform integrations (replaces usePlatforms)
+  // Story 31.1: Load platform integrations
   const { integrationOptions, loading: integrationsLoading, getIntegrationById } = usePlatformIntegrations();
-  // Story 31.6: Load ServiceNow integrations for gate config validation (AC #3)
+  // Story 31.6: Load ServiceNow integrations for gate config validation
   const { integrationOptions: snIntegrationOptions } = useServiceNowIntegrations();
 
   const isEditMode = !!editAction;
   const isMin1280 = useMediaQuery(1280);
 
-  // Story 2.5: Real-time preview using Form.useWatch
-  const watchedName = Form.useWatch('name', form);
-  const watchedDescription = Form.useWatch('description', form);
-  const watchedEngine = Form.useWatch('engine', form);
-  const watchedIntegrationId = Form.useWatch('integration_id', form);
-  const watchedDocumentationMd = Form.useWatch('documentation_md', form);
+  // Story 33.5: All form state extracted to hook
+  const {
+    nameInputRef,
+    stepsError,
+    setStepsError,
+    saving,
+    setSaving,
+    executionSteps,
+    setExecutionSteps,
+    changeTypeConfig,
+    setChangeTypeConfig,
+    parameterList,
+    setParameterList,
+    impactRulesList,
+    setImpactRulesList,
+    defaultImpactLevel,
+    setDefaultImpactLevel,
+    previewEnvironment,
+    setPreviewEnvironment,
+    selectedTags,
+    setSelectedTags,
+    tagsOptions,
+    remediationRules,
+    setRemediationRules,
+    businessRulePolicyId,
+    setBusinessRulePolicyId,
+    gateConfig,
+    setGateConfig,
+    notificationConfig,
+    setNotificationConfig,
+    watchedIntegrationId,
+    previewData,
+  } = useActionFormState({ open, editAction, form, getIntegrationById });
 
-  // Load tags for autocomplete when modal opens (Story 2.6, AC #1)
-  useEffect(() => {
-    if (!open) return;
-    getTags()
-      .then((list) => setTagsOptions(list.map((t) => ({ value: t.name, label: t.name }))))
-      .catch(() => setTagsOptions([]));
-  }, [open]);
-
-  // Transform form values to ActionPreviewData for preview (Story 2.17: parameters from visual editor list; Story 2.18: impact rules from list)
-  const previewData: ActionPreviewData = useMemo(() => {
-    const parsedSchema = parameterListToSchema(parameterList);
-
-    // Story 2.18 AC3/AC5: Extract impact_level from impactRulesList based on selected preview environment
-    // AC5: Fall back to defaultImpactLevel when no rule matches or list is empty
-    let impactLevel: ImpactLevel | null = null;
-    if (impactRulesList.length > 0) {
-      // If previewEnvironment is set, use that environment's rule; otherwise use first rule
-      const targetEnv = previewEnvironment || impactRulesList[0]?.environment;
-      const matchingRule = impactRulesList.find((r) => r.environment === targetEnv);
-      if (matchingRule?.level) {
-        impactLevel = matchingRule.level;
-      } else {
-        // No matching rule for this environment — use default
-        impactLevel = defaultImpactLevel;
-      }
-    } else {
-      // No rules defined — use default impact level (AC5)
-      impactLevel = defaultImpactLevel;
-    }
-
-    return {
-      name: (watchedName as string) || '',
-      description: (watchedDescription as string) || null,
-      engine: (watchedEngine as ActionEngine) || null,
-      // Story 31.1: Derive platform from selected integration for preview
-      platform: (watchedIntegrationId
-        ? (integrationTypeToPlatformCode(getIntegrationById(watchedIntegrationId as number)?.type ?? '') as ActionPlatform)
-        : null),
-      impact_level: impactLevel,
-      parameters_schema: parsedSchema,
-      tags: selectedTags,
-      documentation_md: (watchedDocumentationMd as string) || null,
-    };
-  }, [watchedName, watchedDescription, watchedEngine, watchedIntegrationId, parameterList, impactRulesList, previewEnvironment, defaultImpactLevel, selectedTags, watchedDocumentationMd, getIntegrationById]);
-
-  // Focus on name input when modal opens (AC #7 accessibility)
-  useEffect(() => {
-    if (open) {
-      setTimeout(() => {
-        nameInputRef.current?.focus();
-      }, 100);
-    }
-  }, [open]);
-
-  // Reset form and steps when modal opens/closes or editAction changes
-  useEffect(() => {
-    if (open && editAction) {
-      // Edit mode: populate form with existing values
-      form.setFieldsValue({
-        name: editAction.name,
-        description: editAction.description,
-        engine: editAction.engine,
-        // Story 31.1: Pre-fill integration_id from editAction
-        integration_id: editAction.integration_id ?? undefined,
-        documentation_md: editAction.documentation_md,
-      } as unknown as ActionFormValues);
-      setExecutionSteps(editAction.execution_steps || []);
-      setChangeTypeConfig(editAction.change_type_config ?? {});
-      setParameterList(
-        schemaToParameterList(editAction.parameters_schema ?? undefined).map((p, i) => ({
-          ...p,
-          id: p.id ?? `param-${i}-${Date.now()}`,
-        }))
-      );
-      // Story 2.18: Load impact_rules as list for visual editor
-      setImpactRulesList(impactRulesToList(editAction.impact_rules ?? undefined));
-      // Story 2.18 AC5: Load default impact level
-      setDefaultImpactLevel(editAction.default_impact_level ?? null);
-      setPreviewEnvironment(null);
-      setSelectedTags(editAction.tags ?? []);
-      // Story 9.1, Task 6: Load remediation_rules
-      setRemediationRules(
-        (editAction.remediation_rules ?? []).map((r, i) => ({
-          ...r,
-          id: `rule-${i}-${Date.now()}`,
-        }))
-      );
-      // Story 28.4: Load business rule policy FK
-      setBusinessRulePolicyId(editAction.business_rule_policy_id ?? null);
-      // Story 31.6: Load gate configuration
-      setGateConfig(editAction.gate_config ?? null);
-      // Story 31.8: Load notification configuration
-      setNotificationConfig(editAction.notification_config ?? null);
-    } else if (!open) {
-      form.resetFields();
-      setExecutionSteps([]);
-      setChangeTypeConfig({});
-      setParameterList([]);
-      setImpactRulesList([]);
-      setDefaultImpactLevel(null);
-      setPreviewEnvironment(null);
-      setSelectedTags([]);
-      setRemediationRules([]);
-      setBusinessRulePolicyId(null);
-      setGateConfig(null);
-      setNotificationConfig(null);
-      setStepsError(null);
-    }
-  }, [open, editAction, form]);
+  // Story 33.5: Validation extracted to hook
+  const { validateForm } = useActionFormValidation();
 
   const handleFinish = async (values: ActionFormValues) => {
     setStepsError(null);
     setSaving(true);
     try {
-      // In edit mode, require at least one step (Task 5.3; API does not accept empty steps)
-      if (isEditMode && executionSteps.length === 0) {
-        setStepsError("Au moins une étape est requise pour enregistrer.");
+      const validationError = validateForm({
+        isEditMode,
+        executionSteps,
+        parameterList,
+        impactRulesList,
+        changeTypeConfig,
+        snIntegrationOptions,
+        gateConfig,
+      });
+      if (validationError) {
+        setStepsError(validationError);
         return;
-      }
-      // Validate steps when present (block submit if invalid)
-      if (executionSteps.length > 0) {
-        for (let i = 0; i < executionSteps.length; i++) {
-          const s = executionSteps[i];
-          if (!s.name?.trim()) {
-            setStepsError(`L'étape ${i + 1} doit avoir un nom.`);
-            return;
-          }
-          if (s.connector_type === 'servicenow' && (!s.conditional_environments || s.conditional_environments.length === 0)) {
-            setStepsError(`L'étape "${s.name}" (ServiceNow) requiert au moins un environnement conditionné.`);
-            return;
-          }
-        }
-      }
-
-      // Story 2.17 AC4: validate parameters before save (nom requis, noms uniques)
-      if (parameterList.length > 0) {
-        const names = parameterList.map((p) => (p.name ?? '').trim());
-        const emptyIndex = names.findIndex((n) => !n);
-        if (emptyIndex >= 0) {
-          setStepsError(`Le paramètre ${emptyIndex + 1} doit avoir un nom.`);
-          return;
-        }
-        const seen = new Set<string>();
-        for (let i = 0; i < names.length; i++) {
-          if (seen.has(names[i])) {
-            setStepsError(`Deux paramètres ont le même nom "${names[i]}". Chaque nom doit être unique.`);
-            return;
-          }
-          seen.add(names[i]);
-        }
-      }
-
-      // Story 2.18 AC6: validate impact rules before save (environnement requis, niveau requis, environnements uniques)
-      if (impactRulesList.length > 0) {
-        const envs = impactRulesList.map((r) => (r.environment ?? '').trim());
-        const emptyEnvIndex = envs.findIndex((e) => !e);
-        if (emptyEnvIndex >= 0) {
-          setStepsError(`La règle d'impact ${emptyEnvIndex + 1} doit avoir un environnement.`);
-          return;
-        }
-        const seenEnvs = new Set<string>();
-        for (let i = 0; i < envs.length; i++) {
-          if (seenEnvs.has(envs[i])) {
-            setStepsError(`Deux règles d'impact utilisent l'environnement "${envs[i]}". Chaque environnement doit être unique.`);
-            return;
-          }
-          seenEnvs.add(envs[i]);
-        }
-        const missingLevelIndex = impactRulesList.findIndex((r) => !r.level);
-        if (missingLevelIndex >= 0) {
-          setStepsError(`La règle d'impact ${missingLevelIndex + 1} doit avoir un niveau.`);
-          return;
-        }
-      }
-
-      // Story 31.6 AC #3: Block save if required=true, SN integrations exist, but none selected
-      const hasRequiredEnv = Object.values(changeTypeConfig).some((e) => e?.required);
-      if (hasRequiredEnv && snIntegrationOptions.length > 0 && !gateConfig?.servicenow_change?.integration_id) {
-        setStepsError(
-          "Une intégration ServiceNow doit être sélectionnée lorsque « Changement requis » est activé et que des intégrations ServiceNow sont configurées."
-        );
-        return;
-      }
-
-      // Story 2.24 AC2 + Story 31.4: validate change_type_config — when required=true, model/template ID required
-      // Read template_id first (priority), fall back to change_model_code (rétrocompatibilité)
-      // Pattern relaxed in Story 31.4 to allow underscores and hyphens (e.g. CHG_TPL_001)
-      for (const [env, entry] of Object.entries(changeTypeConfig)) {
-        if (entry?.required) {
-          const code = (entry.template_id ?? entry.change_model_code ?? '').trim();
-          if (!code) {
-            setStepsError(`Le modèle / Template ID est obligatoire pour ${env} lorsque « Changement requis » est activé.`);
-            return;
-          }
-          if (!/^[A-Za-z0-9_-]+$/.test(code)) {
-            setStepsError(`Le modèle / Template ID pour ${env} doit être alphanumérique (tirets et underscores autorisés).`);
-            return;
-          }
-          if (code.length > 50) {
-            setStepsError(`Le modèle / Template ID pour ${env} ne peut pas dépasser 50 caractères.`);
-            return;
-          }
-        }
       }
 
       // Story 31.1: Derive platform from integration type, send both
@@ -321,7 +139,9 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
           ? integrationTypeToPlatformCode(selectedIntegration.type)
           : undefined;
       const derivedPlatform =
-        rawPlatform !== undefined && rawPlatform !== '' ? (rawPlatform as ActionPlatform) : undefined;
+        rawPlatform !== undefined && rawPlatform !== ''
+          ? (rawPlatform as ActionCreate['platform'])
+          : undefined;
 
       const action: ActionCreate = {
         name: values.name,
@@ -340,7 +160,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
       const result = await onSubmit(action);
       const actionId = editAction?.id ?? (result as ActionDetail | ActionResponse | undefined)?.id;
 
-      // Story 2.24: send change_type_config when we have steps OR when we have change config (use placeholder step if no steps)
+      // Story 2.24: send change_type_config when we have steps OR when we have change config
       const hasChangeTypeConfig = Object.keys(changeTypeConfig).length > 0;
       const stepsToSend =
         executionSteps.length > 0
@@ -348,29 +168,25 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
           : hasChangeTypeConfig
             ? [{ order: 1, name: 'Étape à configurer', type: 'prerequisite' as const, connector_type: 'none' as const, conditional_environments: null }]
             : [];
-      const change_type_config =
-        hasChangeTypeConfig
-          ? Object.fromEntries(
-              Object.entries(changeTypeConfig).map(([env, e]) => [
-                env,
-                {
-                  required: e?.required ?? false,
-                  change_model_code: e?.required ? (e.change_model_code?.trim() || null) : null,
-                  change_type: (e?.change_type ?? null) ? String(e.change_type).trim() || null : null,
-                  template_id: (e?.template_id ?? null) ? String(e.template_id).trim() || null : null,
-                  allowed: e?.allowed ?? true,
-                  requires_maintenance_window: e?.requires_maintenance_window ?? false,
-                  requires_approval: e?.requires_approval ?? false,
-                },
-              ])
-            )
-          : null;
+      const change_type_config = hasChangeTypeConfig
+        ? Object.fromEntries(
+            Object.entries(changeTypeConfig).map(([env, e]) => [
+              env,
+              {
+                required: e?.required ?? false,
+                change_model_code: e?.required ? (e.change_model_code?.trim() || null) : null,
+                change_type: (e?.change_type ?? null) ? String(e.change_type).trim() || null : null,
+                template_id: (e?.template_id ?? null) ? String(e.template_id).trim() || null : null,
+                allowed: e?.allowed ?? true,
+                requires_maintenance_window: e?.requires_maintenance_window ?? false,
+                requires_approval: e?.requires_approval ?? false,
+              },
+            ])
+          )
+        : null;
 
       if (actionId && (stepsToSend.length > 0 || change_type_config !== null)) {
-        await updateActionSteps(actionId, {
-          steps: stepsToSend,
-          change_type_config,
-        });
+        await updateActionSteps(actionId, { steps: stepsToSend, change_type_config });
       }
 
       if (actionId) {
@@ -379,15 +195,14 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
 
       // Story 9.1, Task 6: Save remediation rules
       if (actionId) {
-        // Convert to API format (strip internal id field)
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const rulesToSave = remediationRules.length > 0
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          ? remediationRules.map(({ id, ...rule }) => rule as RemediationRule)
+          ? remediationRules.map(({ id: _id, ...rule }) => rule as RemediationRule)
           : null;
         await updateRemediationRules(actionId, rulesToSave);
       }
 
-      // Story 28.4: Save business rule policy (predefined only)
+      // Story 28.4: Save business rule policy
       if (actionId) {
         await updateBusinessRulePolicies(actionId, null);
         await patchAction(actionId, { business_rule_policy_id: businessRulePolicyId ?? null });
@@ -418,11 +233,11 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
 
   return (
     <Modal
-      title={isEditMode ? 'Modifier l\'action' : 'Nouvelle action'}
+      title={isEditMode ? "Modifier l'action" : 'Nouvelle action'}
       open={open}
       onCancel={onCancel}
       onOk={() => form.submit()}
-      okText={isEditMode ? 'Enregistrer' : 'Creer'}
+      okText={isEditMode ? 'Enregistrer' : 'Créer'}
       cancelText="Annuler"
       confirmLoading={!!(loading || saving)}
       width={1200}
@@ -451,8 +266,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
         />
       )}
 
-      {/* Story 2.5: Split view layout - Form left (60%), Preview right (40%); stack below 1280px (AC3, Task 4.4). */}
-      {/* Col 14/10 ≈ 58%/42% (closest to 60/40 on 24-grid). */}
+      {/* Story 2.5: Split view layout - Form left (60%), Preview right (40%); stack below 1280px */}
       <Row gutter={32}>
         {/* Left column: Form */}
         <Col span={isMin1280 ? 14 : 24}>
@@ -491,7 +305,10 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
             <Form.Item
               name="description"
               label="Description"
-              rules={[{ required: true, message: 'La description est requise' }, { max: 4000, message: 'La description ne peut pas depasser 4000 caracteres' }]}
+              rules={[
+                { required: true, message: 'La description est requise' },
+                { max: 4000, message: 'La description ne peut pas depasser 4000 caracteres' },
+              ]}
             >
               <TextArea
                 rows={3}
@@ -524,7 +341,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
             >
               <Select
                 options={engineOptions}
-                placeholder={enginesLoading ? "Chargement..." : "Selectionnez un moteur"}
+                placeholder={enginesLoading ? 'Chargement...' : 'Selectionnez un moteur'}
                 aria-label="Moteur de base de donnees"
                 loading={enginesLoading}
               />
@@ -537,11 +354,12 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
             >
               <Select
                 options={integrationOptions}
-                placeholder={integrationsLoading ? "Chargement..." : "Sélectionnez une intégration"}
+                placeholder={integrationsLoading ? 'Chargement...' : 'Sélectionnez une intégration'}
                 aria-label="Intégration"
                 loading={integrationsLoading}
               />
             </Form.Item>
+
             {/* Story 31.1 AC4: Alert when no platform integrations available */}
             {!integrationsLoading && integrationOptions.length === 0 && (
               <Alert
@@ -561,7 +379,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
               />
             )}
 
-            {/* Story 2.17: Parametres — editeur visuel (AC1–AC6) */}
+            {/* Story 2.17: Parametres — editeur visuel */}
             <Form.Item
               label="Parametres"
               tooltip="Definissez les parametres de l'action via l'editeur visuel (nom, type, requis, defaut, description)"
@@ -569,12 +387,15 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
               <ParametersEditor value={parameterList} onChange={setParameterList} />
             </Form.Item>
 
-            {/* Story 2.18: Regles d'impact — editeur visuel (AC1–AC6) */}
+            {/* Story 2.18: Regles d'impact — editeur visuel */}
             <Form.Item
               label="Regles d'impact"
               tooltip="Definissez les regles d'impact par environnement (niveau de risque et justification)"
             >
-              <ImpactRulesEditor value={impactRulesList} onChange={setImpactRulesList} />
+              <div style={{ width: '100%' }}>
+                <ImpactLevelsLegend />
+                <ImpactRulesEditor value={impactRulesList} onChange={setImpactRulesList} />
+              </div>
             </Form.Item>
 
             {/* Story 2.18 AC5: Niveau d'impact par defaut */}
@@ -584,7 +405,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
             >
               <Select
                 value={defaultImpactLevel ?? undefined}
-                onChange={(v) => setDefaultImpactLevel(v || null)}
+                onChange={(v) => setDefaultImpactLevel((v || null) as ImpactLevel | null)}
                 allowClear
                 placeholder="Selectionnez un niveau par defaut"
                 style={{ width: 220 }}
@@ -592,7 +413,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
                 options={[
                   { value: 'low', label: 'Faible (vert)' },
                   { value: 'medium', label: 'Moyen (orange)' },
-                  { value: 'high', label: 'Eleve (rouge)' },
+                  { value: 'high', label: 'Élevé (rouge)' },
                   { value: 'critical', label: 'Critique (rouge fonce)' },
                 ]}
               />
@@ -616,7 +437,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
               </Form.Item>
             )}
 
-            {/* Story 2.6, AC #1, #2: Section Tags — multi-select + auto-completion, create on Enter */}
+            {/* Story 2.6: Section Tags */}
             <Form.Item
               label="Tags"
               tooltip="Tags existants ou saisie libre + Entree pour en creer un nouveau. Lowercase, sans espaces."
@@ -633,124 +454,23 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
               />
             </Form.Item>
 
-            {/* Execution Steps Section (Story 2.2, AC #1, #2, #3) */}
-            <Collapse
-              ghost
-              items={[
-                {
-                  key: 'execution-steps',
-                  label: (
-                    <Text strong>
-                      Etapes d'execution et changement ServiceNow
-                      {executionSteps.length > 0 && (
-                        <Text type="secondary" style={{ marginLeft: 8 }}>
-                          ({executionSteps.length} etape{executionSteps.length > 1 ? 's' : ''})
-                        </Text>
-                      )}
-                    </Text>
-                  ),
-                  children: (
-                    <>
-                      <Form.Item
-                        label="Etapes d'execution"
-                        tooltip="Definissez les etapes d'execution de l'action (AC #1, #2)"
-                        style={{ marginBottom: 16 }}
-                      >
-                        <StepsEditor value={executionSteps} onChange={setExecutionSteps} integrationId={form.getFieldValue('integration_id')} />
-                      </Form.Item>
-
-                      <Form.Item
-                        label={<span>Changement ServiceNow par environnement <SectionHelp topicId="action-form-changement-servicenow" /></span>}
-                        tooltip="Pour chaque environnement : configurer les gates (autorisé, plage maintenance, approbation) et le changement ServiceNow (requis, modèle/template ID)."
-                        style={{ marginBottom: 16 }}
-                      >
-                        <ChangeTypeConfig value={changeTypeConfig} onChange={setChangeTypeConfig} gateConfig={gateConfig} onGateConfigChange={setGateConfig} />
-                      </Form.Item>
-                    </>
-                  ),
-                },
-                {
-                  key: 'remediation-rules',
-                  label: (
-                    <Text strong>
-                      Règles de remédiation automatique
-                      {remediationRules.length > 0 && (
-                        <Text type="secondary" style={{ marginLeft: 8 }}>
-                          ({remediationRules.length} règle{remediationRules.length > 1 ? 's' : ''})
-                        </Text>
-                      )}
-                    </Text>
-                  ),
-                  children: (
-                    <Form.Item
-                      label="Règles de remédiation"
-                      tooltip="Configurez des règles pour proposer des actions correctives automatiques lorsque cette action échoue (Story 9.1)."
-                      style={{ marginBottom: 16 }}
-                    >
-                      <RemediationRulesEditor
-                        value={remediationRules}
-                        onChange={setRemediationRules}
-                        currentActionId={editAction?.id}
-                      />
-                    </Form.Item>
-                  ),
-                },
-                {
-                  key: 'business-rule-policies',
-                  label: (
-                    <Text strong>
-                      Règles métier
-                      {businessRulePolicyId != null && (
-                        <Text type="secondary" style={{ marginLeft: 8 }}>
-                          (configuré)
-                        </Text>
-                      )}
-                    </Text>
-                  ),
-                  children: (
-                    <Form.Item
-                      label="Règles métier"
-                      tooltip="Choisissez une règle prédéfinie du catalogue (Admin → Règles métier). Seules les règles liées à votre plateforme d'exécution sont proposées."
-                      style={{ marginBottom: 16 }}
-                    >
-                      <BusinessRulePolicySelector
-                        policyId={businessRulePolicyId}
-                        onPolicyIdChange={setBusinessRulePolicyId}
-                        stepType={
-                          getIntegrationById(watchedIntegrationId ?? editAction?.integration_id ?? 0)?.type
-                          ?? (editAction?.platform ? platformCodeToStepType(editAction.platform) : undefined)
-                        }
-                      />
-                    </Form.Item>
-                  ),
-                },
-                {
-                  key: 'notifications',
-                  label: (
-                    <Text strong>
-                      Notifications
-                      {notificationConfig && (notificationConfig.channels.some(ch => ch.enabled) || notificationConfig.page_individual_enabled) && (
-                        <Text type="secondary" style={{ marginLeft: 8 }}>
-                          (configuré)
-                        </Text>
-                      )}
-                    </Text>
-                  ),
-                  children: (
-                    <Form.Item
-                      label="Configuration des notifications"
-                      tooltip="Configurez les canaux de notification (email, Teams, page) et leurs conditions de déclenchement."
-                      style={{ marginBottom: 16 }}
-                    >
-                      <NotificationConfigSection
-                        value={notificationConfig}
-                        onChange={setNotificationConfig}
-                      />
-                    </Form.Item>
-                  ),
-                },
-              ]}
-              style={{ marginTop: 16 }}
+            {/* Story 33.5 Task 4: Sections avancées extraites en composant */}
+            <ActionFormCollapseSections
+              executionSteps={executionSteps}
+              setExecutionSteps={setExecutionSteps}
+              changeTypeConfig={changeTypeConfig}
+              setChangeTypeConfig={setChangeTypeConfig}
+              gateConfig={gateConfig}
+              setGateConfig={setGateConfig}
+              remediationRules={remediationRules}
+              setRemediationRules={setRemediationRules}
+              businessRulePolicyId={businessRulePolicyId}
+              setBusinessRulePolicyId={setBusinessRulePolicyId}
+              notificationConfig={notificationConfig}
+              setNotificationConfig={setNotificationConfig}
+              editAction={editAction}
+              watchedIntegrationId={watchedIntegrationId}
+              getIntegrationById={getIntegrationById}
             />
           </Form>
         </Col>

@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Modal, Steps, Button, Form, Input, Select, Alert, Space, App, Radio, List } from 'antd';
+import { Modal, Steps, Button, Form, Alert, Space, App, List } from 'antd';
 import { CloseCircleOutlined } from '@ant-design/icons';
 import type {
   ActionCreate,
@@ -28,138 +28,19 @@ import type {
 } from '../../types/api';
 import { schemaToParameterList, parameterListToSchema } from '../../utils/parametersSchema';
 import { impactRulesToList, listToImpactRules } from '../../utils/impactRulesSchema';
-import { ParametersEditor } from './ParametersEditor';
-import { ImpactRulesEditor } from './ImpactRulesEditor';
-import { ChangeTypeConfig } from './ChangeTypeConfig';
-import { BusinessRulePolicySelector } from './BusinessRulePolicySelector';
-import { NotificationConfigSection } from './NotificationConfigSection';
-import { WorkflowStepsEditor } from './WorkflowStepsEditor';
-import { WorkflowBuilderCanvas } from './WorkflowBuilderCanvas';
 import { validateWorkflowGraph } from '../../utils/workflowValidation';
 import { workflowStepsToReactFlow } from '../../utils/workflowConversion';
 import { ApiError } from '../../services/api_client';
-import { getTags, updateActionTags, updateActionSteps, updateWorkflowSteps, updateBusinessRulePolicies, patchAction, checkActionNameAvailable } from '../../services/admin_service';
-import { useAAPTemplates } from '../../hooks/useAAPTemplates';
+import { getTags, updateActionTags, updateActionSteps, updateWorkflowSteps, updateBusinessRulePolicies, patchAction } from '../../services/admin_service';
 import { useEngines } from '../../hooks/useEngines';
 import { usePlatformIntegrations } from '../../hooks/usePlatformIntegrations';
 import { useCategories } from '../../hooks/useCategories';
 import { useServiceNowIntegrations } from '../../hooks/useServiceNowIntegrations';
-import { integrationTypeToPlatformCode, integrationToConnector, platformCodeToStepType } from '../../utils/integrationHelpers';
-import SectionHelp from '../common/SectionHelp';
-
-const { TextArea } = Input;
-
-/** Story 31.1: Derive connector from integration type (replaces platformToConnector). */
-
-/** Story 31.5: AAP template selector for wizard — uses hook in a proper component. */
-interface WizardAAPTemplateSectionProps {
-  integrationId: number | undefined;
-  aapResourceType: 'job_template' | 'workflow_job';
-  aapTemplateId: number | undefined;
-  onResourceTypeChange: (v: 'job_template' | 'workflow_job') => void;
-  onTemplateIdChange: (v: number | undefined) => void;
-  isReadOnly: boolean;
-}
-
-function WizardAAPTemplateSection({
-  integrationId,
-  aapResourceType,
-  aapTemplateId,
-  onResourceTypeChange,
-  onTemplateIdChange,
-  isReadOnly,
-}: WizardAAPTemplateSectionProps) {
-  // H3 fix: debounced search for server-side filtering (AC3)
-  const [searchInput, setSearchInput] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(searchInput), 300);
-    return () => clearTimeout(timer);
-  }, [searchInput]);
-
-  const { templates, loading, fallback, error } = useAAPTemplates(integrationId, aapResourceType, debouncedSearch || undefined);
-
-  // Build options with retrocompatibility
-  const options = templates.map((t) => ({ value: t.id, label: t.name }));
-  if (aapTemplateId && !templates.find((t) => t.id === aapTemplateId) && templates.length > 0) {
-    options.unshift({ value: aapTemplateId, label: `Template #${aapTemplateId} (introuvable)` });
-  }
-
-  return (
-    <Form.Item label="Quel automatisme appeler ?" style={{ marginBottom: 0 }}>
-      <Space wrap>
-        <Form.Item label="Type de ressource" style={{ marginBottom: 0 }}>
-          <Select
-            value={aapResourceType}
-            onChange={onResourceTypeChange}
-            options={[
-              { value: 'job_template', label: 'Job template' },
-              { value: 'workflow_job', label: 'Workflow job' },
-            ]}
-            style={{ width: 160 }}
-            aria-label="Type ressource AAP"
-            disabled={isReadOnly}
-          />
-        </Form.Item>
-        {fallback ? (
-          <>
-            {(error || !integrationId) && (
-              <Alert
-                type="warning"
-                showIcon
-                title="Saisie manuelle — liste non disponible"
-                style={{ marginBottom: 8 }}
-              />
-            )}
-            <Form.Item
-              label="ID template (manuel)"
-              required
-              validateStatus={aapTemplateId == null || aapTemplateId < 1 ? 'error' : ''}
-              help={aapTemplateId == null || aapTemplateId < 1 ? 'ID du job template ou workflow job template AAP' : ''}
-              style={{ marginBottom: 0 }}
-            >
-              <Input
-                type="number"
-                min={1}
-                value={aapTemplateId ?? ''}
-                onChange={(e) => onTemplateIdChange(e.target.value ? Number(e.target.value) : undefined)}
-                placeholder="ID template AAP"
-                style={{ width: 120 }}
-                aria-label="ID template AAP"
-                disabled={isReadOnly}
-              />
-            </Form.Item>
-          </>
-        ) : (
-          <Form.Item
-            label="Template AAP"
-            required
-            validateStatus={aapTemplateId == null || aapTemplateId < 1 ? 'error' : ''}
-            help={aapTemplateId == null || aapTemplateId < 1 ? 'Selectionnez un template AAP' : ''}
-            style={{ marginBottom: 0 }}
-          >
-            <Select
-              showSearch
-              loading={loading}
-              style={{ minWidth: 240 }}
-              value={aapTemplateId ?? undefined}
-              onChange={(val) => onTemplateIdChange(val)}
-              onSearch={setSearchInput}
-              placeholder="Selectionnez un template"
-              filterOption={(input, opt) =>
-                ((opt?.label as string) ?? '').toLowerCase().includes(input.toLowerCase())
-              }
-              options={options}
-              aria-label="Template AAP"
-              notFoundContent={loading ? 'Chargement...' : 'Aucun template'}
-              disabled={isReadOnly}
-            />
-          </Form.Item>
-        )}
-      </Space>
-    </Form.Item>
-  );
-}
+import { integrationTypeToPlatformCode, integrationToConnector } from '../../utils/integrationHelpers';
+import { useActionWizardValidation } from '../../hooks/useActionWizardValidation';
+import { WizardStep1General } from './WizardStep1General';
+import { WizardStep2Automatisme } from './WizardStep2Automatisme';
+import { WizardStep3ImpactChangement } from './WizardStep3ImpactChangement';
 
 const STEP_ITEMS = [
   { title: 'Général', content: 'Type, nom, moteur, intégration, tags' },
@@ -348,6 +229,8 @@ export function ActionWizard({
     return true;
   };
 
+  const { validateForSave } = useActionWizardValidation({ validateWorkflowSteps });
+
   const handleNext = async () => {
     if (currentStep === 0) {
       const fieldsToValidate = ['name', 'description'];
@@ -385,89 +268,22 @@ export function ActionWizard({
       return;
     }
 
-    // Validation for actions (not workflows)
-    if (!isWorkflowSave) {
-      if (parameterList.length > 0) {
-        const names = parameterList.map((p) => (p.name ?? '').trim());
-        const emptyIndex = names.findIndex((n) => !n);
-        if (emptyIndex >= 0) {
-          setSubmitError(`Le paramètre ${emptyIndex + 1} doit avoir un nom.`);
-          return;
-        }
-        const seen = new Set<string>();
-        for (let i = 0; i < names.length; i++) {
-          if (seen.has(names[i])) {
-            setSubmitError(`Deux paramètres ont le même nom "${names[i]}". Chaque nom doit être unique.`);
-            return;
-          }
-          seen.add(names[i]);
-        }
-      }
-
-      if (impactRulesList.length > 0) {
-        const envs = impactRulesList.map((r) => (r.environment ?? '').trim());
-        const emptyEnvIndex = envs.findIndex((e) => !e);
-        if (emptyEnvIndex >= 0) {
-          setSubmitError(`La règle d'impact ${emptyEnvIndex + 1} doit avoir un environnement.`);
-          return;
-        }
-        const seenEnvs = new Set<string>();
-        for (let i = 0; i < envs.length; i++) {
-          if (seenEnvs.has(envs[i])) {
-            setSubmitError(`Deux règles d'impact utilisent l'environnement "${envs[i]}". Chaque environnement doit être unique.`);
-            return;
-          }
-          seenEnvs.add(envs[i]);
-        }
-        const missingLevelIndex = impactRulesList.findIndex((r) => !r.level);
-        if (missingLevelIndex >= 0) {
-          setSubmitError(`La règle d'impact ${missingLevelIndex + 1} doit avoir un niveau.`);
-          return;
-        }
-      }
-
-      // Story 31.6 AC #3: Block save if required=true, SN integrations exist, but none selected
-      const hasRequiredEnv = Object.values(changeTypeConfig).some((e) => e?.required);
-      if (hasRequiredEnv && snIntegrationOptions.length > 0 && !gateConfig?.servicenow_change?.integration_id) {
-        setSubmitError(
-          "Une intégration ServiceNow doit être sélectionnée lorsque « Changement requis » est activé et que des intégrations ServiceNow sont configurées."
-        );
-        return;
-      }
-
-      // Story 25.4 + Story 31.4: validate change_type_config — when required=true, model/template ID required
-      // Read template_id first (priority), fall back to change_model_code (rétrocompatibilité)
-      // Pattern relaxed in Story 31.4 to allow underscores and hyphens (e.g. CHG_TPL_001)
-      for (const [env, entry] of Object.entries(changeTypeConfig)) {
-        if (entry?.required) {
-          const code = (entry.template_id ?? entry.change_model_code ?? '').trim();
-          if (!code) {
-            setSubmitError(`Le modèle / Template ID est obligatoire pour ${env} lorsque « Changement requis » est activé.`);
-            return;
-          }
-          if (!/^[A-Za-z0-9_-]+$/.test(code)) {
-            setSubmitError(`Le modèle / Template ID pour ${env} doit être alphanumérique (tirets et underscores autorisés).`);
-            return;
-          }
-          if (code.length > 50) {
-            setSubmitError(`Le modèle / Template ID pour ${env} ne peut pas dépasser 50 caractères.`);
-            return;
-          }
-        }
-      }
-
-      // Story 31.1: Check AAP via integration type instead of platform
-      const saveIntegration = values.integration_id ? getIntegrationById(values.integration_id) : undefined;
-      const isSaveAAP = saveIntegration?.type === 'aap' || saveIntegration?.type === 'tower';
-      if (isSaveAAP && (aapTemplateId == null || aapTemplateId < 1)) {
-        setSubmitError('Pour une intégration AAP/Tower, l\'ID du template (job ou workflow) est requis.');
-        return;
-      }
-    } else {
-      // Validation for workflows
-      if (!validateWorkflowSteps()) {
-        return;
-      }
+    // Validation déléguée au hook useActionWizardValidation (factorisation avec ActionForm)
+    const validationError = validateForSave({
+      isWorkflowSave,
+      parameterList,
+      impactRulesList,
+      changeTypeConfig,
+      snIntegrationOptions,
+      gateConfig,
+      aapTemplateId,
+      integrationId: values.integration_id,
+      getIntegrationById,
+    });
+    if (validationError === '__workflow_steps_invalid__') return;
+    if (validationError) {
+      setSubmitError(validationError);
+      return;
     }
 
     setSaving(true);
@@ -643,247 +459,6 @@ export function ActionWizard({
     }
   };
 
-  const stepContent = () => {
-    return (
-      <Form
-        form={form}
-        layout="vertical"
-        initialValues={{ item_type: initialItemType ?? 'action', name: '', description: '', engine: undefined }}
-      >
-        <div style={{ display: currentStep === 0 ? 'block' : 'none' }}>
-          {/* Story 9.5 / 2.29: Type selector — hidden when initialItemType is set or in edit mode */}
-          <Form.Item
-            name="item_type"
-            label="Type"
-            rules={showTypeSelector ? [{ required: true, message: 'Le type est requis' }] : undefined}
-            hidden={!showTypeSelector}
-          >
-            <Radio.Group aria-label="Type d'élément" disabled={isReadOnly}>
-              <Radio value="action">Action</Radio>
-              <Radio value="workflow">Workflow</Radio>
-            </Radio.Group>
-          </Form.Item>
-          <Form.Item
-            name="name"
-            label={isWorkflow ? 'Nom du workflow' : 'Nom de l\'action'}
-            validateTrigger={['onBlur', 'onFinish']}
-            rules={[
-              { required: true, message: 'Le nom est requis' },
-              { min: 1, max: 255, message: 'Le nom doit faire entre 1 et 255 caractères' },
-              {
-                validator: async (_, value) => {
-                  const name = value ? String(value).trim() : '';
-                  if (!name) return;
-                  const available = await checkActionNameAvailable(name, editAction?.id);
-                  if (!available) {
-                    return Promise.reject(new Error('Une action ou un workflow avec ce nom existe déjà.'));
-                  }
-                },
-              },
-            ]}
-          >
-            <Input placeholder={isWorkflow ? 'Ex: Provisionner environnement' : 'Ex: Créer PDB Oracle'} aria-label={isWorkflow ? 'Nom du workflow' : 'Nom de l\'action'} disabled={isReadOnly} />
-          </Form.Item>
-          <Form.Item name="description" label="Description" rules={[{ required: true, message: 'La description est requise' }, { max: 4000, message: 'La description ne peut pas dépasser 4000 caractères' }]}>
-            <TextArea rows={3} placeholder="Description..." aria-label="Description" showCount maxLength={4000} disabled={isReadOnly} />
-          </Form.Item>
-          {/* Story 2.30: Category field for actions only (not workflows) */}
-          {!isWorkflow && (
-            <Form.Item
-              name="category"
-              label="Catégorie"
-              rules={[{ required: false }]}
-              tooltip="La catégorie permet d'organiser les actions dans le catalogue"
-            >
-              <Select
-                options={categoryOptions}
-                placeholder={categoriesLoading ? "Chargement..." : "Sélectionnez une catégorie"}
-                loading={categoriesLoading}
-                disabled={isReadOnly}
-                allowClear
-                aria-label="Catégorie"
-              />
-            </Form.Item>
-          )}
-          {/* Only show engine/platform for actions, not workflows */}
-          {!isWorkflow && (
-            <>
-              <Form.Item name="engine" label="Moteur de base de données" rules={[{ required: true, message: 'Le moteur est requis' }]}>
-                <Select 
-                  options={engineOptions} 
-                  placeholder={enginesLoading ? "Chargement..." : "Sélectionnez un moteur"} 
-                  aria-label="Moteur"
-                  loading={enginesLoading}
-                  disabled={isReadOnly}
-                />
-              </Form.Item>
-              <Form.Item name="integration_id" label={<span>Intégration <SectionHelp topicId="action-form-integration" /></span>} rules={[{ required: true, message: "L'intégration est requise" }]}>
-                <Select
-                  options={integrationOptions}
-                  placeholder={integrationsLoading ? "Chargement..." : "Sélectionnez une intégration"}
-                  aria-label="Intégration"
-                  loading={integrationsLoading}
-                  disabled={isReadOnly}
-                />
-              </Form.Item>
-              {/* Story 31.1 AC4: Alert when no platform integrations available */}
-              {!integrationsLoading && integrationOptions.length === 0 && (
-                <Alert
-                  type="warning"
-                  showIcon
-                  message="Aucune intégration de type plateforme n'est disponible. Créez-en une dans Admin > Intégrations."
-                  style={{ marginBottom: 16 }}
-                />
-              )}
-              {/* Story 31.1 AC6: Degraded mode for legacy actions without integration_id */}
-              {isEditMode && !editAction?.integration_id && editAction?.platform && (
-                <Alert
-                  type="info"
-                  showIcon
-                  message={`Cette action utilise l'ancienne plateforme « ${editAction.platform} ». Sélectionnez une intégration pour la mettre à jour.`}
-                  style={{ marginBottom: 16 }}
-                />
-              )}
-            </>
-          )}
-          <Form.Item label="Tags" tooltip="Tags existants ou saisie libre + Entrée pour en créer un nouveau.">
-            <Select
-              mode="tags"
-              value={selectedTags}
-              onChange={(v) => setSelectedTags((Array.isArray(v) ? v : [v]).filter(Boolean) as string[])}
-              options={tagsOptions}
-              placeholder="Ex: RAC, dataguard, provisioning"
-              aria-label="Tags"
-              style={{ width: '100%' }}
-              tokenSeparators={[',']}
-              disabled={isReadOnly}
-            />
-          </Form.Item>
-        </div>
-        {currentStep === 1 && (
-          <Space orientation="vertical" style={{ width: '100%' }} size="middle">
-            {/* Story 9.5 / 16.5: Show WorkflowStepsEditor or WorkflowBuilderCanvas for workflows */}
-            {isWorkflow ? (
-              <Form.Item label="Étapes du workflow" tooltip="Définissez les actions qui composent ce workflow, dans l'ordre d'exécution.">
-                <Space direction="vertical" style={{ width: '100%' }}>
-                  {/* Story 20.6 Task 4.4: Contextual help message for workflows */}
-                  <Alert
-                    type="info"
-                    showIcon
-                    message="Un workflow enchaîne des actions existantes dans l'ordre défini. Aucun connecteur à configurer : chaque étape utilise le connecteur de l'action référencée."
-                    style={{ marginBottom: 8 }}
-                  />
-                  <Radio.Group
-                    value={workflowViewMode}
-                    onChange={(e) => setWorkflowViewMode(e.target.value)}
-                    size="small"
-                    aria-label="Mode d'édition du workflow"
-                  >
-                    <Radio.Button value="list">Mode liste</Radio.Button>
-                    <Radio.Button value="visual">Mode visuel</Radio.Button>
-                  </Radio.Group>
-                  {workflowViewMode === 'list' ? (
-                    <WorkflowStepsEditor
-                      steps={workflowSteps}
-                      onChange={setWorkflowSteps}
-                      loading={false}
-                      disabled={isReadOnly}
-                    />
-                  ) : (
-                    <WorkflowBuilderCanvas
-                      steps={workflowSteps}
-                      onChange={setWorkflowSteps}
-                      disabled={isReadOnly}
-                    />
-                  )}
-                </Space>
-              </Form.Item>
-            ) : (
-              <>
-                {isPlatformAAP && (
-                  <WizardAAPTemplateSection
-                    integrationId={integrationId}
-                    aapResourceType={aapResourceType}
-                    aapTemplateId={aapTemplateId}
-                    onResourceTypeChange={setAapResourceType}
-                    onTemplateIdChange={setAapTemplateId}
-                    isReadOnly={!!isReadOnly}
-                  />
-                )}
-                <Form.Item label="Paramètres" tooltip="Définissez les paramètres de l'action (extra_vars, etc.).">
-                  {/* TODO: Add disabled prop to ParametersEditor */}
-                  <ParametersEditor value={parameterList} onChange={isReadOnly ? () => {} : setParameterList} />
-                </Form.Item>
-              </>
-            )}
-          </Space>
-        )}
-        {currentStep === 2 && (
-          <Space orientation="vertical" style={{ width: '100%' }} size="middle">
-            {/* Impact rules and change config for both actions and workflows */}
-            <Form.Item label="Règles d'impact" tooltip="Définissez les règles d'impact par environnement.">
-              {/* TODO: Add disabled prop to ImpactRulesEditor */}
-              <ImpactRulesEditor value={impactRulesList} onChange={isReadOnly ? () => {} : setImpactRulesList} />
-            </Form.Item>
-            <Form.Item label="Niveau d'impact par défaut" tooltip="Niveau appliqué quand aucune règle ne correspond à l'environnement.">
-              <Select
-                value={defaultImpactLevel ?? undefined}
-                onChange={(v) => setDefaultImpactLevel(v || null)}
-                allowClear
-                placeholder="Sélectionnez un niveau par défaut"
-                style={{ width: 220 }}
-                aria-label="Niveau d'impact par défaut"
-                disabled={isReadOnly}
-                options={[
-                  { value: 'low', label: 'Faible (vert)' },
-                  { value: 'medium', label: 'Moyen (orange)' },
-                  { value: 'high', label: 'Élevé (rouge)' },
-                  { value: 'critical', label: 'Critique (rouge foncé)' },
-                ]}
-              />
-            </Form.Item>
-            {/* Only show change config for actions, not workflows */}
-            {!isWorkflow && (
-              <Form.Item
-                label={<span>Changement ServiceNow par environnement <SectionHelp topicId="action-form-changement-servicenow" /></span>}
-                tooltip="Pour chaque environnement : configurer les gates (autorisé, plage maintenance, approbation) et le changement ServiceNow (requis, modèle/template ID)."
-              >
-                {/* TODO: Add disabled prop to ChangeTypeConfig */}
-                <ChangeTypeConfig value={changeTypeConfig} onChange={isReadOnly ? () => {} : setChangeTypeConfig} gateConfig={gateConfig} onGateConfigChange={isReadOnly ? undefined : setGateConfig} />
-              </Form.Item>
-            )}
-            {/* Story 28.4: Règles métier — sélecteur prédéfini (filtré par plateforme) */}
-            <Form.Item
-              label="Règles métier"
-              tooltip="Choisissez une règle prédéfinie du catalogue (Admin → Règles métier). Seules les règles liées à votre plateforme d'exécution sont proposées."
-            >
-              <BusinessRulePolicySelector
-                policyId={businessRulePolicyId}
-                onPolicyIdChange={setBusinessRulePolicyId}
-                stepType={
-                  selectedIntegration?.type
-                  ?? (editAction?.integration_id ? getIntegrationById(editAction.integration_id)?.type : undefined)
-                  ?? (editAction?.platform ? platformCodeToStepType(editAction.platform) : undefined)
-                }
-                disabled={isReadOnly}
-              />
-            </Form.Item>
-            {/* Story 31.8: Notification configuration */}
-            <Form.Item
-              label="Notifications"
-              tooltip="Configurez les canaux de notification (email, Teams, page) et leurs conditions."
-            >
-              <NotificationConfigSection
-                value={notificationConfig}
-                onChange={isReadOnly ? () => {} : setNotificationConfig}
-              />
-            </Form.Item>
-          </Space>
-        )}
-      </Form>
-    );
-  };
-
   // Dynamic modal title based on item type (Story 2.29: initialItemType fallback, editAction.item_type for edit)
   const modalTitle = isEditMode
     ? (editAction?.item_type === 'workflow' ? 'Modifier le workflow' : 'Modifier l\'action')
@@ -920,7 +495,73 @@ export function ActionWizard({
         aria-label={`Étape ${currentStep + 1} sur 3 : ${STEP_ITEMS[currentStep].title}`}
       />
 
-      <div style={{ minHeight: 280 }}>{stepContent()}</div>
+      <div style={{ minHeight: 280 }}>
+        <Form
+          form={form}
+          layout="vertical"
+          initialValues={{ item_type: initialItemType ?? 'action', name: '', description: '', engine: undefined }}
+        >
+          <div style={{ display: currentStep === 0 ? 'block' : 'none' }}>
+            <WizardStep1General
+              form={form}
+              isWorkflow={isWorkflow}
+              showTypeSelector={showTypeSelector}
+              isReadOnly={!!isReadOnly}
+              engineOptions={engineOptions}
+              enginesLoading={enginesLoading}
+              integrationOptions={integrationOptions}
+              integrationsLoading={integrationsLoading}
+              isEditMode={isEditMode}
+              editAction={editAction}
+              selectedTags={selectedTags}
+              setSelectedTags={setSelectedTags}
+              tagsOptions={tagsOptions}
+              categoryOptions={categoryOptions}
+              categoriesLoading={categoriesLoading}
+              getIntegrationById={getIntegrationById}
+            />
+          </div>
+          {currentStep === 1 && (
+            <WizardStep2Automatisme
+              isWorkflow={isWorkflow}
+              isReadOnly={!!isReadOnly}
+              isPlatformAAP={isPlatformAAP}
+              integrationId={integrationId}
+              aapResourceType={aapResourceType}
+              setAapResourceType={setAapResourceType}
+              aapTemplateId={aapTemplateId}
+              setAapTemplateId={setAapTemplateId}
+              parameterList={parameterList}
+              setParameterList={setParameterList}
+              workflowSteps={workflowSteps}
+              setWorkflowSteps={setWorkflowSteps}
+              workflowViewMode={workflowViewMode}
+              setWorkflowViewMode={setWorkflowViewMode}
+            />
+          )}
+          {currentStep === 2 && (
+            <WizardStep3ImpactChangement
+              isWorkflow={isWorkflow}
+              isReadOnly={!!isReadOnly}
+              impactRulesList={impactRulesList}
+              setImpactRulesList={setImpactRulesList}
+              defaultImpactLevel={defaultImpactLevel}
+              setDefaultImpactLevel={setDefaultImpactLevel}
+              changeTypeConfig={changeTypeConfig}
+              setChangeTypeConfig={setChangeTypeConfig}
+              gateConfig={gateConfig}
+              setGateConfig={setGateConfig}
+              businessRulePolicyId={businessRulePolicyId}
+              setBusinessRulePolicyId={setBusinessRulePolicyId}
+              notificationConfig={notificationConfig}
+              setNotificationConfig={setNotificationConfig}
+              selectedIntegration={selectedIntegration}
+              editAction={editAction}
+              getIntegrationById={getIntegrationById}
+            />
+          )}
+        </Form>
+      </div>
 
       <div style={{ marginTop: 24, display: 'flex', justifyContent: 'space-between' }}>
         <Button onClick={onCancel}>Annuler</Button>

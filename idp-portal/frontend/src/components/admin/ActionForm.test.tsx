@@ -161,7 +161,7 @@ describe('ActionForm', () => {
       });
 
       // Try to submit without filling required fields
-      const submitButton = screen.getByText('Creer');
+      const submitButton = screen.getByText('Créer');
       await user.click(submitButton);
 
       await waitFor(() => {
@@ -525,11 +525,11 @@ describe('ActionForm', () => {
       const prodOptions = screen.getAllByText('PROD');
       await user.click(prodOptions[prodOptions.length - 1]);
 
-      // Now preview should show PROD's level (high = "Eleve")
+      // Now preview should show PROD's level (high = "Élevé")
       // The AdminPreview component renders ImpactIndicator which shows the level text
       await waitFor(() => {
-        // Check that "Eleve" appears in the preview area (high level)
-        const eleveIndicators = screen.getAllByText('Eleve');
+        // Check that "Élevé" appears in the preview area (high level)
+        const eleveIndicators = screen.getAllByText('Élevé');
         expect(eleveIndicators.length).toBeGreaterThanOrEqual(1);
       });
     });
