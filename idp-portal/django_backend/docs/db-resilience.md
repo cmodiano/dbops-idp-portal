@@ -1,6 +1,6 @@
 # Résilience Base de Données — Data Guard Failover/Switchover
 
-> Stories 32.1 et 32.2 — Détection, reconnexion, retry borné et idempotence
+> Stories 32.1, 32.2, 32.3, 32.4 — Détection, reconnexion, retry borné, idempotence, bornes temporelles et observabilité
 
 ## Vue d'ensemble
 
@@ -33,7 +33,7 @@ Si une erreur de connexion passe malgré le health check, le middleware :
 4. Retourne une **réponse 503 structurée** si tous les retries sont épuisés
 5. Logge les événements en structlog à chaque étape
 
-## Politique de retry (Story 32.2)
+## Politique de retry (Stories 32.2 & 32.4)
 
 ### Backoff exponentiel
 
@@ -60,12 +60,25 @@ Le cap à 5s protège contre les timeouts gunicorn (30s par défaut).
   - `True` → transaction encore active → pré-commit → retry safe
   - `False` → Django a nettoyé l'atomic block → état incertain → pas de retry
 
-### Réponse 503 (retries épuisés)
+### Borne temporelle (Story 32.4)
+
+En plus de la borne par nombre de tentatives, un **time window** global limite la durée totale des retries. Si `elapsed >= DB_RETRY_TIME_WINDOW_SECONDS`, le middleware arrête immédiatement et retourne 503 (raison : `time_window_exceeded`). Les deux bornes sont **indépendantes** : la première condition atteinte déclenche le 503.
+
+### Réponse 503 enrichie (Story 32.4)
+
+La réponse 503 inclut désormais un champ `reason` pour distinguer les causes :
+
+| `reason` | Description |
+|----------|-------------|
+| `retry_exhausted` | Nombre max de tentatives atteint |
+| `time_window_exceeded` | Fenêtre temporelle dépassée |
+| `mid_commit_error` | Erreur mid-commit — état incertain, pas de retry |
 
 ```json
 {
   "error": {
     "code": "DB_UNAVAILABLE",
+    "reason": "retry_exhausted",
     "message": "Base de données temporairement indisponible après bascule. Veuillez réessayer dans quelques instants.",
     "correlation_id": "abc-123"
   }
@@ -74,16 +87,7 @@ Le cap à 5s protège contre les timeouts gunicorn (30s par défaut).
 
 Header `Retry-After: 30` (30 secondes — typique pour Data Guard FSFO < 1 min).
 
-Pour les erreurs mid-commit :
-```json
-{
-  "error": {
-    "code": "DB_UNAVAILABLE",
-    "message": "Résultat incertain après coupure réseau pendant le commit. Veuillez vérifier l'état de l'opération.",
-    "correlation_id": "abc-123"
-  }
-}
-```
+> **Note :** Le champ `reason` est informatif (logging/debug). Les consommateurs API et le frontend (`isDbUnavailable503()`) continuent de vérifier uniquement `error.code === "DB_UNAVAILABLE"` — compatibilité descendante garantie.
 
 ## Diagramme de séquence
 
@@ -128,8 +132,9 @@ Client          Middleware              Django/View         Base de données
 |----------|--------|-------------|
 | `DB_CONN_MAX_AGE` | `600` | Durée de vie max d'une connexion (secondes) |
 | `DB_CONN_HEALTH_CHECKS` | `True` | Validation des connexions avant réutilisation |
-| `DB_RETRY_MAX_ATTEMPTS` | `3` | Nombre max de tentatives de retry après erreur de connexion |
-| `DB_RETRY_BACKOFF_BASE` | `0.5` | Délai de base (secondes) pour le backoff exponentiel entre tentatives |
+| `DB_RETRY_MAX_ATTEMPTS` | `3` | Nombre max de tentatives avant 503 |
+| `DB_RETRY_BACKOFF_BASE` | `0.5` | Base du backoff exponentiel (secondes) |
+| `DB_RETRY_TIME_WINDOW_SECONDS` | `120` | Fenêtre temporelle max pour les retries (2 min, alignée sur FSFO < 1 min) |
 
 ### Middleware
 
@@ -166,16 +171,15 @@ Les `InterfaceError` sont toujours traités comme des erreurs de connexion.
 
 ## Événements structlog
 
-| Événement | Niveau | Description |
+| Événement | Niveau | Champs clés |
 |-----------|--------|-------------|
-| `db_connection_lost` | WARNING | Connexion DB perdue, début du processus de retry |
-| `db_retry_attempt` | WARNING | Tentative de retry N/max (inclut `attempt_number`, `max_attempts`, `backoff_seconds`) |
-| `db_reconnect_failed` | WARNING | Échec de `ensure_connection()` lors d'une tentative de reconnexion (inclut `attempt_number`, `error`) |
-| `db_connection_restored` | INFO | Reconnexion réussie après retry (inclut `attempt_number`, `total_duration_ms`) |
-| `db_retry_exhausted` | ERROR | Tous les retries épuisés (inclut `total_attempts`, `total_duration_ms`) |
-| `db_retry_unsafe_write` | ERROR | Écriture mid-commit détectée, retry refusé |
-
-Chaque événement inclut : `correlation_id`, `method`, `path`.
+| `db_connection_lost` | WARNING | `correlation_id`, `error_type`, `error_code`, `method`, `path` |
+| `db_retry_attempt` | WARNING | `correlation_id`, `attempt_number`, `max_attempts`, `backoff_seconds`, `method`, `path` |
+| `db_reconnect_failed` | WARNING | `correlation_id`, `attempt_number`, `max_attempts`, `error`, `method`, `path` |
+| `db_connection_restored` | INFO | `correlation_id`, `attempt_number`, `total_duration_ms`, `method`, `path` |
+| `db_retry_exhausted` | ERROR | `correlation_id`, `total_attempts`, `total_duration_ms`, `error_code`, `method`, `path` |
+| `db_retry_time_window_exceeded` | ERROR | `correlation_id`, `total_duration_ms`, `time_window_seconds`, `method`, `path` |
+| `db_retry_unsafe_write` | ERROR | `correlation_id`, `error_code`, `reason`, `method`, `path` |
 
 ## Health Check
 
@@ -267,11 +271,14 @@ Retry-After: 30
 {
   "error": {
     "code": "DB_UNAVAILABLE",
+    "reason": "retry_exhausted",
     "message": "Base de données temporairement indisponible après bascule. Veuillez réessayer dans quelques instants.",
     "correlation_id": "abc-123-def-456"
   }
 }
 ```
+
+Le champ `reason` indique la cause du 503 (`retry_exhausted`, `time_window_exceeded`, ou `mid_commit_error`). Les consommateurs API vérifient uniquement `error.code === "DB_UNAVAILABLE"` — le champ `reason` est disponible pour le diagnostic mais ne change pas la logique de retry.
 
 **Recommandations pour les consommateurs API :**
 

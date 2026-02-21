@@ -423,9 +423,9 @@ development_status:
     # Réf: planning-artifacts/epic-32-resilience-dataguard.md — Backend détecte coupure DB, reconnexion, retry transaction, portail + API
     epic-32: in-progress
     32-1-detection-reconnexion-base-donnees-failover: done # 2026-02-21: middleware résilience DB, CONN_HEALTH_CHECKS, 37 tests pass — code review: 7 issues fixées (3H+3M+1L)
-    32-2-retry-rejeu-transaction-apres-reconnexion: backlog
-    32-3-resilience-portail-et-api-consommateurs: backlog
-    32-4-bornes-retry-observabilite-codes-erreur: backlog
+    32-2-retry-rejeu-transaction-apres-reconnexion: done # 2026-02-21: retry borné, backoff, idempotence, 503, 69 tests pass — code review: 5 fixes (1H+4M)
+    32-3-resilience-portail-et-api-consommateurs: done # 2026-02-21: 13 backend + 50 frontend tests pass, docs NFR/runbook ajoutée — code review: 6 fixes (H2+M1+M2+M3+M4)
+    32-4-bornes-retry-observabilite-codes-erreur: done # 2026-02-21: code review — 4 MEDIUM + 1 LOW fixes (message hardcode, log order, task 4.1/4.2 status, doc example, test assertion) — 103/103 tests pass
     epic-32-retrospective: optional
     # === Epic 33: Conformité SOLID — Corrections des écarts ===
     # Réf: planning-artifacts/epic-33-conformite-solid.md, solid-audit-report.md

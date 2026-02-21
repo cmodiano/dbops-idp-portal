@@ -174,6 +174,7 @@ class DatabaseResilienceMiddleware:
         correlation_id = get_correlation_id()
         ora_code = _extract_ora_code(exc)
         max_attempts = getattr(settings, 'DB_RETRY_MAX_ATTEMPTS', 3)
+        time_window = getattr(settings, 'DB_RETRY_TIME_WINDOW_SECONDS', 120)
         start_time = time.monotonic()
 
         logger.warning(
@@ -196,14 +197,23 @@ class DatabaseResilienceMiddleware:
                 path=request.path,
                 reason="mid_commit_error",
             )
-            return self._build_503_response(
-                correlation_id,
-                message="Résultat incertain après coupure réseau pendant le commit. "
-                        "Veuillez vérifier l'état de l'opération.",
-            )
+            return self._build_503_response(correlation_id, reason="mid_commit_error")
 
         # Bounded retry loop
         for attempt in range(max_attempts):
+            # Check time window BEFORE logging or sleeping (avoids misleading log if window exceeded)
+            elapsed_seconds = time.monotonic() - start_time
+            if elapsed_seconds >= time_window:
+                logger.error(
+                    "db_retry_time_window_exceeded",
+                    correlation_id=correlation_id,
+                    total_duration_ms=int(elapsed_seconds * 1000),
+                    time_window_seconds=time_window,
+                    method=request.method,
+                    path=request.path,
+                )
+                return self._build_503_response(correlation_id, reason="time_window_exceeded")
+
             # Backoff: first attempt (0) is immediate, subsequent have delay
             backoff = _calculate_backoff(attempt - 1) if attempt > 0 else 0
             logger.warning(
@@ -215,6 +225,7 @@ class DatabaseResilienceMiddleware:
                 method=request.method,
                 path=request.path,
             )
+
             if attempt > 0:
                 time.sleep(backoff)
 
@@ -261,11 +272,7 @@ class DatabaseResilienceMiddleware:
                         reason="mid_commit_error_on_retry",
                         attempt_number=attempt + 1,
                     )
-                    return self._build_503_response(
-                        correlation_id,
-                        message="Résultat incertain après coupure réseau pendant le commit. "
-                                "Veuillez vérifier l'état de l'opération.",
-                    )
+                    return self._build_503_response(correlation_id, reason="mid_commit_error")
                 exc = retry_exc
                 continue
 
@@ -282,24 +289,39 @@ class DatabaseResilienceMiddleware:
             path=request.path,
         )
 
-        return self._build_503_response(correlation_id)
+        return self._build_503_response(correlation_id, reason="retry_exhausted")
 
     @staticmethod
     def _build_503_response(
         correlation_id: str | None,
-        message: str | None = None,
+        reason: str = "retry_exhausted",
     ) -> JsonResponse:
-        """Build structured 503 JSON response."""
-        if message is None:
-            message = (
+        """Build structured 503 JSON response.
+
+        Args:
+            correlation_id: Request correlation ID for tracing.
+            reason: One of "retry_exhausted", "time_window_exceeded", "mid_commit_error".
+        """
+        messages = {
+            "retry_exhausted": (
                 "Base de données temporairement indisponible après bascule. "
                 "Veuillez réessayer dans quelques instants."
-            )
+            ),
+            "time_window_exceeded": (
+                "Dépassement de la fenêtre de bascule. "
+                "Veuillez réessayer."
+            ),
+            "mid_commit_error": (
+                "Résultat incertain après coupure réseau pendant le commit. "
+                "Veuillez vérifier l'état de l'opération."
+            ),
+        }
         response = JsonResponse(
             {
                 "error": {
                     "code": "DB_UNAVAILABLE",
-                    "message": message,
+                    "reason": reason,
+                    "message": messages.get(reason, messages["retry_exhausted"]),
                     "correlation_id": correlation_id,
                 }
             },

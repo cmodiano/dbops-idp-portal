@@ -132,6 +132,9 @@ DB_CONN_HEALTH_CHECKS = os.getenv('DB_CONN_HEALTH_CHECKS', 'True').lower() in ('
 DB_RETRY_MAX_ATTEMPTS = int(os.getenv('DB_RETRY_MAX_ATTEMPTS', '3'))
 # Base delay for exponential backoff between retries (seconds), capped at 5s
 DB_RETRY_BACKOFF_BASE = float(os.getenv('DB_RETRY_BACKOFF_BASE', '0.5'))
+# Story 32.4: Max total duration for all retry attempts (seconds).
+# Aligns with Data Guard FSFO < 1 min — default 120s is a generous upper bound.
+DB_RETRY_TIME_WINDOW_SECONDS = int(os.getenv('DB_RETRY_TIME_WINDOW_SECONDS', '120'))
 
 DATABASES = {
     'default': {
