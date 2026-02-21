@@ -1,6 +1,6 @@
 # Revue Exhaustive du Codebase — IDP Portal
 
-**Date :** 2026-02-16 (mise à jour)
+**Date :** 2026-02-21 (mise à jour — ajout audit SOLID)
 **Scope :** Backend Django + Frontend React
 **Auteur :** Claude Code (revue automatisée)
 
@@ -21,7 +21,9 @@
 11. [Problèmes Celery / tâches async](#11-problèmes-celery--tâches-async)
 12. [Incohérences modèles & serializers](#12-incohérences-modèles--serializers)
 13. [Nouveaux findings](#13-nouveaux-findings)
-14. [Récapitulatif par priorité](#14-récapitulatif-par-priorité)
+14. [Analyse SOLID — Backend](#14-analyse-solid--backend)
+15. [Analyse SOLID — Frontend](#15-analyse-solid--frontend)
+16. [Récapitulatif par priorité](#16-récapitulatif-par-priorité)
 
 ---
 
@@ -427,36 +429,259 @@ Inchangé. Impact négligeable.
 
 ---
 
-## 14. Récapitulatif par priorité
+## 14. Analyse SOLID — Backend
+
+**Date :** 2026-02-21
+**Scope :** Django backend (`django_backend/`)
+
+### Points positifs (acquis des Stories 33.x)
+
+- **OCP — Registry pattern** : `adapters/registry.py` (AdapterRegistry), `services/registry.py` (ServiceRegistry), `executions/interpreters/registry.py` (OutputInterpreterRegistry) — ajout de plateforme/service sans modifier le code existant.
+- **DIP — Module DI** : `core/di.py` — service locator léger avec `override_service()` pour les tests.
+- **SRP — Views packages** : `catalog/views/` (4 fichiers) et `executions/views/` (7 fichiers) correctement découpés par responsabilité.
+- **SRP — Tasks package** : `executions/tasks/` (3 fichiers : polling, gates, retry).
+
+### SOLID-BE-1 [HIGH] — SRP — `executions/utils.py` (828 lignes) — module « fourre-tout »
+
+15 fonctions utilitaires non liées couvrant 6 domaines : validation d'environnement, parsing de steps workflow, helpers RBAC/permissions, utilitaires date/pagination, validation mutex, et scheduling cron. Un module devrait avoir une seule raison de changer.
+
+**Fix recommandé :** Éclater en `executions/utils/environment.py`, `executions/utils/workflow_parsing.py`, `executions/utils/scheduling.py`, etc.
+
+### SOLID-BE-2 [HIGH] — SRP — `executions/workflow_runtime.py` (1296 lignes)
+
+`WorkflowRuntime` a 12 méthodes couvrant : exécution de steps, logique de retry (`_execute_step_with_retry`, `_is_retryable_error`), détection de boucles, gestion audit trail, évaluation de policy (`_evaluate_policy_if_needed`), appel adapter plateforme (`_call_platform_adapter`), et évaluation de gates. Au moins 5 responsabilités distinctes.
+
+**Fix recommandé :** Extraire `RetryHandler`, `AuditTrailManager`, `PolicyEvaluator` (déjà ébauché à 75 lignes), `PlatformAdapterCaller` en classes dédiées.
+
+### SOLID-BE-3 [HIGH] — OCP — `executions/tasks/polling.py` (1054 lignes) — 5 tâches quasi-identiques
+
+5 tâches Celery (`poll_aap_job_status`, `poll_tower_job_status`, `poll_azure_devops_run_status`, `poll_github_actions_run_status`, `poll_terraform_cloud_run_status`) dupliquent chacune ~150 lignes de logique similaire : construction adapter, appel `get_status()`, `_update_execution_from_poll()`, re-schedule. Pour ajouter Jenkins, il faut ajouter une nouvelle fonction de 150 lignes.
+
+**Fix recommandé :** Une seule tâche générique `poll_platform_job_status` qui délègue à l'`AdapterRegistry` existant — fermé à la modification, ouvert à l'extension.
+
+### SOLID-BE-4 [MEDIUM] — SRP — `executions/services.py` (1121 lignes) — 2 classes sans rapport
+
+`ExecutionService` (ligne 32) et `SchedulingService` (ligne 862) dans le même fichier. Entités différentes (`Execution` vs `ScheduledExecution`), aucun état partagé.
+
+**Fix recommandé :** Séparer en `executions/execution_service.py` et `executions/scheduling_service.py`.
+
+### SOLID-BE-5 [MEDIUM] — SRP — `inventory/services.py` (933 lignes) — `InventoryService` surchargé
+
+18 méthodes couvrant : exécution requêtes Oracle, appels API externes, lecture statique de targets, agrégation permissions RBAC (`_aggregate_profile_permissions`), chargement/filtrage targets (`_load_targets`, `_apply_rbac_chain_for_user`). 4-5 domaines de responsabilité.
+
+**Fix recommandé :** Extraire `InventoryQueryExecutor`, `RBACPermissionAggregator`, `TargetLoader` en classes dédiées.
+
+### SOLID-BE-6 [MEDIUM] — LSP — `catalog/serializers.py:450-461`
+
+`ActionSerializer.create()` et `update()` lèvent `NotImplementedError`, violant le contrat de `ModelSerializer` (toute appel à `serializer.save()` échoue). Violation LSP textbook.
+
+**Fix recommandé :** Séparer en `ActionReadSerializer` (sans create/update) et `ActionWriteSerializer` (`ActionCreateSerializer` existant suffit).
+
+### SOLID-BE-7 [MEDIUM] — OCP — `executions/services.py:392-408` — `launch_workflow()` switch sur `item_type`
+
+```python
+if action.item_type == "workflow":
+    from executions.container_workflow_runtime import ContainerWorkflowRuntime
+    ContainerWorkflowRuntime(execution).run()
+elif getattr(settings, "SIMULATE_EXECUTION_DEV", False):
+    from executions.simulation_service import SimulationService
+```
+
+Import conditionnel de classes concrètes + `if/elif` sur type string = violation OCP + DIP.
+
+**Fix recommandé :** `RuntimeRegistry` avec enregistrement `workflow → ContainerWorkflowRuntime`, `action → StandardRuntime`, `simulation → SimulationService`.
+
+### SOLID-BE-8 [MEDIUM] — DIP — `catalog/views/action_views.py:437,454,493`
+
+`destroy()`, `deactivate()` et `reactivate()` instancient `CatalogService()` directement au lieu d'utiliser `self.get_catalog_service()` (déjà disponible ligne 67-69). Contourne le mécanisme DI dans les tests.
+
+**Fix recommandé :** Remplacer `service = CatalogService()` par `service = self.get_catalog_service()` (3 occurrences).
+
+### SOLID-BE-9 [MEDIUM] — DIP — Webhooks factory monkey-patch
+
+`executions/views/github_webhooks.py:34` et `executions/views/terraform_webhooks.py:34` utilisent `_execution_service_factory = ExecutionService` au niveau module plutôt que le mécanisme DI de `core/di.py`. Fragile et thread-unsafe en tests.
+
+### SOLID-BE-10 [LOW] — ISP — `adapters/base_adapter.py` — interface trop large
+
+`BaseAdapter` force tous les adapters à implémenter `cancel_execution()`. Pas toutes les plateformes supportent l'annulation. ISP suggèrerait de séparer `ITriggerableAdapter` de `ICancellableAdapter`.
+
+### SOLID-BE-11 [LOW] — DRY/ISP — `catalog/serializers.py` — validation dupliquée
+
+`ActionSerializer` (lignes 248-281) et `ActionCreateSerializer` (lignes 487-509) contiennent des méthodes `validate_engine`, `validate_platform`, et `validate_category` identiques. Changement = modification en 2 endroits.
+
+**Fix recommandé :** Mixin `ActionFieldValidationMixin` partagé entre les deux serializers.
+
+---
+
+## 15. Analyse SOLID — Frontend
+
+**Date :** 2026-02-21
+**Scope :** React frontend (`frontend/src/`)
+
+### Métriques globales
+
+| Métrique | Valeur |
+|----------|--------|
+| Fichiers source (non-test) | ~222 `.tsx`/`.ts` |
+| Fichiers test | 165 (74% couverture fichier) |
+| Lignes de production | ~35 300 |
+| Custom hooks | 32 (4 435 lignes) |
+| Contexts | 4 (AuthContext, FeatureFlagContext, ThemeContext, DashboardContext) |
+
+### Points positifs
+
+- **Architecture hooks** : 32 custom hooks pour extraction de logique — pattern sain globalement.
+- **Services API** : `api_client.ts` centralisé avec retry 401/429/503, correlation ID, blob/formdata.
+- **Tests** : 165 fichiers test, bonne co-location avec les composants.
+- **Refactoring récent (Story 33.5)** : `ActionForm.tsx` refactorisé avec `useActionFormState` hook.
+
+### SOLID-FE-1 [CRITICAL] — SRP — `ExecutionTimeline.tsx` (735 lignes) — God component
+
+12+ responsabilités dans un seul composant :
+1. Gestion connexion WebSocket (lignes 73-114)
+2. Fallback polling automatique WebSocket→polling (lignes 79-84)
+3. Machine à états auto-remédiation (lignes 89-177)
+4. Fetch suggestions/contexte remédiation (lignes 126-136)
+5. State expand/collapse des steps (ligne 138)
+6. State drawer de logs (ligne 139)
+7. Gestion du focus (lignes 157-162)
+8. Annonces aria-live (lignes 185-194)
+9. 7 variantes de bannières status (lignes 216-393)
+10. Liste timeline elle-même (lignes 489-675)
+11. Drawer de logs (lignes 678-732)
+12. Tag `<style>` embarqué avec keyframe (lignes 670-675)
+13. 59 objets `style={{...}}` inline
+
+**Fix recommandé :** Découper en `ExecutionStatusBanners`, `RemediationPanel`, `TimelineList`, `TimelineStepItem`, `StepLogsDrawer`.
+
+### SOLID-FE-2 [HIGH] — SRP — `CatalogPage.tsx` (606 lignes) — Page god
+
+23 appels `useState`, 8 `useCallback`. Gère : catégories, filtres, liste d'actions, favoris, états de chargement, détail action sélectionnée, stats, environnements, drawer states, wizard d'exécution, ID exécution active, drawer ExecutionView, persistence localStorage.
+
+**Fix recommandé :** Extraire `useCatalogState()` hook (comme fait pour `ActionForm` → `useActionFormState`).
+
+### SOLID-FE-3 [HIGH] — SRP — `AuditPage.tsx` (628 lignes) — Page god
+
+28 usages de hooks combinés. Gère : données table, pagination, chargement, erreur, 6 filtres distincts, tri, drawer avec fetch exécution + steps, export, définitions colonnes inline, squelettes inline.
+
+**Fix recommandé :** Extraire `useAuditFilters()`, composants `AuditTable`, `AuditEntryDrawer`.
+
+### SOLID-FE-4 [HIGH] — DIP — 29 composants importent directement les services
+
+Exemples :
+- `WorkflowStepsEditor.tsx` → `admin_service.getEligibleActionsForWorkflow()`
+- `ActionWizard.tsx` → 7 fonctions de `admin_service`
+- `ExecutionWizard.tsx` → `catalog_service` + `execution_service`
+
+Couplage fort composant ↔ couche transport. Empêche le mocking sans interception au niveau module.
+
+**Fix recommandé :** Passer les appels service via hooks ou props (pattern déjà appliqué dans `ActionForm` post-33.5).
+
+### SOLID-FE-5 [HIGH] — DIP — `api_client.ts` dépend de `notification` (Ant Design)
+
+```typescript
+import { notification } from 'antd';
+// ligne 182, 213 — notification.warning dans le client API
+```
+
+La couche transport API ne devrait pas dépendre du système de notification UI. Crée une dépendance bidirectionnelle.
+
+**Fix recommandé :** Callback injectable pour les notifications de retry 503.
+
+### SOLID-FE-6 [MEDIUM] — Prop drilling `variant` sur 4-5 niveaux
+
+`CatalogPage` → `ActionCard` → `ActionDrawerPreview` → `ExecutionWizard` → `TargetSelectionStep` / `ParametersFormStep` / `ConfirmationStep` → `StructuredErrorCard`. Le flag `isBusinessProfile` est lu depuis `AuthContext` dans `CatalogPage` puis converti en prop string et propagé à travers 5 niveaux.
+
+**Fix recommandé :** Chaque composant enfant lit `useAuth().isBusinessProfile` directement depuis le contexte.
+
+### SOLID-FE-7 [MEDIUM] — ISP — Interfaces de props surchargées
+
+| Composant | Nombre de props |
+|-----------|-----------------|
+| `TargetSelectionStepProps` | 22 |
+| `ParametersFormStepProps` | 17 |
+| `ConfirmationStepProps` | 16 |
+
+Les props inventory (`inventoryData`, `inventoryWarnings`, `loadingInventory`, `selectedServerNames`) traversent depuis `ExecutionWizard` — ces données devraient vivre dans un hook ou context dédié.
+
+### SOLID-FE-8 [MEDIUM] — SRP — `WorkflowStepsEditor.tsx` (645 lignes) — 2 composants
+
+`SortableStepCard` (302 lignes) et `WorkflowStepsEditor` (263 lignes) dans le même fichier. `SortableStepCard` gère DnD, autocomplete actions, sélecteurs branches, configuration retry — le tout dans un seul render.
+
+### SOLID-FE-9 [MEDIUM] — SRP — `ExecutionWizard.tsx` — 7 `useEffect` non extraits
+
+Malgré le refactoring Story 17.2, le wizard conserve toute la logique de coordination inline (7 `useEffect`, 2 `eslint-disable-next-line react-hooks/exhaustive-deps`).
+
+### SOLID-FE-10 [MEDIUM] — DRY — Mapping status dupliqué
+
+Mapping status→couleur/label dupliqué indépendamment dans :
+- `ExecutionTimeline.tsx` (lignes 24-31, `STATUS_COLOR`)
+- `AuditPage.tsx` (lignes 61-66, `STATUS_CONFIG`)
+- `pages/executions/executionsColumns.tsx`
+
+**Fix recommandé :** Utility partagé `execution-status.ts`.
+
+### SOLID-FE-11 [LOW] — Couverture test manquante sur composants critiques
+
+| Composant | Lignes | Risque |
+|-----------|--------|--------|
+| `ParametersFormStep.tsx` | 142 | Step wizard critique, 0 test |
+| `SchedulingPanel.tsx` | 327 | Logique scheduling complexe, 0 test |
+| `ExecutionsFiltersPanel.tsx` | 280 | Panel filtres, 0 test |
+| `BusinessRulePolicyModal.tsx` | 230 | Modal admin, 0 test |
+
+---
+
+## 16. Récapitulatif par priorité
 
 ### Issues OUVERTES restantes
 
-#### HIGH (à traiter rapidement)
+#### CRITICAL
 
 | # | Issue | Type | Effort |
 |---|-------|------|--------|
-| ~~BUG-FE-1~~ | ~~`notification({ title })` → `message`~~ ⚠️ INVALIDÉ — `title` est CORRECT en Ant Design 6.2 | Frontend | — |
-| ~~BUG-FE-2~~ | ~~`<Alert title=...>` → `message=`~~ ⚠️ INVALIDÉ — `title` est CORRECT en Ant Design 6.2 | Frontend | — |
-| BUG-FE-1b | `notification({ message: })` → `title:` — re-corriger 9 fichiers changés par 30-4 (API dépréciée) | Frontend | Trivial |
-| BUG-FE-2b | `<Alert message=...>` → `title=` — re-corriger 15 occurrences changées par 30-4 (API dépréciée) | Frontend | Trivial |
+| SOLID-FE-1 | `ExecutionTimeline.tsx` (735 lignes) — God component 12+ responsabilités | Frontend | Élevé |
 
-#### MEDIUM (à planifier)
+#### HIGH
+
+| # | Issue | Type | Effort |
+|---|-------|------|--------|
+| BUG-FE-1b | `notification({ message: })` → `title:` (API dépréciée Ant Design 6.2) | Frontend | Trivial |
+| BUG-FE-2b | `<Alert message=...>` → `title=` (API dépréciée Ant Design 6.2) | Frontend | Trivial |
+| SOLID-BE-1 | `executions/utils.py` (828 lignes) — module fourre-tout 6 domaines | Backend | Moyen |
+| SOLID-BE-2 | `executions/workflow_runtime.py` (1296 lignes) — 5 responsabilités | Backend | Élevé |
+| SOLID-BE-3 | `executions/tasks/polling.py` — 5 tâches dupliquées au lieu d'un poller générique | Backend | Moyen |
+| SOLID-FE-2 | `CatalogPage.tsx` (606 lignes) — 23 useState, page god | Frontend | Moyen |
+| SOLID-FE-3 | `AuditPage.tsx` (628 lignes) — 28 hooks, page god | Frontend | Moyen |
+| SOLID-FE-4 | 29 composants importent directement les services (couplage DIP) | Frontend | Élevé |
+| SOLID-FE-5 | `api_client.ts` dépend de `notification` Ant Design (DIP bidirectionnel) | Frontend | Faible |
+
+#### MEDIUM
 
 | # | Issue | Type | Effort |
 |---|-------|------|--------|
 | NEW-1 | `CatalogActionViewSet.get_queryset()` recrée le queryset | Backend | Faible |
-| ~~NEW-2~~ | ~~TODO actifs : ServiceNow, platform adapter, simulated response~~ ✅ RESOLVED (Story 30.15) | Backend | — |
-| NEW-3 | Cache RBAC invalidation placeholder | Backend | Moyen |
-| INCON-2 | MD5 hash collision (documenté, acceptable pour N<1000) | Backend | — |
+| NEW-3 | Cache RBAC invalidation placeholder (noop) | Backend | Moyen |
+| SOLID-BE-4 | `executions/services.py` — 2 classes non liées dans un module | Backend | Faible |
+| SOLID-BE-5 | `inventory/services.py` (933 lignes) — InventoryService surchargé | Backend | Élevé |
+| SOLID-BE-6 | `ActionSerializer.create()/update()` lèvent NotImplementedError (LSP) | Backend | Faible |
+| SOLID-BE-7 | `launch_workflow()` switch sur item_type (OCP+DIP) | Backend | Moyen |
+| SOLID-BE-8 | 3 méthodes ViewSet contournent le DI (`CatalogService()` direct) | Backend | Trivial |
+| SOLID-BE-9 | Webhooks factory monkey-patch au lieu de DI | Backend | Faible |
+| SOLID-FE-6 | Prop drilling `variant` sur 4-5 niveaux | Frontend | Faible |
+| SOLID-FE-7 | Props surchargées (22/17/16 props) sur les step components | Frontend | Moyen |
+| SOLID-FE-8 | `WorkflowStepsEditor.tsx` — 2 composants dans 1 fichier | Frontend | Faible |
+| SOLID-FE-9 | `ExecutionWizard.tsx` — 7 useEffect non extraits | Frontend | Moyen |
+| SOLID-FE-10 | Mapping status dupliqué dans 3 fichiers | Frontend | Faible |
 
 #### LOW (backlog)
 
-| # | Issue | Type |
-|---|-------|------|
-| ~~BUG-BE-7~~ | ~~Normalisation environnement dupliquée~~ ✅ RESOLVED (Story 30.16) | Backend |
-| ~~NEW-4~~ | ~~`except Exception` trop larges (5 fichiers)~~ ✅ RESOLVED (Story 30.15) | Backend |
-| ~~PERF-4~~ | ~~`<style>` inline dans render~~ ✅ DOCUMENTÉ BACKLOG (Story 30.16) | Frontend |
-| ~~INCON-4~~ | ~~IntegerField booleans (intentionnel Oracle)~~ ✅ INTENTIONNEL - DOCUMENTÉ (Story 30.16) | Backend |
+| # | Issue | Type | Effort |
+|---|-------|------|--------|
+| SOLID-BE-10 | `BaseAdapter` force `cancel_execution()` sur tous les adapters (ISP) | Backend | Faible |
+| SOLID-BE-11 | Validation dupliquée entre ActionSerializer et ActionCreateSerializer | Backend | Trivial |
+| SOLID-FE-11 | Tests manquants : ParametersFormStep, SchedulingPanel, ExecutionsFiltersPanel | Frontend | Moyen |
+| INCON-2 | MD5 hash collision (documenté, acceptable pour N<1000) | Backend | — |
 
 ---
 
@@ -466,7 +691,7 @@ Inchangé. Impact négligeable.
 |-----------|----------|----------|
 | Endpoints manquants | 7/7 | 0 |
 | Bugs backend | 7/7 | 0 |
-| Bugs frontend | 3/5 | 2 (HIGH — INVALIDÉS, remplacés par BUG-FE-1b/2b) |
+| Bugs frontend | 3/5 | 2 (BUG-FE-1b/2b) |
 | Sécurité | 11/11 | 0 |
 | Format API | 4/4 | 0 |
 | Race conditions | 3/3 | 0 |
@@ -477,11 +702,35 @@ Inchangé. Impact négligeable.
 | Celery | 5/5 | 0 |
 | Incohérences modèles | 5/5 | 0 |
 | **Sous-total original** | **68/72** | **2** |
-| Nouveaux findings | — | **4** |
-| **Total** | **68** | **6** |
+| Nouveaux findings (§13) | 2/4 | 2 |
+| **SOLID Backend** (§14) | — | **11** |
+| **SOLID Frontend** (§15) | — | **11** |
+| **Total** | **70** | **26** |
 
 ---
 
-**Bilan global :** Sur les 72 findings originaux, **68 sont entièrement résolus** (BUG-FE-1/2 invalidés = non-bugs, BUG-BE-7/PERF-4/INCON-4 traités Story 30.16). **2 restent ouverts** (2 HIGH frontend BUG-FE-1b/2b). **4 nouveaux findings** identifiés précédemment.
+### Priorités de refactoring recommandées
 
-**Story 30.16 :** BUG-BE-7 RESOLVED (doublon supprimé), PERF-4 DOCUMENTÉ BACKLOG (3 `<style>` justifiés), INCON-4 INTENTIONNEL DOCUMENTÉ (commentaire Oracle ajouté).
+**Sprint immédiat (quick wins) :**
+1. SOLID-BE-8 — Remplacer `CatalogService()` direct par `self.get_catalog_service()` (3 lignes)
+2. SOLID-BE-11 — Mixin validation partagé entre serializers
+3. SOLID-FE-5 — Injecter callback notification dans `api_client.ts`
+4. SOLID-FE-10 — Extraire `execution-status.ts` utility partagé
+5. BUG-FE-1b/2b — Migration props dépréciées Ant Design
+
+**Sprint suivant (impact structurel) :**
+1. SOLID-BE-3 — Poller générique unifié (1054 → ~200 lignes)
+2. SOLID-BE-4 — Séparer ExecutionService et SchedulingService
+3. SOLID-FE-1 — Découper ExecutionTimeline (735 → 5 composants)
+4. SOLID-FE-2 — Extraire `useCatalogState()` de CatalogPage
+5. SOLID-FE-3 — Extraire hooks et sous-composants de AuditPage
+
+**Backlog structurel :**
+1. SOLID-BE-1 — Éclater `executions/utils.py` en sous-modules
+2. SOLID-BE-2 — Décomposer WorkflowRuntime
+3. SOLID-BE-5 — Décomposer InventoryService
+4. SOLID-FE-4 — Migration progressive des 29 composants vers hooks pour les appels service
+
+---
+
+**Bilan global (2026-02-21) :** Sur les 72 findings originaux, **68 sont résolus**. L'audit SOLID identifie **22 nouveaux findings** (11 backend, 11 frontend) dont 1 CRITICAL, 8 HIGH, 13 MEDIUM, 4 LOW. Les quick wins (5 items, effort trivial à faible) peuvent être traités immédiatement. Les refactorings structurels (5 items) réduiraient significativement la dette technique sur les modules les plus complexes (`executions/`, `ExecutionTimeline`, `CatalogPage`).

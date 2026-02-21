@@ -437,5 +437,5 @@ development_status:
     33-3-srp-decouper-catalog-views: done # code-review 2026-02-21: 1 HIGH + 3 MEDIUM + 3 LOW fixes — partial default, dict constant, double subquery, duplicate read, comment cleanup — 369/374 tests pass
     33-4-dip-injection-dependances-services: done # code-review 2026-02-21: H1 ADR ref, H2 CatalogActionViewSet attr, M2 svc var action_views, M3 6 tests execution views DI — 26/26 tests pass
     33-5-srp-reduire-actionform-actionwizard: done # code-review 2026-02-21: M1 validateWorkflowSteps champ mort, M2 snIntegrationOptions prop morte, M3 setTimeout cleanup, L1 TODO prod, L2 accent Créer, L3 test symétrique — 112/118 tests pass (6 pré-existants Story 2.24+31.5)
-    33-6-documentation-checklist-solid: backlog
+    33-6-documentation-checklist-solid: done
     epic-33-retrospective: optional
