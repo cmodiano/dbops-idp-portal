@@ -41,11 +41,24 @@ from core.middleware import get_correlation_id
 class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for catalog actions (read-only, public with RBAC filtering).
+
+    Story 33.4 (DIP): uses _execution_service_class + get_execution_service() so
+    tests can override the service class without monkey-patching.
     """
     queryset = Action.objects.filter(status=ActionStatus.PUBLISHED)
     serializer_class = ActionSerializer
     permission_classes = [OptionalUserPermission]
     pagination_class = CustomPageNumberPagination
+
+    # Lazy default (None) because ExecutionService is in executions app — circular import risk.
+    # Override in tests: view._execution_service_class = MockExecutionService
+    _execution_service_class = None
+
+    def get_execution_service(self):
+        """Return an ExecutionService instance (overridable in tests)."""
+        from executions.services import ExecutionService  # noqa: PLC0415
+        cls = self._execution_service_class or ExecutionService
+        return cls()
 
     def _get_rbac_service(self) -> CatalogRBACService:
         """Get or create RBAC service instance (lazy init to avoid redundant instantiation per request)."""
@@ -224,8 +237,7 @@ class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
                     }
                 )
 
-        from executions.services import ExecutionService
-        execution_service = ExecutionService()
+        execution_service = self.get_execution_service()
         try:
             stats = execution_service.get_action_stats(action.id, days=30)
         except ValueError as e:

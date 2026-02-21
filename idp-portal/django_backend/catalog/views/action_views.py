@@ -55,9 +55,18 @@ logger = structlog.get_logger(__name__)
 class ActionViewSet(viewsets.ModelViewSet):
     """
     ViewSet for admin actions (CRUD operations).
+
+    Story 33.4 (DIP): uses _catalog_service_class + get_catalog_service() so
+    tests can override the service class without monkey-patching.
     """
     queryset = Action.objects.all()
     serializer_class = ActionSerializer
+
+    _catalog_service_class: type[CatalogService] = CatalogService
+
+    def get_catalog_service(self) -> CatalogService:
+        """Return a CatalogService instance (overridable in tests)."""
+        return self._catalog_service_class()
     permission_classes = [IsAuthenticated, DBOPSProfilePermission]
     pagination_class = CustomPageNumberPagination
 
@@ -103,8 +112,9 @@ class ActionViewSet(viewsets.ModelViewSet):
         """POST /admin/actions - Create a new action."""
         serializer = ActionCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        svc = self.get_catalog_service()
         try:
-            action = CatalogService().create_action(
+            action = svc.create_action(
                 action_data=serializer.validated_data,
                 created_by_user=request.user  # type: ignore[arg-type]
             )
@@ -114,7 +124,7 @@ class ActionViewSet(viewsets.ModelViewSet):
                 raise DRFValidationError({'name': ['Une action avec ce nom existe déjà.']})
             raise
         # Reload with relations
-        action = CatalogService().get_by_id(action.id)  # type: ignore[assignment]
+        action = svc.get_by_id(action.id)  # type: ignore[assignment]
         response_serializer = ActionSerializer(action)
 
         # Invalidate catalog and tags caches after write
@@ -180,9 +190,10 @@ class ActionViewSet(viewsets.ModelViewSet):
         serializer = ActionCreateSerializer(data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         update_data = serializer.validated_data
+        svc = self.get_catalog_service()
 
         try:
-            action = CatalogService().update_action(
+            action = svc.update_action(
                 action_id=instance.id,
                 action_update_data=update_data,
                 user=request.user  # type: ignore[arg-type]
@@ -200,7 +211,7 @@ class ActionViewSet(viewsets.ModelViewSet):
             )
 
         # Reload with relations
-        action = CatalogService().get_by_id(action.id)
+        action = svc.get_by_id(action.id)
         response_serializer = ActionSerializer(action)
 
         # Invalidate catalog and tags caches after write
@@ -225,7 +236,8 @@ class ActionViewSet(viewsets.ModelViewSet):
             tags = Tag.objects.filter(id__in=serializer.validated_data['tag_ids'])
             tag_names = [tag.name for tag in tags]
 
-        updated_action = CatalogService().sync_tags(action.id, tag_names or [])
+        svc = self.get_catalog_service()
+        updated_action = svc.sync_tags(action.id, tag_names or [])
 
         if updated_action is None:
             raise NotFoundError(
@@ -235,7 +247,7 @@ class ActionViewSet(viewsets.ModelViewSet):
             )
 
         # Reload with relations
-        updated_action = CatalogService().get_by_id(updated_action.id)
+        updated_action = svc.get_by_id(updated_action.id)
         response_serializer = ActionSerializer(updated_action)
 
         # Invalidate catalog and tags caches after write
@@ -251,8 +263,9 @@ class ActionViewSet(viewsets.ModelViewSet):
         serializer = StatusUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        svc = self.get_catalog_service()
         try:
-            updated_action = CatalogService().update_status(
+            updated_action = svc.update_status(
                 action_id=action.id,
                 transition=serializer.validated_data['transition'],
                 user=request.user  # type: ignore[arg-type]
@@ -275,7 +288,7 @@ class ActionViewSet(viewsets.ModelViewSet):
             )
 
         # Reload with relations
-        updated_action = CatalogService().get_by_id(updated_action.id)
+        updated_action = svc.get_by_id(updated_action.id)
         response_serializer = ActionSerializer(updated_action)
 
         # Invalidate catalog and tags caches after write
@@ -292,8 +305,9 @@ class ActionViewSet(viewsets.ModelViewSet):
         steps = request.data.get('steps')
         change_type_config = request.data.get('change_type_config')
 
+        svc = self.get_catalog_service()
         try:
-            updated_action = CatalogService().update_execution_steps(
+            updated_action = svc.update_execution_steps(
                 action_id=action.id,
                 steps=steps,  # type: ignore[arg-type]
                 change_type_config=change_type_config,
@@ -317,7 +331,7 @@ class ActionViewSet(viewsets.ModelViewSet):
             )
 
         # Reload with relations
-        updated_action = CatalogService().get_by_id(updated_action.id)
+        updated_action = svc.get_by_id(updated_action.id)
         response_serializer = ActionSerializer(updated_action)
 
         # Invalidate catalog and tags caches after write
@@ -386,7 +400,7 @@ class ActionViewSet(viewsets.ModelViewSet):
         _tags_cache.clear()
 
         # Reload with relations
-        action = CatalogService().get_by_id(action.id)
+        action = self.get_catalog_service().get_by_id(action.id)
         response_serializer = ActionSerializer(action)
 
         return Response({"data": response_serializer.data})

@@ -60,17 +60,24 @@ class ContainerWorkflowRuntime:
     - AC4: Failure/cancellation propagation
     """
 
-    def __init__(self, execution: Execution):
+    def __init__(
+        self,
+        execution: Execution,
+        execution_service: ExecutionService | None = None,
+    ):
         """
         Initialize container workflow runtime.
 
         Args:
-            execution: The parent Execution instance (workflow)
+            execution:         The parent Execution instance (workflow)
+            execution_service: Optional ExecutionService to inject (defaults to
+                               a new ExecutionService() for production use).
+                               Pass a mock in tests to avoid DB access.
         """
         self.execution = execution
         self.action = execution.action
         self.correlation_id = get_correlation_id()
-        self.execution_service = ExecutionService()
+        self.execution_service = execution_service or ExecutionService()
 
         # Load workflow steps from action's execution_steps
         self.workflow_steps = self._load_workflow_steps()

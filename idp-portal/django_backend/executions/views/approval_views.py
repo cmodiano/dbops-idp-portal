@@ -100,9 +100,19 @@ class PendingApprovalsView(APIView):
 
 
 class ApproveExecutionView(APIView):
-    """POST /executions/{id}/approve — Approuver une exécution en attente (DBA/DBOPS only)."""
+    """POST /executions/{id}/approve — Approuver une exécution en attente (DBA/DBOPS only).
+
+    Story 33.4 (DIP): uses _execution_service_class + get_execution_service() so
+    tests can override the service class without monkey-patching.
+    """
 
     permission_classes = [IsAuthenticated, IsDBAOrDBOPS]
+
+    _execution_service_class: type[ExecutionService] = ExecutionService
+
+    def get_execution_service(self) -> ExecutionService:
+        """Return an ExecutionService instance (overridable in tests)."""
+        return self._execution_service_class()
 
     @extend_schema(
         tags=['executions'],
@@ -119,7 +129,7 @@ class ApproveExecutionView(APIView):
         user_id = str(request.user.id) if request.user and hasattr(request.user, 'id') else "unknown"
 
         # State machine: PENDING_APPROVAL → RUNNING (Story 7.4). Transition then launch workflow.
-        execution_service = ExecutionService()
+        execution_service = self.get_execution_service()
         updated = execution_service.update_status(execution.id, ExecutionStatus.RUNNING, user_id)
         if not updated:
             raise NotFoundError(
@@ -178,9 +188,19 @@ class ApproveExecutionView(APIView):
 
 
 class RejectExecutionView(APIView):
-    """POST /executions/{id}/reject — Rejeter une exécution en attente (DBA/DBOPS only)."""
+    """POST /executions/{id}/reject — Rejeter une exécution en attente (DBA/DBOPS only).
+
+    Story 33.4 (DIP): uses _execution_service_class + get_execution_service() so
+    tests can override the service class without monkey-patching.
+    """
 
     permission_classes = [IsAuthenticated, IsDBAOrDBOPS]
+
+    _execution_service_class: type[ExecutionService] = ExecutionService
+
+    def get_execution_service(self) -> ExecutionService:
+        """Return an ExecutionService instance (overridable in tests)."""
+        return self._execution_service_class()
 
     @extend_schema(
         tags=['executions'],
@@ -196,7 +216,7 @@ class RejectExecutionView(APIView):
 
         old_status = execution.status
         # State machine: PENDING_APPROVAL → REJECTED (Story 7.4)
-        execution_service = ExecutionService()
+        execution_service = self.get_execution_service()
         updated = execution_service.update_status(
             execution.id, ExecutionStatus.REJECTED, str(request.user.id)
         )

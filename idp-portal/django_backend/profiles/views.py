@@ -67,9 +67,18 @@ def invalidate_permissions_cache() -> None:
 class ProfileViewSet(viewsets.ViewSet):
     """
     ViewSet for admin profiles CRUD operations.
+
+    Story 33.4 (DIP): uses _profile_service_class + get_profile_service() so
+    tests can override the service class without monkey-patching.
     """
     permission_classes = [IsAuthenticated, DBOPSProfilePermission]
-    
+
+    _profile_service_class: type[ProfileService] = ProfileService
+
+    def get_profile_service(self) -> ProfileService:
+        """Return a ProfileService instance (overridable in tests)."""
+        return self._profile_service_class()
+
     def _get_profile_id(self, pk: Any) -> int:
         """
         Helper method to extract and validate profile ID from pk parameter.
@@ -105,7 +114,7 @@ class ProfileViewSet(viewsets.ViewSet):
         Raises:
             NotFoundError: If profile not found
         """
-        service = ProfileService()
+        service = self.get_profile_service()
         profile = service.get_by_id(profile_id)
         if profile is None:
             raise NotFoundError(
@@ -125,7 +134,7 @@ class ProfileViewSet(viewsets.ViewSet):
 
     def list(self, request: Request) -> Response:
         """GET /admin/profiles - List all profiles."""
-        service = ProfileService()
+        service = self.get_profile_service()
         profiles = service.list_all()
         serializer = ProfileListSerializer(profiles, many=True)
         return Response({"data": serializer.data})
@@ -135,7 +144,7 @@ class ProfileViewSet(viewsets.ViewSet):
         serializer = ProfileCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
-        service = ProfileService()
+        service = self.get_profile_service()
         try:
             profile = service.create_profile(serializer.validated_data, user=request.user)
         except ValueError as e:
@@ -165,7 +174,7 @@ class ProfileViewSet(viewsets.ViewSet):
         serializer = ProfileUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
-        service = ProfileService()
+        service = self.get_profile_service()
         try:
             profile = service.update_profile(profile_id, serializer.validated_data, user=request.user)
         except ValueError as e:
@@ -191,7 +200,7 @@ class ProfileViewSet(viewsets.ViewSet):
         """DELETE /admin/profiles/{id} - Delete profile. Returns 204."""
         profile_id = self._get_profile_id(pk)
 
-        service = ProfileService()
+        service = self.get_profile_service()
         deleted = service.delete_profile(profile_id, user=request.user)
 
         if not deleted:
@@ -210,7 +219,7 @@ class ProfileViewSet(viewsets.ViewSet):
         profile_id = self._get_profile_id(pk)
         self._get_profile_or_404(profile_id)  # Verify profile exists
         
-        service = ProfileService()
+        service = self.get_profile_service()
         
         if request.method == 'GET':
             # GET /admin/profiles/{id}/actions
@@ -250,7 +259,7 @@ class ProfileViewSet(viewsets.ViewSet):
         profile_id = self._get_profile_id(pk)
         self._get_profile_or_404(profile_id)  # Verify profile exists
         
-        service = ProfileService()
+        service = self.get_profile_service()
         
         if request.method == 'GET':
             # GET /admin/profiles/{id}/targets

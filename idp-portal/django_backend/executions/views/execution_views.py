@@ -45,10 +45,20 @@ _dba_permission = IsDBAOrDBOPS()
 
 
 class ExecutionsCreateView(APIView):
-    """POST /executions -> {data: ExecutionCreateResponse}"""
+    """POST /executions -> {data: ExecutionCreateResponse}
+
+    Story 33.4 (DIP): uses _execution_service_class + get_execution_service() so
+    tests can override the service class without monkey-patching.
+    """
 
     permission_classes = [IsAuthenticated]
     throttle_classes = [GeneralAPIThrottle, ExecutionThrottle]
+
+    _execution_service_class: type[ExecutionService] = ExecutionService
+
+    def get_execution_service(self) -> ExecutionService:
+        """Return an ExecutionService instance (overridable in tests)."""
+        return self._execution_service_class()
 
     @extend_schema(
         tags=['executions'],
@@ -158,7 +168,7 @@ class ExecutionsCreateView(APIView):
         )
 
         # Step 7: Create execution
-        execution = ExecutionService().create_execution(
+        execution = self.get_execution_service().create_execution(
             user=request.user,  # type: ignore[arg-type]
             action=action,
             environment=env_config['env_str'],
@@ -215,7 +225,7 @@ class ExecutionsCreateView(APIView):
                 exc_info=True,
             )
 
-            execution_service = ExecutionService()
+            execution_service = self.get_execution_service()
             try:
                 execution_service.update_status(
                     execution.id,
@@ -258,10 +268,20 @@ class ExecutionDetailView(APIView):
 
 
 class ExecutionCancelView(APIView):
-    """PATCH /executions/{id}/cancel/ -> cancel an execution"""
+    """PATCH /executions/{id}/cancel/ -> cancel an execution
+
+    Story 33.4 (DIP): uses _execution_service_class + get_execution_service() so
+    tests can override the service class without monkey-patching.
+    """
 
     permission_classes = [IsAuthenticated]
     throttle_classes = [GeneralAPIThrottle]
+
+    _execution_service_class: type[ExecutionService] = ExecutionService
+
+    def get_execution_service(self) -> ExecutionService:
+        """Return an ExecutionService instance (overridable in tests)."""
+        return self._execution_service_class()
 
     @extend_schema(tags=['executions'], summary='Annuler une exécution', responses={200: ExecutionSerializer})
     def patch(self, request: Request, execution_id: int) -> Response:
@@ -287,7 +307,7 @@ class ExecutionCancelView(APIView):
 
             cancelled_by_admin = execution.user_id != request.user.id
             try:
-                updated = ExecutionService().update_status(execution_id, ExecutionStatus.CANCELLED, str(request.user.id))
+                updated = self.get_execution_service().update_status(execution_id, ExecutionStatus.CANCELLED, str(request.user.id))
             except ValueError as e:
                 raise BadRequestError(
                     code="INVALID_STATUS",

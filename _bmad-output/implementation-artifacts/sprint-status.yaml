@@ -418,6 +418,7 @@ development_status:
     31-6-config-gates-choix-service-creation-changement-servicenow: done # 2026-02-19: code-review — 6 fixes (H1 validation bloquante AC#3, H2 ActionListSerializer gate_config, H3 test 10.4, M1 filtre API type, M2 ActionCreateSerializer, M3 File List + Alert)
     31-7-aide-contextuelle-tooltip-popover-markdown-backend: done # 2026-02-19: App help Django, 3 topics MD, SectionHelp composant, intégration ActionForm/ActionWizard — 6 BE + 16 FE tests pass. Code review: 0H + 4M + 3L fixes appliqués
     31-8-service-notification-multi-destinations-email-teams-page: done # 2026-02-19: Code review adversarial — 6 issues corrigées (H1: on_commit, H2: File List, M1: get_parameters(), M2: PII email, M3: URL SSRF, L1: Teams title) — 140 BE tests pass
+    31-9-suppression-doublon-ref-platforms: backlog # Une seule source de vérité : IntegrationTypeCatalogue + intégrations ; supprimer REF_PLATFORMS (réf. analyse-facilite-integrations-adapters.md §7)
     epic-31-retrospective: optional
     # === Epic 32: Résilience Data Guard (failover / switchover) ===
     # Réf: planning-artifacts/epic-32-resilience-dataguard.md — Backend détecte coupure DB, reconnexion, retry transaction, portail + API
@@ -433,7 +434,7 @@ development_status:
     33-1-ocp-registry-pattern-adapters-services: done # code-review 2026-02-21: 5 fixes (M1 unregister, M2 SERVICE_TYPES assert, B1 overwrite warning, B2 __all__ exports, B3 list_types doc) — 50/50 tests pass
     33-2-srp-decouper-executions-tasks: done
     33-3-srp-decouper-catalog-views: done # code-review 2026-02-21: 1 HIGH + 3 MEDIUM + 3 LOW fixes — partial default, dict constant, double subquery, duplicate read, comment cleanup — 369/374 tests pass
-    33-4-dip-injection-dependances-services: backlog
+    33-4-dip-injection-dependances-services: done # code-review 2026-02-21: H1 ADR ref, H2 CatalogActionViewSet attr, M2 svc var action_views, M3 6 tests execution views DI — 26/26 tests pass
     33-5-srp-reduire-actionform-actionwizard: backlog
     33-6-documentation-checklist-solid: backlog
     epic-33-retrospective: optional

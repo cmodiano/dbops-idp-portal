@@ -22,8 +22,17 @@ class GateEvaluator:
     - gate_status: dict with per-condition details and timeout info
     """
 
-    def __init__(self) -> None:
-        self.inventory_service = InventoryService()
+    def __init__(
+        self,
+        inventory_service: InventoryService | None = None,
+    ) -> None:
+        """
+        Args:
+            inventory_service: Optional InventoryService to inject (defaults to
+                               a new InventoryService() for production use).
+                               Pass a mock in tests to avoid DB access.
+        """
+        self.inventory_service = inventory_service or InventoryService()
 
     def evaluate(self, step: Any) -> tuple[bool, dict]:
         """
