@@ -127,6 +127,11 @@ DB_CONN_MAX_AGE = int(os.getenv('DB_CONN_MAX_AGE', '600'))
 # CONN_HEALTH_CHECKS: Django 4.1+ — validates connection before reuse.
 # If dead (post-failover), Django silently recreates it. Key resilience mechanism.
 DB_CONN_HEALTH_CHECKS = os.getenv('DB_CONN_HEALTH_CHECKS', 'True').lower() in ('true', '1', 'yes')
+# Story 32.2: Retry settings for transactional retry after DB reconnection
+# Max retry attempts before returning 503 (first attempt is immediate)
+DB_RETRY_MAX_ATTEMPTS = int(os.getenv('DB_RETRY_MAX_ATTEMPTS', '3'))
+# Base delay for exponential backoff between retries (seconds), capped at 5s
+DB_RETRY_BACKOFF_BASE = float(os.getenv('DB_RETRY_BACKOFF_BASE', '0.5'))
 
 DATABASES = {
     'default': {

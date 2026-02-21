@@ -2,19 +2,24 @@
 Database resilience middleware for Data Guard failover/switchover detection.
 
 Story 32.1: Detects DB connection loss (OperationalError, InterfaceError, DatabaseError)
-and attempts recovery by purging dead connections and retrying the request once.
+and attempts recovery by purging dead connections and retrying the request.
+
+Story 32.2: Bounded retry with exponential backoff, idempotency protection for writes,
+and structured 503 response on exhaustion.
 
 This middleware is a safety net — Django's CONN_HEALTH_CHECKS (4.1+) handles most cases
 by validating connections before reuse. This catches errors that slip through.
 """
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 
 import structlog
+from django.conf import settings
 from django.db import OperationalError, close_old_connections, connection
 from django.db.utils import DatabaseError, InterfaceError
-from django.http import HttpRequest, HttpResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse
 
 from core.middleware import get_correlation_id
 
@@ -34,6 +39,15 @@ CONNECTION_ERROR_CODES = frozenset({
     12170,  # ORA-12170: TNS:connect timeout occurred
     12514,  # ORA-12514: TNS:listener does not currently know of service
 })
+
+# ORA codes that may indicate mid-commit failure (uncertain state)
+MID_COMMIT_ORA_CODES = frozenset({
+    3113,   # ORA-03113: end-of-file on communication channel (can happen mid-commit)
+    3114,   # ORA-03114: not connected to ORACLE
+})
+
+# HTTP methods considered safe for retry (no side effects)
+SAFE_METHODS = frozenset({'GET', 'HEAD', 'OPTIONS'})
 
 
 def _is_connection_error(exc: Exception) -> bool:
@@ -69,15 +83,74 @@ def _extract_ora_code(exc: Exception) -> str | None:
     return None
 
 
+def _is_mid_commit_error(exc: Exception) -> bool:
+    """Determine if error may have occurred during COMMIT (uncertain state).
+
+    If the connection was in an atomic block and the error is one that can
+    occur mid-commit (ORA-03113, ORA-03114), the transaction state is uncertain
+    and retrying would risk double-writes.
+    """
+    if isinstance(exc, InterfaceError):
+        # InterfaceError = connection dead before commit → safe to retry
+        return False
+
+    ora_code = _extract_ora_code(exc)
+    if ora_code is None:
+        return False
+
+    code_num = int(ora_code.split('-')[1])
+    if code_num not in MID_COMMIT_ORA_CODES:
+        return False
+
+    # If connection.in_atomic_block is True after the error, the atomic context
+    # was still active → error happened inside transaction → pre-commit → safe.
+    # If it's False, Django already cleaned up the atomic block, which can mean
+    # the error happened during or after commit → uncertain.
+    try:
+        return not connection.in_atomic_block
+    except Exception:
+        # If we can't check, assume worst case
+        return True
+
+
+def _is_retry_safe(request: HttpRequest, exc: Exception) -> bool:
+    """Determine if retrying the request is safe.
+
+    Read-only methods are always safe to retry.
+    Write methods are safe only if the error occurred before COMMIT.
+    """
+    if request.method in SAFE_METHODS:
+        return True
+
+    # For write methods, check if error is mid-commit
+    if _is_mid_commit_error(exc):
+        return False
+
+    return True
+
+
+def _calculate_backoff(attempt: int) -> float:
+    """Calculate backoff delay for a retry attempt.
+
+    attempt 0 (first retry): DB_RETRY_BACKOFF_BASE
+    attempt 1: DB_RETRY_BACKOFF_BASE * 2
+    attempt N: DB_RETRY_BACKOFF_BASE * 2^N, capped at 5s
+    """
+    base = getattr(settings, 'DB_RETRY_BACKOFF_BASE', 0.5)
+    delay = base * (2 ** attempt)
+    return min(delay, 5.0)
+
+
 class DatabaseResilienceMiddleware:
     """
-    Middleware that detects DB connection loss and attempts recovery.
+    Middleware that detects DB connection loss and attempts bounded retry.
 
     On connection error:
     1. Logs db_connection_lost event
-    2. Closes dead connections via close_old_connections()
-    3. Retries the request once
-    4. Logs db_connection_restored or db_connection_retry_failed
+    2. Checks if retry is safe (idempotency for write methods)
+    3. Retries with exponential backoff up to DB_RETRY_MAX_ATTEMPTS
+    4. On success: logs db_connection_restored
+    5. On exhaustion: returns 503 with structured JSON error
 
     Placed after CorrelationIdMiddleware to have correlation_id available.
     """
@@ -92,42 +165,76 @@ class DatabaseResilienceMiddleware:
             if not _is_connection_error(exc):
                 raise
 
-            correlation_id = get_correlation_id()
-            ora_code = _extract_ora_code(exc)
+            return self._handle_connection_error(request, exc)
 
-            logger.warning(
-                "db_connection_lost",
+    def _handle_connection_error(
+        self, request: HttpRequest, exc: Exception
+    ) -> HttpResponse:
+        """Handle a DB connection error with bounded retry logic."""
+        correlation_id = get_correlation_id()
+        ora_code = _extract_ora_code(exc)
+        max_attempts = getattr(settings, 'DB_RETRY_MAX_ATTEMPTS', 3)
+        start_time = time.monotonic()
+
+        logger.warning(
+            "db_connection_lost",
+            correlation_id=correlation_id,
+            error_type=type(exc).__name__,
+            error_code=ora_code,
+            error=str(exc),
+            method=request.method,
+            path=request.path,
+        )
+
+        # Check idempotency for write methods
+        if not _is_retry_safe(request, exc):
+            logger.error(
+                "db_retry_unsafe_write",
                 correlation_id=correlation_id,
-                error_type=type(exc).__name__,
                 error_code=ora_code,
-                error=str(exc),
+                method=request.method,
+                path=request.path,
+                reason="mid_commit_error",
+            )
+            return self._build_503_response(
+                correlation_id,
+                message="Résultat incertain après coupure réseau pendant le commit. "
+                        "Veuillez vérifier l'état de l'opération.",
+            )
+
+        # Bounded retry loop
+        for attempt in range(max_attempts):
+            # Backoff: first attempt (0) is immediate, subsequent have delay
+            backoff = _calculate_backoff(attempt - 1) if attempt > 0 else 0
+            logger.warning(
+                "db_retry_attempt",
+                correlation_id=correlation_id,
+                attempt_number=attempt + 1,
+                max_attempts=max_attempts,
+                backoff_seconds=backoff,
                 method=request.method,
                 path=request.path,
             )
+            if attempt > 0:
+                time.sleep(backoff)
 
-            # Purge dead connections
+            # Purge dead connections and verify
             close_old_connections()
-
-            # Verify new connection is usable
             try:
                 connection.ensure_connection()
-            except Exception as reconnect_exc:
-                logger.error(
-                    "db_connection_retry_failed",
+            except Exception as conn_exc:
+                logger.warning(
+                    "db_reconnect_failed",
                     correlation_id=correlation_id,
-                    error_type=type(reconnect_exc).__name__,
-                    error=str(reconnect_exc),
-                    original_error_code=ora_code,
+                    attempt_number=attempt + 1,
+                    max_attempts=max_attempts,
+                    error=str(conn_exc),
                     method=request.method,
                     path=request.path,
                 )
-                raise exc from reconnect_exc
+                continue
 
-            # Retry request once.
-            # WARNING: This re-executes the entire downstream middleware chain + view.
-            # Side effects (emails, writes) from the first attempt may be duplicated.
-            # Safe for read-only requests; for mutating requests, Story 32.2 adds
-            # transactional retry with idempotency protection.
+            # Retry the request
             try:
                 response = self.get_response(request)
                 logger.info(
@@ -136,16 +243,67 @@ class DatabaseResilienceMiddleware:
                     method=request.method,
                     path=request.path,
                     original_error_code=ora_code,
+                    attempt_number=attempt + 1,
+                    total_duration_ms=int((time.monotonic() - start_time) * 1000),
                 )
                 return response
             except (OperationalError, InterfaceError, DatabaseError) as retry_exc:
-                logger.error(
-                    "db_connection_retry_failed",
-                    correlation_id=correlation_id,
-                    error_type=type(retry_exc).__name__,
-                    error=str(retry_exc),
-                    original_error_code=ora_code,
-                    method=request.method,
-                    path=request.path,
-                )
-                raise
+                if not _is_connection_error(retry_exc):
+                    raise
+                # Check idempotency again for write retries
+                if not _is_retry_safe(request, retry_exc):
+                    logger.error(
+                        "db_retry_unsafe_write",
+                        correlation_id=correlation_id,
+                        error_code=_extract_ora_code(retry_exc),
+                        method=request.method,
+                        path=request.path,
+                        reason="mid_commit_error_on_retry",
+                        attempt_number=attempt + 1,
+                    )
+                    return self._build_503_response(
+                        correlation_id,
+                        message="Résultat incertain après coupure réseau pendant le commit. "
+                                "Veuillez vérifier l'état de l'opération.",
+                    )
+                exc = retry_exc
+                continue
+
+        # All retries exhausted
+        total_duration_ms = int((time.monotonic() - start_time) * 1000)
+        logger.error(
+            "db_retry_exhausted",
+            correlation_id=correlation_id,
+            total_attempts=max_attempts,
+            total_duration_ms=total_duration_ms,
+            error_type=type(exc).__name__,
+            error_code=_extract_ora_code(exc),
+            method=request.method,
+            path=request.path,
+        )
+
+        return self._build_503_response(correlation_id)
+
+    @staticmethod
+    def _build_503_response(
+        correlation_id: str | None,
+        message: str | None = None,
+    ) -> JsonResponse:
+        """Build structured 503 JSON response."""
+        if message is None:
+            message = (
+                "Base de données temporairement indisponible après bascule. "
+                "Veuillez réessayer dans quelques instants."
+            )
+        response = JsonResponse(
+            {
+                "error": {
+                    "code": "DB_UNAVAILABLE",
+                    "message": message,
+                    "correlation_id": correlation_id,
+                }
+            },
+            status=503,
+        )
+        response["Retry-After"] = "30"
+        return response
