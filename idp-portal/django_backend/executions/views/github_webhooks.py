@@ -24,14 +24,8 @@ from adapters.github_actions_adapter import (
 )
 from core.middleware import get_correlation_id
 from executions.models import Execution, ExecutionStatus, ExecutionStep
-from executions.services import ExecutionService
 
 logger = structlog.get_logger(__name__)
-
-# Story 33.4 (DIP): module-level factory, overridable in tests via:
-#   import executions.views.github_webhooks as m
-#   m._execution_service_factory = lambda: MockExecutionService()
-_execution_service_factory = ExecutionService
 
 # Mapping GitHub webhook action → whether we should process status updates
 WEBHOOK_PROCESSABLE_ACTIONS = {"requested", "in_progress", "completed"}
@@ -207,7 +201,8 @@ def github_webhook_workflow_run(request: Request) -> Response:
     }
     if execution.status not in terminal_statuses and idp_status != execution.status:
         try:
-            svc = _execution_service_factory()
+            from core.di import get_execution_service  # noqa: PLC0415
+            svc = get_execution_service()
             svc.update_status(execution.id, idp_status, str(execution.user_id))
         except ValueError as ve:
             logger.warning(

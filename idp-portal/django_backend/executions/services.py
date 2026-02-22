@@ -383,29 +383,22 @@ class ExecutionService:
     def launch_workflow(execution: Execution, correlation_id: str | None = None) -> None:
         """
         Start the workflow runtime for an execution (Story 7.4 / 25.4).
+        Runtime dispatch via RuntimeRegistry (Story 34.4 — SOLID-BE-7).
         Used after creation (when not PENDING_APPROVAL) and after DBA approval.
         """
-        from django.conf import settings
+        from executions.runtime_registry import runtime_registry  # noqa: PLC0415
         action = execution.action
         if not action:
             return
-        if action.item_type == "workflow":
-            from executions.container_workflow_runtime import ContainerWorkflowRuntime
-            ContainerWorkflowRuntime(execution).run()
-            logger.info(
-                "container_workflow_execution_launched",
+        runtime = runtime_registry.get(action.item_type)
+        if runtime is None:
+            logger.debug(
+                "no_runtime_registered_for_item_type",
+                item_type=action.item_type,
                 execution_id=execution.id,
-                correlation_id=correlation_id,
             )
-        elif getattr(settings, "SIMULATE_EXECUTION_DEV", False):
-            from executions.simulation_service import SimulationService
-            SimulationService.create_simulated_steps(execution)
-            SimulationService.start_simulation(execution)
-            logger.info(
-                "execution_simulation_started",
-                execution_id=execution.id,
-                correlation_id=correlation_id,
-            )
+            return
+        runtime(execution, correlation_id=correlation_id)
     
     @transaction.atomic
     def update_status(self, execution_id: int, new_status: str, user_id: str) -> Execution | None:
