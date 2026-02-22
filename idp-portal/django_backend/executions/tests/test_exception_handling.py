@@ -196,7 +196,7 @@ class TestProfileServiceExceptionLogging:
 
         with patch('executions.utils.ProfileService') as mock_ps_class:
             mock_ps_class.return_value.get_cumulative_permissions.side_effect = ConnectionError("Service down")
-            with patch('executions.utils.exec_logger') as mock_logger:
+            with patch('executions.utils.rbac_helpers.exec_logger') as mock_logger:
                 result = get_allowed_action_ids_for_user(user)
 
                 assert result == set()
