@@ -220,7 +220,16 @@ class ActionFieldValidationMixin:
     ]
 )
 class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
-    """Base Action serializer (read/write) matching ActionResponse/ActionDetail."""
+    """
+    Read-only serializer for Action model.
+    Used for list/detail read operations (GET) — matches ActionResponse/ActionDetail.
+
+    Write operations (create/update) use ActionCreateSerializer and CatalogService.
+    Do NOT call .save() on this serializer — use ActionCreateSerializer instead.
+
+    Story 34.3 - SOLID-BE-6: create() and update() overrides raising NotImplementedError
+    removed (LSP violation). ModelSerializer's default methods are inherited instead.
+    """
 
     # CLOB/JSON fields - OracleJSONField handles serialization automatically (Story 17.4)
     # Story 22.20 (AC4): Schémas explicites pour JSONField complexes
@@ -459,19 +468,6 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
                 validated_data[field] = data[field]  # Keep as dict, model will serialize
 
         return validated_data  # type: ignore[no-any-return]
-
-    def create(self, validated_data: dict[str, Any]) -> Action:
-        """Create action - handled by ViewSet using CatalogService."""
-        # This serializer is mainly for read operations
-        # Create is handled by ActionCreateSerializer
-        raise NotImplementedError("Use ActionCreateSerializer for creation")
-
-    def update(self, instance: Action, validated_data: dict[str, Any]) -> Action:
-        """Update action - handled by ViewSet using CatalogService."""
-        # This serializer is mainly for read operations
-        # Update is handled by ViewSet
-        raise NotImplementedError("Update handled by ViewSet")
-
 
 class ActionCreateSerializer(ActionFieldValidationMixin, serializers.Serializer):
     """Serializer for POST /admin/actions (ActionCreate model)."""

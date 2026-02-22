@@ -1,7 +1,9 @@
-"""Tests for RBAC permissions cache invalidation (Story 30.14, AC3).
+"""Tests for RBAC permissions cache invalidation (Story 30.14, AC3; Story 34.3, NEW-3).
 
 Verifies that invalidate_permissions_cache() clears the cache version key,
 causing CatalogRBACService.get_permissions() to re-fetch from the database.
+
+Story 34.3 - NEW-3: Function moved to profiles/cache.py. Both import paths tested.
 """
 import pytest
 from unittest.mock import patch, MagicMock
@@ -101,3 +103,24 @@ class TestRBACCacheInvalidation:
             result = self.service.get_permissions(self.user)
             assert result is not None
             assert result['actions_type'] == 'list'
+
+
+class TestInvalidatePermissionsCacheFromCacheModule:
+    """Story 34.3 - NEW-3: invalidate_permissions_cache() is importable from profiles.cache."""
+
+    def test_invalidate_permissions_cache_from_cache_module(self) -> None:
+        """AC6: importable from profiles.cache, calls cache.delete(RBAC_CACHE_VERSION_KEY)."""
+        from profiles.cache import invalidate_permissions_cache as fn_from_cache
+
+        with patch('profiles.cache.cache') as mock_cache:
+            fn_from_cache()
+            mock_cache.delete.assert_called_once_with(RBAC_CACHE_VERSION_KEY)
+
+    def test_invalidate_permissions_cache_backward_compat_via_views(self) -> None:
+        """profiles.views.invalidate_permissions_cache is the same function as profiles.cache."""
+        from profiles.cache import invalidate_permissions_cache as fn_cache
+        from profiles.views import invalidate_permissions_cache as fn_views
+
+        assert fn_cache is fn_views, (
+            "profiles.views.invalidate_permissions_cache must re-export profiles.cache version"
+        )
