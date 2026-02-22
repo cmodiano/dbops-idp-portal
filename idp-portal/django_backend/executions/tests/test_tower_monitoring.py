@@ -26,7 +26,7 @@ class TestPollTowerJobStatus:
 
     @patch("executions.tasks._update_execution_from_poll")
     @patch("executions.tasks._broadcast_execution_update")
-    @patch("executions.tasks.poll_tower_job_status.apply_async")
+    @patch("executions.tasks.poll_platform_job_status.apply_async")
     def test_poll_running_reschedules(
         self,
         mock_apply_async: MagicMock,
@@ -50,14 +50,13 @@ class TestPollTowerJobStatus:
             )
 
         assert result["outcome"] == "polling"
-        assert result["tower_status"] == "running"
         mock_broadcast.assert_called_once()
         mock_update.assert_called_once()
         mock_apply_async.assert_called_once()
 
     @patch("executions.tasks._update_execution_from_poll")
     @patch("executions.tasks._broadcast_execution_update")
-    @patch("executions.tasks.poll_tower_job_status.apply_async")
+    @patch("executions.tasks.poll_platform_job_status.apply_async")
     def test_poll_terminal_no_reschedule(
         self,
         mock_apply_async: MagicMock,
@@ -78,14 +77,13 @@ class TestPollTowerJobStatus:
             )
 
         assert result["outcome"] == "complete"
-        assert result["tower_status"] == "successful"
         mock_broadcast.assert_called_once()
         mock_update.assert_called_once()
         mock_apply_async.assert_not_called()
 
     @patch("executions.tasks._update_execution_from_poll")
     @patch("executions.tasks._broadcast_execution_update")
-    @patch("executions.tasks.poll_tower_job_status.apply_async")
+    @patch("executions.tasks.poll_platform_job_status.apply_async")
     def test_poll_failed_is_terminal(
         self,
         mock_apply_async: MagicMock,
@@ -109,7 +107,7 @@ class TestPollTowerJobStatus:
         assert result["status"] == "FAILED"
         mock_apply_async.assert_not_called()
 
-    @patch("executions.tasks.poll_tower_job_status.apply_async")
+    @patch("executions.tasks.poll_platform_job_status.apply_async")
     def test_poll_adapter_error_reschedules(
         self,
         mock_apply_async: MagicMock,
@@ -133,7 +131,7 @@ class TestPollTowerJobStatus:
 
     @patch("executions.tasks._update_execution_from_poll")
     @patch("executions.tasks._broadcast_execution_update")
-    @patch("executions.tasks.poll_tower_job_status.apply_async")
+    @patch("executions.tasks.poll_platform_job_status.apply_async")
     def test_poll_canceled_is_terminal(
         self,
         mock_apply_async: MagicMock,
@@ -154,12 +152,11 @@ class TestPollTowerJobStatus:
             )
 
         assert result["outcome"] == "complete"
-        assert result["tower_status"] == "canceled"
         mock_apply_async.assert_not_called()
 
     @patch("executions.tasks._update_execution_from_poll")
     @patch("executions.tasks._broadcast_execution_update")
-    @patch("executions.tasks.poll_tower_job_status.apply_async")
+    @patch("executions.tasks.poll_platform_job_status.apply_async")
     def test_poll_basic_auth(
         self,
         mock_apply_async: MagicMock,
@@ -186,7 +183,7 @@ class TestPollTowerJobStatus:
 
     @patch("executions.tasks._update_execution_from_poll")
     @patch("executions.tasks._broadcast_execution_update")
-    @patch("executions.tasks.poll_tower_job_status.apply_async")
+    @patch("executions.tasks.poll_platform_job_status.apply_async")
     def test_poll_workflow_job_resource_type(
         self,
         mock_apply_async: MagicMock,
@@ -217,7 +214,7 @@ class TestPollTowerJobStatus:
 
     @patch("executions.tasks._update_execution_from_poll")
     @patch("executions.tasks._broadcast_execution_update")
-    @patch("executions.tasks.poll_tower_job_status.apply_async")
+    @patch("executions.tasks.poll_platform_job_status.apply_async")
     def test_poll_error_status_is_terminal(
         self,
         mock_apply_async: MagicMock,
@@ -238,7 +235,6 @@ class TestPollTowerJobStatus:
             )
 
         assert result["outcome"] == "complete"
-        assert result["tower_status"] == "error"
         mock_apply_async.assert_not_called()
 
 

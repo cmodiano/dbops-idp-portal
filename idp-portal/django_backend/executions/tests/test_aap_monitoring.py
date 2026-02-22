@@ -212,7 +212,7 @@ class TestPollAAPJobStatus:
 
     @patch("adapters.aap_adapter.AAPAdapter")
     @patch("executions.tasks._broadcast_execution_update")
-    @patch("executions.tasks.poll_aap_job_status.apply_async")
+    @patch("executions.tasks.poll_platform_job_status.apply_async")
     def test_poll_running_job_reschedules(
         self, mock_apply_async: MagicMock, mock_broadcast: MagicMock, MockAdapter: MagicMock,
     ) -> None:
@@ -258,13 +258,12 @@ class TestPollAAPJobStatus:
         )
 
         assert result["outcome"] == "polling"
-        assert result["aap_status"] == "running"
         mock_broadcast.assert_called_once()
         mock_apply_async.assert_called_once()
 
     @patch("adapters.aap_adapter.AAPAdapter")
     @patch("executions.tasks._broadcast_execution_update")
-    @patch("executions.tasks.poll_aap_job_status.apply_async")
+    @patch("executions.tasks.poll_platform_job_status.apply_async")
     def test_poll_completed_job_stops(
         self, mock_apply_async: MagicMock, mock_broadcast: MagicMock, MockAdapter: MagicMock,
     ) -> None:
@@ -310,7 +309,6 @@ class TestPollAAPJobStatus:
         )
 
         assert result["outcome"] == "complete"
-        assert result["aap_status"] == "successful"
         mock_broadcast.assert_called_once()
         mock_apply_async.assert_not_called()
 

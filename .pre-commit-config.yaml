@@ -1,0 +1,30 @@
+# Pre-commit hooks — repository root
+# Install: pip install pre-commit && pre-commit install
+# Run:    pre-commit run --all-files
+
+repos:
+  # Secret detection (idp-portal). Excludes tests, docs, .env*, templates (common false positives).
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', 'idp-portal/.secrets.baseline']
+        files: ^idp-portal/
+        exclude: |
+          (?x)^idp-portal/(
+            .*\.lock$|
+            package-lock\.json$|
+            .*node_modules/.*|
+            .*\.venv/.*|
+            .*security-reports/.*|
+            \.env$|\.env\.|.*\.env\.(development|production|example|template)$|
+            .*/docs/.*|
+            .*/tests?/.*|
+            .*test_.*\.py$|.*_test\.py$|
+            .*conftest\.py$|
+            .*test_settings\.py$|
+            .*\.template$|
+            .*\.md$
+          )$
+
+  # Mypy: run from idp-portal directory using the local hook in idp-portal/.pre-commit-config.yaml

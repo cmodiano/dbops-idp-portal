@@ -1,13 +1,15 @@
 """
 executions/tasks/polling.py — Responsabilité unique : surveillance asynchrone des jobs
-sur 5 plateformes externes (AAP, Tower, Azure DevOps, GitHub Actions, Terraform Cloud).
+sur les plateformes externes.
 
-Pattern commun : asyncio.run() pour appels adapters async. Adapters importés en lazy
-dans chaque tâche pour éviter les imports circulaires.
+Story 34.5 (SOLID-BE-3): OCP — une seule tâche générique `poll_platform_job_status`
+délègue à l'AdapterRegistry (Story 33.1). Les 5 tâches nommées sont des shims
+backward-compatibles (≤ 15 lignes chacun). Ajouter une plateforme ne nécessite
+aucune modification de ce fichier.
 
-Expose : poll_aap_job_status, poll_tower_job_status, poll_azure_devops_run_status,
-         poll_github_actions_run_status, poll_terraform_cloud_run_status,
-         MAX_POLLING_RETRIES
+Expose : poll_platform_job_status (générique), poll_aap_job_status, poll_tower_job_status,
+         poll_azure_devops_run_status, poll_github_actions_run_status,
+         poll_terraform_cloud_run_status, MAX_POLLING_RETRIES
 """
 from typing import Any
 
@@ -111,7 +113,7 @@ def _broadcast_execution_update(
     """Broadcast status and log updates to the execution's WebSocket group."""
     try:
         from channels.layers import get_channel_layer  # type: ignore[import-untyped]
-        from asgiref.sync import async_to_sync  # type: ignore[import-untyped]
+        from asgiref.sync import async_to_sync
 
         channel_layer = get_channel_layer()
         if channel_layer is None:
@@ -197,7 +199,7 @@ def _update_execution_from_poll(
                 svc.update_status(execution_id, idp_status, str(execution.user_id))
             except ValueError as ve:
                 logger.warning(
-                    "poll_aap_status_transition_invalid",
+                    "poll_status_transition_invalid",
                     execution_id=execution_id,
                     current=current_status,
                     target=idp_status,
@@ -214,19 +216,19 @@ def _update_execution_from_poll(
         )
         if platform_step and logs_content:
             output = platform_step.get_output() or {}
-            output["aap_logs"] = logs_content
+            output["platform_logs"] = logs_content
             platform_step.set_output(output)
             platform_step.save()
 
     except Execution.DoesNotExist:
         logger.warning(
-            "poll_aap_execution_not_found",
+            "poll_execution_not_found",
             execution_id=execution_id,
             correlation_id=correlation_id,
         )
     except Exception as e:
         logger.error(
-            "poll_aap_update_error",
+            "poll_update_error",
             execution_id=execution_id,
             error=str(e),
             error_type=type(e).__name__,
@@ -235,94 +237,97 @@ def _update_execution_from_poll(
 
 
 # ---------------------------------------------------------------------------
-# Story 27.1: AAP job monitoring polling task
+# Story 34.5 (SOLID-BE-3): Tâche Celery générique — OCP poller
 # ---------------------------------------------------------------------------
 
-@shared_task(bind=True, max_retries=0, name="executions.tasks.poll_aap_job_status")
-def poll_aap_job_status(
+@shared_task(bind=True, max_retries=0, name="executions.tasks.poll_platform_job_status")
+def poll_platform_job_status(
     self: Any,
     execution_id: int,
     platform_job_id: str,
-    resource_type: str = "job_template",
+    platform_type: str,
     base_url: str = "",
     credential_ref: str = "",
     auth_flow: str = "token",
     poll_interval: int = 5,
     retry_count: int = 0,
-    ssl_verify: bool = True,
-    ca_bundle_path: str | None = None,
+    adapter_kwargs: dict | None = None,
+    poll_kwargs: dict | None = None,
 ) -> dict:
     """
-    Story 27.1 (AC4): Poll AAP for job status and logs, then broadcast
-    updates via Django Channels to the execution's WebSocket group.
+    Story 34.5 (SOLID-BE-3): Tâche de polling générique OCP.
 
-    Story 30.7 (RACE-1): Added retry_count / MAX_POLLING_RETRIES to prevent
-    infinite re-scheduling on persistent adapter errors.
+    Construit l'adapter via AdapterRegistry (get_platform_adapter), interroge
+    get_status() + get_job_logs(), et détecte la terminaison via
+    logs_data["complete"] — contrat BaseAdapter garanti pour tous les adapters.
+
+    Aucun if/elif sur platform_type : l'ajout d'une nouvelle plateforme ne
+    nécessite aucune modification de ce fichier (OCP).
 
     Args:
-        execution_id: IDP Portal execution ID.
-        platform_job_id: AAP job ID to monitor.
-        resource_type: 'job_template' or 'workflow_job'.
-        base_url: AAP base URL (from integration).
-        credential_ref: Credential reference for auth.
-        auth_flow: Auth flow type (token, basic, pat).
-        poll_interval: Seconds between polls (default 5).
-        retry_count: Current error retry count (Story 30.7).
+        execution_id: ID de l'exécution IDP Portal.
+        platform_job_id: ID du job sur la plateforme externe.
+        platform_type: Identifiant plateforme ('aap', 'tower', 'azure_devops',
+            'github_actions', 'terraform_cloud', ...).
+        base_url: URL de base de la plateforme.
+        credential_ref: Référence de credential pour l'auth.
+        auth_flow: Type de flux d'authentification (token, basic, pat).
+        poll_interval: Secondes entre deux polls (défaut 5).
+        retry_count: Compteur d'erreurs consécutives (Story 30.7 RACE-1).
+        adapter_kwargs: Kwargs spécifiques à l'adapter (ssl_verify, owner, etc.).
+        poll_kwargs: Kwargs transmis à get_status() et get_job_logs()
+            (resource_type, pipeline_id, etc.).
 
     Returns:
-        dict with final status information.
+        dict avec outcome: 'complete' | 'polling' | 'error' | 'exhausted'.
     """
     import asyncio
-    # Access through package namespace for testability:
-    # allows @patch("executions.tasks.get_correlation_id") etc. to intercept
-    import executions.tasks as _tasks
+    import executions.tasks as _tasks  # noqa: PLC0415
 
     correlation_id = _tasks.get_correlation_id()
 
     logger.info(
-        "poll_aap_job_status_start",
+        "poll_platform_job_status_start",
         execution_id=execution_id,
         platform_job_id=platform_job_id,
-        resource_type=resource_type,
+        platform_type=platform_type,
         retry_count=retry_count,
         max_retries=MAX_POLLING_RETRIES,
         correlation_id=correlation_id,
     )
 
     try:
-        # Build adapter
-        from adapters.aap_adapter import AAPAdapter
-        from adapters.utils import build_auth_headers_from_credentials
+        from adapters import get_platform_adapter  # noqa: PLC0415
+        from adapters.utils import build_auth_headers_from_credentials  # noqa: PLC0415
 
         auth_headers = build_auth_headers_from_credentials(credential_ref, auth_flow)
-        adapter = AAPAdapter(
+        adapter = get_platform_adapter(
+            platform_type=platform_type,
             base_url=base_url,
             auth_headers=auth_headers,
-            ssl_verify=ssl_verify,
-            ca_bundle_path=ca_bundle_path,
+            **(adapter_kwargs or {}),
         )
 
-        # Story 30.7 (CELERY-3): Use asyncio.run() instead of manual event loop
         status_data = asyncio.run(
             adapter.get_status(
                 platform_job_id=platform_job_id,
-                resource_type=resource_type,
                 correlation_id=correlation_id,
+                **(poll_kwargs or {}),
             )
         )
-
         logs_data = asyncio.run(
             adapter.get_job_logs(
                 platform_job_id=platform_job_id,
-                resource_type=resource_type,
                 correlation_id=correlation_id,
+                **(poll_kwargs or {}),
             )
         )
     except Exception as e:
         logger.error(
-            "poll_aap_job_status_adapter_error",
+            "poll_platform_job_status_adapter_error",
             execution_id=execution_id,
             platform_job_id=platform_job_id,
+            platform_type=platform_type,
             error=str(e),
             error_type=type(e).__name__,
             retry_count=retry_count,
@@ -339,25 +344,24 @@ def poll_aap_job_status(
                 correlation_id=correlation_id,
             )
             return {"outcome": "exhausted", "error": str(e), "retry_count": retry_count}
-        poll_aap_job_status.apply_async(
-            args=[execution_id, platform_job_id],
+        poll_platform_job_status.apply_async(
+            args=[execution_id, platform_job_id, platform_type],
             kwargs={
-                "resource_type": resource_type,
                 "base_url": base_url,
                 "credential_ref": credential_ref,
                 "auth_flow": auth_flow,
                 "poll_interval": poll_interval,
                 "retry_count": retry_count + 1,
-                "ssl_verify": ssl_verify,
-                "ca_bundle_path": ca_bundle_path,
+                "adapter_kwargs": adapter_kwargs,
+                "poll_kwargs": poll_kwargs,
             },
             countdown=poll_interval,
         )
         return {"outcome": "error", "error": str(e), "retry_count": retry_count}
 
     idp_status = status_data.get("status", "SUBMITTED")
-    aap_status = status_data.get("aap_status", "unknown")
-    is_terminal = aap_status in {"successful", "failed", "error", "canceled"}
+    # AC2: détection terminale unifiée via contrat BaseAdapter.get_job_logs()
+    is_terminal = logs_data.get("complete", False)
 
     # Broadcast updates via Django Channels
     _tasks._broadcast_execution_update(
@@ -379,46 +383,76 @@ def poll_aap_job_status(
 
     if is_terminal:
         logger.info(
-            "poll_aap_job_status_complete",
+            "poll_platform_job_status_complete",
             execution_id=execution_id,
             platform_job_id=platform_job_id,
-            final_status=aap_status,
+            platform_type=platform_type,
             idp_status=idp_status,
             correlation_id=correlation_id,
         )
-        return {"outcome": "complete", "status": idp_status, "aap_status": aap_status}
+        return {"outcome": "complete", "status": idp_status}
 
     # Re-schedule next poll (reset retry_count on success)
-    poll_aap_job_status.apply_async(
-        args=[execution_id, platform_job_id],
+    poll_platform_job_status.apply_async(
+        args=[execution_id, platform_job_id, platform_type],
         kwargs={
-            "resource_type": resource_type,
             "base_url": base_url,
             "credential_ref": credential_ref,
             "auth_flow": auth_flow,
             "poll_interval": poll_interval,
             "retry_count": 0,
-            "ssl_verify": ssl_verify,
-            "ca_bundle_path": ca_bundle_path,
+            "adapter_kwargs": adapter_kwargs,
+            "poll_kwargs": poll_kwargs,
         },
         countdown=poll_interval,
     )
 
     logger.info(
-        "poll_aap_job_status_rescheduled",
+        "poll_platform_job_status_rescheduled",
         execution_id=execution_id,
         platform_job_id=platform_job_id,
-        aap_status=aap_status,
+        platform_type=platform_type,
         next_poll_in=poll_interval,
         correlation_id=correlation_id,
     )
 
-    return {"outcome": "polling", "status": idp_status, "aap_status": aap_status}
+    return {"outcome": "polling", "status": idp_status}
 
 
 # ---------------------------------------------------------------------------
-# Story 27.2: Tower/AWX job monitoring polling task
+# Backward-compat shims (Story 34.5 AC3) — ≤ 15 lignes chacun
+# Les noms Celery sont inchangés ; chaque shim traduit ses paramètres
+# spécifiques et délègue directement à poll_platform_job_status (synchrone).
 # ---------------------------------------------------------------------------
+
+@shared_task(bind=True, max_retries=0, name="executions.tasks.poll_aap_job_status")
+def poll_aap_job_status(
+    self: Any,
+    execution_id: int,
+    platform_job_id: str,
+    resource_type: str = "job_template",
+    base_url: str = "",
+    credential_ref: str = "",
+    auth_flow: str = "token",
+    poll_interval: int = 5,
+    retry_count: int = 0,
+    ssl_verify: bool = True,
+    ca_bundle_path: str | None = None,
+) -> Any:
+    """Story 34.5: Shim backward-compat — délègue à poll_platform_job_status."""
+    return poll_platform_job_status(
+        execution_id=execution_id,
+        platform_job_id=platform_job_id,
+        platform_type="aap",
+        base_url=base_url,
+        credential_ref=credential_ref,
+        auth_flow=auth_flow,
+        poll_interval=poll_interval,
+        retry_count=retry_count,
+        adapter_kwargs={"ssl_verify": ssl_verify, "ca_bundle_path": ca_bundle_path},
+        poll_kwargs={"resource_type": resource_type},
+    )
+
 
 @shared_task(bind=True, max_retries=0, name="executions.tasks.poll_tower_job_status")
 def poll_tower_job_status(
@@ -431,143 +465,21 @@ def poll_tower_job_status(
     auth_flow: str = "token",
     poll_interval: int = 5,
     retry_count: int = 0,
-) -> dict:
-    """
-    Story 27.2 (AC4): Poll Tower/AWX for job status and logs.
-    Story 30.7 (RACE-1): retry_count / MAX_POLLING_RETRIES.
-    """
-    import asyncio
-    # Access through package namespace for testability
-    import executions.tasks as _tasks
-
-    correlation_id = _tasks.get_correlation_id()
-
-    logger.info(
-        "poll_tower_job_status_start",
+) -> Any:
+    """Story 34.5: Shim backward-compat — délègue à poll_platform_job_status."""
+    return poll_platform_job_status(
         execution_id=execution_id,
         platform_job_id=platform_job_id,
-        resource_type=resource_type,
+        platform_type="tower",
+        base_url=base_url,
+        credential_ref=credential_ref,
+        auth_flow=auth_flow,
+        poll_interval=poll_interval,
         retry_count=retry_count,
-        max_retries=MAX_POLLING_RETRIES,
-        correlation_id=correlation_id,
+        adapter_kwargs={},
+        poll_kwargs={"resource_type": resource_type},
     )
 
-    try:
-        from adapters.tower_adapter import TowerAdapter
-        from adapters.utils import build_auth_headers_from_credentials
-
-        auth_headers = build_auth_headers_from_credentials(credential_ref, auth_flow)
-        adapter = TowerAdapter(base_url=base_url, auth_headers=auth_headers)
-
-        # Story 30.7 (CELERY-3): Use asyncio.run() instead of manual event loop
-        status_data = asyncio.run(
-            adapter.get_status(
-                platform_job_id=platform_job_id,
-                resource_type=resource_type,
-                correlation_id=correlation_id,
-            )
-        )
-
-        logs_data = asyncio.run(
-            adapter.get_job_logs(
-                platform_job_id=platform_job_id,
-                resource_type=resource_type,
-                correlation_id=correlation_id,
-            )
-        )
-    except Exception as e:
-        logger.error(
-            "poll_tower_job_status_adapter_error",
-            execution_id=execution_id,
-            platform_job_id=platform_job_id,
-            error=str(e),
-            error_type=type(e).__name__,
-            retry_count=retry_count,
-            max_retries=MAX_POLLING_RETRIES,
-            correlation_id=correlation_id,
-        )
-        if retry_count >= MAX_POLLING_RETRIES:
-            _tasks._mark_execution_polling_exhausted(
-                execution_id=execution_id,
-                platform_job_id=platform_job_id,
-                retry_count=retry_count,
-                error=str(e),
-                correlation_id=correlation_id,
-            )
-            return {"outcome": "exhausted", "error": str(e), "retry_count": retry_count}
-        poll_tower_job_status.apply_async(
-            args=[execution_id, platform_job_id],
-            kwargs={
-                "resource_type": resource_type,
-                "base_url": base_url,
-                "credential_ref": credential_ref,
-                "auth_flow": auth_flow,
-                "poll_interval": poll_interval,
-                "retry_count": retry_count + 1,
-            },
-            countdown=poll_interval,
-        )
-        return {"outcome": "error", "error": str(e), "retry_count": retry_count}
-
-    idp_status = status_data.get("status", "SUBMITTED")
-    tower_status = status_data.get("tower_status", "unknown")
-    is_terminal = tower_status in {"successful", "failed", "error", "canceled"}
-
-    _tasks._broadcast_execution_update(
-        execution_id=execution_id,
-        status_data=status_data,
-        logs_data=logs_data,
-        is_terminal=is_terminal,
-        correlation_id=correlation_id,
-    )
-
-    _tasks._update_execution_from_poll(
-        execution_id=execution_id,
-        platform_job_id=platform_job_id,
-        idp_status=idp_status,
-        logs_content=logs_data.get("content", ""),
-        correlation_id=correlation_id,
-    )
-
-    if is_terminal:
-        logger.info(
-            "poll_tower_job_status_complete",
-            execution_id=execution_id,
-            platform_job_id=platform_job_id,
-            final_status=tower_status,
-            idp_status=idp_status,
-            correlation_id=correlation_id,
-        )
-        return {"outcome": "complete", "status": idp_status, "tower_status": tower_status}
-
-    poll_tower_job_status.apply_async(
-        args=[execution_id, platform_job_id],
-        kwargs={
-            "resource_type": resource_type,
-            "base_url": base_url,
-            "credential_ref": credential_ref,
-            "auth_flow": auth_flow,
-            "poll_interval": poll_interval,
-            "retry_count": 0,
-        },
-        countdown=poll_interval,
-    )
-
-    logger.info(
-        "poll_tower_job_status_rescheduled",
-        execution_id=execution_id,
-        platform_job_id=platform_job_id,
-        tower_status=tower_status,
-        next_poll_in=poll_interval,
-        correlation_id=correlation_id,
-    )
-
-    return {"outcome": "polling", "status": idp_status, "tower_status": tower_status}
-
-
-# ---------------------------------------------------------------------------
-# Story 27.3: Azure DevOps pipeline run monitoring polling task
-# ---------------------------------------------------------------------------
 
 @shared_task(bind=True, max_retries=0, name="executions.tasks.poll_azure_devops_run_status")
 def poll_azure_devops_run_status(
@@ -580,157 +492,21 @@ def poll_azure_devops_run_status(
     auth_flow: str = "basic",
     poll_interval: int = 5,
     retry_count: int = 0,
-) -> dict:
-    """
-    Story 27.3 (AC4): Poll Azure DevOps for pipeline run status and logs.
-    Story 30.7 (RACE-1): retry_count / MAX_POLLING_RETRIES.
-    """
-    import asyncio
-    # Access through package namespace for testability
-    import executions.tasks as _tasks
-
-    correlation_id = _tasks.get_correlation_id()
-
-    logger.info(
-        "poll_azure_devops_run_status_start",
+) -> Any:
+    """Story 34.5: Shim backward-compat — délègue à poll_platform_job_status."""
+    return poll_platform_job_status(
         execution_id=execution_id,
         platform_job_id=platform_job_id,
-        pipeline_id=pipeline_id,
+        platform_type="azure_devops",
+        base_url=base_url,
+        credential_ref=credential_ref,
+        auth_flow=auth_flow,
+        poll_interval=poll_interval,
         retry_count=retry_count,
-        max_retries=MAX_POLLING_RETRIES,
-        correlation_id=correlation_id,
+        adapter_kwargs={},
+        poll_kwargs={"pipeline_id": pipeline_id},
     )
 
-    try:
-        from adapters.azure_devops_adapter import AzureDevOpsAdapter
-        from adapters.utils import build_auth_headers_from_credentials
-
-        auth_headers = build_auth_headers_from_credentials(credential_ref, auth_flow)
-        adapter = AzureDevOpsAdapter(base_url=base_url, auth_headers=auth_headers)
-
-        # Story 30.7 (CELERY-3): Use asyncio.run() instead of manual event loop
-        status_data = asyncio.run(
-            adapter.get_status(
-                platform_job_id=platform_job_id,
-                pipeline_id=pipeline_id,
-                correlation_id=correlation_id,
-            )
-        )
-
-        logs_data = asyncio.run(
-            adapter.get_job_logs(
-                platform_job_id=platform_job_id,
-                pipeline_id=pipeline_id,
-                correlation_id=correlation_id,
-            )
-        )
-    except Exception as e:
-        logger.error(
-            "poll_azure_devops_run_status_adapter_error",
-            execution_id=execution_id,
-            platform_job_id=platform_job_id,
-            error=str(e),
-            error_type=type(e).__name__,
-            retry_count=retry_count,
-            max_retries=MAX_POLLING_RETRIES,
-            correlation_id=correlation_id,
-        )
-        if retry_count >= MAX_POLLING_RETRIES:
-            _tasks._mark_execution_polling_exhausted(
-                execution_id=execution_id,
-                platform_job_id=platform_job_id,
-                retry_count=retry_count,
-                error=str(e),
-                correlation_id=correlation_id,
-            )
-            return {"outcome": "exhausted", "error": str(e), "retry_count": retry_count}
-        poll_azure_devops_run_status.apply_async(
-            args=[execution_id, platform_job_id],
-            kwargs={
-                "pipeline_id": pipeline_id,
-                "base_url": base_url,
-                "credential_ref": credential_ref,
-                "auth_flow": auth_flow,
-                "poll_interval": poll_interval,
-                "retry_count": retry_count + 1,
-            },
-            countdown=poll_interval,
-        )
-        return {"outcome": "error", "error": str(e), "retry_count": retry_count}
-
-    idp_status = status_data.get("status", "SUBMITTED")
-    azure_state = status_data.get("azure_devops_state", "inProgress")
-    azure_result = status_data.get("azure_devops_result")
-    is_terminal = azure_state == "completed" and azure_result in {
-        "succeeded", "failed", "canceled"
-    }
-
-    _tasks._broadcast_execution_update(
-        execution_id=execution_id,
-        status_data=status_data,
-        logs_data=logs_data,
-        is_terminal=is_terminal,
-        correlation_id=correlation_id,
-    )
-
-    _tasks._update_execution_from_poll(
-        execution_id=execution_id,
-        platform_job_id=platform_job_id,
-        idp_status=idp_status,
-        logs_content=logs_data.get("content", ""),
-        correlation_id=correlation_id,
-    )
-
-    if is_terminal:
-        logger.info(
-            "poll_azure_devops_run_status_complete",
-            execution_id=execution_id,
-            platform_job_id=platform_job_id,
-            final_state=azure_state,
-            final_result=azure_result,
-            idp_status=idp_status,
-            correlation_id=correlation_id,
-        )
-        return {
-            "outcome": "complete",
-            "status": idp_status,
-            "azure_devops_state": azure_state,
-            "azure_devops_result": azure_result,
-        }
-
-    poll_azure_devops_run_status.apply_async(
-        args=[execution_id, platform_job_id],
-        kwargs={
-            "pipeline_id": pipeline_id,
-            "base_url": base_url,
-            "credential_ref": credential_ref,
-            "auth_flow": auth_flow,
-            "poll_interval": poll_interval,
-            "retry_count": 0,
-        },
-        countdown=poll_interval,
-    )
-
-    logger.info(
-        "poll_azure_devops_run_status_rescheduled",
-        execution_id=execution_id,
-        platform_job_id=platform_job_id,
-        azure_devops_state=azure_state,
-        next_poll_in=poll_interval,
-        correlation_id=correlation_id,
-    )
-
-    return {
-        "outcome": "polling",
-        "status": idp_status,
-        "azure_devops_state": azure_state,
-        "azure_devops_result": azure_result,
-    }
-
-
-# ---------------------------------------------------------------------------
-# Story 27.4: GitHub Actions polling task (catch-up fallback for webhooks)
-# ---------------------------------------------------------------------------
 
 @shared_task(bind=True, max_retries=0, name="executions.tasks.poll_github_actions_run_status")
 def poll_github_actions_run_status(
@@ -743,161 +519,21 @@ def poll_github_actions_run_status(
     credential_ref: str = "",
     poll_interval: int = 60,
     retry_count: int = 0,
-) -> dict:
-    """
-    Story 27.4 (AC4): Poll GitHub Actions for workflow run status and logs.
-    Story 30.7 (RACE-1): retry_count / MAX_POLLING_RETRIES.
-    """
-    import asyncio
-    # Access through package namespace for testability
-    import executions.tasks as _tasks
-
-    correlation_id = _tasks.get_correlation_id()
-
-    logger.info(
-        "poll_github_actions_run_status_start",
+) -> Any:
+    """Story 34.5: Shim backward-compat — délègue à poll_platform_job_status."""
+    return poll_platform_job_status(
         execution_id=execution_id,
         platform_job_id=platform_job_id,
-        owner=owner,
-        repo=repo,
+        platform_type="github_actions",
+        base_url=base_url,
+        credential_ref=credential_ref,
+        auth_flow="token",
+        poll_interval=poll_interval,
         retry_count=retry_count,
-        max_retries=MAX_POLLING_RETRIES,
-        correlation_id=correlation_id,
+        adapter_kwargs={"owner": owner, "repo": repo},
+        poll_kwargs={},
     )
 
-    try:
-        from adapters.github_actions_adapter import GitHubActionsAdapter
-
-        auth_headers = {"Authorization": f"Bearer {credential_ref}"}
-
-        adapter = GitHubActionsAdapter(
-            base_url=base_url,
-            auth_headers=auth_headers,
-            owner=owner,
-            repo=repo,
-        )
-
-        # Story 30.7 (CELERY-3): Use asyncio.run() instead of manual event loop
-        status_data = asyncio.run(
-            adapter.get_status(
-                platform_job_id=platform_job_id,
-                correlation_id=correlation_id,
-            )
-        )
-
-        logs_data = asyncio.run(
-            adapter.get_job_logs(
-                platform_job_id=platform_job_id,
-                correlation_id=correlation_id,
-            )
-        )
-    except Exception as e:
-        logger.error(
-            "poll_github_actions_run_status_adapter_error",
-            execution_id=execution_id,
-            platform_job_id=platform_job_id,
-            error=str(e),
-            error_type=type(e).__name__,
-            retry_count=retry_count,
-            max_retries=MAX_POLLING_RETRIES,
-            correlation_id=correlation_id,
-        )
-        if retry_count >= MAX_POLLING_RETRIES:
-            _tasks._mark_execution_polling_exhausted(
-                execution_id=execution_id,
-                platform_job_id=platform_job_id,
-                retry_count=retry_count,
-                error=str(e),
-                correlation_id=correlation_id,
-            )
-            return {"outcome": "exhausted", "error": str(e), "retry_count": retry_count}
-        poll_github_actions_run_status.apply_async(
-            args=[execution_id, platform_job_id],
-            kwargs={
-                "owner": owner,
-                "repo": repo,
-                "base_url": base_url,
-                "credential_ref": credential_ref,
-                "poll_interval": poll_interval,
-                "retry_count": retry_count + 1,
-            },
-            countdown=poll_interval,
-        )
-        return {"outcome": "error", "error": str(e), "retry_count": retry_count}
-
-    idp_status = status_data.get("status", "SUBMITTED")
-    gh_status = status_data.get("github_actions_status", "queued")
-    gh_conclusion = status_data.get("github_actions_conclusion")
-    is_terminal = gh_status == "completed" and gh_conclusion in {
-        "success", "failure", "cancelled", "timed_out", "skipped"
-    }
-
-    _tasks._broadcast_execution_update(
-        execution_id=execution_id,
-        status_data=status_data,
-        logs_data=logs_data,
-        is_terminal=is_terminal,
-        correlation_id=correlation_id,
-    )
-
-    _tasks._update_execution_from_poll(
-        execution_id=execution_id,
-        platform_job_id=platform_job_id,
-        idp_status=idp_status,
-        logs_content=logs_data.get("content", ""),
-        correlation_id=correlation_id,
-    )
-
-    if is_terminal:
-        logger.info(
-            "poll_github_actions_run_status_complete",
-            execution_id=execution_id,
-            platform_job_id=platform_job_id,
-            final_status=gh_status,
-            final_conclusion=gh_conclusion,
-            idp_status=idp_status,
-            correlation_id=correlation_id,
-        )
-        return {
-            "outcome": "complete",
-            "status": idp_status,
-            "github_actions_status": gh_status,
-            "github_actions_conclusion": gh_conclusion,
-        }
-
-    poll_github_actions_run_status.apply_async(
-        args=[execution_id, platform_job_id],
-        kwargs={
-            "owner": owner,
-            "repo": repo,
-            "base_url": base_url,
-            "credential_ref": credential_ref,
-            "poll_interval": poll_interval,
-            "retry_count": 0,
-        },
-        countdown=poll_interval,
-    )
-
-    logger.info(
-        "poll_github_actions_run_status_rescheduled",
-        execution_id=execution_id,
-        platform_job_id=platform_job_id,
-        github_actions_status=gh_status,
-        next_poll_in=poll_interval,
-        correlation_id=correlation_id,
-    )
-
-    return {
-        "outcome": "polling",
-        "status": idp_status,
-        "github_actions_status": gh_status,
-        "github_actions_conclusion": gh_conclusion,
-    }
-
-
-# ---------------------------------------------------------------------------
-# Story 27.5: Terraform Cloud polling task (catch-up fallback for webhooks)
-# ---------------------------------------------------------------------------
 
 @shared_task(bind=True, max_retries=0, name="executions.tasks.poll_terraform_cloud_run_status")
 def poll_terraform_cloud_run_status(
@@ -909,146 +545,17 @@ def poll_terraform_cloud_run_status(
     credential_ref: str = "",
     poll_interval: int = 60,
     retry_count: int = 0,
-) -> dict:
-    """
-    Story 27.5 (AC4): Poll Terraform Cloud for run status and logs.
-    Story 30.7 (RACE-1): retry_count / MAX_POLLING_RETRIES.
-    """
-    import asyncio
-    # Access through package namespace for testability
-    import executions.tasks as _tasks
-
-    correlation_id = _tasks.get_correlation_id()
-
-    logger.info(
-        "poll_terraform_cloud_run_status_start",
+) -> Any:
+    """Story 34.5: Shim backward-compat — délègue à poll_platform_job_status."""
+    return poll_platform_job_status(
         execution_id=execution_id,
         platform_job_id=platform_job_id,
-        organization=organization,
+        platform_type="terraform_cloud",
+        base_url=base_url,
+        credential_ref=credential_ref,
+        auth_flow="token",
+        poll_interval=poll_interval,
         retry_count=retry_count,
-        max_retries=MAX_POLLING_RETRIES,
-        correlation_id=correlation_id,
+        adapter_kwargs={"organization": organization},
+        poll_kwargs={},
     )
-
-    try:
-        from adapters.terraform_cloud_adapter import (
-            TerraformCloudAdapter,
-            TERRAFORM_CLOUD_TERMINAL_STATUSES,
-        )
-
-        auth_headers = {"Authorization": f"Bearer {credential_ref}"}
-
-        adapter = TerraformCloudAdapter(
-            base_url=base_url,
-            auth_headers=auth_headers,
-            organization=organization,
-        )
-
-        # Story 30.7 (CELERY-3): Use asyncio.run() instead of manual event loop
-        status_data = asyncio.run(
-            adapter.get_status(
-                platform_job_id=platform_job_id,
-                correlation_id=correlation_id,
-            )
-        )
-
-        logs_data = asyncio.run(
-            adapter.get_job_logs(
-                platform_job_id=platform_job_id,
-                correlation_id=correlation_id,
-            )
-        )
-    except Exception as e:
-        logger.error(
-            "poll_terraform_cloud_run_status_adapter_error",
-            execution_id=execution_id,
-            platform_job_id=platform_job_id,
-            error=str(e),
-            error_type=type(e).__name__,
-            retry_count=retry_count,
-            max_retries=MAX_POLLING_RETRIES,
-            correlation_id=correlation_id,
-        )
-        if retry_count >= MAX_POLLING_RETRIES:
-            _tasks._mark_execution_polling_exhausted(
-                execution_id=execution_id,
-                platform_job_id=platform_job_id,
-                retry_count=retry_count,
-                error=str(e),
-                correlation_id=correlation_id,
-            )
-            return {"outcome": "exhausted", "error": str(e), "retry_count": retry_count}
-        poll_terraform_cloud_run_status.apply_async(
-            args=[execution_id, platform_job_id],
-            kwargs={
-                "organization": organization,
-                "base_url": base_url,
-                "credential_ref": credential_ref,
-                "poll_interval": poll_interval,
-                "retry_count": retry_count + 1,
-            },
-            countdown=poll_interval,
-        )
-        return {"outcome": "error", "error": str(e), "retry_count": retry_count}
-
-    idp_status = status_data.get("status", "SUBMITTED")
-    tc_status = status_data.get("terraform_cloud_status", "pending")
-    is_terminal = tc_status in TERRAFORM_CLOUD_TERMINAL_STATUSES
-
-    _tasks._broadcast_execution_update(
-        execution_id=execution_id,
-        status_data=status_data,
-        logs_data=logs_data,
-        is_terminal=is_terminal,
-        correlation_id=correlation_id,
-    )
-
-    _tasks._update_execution_from_poll(
-        execution_id=execution_id,
-        platform_job_id=platform_job_id,
-        idp_status=idp_status,
-        logs_content=logs_data.get("content", ""),
-        correlation_id=correlation_id,
-    )
-
-    if is_terminal:
-        logger.info(
-            "poll_terraform_cloud_run_status_complete",
-            execution_id=execution_id,
-            platform_job_id=platform_job_id,
-            terraform_cloud_status=tc_status,
-            idp_status=idp_status,
-            correlation_id=correlation_id,
-        )
-        return {
-            "outcome": "complete",
-            "status": idp_status,
-            "terraform_cloud_status": tc_status,
-        }
-
-    poll_terraform_cloud_run_status.apply_async(
-        args=[execution_id, platform_job_id],
-        kwargs={
-            "organization": organization,
-            "base_url": base_url,
-            "credential_ref": credential_ref,
-            "poll_interval": poll_interval,
-            "retry_count": 0,
-        },
-        countdown=poll_interval,
-    )
-
-    logger.info(
-        "poll_terraform_cloud_run_status_rescheduled",
-        execution_id=execution_id,
-        platform_job_id=platform_job_id,
-        terraform_cloud_status=tc_status,
-        next_poll_in=poll_interval,
-        correlation_id=correlation_id,
-    )
-
-    return {
-        "outcome": "polling",
-        "status": idp_status,
-        "terraform_cloud_status": tc_status,
-    }

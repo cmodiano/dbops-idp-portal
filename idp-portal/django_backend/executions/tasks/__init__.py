@@ -25,6 +25,7 @@ from executions.tasks.gates import (
     _update_waiting_context,
 )
 from executions.tasks.polling import (
+    poll_platform_job_status,
     poll_aap_job_status,
     poll_tower_job_status,
     poll_azure_devops_run_status,
@@ -40,6 +41,7 @@ __all__ = [
     # Public tasks
     "retry_workflow_step",
     "evaluate_waiting_gates",
+    "poll_platform_job_status",
     "poll_aap_job_status",
     "poll_tower_job_status",
     "poll_azure_devops_run_status",
