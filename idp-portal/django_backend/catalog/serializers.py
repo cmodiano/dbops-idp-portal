@@ -149,6 +149,56 @@ class StatusUpdateSerializer(serializers.Serializer):
     )
 
 
+class ActionFieldValidationMixin:
+    """
+    Story 34.1 (SOLID-BE-11): DRY mixin pour la validation des champs engine/platform/category.
+
+    Contient la version STRICTE de validate_category (None passé tel quel, blank → ValidationError).
+    ActionCreateSerializer conserve un override pour accepter blank string → None.
+    """
+
+    def validate_engine(self, value: str | None) -> str | None:
+        """Validate engine against REF_ENGINES table."""
+        if value is None:
+            return value
+        if not RefEngine.objects.filter(code=value, is_active=1).exists():
+            active_engines = list(RefEngine.objects.active().values_list('code', flat=True))
+            raise serializers.ValidationError(
+                f"Invalid engine '{value}'. Must be one of: {', '.join(active_engines)}"
+            )
+        return value
+
+    def validate_platform(self, value: str | None) -> str | None:
+        """Story 31.9: Validate platform against IntegrationTypeCatalogue (role=platform)."""
+        if value is None:
+            return value
+        normalized = value.lower().replace(' ', '_')
+        normalized = _PLATFORM_ALIAS.get(normalized, normalized)
+        if not IntegrationTypeCatalogue.objects.filter(
+            code=normalized, is_active=True, integration_role=IntegrationRole.PLATFORM
+        ).exists():
+            active_codes = list(
+                IntegrationTypeCatalogue.objects.filter(
+                    is_active=True, integration_role=IntegrationRole.PLATFORM
+                ).values_list('code', flat=True)
+            )
+            raise serializers.ValidationError(
+                f"Invalid platform '{value}'. Must be one of: {', '.join(active_codes)}"
+            )
+        return value
+
+    def validate_category(self, value: str | None) -> str | None:
+        """Validate category against REF_CATEGORIES table (Story 2.30). Version stricte."""
+        if value is None:
+            return value
+        if not RefCategory.objects.filter(code=value, is_active=1).exists():
+            active_categories = list(RefCategory.objects.active().values_list('code', flat=True))
+            raise serializers.ValidationError(
+                f"Invalid category '{value}'. Must be one of: {', '.join(active_categories)}"
+            )
+        return value
+
+
 @extend_schema_serializer(
     examples=[
         OpenApiExample(
@@ -169,7 +219,7 @@ class StatusUpdateSerializer(serializers.Serializer):
         )
     ]
 )
-class ActionSerializer(serializers.ModelSerializer):
+class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
     """Base Action serializer (read/write) matching ActionResponse/ActionDetail."""
 
     # CLOB/JSON fields - OracleJSONField handles serialization automatically (Story 17.4)
@@ -242,48 +292,6 @@ class ActionSerializer(serializers.ModelSerializer):
             policy = obj.business_rule_policy
             return policy.name if policy else None
         return None
-
-    def validate_engine(self, value: str | None) -> str | None:
-        """Validate engine against REF_ENGINES table."""
-        if value is None:
-            return value
-        # Check if engine exists in REF_ENGINES
-        if not RefEngine.objects.filter(code=value, is_active=1).exists():
-            active_engines = list(RefEngine.objects.active().values_list('code', flat=True))
-            raise serializers.ValidationError(
-                f"Invalid engine '{value}'. Must be one of: {', '.join(active_engines)}"
-            )
-        return value
-
-    def validate_platform(self, value: str | None) -> str | None:
-        """Story 31.9: Validate platform against IntegrationTypeCatalogue (role=platform)."""
-        if value is None:
-            return value
-        normalized = value.lower().replace(' ', '_')
-        normalized = _PLATFORM_ALIAS.get(normalized, normalized)
-        if not IntegrationTypeCatalogue.objects.filter(
-            code=normalized, is_active=True, integration_role=IntegrationRole.PLATFORM
-        ).exists():
-            active_codes = list(
-                IntegrationTypeCatalogue.objects.filter(
-                    is_active=True, integration_role=IntegrationRole.PLATFORM
-                ).values_list('code', flat=True)
-            )
-            raise serializers.ValidationError(
-                f"Invalid platform '{value}'. Must be one of: {', '.join(active_codes)}"
-            )
-        return value
-
-    def validate_category(self, value: str | None) -> str | None:
-        """Validate category against REF_CATEGORIES table (Story 2.30)."""
-        if value is None:
-            return value
-        if not RefCategory.objects.filter(code=value, is_active=1).exists():
-            active_categories = list(RefCategory.objects.active().values_list('code', flat=True))
-            raise serializers.ValidationError(
-                f"Invalid category '{value}'. Must be one of: {', '.join(active_categories)}"
-            )
-        return value
 
     def validate_parameters_schema(self, value: Any) -> Any:
         """Story 23.5: Validate inventory_type in parameters_schema."""
@@ -465,7 +473,7 @@ class ActionSerializer(serializers.ModelSerializer):
         raise NotImplementedError("Update handled by ViewSet")
 
 
-class ActionCreateSerializer(serializers.Serializer):
+class ActionCreateSerializer(ActionFieldValidationMixin, serializers.Serializer):
     """Serializer for POST /admin/actions (ActionCreate model)."""
 
     name = serializers.CharField(max_length=255, min_length=1)
@@ -479,7 +487,10 @@ class ActionCreateSerializer(serializers.Serializer):
     integration_id = serializers.IntegerField(required=False, allow_null=True)
 
     def validate_category(self, value: str | None) -> str | None:
-        """Validate category against REF_CATEGORIES table (Story 2.30). Blank string → null."""
+        """Validate category against REF_CATEGORIES table (Story 2.30). Blank string → None.
+
+        Override du mixin (version stricte) : accepte blank string et le convertit en None.
+        """
         if value is None or (isinstance(value, str) and not value.strip()):
             return None
         if not RefCategory.objects.filter(code=value, is_active=1).exists():
@@ -489,36 +500,6 @@ class ActionCreateSerializer(serializers.Serializer):
             )
         return value
 
-    def validate_engine(self, value: str | None) -> str | None:
-        """Validate engine against REF_ENGINES table."""
-        if value is None:
-            return value
-        # Check if engine exists in REF_ENGINES
-        if not RefEngine.objects.filter(code=value, is_active=1).exists():
-            active_engines = list(RefEngine.objects.active().values_list('code', flat=True))
-            raise serializers.ValidationError(
-                f"Invalid engine '{value}'. Must be one of: {', '.join(active_engines)}"
-            )
-        return value
-
-    def validate_platform(self, value: str | None) -> str | None:
-        """Story 31.9: Validate platform against IntegrationTypeCatalogue (role=platform)."""
-        if value is None:
-            return value
-        normalized = value.lower().replace(' ', '_')
-        normalized = _PLATFORM_ALIAS.get(normalized, normalized)
-        if not IntegrationTypeCatalogue.objects.filter(
-            code=normalized, is_active=True, integration_role=IntegrationRole.PLATFORM
-        ).exists():
-            active_codes = list(
-                IntegrationTypeCatalogue.objects.filter(
-                    is_active=True, integration_role=IntegrationRole.PLATFORM
-                ).values_list('code', flat=True)
-            )
-            raise serializers.ValidationError(
-                f"Invalid platform '{value}'. Must be one of: {', '.join(active_codes)}"
-            )
-        return value
     parameters_schema = serializers.DictField(required=False, allow_null=True)
     impact_rules = serializers.DictField(required=False, allow_null=True)
     default_impact_level = serializers.ChoiceField(

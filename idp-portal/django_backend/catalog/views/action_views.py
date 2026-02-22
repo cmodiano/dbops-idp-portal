@@ -434,7 +434,7 @@ class ActionViewSet(viewsets.ModelViewSet):
     def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """DELETE /admin/actions/{id} — Hard delete (only if execution_count=0). Story 18.1 AC1."""
         instance = self.get_object()
-        service = CatalogService()
+        service = self.get_catalog_service()
         # ConflictError is raised if execution_count > 0 (propagated to exception handler → 409)
         deleted = service.delete_action(instance.id, user=request.user)  # type: ignore[arg-type]
         if not deleted:
@@ -451,7 +451,7 @@ class ActionViewSet(viewsets.ModelViewSet):
     def deactivate(self, request: Request, pk: int | None = None) -> Response:
         """PUT /admin/actions/{id}/deactivate — Soft delete with cascade. Story 18.1 AC2/AC3."""
         instance = self.get_object()
-        service = CatalogService()
+        service = self.get_catalog_service()
         confirmed = request.query_params.get('confirmed', 'false').lower() == 'true'
         deletion_reason = request.data.get('deletion_reason')
 
@@ -488,7 +488,7 @@ class ActionViewSet(viewsets.ModelViewSet):
     def reactivate(self, request: Request, pk: int | None = None) -> Response:
         """PUT /admin/actions/{id}/reactivate — Reactivate a disabled action. Story 18.1 AC5."""
         instance = self.get_object()
-        service = CatalogService()
+        service = self.get_catalog_service()
         # ConflictError is raised if not disabled (propagated → 409)
         reactivated = service.reactivate_action(instance.id, user=request.user)  # type: ignore[arg-type]
         if reactivated is None:

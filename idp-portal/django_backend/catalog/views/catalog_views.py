@@ -74,11 +74,13 @@ class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
         tags_filter = self.request.query_params.get('tags')
         if tags_filter:
             tag_names = [t.strip() for t in tags_filter.split(',')]
+            # Story 34.1 NEW-1: chaîne sur queryset courant (pas de recréation Action.objects.search_by_tags)
             queryset = queryset.search_by_tags(tag_names)
 
         category = self.request.query_params.get('category')
         if category and category.lower() not in ('tout', 'all', 'mes-actions'):
-            # Category maps to tag
+            # Category maps to tag. Chaîne sur queryset courant → AND logique avec tags si les deux sont fournis.
+            # Story 34.1 NEW-1: queryset.search_by_tags (chaîne) intentionnel — pas Action.objects.search_by_tags (recréation)
             from catalog.models import normalize_tag_name
             tag_name = normalize_tag_name(category)
             if tag_name:
