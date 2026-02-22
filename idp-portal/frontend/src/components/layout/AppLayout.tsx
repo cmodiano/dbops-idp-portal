@@ -1,13 +1,24 @@
-import { Layout, Spin } from 'antd';
+import { Layout, Spin, App as AntApp } from 'antd';
 import { Suspense, useEffect } from 'react';
 import { Outlet } from 'react-router';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { TopNav } from './TopNav';
 import { prefetchEngineIcons } from '../../utils/engineIconCache';
+import { setNotificationCallback } from '../../services/api_client';
 
 const { Header, Content } = Layout;
 
 export function AppLayout() {
+  const { notification } = AntApp.useApp();
+
+  // Wire notification callback so api_client can display UI notifications
+  // without depending on antd directly (DIP — Story 34.2).
+  // Cleanup resets to no-op on unmount to avoid stale closure after logout.
+  useEffect(() => {
+    setNotificationCallback((type, config) => notification[type](config));
+    return () => setNotificationCallback(() => {});
+  }, [notification]);
+
   // Warm the engine icon cache once auth is confirmed (this component only renders
   // inside ProtectedRoute, so the JWT token is already available at this point).
   useEffect(() => {

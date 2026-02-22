@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { apiFetch, apiFetchRaw, apiFetchBlob, apiPostFormData, setAuthAccessors, ApiError, handleAuthenticatedFetch, calculateRetryDelay, parseErrorResponse, isDbUnavailable503 } from './api_client';
+import { apiFetch, apiFetchRaw, apiFetchBlob, apiPostFormData, setAuthAccessors, setNotificationCallback, ApiError, handleAuthenticatedFetch, calculateRetryDelay, parseErrorResponse, isDbUnavailable503 } from './api_client';
 import logger from './logger';
 
 describe('apiFetch', () => {
@@ -656,10 +656,12 @@ describe('handleAuthenticatedFetch - 503 DB_UNAVAILABLE retry (Task 5)', () => {
     vi.useFakeTimers();
     vi.restoreAllMocks();
     setAuthAccessors(() => null, async () => null);
+    setNotificationCallback(() => {}); // Reset to no-op to avoid cross-test state
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    setNotificationCallback(() => {}); // Restore no-op
   });
 
   // Task 5.1: retry après Retry-After: 30, succès au 2ème appel
@@ -735,11 +737,10 @@ describe('handleAuthenticatedFetch - 503 DB_UNAVAILABLE retry (Task 5)', () => {
     expect((err as ApiError).message).toContain('bascule');
   });
 
-  // Task 5.5: notification.warning au 1er retry, notification.error si épuisé
-  it('shows warning notification on first retry, error notification on exhaustion', async () => {
-    const { notification } = await import('antd');
-    const warnSpy = vi.spyOn(notification, 'warning');
-    const errorSpy = vi.spyOn(notification, 'error');
+  // Task 5.5: callback warning au 1er retry, callback error si épuisé
+  it('calls notification callback with warning on first retry, error on exhaustion', async () => {
+    const mockNotify = vi.fn();
+    setNotificationCallback(mockNotify);
 
     const mock503Response = mock503(1);
     global.fetch = vi.fn().mockResolvedValue(mock503Response);
@@ -748,23 +749,20 @@ describe('handleAuthenticatedFetch - 503 DB_UNAVAILABLE retry (Task 5)', () => {
     await vi.advanceTimersByTimeAsync(10_000);
     await p;
 
-    // Warning shown exactly once (1st retry only)
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy).toHaveBeenCalledWith(expect.objectContaining({
-      message: 'Service temporairement indisponible',
-    }));
+    // Warning called exactly once (1st retry only)
+    const warningCalls = mockNotify.mock.calls.filter(([type]) => type === 'warning');
+    expect(warningCalls).toHaveLength(1);
+    expect(warningCalls[0][1]).toMatchObject({ title: 'Service temporairement indisponible' });
 
-    // Error shown exactly once (on exhaustion)
-    expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(errorSpy).toHaveBeenCalledWith(expect.objectContaining({
-      message: 'Base de données temporairement indisponible',
-    }));
+    // Error called exactly once (on exhaustion)
+    const errorCalls = mockNotify.mock.calls.filter(([type]) => type === 'error');
+    expect(errorCalls).toHaveLength(1);
+    expect(errorCalls[0][1]).toMatchObject({ title: 'Base de données temporairement indisponible' });
   });
 
-  it('shows no notification if 503 retry succeeds', async () => {
-    const { notification } = await import('antd');
-    const warnSpy = vi.spyOn(notification, 'warning');
-    const errorSpy = vi.spyOn(notification, 'error');
+  it('calls notification callback with warning only if 503 retry succeeds', async () => {
+    const mockNotify = vi.fn();
+    setNotificationCallback(mockNotify);
 
     const mock503Response = mock503(1);
     const mock200Response = mock200();
@@ -778,9 +776,10 @@ describe('handleAuthenticatedFetch - 503 DB_UNAVAILABLE retry (Task 5)', () => {
     const response = await promise;
 
     expect(response.status).toBe(200);
-    // Warning shown (retry triggered), no error (retry succeeded)
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(errorSpy).not.toHaveBeenCalled();
+    const warningCalls = mockNotify.mock.calls.filter(([type]) => type === 'warning');
+    const errorCalls = mockNotify.mock.calls.filter(([type]) => type === 'error');
+    expect(warningCalls).toHaveLength(1);
+    expect(errorCalls).toHaveLength(0);
   });
 
   it('logs api_503_retry event with correct attributes', async () => {
@@ -826,5 +825,64 @@ describe('handleAuthenticatedFetch - 503 DB_UNAVAILABLE retry (Task 5)', () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(err).toBeInstanceOf(ApiError);
     expect((err as ApiError).status).toBe(503);
+  });
+});
+
+// ============================================================================
+// Story 34.2 — setNotificationCallback tests (AC5)
+// ============================================================================
+
+describe('setNotificationCallback (Story 34.2 — AC5)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.restoreAllMocks();
+    setAuthAccessors(() => null, async () => null);
+    // Reset to no-op default between tests
+    setNotificationCallback(() => {});
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    // Restore no-op default
+    setNotificationCallback(() => {});
+  });
+
+  it('callback is invoked with ("warning", { title, description, duration }) on 503 DB_UNAVAILABLE first retry', async () => {
+    const mockNotify = vi.fn();
+    setNotificationCallback(mockNotify);
+
+    const mock503Response = mock503(30);
+    const mock200Response = mock200();
+
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(mock503Response)
+      .mockResolvedValueOnce(mock200Response);
+
+    const promise = handleAuthenticatedFetch('/catalog/actions', {}, {});
+    await vi.advanceTimersByTimeAsync(30_000);
+    await promise;
+
+    expect(mockNotify).toHaveBeenCalledTimes(1);
+    expect(mockNotify).toHaveBeenCalledWith('warning', {
+      title: 'Service temporairement indisponible',
+      description: 'Nouvelle tentative en cours...',
+      duration: expect.any(Number),
+    });
+  });
+
+  it('no-op default does not throw when 503 DB_UNAVAILABLE occurs without setNotificationCallback', async () => {
+    // Reset to built-in no-op (default state when module is loaded)
+    setNotificationCallback(() => {});
+
+    const mock503Response = mock503(1);
+    global.fetch = vi.fn().mockResolvedValue(mock503Response);
+
+    // Should not throw — no-op callback is transparent
+    const p = apiFetch('/actions').catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(10_000);
+    const result = await p;
+
+    // ApiError is expected (503 exhausted), but no runtime crash from notification
+    expect(result).toBeInstanceOf(ApiError);
   });
 });

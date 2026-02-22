@@ -15,19 +15,12 @@ import { useExecutionPolling } from '../../hooks/useExecutionPolling';
 import { useRemediationSuggestions } from '../../hooks/useRemediationSuggestions';
 import { useRemediationContext } from '../../hooks/useRemediationContext';
 import { StructuredErrorCard } from './StructuredErrorCard';
-import type { ExecutionResponse, ExecutionStepResponse, ExecutionStepStatus, RemediationSuggestion } from '../../types/api';
+import type { ExecutionResponse, ExecutionStepResponse, RemediationSuggestion } from '../../types/api';
+import { STEP_STATUS_COLOR as STATUS_COLOR } from '../../utils/execution-status';
 
 const FORCE_POLLING = import.meta.env.VITE_SIMULATE_EXECUTION === 'true';
 
 const { Text } = Typography;
-
-const STATUS_COLOR: Record<ExecutionStepStatus, string> = {
-  PENDING: '#9CA3AF',
-  RUNNING: '#3B82F6',
-  COMPLETED: '#10B981',
-  FAILED: '#EF4444',
-  SKIPPED: '#9CA3AF',
-};
 
 function formatDuration(started: string | null, completed: string | null): string {
   if (!started || !completed) return '';

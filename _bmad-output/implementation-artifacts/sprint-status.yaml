@@ -443,7 +443,7 @@ development_status:
     # Réf: idp-portal/CODEBASE-REVIEW.md §13–16, planning-artifacts/epic-34-codebase-review-restant-fev-2026.md
     epic-34: in-progress
     34-1-quick-wins-backend-di-queryset-validation: done # SOLID-BE-8, NEW-1, SOLID-BE-11 — code-review 2026-02-22: 3 MEDIUM fixes (test request factory, response code assertions, File List)
-    34-2-quick-wins-frontend-notification-status-antd: backlog # SOLID-FE-5, SOLID-FE-10, BUG-FE-1b/2b
+    34-2-quick-wins-frontend-notification-status-antd: done # SOLID-FE-5, SOLID-FE-10, BUG-FE-1b/2b — code-review 2026-02-22: 2 MEDIUM fixes (AppLayout cleanup, File List), 5 LOW action items
     34-3-backend-cache-rbac-split-services-lsp-serializers: backlog # NEW-3, SOLID-BE-4, SOLID-BE-6
     34-4-backend-runtime-registry-webhooks-di: backlog # SOLID-BE-7, SOLID-BE-9
     34-5-backend-poller-generique-unifie: backlog # SOLID-BE-3

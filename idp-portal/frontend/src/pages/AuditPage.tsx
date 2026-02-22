@@ -34,6 +34,7 @@ import { DownloadOutlined } from '@ant-design/icons';
 import type { TableProps } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { listExecutionAudit, exportAuditReport } from '../services/audit_service';
+import { AUDIT_STATUS_CONFIG as STATUS_CONFIG } from '../utils/execution-status';
 import { fetchCatalogActions } from '../services/catalog_service';
 import type { CatalogAction } from '../services/catalog_service';
 import { getExecution, getExecutionSteps } from '../services/execution_service';
@@ -56,14 +57,6 @@ const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
 // Ant Design 6.2: Extract table event types
 type TableOnChange<T> = NonNullable<TableProps<T>['onChange']>;
-
-/** Status colors for Tag display (AC1). */
-const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
-  success: { color: 'success', label: 'Succès' },
-  failed: { color: 'error', label: 'Échec' },
-  running: { color: 'processing', label: 'En cours' },
-  unknown: { color: 'default', label: 'Inconnu' },
-};
 
 /** Environment options for filter. */
 const ENVIRONMENT_OPTIONS = [

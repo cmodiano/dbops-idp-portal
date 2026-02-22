@@ -1,6 +1,16 @@
-import { notification } from 'antd';
-
 import logger from './logger';
+
+/** Notification callback type — injected by the UI layer (DIP: transport layer has no UI dependency). */
+type NotifyFn = (
+  type: 'warning' | 'error',
+  config: { title: string; description: string; duration?: number },
+) => void;
+
+let _notify: NotifyFn = () => {};
+
+export function setNotificationCallback(fn: NotifyFn): void {
+  _notify = fn;
+}
 
 const API_BASE = '/api/v1';
 
@@ -179,8 +189,8 @@ export async function handleAuthenticatedFetch(
 
         // Show warning notification only on first retry
         if (!notificationShown) {
-          notification.warning({
-            message: 'Service temporairement indisponible',
+          _notify('warning', {
+            title: 'Service temporairement indisponible',
             description: 'Nouvelle tentative en cours...',
             duration: Math.ceil(delay / 1000) + 2,
           });
@@ -210,8 +220,8 @@ export async function handleAuthenticatedFetch(
       }
 
       // All 503 retries exhausted — show error notification
-      notification.error({
-        message: 'Base de données temporairement indisponible',
+      _notify('error', {
+        title: 'Base de données temporairement indisponible',
         description: 'Base de données temporairement indisponible après bascule. Veuillez réessayer dans quelques instants.',
         duration: 8,
       });
