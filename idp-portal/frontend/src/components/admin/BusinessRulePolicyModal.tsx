@@ -177,7 +177,7 @@ export function BusinessRulePolicyModal({
             { max: 200, message: 'Le nom ne peut pas dépasser 200 caractères' },
           ]}
         >
-          <Input placeholder="Ex: Revue Terraform SQL sku_name" />
+          <Input placeholder="Ex: Revue Terraform SQL sku_name" disabled={saving} />
         </Form.Item>
 
         <Form.Item
@@ -185,7 +185,7 @@ export function BusinessRulePolicyModal({
           label="Description"
           rules={[{ max: 500, message: 'La description ne peut pas dépasser 500 caractères' }]}
         >
-          <TextArea rows={2} placeholder="Description de la règle..." showCount maxLength={500} />
+          <TextArea rows={2} placeholder="Description de la règle..." showCount maxLength={500} disabled={saving} />
         </Form.Item>
 
         <Form.Item label="Règle JSON" required>
@@ -215,6 +215,7 @@ export function BusinessRulePolicyModal({
             rows={12}
             placeholder='{"on_step_output": [...]}'
             style={{ fontFamily: 'monospace', fontSize: 12 }}
+            disabled={saving}
           />
           {jsonError && (
             <Alert type="error" showIcon title={jsonError} style={{ marginTop: 8 }} />
@@ -222,7 +223,7 @@ export function BusinessRulePolicyModal({
         </Form.Item>
 
         <Form.Item name="is_active" label="Actif" valuePropName="checked">
-          <Switch />
+          <Switch disabled={saving} />
         </Form.Item>
       </Form>
     </Modal>

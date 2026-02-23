@@ -455,6 +455,6 @@ development_status:
     34-11-frontend-use-audit-filters-composants-audit-page: done # SOLID-FE-3 — code-review 2026-02-22: 2H+3M auto-fixés (handleExport sort/order, sorter null reset, tag Correlation, Drawer width, DRY formatDate) — 22/22 tests pass, 0 TS error
     34-12-frontend-decouper-execution-timeline: done # SOLID-FE-1 CRITICAL — code-review 2026-02-23: 2M+3L auto-fixés (formatDuration utils.ts, <style> pulse déplacé, type steps, renommage failedStep, commentaire) — 34/34 tests pass, 0 TS error
     34-13-frontend-dip-services-props-execution-wizard: done # SOLID-FE-4, FE-7, FE-9 — code-review 2026-02-23: 2H+2M+1L fixes (dead useAuth, firstFieldRef mort, onBackToCatalog inutile, interface bloat, doc AC2) — 77/77 tests, 0 TS error
-    34-14-frontend-tests-composants-critiques: backlog # SOLID-FE-11
+    34-14-frontend-tests-composants-critiques: done # SOLID-FE-11 — 82 tests (15+25+17+25), code review: 3H+3M fixes (disabled={saving}, cronValidating, cronError, workflowValidationSummary), 0 régression, 0 TS error
     34-15-backend-isp-base-adapter-optionnel: backlog # SOLID-BE-10 LOW
     epic-34-retrospective: optional
