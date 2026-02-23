@@ -18,8 +18,8 @@ import type {
   ProfileTargetPermissionsUpdate,
   ProfileTargetPermissionsResponse,
 } from '../../types/api';
-import { getProfileActions, putProfileActions, getProfileTargets, putProfileTargets } from '../../services/profiles_service';
-import { getAdminActions, getTags } from '../../services/admin_service';
+// DIP: services encapsulés dans useProfileFormState — SOLID-FE-4
+import { useProfileFormState } from '../../hooks/useProfileFormState';
 import { MOCK_TARGET_OPTIONS } from '../../utils/profileOptions';
 import { useEnvironments } from '../../hooks/useEnvironments';
 
@@ -118,11 +118,19 @@ export function ProfileForm({
 }: ProfileFormProps) {
   const [form] = Form.useForm<ProfileFormValues>();
   const isEdit = !!editProfile;
-  const [actionsOptions, setActionsOptions] = useState<{ id: number; name: string }[]>([]);
-  const [tagsOptions, setTagsOptions] = useState<string[]>([]);
-  const [loadingActions, setLoadingActions] = useState(false);
   // Story 23.7 - Targets mode state
   const [targetsMode, setTargetsMode] = useState<TargetsMode>('all');
+
+  // DIP: services encapsulés dans useProfileFormState — SOLID-FE-4
+  const {
+    actionsOptions,
+    tagsOptions,
+    loadingData: loadingActions,
+    profileActionsPerms,
+    profileTargetsPerms,
+    handlePutProfileActions,
+    handlePutProfileTargets,
+  } = useProfileFormState({ open, editProfileId: editProfile?.id });
 
   // Story 13.7: Load environments from inventory
   const { environmentOptions, loading: environmentsLoading } = useEnvironments();
@@ -137,10 +145,10 @@ export function ProfileForm({
     );
   }, [watchedEnvironments, environmentOptions]);
 
+  // Initialisation du formulaire à l'ouverture
   useEffect(() => {
     if (!open) return;
     form.resetFields();
-    // Story 23.7 - Reset targets mode
     setTargetsMode('all');
     if (editProfile) {
       form.setFieldsValue({
@@ -155,42 +163,29 @@ export function ProfileForm({
         environments: [],
         target_names: [],
         target_patterns: [],
-        exclusion_patterns: [], // Story 25.6
+        exclusion_patterns: [],
       });
-      queueMicrotask(() => setLoadingActions(true));
-      Promise.all([
-        getProfileActions(editProfile.id),
-        getProfileTargets(editProfile.id),
-        getAdminActions().then((r) => r.data),
-        getTags(),
-      ])
-        .then(([perms, targetsPerms, actions, tags]) => {
-          // Story 23.7 - Load targets permissions and detect mode from filter_by_attribute
-          const mode = detectTargetsMode(targetsPerms);
-          setTargetsMode(mode);
-          form.setFieldsValue({
-            actions_type: perms.actions_type,
-            action_ids: perms.action_ids ?? [],
-            tag_patterns: perms.tag_patterns ?? [],
-            environments: perms.environments ?? [],
-            target_names: targetsPerms.target_names ?? [],
-            target_patterns: targetsPerms.target_patterns ?? [],
-            exclusion_patterns: targetsPerms.exclusion_patterns ?? [], // Story 25.6
-          });
-          setActionsOptions(actions.map((a) => ({ id: a.id, name: a.name })));
-          setTagsOptions(tags.map((t) => t.name));
-        })
-        .catch(() => {
-          setActionsOptions([]);
-          setTagsOptions([]);
-        })
-        .finally(() => setLoadingActions(false));
     } else {
-      // Story 23.7 - Default for new profile
-      setTargetsMode('all');
       form.setFieldsValue({ is_admin: false, is_auditor: false });
     }
   }, [open, editProfile, form]);
+
+  // Appliquer les permissions chargées par useProfileFormState au formulaire
+  useEffect(() => {
+    if (!profileActionsPerms || !profileTargetsPerms) return;
+    // Story 23.7 - Detect mode from filter_by_attribute
+    const mode = detectTargetsMode(profileTargetsPerms);
+    setTargetsMode(mode);
+    form.setFieldsValue({
+      actions_type: profileActionsPerms.actions_type,
+      action_ids: profileActionsPerms.action_ids ?? [],
+      tag_patterns: profileActionsPerms.tag_patterns ?? [],
+      environments: profileActionsPerms.environments ?? [],
+      target_names: profileTargetsPerms.target_names ?? [],
+      target_patterns: profileTargetsPerms.target_patterns ?? [],
+      exclusion_patterns: profileTargetsPerms.exclusion_patterns ?? [],
+    });
+  }, [profileActionsPerms, profileTargetsPerms, form]);
 
   const [permError, setPermError] = useState<string | null>(null);
 
@@ -224,8 +219,8 @@ export function ProfileForm({
       };
       try {
         await Promise.all([
-          putProfileActions(editProfile.id, actionsPayload),
-          putProfileTargets(editProfile.id, targetsPayload),
+          handlePutProfileActions(editProfile.id, actionsPayload),
+          handlePutProfileTargets(editProfile.id, targetsPayload),
         ]);
       } catch {
         setPermError('Profil mis à jour, mais erreur lors de la sauvegarde des permissions. Réessayez en éditant le profil.');

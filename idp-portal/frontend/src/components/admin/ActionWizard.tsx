@@ -31,7 +31,8 @@ import { impactRulesToList, listToImpactRules } from '../../utils/impactRulesSch
 import { validateWorkflowGraph } from '../../utils/workflowValidation';
 import { workflowStepsToReactFlow } from '../../utils/workflowConversion';
 import { ApiError } from '../../services/api_client';
-import { getTags, updateActionTags, updateActionSteps, updateWorkflowSteps, updateBusinessRulePolicies, patchAction } from '../../services/admin_service';
+// DIP: services encapsulés dans useActionWizardState — SOLID-FE-4
+import { useActionWizardState } from '../../hooks/useActionWizardState';
 import { useEngines } from '../../hooks/useEngines';
 import { usePlatformIntegrations } from '../../hooks/usePlatformIntegrations';
 import { useCategories } from '../../hooks/useCategories';
@@ -79,7 +80,16 @@ export function ActionWizard({
   const [impactRulesList, setImpactRulesList] = useState<ImpactRuleDefinition[]>([]);
   const [defaultImpactLevel, setDefaultImpactLevel] = useState<ImpactLevel | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [tagsOptions, setTagsOptions] = useState<{ value: string; label: string }[]>([]);
+
+  // DIP: services encapsulés via useActionWizardState — SOLID-FE-4
+  const {
+    tagsOptions,
+    handleUpdateActionTags,
+    handleUpdateActionSteps,
+    handleUpdateWorkflowSteps,
+    handleUpdateBusinessRulePolicies,
+    handlePatchAction,
+  } = useActionWizardState({ open });
   const [changeTypeConfig, setChangeTypeConfig] = useState<Record<string, ChangeTypeConfigEntry>>({});
   // Story 31.6: Gate configuration (integration selection per gate type)
   const [gateConfig, setGateConfig] = useState<GateConfig | null>(null);
@@ -115,13 +125,6 @@ export function ActionWizard({
   // Story 31.1: Derive AAP check from selected integration
   const selectedIntegration = integrationId ? getIntegrationById(integrationId) : undefined;
   const isPlatformAAP = selectedIntegration?.type === 'aap' || selectedIntegration?.type === 'tower';
-
-  useEffect(() => {
-    if (!open) return;
-    getTags()
-      .then((list) => setTagsOptions(list.map((t) => ({ value: t.name, label: t.name }))))
-      .catch(() => setTagsOptions([]));
-  }, [open]);
 
   useEffect(() => {
     if (open && editAction) {
@@ -320,7 +323,7 @@ export function ActionWizard({
 
       if (actionId && selectedTags.length >= 0) {
         try {
-          await updateActionTags(actionId, { tag_names: selectedTags });
+          await handleUpdateActionTags(actionId, selectedTags);
         } catch (tagErr) {
           if (done) onSuccess?.(done);
           notification.warning({
@@ -336,11 +339,11 @@ export function ActionWizard({
         // Story 28.4: Save business rule policy (predefined only)
         try {
           if (businessRulePolicyId) {
-            await updateBusinessRulePolicies(actionId, null);
-            await patchAction(actionId, { business_rule_policy_id: businessRulePolicyId });
+            await handleUpdateBusinessRulePolicies(actionId, null);
+            await handlePatchAction(actionId, { business_rule_policy_id: businessRulePolicyId });
           } else {
-            await updateBusinessRulePolicies(actionId, null);
-            await patchAction(actionId, { business_rule_policy_id: null });
+            await handleUpdateBusinessRulePolicies(actionId, null);
+            await handlePatchAction(actionId, { business_rule_policy_id: null });
           }
         } catch (policiesErr) {
           notification.warning({
@@ -356,7 +359,7 @@ export function ActionWizard({
           // Story 9.5: Save workflow steps (only if draft or disabled)
           if (canEditSteps) {
             try {
-              await updateWorkflowSteps(actionId, { steps: workflowSteps });
+              await handleUpdateWorkflowSteps(actionId, { steps: workflowSteps });
             } catch (workflowErr) {
               // Handle WORKFLOW_LOOP error from backend
               const errorMessage = workflowErr instanceof Error ? workflowErr.message : 'Erreur lors de la sauvegarde des étapes du workflow';
@@ -416,7 +419,7 @@ export function ActionWizard({
               conditional_environments: null,
             };
             try {
-              await updateActionSteps(actionId, { steps: [singleStep], change_type_config });
+              await handleUpdateActionSteps(actionId, { steps: [singleStep], change_type_config });
             } catch (stepsErr) {
               const errorMessage = stepsErr instanceof Error ? stepsErr.message : 'Erreur lors de la sauvegarde des étapes';
               if (errorMessage.includes('brouillon') || errorMessage.includes('draft') || errorMessage.includes('désactivée')) {

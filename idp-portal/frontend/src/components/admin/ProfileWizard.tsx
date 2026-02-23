@@ -16,15 +16,8 @@ import type {
   ProfileTargetsType,
   ProfileTargetPermissionsUpdate,
 } from '../../types/api';
-import {
-  createProfile,
-  updateProfile,
-  getProfileActions,
-  getProfileTargets,
-  putProfileActions,
-  putProfileTargets,
-} from '../../services/profiles_service';
-import { getAdminActions, getTags } from '../../services/admin_service';
+// DIP: services encapsulés dans useProfileFormState — SOLID-FE-4
+import { useProfileFormState } from '../../hooks/useProfileFormState';
 import { MOCK_TARGET_OPTIONS } from '../../utils/profileOptions';
 import { useEnvironments } from '../../hooks/useEnvironments';
 
@@ -69,66 +62,43 @@ export function ProfileWizard({
   const [currentStep, setCurrentStep] = useState(0);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [loadingData, setLoadingData] = useState(false);
 
-  const [actionsOptions, setActionsOptions] = useState<{ id: number; name: string }[]>([]);
-  const [tagsOptions, setTagsOptions] = useState<string[]>([]);
-  
+  // DIP: services encapsulés dans useProfileFormState — SOLID-FE-4
+  const {
+    actionsOptions,
+    tagsOptions,
+    loadingData,
+    profileActionsPerms,
+    profileTargetsPerms,
+    handlePutProfileActions,
+    handlePutProfileTargets,
+    handleCreateProfile,
+    handleUpdateProfile,
+  } = useProfileFormState({ open, editProfileId: editProfile?.id });
+
   // Story 13.7: Load environments from inventory
   const { environmentOptions, loading: environmentsLoading } = useEnvironments();
 
   const isEditMode = !!editProfile;
 
-  // Load reference data (actions, tags) when modal opens
+  // Appliquer les permissions chargées par useProfileFormState au formulaire (mode édition)
   useEffect(() => {
-    if (!open) return;
-
-    if (editProfile) {
-      // Edit mode: load profile + permissions + reference data
-      setLoadingData(true);
-      Promise.all([
-        getProfileActions(editProfile.id),
-        getProfileTargets(editProfile.id),
-        getAdminActions().then((r) => r.data),
-        getTags(),
-      ])
-        .then(([actionsPerms, targetsPerms, actions, tags]) => {
-          form.setFieldsValue({
-            name: editProfile.name,
-            description: editProfile.description ?? '',
-            ad_group: editProfile.ad_group,
-            is_admin: editProfile.is_admin,
-            is_auditor: editProfile.is_auditor,
-            actions_type: actionsPerms.actions_type,
-            action_ids: actionsPerms.action_ids ?? [],
-            tag_patterns: actionsPerms.tag_patterns ?? [],
-            environments: actionsPerms.environments ?? [],
-            targets_type: targetsPerms.targets_type,
-            target_names: targetsPerms.target_names ?? [],
-            target_patterns: targetsPerms.target_patterns ?? [],
-          });
-          setActionsOptions(actions.map((a) => ({ id: a.id, name: a.name })));
-          setTagsOptions(tags.map((t) => t.name));
-        })
-        .catch(() => {
-          setActionsOptions([]);
-          setTagsOptions([]);
-        })
-        .finally(() => setLoadingData(false));
-    } else {
-      // Create mode: load reference data only (form has initial values)
-      Promise.all([getAdminActions().then((r) => r.data), getTags()])
-        .then(([actions, tags]) => {
-          setActionsOptions(actions.map((a) => ({ id: a.id, name: a.name })));
-          setTagsOptions(tags.map((t) => t.name));
-        })
-        .catch(() => {
-          setActionsOptions([]);
-          setTagsOptions([]);
-        });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, editProfile]);
+    if (!profileActionsPerms || !profileTargetsPerms || !editProfile) return;
+    form.setFieldsValue({
+      name: editProfile.name,
+      description: editProfile.description ?? '',
+      ad_group: editProfile.ad_group,
+      is_admin: editProfile.is_admin,
+      is_auditor: editProfile.is_auditor,
+      actions_type: profileActionsPerms.actions_type,
+      action_ids: profileActionsPerms.action_ids ?? [],
+      tag_patterns: profileActionsPerms.tag_patterns ?? [],
+      environments: profileActionsPerms.environments ?? [],
+      targets_type: profileTargetsPerms.targets_type,
+      target_names: profileTargetsPerms.target_names ?? [],
+      target_patterns: profileTargetsPerms.target_patterns ?? [],
+    });
+  }, [profileActionsPerms, profileTargetsPerms, editProfile, form]);
 
   // Reset local state when modal closes (Form is recreated by destroyOnHidden on reopen)
   useEffect(() => {
@@ -175,9 +145,9 @@ export function ProfileWizard({
       // Create or update profile
       let profile: ProfileResponse;
       if (isEditMode && editProfile) {
-        profile = await updateProfile(editProfile.id, profilePayload);
+        profile = await handleUpdateProfile(editProfile.id, profilePayload);
       } else {
-        profile = await createProfile(profilePayload as ProfileCreate);
+        profile = await handleCreateProfile(profilePayload as ProfileCreate);
       }
 
       // Build action permissions payload
@@ -200,8 +170,8 @@ export function ProfileWizard({
       // Save permissions in parallel
       try {
         await Promise.all([
-          putProfileActions(profile.id, actionsPayload),
-          putProfileTargets(profile.id, targetsPayload),
+          handlePutProfileActions(profile.id, actionsPayload),
+          handlePutProfileTargets(profile.id, targetsPayload),
         ]);
       } catch (permErr) {
         // Profile created/updated but permissions failed - still call onSuccess
@@ -210,7 +180,6 @@ export function ProfileWizard({
           description: permErr instanceof Error ? permErr.message : 'Les permissions n\'ont pas pu être enregistrées. Éditez le profil pour réessayer.',
         });
         onSuccess?.(profile);
-        setSaving(false);
         return;
       }
 

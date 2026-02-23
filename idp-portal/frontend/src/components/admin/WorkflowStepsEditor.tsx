@@ -34,9 +34,9 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import type { WorkflowStep, ActionListItem } from '../../types/api';
-import { getEligibleActionsForWorkflow } from '../../services/admin_service';
-import logger from '../../services/logger';
+import type { WorkflowStep } from '../../types/api';
+// DIP: services encapsulés dans useEligibleActions — SOLID-FE-4
+import { useEligibleActions } from '../../hooks/useEligibleActions';
 import { SortableStepCard } from './SortableStepCard';
 
 /** Extended step type with optional temporary id for new steps. */
@@ -72,9 +72,8 @@ export const WorkflowStepsEditor: React.FC<WorkflowStepsEditorProps> = ({
   loading = false,
   disabled = false,
 }) => {
-  const [eligibleActions, setEligibleActions] = useState<ActionListItem[]>([]);
-  const [loadingActions, setLoadingActions] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // DIP: chargement des actions éligibles via useEligibleActions — SOLID-FE-4
+  const { eligibleActions, loadingActions, loadError } = useEligibleActions();
   const [showValidation, setShowValidation] = useState(false);
 
   // Convert WorkflowStep[] to internal editable format with tempIds
@@ -104,33 +103,6 @@ export const WorkflowStepsEditor: React.FC<WorkflowStepsEditorProps> = ({
       );
     }
   }, [steps, internalSteps.length]);
-
-  // Load eligible actions on mount
-  useEffect(() => {
-    setLoadingActions(true);
-    setLoadError(null);
-    getEligibleActionsForWorkflow()
-      .then((actions) => {
-        setEligibleActions(Array.isArray(actions) ? actions : []);
-      })
-      .catch((err) => {
-        logger.error('Failed to load eligible actions for workflow', { error: err instanceof Error ? err.message : String(err) });
-        // Improve error message to be more helpful
-        let errorMessage = 'Impossible de charger les actions éligibles';
-        if (err instanceof Error) {
-          errorMessage = err.message;
-          // If it's "Unknown error", provide more context
-          if (err.message === 'Unknown error') {
-            errorMessage = 'Erreur lors du chargement des actions éligibles. Vérifiez votre connexion et vos permissions DBOPS.';
-          }
-        }
-        setLoadError(errorMessage);
-        setEligibleActions([]);
-      })
-      .finally(() => {
-        setLoadingActions(false);
-      });
-  }, []);
 
   // Notify parent of changes (filter out internal fields)
   const notifyChange = (newSteps: WorkflowStepEditable[]) => {
