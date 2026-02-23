@@ -22,7 +22,7 @@ automat==25.4.16
     # via twisted
 billiard==4.2.4
     # via celery
-cachetools==7.0.0
+cachetools==7.0.1
     # via idp-portal-backend (pyproject.toml)
 cbor2==5.8.0
     # via autobahn
@@ -87,7 +87,7 @@ drf-spectacular==0.29.0
     # via idp-portal-backend (pyproject.toml)
 ecdsa==0.19.1
     # via python-jose
-gunicorn==25.0.2
+gunicorn==25.1.0
     # via idp-portal-backend (pyproject.toml)
 h11==0.16.0
     # via httpcore
@@ -135,7 +135,7 @@ pillow==12.1.1
     # via reportlab
 prompt-toolkit==3.0.52
     # via click-repl
-puremagic==1.30
+puremagic==2.0.0
     # via idp-portal-backend (pyproject.toml)
 py-ubjson==0.16.1
     # via autobahn

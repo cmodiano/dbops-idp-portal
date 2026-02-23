@@ -47,7 +47,7 @@ def audit_integration_type_catalogue(sender, instance, created, **kwargs):
     # Collision probability for N=9: < 0.00001% (birthday paradox).
     # Collision probability for N=1000 (future): ~0.0005%.
     # A dev-time collision detection test validates uniqueness of current codes.
-    entity_id = int(hashlib.md5(instance.code.encode()).hexdigest()[:8], 16) % (10**9)
+    entity_id = int(hashlib.md5(instance.code.encode(), usedforsecurity=False).hexdigest()[:8], 16) % (10**9)
 
     try:
         AuditService.create_entry(

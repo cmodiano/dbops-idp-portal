@@ -61,13 +61,13 @@ export function WizardStep3ImpactChangement({
   getIntegrationById,
 }: WizardStep3ImpactChangementProps) {
   return (
-    <Space direction="vertical" style={{ width: '100%' }} size="middle">
+    <Space orientation="vertical" style={{ width: '100%' }} size="middle">
       {/* Impact rules and change config for both actions and workflows */}
       <Form.Item
         label="Règles d'impact"
         tooltip="Définissez les règles d'impact par environnement."
       >
-        <Space direction="vertical" size="small" style={{ width: '100%' }}>
+        <Space orientation="vertical" size="small" style={{ width: '100%' }}>
           <ImpactLevelsLegend />
           <ImpactRulesEditor value={impactRulesList} onChange={isReadOnly ? () => {} : setImpactRulesList} />
         </Space>

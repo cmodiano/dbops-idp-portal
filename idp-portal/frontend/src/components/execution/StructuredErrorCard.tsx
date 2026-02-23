@@ -105,7 +105,7 @@ export function StructuredErrorCard({
           <h3 style={{ margin: '0 0 8px 0', fontSize: 14, fontWeight: 600, color: token.colorTextSecondary }}>
             Actions correctives suggérées
           </h3>
-          <Space direction="vertical" style={{ width: '100%' }}>
+          <Space orientation="vertical" style={{ width: '100%' }}>
             <Skeleton.Button active size="default" block />
             <Skeleton.Button active size="default" block />
           </Space>
@@ -124,7 +124,7 @@ export function StructuredErrorCard({
           >
             Actions correctives suggérées
           </h3>
-          <Space direction="vertical" style={{ width: '100%' }}>
+          <Space orientation="vertical" style={{ width: '100%' }}>
             {remediationSuggestions!.map((suggestion, index) => (
               <Tooltip
                 key={suggestion.action_id}

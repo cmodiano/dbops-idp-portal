@@ -93,14 +93,14 @@ export function RemediationPanel({
           }
           data-testid="remediation-context-card"
         >
-          <Space direction="vertical" style={{ width: '100%' }} size="small">
+          <Space orientation="vertical" style={{ width: '100%' }} size="small">
             {remediationContext.remediation_actions.map((action) => (
               <Card.Grid
                 key={action.execution_id}
                 style={{ width: '100%', padding: 12 }}
                 hoverable={false}
               >
-                <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                <Space orientation="vertical" size={4} style={{ width: '100%' }}>
                   <Space>
                     <Tag
                       color={

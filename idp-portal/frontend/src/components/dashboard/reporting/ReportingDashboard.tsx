@@ -208,7 +208,7 @@ export function ReportingDashboard() {
   }, [filters, hasCustomDateRange, period]);
 
   return (
-    <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+    <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
       {/* Mode selector: Stats vs Comparison (Story 8.6, AC1) */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <ComparisonModeSelector mode={mode} onModeChange={setMode} />

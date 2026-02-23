@@ -186,22 +186,20 @@ class InventoryQueryExecutor:
             where_clause = "WHERE " + " AND ".join(conditions)
 
         # Count query
-        # nosec B608 - table_or_synonym validated by SAFE_TABLE_NAME_PATTERN above
-        count_sql = f"SELECT COUNT(*) FROM {table_or_synonym} {where_clause}"
+        count_sql = f"SELECT COUNT(*) FROM {table_or_synonym} {where_clause}"  # nosec B608 - table_or_synonym validated by SAFE_TABLE_NAME_PATTERN above
 
         # Data query with pagination
         offset = (page - 1) * page_size
         params['offset'] = offset  # type: ignore[assignment]
         params['limit'] = page_size  # type: ignore[assignment]
 
-        # nosec B608 - table_or_synonym validated by SAFE_TABLE_NAME_PATTERN above
-        data_sql = f"""
-            SELECT NAME, ENVIRONMENT, TYPE
-            FROM {table_or_synonym}
-            {where_clause}
-            ORDER BY NAME
-            OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY
-        """
+        # table_or_synonym validated by SAFE_TABLE_NAME_PATTERN above
+        data_sql = (
+            f"SELECT NAME, ENVIRONMENT, TYPE FROM {table_or_synonym} "  # nosec B608
+            f"{where_clause} "
+            "ORDER BY NAME "
+            "OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY"
+        )
 
         try:
             with _get_connection().cursor() as cursor:
@@ -336,12 +334,11 @@ class InventoryQueryExecutor:
 
             where_clause, params = mapper.build_where_clause(entity_plural, filters)
 
-            # nosec B608 - table/columns validated by mapper
-            inner_sql = f"SELECT {select} FROM {table}"
+            inner_sql = f"SELECT {select} FROM {table}"  # nosec B608 - table/columns validated by mapper
             if where_clause:
                 inner_sql += f" WHERE {where_clause}"
             inner_sql += " ORDER BY name"
-            sql = f"SELECT * FROM ({inner_sql}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"
+            sql = f"SELECT * FROM ({inner_sql}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"  # nosec B608 - MAX_MULTI_TABLE_RESULTS is a constant, inner_sql validated above
 
             logger.info(
                 f"reading_{entity_plural}_from_config",

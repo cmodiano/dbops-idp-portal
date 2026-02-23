@@ -103,7 +103,7 @@ class TowerAdapter(BaseAdapter):
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=self.timeout,
-                verify=False,  # noqa: S501 — corporate CAs handled externally
+                verify=False,  # nosec B501  # noqa: S501 — corporate CAs handled externally
             ) as client:
                 response = await client.post(url, json=payload)
                 response.raise_for_status()
@@ -204,7 +204,7 @@ class TowerAdapter(BaseAdapter):
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=self.timeout,
-                verify=False,  # noqa: S501
+                verify=False,  # nosec B501  # noqa: S501
             ) as client:
                 response = await client.get(url)
                 response.raise_for_status()
@@ -278,7 +278,7 @@ class TowerAdapter(BaseAdapter):
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=TOWER_LOGS_TIMEOUT,
-                verify=False,  # noqa: S501
+                verify=False,  # nosec B501  # noqa: S501
             ) as client:
                 stdout_response = await client.get(
                     stdout_url,
@@ -400,7 +400,7 @@ class TowerAdapter(BaseAdapter):
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=self.timeout,
-                verify=False,  # noqa: S501
+                verify=False,  # nosec B501  # noqa: S501
             ) as client:
                 response = await client.post(url)
                 response.raise_for_status()

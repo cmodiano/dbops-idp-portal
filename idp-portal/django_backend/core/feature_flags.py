@@ -303,7 +303,7 @@ def get_rollout_status(flag_key: str, user_id: str, rollout_percent: int | None 
     # Consistent hashing: user always gets same result for same flag
     # LOW-1 fix: MD5 is safe for non-cryptographic consistent hashing (not used for security)
     hash_input = f"{flag_key}:{user_id}"
-    hash_value = int(hashlib.md5(hash_input.encode()).hexdigest(), 16)
+    hash_value = int(hashlib.md5(hash_input.encode(), usedforsecurity=False).hexdigest(), 16)
     return (hash_value % 100) < rollout_percent
 
 

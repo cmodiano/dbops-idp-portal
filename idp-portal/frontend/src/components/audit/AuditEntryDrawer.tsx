@@ -41,7 +41,7 @@ export function AuditEntryDrawer({
       title="Détail d'audit"
       open={open}
       onClose={onClose}
-      width={600}
+      styles={{ wrapper: { width: 600 } }}
       destroyOnClose
     >
       {loading ? (

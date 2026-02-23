@@ -127,10 +127,9 @@ export function ComparisonExecutionsDrawer({
         </div>
       }
       placement="right"
-      width={640}
       open={open}
       onClose={onClose}
-      styles={{ body: { padding: 16 } }}
+      styles={{ body: { padding: 16 }, wrapper: { width: 640 } }}
     >
       {executions.length === 0 && !loading ? (
         <Empty description="Aucune exécution trouvée pour ces critères" />

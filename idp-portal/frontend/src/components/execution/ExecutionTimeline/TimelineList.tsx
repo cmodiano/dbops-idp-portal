@@ -55,7 +55,7 @@ export function TimelineList({
         execution?.parent_item_type === 'workflow' &&
         execution?.parent_execution_id ? (
           <Card size="small" style={{ maxWidth: 400 }}>
-            <Space direction="vertical" size={8}>
+            <Space orientation="vertical" size={8}>
               <Text strong>Action du workflow</Text>
               <Text type="secondary">
                 Cette action a été exécutée dans le cadre d'un workflow. Les étapes détaillées sont visibles sur l'exécution parente.

@@ -89,6 +89,7 @@ export default defineConfig([
       'standards/no-antd-internal-imports': 'error',
       'standards/require-app-useapp': 'error',
       'standards/no-class-components': 'error',
+      'standards/no-antd-deprecated-props': 'error',
     },
   },
   // Relaxed rules for test files

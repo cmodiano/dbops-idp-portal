@@ -591,7 +591,7 @@ class AzureDevOpsAdapter(BaseAdapter):
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=self.timeout,
-                verify=False,  # noqa: S501
+                verify=False,  # nosec B501  # noqa: S501
             ) as client:
                 response = await client.patch(
                     url,
