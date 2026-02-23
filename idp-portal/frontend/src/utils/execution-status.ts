@@ -1,11 +1,17 @@
 /**
- * Centralized status mapping utilities (Story 34.2 — SOLID-FE-10).
+ * Centralized status mapping utilities (Story 34.2 — SOLID-FE-10, Story 35.1 — consolidation).
  *
  * Previously duplicated in ExecutionTimeline.tsx and AuditPage.tsx.
  * Single source of truth for step and audit status display configuration.
+ *
+ * Story 35.1: Added EXECUTION_STATUS_BADGE_CONFIG and STEP_STATUS_BADGE_CONFIG
+ * to replace local STATUS_CONFIG in ExecutionView.tsx and StepDetailDrawer.tsx.
  */
 
-import type { ExecutionStepStatus } from '../types/api';
+import type { ExecutionStepStatus, ExecutionStatusType } from '../types/api';
+
+/** Ant Design Badge status type. */
+export type BadgeStatusType = 'success' | 'error' | 'warning' | 'processing' | 'default';
 
 /** Color mapping for execution step statuses (migrated from ExecutionTimeline.tsx). */
 export const STEP_STATUS_COLOR: Record<ExecutionStepStatus, string> = {
@@ -14,6 +20,43 @@ export const STEP_STATUS_COLOR: Record<ExecutionStepStatus, string> = {
   COMPLETED: '#10B981',
   FAILED: '#EF4444',
   SKIPPED: '#9CA3AF',
+};
+
+/**
+ * Badge display config for execution statuses (Story 35.1 — migrated from ExecutionView.tsx).
+ * Maps ExecutionStatusType → Ant Design Badge color + French label.
+ *
+ * Labels intentionally use masculine form ("Soumis", "Terminé") to match ExecutionView.tsx UX.
+ * Note: executionRenderers.tsx uses feminine labels ("Soumise", "Terminée") for inline renderers —
+ * this divergence is deliberate (ExecutionView shows "Exécution: Soumis", renderers show standalone status).
+ * PENDING_APPROVAL uses "En attente approbation" (more precise than "En attente" in executionRenderers).
+ */
+export const EXECUTION_STATUS_BADGE_CONFIG: Record<ExecutionStatusType, { color: BadgeStatusType; label: string }> = {
+  SUBMITTED: { color: 'default', label: 'Soumis' },
+  RUNNING: { color: 'processing', label: 'En cours' },
+  COMPLETED: { color: 'success', label: 'Terminé' },
+  FAILED: { color: 'error', label: 'Échoué' },
+  CANCELLED: { color: 'default', label: 'Annulé' },
+  INTEGRATION_ERROR: { color: 'error', label: 'Erreur intégration' },
+  PENDING_APPROVAL: { color: 'warning', label: 'En attente approbation' },
+  REJECTED: { color: 'error', label: 'Rejeté' },
+};
+
+/**
+ * Badge display config for workflow step statuses (Story 35.1 — migrated from StepDetailDrawer.tsx).
+ * Maps ExecutionStepStatus → Ant Design Badge color + French label.
+ *
+ * Includes CANCELLED defensively: ExecutionStepStatus type only covers 5 states but the backend
+ * may return CANCELLED for steps in cancelled executions. The union `ExecutionStepStatus | 'CANCELLED'`
+ * ensures correct display without requiring a type update that could affect other consumers.
+ */
+export const STEP_STATUS_BADGE_CONFIG: Record<ExecutionStepStatus | 'CANCELLED', { color: BadgeStatusType; label: string }> = {
+  PENDING: { color: 'default', label: 'En attente' },
+  RUNNING: { color: 'processing', label: 'En cours' },
+  COMPLETED: { color: 'success', label: 'Terminé' },
+  FAILED: { color: 'error', label: 'Échoué' },
+  SKIPPED: { color: 'default', label: 'Ignoré' },
+  CANCELLED: { color: 'default', label: 'Annulé' },
 };
 
 /** Display config for audit execution statuses (migrated from AuditPage.tsx). */

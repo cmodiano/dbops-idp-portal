@@ -15,7 +15,6 @@ Output: Consolidated markdown report with executive summary and prioritization
 
 import json
 import os
-import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -344,7 +343,7 @@ Ce rapport consolide les resultats des analyses de securite automatisees effectu
         for f in false_positive_files[:10]:
             report += f"- `{f}` (faux positif)\n"
 
-    report += f"""
+    report += """
 ---
 
 ## 5. Plan de Remediation

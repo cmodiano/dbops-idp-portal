@@ -15,18 +15,9 @@ import { StructuredErrorCard } from './StructuredErrorCard';
 import { ExecutionTimeline } from './ExecutionTimeline';
 import { getExecution, getExecutionSteps } from '../../services/execution_service';
 import type { ExecutionStepResponse, WorkflowStep, ExecutionResponse } from '../../types/api';
+import { STEP_STATUS_BADGE_CONFIG } from '../../utils/execution-status';
 
 const { Title, Text } = Typography;
-
-/** Status badge config matching ExecutionView pattern. */
-const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
-  PENDING: { color: 'default', label: 'En attente' },
-  RUNNING: { color: 'processing', label: 'En cours' },
-  COMPLETED: { color: 'success', label: 'Terminé' },
-  FAILED: { color: 'error', label: 'Échoué' },
-  SKIPPED: { color: 'default', label: 'Ignoré' },
-  CANCELLED: { color: 'default', label: 'Annulé' },
-};
 
 interface StepDetailDrawerProps {
   open: boolean;
@@ -86,7 +77,7 @@ export function StepDetailDrawer({
   // AC3: Status badge
   const statusCfg = useMemo(() => {
     const status = selectedStep?.executionStep?.status ?? 'PENDING';
-    return STATUS_CONFIG[status] ?? STATUS_CONFIG.PENDING;
+    return STEP_STATUS_BADGE_CONFIG[status] ?? { color: 'default', label: status };
   }, [selectedStep?.executionStep?.status]);
 
   const workflowStep = selectedStep?.workflowStep ?? null;
@@ -218,7 +209,7 @@ export function StepDetailDrawer({
             <Space size={4}>
               <Text style={{ color: token.colorTextSecondary }}>Statut:</Text>
               <Badge
-                status={statusCfg.color as 'default' | 'processing' | 'success' | 'error' | 'warning'}
+                status={statusCfg.color}
                 text={<span style={{ color: token.colorText }}>{statusCfg.label}</span>}
               />
             </Space>

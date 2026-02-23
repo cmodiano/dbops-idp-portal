@@ -458,3 +458,12 @@ development_status:
     34-14-frontend-tests-composants-critiques: done # SOLID-FE-11 — 82 tests (15+25+17+25), code review: 3H+3M fixes (disabled={saving}, cronValidating, cronError, workflowValidationSummary), 0 régression, 0 TS error
     34-15-backend-isp-base-adapter-optionnel: done # SOLID-BE-10 LOW — code review 2026-02-23: 1H+2M+3L fixes (ITriggerableAdapter return types, test assertions, régression adapters) — 8/8 + 16/16 tests ✅
     epic-34-retrospective: optional
+    # === Epic 35: Codebase Review — points restants post-refactoring (2026-02-23) ===
+    # Réf: idp-portal/CODEBASE-REVIEW.md §16–17, planning-artifacts/epic-35-codebase-review-points-restants-post-refactoring.md
+    epic-35: in-progress
+    35-1-consolidation-status-config-residuel: done # code-review 2026-02-23: 1H+3M+2L fixes (tests créés 22/22, File List complétée, JSDoc CANCELLED+PENDING_APPROVAL, casts redondants supprimés, STATUS_COLORS.RUNNING dans légende) — 75/75 tests pass
+    35-2-audit-except-exception-et-catch-residuels: backlog
+    35-3-migration-dip-services-phase-1: backlog
+    35-4-revue-fichiers-backend-volumineux: backlog
+    35-5-corriger-ou-supprimer-tests-en-echec: backlog
+    epic-35-retrospective: optional
