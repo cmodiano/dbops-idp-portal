@@ -256,6 +256,23 @@ class InventoryQueryExecutor:
                 f"Failed to read inventory from {table_or_synonym}: {str(e)}"
             )
 
+    @staticmethod
+    def _build_aliased_select(entity_cfg: dict, table_alias: str) -> str:
+        """
+        Build a table-aliased SELECT clause directly from entity config.
+
+        Avoids str.replace fragility when column names share substrings.
+        Example: entity_cfg with id_column="INST_ID", columns={"name": "INST_NAME"},
+        alias="inst" → "inst.INST_ID AS id, inst.INST_NAME AS name"
+        """
+        parts = []
+        id_col = entity_cfg.get('id_column')
+        if id_col:
+            parts.append(f"{table_alias}.{id_col} AS id")
+        for concept, col in entity_cfg.get('columns', {}).items():
+            parts.append(f"{table_alias}.{col} AS {concept}")
+        return ", ".join(parts)
+
     def _read_entity_from_config(
         self,
         entity_type: Literal['server', 'instance', 'database'],
@@ -324,6 +341,96 @@ class InventoryQueryExecutor:
             table = mapper.get_table_name(entity_plural)
             select = mapper.build_select_clause(entity_plural)
 
+            # Story 37.1: Check if servers config available for env-from-server JOIN
+            has_servers_config = mapper.get_entity_config('servers') is not None
+
+            # Story 37.1 Task 1: Instances with environment — derive from servers via JOIN
+            # AC1, AC4: The local environment column on instances is ignored; use servers.env via JOIN.
+            if entity_type == 'instance' and environment and has_servers_config:
+                srv_table = mapper.get_table_name('servers')
+                srv_name_col = mapper.get_column('servers', 'name')
+                srv_env_col = mapper.get_column('servers', 'environment')
+                inst_server_ref_col = mapper.get_column(entity_plural, 'server_ref')
+
+                # Prefix instances columns with 'inst.' alias to avoid JOIN ambiguity
+                entity_cfg = mapper.get_entity_config(entity_plural) or {}
+                aliased_select = self._build_aliased_select(entity_cfg, 'inst')
+
+                inst_params: dict[str, Any] = {'p_environment': environment}
+                inst_inner = (
+                    f"SELECT {aliased_select} "  # nosec B608 - table/columns validated by mapper
+                    f"FROM {table} inst "  # nosec B608 - table validated by mapper
+                    f"INNER JOIN {srv_table} srv "  # nosec B608 - table validated by mapper
+                    f"ON UPPER(inst.{inst_server_ref_col}) = UPPER(srv.{srv_name_col}) "  # nosec B608 - columns validated by mapper
+                    f"WHERE UPPER(srv.{srv_env_col}) = UPPER(:p_environment)"  # nosec B608 - column validated by mapper
+                )
+                # Task 1.2: Cumulate server_ref filter with env JOIN
+                if server_name:
+                    inst_inner += f" AND UPPER(inst.{inst_server_ref_col}) = UPPER(:p_server_ref)"  # nosec B608 - column validated by mapper
+                    inst_params['p_server_ref'] = server_name
+                inst_inner += " ORDER BY name"
+                inst_sql = f"SELECT * FROM ({inst_inner}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"  # nosec B608
+
+                logger.info(
+                    "reading_instances_from_config",
+                    table=table,
+                    has_env_filter=True,
+                    has_server_filter=bool(server_name),
+                    env_from_servers=True,
+                    correlation_id=correlation_id,
+                )
+                return self.execute_mapped_query(inst_sql, inst_params)
+
+            # Story 37.1 Task 2: Databases (no server_name, no server_names) with environment
+            # → derive from servers via JOIN databases → instances → servers (AC2, AC4).
+            # The local environment column on databases is ignored when servers config is available.
+            has_instances_config = mapper.get_entity_config('instances') is not None
+            if entity_type == 'database' and environment and has_servers_config and has_instances_config:
+                db_table = mapper.get_table_name('databases')
+                inst_table = mapper.get_table_name('instances')
+                srv_table = mapper.get_table_name('servers')
+                db_select = mapper.build_select_clause('databases')
+                db_name_col = mapper.get_column('databases', 'name')
+                inst_db_ref_col = mapper.get_column('instances', 'db_ref')
+                inst_server_ref_col = mapper.get_column('instances', 'server_ref')
+                srv_name_col = mapper.get_column('servers', 'name')
+                srv_env_col = mapper.get_column('servers', 'environment')
+
+                # Prefix databases columns with 'd.' alias to avoid JOIN ambiguity
+                db_entity_cfg = mapper.get_entity_config('databases') or {}
+                aliased_db_select = self._build_aliased_select(db_entity_cfg, 'd')
+
+                db_params: dict[str, Any] = {'p_environment': environment}
+                db_inner = (
+                    f"SELECT DISTINCT {aliased_db_select} "  # nosec B608 - table/columns validated by mapper
+                    f"FROM {db_table} d "  # nosec B608 - table validated by mapper
+                    f"INNER JOIN {inst_table} i ON UPPER(i.{inst_db_ref_col}) = UPPER(d.{db_name_col}) "  # nosec B608 - columns validated by mapper
+                    f"INNER JOIN {srv_table} srv ON UPPER(i.{inst_server_ref_col}) = UPPER(srv.{srv_name_col}) "  # nosec B608 - columns validated by mapper
+                    f"WHERE UPPER(srv.{srv_env_col}) = UPPER(:p_environment)"  # nosec B608 - column validated by mapper
+                    f" ORDER BY d.{db_name_col}"  # nosec B608 - column validated by mapper
+                )
+                db_sql = f"SELECT * FROM ({db_inner}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"  # nosec B608
+
+                logger.info(
+                    "reading_databases_from_config",
+                    table=db_table,
+                    has_env_filter=True,
+                    env_from_servers=True,
+                    correlation_id=correlation_id,
+                )
+                return self.execute_mapped_query(db_sql, db_params)
+
+            if entity_type == 'database' and environment and not (has_servers_config and has_instances_config):
+                # Fallback: log warning, continue to local column filter below
+                logger.warning(
+                    "environment_filter_fallback_to_local_column",
+                    entity=entity_plural,
+                    reason="servers/instances entities not configured",
+                    correlation_id=correlation_id,
+                )
+
+            # Default path: servers always use their own env column;
+            # instances/databases fallback here only when servers config is absent.
             filters = {}
             if environment:
                 filters['environment'] = environment
@@ -359,9 +466,7 @@ class InventoryQueryExecutor:
             )
             raise InventoryServiceError(f"{entity_type.capitalize()} mapping config error: {e}")
         except InventoryServiceError:
-            raise InventoryServiceError(
-                f"Failed to read {entity_plural} from {mapper.get_table_name(entity_plural)}"
-            )
+            raise
         except (DatabaseError, InterfaceError) as e:
             logger.error(
                 f"read_{entity_plural}_from_config_db_error",
@@ -409,25 +514,41 @@ class InventoryQueryExecutor:
         table = mapper.get_table_name(entity_plural)
         select = mapper.build_select_clause(entity_plural)
         server_ref_col = mapper.get_column(entity_plural, 'server_ref')
-        env_col = mapper.get_column(entity_plural, 'environment')
 
         in_params = {f'p_server_{i}': sn for i, sn in enumerate(server_names)}
         in_placeholders = ', '.join(f":{key}" for key in in_params.keys())
 
         params = {**in_params, 'p_environment': environment}
 
+        # Story 37.1 Task 3: Derive environment from servers via JOIN (AC1, AC3)
+        # Replace local instances.ENV filter with INNER JOIN on servers table.
+        # Note: this method is only called after is_multi_table verification,
+        # so servers config is always present (has_servers_config always True).
+        srv_table = mapper.get_table_name('servers')
+        srv_name_col = mapper.get_column('servers', 'name')
+        srv_env_col = mapper.get_column('servers', 'environment')
+
+        # Prefix instances columns with 'inst.' alias to avoid JOIN ambiguity
+        entity_cfg = mapper.get_entity_config(entity_plural) or {}
+        aliased_select = self._build_aliased_select(entity_cfg, 'inst')
+
         inner_sql = (
-            f"SELECT {select} FROM {table} "  # nosec B608 - table/columns validated by mapper
-            f"WHERE UPPER({env_col}) = UPPER(:p_environment) "
-            f"AND UPPER({server_ref_col}) IN ({in_placeholders}) "
+            f"SELECT {aliased_select} "  # nosec B608 - table/columns validated by mapper
+            f"FROM {table} inst "  # nosec B608 - table validated by mapper
+            f"INNER JOIN {srv_table} srv "  # nosec B608 - table validated by mapper
+            f"ON UPPER(inst.{server_ref_col}) = UPPER(srv.{srv_name_col}) "  # nosec B608 - columns validated by mapper
+            f"WHERE UPPER(srv.{srv_env_col}) = UPPER(:p_environment) "  # nosec B608 - column validated by mapper
+            f"AND UPPER(inst.{server_ref_col}) IN ({in_placeholders}) "  # nosec B608 - column validated by mapper
             f"ORDER BY name"
         )
+
         sql = f"SELECT * FROM ({inner_sql}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"  # nosec B608
 
         logger.info(
             f"reading_{entity_plural}_from_config_multi",
             table=table,
             server_count=len(server_names),
+            env_from_servers=True,
             correlation_id=correlation_id,
         )
 
@@ -459,32 +580,36 @@ class InventoryQueryExecutor:
         db_table = mapper.get_table_name('databases')
         inst_table = mapper.get_table_name('instances')
         db_name_col = mapper.get_column('databases', 'name')
-        db_env_col = mapper.get_column('databases', 'environment')
         inst_db_ref_col = mapper.get_column('instances', 'db_ref')
         inst_server_ref_col = mapper.get_column('instances', 'server_ref')
         db_select = mapper.build_select_clause('databases')
 
         # Prefix DB columns with alias 'd'
-        aliased_select = db_select
-        for concept, col in entity_config.get('columns', {}).items():
-            aliased_select = aliased_select.replace(col, f"d.{col}")
-        id_col = entity_config.get('id_column')
-        if id_col:
-            aliased_select = aliased_select.replace(id_col, f"d.{id_col}")
+        aliased_select = self._build_aliased_select(entity_config, 'd')
 
         in_params = {f'p_server_{i}': sn for i, sn in enumerate(server_names)}
         in_placeholders = ', '.join(f":{key}" for key in in_params.keys())
 
         params = {**in_params, 'p_environment': environment}
 
+        # Story 37.1 Task 4: Derive environment from servers via additional JOIN (AC3, AC4)
+        # Replace d.db_env_col filter with JOIN databases → instances → servers.
+        # Note: this method is only called after is_multi_table verification,
+        # so servers config is always present.
+        srv_table = mapper.get_table_name('servers')
+        srv_name_col = mapper.get_column('servers', 'name')
+        srv_env_col = mapper.get_column('servers', 'environment')
+
         inner_sql = (
             f"SELECT DISTINCT {aliased_select} "  # nosec B608 - table/columns validated by mapper
-            f"FROM {db_table} d "
-            f"INNER JOIN {inst_table} i ON UPPER(i.{inst_db_ref_col}) = UPPER(d.{db_name_col}) "
-            f"WHERE UPPER(d.{db_env_col}) = UPPER(:p_environment) "
-            f"AND UPPER(i.{inst_server_ref_col}) IN ({in_placeholders}) "
-            f"ORDER BY d.{db_name_col}"
+            f"FROM {db_table} d "  # nosec B608 - table validated by mapper
+            f"INNER JOIN {inst_table} i ON UPPER(i.{inst_db_ref_col}) = UPPER(d.{db_name_col}) "  # nosec B608 - columns validated by mapper
+            f"INNER JOIN {srv_table} srv ON UPPER(i.{inst_server_ref_col}) = UPPER(srv.{srv_name_col}) "  # nosec B608 - columns validated by mapper
+            f"WHERE UPPER(srv.{srv_env_col}) = UPPER(:p_environment) "  # nosec B608 - column validated by mapper
+            f"AND UPPER(i.{inst_server_ref_col}) IN ({in_placeholders}) "  # nosec B608 - column validated by mapper
+            f"ORDER BY d.{db_name_col}"  # nosec B608 - column validated by mapper
         )
+
         sql = f"SELECT * FROM ({inner_sql}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"  # nosec B608
 
         logger.info(
@@ -492,6 +617,7 @@ class InventoryQueryExecutor:
             db_table=db_table,
             inst_table=inst_table,
             server_count=len(server_names),
+            env_from_servers=True,
             correlation_id=correlation_id,
         )
 
@@ -527,29 +653,49 @@ class InventoryQueryExecutor:
         entity_config = mapper.get_entity_config('databases') or {}
 
         # Prefix DB columns with alias 'd'
-        aliased_select = db_select.replace(
-            mapper.get_column('databases', 'name'),
-            f"d.{mapper.get_column('databases', 'name')}",
-            1,
-        )
-        for concept, col in entity_config.get('columns', {}).items():
-            aliased_select = aliased_select.replace(col, f"d.{col}")
-        id_col = entity_config.get('id_column')
-        if id_col:
-            aliased_select = aliased_select.replace(id_col, f"d.{id_col}")
+        aliased_select = self._build_aliased_select(entity_config, 'd')
 
-        inner_sql = (
+        # Build base FROM clause (without WHERE — added below based on environment strategy)
+        inner_sql_base = (
             f"SELECT DISTINCT {aliased_select} "  # nosec B608 - all identifiers validated by mapper
-            f"FROM {db_table} d "
-            f"INNER JOIN {inst_table} i ON UPPER(i.{inst_db_ref_col}) = UPPER(d.{db_name_col}) "
-            f"WHERE UPPER(i.{inst_server_ref_col}) = UPPER(:p_server_name)"
+            f"FROM {db_table} d "  # nosec B608 - table validated by mapper
+            f"INNER JOIN {inst_table} i ON UPPER(i.{inst_db_ref_col}) = UPPER(d.{db_name_col}) "  # nosec B608 - columns validated by mapper
         )
-        params = {'p_server_name': server_name}
+        params: dict[str, Any] = {'p_server_name': server_name}
 
         if environment:
-            db_env_col = mapper.get_column('databases', 'environment')
-            inner_sql += f" AND UPPER(d.{db_env_col}) = UPPER(:p_environment)"
-            params['p_environment'] = environment
+            # Story 37.1 Task 5: Derive environment from servers via JOIN (AC1, AC4)
+            # The local environment column on databases is ignored when servers config is available.
+            has_servers_config = mapper.get_entity_config('servers') is not None
+            if has_servers_config:
+                srv_table = mapper.get_table_name('servers')
+                srv_name_col = mapper.get_column('servers', 'name')
+                srv_env_col = mapper.get_column('servers', 'environment')
+                inner_sql = (
+                    inner_sql_base +
+                    f"INNER JOIN {srv_table} srv "  # nosec B608 - table validated by mapper
+                    f"ON UPPER(i.{inst_server_ref_col}) = UPPER(srv.{srv_name_col}) "  # nosec B608 - columns validated by mapper
+                    f"WHERE UPPER(srv.{srv_env_col}) = UPPER(:p_environment) "  # nosec B608 - column validated by mapper
+                    f"AND UPPER(i.{inst_server_ref_col}) = UPPER(:p_server_name)"  # nosec B608 - column validated by mapper
+                )
+                params['p_environment'] = environment
+            else:
+                # Fallback: filter on local databases.ENV column
+                logger.warning(
+                    "environment_filter_fallback_to_local_column",
+                    entity="databases_via_instances",
+                    reason="servers entity not configured",
+                    correlation_id=correlation_id,
+                )
+                db_env_col = mapper.get_column('databases', 'environment')
+                inner_sql = (
+                    inner_sql_base +
+                    f"WHERE UPPER(i.{inst_server_ref_col}) = UPPER(:p_server_name)"
+                    f" AND UPPER(d.{db_env_col}) = UPPER(:p_environment)"
+                )
+                params['p_environment'] = environment
+        else:
+            inner_sql = inner_sql_base + f"WHERE UPPER(i.{inst_server_ref_col}) = UPPER(:p_server_name)"
 
         inner_sql += f" ORDER BY d.{db_name_col}"
         sql = f"SELECT * FROM ({inner_sql}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"  # nosec B608

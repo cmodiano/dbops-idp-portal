@@ -476,8 +476,8 @@ development_status:
     epic-36-retrospective: optional
     # === Epic 37: Inventaire — Environnement par serveur, colonne paramètre, filtre engine_type ===
     # Réf: planning-artifacts/epic-37-inventaire-environnement-serveur-colonne-engine.md, spec-inventaire-environnement-serveur-colonne-engine.md
-    epic-37: backlog
-    37-1-deriver-environnement-depuis-table-servers: backlog
+    epic-37: in-progress
+    37-1-deriver-environnement-depuis-table-servers: done # code-review 2026-02-23: 1 CRITICAL + 2 HIGH + 2 MEDIUM fixes (double-prefix bug SELECT, aliasing helper, dead code removed, error re-wrap), 33/33 tests pass
     37-2-filtre-engine-type-instances-databases-backend: backlog
     37-3-frontend-passer-engine-type-appels-inventaire: backlog
     37-4-parametre-inventory-value-column-backend: backlog
