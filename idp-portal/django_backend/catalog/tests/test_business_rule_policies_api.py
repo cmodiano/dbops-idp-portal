@@ -12,7 +12,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework import status
 
-from catalog.models import ActionStatus, ActionItemType, ActionEngine, ActionPlatform
+from catalog.models import ActionStatus, ActionItemType, ActionEngine, ActionPlatform, BusinessRulePolicy
 from catalog.services import CatalogService
 from reference.models import RefEngine
 from integrations.models import IntegrationTypeCatalogue, IntegrationRole
@@ -134,6 +134,15 @@ class TestBusinessRulePoliciesAPI(TestCase):
 
     def test_put_business_rule_policies_endpoint(self):
         """PUT /admin/actions/{id}/business-rule-policies/ → 200 + persisted (Story 28.1)."""
+        # Assign a pre-existing FK so the PUT exercises clearing it
+        existing_policy = BusinessRulePolicy.objects.create(
+            name='Pre-existing policy for PUT test',
+            policy_json=VALID_TERRAFORM_POLICY,
+            created_by=self.dbops_user,
+        )
+        self.action.business_rule_policy = existing_policy
+        self.action.save()
+
         put_url = f'/api/v1/admin/actions/{self.action.id}/business-rule-policies/'
         response = self.client.put(
             put_url,

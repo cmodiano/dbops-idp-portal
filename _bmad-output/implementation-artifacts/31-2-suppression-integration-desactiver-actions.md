@@ -123,7 +123,7 @@ def delete_integration(self, integration_id: int, user=None):
     try:
         integration = Integration.objects.get(id=integration_id)
     except Integration.DoesNotExist:
-        raise ValueError(f"Integration {integration_id} not found")
+        return False
 
     integration_name = integration.name
 
@@ -189,6 +189,8 @@ def destroy(self, request, pk=None):
     service = IntegrationService()
     result = service.delete_integration(integration_id, user=request.user)
 
+    if not result:
+        return Response({'detail': 'Integration introuvable'}, status=status.HTTP_404_NOT_FOUND)
     if result['disabled_actions_count'] > 0:
         return Response(
             {'disabled_actions_count': result['disabled_actions_count']},

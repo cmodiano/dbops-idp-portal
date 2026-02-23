@@ -160,11 +160,12 @@ class RefEngineListAPIIconUrlTests(APITestCase):
         )
         dbops = User.objects.create(username='dbops', profile='DBOPS')
         self.client.force_authenticate(dbops)
-        self.client.patch(
+        patch_response = self.client.patch(
             f'/api/v1/admin/engines/{engine.pk}/',
             {'icon_url': '/icons/engines/sqlserver.svg'},
             format='json',
         )
+        self.assertEqual(patch_response.status_code, status.HTTP_200_OK)
         # Re-authenticate as regular user to test GET
         self.client.force_authenticate(self.user)
         response = self.client.get('/api/v1/reference/engines/?active_only=false')
