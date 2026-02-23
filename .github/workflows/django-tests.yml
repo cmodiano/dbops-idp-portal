@@ -18,7 +18,7 @@ on:
 
 jobs:
   test:
-    if: github.ref != 'refs/heads/develop'
+    if: github.ref != 'refs/heads/develop' && github.base_ref != 'develop' && github.head_ref != 'develop'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -78,7 +78,7 @@ jobs:
           retention-days: 7
 
   lint:
-    if: github.ref != 'refs/heads/develop'
+    if: github.ref != 'refs/heads/develop' && github.base_ref != 'develop' && github.head_ref != 'develop'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -92,7 +92,7 @@ jobs:
         run: ruff check .
 
   type-check:
-    if: github.ref != 'refs/heads/develop'
+    if: github.ref != 'refs/heads/develop' && github.base_ref != 'develop' && github.head_ref != 'develop'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
