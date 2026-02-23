@@ -555,6 +555,7 @@ class ExecutionService:
                             execution_id=_execution_id_snap,
                             error=str(exc),
                             correlation_id=_correlation_id,
+                            exc_info=True,
                         )
 
                 _tx.on_commit(_send_notifications)
@@ -564,6 +565,7 @@ class ExecutionService:
                     execution_id=execution_id,
                     error=str(exc),
                     correlation_id=get_correlation_id(),
+                    exc_info=True,
                 )
 
         return execution

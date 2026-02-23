@@ -99,6 +99,7 @@ def _mark_execution_polling_exhausted(
             execution_id=execution_id,
             error=str(exc),
             correlation_id=correlation_id,
+            exc_info=True,
         )
 
 
@@ -166,13 +167,14 @@ def _broadcast_execution_update(
             )
     except ImportError:
         logger.debug("poll_broadcast_skipped_no_channels", execution_id=execution_id)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — broad catch justified: channels broadcast is non-critical, polling must not be interrupted
         logger.warning(
             "poll_broadcast_error",
             execution_id=execution_id,
             error=str(e),
             error_type=type(e).__name__,
             correlation_id=correlation_id,
+            exc_info=True,
         )
 
 
@@ -232,6 +234,7 @@ def _update_execution_from_poll(
             error=str(e),
             error_type=type(e).__name__,
             correlation_id=correlation_id,
+            exc_info=True,
         )
 
 
@@ -332,6 +335,7 @@ def poll_platform_job_status(
             retry_count=retry_count,
             max_retries=MAX_POLLING_RETRIES,
             correlation_id=correlation_id,
+            exc_info=True,
         )
         # Story 30.7 (RACE-1): Check max retries before re-scheduling
         if retry_count >= MAX_POLLING_RETRIES:

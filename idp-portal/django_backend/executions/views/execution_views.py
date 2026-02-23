@@ -414,7 +414,7 @@ class ExecutionCancelView(APIView):
                 platform_job_id=platform_job_id,
                 correlation_id=get_correlation_id(),
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — broad catch justified: adapter may raise various exceptions, remote cancellation is best-effort
             # Story 17.6: Justified broad catch — adapter may raise various exceptions
             exec_logger.warning(
                 "remote_cancellation_failed",
@@ -606,6 +606,7 @@ class ExecutionLogsView(APIView):
                 error=str(e),
                 error_type=type(e).__name__,
                 correlation_id=correlation_id,
+                exc_info=True,
             )
             raise ServiceUnavailableError(
                 code="AAP_LOGS_UNAVAILABLE",

@@ -367,6 +367,7 @@ class ContainerWorkflowRuntime:
                 error=str(exc),
                 error_type=type(exc).__name__,
                 correlation_id=self.correlation_id,
+                exc_info=True,
             )
             self.execution.status = ExecutionStatus.FAILED
             self.execution.error_message = f"Échec de la création du changement ServiceNow : {exc}"
@@ -438,6 +439,7 @@ class ContainerWorkflowRuntime:
                 error=str(exc),
                 error_type=type(exc).__name__,
                 correlation_id=self.correlation_id,
+                exc_info=True,
             )
             self.execution.status = ExecutionStatus.FAILED
             self.execution.error_message = f"Échec de la création du changement ServiceNow : {exc}"

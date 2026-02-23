@@ -38,7 +38,7 @@ def get_allowed_action_ids_for_user(user: Any) -> set[int] | None:
     try:
         profile_service = _eu.ProfileService()
         permissions = profile_service.get_cumulative_permissions(user.id, ad_groups)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — broad catch justified: ProfileService can raise various exceptions, must return safe default (access denied)
         # Story 17.6: Justified broad catch - ProfileService can raise various exceptions
         exec_logger.warning(
             "profile_service_unavailable_access_denied",

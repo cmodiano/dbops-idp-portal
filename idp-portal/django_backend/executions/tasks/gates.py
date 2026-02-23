@@ -102,6 +102,7 @@ def evaluate_waiting_gates(self: Any) -> dict:
                 error=str(e),
                 error_type=type(e).__name__,
                 correlation_id=correlation_id,
+                exc_info=True,
             )
             # Story 25.3 code review fix MEDIUM-1: persist error in step output for user visibility
             try:
@@ -119,6 +120,7 @@ def evaluate_waiting_gates(self: Any) -> dict:
                     step_id=step.id,
                     error=str(save_error),
                     correlation_id=correlation_id,
+                    exc_info=True,
                 )
             errors += 1
 
@@ -376,4 +378,5 @@ def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id:
                 execution_id=step.execution_id,
                 error=str(exc),
                 correlation_id=correlation_id,
+                exc_info=True,
             )

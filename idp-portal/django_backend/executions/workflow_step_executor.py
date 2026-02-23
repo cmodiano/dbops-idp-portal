@@ -462,6 +462,7 @@ class StepExecutor:
                 error=str(exc),
                 error_type=type(exc).__name__,
                 correlation_id=self.correlation_id,
+                exc_info=True,
             )
             AuditService.create_entry(
                 user_id=str(self.execution.user_id),

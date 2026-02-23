@@ -146,6 +146,7 @@ class RuleEngine:
                 interpreter_class=type(interpreter).__name__,
                 error=str(exc),
                 correlation_id=correlation_id,
+                exc_info=True,
             )
             raise
 

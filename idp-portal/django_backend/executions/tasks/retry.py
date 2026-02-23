@@ -195,7 +195,7 @@ def retry_workflow_step(self: Any, execution_id: int, step: dict, attempt: int) 
             'outcome': StepOutcome.ERROR.value,
             'error_message': f'Execution {execution_id} not found',
         }
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — broad catch justified: Celery retry task must handle all failure modes gracefully
         # Story 22.11: Justified broad catch - Celery retry task must handle all failure modes
         # Access through package namespace for testability:
         # allows @patch("executions.tasks.logger") and @patch("executions.tasks.get_correlation_id")

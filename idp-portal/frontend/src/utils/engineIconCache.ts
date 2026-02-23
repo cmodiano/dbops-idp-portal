@@ -29,6 +29,7 @@ export function getEngineIconMap(): Promise<EngineIconMap> {
         return map;
       })
       .catch(() => {
+        // échec non-critique — retourne un cache vide, les icônes seront chargées à la demande
         loadingPromise = null;
         return {} as EngineIconMap;
       });
@@ -49,7 +50,9 @@ export function getEngineIconUrl(engineCode: string): string | null {
  * Call early in app lifecycle to warm the cache.
  */
 export function prefetchEngineIcons(): void {
-  getEngineIconMap().catch(() => {});
+  getEngineIconMap().catch(() => {
+    // fire-and-forget — prefetch optionnel, l'icône sera chargée à la demande si le cache est vide
+  });
 }
 
 /**

@@ -462,7 +462,7 @@ development_status:
     # Réf: idp-portal/CODEBASE-REVIEW.md §16–17, planning-artifacts/epic-35-codebase-review-points-restants-post-refactoring.md
     epic-35: in-progress
     35-1-consolidation-status-config-residuel: done # code-review 2026-02-23: 1H+3M+2L fixes (tests créés 22/22, File List complétée, JSDoc CANCELLED+PENDING_APPROVAL, casts redondants supprimés, STATUS_COLORS.RUNNING dans légende) — 75/75 tests pass
-    35-2-audit-except-exception-et-catch-residuels: backlog
+    35-2-audit-except-exception-et-catch-residuels: done # code-review 2026-02-23: tableaux audit complets produits (AC#2+AC#4), commentaire engineIconCache.ts:31 ajouté (M2), ruff 0 BLE001 confirmé, story done
     35-3-migration-dip-services-phase-1: backlog
     35-4-revue-fichiers-backend-volumineux: backlog
     35-5-corriger-ou-supprimer-tests-en-echec: backlog
