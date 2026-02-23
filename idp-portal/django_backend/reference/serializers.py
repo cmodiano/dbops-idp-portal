@@ -5,7 +5,6 @@ Story 2.30 - Category reference serializer.
 """
 
 import re
-from typing import Any
 from rest_framework import serializers
 from reference.models import RefEngine, RefCategory
 from integrations.models import IntegrationTypeCatalogue

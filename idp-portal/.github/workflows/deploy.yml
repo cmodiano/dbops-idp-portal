@@ -67,6 +67,8 @@ jobs:
           pip install django-stubs djangorestframework-stubs
       - name: Run mypy type check (strict, blocking)
         working-directory: django_backend
+        env:
+          DJANGO_SECRET_KEY: "mypy-ci-placeholder-not-for-production"  # pragma: allowlist secret
         run: mypy . --no-error-summary
 
   typecheck-frontend:

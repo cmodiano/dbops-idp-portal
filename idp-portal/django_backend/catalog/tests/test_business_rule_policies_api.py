@@ -12,7 +12,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework import status
 
-from catalog.models import Action, ActionStatus, ActionItemType, ActionEngine, ActionPlatform
+from catalog.models import ActionStatus, ActionItemType, ActionEngine, ActionPlatform
 from catalog.services import CatalogService
 from reference.models import RefEngine
 from integrations.models import IntegrationTypeCatalogue, IntegrationRole

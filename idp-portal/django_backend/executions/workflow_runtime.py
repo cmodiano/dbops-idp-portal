@@ -18,7 +18,7 @@ from enum import Enum
 from django.db import transaction
 from django.utils import timezone
 
-from executions.models import Execution, ExecutionStep, ExecutionStatus, ExecutionStepStatus
+from executions.models import Execution, ExecutionStatus
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id

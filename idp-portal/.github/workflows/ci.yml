@@ -80,6 +80,8 @@ jobs:
         run: uv pip install -r requirements-dev.lock --system
       - name: Run mypy type check (strict, blocking)
         working-directory: django_backend
+        env:
+          DJANGO_SECRET_KEY: "mypy-ci-placeholder-not-for-production"  # pragma: allowlist secret
         run: mypy . --no-error-summary
 
   typecheck-frontend:

@@ -12,7 +12,6 @@ from celery import shared_task  # type: ignore[import-untyped]
 from executions.models import Execution
 from executions.workflow_runtime import StepOutcome
 from core.services import AuditService
-from core.middleware import get_correlation_id
 from core.models import AuditActionType, AuditEntityType
 
 logger = structlog.get_logger(__name__)

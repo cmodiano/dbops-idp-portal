@@ -3,7 +3,6 @@ Story 27.7: Tests for new adapter type fixtures (Tower, Azure DevOps, GitHub Act
 Validates fixture loading, type/action creation, JSON Schema validity, and API responses.
 """
 
-import json
 
 import pytest
 from django.core.management import call_command

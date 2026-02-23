@@ -7,7 +7,6 @@ Vérifient :
 """
 from unittest.mock import MagicMock
 
-import pytest
 
 
 def test_gate_evaluator_uses_injected_service():

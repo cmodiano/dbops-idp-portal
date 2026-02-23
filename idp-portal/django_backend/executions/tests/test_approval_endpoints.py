@@ -1,11 +1,10 @@
 """Tests for approve/reject execution endpoints (Story 30.1, AC1, AC2)."""
 import pytest
 import threading
-from django.db import transaction
 from rest_framework.test import APIClient
 
 from tests.factories import UserFactory, ActionFactory, IntegrationFactory, ExecutionFactory
-from executions.models import Execution, ExecutionStatus
+from executions.models import ExecutionStatus
 from core.models import AuditLog
 
 

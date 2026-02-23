@@ -23,7 +23,7 @@ from adapters.terraform_cloud_adapter import (
     map_terraform_cloud_status,
 )
 from core.middleware import get_correlation_id
-from executions.models import Execution, ExecutionStatus, ExecutionStep
+from executions.models import ExecutionStatus, ExecutionStep
 
 logger = structlog.get_logger(__name__)
 

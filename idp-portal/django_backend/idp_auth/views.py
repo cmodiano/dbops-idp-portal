@@ -4,7 +4,6 @@ Story M.7 - Full SAML and JWT auth implementation.
 Story M.8 - Task 9: Structured logging with structlog.
 """
 
-from typing import Any
 
 import structlog
 

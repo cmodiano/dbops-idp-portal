@@ -17,7 +17,6 @@ from rest_framework.parsers import MultiPartParser
 from core.permissions import DBOPSProfilePermission
 from core.exceptions import BadRequestError, InvalidStateError
 
-from typing import Any
 import puremagic
 from defusedxml import ElementTree as DefusedET  # type: ignore[import-untyped]
 from xml.etree.ElementTree import Element

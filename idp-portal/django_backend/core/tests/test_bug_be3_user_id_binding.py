@@ -6,7 +6,7 @@ Verifies that user_id is bound in structlog contextvars BEFORE get_response()
 so that all logs generated during request processing contain user_id.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 import structlog

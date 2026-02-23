@@ -8,7 +8,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from executions.interpreters.base import NormalizedArtifact, OutputInterpreter
 from executions.interpreters.registry import OutputInterpreterRegistry
 from executions.policy_evaluator import PolicyDecision, PolicyEvaluationError
 from executions.rule_engine import RuleEngine

@@ -12,7 +12,7 @@ import httpx
 import pytest
 
 from core.exceptions import ServiceUnavailableError
-from services.jira_service import JiraService, MAX_RETRIES, _TRANSIENT_STATUS_CODES
+from services.jira_service import JiraService, MAX_RETRIES
 
 
 @pytest.fixture

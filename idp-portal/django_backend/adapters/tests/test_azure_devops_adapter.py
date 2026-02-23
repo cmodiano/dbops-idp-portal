@@ -18,7 +18,6 @@ import httpx
 from adapters.azure_devops_adapter import (
     AzureDevOpsAdapter,
     _map_azure_devops_status,
-    AZURE_DEVOPS_STATUS_MAP,
 )
 from core.exceptions import ServiceUnavailableError
 

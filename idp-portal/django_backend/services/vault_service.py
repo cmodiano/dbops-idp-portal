@@ -93,7 +93,7 @@ class CircuitBreaker:
         except (VaultSecretNotFoundError, VaultAccessDeniedError):
             # Definitive errors do NOT count toward circuit breaker
             raise
-        except Exception as exc:
+        except Exception:
             with self._state.lock:
                 self._state.failures += 1
                 self._state.last_failure_time = time.monotonic()

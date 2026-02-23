@@ -14,7 +14,7 @@ from celery import shared_task  # type: ignore[import-untyped]
 from django.utils import timezone
 
 from executions.models import (
-    Execution, ExecutionStatus,
+    ExecutionStatus,
     ExecutionStep, ExecutionStepStatus,
 )
 from core.services import AuditService

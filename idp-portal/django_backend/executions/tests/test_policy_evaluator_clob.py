@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from executions.policy_evaluator import PolicyDecision, PolicyEvaluationError, PolicyEvaluator
+from executions.policy_evaluator import PolicyEvaluationError, PolicyEvaluator
 from executions.rule_engine import RuleEngine
 
 

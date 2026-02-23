@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, patch
 from django.test import TransactionTestCase
 from django.utils import timezone
 
-from executions.workflow_runtime import StepResult, StepOutcome
 from executions.workflow_step_executor import StepExecutor
 from tests.factories import UserFactory, ActionFactory
 

@@ -6,7 +6,6 @@ Tests updated to target the new architecture while preserving all original asser
 """
 from __future__ import annotations
 
-import json
 from dataclasses import asdict
 from unittest.mock import MagicMock, patch
 

@@ -54,7 +54,6 @@ def _get_audit(rf: APIRequestFactory, query_string: str = ""):
     """Make a GET request to AuditExecutionsView with auditor mock."""
     request = rf.get(f"/api/v1/audit/executions/?{query_string}")
     user = _make_user()
-    from rest_framework.request import Request
     # Force authentication by setting user on the request
     request.user = user
     request.auth = None

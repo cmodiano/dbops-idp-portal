@@ -5,7 +5,6 @@ NotImplementedError — LSP violation removed.
 """
 import inspect
 
-import pytest
 from rest_framework import serializers
 
 from catalog.serializers import ActionSerializer

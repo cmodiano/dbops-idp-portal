@@ -8,7 +8,6 @@ Vérifient :
 """
 from unittest.mock import MagicMock
 
-import pytest
 
 
 def test_catalog_rbac_service_uses_injected_profile_service():

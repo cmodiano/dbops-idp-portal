@@ -4,11 +4,11 @@ Tests unitaires pour TargetLoader.
 Story 34.8 - AC6: Tests unitaires en isolation (DI via constructeur).
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from django.test import TestCase
 
 from inventory.target_loader import TargetLoader
-from inventory.query_executor import InventoryServiceError, MAX_MULTI_TABLE_RESULTS
+from inventory.query_executor import InventoryServiceError
 from inventory.rbac_filter import MAX_TARGETS_FOR_RBAC_FILTER
 
 

@@ -13,7 +13,7 @@ from core.models import AuditActionType, AuditEntityType
 
 if TYPE_CHECKING:
     from executions.models import Execution
-    from executions.workflow_runtime import StepResult, StepOutcome
+    from executions.workflow_runtime import StepResult
 
 logger = structlog.get_logger(__name__)
 

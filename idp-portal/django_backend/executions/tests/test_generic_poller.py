@@ -10,12 +10,10 @@ from __future__ import annotations
 
 from unittest.mock import patch, MagicMock, AsyncMock
 
-import pytest
 
 from executions.tasks import (
     MAX_POLLING_RETRIES,
     poll_platform_job_status,
-    _mark_execution_polling_exhausted,
 )
 
 

@@ -13,8 +13,7 @@ from rest_framework.test import APIClient
 from rest_framework import status as http_status
 
 from catalog.serializers import ActionSerializer, ActionCreateSerializer
-from catalog.services import CatalogService
-from integrations.models import Integration, IntegrationTypeCatalogue, IntegrationRole
+from integrations.models import IntegrationRole
 from reference.models import RefEngine
 from tests.factories import (
     UserFactory,

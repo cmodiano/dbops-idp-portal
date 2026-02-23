@@ -10,8 +10,8 @@ from unittest.mock import MagicMock, patch, call
 
 from django.db import OperationalError
 from django.db.utils import DatabaseError, InterfaceError
-from django.http import HttpResponse, HttpRequest
-from django.test import TestCase, RequestFactory, override_settings
+from django.http import HttpResponse
+from django.test import TestCase, RequestFactory
 
 from core.db_resilience import (
     DatabaseResilienceMiddleware,
@@ -21,7 +21,6 @@ from core.db_resilience import (
     _is_retry_safe,
     _calculate_backoff,
     CONNECTION_ERROR_CODES,
-    SAFE_METHODS,
 )
 
 

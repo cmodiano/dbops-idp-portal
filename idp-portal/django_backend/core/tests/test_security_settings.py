@@ -14,7 +14,6 @@ import os
 import subprocess
 import sys
 
-import pytest
 
 # Path to manage.py parent directory (django_backend/)
 DJANGO_BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

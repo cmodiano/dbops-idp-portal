@@ -13,7 +13,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.request import Request
 from drf_spectacular.utils import extend_schema, extend_schema_view
-from django.db.models import Count, QuerySet
+from django.db.models import Count
 
 from catalog.models import Action, Tag, ActionStatus
 from catalog.serializers import TagSerializer

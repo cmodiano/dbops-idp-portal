@@ -16,12 +16,10 @@ Architecture:
 - Supports workflow_step_parameters injection (Story 4.12)
 """
 
-import time
 import structlog
 from threading import Thread
 from typing import Dict, Any, List, cast
 
-from django.conf import settings
 from django.db import close_old_connections
 from django.utils import timezone
 
@@ -583,7 +581,7 @@ class ContainerWorkflowRuntime:
                     execution.completed_at = timezone.now()
                     execution.error_message = f"Workflow thread error: {e}"
                     execution.save(update_fields=['status', 'completed_at', 'error_message'])
-            except Exception as cleanup_error:
+            except Exception:
                 logger.error("container_workflow_thread_cleanup_failed", execution_id=execution_id, exc_info=True)
         finally:
             close_old_connections()

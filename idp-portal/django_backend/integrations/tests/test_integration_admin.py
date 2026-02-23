@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 from django.core.management import call_command
 
-from integrations.models import Integration, IntegrationStatus, IntegrationTypeCatalogue
+from integrations.models import Integration, IntegrationStatus
 from integrations.validation_service import IntegrationValidationService
 
 

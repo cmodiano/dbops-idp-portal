@@ -8,8 +8,7 @@ from rest_framework import serializers
 import structlog
 
 from integrations.models import (
-    Integration, AuthFlow, IntegrationType, IntegrationRole,
-    IntegrationTypeCatalogue, IntegrationAction,
+    Integration, AuthFlow, IntegrationType, IntegrationTypeCatalogue, IntegrationAction,
 )
 
 logger = structlog.get_logger(__name__)

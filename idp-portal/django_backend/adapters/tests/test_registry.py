@@ -3,7 +3,6 @@ Tests for adapters/registry.py — AdapterRegistry (Story 33.1, AC: 1, 2, 4).
 """
 from __future__ import annotations
 
-from unittest.mock import MagicMock
 
 import pytest
 

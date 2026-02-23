@@ -9,7 +9,7 @@ Validates:
 from __future__ import annotations
 
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from adapters.base_adapter import BaseAdapter, ICancellableAdapter, ITriggerableAdapter
 

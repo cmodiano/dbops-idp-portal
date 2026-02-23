@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
-from django.utils import timezone
 
 from executions.tasks import (
     MAX_POLLING_RETRIES,

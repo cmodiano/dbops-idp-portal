@@ -15,7 +15,7 @@ import structlog
 
 from django.db.models import Q
 
-from core.exceptions import BadRequestError, ConflictError
+from core.exceptions import ConflictError
 
 exec_logger = structlog.get_logger(__name__)
 

@@ -14,9 +14,8 @@ TODO: Add integration test with real DB fixtures to verify Oracle JSONField __co
 """
 from __future__ import annotations
 
-from unittest.mock import patch, MagicMock, PropertyMock
+from unittest.mock import patch, MagicMock
 
-import pytest
 
 from catalog.services import CatalogService
 

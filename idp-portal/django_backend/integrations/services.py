@@ -4,7 +4,6 @@ Handles complex operations like JSON Schema validation for config.
 Story M.8 - Task 9: Structured logging with structlog.
 """
 
-import os
 from pathlib import Path
 from typing import Any, cast
 

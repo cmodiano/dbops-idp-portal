@@ -7,7 +7,6 @@ from __future__ import annotations
 import structlog
 
 from django.db import transaction
-from rest_framework import status as http_status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response

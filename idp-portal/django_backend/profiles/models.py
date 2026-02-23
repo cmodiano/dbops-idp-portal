@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, cast
+from typing import cast
 from django.db import models
 from django.db.models import Q
 

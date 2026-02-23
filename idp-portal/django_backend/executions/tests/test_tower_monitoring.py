@@ -7,7 +7,6 @@ Covers:
 """
 from __future__ import annotations
 
-import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 
 from executions.tasks import poll_tower_job_status

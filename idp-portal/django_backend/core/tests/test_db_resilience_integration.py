@@ -12,11 +12,11 @@ upper middleware, so direct invocation is the correct approach for middleware te
 from __future__ import annotations
 
 import json
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch
 
 from django.db import OperationalError
 from django.db.utils import InterfaceError
-from django.http import HttpResponse, JsonResponse
+from django.http import JsonResponse
 from django.test import TestCase, RequestFactory, override_settings
 
 from core.db_resilience import DatabaseResilienceMiddleware
