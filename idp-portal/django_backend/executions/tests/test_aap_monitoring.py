@@ -104,7 +104,7 @@ class TestExecutionLogsView:
             environment="dev",
             parameters=json.dumps({"target_host": "h1"}),
         )
-        step = ExecutionStepFactory.create(
+        ExecutionStepFactory.create(
             execution=execution,
             step_order=1,
             step_name="Platform",

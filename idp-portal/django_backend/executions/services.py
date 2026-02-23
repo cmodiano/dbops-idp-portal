@@ -4,18 +4,15 @@ Handles complex operations like atomic execution creation with steps.
 Story M.8 - Task 9: Structured logging with structlog.
 """
 
-import json
 import structlog
 
 from datetime import datetime, timedelta
 from django.db import transaction
 from django.db.models import Q, Count, QuerySet
 from django.utils import timezone
-from core.utils import ensure_utc_isoformat
 from executions.models import (
     Execution, ExecutionStep, ExecutionStatus, ExecutionStepStatus,
-    ExecutionTarget, TargetType,
-    ScheduledExecution, ScheduledExecutionStatus
+    ExecutionTarget, TargetType
 )
 from catalog.models import Action
 from idp_auth.models import User
@@ -23,7 +20,6 @@ from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.exceptions import BadRequestError
 from core.middleware import get_correlation_id
-from executions.utils import calculate_next_execution_date
 from integrations.models import IntegrationStatus
 
 logger = structlog.get_logger(__name__)
@@ -853,4 +849,4 @@ class ExecutionService:
 
 
 # Backward compatibility re-export — SchedulingService moved to executions/scheduling_service.py (Story 34.3)
-from executions.scheduling_service import SchedulingService  # noqa: F401
+from executions.scheduling_service import SchedulingService  # noqa: F401, E402

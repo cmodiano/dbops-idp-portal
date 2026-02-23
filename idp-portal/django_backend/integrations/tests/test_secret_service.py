@@ -13,7 +13,6 @@ from unittest.mock import patch, MagicMock
 from integrations.models import Integration, IntegrationType
 from integrations.serializers import (
     IntegrationCreateSerializer,
-    IntegrationUpdateSerializer,
     IntegrationSerializer,
     IntegrationListSerializer,
 )
@@ -69,7 +68,6 @@ class TestIntegrationSecretServiceModel(TestCase):
             base_url='https://aap.company.com',
             secret_service=self.vault_integration,
         )
-        vault_id = self.vault_integration.id
         self.vault_integration.delete()
         aap.refresh_from_db()
         self.assertIsNone(aap.secret_service_id)
@@ -340,7 +338,7 @@ class TestResolveCredentialMultiInstance(TestCase):
         mock_instance.get_secret.return_value = 'ns-token'
         MockVaultService.return_value = mock_instance
 
-        result = resolve_credential(
+        resolve_credential(
             'vault:secret/data/aap/prod#token',
             integration=self.aap,
         )

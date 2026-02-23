@@ -49,7 +49,7 @@ class TestUserIdInAuditLogs(TestCase):
         """Unauthenticated API call → structlog should NOT contain user_id."""
         # No authentication
         with self.assertLogs('core.middleware', level='INFO') as cm:
-            response = self.client.get('/api/v1/catalog/actions')
+            self.client.get('/api/v1/catalog/actions')
 
         # Request may succeed (public endpoint) or fail (auth required)
         # Either way, logs should NOT contain a user_id

@@ -6,9 +6,6 @@ import logging
 from typing import Any
 
 from asgiref.sync import async_to_sync
-
-logger = logging.getLogger(__name__)
-
 from rest_framework import viewsets, status, serializers as drf_serializers
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -25,6 +22,8 @@ from core.exceptions import NotFoundError, InvalidStateError
 from core.models import AuditActionType, AuditEntityType
 from core.services import AuditService
 from core.middleware import get_correlation_id
+
+logger = logging.getLogger(__name__)
 
 
 class IntegrationViewSet(viewsets.ViewSet):

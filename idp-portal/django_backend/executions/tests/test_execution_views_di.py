@@ -9,7 +9,6 @@ Vérifient :
 """
 from unittest.mock import MagicMock
 
-import pytest
 
 
 def test_executions_create_view_injected_service():
@@ -18,7 +17,7 @@ def test_executions_create_view_injected_service():
     from executions.views.execution_views import ExecutionsCreateView
     view = ExecutionsCreateView()
     view._execution_service_class = mock_svc_class
-    svc = view.get_execution_service()
+    view.get_execution_service()
     mock_svc_class.assert_called_once()
 
 
@@ -37,7 +36,7 @@ def test_approve_execution_view_injected_service():
     from executions.views.approval_views import ApproveExecutionView
     view = ApproveExecutionView()
     view._execution_service_class = mock_svc_class
-    svc = view.get_execution_service()
+    view.get_execution_service()
     mock_svc_class.assert_called_once()
 
 
@@ -56,7 +55,7 @@ def test_execution_cancel_view_injected_service():
     from executions.views.execution_views import ExecutionCancelView
     view = ExecutionCancelView()
     view._execution_service_class = mock_svc_class
-    svc = view.get_execution_service()
+    view.get_execution_service()
     mock_svc_class.assert_called_once()
 
 

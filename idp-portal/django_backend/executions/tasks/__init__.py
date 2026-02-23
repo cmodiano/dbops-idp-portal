@@ -17,14 +17,14 @@ from core.services import AuditService
 # Re-export logger at package level for test patchability (@patch("executions.tasks.logger"))
 logger = structlog.get_logger("executions.tasks")
 
-from executions.tasks.retry import retry_workflow_step
-from executions.tasks.gates import (
+from executions.tasks.retry import retry_workflow_step  # noqa: E402
+from executions.tasks.gates import (  # noqa: E402
     evaluate_waiting_gates,
     _handle_gate_timeout,
     _transition_step_to_running,
     _update_waiting_context,
 )
-from executions.tasks.polling import (
+from executions.tasks.polling import (  # noqa: E402
     poll_platform_job_status,
     poll_aap_job_status,
     poll_tower_job_status,

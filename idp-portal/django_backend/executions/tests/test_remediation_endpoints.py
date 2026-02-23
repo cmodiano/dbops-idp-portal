@@ -8,7 +8,7 @@ import json
 import pytest
 from rest_framework.test import APIClient
 
-from executions.models import Execution, ExecutionStatus
+from executions.models import ExecutionStatus
 from tests.factories import UserFactory, ActionFactory, IntegrationFactory, ExecutionFactory
 
 
@@ -213,14 +213,14 @@ class TestRemediationContext:
             status=ExecutionStatus.FAILED,
             environment="dev",
         )
-        child1 = ExecutionFactory.create(
+        ExecutionFactory.create(
             action=action,
             user=self.user,
             status=ExecutionStatus.RUNNING,
             environment="dev",
             parent_execution=parent,
         )
-        child2 = ExecutionFactory.create(
+        ExecutionFactory.create(
             action=action,
             user=self.user,
             status=ExecutionStatus.FAILED,
@@ -328,7 +328,7 @@ class TestRemediationContext:
             status=ExecutionStatus.FAILED,
             environment="dev",
         )
-        child = ExecutionFactory.create(
+        ExecutionFactory.create(
             action=action,
             user=self.user,
             status=ExecutionStatus.COMPLETED,

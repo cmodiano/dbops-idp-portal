@@ -574,7 +574,7 @@ class ExecutionLogsView(APIView):
         try:
             # Check if there's already a running event loop (ASGI/Channels context)
             try:
-                running_loop = asyncio.get_running_loop()
+                asyncio.get_running_loop()
                 # Running loop exists → use async_to_sync pattern for Django Channels compatibility
                 from asgiref.sync import async_to_sync
                 logs = async_to_sync(adapter.get_job_logs)(

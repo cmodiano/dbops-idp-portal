@@ -6,7 +6,6 @@ Tests for:
 """
 import csv
 import io
-import json
 from datetime import timedelta
 
 import pytest
@@ -115,7 +114,7 @@ class TestDashboardExportCSV:
         assert response.status_code == 200
         content = response.content.decode("utf-8-sig")
         reader = csv.reader(io.StringIO(content))
-        header = next(reader)
+        next(reader)  # skip header
         rows = list(reader)
         assert len(rows) > 0
 
