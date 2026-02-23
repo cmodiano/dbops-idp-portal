@@ -10,7 +10,8 @@ import {
   ENV_COLORS,
   ENV_LABELS,
 } from '../calendarEventUtils';
-import type { ScheduledExecutionListItem } from '../../types/api';
+import type { RecurringPatternResponse, ScheduledExecutionListItem } from '../../types/api';
+import type { DailyPatternConfig, WeeklyPatternConfig, CronPatternConfig } from '../../types/api';
 
 function makeExec(overrides: Partial<ScheduledExecutionListItem> = {}): ScheduledExecutionListItem {
   return {
@@ -67,14 +68,11 @@ describe('mapToCalendarEvent', () => {
     const exec = makeExec({
       scheduled_at: null,
       recurring_pattern: {
-        recurring_pattern_id: 1,
-        scheduled_execution_id: 1,
         pattern_type: 'daily',
         pattern_config: { hour: 9, minute: 0 },
         is_active: true,
         next_execution_date: '2026-03-16T09:00:00Z',
-        created_at: '2026-03-10T08:00:00Z',
-      },
+      } as RecurringPatternResponse,
     });
     const event = mapToCalendarEvent(exec);
     expect(event.start).toContain('2026-03-16');
@@ -114,10 +112,9 @@ describe('describePatternType', () => {
   it('should return "Quotidien" for daily pattern', () => {
     const exec = makeExec({
       recurring_pattern: {
-        recurring_pattern_id: 1, scheduled_execution_id: 1,
-        pattern_type: 'daily', pattern_config: {}, is_active: true,
-        next_execution_date: null, created_at: '',
-      },
+        pattern_type: 'daily', pattern_config: {} as DailyPatternConfig, is_active: true,
+        next_execution_date: null,
+      } as RecurringPatternResponse,
     });
     expect(describePatternType(exec)).toBe('Quotidien');
   });
@@ -125,10 +122,9 @@ describe('describePatternType', () => {
   it('should return "Hebdomadaire" for weekly pattern', () => {
     const exec = makeExec({
       recurring_pattern: {
-        recurring_pattern_id: 1, scheduled_execution_id: 1,
-        pattern_type: 'weekly', pattern_config: {}, is_active: true,
-        next_execution_date: null, created_at: '',
-      },
+        pattern_type: 'weekly', pattern_config: {} as WeeklyPatternConfig, is_active: true,
+        next_execution_date: null,
+      } as RecurringPatternResponse,
     });
     expect(describePatternType(exec)).toBe('Hebdomadaire');
   });
@@ -136,10 +132,9 @@ describe('describePatternType', () => {
   it('should return "Cron" for cron pattern', () => {
     const exec = makeExec({
       recurring_pattern: {
-        recurring_pattern_id: 1, scheduled_execution_id: 1,
-        pattern_type: 'cron', pattern_config: {}, is_active: true,
-        next_execution_date: null, created_at: '',
-      },
+        pattern_type: 'cron', pattern_config: {} as CronPatternConfig, is_active: true,
+        next_execution_date: null,
+      } as RecurringPatternResponse,
     });
     expect(describePatternType(exec)).toBe('Cron');
   });
@@ -147,10 +142,9 @@ describe('describePatternType', () => {
   it('should return "Récurrent" for unknown pattern type', () => {
     const exec = makeExec({
       recurring_pattern: {
-        recurring_pattern_id: 1, scheduled_execution_id: 1,
-        pattern_type: 'custom' as 'daily', pattern_config: {}, is_active: true,
-        next_execution_date: null, created_at: '',
-      },
+        pattern_type: 'custom' as 'daily', pattern_config: {} as DailyPatternConfig, is_active: true,
+        next_execution_date: null,
+      } as RecurringPatternResponse,
     });
     expect(describePatternType(exec)).toBe('Récurrent');
   });

@@ -23,13 +23,15 @@ const mockMessage = {
   info: vi.fn(),
   warning: vi.fn(),
   loading: vi.fn(),
+  open: vi.fn(),
+  destroy: vi.fn(),
 };
 
 vi.spyOn(App, 'useApp').mockReturnValue({
-  message: mockMessage,
-  notification: {} as any,
-  modal: {} as any,
-});
+  message: mockMessage as unknown as ReturnType<typeof App.useApp>['message'],
+  notification: {} as ReturnType<typeof App.useApp>['notification'],
+  modal: {} as ReturnType<typeof App.useApp>['modal'],
+} as ReturnType<typeof App.useApp>);
 
 // Mock the audit service
 const mockListExecutionAudit = vi.fn();
@@ -48,12 +50,12 @@ vi.mock('../services/execution_service', () => ({
 }));
 
 // Mock useAuth hook
-let mockUserData = {
+let mockUserData: { id: number; username: string; display_name: string; profile: string; navigation_tabs: readonly string[]; is_auditor: boolean } = {
   id: 1,
   username: 'auditor',
   display_name: 'Auditor User',
-  profile: 'audit' as const,
-  navigation_tabs: ['audit'] as const,
+  profile: 'audit',
+  navigation_tabs: ['audit'],
   is_auditor: true,
 };
 
@@ -293,7 +295,6 @@ describe('AuditPage', () => {
       await user.type(input, 'abc-123');
 
       await waitFor(() => {
-        const _lastCall = mockListExecutionAudit.mock.calls[mockListExecutionAudit.mock.calls.length - 1];
         // listExecutionAudit is called without args (mock returns default), but the component
         // passes filters via the service. We verify the input value changed.
         expect(input).toHaveValue('abc-123');

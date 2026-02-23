@@ -73,7 +73,7 @@ export default function CatalogPage() {
     <div key={action.id}>
       <ActionCard
         action={toPreviewData(action)}
-        onClick={(e) => handleActionClick(action, e)}
+        onClick={() => handleActionClick(action)}
         isFavorite={favorites.has(action.id)}
         onToggleFavorite={(e) => handleToggleFavorite(action.id, e)}
         showFavoriteButton={isAuthenticated}
@@ -220,7 +220,6 @@ export default function CatalogPage() {
         onClose={handleDrawerClose}
         keyboard
         aria-label={`Fiche action: ${selectedAction?.name || 'Detail'}`}
-        role="dialog"
         aria-modal="true"
       >
         {drawerLoading ? (

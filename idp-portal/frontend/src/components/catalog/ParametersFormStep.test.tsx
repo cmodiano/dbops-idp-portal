@@ -93,7 +93,7 @@ const stringField = {
 describe('ParametersFormStep', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(useAuth).mockReturnValue({ isBusinessProfile: false });
+    vi.mocked(useAuth).mockReturnValue({ isBusinessProfile: false } as unknown as ReturnType<typeof useAuth>);
   });
 
   describe('Rendu smoke — non-workflow sans paramètres', () => {
@@ -109,7 +109,7 @@ describe('ParametersFormStep', () => {
     });
 
     it("affiche la description simplifiée pour business profile sans paramètres", () => {
-      vi.mocked(useAuth).mockReturnValue({ isBusinessProfile: true });
+      vi.mocked(useAuth).mockReturnValue({ isBusinessProfile: true } as unknown as ReturnType<typeof useAuth>);
       render(<TestParametersFormStep {...defaultProps} />);
       expect(
         screen.getByText("Aucune information supplementaire n'est necessaire."),
@@ -213,7 +213,7 @@ describe('ParametersFormStep', () => {
 
   describe('Alerte business profile (isWorkflow=false)', () => {
     it("affiche l'alerte info business profile quand isBusinessProfile=true", () => {
-      vi.mocked(useAuth).mockReturnValue({ isBusinessProfile: true });
+      vi.mocked(useAuth).mockReturnValue({ isBusinessProfile: true } as unknown as ReturnType<typeof useAuth>);
       render(<TestParametersFormStep {...defaultProps} parameterFields={[stringField]} />);
       // L'alerte est affichée en premier (avant les champs)
       const alerts = screen.getAllByRole('alert');
@@ -221,7 +221,7 @@ describe('ParametersFormStep', () => {
     });
 
     it("n'affiche pas l'alerte business profile quand isBusinessProfile=false", () => {
-      vi.mocked(useAuth).mockReturnValue({ isBusinessProfile: false });
+      vi.mocked(useAuth).mockReturnValue({ isBusinessProfile: false } as unknown as ReturnType<typeof useAuth>);
       render(<TestParametersFormStep {...defaultProps} parameterFields={[stringField]} />);
       // Aucun alert sauf ceux potentiels des validations
       // Le champ est affiché sans alerte business

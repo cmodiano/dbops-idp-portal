@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { Form } from 'antd';
-import { WizardStep1General } from './WizardStep1General';
+import { WizardStep1General, type WizardStep1GeneralProps } from './WizardStep1General';
 
 vi.mock('../../services/admin_service', () => ({
   checkActionNameAvailable: vi.fn().mockResolvedValue(true),
@@ -15,7 +15,7 @@ vi.mock('../../contexts/ThemeContext', () => ({
   useTheme: () => ({ mode: 'light', effectiveMode: 'light', setMode: vi.fn(), toggleTheme: vi.fn() }),
 }));
 
-const defaultProps = {
+const defaultProps: WizardStep1GeneralProps = {
   form: {} as ReturnType<typeof Form.useForm>[0],
   isWorkflow: false,
   showTypeSelector: false,
@@ -34,7 +34,7 @@ const defaultProps = {
   getIntegrationById: vi.fn(() => undefined),
 };
 
-function renderWithForm(props = defaultProps) {
+function renderWithForm(props: WizardStep1GeneralProps = defaultProps) {
   return render(
     <Form>
       <WizardStep1General {...props} />

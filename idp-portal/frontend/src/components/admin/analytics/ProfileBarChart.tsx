@@ -89,7 +89,7 @@ export function ProfileBarChart({ data, loading = false }: ProfileBarChartProps)
             width={100}
           />
           <Tooltip
-            formatter={(value: number) => [value, 'Executions']}
+            formatter={(value: number | undefined) => [value ?? 0, 'Executions']}
             contentStyle={{ fontSize: 12 }}
             labelStyle={{ fontWeight: 600 }}
           />

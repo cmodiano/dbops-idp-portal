@@ -130,7 +130,7 @@ describe('scheduled_execution_service', () => {
       });
 
       expect(result.recurring_pattern?.pattern_type).toBe('weekly');
-      expect(result.recurring_pattern?.pattern_config.day_of_week).toBe(5);
+      expect((result.recurring_pattern?.pattern_config as import('../../types/api/scheduled').WeeklyPatternConfig)?.day_of_week).toBe(5);
     });
   });
 

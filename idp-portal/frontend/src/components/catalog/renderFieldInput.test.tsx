@@ -9,15 +9,18 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { Form } from 'antd';
 import { renderFieldInput } from './renderFieldInput';
 import type { ParameterField } from '../../hooks/useDynamicForm';
+import type { InventoryItem } from '../../types/api';
+
+type InventoryDataInput = Record<string, { id: string; name: string; environment?: string | null }[]>;
 
 function renderField(field: ParameterField, overrides: {
-  inventoryData?: Record<string, { id: string; name: string; environment?: string }[]>;
+  inventoryData?: InventoryDataInput;
   inventoryWarnings?: Record<string, boolean>;
   loadingInventory?: boolean;
   selectedServerNames?: string[];
 } = {}) {
   const defaultProps = {
-    inventoryData: {} as Record<string, { id: string; name: string; environment?: string }[]>,
+    inventoryData: {} as InventoryDataInput,
     inventoryWarnings: {} as Record<string, boolean>,
     loadingInventory: false,
     selectedServerNames: undefined as string[] | undefined,
@@ -29,7 +32,7 @@ function renderField(field: ParameterField, overrides: {
       <Form.Item name="test_field">
         {renderFieldInput(
           field,
-          defaultProps.inventoryData,
+          defaultProps.inventoryData as Record<string, InventoryItem[]>,
           defaultProps.inventoryWarnings,
           defaultProps.loadingInventory,
           ...(defaultProps.selectedServerNames !== undefined ? [defaultProps.selectedServerNames] : []) as [string[]?],
@@ -460,8 +463,8 @@ describe('renderFieldInput - Story 23.6 (selectedServerNames)', () => {
       required: true,
     };
 
-    const inventoryData = {
-      instances: [] as { id: string; name: string; environment?: string }[],
+    const inventoryData: Record<string, InventoryItem[]> = {
+      instances: [],
     };
 
     render(

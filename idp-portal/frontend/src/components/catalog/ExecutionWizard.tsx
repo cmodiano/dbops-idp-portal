@@ -166,7 +166,7 @@ export function ExecutionWizard({
               )}
               {currentStep === 2 && !scheduling.isScheduling && (
                 <>
-                  <Button type="primary" onClick={handleSubmit} loading={submitting} disabled={submitting} aria-busy={submitting} style={{ backgroundColor: STYLE_TOKENS.primaryColor }}>Exécuter maintenant</Button>
+                  <Button type="primary" onClick={handleSubmit} loading={submitting} disabled={submitting} aria-busy={submitting} style={{ backgroundColor: STYLE_TOKENS.colorPrimary }}>Exécuter maintenant</Button>
                   <Button type="default" onClick={() => execSubmit.updateScheduling({ isScheduling: true })} icon={<ClockCircleOutlined />}>Planifier</Button>
                 </>
               )}
@@ -176,7 +176,7 @@ export function ExecutionWizard({
                   <Button type="primary" onClick={handleSubmitScheduled} loading={submitting}
                     disabled={submitting || (scheduling.schedulingType === 'one-time' ? !scheduling.scheduledAt : scheduling.schedulingType === 'cron' ? !scheduling.cronIsValid : false)}
                     aria-busy={submitting}
-                    style={{ backgroundColor: STYLE_TOKENS.primaryColor }}>Confirmer planification</Button>
+                    style={{ backgroundColor: STYLE_TOKENS.colorPrimary }}>Confirmer planification</Button>
                 </>
               )}
             </Space>

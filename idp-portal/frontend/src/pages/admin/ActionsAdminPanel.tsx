@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Typography, Button, Table, Space, Card, Tag, Checkbox, Modal, Input } from 'antd';
-import type { NotificationInstance, ModalStaticFunctions } from 'antd';
+import type { NotificationInstance } from 'antd/es/notification/interface';
+import type { HookAPI as ModalHookAPI } from 'antd/es/modal/useModal';
 import {
   PlusOutlined,
   ReloadOutlined,
@@ -14,7 +15,7 @@ import { getActionsColumns } from './actionsColumns';
 
 export interface ActionsAdminPanelProps {
   notification: NotificationInstance;
-  modal: ModalStaticFunctions;
+  modal: ModalHookAPI;
   isDark: boolean;
 }
 

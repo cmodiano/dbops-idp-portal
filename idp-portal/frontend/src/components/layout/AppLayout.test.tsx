@@ -92,7 +92,7 @@ describe('AppLayout', () => {
     // Mock fetch for auth
     global.fetch = vi.fn().mockResolvedValueOnce({ ok: false, status: 401 });
 
-    function ThrowError() {
+    function ThrowError(): React.ReactElement {
       throw new Error('Child route error');
     }
 

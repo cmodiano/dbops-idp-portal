@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import yaml from 'js-yaml';
 import type { WorkflowStep } from '../types/api';
 import {
   sanitizeFilename,
@@ -465,8 +466,6 @@ describe('Round-trip JSON ↔ YAML', () => {
 
   it('export YAML → import → same data structure', async () => {
     // Simulate YAML export by using js-yaml
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const yaml = require('js-yaml');
     const exportObj = buildValidExport();
     const yamlString = yaml.dump(exportObj);
     const result = parseWorkflowFile(yamlString, '.yaml');

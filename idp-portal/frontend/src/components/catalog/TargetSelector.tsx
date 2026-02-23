@@ -197,7 +197,7 @@ export function TargetSelector({
 
   return (
     <Select<string | string[]>
-      ref={inputRef as React.Ref<HTMLElement>}
+      ref={inputRef as unknown as React.Ref<never>}
       mode={multiple ? 'multiple' : undefined}
       value={multiple ? selectedValues : selectedValues[0]}
       onChange={handleChange}

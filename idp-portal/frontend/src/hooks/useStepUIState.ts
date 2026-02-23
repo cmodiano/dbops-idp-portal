@@ -14,7 +14,7 @@ export interface UseStepUIStateReturn {
   logsDrawerStepId: number | null;
   setLogsDrawerStepId: (id: number | null) => void;
   logsDrawerStep: ExecutionStepResponse | null;
-  logsDrawerContentRef: React.RefObject<HTMLDivElement>;
+  logsDrawerContentRef: React.RefObject<HTMLDivElement | null>;
 }
 
 export function useStepUIState(steps: ExecutionStepResponse[]): UseStepUIStateReturn {

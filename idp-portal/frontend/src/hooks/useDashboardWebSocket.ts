@@ -78,7 +78,7 @@ export function useDashboardWebSocket(
   const handleMessage = useCallback(
     (event: MessageEvent) => {
       try {
-        const msg = JSON.parse(event.data) as { type: string; user_id?: string } & Partial<ExecutionUpdateMessage>;
+        const msg = JSON.parse(event.data) as { type: string; user_id?: string; execution_id?: number; status?: ExecutionStatusType; action_name?: string; step_summary?: string };
 
         // Story 22.13 (AC4): Handle auth_success confirmation
         if (msg.type === 'auth_success') {

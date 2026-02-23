@@ -35,8 +35,8 @@ describe('ProfileImportModal (Story 2.26)', () => {
     createObjectURLMock = vi.fn().mockReturnValue('blob:test-url');
     revokeObjectURLMock = vi.fn();
     clickMock = vi.fn();
-    global.URL.createObjectURL = createObjectURLMock;
-    global.URL.revokeObjectURL = revokeObjectURLMock;
+    global.URL.createObjectURL = createObjectURLMock as unknown as (obj: Blob | MediaSource) => string;
+    global.URL.revokeObjectURL = revokeObjectURLMock as unknown as (url: string) => void;
   });
 
   afterEach(() => {

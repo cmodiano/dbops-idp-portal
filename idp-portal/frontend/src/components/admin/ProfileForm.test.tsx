@@ -87,9 +87,9 @@ describe('ProfileForm', () => {
       filter_by_attribute: null,
       exclusion_patterns: [],
     });
-    vi.mocked(profilesService.putProfileTargets).mockResolvedValue(undefined);
+    vi.mocked(profilesService.putProfileTargets).mockResolvedValue({ targets_type: 'all', target_names: [], target_patterns: [] });
     vi.mocked(profilesService.getProfileActions).mockResolvedValue({ actions_type: 'all', action_ids: [], tag_patterns: [], environments: [] });
-    vi.mocked(profilesService.putProfileActions).mockResolvedValue(undefined);
+    vi.mocked(profilesService.putProfileActions).mockResolvedValue({ actions_type: 'all', action_ids: [], tag_patterns: [], environments: [] });
     vi.mocked(adminService.getAdminActions).mockResolvedValue({ data: [], pagination: { page: 1, page_size: 10, total: 0, total_pages: 0 } });
     vi.mocked(adminService.getTags).mockResolvedValue([]);
   });

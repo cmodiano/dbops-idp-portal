@@ -83,8 +83,8 @@ export function TrendLineChart({ data, loading = false }: TrendLineChartProps) {
           />
           <Tooltip
             labelFormatter={(label) => `Date: ${label}`}
-            formatter={(value: number, name: string) => [
-              value,
+            formatter={(value: number | undefined, name: string | undefined) => [
+              value ?? 0,
               name === 'success' ? 'Succes' : 'Echecs',
             ]}
             contentStyle={{ fontSize: 12 }}

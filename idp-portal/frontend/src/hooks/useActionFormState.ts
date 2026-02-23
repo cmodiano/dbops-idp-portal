@@ -24,7 +24,7 @@ import { schemaToParameterList, parameterListToSchema } from '../utils/parameter
 import { impactRulesToList } from '../utils/impactRulesSchema';
 import { integrationTypeToPlatformCode } from '../utils/integrationHelpers';
 
-type IntegrationLike = { id: number; type: string; name: string } & Record<string, unknown>;
+type IntegrationLike = { id: number; type: string; name: string };
 
 interface UseActionFormStateParams {
   open: boolean;

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ActionFormCollapseSections } from './ActionFormCollapseSections';
+import { ActionFormCollapseSections, type ActionFormCollapseSectionsProps } from './ActionFormCollapseSections';
 import { Form } from 'antd';
 
 vi.mock('../../hooks/useEnvironments', () => ({
@@ -30,7 +30,7 @@ vi.mock('../../services/admin_service', () => ({
   getBusinessRulePolicies: vi.fn().mockResolvedValue([]),
 }));
 
-const defaultProps = {
+const defaultProps: ActionFormCollapseSectionsProps = {
   executionSteps: [],
   setExecutionSteps: vi.fn(),
   changeTypeConfig: {},
@@ -48,7 +48,7 @@ const defaultProps = {
   getIntegrationById: vi.fn(() => undefined),
 };
 
-function renderWithForm(props = defaultProps) {
+function renderWithForm(props: ActionFormCollapseSectionsProps = defaultProps) {
   return render(
     <Form>
       <ActionFormCollapseSections {...props} />
@@ -81,7 +81,7 @@ describe('ActionFormCollapseSections', () => {
     const props = {
       ...defaultProps,
       remediationRules: [
-        { id: '1', trigger_action_id: 1, condition: 'any_failure' as const, is_automatic: false },
+        { id: '1', error_pattern: '.*', target_action_id: 1, environments: [], auto_trigger: false, risk_level: 'low' as const },
       ],
     };
     renderWithForm(props);

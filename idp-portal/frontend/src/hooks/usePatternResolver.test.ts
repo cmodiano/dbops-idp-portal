@@ -10,11 +10,11 @@ vi.mock('../services/execution_service', () => ({
 }));
 
 const mockTargets = [
-  { name: 'db-prod-01', environment: 'prod' },
-  { name: 'db-prod-02', environment: 'prod' },
-  { name: 'db-dev-01', environment: 'dev' },
-  { name: 'srv-dev-01', environment: 'dev' },
-  { name: 'srv-prod-01', environment: 'prod' },
+  { name: 'db-prod-01', environment: 'prod', target_type: 'server', metadata: null },
+  { name: 'db-prod-02', environment: 'prod', target_type: 'server', metadata: null },
+  { name: 'db-dev-01', environment: 'dev', target_type: 'server', metadata: null },
+  { name: 'srv-dev-01', environment: 'dev', target_type: 'server', metadata: null },
+  { name: 'srv-prod-01', environment: 'prod', target_type: 'server', metadata: null },
 ];
 
 // Use a very short debounce for tests (real timers)

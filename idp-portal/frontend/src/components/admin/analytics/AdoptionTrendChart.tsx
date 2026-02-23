@@ -118,7 +118,7 @@ export function AdoptionTrendChart({ data, loading = false }: AdoptionTrendChart
           <Tooltip
             contentStyle={{ fontSize: 12 }}
             labelStyle={{ fontWeight: 600 }}
-            formatter={(value: number, name: string) => [value, name]}
+            formatter={(value: number | undefined, name: string | undefined) => [value ?? 0, name ?? '']}
           />
           <Legend wrapperStyle={{ fontSize: 12 }} />
           {engines.map((engine) => (

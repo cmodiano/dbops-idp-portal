@@ -10,7 +10,7 @@ import { checkActionNameAvailable } from '../../services/admin_service';
 
 const { TextArea } = Input;
 
-type IntegrationLike = { id: number; type: string; name: string } & Record<string, unknown>;
+type IntegrationLike = { id: number; type: string; name: string };
 
 export interface WizardStep1GeneralProps {
   form: FormInstance;

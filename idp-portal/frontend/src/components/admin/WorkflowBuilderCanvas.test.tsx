@@ -519,7 +519,7 @@ vi.mock('@xyflow/react', async () => {
             })
           )
         ),
-        children
+        children as React.ReactNode
       );
     },
     ReactFlowProvider: ({ children }: { children: React.ReactNode }) =>

@@ -12,9 +12,9 @@ vi.mock('../services/admin_service', () => ({
 }));
 
 const MOCK_ACTIONS = [
-  { id: 1, name: 'Alpha', engine: 'Oracle', status: 'published', created_at: '', execution_count: 0 },
-  { id: 2, name: 'Beta', engine: 'SQL Server', status: 'published', created_at: '', execution_count: 0 },
-  { id: 3, name: 'Gamma', engine: 'Oracle', status: 'published', created_at: '', execution_count: 5 },
+  { id: 1, name: 'Alpha', engine: 'Oracle', status: 'published' as const, created_at: '', execution_count: 0 },
+  { id: 2, name: 'Beta', engine: 'SQL Server', status: 'published' as const, created_at: '', execution_count: 0 },
+  { id: 3, name: 'Gamma', engine: 'Oracle', status: 'published' as const, created_at: '', execution_count: 5 },
 ];
 
 vi.mock('../services/logger', () => ({

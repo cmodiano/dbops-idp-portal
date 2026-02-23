@@ -21,7 +21,7 @@ import { platformCodeToStepType } from '../../utils/integrationHelpers';
 
 const { Text } = Typography;
 
-type IntegrationLike = { id: number; type: string; name: string } & Record<string, unknown>;
+type IntegrationLike = { id: number; type: string; name: string };
 
 export interface ActionFormCollapseSectionsProps {
   executionSteps: ExecutionStep[];

@@ -8,7 +8,7 @@ import { ConfigProvider } from 'antd';
 import { MemoryRouter } from 'react-router';
 
 import { EventDetailsPopover } from '../EventDetailsPopover';
-import type { ScheduledExecutionListItem } from '../../../types/api';
+import type { ScheduledExecutionListItem, DailyPatternConfig } from '../../../types/api';
 
 vi.mock('../../../contexts/AuthContext', () => ({
   useAuth: vi.fn(),
@@ -39,7 +39,7 @@ function renderPopover(
 ) {
   vi.mocked(useAuth).mockReturnValue({
     user: { id: 1, profile: 'DBOPS', ...userOverrides },
-  } as ReturnType<typeof useAuth>);
+  } as unknown as ReturnType<typeof useAuth>);
 
   return render(
     <ConfigProvider>
@@ -121,13 +121,10 @@ describe('EventDetailsPopover', () => {
     const onToggle = vi.fn();
     const exec = makeExec({
       recurring_pattern: {
-        recurring_pattern_id: 1,
-        scheduled_execution_id: 42,
         pattern_type: 'daily',
-        pattern_config: {},
+        pattern_config: {} as DailyPatternConfig,
         is_active: true,
         next_execution_date: '2026-03-16T09:00:00Z',
-        created_at: '2026-03-10T08:00:00Z',
       },
     });
     renderPopover(exec, { onToggleRecurrence: onToggle });

@@ -5,7 +5,7 @@
  */
 
 import { apiFetch, apiFetchRaw } from './api_client';
-import type { ActionPreviewData, ActionStats } from '../types/api';
+import type { ActionPreviewData, ActionStats, NotificationConfig, ImpactLevel } from '../types/api';
 import type { ItemType, WorkflowStep } from '../types/api';
 
 /** Action with execution_count for catalog display. */
@@ -51,6 +51,12 @@ export interface CatalogActionDetail extends CatalogAction {
   item_type?: ItemType;
   /** Story 5.7: workflow steps for workflows (action references). */
   workflow_steps?: WorkflowStep[] | null;
+  /** Story 31.8: Notification channels configuration. */
+  notification_config?: NotificationConfig | null;
+  /** Impact rules per environment (from ActionResponse). */
+  impact_rules?: Record<string, { level: ImpactLevel; criteria?: string | null }> | null;
+  /** Default impact level when no rule matches. */
+  default_impact_level?: ImpactLevel | null;
 }
 
 /** Response from GET /catalog/actions/{id} (Story 3.2, AC3). */

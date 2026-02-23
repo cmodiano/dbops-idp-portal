@@ -26,14 +26,14 @@ describe('validateParameterList', () => {
   });
 
   it('retourne erreur si nom de paramètre vide', () => {
-    const error = validateParameterList([{ id: '1', name: '', type: 'string', required: false }]);
+    const error = validateParameterList([{ id: '1', name: '', type: 'string' as const, required: false }]);
     expect(error).toMatch(/paramètre 1 doit avoir un nom/);
   });
 
   it('retourne erreur si deux paramètres ont le même nom', () => {
     const params = [
-      { id: '1', name: 'param1', type: 'string', required: false },
-      { id: '2', name: 'param1', type: 'string', required: false },
+      { id: '1', name: 'param1', type: 'string' as const, required: false },
+      { id: '2', name: 'param1', type: 'string' as const, required: false },
     ];
     const error = validateParameterList(params);
     expect(error).toMatch(/Deux paramètres ont le même nom "param1"/);
@@ -41,8 +41,8 @@ describe('validateParameterList', () => {
 
   it('retourne null pour des paramètres valides', () => {
     const params = [
-      { id: '1', name: 'param1', type: 'string', required: false },
-      { id: '2', name: 'param2', type: 'number', required: true },
+      { id: '1', name: 'param1', type: 'string' as const, required: false },
+      { id: '2', name: 'param2', type: 'number' as const, required: true },
     ];
     expect(validateParameterList(params)).toBeNull();
   });
@@ -56,30 +56,30 @@ describe('validateImpactRulesList', () => {
   });
 
   it('retourne erreur si environnement manquant', () => {
-    const rules = [{ environment: '', level: 'low' as const }];
+    const rules = [{ environment: '', level: 'low' as const, criteria: null }];
     const error = validateImpactRulesList(rules);
     expect(error).toMatch(/règle d'impact 1 doit avoir un environnement/);
   });
 
   it('retourne erreur si environnements dupliqués', () => {
     const rules = [
-      { environment: 'PROD', level: 'high' as const },
-      { environment: 'PROD', level: 'low' as const },
+      { environment: 'PROD', level: 'high' as const, criteria: null },
+      { environment: 'PROD', level: 'low' as const, criteria: null },
     ];
     const error = validateImpactRulesList(rules);
     expect(error).toMatch(/Deux règles d'impact utilisent l'environnement "PROD"/);
   });
 
   it('retourne erreur si niveau manquant', () => {
-    const rules = [{ environment: 'PROD', level: undefined as unknown as 'low' }];
+    const rules = [{ environment: 'PROD', level: undefined as unknown as 'low', criteria: null }];
     const error = validateImpactRulesList(rules);
     expect(error).toMatch(/règle d'impact 1 doit avoir un niveau/);
   });
 
   it('retourne null pour des règles valides', () => {
     const rules = [
-      { environment: 'DEV', level: 'low' as const },
-      { environment: 'PROD', level: 'high' as const },
+      { environment: 'DEV', level: 'low' as const, criteria: null },
+      { environment: 'PROD', level: 'high' as const, criteria: null },
     ];
     expect(validateImpactRulesList(rules)).toBeNull();
   });
@@ -156,7 +156,7 @@ describe('useActionFormValidation', () => {
     const { result } = renderHook(() => useActionFormValidation());
     const params = {
       ...baseParams,
-      executionSteps: [{ order: 1, name: '', type: 'execution', connector_type: 'none' as const, conditional_environments: null }],
+      executionSteps: [{ order: 1, name: '', type: 'execution' as const, connector_type: 'none' as const, conditional_environments: null }],
     };
     const error = result.current.validateForm(params);
     expect(error).toMatch(/L'étape 1 doit avoir un nom/);
@@ -166,7 +166,7 @@ describe('useActionFormValidation', () => {
     const { result } = renderHook(() => useActionFormValidation());
     const params = {
       ...baseParams,
-      parameterList: [{ id: '1', name: '', type: 'string', required: false }],
+      parameterList: [{ id: '1', name: '', type: 'string' as const, required: false }],
     };
     const error = result.current.validateForm(params);
     expect(error).toMatch(/paramètre 1 doit avoir un nom/);
@@ -177,8 +177,8 @@ describe('useActionFormValidation', () => {
     const params = {
       ...baseParams,
       impactRulesList: [
-        { environment: 'DEV', level: 'low' as const },
-        { environment: 'DEV', level: 'high' as const },
+        { environment: 'DEV', level: 'low' as const, criteria: null },
+        { environment: 'DEV', level: 'high' as const, criteria: null },
       ],
     };
     const error = result.current.validateForm(params);

@@ -85,7 +85,7 @@ export function IntegrationForm({
   const selectedTypeData = integrationTypes.find((t) => t.code === watchType) ?? null;
 
   // Valeurs pour préremplir en édition (stable pour initialValues / key)
-  const editConfig = editIntegration?.config as { schema?: string; table?: string } | undefined;
+  const editConfig = editIntegration?.config as { schema?: string; table?: string; entities?: unknown; flat_table?: unknown } | undefined;
   const editValues =
     open && editIntegration
       ? {

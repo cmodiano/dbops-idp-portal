@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Card } from 'antd';
-import type { NotificationInstance } from 'antd';
+import type { NotificationInstance } from 'antd/es/notification/interface';
 import { IntegrationsTable } from '../../components/admin/IntegrationsTable';
 import { IntegrationForm } from '../../components/admin/IntegrationForm';
 import { getIntegrations, getIntegration, createIntegration, updateIntegration, deleteIntegration } from '../../services/integrations_service';

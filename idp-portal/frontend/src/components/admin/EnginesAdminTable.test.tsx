@@ -43,10 +43,10 @@ const mockModalConfirm = vi.fn();
 
 function renderWithApp(ui: React.ReactElement) {
   vi.spyOn(App, 'useApp').mockReturnValue({
-    message: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), loading: vi.fn() },
+    message: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), loading: vi.fn(), open: vi.fn(), destroy: vi.fn() },
     notification: mockNotification,
     modal: { confirm: mockModalConfirm },
-  } as ReturnType<typeof App.useApp>);
+  } as unknown as ReturnType<typeof App.useApp>);
   return render(<App>{ui}</App>);
 }
 

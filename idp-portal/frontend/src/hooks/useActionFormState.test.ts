@@ -98,7 +98,7 @@ describe('useActionFormState', () => {
 
   it('initialise depuis editAction en mode edit', async () => {
     const { impactRulesToList } = vi.mocked(await import('../utils/impactRulesSchema'));
-    const mockImpactRules = [{ environment: 'PROD', level: 'high' as const }];
+    const mockImpactRules = [{ environment: 'PROD', level: 'high' as const, criteria: null }];
     impactRulesToList.mockReturnValue(mockImpactRules);
 
     const editAction: ActionDetail = {

@@ -73,23 +73,26 @@ export function TagCloud({ tags, selectedTags, onSelectionChange }: TagCloudProp
         const isSelected = selectedTags.includes(tag.name);
         const tagStyle = getTagStyle(tag.name, isDark);
         return (
-          <CheckableTag
+          <span
             key={tag.name}
-            checked={isSelected}
-            onChange={(checked) => handleTagToggle(tag.name, checked)}
             onKeyDown={(e) => handleKeyDown(tag.name, e)}
             tabIndex={0}
-            style={{
-              cursor: 'pointer',
-              padding: '4px 12px',
-              borderRadius: 16,
-              fontSize: 13,
-              ...tagStyle,
-              border: isSelected ? `2px solid ${STYLE_TOKENS.colorPrimary}` : tagStyle.border,
-            }}
           >
-            {tag.name} ({tag.action_count})
-          </CheckableTag>
+            <CheckableTag
+              checked={isSelected}
+              onChange={(checked) => handleTagToggle(tag.name, checked)}
+              style={{
+                cursor: 'pointer',
+                padding: '4px 12px',
+                borderRadius: 16,
+                fontSize: 13,
+                ...tagStyle,
+                border: isSelected ? `2px solid ${STYLE_TOKENS.colorPrimary}` : tagStyle.border,
+              }}
+            >
+              {tag.name} ({tag.action_count})
+            </CheckableTag>
+          </span>
         );
       })}
       {selectedTags.length > 0 && (

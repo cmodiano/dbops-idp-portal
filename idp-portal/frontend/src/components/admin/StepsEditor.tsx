@@ -99,9 +99,10 @@ const AAPTemplateSection: React.FC<AAPTemplateSectionProps> = ({
   onStepChange,
 }) => {
   const resourceType = ((step.connector_config?.resource_type as string) ?? 'job_template') as 'job_template' | 'workflow_job';
+  const connectorCfg = step.connector_config as Record<string, unknown> | null;
   const currentId = resourceType === 'workflow_job'
-    ? (step.connector_config?.workflow_job_template_id as number | undefined)
-    : (step.connector_config?.job_template_id as number | undefined);
+    ? (connectorCfg?.['workflow_job_template_id'] as number | undefined)
+    : (connectorCfg?.['job_template_id'] as number | undefined);
 
   // H3 fix: debounced search for server-side filtering (AC3)
   const [searchInput, setSearchInput] = useState('');
@@ -114,13 +115,13 @@ const AAPTemplateSection: React.FC<AAPTemplateSectionProps> = ({
   const { templates, loading, fallback, error } = useAAPTemplates(integrationId, resourceType, debouncedSearch || undefined);
 
   const handleTemplateSelect = (templateId: number) => {
-    const cfg = { ...(step.connector_config || {}), resource_type: resourceType };
+    const cfg: Record<string, unknown> = { ...(step.connector_config || {}), resource_type: resourceType };
     if (resourceType === 'workflow_job') {
-      cfg.workflow_job_template_id = templateId;
-      delete cfg.job_template_id;
+      cfg['workflow_job_template_id'] = templateId;
+      delete cfg['job_template_id'];
     } else {
-      cfg.job_template_id = templateId;
-      delete cfg.workflow_job_template_id;
+      cfg['job_template_id'] = templateId;
+      delete cfg['workflow_job_template_id'];
     }
     onStepChange(index, 'connector_config', cfg);
   };

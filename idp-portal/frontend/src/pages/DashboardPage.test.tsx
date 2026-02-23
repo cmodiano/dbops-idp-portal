@@ -108,7 +108,8 @@ describe('DashboardPage', () => {
     vi.mocked(dashboardService.fetchFilterOptions).mockResolvedValue({
       engines: ['Oracle', 'PostgreSQL'],
       environments: ['dev', 'staging', 'prod'],
-      actions: ['Action 1', 'Action 2'],
+      tags: [],
+      statuses: [],
     });
   });
 

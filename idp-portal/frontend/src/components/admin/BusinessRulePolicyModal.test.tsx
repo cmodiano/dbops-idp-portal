@@ -32,6 +32,9 @@ const mockEditPolicy: BusinessRulePolicyDetail = {
   name: 'Règle Terraform SQL',
   description: 'Revue si sku_name modifié',
   is_active: true,
+  step_type: 'terraform_cloud',
+  actions_count: 0,
+  created_by: 1,
   policy_json: {
     on_step_output: [
       {
@@ -50,18 +53,6 @@ const mockEditPolicy: BusinessRulePolicyDetail = {
   updated_at: '2026-02-22T12:00:00Z',
 };
 
-const _validJson = JSON.stringify(
-  {
-    on_step_output: [
-      {
-        when: { step_type: 'aap' },
-        policy: { type: 'review_if_modified', require_review_if_modified: [], auto_approve_if_none_match: true },
-      },
-    ],
-  },
-  null,
-  2,
-);
 
 describe('BusinessRulePolicyModal', () => {
   beforeEach(() => {

@@ -230,7 +230,7 @@ describe('handleAuthenticatedFetch', () => {
     // Original should not have Authorization added
     expect(originalHeaders).toEqual({ 'X-Custom': 'value' });
     // Copy should have Authorization updated
-    expect(headersCopy['Authorization']).toBe('Bearer refreshed');
+    expect((headersCopy as Record<string, string>)['Authorization']).toBe('Bearer refreshed');
   });
 });
 
