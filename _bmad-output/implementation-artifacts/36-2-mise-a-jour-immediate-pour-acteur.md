@@ -183,22 +183,25 @@ export function useActorExecutionSync(
       try {
         const data = JSON.parse(event.data as string);
         if (data.type === 'execution_complete') {
+          // Delete from map BEFORE close so onclose knows this is an intentional terminal close
+          wsMap.current.delete(id);
           onStatusUpdate(id, data.status ?? 'COMPLETED', data);
           ws.close();
-          wsMap.current.delete(id);
         } else if (data.type === 'execution_failed') {
+          wsMap.current.delete(id);
           onStatusUpdate(id, 'FAILED', { status: 'FAILED', error_message: data.error_message });
           ws.close();
-          wsMap.current.delete(id);
         }
       } catch { /* JSON invalide ignoré */ }
     };
 
     ws.onclose = (event) => {
+      // Check BEFORE deleting: if id was already removed (intentional terminal close from onmessage), skip fallback
+      const wasTracked = wsMap.current.has(id);
       wsMap.current.delete(id);
       // 4001 = auth failure → ne pas reconnecter ni poller
       if (event.code === 4001) return;
-      // Autre erreur → fallback polling
+      if (!wasTracked) return; // intentional close → no fallback
       if (isMountedRef.current) startFallbackPolling(id);
     };
 

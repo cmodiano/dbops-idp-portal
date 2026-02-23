@@ -371,6 +371,33 @@ class TestCatalogService(TestCase):
         workflow.refresh_from_db()
         self.assertEqual(workflow.status, ActionStatus.DISABLED)
 
+    def test_reactivate_action_workflow_succeeds_when_all_referenced_actions_published(self):
+        """reactivate_action succeeds for a workflow whose referenced action is PUBLISHED and not deleted."""
+        ref_action = Action.objects.create(
+            name='Ref Action Published',
+            engine='Oracle',
+            platform='AAP',
+            status=ActionStatus.PUBLISHED,
+            created_by=self.user,
+            item_type=ActionItemType.ACTION,
+        )
+        workflow = Action.objects.create(
+            name='Workflow To Reactivate',
+            status=ActionStatus.DISABLED,
+            deleted_at=timezone.now(),
+            item_type=ActionItemType.WORKFLOW,
+            created_by=self.user,
+            execution_steps=[
+                {'order': 1, 'name': 'Step 1', 'referenced_action_id': ref_action.id, 'step_id': 's1'},
+            ],
+        )
+        result = self.service.reactivate_action(workflow.id, self.user)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.status, ActionStatus.PUBLISHED)
+        workflow.refresh_from_db()
+        self.assertEqual(workflow.status, ActionStatus.PUBLISHED)
+        self.assertIsNone(workflow.deleted_at)
+
     def test_delete_action(self):
         """Test delete_action() deletes action and creates audit."""
         action = Action.objects.create(

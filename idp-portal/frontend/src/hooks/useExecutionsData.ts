@@ -3,6 +3,8 @@
  *
  * Story 26.4 - AC6: Extracted from ExecutionsPage.tsx to reduce orchestrator to <400 LOC.
  * Handles listing executions, stats, time series, pending approvals, and integration icons.
+ * Story 36.2: Real-time WS sync for the actor's own active executions (useActorExecutionSync).
+ * Story 36.3: Observer polling with Page Visibility API (see polling useEffect below).
  *
  * When the list contains running executions (RUNNING, SUBMITTED, PENDING_APPROVAL),
  * the hook polls every OBSERVER_POLL_INTERVAL_MS (10 s) so observers see status changes
@@ -33,16 +35,14 @@ import type {
 import logger from '../services/logger';
 import { useAuth } from '../contexts/AuthContext';
 import { useActorExecutionSync } from './useActorExecutionSync';
+import { RUNNING_STATUSES } from '../constants/executions';
 
 const PAGE_SIZE = 25;
 
-/** Statuses that indicate an execution is still in progress; list should poll while any of these are present. */
-const RUNNING_STATUSES: ExecutionStatusType[] = ['RUNNING', 'SUBMITTED', 'PENDING_APPROVAL'];
-
 /** Observer polling interval: refresh the full list so status changes from other users become visible. */
 const OBSERVER_POLL_INTERVAL_MS = 10_000;
-/** Interval when no running executions; 5–10s for observer UX so new executions from other users appear sooner. */
-const BACKGROUND_POLL_INTERVAL_MS = 10_000;
+/** Slower interval when no running executions, so new executions from other users appear in the list. */
+const BACKGROUND_POLL_INTERVAL_MS = 30_000;
 
 export interface UseExecutionsDataReturn {
   // Executions
@@ -108,6 +108,8 @@ export const useExecutionsData = (
   const currentPageRef = useRef(currentPage);
   const activeScopeRef = useRef(activeScope);
   const isRefreshingRef = useRef(false);
+  const refetchSilentRef = useRef(refetchSilent);
+  const hasRunningRef = useRef(false);
 
   useEffect(() => { currentPageRef.current = currentPage; }, [currentPage]);
   useEffect(() => { activeScopeRef.current = activeScope; }, [activeScope]);

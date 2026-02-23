@@ -61,21 +61,6 @@ def _is_auditor(user) -> bool:
     return any(getattr(p, "is_auditor", 0) == 1 for p in profiles)
 
 
-# Map audit filter value to audit action types (for reference / validation)
-_STATUS_ACTION_TYPES = {
-    "success": [AuditActionType.EXECUTION_COMPLETED],
-    "failed": [
-        AuditActionType.EXECUTION_FAILED,
-        AuditActionType.EXECUTION_REJECTED,
-        AuditActionType.EXECUTION_CANCELLED,
-    ],
-    "running": [
-        AuditActionType.EXECUTION_SUBMITTED,
-        AuditActionType.EXECUTION_RUNNING,
-        AuditActionType.EXECUTION_PENDING_APPROVAL,
-    ],
-}
-
 # Map audit filter value to current Execution.status (filter by execution state, not audit event type)
 # Fix: "En cours" must show only executions currently in progress, not old RUNNING events for completed executions.
 _EXECUTION_STATUS_BY_FILTER = {

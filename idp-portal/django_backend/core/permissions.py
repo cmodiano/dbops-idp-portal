@@ -14,6 +14,51 @@ import structlog
 
 logger = structlog.get_logger(__name__)
 
+# Shared admin profile names (DBA/DBOPS) for view-level and filter-level checks
+_ADMIN_PROFILES = {'dbops', 'dba', 'dba_applicatif', 'dba_infrastructure'}
+
+
+def is_admin_user(user: Any) -> bool:
+    """
+    Check if user has an admin DBA/DBOPS profile (profile string, profiles M2M, or ad_groups).
+
+    Reusable without a request object. Used by IsDBAOrDBOPS.has_permission and by
+    executions.utils.filters for scope=all admin check.
+    """
+    if not user or not getattr(user, 'is_authenticated', False):
+        return False
+
+    # Check via user.profile attribute (SAML string)
+    profile_str = getattr(user, 'profile', None)
+    if profile_str and isinstance(profile_str, str) and profile_str.lower() in _ADMIN_PROFILES:
+        return True
+
+    # Check via user.profiles M2M relation (Profile model)
+    if hasattr(user, 'profiles'):
+        for profile in user.profiles.all():
+            if hasattr(profile, 'name') and profile.name.lower() in _ADMIN_PROFILES:
+                return True
+
+    # Check via ad_groups → Profile resolution
+    if hasattr(user, 'ad_groups'):
+        ad_groups = user.ad_groups or []
+        if not isinstance(ad_groups, list):
+            ad_groups = []
+        try:
+            for profile in Profile.objects.find_by_ad_groups(ad_groups):
+                if profile.name.lower() in _ADMIN_PROFILES:
+                    return True
+        except OperationalError as e:
+            logger.warning(
+                "profile_db_unavailable_dba_check",
+                user_id=getattr(user, 'id', None),
+                error=str(e),
+                error_type=type(e).__name__,
+                exc_info=True,
+            )
+
+    return False
+
 
 class IsDBAOrDBOPS(permissions.BasePermission):
     """
@@ -50,7 +95,7 @@ class IsDBAOrDBOPS(permissions.BasePermission):
                 # ...
     """
 
-    ADMIN_PROFILES = {'dbops', 'dba', 'dba_applicatif', 'dba_infrastructure'}
+    ADMIN_PROFILES = _ADMIN_PROFILES
 
     def has_permission(self, request: Any, view: Any) -> bool:
         """
@@ -60,42 +105,7 @@ class IsDBAOrDBOPS(permissions.BasePermission):
             True si utilisateur authentifié avec profil dans ADMIN_PROFILES.
             False sinon.
         """
-        if not request.user or not request.user.is_authenticated:
-            return False
-
-        # Check via user.profile attribute (SAML string)
-        profile_str = getattr(request.user, 'profile', None)
-        if profile_str:
-            if isinstance(profile_str, str) and profile_str.lower() in self.ADMIN_PROFILES:
-                return True
-
-        # Check via user.profiles M2M relation (Profile model)
-        if hasattr(request.user, 'profiles'):
-            user_profiles = request.user.profiles.all()
-            for profile in user_profiles:
-                if hasattr(profile, 'name') and profile.name.lower() in self.ADMIN_PROFILES:
-                    return True
-
-        # Check via ad_groups → Profile resolution
-        if hasattr(request.user, 'ad_groups'):
-            ad_groups = request.user.ad_groups or []
-            if not isinstance(ad_groups, list):
-                ad_groups = []
-
-            try:
-                for profile in Profile.objects.find_by_ad_groups(ad_groups):
-                    if profile.name.lower() in self.ADMIN_PROFILES:
-                        return True
-            except OperationalError as e:
-                logger.warning(
-                    "profile_db_unavailable_dba_check",
-                    user_id=getattr(request.user, 'id', None),
-                    error=str(e),
-                    error_type=type(e).__name__,
-                    exc_info=True,
-                )
-
-        return False
+        return is_admin_user(request.user)
 
     def has_object_permission(self, request: Any, view: Any, obj: Any) -> bool:
         """

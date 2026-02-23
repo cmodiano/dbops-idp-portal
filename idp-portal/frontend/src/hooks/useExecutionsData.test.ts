@@ -1,10 +1,16 @@
 /**
- * Tests for useExecutionsData — Story 36.2 additions.
+ * Tests for useExecutionsData — Stories 36.2 and 36.3.
  *
- * Verifies:
+ * Story 36.2 — Real-time actor sync:
  * - actorActiveIds contient uniquement les exécutions RUNNING/SUBMITTED de l'utilisateur courant
  * - handleActorStatusUpdate met à jour le statut de l'exécution dans la liste
  * - refresh() relance listExecutions
+ *
+ * Story 36.3 — Observer polling + Visibility API:
+ * - setInterval à 10 000 ms quand des exécutions RUNNING sont présentes
+ * - setInterval à 30 000 ms quand aucune exécution en cours
+ * - Pas de refetch quand document.hidden = true
+ * - Refetch immédiat au retour au premier plan (visibilitychange)
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -144,5 +150,135 @@ describe('useExecutionsData — Story 36.2', () => {
     const { result } = renderHook(() => useExecutionsData(defaultFilters, false));
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(typeof result.current.refresh).toBe('function');
+  });
+});
+
+// ── Story 36.3 — Polling observateur + Visibility API ─────────────────────────
+
+describe('useExecutionsData — Story 36.3 : polling observateur', () => {
+  beforeEach(() => {
+    mockListExecutions.mockResolvedValue(makeListResponse([]));
+    mockFetchStats.mockResolvedValue({ executions_jour: 0, taux_succes_pct: 0, executions_en_cours: 0, executions_en_erreur: 0 });
+    mockFetchTimeSeries.mockResolvedValue([]);
+    mockListPending.mockResolvedValue(makeListResponse([]));
+    mockActorSync.mockReset();
+    // Ensure tab is visible by default
+    Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+  });
+
+  it('3.1 — RUNNING exécutions → setInterval appelé avec 10 000 ms', async () => {
+    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+    mockListExecutions.mockResolvedValue(makeListResponse([makeExecution(1, 'RUNNING', 42)]));
+
+    renderHook(() => useExecutionsData(defaultFilters, false));
+
+    // Wait for executions to load, which re-runs the polling effect with the new interval
+    await waitFor(() => {
+      const pollingCall = setIntervalSpy.mock.calls.find((args) => args[1] === 10_000);
+      expect(pollingCall).toBeDefined();
+    });
+
+    setIntervalSpy.mockRestore();
+  });
+
+  it('3.2 — Aucune exécution en cours → setInterval appelé avec 30 000 ms', async () => {
+    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+    mockListExecutions.mockResolvedValue(makeListResponse([makeExecution(1, 'COMPLETED', 42)]));
+
+    renderHook(() => useExecutionsData(defaultFilters, false));
+    await waitFor(() => expect(mockListExecutions).toHaveBeenCalled());
+
+    const pollingCall = setIntervalSpy.mock.calls.find((args) => args[1] === 30_000);
+    expect(pollingCall).toBeDefined();
+
+    setIntervalSpy.mockRestore();
+  });
+
+  it('3.3 — document.hidden = true → refetchSilent non appelé à l\'intervalle', async () => {
+    Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+
+    // Spy on setInterval to capture callbacks while still running real intervals
+    const pollingIntervals: Array<{ fn: () => void; delay: number }> = [];
+    const origSetInterval = globalThis.setInterval;
+    vi.spyOn(globalThis, 'setInterval').mockImplementation((fn: TimerHandler, delay?: number, ...rest: unknown[]) => {
+      pollingIntervals.push({ fn: fn as () => void, delay: delay ?? 0 });
+      return (origSetInterval as typeof globalThis.setInterval)(fn, delay, ...rest);
+    });
+
+    mockListExecutions.mockResolvedValue(makeListResponse([makeExecution(1, 'RUNNING', 42)]));
+
+    const { result } = renderHook(() => useExecutionsData(defaultFilters, false));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const pollingInterval = pollingIntervals.find((i) => i.delay === 10_000);
+    expect(pollingInterval).toBeDefined();
+    const callsBefore = mockListExecutions.mock.calls.length;
+
+    // Invoke callback — document.hidden=true → refetchSilent NOT called
+    pollingInterval!.fn();
+    await Promise.resolve(); // flush microtasks
+
+    expect(mockListExecutions.mock.calls.length).toBe(callsBefore);
+
+    vi.restoreAllMocks();
+  });
+
+  it('3.4 — document.hidden = false et intervalle écoulé → refetchSilent appelé', async () => {
+    Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+
+    // Spy on setInterval to capture callbacks while still running real intervals
+    const pollingIntervals: Array<{ fn: () => void; delay: number }> = [];
+    const origSetInterval = globalThis.setInterval;
+    vi.spyOn(globalThis, 'setInterval').mockImplementation((fn: TimerHandler, delay?: number, ...rest: unknown[]) => {
+      pollingIntervals.push({ fn: fn as () => void, delay: delay ?? 0 });
+      return (origSetInterval as typeof globalThis.setInterval)(fn, delay, ...rest);
+    });
+
+    mockListExecutions.mockResolvedValue(makeListResponse([makeExecution(1, 'RUNNING', 42)]));
+
+    const { result } = renderHook(() => useExecutionsData(defaultFilters, false));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // Find the 10_000ms polling callback registered after RUNNING executions loaded
+    const pollingInterval = pollingIntervals.find((i) => i.delay === 10_000);
+    expect(pollingInterval).toBeDefined();
+
+    const callsBefore = mockListExecutions.mock.calls.length;
+
+    // Invoke callback — document.hidden=false → refetchSilent IS called
+    await act(async () => {
+      pollingInterval!.fn();
+    });
+
+    await waitFor(() => expect(mockListExecutions.mock.calls.length).toBeGreaterThan(callsBefore));
+
+    vi.restoreAllMocks();
+  });
+
+  it('3.5 — retour au premier plan (visibilitychange) → refetchSilent déclenché immédiatement', async () => {
+    // Start with tab hidden
+    Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+
+    mockListExecutions.mockResolvedValue(makeListResponse([makeExecution(1, 'RUNNING', 42)]));
+
+    renderHook(() => useExecutionsData(defaultFilters, false));
+    await waitFor(() => expect(mockListExecutions).toHaveBeenCalled());
+
+    const callsBefore = mockListExecutions.mock.calls.length;
+
+    // Tab becomes visible → visibilitychange fires → immediate refetch
+    await act(async () => {
+      Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    await waitFor(() => {
+      expect(mockListExecutions.mock.calls.length).toBeGreaterThan(callsBefore);
+    });
   });
 });

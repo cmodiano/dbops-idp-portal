@@ -472,7 +472,7 @@ development_status:
     epic-36: in-progress
     36-1-vue-partagee-liste-et-droits-rbac: done
     36-2-mise-a-jour-immediate-pour-acteur: done # code-review 2026-02-23: 2 HIGH fixes (ws.close() → fallback polling bug, sync cleanup), 2 MEDIUM fixes (test 4.7 étendu + tests 4.3b/4.4b, File List 5 fichiers manquants), 88 frontend tests pass
-    36-3-polling-pour-observateurs: backlog
+    36-3-polling-pour-observateurs: done # code-review 2026-02-23: M1 BACKGROUND 10k→30k (linter revert fixé), M2 test 3.3 .find() robustesse, M3 JSDoc tests mis à jour
     epic-36-retrospective: optional
     # === Epic 37: Inventaire — Environnement par serveur, colonne paramètre, filtre engine_type ===
     # Réf: planning-artifacts/epic-37-inventaire-environnement-serveur-colonne-engine.md, spec-inventaire-environnement-serveur-colonne-engine.md
