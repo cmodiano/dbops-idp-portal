@@ -281,12 +281,15 @@ class TestBroadCatchJustification:
     def test_no_bare_except_in_codebase(self):
         """No bare except: statements in Python files."""
         import subprocess
+        from pathlib import Path
+        # Navigate up from this file to the repo root (…/idp-portal/django_backend/executions/tests/)
+        repo_root = Path(__file__).resolve().parents[4]
         result = subprocess.run(
             ["grep", "-rn", r"^\s*except\s*:", "idp-portal/django_backend",
              "--include=*.py", "--exclude-dir=security-reports",
              "--exclude-dir=__pycache__", "--exclude-dir=.venv"],
             capture_output=True, text=True,
-            cwd="/Users/cyrille/Documents/Dev/test",
+            cwd=str(repo_root),
         )
         bare_excepts = [line for line in result.stdout.strip().split('\n') if line.strip()]
         assert bare_excepts == [], f"Found bare excepts: {bare_excepts}"
@@ -294,13 +297,15 @@ class TestBroadCatchJustification:
     def test_no_except_exception_without_as_e(self):
         """All except Exception must capture with 'as e' for logging."""
         import subprocess
+        from pathlib import Path
+        repo_root = Path(__file__).resolve().parents[4]
         result = subprocess.run(
             ["grep", "-rn", "except Exception:", "idp-portal/django_backend",
              "--include=*.py", "--exclude-dir=security-reports",
              "--exclude-dir=__pycache__", "--exclude-dir=.venv",
              "--exclude=test_exception_handling.py"],
             capture_output=True, text=True,
-            cwd="/Users/cyrille/Documents/Dev/test",
+            cwd=str(repo_root),
         )
         without_as = [
             line for line in result.stdout.strip().split('\n')
