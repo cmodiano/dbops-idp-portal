@@ -1,5 +1,8 @@
 # IDP Portal
 
+[![Backend Coverage](https://codecov.io/gh/cmodiano/dbops-idp-portal/branch/main/graph/badge.svg?flag=django-backend)](https://codecov.io/gh/cmodiano/dbops-idp-portal)
+[![Frontend Coverage](https://codecov.io/gh/cmodiano/dbops-idp-portal/branch/main/graph/badge.svg?flag=frontend)](https://codecov.io/gh/cmodiano/dbops-idp-portal)
+
 Internal Developer Platform pour les operations base de donnees.
 
 ## Stack

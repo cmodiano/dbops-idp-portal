@@ -1,0 +1,42 @@
+coverage:
+  # Statut affiché sur les PRs et commits
+  status:
+    project:
+      default:
+        target: auto        # comparé au commit parent
+        threshold: 2%       # tolérance de régression
+    patch:
+      default:
+        target: 70%         # couverture minimale des lignes modifiées
+        threshold: 5%
+
+  # Ignorer les fichiers non pertinents pour la couverture
+  ignore:
+    - "**/migrations/**"
+    - "**/__pycache__/**"
+    - "**/.venv/**"
+    - "**/node_modules/**"
+    - "**/tests/**"
+    - "**/*.test.ts"
+    - "**/*.test.tsx"
+
+# Flags séparés par composant
+flag_management:
+  default_rules:
+    carryforward: true   # conserver la couverture si le flag n'est pas re-uploadé
+
+flags:
+  django-backend:
+    paths:
+      - idp-portal/django_backend/
+    carryforward: true
+  frontend:
+    paths:
+      - idp-portal/frontend/src/
+    carryforward: true
+
+# Commentaire automatique sur les PRs
+comment:
+  layout: "reach,diff,flags,files"
+  behavior: default
+  require_changes: true   # commenter seulement si la couverture change
