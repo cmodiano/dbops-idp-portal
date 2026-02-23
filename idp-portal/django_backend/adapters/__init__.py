@@ -21,7 +21,7 @@ from adapters.registry import adapter_registry
 # Factory functions — parameter validation stays here, not in the registry
 # ---------------------------------------------------------------------------
 
-def _factory_aap(base_url: str, auth_headers: dict, timeout: float | None = None, **kwargs) -> ITriggerableAdapter:
+def _factory_aap(base_url: str, auth_headers: dict, timeout: float | None = None, **kwargs) -> BaseAdapter:
     from adapters.aap_adapter import AAPAdapter
     kw: dict = {"base_url": base_url, "auth_headers": auth_headers, **kwargs}
     if timeout is not None:
@@ -29,7 +29,7 @@ def _factory_aap(base_url: str, auth_headers: dict, timeout: float | None = None
     return AAPAdapter(**kw)
 
 
-def _factory_tower(base_url: str, auth_headers: dict, timeout: float | None = None, **kwargs) -> ITriggerableAdapter:
+def _factory_tower(base_url: str, auth_headers: dict, timeout: float | None = None, **kwargs) -> BaseAdapter:
     from adapters.tower_adapter import TowerAdapter
     kw: dict = {"base_url": base_url, "auth_headers": auth_headers, **kwargs}
     if timeout is not None:
@@ -37,7 +37,7 @@ def _factory_tower(base_url: str, auth_headers: dict, timeout: float | None = No
     return TowerAdapter(**kw)
 
 
-def _factory_azure_devops(base_url: str, auth_headers: dict, timeout: float | None = None, **kwargs) -> ITriggerableAdapter:
+def _factory_azure_devops(base_url: str, auth_headers: dict, timeout: float | None = None, **kwargs) -> BaseAdapter:
     from adapters.azure_devops_adapter import AzureDevOpsAdapter
     kw: dict = {"base_url": base_url, "auth_headers": auth_headers, **kwargs}
     if timeout is not None:
@@ -45,7 +45,7 @@ def _factory_azure_devops(base_url: str, auth_headers: dict, timeout: float | No
     return AzureDevOpsAdapter(**kw)
 
 
-def _factory_github_actions(base_url: str, auth_headers: dict, timeout: float | None = None, **kwargs) -> ITriggerableAdapter:
+def _factory_github_actions(base_url: str, auth_headers: dict, timeout: float | None = None, **kwargs) -> BaseAdapter:
     if "owner" not in kwargs or "repo" not in kwargs:
         raise ValueError("github_actions platform requires 'owner' and 'repo' parameters")
     from adapters.github_actions_adapter import GitHubActionsAdapter
@@ -55,7 +55,7 @@ def _factory_github_actions(base_url: str, auth_headers: dict, timeout: float | 
     return GitHubActionsAdapter(**kw)
 
 
-def _factory_terraform_cloud(base_url: str, auth_headers: dict, timeout: float | None = None, **kwargs) -> ITriggerableAdapter:
+def _factory_terraform_cloud(base_url: str, auth_headers: dict, timeout: float | None = None, **kwargs) -> BaseAdapter:
     if "organization" not in kwargs or not kwargs["organization"]:
         raise ValueError("terraform_cloud platform requires 'organization' parameter")
     from adapters.terraform_cloud_adapter import TerraformCloudAdapter
@@ -91,7 +91,7 @@ def get_platform_adapter(
     auth_headers: dict[str, str],
     timeout: float | None = None,
     **platform_kwargs,
-) -> ITriggerableAdapter:
+) -> BaseAdapter:
     """Factory to instantiate the correct adapter for a given platform type.
 
     Delegates to adapter_registry — no if/elif.

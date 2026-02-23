@@ -88,7 +88,7 @@ class AzureDevOpsAdapter(BaseAdapter):
     # Trigger (launch) — pipeline run
     # ------------------------------------------------------------------
 
-    async def trigger(
+    async def trigger(  # type: ignore[override]
         self,
         pipeline_id: str,
         template_parameters: dict | None = None,
@@ -222,7 +222,7 @@ class AzureDevOpsAdapter(BaseAdapter):
     # Get status
     # ------------------------------------------------------------------
 
-    async def get_status(
+    async def get_status(  # type: ignore[override]
         self,
         platform_job_id: str,
         pipeline_id: str,
@@ -344,7 +344,7 @@ class AzureDevOpsAdapter(BaseAdapter):
     # Get job logs — Story 27.3 Task 2.4
     # ------------------------------------------------------------------
 
-    async def get_job_logs(
+    async def get_job_logs(  # type: ignore[override]
         self,
         platform_job_id: str,
         pipeline_id: str,
@@ -552,7 +552,7 @@ class AzureDevOpsAdapter(BaseAdapter):
     # Cancel execution
     # ------------------------------------------------------------------
 
-    async def cancel_execution(
+    async def cancel_execution(  # type: ignore[override]
         self,
         platform_job_id: str,
         pipeline_id: str,

@@ -27,7 +27,7 @@ DATABASES = {
 AUTH_DEV_BYPASS = False
 
 # Story 17.5: Provide test-safe secret values
-if not ORACLE_PASSWORD:  # noqa: F405
+if not ORACLE_PASSWORD:  # noqa: F405  # type: ignore[used-before-def]
     ORACLE_PASSWORD = 'test-oracle-password'  # noqa: F811
 
 # Story 27.4: GitHub webhook secret for tests

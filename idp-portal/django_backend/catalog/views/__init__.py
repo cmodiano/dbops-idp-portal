@@ -20,7 +20,7 @@ from catalog.views.tags_views import TagViewSet
 # Rétrocompatibilité : ces symboles privés sont re-exportés pour les tests existants
 # qui utilisent `from catalog.views import _catalog_cache` (voir test_performance.py, test_bug_be5_cache_pagination.py)
 from catalog.views._shared import _catalog_cache, _tags_cache, _get_cache_key  # noqa: F401
-from catalog.views.tags_views import ensure_utc_isoformat  # noqa: F401  # rétrocompatibilité tests
+from core.utils import ensure_utc_isoformat  # noqa: F401  # rétrocompatibilité tests
 
 __all__ = [
     "ActionViewSet",

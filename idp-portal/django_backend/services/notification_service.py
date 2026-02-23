@@ -182,7 +182,7 @@ class NotificationService:
                 destination_type=destination_type,
             )
             return
-        handler(**kwargs)  # type: ignore[misc]
+        handler(**kwargs)
 
     def notify_execution_event(
         self,

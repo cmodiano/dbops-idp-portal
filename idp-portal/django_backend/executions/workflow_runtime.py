@@ -133,7 +133,7 @@ class WorkflowRuntime:
         self.execution = execution
         self.action = execution.action
         self.state = WorkflowExecutionState(execution_id=execution.id)
-        self.correlation_id = get_correlation_id()
+        self.correlation_id: str = get_correlation_id() or ""
 
         # Track global step_order counter for ExecutionStep creation
         self._step_order_counter = 0

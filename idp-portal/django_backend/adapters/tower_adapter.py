@@ -56,7 +56,7 @@ class TowerAdapter(BaseAdapter):
     # Trigger (launch) — job template or workflow job template
     # ------------------------------------------------------------------
 
-    async def trigger(
+    async def trigger(  # type: ignore[override]
         self,
         template_id: str,
         resource_type: str = "job_template",

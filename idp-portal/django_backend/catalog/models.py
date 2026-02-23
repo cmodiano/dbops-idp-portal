@@ -325,13 +325,13 @@ class Action(models.Model):
         if self.business_rule_policy_id:
             policy = self.business_rule_policy
             if policy and policy.is_active:
-                return policy.policy_json  # type: ignore[return-value]
+                return policy.policy_json  # type: ignore[no-any-return]
             logger.warning(
                 "business_rule_policy_inactive: action_id=%s, policy_id=%s",
                 self.id, self.business_rule_policy_id,
             )
             return None
-        return self.business_rule_policies  # type: ignore[return-value]
+        return self.business_rule_policies  # type: ignore[no-any-return]
 
     def clean(self) -> None:
         """Validate model fields before save."""

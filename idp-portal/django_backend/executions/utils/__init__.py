@@ -32,6 +32,9 @@ from executions.utils.rbac_helpers import get_allowed_action_ids_for_user
 from executions.utils.mutex_validation import validate_action_mutex
 
 __all__ = [
+    "ProfileService",
+    "InventoryService",
+    "AuditService",
     "get_env_config_case_insensitive",
     "validate_environment_against_inventory",
     "extract_workflow_referenced_action_ids",
