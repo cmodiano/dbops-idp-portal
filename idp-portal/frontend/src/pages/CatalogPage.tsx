@@ -60,7 +60,7 @@ export default function CatalogPage() {
     loading, filteredActions, tagsWithCounts, favorites, handleToggleFavorite,
     selectedAction, selectedActionDetail, selectedActionCanExecute,
     selectedActionEnvs, selectedActionStats, statsLoading,
-    drawerVisible, drawerLoading, lastFocusedCardRef,
+    drawerVisible, drawerLoading,
     handleActionClick, handleDrawerClose, handleExecuteClick,
     executionWizardOpen, activeExecutionId, setActiveExecutionId,
     setExecutionWizardOpen, parentExecutionId, setParentExecutionId,

@@ -195,7 +195,6 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
 
       // Story 9.1, Task 6: Save remediation rules
       if (actionId) {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const rulesToSave = remediationRules.length > 0
           ? remediationRules.map(({ id: _id, ...rule }) => rule as RemediationRule)
           : null;

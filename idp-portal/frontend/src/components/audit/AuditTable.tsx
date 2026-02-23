@@ -20,6 +20,7 @@ const PAGE_SIZE_OPTIONS = [25, 50, 100];
 type TableOnChange<T> = NonNullable<TableProps<T>['onChange']>;
 
 /** Format date for display. */
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatDate(dateStr: string | null): string {
   if (!dateStr) return '—';
   const date = new Date(dateStr);
@@ -33,6 +34,7 @@ export function formatDate(dateStr: string | null): string {
 }
 
 /** Extract action name from entry (enriched by backend) or fallback. */
+// eslint-disable-next-line react-refresh/only-export-components
 export function getActionName(entry: AuditExecutionEntry): string {
   if (entry.action_name) {
     return entry.action_name;

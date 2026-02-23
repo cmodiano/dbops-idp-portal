@@ -293,7 +293,7 @@ describe('AuditPage', () => {
       await user.type(input, 'abc-123');
 
       await waitFor(() => {
-        const lastCall = mockListExecutionAudit.mock.calls[mockListExecutionAudit.mock.calls.length - 1];
+        const _lastCall = mockListExecutionAudit.mock.calls[mockListExecutionAudit.mock.calls.length - 1];
         // listExecutionAudit is called without args (mock returns default), but the component
         // passes filters via the service. We verify the input value changed.
         expect(input).toHaveValue('abc-123');

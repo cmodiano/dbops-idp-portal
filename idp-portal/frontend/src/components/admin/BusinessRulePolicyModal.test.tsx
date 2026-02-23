@@ -50,7 +50,7 @@ const mockEditPolicy: BusinessRulePolicyDetail = {
   updated_at: '2026-02-22T12:00:00Z',
 };
 
-const validJson = JSON.stringify(
+const _validJson = JSON.stringify(
   {
     on_step_output: [
       {
@@ -190,7 +190,6 @@ describe('BusinessRulePolicyModal', () => {
       const user = userEvent.setup();
       renderModal({ editPolicy: null });
 
-      const textarea = screen.getByPlaceholderText(/on_step_output/i);
       // Saisir du JSON valide caractère par caractère prend du temps — simuler via click sur exemple
       await user.click(screen.getByRole('button', { name: /insérer exemple terraform/i }));
 
