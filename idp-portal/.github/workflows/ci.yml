@@ -114,10 +114,6 @@ jobs:
         run: uv pip install -r requirements-dev.lock --system
       - name: Run pytest
         working-directory: django_backend
-        env:
-          DJANGO_SETTINGS_MODULE: idp_backend.settings
-          DATABASE_URL: sqlite:///:memory:
-          DJANGO_SECRET_KEY: "ci-test-placeholder-not-for-production"  # pragma: allowlist secret
         run: pytest tests/ -v --ignore=tests/integration/
 
   test-frontend:
