@@ -390,8 +390,8 @@ class ExecutionCancelView(APIView):
                 **platform_kwargs,
             )
             # Story 34.15: ISP — skip remote cancel if adapter does not support it
-            if not isinstance(adapter, ICancellableAdapter):  # type: ignore[unreachable]
-                exec_logger.warning(
+            if not isinstance(adapter, ICancellableAdapter):
+                exec_logger.warning(  # type: ignore[unreachable]
                     "cancel_not_supported",
                     platform_type=platform_type,
                     execution_id=str(execution.id),
