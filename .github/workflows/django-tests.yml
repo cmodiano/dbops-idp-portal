@@ -4,8 +4,14 @@
 name: Django Tests
 
 on:
+  workflow_dispatch:  # Run manually (e.g. for develop branch)
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
+    paths:
+      - 'idp-portal/django_backend/**'
+      - '.github/workflows/django-tests.yml'
+  pull_request:
+    branches: [ main ]
     paths:
       - 'idp-portal/django_backend/**'
       - '.github/workflows/django-tests.yml'

@@ -4,6 +4,7 @@
 name: CI
 
 on:
+  workflow_dispatch:  # Run manually (e.g. for develop branch)
   push:
     branches: [main]
   pull_request:
