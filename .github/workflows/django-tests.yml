@@ -103,6 +103,4 @@ jobs:
           pip install django-stubs djangorestframework-stubs
       - name: Run mypy type check (strict, blocking)
         working-directory: idp-portal/django_backend
-        env:
-          DJANGO_SECRET_KEY: "dummy-secret-key-for-ci-type-check-only"
         run: mypy . --no-error-summary

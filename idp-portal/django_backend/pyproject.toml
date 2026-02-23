@@ -141,7 +141,7 @@ exclude = [
 ]
 
 [tool.django-stubs]
-django_settings_module = "idp_backend.settings"
+django_settings_module = "idp_backend.test_settings"
 strict_settings = false
 
 # Per-module overrides: stricter on newer modules
