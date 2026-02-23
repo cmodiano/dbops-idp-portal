@@ -36,11 +36,10 @@ export const ExecutionDetailDrawer: React.FC<ExecutionDetailDrawerProps> = ({
     title={execution ? `Exécution — ${execution.action_name || `Action #${execution.action_id}`}` : 'Détail exécution'}
     open={open}
     onClose={onClose}
-    width={execution?.item_type === 'workflow' && actionDetail?.workflow_steps ? '90%' : undefined}
     size={execution?.item_type === 'workflow' && actionDetail?.workflow_steps ? undefined : 'default'}
     styles={
       execution?.item_type === 'workflow' && actionDetail?.workflow_steps
-        ? { body: { padding: 0, height: '100%', display: 'flex', flexDirection: 'column' } }
+        ? { body: { padding: 0, height: '100%', display: 'flex', flexDirection: 'column' }, wrapper: { width: '90%' } }
         : { body: { width: 480 } }
     }
     destroyOnClose

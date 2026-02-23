@@ -25,3 +25,14 @@ global.ResizeObserver = class ResizeObserver {
   unobserve() {}
   disconnect() {}
 };
+
+// Suppress jsdom "Not implemented: Window's getComputedStyle() with pseudo-elements"
+// jsdom does not implement pseudo-element style resolution; antd's CSS-in-JS triggers
+// this on every render, producing noise in the test output.
+const _originalGetComputedStyle = window.getComputedStyle.bind(window);
+window.getComputedStyle = (elt: Element, pseudoElt?: string | null): CSSStyleDeclaration => {
+  if (pseudoElt) {
+    return {} as CSSStyleDeclaration;
+  }
+  return _originalGetComputedStyle(elt);
+};

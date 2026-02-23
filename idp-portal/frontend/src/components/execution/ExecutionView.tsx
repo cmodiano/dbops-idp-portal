@@ -164,7 +164,6 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
     <Drawer
       title={null}
       placement="right"
-      width="min(90vw, 1400px)"
       open={executionId != null}
       onClose={handleClose}
       closable={false}
@@ -173,6 +172,7 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
       styles={{
         body: { padding: 0 },
         header: { display: 'none' },
+        wrapper: { width: 'min(90vw, 1400px)' },
       }}
       data-testid="execution-view-drawer"
       aria-label="Vue d'exécution temps réel"
