@@ -12,6 +12,7 @@ import os
 os.environ.setdefault('SECRET_KEY', 'test-secret-key-for-tests-only')
 os.environ.setdefault('JWT_SECRET_KEY', 'test-jwt-secret-key-for-tests-only')
 os.environ.setdefault('DEBUG', 'True')
+os.environ.setdefault('ORACLE_PASSWORD', 'test-oracle-password')
 
 from idp_backend.settings import *  # noqa: F401,F403
 
@@ -25,10 +26,6 @@ DATABASES = {
 
 # Ensure auth dev bypass is disabled by default in tests
 AUTH_DEV_BYPASS = False
-
-# Story 17.5: Provide test-safe secret values
-if not ORACLE_PASSWORD:  # noqa: F405  # type: ignore[used-before-def]
-    ORACLE_PASSWORD = 'test-oracle-password'  # noqa: F811
 
 # Story 27.4: GitHub webhook secret for tests
 GITHUB_WEBHOOK_SECRET = 'test-github-webhook-secret'
