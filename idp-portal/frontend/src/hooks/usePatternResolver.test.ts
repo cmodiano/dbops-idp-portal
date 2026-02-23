@@ -80,8 +80,8 @@ describe('usePatternResolver', () => {
 
     await waitFor(() => {
       expect(result.current.resolvedTargets).toEqual([
-        { name: 'db-prod-01', environment: 'prod' },
-        { name: 'db-prod-02', environment: 'prod' },
+        { name: 'db-prod-01', environment: 'prod', target_type: 'server', metadata: null },
+        { name: 'db-prod-02', environment: 'prod', target_type: 'server', metadata: null },
       ]);
     });
 
