@@ -28,7 +28,7 @@ boolean-py==5.0
     # via license-expression
 cachecontrol==0.14.4
     # via pip-audit
-cachetools==7.0.0
+cachetools==7.0.1
     # via idp-portal-backend (pyproject.toml)
 cbor2==5.8.0
     # via autobahn
@@ -121,7 +121,7 @@ faker==40.4.0
     #   factory-boy
 filelock==3.20.3
     # via cachecontrol
-gunicorn==25.0.2
+gunicorn==25.1.0
     # via idp-portal-backend (pyproject.toml)
 h11==0.16.0
     # via httpcore
