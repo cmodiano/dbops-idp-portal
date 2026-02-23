@@ -113,7 +113,7 @@ jobs:
         working-directory: idp-portal/django_backend
         env:
           DJANGO_SETTINGS_MODULE: idp_backend.settings
-          DATABASE_URL: sqlite:///:memory:
+          DATABASE_URL: "sqlite:///:memory:"
         run: pytest tests/ -v --ignore=tests/integration/
 
   test-frontend:
