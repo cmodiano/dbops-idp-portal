@@ -9,11 +9,6 @@ on:
     paths:
       - 'idp-portal/django_backend/**'
       - '.github/workflows/django-tests.yml'
-  pull_request:
-    branches: [ main, develop ]
-    paths:
-      - 'idp-portal/django_backend/**'
-      - '.github/workflows/django-tests.yml'
 
 jobs:
   test:
