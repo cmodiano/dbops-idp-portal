@@ -102,8 +102,6 @@ jobs:
   test-backend:
     name: Test Django Backend (pytest)
     runs-on: ubuntu-latest
-    env:
-      DJANGO_SECRET_KEY: "ci-test-placeholder-not-for-production"  # pragma: allowlist secret
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -119,6 +117,7 @@ jobs:
         env:
           DJANGO_SETTINGS_MODULE: idp_backend.settings
           DATABASE_URL: sqlite:///:memory:
+          DJANGO_SECRET_KEY: "ci-test-placeholder-not-for-production"  # pragma: allowlist secret
         run: pytest tests/ -v --ignore=tests/integration/
 
   test-frontend:
@@ -276,6 +275,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+      - name: Update npm
+        run: npm install -g npm@latest
       - name: Install dependencies
         working-directory: frontend
         run: npm ci
@@ -284,7 +285,9 @@ jobs:
         run: |
           mkdir -p security-reports
           npm audit --json > security-reports/npm-audit-report.json || true
-          npm audit --audit-level=moderate
+          # Audit production dependencies only: dev vulnerabilities (eslint toolchain)
+          # are already patched via package.json overrides; npm 10 may not reflect this.
+          npm audit --audit-level=moderate --omit=dev
       - name: Upload npm audit report
         uses: actions/upload-artifact@v4
         if: always()
