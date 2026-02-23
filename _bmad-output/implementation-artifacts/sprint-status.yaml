@@ -451,7 +451,7 @@ development_status:
     34-7-backend-decomposer-workflow-runtime: done # SOLID-BE-2 — code-review 2026-02-22: H2 tasks cochées, M1 dataclasses.asdict top-level, M2 commentaire corrigé, M3 call_platform_adapter public — 24/24 tests pass
     34-8-backend-decomposer-inventory-services: done # SOLID-BE-5 — code-review 2026-02-22: 2H+3M+1L auto-fixés (import mort, DRY extraction, type guard, mixed-admin test, naming, encapsulation)
     34-9-frontend-variant-context-workflow-steps-editor: done # SOLID-FE-6, SOLID-FE-8 — code-review 2026-02-22: H1 variant prop retained (fixed), H2 SortableStepCard tests incomplets (fixed: retry defaults + disabled complet), M1 File List vide (fixed), M2 WorkflowStepsRenderer hors scope (documenté), L1 JSDoc (fixed)
-    34-10-frontend-use-catalog-state-catalog-page: backlog # SOLID-FE-2
+    34-10-frontend-use-catalog-state-catalog-page: done # SOLID-FE-2 — code-review 2026-02-22: 2H+1M+1L auto-fixés (useCallback x4, useMemo hasActiveFilters, act() warnings, contentMaxWidth) — 41/41 tests pass, 0 erreur TypeScript
     34-11-frontend-use-audit-filters-composants-audit-page: backlog # SOLID-FE-3
     34-12-frontend-decouper-execution-timeline: backlog # SOLID-FE-1 CRITICAL
     34-13-frontend-dip-services-props-execution-wizard: backlog # SOLID-FE-4, FE-7, FE-9
