@@ -181,7 +181,7 @@ export function StepDetailDrawer({
         }}
         data-testid="step-detail-header"
       >
-        <Space direction="vertical" size={8} style={{ width: '100%' }}>
+        <Space orientation="vertical" size={8} style={{ width: '100%' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Space size={8} align="center">
               {statusIcon}
@@ -235,7 +235,7 @@ export function StepDetailDrawer({
             data-testid="step-pending-alert"
           />
         ) : (
-          <Space direction="vertical" size={16} style={{ width: '100%' }}>
+          <Space orientation="vertical" size={16} style={{ width: '100%' }}>
             {/* AC9: Structured error for FAILED step */}
             {executionStep.status === 'FAILED' && (
               <StructuredErrorCard
@@ -248,7 +248,7 @@ export function StepDetailDrawer({
 
             {/* Step info card */}
             <Card size="small" title={<span style={{ fontSize: 13 }}>{executionStep.step_name}</span>}>
-              <Space direction="vertical" size={4} style={{ width: '100%' }}>
+              <Space orientation="vertical" size={4} style={{ width: '100%' }}>
                 <Space size={8}>
                   {statusIcon}
                   <Text strong>{statusCfg.label}</Text>

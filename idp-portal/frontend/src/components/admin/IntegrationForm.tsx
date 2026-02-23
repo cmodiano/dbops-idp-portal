@@ -502,7 +502,7 @@ export function IntegrationForm({
           />
         </Form.Item>
         <Form.Item label="Icône" tooltip="Uploader une icône ou saisir une URL">
-          <Space direction="vertical" style={{ width: '100%' }}>
+          <Space orientation="vertical" style={{ width: '100%' }}>
             <Upload
               accept="image/*"
               maxCount={1}

@@ -92,7 +92,7 @@ export const NotificationConfigSection: React.FC<NotificationConfigSectionProps>
   }));
 
   return (
-    <Space direction="vertical" style={{ width: '100%' }} size="small">
+    <Space orientation="vertical" style={{ width: '100%' }} size="small">
       {/* Email */}
       <div style={headerStyle}>
         <Space>
@@ -107,7 +107,7 @@ export const NotificationConfigSection: React.FC<NotificationConfigSectionProps>
       </div>
       {getChannel('email').enabled && (
         <div style={rowStyle}>
-          <Space direction="vertical" style={{ width: '100%' }} size="small">
+          <Space orientation="vertical" style={{ width: '100%' }} size="small">
             <div>
               <Text type="secondary">Destinataire :</Text>
               <Input
@@ -146,7 +146,7 @@ export const NotificationConfigSection: React.FC<NotificationConfigSectionProps>
       </div>
       {getChannel('teams').enabled && (
         <div style={rowStyle}>
-          <Space direction="vertical" style={{ width: '100%' }} size="small">
+          <Space orientation="vertical" style={{ width: '100%' }} size="small">
             <div>
               <Text type="secondary">Webhook URL :</Text>
               <Input
@@ -206,7 +206,7 @@ export const NotificationConfigSection: React.FC<NotificationConfigSectionProps>
       </div>
       {getChannel('page_dba').enabled && (
         <div style={rowStyle}>
-          <Space direction="vertical" style={{ width: '100%' }} size="small">
+          <Space orientation="vertical" style={{ width: '100%' }} size="small">
             <div>
               <Text type="secondary">URL API (optionnel) :</Text>
               <Input

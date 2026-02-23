@@ -238,7 +238,7 @@ export const SchedulingPanel = memo(function SchedulingPanel({
             validateStatus={cronIsValid === false ? 'error' : cronIsValid === true ? 'success' : undefined}
             help={cronError || undefined}
           >
-            <Space direction="vertical" style={{ width: '100%' }}>
+            <Space orientation="vertical" style={{ width: '100%' }}>
               <Space>
                 <Select
                   placeholder="Préréglages courants"

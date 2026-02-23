@@ -159,13 +159,13 @@ export function WizardStep2Automatisme({
   setWorkflowViewMode,
 }: WizardStep2AutomatismeProps) {
   return (
-    <Space direction="vertical" style={{ width: '100%' }} size="middle">
+    <Space orientation="vertical" style={{ width: '100%' }} size="middle">
       {isWorkflow ? (
         <Form.Item
           label="Étapes du workflow"
           tooltip="Définissez les actions qui composent ce workflow, dans l'ordre d'exécution."
         >
-          <Space direction="vertical" style={{ width: '100%' }}>
+          <Space orientation="vertical" style={{ width: '100%' }}>
             {/* Story 20.6 Task 4.4: Contextual help message for workflows */}
             <Alert
               type="info"

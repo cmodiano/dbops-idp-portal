@@ -187,7 +187,7 @@ export function ExecutionStatusBanners({
           }
           data-testid="auto-remediation-progress-card"
         >
-          <Space direction="vertical" size="small" style={{ width: '100%' }}>
+          <Space orientation="vertical" size="small" style={{ width: '100%' }}>
             <Text>
               <ToolOutlined style={{ marginRight: 8 }} />
               {autoRemediationState.correctiveActionName || 'Action corrective'}

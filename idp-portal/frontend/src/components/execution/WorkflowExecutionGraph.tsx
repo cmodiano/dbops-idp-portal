@@ -365,7 +365,7 @@ function WorkflowExecutionGraphInner({
         <Text strong style={{ display: 'block', marginBottom: 8, fontSize: 13 }}>
           Légende
         </Text>
-        <Space direction="vertical" size={4}>
+        <Space orientation="vertical" size={4}>
           <Space size={8}>
             <Badge color={STATUS_COLORS.RUNNING} />
             <Text type="secondary">En cours</Text>

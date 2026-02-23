@@ -87,7 +87,7 @@ export default function CronExpressionHelper({ open, onClose }: CronExpressionHe
       ]}
       width={800}
     >
-      <Space direction="vertical" style={{ width: '100%' }} size="middle">
+      <Space orientation="vertical" style={{ width: '100%' }} size="middle">
         <div>
           <Title level={5}>Format des expressions cron</Title>
           <Paragraph>

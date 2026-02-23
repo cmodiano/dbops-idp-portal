@@ -103,7 +103,7 @@ export function BusinessRulePolicySelector({
       </Radio.Group>
 
       {mode === 'predefined' && (
-        <Space direction="vertical" style={{ width: '100%' }}>
+        <Space orientation="vertical" style={{ width: '100%' }}>
           {!hasStepType ? (
             <Text type="secondary">
               Sélectionnez une intégration (plateforme d'exécution) pour afficher les règles métier disponibles.

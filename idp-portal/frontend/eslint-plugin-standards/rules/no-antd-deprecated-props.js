@@ -4,7 +4,8 @@
  * Tracks antd imports and flags deprecated JSX props on those components.
  *
  * Currently enforced:
- *   - Drawer: `width` → use `size` instead (deprecated in antd v5)
+ *   - Drawer: `width` → use `styles.wrapper.width` (deprecated in antd v5)
+ *   - Space:  `direction` → use `orientation` instead (deprecated in antd v5)
  *
  * @see FRONTEND-STANDARDS.md
  */
@@ -17,8 +18,15 @@ const DEPRECATED_PROPS = {
   Drawer: {
     width: {
       message:
-        '[antd] `width` on <Drawer> is deprecated. Use `size` instead (antd v5+). ' +
+        '[antd] `width` on <Drawer> is deprecated. Use `styles.wrapper.width` instead (antd v5+). ' +
         'See https://ant.design/components/drawer#api',
+    },
+  },
+  Space: {
+    direction: {
+      message:
+        '[antd] `direction` on <Space> is deprecated. Use `orientation` instead (antd v5+). ' +
+        'See https://ant.design/components/space#api',
     },
   },
 };
