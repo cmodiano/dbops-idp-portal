@@ -11,7 +11,7 @@
  * - Inventory loading and error handling (Story 4.2)
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from 'antd';
@@ -20,6 +20,22 @@ import type { CatalogActionDetail } from '../../services/catalog_service';
 import type { InventoryItem } from '../../types/api';
 import { submitExecution, fetchInventoryItems } from '../../services/execution_service';
 import { fetchCatalogActionById } from '../../services/catalog_service';
+import { useAuth } from '../../contexts/AuthContext';
+
+// Mock useAuth — isBusinessProfile: false by default (SOLID-FE-6)
+vi.mock('../../contexts/AuthContext', () => ({
+  useAuth: vi.fn().mockReturnValue({
+    isAuthenticated: true,
+    isBusinessProfile: false,
+    isLoading: false,
+    user: null,
+    accessToken: null,
+    login: vi.fn(),
+    logout: vi.fn(),
+    refreshToken: vi.fn().mockResolvedValue(null),
+    hasTab: vi.fn().mockReturnValue(true),
+  }),
+}));
 
 // Mock environments data (always needed for environment selector) - use French labels to match UI
 const mockEnvironments: InventoryItem[] = [
@@ -973,9 +989,16 @@ describe('ExecutionWizard', () => {
 
   // Story 7.2: Simplified variant tests
   describe('Simplified Variant (Story 7.2)', () => {
+    beforeEach(() => {
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: true, isLoading: false, user: null, accessToken: null, login: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
+    });
+    afterEach(() => {
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
+    });
+
     it('renders simplified step labels when variant is simplified (Task 5.1)', () => {
       render(
-        <ExecutionWizard {...defaultProps} variant="simplified" />,
+        <ExecutionWizard {...defaultProps} />,
         { wrapper: TestWrapper }
       );
 
@@ -987,7 +1010,7 @@ describe('ExecutionWizard', () => {
 
     it('shows contextual help description on step 1 in simplified mode (Task 5.1)', () => {
       render(
-        <ExecutionWizard {...defaultProps} variant="simplified" />,
+        <ExecutionWizard {...defaultProps} />,
         { wrapper: TestWrapper }
       );
 
@@ -998,7 +1021,7 @@ describe('ExecutionWizard', () => {
     it('shows contextual help description on step 2 in simplified mode (Task 5.1)', async () => {
       const user = userEvent.setup();
       render(
-        <ExecutionWizard {...defaultProps} variant="simplified" />,
+        <ExecutionWizard {...defaultProps} />,
         { wrapper: TestWrapper }
       );
 
@@ -1016,7 +1039,7 @@ describe('ExecutionWizard', () => {
     it('shows contextual help description on step 3 in simplified mode (Task 5.1)', async () => {
       const user = userEvent.setup();
       render(
-        <ExecutionWizard {...defaultProps} variant="simplified" />,
+        <ExecutionWizard {...defaultProps} />,
         { wrapper: TestWrapper }
       );
 
@@ -1036,8 +1059,9 @@ describe('ExecutionWizard', () => {
     });
 
     it('does not show contextual descriptions in default mode', () => {
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
       render(
-        <ExecutionWizard {...defaultProps} variant="default" />,
+        <ExecutionWizard {...defaultProps} />,
         { wrapper: TestWrapper }
       );
 
@@ -1046,6 +1070,7 @@ describe('ExecutionWizard', () => {
     });
 
     it('uses default labels when variant is not specified', () => {
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
       render(<ExecutionWizard {...defaultProps} />, { wrapper: TestWrapper });
 
       // Should show default labels (Story 13.2: Step 1 renamed to "Cible(s)")
@@ -1106,9 +1131,16 @@ describe('ExecutionWizard', () => {
 
   // Story 7.2: Accessibility tests for simplified variant
   describe('Accessibility - Simplified Variant (Story 7.2, Task 5.5)', () => {
+    beforeEach(() => {
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: true, isLoading: false, user: null, accessToken: null, login: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
+    });
+    afterEach(() => {
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
+    });
+
     it('has proper aria-labels for simplified step titles', async () => {
       render(
-        <ExecutionWizard {...defaultProps} variant="simplified" />,
+        <ExecutionWizard {...defaultProps} />,
         { wrapper: TestWrapper }
       );
 
@@ -1121,7 +1153,7 @@ describe('ExecutionWizard', () => {
 
     it('environment select maintains aria-label in simplified mode', async () => {
       render(
-        <ExecutionWizard {...defaultProps} variant="simplified" />,
+        <ExecutionWizard {...defaultProps} />,
         { wrapper: TestWrapper }
       );
 

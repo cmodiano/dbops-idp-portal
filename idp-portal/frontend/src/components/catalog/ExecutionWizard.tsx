@@ -39,6 +39,7 @@ import { extractParameterFields } from '../../hooks/useDynamicForm';
 import { usePatternResolver } from '../../hooks/usePatternResolver';
 import { useSchedulingValidation } from '../../hooks/useSchedulingValidation';
 import { useExecutionSubmit } from '../../hooks/useExecutionSubmit';
+import { useAuth } from '../../contexts/AuthContext';
 import { TargetSelectionStep } from './TargetSelectionStep';
 import { ParametersFormStep } from './ParametersFormStep';
 import { ConfirmationStep } from './ConfirmationStep';
@@ -67,7 +68,6 @@ export interface ExecutionWizardProps {
   onCancel: () => void;
   onSuccess?: (executionId: number) => void;
   onBackToCatalog?: () => void;
-  variant?: 'default' | 'simplified';
   onSuggestionClick?: (suggestion: RemediationSuggestion) => void;
   parentExecutionId?: number | null;
   /** Story 17.15: Initial parameters to pre-fill the wizard (restart execution). */
@@ -128,19 +128,19 @@ export function ExecutionWizard({
   onCancel,
   onSuccess,
   onBackToCatalog,
-  variant = 'default',
   onSuggestionClick,
   parentExecutionId,
   initialParams,
 }: ExecutionWizardProps) {
   const { notification } = App.useApp();
+  const { isBusinessProfile } = useAuth();
   const schedulingValidation = useSchedulingValidation();
   const execSubmit = useExecutionSubmit();
 
   // Extract stable references for useEffect dependencies
   const { setSubmitError, resetScheduling } = execSubmit;
 
-  const STEP_ITEMS = variant === 'simplified' ? STEP_ITEMS_SIMPLIFIED : STEP_ITEMS_DEFAULT;
+  const STEP_ITEMS = isBusinessProfile ? STEP_ITEMS_SIMPLIFIED : STEP_ITEMS_DEFAULT;
   const [form] = Form.useForm();
   const [currentStep, setCurrentStep] = useState(0);
 
@@ -545,7 +545,7 @@ export function ExecutionWizard({
         <Suspense fallback={<div style={{ textAlign: 'center', padding: 24 }}>Chargement...</div>}>
           <ExecutionTimeline executionId={activeExecutionId} mode="realtime" onRetry={onBackToCatalog ?? onCancel}
             onContact={() => { window.location.href = 'mailto:?subject=IDP%20Portal%20-%20Support%20DBA'; }}
-            errorCardVariant={variant === 'simplified' ? 'business' : 'default'} onSuggestionClick={onSuggestionClick} />
+            errorCardVariant={isBusinessProfile ? 'business' : 'default'} onSuggestionClick={onSuggestionClick} />
         </Suspense>
       </Modal>
     );
@@ -571,7 +571,7 @@ export function ExecutionWizard({
         <div style={{ minHeight: 200, padding: '0 8px' }}>
           {currentStep === 0 && (
             <TargetSelectionStep
-              action={action!} allowedEnvironments={allowedEnvironments} variant={variant}
+              action={action!} allowedEnvironments={allowedEnvironments}
               selectedTargets={selectedTargets} onTargetsChange={setSelectedTargets}
               targetInputMode={targetInputMode} onTargetInputModeChange={setTargetInputMode}
               targetPattern={targetPattern} onTargetPatternChange={setTargetPattern}
@@ -585,7 +585,7 @@ export function ExecutionWizard({
           )}
           <div style={{ display: currentStep === 1 ? 'block' : 'none' }}>
             <ParametersFormStep
-              form={form} action={action!} variant={variant} parameterFields={parameterFields}
+              form={form} action={action!} parameterFields={parameterFields}
               parameters={parameters} onParametersChange={setParameters}
               isWorkflow={isWorkflow} workflowSteps={workflowSteps}
               workflowStepActions={workflowStepActions} loadingWorkflowStepActions={loadingWorkflowStepActions}
@@ -596,7 +596,7 @@ export function ExecutionWizard({
           </div>
           {currentStep === 2 && (
             <ConfirmationStep
-              action={action!} variant={variant} selectedTargets={selectedTargets}
+              action={action!} selectedTargets={selectedTargets}
               derivedEnvironment={derivedEnvironment} currentImpact={currentImpact}
               parameters={parameters} submitError={execSubmit.submitError} environmentsCache={environmentsCache}
               isScheduling={scheduling.isScheduling} scheduling={scheduling}

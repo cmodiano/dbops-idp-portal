@@ -6,6 +6,7 @@
  */
 
 import { memo, useMemo, useRef } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   Form,
   Select,
@@ -35,7 +36,6 @@ function isEnvironmentAllowed(envId: string, allowedEnvironments: string[]): boo
 export interface TargetSelectionStepProps {
   action: CatalogActionDetail;
   allowedEnvironments: string[];
-  variant: 'default' | 'simplified';
   selectedTargets: Target[];
   onTargetsChange: (targets: Target[]) => void;
   targetInputMode: 'list' | 'pattern' | 'manual';
@@ -60,7 +60,6 @@ import { STEP_DESCRIPTIONS_SIMPLIFIED } from '../../utils/stepDescriptions';
 export const TargetSelectionStep = memo(function TargetSelectionStep({
   action,
   allowedEnvironments,
-  variant,
   selectedTargets,
   onTargetsChange,
   targetInputMode,
@@ -80,6 +79,7 @@ export const TargetSelectionStep = memo(function TargetSelectionStep({
   patternResolving,
 }: TargetSelectionStepProps) {
   const firstFieldRef = useRef<HTMLElement | null>(null);
+  const { isBusinessProfile } = useAuth();
   const requiresTarget = action?.requires_target !== false;
 
   const manualTargetCount = useMemo(() => {
@@ -91,7 +91,7 @@ export const TargetSelectionStep = memo(function TargetSelectionStep({
 
   return (
     <div>
-      {variant === 'simplified' && (
+      {isBusinessProfile && (
         <Alert
           type="info"
           showIcon
@@ -103,7 +103,7 @@ export const TargetSelectionStep = memo(function TargetSelectionStep({
       {requiresTarget ? (
         <>
           <Form.Item
-            label={variant === 'simplified' ? 'Mode de selection' : 'Comment choisir les cibles?'}
+            label={isBusinessProfile ? 'Mode de selection' : 'Comment choisir les cibles?'}
             required
           >
             <Radio.Group
@@ -122,7 +122,7 @@ export const TargetSelectionStep = memo(function TargetSelectionStep({
             <Form.Item
               label="Cible(s)"
               required
-              tooltip={variant === 'simplified' ? undefined : 'Selectionnez une ou plusieurs cibles dans la liste.'}
+              tooltip={isBusinessProfile ? undefined : 'Selectionnez une ou plusieurs cibles dans la liste.'}
             >
               <TargetSelector
                 inputRef={firstFieldRef as React.Ref<HTMLElement>}
@@ -203,9 +203,9 @@ export const TargetSelectionStep = memo(function TargetSelectionStep({
       ) : (
         <>
           <Form.Item
-            label={variant === 'simplified' ? 'Environnement' : 'Environnement cible'}
+            label={isBusinessProfile ? 'Environnement' : 'Environnement cible'}
             required
-            tooltip={variant === 'simplified' ? undefined : 'Selectionnez l\'environnement sur lequel executer l\'action.'}
+            tooltip={isBusinessProfile ? undefined : 'Selectionnez l\'environnement sur lequel executer l\'action.'}
           >
             <Select
               ref={(ref) => {

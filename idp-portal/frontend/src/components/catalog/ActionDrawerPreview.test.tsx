@@ -3,6 +3,22 @@ import { render, screen, within, waitFor } from '@testing-library/react';
 import { ThemeProvider } from '../../contexts/ThemeContext';
 import { ActionDrawerPreview } from './ActionDrawerPreview';
 import type { ActionPreviewData } from '../../types/api';
+import { useAuth } from '../../contexts/AuthContext';
+
+// Mock useAuth — isBusinessProfile: false by default (SOLID-FE-6)
+vi.mock('../../contexts/AuthContext', () => ({
+  useAuth: vi.fn().mockReturnValue({
+    isAuthenticated: true,
+    isBusinessProfile: false,
+    isLoading: false,
+    user: null,
+    accessToken: null,
+    login: vi.fn(),
+    logout: vi.fn(),
+    refreshToken: vi.fn(),
+    hasTab: vi.fn().mockReturnValue(true),
+  }),
+}));
 
 // Mock react-markdown to avoid lazy/Suspense issues in tests
 vi.mock('react-markdown', () => ({
@@ -285,6 +301,34 @@ describe('ActionDrawerPreview', () => {
 
   // === Story 7.1: Business variant tests ===
   describe('business variant (Story 7.1)', () => {
+    beforeEach(() => {
+      vi.mocked(useAuth).mockReturnValue({
+        isAuthenticated: true,
+        isBusinessProfile: true,
+        isLoading: false,
+        user: null,
+        accessToken: null,
+        login: vi.fn(),
+        logout: vi.fn(),
+        refreshToken: vi.fn().mockResolvedValue(null),
+        hasTab: vi.fn().mockReturnValue(true),
+      });
+    });
+
+    afterEach(() => {
+      vi.mocked(useAuth).mockReturnValue({
+        isAuthenticated: true,
+        isBusinessProfile: false,
+        isLoading: false,
+        user: null,
+        accessToken: null,
+        login: vi.fn(),
+        logout: vi.fn(),
+        refreshToken: vi.fn().mockResolvedValue(null),
+        hasTab: vi.fn().mockReturnValue(true),
+      });
+    });
+
     const actionWithTechnicalTerms: ActionPreviewData = {
       name: 'Database Action', // Name is not sanitized
       description: 'Run the Ansible playbook via the pipeline to deploy changes',
@@ -303,7 +347,7 @@ describe('ActionDrawerPreview', () => {
 
     it('sanitizes technical terms in description for business variant (AC2)', () => {
       renderWithTheme(
-        <ActionDrawerPreview action={actionWithTechnicalTerms} variant="business" />
+        <ActionDrawerPreview action={actionWithTechnicalTerms} />
       );
 
       // Description should be sanitized
@@ -313,8 +357,9 @@ describe('ActionDrawerPreview', () => {
     });
 
     it('displays original description for default variant', () => {
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
       renderWithTheme(
-        <ActionDrawerPreview action={actionWithTechnicalTerms} variant="default" />
+        <ActionDrawerPreview action={actionWithTechnicalTerms} />
       );
 
       expect(screen.getByText(/playbook/i)).toBeInTheDocument();
@@ -322,7 +367,7 @@ describe('ActionDrawerPreview', () => {
 
     it('shows impact Alert callout for business variant (AC3)', () => {
       renderWithTheme(
-        <ActionDrawerPreview action={actionWithTechnicalTerms} variant="business" />
+        <ActionDrawerPreview action={actionWithTechnicalTerms} />
       );
 
       // Should have an Alert component with impact information
@@ -330,8 +375,9 @@ describe('ActionDrawerPreview', () => {
     });
 
     it('does not show impact Alert for default variant', () => {
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
       renderWithTheme(
-        <ActionDrawerPreview action={actionWithTechnicalTerms} variant="default" />
+        <ActionDrawerPreview action={actionWithTechnicalTerms} />
       );
 
       // No alert with impact label (the badge shows "Élevé" but not in Alert format)
@@ -340,7 +386,7 @@ describe('ActionDrawerPreview', () => {
 
     it('hides engine and platform metadata for business variant (black box)', () => {
       renderWithTheme(
-        <ActionDrawerPreview action={actionWithTechnicalTerms} variant="business" />
+        <ActionDrawerPreview action={actionWithTechnicalTerms} />
       );
 
       // Engine and platform should not be displayed
@@ -350,8 +396,9 @@ describe('ActionDrawerPreview', () => {
     });
 
     it('shows engine and platform for default variant', () => {
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
       renderWithTheme(
-        <ActionDrawerPreview action={actionWithTechnicalTerms} variant="default" />
+        <ActionDrawerPreview action={actionWithTechnicalTerms} />
       );
 
       expect(screen.getByText('Moteur')).toBeInTheDocument();
@@ -360,7 +407,7 @@ describe('ActionDrawerPreview', () => {
 
     it('uses simplified label "Options" instead of "Parametres attendus" (AC3)', () => {
       renderWithTheme(
-        <ActionDrawerPreview action={actionWithTechnicalTerms} variant="business" />
+        <ActionDrawerPreview action={actionWithTechnicalTerms} />
       );
 
       expect(screen.getByText('Options')).toBeInTheDocument();
@@ -369,7 +416,7 @@ describe('ActionDrawerPreview', () => {
 
     it('uses simplified label "Type" instead of "Categorie" (AC2)', () => {
       renderWithTheme(
-        <ActionDrawerPreview action={actionWithTechnicalTerms} variant="business" />
+        <ActionDrawerPreview action={actionWithTechnicalTerms} />
       );
 
       expect(screen.getByText('Type')).toBeInTheDocument();
@@ -378,7 +425,7 @@ describe('ActionDrawerPreview', () => {
 
     it('renders larger Execute button for business variant (AC3)', () => {
       renderWithTheme(
-        <ActionDrawerPreview action={actionWithTechnicalTerms} variant="business" />
+        <ActionDrawerPreview action={actionWithTechnicalTerms} />
       );
 
       const button = screen.getByRole('button', { name: /Executer/i });
@@ -387,8 +434,9 @@ describe('ActionDrawerPreview', () => {
     });
 
     it('renders normal Execute button for default variant', () => {
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: false, isLoading: false, user: null, accessToken: null, login: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
       renderWithTheme(
-        <ActionDrawerPreview action={actionWithTechnicalTerms} variant="default" />
+        <ActionDrawerPreview action={actionWithTechnicalTerms} />
       );
 
       const button = screen.getByRole('button', { name: /Executer/i });
@@ -397,7 +445,7 @@ describe('ActionDrawerPreview', () => {
 
     it('maintains accessibility in business variant', () => {
       renderWithTheme(
-        <ActionDrawerPreview action={actionWithTechnicalTerms} variant="business" />
+        <ActionDrawerPreview action={actionWithTechnicalTerms} />
       );
 
       const region = screen.getByRole('region');
@@ -415,7 +463,7 @@ describe('ActionDrawerPreview', () => {
         },
       };
       renderWithTheme(
-        <ActionDrawerPreview action={actionWithStats} variant="business" />
+        <ActionDrawerPreview action={actionWithStats} />
       );
 
       // Metrics section should be hidden for business users
@@ -475,7 +523,8 @@ describe('ActionDrawerPreview', () => {
     });
 
     it('hides metrics section for business variant (AC1 - business exclusion)', () => {
-      renderWithTheme(<ActionDrawerPreview action={actionWithStats} variant="business" />);
+      vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isBusinessProfile: true, isLoading: false, user: null, accessToken: null, login: vi.fn(), logout: vi.fn(), refreshToken: vi.fn().mockResolvedValue(null), hasTab: vi.fn().mockReturnValue(true) });
+      renderWithTheme(<ActionDrawerPreview action={actionWithStats} />);
 
       expect(screen.queryByTestId('metrics-section')).not.toBeInTheDocument();
       expect(screen.queryByText('Metriques (30 derniers jours)')).not.toBeInTheDocument();

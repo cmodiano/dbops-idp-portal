@@ -35,7 +35,7 @@ import {
   BarsOutlined,
   SearchOutlined,
 } from '@ant-design/icons';
-import { ActionCard, type ActionCardProps } from '../components/catalog/ActionCard';
+import { ActionCard } from '../components/catalog/ActionCard';
 import { ActionDrawerPreview } from '../components/catalog/ActionDrawerPreview';
 import { ActionTable } from '../components/catalog/ActionTable';
 import { ExecutionWizard } from '../components/catalog/ExecutionWizard';
@@ -368,14 +368,12 @@ export default function CatalogPage() {
   const renderActionCard = (action: CatalogAction) => {
     const isFav = favorites.has(action.id);
     const preview = toPreviewData(action);
-    const cardVariant: ActionCardProps['variant'] = isBusinessProfile ? 'business' : 'default';
 
     return (
       <div key={action.id}>
         <ActionCard
           action={preview}
           onClick={(e) => handleActionClick(action, e)}
-          variant={cardVariant}
           isFavorite={isFav}
           onToggleFavorite={(e) => handleToggleFavorite(action.id, e)}
           showFavoriteButton={isAuthenticated}
@@ -560,13 +558,11 @@ export default function CatalogPage() {
             canExecute={selectedActionCanExecute}
             allowedEnvironments={selectedActionEnvs}
             onExecute={handleExecuteClick}
-            variant={isBusinessProfile ? 'business' : 'default'}
             statsLoading={statsLoading}
           />
         ) : selectedAction ? (
           <ActionDrawerPreview
             action={toPreviewData(selectedAction)}
-            variant={isBusinessProfile ? 'business' : 'default'}
             statsLoading={statsLoading}
           />
         ) : null}
@@ -586,7 +582,6 @@ export default function CatalogPage() {
         }}
         onSuccess={handleExecutionSuccess}
         onBackToCatalog={handleBackToCatalog}
-        variant={isBusinessProfile ? 'simplified' : 'default'}
         onSuggestionClick={handleRemediationSuggestionClick}
         parentExecutionId={parentExecutionId}
       />

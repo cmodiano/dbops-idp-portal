@@ -24,6 +24,7 @@ import {
 } from '@ant-design/icons';
 import type { ActionPreviewData, ActionEngine } from '../../types/api';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { ImpactIndicator } from '../shared/ImpactIndicator';
 import { IMPACT_LABELS } from '../shared/impactLabels';
 import { STYLE_TOKENS } from '../../theme/styleTokens';
@@ -81,8 +82,9 @@ export function ActionCard({
 }: ActionCardProps) {
   const { effectiveMode } = useTheme();
   const isDark = effectiveMode === 'dark';
+  const { isBusinessProfile } = useAuth();
   const isPreview = variant === 'preview';
-  const isBusiness = variant === 'business';
+  const isBusiness = variant === 'business' || isBusinessProfile;
   const isClickable = !!onClick && !isPreview;
   const isWorkflow = action.item_type === 'workflow';
 

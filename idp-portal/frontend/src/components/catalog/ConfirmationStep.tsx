@@ -6,6 +6,7 @@
  */
 
 import { memo } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   Alert,
   Badge,
@@ -28,7 +29,6 @@ import { STEP_DESCRIPTIONS_SIMPLIFIED } from '../../utils/stepDescriptions';
 
 export interface ConfirmationStepProps {
   action: CatalogActionDetail;
-  variant: 'default' | 'simplified';
   selectedTargets: Target[];
   derivedEnvironment: ExecutionEnvironment | null;
   currentImpact: ImpactLevel | null;
@@ -49,7 +49,6 @@ export interface ConfirmationStepProps {
 
 export const ConfirmationStep = memo(function ConfirmationStep({
   action,
-  variant,
   selectedTargets,
   derivedEnvironment,
   currentImpact,
@@ -65,6 +64,7 @@ export const ConfirmationStep = memo(function ConfirmationStep({
   pageMeEnabled,
   onPageMeChange,
 }: ConfirmationStepProps) {
+  const { isBusinessProfile } = useAuth();
   const changeConfig = action?.change_type_config?.[derivedEnvironment?.toUpperCase() ?? ''];
   const isChangeRequired = changeConfig?.required ?? false;
 
@@ -73,7 +73,7 @@ export const ConfirmationStep = memo(function ConfirmationStep({
 
   return (
     <div>
-      {variant === 'simplified' && (
+      {isBusinessProfile && (
         <Alert
           type="info"
           showIcon
