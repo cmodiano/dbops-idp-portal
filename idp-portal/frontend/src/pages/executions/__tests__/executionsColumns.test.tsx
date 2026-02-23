@@ -96,6 +96,7 @@ function makeState(overrides: Partial<ExecutionColumnState> = {}): ExecutionColu
     integrationIconsMap: null,
     user: testUser,
     canViewAll: false,
+    canManage: false,
     cancellingId: null,
     restartLoadingId: null,
     ...overrides,
@@ -300,8 +301,8 @@ describe('executionsColumns', () => {
       expect(screen.queryByRole('button', { name: /annuler/i })).not.toBeInTheDocument();
     });
 
-    it('renders buttons for another user\'s execution when canViewAll is true', () => {
-      renderTable([otherUserExecution], defaultHandlers, makeState({ canViewAll: true }));
+    it('renders buttons for another user\'s execution when canManage is true', () => {
+      renderTable([otherUserExecution], defaultHandlers, makeState({ canManage: true }));
       expect(screen.getByRole('button', { name: /relancer/i })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /annuler/i })).toBeInTheDocument();
     });

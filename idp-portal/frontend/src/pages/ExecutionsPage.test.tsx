@@ -67,11 +67,19 @@ vi.mock('../services/catalog_service', () => ({
   }),
   fetchCatalogActions: vi.fn().mockResolvedValue([]),
 }));
+// Story 36.2: capture onSuccess to test post-wizard refresh trigger
+let _wizardOnSuccess: ((id: number) => void) | undefined;
 vi.mock('../components/catalog/ExecutionWizard', () => ({
-  ExecutionWizard: ({ open }: { open: boolean }) => open ? <div data-testid="execution-wizard">Wizard</div> : null,
+  ExecutionWizard: ({ open, onSuccess }: { open: boolean; onSuccess?: (id: number) => void }) => {
+    _wizardOnSuccess = onSuccess;
+    return open ? <div data-testid="execution-wizard">Wizard</div> : null;
+  },
 }));
 vi.mock('../hooks/useWebSocket', () => ({
   useWebSocket: () => ({ steps: [], execution: null, loading: false, error: null }),
+}));
+vi.mock('../hooks/useActorExecutionSync', () => ({
+  useActorExecutionSync: vi.fn(),
 }));
 
 /** Mock auth session with profile */
@@ -2017,6 +2025,41 @@ describe('ExecutionsPage', () => {
       const headers = within(table).getAllByRole('columnheader');
       const headerTexts = headers.map(h => h.textContent);
       expect(headerTexts).toContain('Utilisateur');
+    });
+  });
+  // ── Story 36.2 — Trigger refresh post-wizard ──────────────────────────────
+  describe('Story 36.2 — Trigger refresh post-wizard (AC4)', () => {
+    it('6.1 — après fermeture réussie du wizard (onSuccess), refresh() est appelé (listExecutions rappelé)', async () => {
+      vi.mocked(executionService.listExecutions).mockResolvedValue({
+        data: mockExecutions,
+        pagination: { page: 1, page_size: 25, total: mockExecutions.length, total_pages: 1 },
+      });
+      vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
+        data: [],
+        pagination: { page: 1, page_size: 50, total: 0, total_pages: 1 },
+      });
+
+      await act(async () => {
+        renderWithProviders();
+      });
+
+      // Attendre le chargement initial — _wizardOnSuccess est capturé lors du premier rendu
+      await waitFor(() => {
+        expect(vi.mocked(executionService.listExecutions)).toHaveBeenCalled();
+        expect(_wizardOnSuccess).toBeDefined();
+      });
+
+      const callsBefore = vi.mocked(executionService.listExecutions).mock.calls.length;
+
+      // Déclencher onSuccess du wizard (simule la soumission réussie d'une exécution)
+      await act(async () => {
+        _wizardOnSuccess!(99);
+      });
+
+      // refresh() doit relancer listExecutions
+      await waitFor(() => {
+        expect(vi.mocked(executionService.listExecutions).mock.calls.length).toBeGreaterThan(callsBefore);
+      });
     });
   });
 }); // end ExecutionsPage

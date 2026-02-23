@@ -9,7 +9,7 @@
  * When there are no running executions, it still polls at BACKGROUND_POLL_INTERVAL_MS so new executions
  * triggered by other users eventually appear in the list.
  */
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   listExecutions,
   listPendingApprovals,
@@ -27,6 +27,8 @@ import type {
   ExecutionStatusType,
 } from '../types/api';
 import logger from '../services/logger';
+import { useAuth } from '../contexts/AuthContext';
+import { useActorExecutionSync } from './useActorExecutionSync';
 
 const PAGE_SIZE = 25;
 
@@ -67,6 +69,8 @@ export interface UseExecutionsDataReturn {
   // Refs for stale closure prevention (Story 22.14)
   isRefreshingRef: React.MutableRefObject<boolean>;
   refetchCurrentState: () => Promise<void>;
+  // Story 36.2: trigger immediate refresh after wizard submission
+  refresh: () => void;
   // Computed
   PAGE_SIZE: number;
 }
@@ -75,6 +79,8 @@ export const useExecutionsData = (
   filters: ExecutionFilters,
   canApprove: boolean,
 ): UseExecutionsDataReturn => {
+  const { user } = useAuth();
+
   const [integrationIconsMap, setIntegrationIconsMap] = useState<IntegrationIconsMap | null>(null);
   const [executions, setExecutions] = useState<ExecutionResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -230,6 +236,31 @@ export const useExecutionsData = (
     loadStats();
   }, [activeScope, filters]);
 
+  // Story 36.2 — Real-time WS sync for current user's active executions
+  const actorActiveIds = useMemo(
+    () =>
+      executions
+        .filter((e) => e.user_id === user?.id && ['RUNNING', 'SUBMITTED'].includes(e.status))
+        .map((e) => e.id),
+    [executions, user?.id],
+  );
+
+  const handleActorStatusUpdate = useCallback(
+    (id: number, status: string, data?: Partial<ExecutionResponse>) => {
+      setExecutions((prev) =>
+        prev.map((e) => (e.id === id ? { ...e, status: status as ExecutionResponse['status'], ...(data ?? {}) } : e)),
+      );
+    },
+    [],
+  );
+
+  useActorExecutionSync(actorActiveIds, handleActorStatusUpdate);
+
+  // Expose refresh for post-wizard trigger (Story 36.2 AC4)
+  const refresh = useCallback(() => {
+    fetchData(currentPageRef.current, activeScopeRef.current);
+  }, [fetchData]);
+
   return {
     executions, loading, error, currentPage, setCurrentPage, totalCount,
     sortField, setSortField, sortOrder, setSortOrder,
@@ -237,7 +268,7 @@ export const useExecutionsData = (
     statsData, statsLoading, timeSeriesData, timeSeriesLoading,
     pendingApprovals, pendingApprovalsLoading, loadPendingApprovals,
     integrationIconsMap,
-    isRefreshingRef, refetchCurrentState,
+    isRefreshingRef, refetchCurrentState, refresh,
     PAGE_SIZE,
   };
 };

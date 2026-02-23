@@ -1,6 +1,6 @@
 # Story 36.2 : Mise à jour immédiate pour l'acteur
 
-Status: in-progress
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -38,46 +38,46 @@ afin de savoir sans attendre si mon action a démarré et quel est son résultat
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Nouveau hook `useActorExecutionSync.ts`** (AC: #1, #2, #5)
-  - [ ] 1.1 Créer `idp-portal/frontend/src/hooks/useActorExecutionSync.ts`
-  - [ ] 1.2 Signature : `useActorExecutionSync(executionIds: number[], onStatusUpdate: (id: number, status: string, data?: Partial<ExecutionResponse>) => void): void`
-  - [ ] 1.3 Pour chaque `executionId`, ouvrir une connexion WebSocket vers `/ws/executions/${executionId}` en réutilisant le pattern auth de `useWebSocket.ts` : `ws.onopen → ws.send({type:'auth', token})` ; ne pas mettre le token en URL
-  - [ ] 1.4 Sur `execution_complete` → appeler `onStatusUpdate(id, data.status ?? 'COMPLETED', data)` puis fermer la WS (statut terminal)
-  - [ ] 1.5 Sur `execution_failed` → appeler `onStatusUpdate(id, 'FAILED', {status:'FAILED', error_message: data.error_message})` puis fermer la WS
-  - [ ] 1.6 Sur erreur WS (code ≠ 4001) → activer fallback polling 2000 ms sur `GET /api/v1/executions/${id}` ; arrêt sur statut terminal ; ne pas relancer après code 4001 (auth failure)
-  - [ ] 1.7 Synchroniser `wsRefs` (Map<number, WebSocket>) quand `executionIds` change : créer WS pour les nouveaux IDs, fermer et supprimer pour les IDs disparus
-  - [ ] 1.8 Cleanup `useEffect` retour : fermer toutes les WS ouvertes et annuler tous les intervalles polling actifs
+- [x] **Task 1 — Nouveau hook `useActorExecutionSync.ts`** (AC: #1, #2, #5)
+  - [x] 1.1 Créer `idp-portal/frontend/src/hooks/useActorExecutionSync.ts`
+  - [x] 1.2 Signature : `useActorExecutionSync(executionIds: number[], onStatusUpdate: (id: number, status: string, data?: Partial<ExecutionResponse>) => void): void`
+  - [x] 1.3 Pour chaque `executionId`, ouvrir une connexion WebSocket vers `/ws/executions/${executionId}` en réutilisant le pattern auth de `useWebSocket.ts` : `ws.onopen → ws.send({type:'auth', token})` ; ne pas mettre le token en URL
+  - [x] 1.4 Sur `execution_complete` → appeler `onStatusUpdate(id, data.status ?? 'COMPLETED', data)` puis fermer la WS (statut terminal)
+  - [x] 1.5 Sur `execution_failed` → appeler `onStatusUpdate(id, 'FAILED', {status:'FAILED', error_message: data.error_message})` puis fermer la WS
+  - [x] 1.6 Sur erreur WS (code ≠ 4001) → activer fallback polling 2000 ms sur `GET /api/v1/executions/${id}` ; arrêt sur statut terminal ; ne pas relancer après code 4001 (auth failure)
+  - [x] 1.7 Synchroniser `wsRefs` (Map<number, WebSocket>) quand `executionIds` change : créer WS pour les nouveaux IDs, fermer et supprimer pour les IDs disparus
+  - [x] 1.8 Cleanup `useEffect` retour : fermer toutes les WS ouvertes et annuler tous les intervalles polling actifs
 
-- [ ] **Task 2 — Intégrer dans `useExecutionsData.ts`** (AC: #1, #2, #3, #4)
-  - [ ] 2.1 Importer `useAuth` (déjà disponible) pour obtenir `user.id` (type `number | undefined`)
-  - [ ] 2.2 Calculer `actorActiveIds` via `useMemo` : filtrer `executions` par `e.user_id === user?.id && ['RUNNING','SUBMITTED'].includes(e.status)`, extraire `.map(e => e.id)`
-  - [ ] 2.3 Implémenter `handleActorStatusUpdate` via `useCallback` : `setExecutions(prev => prev.map(e => e.id === id ? {...e, status, ...(data ?? {})} : e))`
-  - [ ] 2.4 Appeler `useActorExecutionSync(actorActiveIds, handleActorStatusUpdate)` dans le hook
-  - [ ] 2.5 Exposer une fonction `refresh()` publique qui relance `fetchExecutions()` (pour le trigger post-wizard)
-  - [ ] 2.6 ⚠️ Ne pas supprimer le fast polling existant (4000 ms sur `hasActiveExecutions`) — il reste actif pour les cas sans WS et servira aux observateurs (Story 36.3)
+- [x] **Task 2 — Intégrer dans `useExecutionsData.ts`** (AC: #1, #2, #3, #4)
+  - [x] 2.1 Importer `useAuth` (déjà disponible) pour obtenir `user.id` (type `number | undefined`)
+  - [x] 2.2 Calculer `actorActiveIds` via `useMemo` : filtrer `executions` par `e.user_id === user?.id && ['RUNNING','SUBMITTED'].includes(e.status)`, extraire `.map(e => e.id)`
+  - [x] 2.3 Implémenter `handleActorStatusUpdate` via `useCallback` : `setExecutions(prev => prev.map(e => e.id === id ? {...e, status, ...(data ?? {})} : e))`
+  - [x] 2.4 Appeler `useActorExecutionSync(actorActiveIds, handleActorStatusUpdate)` dans le hook
+  - [x] 2.5 Exposer une fonction `refresh()` publique qui relance `fetchExecutions()` (pour le trigger post-wizard)
+  - [x] 2.6 ⚠️ Ne pas supprimer le fast polling existant (4000 ms sur `hasActiveExecutions`) — il reste actif pour les cas sans WS et servira aux observateurs (Story 36.3)
 
-- [ ] **Task 3 — Trigger refresh post-wizard dans `ExecutionsPage.tsx`** (AC: #4)
-  - [ ] 3.1 Dans le callback `onSuccess` du wizard (déjà existant), appeler `refresh()` exposé par `useExecutionsData`
-  - [ ] 3.2 Vérifier que `ExecutionWizard.onSuccess` reçoit bien l'objet `ExecutionCreateResponse` contenant `execution_id`
-  - [ ] 3.3 Si `execution_id` est disponible à la fermeture du wizard, l'injecter dans le state local pour que `actorActiveIds` le détecte immédiatement (avant même le prochain poll)
+- [x] **Task 3 — Trigger refresh post-wizard dans `ExecutionsPage.tsx`** (AC: #4)
+  - [x] 3.1 Dans le callback `onSuccess` du wizard (déjà existant), appeler `refresh()` exposé par `useExecutionsData`
+  - [x] 3.2 Vérifier que `ExecutionWizard.onSuccess` reçoit bien l'objet `ExecutionCreateResponse` contenant `execution_id`
+  - [x] 3.3 Si `execution_id` est disponible à la fermeture du wizard, l'injecter dans le state local pour que `actorActiveIds` le détecte immédiatement (avant même le prochain poll)
 
-- [ ] **Task 4 — Tests `useActorExecutionSync.test.ts`** (AC: #1, #2, #5)
-  - [ ] 4.1 Créer `idp-portal/frontend/src/hooks/useActorExecutionSync.test.ts`
-  - [ ] 4.2 Test : connexion WS créée pour chaque `executionId` fourni (mock `WebSocket` global)
-  - [ ] 4.3 Test : `execution_complete` → `onStatusUpdate(id, 'COMPLETED', ...)` appelé + WS fermée
-  - [ ] 4.4 Test : `execution_failed` → `onStatusUpdate(id, 'FAILED', {...})` appelé + WS fermée
-  - [ ] 4.5 Test : WS erreur (code ≠ 4001) → fallback polling 2000 ms activé via `setInterval` mock
-  - [ ] 4.6 Test : WS erreur code 4001 → aucun reconnect, aucun polling
-  - [ ] 4.7 Test : quand un ID quitte `executionIds`, sa WS est fermée
-  - [ ] 4.8 Test : unmount → toutes les WS fermées, tous les intervalles annulés
+- [x] **Task 4 — Tests `useActorExecutionSync.test.ts`** (AC: #1, #2, #5)
+  - [x] 4.1 Créer `idp-portal/frontend/src/hooks/useActorExecutionSync.test.ts`
+  - [x] 4.2 Test : connexion WS créée pour chaque `executionId` fourni (mock `WebSocket` global)
+  - [x] 4.3 Test : `execution_complete` → `onStatusUpdate(id, 'COMPLETED', ...)` appelé + WS fermée
+  - [x] 4.4 Test : `execution_failed` → `onStatusUpdate(id, 'FAILED', {...})` appelé + WS fermée
+  - [x] 4.5 Test : WS erreur (code ≠ 4001) → fallback polling 2000 ms activé via `setInterval` mock
+  - [x] 4.6 Test : WS erreur code 4001 → aucun reconnect, aucun polling
+  - [x] 4.7 Test : quand un ID quitte `executionIds`, sa WS est fermée
+  - [x] 4.8 Test : unmount → toutes les WS fermées, tous les intervalles annulés
 
-- [ ] **Task 5 — Tests `useExecutionsData.test.ts`** (AC: #1, #3, #4)
-  - [ ] 5.1 Test : `actorActiveIds` contient uniquement les exécutions de l'utilisateur courant en RUNNING/SUBMITTED (pas celles d'autres users)
-  - [ ] 5.2 Test : `handleActorStatusUpdate(1, 'COMPLETED')` → l'exécution #1 dans la liste passe à COMPLETED
-  - [ ] 5.3 Test : `refresh()` relance `listExecutions` (mock api vérifié appelé une seconde fois)
+- [x] **Task 5 — Tests `useExecutionsData.test.ts`** (AC: #1, #3, #4)
+  - [x] 5.1 Test : `actorActiveIds` contient uniquement les exécutions de l'utilisateur courant en RUNNING/SUBMITTED (pas celles d'autres users)
+  - [x] 5.2 Test : `handleActorStatusUpdate(1, 'COMPLETED')` → l'exécution #1 dans la liste passe à COMPLETED
+  - [x] 5.3 Test : `refresh()` relance `listExecutions` (mock api vérifié appelé une seconde fois)
 
-- [ ] **Task 6 — Tests `ExecutionsPage.test.tsx`** (AC: #4)
-  - [ ] 6.1 Test : après fermeture réussie du wizard (`onSuccess` callback), `refresh()` de `useExecutionsData` est appelé
+- [x] **Task 6 — Tests `ExecutionsPage.test.tsx`** (AC: #4)
+  - [x] 6.1 Test : après fermeture réussie du wizard (`onSuccess` callback), `refresh()` de `useExecutionsData` est appelé
 
 ## Dev Notes
 
@@ -370,4 +370,31 @@ claude-sonnet-4-6
 
 ### Completion Notes List
 
+- Implémenté `useActorExecutionSync.ts` : hook WebSocket par exécution, fallback polling 2000 ms, auth token en message (pas en URL, Story 22.13), fermeture sur code 4001
+- Intégré dans `useExecutionsData.ts` : `actorActiveIds` via `useMemo` filtre RUNNING/SUBMITTED de l'utilisateur courant, `handleActorStatusUpdate` via `useCallback`, `refresh()` exposé
+- `ExecutionsPage.tsx` : `handleWizardSuccess` combine `handleRestartSuccess` + `refresh()` pour déclenchement immédiat après wizard
+- 11 tests `useActorExecutionSync` + 4 tests `useExecutionsData` + 1 test `ExecutionsPage` (Story 36.2) ajoutés
+- Mock `useActorExecutionSync` ajouté dans `ExecutionsPage.test.tsx` pour éviter les connexions WebSocket pendant les tests
+- Suite complète : 2459/2459 tests passent, 0 régression
+- Fast polling 4000 ms/30000 ms préservé (nécessaire pour Story 36.3 observateurs)
+
 ### File List
+
+- `idp-portal/frontend/src/hooks/useActorExecutionSync.ts` (NOUVEAU)
+- `idp-portal/frontend/src/hooks/useActorExecutionSync.test.ts` (NOUVEAU)
+- `idp-portal/frontend/src/hooks/useExecutionsData.ts` (MODIFIÉ)
+- `idp-portal/frontend/src/hooks/useExecutionsData.test.ts` (NOUVEAU)
+- `idp-portal/frontend/src/pages/ExecutionsPage.tsx` (MODIFIÉ)
+- `idp-portal/frontend/src/pages/ExecutionsPage.test.tsx` (MODIFIÉ)
+- `idp-portal/frontend/src/pages/executions/executionsColumns.tsx` (MODIFIÉ — fix RBAC canManage)
+- `idp-portal/frontend/src/pages/executions/__tests__/executionsColumns.test.tsx` (MODIFIÉ — tests canManage)
+- `idp-portal/frontend/src/__tests__/__snapshots__/ExecutionsPage.compact.test.tsx.snap` (MODIFIÉ — snapshot MAJ)
+- `idp-portal/django_backend/catalog/services.py` (MODIFIÉ — fix validation publish/enable workflow)
+- `idp-portal/django_backend/catalog/tests/test_services.py` (MODIFIÉ — tests validation workflow)
+- `_bmad-output/implementation-artifacts/36-2-mise-a-jour-immediate-pour-acteur.md` (MODIFIÉ)
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` (MODIFIÉ)
+
+## Change Log
+
+- 2026-02-23 : Implémentation Story 36.2 — Mise à jour immédiate pour l'acteur. Nouveau hook `useActorExecutionSync` (WS + fallback polling), intégration dans `useExecutionsData` (actorActiveIds, handleActorStatusUpdate, refresh), trigger refresh post-wizard dans `ExecutionsPage`. 16 nouveaux tests (11 + 4 + 1), 2459/2459 tests passent.
+- 2026-02-23 : Code review — Fix bug `ws.close()` après statut terminal / nettoyage IDs déclenchait fallback polling non voulu (`useActorExecutionSync.ts` : guard `wasTracked` dans `onclose` + suppression wsMap avant `ws.close()`). Ajout tests 4.3b, 4.4b, 4.7 étendu pour régressions. File List complétée avec 5 fichiers non documentés.

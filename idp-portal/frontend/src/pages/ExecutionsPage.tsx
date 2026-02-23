@@ -67,7 +67,7 @@ export default function ExecutionsPage() {
     activeScope, setActiveScope, userHasChosenScope,
     statsData, statsLoading, timeSeriesData, timeSeriesLoading,
     pendingApprovals, pendingApprovalsLoading, loadPendingApprovals,
-    integrationIconsMap, isRefreshingRef, refetchCurrentState, PAGE_SIZE,
+    integrationIconsMap, isRefreshingRef, refetchCurrentState, refresh, PAGE_SIZE,
   } = useExecutionsData(filters, canApprove);
 
   // Scope sync (Story 8.9, 36.1)
@@ -94,6 +94,12 @@ export default function ExecutionsPage() {
     restartWizardOpen, restartAction, restartAllowedEnvs, restartInitialParams,
     restartLoadingId, handleRestartExecution, handleRestartWizardClose, handleRestartSuccess,
   } = useExecutionRestart(refetchCurrentState, isRefreshingRef);
+
+  // Story 36.2 AC4: after wizard success, immediately refresh the list
+  const handleWizardSuccess = useCallback((executionId: number) => {
+    handleRestartSuccess(executionId);
+    refresh();
+  }, [handleRestartSuccess, refresh]);
 
   // Cancel handler (Story 17.14)
   const handleCancelExecution = useCallback((executionId: number) => {
@@ -184,9 +190,9 @@ export default function ExecutionsPage() {
   const columns = useMemo(() =>
     getExecutionsColumns(
       { onCancelExecution: handleCancelExecution, onRestartExecution: handleRestartExecution },
-      { activeScope, sortField, sortOrder, integrationIconsMap, user, canViewAll, cancellingId, restartLoadingId },
+      { activeScope, sortField, sortOrder, integrationIconsMap, user, canViewAll, canManage: canApprove, cancellingId, restartLoadingId },
     ),
-    [activeScope, sortField, sortOrder, integrationIconsMap, user, canViewAll, cancellingId, handleCancelExecution, restartLoadingId, handleRestartExecution]
+    [activeScope, sortField, sortOrder, integrationIconsMap, user, canViewAll, canApprove, cancellingId, handleCancelExecution, restartLoadingId, handleRestartExecution]
   );
 
   const handleTableChange = (
@@ -294,7 +300,7 @@ export default function ExecutionsPage() {
 
       <ExecutionWizard
         open={restartWizardOpen} action={restartAction} allowedEnvironments={restartAllowedEnvs}
-        onCancel={handleRestartWizardClose} onSuccess={handleRestartSuccess} initialParams={restartInitialParams}
+        onCancel={handleRestartWizardClose} onSuccess={handleWizardSuccess} initialParams={restartInitialParams}
       />
     </div>
   );

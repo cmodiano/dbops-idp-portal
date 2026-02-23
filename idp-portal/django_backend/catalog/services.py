@@ -457,8 +457,8 @@ class CatalogService:
         # Validate transition
         new_status = _validate_transition(action.status, transition)
 
-        # Workflow: cannot publish if any referenced action is disabled or missing
-        if transition == 'publish' and action.item_type == ActionItemType.WORKFLOW:
+        # Workflow: cannot publish or enable if any referenced action is disabled or missing
+        if action.item_type == ActionItemType.WORKFLOW and transition in ('publish', 'enable'):
             _validate_workflow_can_be_published(action)
         
         # Update status

@@ -471,7 +471,7 @@ development_status:
     # Réf: planning-artifacts/epic-36-vue-executions-partagee-mise-a-jour-statut.md, spec-vue-executions-partagee-mise-a-jour-statut.md
     epic-36: in-progress
     36-1-vue-partagee-liste-et-droits-rbac: done
-    36-2-mise-a-jour-immediate-pour-acteur: in-progress
+    36-2-mise-a-jour-immediate-pour-acteur: done # code-review 2026-02-23: 2 HIGH fixes (ws.close() → fallback polling bug, sync cleanup), 2 MEDIUM fixes (test 4.7 étendu + tests 4.3b/4.4b, File List 5 fichiers manquants), 88 frontend tests pass
     36-3-polling-pour-observateurs: backlog
     epic-36-retrospective: optional
     # === Epic 37: Inventaire — Environnement par serveur, colonne paramètre, filtre engine_type ===
