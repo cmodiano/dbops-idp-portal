@@ -18,6 +18,7 @@ on:
 
 jobs:
   test:
+    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -77,6 +78,7 @@ jobs:
           retention-days: 7
 
   lint:
+    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -90,6 +92,7 @@ jobs:
         run: ruff check .
 
   type-check:
+    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

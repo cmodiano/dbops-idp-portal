@@ -15,6 +15,8 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework.request import Request
 
+from types import SimpleNamespace
+
 from catalog.models import Action
 from core.exceptions import BadRequestError
 from core.permissions import IsDBAOrDBOPS
@@ -22,6 +24,11 @@ from executions.utils.rbac_helpers import get_allowed_action_ids_for_user
 
 # Fixed-offset UTC — Oracle Thin Mode ne supporte pas les named timezones (DPY-3022)
 UTC = dt_timezone(timedelta(0))
+
+
+def _request_like(user: Any) -> Any:
+    """Minimal request-like object for IsDBAOrDBOPS.has_permission (same logic as view-level checks)."""
+    return SimpleNamespace(user=user)
 
 
 def parse_int(value: str | None, default: int, *, name: str) -> int:
@@ -123,10 +130,9 @@ def apply_scope_filter(qs: QuerySet, *, user: Any, scope: str) -> tuple[QuerySet
         qs = qs.filter(user_id=user.id)
         return qs, "mine"
 
-    # scope == "all"
-    profile_str = (getattr(user, 'profile', '') or '').lower()
-    is_admin = profile_str in IsDBAOrDBOPS.ADMIN_PROFILES
-    if is_admin:
+    # scope == "all" — use central permission helper so DBA/DBOPS via profile, profiles, or AD groups are recognized
+    request_like = _request_like(user)
+    if IsDBAOrDBOPS().has_permission(request_like, None):
         # Admins (DBA/DBOPS) voient tout — comportement actuel inchangé (AC3)
         return qs, "all"
 

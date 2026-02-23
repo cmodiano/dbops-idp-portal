@@ -230,7 +230,7 @@ export function StepDetailDrawer({
           <Alert
             type="info"
             showIcon
-            title="Étape en attente"
+            message="Étape en attente"
             description="Cette étape n'a pas encore été exécutée. Les détails apparaîtront dès le démarrage."
             data-testid="step-pending-alert"
           />
@@ -285,7 +285,7 @@ export function StepDetailDrawer({
                     <Alert
                       type="warning"
                       showIcon
-                      title="Impossible de charger la timeline de l'action"
+                      message="Impossible de charger la timeline de l'action"
                       description={childError}
                       style={{ marginBottom: 12 }}
                     />

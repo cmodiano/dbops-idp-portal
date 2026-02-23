@@ -5,9 +5,13 @@
  * Handles listing executions, stats, time series, pending approvals, and integration icons.
  *
  * When the list contains running executions (RUNNING, SUBMITTED, PENDING_APPROVAL),
- * the hook polls every POLL_INTERVAL_MS so the view updates when status changes (e.g. "En cours" → "Terminée").
- * When there are no running executions, it still polls at BACKGROUND_POLL_INTERVAL_MS so new executions
- * triggered by other users eventually appear in the list.
+ * the hook polls every OBSERVER_POLL_INTERVAL_MS (10 s) so observers see status changes
+ * (e.g. "En cours" → "Terminée"). The actor's own executions also receive faster real-time
+ * updates via WebSocket (useActorExecutionSync, Story 36.2).
+ * When there are no running executions, it still polls at BACKGROUND_POLL_INTERVAL_MS so new
+ * executions triggered by other users eventually appear in the list.
+ * Polling respects the Page Visibility API: skipped when the tab is hidden, and an immediate
+ * refresh fires when the tab becomes visible again (Story 36.3).
  */
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
@@ -35,9 +39,10 @@ const PAGE_SIZE = 25;
 /** Statuses that indicate an execution is still in progress; list should poll while any of these are present. */
 const RUNNING_STATUSES: ExecutionStatusType[] = ['RUNNING', 'SUBMITTED', 'PENDING_APPROVAL'];
 
-const POLL_INTERVAL_MS = 4000;
-/** Slower interval when no running executions, so new executions from other users appear in the list. */
-const BACKGROUND_POLL_INTERVAL_MS = 30000;
+/** Observer polling interval: refresh the full list so status changes from other users become visible. */
+const OBSERVER_POLL_INTERVAL_MS = 10_000;
+/** Interval when no running executions; 5–10s for observer UX so new executions from other users appear sooner. */
+const BACKGROUND_POLL_INTERVAL_MS = 10_000;
 
 export interface UseExecutionsDataReturn {
   // Executions
@@ -130,36 +135,51 @@ export const useExecutionsData = (
     return fetchData(currentPageRef.current, activeScopeRef.current);
   }, [fetchData]);
 
-  // Silent refetch: update list + stats + time series without toggling loading (for polling)
+  // Silent refetch: update list + stats + time series without toggling loading (for polling).
+  // In-flight guard prevents overlapping polls; list is always applied; stats/timeSeries are best-effort.
   const refetchSilent = useCallback(async () => {
+    if (isRefreshingRef.current) return;
+    isRefreshingRef.current = true;
     const page = currentPageRef.current;
     const scope = activeScopeRef.current;
     const offset = (page - 1) * PAGE_SIZE;
     try {
-      const [listResult, stats, timeSeries] = await Promise.all([
-        listExecutions(PAGE_SIZE, offset, scope, filters),
-        fetchExecutionStats(scope, filters),
-        fetchExecutionTimeSeries(scope, filters),
-      ]);
+      const listResult = await listExecutions(PAGE_SIZE, offset, scope, filters);
       setExecutions(listResult.data);
       setTotalCount(listResult.pagination.total);
-      setStatsData(stats);
-      setTimeSeriesData(timeSeries);
+      // Best-effort: failures must not prevent list updates; update state only on success
+      fetchExecutionStats(scope, filters)
+        .then((stats) => setStatsData(stats))
+        .catch(() => null);
+      fetchExecutionTimeSeries(scope, filters)
+        .then((data) => setTimeSeriesData(data))
+        .catch(() => null);
     } catch (err) {
       logger.error('Executions poll refetch failed', { error: err instanceof Error ? err.message : String(err) });
+    } finally {
+      isRefreshingRef.current = false;
     }
   }, [filters]);
 
-  // Poll so the list stays up to date: fast when any execution is running, slower otherwise (e.g. new executions from other users)
+  // Poll so the list stays up to date: observer interval when running, slower otherwise.
+  // Respects Page Visibility API: skip poll when tab is hidden, fire immediately on tab focus (Story 36.3).
   useEffect(() => {
     const hasRunning = executions.some((e) => RUNNING_STATUSES.includes(e.status));
-    const intervalMs = hasRunning ? POLL_INTERVAL_MS : BACKGROUND_POLL_INTERVAL_MS;
+    const intervalMs = hasRunning ? OBSERVER_POLL_INTERVAL_MS : BACKGROUND_POLL_INTERVAL_MS;
 
     const intervalId = setInterval(() => {
-      refetchSilent();
+      if (!document.hidden) refetchSilent();
     }, intervalMs);
 
-    return () => clearInterval(intervalId);
+    const handleVisibility = () => {
+      if (!document.hidden) refetchSilent();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [executions, refetchSilent]);
 
   // Time series (Story 9.10)

@@ -95,11 +95,10 @@ export default function ExecutionsPage() {
     restartLoadingId, handleRestartExecution, handleRestartWizardClose, handleRestartSuccess,
   } = useExecutionRestart(refetchCurrentState, isRefreshingRef);
 
-  // Story 36.2 AC4: after wizard success, immediately refresh the list
+  // Story 36.2 AC4: after wizard success, refresh via useExecutionRestart's refetchCurrentState (no duplicate fetch)
   const handleWizardSuccess = useCallback((executionId: number) => {
     handleRestartSuccess(executionId);
-    refresh();
-  }, [handleRestartSuccess, refresh]);
+  }, [handleRestartSuccess]);
 
   // Cancel handler (Story 17.14)
   const handleCancelExecution = useCallback((executionId: number) => {

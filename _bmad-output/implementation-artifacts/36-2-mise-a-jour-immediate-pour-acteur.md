@@ -329,7 +329,7 @@ const handleWizardSuccess = useCallback(() => {
 
 ### Project Structure Notes
 
-```
+```text
 idp-portal/
   frontend/src/
     hooks/

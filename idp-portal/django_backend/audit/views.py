@@ -102,7 +102,7 @@ def _derive_status(action_type: str, details: dict | None) -> str:
             s_up = s.upper()
             if s_up in ("COMPLETED",):
                 return "success"
-            if s_up in ("FAILED", "REJECTED", "CANCELLED"):
+            if s_up in ("FAILED", "REJECTED", "CANCELLED", "INTEGRATION_ERROR"):
                 return "failed"
             if s_up in ("SUBMITTED", "RUNNING", "PENDING_APPROVAL"):
                 return "running"
@@ -114,6 +114,7 @@ def _derive_status(action_type: str, details: dict | None) -> str:
         AuditActionType.EXECUTION_FAILED,
         AuditActionType.EXECUTION_REJECTED,
         AuditActionType.EXECUTION_CANCELLED,
+        AuditActionType.EXECUTION_INTEGRATION_ERROR,
     ):
         return "failed"
     if action_type in (
