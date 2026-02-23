@@ -192,7 +192,7 @@ export default function ExecutionsPage() {
     sorter: SorterResult<ExecutionResponse> | SorterResult<ExecutionResponse>[],
   ) => {
     if (pagination.current && pagination.current !== currentPage) setCurrentPage(pagination.current);
-    const singleSorter = Array.isArray(sorter) ? sorter[0] : sorter;
+    const singleSorter = (Array.isArray(sorter) ? sorter[0] : sorter) as import('antd/es/table/interface').SorterResult<ExecutionResponse> | undefined;
     if (singleSorter?.field) {
       setSortField(singleSorter.field as string);
       setSortOrder(singleSorter.order || 'descend');

@@ -28,10 +28,10 @@ const mockMessage = {
 
 // Spy on App.useApp to provide mocked message
 vi.spyOn(App, 'useApp').mockReturnValue({
-  message: mockMessage,
+  message: { ...mockMessage, open: vi.fn(), destroy: vi.fn() },
   notification: {} as any,
   modal: {} as any,
-});
+} as unknown as ReturnType<typeof App.useApp>);
 
 // Mock the dashboard service
 vi.mock('../../../services/dashboard_service', () => ({
@@ -168,7 +168,7 @@ describe('ExportButton', () => {
       engine: 'aap',
       environment: 'prod',
       tags: ['oracle', 'patch'],
-      status: 'COMPLETED',
+      status: 'COMPLETED' as const,
       fromDate: '2026-01-01',
       toDate: '2026-01-31',
     };

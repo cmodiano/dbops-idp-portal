@@ -26,6 +26,7 @@ export interface WizardExecutionContextValue {
 
 const WizardExecutionContext = createContext<WizardExecutionContextValue | null>(null);
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useWizardExecutionContext(): WizardExecutionContextValue {
   const ctx = useContext(WizardExecutionContext);
   if (!ctx) throw new Error('useWizardExecutionContext must be used within WizardExecutionContext.Provider');

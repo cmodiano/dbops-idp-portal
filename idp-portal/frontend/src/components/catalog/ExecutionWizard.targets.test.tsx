@@ -85,11 +85,10 @@ const mockActionWithTargets: CatalogActionDetail = {
     STAGING: { level: 'medium', criteria: null },
     PROD: { level: 'high', criteria: null },
   },
+  impact_level: null,
   default_impact_level: 'medium',
   status: 'published',
-  created_by: 1,
   created_at: '2026-02-05T00:00:00Z',
-  updated_at: null,
   tags: ['oracle'],
   execution_count: 0,
   requires_target: true, // Explicit true

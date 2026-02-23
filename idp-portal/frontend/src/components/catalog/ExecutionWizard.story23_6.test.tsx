@@ -69,12 +69,11 @@ const mkAction = (
   engine: 'Oracle',
   platform: 'AAP',
   parameters_schema: schema,
+  impact_level: null,
   impact_rules: null,
   default_impact_level: 'low',
   status: 'published',
-  created_by: 1,
   created_at: '2026-02-09T00:00:00Z',
-  updated_at: null,
   tags: ['oracle'],
   execution_count: 0,
   requires_target: false, // All tests use requires_target=false for simpler navigation

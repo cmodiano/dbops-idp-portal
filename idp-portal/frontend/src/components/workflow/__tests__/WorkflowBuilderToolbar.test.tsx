@@ -3,7 +3,6 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import React from 'react';
 import { App } from 'antd';
 import { WorkflowBuilderToolbar, type WorkflowBuilderToolbarProps } from '../WorkflowBuilderToolbar';
 

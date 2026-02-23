@@ -41,7 +41,7 @@ const mockForm = {
 
 const mockNotification = { success: vi.fn(), error: vi.fn() };
 vi.mock('antd', async () => {
-  const actual = await vi.importActual('antd');
+  const actual = await vi.importActual<typeof import('antd')>('antd');
   return {
     ...actual,
     App: {
@@ -118,13 +118,10 @@ describe('useEditExecution', () => {
     const { result } = renderEditHook();
     const exec = makeExec({
       recurring_pattern: {
-        recurring_pattern_id: 1,
-        scheduled_execution_id: 42,
         pattern_type: 'weekly',
         pattern_config: { hour: 14, minute: 30, day_of_week: 3 },
         is_active: true,
         next_execution_date: '2026-03-17T14:30:00Z',
-        created_at: '2026-03-10T08:00:00Z',
       },
     });
 

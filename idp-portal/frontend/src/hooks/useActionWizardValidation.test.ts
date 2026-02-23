@@ -59,7 +59,7 @@ describe('useActionWizardValidation', () => {
     );
     const params = {
       ...baseParams,
-      parameterList: [{ id: '1', name: '', type: 'string', required: false }],
+      parameterList: [{ id: '1', name: '', type: 'string' as const, required: false }],
     };
     const error = result.current.validateForSave(params);
     expect(error).toMatch(/paramètre 1 doit avoir un nom/);
@@ -72,8 +72,8 @@ describe('useActionWizardValidation', () => {
     const params = {
       ...baseParams,
       impactRulesList: [
-        { environment: 'PROD', level: 'high' as const },
-        { environment: 'PROD', level: 'low' as const },
+        { environment: 'PROD', level: 'high' as const, criteria: null },
+        { environment: 'PROD', level: 'low' as const, criteria: null },
       ],
     };
     const error = result.current.validateForSave(params);

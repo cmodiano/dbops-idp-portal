@@ -503,7 +503,7 @@ describe('handleAuthenticatedFetch - 429 retry', () => {
 
     // First retry at info
     expect(mockLoggerInfo).toHaveBeenCalledTimes(1);
-    const correlationId = mockLoggerInfo.mock.calls[0][1].correlation_id;
+    const correlationId = (mockLoggerInfo.mock.calls[0]![1] as { correlation_id: string }).correlation_id;
     expect(mockLoggerInfo).toHaveBeenCalledWith('Rate limit exceeded, retrying...', expect.objectContaining({ attempt: 1, correlation_id: correlationId }));
 
     // Subsequent retries at warn

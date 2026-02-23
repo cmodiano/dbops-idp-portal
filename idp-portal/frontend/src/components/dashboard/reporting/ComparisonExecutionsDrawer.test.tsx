@@ -11,20 +11,18 @@ import type { DashboardRecentExecution } from '../../../types/api';
 const mockExecutions: DashboardRecentExecution[] = [
   {
     id: 1,
-    action_id: 101,
     action_name: 'Backup Database',
     status: 'COMPLETED',
     environment: 'prod',
-    started_by_username: 'admin',
+    user_display_name: 'admin',
     created_at: '2026-01-31T10:00:00Z',
   },
   {
     id: 2,
-    action_id: 102,
     action_name: 'Patch Server',
     status: 'FAILED',
     environment: 'dev',
-    started_by_username: 'user1',
+    user_display_name: 'user1',
     created_at: '2026-01-31T09:30:00Z',
   },
 ];

@@ -72,7 +72,7 @@ const defaultProps: ConfirmationStepProps = {
   parameters: {},
   submitError: null,
   isScheduling: false,
-  scheduling: { mode: 'immediate' } as ConfirmationStepProps['scheduling'],
+  scheduling: { mode: 'immediate' } as unknown as ConfirmationStepProps['scheduling'],
   onSchedulingChange: vi.fn(),
   schedulingError: null,
   submitting: false,

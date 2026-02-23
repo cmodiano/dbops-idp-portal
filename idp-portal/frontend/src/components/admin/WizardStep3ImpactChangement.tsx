@@ -19,7 +19,7 @@ import { ImpactLevelsLegend } from './ImpactLevelsLegend';
 import SectionHelp from '../common/SectionHelp';
 import { platformCodeToStepType } from '../../utils/integrationHelpers';
 
-type IntegrationLike = { id: number; type: string; name: string } & Record<string, unknown>;
+type IntegrationLike = { id: number; type: string; name: string };
 
 export interface WizardStep3ImpactChangementProps {
   isWorkflow: boolean;

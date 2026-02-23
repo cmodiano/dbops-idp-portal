@@ -67,8 +67,8 @@ export function ExecutionsChart({ data, loading = false }: ExecutionsChartProps)
           />
           <Tooltip
             labelFormatter={(label) => `Date: ${label}`}
-            formatter={(value: number, name: string) => [
-              value,
+            formatter={(value: number | undefined, name: string | undefined) => [
+              value ?? 0,
               name === 'success' ? 'Succès' : 'Échecs',
             ]}
             contentStyle={{ fontSize: 12 }}

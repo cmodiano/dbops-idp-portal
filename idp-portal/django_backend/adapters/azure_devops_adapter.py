@@ -148,7 +148,7 @@ class AzureDevOpsAdapter(BaseAdapter):
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=self.timeout,
-                verify=False,  # noqa: S501 — corporate CAs handled externally
+                verify=False,  # nosec B501  # noqa: S501 — corporate CAs handled externally
             ) as client:
                 response = await client.post(url, json=payload)
                 response.raise_for_status()
@@ -259,7 +259,7 @@ class AzureDevOpsAdapter(BaseAdapter):
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=self.timeout,
-                verify=False,  # noqa: S501
+                verify=False,  # nosec B501  # noqa: S501
             ) as client:
                 response = await client.get(url)
                 response.raise_for_status()
@@ -395,7 +395,7 @@ class AzureDevOpsAdapter(BaseAdapter):
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=AZURE_DEVOPS_LOGS_TIMEOUT,
-                verify=False,  # noqa: S501
+                verify=False,  # nosec B501  # noqa: S501
             ) as client:
                 # Step 1: Get log listing
                 logs_response = await client.get(logs_list_url)

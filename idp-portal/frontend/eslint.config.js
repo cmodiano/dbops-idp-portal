@@ -75,6 +75,16 @@ export default defineConfig([
       // Structured logging enforcement (Story 17.7)
       'no-console': 'error',
 
+      // Allow _ prefix for intentionally unused variables (e.g. destructuring to omit a prop)
+      '@typescript-eslint/no-unused-vars': ['error', {
+        vars: 'all',
+        args: 'after-used',
+        ignoreRestSiblings: true,
+        varsIgnorePattern: '^_',
+        argsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+      }],
+
       // Frontend standards enforcement (Story 17.16)
       'standards/no-antd-internal-imports': 'error',
       'standards/require-app-useapp': 'error',

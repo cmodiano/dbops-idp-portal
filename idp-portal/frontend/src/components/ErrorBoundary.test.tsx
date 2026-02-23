@@ -152,8 +152,7 @@ describe('ErrorBoundary', () => {
 
   it('shows technical error details in development mode', () => {
     const originalEnv = import.meta.env.MODE;
-    // @ts-expect-error - Mocking env for test
-    import.meta.env.MODE = 'development';
+    (import.meta.env as Record<string, unknown>).MODE = 'development';
 
     render(
       <MemoryRouter>
@@ -166,8 +165,7 @@ describe('ErrorBoundary', () => {
     expect(screen.getByText(/Détails techniques/i)).toBeInTheDocument();
     expect(screen.getByText(/Test error/i)).toBeInTheDocument();
 
-    // @ts-expect-error - Restore env
-    import.meta.env.MODE = originalEnv;
+    (import.meta.env as Record<string, unknown>).MODE = originalEnv;
   });
 
   it('includes correlation_id in error logs', () => {

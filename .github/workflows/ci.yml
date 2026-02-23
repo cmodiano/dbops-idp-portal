@@ -46,7 +46,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install uv
-        run: pip install uv
+        run: pip install uv==0.10.0
       - name: Verify requirements.lock is up-to-date
         working-directory: idp-portal/django_backend
         run: |
@@ -73,7 +73,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install uv
-        run: pip install uv
+        run: pip install uv==0.10.0
       - name: Install dependencies
         working-directory: idp-portal/django_backend
         run: uv pip install -r requirements-dev.lock --system
@@ -105,7 +105,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install uv
-        run: pip install uv
+        run: pip install uv==0.10.0
       - name: Install dependencies
         working-directory: idp-portal/django_backend
         run: uv pip install -r requirements-dev.lock --system
@@ -181,7 +181,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install uv
-        run: pip install uv
+        run: pip install uv==0.10.0
       - name: Install dependencies
         working-directory: idp-portal/django_backend
         run: uv pip install -r requirements-dev.lock --system
@@ -239,7 +239,7 @@ jobs:
       - name: Install pip-audit
         run: pip install pip-audit>=2.7.0
       - name: Install uv
-        run: pip install uv
+        run: pip install uv==0.10.0
       - name: Install project dependencies
         working-directory: idp-portal/django_backend
         run: uv pip install -r requirements.lock --system

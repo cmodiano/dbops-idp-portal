@@ -170,7 +170,6 @@ export const SortableStepCard: React.FC<SortableStepCardProps> = ({
                 }}
                 onClear={() => onStepChange(index, 'referenced_action_id', undefined)}
                 allowClear
-                loading={loadingActions}
                 status={hasError && !step.referenced_action_id ? 'error' : undefined}
                 aria-label="Sélectionner une action"
                 disabled={disabled}

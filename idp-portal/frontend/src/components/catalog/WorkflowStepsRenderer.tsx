@@ -8,13 +8,13 @@
 
 import { memo, useRef } from 'react';
 import { Form, Alert, Typography } from 'antd';
+import type { FormRule as Rule } from 'antd';
 import { useAuth } from '../../contexts/AuthContext';
 import { InfoCircleOutlined } from '@ant-design/icons';
 import type { CatalogActionDetail } from '../../services/catalog_service';
 import type { InventoryItem } from '../../types/api';
 import type { ParameterField } from '../../hooks/useDynamicForm';
 import { extractParameterFields } from '../../hooks/useDynamicForm';
-import { STYLE_TOKENS } from '../../theme/styleTokens';
 import { sanitizeDescription } from '../../utils/businessLanguage';
 import { renderFieldInput } from './renderFieldInput';
 
@@ -87,11 +87,11 @@ export const WorkflowStepsRenderer = memo(function WorkflowStepsRenderer({
           <div
             key={`${step.order}-${step.referenced_action_id}`}
             style={{
-              border: `1px solid ${STYLE_TOKENS.borderColor}`,
+              border: '1px solid #d9d9d9',
               borderRadius: 8,
               padding: 12,
               marginBottom: 12,
-              background: STYLE_TOKENS.surfaceColor,
+              background: '#fafafa',
             }}
           >
             <Title level={5} style={{ marginTop: 0, marginBottom: 8 }}>
@@ -102,7 +102,7 @@ export const WorkflowStepsRenderer = memo(function WorkflowStepsRenderer({
               <Alert type="info" showIcon description="Cette action n'a pas de paramètres" />
             ) : (
               fields.map((field: ParameterField, index: number) => {
-                const rules: unknown[] = [];
+                const rules: Rule[] = [];
                 if (field.required) rules.push({ required: true, message: `${field.label} est requis` });
                 if (field.pattern) rules.push({ pattern: new RegExp(field.pattern), message: 'Format invalide' });
                 if (field.minimum !== undefined) rules.push({ type: 'number', min: field.minimum, message: `Minimum: ${field.minimum}` });

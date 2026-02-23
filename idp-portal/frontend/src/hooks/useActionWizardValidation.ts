@@ -15,7 +15,7 @@ import {
   validateChangeTypeConfig,
 } from './useActionFormValidation';
 
-type IntegrationLike = { id: number; type: string; name: string } & Record<string, unknown>;
+type IntegrationLike = { id: number; type: string; name: string };
 
 export interface ActionWizardValidationParams {
   isWorkflowSave: boolean;

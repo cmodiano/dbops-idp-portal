@@ -33,7 +33,7 @@ const testUser: User = {
   id: 1,
   username: 'test.user',
   display_name: 'Test User',
-  profile: 'DBA',
+  profile: 'dba_applicatif',
   navigation_tabs: ['dashboard', 'catalog', 'executions'],
 };
 

@@ -20,14 +20,18 @@ const DEFAULT_503_RETRY_DELAY_MS = 5000;
 
 /** Error thrown by apiFetch when response is not ok. Carries HTTP status for 403/400 handling. */
 export class ApiError extends Error {
+  status: number;
+  /** Optional parsed JSON body (e.g. { error: { code, message, details } }) for 400 validation details. */
+  responseBody?: { error?: { code?: string; message?: string; details?: Record<string, unknown> } };
   constructor(
     message: string,
-    public status: number,
-    /** Optional parsed JSON body (e.g. { error: { code, message, details } }) for 400 validation details. */
-    public responseBody?: { error?: { code?: string; message?: string; details?: Record<string, unknown> } },
+    status: number,
+    responseBody?: { error?: { code?: string; message?: string; details?: Record<string, unknown> } },
   ) {
     super(message);
     this.name = 'ApiError';
+    this.status = status;
+    this.responseBody = responseBody;
   }
 }
 

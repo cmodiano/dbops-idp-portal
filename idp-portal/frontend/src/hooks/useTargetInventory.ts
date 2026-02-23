@@ -139,7 +139,7 @@ export function useTargetInventory({
             setInventoryWarnings((prev) => ({ ...prev, [source]: true }));
             return [source, error.cachedItems] as const;
           }
-          return [source, []] as const;
+          return [source, [] as InventoryItem[]] as const;
         }
       })
     )

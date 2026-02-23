@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Card } from 'antd';
-import type { NotificationInstance } from 'antd';
+import { Card, App } from 'antd';
+
+type NotificationInstance = ReturnType<typeof App.useApp>['notification'];
 import { ProfileWizard } from '../../components/admin/ProfileWizard';
 import { ProfilesTable } from '../../components/admin/ProfilesTable';
 import { ProfileImportModal } from '../../components/admin/ProfileImportModal';

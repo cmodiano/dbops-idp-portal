@@ -178,7 +178,7 @@ export function reactFlowToWorkflowSteps(
   );
 
   return workflowNodes.map((node, index) => {
-    const data = node.data as WorkflowStepNodeData;
+    const data = node.data as unknown as WorkflowStepNodeData;
     const successEdge = edges.find(
       (e) => e.source === node.id && e.sourceHandle === 'success' && e.target !== END_NODE_ID
     );

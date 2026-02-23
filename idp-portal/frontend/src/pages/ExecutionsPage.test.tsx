@@ -1512,7 +1512,7 @@ describe('ExecutionsPage', () => {
         mockAppWithAutoConfirmModal();
         mockAuthSession('DBA');
 
-        vi.mocked(executionService.cancelExecution).mockResolvedValue();
+        vi.mocked(executionService.cancelExecution).mockResolvedValue({} as never);
 
         const cancellableExecutions: ExecutionResponse[] = [
           { ...mockExecutions[0], status: 'SUBMITTED', user_display_name: 'Test User' },
@@ -1560,7 +1560,7 @@ describe('ExecutionsPage', () => {
 
         let resolveCancelPromise: () => void;
         vi.mocked(executionService.cancelExecution).mockImplementation(
-          () => new Promise<void>((resolve) => { resolveCancelPromise = resolve; })
+          () => new Promise<never>((resolve) => { resolveCancelPromise = resolve as () => void; })
         );
 
         const cancellableExecutions: ExecutionResponse[] = [
@@ -1611,7 +1611,7 @@ describe('ExecutionsPage', () => {
 
         // Cancel never resolves — stays in-flight
         vi.mocked(executionService.cancelExecution).mockImplementation(
-          () => new Promise<void>(() => { /* never resolves */ })
+          () => new Promise<never>(() => { /* never resolves */ })
         );
 
         const cancellableExecutions: ExecutionResponse[] = [
@@ -1646,7 +1646,7 @@ describe('ExecutionsPage', () => {
         mockAppWithAutoConfirmModal();
         mockAuthSession('DBA');
 
-        vi.mocked(executionService.cancelExecution).mockResolvedValue();
+        vi.mocked(executionService.cancelExecution).mockResolvedValue({} as never);
 
         const cancellableExecutions: ExecutionResponse[] = [
           { ...mockExecutions[0], status: 'SUBMITTED', user_display_name: 'Test User' },
@@ -1755,6 +1755,7 @@ describe('ExecutionsPage', () => {
 
         vi.mocked(executionService.cancelExecution).mockImplementation(async () => {
           await new Promise(resolve => setTimeout(resolve, 50));
+          return {} as never;
         });
 
         const cancellableExecutions: ExecutionResponse[] = [
@@ -1798,7 +1799,7 @@ describe('ExecutionsPage', () => {
         mockAppWithAutoConfirmModal();
         mockAuthSession('DBA');
 
-        vi.mocked(executionService.cancelExecution).mockResolvedValue();
+        vi.mocked(executionService.cancelExecution).mockResolvedValue({} as never);
 
         const cancellableExecutions: ExecutionResponse[] = [
           { ...mockExecutions[0], status: 'SUBMITTED', user_display_name: 'Test User' },

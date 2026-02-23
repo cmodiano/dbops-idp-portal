@@ -8,7 +8,6 @@ import type {
   ActionResponse,
   ActionDetail,
   ActionListItem,
-  ActionStatus,
   ExecutionStepsUpdate,
   StatusTransition,
   AdminActionsFilters,

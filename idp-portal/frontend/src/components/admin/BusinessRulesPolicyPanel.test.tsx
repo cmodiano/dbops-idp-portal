@@ -24,7 +24,6 @@ vi.mock('../../services/logger', () => ({
 import {
   getBusinessRulePolicies,
   getBusinessRulePolicy,
-  createBusinessRulePolicy,
 } from '../../services/business_rules_service';
 
 const mockPolicies = [

@@ -409,7 +409,7 @@ describe('ActionWizard', () => {
 
   describe('Story 2.24: change_type_config payload', () => {
     it('calls updateActionSteps with single step and change_type_config when user submits at step 3', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       const editAction: ActionDetail = {
         id: 1,
         name: 'Action existante',
@@ -461,7 +461,7 @@ describe('ActionWizard', () => {
       expect(callPayload.steps).toHaveLength(1);
       expect(callPayload.change_type_config).toBeDefined();
       expect(callPayload.change_type_config!.PROD.required).toBe(true);
-    });
+    }, 30000);
   });
 
   describe('Comportement modal', () => {

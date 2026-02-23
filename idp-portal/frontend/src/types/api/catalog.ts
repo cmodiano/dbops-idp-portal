@@ -47,6 +47,8 @@ export interface ActionCreate {
   gate_config?: GateConfig | null;
   /** Story 31.8: Notification channels configuration. */
   notification_config?: NotificationConfig | null;
+  /** Story 28.4: FK to predefined business rule policy. */
+  business_rule_policy_id?: number | null;
 }
 
 export interface ActionResponse {

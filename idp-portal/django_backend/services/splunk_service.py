@@ -194,7 +194,7 @@ class SplunkService:
             try:
                 async with httpx.AsyncClient(
                     timeout=self.timeout,
-                    verify=False,  # noqa: S501 — corporate CAs handled externally
+                    verify=False,  # nosec B501  # noqa: S501 — corporate CAs handled externally
                 ) as client:
                     response = await client.post(url, content=body, headers=headers)
 

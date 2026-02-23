@@ -14,10 +14,10 @@ const mockModalConfirm = vi.fn();
 
 function renderWithApp(ui: React.ReactElement) {
   vi.spyOn(App, 'useApp').mockReturnValue({
-    message: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), loading: vi.fn() },
+    message: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), loading: vi.fn(), open: vi.fn(), destroy: vi.fn() },
     notification: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), open: vi.fn() },
     modal: { confirm: mockModalConfirm },
-  } as ReturnType<typeof App.useApp>);
+  } as unknown as ReturnType<typeof App.useApp>);
   return render(<App>{ui}</App>);
 }
 
@@ -119,6 +119,7 @@ describe('IntegrationsTable', () => {
         base_url: 'https://terraform.example.com',
         credential_ref: null,
         icon: 'https://example.com/terraform-icon.png',
+        auth_flow: null,
         created_at: '2026-01-28T10:00:00Z',
         updated_at: '2026-01-28T10:00:00Z',
       },

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { Form } from 'antd';
-import { WizardStep3ImpactChangement } from './WizardStep3ImpactChangement';
+import { WizardStep3ImpactChangement, type WizardStep3ImpactChangementProps } from './WizardStep3ImpactChangement';
 
 vi.mock('../../hooks/useEnvironments', () => ({
   useEnvironments: () => ({
@@ -29,7 +29,7 @@ vi.mock('../../services/admin_service', () => ({
   getBusinessRulePolicies: vi.fn().mockResolvedValue([]),
 }));
 
-const defaultProps = {
+const defaultProps: WizardStep3ImpactChangementProps = {
   isWorkflow: false,
   isReadOnly: false,
   impactRulesList: [],
@@ -47,10 +47,9 @@ const defaultProps = {
   selectedIntegration: undefined,
   editAction: null,
   getIntegrationById: vi.fn(() => undefined),
-  snIntegrationOptions: [],
 };
 
-function renderWithForm(props = defaultProps) {
+function renderWithForm(props: WizardStep3ImpactChangementProps = defaultProps) {
   return render(
     <Form>
       <WizardStep3ImpactChangement {...props} />
@@ -89,7 +88,7 @@ describe('WizardStep3ImpactChangement', () => {
   it('affiche les règles d\'impact existantes', () => {
     const props = {
       ...defaultProps,
-      impactRulesList: [{ environment: 'PROD', level: 'high' as const }],
+      impactRulesList: [{ environment: 'PROD', level: 'high' as const, criteria: null }],
     };
     renderWithForm(props);
     expect(screen.getByText('Regle 1')).toBeInTheDocument();

@@ -68,7 +68,7 @@ export const ConfirmationStep = memo(function ConfirmationStep({
     currentImpact,
     environmentsCache,
   } = useWizardExecutionContext();
-  const changeConfig = action?.change_type_config?.[derivedEnvironment?.toUpperCase() ?? ''];
+  const changeConfig = action?.change_type_config?.[derivedEnvironment?.toUpperCase() ?? ''] as { required?: boolean } | undefined;
   const isChangeRequired = changeConfig?.required ?? false;
 
   const environmentName = environmentsCache?.find((env) => env.id === derivedEnvironment)?.name

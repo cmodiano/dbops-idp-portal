@@ -11,6 +11,7 @@
 
 import { memo, useRef } from 'react';
 import { Form, Alert } from 'antd';
+import type { FormRule as Rule } from 'antd';
 import { useAuth } from '../../contexts/AuthContext';
 import { InfoCircleOutlined } from '@ant-design/icons';
 import type { FormInstance } from 'antd';
@@ -103,7 +104,7 @@ export const ParametersFormStep = memo(function ParametersFormStep({
           />
         ) : (
           parameterFields.map((field, index) => {
-            const rules: unknown[] = [];
+            const rules: Rule[] = [];
             if (field.required) rules.push({ required: true, message: `${field.label} est requis` });
             if (field.pattern) rules.push({ pattern: new RegExp(field.pattern), message: 'Format invalide' });
             if (field.minimum !== undefined) rules.push({ type: 'number', min: field.minimum, message: `Minimum: ${field.minimum}` });

@@ -1,3 +1,4 @@
+import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, within, waitFor } from '@testing-library/react';
 import { ThemeProvider } from '../../contexts/ThemeContext';
@@ -26,7 +27,7 @@ vi.mock('react-markdown', () => ({
   default: function MockMarkdown({ children }: { children: string; components?: Record<string, Function> }) {
     // Minimal markdown-to-DOM for test assertions
     const lines = children.split('\n');
-    const els: JSX.Element[] = [];
+    const els: React.JSX.Element[] = [];
     let tableRows: string[][] = [];
     let inCode = false;
     let codeContent = '';

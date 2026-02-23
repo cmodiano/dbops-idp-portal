@@ -109,9 +109,10 @@ describe('useRemediationContext', () => {
   });
 
   it('resets context when status changes from FAILED to COMPLETED', async () => {
+    const initialProps: { executionId: number; status: import('../types/api').ExecutionStatusType | null } = { executionId: 123, status: 'FAILED' };
     const { result, rerender } = renderHook(
       ({ executionId, status }) => useRemediationContext(executionId, status),
-      { initialProps: { executionId: 123, status: 'FAILED' as const } }
+      { initialProps }
     );
 
     await waitFor(() => {
@@ -119,7 +120,7 @@ describe('useRemediationContext', () => {
     });
 
     // Change status to COMPLETED
-    rerender({ executionId: 123, status: 'COMPLETED' as const });
+    rerender({ executionId: 123, status: 'COMPLETED' });
 
     expect(result.current.context).toBeNull();
     expect(result.current.error).toBeNull();

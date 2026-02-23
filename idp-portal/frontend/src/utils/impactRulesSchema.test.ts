@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { impactRulesToList, listToImpactRules } from './impactRulesSchema';
 import type { ImpactRuleDefinition } from '../types/api';
+import type { ImpactRulesJson } from './impactRulesSchema';
 
 describe('impactRulesToList', () => {
   it('returns empty array for null or undefined', () => {
@@ -17,7 +18,7 @@ describe('impactRulesToList', () => {
   });
 
   it('converts impact_rules object to ImpactRuleDefinition list', () => {
-    const rules = {
+    const rules: ImpactRulesJson = {
       DEV: { level: 'low', criteria: 'Environnement de developpement isole' },
       PROD: { level: 'high', criteria: 'Environnement de production' },
     };
@@ -37,7 +38,7 @@ describe('impactRulesToList', () => {
   });
 
   it('handles missing criteria (null)', () => {
-    const rules = {
+    const rules: ImpactRulesJson = {
       DEV: { level: 'medium' },
     };
     const list = impactRulesToList(rules);
@@ -48,13 +49,13 @@ describe('impactRulesToList', () => {
   it('defaults to low for invalid level', () => {
     const rules = {
       DEV: { level: 'invalid_level' },
-    };
+    } as unknown as ImpactRulesJson;
     const list = impactRulesToList(rules);
     expect(list[0].level).toBe('low');
   });
 
   it('handles all valid levels', () => {
-    const rules = {
+    const rules: ImpactRulesJson = {
       DEV: { level: 'low' },
       STAGING: { level: 'medium' },
       PROD: { level: 'high' },
@@ -117,7 +118,7 @@ describe('listToImpactRules', () => {
 
 describe('round-trip conversion', () => {
   it('rules -> list -> rules preserves data', () => {
-    const original = {
+    const original: ImpactRulesJson = {
       DEV: { level: 'low', criteria: 'Dev environment' },
       STAGING: { level: 'medium', criteria: 'Staging environment' },
       PROD: { level: 'high', criteria: 'Production environment' },

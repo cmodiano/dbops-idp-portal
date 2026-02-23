@@ -111,11 +111,12 @@ const mockAction: CatalogAction = {
   tags: ['deployment'],
   execution_count: 5,
   item_type: 'action',
+  status: 'published',
+  created_at: '2026-01-01T00:00:00Z',
 };
 
 const mockActionDetail: CatalogActionDetail = {
   ...mockAction,
-  engine_details: {},
   requires_target: false,
   status: 'published',
   parameters_schema: {

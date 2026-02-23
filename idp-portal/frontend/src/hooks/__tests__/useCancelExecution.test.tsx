@@ -15,7 +15,7 @@ vi.mock('../../services/scheduled_execution_service', () => ({
 
 const mockNotification = { success: vi.fn(), error: vi.fn() };
 vi.mock('antd', async () => {
-  const actual = await vi.importActual('antd');
+  const actual = await vi.importActual<typeof import('antd')>('antd');
   return {
     ...actual,
     App: {

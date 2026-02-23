@@ -28,7 +28,7 @@ function mockProfile(profile: string | null) {
     loading: false,
     logout: vi.fn(),
     login: vi.fn(),
-  } as ReturnType<typeof authContext.useAuth>);
+  } as unknown as ReturnType<typeof authContext.useAuth>);
 }
 
 describe('usePendingApprovalsCount', () => {

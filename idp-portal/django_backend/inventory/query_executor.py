@@ -419,14 +419,13 @@ class InventoryQueryExecutor:
 
         params = {**in_params, 'p_environment': environment}
 
-        # nosec B608 - table/columns validated by mapper
         inner_sql = (
-            f"SELECT {select} FROM {table} "
+            f"SELECT {select} FROM {table} "  # nosec B608 - table/columns validated by mapper
             f"WHERE UPPER({env_col}) = UPPER(:p_environment) "
             f"AND UPPER({server_ref_col}) IN ({in_placeholders}) "
             f"ORDER BY name"
         )
-        sql = f"SELECT * FROM ({inner_sql}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"
+        sql = f"SELECT * FROM ({inner_sql}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"  # nosec B608
 
         logger.info(
             f"reading_{entity_plural}_from_config_multi",
@@ -481,16 +480,15 @@ class InventoryQueryExecutor:
 
         params = {**in_params, 'p_environment': environment}
 
-        # nosec B608 - table/columns validated by mapper
         inner_sql = (
-            f"SELECT DISTINCT {aliased_select} "
+            f"SELECT DISTINCT {aliased_select} "  # nosec B608 - table/columns validated by mapper
             f"FROM {db_table} d "
             f"INNER JOIN {inst_table} i ON UPPER(i.{inst_db_ref_col}) = UPPER(d.{db_name_col}) "
             f"WHERE UPPER(d.{db_env_col}) = UPPER(:p_environment) "
             f"AND UPPER(i.{inst_server_ref_col}) IN ({in_placeholders}) "
             f"ORDER BY d.{db_name_col}"
         )
-        sql = f"SELECT * FROM ({inner_sql}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"
+        sql = f"SELECT * FROM ({inner_sql}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"  # nosec B608
 
         logger.info(
             "reading_databases_from_config_multi",
@@ -543,9 +541,8 @@ class InventoryQueryExecutor:
         if id_col:
             aliased_select = aliased_select.replace(id_col, f"d.{id_col}")
 
-        # nosec B608 - all identifiers validated by mapper
         inner_sql = (
-            f"SELECT DISTINCT {aliased_select} "
+            f"SELECT DISTINCT {aliased_select} "  # nosec B608 - all identifiers validated by mapper
             f"FROM {db_table} d "
             f"INNER JOIN {inst_table} i ON UPPER(i.{inst_db_ref_col}) = UPPER(d.{db_name_col}) "
             f"WHERE UPPER(i.{inst_server_ref_col}) = UPPER(:p_server_name)"
@@ -558,7 +555,7 @@ class InventoryQueryExecutor:
             params['p_environment'] = environment
 
         inner_sql += f" ORDER BY d.{db_name_col}"
-        sql = f"SELECT * FROM ({inner_sql}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"
+        sql = f"SELECT * FROM ({inner_sql}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"  # nosec B608
 
         logger.info(
             "reading_databases_via_instances",

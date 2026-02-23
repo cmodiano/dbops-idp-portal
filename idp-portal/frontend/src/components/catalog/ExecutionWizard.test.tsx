@@ -126,11 +126,10 @@ const mockAction: CatalogActionDetail = {
     STAGING: { level: 'medium', criteria: null },
     PROD: { level: 'high', criteria: null },
   },
+  impact_level: null,
   default_impact_level: 'medium',
   status: 'published',
-  created_by: 1,
   created_at: '2026-01-29T00:00:00Z',
-  updated_at: null,
   tags: ['oracle', 'provisioning'],
   change_type_config: {
     DEV: { required: false, change_model_code: null },

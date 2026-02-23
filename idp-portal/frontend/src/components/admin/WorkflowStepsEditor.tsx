@@ -46,6 +46,7 @@ export interface WorkflowStepEditable extends Omit<WorkflowStep, 'referenced_act
   _tempId?: string;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function generateStepId(): string {
   // Prefer browser crypto UUID for stability/uniqueness.
   // Fallback is good enough for local editing; backend also enforces uniqueness.

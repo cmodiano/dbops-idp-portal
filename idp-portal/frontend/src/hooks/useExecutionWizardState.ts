@@ -15,6 +15,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Form, App } from 'antd';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
+import isoWeek from 'dayjs/plugin/isoWeek';
+dayjs.extend(isoWeek);
 import type { CatalogActionDetail } from '../services/catalog_service';
 import type { ExecutionEnvironment, ImpactLevel, RecurringPatternRequest } from '../types/api';
 import type { WizardInitialParams } from '../types/wizard';
@@ -212,7 +214,7 @@ export function useExecutionWizardState({
 
   const currentImpact = useMemo((): ImpactLevel | null => {
     if (!derivedEnvironment || !action) return null;
-    return evaluateImpact(action.impact_rules, action.default_impact_level, derivedEnvironment);
+    return evaluateImpact(action.impact_rules ?? null, action.default_impact_level ?? null, derivedEnvironment);
   }, [derivedEnvironment, action]);
 
   // === DIP: Inventory via useTargetInventory ===

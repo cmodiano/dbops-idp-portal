@@ -41,17 +41,16 @@ const mockStepActions: Record<number, CatalogActionDetail> = {
     id: 101,
     name: 'Stop Database',
     parameters_schema: { properties: { db_name: { title: 'Database Name', type: 'string' } } },
-  } as CatalogActionDetail,
+  } as unknown as CatalogActionDetail,
   102: {
     id: 102,
     name: 'Apply Patch',
     parameters_schema: null,
-  } as CatalogActionDetail,
+  } as unknown as CatalogActionDetail,
 };
 
 function renderComponent(overrides = {}) {
   const defaultProps = {
-    form: {} as ReturnType<typeof Form.useForm>[0],
     workflowSteps: mockWorkflowSteps,
     workflowStepActions: mockStepActions,
     loadingWorkflowStepActions: false,
@@ -72,11 +71,11 @@ function renderComponent(overrides = {}) {
 }
 
 // Form wrapper that creates real form instance
-function FormWrapper(props: Omit<Parameters<typeof WorkflowStepsRenderer>[0], 'form'> & { form?: unknown }) {
+function FormWrapper(props: Parameters<typeof WorkflowStepsRenderer>[0] & { form?: unknown }) {
   const [form] = Form.useForm();
   return (
     <Form form={form}>
-      <WorkflowStepsRenderer {...props} form={form} />
+      <WorkflowStepsRenderer {...props} />
     </Form>
   );
 }

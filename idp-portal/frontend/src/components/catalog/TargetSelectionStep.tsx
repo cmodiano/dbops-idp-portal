@@ -146,7 +146,7 @@ export const TargetSelectionStep = memo(function TargetSelectionStep({
               tooltip="Utilisez * pour tout correspondre et ? pour un caractere (ex: srv-dev-*, assurance-*)"
             >
               <Input
-                ref={firstFieldRef as React.Ref<HTMLInputElement>}
+                ref={firstFieldRef as unknown as React.Ref<import('antd').InputRef>}
                 value={targetPattern}
                 onChange={(e) => onTargetPatternChange(e.target.value)}
                 placeholder="ex: srv-dev-* ou assurance-*"

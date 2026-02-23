@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Form } from 'antd';
-import { WizardStep2Automatisme } from './WizardStep2Automatisme';
+import { WizardStep2Automatisme, type WizardStep2AutomatismeProps } from './WizardStep2Automatisme';
 
 vi.mock('../../hooks/useAAPTemplates', () => ({
   useAAPTemplates: vi.fn(() => ({
@@ -23,7 +23,7 @@ vi.mock('../../services/admin_service', () => ({
   getEligibleActionsForWorkflow: vi.fn().mockResolvedValue([]),
 }));
 
-const defaultProps = {
+const defaultProps: WizardStep2AutomatismeProps = {
   isWorkflow: false,
   isReadOnly: false,
   isPlatformAAP: false,
@@ -40,7 +40,7 @@ const defaultProps = {
   setWorkflowViewMode: vi.fn(),
 };
 
-function renderWithForm(props = defaultProps) {
+function renderWithForm(props: WizardStep2AutomatismeProps = defaultProps) {
   return render(
     <Form>
       <WizardStep2Automatisme {...props} />

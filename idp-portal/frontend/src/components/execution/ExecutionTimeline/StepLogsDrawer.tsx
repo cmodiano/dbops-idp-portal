@@ -12,7 +12,7 @@ interface StepLogsDrawerProps {
   step: ExecutionStepResponse | null;
   open: boolean;
   onClose: () => void;
-  contentRef: React.RefObject<HTMLDivElement>;
+  contentRef: React.RefObject<HTMLDivElement | null>;
 }
 
 export function StepLogsDrawer({ step, open, onClose, contentRef }: StepLogsDrawerProps) {
