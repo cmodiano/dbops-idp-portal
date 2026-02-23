@@ -4,6 +4,7 @@
  * Tracks antd imports and flags deprecated JSX props on those components.
  *
  * Currently enforced:
+ *   - Alert:  `message` → use `title` instead (deprecated in antd v5)
  *   - Drawer: `width` → use `styles.wrapper.width` (deprecated in antd v5)
  *   - Space:  `direction` → use `orientation` instead (deprecated in antd v5)
  *
@@ -15,6 +16,13 @@
  * Add new entries here as antd deprecates more props.
  */
 const DEPRECATED_PROPS = {
+  Alert: {
+    message: {
+      message:
+        '[antd] `message` on <Alert> is deprecated. Use `title` instead (antd v5+). ' +
+        'See https://ant.design/components/alert#api',
+    },
+  },
   Drawer: {
     width: {
       message:

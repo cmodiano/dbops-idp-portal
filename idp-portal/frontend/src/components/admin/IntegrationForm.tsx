@@ -310,7 +310,7 @@ export function IntegrationForm({
           type="error"
           showIcon
           icon={<ExclamationCircleOutlined />}
-          message="Intégration invalide"
+          title="Intégration invalide"
           description={`Cette intégration est invalide. Le type '${editIntegration?.type}' n'existe pas dans le catalogue backend. Veuillez contacter un administrateur. Les modifications ne sont pas autorisées pour les intégrations invalides.`}
           style={{ marginBottom: 16 }}
         />
@@ -321,7 +321,7 @@ export function IntegrationForm({
           type="warning"
           showIcon
           icon={<WarningOutlined />}
-          message="Intégration dépréciée"
+          title="Intégration dépréciée"
           description={`Attention : le type de cette intégration ('${editIntegration?.type}') est déprécié. Il est recommandé de migrer vers un type supporté. Vous pouvez encore modifier cette intégration, mais son utilisation dans de nouveaux workflows sera bloquée.`}
           style={{ marginBottom: 16 }}
         />
@@ -387,7 +387,7 @@ export function IntegrationForm({
             type="info"
             showIcon
             icon={<InfoCircleOutlined />}
-            message="Le type d'une intégration ne peut pas être modifié après sa création"
+            title="Le type d'une intégration ne peut pas être modifié après sa création"
             style={{ marginBottom: 16 }}
           />
         )}
@@ -462,7 +462,7 @@ export function IntegrationForm({
             type="info"
             showIcon
             icon={<InfoCircleOutlined />}
-            message="Authentification Vault (secret 0)"
+            title="Authentification Vault (secret 0)"
             description="L'authentification à Vault utilise le secret 0 fourni par les variables d'environnement (VAULT_TOKEN ou VAULT_ROLE_ID + VAULT_SECRET_ID). Aucun credential n'est stocké en base. Voir la documentation vault-bootstrap-guide pour la configuration."
             style={{ marginBottom: 16 }}
           />

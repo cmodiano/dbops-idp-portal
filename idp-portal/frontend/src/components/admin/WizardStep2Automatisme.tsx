@@ -170,7 +170,7 @@ export function WizardStep2Automatisme({
             <Alert
               type="info"
               showIcon
-              message="Un workflow enchaîne des actions existantes dans l'ordre défini. Aucun connecteur à configurer : chaque étape utilise le connecteur de l'action référencée."
+              title="Un workflow enchaîne des actions existantes dans l'ordre défini. Aucun connecteur à configurer : chaque étape utilise le connecteur de l'action référencée."
               style={{ marginBottom: 8 }}
             />
             <Radio.Group

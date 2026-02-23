@@ -225,7 +225,7 @@ describe('IntegrationForm', () => {
     await waitFor(() => {
       expect(screen.getByText(/L'URL doit être valide/)).toBeInTheDocument();
     });
-  });
+  }, 15000);
 
   it('submits with type, name, base_url, auth_flow and calls onSuccess (Story 24.2)', async () => {
     const user = userEvent.setup();

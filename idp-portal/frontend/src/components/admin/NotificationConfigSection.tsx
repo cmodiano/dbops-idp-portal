@@ -234,7 +234,7 @@ export const NotificationConfigSection: React.FC<NotificationConfigSectionProps>
       {(getChannel('page_dba').enabled || config.page_individual_enabled) && (
         <Alert
           type="info"
-          message="Les pages (individuel et DBA) ne sont envoyés que si l'environnement est « prod » et le niveau d'impact est « critical »."
+          title="Les pages (individuel et DBA) ne sont envoyés que si l'environnement est « prod » et le niveau d'impact est « critical »."
           style={{ marginTop: 8 }}
           showIcon
         />

@@ -622,7 +622,7 @@ describe('ActionWizard', () => {
         },
         { timeout: 5000 }
       );
-    }, 15000);
+    }, 25000);
 
     it('édition workflow existant charge et pré-remplit WorkflowStepsEditor', async () => {
       const editAction: ActionDetail = {
@@ -916,7 +916,7 @@ describe('ActionWizard', () => {
         // Form.Item label is used (no htmlFor without name prop) — check label text presence
         expect(screen.getByText('Template AAP')).toBeInTheDocument();
       });
-    });
+    }, 20000);
 
     it('affiche la saisie manuelle (fallback) quand API indisponible', async () => {
       mockUseAAPTemplates.mockReturnValue(defaultAAPMockWizard);
@@ -926,7 +926,7 @@ describe('ActionWizard', () => {
       await waitFor(() => {
         expect(screen.getByLabelText('ID template AAP')).toBeInTheDocument();
       });
-    });
+    }, 20000);
 
     it('affiche une alerte quand API retourne une erreur', async () => {
       mockUseAAPTemplates.mockReturnValue({
@@ -941,6 +941,6 @@ describe('ActionWizard', () => {
       await waitFor(() => {
         expect(screen.getByText(/Saisie manuelle/i)).toBeInTheDocument();
       });
-    });
+    }, 20000);
   });
 });

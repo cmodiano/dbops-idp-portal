@@ -1,5 +1,5 @@
 /**
- * Tests for ExecutionsTabs component (Story 8.9, AC1, AC6).
+ * Tests for ExecutionsTabs component (Story 8.9, AC1, AC6; Story 36.1, AC1).
  */
 
 import { render, screen, fireEvent } from '@testing-library/react';
@@ -28,7 +28,7 @@ describe('ExecutionsTabs', () => {
     expect(screen.getByRole('tab', { name: /Mes exécutions/i })).toBeInTheDocument();
   });
 
-  it('renders only "Mes exécutions" tab when canViewAll is false (AC6)', () => {
+  it('renders both tabs even when canViewAll is false (Story 36.1 AC1)', () => {
     const onScopeChange = vi.fn();
     renderWithTheme(
       <ExecutionsTabs
@@ -38,9 +38,9 @@ describe('ExecutionsTabs', () => {
       />
     );
 
-    // Only "Mes exécutions" should be visible
+    // Story 36.1: les deux onglets sont visibles pour tous (le backend filtre)
+    expect(screen.getByRole('tab', { name: /Toutes les exécutions/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /Mes exécutions/i })).toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: /Toutes les exécutions/i })).not.toBeInTheDocument();
   });
 
   it('calls onScopeChange with "all" when "Toutes les exécutions" tab is clicked', () => {

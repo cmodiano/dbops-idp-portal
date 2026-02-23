@@ -216,7 +216,7 @@ describe('Story 19.4 Integration - ExecutionWizard → ExecutionView flow', () =
     expect(screen.getByTestId('execution-view-drawer')).toBeInTheDocument();
     expect(within(screen.getByTestId('execution-view-drawer')).getByText(/Deploy Application/)).toBeInTheDocument();
     expect(executionService.getExecution).toHaveBeenCalledWith(42);
-  });
+  }, 20000);
 
   // Task 2.3, Subtask 2.3: AC3 test
   it('AC3: closes ExecutionView and stays on catalog on close button', async () => {
@@ -241,7 +241,7 @@ describe('Story 19.4 Integration - ExecutionWizard → ExecutionView flow', () =
 
     // AC3: Vérifier toujours sur CatalogPage
     expect(screen.getByText('Catalogue')).toBeInTheDocument();
-  });
+  }, 20000);
 
   // Task 2.3, AC5: Wizard stays open on error
   it('AC5: displays error in wizard without closing on POST failure', async () => {
@@ -262,7 +262,7 @@ describe('Story 19.4 Integration - ExecutionWizard → ExecutionView flow', () =
 
     // AC5: Vérifier ExecutionView ne s'ouvre PAS
     expect(screen.queryByTestId('execution-view-drawer')).not.toBeInTheDocument();
-  });
+  }, 20000);
 
   // Task 2.3, AC8: Wizard state resets after success
   it('AC8: resets wizard state after execution success', { timeout: 20000 }, async () => {

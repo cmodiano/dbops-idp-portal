@@ -18,6 +18,7 @@ from rest_framework.request import Request
 from catalog.models import Action
 from core.exceptions import BadRequestError
 from core.permissions import IsDBAOrDBOPS
+from executions.utils.rbac_helpers import get_allowed_action_ids_for_user
 
 # Fixed-offset UTC — Oracle Thin Mode ne supporte pas les named timezones (DPY-3022)
 UTC = dt_timezone(timedelta(0))
@@ -101,22 +102,42 @@ def detect_request_source(request: Any) -> str:
 
 def apply_scope_filter(qs: QuerySet, *, user: Any, scope: str) -> tuple[QuerySet, str]:
     """
-    Return (qs, effective_scope):
-    - scope defaults to mine
-    - scope=all only if user is DBA/DBOPS, else fallback to mine
+    Return (qs, effective_scope) applying RBAC-based scope filtering.
+
+    - scope=mine → filter by user_id (inchangé)
+    - scope=all + admin (DBA/DBOPS) → accès complet, pas de filtre
+    - scope=all + non-admin → filtrer par les action IDs autorisés via RBAC
+      - get_allowed_action_ids_for_user() retourne None → accès complet (actions_type='all')
+      - retourne set() vide → liste vide (aucune permission)
+      - retourne set d'IDs → filter(action_id__in=allowed_ids)
+    - Pas de fallback silencieux scope=all → scope=mine (Story 36.1 AC6)
+
     Story 26.10: Renamed from _apply_scope_filter to respect Python convention (PEP 8).
+    Story 36.1: RBAC-based filtering for non-admin users (AC2, AC3, AC6, AC7).
     """
     scope = (scope or "mine").lower()
     if scope not in ("mine", "all"):
         raise BadRequestError(code="BAD_REQUEST", message="scope invalide", details={"scope": scope})
 
-    # AC4: Story 26.8 — Use IsDBAOrDBOPS.ADMIN_PROFILES for user-only check (no request object)
-    profile_str = (getattr(user, 'profile', '') or '').lower()
-    can_view_all = profile_str in IsDBAOrDBOPS.ADMIN_PROFILES
-    effective_scope = scope if (scope == "mine" or can_view_all) else "mine"
-    if effective_scope == "mine":
+    if scope == "mine":
         qs = qs.filter(user_id=user.id)
-    return qs, effective_scope
+        return qs, "mine"
+
+    # scope == "all"
+    profile_str = (getattr(user, 'profile', '') or '').lower()
+    is_admin = profile_str in IsDBAOrDBOPS.ADMIN_PROFILES
+    if is_admin:
+        # Admins (DBA/DBOPS) voient tout — comportement actuel inchangé (AC3)
+        return qs, "all"
+
+    # Utilisateurs non-admin : filtrer par leurs action IDs autorisés via RBAC (AC2, AC6)
+    allowed_ids = get_allowed_action_ids_for_user(user)
+    if allowed_ids is None:
+        # actions_type='all' dans les permissions → accès complet
+        return qs, "all"
+    # Set vide → aucune exécution visible (AC7)
+    qs = qs.filter(action_id__in=allowed_ids)
+    return qs, "all"
 
 
 def apply_execution_filters(qs: QuerySet, *, request: Request) -> tuple[QuerySet, date | None, date | None]:

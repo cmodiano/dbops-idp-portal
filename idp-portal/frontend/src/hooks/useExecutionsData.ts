@@ -3,6 +3,11 @@
  *
  * Story 26.4 - AC6: Extracted from ExecutionsPage.tsx to reduce orchestrator to <400 LOC.
  * Handles listing executions, stats, time series, pending approvals, and integration icons.
+ *
+ * When the list contains running executions (RUNNING, SUBMITTED, PENDING_APPROVAL),
+ * the hook polls every POLL_INTERVAL_MS so the view updates when status changes (e.g. "En cours" → "Terminée").
+ * When there are no running executions, it still polls at BACKGROUND_POLL_INTERVAL_MS so new executions
+ * triggered by other users eventually appear in the list.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
@@ -19,10 +24,18 @@ import type {
   ExecutionFilters,
   DashboardStats,
   DashboardTimeSeriesPoint,
+  ExecutionStatusType,
 } from '../types/api';
 import logger from '../services/logger';
 
 const PAGE_SIZE = 25;
+
+/** Statuses that indicate an execution is still in progress; list should poll while any of these are present. */
+const RUNNING_STATUSES: ExecutionStatusType[] = ['RUNNING', 'SUBMITTED', 'PENDING_APPROVAL'];
+
+const POLL_INTERVAL_MS = 4000;
+/** Slower interval when no running executions, so new executions from other users appear in the list. */
+const BACKGROUND_POLL_INTERVAL_MS = 30000;
 
 export interface UseExecutionsDataReturn {
   // Executions
@@ -110,6 +123,38 @@ export const useExecutionsData = (
   const refetchCurrentState = useCallback(() => {
     return fetchData(currentPageRef.current, activeScopeRef.current);
   }, [fetchData]);
+
+  // Silent refetch: update list + stats + time series without toggling loading (for polling)
+  const refetchSilent = useCallback(async () => {
+    const page = currentPageRef.current;
+    const scope = activeScopeRef.current;
+    const offset = (page - 1) * PAGE_SIZE;
+    try {
+      const [listResult, stats, timeSeries] = await Promise.all([
+        listExecutions(PAGE_SIZE, offset, scope, filters),
+        fetchExecutionStats(scope, filters),
+        fetchExecutionTimeSeries(scope, filters),
+      ]);
+      setExecutions(listResult.data);
+      setTotalCount(listResult.pagination.total);
+      setStatsData(stats);
+      setTimeSeriesData(timeSeries);
+    } catch (err) {
+      logger.error('Executions poll refetch failed', { error: err instanceof Error ? err.message : String(err) });
+    }
+  }, [filters]);
+
+  // Poll so the list stays up to date: fast when any execution is running, slower otherwise (e.g. new executions from other users)
+  useEffect(() => {
+    const hasRunning = executions.some((e) => RUNNING_STATUSES.includes(e.status));
+    const intervalMs = hasRunning ? POLL_INTERVAL_MS : BACKGROUND_POLL_INTERVAL_MS;
+
+    const intervalId = setInterval(() => {
+      refetchSilent();
+    }, intervalMs);
+
+    return () => clearInterval(intervalId);
+  }, [executions, refetchSilent]);
 
   // Time series (Story 9.10)
   useEffect(() => {

@@ -59,7 +59,7 @@ export function AdminAnalyticsDashboard() {
     return (
       <Alert
         type="error"
-        message="Erreur"
+        title="Erreur"
         description={error}
         showIcon
         style={{ marginTop: 16 }}

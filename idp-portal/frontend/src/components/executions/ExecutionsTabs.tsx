@@ -2,8 +2,9 @@
  * ExecutionsTabs - Tab navigation for execution scope (Story 8.9, AC1, AC6).
  *
  * Features:
- * - Tabs: "Toutes les exécutions" (DBA/DBOPS only), "Mes exécutions"
- * - RBAC: non-DBA/DBOPS users only see "Mes exécutions" tab
+ * - Tabs: "Toutes les exécutions" (tous les utilisateurs), "Mes exécutions"
+ * - Story 36.1 AC1: les deux onglets sont visibles pour tous les utilisateurs authentifiés.
+ *   Le backend applique le filtrage RBAC par actions autorisées.
  * - Active tab with indicator
  * - Keyboard accessible (native Ant Design Tabs)
  */
@@ -17,7 +18,11 @@ export interface ExecutionsTabsProps {
   activeScope: ExecutionScope;
   /** Callback when scope changes. */
   onScopeChange: (scope: ExecutionScope) => void;
-  /** RBAC: true if user can view all executions (DBA/DBOPS). */
+  /**
+   * @deprecated Story 36.1: tous les utilisateurs voient les deux onglets.
+   * Le backend applique le filtrage RBAC. Cette prop est conservée pour
+   * compatibilité mais n'est plus utilisée dans le rendu du composant.
+   */
   canViewAll: boolean;
 }
 
@@ -34,13 +39,13 @@ export function ExecutionsTabs({
   const { effectiveMode } = useTheme();
   const isDark = effectiveMode === 'dark';
 
-  // If user cannot view all executions, only show "Mes exécutions" tab
-  const items = canViewAll
-    ? [
-        { key: 'all', label: 'Toutes les exécutions' },
-        { key: 'mine', label: 'Mes exécutions' },
-      ]
-    : [{ key: 'mine', label: 'Mes exécutions' }];
+  // Story 36.1 AC1: les deux onglets sont toujours visibles.
+  // Le backend filtre les exécutions selon les droits RBAC de l'utilisateur.
+  // canViewAll est conservé dans l'interface pour rétrocompatibilité.
+  const items = [
+    { key: 'all', label: 'Toutes les exécutions' },
+    { key: 'mine', label: 'Mes exécutions' },
+  ];
 
   return (
     <Tabs

@@ -53,7 +53,9 @@ export default function ExecutionsPage() {
     user?.profile?.toLowerCase() === 'dba' || user?.profile?.toLowerCase() === 'dbops',
     [user?.profile]
   );
-  const canViewAll = canApprove;
+  // Story 36.1 AC1: tous les utilisateurs authentifiés voient l'onglet "Toutes les exécutions".
+  // Le backend applique le filtrage RBAC par action IDs autorisés.
+  const canViewAll = true;
 
   // Filters (Story 9.10)
   const { filters, applyFilters, resetFilters, activeFilterCount } = useExecutionFilters();
@@ -68,13 +70,14 @@ export default function ExecutionsPage() {
     integrationIconsMap, isRefreshingRef, refetchCurrentState, PAGE_SIZE,
   } = useExecutionsData(filters, canApprove);
 
-  // Scope sync (Story 8.9)
+  // Scope sync (Story 8.9, 36.1)
+  // Story 36.1 AC1: scope par défaut = 'all' pour tous les utilisateurs authentifiés.
+  // Le backend filtre selon les droits RBAC, pas le frontend.
   useEffect(() => {
     if (userHasChosenScope.current) return;
-    if (authLoading) { if (activeScope !== 'mine') setActiveScope('mine'); return; }
-    if (canViewAll && activeScope === 'mine') { setActiveScope('all'); return; }
-    if (!canViewAll && activeScope === 'all') { setActiveScope('mine'); }
-  }, [authLoading, canViewAll, activeScope, setActiveScope, userHasChosenScope]);
+    if (authLoading) { if (activeScope !== 'all') setActiveScope('all'); return; }
+    if (activeScope === 'mine') setActiveScope('all');
+  }, [authLoading, activeScope, setActiveScope, userHasChosenScope]);
 
   // Drawer hook (Story 26.4 AC2)
   const {

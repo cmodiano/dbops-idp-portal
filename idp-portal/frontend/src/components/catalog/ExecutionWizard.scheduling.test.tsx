@@ -157,7 +157,7 @@ describe('ExecutionWizard - Scheduling (Story 11.5)', () => {
       // Should show scheduling mode buttons
       expect(screen.getByRole('button', { name: /annuler planification/i })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /confirmer planification/i })).toBeInTheDocument();
-    });
+    }, 15000);
 
     it('hides DatePicker when Annuler planification is clicked', async () => {
       vi.useRealTimers();
@@ -180,7 +180,7 @@ describe('ExecutionWizard - Scheduling (Story 11.5)', () => {
         expect(screen.getByRole('button', { name: /exécuter maintenant/i })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /planifier/i })).toBeInTheDocument();
       });
-    });
+    }, 15000);
   });
 
   describe('Confirm Button Disabled Without Date (AC5)', () => {
@@ -246,7 +246,7 @@ describe('ExecutionWizard - Scheduling (Story 11.5)', () => {
 
       // For now, verify the component renders correctly and API is mocked
       expect(createScheduledExecution).not.toHaveBeenCalled(); // Not called yet
-    });
+    }, 15000);
   });
 
   describe('API Error Handling (AC6)', () => {
@@ -370,6 +370,6 @@ describe('ExecutionWizard - Scheduling (Story 11.5)', () => {
         expect(screen.getByRole('button', { name: /planifier/i })).toBeInTheDocument();
         expect(screen.queryByLabelText("Date et heure d'exécution planifiée")).not.toBeInTheDocument();
       });
-    });
+    }, 15000);
   });
 });

@@ -42,7 +42,7 @@ export function renderFieldInput(
             type="info"
             showIcon
             closable={false}
-            message={`Veuillez d'abord sélectionner un serveur à l'étape 1 pour afficher les ${entityLabel} disponibles.`}
+            title={`Veuillez d'abord sélectionner un serveur à l'étape 1 pour afficher les ${entityLabel} disponibles.`}
             style={{ marginBottom: 8 }}
           />
           <Select

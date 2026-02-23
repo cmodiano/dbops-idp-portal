@@ -290,7 +290,7 @@ export const SchedulingPanel = memo(function SchedulingPanel({
               type="info"
               showIcon
               icon={<ClockCircleOutlined />}
-              message="Prochaines exécutions (UTC)"
+              title="Prochaines exécutions (UTC)"
               description={
                 <ul style={{ margin: '8px 0 0 0', paddingLeft: 20 }}>
                   {cronNextExecutions.map((exec, i) => (
@@ -308,7 +308,7 @@ export const SchedulingPanel = memo(function SchedulingPanel({
 
       {schedulingError && (
         <Alert
-          message="Erreur de planification"
+          title="Erreur de planification"
           description={schedulingError}
           type="error"
           showIcon

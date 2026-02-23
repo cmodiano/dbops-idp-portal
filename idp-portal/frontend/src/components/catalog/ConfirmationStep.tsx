@@ -146,7 +146,7 @@ export const ConfirmationStep = memo(function ConfirmationStep({
 
       {submitError && (
         <Alert
-          message="Erreur"
+          title="Erreur"
           description={submitError}
           type="error"
           showIcon

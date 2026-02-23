@@ -348,6 +348,18 @@ Clarifier le modèle de données des intégrations : distinguer **Plateformes** 
 **FRs couvertes :** FR1, FR2, FR18 (catalogue, étapes, routage plateformes)
 **Référence :** idp-portal/docs/rapport-bases-moteurs-technologies-integrations.md
 
+### Epic 36 : Vue Exécutions partagée et mise à jour du statut
+Vue « Exécutions » partagée : tous les utilisateurs voient les exécutions auxquelles ils ont accès (RBAC), y compris lancées par d'autres (colonne Utilisateur). Liste mise à jour automatiquement : **immédiat** pour l'utilisateur qui a lancé l'action, **polling régulier** (quelques secondes) pour les observateurs.
+**FRs couvertes :** FR19, FR22 (suivi statut, historique — étendu à la vue partagée)
+**Phase :** Growth (Phase 2)
+**Référence :** planning-artifacts/epic-36-vue-executions-partagee-mise-a-jour-statut.md
+
+### Epic 37 : Inventaire — Environnement par serveur, colonne paramètre, filtre engine_type
+Dériver l'environnement depuis la table servers (JOIN instances→servers, databases→instances→servers). Ajouter le paramètre engine_type aux API instances/databases et le passer depuis le frontend (action.engine). Permettre de choisir la colonne valeur pour les paramètres inventaire (inventory_value_column).
+**FRs couvertes :** FR42, FR43 (inventaire), FR26 (RBAC cibles)
+**Phase :** Growth (Phase 2)
+**Référence :** planning-artifacts/epic-37-inventaire-environnement-serveur-colonne-engine.md
+
 ---
 
 ## Epic 1 : Bootstrap Projet & Authentification

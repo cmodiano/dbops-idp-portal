@@ -16,6 +16,7 @@ from core.exceptions import BadRequestError, ForbiddenError
 from core.utils import ensure_utc_isoformat
 from core.models import AuditLog, AuditEntityType, AuditActionType
 from executions.models import Execution
+from executions.models import ExecutionStatus
 from idp_auth.models import User
 from profiles.models import Profile
 
@@ -60,6 +61,7 @@ def _is_auditor(user) -> bool:
     return any(getattr(p, "is_auditor", 0) == 1 for p in profiles)
 
 
+# Map audit filter value to audit action types (for reference / validation)
 _STATUS_ACTION_TYPES = {
     "success": [AuditActionType.EXECUTION_COMPLETED],
     "failed": [
@@ -71,6 +73,23 @@ _STATUS_ACTION_TYPES = {
         AuditActionType.EXECUTION_SUBMITTED,
         AuditActionType.EXECUTION_RUNNING,
         AuditActionType.EXECUTION_PENDING_APPROVAL,
+    ],
+}
+
+# Map audit filter value to current Execution.status (filter by execution state, not audit event type)
+# Fix: "En cours" must show only executions currently in progress, not old RUNNING events for completed executions.
+_EXECUTION_STATUS_BY_FILTER = {
+    "success": [ExecutionStatus.COMPLETED],
+    "failed": [
+        ExecutionStatus.FAILED,
+        ExecutionStatus.REJECTED,
+        ExecutionStatus.CANCELLED,
+        ExecutionStatus.INTEGRATION_ERROR,
+    ],
+    "running": [
+        ExecutionStatus.SUBMITTED,
+        ExecutionStatus.RUNNING,
+        ExecutionStatus.PENDING_APPROVAL,
     ],
 }
 
@@ -174,13 +193,16 @@ def _build_audit_queryset(request):
 
     status_filter = (request.query_params.get("status") or "").strip()
     if status_filter:
-        if status_filter not in _STATUS_ACTION_TYPES:
+        if status_filter not in _EXECUTION_STATUS_BY_FILTER:
             raise BadRequestError(
                 code="BAD_REQUEST",
                 message="status invalide",
                 details={"status": status_filter},
             )
-        qs = qs.filter(action_type__in=_STATUS_ACTION_TYPES[status_filter])
+        # Filter by current execution status so "En cours" shows only executions still in progress
+        exec_statuses = _EXECUTION_STATUS_BY_FILTER[status_filter]
+        exec_ids = Execution.objects.filter(status__in=exec_statuses).values_list("id", flat=True)
+        qs = qs.filter(entity_id__in=exec_ids)
 
     # Story 27.8: Filter by correlation_id (exact match)
     correlation_id = (request.query_params.get("correlation_id") or "").strip()
