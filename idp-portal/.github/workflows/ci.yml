@@ -248,13 +248,14 @@ jobs:
         working-directory: django_backend
         run: |
           mkdir -p security-reports
-          # CVE-2024-23342: ecdsa timing attack (transitive via python-jose).
+          # CVE-2024-23342 / GHSA-wkqf-x4fv-wfr4: ecdsa timing attack (transitive via python-jose).
           # No fix available — python-ecdsa project considers side-channel attacks out of scope.
-          # Tracked in: https://github.com/pyca/python-ecdsa/issues/XXX
-          IGNORE_VULNS="--ignore-vuln CVE-2024-23342"
-          pip-audit --format json --output security-reports/pip-audit-report.json $IGNORE_VULNS || true
-          pip-audit --format markdown --output security-reports/pip-audit-report.md $IGNORE_VULNS || true
-          pip-audit --strict --desc on $IGNORE_VULNS
+          pip-audit --format json --output security-reports/pip-audit-report.json \
+            --ignore-vuln CVE-2024-23342 --ignore-vuln GHSA-wkqf-x4fv-wfr4 || true
+          pip-audit --format markdown --output security-reports/pip-audit-report.md \
+            --ignore-vuln CVE-2024-23342 --ignore-vuln GHSA-wkqf-x4fv-wfr4 || true
+          pip-audit --strict --desc on \
+            --ignore-vuln CVE-2024-23342 --ignore-vuln GHSA-wkqf-x4fv-wfr4
       - name: Upload pip-audit report
         uses: actions/upload-artifact@v4
         if: always()
