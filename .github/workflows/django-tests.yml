@@ -1,0 +1,106 @@
+# Django Backend Tests — runs from repo root (path-filter and working-directory use idp-portal/)
+# Copied from idp-portal/.github/workflows/django-tests.yml
+
+name: Django Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'idp-portal/django_backend/**'
+      - '.github/workflows/django-tests.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'idp-portal/django_backend/**'
+      - '.github/workflows/django-tests.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.12']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('idp-portal/django_backend/requirements-dev.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        working-directory: idp-portal/django_backend
+        run: uv pip install -r requirements-dev.lock --system
+
+      - name: Run unit tests with coverage
+        working-directory: idp-portal/django_backend
+        run: |
+          pytest -m "not slow and not benchmark and not integration" \
+            --cov=catalog --cov=profiles --cov=integrations \
+            --cov=executions --cov=idp_auth --cov=core \
+            --cov-report=xml --cov-report=term-missing \
+            --cov-fail-under=80 \
+            -v
+
+      - name: Run integration tests
+        working-directory: idp-portal/django_backend
+        run: |
+          pytest -m integration -v
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: idp-portal/django_backend/coverage.xml
+          flags: django-backend
+          name: django-coverage
+          fail_ci_if_error: false
+
+      - name: Upload coverage report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: idp-portal/django_backend/htmlcov/
+          retention-days: 7
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install ruff
+        run: pip install ruff
+      - name: Run ruff linter
+        working-directory: idp-portal/django_backend
+        run: ruff check .
+
+  type-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install uv
+        run: pip install uv
+      - name: Install dependencies
+        working-directory: idp-portal/django_backend
+        run: |
+          uv pip install -r requirements-dev.lock --system
+          pip install django-stubs djangorestframework-stubs
+      - name: Run mypy type check (strict, blocking)
+        working-directory: idp-portal/django_backend
+        run: mypy . --no-error-summary

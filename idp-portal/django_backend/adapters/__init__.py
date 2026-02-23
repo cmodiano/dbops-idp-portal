@@ -13,7 +13,7 @@ Story 33.1: OCP — replaced if/elif chains with AdapterRegistry.
 """
 from __future__ import annotations
 
-from adapters.base_adapter import BaseAdapter
+from adapters.base_adapter import BaseAdapter, ICancellableAdapter, ITriggerableAdapter
 from adapters.registry import adapter_registry
 
 
@@ -21,7 +21,7 @@ from adapters.registry import adapter_registry
 # Factory functions — parameter validation stays here, not in the registry
 # ---------------------------------------------------------------------------
 
-def _factory_aap(base_url: str, auth_headers: dict, timeout: float | None = None, **kwargs) -> BaseAdapter:
+def _factory_aap(base_url: str, auth_headers: dict, timeout: float | None = None, **kwargs) -> ITriggerableAdapter:
     from adapters.aap_adapter import AAPAdapter
     kw: dict = {"base_url": base_url, "auth_headers": auth_headers, **kwargs}
     if timeout is not None:
@@ -29,7 +29,7 @@ def _factory_aap(base_url: str, auth_headers: dict, timeout: float | None = None
     return AAPAdapter(**kw)
 
 
-def _factory_tower(base_url: str, auth_headers: dict, timeout: float | None = None, **kwargs) -> BaseAdapter:
+def _factory_tower(base_url: str, auth_headers: dict, timeout: float | None = None, **kwargs) -> ITriggerableAdapter:
     from adapters.tower_adapter import TowerAdapter
     kw: dict = {"base_url": base_url, "auth_headers": auth_headers, **kwargs}
     if timeout is not None:
@@ -37,7 +37,7 @@ def _factory_tower(base_url: str, auth_headers: dict, timeout: float | None = No
     return TowerAdapter(**kw)
 
 
-def _factory_azure_devops(base_url: str, auth_headers: dict, timeout: float | None = None, **kwargs) -> BaseAdapter:
+def _factory_azure_devops(base_url: str, auth_headers: dict, timeout: float | None = None, **kwargs) -> ITriggerableAdapter:
     from adapters.azure_devops_adapter import AzureDevOpsAdapter
     kw: dict = {"base_url": base_url, "auth_headers": auth_headers, **kwargs}
     if timeout is not None:
@@ -45,7 +45,7 @@ def _factory_azure_devops(base_url: str, auth_headers: dict, timeout: float | No
     return AzureDevOpsAdapter(**kw)
 
 
-def _factory_github_actions(base_url: str, auth_headers: dict, timeout: float | None = None, **kwargs) -> BaseAdapter:
+def _factory_github_actions(base_url: str, auth_headers: dict, timeout: float | None = None, **kwargs) -> ITriggerableAdapter:
     if "owner" not in kwargs or "repo" not in kwargs:
         raise ValueError("github_actions platform requires 'owner' and 'repo' parameters")
     from adapters.github_actions_adapter import GitHubActionsAdapter
@@ -55,7 +55,7 @@ def _factory_github_actions(base_url: str, auth_headers: dict, timeout: float | 
     return GitHubActionsAdapter(**kw)
 
 
-def _factory_terraform_cloud(base_url: str, auth_headers: dict, timeout: float | None = None, **kwargs) -> BaseAdapter:
+def _factory_terraform_cloud(base_url: str, auth_headers: dict, timeout: float | None = None, **kwargs) -> ITriggerableAdapter:
     if "organization" not in kwargs or not kwargs["organization"]:
         raise ValueError("terraform_cloud platform requires 'organization' parameter")
     from adapters.terraform_cloud_adapter import TerraformCloudAdapter
@@ -82,7 +82,7 @@ adapter_registry.register("terraform_cloud", _factory_terraform_cloud)
 
 # Re-exported for consumers who need to register custom adapters at runtime.
 # Preferred over importing from adapters.registry directly.
-__all__ = ["get_platform_adapter", "adapter_registry"]
+__all__ = ["get_platform_adapter", "adapter_registry", "BaseAdapter", "ITriggerableAdapter", "ICancellableAdapter"]
 
 
 def get_platform_adapter(
@@ -91,7 +91,7 @@ def get_platform_adapter(
     auth_headers: dict[str, str],
     timeout: float | None = None,
     **platform_kwargs,
-) -> BaseAdapter:
+) -> ITriggerableAdapter:
     """Factory to instantiate the correct adapter for a given platform type.
 
     Delegates to adapter_registry — no if/elif.
@@ -105,7 +105,9 @@ def get_platform_adapter(
         **platform_kwargs: Platform-specific args (e.g. owner, repo for github_actions).
 
     Returns:
-        Adapter instance.
+        Adapter instance implementing ITriggerableAdapter. Callers should use
+        isinstance(adapter, ICancellableAdapter) before calling cancel_execution()
+        to respect ISP (Story 34.15).
 
     Raises:
         ValueError: If platform_type is not supported.

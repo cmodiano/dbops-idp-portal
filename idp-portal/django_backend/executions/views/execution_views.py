@@ -37,6 +37,7 @@ import structlog
 
 # Story 27.9: Use factory pattern for platform adapter instantiation
 from adapters import get_platform_adapter
+from adapters.base_adapter import ICancellableAdapter
 
 exec_logger = structlog.get_logger(__name__)
 
@@ -388,6 +389,15 @@ class ExecutionCancelView(APIView):
                 auth_headers=auth_headers,
                 **platform_kwargs,
             )
+            # Story 34.15: ISP — skip remote cancel if adapter does not support it
+            if not isinstance(adapter, ICancellableAdapter):
+                exec_logger.warning(
+                    "cancel_not_supported",
+                    platform_type=platform_type,
+                    execution_id=str(execution.id),
+                    correlation_id=get_correlation_id(),
+                )
+                return
             # MEDIUM-3 FIX: Create new event loop instead of get_event_loop() (deprecated Python 3.10+)
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)

@@ -1,25 +1,20 @@
 """
-Base adapter interface for platform integrations.
+Base adapter interfaces for platform integrations.
 
-Defines the contract that all platform adapters (AAP, Tower, Azure DevOps,
-GitHub Actions, Terraform Cloud, etc.) must implement.
+Defines the contracts that platform adapters must implement.
 
 Story 27.1-27.3: Strategy Pattern for platform-agnostic execution.
+Story 34.15: ISP — Split BaseAdapter into ITriggerableAdapter (core) and
+  ICancellableAdapter (optional). New adapters that do not support remote
+  cancellation inherit from ITriggerableAdapter only.
 """
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
 
-class BaseAdapter(ABC):
-    """Abstract base class for platform integration adapters.
-
-    All platform adapters must implement:
-    - trigger(): Launch a job/workflow/pipeline run
-    - get_status(): Get current execution status
-    - get_job_logs(): Retrieve execution logs
-    - cancel_execution(): Cancel a running execution
-    """
+class ITriggerableAdapter(ABC):
+    """Interface core — toute plateforme doit supporter trigger/status/logs."""
 
     @abstractmethod
     async def trigger(
@@ -90,6 +85,15 @@ class BaseAdapter(ABC):
         """
         ...
 
+
+class ICancellableAdapter(ABC):
+    """Interface optionnelle ISP — plateformes supportant l'annulation distante.
+
+    Les adapters qui ne supportent pas l'annulation n'héritent PAS de cette classe.
+    Le code appelant vérifie isinstance(adapter, ICancellableAdapter) avant d'appeler
+    cancel_execution().
+    """
+
     @abstractmethod
     async def cancel_execution(
         self,
@@ -106,3 +110,19 @@ class BaseAdapter(ABC):
             ServiceUnavailableError: If platform is unreachable or cancel fails
         """
         ...
+
+
+class BaseAdapter(ITriggerableAdapter, ICancellableAdapter):
+    """Combinaison des deux interfaces — compatibilité ascendante (Story 27.1-27.3).
+
+    Les adapters existants (AAP, Tower, Azure DevOps, GitHub Actions, Terraform Cloud)
+    héritent de BaseAdapter sans modification.
+
+    Pour les nouveaux adapters ne supportant pas l'annulation distante (ex. Splunk,
+    adapters read-only), hériter de ITriggerableAdapter uniquement — NE PAS hériter
+    de BaseAdapter. Le code appelant vérifie isinstance(adapter, ICancellableAdapter)
+    avant d'appeler cancel_execution() (Story 34.15 — ISP).
+    """
+
+
+__all__ = ["ITriggerableAdapter", "ICancellableAdapter", "BaseAdapter"]
