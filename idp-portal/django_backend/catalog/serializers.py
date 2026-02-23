@@ -2,6 +2,9 @@
 DRF Serializers for catalog app.
 Maps Django models to JSON responses.
 """
+# Responsabilité : Sérialisation/désérialisation DRF du catalogue (10+ serializers, validations
+# croisées plateforme/intégration, règles métier au niveau API) — volume justifié par la richesse
+# du modèle Action et les contraintes de validation inter-champs (Story 35.4 AC3).
 
 from __future__ import annotations
 

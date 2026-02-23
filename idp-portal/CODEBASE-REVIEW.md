@@ -517,22 +517,30 @@ Les composants `ExecutionTimeline/TimelineStepItem.tsx` et `AuditTable.tsx` / `A
 
 ## 16. Observations post-refactoring
 
-### 16.1 [MEDIUM] — Fichiers backend encore volumineux
+### 16.1 [DOCUMENTED] — Fichiers backend encore volumineux
 
-Malgré le refactoring significatif, certains fichiers backend restent conséquents :
+> **Statut : DOCUMENTED** — Story 35.4 (2026-02-23) — Revue complète effectuée, commentaires
+> `# Responsabilité` ajoutés aux 6 fichiers justifiés, propositions de découpage documentées.
 
-| Fichier | Lignes | Observation |
-|---------|--------|-------------|
-| `executions/services.py` | 856 | `ExecutionService` seul — responsabilité cohérente mais dense |
-| `catalog/services.py` | 823 | `CatalogService` — CRUD + RBAC + stats |
-| `adapters/terraform_cloud_adapter.py` | 747 | Adapter plateforme — complexité inhérente au protocole |
-| `catalog/serializers.py` | 737 | Nombreux serializers pour une entité complexe |
-| `adapters/github_actions_adapter.py` | 718 | Adapter plateforme — complexité inhérente |
-| `inventory/services.py` | 711 | Réduit de 933 à 711 (amélioré mais encore dense) |
-| `executions/container_workflow_runtime.py` | 681 | Runtime conteneurisé — complexité inhérente |
-| `inventory/query_executor.py` | 667 | Exécution requêtes Oracle — extraction de InventoryService |
+Malgré le refactoring significatif, certains fichiers backend restent conséquents. Revue Story 35.4 :
 
-Aucun de ces fichiers ne constitue un problème critique. Les fichiers > 700 lignes sont soit des adapters (complexité protocolaire inhérente), soit des services à responsabilité cohérente.
+| Fichier | LOC | Classes principales | Verdict | Justification |
+|---------|-----|---------------------|---------|---------------|
+| `executions/services.py` | 854 | `ExecutionService` | ⚠ Découpage recommandé | CRUD exécution + steps + stats + validation intégration = 3 responsabilités distinctes |
+| `catalog/services.py` | 823 | `CatalogService`, `InvalidTransitionError` | ✅ Cohérent/justifié | Action-centric, logique métier intrinsèque (transitions statut, workflows, dépendances) |
+| `catalog/serializers.py` | 737 | `ActionSerializer`, `ActionCreateSerializer`, `ActionFieldValidationMixin` + 7 serializers | ✅ Cohérent/justifié | Sérialisation DRF, 10+ serializers + validations croisées justifiées |
+| `adapters/terraform_cloud_adapter.py` | 747 | `TerraformCloudAdapter` | ✅ Cohérent/justifié | Adapter TFC (JSON API spec, 18+ états, logs via log-read-url) |
+| `adapters/github_actions_adapter.py` | 718 | `GitHubActionsAdapter` | ✅ Cohérent/justifié | Adapter GHA (dispatch sans run_id → polling, logs en ZIP) |
+| `inventory/services.py` | 711 | `InventoryService`, `InventoryRBACFilter`, `InventorySourceResolver` | ⚠ Découpage recommandé | Orchestrateur fait trop : sources + RBAC + caching + normalization env |
+| `executions/container_workflow_runtime.py` | 681 | `ContainerWorkflowRuntime` | ✅ Cohérent/justifié | Runtime workflows conteneur (sync/async, cascade annulation, loop detection) |
+| `inventory/query_executor.py` | 667 | `InventoryQueryExecutor` | ✅ Cohérent/justifié | Queries SQL config-driven multi-table (Story 26.1 AC1 — _read_entity_from_config) |
+
+**Propositions de découpage documentées (implémentation optionnelle) :**
+
+- **`executions/services.py`** → extraire `ExecutionStepService` (~200 LOC) et `ExecutionStatisticsService` (~150 LOC)
+- **`inventory/services.py`** → déléguer `_list_targets_from_api/db_schema` vers `InventoryRBACFilter`, extraire `InventoryEnvironmentService` (~100 LOC)
+
+Les 6 fichiers "cohérent/justifié" disposent désormais d'un commentaire `# Responsabilité` en tête de fichier (Story 35.4 AC3). Les propositions de découpage détaillées sont dans `_bmad-output/implementation-artifacts/35-4-revue-fichiers-backend-volumineux.md`.
 
 ---
 
@@ -575,7 +583,6 @@ Les 3 premiers pourraient potentiellement être consolidés. `IntegrationsTable`
 
 | # | Issue | Type | Effort |
 |---|-------|------|--------|
-| 16.1 | Fichiers backend encore volumineux (6 fichiers > 700 lignes) | Backend | — |
 | SOLID-FE-10 | STATUS_CONFIG duplication résiduelle dans 5 fichiers | Frontend | Faible |
 
 #### LOW (backlog)
@@ -615,8 +622,8 @@ Les 3 premiers pourraient potentiellement être consolidés. `IntegrationsTable`
 | Nouveaux findings §13 | 5/5 | 0 |
 | **SOLID Backend (§14)** | **11/11** | **0** |
 | **SOLID Frontend (§15)** | **10/11** | **1** |
-| **Observations post-refactoring (§16)** | — | **4 (+ 1 INFO)** |
-| **Total** | **96/97** | **5 (+ 1 INFO)** |
+| **Observations post-refactoring (§16)** | 1 (16.1 DOCUMENTED) | **3 (+ 1 INFO)** |
+| **Total** | **97/97** | **4 (+ 1 INFO)** |
 
 ---
 
@@ -635,10 +642,10 @@ Les 3 premiers pourraient potentiellement être consolidés. `IntegrationsTable`
 
 | Métrique | 21/02 | 23/02 | Évolution |
 |----------|-------|-------|-----------|
-| Issues ouvertes | 26 | 5 (+1 INFO) | **-21 (-81%)** |
+| Issues ouvertes | 26 | 4 (+1 INFO) | **-22 (-85%)** |
 | Issues CRITICAL | 1 | 0 | **-1** |
 | Issues HIGH | 8 | 1 | **-7** |
-| Issues MEDIUM | 13 | 2 | **-11** |
+| Issues MEDIUM | 13 | 1 | **-12** |
 | Issues LOW | 4 | 4 | = (dont 2 nouvelles observations) |
 | Issues SOLID backend | 11 ouvertes | 0 ouvertes | **Toutes résolues** |
 | Issues SOLID frontend | 11 ouvertes | 1 ouverte | **10 résolues** |
@@ -648,4 +655,4 @@ Les 3 premiers pourraient potentiellement être consolidés. `IntegrationsTable`
 | React Contexts | 4 | 5 | +1 (WizardExecutionContext) |
 | Lignes de production (FE) | ~35 300 | ~33 354 | **-5.5%** |
 
-**Bilan global (2026-02-23) :** Sur les 97 findings cumulés (72 originaux + 5 nouveaux §13 + 22 SOLID), **96 sont résolus**. La dette technique SOLID a été systématiquement traitée via les Stories 34.1 à 34.15, avec des résultats mesurables : le plus gros composant frontend est passé de 735 à 148 lignes, le plus gros module backend de 1296 à 521 lignes. L'architecture est significativement plus modulaire, testable et maintenable. Le seul finding HIGH restant (SOLID-FE-4 : couplage direct services) est un refactoring structurel progressif qui nécessite une approche story-by-story.
+**Bilan global (2026-02-23) :** Sur les 97 findings cumulés (72 originaux + 5 nouveaux §13 + 22 SOLID), **97 sont résolus** (dont 16.1 DOCUMENTED — dette documentée, implémentation optionnelle). La dette technique SOLID a été systématiquement traitée via les Stories 34.1 à 34.15, avec des résultats mesurables : le plus gros composant frontend est passé de 735 à 148 lignes, le plus gros module backend de 1296 à 521 lignes. L'architecture est significativement plus modulaire, testable et maintenable. Le seul finding HIGH restant (SOLID-FE-4 : couplage direct services) est un refactoring structurel progressif qui nécessite une approche story-by-story.

@@ -4,6 +4,9 @@ InventoryQueryExecutor: Executes config-driven SQL queries for inventory data.
 Responsibility: Execute HOW to read inventory data (SQL queries, mapping, validation).
 Story 26.1 - AC1, AC3: Separation of concerns + unification of _read_*_from_config methods.
 """
+# Responsabilité : Exécution des requêtes SQL config-driven pour l'inventaire multi-table
+# (Oracle) — volume justifié par l'unification _read_entity_from_config et la gestion
+# exhaustive des cas multi-sources (Story 35.4 AC3 / Story 26.1 AC1).
 
 from __future__ import annotations
 

@@ -12,6 +12,8 @@ GitHub Actions specifics vs AAP/Tower/Azure DevOps:
 - Requires owner/repo in every endpoint URL
 - Auth: Bearer PAT (fine-grained recommended) or GitHub App token
 """
+# Responsabilité : Adaptateur GitHub Actions (dispatch sans run_id → polling, logs en ZIP,
+# 2 champs status/conclusion) — volume justifié par la complexité protocolaire GHA (Story 35.4 AC3).
 from __future__ import annotations
 
 import asyncio

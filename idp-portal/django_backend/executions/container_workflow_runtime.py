@@ -15,6 +15,9 @@ Architecture:
 - Uses ExecutionService.create_execution for child executions
 - Supports workflow_step_parameters injection (Story 4.12)
 """
+# Responsabilité : Runtime des workflows conteneur (exécutions enfants, cascade annulation,
+# loop detection, intégration ServiceNow) — volume justifié par la complexité inhérente
+# à l'orchestration async multi-étapes (Story 35.4 AC3).
 
 import structlog
 from threading import Thread

@@ -3,6 +3,9 @@ CatalogService for business logic related to actions and workflows.
 Handles complex operations like status transitions, tag management, and validation.
 Story M.8 - Task 9: Structured logging with structlog.
 """
+# Responsabilité : Logique métier du catalogue d'actions (transitions de statut, gestion des
+# workflows, dépendances entre étapes, tags, RBAC catalog) — volume justifié par la richesse
+# inhérente du domaine métier (Story 35.4 AC3).
 
 from __future__ import annotations
 
