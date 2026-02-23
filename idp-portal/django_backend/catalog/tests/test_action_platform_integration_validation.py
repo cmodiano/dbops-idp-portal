@@ -111,7 +111,7 @@ class TestActionPlatformIntegrationValidation(TestCase):
             'item_type': 'action',
             'engine': 'Oracle',
             'platform': 'Tower',
-            'integration_id': self.integration_tower.id,
+            'integration_id': self.integration_aap.id,  # Tower is alias for AAP (see _PLATFORM_ALIAS)
         })
         self.assertTrue(serializer.is_valid(), serializer.errors)
 

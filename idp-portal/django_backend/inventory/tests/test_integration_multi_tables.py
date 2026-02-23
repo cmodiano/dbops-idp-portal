@@ -25,7 +25,7 @@ class InventoryMultiTableIntegrationTests(TestCase):
 
     @patch('inventory.views.get_correlation_id', return_value='int-test-001')
     @patch('inventory.views.get_user_ad_groups', return_value=['GRP-DBA'])
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_full_flow_servers(self, mock_service_cls, mock_ad_groups, mock_corr_id):
         """Task 9.2: Full flow - request → RBAC → list_servers → JSON."""
         mock_svc = mock_service_cls.return_value
@@ -57,7 +57,7 @@ class InventoryMultiTableIntegrationTests(TestCase):
 
     @patch('inventory.views.get_correlation_id', return_value='int-test-002')
     @patch('inventory.views.get_user_ad_groups', return_value=['GRP-DBA'])
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_full_flow_instances_with_server_filter(self, mock_service_cls, mock_ad_groups, mock_corr_id):
         """Task 9.4: User with access to 2 servers loads instances."""
         mock_svc = mock_service_cls.return_value
@@ -92,7 +92,7 @@ class InventoryMultiTableIntegrationTests(TestCase):
 
     @patch('inventory.views.get_correlation_id', return_value='int-test-003')
     @patch('inventory.views.get_user_ad_groups', return_value=['GRP-DBA'])
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_rbac_denial_flow(self, mock_service_cls, mock_ad_groups, mock_corr_id):
         """Task 9.5: User tries to access server outside profiles → 403."""
         mock_svc = mock_service_cls.return_value
@@ -118,7 +118,7 @@ class InventoryMultiTableIntegrationTests(TestCase):
 
     @patch('inventory.views.get_correlation_id', return_value='int-test-004')
     @patch('inventory.views.get_user_ad_groups', return_value=['GRP-DBA'])
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_full_flow_databases_no_server_filter(self, mock_service_cls, mock_ad_groups, mock_corr_id):
         """Task 9.4: All databases for environment without server filter."""
         mock_svc = mock_service_cls.return_value
@@ -137,7 +137,7 @@ class InventoryMultiTableIntegrationTests(TestCase):
 
     @patch('inventory.views.get_correlation_id', return_value='int-test-005')
     @patch('inventory.views.get_user_ad_groups', return_value=['GRP-DBA'])
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_json_structure_exact_format(self, mock_service_cls, mock_ad_groups, mock_corr_id):
         """Task 9.7: Verify exact JSON response structure { "data": [...] }."""
         mock_svc = mock_service_cls.return_value
@@ -162,7 +162,7 @@ class InventoryMultiTableIntegrationTests(TestCase):
 
     @patch('inventory.views.get_correlation_id', return_value='int-test-006')
     @patch('inventory.views.get_user_ad_groups', return_value=['GRP-DBA'])
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_error_response_format(self, mock_service_cls, mock_ad_groups, mock_corr_id):
         """AC6: Error responses return { "detail": "..." }."""
         mock_svc = mock_service_cls.return_value
@@ -186,7 +186,7 @@ class InventoryMultiTableIntegrationTests(TestCase):
 
     @patch('inventory.views.get_correlation_id', return_value='int-test-008')
     @patch('inventory.views.get_user_ad_groups', return_value=['GRP-DBA'])
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_multi_server_names_query_param(self, mock_service_cls, mock_ad_groups, mock_corr_id):
         """Task 9.4: Multi-value server_names query param (srv01&srv02)."""
         mock_svc = mock_service_cls.return_value

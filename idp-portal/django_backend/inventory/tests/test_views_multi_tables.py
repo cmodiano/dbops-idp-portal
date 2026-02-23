@@ -163,7 +163,7 @@ class BaseMultiTableViewTest(TestCase):
 class ListServersViewTests(BaseMultiTableViewTest):
     """Tests for list_servers endpoint. Task 8.2."""
 
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_list_servers_success_200(self, mock_service_cls):
         """AC1: Success 200 with valid environment."""
         mock_svc = mock_service_cls.return_value
@@ -190,7 +190,7 @@ class ListServersViewTests(BaseMultiTableViewTest):
         self.assertEqual(response.status_code, 400)
         self.assertIn('detail', response.json())
 
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_list_servers_filter_engine_type(self, mock_service_cls):
         """AC1: engine_type filter works - verifies service receives the parameter."""
         mock_svc = mock_service_cls.return_value
@@ -219,7 +219,7 @@ class ListServersViewTests(BaseMultiTableViewTest):
         # Note: actual filtering by engine_type is handled by InventoryService (story 23.2)
         # This test verifies the API layer passes the parameter correctly
 
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_list_servers_rbac_filters(self, mock_service_cls):
         """AC1: RBAC applied - only allowed servers returned."""
         mock_svc = mock_service_cls.return_value
@@ -242,7 +242,7 @@ class ListServersViewTests(BaseMultiTableViewTest):
         self.assertEqual(len(data['data']), 1)
         self.assertEqual(data['data'][0]['name'], 'srv01')
 
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_list_servers_500_service_error(self, mock_service_cls):
         """AC6: 500 on InventoryServiceError."""
         mock_svc = mock_service_cls.return_value
@@ -259,7 +259,7 @@ class ListServersViewTests(BaseMultiTableViewTest):
         response = self.client.get('/api/v1/inventory/servers/', {'environment': 'dev'})
         self.assertEqual(response.status_code, 401)
 
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_list_servers_logging(self, mock_service_cls):
         """AC6: Logging with correlation_id."""
         mock_svc = mock_service_cls.return_value
@@ -275,7 +275,7 @@ class ListServersViewTests(BaseMultiTableViewTest):
 class ListInstancesViewTests(BaseMultiTableViewTest):
     """Tests for list_instances endpoint. Task 8.3."""
 
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_list_instances_success_env_only(self, mock_service_cls):
         """AC2: Success 200 with environment only."""
         mock_svc = mock_service_cls.return_value
@@ -294,7 +294,7 @@ class ListInstancesViewTests(BaseMultiTableViewTest):
             environment='dev', server_name=None, server_names=None,
         )
 
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     @patch('inventory.views._validate_server_access')
     def test_list_instances_with_server_name_authorized(self, mock_validate, mock_service_cls):
         """AC2: Success 200 when server_name authorized."""
@@ -330,7 +330,7 @@ class ListInstancesViewTests(BaseMultiTableViewTest):
         # Custom exception handler wraps in {"error": {"message": "..."}}
         self.assertIn('srv99', str(data))
 
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     @patch('inventory.views._validate_server_access')
     def test_list_instances_server_names_multi_value(self, mock_validate, mock_service_cls):
         """AC2: server_names multi-value works."""
@@ -354,7 +354,7 @@ class ListInstancesViewTests(BaseMultiTableViewTest):
         response = self.client.get('/api/v1/inventory/instances/')
         self.assertEqual(response.status_code, 400)
 
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_list_instances_500_service_error(self, mock_service_cls):
         """AC6: 500 on InventoryServiceError."""
         mock_svc = mock_service_cls.return_value
@@ -369,7 +369,7 @@ class ListInstancesViewTests(BaseMultiTableViewTest):
 class ListDatabasesViewTests(BaseMultiTableViewTest):
     """Tests for list_databases endpoint. Task 8.4."""
 
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     @patch('inventory.views._validate_server_access')
     def test_list_databases_with_server_name_authorized(self, mock_validate, mock_service_cls):
         """AC3: Success 200 with authorized server_name."""
@@ -402,7 +402,7 @@ class ListDatabasesViewTests(BaseMultiTableViewTest):
 
         self.assertEqual(response.status_code, 403)
 
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     @patch('inventory.views._validate_server_access')
     def test_list_databases_server_names_multi_value(self, mock_validate, mock_service_cls):
         """AC3: server_names list works."""
@@ -421,7 +421,7 @@ class ListDatabasesViewTests(BaseMultiTableViewTest):
         data = response.json()
         self.assertEqual(len(data['data']), 2)
 
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_list_databases_no_server_filter(self, mock_service_cls):
         """AC3: Returns all databases for env without server filter."""
         mock_svc = mock_service_cls.return_value
@@ -441,7 +441,7 @@ class ListDatabasesViewTests(BaseMultiTableViewTest):
         response = self.client.get('/api/v1/inventory/databases/')
         self.assertEqual(response.status_code, 400)
 
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_list_databases_500_service_error(self, mock_service_cls):
         """AC6: 500 on InventoryServiceError."""
         mock_svc = mock_service_cls.return_value
@@ -455,7 +455,7 @@ class ListDatabasesViewTests(BaseMultiTableViewTest):
 class ErrorHandlingTests(BaseMultiTableViewTest):
     """Tests for error handling across endpoints. Task 8.5."""
 
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_inventory_service_error_500_all_endpoints(self, mock_service_cls):
         """500 when InventoryService raises error - parameterized test for all endpoints."""
         test_cases = [
@@ -503,7 +503,7 @@ class ValidateServerAccessTests(TestCase):
 
     @patch('inventory.views.get_correlation_id', return_value='test-corr-id')
     @patch('inventory.views.get_user_ad_groups', return_value=['GRP-DBA'])
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_server_authorized_passes(self, mock_service_cls, mock_ad_groups, mock_corr_id):
         """Authorized server_name passes without exception."""
         mock_svc = mock_service_cls.return_value
@@ -519,7 +519,7 @@ class ValidateServerAccessTests(TestCase):
 
     @patch('inventory.views.get_correlation_id', return_value='test-corr-id')
     @patch('inventory.views.get_user_ad_groups', return_value=['GRP-DBA'])
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_server_unauthorized_raises_403(self, mock_service_cls, mock_ad_groups, mock_corr_id):
         """Unauthorized server_name raises PermissionDenied."""
         mock_svc = mock_service_cls.return_value
@@ -537,7 +537,7 @@ class ValidateServerAccessTests(TestCase):
 
     @patch('inventory.views.get_correlation_id', return_value='test-corr-id')
     @patch('inventory.views.get_user_ad_groups', return_value=['GRP-DBA'])
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_server_names_all_authorized(self, mock_service_cls, mock_ad_groups, mock_corr_id):
         """All server_names authorized passes."""
         mock_svc = mock_service_cls.return_value
@@ -557,7 +557,7 @@ class ValidateServerAccessTests(TestCase):
 
     @patch('inventory.views.get_correlation_id', return_value='test-corr-id')
     @patch('inventory.views.get_user_ad_groups', return_value=['GRP-DBA'])
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_server_names_mixed_raises_403(self, mock_service_cls, mock_ad_groups, mock_corr_id):
         """Mixed server_names (some unauthorized) raises PermissionDenied."""
         mock_svc = mock_service_cls.return_value
@@ -575,7 +575,7 @@ class ValidateServerAccessTests(TestCase):
 
     @patch('inventory.views.get_correlation_id', return_value='test-corr-id')
     @patch('inventory.views.get_user_ad_groups', return_value=['GRP-DBA'])
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_no_server_filter_returns_allowed(self, mock_service_cls, mock_ad_groups, mock_corr_id):
         """No server filter returns list of allowed servers."""
         mock_svc = mock_service_cls.return_value
@@ -593,7 +593,7 @@ class ValidateServerAccessTests(TestCase):
 class ResponseFormatTests(BaseMultiTableViewTest):
     """Tests to verify JSON response format matches AC4."""
 
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_servers_response_format(self, mock_service_cls):
         """Response format: { "data": [...] } for servers."""
         mock_svc = mock_service_cls.return_value
@@ -613,7 +613,7 @@ class ResponseFormatTests(BaseMultiTableViewTest):
         self.assertIsInstance(data['data'], list)
         self.assertEqual(set(data['data'][0].keys()), {'id', 'name', 'environment', 'engine_type'})
 
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_instances_response_format(self, mock_service_cls):
         """Response format: { "data": [...] } for instances."""
         mock_svc = mock_service_cls.return_value
@@ -628,7 +628,7 @@ class ResponseFormatTests(BaseMultiTableViewTest):
         self.assertIsInstance(data['data'], list)
         self.assertEqual(set(data['data'][0].keys()), {'id', 'name', 'environment', 'server_ref', 'db_ref'})
 
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_databases_response_format(self, mock_service_cls):
         """Response format: { "data": [...] } for databases."""
         mock_svc = mock_service_cls.return_value

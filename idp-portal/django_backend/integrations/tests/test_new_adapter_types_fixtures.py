@@ -22,13 +22,13 @@ class TestFixtureLoading:
         call_command('loaddata', 'integration_type_catalogue', verbosity=0)
 
     def test_seven_types_created(self):
-        """AC9: 7 types total (2 existing + 5 new)."""
+        """AC9: 10 types total (original 7 + splunk/jira/inventory_db added in Stories 27.8/27.10/24.x)."""
         count = IntegrationTypeCatalogue.objects.filter(is_active=True).count()
-        assert count == 7
+        assert count == 10
 
     def test_all_expected_types_exist(self):
-        expected = ['aap', 'azure_devops', 'github_actions', 'servicenow',
-                    'terraform_cloud', 'tower', 'vault']
+        expected = ['aap', 'azure_devops', 'github_actions', 'inventory_db',
+                    'jira', 'servicenow', 'splunk', 'terraform_cloud', 'tower', 'vault']
         actual = sorted(
             IntegrationTypeCatalogue.objects.values_list('code', flat=True)
         )
@@ -143,8 +143,8 @@ class TestActionCounts:
     def test_total_action_count(self):
         """AC9: All types have actions associated."""
         total = IntegrationAction.objects.count()
-        # AAP:4 + SN:3 + Tower:4 + Azure:4 + GitHub:4 + Terraform:5 + Vault:3 = 27
-        assert total == 27
+        # AAP:4 + SN:3 + Tower:4 + Azure:4 + GitHub:4 + Terraform:5 + Vault:3 + Splunk:x + Jira:x + InventoryDB:x = 33
+        assert total == 33
 
     def test_every_type_has_at_least_one_action(self):
         """AC9: Each type has at least 1 active action."""
@@ -263,10 +263,10 @@ class TestCatalogueAPINewTypes:
         call_command('loaddata', 'integration_type_catalogue', verbosity=0)
 
     def test_list_returns_7_types(self):
-        """AC9: GET /api/v1/integrations/types/ returns 7 types."""
+        """AC9: GET /api/v1/integrations/types/ returns 10 types (7 original + splunk/jira/inventory_db)."""
         response = self.client.get('/api/v1/integrations/types/')
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data['data']) == 7
+        assert len(response.data['data']) == 10
 
     def test_list_types_sorted_by_code(self):
         """AC6: Types sorted by code (alphabetical)."""
@@ -381,7 +381,7 @@ class TestEdgeCases:
         response = self.client.get('/api/v1/integrations/types/')
         codes = [t['code'] for t in response.data['data']]
         assert 'vault' not in codes
-        assert len(response.data['data']) == 6
+        assert len(response.data['data']) == 9
 
     def test_inactive_action_filtered(self):
         """Inactive action filtered from actions list."""
@@ -405,7 +405,7 @@ class TestSeedCommand:
         """Command loads all types when none exist."""
         assert IntegrationTypeCatalogue.objects.count() == 0
         call_command('seed_integration_types')
-        assert IntegrationTypeCatalogue.objects.count() == 7
+        assert IntegrationTypeCatalogue.objects.count() == 10
 
     def test_seed_idempotent(self):
         """Command skips when all types exist."""
@@ -419,8 +419,8 @@ class TestSeedCommand:
         call_command('loaddata', 'integration_type_catalogue', verbosity=0)
         # seed_integration_types --force clears actions then reloads
         call_command('seed_integration_types', force=True)
-        assert IntegrationTypeCatalogue.objects.count() == 7
-        assert IntegrationAction.objects.count() == 27
+        assert IntegrationTypeCatalogue.objects.count() == 10
+        assert IntegrationAction.objects.count() == 33
 
     def test_individual_fixture_tower(self):
         """Individual Tower fixture loads correctly."""
@@ -467,7 +467,7 @@ class TestUniqueConstraints:
         """Type codes are unique — PK-based upsert prevents duplicates."""
         # Types use PK (code) so loaddata does upsert.
         # Actions have auto-PK so we verify uniqueness via constraint.
-        assert IntegrationTypeCatalogue.objects.count() == 7
+        assert IntegrationTypeCatalogue.objects.count() == 10
         codes = list(
             IntegrationTypeCatalogue.objects.values_list('code', flat=True)
         )

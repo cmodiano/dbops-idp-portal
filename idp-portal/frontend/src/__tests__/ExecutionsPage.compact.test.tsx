@@ -136,7 +136,9 @@ describe('ExecutionsPage - Compact Mode (Story 17.13)', () => {
     expect(ENGINE_ICON_SIZE_COMPACT_VALUE).toBe(40);
 
     // Render an engine icon and check size
-    const { container } = render(renderEngineIcon('Oracle', 'action') as React.ReactElement);
+    const { container } = render(
+      <ThemeProvider>{renderEngineIcon('Oracle', 'action') as React.ReactElement}</ThemeProvider>
+    );
     const img = container.querySelector('img');
     expect(img).toBeInTheDocument();
     expect(img).toHaveAttribute('width', '40');
@@ -179,7 +181,9 @@ describe('ExecutionsPage - Compact Mode (Story 17.13)', () => {
   });
 
   it('accessibility maintained: tooltips and aria attributes on icons (Task 5.4)', () => {
-    const { container } = render(renderEngineIcon('Oracle', 'action') as React.ReactElement);
+    const { container } = render(
+      <ThemeProvider>{renderEngineIcon('Oracle', 'action') as React.ReactElement}</ThemeProvider>
+    );
     const img = container.querySelector('img');
     // img has aria-hidden for decorative icons
     expect(img).toHaveAttribute('aria-hidden');

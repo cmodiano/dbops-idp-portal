@@ -47,7 +47,7 @@ describe('useAAPTemplates', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.templates).toEqual([{ id: 10, name: 'Deploy', description: '' }]);
     expect(result.current.fallback).toBe(false);
-    expect(mockGetAAPTemplates).toHaveBeenCalledWith(1, 'job_template');
+    expect(mockGetAAPTemplates).toHaveBeenCalledWith(1, 'job_template', undefined);
   });
 
   it('sets fallback=true on API error', async () => {

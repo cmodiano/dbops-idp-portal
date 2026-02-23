@@ -571,7 +571,7 @@ describe('ActionForm', () => {
       await user.click(screen.getByText('Enregistrer'));
 
       await waitFor(() => {
-        expect(screen.getByText(/Le code modèle est obligatoire pour PROD/i)).toBeInTheDocument();
+        expect(screen.getByText(/Le modèle \/ Template ID est obligatoire pour PROD/i)).toBeInTheDocument();
       });
       expect(mockOnSubmit).not.toHaveBeenCalled();
     });
@@ -597,7 +597,7 @@ describe('ActionForm', () => {
           { order: 1, name: 'Step', type: 'prerequisite', connector_type: 'none', conditional_environments: null },
         ],
         workflow_steps: null,
-        change_type_config: { PROD: { required: true, change_model_code: '1516-B' } },
+        change_type_config: { PROD: { required: true, change_model_code: '1516 B' } },  // space is not allowed
         tags: [],
       };
 
@@ -609,7 +609,7 @@ describe('ActionForm', () => {
 
       // Should show error and block submit (message contains "alphanumérique")
       await waitFor(() => {
-        expect(screen.getByText(/code modèle pour PROD/i)).toBeInTheDocument();
+        expect(screen.getByText(/modèle \/ Template ID pour PROD/i)).toBeInTheDocument();
       });
       expect(mockOnSubmit).not.toHaveBeenCalled();
     });

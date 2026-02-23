@@ -106,7 +106,7 @@ describe('executionRenderers', () => {
 
     it('renders SQL Server icon (SVG)', () => {
       const { container } = renderWithTheme(<>{renderEngineIcon('SQL Server', 'action')}</>);
-      const img = container.querySelector('img[src*="microsoft-sql-server"]');
+      const img = container.querySelector('img[src*="sqlserver"]');
       expect(img).toBeInTheDocument();
     });
 

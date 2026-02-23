@@ -154,7 +154,7 @@ describe('useExecutionRestart', () => {
     });
 
     expect(mockNotificationError).toHaveBeenCalledWith({
-      message: 'Erreur de relance',
+      title: 'Erreur de relance',
       description: 'Action non disponible — impossible de relancer cette exécution',
     });
     expect(vi.mocked(logger.error)).toHaveBeenCalled();
@@ -184,7 +184,7 @@ describe('useExecutionRestart', () => {
     });
 
     expect(mockNotificationError).toHaveBeenCalledWith({
-      message: 'Erreur de relance',
+      title: 'Erreur de relance',
       description: 'Action non disponible — impossible de relancer cette exécution',
     });
     expect(result.current.restartWizardOpen).toBe(false);
@@ -206,7 +206,7 @@ describe('useExecutionRestart', () => {
     });
 
     expect(mockNotificationError).toHaveBeenCalledWith({
-      message: 'Erreur de relance',
+      title: 'Erreur de relance',
       description: 'Network failure',
     });
     expect(result.current.restartWizardOpen).toBe(false);

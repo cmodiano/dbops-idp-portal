@@ -313,7 +313,7 @@ describe('Story 18.1 — AdminPage Actions', () => {
       await user.click(deactivateBtn);
 
       await waitFor(() => {
-        expect(screen.getByText('Confirmation de desactivation en cascade')).toBeInTheDocument();
+        expect(screen.getByText('Confirmation de désactivation en cascade')).toBeInTheDocument();
       });
 
       expect(screen.getByText('Workflow A')).toBeInTheDocument();
@@ -345,11 +345,11 @@ describe('Story 18.1 — AdminPage Actions', () => {
       await user.click(within(row).getByText('Desactiver'));
 
       await waitFor(() => {
-        expect(screen.getByText('Confirmation de desactivation en cascade')).toBeInTheDocument();
+        expect(screen.getByText('Confirmation de désactivation en cascade')).toBeInTheDocument();
       });
 
       // Click confirm
-      const confirmBtn = screen.getByText('Confirmer la desactivation');
+      const confirmBtn = screen.getByText('Confirmer la désactivation');
       await user.click(confirmBtn);
 
       await waitFor(() => {
@@ -376,7 +376,7 @@ describe('Story 18.1 — AdminPage Actions', () => {
       await user.click(within(row).getByText('Desactiver'));
 
       await waitFor(() => {
-        expect(screen.getByText('Confirmation de desactivation en cascade')).toBeInTheDocument();
+        expect(screen.getByText('Confirmation de désactivation en cascade')).toBeInTheDocument();
       });
 
       // Cancel

@@ -465,5 +465,5 @@ development_status:
     35-2-audit-except-exception-et-catch-residuels: done # code-review 2026-02-23: tableaux audit complets produits (AC#2+AC#4), commentaire engineIconCache.ts:31 ajouté (M2), ruff 0 BLE001 confirmé, story done
     35-3-migration-dip-services-phase-1: done # code-review 2026-02-23: 1H+3M+2L findings, 5 auto-fixés (loadingData création, useCallback, test erreur édition, mock redondant, setSaving), 1 action item M3
     35-4-revue-fichiers-backend-volumineux: done # 2026-02-23: commentaires Responsabilité ajoutés aux 6 fichiers justifiés, propositions découpage documentées, CODEBASE-REVIEW §16.1 → DOCUMENTED — code-review: 2 MEDIUM + 2 LOW fixes (compteurs §17, classes principales, scope, File List)
-    35-5-corriger-ou-supprimer-tests-en-echec: backlog
+    35-5-corriger-ou-supprimer-tests-en-echec: done # 2026-02-23: 93 backend + 113 frontend → 0 failures. Backend 3488 passed, frontend 2440 passed (180 files). KNOWN_ISSUES.md updated. code-review: 1H+2M+2L auto-corrigés (File List factories.py, KNOWN_ISSUES.md 3e skip documenté, catégorisation views/__init__.py)
     epic-35-retrospective: optional

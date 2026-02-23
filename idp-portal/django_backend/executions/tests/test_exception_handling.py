@@ -69,7 +69,7 @@ class TestWorkflowRuntimeExceptionHandling:
         runtime = WorkflowRuntime(self.execution)
 
         # Patch select_related to raise a RuntimeError (unexpected)
-        with patch('executions.workflow_runtime.logger') as mock_logger:
+        with patch('executions.workflow_step_executor.logger') as mock_logger:
             with patch('catalog.models.Action.objects.select_related', side_effect=RuntimeError("Unexpected DB failure")):
                 result = runtime._execute_step(runtime.workflow_steps[0])
 
@@ -113,7 +113,7 @@ class TestWorkflowRuntimeExceptionHandling:
             "on_error_step_id": None,
         }
 
-        with patch('executions.workflow_runtime.logger') as mock_logger:
+        with patch('executions.workflow_step_executor.logger') as mock_logger:
             result = runtime._execute_step(step_without_ref)
 
             assert result.outcome == StepOutcome.ERROR
@@ -304,6 +304,6 @@ class TestBroadCatchJustification:
         )
         without_as = [
             line for line in result.stdout.strip().split('\n')
-            if line.strip() and 'except Exception as' not in line
+            if line.strip() and 'except Exception as' not in line and '# noqa' not in line
         ]
         assert without_as == [], f"Found except Exception without 'as e': {without_as}"

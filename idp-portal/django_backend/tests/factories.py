@@ -69,42 +69,42 @@ class ActionFactory(DjangoModelFactory):
     item_type = 'action'
     default_impact_level = 'medium'
 
-    # JSON fields as serialized strings
-    parameters_schema = factory.LazyFunction(lambda: json.dumps({
+    # JSON fields as native Python objects (OracleJSONField handles serialization via get_prep_value)
+    parameters_schema = factory.LazyFunction(lambda: {
         "type": "object",
         "properties": {
             "target_host": {"type": "string", "description": "Target database host"},
             "database_name": {"type": "string", "description": "Database SID/name"}
         },
         "required": ["target_host", "database_name"]
-    }))
+    })
 
-    impact_rules = factory.LazyFunction(lambda: json.dumps({
+    impact_rules = factory.LazyFunction(lambda: {
         "dev": {"requires_change": False, "auto_approve": True},
         "staging": {"requires_change": True, "auto_approve": False},
         "prod": {"requires_change": True, "auto_approve": False}
-    }))
+    })
 
-    execution_steps = factory.LazyFunction(lambda: json.dumps([
+    execution_steps = factory.LazyFunction(lambda: [
         {"name": "Fetch credentials", "type": "vault"},
         {"name": "Create change ticket", "type": "servicenow"},
         {"name": "Execute on platform", "type": "platform"}
-    ]))
+    ])
 
-    change_type_config = factory.LazyFunction(lambda: json.dumps({
+    change_type_config = factory.LazyFunction(lambda: {
         "model": "standard",
         "category": "database",
         "assignment_group": "DBA-Team"
-    }))
+    })
 
     documentation_md = factory.LazyAttribute(lambda o: f"# {o.name}\n\nThis action performs database operations.")
 
-    remediation_rules = factory.LazyFunction(lambda: json.dumps({
+    remediation_rules = factory.LazyFunction(lambda: {
         "on_failure": [
             {"condition": "ORA-01017", "action": "notify_dba", "severity": "high"},
             {"condition": "ORA-00942", "action": "retry", "max_retries": 3}
         ]
-    }))
+    })
 
     created_by = factory.SubFactory(UserFactory)
     integration = factory.SubFactory(IntegrationFactory)

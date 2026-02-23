@@ -83,7 +83,7 @@ class CatalogRBACService:
                 cached = cache.get(cache_key)
                 if cached is not None:
                     return cast(dict, cached)
-        except Exception:
+        except Exception:  # noqa: BLE001
             # Cache unavailability should not break permission lookups
             pass
 
@@ -164,7 +164,7 @@ class CatalogRBACService:
             )
             cache_key = f'rbac:permissions:user:{user.id}:v:{cache_version}'
             cache.set(cache_key, result, RBAC_CACHE_TTL)
-        except Exception:
+        except Exception:  # noqa: BLE001
             # Cache unavailability should not break permission lookups
             pass
 

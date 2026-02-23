@@ -291,8 +291,8 @@ describe('BusinessRulePolicyModal', () => {
       const saveButton = buttons.find(
         (b) => b.textContent?.includes('Créer') || b.textContent?.includes('Enregistrer'),
       );
-      // Le bouton doit avoir aria-busy=true (Ant Design Button loading)
-      expect(saveButton).toHaveAttribute('aria-busy', 'true');
+      // Le bouton doit avoir la classe ant-btn-loading (Ant Design Button loading state)
+      expect(saveButton).toHaveClass('ant-btn-loading');
     });
   });
 });

@@ -36,6 +36,9 @@ def test_catalog_rbac_service_default_services():
 
 def test_catalog_rbac_service_get_permissions_uses_injected_profile_service():
     """AC3 : get_permissions() utilise le ProfileService injecté."""
+    from django.core.cache import cache
+    cache.clear()  # Prevent stale RBAC cache from previous tests affecting this test
+
     mock_profile_svc = MagicMock()
     mock_profile_svc.get_cumulative_permissions.return_value = {
         'action_permissions': [

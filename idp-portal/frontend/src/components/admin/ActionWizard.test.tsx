@@ -52,6 +52,23 @@ vi.mock('../../services/reference_service', () => ({
   fetchEnvironments: vi.fn().mockResolvedValue(['DEV', 'STAGING', 'PROD']),
 }));
 
+// Mock useEngines to bypass module-level cache and avoid cross-test state contamination
+vi.mock('../../hooks/useEngines', () => ({
+  useEngines: () => ({
+    engines: [
+      { value: 'Oracle', label: 'Oracle' },
+      { value: 'SQL Server', label: 'SQL Server' },
+    ],
+    engineOptions: [
+      { value: 'Oracle', label: 'Oracle' },
+      { value: 'SQL Server', label: 'SQL Server' },
+    ],
+    loading: false,
+    error: null,
+  }),
+  invalidateEnginesCache: vi.fn(),
+}));
+
 // Story 31.1: Mock usePlatformIntegrations (replaces usePlatforms for action forms)
 vi.mock('../../hooks/usePlatformIntegrations', () => ({
   usePlatformIntegrations: () => ({
@@ -425,8 +442,8 @@ describe('ActionWizard', () => {
       await waitFor(() => expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeInTheDocument());
       const prodSwitch = screen.getByLabelText(/Changement requis pour PROD/i);
       await user.click(prodSwitch);
-      // Code modèle is required when "Changement requis" is enabled for PROD
-      const codeModeleProd = screen.getByLabelText(/Code modèle pour PROD/i);
+      // Modèle / Template ID is required when "Changement requis" is enabled for PROD
+      const codeModeleProd = screen.getByLabelText(/Modèle \/ Template ID pour PROD/i);
       await user.type(codeModeleProd, 'CHG001');
       await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
       await waitFor(() => {
@@ -870,7 +887,7 @@ describe('ActionWizard', () => {
       // Select engine (Oracle)
       const engineSelect = screen.getByLabelText('Moteur');
       await user.click(engineSelect);
-      const oracleOpt = await screen.findByText('Oracle');
+      const oracleOpt = await screen.findByText('Oracle', { selector: '[class*="ant-select-item-option-content"]' });
       await user.click(oracleOpt);
       // Select integration (AAP-PROD = id 1)
       const integrationSelect = screen.getByLabelText('Intégration');
@@ -896,7 +913,8 @@ describe('ActionWizard', () => {
       await act(async () => { render(<ActionWizard {...defaultProps} />); });
       await navigateToStep2WithAAP(user);
       await waitFor(() => {
-        expect(screen.getByLabelText('Template AAP')).toBeInTheDocument();
+        // Form.Item label is used (no htmlFor without name prop) — check label text presence
+        expect(screen.getByText('Template AAP')).toBeInTheDocument();
       });
     });
 

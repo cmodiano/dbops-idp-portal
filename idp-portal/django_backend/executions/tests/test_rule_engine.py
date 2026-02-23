@@ -82,6 +82,7 @@ def _make_step(step_type: str = "terraform_cloud") -> MagicMock:
 def _make_action(policies: dict | None = None) -> MagicMock:
     action = MagicMock()
     action.id = 10
+    action.business_rule_policy_id = None  # Force inline policy path (Story 28.4 FK takes priority)
     action.business_rule_policies = policies
     return action
 

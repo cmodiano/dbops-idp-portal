@@ -5,7 +5,7 @@ PUT /admin/integrations/{id}, DELETE /admin/integrations/{id}
 """
 
 import pytest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework import status
@@ -382,7 +382,8 @@ class TestAAPTemplatesEndpoint(TestCase):
         mock_templates = [
             {"id": 10, "name": "Deploy", "description": "Deploy job"},
         ]
-        with patch('integrations.views.asyncio.run', return_value=mock_templates):
+        with patch('integrations.views.async_to_sync') as mock_a2s:
+            mock_a2s.return_value = MagicMock(return_value=mock_templates)
             response = self.client.get(
                 f'/api/v1/admin/integrations/{self.aap_integration.id}/aap-templates/',
                 {'resource_type': 'job_template'},
@@ -397,7 +398,8 @@ class TestAAPTemplatesEndpoint(TestCase):
         mock_templates = [
             {"id": 42, "name": "Full Provision", "description": ""},
         ]
-        with patch('integrations.views.asyncio.run', return_value=mock_templates):
+        with patch('integrations.views.async_to_sync') as mock_a2s:
+            mock_a2s.return_value = MagicMock(return_value=mock_templates)
             response = self.client.get(
                 f'/api/v1/admin/integrations/{self.aap_integration.id}/aap-templates/',
                 {'resource_type': 'workflow_job'},
@@ -423,12 +425,10 @@ class TestAAPTemplatesEndpoint(TestCase):
         """GET aap-templates when AAP is down → 503 + fallback=true."""
         from core.exceptions import ServiceUnavailableError
         self.client.force_authenticate(user=self.dbops_user)
-        with patch(
-            'integrations.views.asyncio.run',
-            side_effect=ServiceUnavailableError(
+        with patch('integrations.views.async_to_sync') as mock_a2s:
+            mock_a2s.return_value = MagicMock(side_effect=ServiceUnavailableError(
                 code="AAP_TIMEOUT", message="AAP API timeout", details={},
-            ),
-        ):
+            ))
             response = self.client.get(
                 f'/api/v1/admin/integrations/{self.aap_integration.id}/aap-templates/',
             )

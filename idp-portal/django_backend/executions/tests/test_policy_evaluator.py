@@ -126,6 +126,7 @@ def _make_action(business_rule_policies: dict | None = None) -> MagicMock:
     """Create a mock Action."""
     action = MagicMock()
     action.id = TEST_ACTION_ID
+    action.business_rule_policy_id = None  # Force inline policy path (Story 28.4 FK takes priority)
     action.business_rule_policies = business_rule_policies
     return action
 

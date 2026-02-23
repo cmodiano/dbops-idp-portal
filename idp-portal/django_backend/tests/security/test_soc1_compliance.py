@@ -544,14 +544,11 @@ class TestSecretValidation:
             assert pattern not in content, \
                 f"Hardcoded secret pattern found in settings.py: {pattern}"
 
-        # NEW fallback pattern (Story 17.5) should exist ONLY in controlled context
-        # Verify it's used as a fallback with proper comment explaining validation
-        assert 'django-insecure-dev-fallback-will-be-validated' in content, \
-            "Dev fallback SECRET_KEY missing (Story 17.5 requirement)"
-        assert 'startup_checks.py validates properly' in content, \
-            "Missing comment explaining dev fallback validation"
-        # Ensure it's ONLY used in an if statement, not as direct os.getenv default
-        assert "os.getenv('SECRET_KEY', 'django-insecure-dev-fallback" not in content, \
-            "Dev fallback must not be in os.getenv() default - should be in if not SECRET_KEY: block"
+        # Settings should use env var and raise on missing (Story 17.5 → superseded by strict validation)
+        assert "os.getenv('SECRET_KEY')" in content or 'os.getenv("SECRET_KEY")' in content, \
+            "SECRET_KEY must be loaded from environment variable"
         assert 'if not SECRET_KEY:' in content, \
-            "Dev fallback must be conditional (if not SECRET_KEY: pattern)"
+            "SECRET_KEY must validate presence (if not SECRET_KEY: block)"
+        # No dev fallback hardcoded in settings (strict environment requirement)
+        assert "os.getenv('SECRET_KEY', 'django-insecure-dev-fallback" not in content, \
+            "Dev fallback must not be in os.getenv() default"
