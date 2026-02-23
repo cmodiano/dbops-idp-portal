@@ -1,25 +1,29 @@
 /**
  * ConfirmationStep - Step 3 of the execution wizard.
  * Story 17.2, Task 4.3.
+ * Story 34.13 (SOLID-FE-7): Reduced from 15 to 12 props — 3 props moved
+ * to WizardExecutionContext (derivedEnvironment, currentImpact, environmentsCache).
  *
  * Shows execution recap and handles submit/scheduling.
  */
 
 import { memo } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   Alert,
   Badge,
+  Checkbox,
   Descriptions,
   Typography,
 } from 'antd';
 import type { CatalogActionDetail } from '../../services/catalog_service';
-import type { ExecutionEnvironment, ImpactLevel, InventoryItem } from '../../types/api';
 import { ImpactIndicator } from '../shared/ImpactIndicator';
 import type { SchedulingState } from '../../hooks/useExecutionSubmit';
 import { SchedulingPanel } from './SchedulingPanel';
 import type { UseSchedulingValidationReturn } from '../../hooks/useSchedulingValidation';
 import type { Target } from './TargetSelector';
 import { getEnvironmentLabel, isProductionEnvironment } from '../../utils/environmentHelpers';
+import { useWizardExecutionContext } from '../../contexts/WizardExecutionContext';
 
 const { Text, Title } = Typography;
 
@@ -27,37 +31,43 @@ import { STEP_DESCRIPTIONS_SIMPLIFIED } from '../../utils/stepDescriptions';
 
 export interface ConfirmationStepProps {
   action: CatalogActionDetail;
-  variant: 'default' | 'simplified';
   selectedTargets: Target[];
-  derivedEnvironment: ExecutionEnvironment | null;
-  currentImpact: ImpactLevel | null;
+  // 3 props moved to WizardExecutionContext:
+  // derivedEnvironment, currentImpact, environmentsCache
   parameters: Record<string, unknown>;
   submitError: string | null;
-  environmentsCache: InventoryItem[] | null;
   isScheduling: boolean;
   scheduling: SchedulingState;
   onSchedulingChange: (updates: Partial<SchedulingState>) => void;
   schedulingError: string | null;
   submitting: boolean;
   schedulingValidation: UseSchedulingValidationReturn;
+  /** Story 31.8: Page me checkbox state. */
+  pageMeEnabled: boolean;
+  /** Story 31.8: Page me checkbox handler. */
+  onPageMeChange: (checked: boolean) => void;
 }
 
 export const ConfirmationStep = memo(function ConfirmationStep({
   action,
-  variant,
   selectedTargets,
-  derivedEnvironment,
-  currentImpact,
   parameters,
   submitError,
-  environmentsCache,
   isScheduling,
   scheduling,
   onSchedulingChange,
   schedulingError,
   submitting,
   schedulingValidation,
+  pageMeEnabled,
+  onPageMeChange,
 }: ConfirmationStepProps) {
+  const { isBusinessProfile } = useAuth();
+  const {
+    derivedEnvironment,
+    currentImpact,
+    environmentsCache,
+  } = useWizardExecutionContext();
   const changeConfig = action?.change_type_config?.[derivedEnvironment?.toUpperCase() ?? ''];
   const isChangeRequired = changeConfig?.required ?? false;
 
@@ -66,7 +76,7 @@ export const ConfirmationStep = memo(function ConfirmationStep({
 
   return (
     <div>
-      {variant === 'simplified' && (
+      {isBusinessProfile && (
         <Alert
           type="info"
           showIcon
@@ -120,6 +130,18 @@ export const ConfirmationStep = memo(function ConfirmationStep({
             ))}
           </Descriptions>
         </>
+      )}
+
+      {/* Story 31.8: Page me checkbox — shown only if page_individual_enabled */}
+      {action?.notification_config?.page_individual_enabled && (
+        <div style={{ marginTop: 16 }}>
+          <Checkbox
+            checked={pageMeEnabled}
+            onChange={(e) => onPageMeChange(e.target.checked)}
+          >
+            Être pagé en cas d&apos;échec (production + critique uniquement)
+          </Checkbox>
+        </div>
       )}
 
       {submitError && (

@@ -3,7 +3,6 @@ Story 30.5 — SEC-9: CORS correlation ID header standardization tests.
 SEC-8: Celery credentials validation tests.
 """
 
-import pytest
 from django.conf import settings
 from django.test import RequestFactory
 from django.http import HttpResponse

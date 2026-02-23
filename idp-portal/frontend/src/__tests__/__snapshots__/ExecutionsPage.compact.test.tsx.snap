@@ -1381,14 +1381,14 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                         style="display: inline-flex; align-items: center; justify-content: center;"
                       >
                         <div
-                          style="display: inline-flex; align-items: center; justify-content: center; padding: 6px; background-color: rgba(26, 26, 36, 0.6); border-radius: 4px; border: 1px solid rgba(255, 255, 255, 0.1);"
+                          style="display: inline-flex; align-items: center; justify-content: center; padding: 6px; border-radius: 4px; background-color: rgb(255, 255, 255); border: 1px solid rgba(0, 0, 0, 0.06);"
                         >
                           <img
                             alt=""
                             aria-hidden="true"
                             height="40"
-                            src="https://www.svgrepo.com/show/303229/microsoft-sql-server-logo.svg"
-                            style="flex-shrink: 0; vertical-align: middle; filter: brightness(0) invert(1) contrast(1.2);"
+                            src="/icons/engines/sqlserver.svg"
+                            style="flex-shrink: 0; vertical-align: middle; filter: none;"
                             width="40"
                           />
                         </div>
@@ -1494,13 +1494,13 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                         style="display: inline-flex; align-items: center; justify-content: center;"
                       >
                         <div
-                          style="display: inline-flex; align-items: center; justify-content: center; padding: 6px; background-color: rgba(26, 26, 36, 0.6); border-radius: 4px; border: 1px solid rgba(255, 255, 255, 0.1);"
+                          style="display: inline-flex; align-items: center; justify-content: center; padding: 6px; border-radius: 4px; background-color: rgb(255, 255, 255); border: 1px solid rgba(0, 0, 0, 0.06);"
                         >
                           <img
                             alt=""
                             aria-hidden="true"
                             height="40"
-                            src="https://www.svgrepo.com/show/354152/oracle.svg"
+                            src="/icons/engines/oracle.svg"
                             style="flex-shrink: 0; vertical-align: middle; filter: brightness(1.1) contrast(1.1);"
                             width="40"
                           />

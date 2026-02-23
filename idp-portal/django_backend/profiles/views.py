@@ -22,39 +22,11 @@ from profiles.serializers import (
     ProfileActionPermissionsSerializer,
     ProfileTargetPermissionsSerializer,
 )
-from profiles.cache import RBAC_CACHE_VERSION_KEY, RBAC_CACHE_TTL
+from profiles.cache import invalidate_permissions_cache
 from profiles.services import ProfileService
 from profiles.services_export_import import export_profiles_yaml, import_profiles_yaml
 from core.permissions import DBOPSProfilePermission
 from core.exceptions import NotFoundError, InvalidStateError
-
-
-def invalidate_permissions_cache() -> None:
-    """
-    Invalidate RBAC permissions cache for all users.
-
-    Deletes the global cache version key (RBAC_CACHE_VERSION_KEY), which causes
-    all user-specific permission caches (rbac:permissions:user:{id}:v:{version})
-    to miss on the next request. This is called after profile/permission modifications.
-
-    TTL: 5 minutes (RBAC_CACHE_TTL).
-
-    Story 30.14 - AC3: Cache invalidation implementation.
-    """
-    import logging
-    from django.core.cache import cache
-
-    logger = logging.getLogger(__name__)
-    try:
-        cache.delete(RBAC_CACHE_VERSION_KEY)
-        logger.info(
-            'rbac_permissions_cache_invalidated',
-            cache_key=RBAC_CACHE_VERSION_KEY,
-            ttl_seconds=RBAC_CACHE_TTL,
-        )
-    except Exception:
-        # Cache unavailability should not break profile operations
-        logger.warning('rbac_permissions_cache_invalidation_failed', exc_info=True)
 
 
 @extend_schema_view(
@@ -67,9 +39,18 @@ def invalidate_permissions_cache() -> None:
 class ProfileViewSet(viewsets.ViewSet):
     """
     ViewSet for admin profiles CRUD operations.
+
+    Story 33.4 (DIP): uses _profile_service_class + get_profile_service() so
+    tests can override the service class without monkey-patching.
     """
     permission_classes = [IsAuthenticated, DBOPSProfilePermission]
-    
+
+    _profile_service_class: type[ProfileService] = ProfileService
+
+    def get_profile_service(self) -> ProfileService:
+        """Return a ProfileService instance (overridable in tests)."""
+        return self._profile_service_class()
+
     def _get_profile_id(self, pk: Any) -> int:
         """
         Helper method to extract and validate profile ID from pk parameter.
@@ -105,7 +86,7 @@ class ProfileViewSet(viewsets.ViewSet):
         Raises:
             NotFoundError: If profile not found
         """
-        service = ProfileService()
+        service = self.get_profile_service()
         profile = service.get_by_id(profile_id)
         if profile is None:
             raise NotFoundError(
@@ -125,7 +106,7 @@ class ProfileViewSet(viewsets.ViewSet):
 
     def list(self, request: Request) -> Response:
         """GET /admin/profiles - List all profiles."""
-        service = ProfileService()
+        service = self.get_profile_service()
         profiles = service.list_all()
         serializer = ProfileListSerializer(profiles, many=True)
         return Response({"data": serializer.data})
@@ -135,7 +116,7 @@ class ProfileViewSet(viewsets.ViewSet):
         serializer = ProfileCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
-        service = ProfileService()
+        service = self.get_profile_service()
         try:
             profile = service.create_profile(serializer.validated_data, user=request.user)
         except ValueError as e:
@@ -165,7 +146,7 @@ class ProfileViewSet(viewsets.ViewSet):
         serializer = ProfileUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
-        service = ProfileService()
+        service = self.get_profile_service()
         try:
             profile = service.update_profile(profile_id, serializer.validated_data, user=request.user)
         except ValueError as e:
@@ -191,7 +172,7 @@ class ProfileViewSet(viewsets.ViewSet):
         """DELETE /admin/profiles/{id} - Delete profile. Returns 204."""
         profile_id = self._get_profile_id(pk)
 
-        service = ProfileService()
+        service = self.get_profile_service()
         deleted = service.delete_profile(profile_id, user=request.user)
 
         if not deleted:
@@ -210,7 +191,7 @@ class ProfileViewSet(viewsets.ViewSet):
         profile_id = self._get_profile_id(pk)
         self._get_profile_or_404(profile_id)  # Verify profile exists
         
-        service = ProfileService()
+        service = self.get_profile_service()
         
         if request.method == 'GET':
             # GET /admin/profiles/{id}/actions
@@ -250,7 +231,7 @@ class ProfileViewSet(viewsets.ViewSet):
         profile_id = self._get_profile_id(pk)
         self._get_profile_or_404(profile_id)  # Verify profile exists
         
-        service = ProfileService()
+        service = self.get_profile_service()
         
         if request.method == 'GET':
             # GET /admin/profiles/{id}/targets

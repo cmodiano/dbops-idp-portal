@@ -1,11 +1,16 @@
 /**
  * TargetSelectionStep - Step 1 of the execution wizard.
  * Story 17.2, Task 4.1.
+ * Story 34.13 (SOLID-FE-7): Reduced from 19 to 12 props — 7 props moved
+ * to WizardExecutionContext (derivedEnvironment, hasMixedEnvironments,
+ * currentImpact, environmentsCache, inventoryWarnings, resolvedPatternTargets,
+ * patternResolving).
  *
  * Handles target selection (list, pattern, manual) or environment selection (fallback).
  */
 
 import { memo, useMemo, useRef } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   Form,
   Select,
@@ -17,10 +22,11 @@ import {
 } from 'antd';
 import { WarningOutlined, LoadingOutlined } from '@ant-design/icons';
 import type { CatalogActionDetail } from '../../services/catalog_service';
-import type { ExecutionEnvironment, InventoryItem } from '../../types/api';
+import type { ExecutionEnvironment } from '../../types/api';
 import { ImpactIndicator } from '../shared/ImpactIndicator';
 import { TargetSelector, type Target } from './TargetSelector';
 import { getEnvironmentLabel, isProductionEnvironment } from '../../utils/environmentHelpers';
+import { useWizardExecutionContext } from '../../contexts/WizardExecutionContext';
 
 const { Text } = Typography;
 
@@ -35,7 +41,6 @@ function isEnvironmentAllowed(envId: string, allowedEnvironments: string[]): boo
 export interface TargetSelectionStepProps {
   action: CatalogActionDetail;
   allowedEnvironments: string[];
-  variant: 'default' | 'simplified';
   selectedTargets: Target[];
   onTargetsChange: (targets: Target[]) => void;
   targetInputMode: 'list' | 'pattern' | 'manual';
@@ -46,13 +51,9 @@ export interface TargetSelectionStepProps {
   onManualTargetInputChange: (input: string) => void;
   selectedEnvironment: ExecutionEnvironment | null;
   onEnvironmentChange: (env: ExecutionEnvironment) => void;
-  derivedEnvironment: ExecutionEnvironment | null;
-  hasMixedEnvironments: boolean;
-  currentImpact: import('../../types/api').ImpactLevel | null;
-  environmentsCache: InventoryItem[] | null;
-  inventoryWarnings: Record<string, boolean>;
-  resolvedPatternTargets: Array<{ name: string; environment: string }>;
-  patternResolving: boolean;
+  // 7 props moved to WizardExecutionContext:
+  // derivedEnvironment, hasMixedEnvironments, currentImpact,
+  // environmentsCache, inventoryWarnings, resolvedPatternTargets, patternResolving
 }
 
 import { STEP_DESCRIPTIONS_SIMPLIFIED } from '../../utils/stepDescriptions';
@@ -60,7 +61,6 @@ import { STEP_DESCRIPTIONS_SIMPLIFIED } from '../../utils/stepDescriptions';
 export const TargetSelectionStep = memo(function TargetSelectionStep({
   action,
   allowedEnvironments,
-  variant,
   selectedTargets,
   onTargetsChange,
   targetInputMode,
@@ -71,16 +71,20 @@ export const TargetSelectionStep = memo(function TargetSelectionStep({
   onManualTargetInputChange,
   selectedEnvironment,
   onEnvironmentChange,
-  derivedEnvironment,
-  hasMixedEnvironments,
-  currentImpact,
-  environmentsCache,
-  inventoryWarnings,
-  resolvedPatternTargets,
-  patternResolving,
 }: TargetSelectionStepProps) {
   const firstFieldRef = useRef<HTMLElement | null>(null);
+  const { isBusinessProfile } = useAuth();
   const requiresTarget = action?.requires_target !== false;
+
+  const {
+    environmentsCache,
+    inventoryWarnings,
+    derivedEnvironment,
+    hasMixedEnvironments,
+    currentImpact,
+    resolvedPatternTargets,
+    patternResolving,
+  } = useWizardExecutionContext();
 
   const manualTargetCount = useMemo(() => {
     return manualTargetInput
@@ -91,7 +95,7 @@ export const TargetSelectionStep = memo(function TargetSelectionStep({
 
   return (
     <div>
-      {variant === 'simplified' && (
+      {isBusinessProfile && (
         <Alert
           type="info"
           showIcon
@@ -103,7 +107,7 @@ export const TargetSelectionStep = memo(function TargetSelectionStep({
       {requiresTarget ? (
         <>
           <Form.Item
-            label={variant === 'simplified' ? 'Mode de selection' : 'Comment choisir les cibles?'}
+            label={isBusinessProfile ? 'Mode de selection' : 'Comment choisir les cibles?'}
             required
           >
             <Radio.Group
@@ -122,7 +126,7 @@ export const TargetSelectionStep = memo(function TargetSelectionStep({
             <Form.Item
               label="Cible(s)"
               required
-              tooltip={variant === 'simplified' ? undefined : 'Selectionnez une ou plusieurs cibles dans la liste.'}
+              tooltip={isBusinessProfile ? undefined : 'Selectionnez une ou plusieurs cibles dans la liste.'}
             >
               <TargetSelector
                 inputRef={firstFieldRef as React.Ref<HTMLElement>}
@@ -203,9 +207,9 @@ export const TargetSelectionStep = memo(function TargetSelectionStep({
       ) : (
         <>
           <Form.Item
-            label={variant === 'simplified' ? 'Environnement' : 'Environnement cible'}
+            label={isBusinessProfile ? 'Environnement' : 'Environnement cible'}
             required
-            tooltip={variant === 'simplified' ? undefined : 'Selectionnez l\'environnement sur lequel executer l\'action.'}
+            tooltip={isBusinessProfile ? undefined : 'Selectionnez l\'environnement sur lequel executer l\'action.'}
           >
             <Select
               ref={(ref) => {

@@ -1,39 +1,30 @@
 """
-ServiceNowService — ServiceNow ITSM integration service (placeholder).
+ServiceNowService — ServiceNow ITSM integration service.
 
 Story 27.9: ServiceNow is classified as a Service (consumed by the portal for
 change management), not a Platform adapter (does not execute jobs).
 
-Future implementation will provide:
-- create_change(): Create a ServiceNow change request
-- update_change(): Update a change request status
-- get_change_status(): Query change request status
-- close_change(): Close a completed change request
+Story 31.6: create_change() implemented — creates a change request via REST API.
 """
 from __future__ import annotations
 
+import httpx
 import structlog
+from django.conf import settings
+
+from core.exceptions import ServiceUnavailableError
 
 logger = structlog.get_logger(__name__)
 
 
 class ServiceNowService:
-    """ServiceNow ITSM service client — placeholder, NOT yet implemented.
+    """ServiceNow ITSM service client.
 
     ServiceNow is a consumed service for change management (opening, updating,
     closing change requests during execution flows). It does NOT execute jobs
     and therefore does NOT implement BaseAdapter.
 
-    **Status:** Placeholder only. Not used in production code paths.
-    Only instantiated via ``get_service_client('servicenow')`` in test factories.
-
-    **Future implementation** (backlog):
-    - ``create_change()`` — Create a ServiceNow change request
-    - ``update_change()`` — Update a change request status
-    - ``get_change_status()`` — Query change request status
-    - ``close_change()`` — Close a completed change request
-
-    Configuration will come from Integration model (type='servicenow'):
+    Configuration comes from Integration model (type='servicenow'):
     - base_url: ServiceNow instance URL
     - credential_ref: Vault reference for authentication
     - config: Additional configuration (instance, table, etc.)
@@ -49,12 +40,75 @@ class ServiceNowService:
         self.auth_headers = auth_headers
         logger.info("servicenow_service_initialized", base_url=self.base_url)
 
-    def create_change(self, **kwargs: object) -> None:
-        """Create a ServiceNow change request (not yet implemented)."""
-        raise NotImplementedError(
-            "ServiceNowService.create_change() is not yet implemented. "
-            "See integration-type-catalogue.md for specification."
-        )
+    def create_change(
+        self,
+        change_model_code: str | None = None,
+        change_type: str | None = None,
+        short_description: str = "",
+        description: str = "",
+        **kwargs: object,
+    ) -> str:
+        """
+        Create a ServiceNow change request via REST API (Story 31.6, AC#9).
+
+        Args:
+            change_model_code: sys_id of the ServiceNow change model
+            change_type: Change type (normal, standard, emergency)
+            short_description: Short description for the change
+            description: Full description
+
+        Returns:
+            Change number (e.g. "CHG0001234")
+
+        Raises:
+            ServiceUnavailableError: If the API is unavailable or returns an error
+        """
+        url = f"{self.base_url}/api/now/table/change_request"
+        payload: dict[str, str] = {
+            "short_description": short_description or "IDP Portal — Changement automatique",
+            "description": description,
+            "type": change_type or "normal",
+        }
+        if change_model_code:
+            payload["chg_model"] = change_model_code
+
+        timeout = getattr(settings, 'SERVICENOW_TIMEOUT', 30)
+        verify_tls = getattr(settings, 'SERVICENOW_VERIFY_TLS', True)
+
+        try:
+            with httpx.Client(headers=self.auth_headers, timeout=timeout, verify=verify_tls) as client:
+                resp = client.post(url, json=payload)
+                resp.raise_for_status()
+                result = resp.json().get('result', {})
+                change_number = result.get('number') or result.get('sys_id', '')
+                logger.info(
+                    "servicenow_create_change_success",
+                    change_number=change_number,
+                    base_url=self.base_url,
+                )
+                return str(change_number)
+        except httpx.TimeoutException as exc:
+            logger.error("servicenow_create_change_timeout", base_url=self.base_url, error=str(exc))
+            raise ServiceUnavailableError(
+                code="SERVICENOW_TIMEOUT",
+                message="ServiceNow create_change timeout",
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            logger.error(
+                "servicenow_create_change_http_error",
+                status=exc.response.status_code,
+                error=str(exc),
+            )
+            raise ServiceUnavailableError(
+                code="SERVICENOW_HTTP_ERROR",
+                message=f"ServiceNow create_change erreur {exc.response.status_code}",
+            ) from exc
+        except httpx.RequestError as exc:
+            logger.error("servicenow_create_change_request_error", base_url=self.base_url, error=str(exc))
+            raise ServiceUnavailableError(
+                code="SERVICENOW_UNAVAILABLE",
+                message=f"ServiceNow indisponible: {exc}",
+            ) from exc
 
     def update_change(self, change_id: str, **kwargs: object) -> None:
         """Update a ServiceNow change request (not yet implemented)."""

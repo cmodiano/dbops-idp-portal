@@ -180,19 +180,19 @@ class DashboardExportPDFView(APIView):
         correlation_id = get_correlation_id()
 
         try:
-            from reportlab.lib import colors
-            from reportlab.lib.pagesizes import A4
-            from reportlab.lib.styles import getSampleStyleSheet
-            from reportlab.lib.units import mm
-            from reportlab.platypus import (
+            from reportlab.lib import colors  # type: ignore[import-untyped]
+            from reportlab.lib.pagesizes import A4  # type: ignore[import-untyped]
+            from reportlab.lib.styles import getSampleStyleSheet  # type: ignore[import-untyped]
+            from reportlab.lib.units import mm  # type: ignore[import-untyped]
+            from reportlab.platypus import (  # type: ignore[import-untyped]
                 SimpleDocTemplate,
                 Table,
                 TableStyle,
                 Paragraph,
                 Spacer,
             )
-            from reportlab.graphics.shapes import Drawing
-            from reportlab.graphics.charts.lineplots import LinePlot
+            from reportlab.graphics.shapes import Drawing  # type: ignore[import-untyped]
+            from reportlab.graphics.charts.lineplots import LinePlot  # type: ignore[import-untyped]
         except ImportError:
             raise BadRequestError(
                 code="PDF_UNAVAILABLE",

@@ -12,9 +12,10 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework import status
 
-from catalog.models import Action, ActionStatus, ActionItemType, ActionEngine, ActionPlatform
+from catalog.models import ActionStatus, ActionItemType, ActionEngine, ActionPlatform, BusinessRulePolicy
 from catalog.services import CatalogService
-from reference.models import RefEngine, RefPlatform
+from reference.models import RefEngine
+from integrations.models import IntegrationTypeCatalogue, IntegrationRole
 from tests.factories import UserFactory
 
 
@@ -56,7 +57,7 @@ class TestBusinessRulePoliciesAPI(TestCase):
 
         # Create reference data
         RefEngine.objects.get_or_create(code='Oracle', defaults={'label': 'Oracle', 'display_order': 1})
-        RefPlatform.objects.get_or_create(code='AAP', defaults={'label': 'AAP', 'display_order': 1})
+        IntegrationTypeCatalogue.objects.get_or_create(code='aap', defaults={'name': 'AAP', 'integration_role': IntegrationRole.PLATFORM, 'is_active': True})
 
         # Create DBOPS user
         self.dbops_user = UserFactory(username='dbops_brp', profile='dbops')
@@ -128,6 +129,49 @@ class TestBusinessRulePoliciesAPI(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         # Verify cleared
+        self.action.refresh_from_db()
+        self.assertIsNone(self.action.business_rule_policies)
+
+    def test_put_business_rule_policies_endpoint(self):
+        """PUT /admin/actions/{id}/business-rule-policies/ → 200 + persisted (Story 28.1)."""
+        # Assign a pre-existing FK so the PUT exercises clearing it
+        existing_policy = BusinessRulePolicy.objects.create(
+            name='Pre-existing policy for PUT test',
+            policy_json=VALID_TERRAFORM_POLICY,
+            created_by=self.dbops_user,
+        )
+        self.action.business_rule_policy = existing_policy
+        self.action.save()
+
+        put_url = f'/api/v1/admin/actions/{self.action.id}/business-rule-policies/'
+        response = self.client.put(
+            put_url,
+            {'business_rule_policies': VALID_TERRAFORM_POLICY},
+            format='json'
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.action.refresh_from_db()
+        self.assertIsNone(self.action.business_rule_policy_id)
+        self.assertIsNotNone(self.action.business_rule_policies)
+        self.assertEqual(
+            self.action.business_rule_policies['on_step_output'][0]['when']['step_type'],
+            'terraform_cloud'
+        )
+
+    def test_put_business_rule_policies_endpoint_clear(self):
+        """PUT /admin/actions/{id}/business-rule-policies/ with null → 200 + cleared."""
+        self.action.business_rule_policies = VALID_TERRAFORM_POLICY
+        self.action.save()
+
+        put_url = f'/api/v1/admin/actions/{self.action.id}/business-rule-policies/'
+        response = self.client.put(
+            put_url,
+            {'business_rule_policies': None},
+            format='json'
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
         self.action.refresh_from_db()
         self.assertIsNone(self.action.business_rule_policies)
 

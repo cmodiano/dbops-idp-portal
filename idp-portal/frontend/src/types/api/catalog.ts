@@ -15,7 +15,7 @@ export interface RefCategory {
 // The union types below are kept for backward compatibility, but values come from API.
 // Consider using `string` instead for new code.
 export type ActionEngine = 'Oracle' | 'SQL Server' | 'DB2' | string;
-export type ActionPlatform = 'AAP' | 'GitHub Actions' | 'Azure DevOps' | 'Terraform' | string;
+export type ActionPlatform = 'AAP' | 'Tower' | 'GitHub Actions' | 'Azure DevOps' | 'Terraform' | string;
 export type ActionStatus = 'draft' | 'published' | 'disabled';
 /** Impact level for actions (Story 2.5, 2.18). */
 export type ImpactLevel = 'low' | 'medium' | 'high' | 'critical';
@@ -33,6 +33,8 @@ export interface ActionCreate {
   engine?: ActionEngine | null;
   /** Platform is required for actions, optional for workflows (Story 5.7). */
   platform?: ActionPlatform | null;
+  /** Story 31.1: Integration FK (optional, derived from integration selection). */
+  integration_id?: number | null;
   parameters_schema?: Record<string, unknown> | null;
   /** Story 2.18: impact_rules includes criteria field. */
   impact_rules?: Record<string, { level: ImpactLevel; criteria?: string | null }> | null;
@@ -41,6 +43,10 @@ export interface ActionCreate {
   /** Story 2.24: change_model_code removed; change_type_config is in ExecutionStepsUpdate only. */
   /** Story 3.4 FR12: Markdown documentation for contextual help. */
   documentation_md?: string | null;
+  /** Story 31.6: Gate configuration — integration selection per gate type. */
+  gate_config?: GateConfig | null;
+  /** Story 31.8: Notification channels configuration. */
+  notification_config?: NotificationConfig | null;
 }
 
 export interface ActionResponse {
@@ -55,6 +61,8 @@ export interface ActionResponse {
   engine: ActionEngine | null;
   /** Platform (nullable for workflows). */
   platform: ActionPlatform | null;
+  /** Story 31.1: Integration FK (nullable). */
+  integration_id?: number | null;
   parameters_schema: Record<string, unknown> | null;
   /** Story 2.18: impact_rules includes criteria field. */
   impact_rules: Record<string, { level: ImpactLevel; criteria?: string | null }> | null;
@@ -75,6 +83,35 @@ export interface ActionResponse {
    * consistent with backend models.BooleanField(default=True).
    */
   requires_target?: boolean;
+}
+
+/** Story 31.6: ServiceNow gate configuration. */
+export interface GateConfigServiceNow {
+  integration_id?: number | null;
+}
+
+/** Story 31.6: Gate configuration — integration selection per gate type. */
+export interface GateConfig {
+  servicenow_change?: GateConfigServiceNow;
+}
+
+/** Story 31.8: Notification channel configuration. */
+export interface NotificationChannel {
+  type: 'email' | 'teams' | 'page_dba';
+  enabled: boolean;
+  conditions: ('on_failure' | 'on_success' | 'always')[];
+  /** Email only: "requester" or direct email address. */
+  recipient?: string;
+  /** Teams only: webhook URL or Vault reference. */
+  webhook_url_ref?: string;
+  /** Page DBA only: API URL (optional, falls back to settings). */
+  api_url?: string;
+}
+
+/** Story 31.8: Notification configuration for actions. */
+export interface NotificationConfig {
+  channels: NotificationChannel[];
+  page_individual_enabled: boolean;
 }
 
 /** Per-environment change config (Story 2.24; Story 25.4: + requires_maintenance_window, requires_approval, allowed). */
@@ -181,6 +218,10 @@ export interface ActionDetail extends ActionResponse {
   workflow_steps: WorkflowStep[] | null;
   /** Story 2.24: per-env { required, change_model_code }. */
   change_type_config: Record<string, ChangeTypeConfigEntry> | null;
+  /** Story 31.6: Gate configuration — integration selection per gate type. */
+  gate_config?: GateConfig | null;
+  /** Story 31.8: Notification channels configuration. */
+  notification_config?: NotificationConfig | null;
   /* documentation_md is inherited from ActionResponse (Story 3.4) */
   /** Story 9.1: Remediation rules for auto-suggesting corrective actions. */
   remediation_rules?: RemediationRule[] | null;

@@ -8,8 +8,9 @@
  * - Accessibility support
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
+  Alert,
   Button,
   Input,
   Select,
@@ -39,6 +40,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import type { ExecutionStep, ExecutionStepType, ConnectorType } from '../../types/api';
 import { useEnvironments } from '../../hooks/useEnvironments';
+import { useAAPTemplates } from '../../hooks/useAAPTemplates';
 
 const { Text } = Typography;
 
@@ -47,6 +49,8 @@ const EMPTY_STEPS: ExecutionStep[] = [];
 interface StepsEditorProps {
   value?: ExecutionStep[];
   onChange?: (steps: ExecutionStep[]) => void;
+  /** Story 31.5: Integration ID for loading AAP templates. */
+  integrationId?: number | null;
 }
 
 const STEP_TYPE_OPTIONS: { value: ExecutionStepType; label: string }[] = [
@@ -76,7 +80,131 @@ interface SortableStepCardProps {
   onRemoveStep: (index: number) => void;
   /** When false, remove button is disabled (at least one step required). */
   canRemove: boolean;
+  /** Story 31.5: Integration ID for AAP template loading. */
+  integrationId?: number | null;
 }
+
+/** Story 31.5: AAP template selector — separate component to use hooks safely. */
+interface AAPTemplateSectionProps {
+  step: ExecutionStep;
+  index: number;
+  integrationId?: number | null;
+  onStepChange: (index: number, field: keyof ExecutionStep, fieldValue: unknown) => void;
+}
+
+const AAPTemplateSection: React.FC<AAPTemplateSectionProps> = ({
+  step,
+  index,
+  integrationId,
+  onStepChange,
+}) => {
+  const resourceType = ((step.connector_config?.resource_type as string) ?? 'job_template') as 'job_template' | 'workflow_job';
+  const currentId = resourceType === 'workflow_job'
+    ? (step.connector_config?.workflow_job_template_id as number | undefined)
+    : (step.connector_config?.job_template_id as number | undefined);
+
+  // H3 fix: debounced search for server-side filtering (AC3)
+  const [searchInput, setSearchInput] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchInput), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  const { templates, loading, fallback, error } = useAAPTemplates(integrationId, resourceType, debouncedSearch || undefined);
+
+  const handleTemplateSelect = (templateId: number) => {
+    const cfg = { ...(step.connector_config || {}), resource_type: resourceType };
+    if (resourceType === 'workflow_job') {
+      cfg.workflow_job_template_id = templateId;
+      delete cfg.job_template_id;
+    } else {
+      cfg.job_template_id = templateId;
+      delete cfg.workflow_job_template_id;
+    }
+    onStepChange(index, 'connector_config', cfg);
+  };
+
+  // Build options with retrocompatibility: if current ID not in list, show warning option
+  const options = templates.map((t) => ({ value: t.id, label: t.name }));
+  if (currentId && !templates.find((t) => t.id === currentId) && templates.length > 0) {
+    options.unshift({ value: currentId, label: `Template #${currentId} (introuvable)` });
+  }
+
+  return (
+    <>
+      <Form.Item label="Type de ressource" style={{ marginBottom: 0 }}>
+        <Select
+          value={resourceType}
+          onChange={(val) =>
+            onStepChange(index, 'connector_config', {
+              ...(step.connector_config || {}),
+              resource_type: val,
+            })
+          }
+          options={[
+            { value: 'job_template', label: 'Job template' },
+            { value: 'workflow_job', label: 'Workflow job' },
+          ]}
+          style={{ width: 160 }}
+          aria-label={`Type ressource AAP etape ${step.order}`}
+        />
+      </Form.Item>
+
+      {fallback ? (
+        <>
+          {(error || !integrationId) && (
+            <Alert
+              type="warning"
+              showIcon
+              title="Saisie manuelle — liste non disponible"
+              style={{ marginBottom: 8 }}
+            />
+          )}
+          <Form.Item
+            label="ID template (manuel)"
+            validateStatus={currentId == null || currentId === 0 ? 'error' : ''}
+            help={currentId == null || currentId === 0 ? 'ID template requis pour une etape AAP' : ''}
+            style={{ marginBottom: 0 }}
+          >
+            <Input
+              type="number"
+              min={1}
+              value={currentId ?? ''}
+              onChange={(e) => handleTemplateSelect(e.target.value ? Number(e.target.value) : 0)}
+              placeholder="ID du template AAP"
+              style={{ width: 120 }}
+              aria-label={`ID template AAP etape ${step.order}`}
+            />
+          </Form.Item>
+        </>
+      ) : (
+        <Form.Item
+          label="Template AAP"
+          validateStatus={currentId == null ? 'error' : ''}
+          help={currentId == null ? 'Selectionnez un template AAP' : ''}
+          style={{ marginBottom: 0 }}
+        >
+          <Select
+            showSearch
+            loading={loading}
+            style={{ minWidth: 240 }}
+            value={currentId ?? undefined}
+            onChange={handleTemplateSelect}
+            onSearch={setSearchInput}
+            placeholder="Selectionnez un template"
+            filterOption={(input, opt) =>
+              ((opt?.label as string) ?? '').toLowerCase().includes(input.toLowerCase())
+            }
+            options={options}
+            aria-label={`Template AAP etape ${step.order}`}
+            notFoundContent={loading ? 'Chargement...' : 'Aucun template'}
+          />
+        </Form.Item>
+      )}
+    </>
+  );
+};
 
 /** Sortable step card component using @dnd-kit */
 const SortableStepCard: React.FC<SortableStepCardProps> = ({
@@ -87,6 +215,7 @@ const SortableStepCard: React.FC<SortableStepCardProps> = ({
   onStepChange,
   onRemoveStep,
   canRemove,
+  integrationId,
 }) => {
   const { token } = theme.useToken();
   const {
@@ -202,80 +331,14 @@ const SortableStepCard: React.FC<SortableStepCardProps> = ({
             </Form.Item>
           )}
 
-          {/* Story 4.10 AC4: Type de ressource AAP (job template | workflow job) */}
+          {/* Story 31.5: AAP template selector (list or manual fallback) */}
           {step.connector_type === 'aap' && (
-            <>
-              <Form.Item label="Type de ressource" style={{ marginBottom: 0 }}>
-                <Select
-                  value={(step.connector_config?.resource_type as string) ?? 'job_template'}
-                  onChange={(val) =>
-                    onStepChange(index, 'connector_config', {
-                      ...(step.connector_config || {}),
-                      resource_type: val,
-                    })
-                  }
-                  options={[
-                    { value: 'job_template', label: 'Job template' },
-                    { value: 'workflow_job', label: 'Workflow job' },
-                  ]}
-                  style={{ width: 160 }}
-                  aria-label={`Type ressource AAP etape ${step.order}`}
-                />
-              </Form.Item>
-              <Form.Item
-                label="ID template"
-                validateStatus={
-                  step.connector_type === 'aap' &&
-                  (step.connector_config?.resource_type === 'workflow_job'
-                    ? (step.connector_config?.workflow_job_template_id == null ||
-                        step.connector_config?.workflow_job_template_id === '' ||
-                        step.connector_config?.workflow_job_template_id === 0)
-                    : (step.connector_config?.job_template_id == null ||
-                        step.connector_config?.job_template_id === '' ||
-                        step.connector_config?.job_template_id === 0))
-                    ? 'error'
-                    : ''
-                }
-                help={
-                  step.connector_type === 'aap' &&
-                  (step.connector_config?.resource_type === 'workflow_job'
-                    ? (step.connector_config?.workflow_job_template_id == null ||
-                        step.connector_config?.workflow_job_template_id === '' ||
-                        step.connector_config?.workflow_job_template_id === 0)
-                    : (step.connector_config?.job_template_id == null ||
-                        step.connector_config?.job_template_id === '' ||
-                        step.connector_config?.job_template_id === 0))
-                    ? 'ID template requis pour une etape AAP'
-                    : ''
-                }
-                style={{ marginBottom: 0 }}
-              >
-                <Input
-                  type="number"
-                  min={1}
-                  value={
-                    (step.connector_config?.resource_type === 'workflow_job'
-                      ? step.connector_config?.workflow_job_template_id
-                      : step.connector_config?.job_template_id) ?? ''
-                  }
-                  onChange={(e) => {
-                    const v = e.target.value ? Number(e.target.value) : undefined;
-                    const cfg = { ...(step.connector_config || {}), resource_type: step.connector_config?.resource_type ?? 'job_template' };
-                    if (cfg.resource_type === 'workflow_job') {
-                      cfg.workflow_job_template_id = v;
-                      delete cfg.job_template_id;
-                    } else {
-                      cfg.job_template_id = v;
-                      delete cfg.workflow_job_template_id;
-                    }
-                    onStepChange(index, 'connector_config', cfg);
-                  }}
-                  placeholder="ID du template AAP"
-                  style={{ width: 120 }}
-                  aria-label={`ID template AAP etape ${step.order}`}
-                />
-              </Form.Item>
-            </>
+            <AAPTemplateSection
+              step={step}
+              index={index}
+              integrationId={integrationId}
+              onStepChange={onStepChange}
+            />
           )}
         </Space>
       </Space>
@@ -283,7 +346,7 @@ const SortableStepCard: React.FC<SortableStepCardProps> = ({
   );
 };
 
-export const StepsEditor: React.FC<StepsEditorProps> = ({ value = EMPTY_STEPS, onChange }) => {
+export const StepsEditor: React.FC<StepsEditorProps> = ({ value = EMPTY_STEPS, onChange, integrationId }) => {
   const { environmentOptions, loading: environmentsLoading } = useEnvironments();
 
   // Configure dnd-kit sensors for pointer and keyboard interaction
@@ -364,6 +427,7 @@ export const StepsEditor: React.FC<StepsEditorProps> = ({ value = EMPTY_STEPS, o
                 onStepChange={handleStepChange}
                 onRemoveStep={handleRemoveStep}
                 canRemove={value.length > 1}
+                integrationId={integrationId}
               />
             ))}
           </SortableContext>

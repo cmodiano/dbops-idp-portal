@@ -19,6 +19,7 @@ export async function getBusinessRulePolicies(
 ): Promise<BusinessRulePolicyListResponse> {
   const params = new URLSearchParams();
   if (filters?.step_type) params.append('step_type', filters.step_type);
+  if (filters?.platform) params.append('platform', filters.platform);
   if (filters?.is_active !== undefined) params.append('is_active', String(filters.is_active));
   if (filters?.page) params.append('page', filters.page.toString());
   if (filters?.page_size) params.append('page_size', filters.page_size.toString());

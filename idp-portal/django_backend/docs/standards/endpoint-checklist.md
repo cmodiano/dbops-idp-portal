@@ -34,7 +34,7 @@
 - [ ] Utiliser `UserFactory` (jamais `User.objects.create` avec `is_staff`/`is_superuser`)
 - [ ] Utiliser `ActionFactory` pour Actions avec champs JSON
 - [ ] URLs avec trailing slash (`/api/v1/resource/` et non `/api/v1/resource`)
-- [ ] Créer `RefEngine`/`RefPlatform` si nécessaire pour endpoints admin
+- [ ] Créer `RefEngine` + `IntegrationTypeCatalogue` (role=platform) si nécessaire pour endpoints admin
 - [ ] Tests edge cases : champs vides, valeurs limites, caractères spéciaux
 - [ ] Tests de non-régression : vérifier que les endpoints existants ne sont pas cassés
 - [ ] Conventions de nommage : `test_<action>_<scenario>` (ex: `test_create_action_invalid_status`)

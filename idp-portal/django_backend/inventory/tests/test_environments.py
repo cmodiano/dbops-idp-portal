@@ -29,7 +29,7 @@ class InventoryEnvironmentsAPITests(TestCase):
         del self.user.get_ad_groups
         self.client.force_authenticate(user=self.user)
 
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_list_environments_success(self, mock_service_class):
         """Test listing environments from inventory."""
         mock_service = MagicMock()
@@ -42,7 +42,7 @@ class InventoryEnvironmentsAPITests(TestCase):
         self.assertIsInstance(response.data, list)
         self.assertEqual(response.data, ['dev', 'staging', 'prod'])
 
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_list_environments_empty(self, mock_service_class):
         """Test listing environments when inventory is empty."""
         mock_service = MagicMock()
@@ -54,7 +54,7 @@ class InventoryEnvironmentsAPITests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data, [])
 
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_list_environments_service_error(self, mock_service_class):
         """Test handling inventory service error."""
         from inventory.services import InventoryServiceError

@@ -21,7 +21,7 @@ describe('fetchInventoryItems - Story 23.6', () => {
     expect(mockFetch).toHaveBeenCalledOnce();
     const calledUrl: string = mockFetch.mock.calls[0][0];
     expect(calledUrl).toBe(
-      '/api/v1/inventory/instances?environment=dev&server_names=srv01%2Csrv02'
+      '/api/v1/inventory/instances/?environment=dev&server_names=srv01%2Csrv02'
     );
   });
 
@@ -30,7 +30,7 @@ describe('fetchInventoryItems - Story 23.6', () => {
 
     expect(mockFetch).toHaveBeenCalledOnce();
     const calledUrl: string = mockFetch.mock.calls[0][0];
-    expect(calledUrl).toBe('/api/v1/inventory/servers?environment=dev');
+    expect(calledUrl).toBe('/api/v1/inventory/servers/?environment=dev');
   });
 
   it('pas de server_names param avec array vide', async () => {
@@ -38,7 +38,7 @@ describe('fetchInventoryItems - Story 23.6', () => {
 
     expect(mockFetch).toHaveBeenCalledOnce();
     const calledUrl: string = mockFetch.mock.calls[0][0];
-    expect(calledUrl).toBe('/api/v1/inventory/databases?environment=dev');
+    expect(calledUrl).toBe('/api/v1/inventory/databases/?environment=dev');
   });
 
   it('retrocompatibilite sans troisieme argument', async () => {
@@ -46,6 +46,6 @@ describe('fetchInventoryItems - Story 23.6', () => {
 
     expect(mockFetch).toHaveBeenCalledOnce();
     const calledUrl: string = mockFetch.mock.calls[0][0];
-    expect(calledUrl).toBe('/api/v1/inventory/instances?environment=staging');
+    expect(calledUrl).toBe('/api/v1/inventory/instances/?environment=staging');
   });
 });

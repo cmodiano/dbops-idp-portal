@@ -36,6 +36,10 @@ from core.middleware import get_correlation_id
 
 logger = structlog.get_logger(__name__)
 
+# Story 33.4 (DIP): module-level factory, overridable in tests via:
+#   import inventory.views as v; v._inventory_service_factory = lambda: MockInventoryService()
+_inventory_service_factory = InventoryService
+
 
 class IsAdminOrIntegration(BasePermission):
     """
@@ -79,7 +83,7 @@ def list_targets(request: Request) -> Response:
         page_size: Items per page (default: 25, max: 100)
     """
     correlation_id = get_correlation_id()
-    inventory_service = InventoryService()
+    inventory_service = _inventory_service_factory()
 
     # Parse and validate query params
     params_serializer = TargetFilterParamsSerializer(data=request.query_params)
@@ -171,7 +175,7 @@ def list_all_targets(request: Request) -> Response:
         page_size: Items per page (default: 25, max: 100)
     """
     correlation_id = get_correlation_id()
-    inventory_service = InventoryService()
+    inventory_service = _inventory_service_factory()
 
     # Parse and validate query params
     try:
@@ -258,7 +262,7 @@ def list_environments(request: Request) -> Response:
     This endpoint replaces hardcoded environment lists.
     """
     correlation_id = get_correlation_id()
-    inventory_service = InventoryService()
+    inventory_service = _inventory_service_factory()
 
     logger.info(
         "listing_environments",
@@ -309,7 +313,7 @@ def _validate_server_access(
         PermissionDenied: If any specified server is not in user's allowed servers.
     """
     correlation_id = get_correlation_id()
-    inventory_service = InventoryService()
+    inventory_service = _inventory_service_factory()
 
     ad_groups = get_user_ad_groups(user)
     try:
@@ -396,7 +400,7 @@ def list_servers(request: Request) -> Response:
     environment = params['environment']
     engine_type = params.get('engine_type')
 
-    inventory_service = InventoryService()
+    inventory_service = _inventory_service_factory()
     try:
         # RBAC: get allowed servers for this user
         ad_groups = get_user_ad_groups(user)
@@ -492,7 +496,7 @@ def list_instances(request: Request) -> Response:
         except PermissionDenied:
             raise
 
-    inventory_service = InventoryService()
+    inventory_service = _inventory_service_factory()
     try:
         instances = inventory_service.list_instances(
             environment=environment,
@@ -574,7 +578,7 @@ def list_databases(request: Request) -> Response:
         except PermissionDenied:
             raise
 
-    inventory_service = InventoryService()
+    inventory_service = _inventory_service_factory()
     try:
         databases = inventory_service.list_databases(
             environment=environment,

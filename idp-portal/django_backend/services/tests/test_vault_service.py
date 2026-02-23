@@ -7,8 +7,6 @@ credential_ref parsing, adapter integration via build_auth_headers.
 """
 from __future__ import annotations
 
-import json
-import time
 from unittest.mock import MagicMock, patch
 
 import pytest

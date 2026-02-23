@@ -93,7 +93,7 @@ class CircuitBreaker:
         except (VaultSecretNotFoundError, VaultAccessDeniedError):
             # Definitive errors do NOT count toward circuit breaker
             raise
-        except Exception as exc:
+        except Exception:  # noqa: BLE001
             with self._state.lock:
                 self._state.failures += 1
                 self._state.last_failure_time = time.monotonic()
@@ -156,7 +156,8 @@ class VaultService:
     ) -> None:
         # Story 27.11: instance_id for multi-instance cache key isolation
         self.instance_id = instance_id
-        self.vault_addr = (vault_addr or os.getenv("VAULT_ADDR", "http://localhost:8200")).rstrip("/")
+        _addr: str = vault_addr or os.getenv("VAULT_ADDR", "http://localhost:8200") or ""
+        self.vault_addr = _addr.rstrip("/")
         self.vault_namespace = vault_namespace or os.getenv("VAULT_NAMESPACE") or None
         self._vault_token = vault_token or os.getenv("VAULT_TOKEN") or None
         self._token_renewable = False

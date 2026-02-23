@@ -8,6 +8,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { App } from 'antd';
 import { TargetSelectionStep, type TargetSelectionStepProps } from './TargetSelectionStep';
 import type { InventoryItem, ImpactLevel } from '../../types/api';
+import { WizardExecutionContextProvider, type WizardExecutionContextValue } from '../../contexts/WizardExecutionContext';
 
 // Mock TargetSelector to avoid API calls
 vi.mock('./TargetSelector', () => ({
@@ -16,8 +17,27 @@ vi.mock('./TargetSelector', () => ({
   ),
 }));
 
-function TestWrapper({ children }: { children: React.ReactNode }) {
-  return <App>{children}</App>;
+const defaultWizardContext: WizardExecutionContextValue = {
+  environmentsCache: null,
+  inventoryData: {},
+  inventoryWarnings: {},
+  loadingInventory: false,
+  derivedEnvironment: null,
+  currentImpact: null,
+  hasMixedEnvironments: false,
+  resolvedPatternTargets: [],
+  patternResolving: false,
+  selectedServerNames: [],
+};
+
+function TestWrapper({ children, contextValue = defaultWizardContext }: { children: React.ReactNode; contextValue?: WizardExecutionContextValue }) {
+  return (
+    <App>
+      <WizardExecutionContextProvider value={contextValue}>
+        {children}
+      </WizardExecutionContextProvider>
+    </App>
+  );
 }
 
 const mockAction = {
@@ -51,7 +71,6 @@ const mockAction = {
 const defaultProps: TargetSelectionStepProps = {
   action: mockAction,
   allowedEnvironments: ['dev', 'staging', 'prod', 'lab', 'qa'],
-  variant: 'default',
   selectedTargets: [],
   onTargetsChange: vi.fn(),
   targetInputMode: 'list',
@@ -62,13 +81,6 @@ const defaultProps: TargetSelectionStepProps = {
   onManualTargetInputChange: vi.fn(),
   selectedEnvironment: null,
   onEnvironmentChange: vi.fn(),
-  derivedEnvironment: null,
-  hasMixedEnvironments: false,
-  currentImpact: null,
-  environmentsCache: null,
-  inventoryWarnings: {},
-  resolvedPatternTargets: [],
-  patternResolving: false,
 };
 
 describe('TargetSelectionStep - Story 21.5', () => {
@@ -81,11 +93,8 @@ describe('TargetSelectionStep - Story 21.5', () => {
       ];
 
       render(
-        <TestWrapper>
-          <TargetSelectionStep
-            {...defaultProps}
-            environmentsCache={cache}
-          />
+        <TestWrapper contextValue={{ ...defaultWizardContext, environmentsCache: cache }}>
+          <TargetSelectionStep {...defaultProps} />
         </TestWrapper>
       );
 
@@ -95,11 +104,8 @@ describe('TargetSelectionStep - Story 21.5', () => {
 
     it('shows loading placeholder when cache is null', () => {
       render(
-        <TestWrapper>
-          <TargetSelectionStep
-            {...defaultProps}
-            environmentsCache={null}
-          />
+        <TestWrapper contextValue={{ ...defaultWizardContext, environmentsCache: null }}>
+          <TargetSelectionStep {...defaultProps} />
         </TestWrapper>
       );
 
@@ -108,11 +114,8 @@ describe('TargetSelectionStep - Story 21.5', () => {
 
     it('shows "Aucun environnement disponible" when cache is empty', () => {
       render(
-        <TestWrapper>
-          <TargetSelectionStep
-            {...defaultProps}
-            environmentsCache={[]}
-          />
+        <TestWrapper contextValue={{ ...defaultWizardContext, environmentsCache: [] }}>
+          <TargetSelectionStep {...defaultProps} />
         </TestWrapper>
       );
 
@@ -125,11 +128,10 @@ describe('TargetSelectionStep - Story 21.5', () => {
       ];
 
       render(
-        <TestWrapper>
+        <TestWrapper contextValue={{ ...defaultWizardContext, environmentsCache: cache }}>
           <TargetSelectionStep
             {...defaultProps}
             allowedEnvironments={['dev', 'staging']}
-            environmentsCache={cache}
           />
         </TestWrapper>
       );
@@ -142,12 +144,8 @@ describe('TargetSelectionStep - Story 21.5', () => {
   describe('Production warning (AC #5)', () => {
     it('shows production warning for prod environment', () => {
       render(
-        <TestWrapper>
-          <TargetSelectionStep
-            {...defaultProps}
-            derivedEnvironment="prod"
-            environmentsCache={[]}
-          />
+        <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'prod', environmentsCache: [] }}>
+          <TargetSelectionStep {...defaultProps} />
         </TestWrapper>
       );
 
@@ -156,12 +154,8 @@ describe('TargetSelectionStep - Story 21.5', () => {
 
     it('shows production warning for PROD (case-insensitive)', () => {
       render(
-        <TestWrapper>
-          <TargetSelectionStep
-            {...defaultProps}
-            derivedEnvironment="PROD"
-            environmentsCache={[]}
-          />
+        <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'PROD', environmentsCache: [] }}>
+          <TargetSelectionStep {...defaultProps} />
         </TestWrapper>
       );
 
@@ -170,12 +164,8 @@ describe('TargetSelectionStep - Story 21.5', () => {
 
     it('shows production warning for production alias', () => {
       render(
-        <TestWrapper>
-          <TargetSelectionStep
-            {...defaultProps}
-            derivedEnvironment="production"
-            environmentsCache={[]}
-          />
+        <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'production', environmentsCache: [] }}>
+          <TargetSelectionStep {...defaultProps} />
         </TestWrapper>
       );
 
@@ -184,12 +174,8 @@ describe('TargetSelectionStep - Story 21.5', () => {
 
     it('does not show production warning for non-prod environments', () => {
       render(
-        <TestWrapper>
-          <TargetSelectionStep
-            {...defaultProps}
-            derivedEnvironment="lab"
-            environmentsCache={[]}
-          />
+        <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'lab', environmentsCache: [] }}>
+          <TargetSelectionStep {...defaultProps} />
         </TestWrapper>
       );
 
@@ -200,12 +186,10 @@ describe('TargetSelectionStep - Story 21.5', () => {
   describe('Derived environment label (AC #2)', () => {
     it('displays derived environment with correct label for standard env', () => {
       render(
-        <TestWrapper>
+        <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'dev', environmentsCache: [] }}>
           <TargetSelectionStep
             {...defaultProps}
             action={{ ...mockAction, requires_target: true }}
-            derivedEnvironment="dev"
-            environmentsCache={[]}
           />
         </TestWrapper>
       );
@@ -215,12 +199,10 @@ describe('TargetSelectionStep - Story 21.5', () => {
 
     it('displays derived environment with capitalized label for non-standard env', () => {
       render(
-        <TestWrapper>
+        <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'lab', environmentsCache: [] }}>
           <TargetSelectionStep
             {...defaultProps}
             action={{ ...mockAction, requires_target: true }}
-            derivedEnvironment="lab"
-            environmentsCache={[]}
           />
         </TestWrapper>
       );
@@ -230,12 +212,10 @@ describe('TargetSelectionStep - Story 21.5', () => {
 
     it('displays derived environment with capitalized label for qa', () => {
       render(
-        <TestWrapper>
+        <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'qa', environmentsCache: [] }}>
           <TargetSelectionStep
             {...defaultProps}
             action={{ ...mockAction, requires_target: true }}
-            derivedEnvironment="qa"
-            environmentsCache={[]}
           />
         </TestWrapper>
       );
@@ -247,11 +227,8 @@ describe('TargetSelectionStep - Story 21.5', () => {
   describe('No hardcoded fallback (AC #1)', () => {
     it('does not render dev/staging/prod options when cache is empty', () => {
       render(
-        <TestWrapper>
-          <TargetSelectionStep
-            {...defaultProps}
-            environmentsCache={[]}
-          />
+        <TestWrapper contextValue={{ ...defaultWizardContext, environmentsCache: [] }}>
+          <TargetSelectionStep {...defaultProps} />
         </TestWrapper>
       );
 
@@ -271,11 +248,10 @@ describe('TargetSelectionStep - Story 21.5', () => {
 
       expect(() => {
         render(
-          <TestWrapper>
+          <TestWrapper contextValue={{ ...defaultWizardContext, environmentsCache: cache }}>
             <TargetSelectionStep
               {...defaultProps}
               allowedEnvironments={['uat', 'certif']}
-              environmentsCache={cache}
             />
           </TestWrapper>
         );

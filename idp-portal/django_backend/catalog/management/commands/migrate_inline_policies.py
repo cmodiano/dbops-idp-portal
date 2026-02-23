@@ -6,11 +6,13 @@ Usage:
     python manage.py migrate_inline_policies              # Execute migration
 """
 
+from __future__ import annotations
+
 import json
 import logging
+from typing import Any
 
 from django.core.management.base import BaseCommand
-from django.db import transaction
 
 from catalog.models import Action, BusinessRulePolicy
 
@@ -20,14 +22,14 @@ logger = logging.getLogger(__name__)
 class Command(BaseCommand):
     help = 'Migrate inline business_rule_policies JSON to predefined BusinessRulePolicy entries (Story 28.4, AC#8).'
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: Any) -> None:
         parser.add_argument(
             '--dry-run',
             action='store_true',
             help='Preview what would be migrated without making changes.',
         )
 
-    def handle(self, *args, **options):
+    def handle(self, *args: Any, **options: Any) -> None:
         dry_run = options['dry_run']
         actions_with_inline = Action.objects.filter(
             business_rule_policies__isnull=False,
@@ -95,7 +97,7 @@ class Command(BaseCommand):
                     f'  [DRY-RUN] Action "{action.name}" (id={action.id}) → '
                     f'{"réutiliserait" if existing else "créerait nouvelle"} règle'
                 )
-            else:
+            elif policy is not None:
                 action.business_rule_policy = policy
                 action.business_rule_policies = None
                 action.save(update_fields=['business_rule_policy', 'business_rule_policies'])

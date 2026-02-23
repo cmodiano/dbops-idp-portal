@@ -7,25 +7,18 @@
  * - Optional display name per step
  * - Inline validation (at least 1 step required, each step must have referenced_action_id)
  * - Accessibility support (WCAG 2.1 AA)
+ *
+ * Story 34-9 (SOLID-FE-8): SortableStepCard extracted to ./SortableStepCard.tsx (SRP).
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Button,
-  Input,
-  AutoComplete,
-  Select,
-  Switch,
-  InputNumber,
   Space,
-  Card,
-  Typography,
   Alert,
   Spin,
-  Tooltip,
-  theme,
 } from 'antd';
-import { PlusOutlined, DeleteOutlined, HolderOutlined } from '@ant-design/icons';
+import { PlusOutlined } from '@ant-design/icons';
 import {
   DndContext,
   closestCenter,
@@ -39,24 +32,21 @@ import {
   arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
-  useSortable,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import type { WorkflowStep, ActionListItem } from '../../types/api';
-import { getEligibleActionsForWorkflow } from '../../services/admin_service';
-import logger from '../../services/logger';
-
-const { Text } = Typography;
+import type { WorkflowStep } from '../../types/api';
+// DIP: services encapsulés dans useEligibleActions — SOLID-FE-4
+import { useEligibleActions } from '../../hooks/useEligibleActions';
+import { SortableStepCard } from './SortableStepCard';
 
 /** Extended step type with optional temporary id for new steps. */
-interface WorkflowStepEditable extends Omit<WorkflowStep, 'referenced_action_id'> {
+export interface WorkflowStepEditable extends Omit<WorkflowStep, 'referenced_action_id'> {
   referenced_action_id: number | undefined;
   /** Temporary unique ID for react key and dnd-kit. */
   _tempId?: string;
 }
 
-function generateStepId(): string {
+export function generateStepId(): string {
   // Prefer browser crypto UUID for stability/uniqueness.
   // Fallback is good enough for local editing; backend also enforces uniqueness.
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto && typeof crypto.randomUUID === 'function') {
@@ -76,319 +66,14 @@ export interface WorkflowStepsEditorProps {
   disabled?: boolean;
 }
 
-interface SortableStepCardProps {
-  step: WorkflowStepEditable;
-  index: number;
-  eligibleActions: ActionListItem[];
-  loadingActions: boolean;
-  stepIdsFromEditor: string[];
-  /** All steps for resolving step_id → action name in branch selects */
-  allSteps: WorkflowStepEditable[];
-  onStepChange: (index: number, field: keyof WorkflowStepEditable, value: unknown) => void;
-  onRemoveStep: (index: number) => void;
-  canRemove: boolean;
-  hasError: boolean;
-  disabled?: boolean;
-}
-
-/** Sortable step card using @dnd-kit. */
-const SortableStepCard: React.FC<SortableStepCardProps> = ({
-  step,
-  index,
-  eligibleActions,
-  loadingActions,
-  stepIdsFromEditor,
-  allSteps,
-  onStepChange,
-  onRemoveStep,
-  canRemove,
-  hasError,
-  disabled = false,
-}) => {
-  const { token } = theme.useToken();
-  const EXIT_VALUE = '__exit__';
-  const stepId = step._tempId ?? `step-${step.order}`;
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: stepId });
-
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-    marginBottom: 8,
-  };
-
-  // Build AutoComplete options from eligible actions
-  const actionOptions = useMemo(
-    () =>
-      eligibleActions.map((a) => ({
-        value: String(a.id),
-        label: `${a.name}${a.engine ? ` (${a.engine})` : ''}`,
-        actionId: a.id,
-      })),
-    [eligibleActions]
-  );
-
-  // Get the selected action for display
-  const selectedAction = eligibleActions.find((a) => a.id === step.referenced_action_id);
-  const displayValue = selectedAction
-    ? `${selectedAction.name}${selectedAction.engine ? ` (${selectedAction.engine})` : ''}`
-    : '';
-
-  const stepIdValue = step.step_id ?? '';
-  /** Build branch options: step_id → display label (action name + order) */
-  const getBranchOptions = (excludeStepId: string | null | undefined) => {
-    const ids = stepIdsFromEditor.filter((sid) => sid && sid !== excludeStepId);
-    return ids.map((sid) => {
-      const s = allSteps.find((st) => (st.step_id ?? st._tempId) === sid);
-      const action = s ? eligibleActions.find((a) => a.id === s.referenced_action_id) : undefined;
-      const actionName = s?.action_name ?? action?.name;
-      const engine = action?.engine;
-      const label = actionName
-        ? `Étape ${s?.order ?? '?'} — ${actionName}${engine ? ` (${engine})` : ''}`
-        : sid;
-      return { value: sid, label };
-    });
-  };
-
-  return (
-    <Card
-      ref={setNodeRef}
-      style={style}
-      size="small"
-      styles={{
-        body: { padding: '12px' },
-      }}
-    >
-      <Space orientation="vertical" style={{ width: '100%' }} size="small">
-        <Space align="center" style={{ width: '100%', justifyContent: 'space-between' }}>
-          <Space>
-            <HolderOutlined
-              {...attributes}
-              {...listeners}
-              style={{
-                cursor: isDragging ? 'grabbing' : 'grab',
-                color: token.colorTextTertiary,
-                touchAction: 'none',
-              }}
-              aria-label={`Glisser pour réordonner l'étape ${step.order}`}
-            />
-            <Text strong>Étape {step.order}</Text>
-          </Space>
-          <Tooltip title={canRemove ? `Supprimer l'étape ${step.order}` : 'Au moins une étape requise'}>
-            <Button
-              size="small"
-              danger
-              icon={<DeleteOutlined />}
-              onClick={() => onRemoveStep(index)}
-              disabled={disabled || !canRemove}
-              aria-label={canRemove ? `Supprimer l'étape ${step.order}` : 'Au moins une étape requise'}
-            />
-          </Tooltip>
-        </Space>
-
-        <Space wrap style={{ width: '100%' }}>
-          <div style={{ marginBottom: 0 }}>
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              Action *
-            </Text>
-            <Tooltip title="Sélectionnez une action publiée existante">
-              <AutoComplete
-                style={{ width: 280, marginTop: 4, display: 'block' }}
-                value={displayValue}
-                options={actionOptions}
-                placeholder="Rechercher une action..."
-                filterOption={(inputValue, option) =>
-                  option?.label?.toString().toLowerCase().includes(inputValue.toLowerCase()) ?? false
-                }
-                onSelect={(value: string) => {
-                  const selected = actionOptions.find(opt => opt.value === value);
-                  if (selected?.actionId) {
-                    onStepChange(index, 'referenced_action_id', selected.actionId);
-                  }
-                }}
-                onClear={() => onStepChange(index, 'referenced_action_id', undefined)}
-                allowClear
-                loading={loadingActions}
-                status={hasError && !step.referenced_action_id ? 'error' : undefined}
-                aria-label="Sélectionner une action"
-                disabled={disabled}
-                notFoundContent={
-                  loadingActions ? (
-                    <Spin size="small" />
-                  ) : eligibleActions.length === 0 ? (
-                    'Aucune action publiée disponible'
-                  ) : (
-                    'Aucun résultat'
-                  )
-                }
-              />
-            </Tooltip>
-            {hasError && !step.referenced_action_id && (
-              <Text type="danger" style={{ fontSize: 12 }} role="alert">
-                Action requise
-              </Text>
-            )}
-          </div>
-
-          <div style={{ marginBottom: 0 }}>
-            <Tooltip title="Nom personnalisé optionnel pour cette étape dans le workflow">
-              <div>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  Nom d'affichage
-                </Text>
-                <Input
-                  style={{ width: 200, marginTop: 4, display: 'block' }}
-                  value={step.name ?? ''}
-                  onChange={(e) => onStepChange(index, 'name', e.target.value || null)}
-                  placeholder="Optionnel"
-                  aria-label={`Nom d'affichage de l'étape ${step.order}`}
-                  disabled={disabled}
-                />
-              </div>
-            </Tooltip>
-          </div>
-
-          {/* Story 16.2: step_id read-only (auto-generated for branches/retry) */}
-          {step.step_id && (
-          <div style={{ marginBottom: 0, minWidth: 200 }}>
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              ID d'étape
-            </Text>
-            <Tooltip title="Identifiant technique auto-généré pour les branches. Non modifiable.">
-              <Input
-                style={{ width: 200, marginTop: 4, display: 'block', fontSize: 11, fontFamily: 'monospace' }}
-                value={stepIdValue}
-                readOnly
-                aria-label={`step_id de l'étape ${step.order}`}
-              />
-            </Tooltip>
-          </div>
-          )}
-        </Space>
-
-        <Card
-          size="small"
-          styles={{ body: { padding: '12px' } }}
-          style={{ background: token.colorFillAlter }}
-        >
-          <Space wrap size="middle" align="start">
-            <div>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                Branche succès
-              </Text>
-              <Select
-                style={{ width: 260, marginTop: 4, display: 'block' }}
-                value={(step.on_success_step_id ?? EXIT_VALUE) as string}
-                onChange={(v) => onStepChange(index, 'on_success_step_id', v === EXIT_VALUE ? null : v)}
-                options={[
-                  { value: EXIT_VALUE, label: '(fin du workflow)' },
-                  ...getBranchOptions(step.step_id),
-                ]}
-                placeholder="Sélectionner une étape..."
-                aria-label={`on_success_step_id de l'étape ${step.order}`}
-                disabled={disabled}
-                allowClear={false}
-              />
-            </div>
-
-            <div>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                Branche erreur
-              </Text>
-              <Select
-                style={{ width: 260, marginTop: 4, display: 'block' }}
-                value={(step.on_error_step_id ?? EXIT_VALUE) as string}
-                onChange={(v) => onStepChange(index, 'on_error_step_id', v === EXIT_VALUE ? null : v)}
-                options={[
-                  { value: EXIT_VALUE, label: '(fin du workflow)' },
-                  ...getBranchOptions(step.step_id),
-                ]}
-                placeholder="Sélectionner une étape..."
-                aria-label={`on_error_step_id de l'étape ${step.order}`}
-                disabled={disabled}
-                allowClear={false}
-              />
-            </div>
-
-            <div>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                Retry
-              </Text>
-              <div style={{ marginTop: 8 }}>
-                <Switch
-                  checked={Boolean(step.retry_enabled)}
-                  onChange={(checked) => onStepChange(index, 'retry_enabled', checked)}
-                  disabled={disabled}
-                  aria-label={`retry_enabled de l'étape ${step.order}`}
-                />
-              </div>
-            </div>
-
-            <div>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                Max tentatives
-              </Text>
-              <InputNumber
-                style={{ width: 160, marginTop: 4, display: 'block' }}
-                min={1}
-                value={step.retry_max_attempts ?? null}
-                onChange={(v) => onStepChange(index, 'retry_max_attempts', v ?? null)}
-                disabled={disabled || !step.retry_enabled}
-                aria-label={`retry_max_attempts de l'étape ${step.order}`}
-              />
-            </div>
-
-            <div>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                Intervalle (s)
-              </Text>
-              <InputNumber
-                style={{ width: 160, marginTop: 4, display: 'block' }}
-                min={1}
-                value={step.retry_interval_seconds ?? null}
-                onChange={(v) => onStepChange(index, 'retry_interval_seconds', v ?? null)}
-                disabled={disabled || !step.retry_enabled}
-                aria-label={`retry_interval_seconds de l'étape ${step.order}`}
-              />
-            </div>
-
-            <div>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                Backoff
-              </Text>
-              <InputNumber
-                style={{ width: 160, marginTop: 4, display: 'block' }}
-                min={1}
-                step={0.1}
-                value={step.retry_backoff_multiplier ?? null}
-                onChange={(v) => onStepChange(index, 'retry_backoff_multiplier', v ?? null)}
-                disabled={disabled || !step.retry_enabled}
-                aria-label={`retry_backoff_multiplier de l'étape ${step.order}`}
-              />
-            </div>
-          </Space>
-        </Card>
-      </Space>
-    </Card>
-  );
-};
-
 export const WorkflowStepsEditor: React.FC<WorkflowStepsEditorProps> = ({
   steps,
   onChange,
   loading = false,
   disabled = false,
 }) => {
-  const [eligibleActions, setEligibleActions] = useState<ActionListItem[]>([]);
-  const [loadingActions, setLoadingActions] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // DIP: chargement des actions éligibles via useEligibleActions — SOLID-FE-4
+  const { eligibleActions, loadingActions, loadError } = useEligibleActions();
   const [showValidation, setShowValidation] = useState(false);
 
   // Convert WorkflowStep[] to internal editable format with tempIds
@@ -418,33 +103,6 @@ export const WorkflowStepsEditor: React.FC<WorkflowStepsEditorProps> = ({
       );
     }
   }, [steps, internalSteps.length]);
-
-  // Load eligible actions on mount
-  useEffect(() => {
-    setLoadingActions(true);
-    setLoadError(null);
-    getEligibleActionsForWorkflow()
-      .then((actions) => {
-        setEligibleActions(Array.isArray(actions) ? actions : []);
-      })
-      .catch((err) => {
-        logger.error('Failed to load eligible actions for workflow', { error: err instanceof Error ? err.message : String(err) });
-        // Improve error message to be more helpful
-        let errorMessage = 'Impossible de charger les actions éligibles';
-        if (err instanceof Error) {
-          errorMessage = err.message;
-          // If it's "Unknown error", provide more context
-          if (err.message === 'Unknown error') {
-            errorMessage = 'Erreur lors du chargement des actions éligibles. Vérifiez votre connexion et vos permissions DBOPS.';
-          }
-        }
-        setLoadError(errorMessage);
-        setEligibleActions([]);
-      })
-      .finally(() => {
-        setLoadingActions(false);
-      });
-  }, []);
 
   // Notify parent of changes (filter out internal fields)
   const notifyChange = (newSteps: WorkflowStepEditable[]) => {

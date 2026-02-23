@@ -53,6 +53,8 @@ export interface ScheduledExecutionCreateRequest {
   recurring_pattern?: RecurringPatternRequest | null;
   /** Story 13.2: Target names for target-based execution. */
   target_names?: string[];
+  /** Story 31.8: Page me on failure (opt-in at execution time). */
+  page_me?: boolean;
 }
 
 /** Request to update a scheduled execution (Story 13.8, AC4). */

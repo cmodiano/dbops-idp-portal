@@ -4,7 +4,7 @@
  * Usage contexts:
  * - AdminPreview: inline preview card (role="region", no focus trap)
  * - CatalogPage drawer: inside Ant Design Drawer (role="dialog" on parent, focus trap managed by Drawer)
- * - Business catalog (Story 7.1): simplified view with variant='business'
+ * - Business catalog (Story 7.1): simplified view — business mode auto-détecté via useAuth().isBusinessProfile (SOLID-FE-6)
  *
  * Displays:
  * - Action name and description (sanitized in business variant)
@@ -18,7 +18,7 @@
  * Props:
  * - canExecute: undefined = enabled (admin preview), false = disabled with tooltip (catalog)
  * - onExecute: callback when Execute button is clicked (Story 4.1, Task 7)
- * - variant: 'default' | 'business' - simplified UI for business users (Story 7.1)
+ * Note: business variant now auto-detected via useAuth().isBusinessProfile (SOLID-FE-6)
  *
  * Story 2.23: category removed — use tags for categorization.
  * Story 3.4: documentation_md field with Markdown rendering.
@@ -27,7 +27,8 @@
  */
 
 import { Card, Typography, Button, Descriptions, Space, Empty, Tag, Tooltip, Divider, Badge, Alert, theme, Spin } from 'antd';
-import { PlayCircleOutlined, FileTextOutlined, ApartmentOutlined, BarChartOutlined } from '@ant-design/icons';
+import { PlayCircleOutlined, FileTextOutlined, BarChartOutlined } from '@ant-design/icons';
+import { WorkflowIcon } from '../icons/WorkflowIcon';
 import { lazy, Suspense } from 'react';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
@@ -35,6 +36,7 @@ import rehypeSanitize from 'rehype-sanitize';
 const Markdown = lazy(() => import('react-markdown'));
 import type { ActionPreviewData } from '../../types/api';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { ImpactIndicator } from '../shared/ImpactIndicator';
 import { IMPACT_LABELS } from '../shared/impactLabels';
 import { getTagStyle } from '../../utils/tagStyles';
@@ -55,8 +57,6 @@ export interface ActionDrawerPreviewProps {
   allowedEnvironments?: string[];
   /** Story 4.1 Task 7: callback when Execute button is clicked. Opens ExecutionWizard. */
   onExecute?: () => void;
-  /** Story 7.1: 'business' variant for simplified UI for business users. */
-  variant?: 'default' | 'business';
   /** Story 8.1: Loading state for stats (separate from action data). */
   statsLoading?: boolean;
 }
@@ -92,7 +92,6 @@ export function ActionDrawerPreview({
   canExecute,
   allowedEnvironments = EMPTY_ENVIRONMENTS,
   onExecute,
-  variant = 'default',
   statsLoading = false,
 }: ActionDrawerPreviewProps) {
   // Note: allowedEnvironments is passed to the component for future env-specific execute button logic
@@ -101,7 +100,8 @@ export function ActionDrawerPreview({
   const { effectiveMode } = useTheme();
   const isDark = effectiveMode === 'dark';
   const { token } = theme.useToken();
-  const isBusiness = variant === 'business';
+  const { isBusinessProfile } = useAuth();
+  const isBusiness = isBusinessProfile;
 
   if (!visible) return null;
 
@@ -146,7 +146,7 @@ export function ActionDrawerPreview({
             {isWorkflow && (
               <Tooltip title="Workflow (chaîne d'actions)">
                 <Badge
-                  count={<ApartmentOutlined style={{ color: '#722ed1' }} />}
+                  count={<WorkflowIcon fontSize={16} aria-label="Workflow" />}
                   style={{ backgroundColor: 'transparent' }}
                 />
               </Tooltip>

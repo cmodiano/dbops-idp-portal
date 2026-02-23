@@ -9,6 +9,15 @@ import type { ImpactLevel } from '../../types/api';
 export const IMPACT_LABELS: Record<ImpactLevel, string> = {
   low: 'Faible',
   medium: 'Moyen',
-  high: 'Eleve',
+  high: 'Élevé',
   critical: 'Critique',
+};
+
+/** Descriptions des niveaux d'impact — affichées à la définition d'une action pour guider le choix. */
+export const IMPACT_DESCRIPTIONS: Record<ImpactLevel, string> = {
+  low: 'Aucun impact.',
+  medium: 'Impact possible sur les performances.',
+  high: 'Cause une indisponibilité du service.',
+  critical:
+    "Indisponibilité du service, plus considérations particulières ; doit faire l'objet d'une explication particulière.",
 };

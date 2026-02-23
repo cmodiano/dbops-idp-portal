@@ -8,7 +8,7 @@ from django.core.exceptions import ValidationError
 from rest_framework.test import APIClient
 from rest_framework import status
 
-from integrations.models import IntegrationTypeCatalogue, IntegrationRole
+from integrations.models import IntegrationRole
 from integrations.serializers import IntegrationTypeWithActionsSerializer
 from integrations.catalogue_service import IntegrationCatalogueService
 from tests.factories import (

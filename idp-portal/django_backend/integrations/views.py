@@ -2,13 +2,15 @@
 Views for integrations CRUD endpoints.
 """
 
+import logging
 from typing import Any
 
+from asgiref.sync import async_to_sync
 from rest_framework import viewsets, status, serializers as drf_serializers
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
-from drf_spectacular.utils import extend_schema, inline_serializer, OpenApiResponse
+from drf_spectacular.utils import extend_schema, inline_serializer, OpenApiResponse, OpenApiParameter
 from integrations.serializers import (
     IntegrationSerializer, IntegrationCreateSerializer,
     IntegrationUpdateSerializer, IntegrationListSerializer
@@ -21,6 +23,8 @@ from core.models import AuditActionType, AuditEntityType
 from core.services import AuditService
 from core.middleware import get_correlation_id
 
+logger = logging.getLogger(__name__)
+
 
 class IntegrationViewSet(viewsets.ViewSet):
     """
@@ -31,9 +35,11 @@ class IntegrationViewSet(viewsets.ViewSet):
     def list(self, request):
         """
         GET /admin/integrations - List all integrations.
+        GET /admin/integrations/?type=... - List integrations filtered by type.
         """
         service = IntegrationService()
-        integrations = service.list_all()
+        integration_type = request.query_params.get('type')
+        integrations = service.list_all(integration_type=integration_type)
         serializer = IntegrationListSerializer(integrations, many=True)
         return Response({'data': serializer.data})
     
@@ -94,6 +100,16 @@ class IntegrationViewSet(viewsets.ViewSet):
         except InvalidStateError:
             # Re-raise InvalidStateError (e.g., INVALID_CONFIG from JSON Schema validation)
             raise
+        except Exception as e:
+            logger.exception(
+                "create_integration_unexpected_error",
+                extra={"error": str(e), "error_type": type(e).__name__},
+            )
+            raise InvalidStateError(
+                code="VALIDATION_ERROR",
+                message="Impossible d'enregistrer l'intégration. Réessayez ou contactez l'administrateur.",
+                details={}
+            )
         
         response_serializer = IntegrationSerializer(integration)
         response_data: dict[str, Any] = {'data': response_serializer.data}
@@ -142,6 +158,16 @@ class IntegrationViewSet(viewsets.ViewSet):
         except InvalidStateError:
             # Re-raise InvalidStateError (e.g., INVALID_CONFIG from JSON Schema validation)
             raise
+        except Exception as e:
+            logger.exception(
+                "update_integration_unexpected_error",
+                extra={"error": str(e), "error_type": type(e).__name__},
+            )
+            raise InvalidStateError(
+                code="VALIDATION_ERROR",
+                message="Impossible d'enregistrer l'intégration. Réessayez ou contactez l'administrateur.",
+                details={}
+            )
         
         if integration is None:
             raise NotFoundError(
@@ -159,8 +185,8 @@ class IntegrationViewSet(viewsets.ViewSet):
 
     def destroy(self, request, pk=None):
         """
-        DELETE /admin/integrations/{id} - Delete integration.
-        Returns 204 No Content.
+        DELETE /admin/integrations/{id} - Delete integration and disable linked actions.
+        Returns 200 with disabled_actions_count if actions were disabled, 204 otherwise.
         """
         try:
             integration_id = int(pk)
@@ -170,32 +196,23 @@ class IntegrationViewSet(viewsets.ViewSet):
                 message=f"Integration {pk} introuvable",
                 details={"integration_id": pk}
             )
-        
+
         service = IntegrationService()
-        
-        try:
-            deleted = service.delete_integration(integration_id, user=request.user)
-        except ValueError as e:
-            error_msg = str(e)
-            if "actions liées" in error_msg:
-                raise InvalidStateError(
-                    code="DEPENDENCY_ERROR",
-                    message=error_msg,
-                    details={"integration_id": integration_id}
-                )
-            raise InvalidStateError(
-                code="VALIDATION_ERROR",
-                message=error_msg,
-                details={}
-            )
-        
-        if not deleted:
+
+        result = service.delete_integration(integration_id, user=request.user)
+
+        if not result:
             raise NotFoundError(
                 code="NOT_FOUND",
                 message=f"Integration {integration_id} introuvable",
                 details={"integration_id": integration_id}
             )
 
+        if result['disabled_actions_count'] > 0:
+            return Response(
+                {'disabled_actions_count': result['disabled_actions_count']},
+                status=status.HTTP_200_OK,
+            )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @extend_schema(
@@ -271,6 +288,88 @@ class IntegrationViewSet(viewsets.ViewSet):
                 'validation_message': details['validation_message'],
             },
         }})
+
+    @extend_schema(
+        summary="Liste les templates AAP (job ou workflow) d'une intégration",
+        parameters=[
+            OpenApiParameter('resource_type', str, description="job_template | workflow_job", default='job_template'),
+            OpenApiParameter('search', str, description="Filtre par nom (optionnel)", required=False),
+        ],
+        responses={
+            200: inline_serializer(name='AAPTemplatesResponse', fields={
+                'data': drf_serializers.ListField(child=drf_serializers.DictField()),
+            }),
+            400: OpenApiResponse(description='Invalid resource_type or non-AAP integration'),
+            404: OpenApiResponse(description='Integration not found'),
+            503: OpenApiResponse(description='AAP API unavailable'),
+        },
+    )
+    @action(detail=True, methods=['get'], url_path='aap-templates')
+    def aap_templates(self, request, pk=None):
+        """GET /admin/integrations/{id}/aap-templates/ — Liste templates AAP."""
+        from adapters.aap_adapter import AAPAdapter
+        from adapters.utils import build_auth_headers
+        from core.exceptions import ServiceUnavailableError as _ServiceUnavailableError
+
+        # Validate resource_type
+        resource_type = request.query_params.get('resource_type', 'job_template')
+        if resource_type not in ('job_template', 'workflow_job'):
+            return Response(
+                {'error': f"resource_type invalide: {resource_type!r}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        search = request.query_params.get('search') or None
+
+        # Get integration
+        try:
+            integration_id = int(pk)
+        except (ValueError, TypeError):
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message=f"Integration {pk} introuvable",
+                details={"integration_id": pk},
+            )
+
+        service = IntegrationService()
+        integration = service.get_by_id(integration_id)
+
+        if integration is None:
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message=f"Integration {integration_id} introuvable",
+                details={"integration_id": integration_id},
+            )
+
+        # Verify type AAP (includes tower)
+        if integration.type not in ('aap', 'tower'):
+            return Response(
+                {'error': f"L'intégration {integration_id} n'est pas de type AAP (type={integration.type!r})"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        auth_headers = build_auth_headers(integration, get_correlation_id())
+        config = integration.get_config() if hasattr(integration, "get_config") else None
+        config = config or {}
+        ssl_verify = config.get("ssl_verify", True)
+        ca_bundle_path = config.get("ca_bundle_path") or None
+        adapter = AAPAdapter(
+            base_url=integration.base_url,
+            auth_headers=auth_headers,
+            ssl_verify=ssl_verify,
+            ca_bundle_path=ca_bundle_path,
+        )
+        try:
+            templates = async_to_sync(adapter.list_templates)(
+                resource_type=resource_type,
+                search=search,
+            )
+            return Response({'data': templates})
+        except _ServiceUnavailableError:
+            return Response(
+                {'data': [], 'fallback': True, 'error': 'API AAP indisponible'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
     @extend_schema(
         summary="Validate all integrations against the type catalogue",

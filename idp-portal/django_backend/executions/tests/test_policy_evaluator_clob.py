@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from executions.policy_evaluator import PolicyDecision, PolicyEvaluationError, PolicyEvaluator
+from executions.policy_evaluator import PolicyEvaluationError, PolicyEvaluator
 from executions.rule_engine import RuleEngine
 
 
@@ -43,6 +43,7 @@ def _make_action(business_rule_policies: dict | str | None = None) -> MagicMock:
     """Create a mock Action."""
     action = MagicMock()
     action.id = 10
+    action.business_rule_policy_id = None  # Force inline policy path (Story 28.4 FK takes priority)
     action.business_rule_policies = business_rule_policies
     return action
 
@@ -81,17 +82,19 @@ class TestPolicyEvaluatorCLOB:
 
     @patch("executions.rule_engine.get_correlation_id", return_value="test-corr-id")
     def test_evaluate_policy_with_clob_string_invalid_json(self, _mock: MagicMock) -> None:
-        """business_rule_policies as CLOB string (invalid JSON) → no approval."""
+        """business_rule_policies as CLOB string (invalid JSON) → PolicyEvaluationError (strict mode).
+
+        Rationale: corrupt policy JSON could be used to bypass security controls.
+        Strict failure is safer than silent no-approval.
+        """
         policy_clob = "{ invalid json }"
 
         step = _make_step()
         action = _make_action(policy_clob)
 
         evaluator = PolicyEvaluator()
-        decision = evaluator.evaluate_policy(step, action, SAMPLE_TERRAFORM_JSON_PLAN)
-
-        assert decision.require_approval is False
-        assert "No business rule policies defined" in decision.decision_reason
+        with pytest.raises(PolicyEvaluationError, match="Failed to parse business_rule_policies JSON"):
+            evaluator.evaluate_policy(step, action, SAMPLE_TERRAFORM_JSON_PLAN)
 
 
 class TestValidationAttributePathsType:

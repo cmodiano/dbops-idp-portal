@@ -1,5 +1,6 @@
 """
 Story 28.1: business_rule_policies validation tests (AC7).
+Story 31.6: gate_config validation tests (AC#5).
 
 Tests for validate_business_rule_policies:
 - Valid schema passes
@@ -8,11 +9,16 @@ Tests for validate_business_rule_policies:
 - Invalid policy data rejected
 - null/empty allowed
 - Empty on_step_output array allowed
+
+Tests for validate_gate_config:
+- Valid gate_config passes
+- Invalid integration raises error
+- Wrong type integration raises error
 """
 import pytest
 from rest_framework.exceptions import ValidationError
 
-from catalog.validators import validate_business_rule_policies
+from catalog.validators import validate_business_rule_policies, validate_gate_config
 
 
 # --- Valid schema fixture ---
@@ -436,3 +442,65 @@ class TestBusinessRulePoliciesEdgeCases:
         }
         with pytest.raises(ValidationError, match="policy must be an object"):
             validate_business_rule_policies(value)
+
+
+# ============================================================================
+# Story 31.6: gate_config validation tests
+# ============================================================================
+
+class TestValidateGateConfigBasic:
+    """Story 31.6: gate_config basic validation (AC#5)."""
+
+    def test_none_passes(self):
+        """None gate_config passes validation."""
+        validate_gate_config(None)
+
+    def test_empty_dict_passes(self):
+        """Empty dict passes validation."""
+        validate_gate_config({})
+
+    def test_not_dict_raises(self):
+        """Non-dict value raises ValidationError."""
+        with pytest.raises(ValidationError, match="objet JSON"):
+            validate_gate_config("invalid")
+
+    def test_servicenow_change_none_passes(self):
+        """servicenow_change=None passes."""
+        validate_gate_config({"servicenow_change": None})
+
+    def test_servicenow_change_not_dict_raises(self):
+        """servicenow_change as string raises error."""
+        with pytest.raises(ValidationError, match="objet"):
+            validate_gate_config({"servicenow_change": "invalid"})
+
+    def test_integration_id_none_passes(self):
+        """integration_id=None passes."""
+        validate_gate_config({"servicenow_change": {"integration_id": None}})
+
+    def test_integration_id_not_int_raises(self):
+        """integration_id as string raises error."""
+        with pytest.raises(ValidationError, match="entier"):
+            validate_gate_config({"servicenow_change": {"integration_id": "abc"}})
+
+
+@pytest.mark.django_db
+class TestValidateGateConfigIntegration:
+    """Story 31.6: gate_config integration validation (AC#5)."""
+
+    def test_validate_gate_config_valid(self):
+        """5.8: Valid gate_config with existing servicenow integration passes."""
+        from tests.factories import IntegrationFactory
+        integration = IntegrationFactory(type='servicenow', name='SN Valid')
+        validate_gate_config({"servicenow_change": {"integration_id": integration.id}})
+
+    def test_validate_gate_config_invalid_integration(self):
+        """5.9: Non-existent integration raises ValidationError."""
+        with pytest.raises(ValidationError, match="introuvable"):
+            validate_gate_config({"servicenow_change": {"integration_id": 99999}})
+
+    def test_validate_gate_config_wrong_type(self):
+        """5.10: Integration of wrong type raises ValidationError."""
+        from tests.factories import IntegrationFactory
+        integration = IntegrationFactory(type='aap', name='AAP Wrong Type')
+        with pytest.raises(ValidationError, match="servicenow"):
+            validate_gate_config({"servicenow_change": {"integration_id": integration.id}})

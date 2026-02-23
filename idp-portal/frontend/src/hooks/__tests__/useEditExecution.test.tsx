@@ -206,7 +206,7 @@ describe('useEditExecution', () => {
 
     await waitFor(() => {
       expect(mockNotification.error).toHaveBeenCalledWith(
-        expect.objectContaining({ message: 'Permission refusée' })
+        expect.objectContaining({ title: 'Permission refusée' })
       );
     });
   });

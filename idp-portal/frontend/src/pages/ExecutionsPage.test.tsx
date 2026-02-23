@@ -35,6 +35,7 @@ import { AuthProvider } from '../contexts/AuthContext';
 import { ThemeProvider } from '../contexts/ThemeContext';
 import * as executionService from '../services/execution_service';
 import { getIntegrations } from '../services/integrations_service';
+import { fetchCatalogActions } from '../services/catalog_service';
 import type { ExecutionResponse, ExecutionStepResponse } from '../types/api';
 
 // Mock App.useApp() to provide notification/message/modal without requiring <App> context
@@ -247,6 +248,8 @@ describe('ExecutionsPage', () => {
     vi.mocked(executionService.fetchExecutionTimeSeries).mockResolvedValue([]);
     // Story 9.10: Mock fetchExecutionTags for ExecutionsFiltersPanel
     vi.mocked(executionService.fetchExecutionTags).mockResolvedValue([]);
+    // Re-mock fetchCatalogActions after resetAllMocks (factory mock implementation is cleared)
+    vi.mocked(fetchCatalogActions).mockResolvedValue([]);
   });
 
   describe('Table Display (AC1)', () => {
@@ -1214,8 +1217,8 @@ describe('ExecutionsPage', () => {
         expect(screen.getByText('Create PDB')).toBeInTheDocument();
       });
 
-      // Check for ApartmentOutlined icon (workflow)
-      const workflowIcon = container.querySelector('[class*="anticon-apartment"]');
+      // WorkflowIcon renders a custom SVG with aria-label="Workflow" (not ApartmentOutlined)
+      const workflowIcon = container.querySelector('[aria-label="Workflow"]');
       expect(workflowIcon).toBeInTheDocument();
     });
 
@@ -1784,7 +1787,7 @@ describe('ExecutionsPage', () => {
 
         // The notification.success should have been called
         expect(mockNotification.success).toHaveBeenCalledWith({
-          message: 'Exécution annulée avec succès',
+          title: 'Exécution annulée avec succès',
         });
       });
     });

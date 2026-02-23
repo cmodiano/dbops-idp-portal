@@ -52,9 +52,62 @@ vi.mock('../../services/reference_service', () => ({
   fetchEnvironments: vi.fn().mockResolvedValue(['DEV', 'STAGING', 'PROD']),
 }));
 
+// Mock useEngines to bypass module-level cache and avoid cross-test state contamination
+vi.mock('../../hooks/useEngines', () => ({
+  useEngines: () => ({
+    engines: [
+      { value: 'Oracle', label: 'Oracle' },
+      { value: 'SQL Server', label: 'SQL Server' },
+    ],
+    engineOptions: [
+      { value: 'Oracle', label: 'Oracle' },
+      { value: 'SQL Server', label: 'SQL Server' },
+    ],
+    loading: false,
+    error: null,
+  }),
+  invalidateEnginesCache: vi.fn(),
+}));
+
+// Story 31.1: Mock usePlatformIntegrations (replaces usePlatforms for action forms)
+vi.mock('../../hooks/usePlatformIntegrations', () => ({
+  usePlatformIntegrations: () => ({
+    integrations: [
+      { id: 1, type: 'aap', name: 'AAP-PROD', status: 'valid', base_url: 'https://aap.local', credential_ref: null, icon: null, auth_flow: null, created_at: '', updated_at: '' },
+      { id: 2, type: 'github_actions', name: 'GitHub CI', status: 'valid', base_url: 'https://github.com', credential_ref: null, icon: null, auth_flow: null, created_at: '', updated_at: '' },
+    ],
+    integrationOptions: [
+      { value: 1, label: 'AAP-PROD — aap' },
+      { value: 2, label: 'GitHub CI — github_actions' },
+    ],
+    loading: false,
+    error: null,
+    getIntegrationById: (id: number) => {
+      if (id === 1) return { id: 1, type: 'aap', name: 'AAP-PROD', status: 'valid', base_url: 'https://aap.local', credential_ref: null, icon: null, auth_flow: null, created_at: '', updated_at: '' };
+      if (id === 2) return { id: 2, type: 'github_actions', name: 'GitHub CI', status: 'valid', base_url: 'https://github.com', credential_ref: null, icon: null, auth_flow: null, created_at: '', updated_at: '' };
+      return undefined;
+    },
+  }),
+}));
+
 vi.mock('../../services/categories_service', () => ({
   getCategories: vi.fn().mockResolvedValue([]),
 }));
+
+// M3 fix: mock useAAPTemplates to avoid real API calls in WizardAAPTemplateSection tests
+vi.mock('../../hooks/useAAPTemplates', () => ({
+  useAAPTemplates: vi.fn(),
+}));
+
+import { useAAPTemplates } from '../../hooks/useAAPTemplates';
+const mockUseAAPTemplates = useAAPTemplates as ReturnType<typeof vi.fn>;
+
+const defaultAAPMockWizard = {
+  templates: [],
+  loading: false,
+  fallback: true,
+  error: null,
+};
 
 const mockOnSubmit = vi.fn().mockResolvedValue({ id: 1 });
 const mockOnCancel = vi.fn();
@@ -73,6 +126,8 @@ const defaultProps = {
 describe('ActionWizard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // M3 fix: default AAP mock (fallback = manual input)
+    mockUseAAPTemplates.mockReturnValue(defaultAAPMockWizard);
   });
 
   describe('AC1: Ouverture du wizard', () => {
@@ -92,7 +147,7 @@ describe('ActionWizard', () => {
       expect(screen.getByLabelText("Nom de l'action")).toBeInTheDocument();
       expect(screen.getByLabelText('Description')).toBeInTheDocument();
       expect(screen.getByLabelText('Moteur')).toBeInTheDocument();
-      expect(screen.getByLabelText('Plateforme')).toBeInTheDocument();
+      expect(screen.getByLabelText('Intégration')).toBeInTheDocument();
     });
   });
 
@@ -106,6 +161,7 @@ describe('ActionWizard', () => {
         item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
+        integration_id: 1,
         parameters_schema: null,
         impact_rules: null,
         default_impact_level: null,
@@ -142,6 +198,7 @@ describe('ActionWizard', () => {
         item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
+        integration_id: 1,
         parameters_schema: null,
         impact_rules: null,
         default_impact_level: null,
@@ -183,6 +240,7 @@ describe('ActionWizard', () => {
         item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
+        integration_id: 1,
         parameters_schema: null,
         impact_rules: null,
         default_impact_level: null,
@@ -213,6 +271,8 @@ describe('ActionWizard', () => {
         const payload = mockOnSubmit.mock.calls[0][0];
         expect(payload.name).toBe('Action à modifier');
         expect(payload.engine).toBe('Oracle');
+        // Story 31.1: integration_id sent, platform derived from integration type
+        expect(payload.integration_id).toBe(1);
         expect(payload.platform).toBe('AAP');
         expect(payload.parameters_schema).toBeDefined();
         expect(payload.impact_rules).toBeDefined();
@@ -220,7 +280,7 @@ describe('ActionWizard', () => {
     });
   });
 
-  describe('AC4: Enregistrement', () => {
+  describe('AC4: Enregistrement (mode édition pré-rempli)', () => {
     it('à l\'étape 4, Enregistrer envoie le payload via onSubmit (mode édition pré-rempli)', async () => {
       const user = userEvent.setup();
       const editAction: ActionDetail = {
@@ -230,6 +290,7 @@ describe('ActionWizard', () => {
         item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
+        integration_id: 1,
         parameters_schema: null,
         impact_rules: null,
         default_impact_level: null,
@@ -264,13 +325,15 @@ describe('ActionWizard', () => {
         const payload = mockOnSubmit.mock.calls[0][0];
         expect(payload.name).toBe('Action à modifier');
         expect(payload.engine).toBe('Oracle');
+        // Story 31.1: integration_id sent, platform derived
+        expect(payload.integration_id).toBe(1);
         expect(payload.platform).toBe('AAP');
         expect(payload.parameters_schema).toBeDefined();
         expect(payload.impact_rules).toBeDefined();
       });
     });
 
-    it('en mode création (sans editAction), le wizard affiche l’étape 1 et Enregistrer envoie le payload attendu quand on soumet', async () => {
+    it("en mode création (sans editAction), le wizard affiche l'étape 1 et Enregistrer envoie le payload attendu quand on soumet", async () => {
       await act(async () => {
         render(<ActionWizard {...defaultProps} />);
       });
@@ -279,7 +342,7 @@ describe('ActionWizard', () => {
       expect(screen.getByLabelText('Description')).toBeInTheDocument();
       expect(screen.getByRole('combobox', { name: /moteur/i })).toBeInTheDocument();
       expect(screen.getByRole('combobox', { name: /moteur/i })).toBeInTheDocument();
-      expect(screen.getByRole('combobox', { name: /plateforme/i })).toBeInTheDocument();
+      expect(screen.getByRole('combobox', { name: /intégration/i })).toBeInTheDocument();
     });
   });
 
@@ -292,6 +355,7 @@ describe('ActionWizard', () => {
         item_type: 'action',
         engine: 'SQL Server',
         platform: 'GitHub Actions',
+        integration_id: 2,
         parameters_schema: { type: 'object', properties: { foo: { type: 'string' } }, required: ['foo'] },
         impact_rules: { DEV: { level: 'low', criteria: null } },
         default_impact_level: 'low',
@@ -321,6 +385,7 @@ describe('ActionWizard', () => {
         item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
+        integration_id: 1,
         parameters_schema: null,
         impact_rules: null,
         default_impact_level: null,
@@ -352,6 +417,7 @@ describe('ActionWizard', () => {
         item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
+        integration_id: 1,
         parameters_schema: null,
         impact_rules: null,
         default_impact_level: null,
@@ -376,8 +442,8 @@ describe('ActionWizard', () => {
       await waitFor(() => expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeInTheDocument());
       const prodSwitch = screen.getByLabelText(/Changement requis pour PROD/i);
       await user.click(prodSwitch);
-      // Code modèle is required when "Changement requis" is enabled for PROD
-      const codeModeleProd = screen.getByLabelText(/Code modèle pour PROD/i);
+      // Modèle / Template ID is required when "Changement requis" is enabled for PROD
+      const codeModeleProd = screen.getByLabelText(/Modèle \/ Template ID pour PROD/i);
       await user.type(codeModeleProd, 'CHG001');
       await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
       await waitFor(() => {
@@ -428,13 +494,13 @@ describe('ActionWizard', () => {
       });
       // Initially engine/platform are visible
       expect(screen.getByLabelText('Moteur')).toBeInTheDocument();
-      expect(screen.getByLabelText('Plateforme')).toBeInTheDocument();
+      expect(screen.getByLabelText('Intégration')).toBeInTheDocument();
 
       // Select workflow
       await user.click(screen.getByRole('radio', { name: /Workflow/i }));
       await waitFor(() => {
         expect(screen.queryByLabelText('Moteur')).not.toBeInTheDocument();
-        expect(screen.queryByLabelText('Plateforme')).not.toBeInTheDocument();
+        expect(screen.queryByLabelText('Intégration')).not.toBeInTheDocument();
       });
     });
 
@@ -612,7 +678,7 @@ describe('ActionWizard', () => {
       expect(screen.getByText('Nouvelle action')).toBeInTheDocument();
       // Engine/platform should be visible (action type)
       expect(screen.getByLabelText('Moteur')).toBeInTheDocument();
-      expect(screen.getByLabelText('Plateforme')).toBeInTheDocument();
+      expect(screen.getByLabelText('Intégration')).toBeInTheDocument();
     });
 
     it('avec initialItemType="workflow", le Radio.Group est masqué et champs engine/platform masqués', async () => {
@@ -626,7 +692,7 @@ describe('ActionWizard', () => {
       expect(screen.getByText('Nouveau workflow')).toBeInTheDocument();
       // Engine/platform should NOT be visible (workflow type)
       expect(screen.queryByLabelText('Moteur')).not.toBeInTheDocument();
-      expect(screen.queryByLabelText('Plateforme')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Intégration')).not.toBeInTheDocument();
     });
 
     it('sans initialItemType, le Radio.Group est visible (compatibilité rétroactive)', async () => {
@@ -648,6 +714,7 @@ describe('ActionWizard', () => {
         description: null,
         engine: 'Oracle',
         platform: 'AAP',
+        integration_id: 1,
         parameters_schema: null,
         impact_rules: null,
         default_impact_level: null,
@@ -670,7 +737,7 @@ describe('ActionWizard', () => {
       expect(screen.getByText(/Modifier l'action/i)).toBeInTheDocument();
       // Engine/platform should still be visible (action type)
       expect(screen.getByLabelText('Moteur')).toBeInTheDocument();
-      expect(screen.getByLabelText('Plateforme')).toBeInTheDocument();
+      expect(screen.getByLabelText('Intégration')).toBeInTheDocument();
     });
 
     it('avec initialItemType="workflow", titre et champs corrects à étape 1', async () => {
@@ -684,7 +751,7 @@ describe('ActionWizard', () => {
       expect(screen.queryByRole('radio', { name: /Workflow/i })).not.toBeInTheDocument();
       // Verify engine/platform are NOT displayed for workflows
       expect(screen.queryByLabelText('Moteur')).not.toBeInTheDocument();
-      expect(screen.queryByLabelText('Plateforme')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Intégration')).not.toBeInTheDocument();
       // Verify name field label is "Nom du workflow" (not "Nom de l'action")
       expect(screen.getByLabelText('Nom du workflow')).toBeInTheDocument();
     });
@@ -712,6 +779,168 @@ describe('ActionWizard', () => {
       if (modal) {
         expect(modal).toHaveStyle({ width: '640px' });
       }
+    });
+  });
+
+  // Story 31.1: Integration field tests
+  describe('Story 31.1: Intégration field', () => {
+    it('affiche le champ "Intégration" au lieu de "Plateforme" pour les actions', async () => {
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} />);
+      });
+      expect(screen.getByLabelText('Intégration')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Plateforme')).not.toBeInTheDocument();
+    });
+
+    it('envoie integration_id et platform dérivé dans le payload', async () => {
+      const user = userEvent.setup();
+      const editAction: ActionDetail = {
+        id: 10,
+        name: 'Action intégration',
+        description: 'Desc',
+        item_type: 'action',
+        engine: 'Oracle',
+        platform: 'AAP',
+        integration_id: 1,
+        parameters_schema: null,
+        impact_rules: null,
+        default_impact_level: null,
+        status: 'draft',
+        created_by: null,
+        created_at: '',
+        updated_at: null,
+        execution_steps: [],
+        workflow_steps: null,
+        change_type_config: null,
+        tags: [],
+      };
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} editAction={editAction} />);
+      });
+      // Navigate to step 2
+      const next1 = await screen.findByRole('button', { name: /Suivant/i });
+      await user.click(next1);
+      await waitFor(() => expect(screen.getByLabelText('ID template AAP')).toBeInTheDocument());
+      await user.type(screen.getByLabelText('ID template AAP'), '42');
+      // Navigate to step 3
+      const next2 = await screen.findByRole('button', { name: /Suivant/i });
+      await user.click(next2);
+      await waitFor(() => expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
+
+      await waitFor(() => {
+        expect(mockOnSubmit).toHaveBeenCalledTimes(1);
+        const payload = mockOnSubmit.mock.calls[0][0];
+        expect(payload.integration_id).toBe(1);
+        expect(payload.platform).toBe('AAP');
+      });
+    });
+
+    it('masque le champ Intégration pour les workflows', async () => {
+      const user = userEvent.setup();
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} />);
+      });
+      // Switch to workflow
+      await user.click(screen.getByRole('radio', { name: /Workflow/i }));
+      await waitFor(() => {
+        expect(screen.queryByLabelText('Intégration')).not.toBeInTheDocument();
+      });
+    });
+
+    it('AC6: affiche alerte mode dégradé quand action existante a platform sans integration_id', async () => {
+      const editAction: ActionDetail = {
+        id: 99,
+        name: 'Action legacy',
+        description: 'Description legacy',
+        item_type: 'action',
+        engine: 'Oracle',
+        platform: 'AAP',
+        integration_id: null,
+        parameters_schema: null,
+        impact_rules: null,
+        default_impact_level: null,
+        status: 'draft',
+        created_by: null,
+        created_at: '',
+        updated_at: null,
+        execution_steps: null,
+        workflow_steps: null,
+        change_type_config: null,
+        tags: [],
+      };
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} editAction={editAction} />);
+      });
+      await waitFor(() => {
+        expect(screen.getByText(/ancienne plateforme.*AAP/i)).toBeInTheDocument();
+      });
+    });
+  });
+
+  // Story 31.5: WizardAAPTemplateSection tests — M3 fix
+  describe('Story 31.5: WizardAAPTemplateSection', () => {
+    const navigateToStep2WithAAP = async (user: ReturnType<typeof userEvent.setup>) => {
+      // Fill step 1: name, description, engine, integration (AAP id=1)
+      await user.type(screen.getByLabelText(/Nom de l'action/i), 'Test AAP Action');
+      await user.type(screen.getByLabelText(/Description/i), 'Description test');
+      // Select engine (Oracle)
+      const engineSelect = screen.getByLabelText('Moteur');
+      await user.click(engineSelect);
+      const oracleOpt = await screen.findByText('Oracle', { selector: '[class*="ant-select-item-option-content"]' });
+      await user.click(oracleOpt);
+      // Select integration (AAP-PROD = id 1)
+      const integrationSelect = screen.getByLabelText('Intégration');
+      await user.click(integrationSelect);
+      const aapOpt = await screen.findByText('AAP-PROD — aap');
+      await user.click(aapOpt);
+      // Navigate to step 2
+      const next = screen.getByRole('button', { name: /Suivant/i });
+      await user.click(next);
+    };
+
+    it('affiche le sélecteur de template AAP (liste) quand templates disponibles', async () => {
+      mockUseAAPTemplates.mockReturnValue({
+        templates: [
+          { id: 10, name: 'Deploy DB', description: '' },
+          { id: 20, name: 'Patch OS', description: '' },
+        ],
+        loading: false,
+        fallback: false,
+        error: null,
+      });
+      const user = userEvent.setup();
+      await act(async () => { render(<ActionWizard {...defaultProps} />); });
+      await navigateToStep2WithAAP(user);
+      await waitFor(() => {
+        // Form.Item label is used (no htmlFor without name prop) — check label text presence
+        expect(screen.getByText('Template AAP')).toBeInTheDocument();
+      });
+    });
+
+    it('affiche la saisie manuelle (fallback) quand API indisponible', async () => {
+      mockUseAAPTemplates.mockReturnValue(defaultAAPMockWizard);
+      const user = userEvent.setup();
+      await act(async () => { render(<ActionWizard {...defaultProps} />); });
+      await navigateToStep2WithAAP(user);
+      await waitFor(() => {
+        expect(screen.getByLabelText('ID template AAP')).toBeInTheDocument();
+      });
+    });
+
+    it('affiche une alerte quand API retourne une erreur', async () => {
+      mockUseAAPTemplates.mockReturnValue({
+        templates: [],
+        loading: false,
+        fallback: true,
+        error: 'API indisponible',
+      });
+      const user = userEvent.setup();
+      await act(async () => { render(<ActionWizard {...defaultProps} />); });
+      await navigateToStep2WithAAP(user);
+      await waitFor(() => {
+        expect(screen.getByText(/Saisie manuelle/i)).toBeInTheDocument();
+      });
     });
   });
 });

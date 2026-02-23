@@ -5,9 +5,9 @@ Story 2.30 - Category reference serializer.
 """
 
 import re
-from typing import Any
 from rest_framework import serializers
-from reference.models import RefEngine, RefPlatform, RefCategory
+from reference.models import RefEngine, RefCategory
+from integrations.models import IntegrationTypeCatalogue
 
 
 class RefEngineSerializer(serializers.ModelSerializer):
@@ -17,25 +17,31 @@ class RefEngineSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = RefEngine
-        fields = ['id', 'code', 'label', 'display_order', 'is_active', 'normalized_code']
+        fields = ['id', 'code', 'label', 'display_order', 'is_active', 'normalized_code', 'icon_url']
 
     def get_normalized_code(self, obj: RefEngine) -> str:
         """Retourne le code normalisé (minuscules + underscores) pour usage dans engine_type."""
         return obj.code.lower().replace(' ', '_')
 
 
-class RefPlatformSerializer(serializers.ModelSerializer):
-    """Serializer for RefPlatform model."""
-
-    normalized_code = serializers.SerializerMethodField()
+class RefEngineWriteSerializer(serializers.ModelSerializer):
+    """Write serializer for RefEngine admin updates (Story 31.3, AC6)."""
 
     class Meta:
-        model = RefPlatform
-        fields = ['id', 'code', 'label', 'display_order', 'is_active', 'normalized_code']
+        model = RefEngine
+        fields = ['label', 'display_order', 'is_active', 'icon_url']
 
-    def get_normalized_code(self, obj: RefPlatform) -> str:
-        """Retourne le code normalisé (minuscules + underscores) pour cohérence avec conventions."""
-        return obj.code.lower().replace(' ', '_')
+
+class PlatformTypeCatalogueSerializer(serializers.ModelSerializer):
+    """Story 31.9: Serializer for IntegrationTypeCatalogue (role=platform).
+    Replaces RefPlatformSerializer. Compatible response format."""
+
+    label: serializers.CharField = serializers.CharField(source='name')  # type: ignore[assignment]
+    normalized_code: serializers.CharField = serializers.CharField(source='code')
+
+    class Meta:
+        model = IntegrationTypeCatalogue
+        fields = ['code', 'label', 'is_active', 'normalized_code']
 
 
 class RefCategorySerializer(serializers.ModelSerializer):

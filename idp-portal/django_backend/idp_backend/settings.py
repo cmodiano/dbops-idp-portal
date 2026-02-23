@@ -67,11 +67,13 @@ INSTALLED_APPS = [
     'executions',
     'inventory',
     'reference',
+    'help',  # Story 31.7 - Aide contextuelle
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'core.middleware.CorrelationIdMiddleware',  # Story M.7 - correlation ID first
+    'core.db_resilience.DatabaseResilienceMiddleware',  # Story 32.1 - DB failover detection + retry
     'core.middleware.RequestResponseLoggingMiddleware',  # Story M.8 - request/response logging
     'core.middleware.RateLimitHeadersMiddleware',  # Story 17.11 - rate limit headers + logging
     'core.middleware.SecurityHeadersMiddleware',  # Story M.7 - security headers
@@ -118,12 +120,30 @@ ORACLE_USER = os.getenv('ORACLE_USER', 'idp_app')
 # Story 17.5: No hardcoded default - fail-fast if missing in production
 ORACLE_PASSWORD = os.getenv('ORACLE_PASSWORD', '')
 
+# Story 32.1: DB resilience settings for Data Guard failover/switchover
+# CONN_MAX_AGE: Max lifetime of a DB connection (seconds). After failover,
+# new requests get fresh connections once old ones expire.
+DB_CONN_MAX_AGE = int(os.getenv('DB_CONN_MAX_AGE', '600'))
+# CONN_HEALTH_CHECKS: Django 4.1+ — validates connection before reuse.
+# If dead (post-failover), Django silently recreates it. Key resilience mechanism.
+DB_CONN_HEALTH_CHECKS = os.getenv('DB_CONN_HEALTH_CHECKS', 'True').lower() in ('true', '1', 'yes')
+# Story 32.2: Retry settings for transactional retry after DB reconnection
+# Max retry attempts before returning 503 (first attempt is immediate)
+DB_RETRY_MAX_ATTEMPTS = int(os.getenv('DB_RETRY_MAX_ATTEMPTS', '3'))
+# Base delay for exponential backoff between retries (seconds), capped at 5s
+DB_RETRY_BACKOFF_BASE = float(os.getenv('DB_RETRY_BACKOFF_BASE', '0.5'))
+# Story 32.4: Max total duration for all retry attempts (seconds).
+# Aligns with Data Guard FSFO < 1 min — default 120s is a generous upper bound.
+DB_RETRY_TIME_WINDOW_SECONDS = int(os.getenv('DB_RETRY_TIME_WINDOW_SECONDS', '120'))
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.oracle',
         'NAME': ORACLE_DSN,
         'USER': ORACLE_USER,
         'PASSWORD': ORACLE_PASSWORD,
+        'CONN_MAX_AGE': DB_CONN_MAX_AGE,
+        'CONN_HEALTH_CHECKS': DB_CONN_HEALTH_CHECKS,
     }
 }
 
@@ -164,9 +184,12 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 
-# Include BASE_DIR/static for uploaded icons (integration icons in static/icons/)
-# Directory is created by upload endpoint on first icon upload
-STATICFILES_DIRS = [BASE_DIR / 'static'] if (BASE_DIR / 'static').exists() else []
+# Ensure static/icons/ directory exists so STATICFILES_DIRS always includes it.
+# Without this, if Django starts before any icon is uploaded, the dir doesn't exist,
+# STATICFILES_DIRS becomes [] and StaticFilesHandler can't serve uploaded icons
+# even after they're written to disk (finders are loaded once at startup).
+(BASE_DIR / 'static' / 'icons').mkdir(parents=True, exist_ok=True)
+STATICFILES_DIRS = [BASE_DIR / 'static']
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -471,5 +494,12 @@ WORKFLOW_RETRY_USE_CANCELLATION_CACHE = os.getenv(
 # Vault configuration for health check
 VAULT_ADDR = os.getenv('VAULT_ADDR', 'http://localhost:8200')
 
-# ServiceNow configuration for health check
+# ServiceNow configuration for health check and ITSM integration
 SERVICENOW_INSTANCE_URL = os.getenv('SERVICENOW_INSTANCE_URL', 'https://instance.service-now.com')
+# TLS verification for ServiceNow API calls (default True); set SERVICENOW_VERIFY_TLS=false to disable
+SERVICENOW_VERIFY_TLS = os.getenv('SERVICENOW_VERIFY_TLS', 'true').lower() == 'true'
+
+# Story 31.8: Notification service configuration
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'idp-portal@example.com')
+PAGE_INDIVIDUAL_API_URL = os.getenv('PAGE_INDIVIDUAL_API_URL', '')
+PAGE_DBA_API_URL = os.getenv('PAGE_DBA_API_URL', '')

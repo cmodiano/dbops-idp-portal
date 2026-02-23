@@ -48,14 +48,18 @@ import { StepDetailDrawer } from './StepDetailDrawer';
 
 const { Text } = Typography;
 
-// Status colors — RUNNING uses orange for high visibility (active step)
+// Couleurs graphe React Flow — config locale justifiée (Story 35.1 AC4 Option B).
+// Les couleurs hex servent la lisibilité visuelle du graphe React Flow, pas les badges Ant Design.
+// RUNNING = orange (#fa8c16) pour étape active très visible (vs bleu #3B82F6 dans STEP_STATUS_COLOR).
+// SELECTED = gold (#faad14) — sélection nœud AC7, aucun équivalent dans execution-status.ts.
+// Ne pas migrer vers STEP_STATUS_COLOR : usage graphe (hex) différent du usage badge (BadgeStatusType).
 const STATUS_COLORS = {
-  RUNNING: '#fa8c16', // Orange — étape active, bien visible
+  RUNNING: '#fa8c16', // Orange — étape active, bien visible (différent de STEP_STATUS_COLOR '#3B82F6')
   COMPLETED: '#52c41a',
   FAILED: '#ff4d4f',
   PENDING: '#8c8c8c',
   SKIPPED: '#8c8c8c',
-  SELECTED: '#faad14', // Story 19.3 AC7: Golden border for selected node
+  SELECTED: '#faad14', // Story 19.3 AC7: Golden border for selected node — pas d'équivalent dans execution-status.ts
 } as const;
 
 interface WorkflowExecutionGraphProps {
@@ -363,7 +367,7 @@ function WorkflowExecutionGraphInner({
         </Text>
         <Space direction="vertical" size={4}>
           <Space size={8}>
-            <Badge color="#fa8c16" />
+            <Badge color={STATUS_COLORS.RUNNING} />
             <Text type="secondary">En cours</Text>
           </Space>
           <Space size={8}>

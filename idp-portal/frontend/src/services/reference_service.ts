@@ -17,14 +17,7 @@ export interface RefEngine {
   label: string;
   display_order: number;
   is_active: number;
-}
-
-export interface RefPlatform {
-  id: number;
-  code: string;
-  label: string;
-  display_order: number;
-  is_active: number;
+  icon_url: string | null;
 }
 
 /**
@@ -32,13 +25,6 @@ export interface RefPlatform {
  */
 export async function fetchEngines(): Promise<RefEngine[]> {
   return apiFetch<RefEngine[]>('/reference/engines?active_only=true');
-}
-
-/**
- * Fetch active platforms from REF_PLATFORMS table.
- */
-export async function fetchPlatforms(): Promise<RefPlatform[]> {
-  return apiFetch<RefPlatform[]>('/reference/platforms?active_only=true');
 }
 
 /**

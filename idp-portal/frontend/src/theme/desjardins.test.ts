@@ -54,6 +54,10 @@ describe('desjardins themes', () => {
       expect(lightTheme.token?.colorTextSecondary).toBe('#5c5c6d');
     });
 
+    it('sets placeholder color for readable inputs/Select on white (UX)', () => {
+      expect(lightTheme.token?.colorTextPlaceholder).toBe('#6b6b7a');
+    });
+
     it('defines border radius token', () => {
       expect(lightTheme.token?.borderRadius).toBe(6);
       expect(lightTheme.token?.borderRadiusLG).toBe(8);
@@ -146,14 +150,14 @@ describe('desjardins themes', () => {
     });
 
     it('sets dark background colors (AC #4, #5)', () => {
-      expect(darkTheme.token?.colorBgBase).toBe('#0f0f14');
-      expect(darkTheme.token?.colorBgContainer).toBe('#1a1a24');
-      expect(darkTheme.token?.colorBgLayout).toBe('#0f0f14');
+      expect(darkTheme.token?.colorBgBase).toBe('#12121a');
+      expect(darkTheme.token?.colorBgContainer).toBe('#1e1e2a');
+      expect(darkTheme.token?.colorBgLayout).toBe('#12121a');
     });
 
     it('sets dark text colors', () => {
-      expect(darkTheme.token?.colorText).toBe('#f0f0f2');
-      expect(darkTheme.token?.colorTextSecondary).toBe('#a8a8b3');
+      expect(darkTheme.token?.colorText).toBe('#f5f5f7');
+      expect(darkTheme.token?.colorTextSecondary).toBe('#b8b8c4');
     });
 
     it('uses same border radius as light theme (AC #4)', () => {
@@ -182,10 +186,10 @@ describe('desjardins themes', () => {
   // Story 3-7: Verify dark theme unchanged (AC #4)
   describe('Dark theme regression check (AC #4)', () => {
     it('dark theme tokens remain unchanged after light theme modifications', () => {
-      // Verify dark theme background colors are unchanged
-      expect(darkTheme.token?.colorBgBase).toBe('#0f0f14');
-      expect(darkTheme.token?.colorBgContainer).toBe('#1a1a24');
-      expect(darkTheme.token?.colorBgLayout).toBe('#0f0f14');
+      // Verify dark theme background colors (UX: hierarchy body < header < cards)
+      expect(darkTheme.token?.colorBgBase).toBe('#12121a');
+      expect(darkTheme.token?.colorBgContainer).toBe('#1e1e2a');
+      expect(darkTheme.token?.colorBgLayout).toBe('#12121a');
 
       // Verify dark theme shadows are unchanged (should not have enhanced values)
       const darkShadows = darkTheme.token?.boxShadow;

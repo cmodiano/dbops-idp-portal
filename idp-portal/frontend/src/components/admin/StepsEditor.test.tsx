@@ -14,6 +14,13 @@ vi.mock('../../hooks/useEnvironments', () => ({
   useEnvironments: vi.fn(),
 }));
 
+vi.mock('../../hooks/useAAPTemplates', () => ({
+  useAAPTemplates: vi.fn(),
+}));
+
+import { useAAPTemplates } from '../../hooks/useAAPTemplates';
+const mockUseAAPTemplates = useAAPTemplates as ReturnType<typeof vi.fn>;
+
 const mockUseEnvironments = useEnvironments as ReturnType<typeof vi.fn>;
 
 const defaultEnvMock = {
@@ -27,10 +34,18 @@ const defaultEnvMock = {
   error: null,
 };
 
+const defaultAAPMock = {
+  templates: [],
+  loading: false,
+  fallback: true,
+  error: null,
+};
+
 describe('StepsEditor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseEnvironments.mockReturnValue(defaultEnvMock);
+    mockUseAAPTemplates.mockReturnValue(defaultAAPMock);
   });
 
   it('renders connector dropdown (Story 2.7)', async () => {
@@ -214,6 +229,120 @@ describe('StepsEditor', () => {
 
       // Component should still render with fallback environments
       expect(screen.getByLabelText(/Environnements conditionnes etape 1/i)).toBeInTheDocument();
+    });
+  });
+
+  // Story 31.5: AAP template selector tests
+  describe('Story 31.5: AAP template selector', () => {
+    const aapStep: ExecutionStep[] = [
+      {
+        order: 1,
+        name: 'Deploy AAP',
+        type: 'execution',
+        connector_type: 'aap',
+        connector_config: { resource_type: 'job_template' },
+        conditional_environments: null,
+      },
+    ];
+
+    it('renders AAP template selector when integrationId is provided and templates available', () => {
+      mockUseAAPTemplates.mockReturnValue({
+        templates: [
+          { id: 10, name: 'Deploy DB', description: 'Deploy database' },
+          { id: 20, name: 'Patch OS', description: '' },
+        ],
+        loading: false,
+        fallback: false,
+        error: null,
+      });
+
+      render(<StepsEditor value={aapStep} onChange={vi.fn()} integrationId={1} />);
+      expect(screen.getByLabelText(/Template AAP etape 1/i)).toBeInTheDocument();
+    });
+
+    it('renders manual input fallback when integrationId is null', () => {
+      mockUseAAPTemplates.mockReturnValue(defaultAAPMock);
+
+      render(<StepsEditor value={aapStep} onChange={vi.fn()} integrationId={null} />);
+      expect(screen.getByLabelText(/ID template AAP etape 1/i)).toBeInTheDocument();
+    });
+
+    it('renders manual input fallback with warning when API error', () => {
+      mockUseAAPTemplates.mockReturnValue({
+        templates: [],
+        loading: false,
+        fallback: true,
+        error: 'API indisponible',
+      });
+
+      render(<StepsEditor value={aapStep} onChange={vi.fn()} integrationId={1} />);
+      expect(screen.getByText(/Saisie manuelle/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/ID template AAP etape 1/i)).toBeInTheDocument();
+    });
+
+    it('shows loading state', () => {
+      mockUseAAPTemplates.mockReturnValue({
+        templates: [],
+        loading: true,
+        fallback: false,
+        error: null,
+      });
+
+      render(<StepsEditor value={aapStep} onChange={vi.fn()} integrationId={1} />);
+      // Loading select should be present
+      expect(screen.getByLabelText(/Template AAP etape 1/i)).toBeInTheDocument();
+    });
+
+    it('shows retrocompatibility: existing ID displayed in selector', () => {
+      const stepsWithId: ExecutionStep[] = [
+        {
+          order: 1,
+          name: 'Deploy AAP',
+          type: 'execution',
+          connector_type: 'aap',
+          connector_config: { resource_type: 'job_template', job_template_id: 99 },
+          conditional_environments: null,
+        },
+      ];
+
+      mockUseAAPTemplates.mockReturnValue({
+        templates: [
+          { id: 10, name: 'Deploy DB', description: '' },
+        ],
+        loading: false,
+        fallback: false,
+        error: null,
+      });
+
+      render(<StepsEditor value={stepsWithId} onChange={vi.fn()} integrationId={1} />);
+      // Template #99 not in list → should show "introuvable" option
+      expect(screen.getByLabelText(/Template AAP etape 1/i)).toBeInTheDocument();
+    });
+
+    it('calls onChange when template is selected', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      mockUseAAPTemplates.mockReturnValue({
+        templates: [
+          { id: 10, name: 'Deploy DB', description: '' },
+        ],
+        loading: false,
+        fallback: false,
+        error: null,
+      });
+
+      render(<StepsEditor value={aapStep} onChange={onChange} integrationId={1} />);
+      const selector = screen.getByLabelText(/Template AAP etape 1/i);
+      await user.click(selector);
+      const option = await screen.findByText('Deploy DB');
+      await user.click(option);
+      expect(onChange).toHaveBeenCalledWith([
+        expect.objectContaining({
+          connector_config: expect.objectContaining({
+            job_template_id: 10,
+          }),
+        }),
+      ]);
     });
   });
 });

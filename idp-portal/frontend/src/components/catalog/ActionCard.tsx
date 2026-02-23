@@ -24,12 +24,14 @@ import {
 } from '@ant-design/icons';
 import type { ActionPreviewData, ActionEngine } from '../../types/api';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { ImpactIndicator } from '../shared/ImpactIndicator';
 import { IMPACT_LABELS } from '../shared/impactLabels';
 import { STYLE_TOKENS } from '../../theme/styleTokens';
 import { getTagStyle } from '../../utils/tagStyles';
 import { sanitizeDescription } from '../../utils/businessLanguage';
 import { ENGINE_SVG_SOURCES } from '../../utils/executionRenderers';
+import { getEngineIconUrl } from '../../utils/engineIconCache';
 import { getItemTypeIcon } from '../../utils/iconHelpers';
 
 const { Text, Paragraph } = Typography;
@@ -47,9 +49,11 @@ export interface ActionCardProps {
   showFavoriteButton?: boolean;
 }
 
-/** Get engine icon with SVG override for cards (real vendor logos). Story 18.2: fallback uses shared iconHelpers. */
+/** Get engine icon with SVG override for cards (real vendor logos).
+ * Story 31.3: Fallback cascade — 1) icon_url from API cache, 2) ENGINE_SVG_SOURCES hardcoded, 3) iconHelpers. */
 function getEngineIcon(engine: ActionEngine): React.ReactNode {
-  const svgSrc = ENGINE_SVG_SOURCES[engine];
+  const apiIconUrl = getEngineIconUrl(engine);
+  const svgSrc = apiIconUrl || ENGINE_SVG_SOURCES[engine];
   if (svgSrc) {
     return (
       <img
@@ -78,8 +82,9 @@ export function ActionCard({
 }: ActionCardProps) {
   const { effectiveMode } = useTheme();
   const isDark = effectiveMode === 'dark';
+  const { isBusinessProfile } = useAuth();
   const isPreview = variant === 'preview';
-  const isBusiness = variant === 'business';
+  const isBusiness = variant === 'business' || isBusinessProfile;
   const isClickable = !!onClick && !isPreview;
   const isWorkflow = action.item_type === 'workflow';
 

@@ -407,3 +407,63 @@ development_status:
     30-15-todo-stubs-except-trop-larges: done # MEDIUM — NEW-2 TODO ServiceNow/platform adapter, NEW-4 except trop larges
     30-16-restant-doublon-styles-inline-incon-4: done # LOW — BUG-BE-7 doublon supprimé, PERF-4 documenté backlog, INCON-4 commentaire enrichi + tests (code review: 12/15 auto-fixes)
     epic-30-retrospective: optional
+    # === Epic 31: Admin catalogue — Intégrations alignées et icônes moteurs (février 2026) ===
+    # Réf: planning-artifacts/epic-31-admin-catalogue-integrations-et-icones-moteurs.md
+    epic-31: in-progress
+    31-1-formulaire-action-liste-integrations-label-integration: done # 2026-02-19: code-review — 7 issues corrigées (AC6 ActionForm, Alert.title→message, tests AC6, Tower type)
+    31-2-suppression-integration-desactiver-actions: done # 2026-02-19: code-review — 1 HIGH + 2 MEDIUM fixes (updated_at action, code mort view, assertion test)
+    31-3-icones-moteurs-ref-engines: done # 2026-02-19: code-review — 7 issues (1H + 2M + 4L) auto-fixées (race condition SAML prefetch, EngineIconCell moteurs inconnus, APITestCase, test null, docs)
+    31-4-refonte-ux-panneau-changement-servicenow-gates: done # 2026-02-19: Code review adversarial — 4 issues auto-fixés (H1: regex ^[A-Za-z0-9_-]+$, H2: validation template_id, M4: messages erreur, M5: tests Gates switches) — 16/16 tests ✅
+    31-5-aap-selection-template-liste-ou-nom: done # 2026-02-19: code-review — 7 fixes (H1 service erreur, H2 race condition, H3 search AC3, M1 test search, M2 auth tests, M3 WizardAAP tests) — 18 BE + 14 FE tests pass
+    31-6-config-gates-choix-service-creation-changement-servicenow: done # 2026-02-19: code-review — 6 fixes (H1 validation bloquante AC#3, H2 ActionListSerializer gate_config, H3 test 10.4, M1 filtre API type, M2 ActionCreateSerializer, M3 File List + Alert)
+    31-7-aide-contextuelle-tooltip-popover-markdown-backend: done # 2026-02-19: App help Django, 3 topics MD, SectionHelp composant, intégration ActionForm/ActionWizard — 6 BE + 16 FE tests pass. Code review: 0H + 4M + 3L fixes appliqués
+    31-8-service-notification-multi-destinations-email-teams-page: done # 2026-02-19: Code review adversarial — 6 issues corrigées (H1: on_commit, H2: File List, M1: get_parameters(), M2: PII email, M3: URL SSRF, L1: Teams title) — 140 BE tests pass
+    31-9-suppression-doublon-ref-platforms: done # 2026-02-21: RefPlatform supprimé, validate_platform → IntegrationTypeCatalogue, API /reference/platforms → catalogue, bug workflow_runtime fixé, 158 tests pass — Code review: 3 fixes (M1 docs stales, M2 _PLATFORM_ALIAS DRY, L1 docstring)
+    31-10-admin-ui-moteurs-et-reproductibilite-icones: done # code-review 2026-02-21: 7 issues (1H+5M+1L), 6 auto-fixés (doc seed inexistante, Avatar fallback, URL validation, 2 tests ajoutés, doc PK corrigée) — 19 FE tests pass
+    epic-31-retrospective: optional
+    # === Epic 32: Résilience Data Guard (failover / switchover) ===
+    # Réf: planning-artifacts/epic-32-resilience-dataguard.md — Backend détecte coupure DB, reconnexion, retry transaction, portail + API
+    epic-32: in-progress
+    32-1-detection-reconnexion-base-donnees-failover: done # 2026-02-21: middleware résilience DB, CONN_HEALTH_CHECKS, 37 tests pass — code review: 7 issues fixées (3H+3M+1L)
+    32-2-retry-rejeu-transaction-apres-reconnexion: done # 2026-02-21: retry borné, backoff, idempotence, 503, 69 tests pass — code review: 5 fixes (1H+4M)
+    32-3-resilience-portail-et-api-consommateurs: done # 2026-02-21: 13 backend + 50 frontend tests pass, docs NFR/runbook ajoutée — code review: 6 fixes (H2+M1+M2+M3+M4)
+    32-4-bornes-retry-observabilite-codes-erreur: done # 2026-02-21: code review — 4 MEDIUM + 1 LOW fixes (message hardcode, log order, task 4.1/4.2 status, doc example, test assertion) — 103/103 tests pass
+    epic-32-retrospective: optional
+    # === Epic 33: Conformité SOLID — Corrections des écarts ===
+    # Réf: planning-artifacts/epic-33-conformite-solid.md, solid-audit-report.md
+    epic-33: in-progress
+    33-1-ocp-registry-pattern-adapters-services: done # code-review 2026-02-21: 5 fixes (M1 unregister, M2 SERVICE_TYPES assert, B1 overwrite warning, B2 __all__ exports, B3 list_types doc) — 50/50 tests pass
+    33-2-srp-decouper-executions-tasks: done
+    33-3-srp-decouper-catalog-views: done # code-review 2026-02-21: 1 HIGH + 3 MEDIUM + 3 LOW fixes — partial default, dict constant, double subquery, duplicate read, comment cleanup — 369/374 tests pass
+    33-4-dip-injection-dependances-services: done # code-review 2026-02-21: H1 ADR ref, H2 CatalogActionViewSet attr, M2 svc var action_views, M3 6 tests execution views DI — 26/26 tests pass
+    33-5-srp-reduire-actionform-actionwizard: done # code-review 2026-02-21: M1 validateWorkflowSteps champ mort, M2 snIntegrationOptions prop morte, M3 setTimeout cleanup, L1 TODO prod, L2 accent Créer, L3 test symétrique — 112/118 tests pass (6 pré-existants Story 2.24+31.5)
+    33-6-documentation-checklist-solid: done
+    epic-33-retrospective: optional
+    # === Epic 34: Codebase Review restant (mise à jour 2026-02-21) ===
+    # Réf: idp-portal/CODEBASE-REVIEW.md §13–16, planning-artifacts/epic-34-codebase-review-restant-fev-2026.md
+    epic-34: in-progress
+    34-1-quick-wins-backend-di-queryset-validation: done # SOLID-BE-8, NEW-1, SOLID-BE-11 — code-review 2026-02-22: 3 MEDIUM fixes (test request factory, response code assertions, File List)
+    34-2-quick-wins-frontend-notification-status-antd: done # SOLID-FE-5, SOLID-FE-10, BUG-FE-1b/2b — code-review 2026-02-22: 2 MEDIUM fixes (AppLayout cleanup, File List), 5 LOW action items
+    34-3-backend-cache-rbac-split-services-lsp-serializers: done # NEW-3, SOLID-BE-4, SOLID-BE-6 — code-review 2026-02-22: 3M+2L auto-fixés
+    34-4-backend-runtime-registry-webhooks-di: done # SOLID-BE-7, SOLID-BE-9 — code-review 2026-02-22: 2M+3L auto-fixés (threading.Lock, test assertion, logger.debug, test SIMULATE_EXECUTION_DEV, task 2.4 doc) — 42/42 tests pass
+    34-5-backend-poller-generique-unifie: done # SOLID-BE-3 — code-review 2026-02-22: 3M+1L auto-fixés (platform_logs, log events génériques, tests shims GitHub/Terraform, patch mort), 71/71 tests pass
+    34-6-backend-eclater-executions-utils: done # SOLID-BE-1
+    34-7-backend-decomposer-workflow-runtime: done # SOLID-BE-2 — code-review 2026-02-22: H2 tasks cochées, M1 dataclasses.asdict top-level, M2 commentaire corrigé, M3 call_platform_adapter public — 24/24 tests pass
+    34-8-backend-decomposer-inventory-services: done # SOLID-BE-5 — code-review 2026-02-22: 2H+3M+1L auto-fixés (import mort, DRY extraction, type guard, mixed-admin test, naming, encapsulation)
+    34-9-frontend-variant-context-workflow-steps-editor: done # SOLID-FE-6, SOLID-FE-8 — code-review 2026-02-22: H1 variant prop retained (fixed), H2 SortableStepCard tests incomplets (fixed: retry defaults + disabled complet), M1 File List vide (fixed), M2 WorkflowStepsRenderer hors scope (documenté), L1 JSDoc (fixed)
+    34-10-frontend-use-catalog-state-catalog-page: done # SOLID-FE-2 — code-review 2026-02-22: 2H+1M+1L auto-fixés (useCallback x4, useMemo hasActiveFilters, act() warnings, contentMaxWidth) — 41/41 tests pass, 0 erreur TypeScript
+    34-11-frontend-use-audit-filters-composants-audit-page: done # SOLID-FE-3 — code-review 2026-02-22: 2H+3M auto-fixés (handleExport sort/order, sorter null reset, tag Correlation, Drawer width, DRY formatDate) — 22/22 tests pass, 0 TS error
+    34-12-frontend-decouper-execution-timeline: done # SOLID-FE-1 CRITICAL — code-review 2026-02-23: 2M+3L auto-fixés (formatDuration utils.ts, <style> pulse déplacé, type steps, renommage failedStep, commentaire) — 34/34 tests pass, 0 TS error
+    34-13-frontend-dip-services-props-execution-wizard: done # SOLID-FE-4, FE-7, FE-9 — code-review 2026-02-23: 2H+2M+1L fixes (dead useAuth, firstFieldRef mort, onBackToCatalog inutile, interface bloat, doc AC2) — 77/77 tests, 0 TS error
+    34-14-frontend-tests-composants-critiques: done # SOLID-FE-11 — 82 tests (15+25+17+25), code review: 3H+3M fixes (disabled={saving}, cronValidating, cronError, workflowValidationSummary), 0 régression, 0 TS error
+    34-15-backend-isp-base-adapter-optionnel: done # SOLID-BE-10 LOW — code review 2026-02-23: 1H+2M+3L fixes (ITriggerableAdapter return types, test assertions, régression adapters) — 8/8 + 16/16 tests ✅
+    epic-34-retrospective: optional
+    # === Epic 35: Codebase Review — points restants post-refactoring (2026-02-23) ===
+    # Réf: idp-portal/CODEBASE-REVIEW.md §16–17, planning-artifacts/epic-35-codebase-review-points-restants-post-refactoring.md
+    epic-35: in-progress
+    35-1-consolidation-status-config-residuel: done # code-review 2026-02-23: 1H+3M+2L fixes (tests créés 22/22, File List complétée, JSDoc CANCELLED+PENDING_APPROVAL, casts redondants supprimés, STATUS_COLORS.RUNNING dans légende) — 75/75 tests pass
+    35-2-audit-except-exception-et-catch-residuels: done # code-review 2026-02-23: tableaux audit complets produits (AC#2+AC#4), commentaire engineIconCache.ts:31 ajouté (M2), ruff 0 BLE001 confirmé, story done
+    35-3-migration-dip-services-phase-1: done # code-review 2026-02-23: 1H+3M+2L findings, 5 auto-fixés (loadingData création, useCallback, test erreur édition, mock redondant, setSaving), 1 action item M3
+    35-4-revue-fichiers-backend-volumineux: done # 2026-02-23: commentaires Responsabilité ajoutés aux 6 fichiers justifiés, propositions découpage documentées, CODEBASE-REVIEW §16.1 → DOCUMENTED — code-review: 2 MEDIUM + 2 LOW fixes (compteurs §17, classes principales, scope, File List)
+    35-5-corriger-ou-supprimer-tests-en-echec: done # 2026-02-23: 93 backend + 113 frontend → 0 failures. Backend 3488 passed, frontend 2440 passed (180 files). KNOWN_ISSUES.md updated. code-review: 1H+2M+2L auto-corrigés (File List factories.py, KNOWN_ISSUES.md 3e skip documenté, catégorisation views/__init__.py)
+    epic-35-retrospective: optional

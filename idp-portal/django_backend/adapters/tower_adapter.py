@@ -56,13 +56,14 @@ class TowerAdapter(BaseAdapter):
     # Trigger (launch) — job template or workflow job template
     # ------------------------------------------------------------------
 
-    async def trigger(
+    async def trigger(  # type: ignore[override]
         self,
         template_id: str,
         resource_type: str = "job_template",
         extra_vars: dict | None = None,
         limit: str | None = None,
         correlation_id: str | None = None,
+        **kwargs: object,
     ) -> dict:
         """Launch a job template or workflow job template on Tower/AWX.
 
@@ -172,6 +173,7 @@ class TowerAdapter(BaseAdapter):
         platform_job_id: str,
         resource_type: str = "job_template",
         correlation_id: str | None = None,
+        **kwargs: object,
     ) -> dict:
         """Get current status of a Tower/AWX job.
 
@@ -243,6 +245,7 @@ class TowerAdapter(BaseAdapter):
         platform_job_id: str,
         resource_type: str = "job_template",
         correlation_id: str | None = None,
+        **kwargs: object,
     ) -> dict:
         """Retrieve stdout logs for a Tower/AWX job.
 
@@ -369,6 +372,7 @@ class TowerAdapter(BaseAdapter):
         platform_job_id: str,
         resource_type: str = "job_template",
         correlation_id: str | None = None,
+        **kwargs: object,
     ) -> None:
         """Attempt to cancel a running job on Tower/AWX.
 

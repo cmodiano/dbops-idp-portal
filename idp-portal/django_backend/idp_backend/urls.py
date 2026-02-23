@@ -38,6 +38,7 @@ urlpatterns = [
     path('api/v1/admin/', include('profiles.urls')),
     path('api/v1/inventory/', include('inventory.urls')),
     path('api/v1/reference/', include('reference.urls')),
+    path('api/v1/', include('help.urls')),  # Story 31.7 - Aide contextuelle
     # Story 2.30: Admin CRUD categories
     path('api/v1/admin/', include('reference.admin_urls')),
     # Story 27.4: GitHub Actions webhook (HMAC-secured, no DRF auth)
@@ -54,11 +55,14 @@ urlpatterns = [
     ),
 ]
 
-# Serve uploaded integration icons in development
+# Serve uploaded integration icons in development (and in Docker with DEBUG=True)
+# Uses STATIC_ROOT when set (Docker: /opt/.../staticfiles/icons) to match the upload endpoint.
+# Falls back to BASE_DIR/static/icons for local dev (no STATIC_ROOT configured).
 if settings.DEBUG:
     from django.views.static import serve
     from pathlib import Path
-    _icons_root = Path(settings.BASE_DIR) / 'static' / 'icons'
+    _static_root = getattr(settings, 'STATIC_ROOT', None) or (Path(settings.BASE_DIR) / 'static')
+    _icons_root = Path(_static_root) / 'icons'
     urlpatterns += [
         path('static/icons/<path:path>', serve, {'document_root': _icons_root}),
     ]

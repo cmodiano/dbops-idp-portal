@@ -13,6 +13,8 @@ vi.mock('../../services/admin_service', () => ({
   getTags: vi.fn().mockResolvedValue([]),
   updateActionTags: vi.fn().mockResolvedValue({}),
   updateRemediationRules: vi.fn().mockResolvedValue({}),
+  updateBusinessRulePolicies: vi.fn().mockResolvedValue({}),
+  patchAction: vi.fn().mockResolvedValue({}),
   checkActionNameAvailable: vi.fn().mockResolvedValue(true),
 }));
 
@@ -37,6 +39,24 @@ vi.mock('../../hooks/useEnvironments', () => ({
 // Mock ThemeContext to avoid ThemeProvider requirement (ActionCard uses useTheme)
 vi.mock('../../contexts/ThemeContext', () => ({
   useTheme: () => ({ mode: 'light', effectiveMode: 'light', setMode: vi.fn(), toggleTheme: vi.fn() }),
+}));
+
+// Story 31.1: Mock usePlatformIntegrations (replaces usePlatforms for action forms)
+vi.mock('../../hooks/usePlatformIntegrations', () => ({
+  usePlatformIntegrations: () => ({
+    integrations: [
+      { id: 1, type: 'aap', name: 'AAP-PROD', status: 'valid', base_url: 'https://aap.local', credential_ref: null, icon: null, auth_flow: null, created_at: '', updated_at: '' },
+    ],
+    integrationOptions: [
+      { value: 1, label: 'AAP-PROD — aap' },
+    ],
+    loading: false,
+    error: null,
+    getIntegrationById: (id: number) => {
+      if (id === 1) return { id: 1, type: 'aap', name: 'AAP-PROD', status: 'valid', base_url: 'https://aap.local', credential_ref: null, icon: null, auth_flow: null, created_at: '', updated_at: '' };
+      return undefined;
+    },
+  }),
 }));
 
 const mockOnSubmit = vi.fn().mockResolvedValue({ id: 1 });
@@ -141,7 +161,7 @@ describe('ActionForm', () => {
       });
 
       // Try to submit without filling required fields
-      const submitButton = screen.getByText('Creer');
+      const submitButton = screen.getByText('Créer');
       await user.click(submitButton);
 
       await waitFor(() => {
@@ -161,6 +181,7 @@ describe('ActionForm', () => {
         item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
+        integration_id: 1,
         parameters_schema: null,
         // Single DEV rule will be loaded; we'll add another DEV rule via "Ajouter" button
         impact_rules: { DEV: { level: 'low' } },
@@ -219,6 +240,7 @@ describe('ActionForm', () => {
       item_type: 'action',
       engine: 'Oracle',
       platform: 'AAP',
+      integration_id: 1,
       parameters_schema: { type: 'object', properties: { param1: { type: 'string' } } },
       impact_rules: { DEV: { level: 'low' } },
       default_impact_level: null,
@@ -301,6 +323,20 @@ describe('ActionForm', () => {
       expect(screen.getByText('Enregistrer')).toBeInTheDocument();
     });
 
+    it('Story 31.1 AC6: affiche alerte mode dégradé quand action existante a platform sans integration_id', async () => {
+      const legacyAction: ActionDetail = {
+        ...mockEditAction,
+        integration_id: null,
+        platform: 'AAP',
+      };
+      await act(async () => {
+        render(<ActionForm {...defaultProps} editAction={legacyAction} />);
+      });
+      await waitFor(() => {
+        expect(screen.getByText(/ancienne plateforme.*AAP/i)).toBeInTheDocument();
+      });
+    });
+
     it('save sends change_type_config in new format (Story 2.24)', async () => {
       const user = userEvent.setup();
       const editWithSteps: ActionDetail = {
@@ -342,6 +378,7 @@ describe('ActionForm', () => {
         item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
+        integration_id: 1,
         parameters_schema: { type: 'object', properties: { param1: { type: 'string' } } },
         impact_rules: { DEV: { level: 'low' } },
         default_impact_level: null,
@@ -387,6 +424,7 @@ describe('ActionForm', () => {
         item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
+        integration_id: 1,
         parameters_schema: {
           type: 'object',
           properties: {
@@ -438,6 +476,7 @@ describe('ActionForm', () => {
         item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
+        integration_id: 1,
         parameters_schema: null,
         // Two rules with different levels
         impact_rules: {
@@ -486,11 +525,11 @@ describe('ActionForm', () => {
       const prodOptions = screen.getAllByText('PROD');
       await user.click(prodOptions[prodOptions.length - 1]);
 
-      // Now preview should show PROD's level (high = "Eleve")
+      // Now preview should show PROD's level (high = "Élevé")
       // The AdminPreview component renders ImpactIndicator which shows the level text
       await waitFor(() => {
-        // Check that "Eleve" appears in the preview area (high level)
-        const eleveIndicators = screen.getAllByText('Eleve');
+        // Check that "Élevé" appears in the preview area (high level)
+        const eleveIndicators = screen.getAllByText('Élevé');
         expect(eleveIndicators.length).toBeGreaterThanOrEqual(1);
       });
     });
@@ -506,6 +545,7 @@ describe('ActionForm', () => {
         item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
+        integration_id: 1,
         parameters_schema: null,
         impact_rules: null,
         default_impact_level: null,
@@ -531,7 +571,7 @@ describe('ActionForm', () => {
       await user.click(screen.getByText('Enregistrer'));
 
       await waitFor(() => {
-        expect(screen.getByText(/Le code modèle est obligatoire pour PROD/i)).toBeInTheDocument();
+        expect(screen.getByText(/Le modèle \/ Template ID est obligatoire pour PROD/i)).toBeInTheDocument();
       });
       expect(mockOnSubmit).not.toHaveBeenCalled();
     });
@@ -545,6 +585,7 @@ describe('ActionForm', () => {
         item_type: 'action',
         engine: 'Oracle',
         platform: 'AAP',
+        integration_id: 1,
         parameters_schema: null,
         impact_rules: null,
         default_impact_level: null,
@@ -556,7 +597,7 @@ describe('ActionForm', () => {
           { order: 1, name: 'Step', type: 'prerequisite', connector_type: 'none', conditional_environments: null },
         ],
         workflow_steps: null,
-        change_type_config: { PROD: { required: true, change_model_code: '1516-B' } },
+        change_type_config: { PROD: { required: true, change_model_code: '1516 B' } },  // space is not allowed
         tags: [],
       };
 
@@ -568,7 +609,7 @@ describe('ActionForm', () => {
 
       // Should show error and block submit (message contains "alphanumérique")
       await waitFor(() => {
-        expect(screen.getByText(/code modèle pour PROD/i)).toBeInTheDocument();
+        expect(screen.getByText(/modèle \/ Template ID pour PROD/i)).toBeInTheDocument();
       });
       expect(mockOnSubmit).not.toHaveBeenCalled();
     });

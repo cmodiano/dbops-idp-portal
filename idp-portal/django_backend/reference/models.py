@@ -1,7 +1,8 @@
 """
-Reference models for REF_ENGINES, REF_PLATFORMS, and REF_CATEGORIES tables.
-Story 13.7 - Reference tables for engines and platforms.
+Reference models for REF_ENGINES and REF_CATEGORIES tables.
+Story 13.7 - Reference table for engines.
 Story 2.30 - Reference table for categories.
+Story 31.9 - RefPlatform removed (replaced by IntegrationTypeCatalogue).
 """
 
 from django.db import models
@@ -33,6 +34,7 @@ class RefEngine(models.Model):
     label = models.CharField(max_length=100, db_column='LABEL')
     display_order = models.IntegerField(default=0, db_column='DISPLAY_ORDER')
     is_active = models.IntegerField(default=1, db_column='IS_ACTIVE')
+    icon_url = models.CharField(max_length=500, null=True, blank=True, db_column='ICON_URL')
 
     objects = RefEngineManager()
 
@@ -41,45 +43,6 @@ class RefEngine(models.Model):
         ordering = ['display_order', 'code']
         verbose_name = 'Engine Reference'
         verbose_name_plural = 'Engine References'
-
-    def __str__(self) -> str:
-        return f"{self.code} ({'active' if self.is_active else 'inactive'})"
-
-
-class RefPlatformQuerySet(models.QuerySet):
-    """Custom QuerySet for RefPlatform model."""
-
-    def active(self) -> models.QuerySet["RefPlatform"]:
-        """Return only active platforms."""
-        return self.filter(is_active=1)
-
-    def ordered(self) -> models.QuerySet["RefPlatform"]:  # type: ignore[override]
-        """Return platforms ordered by display_order."""
-        return self.order_by('display_order', 'code')
-
-
-class RefPlatformManager(models.Manager.from_queryset(RefPlatformQuerySet)):  # type: ignore[misc]
-    """Custom manager for RefPlatform model."""
-
-
-class RefPlatform(models.Model):
-    """
-    Reference table for execution platforms.
-    Maps to Oracle REF_PLATFORMS table (V051).
-    """
-    id = models.BigAutoField(primary_key=True, db_column='ID')
-    code = models.CharField(max_length=50, unique=True, db_column='CODE')
-    label = models.CharField(max_length=100, db_column='LABEL')
-    display_order = models.IntegerField(default=0, db_column='DISPLAY_ORDER')
-    is_active = models.IntegerField(default=1, db_column='IS_ACTIVE')
-
-    objects = RefPlatformManager()
-
-    class Meta:
-        db_table = 'REF_PLATFORMS'
-        ordering = ['display_order', 'code']
-        verbose_name = 'Platform Reference'
-        verbose_name_plural = 'Platform References'
 
     def __str__(self) -> str:
         return f"{self.code} ({'active' if self.is_active else 'inactive'})"

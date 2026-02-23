@@ -212,7 +212,7 @@ describe('ActionTable (Story 8.10)', () => {
 
       // ImpactIndicator renders French labels - may be duplicated in fixed columns
       expect(screen.getAllByText('Faible').length).toBeGreaterThan(0); // low
-      expect(screen.getAllByText('Eleve').length).toBeGreaterThan(0); // high (no accent in impactLabels.ts)
+      expect(screen.getAllByText('Élevé').length).toBeGreaterThan(0); // high
       expect(screen.getAllByText('Critique').length).toBeGreaterThan(0); // critical
     });
 

@@ -209,7 +209,7 @@ class SplunkService:
                         continue
 
                     response.raise_for_status()
-                    return response.json()
+                    return response.json()  # type: ignore[no-any-return]
 
             except httpx.TimeoutException as exc:
                 last_exc = exc

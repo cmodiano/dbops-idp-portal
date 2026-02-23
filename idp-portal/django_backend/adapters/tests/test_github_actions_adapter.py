@@ -22,7 +22,6 @@ import httpx
 from adapters.github_actions_adapter import (
     GitHubActionsAdapter,
     _map_github_actions_status,
-    GITHUB_ACTIONS_STATUS_MAP,
 )
 from core.exceptions import ServiceUnavailableError
 

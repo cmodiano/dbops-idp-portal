@@ -12,6 +12,8 @@ Terraform Cloud specifics vs AAP/Tower/Azure DevOps/GitHub Actions:
 - Requires organization/workspace for endpoint URLs
 - JSON API spec format (application/vnd.api+json)
 """
+# Responsabilité : Adaptateur Terraform Cloud (JSON API spec, 18+ états plan/apply, logs via
+# log-read-url) — volume justifié par la complexité protocolaire inhérente à TFC (Story 35.4 AC3).
 from __future__ import annotations
 
 from datetime import datetime, timezone

@@ -13,6 +13,7 @@ import {
   IntegrationsAdminPanel,
   BusinessRulesAdminPanel,
   CategoriesAdminPanel,
+  EnginesAdminPanel,
   MetricsAdminPanel,
   FeatureFlagsAdminPanel,
 } from './admin';
@@ -63,6 +64,11 @@ export default function AdminPage() {
             key: 'categories',
             label: 'Catégories',
             children: <CategoriesAdminPanel />,
+          },
+          {
+            key: 'engines',
+            label: 'Moteurs',
+            children: <EnginesAdminPanel />,
           },
           {
             key: 'analytics',

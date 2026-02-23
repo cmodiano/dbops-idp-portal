@@ -78,7 +78,7 @@ describe('ImpactRulesEditor', () => {
       expect(screen.getByText('Regle 2')).toBeInTheDocument();
       // ImpactIndicator renders labels
       expect(screen.getByText('Faible')).toBeInTheDocument();
-      expect(screen.getByText('Eleve')).toBeInTheDocument();
+      expect(screen.getByText('Élevé')).toBeInTheDocument();
     });
   });
 
@@ -133,7 +133,7 @@ describe('ImpactRulesEditor', () => {
 
       const levelSelect = screen.getByRole('combobox', { name: /niveau d'impact regle 1/i });
       await user.click(levelSelect);
-      await user.click(screen.getByText('Eleve (rouge)'));
+      await user.click(screen.getByText('Élevé (rouge)'));
 
       expect(onChange).toHaveBeenCalled();
       const lastCall = onChange.mock.calls[onChange.mock.calls.length - 1][0] as ImpactRuleDefinition[];
@@ -208,7 +208,7 @@ describe('ImpactRulesEditor', () => {
 
       expect(screen.getByText('Faible')).toBeInTheDocument();
       expect(screen.getByText('Moyen')).toBeInTheDocument();
-      expect(screen.getByText('Eleve')).toBeInTheDocument();
+      expect(screen.getByText('Élevé')).toBeInTheDocument();
       expect(screen.getByText('Critique')).toBeInTheDocument();
     });
   });

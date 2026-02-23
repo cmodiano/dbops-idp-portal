@@ -104,6 +104,10 @@ class TestTerraformWebhookEndpoint:
     def setup_method(self) -> None:
         self.client = APIClient()
 
+    def teardown_method(self) -> None:
+        from core.di import reset_services
+        reset_services()
+
     def _post_webhook(
         self,
         payload: dict | None = None,
@@ -216,15 +220,15 @@ class TestTerraformWebhookEndpoint:
         mock_step.execution = mock_execution
         mock_step_model.objects.filter.return_value.select_related.return_value.first.return_value = mock_step
 
-        with patch("executions.services.ExecutionService") as mock_svc_cls:
-            mock_svc = MagicMock()
-            mock_svc_cls.return_value = mock_svc
+        from core.di import override_service
+        mock_svc = MagicMock()
+        override_service("execution_service", lambda: mock_svc)
 
-            response = self._post_webhook(
-                payload=_make_terraform_payload(
-                    run_status="applying", trigger="run:applying"
-                )
+        response = self._post_webhook(
+            payload=_make_terraform_payload(
+                run_status="applying", trigger="run:applying"
             )
+        )
 
         assert response.status_code == 200
         assert response.json()["status"] == "ok"
@@ -247,12 +251,14 @@ class TestTerraformWebhookEndpoint:
         mock_step.execution = mock_execution
         mock_step_model.objects.filter.return_value.select_related.return_value.first.return_value = mock_step
 
-        with patch("executions.services.ExecutionService"):
-            response = self._post_webhook(
-                payload=_make_terraform_payload(
-                    run_status="applied", trigger="run:completed"
-                )
+        from core.di import override_service
+        override_service("execution_service", lambda: MagicMock())
+
+        response = self._post_webhook(
+            payload=_make_terraform_payload(
+                run_status="applied", trigger="run:completed"
             )
+        )
 
         assert response.status_code == 200
         mock_broadcast.assert_called_once()
@@ -277,12 +283,14 @@ class TestTerraformWebhookEndpoint:
         mock_step.execution = mock_execution
         mock_step_model.objects.filter.return_value.select_related.return_value.first.return_value = mock_step
 
-        with patch("executions.services.ExecutionService"):
-            response = self._post_webhook(
-                payload=_make_terraform_payload(
-                    run_status="errored", trigger="run:errored"
-                )
+        from core.di import override_service
+        override_service("execution_service", lambda: MagicMock())
+
+        response = self._post_webhook(
+            payload=_make_terraform_payload(
+                run_status="errored", trigger="run:errored"
             )
+        )
 
         assert response.status_code == 200
         call_kwargs = mock_broadcast.call_args.kwargs

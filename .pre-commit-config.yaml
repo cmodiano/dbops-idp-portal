@@ -1,0 +1,38 @@
+# Pre-commit hooks — repository root
+# Install: pip install pre-commit && pre-commit install
+# Run:    pre-commit run --all-files
+
+repos:
+  # Secret detection (idp-portal). Excludes tests, docs, .env*, templates (common false positives).
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', 'idp-portal/.secrets.baseline']
+        files: ^idp-portal/
+        exclude: |
+          (?x)^idp-portal/(
+            .*\.lock$|
+            package-lock\.json$|
+            .*node_modules/.*|
+            .*\.venv/.*|
+            .*security-reports/.*|
+            \.env$|\.env\.|.*\.env\.(development|production|example|template)$|
+            .*/docs/.*|
+            .*/tests?/.*|
+            .*test_.*\.py$|.*_test\.py$|
+            .*conftest\.py$|
+            .*test_settings\.py$|
+            .*\.template$|
+            .*\.md$
+          )$
+
+  # Mypy (Django backend): runs at commit using project venv (Django plugin needs project settings).
+  - repo: local
+    hooks:
+      - id: mypy-django-backend
+        name: mypy (django_backend)
+        entry: "bash -c 'V=idp-portal/django_backend/.venv/bin/python; if [ -x \"$V\" ] && \"$V\" -c \"import mypy\" 2>/dev/null; then \"$V\" -m mypy --config-file=idp-portal/django_backend/pyproject.toml --no-error-summary idp-portal/django_backend; else echo \"Skip mypy (no mypy in .venv). Install: cd idp-portal/django_backend && uv sync --extra dev\"; fi'"
+        language: system
+        files: ^idp-portal/django_backend/.*\.py$
+        pass_filenames: false

@@ -84,6 +84,8 @@ export const lightTheme: ThemeConfig = {
     colorText: '#1a1a2e',
     colorTextSecondary: '#5c5c6d',
     colorTextTertiary: '#8c8c9a',
+    // Placeholder inputs/Select: gris lisible sur blanc (évite gris trop clair)
+    colorTextPlaceholder: '#6b6b7a',
     colorBorder: '#e8eaed',
     colorBorderSecondary: '#f0f2f5',
     // Primary hover - darker for light mode
@@ -121,57 +123,56 @@ export const lightTheme: ThemeConfig = {
  * Dark theme configuration.
  * Same structure as light, only colors change.
  * Inspired by modern 2026 dark UI with liquid glass effects.
+ * UX: Lighter base + elevated surfaces so cards/header are clearly distinct from background; brighter text for readability on all screens.
  */
 export const darkTheme: ThemeConfig = {
   algorithm: darkAlgorithm,
   token: {
     ...sharedTokens,
-    // Colors - Dark mode (AC #4, #5)
-    // Deeper, richer dark backgrounds for more contrast
-    colorBgBase: '#0f0f14',
-    colorBgContainer: '#1a1a24',
-    colorBgElevated: '#242430',
-    colorBgLayout: '#0f0f14',
-    // Brighter text for better readability
-    colorText: '#f0f0f2',
-    colorTextSecondary: '#a8a8b3',
-    colorTextTertiary: '#8a8a96',
-    // Subtle borders with slight luminosity for glass effect
-    colorBorder: '#2d2d3a',
-    colorBorderSecondary: '#252532',
-    // Primary hover - brighter for dark mode
+    // Colors - Dark mode (AC #4, #5) — hierarchy: body < header/sider < cards
+    colorBgBase: '#12121a',
+    colorBgContainer: '#1e1e2a',
+    colorBgElevated: '#262634',
+    colorBgLayout: '#12121a',
+    // Brighter text for readability (especially on low-contrast screens)
+    colorText: '#f5f5f7',
+    colorTextSecondary: '#b8b8c4',
+    colorTextTertiary: '#9a9aa8',
+    colorTextPlaceholder: '#9a9aa8',
+    // More visible borders so cards and sections are clearly demarcated
+    colorBorder: '#3a3a4c',
+    colorBorderSecondary: '#2e2e3e',
     colorPrimaryHover: '#00b85e',
-    // Liquid glass shadows - soft, diffused, multi-layer
-    boxShadow: '0 2px 4px rgba(0,0,0,0.3), 0 8px 16px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.03)',
-    boxShadowSecondary: '0 4px 8px rgba(0,0,0,0.3), 0 12px 32px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.04)',
-    boxShadowTertiary: '0 8px 16px rgba(0,0,0,0.35), 0 24px 48px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05)',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.3), 0 8px 16px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.04)',
+    boxShadowSecondary: '0 4px 8px rgba(0,0,0,0.3), 0 12px 32px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.05)',
+    boxShadowTertiary: '0 8px 16px rgba(0,0,0,0.35), 0 24px 48px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)',
   },
   components: {
     ...sharedComponents,
     Tabs: {
       ...sharedComponents.Tabs,
-      itemColor: '#a8a8b3',
-      itemHoverColor: '#f0f0f2',
+      itemColor: '#b8b8c4',
+      itemHoverColor: '#f5f5f7',
     },
     Layout: {
-      headerBg: '#1a1a24',
-      bodyBg: '#0f0f14',
-      siderBg: '#1a1a24',
+      headerBg: '#1a1a28',
+      bodyBg: '#12121a',
+      siderBg: '#1a1a28',
     },
     Card: {
       ...sharedComponents.Card,
-      colorBgContainer: '#1a1a24',
-      colorBorderSecondary: '#2d2d3a',
+      colorBgContainer: '#1e1e2a',
+      colorBorderSecondary: '#3a3a4c',
     },
     Table: {
-      headerBg: '#1a1a24',
-      rowHoverBg: '#222230',
-      borderColor: '#2d2d3a',
+      headerBg: '#1a1a28',
+      rowHoverBg: '#252538',
+      borderColor: '#3a3a4c',
     },
     Button: {
       ...sharedComponents.Button,
-      defaultBg: '#242430',
-      defaultBorderColor: '#3d3d4a',
+      defaultBg: '#262634',
+      defaultBorderColor: '#3a3a4c',
     },
   },
 };

@@ -8,7 +8,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from executions.interpreters.base import NormalizedArtifact, OutputInterpreter
 from executions.interpreters.registry import OutputInterpreterRegistry
 from executions.policy_evaluator import PolicyDecision, PolicyEvaluationError
 from executions.rule_engine import RuleEngine
@@ -83,6 +82,7 @@ def _make_step(step_type: str = "terraform_cloud") -> MagicMock:
 def _make_action(policies: dict | None = None) -> MagicMock:
     action = MagicMock()
     action.id = 10
+    action.business_rule_policy_id = None  # Force inline policy path (Story 28.4 FK takes priority)
     action.business_rule_policies = policies
     return action
 

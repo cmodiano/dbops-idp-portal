@@ -1,7 +1,6 @@
 /**
- * Story 28.4, AC#6: S\u00e9lecteur de r\u00e8gle m\u00e9tier pour le ActionWizard.
- *
- * Radio.Group avec 3 options : Aucune, R\u00e8gle pr\u00e9d\u00e9finie (Select), R\u00e8gle personnalis\u00e9e (inline JSON).
+ * Story 28.4, AC#6: Sélecteur de règle métier pour le ActionWizard.
+ * Uniquement règles prédéfinies (catalogue), filtrées par plateforme d'exécution (step_type).
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -9,29 +8,25 @@ import { Radio, Select, Space, Button, Modal, Typography, Tag } from 'antd';
 import { EyeOutlined } from '@ant-design/icons';
 import type { BusinessRulePolicyListItem, BusinessRulePoliciesData } from '../../types/api';
 import { getBusinessRulePolicies } from '../../services/business_rules_service';
-import { BusinessRulePoliciesEditor } from './BusinessRulePoliciesEditor';
 
 const { Text } = Typography;
 
-type PolicyMode = 'none' | 'predefined' | 'inline';
+type PolicyMode = 'none' | 'predefined';
 
 export interface BusinessRulePolicySelectorProps {
-  /** Current selected predefined policy ID (null if none or inline). */
+  /** Current selected predefined policy ID (null if none). */
   policyId: number | null;
-  /** Current inline JSON string (empty if none or predefined). */
-  inlineJson: string;
   /** Called when predefined policy is selected or cleared. */
   onPolicyIdChange: (id: number | null) => void;
-  /** Called when inline JSON changes. */
-  onInlineJsonChange: (json: string) => void;
+  /** step_type (e.g. aap, terraform_cloud, azure_devops) to filter rules by execution platform. When empty, list is empty and message is shown. */
+  stepType?: string | null;
   disabled?: boolean;
 }
 
 export function BusinessRulePolicySelector({
   policyId,
-  inlineJson,
   onPolicyIdChange,
-  onInlineJsonChange,
+  stepType,
   disabled,
 }: BusinessRulePolicySelectorProps) {
   const [policies, setPolicies] = useState<BusinessRulePolicyListItem[]>([]);
@@ -39,43 +34,46 @@ export function BusinessRulePolicySelector({
   const [previewJson, setPreviewJson] = useState<BusinessRulePoliciesData | null>(null);
   const [previewName, setPreviewName] = useState('');
 
-  // Derive mode from current state
-  const mode: PolicyMode = policyId ? 'predefined' : inlineJson.trim() ? 'inline' : 'none';
+  const [mode, setMode] = useState<PolicyMode>(policyId ? 'predefined' : 'none');
+  useEffect(() => {
+    setMode(policyId ? 'predefined' : 'none');
+  }, [policyId]);
 
   const fetchPolicies = useCallback(async () => {
+    if (!stepType?.trim()) {
+      setPolicies([]);
+      return;
+    }
     setLoading(true);
     try {
-      const response = await getBusinessRulePolicies({ is_active: true });
+      const response = await getBusinessRulePolicies({
+        is_active: true,
+        step_type: stepType.trim(),
+      });
       setPolicies(response.data ?? []);
     } catch {
       setPolicies([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [stepType]);
 
   useEffect(() => {
     fetchPolicies();
   }, [fetchPolicies]);
 
   const handleModeChange = (newMode: PolicyMode) => {
+    setMode(newMode);
     if (newMode === 'none') {
-      onPolicyIdChange(null);
-      onInlineJsonChange('');
-    } else if (newMode === 'predefined') {
-      onInlineJsonChange('');
-    } else if (newMode === 'inline') {
       onPolicyIdChange(null);
     }
   };
 
   const handlePolicySelect = (value: number | null) => {
     onPolicyIdChange(value ?? null);
-    onInlineJsonChange('');
   };
 
   const handlePreview = (policyItem: BusinessRulePolicyListItem) => {
-    // MEDIUM-2: Add error handling for preview fetch
     import('../../services/business_rules_service').then(({ getBusinessRulePolicy }) => {
       getBusinessRulePolicy(policyItem.id)
         .then((detail) => {
@@ -83,7 +81,6 @@ export function BusinessRulePolicySelector({
           setPreviewName(detail.name);
         })
         .catch(() => {
-          // Silently fail — preview modal won't open
           setPreviewJson(null);
           setPreviewName('');
         });
@@ -91,6 +88,7 @@ export function BusinessRulePolicySelector({
   };
 
   const selectedPolicy = policies.find(p => p.id === policyId);
+  const hasStepType = !!stepType?.trim();
 
   return (
     <div>
@@ -101,62 +99,67 @@ export function BusinessRulePolicySelector({
         style={{ marginBottom: 12 }}
       >
         <Radio value="none">Aucune</Radio>
-        <Radio value="predefined">R\u00e8gle pr\u00e9d\u00e9finie</Radio>
-        <Radio value="inline">R\u00e8gle personnalis\u00e9e (inline)</Radio>
+        <Radio value="predefined">Règle prédéfinie</Radio>
       </Radio.Group>
 
       {mode === 'predefined' && (
-        <Space orientation="vertical" style={{ width: '100%' }}>
-          <Space style={{ width: '100%' }}>
-            <Select
-              value={policyId ?? undefined}
-              onChange={handlePolicySelect}
-              placeholder="S\u00e9lectionner une r\u00e8gle..."
-              loading={loading}
-              disabled={disabled}
-              allowClear
-              style={{ minWidth: 350 }}
-              options={policies.map(p => ({
-                value: p.id,
-                label: (
-                  <Space>
-                    <span>{p.name}</span>
-                    {p.step_type && <Tag>{p.step_type}</Tag>}
-                  </Space>
-                ),
-              }))}
-              optionFilterProp="label"
-              filterOption={(input, option) => {
-                const policy = policies.find(p => p.id === option?.value);
-                return policy?.name.toLowerCase().includes(input.toLowerCase()) ?? false;
-              }}
-            />
-            {selectedPolicy && (
-              <Button
-                icon={<EyeOutlined />}
-                size="small"
-                onClick={() => handlePreview(selectedPolicy)}
-                disabled={disabled}
-              >
-                Voir JSON
-              </Button>
-            )}
-          </Space>
-          {selectedPolicy?.description && (
-            <Text type="secondary" style={{ fontSize: 12 }}>{selectedPolicy.description}</Text>
+        <Space direction="vertical" style={{ width: '100%' }}>
+          {!hasStepType ? (
+            <Text type="secondary">
+              Sélectionnez une intégration (plateforme d'exécution) pour afficher les règles métier disponibles.
+            </Text>
+          ) : (
+            <>
+              <Space style={{ width: '100%' }}>
+                <Select
+                  value={policyId ?? undefined}
+                  onChange={handlePolicySelect}
+                  placeholder="Sélectionner une règle..."
+                  loading={loading}
+                  disabled={disabled}
+                  allowClear
+                  style={{ minWidth: 350 }}
+                  options={policies.map(p => ({
+                    value: p.id,
+                    label: (
+                      <Space>
+                        <span>{p.name}</span>
+                        {p.step_type && <Tag>{p.step_type}</Tag>}
+                      </Space>
+                    ),
+                  }))}
+                  optionFilterProp="label"
+                  filterOption={(input, option) => {
+                    const policy = policies.find(p => p.id === option?.value);
+                    return policy?.name.toLowerCase().includes(input.toLowerCase()) ?? false;
+                  }}
+                />
+                {selectedPolicy && (
+                  <Button
+                    icon={<EyeOutlined />}
+                    size="small"
+                    onClick={() => handlePreview(selectedPolicy)}
+                    disabled={disabled}
+                  >
+                    Voir JSON
+                  </Button>
+                )}
+              </Space>
+              {selectedPolicy?.description && (
+                <Text type="secondary" style={{ fontSize: 12 }}>{selectedPolicy.description}</Text>
+              )}
+              {hasStepType && policies.length === 0 && !loading && (
+                <Text type="secondary">
+                  Aucune règle prédéfinie pour cette plateforme. Créez-en dans Admin → Règles métier.
+                </Text>
+              )}
+            </>
           )}
         </Space>
       )}
 
-      {mode === 'inline' && (
-        <BusinessRulePoliciesEditor
-          value={inlineJson}
-          onChange={disabled ? undefined : onInlineJsonChange}
-        />
-      )}
-
       <Modal
-        title={`R\u00e8gle : ${previewName}`}
+        title={`Règle : ${previewName}`}
         open={!!previewJson}
         onCancel={() => setPreviewJson(null)}
         footer={<Button onClick={() => setPreviewJson(null)}>Fermer</Button>}

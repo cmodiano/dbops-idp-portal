@@ -8,7 +8,7 @@ filtering, and single-action access checks.
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import structlog
 from django.core.cache import cache
@@ -31,7 +31,24 @@ class CatalogRBACService:
     Centralizes the logic previously spread across module-level functions
     in catalog/views.py: _get_cumulative_permissions_for_user,
     _filter_by_rbac, and _check_rbac_for_action.
+
+    Story 33.4 (DIP): accepts optional injected services for testability.
     """
+
+    def __init__(
+        self,
+        profile_service: ProfileService | None = None,
+        inventory_service: Any = None,
+    ) -> None:
+        """
+        Args:
+            profile_service:   Optional ProfileService (defaults to new instance).
+            inventory_service: Optional InventoryService (defaults to new instance
+                               when needed; kept None here to preserve the lazy
+                               import that avoids circular dependencies).
+        """
+        self._profile_service = profile_service
+        self._inventory_service = inventory_service
 
     def get_permissions(self, user: User | None) -> dict | None:
         """
@@ -65,14 +82,14 @@ class CatalogRBACService:
                 cache_key = f'rbac:permissions:user:{user.id}:v:{cache_version}'
                 cached = cache.get(cache_key)
                 if cached is not None:
-                    return cached
-        except Exception:
+                    return cast(dict, cached)
+        except Exception:  # noqa: BLE001
             # Cache unavailability should not break permission lookups
             pass
 
         ad_groups = get_user_ad_groups(user)
         try:
-            profile_service = ProfileService()
+            profile_service = self._profile_service or ProfileService()
             permissions = profile_service.get_cumulative_permissions(user.id, ad_groups)
         except Exception as e:
             # Story 17.6: Justified broad catch - ProfileService can raise various exceptions
@@ -115,9 +132,9 @@ class CatalogRBACService:
         # default to all environments from inventory (Story 13.7).
         if not environments and actions_type_all:
             # Lazy import to avoid circular dependency (LOW-1 documented reason)
-            from inventory.services import InventoryService
+            from inventory.services import InventoryService  # noqa: PLC0415
             try:
-                inventory_service = InventoryService()
+                inventory_service = self._inventory_service or InventoryService()
                 environments = set(inventory_service.list_environments())
             except Exception as e:
                 # Story 17.6: Justified broad catch - InventoryService can raise various exceptions
@@ -147,7 +164,7 @@ class CatalogRBACService:
             )
             cache_key = f'rbac:permissions:user:{user.id}:v:{cache_version}'
             cache.set(cache_key, result, RBAC_CACHE_TTL)
-        except Exception:
+        except Exception:  # noqa: BLE001
             # Cache unavailability should not break permission lookups
             pass
 

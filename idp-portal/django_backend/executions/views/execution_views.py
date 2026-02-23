@@ -37,6 +37,7 @@ import structlog
 
 # Story 27.9: Use factory pattern for platform adapter instantiation
 from adapters import get_platform_adapter
+from adapters.base_adapter import ICancellableAdapter
 
 exec_logger = structlog.get_logger(__name__)
 
@@ -45,10 +46,20 @@ _dba_permission = IsDBAOrDBOPS()
 
 
 class ExecutionsCreateView(APIView):
-    """POST /executions -> {data: ExecutionCreateResponse}"""
+    """POST /executions -> {data: ExecutionCreateResponse}
+
+    Story 33.4 (DIP): uses _execution_service_class + get_execution_service() so
+    tests can override the service class without monkey-patching.
+    """
 
     permission_classes = [IsAuthenticated]
     throttle_classes = [GeneralAPIThrottle, ExecutionThrottle]
+
+    _execution_service_class: type[ExecutionService] = ExecutionService
+
+    def get_execution_service(self) -> ExecutionService:
+        """Return an ExecutionService instance (overridable in tests)."""
+        return self._execution_service_class()
 
     @extend_schema(
         tags=['executions'],
@@ -138,6 +149,16 @@ class ExecutionsCreateView(APIView):
             parameters = parameters.copy() if parameters else {}
             parameters["workflow_step_parameters"] = normalized_wsp
 
+        # Step 5b (Story 31.8): Inject page_me parameters if requested
+        page_me = validated.get('page_me', False)
+        if page_me:
+            parameters = parameters.copy() if parameters else {}
+            parameters['__page_me'] = True
+            parameters['__page_me_user_id'] = str(request.user.username)
+            parameters['__page_me_user_name'] = getattr(
+                request.user, 'display_name', str(request.user.username)
+            )
+
         # Step 6: Validate mutex
         target_ids_for_mutex = [t['name'] for t in validated_targets] if validated_targets else []
         MutexValidator.validate(
@@ -148,7 +169,7 @@ class ExecutionsCreateView(APIView):
         )
 
         # Step 7: Create execution
-        execution = ExecutionService().create_execution(
+        execution = self.get_execution_service().create_execution(
             user=request.user,  # type: ignore[arg-type]
             action=action,
             environment=env_config['env_str'],
@@ -162,8 +183,10 @@ class ExecutionsCreateView(APIView):
             validated_targets=validated_targets if target_names else None,
         )
 
-        # Step 8: Launch execution
-        self._launch_execution(execution, action, correlation_id, request)
+        # Step 8: Launch execution (skip when requires_approval → PENDING_APPROVAL; DBA will launch via /approve)
+        from executions.models import ExecutionStatus
+        if execution.status != ExecutionStatus.PENDING_APPROVAL:
+            self._launch_execution(execution, action, correlation_id, request)
 
         # Step 9: Build response
         return ExecutionResponseBuilder.build(execution, action)
@@ -203,7 +226,7 @@ class ExecutionsCreateView(APIView):
                 exc_info=True,
             )
 
-            execution_service = ExecutionService()
+            execution_service = self.get_execution_service()
             try:
                 execution_service.update_status(
                     execution.id,
@@ -246,10 +269,20 @@ class ExecutionDetailView(APIView):
 
 
 class ExecutionCancelView(APIView):
-    """PATCH /executions/{id}/cancel/ -> cancel an execution"""
+    """PATCH /executions/{id}/cancel/ -> cancel an execution
+
+    Story 33.4 (DIP): uses _execution_service_class + get_execution_service() so
+    tests can override the service class without monkey-patching.
+    """
 
     permission_classes = [IsAuthenticated]
     throttle_classes = [GeneralAPIThrottle]
+
+    _execution_service_class: type[ExecutionService] = ExecutionService
+
+    def get_execution_service(self) -> ExecutionService:
+        """Return an ExecutionService instance (overridable in tests)."""
+        return self._execution_service_class()
 
     @extend_schema(tags=['executions'], summary='Annuler une exécution', responses={200: ExecutionSerializer})
     def patch(self, request: Request, execution_id: int) -> Response:
@@ -275,7 +308,7 @@ class ExecutionCancelView(APIView):
 
             cancelled_by_admin = execution.user_id != request.user.id
             try:
-                updated = ExecutionService().update_status(execution_id, ExecutionStatus.CANCELLED, str(request.user.id))
+                updated = self.get_execution_service().update_status(execution_id, ExecutionStatus.CANCELLED, str(request.user.id))
             except ValueError as e:
                 raise BadRequestError(
                     code="INVALID_STATUS",
@@ -344,11 +377,27 @@ class ExecutionCancelView(APIView):
                     message="Integration missing type field",
                     details={"integration_id": integration.id},
                 )
+            config = getattr(integration, "get_config", lambda: None)() or {}
+            platform_kwargs = {}
+            if "ssl_verify" in config:
+                platform_kwargs["ssl_verify"] = config["ssl_verify"]
+            if config.get("ca_bundle_path"):
+                platform_kwargs["ca_bundle_path"] = config["ca_bundle_path"]
             adapter = get_platform_adapter(
                 platform_type=platform_type,
                 base_url=integration.base_url,
                 auth_headers=auth_headers,
+                **platform_kwargs,
             )
+            # Story 34.15: ISP — skip remote cancel if adapter does not support it
+            if not isinstance(adapter, ICancellableAdapter):
+                exec_logger.warning(  # type: ignore[unreachable]
+                    "cancel_not_supported",
+                    platform_type=platform_type,
+                    execution_id=str(execution.id),
+                    correlation_id=get_correlation_id(),
+                )
+                return
             # MEDIUM-3 FIX: Create new event loop instead of get_event_loop() (deprecated Python 3.10+)
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
@@ -365,7 +414,7 @@ class ExecutionCancelView(APIView):
                 platform_job_id=platform_job_id,
                 correlation_id=get_correlation_id(),
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — broad catch justified: adapter may raise various exceptions, remote cancellation is best-effort
             # Story 17.6: Justified broad catch — adapter may raise various exceptions
             exec_logger.warning(
                 "remote_cancellation_failed",
@@ -508,17 +557,24 @@ class ExecutionLogsView(APIView):
                 message="Integration missing type field",
                 details={"integration_id": integration.id},
             )
+        config = getattr(integration, "get_config", lambda: None)() or {}
+        platform_kwargs = {}
+        if "ssl_verify" in config:
+            platform_kwargs["ssl_verify"] = config["ssl_verify"]
+        if config.get("ca_bundle_path"):
+            platform_kwargs["ca_bundle_path"] = config["ca_bundle_path"]
         adapter = get_platform_adapter(
             platform_type=platform_type,
             base_url=integration.base_url,
             auth_headers=auth_headers,
+            **platform_kwargs,
         )
 
         # CRITICAL-4 FIX: Handle both ASGI (event loop running) and WSGI (no event loop) contexts
         try:
             # Check if there's already a running event loop (ASGI/Channels context)
             try:
-                running_loop = asyncio.get_running_loop()
+                asyncio.get_running_loop()
                 # Running loop exists → use async_to_sync pattern for Django Channels compatibility
                 from asgiref.sync import async_to_sync
                 logs = async_to_sync(adapter.get_job_logs)(
@@ -550,6 +606,7 @@ class ExecutionLogsView(APIView):
                 error=str(e),
                 error_type=type(e).__name__,
                 correlation_id=correlation_id,
+                exc_info=True,
             )
             raise ServiceUnavailableError(
                 code="AAP_LOGS_UNAVAILABLE",

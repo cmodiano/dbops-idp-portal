@@ -18,6 +18,7 @@ Chaque service :
 | `SplunkService` | `splunk_service.py` | Envoi de logs structures vers Splunk HEC |
 | `ServiceNowService` | `servicenow_service.py` | Gestion des changements ITSM ServiceNow |
 | `JiraService` | `jira_service.py` | Gestion d'issues Jira (creation, mise a jour, commentaires) |
+| `NotificationService` | `notification_service.py` | Envoi de notifications multi-destinations (email, Teams, page) |
 
 ## Factory
 
@@ -83,6 +84,34 @@ await jira.add_comment("PROJ-456", "Patch applique avec succes", correlation_id=
 **Authentification Jira :**
 - **Cloud** : Basic Auth `email:api_token` (encode base64)
 - **Server/Data Center** : Basic Auth `username:password` ou Bearer PAT
+
+### NotificationService (Story 31.8)
+```python
+from services.notification_service import NotificationService
+
+notif = NotificationService()
+
+# Envoi direct
+notif.send_email("user@example.com", "Sujet", "Corps du message")
+notif.send_teams("https://webhook.example.com/...", "Message Teams")
+
+# Point d'entree principal — traite tous les canaux configures sur l'action
+notif.notify_execution_event(
+    execution=execution_obj,
+    action=action_obj,
+    event="on_failure",  # ou "on_success"
+    page_me=True,
+    page_me_user_id="user123",
+    page_me_user_name="User Name",
+    correlation_id="abc-123",
+)
+```
+
+**Destinations :**
+- **email** : `django.core.mail.send_mail()` via SMTP
+- **teams** : POST webhook MessageCard
+- **page_individual** : POST API interne (prod + critique uniquement)
+- **page_dba** : POST API interne DBA on-call (prod + critique uniquement)
 
 ## A ne pas confondre
 

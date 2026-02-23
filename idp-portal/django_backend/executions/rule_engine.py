@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 
 import structlog
 
@@ -146,6 +146,7 @@ class RuleEngine:
                 interpreter_class=type(interpreter).__name__,
                 error=str(exc),
                 correlation_id=correlation_id,
+                exc_info=True,
             )
             raise
 
@@ -291,7 +292,7 @@ class RuleEngine:
                     message=f"Failed to parse business_rule_policies JSON: {exc}",
                 ) from exc
 
-        return policies  # type: ignore[return-value]
+        return cast(dict[str, Any], policies)
 
     def _match_criteria(
         self,
@@ -454,7 +455,7 @@ class RuleEngine:
             parts.append(f"attributes={criterion['attribute_paths']}")
         return ", ".join(parts) if parts else "unknown criterion"
 
-    def _no_approval(self, reason: str, correlation_id: str) -> PolicyDecision:
+    def _no_approval(self, reason: str, correlation_id: str | None = None) -> PolicyDecision:
         """Return a no-approval PolicyDecision with logging."""
         decision = PolicyDecision(
             require_approval=False,

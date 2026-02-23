@@ -20,8 +20,8 @@ describe('ImpactIndicator', () => {
   it('renders high impact with correct label and aria-label', () => {
     render(<ImpactIndicator level="high" />);
 
-    expect(screen.getByText('Eleve')).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveAttribute('aria-label', 'Impact: Eleve');
+    expect(screen.getByText('Élevé')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveAttribute('aria-label', 'Impact: Élevé');
   });
 
   it('renders critical impact with correct label and aria-label', () => {

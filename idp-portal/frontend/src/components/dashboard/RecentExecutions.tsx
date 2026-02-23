@@ -23,6 +23,7 @@ import {
   ENGINE_ICON_SIZE_VALUE,
   ENGINE_SVG_SOURCES,
 } from '../../utils/executionRenderers';
+import { getEngineIconUrl } from '../../utils/engineIconCache';
 import { getIconUrl } from '../../utils/iconUrl';
 
 const { Text } = Typography;
@@ -65,8 +66,29 @@ function EngineIconCell({ engine }: { engine: string | null | undefined }) {
     return <span style={{ opacity: 0.4 }}>—</span>;
   }
   const config = ENGINE_ICONS_CONFIG[engine as ActionEngine];
-  const svgSrc = ENGINE_SVG_SOURCES[engine as ActionEngine];
+  // Story 31.3: Fallback cascade — 1) icon_url from API cache, 2) ENGINE_SVG_SOURCES, 3) ENGINE_ICONS
+  const apiIconUrl = getEngineIconUrl(engine);
+  const svgSrc = apiIconUrl || ENGINE_SVG_SOURCES[engine as ActionEngine];
   if (!config) {
+    // Unknown engine: still show icon_url from API if available (mirrors renderEngineIcon behaviour)
+    if (svgSrc) {
+      return (
+        <span
+          title={engine}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}
+        >
+          <img
+            src={svgSrc}
+            alt=""
+            width={ENGINE_ICON_SIZE}
+            height={ENGINE_ICON_SIZE}
+            style={{ flexShrink: 0 }}
+            aria-hidden
+          />
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{engine}</span>
+        </span>
+      );
+    }
     return <span title={engine} style={{ fontSize: 12, opacity: 0.6 }}>{engine}</span>;
   }
   const iconNode = svgSrc ? (

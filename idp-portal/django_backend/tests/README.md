@@ -679,29 +679,32 @@ service.delete_action(action.id, user)  # ✅ Objet User
 
 ---
 
-### ❌ PIÈGE 9: RefEngine/RefPlatform Requis pour Admin API (Story 20.1)
+### ❌ PIÈGE 9: RefEngine/IntegrationTypeCatalogue Requis pour Admin API (Story 20.1, 31.9)
 
-**Problème:** Les endpoints admin (`/api/v1/admin/actions/`) utilisent un serializer qui valide `engine` et `platform` contre les tables de référence `RefEngine` et `RefPlatform`. Sans ces données, les requêtes POST/PUT retournent 400.
+**Problème:** Les endpoints admin (`/api/v1/admin/actions/`) utilisent un serializer qui valide `engine` contre `RefEngine` et `platform` contre `IntegrationTypeCatalogue` (role=platform). Sans ces données, les requêtes POST/PUT retournent 400.
 
 **❌ MAUVAIS (données de référence manquantes):**
 ```python
 def setUp(self):
     self.client = APIClient()
     self.user = UserFactory(profile='DBOPS')
-    # ❌ Pas de RefEngine/RefPlatform
+    # ❌ Pas de RefEngine/IntegrationTypeCatalogue
     # POST /api/v1/admin/actions/ → 400 "Invalid engine 'Oracle'"
 ```
 
 **✅ CORRECT (créer données de référence):**
 ```python
-from reference.models import RefEngine, RefPlatform
+from reference.models import RefEngine
+from integrations.models import IntegrationTypeCatalogue, IntegrationRole
 
 def setUp(self):
     self.client = APIClient()
     self.user = UserFactory(profile='DBOPS')
     # ✅ Créer les données de référence
     RefEngine.objects.get_or_create(code='Oracle', defaults={'label': 'Oracle', 'display_order': 1})
-    RefPlatform.objects.get_or_create(code='AAP', defaults={'label': 'AAP', 'display_order': 1})
+    IntegrationTypeCatalogue.objects.get_or_create(
+        code='aap', defaults={'name': 'AAP', 'integration_role': IntegrationRole.PLATFORM, 'is_active': True}
+    )
 ```
 
 ---
@@ -765,7 +768,7 @@ Avant de soumettre un test:
 - [ ] ✅ Je crée Actions en DRAFT avant d'appeler `update_status('publish')`
 - [ ] ✅ J'utilise `deactivate_action()`/`reactivate_action()` (pas `update_status('disable')`)
 - [ ] ✅ Je passe un objet `User` à `delete_action()` (pas `str(user.id)`)
-- [ ] ✅ Je crée `RefEngine`/`RefPlatform` avant les tests admin API
+- [ ] ✅ Je crée `RefEngine` + `IntegrationTypeCatalogue` (role=platform) avant les tests admin API
 - [ ] ✅ J'ajoute `referenced_action_id` aux workflow steps
 - [ ] ✅ J'utilise `pagination_info['total']` (dict, pas int) pour `list_all()`
 - [ ] ❌ Je n'utilise PAS de champs Django auth (`is_staff`, `is_active`)

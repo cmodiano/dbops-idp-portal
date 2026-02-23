@@ -36,7 +36,7 @@ class TestUserIdInAuditLogs(TestCase):
         self.client.force_authenticate(user=self.user)
 
         with self.assertLogs('core.middleware', level='INFO') as cm:
-            response = self.client.get('/api/v1/catalog/actions')
+            response = self.client.get('/api/v1/catalog/actions/')
 
         assert response.status_code == status.HTTP_200_OK
 
@@ -49,11 +49,11 @@ class TestUserIdInAuditLogs(TestCase):
         """Unauthenticated API call → structlog should NOT contain user_id."""
         # No authentication
         with self.assertLogs('core.middleware', level='INFO') as cm:
-            response = self.client.get('/api/v1/catalog/actions')
+            self.client.get('/api/v1/catalog/actions/')
 
         # Request may succeed (public endpoint) or fail (auth required)
         # Either way, logs should NOT contain a user_id
 
         logs_output = '\n'.join(cm.output)
         # user_id may be null or absent, but should not be an actual user ID
-        assert 'user_id=None' in logs_output or 'user_id' not in logs_output
+        assert '"user_id": null' in logs_output or '"user_id":null' in logs_output

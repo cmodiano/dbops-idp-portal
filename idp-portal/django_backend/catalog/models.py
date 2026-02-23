@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Count, Subquery
@@ -30,6 +29,7 @@ class ActionEngine(models.TextChoices):
 class ActionPlatform(models.TextChoices):
     """Action platform enum matching Oracle CHECK constraint."""
     AAP = 'AAP', 'AAP'
+    TOWER = 'Tower', 'Tower'
     GITHUB_ACTIONS = 'GitHub Actions', 'GitHub Actions'
     AZURE_DEVOPS = 'Azure DevOps', 'Azure DevOps'
     TERRAFORM = 'Terraform', 'Terraform'
@@ -183,7 +183,8 @@ class BusinessRulePolicy(models.Model):
             return None
         rules = self.policy_json.get('on_step_output')
         if rules and isinstance(rules, list) and len(rules) > 0:
-            return rules[0].get('when', {}).get('step_type')
+            step_type = rules[0].get('when', {}).get('step_type')
+            return str(step_type) if step_type is not None else None
         return None
 
 
@@ -210,13 +211,17 @@ class Action(models.Model):
     platform = models.CharField(
         max_length=50,
         db_column='PLATFORM',
-        help_text='Platform code (must exist in REF_PLATFORMS.CODE). Validated by application logic.'
+        help_text='Platform code (validated against IntegrationTypeCatalogue, role=platform). Story 31.9.'
     )
     # CLOB fields - using OracleJSONField with automatic JSON handling (Story 17.4)
     parameters_schema = OracleJSONField(null=True, blank=True, db_column='PARAMETERS_SCHEMA')
     impact_rules = OracleJSONField(null=True, blank=True, db_column='IMPACT_RULES')
     execution_steps = OracleJSONField(null=True, blank=True, db_column='EXECUTION_STEPS')
     change_type_config = OracleJSONField(null=True, blank=True, db_column='CHANGE_TYPE_CONFIG')
+    # Story 31.6: Gate configuration — integration selection per gate type (e.g., servicenow_change.integration_id)
+    gate_config = OracleJSONField(null=True, blank=True, db_column='GATE_CONFIG')
+    # Story 31.8: Notification channels configuration (email, teams, page_individual, page_dba)
+    notification_config = OracleJSONField(null=True, blank=True, db_column='NOTIFICATION_CONFIG')
     documentation_md = models.TextField(null=True, blank=True, db_column='DOCUMENTATION_MD')
     remediation_rules = OracleJSONField(null=True, blank=True, db_column='REMEDIATION_RULES')
     # Story 28.1: Business rule policies evaluated on step output (post-step, before gate evaluation)
@@ -301,10 +306,10 @@ class Action(models.Model):
             models.Index(fields=['deleted_at'], name='idx_actions_deleted_at'),
         ]
         constraints = [
-            # Story 18.1: Ensure consistency between status and deleted_at
+            # Story 18.1 / V080: disabled allows deleted_at null (e.g. integration-deleted); draft/published require deleted_at null
             models.CheckConstraint(
                 check=(
-                    models.Q(status='disabled', deleted_at__isnull=False)
+                    models.Q(status='disabled')
                     | models.Q(status__in=['draft', 'published'], deleted_at__isnull=True)
                 ),
                 name='ck_actions_soft_delete_consistency',
@@ -320,13 +325,13 @@ class Action(models.Model):
         if self.business_rule_policy_id:
             policy = self.business_rule_policy
             if policy and policy.is_active:
-                return policy.policy_json
+                return policy.policy_json  # type: ignore[no-any-return]
             logger.warning(
                 "business_rule_policy_inactive: action_id=%s, policy_id=%s",
                 self.id, self.business_rule_policy_id,
             )
             return None
-        return self.business_rule_policies
+        return self.business_rule_policies  # type: ignore[no-any-return]
 
     def clean(self) -> None:
         """Validate model fields before save."""

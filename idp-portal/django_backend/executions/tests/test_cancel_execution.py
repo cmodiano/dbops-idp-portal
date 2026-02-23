@@ -191,7 +191,9 @@ class TestCancelRemoteExecution:
     @patch('executions.views.execution_views.get_platform_adapter')
     def test_remote_cancel_called_for_running_with_job_id(self, mock_factory):
         """2.6a: Platform adapter cancel_execution() called for RUNNING with platform_job_id."""
-        mock_instance = MagicMock()
+        from adapters.base_adapter import BaseAdapter
+        # spec=BaseAdapter ensures isinstance(mock, ICancellableAdapter) is True (Story 34.15)
+        mock_instance = MagicMock(spec=BaseAdapter)
         mock_instance.cancel_execution = AsyncMock(return_value=None)
         mock_factory.return_value = mock_instance
 
@@ -218,7 +220,9 @@ class TestCancelRemoteExecution:
     @patch('executions.views.execution_views.get_platform_adapter')
     def test_remote_cancel_failure_still_cancels_locally(self, mock_factory):
         """2.6b: If remote cancel fails, execution is still CANCELLED locally with warning."""
-        mock_instance = MagicMock()
+        from adapters.base_adapter import BaseAdapter
+        # spec=BaseAdapter ensures isinstance(mock, ICancellableAdapter) is True (Story 34.15)
+        mock_instance = MagicMock(spec=BaseAdapter)
         mock_instance.cancel_execution = AsyncMock(side_effect=Exception("AAP unreachable"))
         mock_factory.return_value = mock_instance
 
@@ -238,8 +242,10 @@ class TestCancelRemoteExecution:
 
     @patch('executions.views.execution_views.get_platform_adapter')
     def test_remote_cancel_not_implemented_still_cancels(self, mock_factory):
-        """2.6c: If adapter raises NotImplementedError, execution still cancelled."""
-        mock_instance = MagicMock()
+        """2.6c: If cancellable adapter raises NotImplementedError, execution still cancelled."""
+        from adapters.base_adapter import BaseAdapter
+        # spec=BaseAdapter ensures isinstance(mock, ICancellableAdapter) is True (Story 34.15)
+        mock_instance = MagicMock(spec=BaseAdapter)
         mock_instance.cancel_execution = AsyncMock(side_effect=NotImplementedError("Not supported"))
         mock_factory.return_value = mock_instance
 

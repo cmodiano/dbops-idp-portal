@@ -1,8 +1,22 @@
 import logger from './logger';
 
+/** Notification callback type — injected by the UI layer (DIP: transport layer has no UI dependency). */
+type NotifyFn = (
+  type: 'warning' | 'error',
+  config: { title: string; description: string; duration?: number },
+) => void;
+
+let _notify: NotifyFn = () => {};
+
+export function setNotificationCallback(fn: NotifyFn): void {
+  _notify = fn;
+}
+
 const API_BASE = '/api/v1';
 
 const MAX_429_RETRIES = 3;
+const MAX_503_RETRIES = 2;
+const DEFAULT_503_RETRY_DELAY_MS = 5000;
 
 /** Error thrown by apiFetch when response is not ok. Carries HTTP status for 403/400 handling. */
 export class ApiError extends Error {
@@ -78,6 +92,22 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * Check if a 503 response is specifically a DB_UNAVAILABLE error from the backend middleware.
+ * Uses response.clone() to avoid consuming the original response body.
+ * Only DB_UNAVAILABLE 503s are retried — other 503s (e.g. maintenance page) fall through normally.
+ * @internal Exported for testing only - not part of public API
+ */
+export async function isDbUnavailable503(response: Response): Promise<boolean> {
+  if (response.status !== 503) return false;
+  try {
+    const body = await response.clone().json();
+    return body?.error?.code === 'DB_UNAVAILABLE';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Fetch with automatic 401 retry after token refresh and 429 retry with backoff.
  *
  * On HTTP 429 (rate limited), retries up to {@link MAX_429_RETRIES} times using the
@@ -141,6 +171,67 @@ export async function handleAuthenticatedFetch(
       endpoint: path,
     });
     throw new ApiError(message, 429);
+  }
+
+  // 503 DB_UNAVAILABLE retry with Retry-After (Story 32.3)
+  if (response.status === 503) {
+    const is503DbUnavailable = await isDbUnavailable503(response);
+    if (is503DbUnavailable) {
+      let retryCount503 = 0;
+      let notificationShown = false;
+
+      while (retryCount503 < MAX_503_RETRIES) {
+        const retryAfter = response.headers.get('Retry-After');
+        const retryAfterSeconds = retryAfter ? parseInt(retryAfter, 10) : NaN;
+        const delay = !isNaN(retryAfterSeconds) && retryAfterSeconds > 0
+          ? retryAfterSeconds * 1000
+          : DEFAULT_503_RETRY_DELAY_MS;
+
+        // Show warning notification only on first retry
+        if (!notificationShown) {
+          _notify('warning', {
+            title: 'Service temporairement indisponible',
+            description: 'Nouvelle tentative en cours...',
+            duration: Math.ceil(delay / 1000) + 2,
+          });
+          notificationShown = true;
+        }
+
+        logger.warn('api_503_retry', {
+          correlation_id: correlationId,
+          attempt: retryCount503 + 1,
+          max_retries: MAX_503_RETRIES,
+          retry_after_seconds: Math.ceil(delay / 1000),
+          endpoint: path,
+        });
+
+        await sleep(delay);
+        retryCount503++;
+        response = await fetch(url, { ...init, headers });
+
+        // If retry succeeds or is a non-DB_UNAVAILABLE 503, return immediately
+        if (response.status !== 503) {
+          return response;
+        }
+        const isStillDbUnavailable = await isDbUnavailable503(response);
+        if (!isStillDbUnavailable) {
+          return response;
+        }
+      }
+
+      // All 503 retries exhausted — show error notification
+      _notify('error', {
+        title: 'Base de données temporairement indisponible',
+        description: 'Base de données temporairement indisponible après bascule. Veuillez réessayer dans quelques instants.',
+        duration: 8,
+      });
+
+      logger.error('api_503_exhausted', {
+        correlation_id: correlationId,
+        max_retries: MAX_503_RETRIES,
+        endpoint: path,
+      });
+    }
   }
 
   return response;

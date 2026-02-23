@@ -23,7 +23,7 @@ from adapters.terraform_cloud_adapter import (
     map_terraform_cloud_status,
 )
 from core.middleware import get_correlation_id
-from executions.models import Execution, ExecutionStatus, ExecutionStep
+from executions.models import ExecutionStatus, ExecutionStep
 
 logger = structlog.get_logger(__name__)
 
@@ -210,8 +210,8 @@ def terraform_webhook_run(request: Request) -> Response:
     }
     if execution.status not in terminal_statuses and idp_status != execution.status:
         try:
-            from executions.services import ExecutionService
-            svc = ExecutionService()
+            from core.di import get_execution_service  # noqa: PLC0415
+            svc = get_execution_service()
             svc.update_status(execution.id, idp_status, str(execution.user_id))
         except ValueError as ve:
             logger.warning(
@@ -253,7 +253,7 @@ def _broadcast_terraform_webhook_update(
     """Broadcast webhook status update to execution's WebSocket group."""
     try:
         from channels.layers import get_channel_layer  # type: ignore[import-untyped]
-        from asgiref.sync import async_to_sync  # type: ignore[import-untyped]
+        from asgiref.sync import async_to_sync
 
         channel_layer = get_channel_layer()
         if channel_layer is None:

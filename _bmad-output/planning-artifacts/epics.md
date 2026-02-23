@@ -4906,3 +4906,141 @@ So that **la cohérence action.platform ↔ integration.type soit garantie et do
 
 **And** la validation backend (création/édition action) vérifie la cohérence platform ↔ integration.type quand les deux sont renseignés
 **And** des tests valident le mapping et la validation
+
+---
+
+## Epic 31 : Admin catalogue — Intégrations alignées et icônes moteurs (février 2026)
+
+**En tant que** DBOPS,  
+**je veux** que le formulaire d'action ne propose que les intégrations réellement configurées, que la suppression d'une intégration désactive les actions qui en dépendent, et que je puisse définir les icônes des technologies/moteurs de base de données,  
+**afin de** éviter des actions non exécutables, garder un catalogue cohérent et personnaliser l'affichage des moteurs.
+
+### Story 31.1 : Formulaire action — liste = intégrations configurées, libellé « Intégration »
+
+As a **DBOPS**,
+I want **que le champ (aujourd'hui « Plateforme d'exécution ») affiche uniquement les intégrations définies dans Admin > Intégrations (rôle plateforme) et soit libellé « Intégration »**,
+So that **je ne puisse plus associer une action à une plateforme non configurée et que le vocabulaire soit cohérent avec le reste de l'admin**.
+
+**Acceptance Criteria:**
+
+**Given** le formulaire d'action (ActionForm, ActionWizard) est ouvert en création ou édition
+**When** l'utilisateur consulte le champ aujourd'hui nommé « Plateforme d'exécution »
+**Then** le libellé du champ est **« Intégration »** (ou « Intégration d'exécution ») et le placeholder « Sélectionnez une intégration »
+**And** la liste déroulante est alimentée par les **intégrations** (API admin, filtrées role=platform), et non par REF_PLATFORMS
+**And** chaque option envoie **integration_id** ; **platform** est dérivé du type de l'intégration sélectionnée (validation existante respectée)
+**And** si aucune intégration plateforme n'est configurée, la liste est vide avec un message invitant à en créer une dans Admin > Intégrations
+**And** les libellés « Plateforme d'exécution » / « plateforme » sont remplacés par « Intégration » / « intégration » dans ce formulaire
+
+### Story 31.2 : Suppression d'intégration — désactiver les actions qui l'utilisent
+
+As a **DBOPS**,
+I want **que lorsqu'une intégration est supprimée, toutes les actions qui la référencent passent en statut désactivé (disabled)**,
+So that **aucune action « orpheline » ne reste publiée alors qu'elle ne peut plus s'exécuter**.
+
+**Acceptance Criteria:**
+
+**Given** une intégration I est utilisée par au moins une action (action.integration_id = I)
+**When** un DBOPS supprime l'intégration I
+**Then** toutes les actions dont integration_id = I passent en statut **disabled**
+**And** une entrée d'audit (ou log) indique que les actions ont été désactivées suite à la suppression de l'intégration
+**And** si aucune action n'utilise l'intégration, la suppression se comporte comme aujourd'hui
+**And** des tests valident le scénario : suppression intégration utilisée → actions concernées en disabled
+
+### Story 31.3 : Définir les icônes des technologies / moteurs de base de données
+
+As a **DBOPS**,
+I want **pouvoir définir l'icône associée à chaque moteur de base de données (technologie) dans l'admin**,
+So that **personnaliser l'affichage dans le catalogue, les exécutions et les rapports sans modifier le code (ex. logo Oracle, SQL Server, DB2)**.
+
+**Acceptance Criteria:**
+
+**Given** le référentiel des moteurs (REF_ENGINES ou équivalent) est administrable
+**When** un DBOPS édite un moteur
+**Then** il peut renseigner une **icône** pour ce moteur : URL d'image (SVG/PNG) ou identifiant d'icône prédéfini
+**And** l'API reference/engines expose ce champ (ex. icon_url ou icon) pour chaque moteur
+**And** le frontend utilise cette valeur pour afficher l'icône du moteur partout où le moteur est affiché, avec un fallback si absente ou invalide
+**And** la rétrocompatibilité est assurée : moteurs sans icône définie conservent un affichage par défaut
+**And** des tests valident la persistance, l'API et l'affichage frontend
+
+### Story 31.4 : Refonte UX — Panneau « Changement ServiceNow par environnement » (gates vs changement, Code modèle unique)
+
+As a **DBOPS**,
+I want **que le panneau par environnement sépare clairement les gates (Approbation, Plage maintenance) du bloc Changement ServiceNow, et que « Code modèle » et « Template ID » soient fusionnés en un seul champ**,
+So that **l'interface soit plus claire et évite la redondance (Code modèle et Template ID = même chose)**.
+
+**Acceptance Criteria:**
+
+**Given** la section « Changement ServiceNow par environnement » dans le formulaire action
+**When** le DBOPS consulte cette section
+**Then** deux blocs distincts : (1) Gates — Autorisé, Plage maintenance, Approbation ; (2) Changement ServiceNow — Changement requis, un seul champ « Code modèle (template) »
+**And** plus de deux colonnes séparées Code modèle / Template ID ; une seule valeur envoyée au backend (mapping existant conservé)
+**And** densité visuelle réduite, tests adaptés
+
+### Story 31.5 : AAP — Sélection du template par liste ou par nom (résolution dynamique de l'ID)
+
+As a **DBOPS**,
+I want **ne plus saisir manuellement workflow_job_template_id / job_template_id pour AAP : soit choisir le template dans une liste (chargée depuis l'intégration AAP), soit saisir le nom et laisser le système résoudre l'ID**,
+So that **éviter les erreurs de saisie et rendre la config des actions AAP plus intuitive**.
+
+**Acceptance Criteria:**
+
+**Given** une étape cible AAP (job ou workflow job template) et une intégration AAP configurée
+**When** le DBOPS configure l'étape
+**Then** au moins une des options : (A) liste déroulante des templates chargée depuis l'API AAP (via backend/intégration) ; (B) saisie du nom du template avec résolution nom → ID (backend ou proxy)
+**And** liste filtrée selon type d'étape (job vs workflow job) et intégration AAP de l'action
+**And** fallback : si API AAP indisponible, saisie manuelle de l'ID avec avertissement
+**And** rétrocompatibilité : actions existantes avec ID renseigné continuent de fonctionner ; affichage nom du template si disponible
+**And** tests ou documentation pour liste, résolution nom → ID, fallback
+
+### Story 31.6 : Configuration des gates — étape dédiée, choix du service par gate, création changement ServiceNow avant exécution
+
+As a **DBOPS**,
+I want **une étape de configuration dédiée aux gates** où je définis **quels gates** s'appliquent et, pour chaque gate qui appelle un **service externe**, **quelle intégration** utiliser (ex. plusieurs ServiceNow → choisir laquelle la gate « changement ServiceNow » appelle) ; et que le **changement ServiceNow soit créé avant l'exécution** quand « changement requis » est activé, avec **annulation de l'exécution** si la création échoue,
+So that **maîtriser quelle instance de service chaque gate utilise et garantir qu'une exécution ne part pas sans changement créé quand c'est requis**.
+
+**Acceptance Criteria:**
+
+**A — Configuration des gates (étape dédiée)**  
+**Given** le formulaire d'action  
+**When** le DBOPS accède à la configuration des gates (section/étape dédiée)  
+**Then** il définit quels gates s'appliquent (liste des types : maintenance, approbation, changement ServiceNow, etc.)  
+**And** pour chaque gate qui s'appuie sur un service externe, il **sélectionne l'intégration** à utiliser (liste des intégrations du type, ex. ServiceNow ; si plusieurs ServiceNow, choix explicite de laquelle la gate appellera)  
+**And** la config est persistée (ex. gate_conditions + integration_id par condition, ou gate_config action) ; validation et rétrocompatibilité documentées  
+
+**B — Création du changement ServiceNow avant exécution**  
+**Given** action avec « changement requis » pour l'environnement et intégration ServiceNow configurée pour la gate  
+**When** un utilisateur lance une exécution pour cet environnement  
+**Then** avant RUNNING, le backend appelle ServiceNow (intégration choisie) pour **créer le changement** ; en cas de succès, servicenow_change_id est stocké sur l'exécution et l'exécution continue  
+**And** en cas d'échec de create_change : exécution **non lancée** ou immédiatement en échec (FAILED), message explicite ; aucune étape plateforme déclenchée  
+**And** ServiceNowService.create_change() est implémenté (plus NotImplementedError), s'appuie sur l'intégration de la gate ; paramètres depuis change_type_config pour l'environnement  
+**And** tests valident création avant exécution, persistance servicenow_change_id, et annulation si create_change échoue
+
+### Story 31.7 : Aide contextuelle (tooltip + popover Markdown) alimentée par le backend
+
+As a **DBOPS**,
+I want **une aide contextuelle dans les fenêtres de configuration : tooltip (contexte court) au survol et popover avec doc Markdown au clic**, alimentée par des **fichiers MD côté backend** (maintenables dans git),
+So that **comprendre rapidement une section ou consulter une doc détaillée sans quitter l'écran**.
+
+**Acceptance Criteria:**
+
+**Backend :** Répertoire `docs/help/` avec MD par topic (frontmatter `short` optionnel). GET /api/v1/help/<topic_id>/ → { topic_id, short, markdown } ; 404 si inconnu ; mapping restreint ; auth. Réf. docs/help-contextual-design.md.
+**Frontend :** Composant SectionHelp (topicId, mode: tooltip | popover | both). Tooltip = short au survol ; Popover = markdown rendu (react-markdown) au clic. getHelpContent(topicId) + cache. Accessibilité.
+**Intégration :** Au moins 2–3 sections pilotes (Intégration, Changement ServiceNow, Gates) avec icône d'aide et fichiers MD.
+
+### Story 31.8 : Service de notification multi-destinations (email, Teams, page)
+
+As a **DBOPS / utilisateur du portail**,
+I want **un service de notification au même niveau que Jira, Splunk, Vault, ServiceNow**, avec plusieurs **types de destinations** (courriel, Teams, page individuel, page DBA), **paramétrable au niveau de l'action** et **option page à l'exécution** pour le page individuel,
+So that **livrer les outputs par courriel au demandeur, alerter l'équipe (Teams) en cas d'erreur, et paginer (support / individu / DBA) pour les jobs critiques en production**.
+
+**Acceptance Criteria:**
+
+**Given** le package `services/` (Vault, Splunk, Jira, ServiceNow)
+**When** on introduit le service de notification
+**Then** un **NotificationService** est ajouté dans `services/` avec interface unifiée (envoi vers une destination donnée)
+**And** destinations supportées : **email** (output au demandeur), **Teams** (message canal, ex. erreur), **page individuel** (API interne, nom + identité), **page DBA** (API interne fournie)
+**And** la config des notifications est **paramétrable au niveau de l'action** (quels canaux, conditions)
+**And** **page individuel** = **option à l'exécution** (la personne qui lance choisit « être pagé en cas d'échec » ; nom + identité → API interne)
+**And** le **page** ne se déclenche **que si target = production** et niveau **critique**
+**And** le service est intégré à la factory ou instanciation existante et documenté dans `services/README.md`
+**And** des tests valident l'envoi vers chaque type de destination (mocks pour APIs internes et Teams/email)

@@ -2,7 +2,7 @@
 import pytest
 from django.utils import timezone
 
-from catalog.models import Action, ActionStatus, Tag, ActionTag
+from catalog.models import ActionStatus, Tag, ActionTag
 from catalog.services import CatalogService
 from tests.factories import UserFactory, IntegrationFactory, ActionFactory
 

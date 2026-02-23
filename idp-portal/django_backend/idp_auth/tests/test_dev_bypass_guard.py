@@ -3,12 +3,10 @@ Story 30.5 — SEC-7: AUTH_DEV_BYPASS production guard tests.
 Validates that CRITICAL log is emitted when dev bypass is active with DEBUG=False.
 """
 
-import logging
 import pytest
 from unittest.mock import patch, MagicMock
-from django.test import override_settings, RequestFactory
+from django.test import override_settings
 from rest_framework.test import APIClient
-from idp_auth.models import User
 
 
 @pytest.fixture
@@ -64,7 +62,7 @@ class TestDevBypassGuardJWTAuthentication:
             # Use dev mock token
             api_client.credentials(HTTP_AUTHORIZATION='Bearer dev-mock-token-for-testing')
             # Access any authenticated endpoint
-            response = api_client.get('/api/v1/auth/me/')
+            api_client.get('/api/v1/auth/me/')
             # Should succeed (dev user created) but CRITICAL logged
             mock_logger.critical.assert_called_once()
             call_args = mock_logger.critical.call_args[0][0]
@@ -75,5 +73,5 @@ class TestDevBypassGuardJWTAuthentication:
         """Mock token with AUTH_DEV_BYPASS + DEBUG=True must NOT log CRITICAL."""
         with patch('idp_auth.authentication.logger') as mock_logger:
             api_client.credentials(HTTP_AUTHORIZATION='Bearer dev-mock-token-for-testing')
-            response = api_client.get('/api/v1/auth/me/')
+            api_client.get('/api/v1/auth/me/')
             mock_logger.critical.assert_not_called()

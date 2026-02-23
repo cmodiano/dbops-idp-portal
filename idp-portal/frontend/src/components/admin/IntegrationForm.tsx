@@ -179,12 +179,19 @@ export function IntegrationForm({
         }
       }
 
+      // Always send icon so backend persists it (undefined is omitted by JSON.stringify).
+      // Create: uploadedIconUrl or form URL field. Edit: same, or fallback to existing integration icon.
+      const effectiveIcon =
+        uploadedIconUrl ??
+        values.icon?.trim() ??
+        (isEdit ? (editIntegration?.icon ?? null) : null) ??
+        null;
       const payload: IntegrationCreate | IntegrationUpdate = {
         type: values.type,
         name: values.name.trim(),
         base_url: values.base_url.trim(),
         credential_ref: isVaultType ? null : (values.credential_ref?.trim() || null),
-        icon: uploadedIconUrl || values.icon?.trim() || null,
+        icon: effectiveIcon ?? null,
         auth_flow: values.auth_flow || null,
         secret_service_id: isVaultType ? null : (values.secret_service_id || null),
       };
@@ -226,7 +233,7 @@ export function IntegrationForm({
       const headers: Record<string, string> = {};
       if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
 
-      const response = await fetch('/api/v1/admin/integrations/upload-icon', {
+      const response = await fetch('/api/v1/admin/integrations/upload-icon/', {
         method: 'POST',
         body: formData,
         credentials: 'include',
@@ -332,7 +339,20 @@ export function IntegrationForm({
         form={form}
         layout="vertical"
         preserve={false}
-        initialValues={editValues ?? undefined}
+        initialValues={
+          editValues ?? {
+            type: undefined,
+            name: '',
+            base_url: '',
+            credential_ref: undefined,
+            icon: null,
+            auth_flow: undefined,
+            schema: undefined,
+            table: undefined,
+            config_advanced: undefined,
+            secret_service_id: undefined,
+          }
+        }
         key={editIntegration ? `edit-${editIntegration.id}` : 'create'}
       >
         {/* Story 24.2 AC2: Select replaces AutoComplete */}

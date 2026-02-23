@@ -27,7 +27,8 @@ export default defineConfig({
     setupFiles: './src/test-setup.ts',
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'json'],
+      reporter: ['text', 'json', 'lcov'],
+      reportsDirectory: './coverage',
       include: ['src/hooks/**/*.ts', 'src/components/**/*.tsx'],
       exclude: ['**/*.test.ts', '**/*.test.tsx', '**/node_modules/**', 'src/test-setup.ts'],
     },

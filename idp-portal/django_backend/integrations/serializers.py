@@ -8,8 +8,7 @@ from rest_framework import serializers
 import structlog
 
 from integrations.models import (
-    Integration, AuthFlow, IntegrationType, IntegrationRole,
-    IntegrationTypeCatalogue, IntegrationAction,
+    Integration, AuthFlow, IntegrationType, IntegrationTypeCatalogue, IntegrationAction,
 )
 
 logger = structlog.get_logger(__name__)
@@ -313,7 +312,7 @@ class IntegrationListSerializer(serializers.ModelSerializer):
     Excludes config for performance.
     """
     auth_flow = serializers.CharField(required=False, allow_null=True)
-    secret_service_id = serializers.PrimaryKeyRelatedField(
+    secret_service_id: serializers.PrimaryKeyRelatedField = serializers.PrimaryKeyRelatedField(
         source='secret_service',
         read_only=True,
     )

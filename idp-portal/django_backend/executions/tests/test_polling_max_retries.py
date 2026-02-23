@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
-from django.utils import timezone
 
 from executions.tasks import (
     MAX_POLLING_RETRIES,
@@ -70,12 +69,16 @@ class TestPollAAPExhaustion:
         assert result["retry_count"] == MAX_POLLING_RETRIES
         mock_exhausted.assert_called_once()
 
-    @patch("executions.tasks.poll_aap_job_status.apply_async")
+    @patch("executions.tasks.poll_platform_job_status.apply_async")
     @patch("executions.tasks.get_correlation_id", return_value="test-corr")
     def test_reschedule_with_incremented_retry(
         self, mock_corr: MagicMock, mock_apply: MagicMock
     ) -> None:
-        """When retry_count < MAX, re-schedule with retry_count+1."""
+        """When retry_count < MAX, re-schedule with retry_count+1.
+
+        Story 34.5: Le shim poll_aap_job_status délègue à poll_platform_job_status,
+        qui est responsable du re-schedule via poll_platform_job_status.apply_async.
+        """
         with patch("adapters.aap_adapter.AAPAdapter") as MockAdapter:
             MockAdapter.side_effect = Exception("timeout")
 
@@ -93,7 +96,7 @@ class TestPollAAPExhaustion:
 
     @patch("executions.tasks._broadcast_execution_update")
     @patch("executions.tasks._update_execution_from_poll")
-    @patch("executions.tasks.poll_aap_job_status.apply_async")
+    @patch("executions.tasks.poll_platform_job_status.apply_async")
     @patch("executions.tasks.get_correlation_id", return_value="test-corr")
     def test_successful_poll_resets_retry_count(
         self,
@@ -102,10 +105,13 @@ class TestPollAAPExhaustion:
         mock_update: MagicMock,
         mock_broadcast: MagicMock,
     ) -> None:
-        """After a successful poll (non-terminal), retry_count resets to 0."""
+        """After a successful poll (non-terminal), retry_count resets to 0.
+
+        Story 34.5: Le re-schedule se fait via poll_platform_job_status.apply_async.
+        """
         mock_adapter = MagicMock()
         mock_adapter.get_status = AsyncMock(return_value={"status": "RUNNING", "aap_status": "running"})
-        mock_adapter.get_job_logs = AsyncMock(return_value={"content": "log line"})
+        mock_adapter.get_job_logs = AsyncMock(return_value={"content": "log line", "complete": False})
 
         with patch("adapters.aap_adapter.AAPAdapter", return_value=mock_adapter):
             result = poll_aap_job_status(
@@ -212,12 +218,11 @@ class TestPollTerraformCloudExhaustion:
     ) -> None:
         with patch("adapters.terraform_cloud_adapter.TerraformCloudAdapter") as MockAdapter:
             MockAdapter.side_effect = Exception("connection refused")
-            with patch("adapters.terraform_cloud_adapter.TERRAFORM_CLOUD_TERMINAL_STATUSES", new=set()):
-                result = poll_terraform_cloud_run_status(
-                    execution_id=1,
-                    platform_job_id="run-202",
-                    retry_count=MAX_POLLING_RETRIES,
-                )
+            result = poll_terraform_cloud_run_status(
+                execution_id=1,
+                platform_job_id="run-202",
+                retry_count=MAX_POLLING_RETRIES,
+            )
 
         assert result["outcome"] == "exhausted"
         mock_exhausted.assert_called_once()

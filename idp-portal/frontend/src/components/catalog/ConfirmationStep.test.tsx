@@ -3,19 +3,39 @@
  * Tests dynamic environment labels, badge colors, and case-insensitive production detection.
  */
 
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { App } from 'antd';
 import { ConfirmationStep, type ConfirmationStepProps } from './ConfirmationStep';
 import type { InventoryItem, ImpactLevel } from '../../types/api';
+import { WizardExecutionContextProvider, type WizardExecutionContextValue } from '../../contexts/WizardExecutionContext';
 
 // Mock SchedulingPanel to avoid complex dependency chain
 vi.mock('./SchedulingPanel', () => ({
   SchedulingPanel: () => <div data-testid="scheduling-panel" />,
 }));
 
-function TestWrapper({ children }: { children: React.ReactNode }) {
-  return <App>{children}</App>;
+const defaultWizardContext: WizardExecutionContextValue = {
+  environmentsCache: null,
+  inventoryData: {},
+  inventoryWarnings: {},
+  loadingInventory: false,
+  derivedEnvironment: null,
+  currentImpact: null,
+  hasMixedEnvironments: false,
+  resolvedPatternTargets: [],
+  patternResolving: false,
+  selectedServerNames: [],
+};
+
+function TestWrapper({ children, contextValue = defaultWizardContext }: { children: React.ReactNode; contextValue?: WizardExecutionContextValue }) {
+  return (
+    <App>
+      <WizardExecutionContextProvider value={contextValue}>
+        {children}
+      </WizardExecutionContextProvider>
+    </App>
+  );
 }
 
 const mockAction = {
@@ -48,19 +68,17 @@ const mockAction = {
 
 const defaultProps: ConfirmationStepProps = {
   action: mockAction,
-  variant: 'default',
   selectedTargets: [],
-  derivedEnvironment: 'dev',
-  currentImpact: null,
   parameters: {},
   submitError: null,
-  environmentsCache: null,
   isScheduling: false,
   scheduling: { mode: 'immediate' } as ConfirmationStepProps['scheduling'],
   onSchedulingChange: vi.fn(),
   schedulingError: null,
   submitting: false,
   schedulingValidation: { isValid: true, errors: [] } as unknown as ConfirmationStepProps['schedulingValidation'],
+  pageMeEnabled: false,
+  onPageMeChange: vi.fn(),
 };
 
 describe('ConfirmationStep - Story 21.5', () => {
@@ -71,12 +89,8 @@ describe('ConfirmationStep - Story 21.5', () => {
       ];
 
       render(
-        <TestWrapper>
-          <ConfirmationStep
-            {...defaultProps}
-            derivedEnvironment="dev"
-            environmentsCache={cache}
-          />
+        <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'dev', environmentsCache: cache }}>
+          <ConfirmationStep {...defaultProps} />
         </TestWrapper>
       );
 
@@ -85,12 +99,8 @@ describe('ConfirmationStep - Story 21.5', () => {
 
     it('falls back to getEnvironmentLabel when env not in cache', () => {
       render(
-        <TestWrapper>
-          <ConfirmationStep
-            {...defaultProps}
-            derivedEnvironment="dev"
-            environmentsCache={[]}
-          />
+        <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'dev', environmentsCache: [] }}>
+          <ConfirmationStep {...defaultProps} />
         </TestWrapper>
       );
 
@@ -99,12 +109,8 @@ describe('ConfirmationStep - Story 21.5', () => {
 
     it('displays capitalized label for non-standard environment', () => {
       render(
-        <TestWrapper>
-          <ConfirmationStep
-            {...defaultProps}
-            derivedEnvironment="lab"
-            environmentsCache={[]}
-          />
+        <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'lab', environmentsCache: [] }}>
+          <ConfirmationStep {...defaultProps} />
         </TestWrapper>
       );
 
@@ -117,12 +123,8 @@ describe('ConfirmationStep - Story 21.5', () => {
       ];
 
       render(
-        <TestWrapper>
-          <ConfirmationStep
-            {...defaultProps}
-            derivedEnvironment="lab"
-            environmentsCache={cache}
-          />
+        <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'lab', environmentsCache: cache }}>
+          <ConfirmationStep {...defaultProps} />
         </TestWrapper>
       );
 
@@ -133,12 +135,8 @@ describe('ConfirmationStep - Story 21.5', () => {
   describe('Badge status (AC #4, #5)', () => {
     it('shows warning badge for production environment', () => {
       render(
-        <TestWrapper>
-          <ConfirmationStep
-            {...defaultProps}
-            derivedEnvironment="prod"
-            environmentsCache={[]}
-          />
+        <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'prod', environmentsCache: [] }}>
+          <ConfirmationStep {...defaultProps} />
         </TestWrapper>
       );
 
@@ -150,12 +148,8 @@ describe('ConfirmationStep - Story 21.5', () => {
 
     it('shows warning badge for PROD (case-insensitive)', () => {
       render(
-        <TestWrapper>
-          <ConfirmationStep
-            {...defaultProps}
-            derivedEnvironment="PROD"
-            environmentsCache={[]}
-          />
+        <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'PROD', environmentsCache: [] }}>
+          <ConfirmationStep {...defaultProps} />
         </TestWrapper>
       );
 
@@ -167,12 +161,8 @@ describe('ConfirmationStep - Story 21.5', () => {
 
     it('shows processing badge for non-production environment', () => {
       render(
-        <TestWrapper>
-          <ConfirmationStep
-            {...defaultProps}
-            derivedEnvironment="dev"
-            environmentsCache={[]}
-          />
+        <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'dev', environmentsCache: [] }}>
+          <ConfirmationStep {...defaultProps} />
         </TestWrapper>
       );
 
@@ -184,12 +174,8 @@ describe('ConfirmationStep - Story 21.5', () => {
 
     it('shows processing badge for lab environment', () => {
       render(
-        <TestWrapper>
-          <ConfirmationStep
-            {...defaultProps}
-            derivedEnvironment="lab"
-            environmentsCache={[]}
-          />
+        <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'lab', environmentsCache: [] }}>
+          <ConfirmationStep {...defaultProps} />
         </TestWrapper>
       );
 
@@ -204,12 +190,8 @@ describe('ConfirmationStep - Story 21.5', () => {
     it('renders non-standard environments without errors', () => {
       expect(() => {
         render(
-          <TestWrapper>
-            <ConfirmationStep
-              {...defaultProps}
-              derivedEnvironment="uat"
-              environmentsCache={[]}
-            />
+          <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'uat', environmentsCache: [] }}>
+            <ConfirmationStep {...defaultProps} />
           </TestWrapper>
         );
       }).not.toThrow();
@@ -219,16 +201,90 @@ describe('ConfirmationStep - Story 21.5', () => {
 
     it('displays qa environment correctly', () => {
       render(
-        <TestWrapper>
-          <ConfirmationStep
-            {...defaultProps}
-            derivedEnvironment="qa"
-            environmentsCache={[]}
-          />
+        <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'qa', environmentsCache: [] }}>
+          <ConfirmationStep {...defaultProps} />
         </TestWrapper>
       );
 
       expect(screen.getByText('Qa')).toBeInTheDocument();
     });
+  });
+});
+
+describe('ConfirmationStep - Story 31.8 page_me', () => {
+  const actionWithPageMe = {
+    ...mockAction,
+    notification_config: {
+      channels: [],
+      page_individual_enabled: true,
+    },
+  } as unknown as ConfirmationStepProps['action'];
+
+  it('does not show page_me checkbox when notification_config is null', () => {
+    render(
+      <TestWrapper>
+        <ConfirmationStep {...defaultProps} />
+      </TestWrapper>,
+    );
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+  });
+
+  it('does not show page_me checkbox when page_individual_enabled is false', () => {
+    const action = {
+      ...mockAction,
+      notification_config: {
+        channels: [],
+        page_individual_enabled: false,
+      },
+    } as unknown as ConfirmationStepProps['action'];
+    render(
+      <TestWrapper>
+        <ConfirmationStep {...defaultProps} action={action} />
+      </TestWrapper>,
+    );
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+  });
+
+  it('shows page_me checkbox when page_individual_enabled is true', () => {
+    render(
+      <TestWrapper>
+        <ConfirmationStep {...defaultProps} action={actionWithPageMe} />
+      </TestWrapper>,
+    );
+    expect(screen.getByRole('checkbox')).toBeInTheDocument();
+    expect(screen.getByText(/pagé en cas d'échec/i)).toBeInTheDocument();
+  });
+
+  it('checkbox is unchecked when pageMeEnabled is false', () => {
+    render(
+      <TestWrapper>
+        <ConfirmationStep {...defaultProps} action={actionWithPageMe} pageMeEnabled={false} />
+      </TestWrapper>,
+    );
+    expect(screen.getByRole('checkbox')).not.toBeChecked();
+  });
+
+  it('checkbox is checked when pageMeEnabled is true', () => {
+    render(
+      <TestWrapper>
+        <ConfirmationStep {...defaultProps} action={actionWithPageMe} pageMeEnabled={true} />
+      </TestWrapper>,
+    );
+    expect(screen.getByRole('checkbox')).toBeChecked();
+  });
+
+  it('calls onPageMeChange when checkbox is clicked', () => {
+    const onPageMeChange = vi.fn();
+    render(
+      <TestWrapper>
+        <ConfirmationStep
+          {...defaultProps}
+          action={actionWithPageMe}
+          onPageMeChange={onPageMeChange}
+        />
+      </TestWrapper>,
+    );
+    fireEvent.click(screen.getByRole('checkbox'));
+    expect(onPageMeChange).toHaveBeenCalledWith(true);
   });
 });

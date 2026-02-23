@@ -188,10 +188,10 @@ describe('ActionCard', () => {
       expect(card).toHaveAttribute('aria-label', 'Workflow: Creer PDB Oracle, impact Moyen');
     });
 
-    it('renders workflow icon (ApartmentOutlined) instead of engine icon', () => {
+    it('renders workflow icon (WorkflowIcon) instead of engine icon', () => {
       const { container } = renderWithTheme(<ActionCard action={workflowAction} />);
 
-      expect(container.querySelector('.anticon-apartment')).toBeInTheDocument();
+      expect(container.querySelector('svg')).toBeInTheDocument();
     });
 
     it('renders standard engine icon when item_type is not workflow', () => {

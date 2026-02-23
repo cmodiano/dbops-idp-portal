@@ -136,7 +136,9 @@ describe('ExecutionsPage - Compact Mode (Story 17.13)', () => {
     expect(ENGINE_ICON_SIZE_COMPACT_VALUE).toBe(40);
 
     // Render an engine icon and check size
-    const { container } = render(renderEngineIcon('Oracle', 'action') as React.ReactElement);
+    const { container } = render(
+      <ThemeProvider>{renderEngineIcon('Oracle', 'action') as React.ReactElement}</ThemeProvider>
+    );
     const img = container.querySelector('img');
     expect(img).toBeInTheDocument();
     expect(img).toHaveAttribute('width', '40');
@@ -144,12 +146,13 @@ describe('ExecutionsPage - Compact Mode (Story 17.13)', () => {
   });
 
   it('workflow icons render at 40px compact size (Task 2)', () => {
-    const { container } = render(renderEngineIcon(null, 'workflow') as React.ReactElement);
-    const icon = container.querySelector('[class*="anticon-apartment"]');
-    expect(icon).toBeInTheDocument();
-    // Icon font-size should be 40px
-    const svg = icon?.closest('[style]');
-    expect(svg).toHaveStyle({ fontSize: '40px' });
+    const { container } = render(
+      <ThemeProvider>{renderEngineIcon(null, 'workflow') as React.ReactElement}</ThemeProvider>
+    );
+    const svg = container.querySelector('svg');
+    expect(svg).toBeInTheDocument();
+    expect(svg).toHaveAttribute('width', '40');
+    expect(svg).toHaveAttribute('height', '40');
   });
 
   it('status badges have compact padding 1px 6px (Task 3)', () => {
@@ -178,7 +181,9 @@ describe('ExecutionsPage - Compact Mode (Story 17.13)', () => {
   });
 
   it('accessibility maintained: tooltips and aria attributes on icons (Task 5.4)', () => {
-    const { container } = render(renderEngineIcon('Oracle', 'action') as React.ReactElement);
+    const { container } = render(
+      <ThemeProvider>{renderEngineIcon('Oracle', 'action') as React.ReactElement}</ThemeProvider>
+    );
     const img = container.querySelector('img');
     // img has aria-hidden for decorative icons
     expect(img).toHaveAttribute('aria-hidden');

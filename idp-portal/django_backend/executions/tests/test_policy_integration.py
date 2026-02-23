@@ -7,21 +7,17 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
-from unittest.mock import MagicMock, patch, ANY
+from unittest.mock import patch
 
 import pytest
 
-from django.test import TestCase
 
 from core.models import AuditActionType, AuditEntityType, AuditLog
 from core.services import AuditService
 from executions.models import (
-    Execution,
-    ExecutionStep,
     ExecutionStepStatus,
-    ExecutionStatus,
 )
-from executions.policy_evaluator import PolicyDecision, PolicyEvaluator
+from executions.policy_evaluator import PolicyEvaluator
 from tests.factories import (
     ActionFactory,
     ExecutionFactory,

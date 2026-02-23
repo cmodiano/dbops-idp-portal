@@ -66,6 +66,8 @@ jobs:
   typecheck-backend:
     name: Type Check Django Backend (mypy)
     runs-on: ubuntu-latest
+    env:
+      DJANGO_SECRET_KEY: "mypy-ci-placeholder-not-for-production"  # pragma: allowlist secret
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -78,6 +80,8 @@ jobs:
         run: uv pip install -r requirements-dev.lock --system
       - name: Run mypy type check (strict, blocking)
         working-directory: django_backend
+        env:
+          DJANGO_SECRET_KEY: "mypy-ci-placeholder-not-for-production"  # pragma: allowlist secret
         run: mypy . --no-error-summary
 
   typecheck-frontend:
@@ -98,6 +102,8 @@ jobs:
   test-backend:
     name: Test Django Backend (pytest)
     runs-on: ubuntu-latest
+    env:
+      DJANGO_SECRET_KEY: "ci-test-placeholder-not-for-production"  # pragma: allowlist secret
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

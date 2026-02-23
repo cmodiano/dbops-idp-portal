@@ -8,6 +8,7 @@
 
 import { memo, useRef } from 'react';
 import { Form, Alert, Typography } from 'antd';
+import { useAuth } from '../../contexts/AuthContext';
 import { InfoCircleOutlined } from '@ant-design/icons';
 import type { CatalogActionDetail } from '../../services/catalog_service';
 import type { InventoryItem } from '../../types/api';
@@ -25,7 +26,6 @@ export interface WorkflowStepsRendererProps {
   loadingWorkflowStepActions: boolean;
   workflowStepActionsError: string | null;
   workflowValidationSummary: string | null;
-  variant: 'default' | 'simplified';
   inventoryData: Record<string, InventoryItem[]>;
   inventoryWarnings: Record<string, boolean>;
   loadingInventory: boolean;
@@ -39,13 +39,13 @@ export const WorkflowStepsRenderer = memo(function WorkflowStepsRenderer({
   loadingWorkflowStepActions,
   workflowStepActionsError,
   workflowValidationSummary,
-  variant,
   inventoryData,
   inventoryWarnings,
   loadingInventory,
   selectedServerNames = [],
 }: WorkflowStepsRendererProps) {
   const firstFieldRef = useRef<HTMLElement | null>(null);
+  const { isBusinessProfile } = useAuth();
 
   return (
     <div>
@@ -108,7 +108,7 @@ export const WorkflowStepsRenderer = memo(function WorkflowStepsRenderer({
                 if (field.minimum !== undefined) rules.push({ type: 'number', min: field.minimum, message: `Minimum: ${field.minimum}` });
                 if (field.maximum !== undefined) rules.push({ type: 'number', max: field.maximum, message: `Maximum: ${field.maximum}` });
 
-                const displayDescription = variant === 'simplified' && field.description
+                const displayDescription = isBusinessProfile && field.description
                   ? sanitizeDescription(field.description)
                   : field.description;
 

@@ -1,6 +1,9 @@
 /**
  * ParametersFormStep - Step 2 of the execution wizard.
  * Story 17.2, Task 4.2. Refactored Story 20.4: workflow rendering extracted to WorkflowStepsRenderer.
+ * Story 34.13 (SOLID-FE-7): Reduced from 15 to 11 props — 4 inventory props moved to
+ * WizardExecutionContext (inventoryData, inventoryWarnings, loadingInventory, selectedServerNames)
+ * and unused prop 'action' removed.
  *
  * Renders a dynamic form from action's parameters_schema or
  * delegates to WorkflowStepsRenderer for workflows.
@@ -8,21 +11,21 @@
 
 import { memo, useRef } from 'react';
 import { Form, Alert } from 'antd';
+import { useAuth } from '../../contexts/AuthContext';
 import { InfoCircleOutlined } from '@ant-design/icons';
 import type { FormInstance } from 'antd';
 import type { CatalogActionDetail } from '../../services/catalog_service';
-import type { InventoryItem } from '../../types/api';
 import type { ParameterField } from '../../hooks/useDynamicForm';
 import { sanitizeDescription } from '../../utils/businessLanguage';
 import { renderFieldInput } from './renderFieldInput';
 import { WorkflowStepsRenderer } from './WorkflowStepsRenderer';
+import { useWizardExecutionContext } from '../../contexts/WizardExecutionContext';
 
 import { STEP_DESCRIPTIONS_SIMPLIFIED } from '../../utils/stepDescriptions';
 
 export interface ParametersFormStepProps {
   form: FormInstance;
-  action: CatalogActionDetail;
-  variant: 'default' | 'simplified';
+  // 'action' removed — was unused in this component's implementation
   parameterFields: ParameterField[];
   parameters: Record<string, unknown>;
   onParametersChange: (values: Record<string, unknown>) => void;
@@ -32,16 +35,12 @@ export interface ParametersFormStepProps {
   loadingWorkflowStepActions: boolean;
   workflowStepActionsError: string | null;
   workflowValidationSummary: string | null;
-  inventoryData: Record<string, InventoryItem[]>;
-  inventoryWarnings: Record<string, boolean>;
-  loadingInventory: boolean;
-  /** Story 23.6 - Selected server names for filtering instances/databases. */
-  selectedServerNames?: string[];
+  // 4 props moved to WizardExecutionContext:
+  // inventoryData, inventoryWarnings, loadingInventory, selectedServerNames
 }
 
 export const ParametersFormStep = memo(function ParametersFormStep({
   form,
-  variant,
   parameterFields,
   parameters,
   onParametersChange,
@@ -51,12 +50,15 @@ export const ParametersFormStep = memo(function ParametersFormStep({
   loadingWorkflowStepActions,
   workflowStepActionsError,
   workflowValidationSummary,
-  inventoryData,
-  inventoryWarnings,
-  loadingInventory,
-  selectedServerNames = [],
 }: ParametersFormStepProps) {
+  const {
+    inventoryData,
+    inventoryWarnings,
+    loadingInventory,
+    selectedServerNames,
+  } = useWizardExecutionContext();
   const firstFieldRef = useRef<HTMLElement | null>(null);
+  const { isBusinessProfile } = useAuth();
 
   return (
     <Form
@@ -68,7 +70,7 @@ export const ParametersFormStep = memo(function ParametersFormStep({
         onParametersChange({ ...(parameters || {}), ...(allValues || {}) });
       }}
     >
-      {variant === 'simplified' && (
+      {isBusinessProfile && (
         <Alert
           type="info"
           showIcon
@@ -84,7 +86,6 @@ export const ParametersFormStep = memo(function ParametersFormStep({
           loadingWorkflowStepActions={loadingWorkflowStepActions}
           workflowStepActionsError={workflowStepActionsError}
           workflowValidationSummary={workflowValidationSummary}
-          variant={variant}
           inventoryData={inventoryData}
           inventoryWarnings={inventoryWarnings}
           loadingInventory={loadingInventory}
@@ -94,7 +95,7 @@ export const ParametersFormStep = memo(function ParametersFormStep({
         parameterFields.length === 0 ? (
           <Alert
             title="Aucun parametre requis"
-            description={variant === 'simplified'
+            description={isBusinessProfile
               ? 'Aucune information supplementaire n\'est necessaire.'
               : 'Cette action ne necessite pas de parametres.'}
             type="info"
@@ -108,7 +109,7 @@ export const ParametersFormStep = memo(function ParametersFormStep({
             if (field.minimum !== undefined) rules.push({ type: 'number', min: field.minimum, message: `Minimum: ${field.minimum}` });
             if (field.maximum !== undefined) rules.push({ type: 'number', max: field.maximum, message: `Maximum: ${field.maximum}` });
 
-            const displayDescription = variant === 'simplified' && field.description
+            const displayDescription = isBusinessProfile && field.description
               ? sanitizeDescription(field.description)
               : field.description;
 

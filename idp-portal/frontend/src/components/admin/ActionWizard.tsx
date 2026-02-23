@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Modal, Steps, Button, Form, Input, Select, Alert, Space, App, Radio, List } from 'antd';
+import { Modal, Steps, Button, Form, Alert, Space, App, List } from 'antd';
 import { CloseCircleOutlined } from '@ant-design/icons';
 import type {
   ActionCreate,
@@ -21,40 +21,30 @@ import type {
   ImpactLevel,
   ChangeTypeConfigEntry,
   ExecutionStep,
-  ConnectorType,
   ItemType,
   WorkflowStep,
+  GateConfig,
+  NotificationConfig,
 } from '../../types/api';
 import { schemaToParameterList, parameterListToSchema } from '../../utils/parametersSchema';
 import { impactRulesToList, listToImpactRules } from '../../utils/impactRulesSchema';
-import { ParametersEditor } from './ParametersEditor';
-import { ImpactRulesEditor } from './ImpactRulesEditor';
-import { ChangeTypeConfig } from './ChangeTypeConfig';
-import { BusinessRulePolicySelector } from './BusinessRulePolicySelector';
-import { WorkflowStepsEditor } from './WorkflowStepsEditor';
-import { WorkflowBuilderCanvas } from './WorkflowBuilderCanvas';
 import { validateWorkflowGraph } from '../../utils/workflowValidation';
 import { workflowStepsToReactFlow } from '../../utils/workflowConversion';
-import { getTags, updateActionTags, updateActionSteps, updateWorkflowSteps, updateBusinessRulePolicies, patchAction, checkActionNameAvailable } from '../../services/admin_service';
+import { ApiError } from '../../services/api_client';
+// DIP: services encapsulés dans useActionWizardState — SOLID-FE-4
+import { useActionWizardState } from '../../hooks/useActionWizardState';
 import { useEngines } from '../../hooks/useEngines';
-import { usePlatforms } from '../../hooks/usePlatforms';
+import { usePlatformIntegrations } from '../../hooks/usePlatformIntegrations';
 import { useCategories } from '../../hooks/useCategories';
-
-const { TextArea } = Input;
-
-/** Plateforme (step 1) définit le connecteur. 1 action = 1 step. */
-function platformToConnector(platform: ActionPlatform): ConnectorType {
-  const map: Record<ActionPlatform, ConnectorType> = {
-    AAP: 'aap',
-    'GitHub Actions': 'github_actions',
-    'Azure DevOps': 'azuredevops',
-    Terraform: 'terraform',
-  };
-  return map[platform] ?? 'none';
-}
+import { useServiceNowIntegrations } from '../../hooks/useServiceNowIntegrations';
+import { integrationTypeToPlatformCode, integrationToConnector } from '../../utils/integrationHelpers';
+import { useActionWizardValidation } from '../../hooks/useActionWizardValidation';
+import { WizardStep1General } from './WizardStep1General';
+import { WizardStep2Automatisme } from './WizardStep2Automatisme';
+import { WizardStep3ImpactChangement } from './WizardStep3ImpactChangement';
 
 const STEP_ITEMS = [
-  { title: 'Général', content: 'Type, nom, moteur, plateforme, tags' },
+  { title: 'Général', content: 'Type, nom, moteur, intégration, tags' },
   { title: 'Automatisme & Paramètres', content: 'Configuration selon le type' },
   { title: 'Impact & Changement', content: 'Règles d\'impact, changement ServiceNow, règles métier' },
 ];
@@ -90,12 +80,23 @@ export function ActionWizard({
   const [impactRulesList, setImpactRulesList] = useState<ImpactRuleDefinition[]>([]);
   const [defaultImpactLevel, setDefaultImpactLevel] = useState<ImpactLevel | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [tagsOptions, setTagsOptions] = useState<{ value: string; label: string }[]>([]);
+
+  // DIP: services encapsulés via useActionWizardState — SOLID-FE-4
+  const {
+    tagsOptions,
+    handleUpdateActionTags,
+    handleUpdateActionSteps,
+    handleUpdateWorkflowSteps,
+    handleUpdateBusinessRulePolicies,
+    handlePatchAction,
+  } = useActionWizardState({ open });
   const [changeTypeConfig, setChangeTypeConfig] = useState<Record<string, ChangeTypeConfigEntry>>({});
-  /** Story 28.4: Predefined business rule policy ID (FK). */
+  // Story 31.6: Gate configuration (integration selection per gate type)
+  const [gateConfig, setGateConfig] = useState<GateConfig | null>(null);
+  // Story 31.8: Notification configuration (email, teams, page)
+  const [notificationConfig, setNotificationConfig] = useState<NotificationConfig | null>(null);
+  /** Story 28.4: Predefined business rule policy ID (FK). Inline rules removed — only catalogue. */
   const [businessRulePolicyId, setBusinessRulePolicyId] = useState<number | null>(null);
-  /** Story 28.1: Business rule policies inline JSON (legacy). */
-  const [businessRulePoliciesJson, setBusinessRulePoliciesJson] = useState<string>('');
   /** Pour AAP : type de ressource (job_template | workflow_job) et ID template. 1 action = 1 étape. */
   const [aapResourceType, setAapResourceType] = useState<'job_template' | 'workflow_job'>('job_template');
   const [aapTemplateId, setAapTemplateId] = useState<number | undefined>(undefined);
@@ -107,25 +108,23 @@ export function ActionWizard({
   const isEditMode = !!editAction;
   // Read-only if editing a published action (draft and disabled actions can be edited)
   const isReadOnly = isEditMode && editAction?.status === 'published';
-  const platform = Form.useWatch<ActionPlatform>('platform', form);
+  const integrationId = Form.useWatch<number>('integration_id', form);
   const itemType = Form.useWatch<ItemType>('item_type', form);
-  const isPlatformAAP = platform === 'AAP';
   const isWorkflow = itemType === 'workflow' || (!isEditMode && initialItemType === 'workflow' && itemType == null);
   const showTypeSelector = !initialItemType && !isEditMode;
 
   // Story 13.7: Load engines from REF_ENGINES table
   const { engineOptions, loading: enginesLoading } = useEngines();
-  // Story 13.7: Load platforms from REF_PLATFORMS table
-  const { platformOptions, loading: platformsLoading } = usePlatforms();
+  // Story 31.1: Load platform integrations (replaces usePlatforms)
+  const { integrationOptions, loading: integrationsLoading, getIntegrationById } = usePlatformIntegrations();
+  // Story 31.6: Load ServiceNow integrations for gate config validation (AC #3)
+  const { integrationOptions: snIntegrationOptions } = useServiceNowIntegrations();
   // Story 2.30: Load categories from REF_CATEGORIES table
   const { categoryOptions, loading: categoriesLoading } = useCategories();
 
-  useEffect(() => {
-    if (!open) return;
-    getTags()
-      .then((list) => setTagsOptions(list.map((t) => ({ value: t.name, label: t.name }))))
-      .catch(() => setTagsOptions([]));
-  }, [open]);
+  // Story 31.1: Derive AAP check from selected integration
+  const selectedIntegration = integrationId ? getIntegrationById(integrationId) : undefined;
+  const isPlatformAAP = selectedIntegration?.type === 'aap' || selectedIntegration?.type === 'tower';
 
   useEffect(() => {
     if (open && editAction) {
@@ -135,7 +134,8 @@ export function ActionWizard({
         description: editAction.description,
         category: editAction.category ?? undefined,
         engine: editAction.engine,
-        platform: editAction.platform,
+        // Story 31.1: Pre-fill integration_id from editAction
+        integration_id: editAction.integration_id ?? undefined,
       });
       setParameterList(
         schemaToParameterList(editAction.parameters_schema ?? undefined).map((p, i) => ({
@@ -147,13 +147,12 @@ export function ActionWizard({
       setDefaultImpactLevel(editAction.default_impact_level ?? null);
       setSelectedTags(editAction.tags ?? []);
       setChangeTypeConfig(editAction.change_type_config ?? {});
-      // Story 28.4: Load business rule policy (FK or inline)
+      // Story 31.6: Load gate configuration
+      setGateConfig(editAction.gate_config ?? null);
+      // Story 31.8: Load notification configuration
+      setNotificationConfig(editAction.notification_config ?? null);
+      // Story 28.4: Load business rule policy (FK only; inline removed)
       setBusinessRulePolicyId(editAction.business_rule_policy_id ?? null);
-      setBusinessRulePoliciesJson(
-        editAction.business_rule_policies
-          ? JSON.stringify(editAction.business_rule_policies, null, 2)
-          : ''
-      );
       // Story 9.5: Load workflow steps for workflows
       if (editAction.item_type === 'workflow' && editAction.workflow_steps) {
         setWorkflowSteps(editAction.workflow_steps);
@@ -181,8 +180,9 @@ export function ActionWizard({
       setDefaultImpactLevel(null);
       setSelectedTags([]);
       setChangeTypeConfig({});
+      setGateConfig(null);
+      setNotificationConfig(null);
       setBusinessRulePolicyId(null);
-      setBusinessRulePoliciesJson('');
       setAapResourceType('job_template');
       setAapTemplateId(undefined);
       setWorkflowSteps([]);
@@ -232,12 +232,14 @@ export function ActionWizard({
     return true;
   };
 
+  const { validateForSave } = useActionWizardValidation({ validateWorkflowSteps });
+
   const handleNext = async () => {
     if (currentStep === 0) {
       const fieldsToValidate = ['name', 'description'];
-      // Only validate engine/platform for actions, not workflows
+      // Only validate engine/integration for actions, not workflows
       if (!isWorkflow) {
-        fieldsToValidate.push('engine', 'platform');
+        fieldsToValidate.push('engine', 'integration_id');
       }
       try {
         await form.validateFields(fieldsToValidate);
@@ -262,82 +264,29 @@ export function ActionWizard({
     const currentItemType = form.getFieldValue('item_type') as ItemType;
     const isWorkflowSave = currentItemType === 'workflow';
 
-    let values: { name: string; description?: string; engine?: ActionEngine; platform?: ActionPlatform; item_type: ItemType };
+    let values: { name: string; description?: string; engine?: ActionEngine; integration_id?: number; item_type: ItemType };
     try {
       values = await form.validateFields();
     } catch {
       return;
     }
 
-    // Validation for actions (not workflows)
-    if (!isWorkflowSave) {
-      if (parameterList.length > 0) {
-        const names = parameterList.map((p) => (p.name ?? '').trim());
-        const emptyIndex = names.findIndex((n) => !n);
-        if (emptyIndex >= 0) {
-          setSubmitError(`Le paramètre ${emptyIndex + 1} doit avoir un nom.`);
-          return;
-        }
-        const seen = new Set<string>();
-        for (let i = 0; i < names.length; i++) {
-          if (seen.has(names[i])) {
-            setSubmitError(`Deux paramètres ont le même nom "${names[i]}". Chaque nom doit être unique.`);
-            return;
-          }
-          seen.add(names[i]);
-        }
-      }
-
-      if (impactRulesList.length > 0) {
-        const envs = impactRulesList.map((r) => (r.environment ?? '').trim());
-        const emptyEnvIndex = envs.findIndex((e) => !e);
-        if (emptyEnvIndex >= 0) {
-          setSubmitError(`La règle d'impact ${emptyEnvIndex + 1} doit avoir un environnement.`);
-          return;
-        }
-        const seenEnvs = new Set<string>();
-        for (let i = 0; i < envs.length; i++) {
-          if (seenEnvs.has(envs[i])) {
-            setSubmitError(`Deux règles d'impact utilisent l'environnement "${envs[i]}". Chaque environnement doit être unique.`);
-            return;
-          }
-          seenEnvs.add(envs[i]);
-        }
-        const missingLevelIndex = impactRulesList.findIndex((r) => !r.level);
-        if (missingLevelIndex >= 0) {
-          setSubmitError(`La règle d'impact ${missingLevelIndex + 1} doit avoir un niveau.`);
-          return;
-        }
-      }
-
-      // Story 25.4: validate change_type_config — when required=true, change_model_code required and alphanumeric max 50
-      for (const [env, entry] of Object.entries(changeTypeConfig)) {
-        if (entry?.required) {
-          const code = (entry.change_model_code ?? '').trim();
-          if (!code) {
-            setSubmitError(`Le code modèle est obligatoire pour ${env} lorsque « Changement requis » est activé.`);
-            return;
-          }
-          if (!/^[A-Za-z0-9]+$/.test(code)) {
-            setSubmitError(`Le code modèle pour ${env} doit être alphanumérique uniquement.`);
-            return;
-          }
-          if (code.length > 50) {
-            setSubmitError(`Le code modèle pour ${env} ne peut pas dépasser 50 caractères.`);
-            return;
-          }
-        }
-      }
-
-      if (values.platform === 'AAP' && (aapTemplateId == null || aapTemplateId < 1)) {
-        setSubmitError('Pour la plateforme AAP, l\'ID du template (job ou workflow) est requis.');
-        return;
-      }
-    } else {
-      // Validation for workflows
-      if (!validateWorkflowSteps()) {
-        return;
-      }
+    // Validation déléguée au hook useActionWizardValidation (factorisation avec ActionForm)
+    const validationError = validateForSave({
+      isWorkflowSave,
+      parameterList,
+      impactRulesList,
+      changeTypeConfig,
+      snIntegrationOptions,
+      gateConfig,
+      aapTemplateId,
+      integrationId: values.integration_id,
+      getIntegrationById,
+    });
+    if (validationError === '__workflow_steps_invalid__') return;
+    if (validationError) {
+      setSubmitError(validationError);
+      return;
     }
 
     setSaving(true);
@@ -349,13 +298,21 @@ export function ActionWizard({
         // impact_rules and default_impact_level apply to both actions and workflows
         impact_rules: listToImpactRules(impactRulesList),
         default_impact_level: defaultImpactLevel,
-        // Only include engine/platform/parameters_schema/category for actions
+        // Story 31.6: Gate configuration
+        gate_config: gateConfig,
+        // Story 31.8: Notification configuration
+        notification_config: notificationConfig,
+        // Only include engine/platform/integration_id/parameters_schema/category for actions
         ...(isWorkflowSave
           ? {}
           : {
               category: (values as Record<string, unknown>).category as string | undefined ?? null,
               engine: values.engine,
-              platform: values.platform,
+              // Story 31.1: Derive platform from integration type, send both
+              integration_id: values.integration_id,
+              platform: values.integration_id
+                ? (integrationTypeToPlatformCode(getIntegrationById(values.integration_id)?.type ?? '') as ActionPlatform)
+                : undefined,
               parameters_schema: parameterListToSchema(parameterList),
             }),
       };
@@ -366,7 +323,7 @@ export function ActionWizard({
 
       if (actionId && selectedTags.length >= 0) {
         try {
-          await updateActionTags(actionId, { tag_names: selectedTags });
+          await handleUpdateActionTags(actionId, selectedTags);
         } catch (tagErr) {
           if (done) onSuccess?.(done);
           notification.warning({
@@ -379,19 +336,14 @@ export function ActionWizard({
       }
 
       if (actionId) {
-        // Story 28.4: Save business rule policy (FK predefined or inline)
+        // Story 28.4: Save business rule policy (predefined only)
         try {
           if (businessRulePolicyId) {
-            // Use predefined policy via FK — PATCH to clear inline
-            await updateBusinessRulePolicies(actionId, null);
-            await patchAction(actionId, { business_rule_policy_id: businessRulePolicyId });
-          } else if (businessRulePoliciesJson.trim()) {
-            // Use inline JSON (legacy)
-            const policiesToSave = JSON.parse(businessRulePoliciesJson) as { on_step_output?: unknown[] };
-            await updateBusinessRulePolicies(actionId, policiesToSave);
+            await handleUpdateBusinessRulePolicies(actionId, null);
+            await handlePatchAction(actionId, { business_rule_policy_id: businessRulePolicyId });
           } else {
-            // Clear both
-            await updateBusinessRulePolicies(actionId, null);
+            await handleUpdateBusinessRulePolicies(actionId, null);
+            await handlePatchAction(actionId, { business_rule_policy_id: null });
           }
         } catch (policiesErr) {
           notification.warning({
@@ -407,7 +359,7 @@ export function ActionWizard({
           // Story 9.5: Save workflow steps (only if draft or disabled)
           if (canEditSteps) {
             try {
-              await updateWorkflowSteps(actionId, { steps: workflowSteps });
+              await handleUpdateWorkflowSteps(actionId, { steps: workflowSteps });
             } catch (workflowErr) {
               // Handle WORKFLOW_LOOP error from backend
               const errorMessage = workflowErr instanceof Error ? workflowErr.message : 'Erreur lors de la sauvegarde des étapes du workflow';
@@ -448,7 +400,10 @@ export function ActionWizard({
             : null;
           
           if (canEditSteps) {
-            const connector = platformToConnector(values.platform!);
+            // Story 31.1: Derive connector from integration type
+            const connector = values.integration_id
+              ? integrationToConnector(getIntegrationById(values.integration_id)?.type ?? '')
+              : 'none';
             const connector_config =
               connector === 'aap' && aapTemplateId != null && aapTemplateId >= 1
                 ? aapResourceType === 'workflow_job'
@@ -464,7 +419,7 @@ export function ActionWizard({
               conditional_environments: null,
             };
             try {
-              await updateActionSteps(actionId, { steps: [singleStep], change_type_config });
+              await handleUpdateActionSteps(actionId, { steps: [singleStep], change_type_config });
             } catch (stepsErr) {
               const errorMessage = stepsErr instanceof Error ? stepsErr.message : 'Erreur lors de la sauvegarde des étapes';
               if (errorMessage.includes('brouillon') || errorMessage.includes('draft') || errorMessage.includes('désactivée')) {
@@ -487,249 +442,24 @@ export function ActionWizard({
 
       if (done) onSuccess?.(done);
     } catch (err) {
+      if (err instanceof ApiError && err.status === 400 && err.responseBody?.error?.details) {
+        const details = err.responseBody.error.details as Record<string, string[] | string | unknown>;
+        if (details && typeof details === 'object' && !Array.isArray(details)) {
+          const fieldErrors = Object.entries(details).flatMap(([field, messages]) => {
+            const list = Array.isArray(messages) ? messages : [String(messages ?? '')];
+            return list.length ? [{ name: field, errors: list }] : [];
+          });
+          if (fieldErrors.length > 0) {
+            form.setFields(fieldErrors);
+            setSubmitError('Veuillez corriger les erreurs indiquées dans le formulaire.');
+            return;
+          }
+        }
+      }
       setSubmitError(err instanceof Error ? err.message : 'Erreur lors de l\'enregistrement');
     } finally {
       setSaving(false);
     }
-  };
-
-  const stepContent = () => {
-    return (
-      <Form
-        form={form}
-        layout="vertical"
-        initialValues={{ item_type: initialItemType ?? 'action', name: '', description: '', engine: undefined, platform: undefined }}
-      >
-        <div style={{ display: currentStep === 0 ? 'block' : 'none' }}>
-          {/* Story 9.5 / 2.29: Type selector — hidden when initialItemType is set or in edit mode */}
-          <Form.Item
-            name="item_type"
-            label="Type"
-            rules={showTypeSelector ? [{ required: true, message: 'Le type est requis' }] : undefined}
-            hidden={!showTypeSelector}
-          >
-            <Radio.Group aria-label="Type d'élément" disabled={isReadOnly}>
-              <Radio value="action">Action</Radio>
-              <Radio value="workflow">Workflow</Radio>
-            </Radio.Group>
-          </Form.Item>
-          <Form.Item
-            name="name"
-            label={isWorkflow ? 'Nom du workflow' : 'Nom de l\'action'}
-            validateTrigger={['onBlur', 'onFinish']}
-            rules={[
-              { required: true, message: 'Le nom est requis' },
-              { min: 1, max: 255, message: 'Le nom doit faire entre 1 et 255 caractères' },
-              {
-                validator: async (_, value) => {
-                  const name = value ? String(value).trim() : '';
-                  if (!name) return;
-                  const available = await checkActionNameAvailable(name, editAction?.id);
-                  if (!available) {
-                    return Promise.reject(new Error('Une action ou un workflow avec ce nom existe déjà.'));
-                  }
-                },
-              },
-            ]}
-          >
-            <Input placeholder={isWorkflow ? 'Ex: Provisionner environnement' : 'Ex: Créer PDB Oracle'} aria-label={isWorkflow ? 'Nom du workflow' : 'Nom de l\'action'} disabled={isReadOnly} />
-          </Form.Item>
-          <Form.Item name="description" label="Description" rules={[{ required: true, message: 'La description est requise' }, { max: 4000, message: 'La description ne peut pas dépasser 4000 caractères' }]}>
-            <TextArea rows={3} placeholder="Description..." aria-label="Description" showCount maxLength={4000} disabled={isReadOnly} />
-          </Form.Item>
-          {/* Story 2.30: Category field for actions only (not workflows) */}
-          {!isWorkflow && (
-            <Form.Item
-              name="category"
-              label="Catégorie"
-              rules={[{ required: false }]}
-              tooltip="La catégorie permet d'organiser les actions dans le catalogue"
-            >
-              <Select
-                options={categoryOptions}
-                placeholder={categoriesLoading ? "Chargement..." : "Sélectionnez une catégorie"}
-                loading={categoriesLoading}
-                disabled={isReadOnly}
-                allowClear
-                aria-label="Catégorie"
-              />
-            </Form.Item>
-          )}
-          {/* Only show engine/platform for actions, not workflows */}
-          {!isWorkflow && (
-            <>
-              <Form.Item name="engine" label="Moteur de base de données" rules={[{ required: true, message: 'Le moteur est requis' }]}>
-                <Select 
-                  options={engineOptions} 
-                  placeholder={enginesLoading ? "Chargement..." : "Sélectionnez un moteur"} 
-                  aria-label="Moteur"
-                  loading={enginesLoading}
-                  disabled={isReadOnly}
-                />
-              </Form.Item>
-              <Form.Item name="platform" label="Plateforme d'exécution" rules={[{ required: true, message: 'La plateforme est requise' }]}>
-                <Select 
-                  options={platformOptions} 
-                  placeholder={platformsLoading ? "Chargement..." : "Sélectionnez une plateforme"} 
-                  aria-label="Plateforme"
-                  loading={platformsLoading}
-                  disabled={isReadOnly}
-                />
-              </Form.Item>
-            </>
-          )}
-          <Form.Item label="Tags" tooltip="Tags existants ou saisie libre + Entrée pour en créer un nouveau.">
-            <Select
-              mode="tags"
-              value={selectedTags}
-              onChange={(v) => setSelectedTags((Array.isArray(v) ? v : [v]).filter(Boolean) as string[])}
-              options={tagsOptions}
-              placeholder="Ex: RAC, dataguard, provisioning"
-              aria-label="Tags"
-              style={{ width: '100%' }}
-              tokenSeparators={[',']}
-              disabled={isReadOnly}
-            />
-          </Form.Item>
-        </div>
-        {currentStep === 1 && (
-          <Space orientation="vertical" style={{ width: '100%' }} size="middle">
-            {/* Story 9.5 / 16.5: Show WorkflowStepsEditor or WorkflowBuilderCanvas for workflows */}
-            {isWorkflow ? (
-              <Form.Item label="Étapes du workflow" tooltip="Définissez les actions qui composent ce workflow, dans l'ordre d'exécution.">
-                <Space direction="vertical" style={{ width: '100%' }}>
-                  {/* Story 20.6 Task 4.4: Contextual help message for workflows */}
-                  <Alert
-                    type="info"
-                    showIcon
-                    title="Un workflow enchaîne des actions existantes dans l'ordre défini. Aucun connecteur à configurer : chaque étape utilise le connecteur de l'action référencée."
-                    style={{ marginBottom: 8 }}
-                  />
-                  <Radio.Group
-                    value={workflowViewMode}
-                    onChange={(e) => setWorkflowViewMode(e.target.value)}
-                    size="small"
-                    aria-label="Mode d'édition du workflow"
-                  >
-                    <Radio.Button value="list">Mode liste</Radio.Button>
-                    <Radio.Button value="visual">Mode visuel</Radio.Button>
-                  </Radio.Group>
-                  {workflowViewMode === 'list' ? (
-                    <WorkflowStepsEditor
-                      steps={workflowSteps}
-                      onChange={setWorkflowSteps}
-                      loading={false}
-                      disabled={isReadOnly}
-                    />
-                  ) : (
-                    <WorkflowBuilderCanvas
-                      steps={workflowSteps}
-                      onChange={setWorkflowSteps}
-                      disabled={isReadOnly}
-                    />
-                  )}
-                </Space>
-              </Form.Item>
-            ) : (
-              <>
-                {isPlatformAAP && (
-                  <>
-                    <Form.Item label="Quel automatisme appeler ?" style={{ marginBottom: 0 }}>
-                      <Space wrap>
-                        <Form.Item label="Type de ressource" style={{ marginBottom: 0 }}>
-                          <Select
-                            value={aapResourceType}
-                            onChange={setAapResourceType}
-                            options={[
-                              { value: 'job_template', label: 'Job template' },
-                              { value: 'workflow_job', label: 'Workflow job' },
-                            ]}
-                            style={{ width: 160 }}
-                            aria-label="Type ressource AAP"
-                            disabled={isReadOnly}
-                          />
-                        </Form.Item>
-                        <Form.Item
-                          label="ID template"
-                          required
-                          validateStatus={isPlatformAAP && (aapTemplateId == null || aapTemplateId < 1) ? 'error' : ''}
-                          help={isPlatformAAP && (aapTemplateId == null || aapTemplateId < 1) ? 'ID du job template ou workflow job template AAP' : ''}
-                          style={{ marginBottom: 0 }}
-                        >
-                          <Input
-                            type="number"
-                            min={1}
-                            value={aapTemplateId ?? ''}
-                            onChange={(e) => setAapTemplateId(e.target.value ? Number(e.target.value) : undefined)}
-                            placeholder="ID template AAP"
-                            style={{ width: 120 }}
-                            aria-label="ID template AAP"
-                            disabled={isReadOnly}
-                          />
-                        </Form.Item>
-                      </Space>
-                    </Form.Item>
-                  </>
-                )}
-                <Form.Item label="Paramètres" tooltip="Définissez les paramètres de l'action (extra_vars, etc.).">
-                  {/* TODO: Add disabled prop to ParametersEditor */}
-                  <ParametersEditor value={parameterList} onChange={isReadOnly ? () => {} : setParameterList} />
-                </Form.Item>
-              </>
-            )}
-          </Space>
-        )}
-        {currentStep === 2 && (
-          <Space orientation="vertical" style={{ width: '100%' }} size="middle">
-            {/* Impact rules and change config for both actions and workflows */}
-            <Form.Item label="Règles d'impact" tooltip="Définissez les règles d'impact par environnement.">
-              {/* TODO: Add disabled prop to ImpactRulesEditor */}
-              <ImpactRulesEditor value={impactRulesList} onChange={isReadOnly ? () => {} : setImpactRulesList} />
-            </Form.Item>
-            <Form.Item label="Niveau d'impact par défaut" tooltip="Niveau appliqué quand aucune règle ne correspond à l'environnement.">
-              <Select
-                value={defaultImpactLevel ?? undefined}
-                onChange={(v) => setDefaultImpactLevel(v || null)}
-                allowClear
-                placeholder="Sélectionnez un niveau par défaut"
-                style={{ width: 220 }}
-                aria-label="Niveau d'impact par défaut"
-                disabled={isReadOnly}
-                options={[
-                  { value: 'low', label: 'Faible (vert)' },
-                  { value: 'medium', label: 'Moyen (orange)' },
-                  { value: 'high', label: 'Élevé (rouge)' },
-                  { value: 'critical', label: 'Critique (rouge foncé)' },
-                ]}
-              />
-            </Form.Item>
-            {/* Only show change config for actions, not workflows */}
-            {!isWorkflow && (
-              <Form.Item
-                label="Changement ServiceNow par environnement"
-                tooltip="Pour chaque environnement : activer « Changement requis » et, si actif, saisir le code modèle (alphanumérique, max 50). Story 2.24."
-              >
-                {/* TODO: Add disabled prop to ChangeTypeConfig */}
-                <ChangeTypeConfig value={changeTypeConfig} onChange={isReadOnly ? () => {} : setChangeTypeConfig} />
-              </Form.Item>
-            )}
-            {/* Story 28.4: Règles métier — sélecteur prédéfini ou inline */}
-            <Form.Item
-              label="Règles métier"
-              tooltip="Associez une règle prédéfinie du catalogue ou saisissez une règle personnalisée (inline JSON)."
-            >
-              <BusinessRulePolicySelector
-                policyId={businessRulePolicyId}
-                inlineJson={businessRulePoliciesJson}
-                onPolicyIdChange={setBusinessRulePolicyId}
-                onInlineJsonChange={setBusinessRulePoliciesJson}
-                disabled={isReadOnly}
-              />
-            </Form.Item>
-          </Space>
-        )}
-      </Form>
-    );
   };
 
   // Dynamic modal title based on item type (Story 2.29: initialItemType fallback, editAction.item_type for edit)
@@ -768,7 +498,73 @@ export function ActionWizard({
         aria-label={`Étape ${currentStep + 1} sur 3 : ${STEP_ITEMS[currentStep].title}`}
       />
 
-      <div style={{ minHeight: 280 }}>{stepContent()}</div>
+      <div style={{ minHeight: 280 }}>
+        <Form
+          form={form}
+          layout="vertical"
+          initialValues={{ item_type: initialItemType ?? 'action', name: '', description: '', engine: undefined }}
+        >
+          <div style={{ display: currentStep === 0 ? 'block' : 'none' }}>
+            <WizardStep1General
+              form={form}
+              isWorkflow={isWorkflow}
+              showTypeSelector={showTypeSelector}
+              isReadOnly={!!isReadOnly}
+              engineOptions={engineOptions}
+              enginesLoading={enginesLoading}
+              integrationOptions={integrationOptions}
+              integrationsLoading={integrationsLoading}
+              isEditMode={isEditMode}
+              editAction={editAction}
+              selectedTags={selectedTags}
+              setSelectedTags={setSelectedTags}
+              tagsOptions={tagsOptions}
+              categoryOptions={categoryOptions}
+              categoriesLoading={categoriesLoading}
+              getIntegrationById={getIntegrationById}
+            />
+          </div>
+          {currentStep === 1 && (
+            <WizardStep2Automatisme
+              isWorkflow={isWorkflow}
+              isReadOnly={!!isReadOnly}
+              isPlatformAAP={isPlatformAAP}
+              integrationId={integrationId}
+              aapResourceType={aapResourceType}
+              setAapResourceType={setAapResourceType}
+              aapTemplateId={aapTemplateId}
+              setAapTemplateId={setAapTemplateId}
+              parameterList={parameterList}
+              setParameterList={setParameterList}
+              workflowSteps={workflowSteps}
+              setWorkflowSteps={setWorkflowSteps}
+              workflowViewMode={workflowViewMode}
+              setWorkflowViewMode={setWorkflowViewMode}
+            />
+          )}
+          {currentStep === 2 && (
+            <WizardStep3ImpactChangement
+              isWorkflow={isWorkflow}
+              isReadOnly={!!isReadOnly}
+              impactRulesList={impactRulesList}
+              setImpactRulesList={setImpactRulesList}
+              defaultImpactLevel={defaultImpactLevel}
+              setDefaultImpactLevel={setDefaultImpactLevel}
+              changeTypeConfig={changeTypeConfig}
+              setChangeTypeConfig={setChangeTypeConfig}
+              gateConfig={gateConfig}
+              setGateConfig={setGateConfig}
+              businessRulePolicyId={businessRulePolicyId}
+              setBusinessRulePolicyId={setBusinessRulePolicyId}
+              notificationConfig={notificationConfig}
+              setNotificationConfig={setNotificationConfig}
+              selectedIntegration={selectedIntegration}
+              editAction={editAction}
+              getIntegrationById={getIntegrationById}
+            />
+          )}
+        </Form>
+      </div>
 
       <div style={{ marginTop: 24, display: 'flex', justifyContent: 'space-between' }}>
         <Button onClick={onCancel}>Annuler</Button>

@@ -4,12 +4,14 @@ Handles complex operations like JSON Schema validation for config.
 Story M.8 - Task 9: Structured logging with structlog.
 """
 
+from pathlib import Path
 from typing import Any, cast
 
 import structlog
 
 from django.db import transaction
 from django.db import IntegrityError
+from django.conf import settings
 from integrations.models import Integration, IntegrationStatus
 from integrations.validation_service import IntegrationValidationService
 from core.services import AuditService
@@ -17,6 +19,25 @@ from core.models import AuditActionType, AuditEntityType
 from core.exceptions import InvalidStateError
 
 logger = structlog.get_logger(__name__)
+
+
+def _delete_uploaded_icon(icon_path: str | None) -> None:
+    """
+    Delete a locally uploaded icon file (best-effort, never raises).
+    Only acts on paths that start with '/static/icons/' — ignores external URLs
+    and preset icon names that have no corresponding file.
+    """
+    if not icon_path or not icon_path.startswith('/static/icons/'):
+        return
+    filename = icon_path.removeprefix('/static/icons/').lstrip('/')
+    if not filename:
+        return
+    static_root = Path(getattr(settings, 'STATIC_ROOT', None) or (Path(settings.BASE_DIR) / 'static'))
+    file_path = static_root / 'icons' / filename
+    try:
+        file_path.unlink(missing_ok=True)
+    except OSError as exc:
+        logger.warning("icon_delete_failed", path=str(file_path), error=str(exc))
 
 
 class IntegrationService:
@@ -218,7 +239,10 @@ class IntegrationService:
         if 'credential_ref' in integration_update_data:
             integration.credential_ref = integration_update_data.get('credential_ref')
         if 'icon' in integration_update_data:
-            integration.icon = integration_update_data.get('icon')
+            new_icon = integration_update_data.get('icon')
+            if new_icon != integration.icon:
+                _delete_uploaded_icon(integration.icon)
+            integration.icon = new_icon
         if 'auth_flow' in integration_update_data:
             integration.auth_flow = integration_update_data.get('auth_flow')
         if 'token_url' in integration_update_data:
@@ -282,44 +306,71 @@ class IntegrationService:
     @transaction.atomic
     def delete_integration(self, integration_id: int, user=None):
         """
-        Delete integration after checking dependencies.
-        
+        Delete integration and disable all linked actions.
+
         Args:
             integration_id: ID of the integration
             user: Optional user instance for audit
-        
+
         Returns:
-            True if deleted, False if not found
-        
-        Raises:
-            ValueError: If integration has dependencies (actions linked)
+            dict with 'deleted' (bool) and 'disabled_actions_count' (int),
+            or False if not found
         """
         try:
             integration = Integration.objects.get(id=integration_id)
         except Integration.DoesNotExist:
             return False
-        
-        # Check for dependencies: actions linked to this integration
-        from catalog.models import Action
-        linked_actions = Action.objects.filter(integration_id=integration_id).exists()
-        
-        if linked_actions:
-            raise ValueError("Impossible de supprimer une intégration avec des actions liées")
-        
-        integration_name = integration.name  # Save name before deletion for audit
+
+        integration_name = integration.name
+        icon_to_delete = integration.icon
+
+        # Disable all linked actions before deletion (status + updated_at only; no soft-delete fields)
+        from catalog.models import Action, ActionStatus
+        from django.utils import timezone
+
+        linked_actions = list(Action.objects.filter(integration_id=integration_id))
+        now = timezone.now()
+        disabled_count = 0
+
+        for action in linked_actions:
+            action.status = ActionStatus.DISABLED
+            action.updated_at = now
+            action.save(update_fields=['status', 'updated_at'])
+            disabled_count += 1
+
+            if user:
+                AuditService.create_entry(
+                    user_id=str(user.id),
+                    action_type=AuditActionType.ACTION_DISABLED_INTEGRATION_DELETED,
+                    entity_type=AuditEntityType.ACTION,
+                    entity_id=action.id,
+                    details={
+                        'action_name': action.name,
+                        'integration_id': integration_id,
+                        'integration_name': integration_name,
+                        'reason': 'integration_deleted',
+                    }
+                )
+
+        # Delete integration (SET_NULL sets integration_id=NULL on actions)
         integration.delete()
-        
-        # Audit if user provided
+        # Best-effort cleanup of the uploaded icon file
+        _delete_uploaded_icon(icon_to_delete)
+
+        # Audit the deletion with disabled count
         if user:
             AuditService.create_entry(
                 user_id=str(user.id),
                 action_type=AuditActionType.INTEGRATION_DELETED,
                 entity_type=AuditEntityType.INTEGRATION,
                 entity_id=integration_id,
-                details={'name': integration_name}
+                details={
+                    'name': integration_name,
+                    'disabled_actions_count': disabled_count,
+                }
             )
-        
-        return True
+
+        return {'deleted': True, 'disabled_actions_count': disabled_count}
     
     def get_by_type(self, integration_type: str):
         """

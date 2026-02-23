@@ -21,6 +21,7 @@ import { fetchCatalogActionById } from '../../services/catalog_service';
 import type { ExecutionResponse, ExecutionStatusType, RemediationSuggestion, ActionEngine } from '../../types/api';
 import type { CatalogActionDetail } from '../../services/catalog_service';
 import { getItemTypeIcon } from '../../utils/iconHelpers';
+import { EXECUTION_STATUS_BADGE_CONFIG } from '../../utils/execution-status';
 import logger from '../../services/logger';
 
 const { Text, Title } = Typography;
@@ -41,17 +42,6 @@ const ENV_BADGE: Record<string, { color: string; label: string }> = {
   prod: { color: 'red', label: 'Production' },
 };
 
-/** AC8: Status badge config. */
-const STATUS_CONFIG: Record<ExecutionStatusType, { color: string; label: string }> = {
-  SUBMITTED: { color: 'default', label: 'Soumis' },
-  RUNNING: { color: 'processing', label: 'En cours' },
-  COMPLETED: { color: 'success', label: 'Terminé' },
-  FAILED: { color: 'error', label: 'Échoué' },
-  CANCELLED: { color: 'default', label: 'Annulé' },
-  INTEGRATION_ERROR: { color: 'error', label: 'Erreur intégration' },
-  PENDING_APPROVAL: { color: 'warning', label: 'En attente approbation' },
-  REJECTED: { color: 'error', label: 'Rejeté' },
-};
 
 export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggestionClick }: ExecutionViewProps) {
   const [execution, setExecution] = useState<ExecutionResponse | null>(null);
@@ -167,7 +157,7 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
   };
 
   const envBadge = ENV_BADGE[execution?.environment ?? 'dev'] ?? ENV_BADGE.dev;
-  const statusCfg = STATUS_CONFIG[execution?.status ?? 'SUBMITTED'] ?? STATUS_CONFIG.SUBMITTED;
+  const statusCfg = EXECUTION_STATUS_BADGE_CONFIG[execution?.status ?? 'SUBMITTED'] ?? { color: 'default', label: execution?.status ?? 'SUBMITTED' };
   const isTerminal = execution ? TERMINAL_STATUSES.includes(execution.status) : false;
 
   return (
@@ -251,7 +241,7 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
               </Space>
               <Space size={4}>
                 <Text type="secondary" style={{ color: '#595959' }}>Statut:</Text>
-                <Badge status={statusCfg.color as 'default' | 'processing' | 'success' | 'error' | 'warning'} text={<span style={{ color: '#262626' }}>{statusCfg.label}</span>} />
+                <Badge status={statusCfg.color} text={<span style={{ color: '#262626' }}>{statusCfg.label}</span>} />
               </Space>
               <Space size={4}>
                 <Text type="secondary" style={{ color: '#595959' }}>Initiateur:</Text>

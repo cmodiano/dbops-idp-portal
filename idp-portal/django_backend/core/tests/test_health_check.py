@@ -22,6 +22,7 @@ class TestHealthCheckEndpoint(TestCase):
         mock_cursor = MagicMock()
         mock_connection.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
         mock_connection.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        mock_connection.is_usable.return_value = True
 
         response = self.client.get(self.url)
 
@@ -53,6 +54,7 @@ class TestHealthCheckEndpoint(TestCase):
         mock_cursor = MagicMock()
         mock_connection.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
         mock_connection.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        mock_connection.is_usable.return_value = True
 
         # Mock Vault failure
         mock_requests.get.side_effect = Exception("Connection refused")
@@ -74,6 +76,7 @@ class TestHealthCheckEndpoint(TestCase):
         mock_cursor = MagicMock()
         mock_connection.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
         mock_connection.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        mock_connection.is_usable.return_value = True
 
         # Mock ServiceNow failure
         mock_requests.get.side_effect = Exception("Connection refused")
@@ -92,6 +95,7 @@ class TestHealthCheckEndpoint(TestCase):
         mock_cursor = MagicMock()
         mock_connection.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
         mock_connection.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        mock_connection.is_usable.return_value = True
 
         response = self.client.get(self.url)
 
@@ -126,6 +130,7 @@ class TestHealthCheckEndpoint(TestCase):
         mock_cursor = MagicMock()
         mock_connection.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
         mock_connection.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        mock_connection.is_usable.return_value = True
 
         # Mock successful external service calls
         mock_response = MagicMock()
@@ -149,6 +154,7 @@ class TestHealthCheckEndpoint(TestCase):
         mock_cursor = MagicMock()
         mock_connection.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
         mock_connection.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        mock_connection.is_usable.return_value = True
 
         # Mock ServiceNow returning 401 (auth required but reachable)
         mock_response = MagicMock()
@@ -183,6 +189,7 @@ class TestHealthCheckEndpoint(TestCase):
         mock_cursor = MagicMock()
         mock_connection.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
         mock_connection.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        mock_connection.is_usable.return_value = True
 
         response = self.client.get(self.url)
 
@@ -196,6 +203,7 @@ class TestHealthCheckEndpoint(TestCase):
         mock_cursor = MagicMock()
         mock_connection.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
         mock_connection.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        mock_connection.is_usable.return_value = True
 
         # Default VAULT_ADDR is localhost - should not be tested
         response = self.client.get(self.url)

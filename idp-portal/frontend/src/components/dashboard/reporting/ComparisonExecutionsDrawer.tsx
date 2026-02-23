@@ -32,6 +32,8 @@ export interface ComparisonExecutionsDrawerProps {
 
 const EMPTY_EXECUTIONS: DashboardRecentExecution[] = [];
 
+// Couleurs comparaison — cas spécialisé reporting, format string CSS (pas Ant Design Badge), config locale justifiée.
+// Utilisé avec <Tag color={...}> (CSS strings) et non <Badge status={...}> (BadgeStatusType).
 /** Status tag colors. */
 const STATUS_COLORS: Record<string, string> = {
   COMPLETED: 'green',

@@ -29,9 +29,12 @@ import {
   MinusCircleOutlined,
   ExclamationCircleOutlined,
 } from '@ant-design/icons';
+import { WorkflowIcon } from '../components/icons/WorkflowIcon';
 import type { ActionEngine, ActionPlatform, ItemType, ExecutionStatusType } from '../types/api';
 import { STYLE_TOKENS } from '../theme/styleTokens';
+import { useTheme } from '../contexts/ThemeContext';
 import { getIconUrl } from './iconUrl';
+import { getEngineIconUrl } from './engineIconCache';
 
 /** Engine icon size in execution tables (px) - clearly visible vendor logos.
  * Increased from 44px to 56px for better visibility and proportion with platform icons.
@@ -41,10 +44,10 @@ const ENGINE_ICON_SIZE = 56;
 /** Compact icon size for execution tables (Story 17.13) - aligned with size="small" row height. */
 const ENGINE_ICON_SIZE_COMPACT = 40;
 
-/** SVG URLs for database engine icons (real vendor logos from svgrepo.com). */
+/** SVG URLs for database engine icons (served from frontend public/icons/engines/). */
 const ENGINE_SVG_SOURCES: Partial<Record<ActionEngine, string>> = {
-  Oracle: 'https://www.svgrepo.com/show/354152/oracle.svg',
-  'SQL Server': 'https://www.svgrepo.com/show/303229/microsoft-sql-server-logo.svg',
+  Oracle: '/icons/engines/oracle.svg',
+  'SQL Server': '/icons/engines/sqlserver.svg',
   DB2: '/icons/engines/db2.svg',
 };
 
@@ -55,8 +58,6 @@ const ENGINE_ICONS: Record<ActionEngine, { Icon: React.ComponentType<{ style?: R
   DB2: { Icon: HddOutlined, color: STYLE_TOKENS.engineIconColor.DB2 },
 };
 
-/** Workflow icon color (violet). */
-const WORKFLOW_ICON_COLOR = '#722ed1';
 
 /** Platform (execution) icons: platform name → Icon + color. Action.platform is mandatory for actions. */
 const PLATFORM_ICONS: Record<ActionPlatform, { Icon: React.ComponentType<{ style?: React.CSSProperties }>; color: string }> = {
@@ -144,22 +145,68 @@ export function renderPlateformeIcon(
 }
 
 /**
+ * Engine icon with SVG on a theme-aware background (Oracle, SQL Server).
+ * Light mode: white background for consistency with the page. Dark mode: dark background.
+ */
+function EngineIconSvgCell({ engine, svgSrc }: { engine: ActionEngine; svgSrc: string }): React.ReactNode {
+  const { effectiveMode } = useTheme();
+  const isDark = effectiveMode === 'dark';
+  const isSqlServer = engine === 'SQL Server';
+
+  const boxStyle: React.CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '6px',
+    borderRadius: '4px',
+    backgroundColor: isDark ? 'rgba(26, 26, 36, 0.6)' : '#FFFFFF',
+    border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(0, 0, 0, 0.06)',
+  };
+
+  const imgFilter = isSqlServer && isDark
+    ? 'brightness(0) invert(1) contrast(1.2)' // SQL Server: invert for dark background
+    : !isDark && engine === 'Oracle'
+      ? 'brightness(1.1) contrast(1.1)' // Oracle on white: slight enhancement
+      : 'none';
+
+  return (
+    <Tooltip title={engine}>
+      <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={boxStyle}>
+          <img
+            src={svgSrc}
+            alt=""
+            width={ENGINE_ICON_SIZE_COMPACT}
+            height={ENGINE_ICON_SIZE_COMPACT}
+            style={{ flexShrink: 0, verticalAlign: 'middle', filter: imgFilter }}
+            aria-hidden
+          />
+        </div>
+      </div>
+    </Tooltip>
+  );
+}
+
+/**
  * Render engine icon for Technologie column (AC4).
+ * Story 31.3: Fallback cascade — 1) icon_url from API, 2) ENGINE_SVG_SOURCES hardcoded, 3) ENGINE_ICONS Ant Design.
  *
  * @param engine - Engine name (Oracle, SQL Server, DB2) or null
  * @param itemType - Item type (action or workflow)
+ * @param iconUrl - Optional icon_url from API (takes priority over ENGINE_SVG_SOURCES)
  * @returns React node with icon + tooltip
  */
 export function renderEngineIcon(
   engine: ActionEngine | null | undefined,
   itemType: ItemType | undefined,
+  iconUrl?: string | null,
 ): React.ReactNode {
   // Workflow takes priority over engine
   if (itemType === 'workflow') {
     return (
       <Tooltip title="Workflow (chaîne d'actions)">
         <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-          <ApartmentOutlined style={{ fontSize: ENGINE_ICON_SIZE_COMPACT, color: WORKFLOW_ICON_COLOR }} />
+          <WorkflowIcon fontSize={ENGINE_ICON_SIZE_COMPACT} aria-label="Workflow" />
         </div>
       </Tooltip>
     );
@@ -172,48 +219,49 @@ export function renderEngineIcon(
 
   // Known engine
   const config = ENGINE_ICONS[engine as ActionEngine];
-  const svgSrc = ENGINE_SVG_SOURCES[engine as ActionEngine];
-  if (!config) {
-    // Unknown engine - show text
-    return <span title={engine} style={{ fontSize: 12, opacity: 0.6 }}>{engine}</span>;
-  }
+  // Story 31.3: Fallback cascade for SVG source
+  const apiIconUrl = iconUrl?.trim() || getEngineIconUrl(engine) || undefined;
+  const svgSrc = apiIconUrl || ENGINE_SVG_SOURCES[engine as ActionEngine];
 
-  if (svgSrc) {
-    // Dark theme: Use dark semi-transparent background instead of white for better integration
-    const needsBackground = engine === 'SQL Server' || engine === 'Oracle';
-    // SQL Server has black text that needs to be inverted/lightened for dark theme
-    const isSqlServer = engine === 'SQL Server';
-    return (
-      <Tooltip title={engine}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: needsBackground ? '6px' : '0',
-              backgroundColor: needsBackground ? 'rgba(26, 26, 36, 0.6)' : 'transparent',
-              borderRadius: needsBackground ? '4px' : '0',
-              border: needsBackground ? '1px solid rgba(255, 255, 255, 0.1)' : 'none',
-            }}
-          >
+  if (!config) {
+    // Unknown engine — still try API icon_url before showing text
+    if (svgSrc) {
+      return (
+        <Tooltip title={engine}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
             <img
               src={svgSrc}
               alt=""
               width={ENGINE_ICON_SIZE_COMPACT}
               height={ENGINE_ICON_SIZE_COMPACT}
-              style={{ 
-                flexShrink: 0, 
-                verticalAlign: 'middle',
-                filter: isSqlServer 
-                  ? 'brightness(0) invert(1) contrast(1.2)' // Invert black text to white for SQL Server
-                  : needsBackground 
-                    ? 'brightness(1.1) contrast(1.1)' // Light enhancement for Oracle
-                    : 'none',
-              }}
+              style={{ flexShrink: 0, verticalAlign: 'middle' }}
               aria-hidden
             />
           </div>
+        </Tooltip>
+      );
+    }
+    return <span title={engine} style={{ fontSize: 12, opacity: 0.6 }}>{engine}</span>;
+  }
+
+  if (svgSrc) {
+    const needsBackground = engine === 'SQL Server' || engine === 'Oracle';
+    if (needsBackground) {
+      return (
+        <EngineIconSvgCell engine={engine} svgSrc={svgSrc} />
+      );
+    }
+    return (
+      <Tooltip title={engine}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+          <img
+            src={svgSrc}
+            alt=""
+            width={ENGINE_ICON_SIZE_COMPACT}
+            height={ENGINE_ICON_SIZE_COMPACT}
+            style={{ flexShrink: 0, verticalAlign: 'middle' }}
+            aria-hidden
+          />
         </div>
       </Tooltip>
     );

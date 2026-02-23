@@ -8,10 +8,9 @@ Verifies that:
 - Pagination is applied before caching
 """
 
-import pytest
 from django.test import TestCase
 
-from catalog.views import _get_cache_key, _catalog_cache
+from catalog.views import _get_cache_key
 
 
 class TestCacheKeyIncludesPagination(TestCase):

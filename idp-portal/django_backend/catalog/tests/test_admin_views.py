@@ -9,7 +9,8 @@ from rest_framework.test import APIClient
 from rest_framework import status
 from catalog.models import Tag, ActionStatus, ActionItemType, ActionEngine, ActionPlatform
 from catalog.services import CatalogService
-from reference.models import RefEngine, RefPlatform
+from reference.models import RefEngine
+from integrations.models import IntegrationTypeCatalogue, IntegrationRole
 from tests.factories import UserFactory
 
 
@@ -23,7 +24,7 @@ class TestAdminActionViewSet(TestCase):
 
         # Create reference data (required for serializer validation)
         RefEngine.objects.get_or_create(code='Oracle', defaults={'label': 'Oracle', 'display_order': 1})
-        RefPlatform.objects.get_or_create(code='AAP', defaults={'label': 'AAP', 'display_order': 1})
+        IntegrationTypeCatalogue.objects.get_or_create(code='aap', defaults={'name': 'AAP', 'integration_role': IntegrationRole.PLATFORM, 'is_active': True})
 
         # Create DBOPS user
         self.dbops_user = UserFactory(

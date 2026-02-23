@@ -1,19 +1,23 @@
 /**
  * Story 18.2 — Task 6: Tests for getItemTypeIcon shared utility.
  */
+import React from 'react';
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
+import { ThemeProvider } from '../contexts/ThemeContext';
 import { getItemTypeIcon, WORKFLOW_COLOR } from './iconHelpers';
 
+const renderWithTheme = (ui: React.ReactElement) =>
+  render(<ThemeProvider>{ui}</ThemeProvider>);
+
 describe('getItemTypeIcon', () => {
-  it('returns ApartmentOutlined violet for workflow', () => {
+  it('returns WorkflowIcon (theme-adaptive) for workflow', () => {
     const result = getItemTypeIcon('workflow', null);
     expect(result.color).toBe(WORKFLOW_COLOR);
     expect(result.label).toBe("Workflow (chaîne d'actions)");
 
-    const { container } = render(<>{result.icon}</>);
-    const icon = container.querySelector('.anticon-apartment');
-    expect(icon).toBeInTheDocument();
+    const { container } = renderWithTheme(<>{result.icon}</>);
+    expect(container.querySelector('svg')).toBeInTheDocument();
     expect(container.querySelector('[aria-label="Type: Workflow"]')).toBeInTheDocument();
   });
 
@@ -21,7 +25,7 @@ describe('getItemTypeIcon', () => {
     const result = getItemTypeIcon('action', 'Oracle');
     expect(result.label).toBe('Action Oracle');
 
-    const { container } = render(<>{result.icon}</>);
+    const { container } = renderWithTheme(<>{result.icon}</>);
     expect(container.querySelector('.anticon-database')).toBeInTheDocument();
     expect(container.querySelector('[aria-label="Type: Action Oracle"]')).toBeInTheDocument();
   });
@@ -62,15 +66,13 @@ describe('getItemTypeIcon', () => {
 
   it('wraps in Tooltip when withTooltip is true', () => {
     const result = getItemTypeIcon('workflow', null, { withTooltip: true });
-    const { container } = render(<>{result.icon}</>);
-    // Tooltip wraps the icon — the icon should still be present
-    expect(container.querySelector('.anticon-apartment')).toBeInTheDocument();
+    const { container } = renderWithTheme(<>{result.icon}</>);
+    expect(container.querySelector('svg')).toBeInTheDocument();
   });
 
   it('respects custom fontSize option', () => {
     const result = getItemTypeIcon('workflow', null, { fontSize: 24 });
-    const { container } = render(<>{result.icon}</>);
-    const icon = container.querySelector('.anticon-apartment');
-    expect(icon).toBeInTheDocument();
+    const { container } = renderWithTheme(<>{result.icon}</>);
+    expect(container.querySelector('svg')).toBeInTheDocument();
   });
 });

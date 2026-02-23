@@ -80,9 +80,10 @@ export const ExecutionDetailDrawer: React.FC<ExecutionDetailDrawerProps> = ({
           )}
         >
           <ExecutionTimeline
+            executionId={execution.id}
             execution={execution}
             steps={steps}
-            mode="historical"
+            mode="realtime"
           />
         </ErrorBoundary>
       )

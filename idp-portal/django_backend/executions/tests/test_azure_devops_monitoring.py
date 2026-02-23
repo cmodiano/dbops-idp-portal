@@ -7,7 +7,6 @@ Covers:
 """
 from __future__ import annotations
 
-import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 
 from executions.tasks import poll_azure_devops_run_status
@@ -26,7 +25,7 @@ class TestPollAzureDevOpsRunStatus:
 
     @patch("executions.tasks._update_execution_from_poll")
     @patch("executions.tasks._broadcast_execution_update")
-    @patch("executions.tasks.poll_azure_devops_run_status.apply_async")
+    @patch("executions.tasks.poll_platform_job_status.apply_async")
     def test_poll_running_reschedules(
         self,
         mock_apply_async: MagicMock,
@@ -62,14 +61,13 @@ class TestPollAzureDevOpsRunStatus:
             )
 
         assert result["outcome"] == "polling"
-        assert result["azure_devops_state"] == "inProgress"
         mock_broadcast.assert_called_once()
         mock_update.assert_called_once()
         mock_apply_async.assert_called_once()
 
     @patch("executions.tasks._update_execution_from_poll")
     @patch("executions.tasks._broadcast_execution_update")
-    @patch("executions.tasks.poll_azure_devops_run_status.apply_async")
+    @patch("executions.tasks.poll_platform_job_status.apply_async")
     def test_poll_completed_succeeded_no_reschedule(
         self,
         mock_apply_async: MagicMock,
@@ -105,14 +103,13 @@ class TestPollAzureDevOpsRunStatus:
 
         assert result["outcome"] == "complete"
         assert result["status"] == "COMPLETED"
-        assert result["azure_devops_result"] == "succeeded"
         mock_broadcast.assert_called_once()
         mock_update.assert_called_once()
         mock_apply_async.assert_not_called()
 
     @patch("executions.tasks._update_execution_from_poll")
     @patch("executions.tasks._broadcast_execution_update")
-    @patch("executions.tasks.poll_azure_devops_run_status.apply_async")
+    @patch("executions.tasks.poll_platform_job_status.apply_async")
     def test_poll_completed_failed_is_terminal(
         self,
         mock_apply_async: MagicMock,
@@ -149,7 +146,7 @@ class TestPollAzureDevOpsRunStatus:
 
     @patch("executions.tasks._update_execution_from_poll")
     @patch("executions.tasks._broadcast_execution_update")
-    @patch("executions.tasks.poll_azure_devops_run_status.apply_async")
+    @patch("executions.tasks.poll_platform_job_status.apply_async")
     def test_poll_completed_canceled_is_terminal(
         self,
         mock_apply_async: MagicMock,
@@ -184,7 +181,7 @@ class TestPollAzureDevOpsRunStatus:
         assert result["status"] == "CANCELLED"
         mock_apply_async.assert_not_called()
 
-    @patch("executions.tasks.poll_azure_devops_run_status.apply_async")
+    @patch("executions.tasks.poll_platform_job_status.apply_async")
     def test_poll_error_reschedules(
         self,
         mock_apply_async: MagicMock,
@@ -207,7 +204,7 @@ class TestPollAzureDevOpsRunStatus:
 
     @patch("executions.tasks._update_execution_from_poll")
     @patch("executions.tasks._broadcast_execution_update")
-    @patch("executions.tasks.poll_azure_devops_run_status.apply_async")
+    @patch("executions.tasks.poll_platform_job_status.apply_async")
     def test_poll_bearer_auth_flow(
         self,
         mock_apply_async: MagicMock,
@@ -243,7 +240,7 @@ class TestPollAzureDevOpsRunStatus:
 
     @patch("executions.tasks._update_execution_from_poll")
     @patch("executions.tasks._broadcast_execution_update")
-    @patch("executions.tasks.poll_azure_devops_run_status.apply_async")
+    @patch("executions.tasks.poll_platform_job_status.apply_async")
     def test_poll_canceling_not_terminal(
         self,
         mock_apply_async: MagicMock,

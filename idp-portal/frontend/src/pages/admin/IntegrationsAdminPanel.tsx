@@ -53,11 +53,19 @@ export function IntegrationsAdminPanel({ notification }: IntegrationsAdminPanelP
 
   const handleIntegrationDelete = async (record: IntegrationListItem) => {
     try {
-      await deleteIntegration(record.id);
-      notification.success({
-        title: 'Succes',
-        description: `Intégration « ${record.name} » supprimée`,
-      });
+      const result = await deleteIntegration(record.id);
+      const count = result?.disabled_actions_count ?? 0;
+      if (count > 0) {
+        notification.warning({
+          title: 'Intégration supprimée',
+          description: `${count} action(s) associée(s) ont été désactivées.`,
+        });
+      } else {
+        notification.success({
+          title: 'Succès',
+          description: `Intégration « ${record.name} » supprimée`,
+        });
+      }
       fetchIntegrations();
     } catch (err) {
       notification.error({

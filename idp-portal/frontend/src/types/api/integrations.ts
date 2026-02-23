@@ -146,3 +146,17 @@ export interface IntegrationResponse {
 
 /** Alias for list display (same as full response). */
 export type IntegrationListItem = IntegrationResponse;
+
+/** Story 31.5: AAP template returned by GET /admin/integrations/{id}/aap-templates/ */
+export interface AAPTemplate {
+  id: number;
+  name: string;
+  description?: string;
+}
+
+/** Story 31.5: Response from AAP templates endpoint. */
+export interface AAPTemplatesResponse {
+  data: AAPTemplate[];
+  fallback?: boolean;
+  error?: string;
+}

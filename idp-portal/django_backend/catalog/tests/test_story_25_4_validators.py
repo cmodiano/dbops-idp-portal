@@ -14,7 +14,8 @@ from rest_framework.exceptions import ValidationError
 from catalog.models import Action, ActionStatus, ActionItemType
 from catalog.services import CatalogService
 from catalog.validators import validate_change_type_config
-from reference.models import RefEngine, RefPlatform
+from reference.models import RefEngine
+from integrations.models import IntegrationTypeCatalogue, IntegrationRole
 from tests.factories import UserFactory
 
 
@@ -115,7 +116,7 @@ class TestStory254CatalogServiceIntegration(TestCase):
 
     def setUp(self):
         RefEngine.objects.get_or_create(code='Oracle', defaults={'label': 'Oracle', 'display_order': 1})
-        RefPlatform.objects.get_or_create(code='AAP', defaults={'label': 'AAP', 'display_order': 1})
+        IntegrationTypeCatalogue.objects.get_or_create(code='aap', defaults={'name': 'AAP', 'integration_role': IntegrationRole.PLATFORM, 'is_active': True})
         self.user = UserFactory(username='story254_admin', profile='dbops')
         self.action = Action.objects.create(
             name='Story 25.4 Test',

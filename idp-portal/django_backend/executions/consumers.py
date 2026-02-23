@@ -60,7 +60,7 @@ class ExecutionConsumer(AuthenticatedWebSocketConsumer):
                     execution_id=self.execution_id,
                     group_name=self.group_name,
                 )
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — broad catch justified: group_discard is best-effort cleanup, must not raise
                 # MEDIUM-7 FIX: Log warning but don't raise (best-effort cleanup)
                 logger.warning(
                     "ws_execution_group_discard_failed",
@@ -68,6 +68,7 @@ class ExecutionConsumer(AuthenticatedWebSocketConsumer):
                     group_name=self.group_name,
                     error=str(e),
                     error_type=type(e).__name__,
+                    exc_info=True,
                 )
         await super().disconnect(code)
 

@@ -2,6 +2,9 @@
 DRF Serializers for catalog app.
 Maps Django models to JSON responses.
 """
+# Responsabilité : Sérialisation/désérialisation DRF du catalogue (10+ serializers, validations
+# croisées plateforme/intégration, règles métier au niveau API) — volume justifié par la richesse
+# du modèle Action et les contraintes de validation inter-champs (Story 35.4 AC3).
 
 from __future__ import annotations
 
@@ -13,8 +16,15 @@ from catalog import models
 from catalog.models import (
     Action, Tag, ActionStatus, ActionItemType, BusinessRulePolicy
 )
-from reference.models import RefEngine, RefPlatform, RefCategory
+from reference.models import RefEngine, RefCategory
 from integrations.models import Integration, IntegrationTypeCatalogue, IntegrationRole
+
+# Story 31.9: Alias mapping for legacy platform codes → catalogue codes
+# Canonical source — also used by business_rule_views.py
+_PLATFORM_ALIAS: dict[str, str] = {
+    'terraform': 'terraform_cloud',
+    'tower': 'aap',
+}
 
 
 VALID_INVENTORY_TYPES = ('servers', 'instances', 'databases')
@@ -52,25 +62,16 @@ def _validate_platform_integration_consistency(
             )
         })
 
-    # Normalize platform code for matching (lower, spaces→underscores)
+    # Story 31.9: Normalize platform code for matching (lower, spaces→underscores, alias)
     normalized_platform = platform.lower().replace(' ', '_')
+    normalized_platform = _PLATFORM_ALIAS.get(normalized_platform, normalized_platform)
 
     # Check if normalized platform matches integration.type
     if normalized_platform != integration.type:
-        # Build clear error message with expected value
-        expected_platforms = {
-            'aap': 'AAP',
-            'tower': 'Tower',
-            'github_actions': 'GitHub Actions',
-            'azure_devops': 'Azure DevOps',
-            'terraform_cloud': 'Terraform Cloud',
-        }
-        expected_platform = expected_platforms.get(integration.type, integration_type_cat.name)
-
         raise serializers.ValidationError({
             'platform': (
                 f"Platform '{platform}' is inconsistent with integration type '{integration.type}'. "
-                f"Expected platform '{expected_platform}' for integration '{integration.name}'."
+                f"Expected platform '{integration_type_cat.name}' for integration '{integration.name}'."
             )
         })
 
@@ -151,6 +152,56 @@ class StatusUpdateSerializer(serializers.Serializer):
     )
 
 
+class ActionFieldValidationMixin:
+    """
+    Story 34.1 (SOLID-BE-11): DRY mixin pour la validation des champs engine/platform/category.
+
+    Contient la version STRICTE de validate_category (None passé tel quel, blank → ValidationError).
+    ActionCreateSerializer conserve un override pour accepter blank string → None.
+    """
+
+    def validate_engine(self, value: str | None) -> str | None:
+        """Validate engine against REF_ENGINES table."""
+        if value is None:
+            return value
+        if not RefEngine.objects.filter(code=value, is_active=1).exists():
+            active_engines = list(RefEngine.objects.active().values_list('code', flat=True))
+            raise serializers.ValidationError(
+                f"Invalid engine '{value}'. Must be one of: {', '.join(active_engines)}"
+            )
+        return value
+
+    def validate_platform(self, value: str | None) -> str | None:
+        """Story 31.9: Validate platform against IntegrationTypeCatalogue (role=platform)."""
+        if value is None:
+            return value
+        normalized = value.lower().replace(' ', '_')
+        normalized = _PLATFORM_ALIAS.get(normalized, normalized)
+        if not IntegrationTypeCatalogue.objects.filter(
+            code=normalized, is_active=True, integration_role=IntegrationRole.PLATFORM
+        ).exists():
+            active_codes = list(
+                IntegrationTypeCatalogue.objects.filter(
+                    is_active=True, integration_role=IntegrationRole.PLATFORM
+                ).values_list('code', flat=True)
+            )
+            raise serializers.ValidationError(
+                f"Invalid platform '{value}'. Must be one of: {', '.join(active_codes)}"
+            )
+        return value
+
+    def validate_category(self, value: str | None) -> str | None:
+        """Validate category against REF_CATEGORIES table (Story 2.30). Version stricte."""
+        if value is None:
+            return value
+        if not RefCategory.objects.filter(code=value, is_active=1).exists():
+            active_categories = list(RefCategory.objects.active().values_list('code', flat=True))
+            raise serializers.ValidationError(
+                f"Invalid category '{value}'. Must be one of: {', '.join(active_categories)}"
+            )
+        return value
+
+
 @extend_schema_serializer(
     examples=[
         OpenApiExample(
@@ -171,8 +222,17 @@ class StatusUpdateSerializer(serializers.Serializer):
         )
     ]
 )
-class ActionSerializer(serializers.ModelSerializer):
-    """Base Action serializer (read/write) matching ActionResponse/ActionDetail."""
+class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
+    """
+    Read-only serializer for Action model.
+    Used for list/detail read operations (GET) — matches ActionResponse/ActionDetail.
+
+    Write operations (create/update) use ActionCreateSerializer and CatalogService.
+    Do NOT call .save() on this serializer — use ActionCreateSerializer instead.
+
+    Story 34.3 - SOLID-BE-6: create() and update() overrides raising NotImplementedError
+    removed (LSP violation). ModelSerializer's default methods are inherited instead.
+    """
 
     # CLOB/JSON fields - OracleJSONField handles serialization automatically (Story 17.4)
     # Story 22.20 (AC4): Schémas explicites pour JSONField complexes
@@ -191,6 +251,16 @@ class ActionSerializer(serializers.ModelSerializer):
     change_type_config = serializers.JSONField(
         required=False, allow_null=True,
         help_text="Configuration du type de changement pour l'audit SOC1"
+    )
+    # Story 31.6: Gate configuration (integration selection per gate type)
+    gate_config = serializers.JSONField(
+        required=False, allow_null=True,
+        help_text="Configuration des gates : sélection d'intégration par type de gate (ex: servicenow_change.integration_id)"
+    )
+    # Story 31.8: Notification channels configuration (email, teams, page)
+    notification_config = serializers.JSONField(
+        required=False, allow_null=True,
+        help_text="Configuration des notifications : canaux (email, teams, page) et conditions de déclenchement"
     )
     remediation_rules = serializers.JSONField(
         required=False, allow_null=True,
@@ -235,44 +305,23 @@ class ActionSerializer(serializers.ModelSerializer):
             return policy.name if policy else None
         return None
 
-    def validate_engine(self, value: str | None) -> str | None:
-        """Validate engine against REF_ENGINES table."""
-        if value is None:
-            return value
-        # Check if engine exists in REF_ENGINES
-        if not RefEngine.objects.filter(code=value, is_active=1).exists():
-            active_engines = list(RefEngine.objects.active().values_list('code', flat=True))
-            raise serializers.ValidationError(
-                f"Invalid engine '{value}'. Must be one of: {', '.join(active_engines)}"
-            )
-        return value
-
-    def validate_platform(self, value: str | None) -> str | None:
-        """Validate platform against REF_PLATFORMS table."""
-        if value is None:
-            return value
-        # Check if platform exists in REF_PLATFORMS
-        if not RefPlatform.objects.filter(code=value, is_active=1).exists():
-            active_platforms = list(RefPlatform.objects.active().values_list('code', flat=True))
-            raise serializers.ValidationError(
-                f"Invalid platform '{value}'. Must be one of: {', '.join(active_platforms)}"
-            )
-        return value
-
-    def validate_category(self, value: str | None) -> str | None:
-        """Validate category against REF_CATEGORIES table (Story 2.30)."""
-        if value is None:
-            return value
-        if not RefCategory.objects.filter(code=value, is_active=1).exists():
-            active_categories = list(RefCategory.objects.active().values_list('code', flat=True))
-            raise serializers.ValidationError(
-                f"Invalid category '{value}'. Must be one of: {', '.join(active_categories)}"
-            )
-        return value
-
     def validate_parameters_schema(self, value: Any) -> Any:
         """Story 23.5: Validate inventory_type in parameters_schema."""
         return validate_parameters_schema_inventory(value)
+
+    def validate_gate_config(self, value: Any) -> Any:
+        """Story 31.6: Validate gate_config schema."""
+        if value is not None:
+            from catalog.validators import validate_gate_config
+            validate_gate_config(value)
+        return value
+
+    def validate_notification_config(self, value: Any) -> Any:
+        """Story 31.8: Validate notification_config schema."""
+        if value is not None:
+            from catalog.validators import validate_notification_config
+            validate_notification_config(value)
+        return value
 
     def validate_business_rule_policies(self, value: Any) -> Any:
         """Story 28.1: Validate business_rule_policies schema."""
@@ -310,7 +359,7 @@ class ActionSerializer(serializers.ModelSerializer):
             'parameters_schema', 'impact_rules', 'default_impact_level',
             'status', 'created_by', 'created_at', 'updated_at',
             'tags', 'documentation_md', 'remediation_rules',
-            'execution_steps', 'change_type_config', 'workflow_steps',
+            'execution_steps', 'change_type_config', 'gate_config', 'notification_config', 'workflow_steps',
             # Story 28.1: business_rule_policies
             'business_rule_policies',
             # Story 28.4: FK to predefined business rule policy
@@ -415,43 +464,34 @@ class ActionSerializer(serializers.ModelSerializer):
         
         # Store JSON fields as-is (will be converted by model setters)
         json_fields = ['parameters_schema', 'impact_rules', 'execution_steps',
-                      'change_type_config', 'remediation_rules', 'business_rule_policies']
+                      'change_type_config', 'gate_config', 'notification_config',
+                      'remediation_rules', 'business_rule_policies']
         for field in json_fields:
             if field in data:
                 validated_data[field] = data[field]  # Keep as dict, model will serialize
 
         return validated_data  # type: ignore[no-any-return]
 
-    def create(self, validated_data: dict[str, Any]) -> Action:
-        """Create action - handled by ViewSet using CatalogService."""
-        # This serializer is mainly for read operations
-        # Create is handled by ActionCreateSerializer
-        raise NotImplementedError("Use ActionCreateSerializer for creation")
-
-    def update(self, instance: Action, validated_data: dict[str, Any]) -> Action:
-        """Update action - handled by ViewSet using CatalogService."""
-        # This serializer is mainly for read operations
-        # Update is handled by ViewSet
-        raise NotImplementedError("Update handled by ViewSet")
-
-
-class ActionCreateSerializer(serializers.Serializer):
+class ActionCreateSerializer(ActionFieldValidationMixin, serializers.Serializer):
     """Serializer for POST /admin/actions (ActionCreate model)."""
 
     name = serializers.CharField(max_length=255, min_length=1)
     description = serializers.CharField(max_length=4000, required=False, allow_null=True)
     item_type = serializers.ChoiceField(choices=ActionItemType.choices, default=ActionItemType.ACTION)
     # Story 2.30: Category code (optional, validated against REF_CATEGORIES)
-    category = serializers.CharField(max_length=50, required=False, allow_null=True)
+    category = serializers.CharField(max_length=50, required=False, allow_null=True, allow_blank=True)
     engine = serializers.CharField(max_length=50, required=False, allow_null=True)
     platform = serializers.CharField(max_length=50, required=False, allow_null=True)
     # Story 29.4: integration_id for platform ↔ integration.type consistency validation
     integration_id = serializers.IntegerField(required=False, allow_null=True)
 
     def validate_category(self, value: str | None) -> str | None:
-        """Validate category against REF_CATEGORIES table (Story 2.30)."""
-        if value is None:
-            return value
+        """Validate category against REF_CATEGORIES table (Story 2.30). Blank string → None.
+
+        Override du mixin (version stricte) : accepte blank string et le convertit en None.
+        """
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
         if not RefCategory.objects.filter(code=value, is_active=1).exists():
             active_categories = list(RefCategory.objects.active().values_list('code', flat=True))
             raise serializers.ValidationError(
@@ -459,29 +499,6 @@ class ActionCreateSerializer(serializers.Serializer):
             )
         return value
 
-    def validate_engine(self, value: str | None) -> str | None:
-        """Validate engine against REF_ENGINES table."""
-        if value is None:
-            return value
-        # Check if engine exists in REF_ENGINES
-        if not RefEngine.objects.filter(code=value, is_active=1).exists():
-            active_engines = list(RefEngine.objects.active().values_list('code', flat=True))
-            raise serializers.ValidationError(
-                f"Invalid engine '{value}'. Must be one of: {', '.join(active_engines)}"
-            )
-        return value
-
-    def validate_platform(self, value: str | None) -> str | None:
-        """Validate platform against REF_PLATFORMS table."""
-        if value is None:
-            return value
-        # Check if platform exists in REF_PLATFORMS
-        if not RefPlatform.objects.filter(code=value, is_active=1).exists():
-            active_platforms = list(RefPlatform.objects.active().values_list('code', flat=True))
-            raise serializers.ValidationError(
-                f"Invalid platform '{value}'. Must be one of: {', '.join(active_platforms)}"
-            )
-        return value
     parameters_schema = serializers.DictField(required=False, allow_null=True)
     impact_rules = serializers.DictField(required=False, allow_null=True)
     default_impact_level = serializers.ChoiceField(
@@ -490,6 +507,24 @@ class ActionCreateSerializer(serializers.Serializer):
         allow_null=True
     )
     documentation_md = serializers.CharField(max_length=100_000, required=False, allow_null=True)
+    # Story 31.6: Gate configuration — validated via field-level validate_gate_config
+    gate_config = serializers.JSONField(required=False, allow_null=True)
+    # Story 31.8: Notification channels configuration
+    notification_config = serializers.JSONField(required=False, allow_null=True)
+
+    def validate_gate_config(self, value: Any) -> Any:
+        """Story 31.6: Validate gate_config schema."""
+        if value is not None:
+            from catalog.validators import validate_gate_config
+            validate_gate_config(value)
+        return value
+
+    def validate_notification_config(self, value: Any) -> Any:
+        """Story 31.8: Validate notification_config schema."""
+        if value is not None:
+            from catalog.validators import validate_notification_config
+            validate_notification_config(value)
+        return value
 
     def validate_parameters_schema(self, value: Any) -> Any:
         """Story 23.5: Validate inventory_type in parameters_schema."""
@@ -534,16 +569,24 @@ class ActionCreateSerializer(serializers.Serializer):
 
 class ActionListSerializer(serializers.ModelSerializer):
     """Serializer for GET /admin/actions (simplified list with execution_count)."""
-    
+
     tags = serializers.SerializerMethodField()
     execution_count = serializers.SerializerMethodField()
-    
+    # Story 31.6 (Task 2.4): gate_config exposed in list view
+    gate_config = serializers.JSONField(read_only=True, allow_null=True)
+    # Story 31.8: notification_config exposed in list view
+    notification_config = serializers.JSONField(read_only=True, allow_null=True)
+
     class Meta:
         model = Action
         fields = [
             'id', 'name', 'description', 'item_type', 'category', 'engine', 'platform',
             'status', 'created_by', 'created_at', 'updated_at',
             'tags', 'execution_count',
+            # Story 31.6: gate configuration
+            'gate_config',
+            # Story 31.8: notification configuration
+            'notification_config',
             # Story 18.1: soft-delete fields for admin list
             'deleted_at', 'deleted_by', 'deletion_reason',
         ]

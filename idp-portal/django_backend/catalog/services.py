@@ -3,6 +3,9 @@ CatalogService for business logic related to actions and workflows.
 Handles complex operations like status transitions, tag management, and validation.
 Story M.8 - Task 9: Structured logging with structlog.
 """
+# Responsabilité : Logique métier du catalogue d'actions (transitions de statut, gestion des
+# workflows, dépendances entre étapes, tags, RBAC catalog) — volume justifié par la richesse
+# inhérente du domaine métier (Story 35.4 AC3).
 
 from __future__ import annotations
 
@@ -16,7 +19,7 @@ from catalog.models import Action, ActionStatus, Tag, ActionTag, ActionItemType,
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id
-from core.exceptions import ConflictError
+from core.exceptions import ConflictError, BadRequestError
 from idp_auth.models import User
 
 logger = structlog.get_logger(__name__)
@@ -39,6 +42,76 @@ _VALID_TRANSITIONS = {
         'enable': ActionStatus.PUBLISHED,
     },
 }
+
+
+def _validate_workflow_can_be_published(workflow_action: Action) -> None:
+    """
+    Ensure all referenced actions in a workflow are published (not disabled).
+    Prevents publishing a workflow whose step actions are disabled (avoids runtime errors).
+    Raises BadRequestError with details if any referenced action is missing or not published.
+    """
+    from executions.utils import extract_workflow_referenced_action_ids
+
+    ref_ids = extract_workflow_referenced_action_ids(workflow_action)
+    if not ref_ids:
+        return
+
+    missing: list[int] = []
+    not_published: list[dict[str, Any]] = []
+    for ref_id in ref_ids:
+        try:
+            ref_action = Action.objects.get(id=ref_id)
+        except Action.DoesNotExist:
+            missing.append(ref_id)
+            continue
+        if ref_action.status != ActionStatus.PUBLISHED:
+            not_published.append({
+                "referenced_action_id": ref_id,
+                "action_name": ref_action.name,
+                "status": ref_action.status,
+            })
+
+    if missing:
+        if len(missing) == 1:
+            msg = (
+                f"Impossible de publier le workflow : l'action référencée (id {missing[0]}) "
+                "n'existe pas ou n'est plus disponible."
+            )
+        else:
+            ids_str = ", ".join(str(i) for i in missing)
+            msg = f"Impossible de publier le workflow : les actions référencées ({ids_str}) n'existent pas."
+        raise BadRequestError(
+            code="REFERENCED_ACTION_NOT_FOUND",
+            message=msg,
+            details={
+                "workflow_action_id": workflow_action.id,
+                "workflow_action_name": workflow_action.name,
+                "missing_referenced_action_ids": missing,
+            },
+        )
+
+    if not_published:
+        first = not_published[0]
+        if len(not_published) == 1:
+            msg = (
+                f"Impossible de publier le workflow : l'action référencée « {first['action_name']} » "
+                f"n'est pas publiée (statut: {first['status']}). Réactivez-la ou retirez-la du workflow."
+            )
+        else:
+            parts = [f"« {p['action_name']} » (statut: {p['status']})" for p in not_published]
+            msg = (
+                f"Impossible de publier le workflow : les actions référencées ne sont pas toutes publiées : "
+                f"{', '.join(parts)}. Réactivez-les ou retirez-les du workflow."
+            )
+        raise BadRequestError(
+            code="REFERENCED_ACTION_NOT_PUBLISHED",
+            message=msg,
+            details={
+                "workflow_action_id": workflow_action.id,
+                "workflow_action_name": workflow_action.name,
+                "not_published": not_published,
+            },
+        )
 
 
 def _validate_transition(current_status: str, transition: str) -> str:
@@ -150,8 +223,19 @@ class CatalogService:
                 from catalog.validators import validate_change_type_config
                 validate_change_type_config(ctc)
             action.change_type_config = ctc
+        if 'gate_config' in action_data:
+            gc = _json_value(action_data['gate_config'])
+            if gc is not None:
+                from catalog.validators import validate_gate_config
+                validate_gate_config(gc)
+            action.gate_config = gc
         if 'remediation_rules' in action_data:
             action.remediation_rules = _json_value(action_data['remediation_rules'])
+
+        # Workflow: cannot create as published if any referenced action is disabled or missing
+        if status == ActionStatus.PUBLISHED and action.item_type == ActionItemType.WORKFLOW and action.execution_steps:
+            _validate_workflow_can_be_published(action)
+
         action.save()
         
         # Add tags if provided
@@ -324,7 +408,10 @@ class CatalogService:
             action.impact_rules = action_update_data['impact_rules']
         if 'remediation_rules' in action_update_data:
             action.remediation_rules = action_update_data['remediation_rules']
-        
+        # Story 31.6: gate_config (validated by serializer)
+        if 'gate_config' in action_update_data:
+            action.gate_config = action_update_data['gate_config']
+
         action.save()
         
         # Update tags if provided
@@ -369,6 +456,10 @@ class CatalogService:
         
         # Validate transition
         new_status = _validate_transition(action.status, transition)
+
+        # Workflow: cannot publish if any referenced action is disabled or missing
+        if transition == 'publish' and action.item_type == ActionItemType.WORKFLOW:
+            _validate_workflow_can_be_published(action)
         
         # Update status
         old_status = action.status

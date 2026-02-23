@@ -201,9 +201,10 @@ class ActionSerializerCategoryValidationTests(TestCase):
 
     def test_create_action_with_valid_category(self):
         """Creating an action with a valid active category code should succeed."""
-        from reference.models import RefEngine, RefPlatform
+        from reference.models import RefEngine
+        from integrations.models import IntegrationTypeCatalogue, IntegrationRole
         RefEngine.objects.create(code='Oracle', label='Oracle', display_order=1, is_active=1)
-        RefPlatform.objects.create(code='AAP', label='AAP', display_order=1, is_active=1)
+        IntegrationTypeCatalogue.objects.get_or_create(code='aap', defaults={'name': 'AAP', 'integration_role': IntegrationRole.PLATFORM, 'is_active': True})
 
         response = self.client.post('/api/v1/admin/actions/', {
             'name': 'Test Action Category',
@@ -217,9 +218,10 @@ class ActionSerializerCategoryValidationTests(TestCase):
 
     def test_create_action_with_invalid_category(self):
         """Creating an action with a non-existent category should fail."""
-        from reference.models import RefEngine, RefPlatform
+        from reference.models import RefEngine
+        from integrations.models import IntegrationTypeCatalogue, IntegrationRole
         RefEngine.objects.create(code='Oracle', label='Oracle', display_order=1, is_active=1)
-        RefPlatform.objects.create(code='AAP', label='AAP', display_order=1, is_active=1)
+        IntegrationTypeCatalogue.objects.get_or_create(code='aap', defaults={'name': 'AAP', 'integration_role': IntegrationRole.PLATFORM, 'is_active': True})
 
         response = self.client.post('/api/v1/admin/actions/', {
             'name': 'Test Action Bad Category',
@@ -233,9 +235,10 @@ class ActionSerializerCategoryValidationTests(TestCase):
 
     def test_create_action_with_inactive_category(self):
         """Creating an action with an inactive category should fail."""
-        from reference.models import RefEngine, RefPlatform
+        from reference.models import RefEngine
+        from integrations.models import IntegrationTypeCatalogue, IntegrationRole
         RefEngine.objects.create(code='Oracle', label='Oracle', display_order=1, is_active=1)
-        RefPlatform.objects.create(code='AAP', label='AAP', display_order=1, is_active=1)
+        IntegrationTypeCatalogue.objects.get_or_create(code='aap', defaults={'name': 'AAP', 'integration_role': IntegrationRole.PLATFORM, 'is_active': True})
 
         response = self.client.post('/api/v1/admin/actions/', {
             'name': 'Test Action Inactive Category',
@@ -249,9 +252,10 @@ class ActionSerializerCategoryValidationTests(TestCase):
 
     def test_create_action_with_null_category(self):
         """Creating an action with null category should succeed (optional)."""
-        from reference.models import RefEngine, RefPlatform
+        from reference.models import RefEngine
+        from integrations.models import IntegrationTypeCatalogue, IntegrationRole
         RefEngine.objects.create(code='Oracle', label='Oracle', display_order=1, is_active=1)
-        RefPlatform.objects.create(code='AAP', label='AAP', display_order=1, is_active=1)
+        IntegrationTypeCatalogue.objects.get_or_create(code='aap', defaults={'name': 'AAP', 'integration_role': IntegrationRole.PLATFORM, 'is_active': True})
 
         response = self.client.post('/api/v1/admin/actions/', {
             'name': 'Test Action No Category',

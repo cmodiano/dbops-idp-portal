@@ -109,7 +109,7 @@ class TargetListViewTests(TestCase):
         self.assertIn('total_pages', data)
         self.assertIn('rbac_truncated', data)
 
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_list_targets_response_includes_rbac_truncated_true_when_truncated(self, mock_service_class):
         """Story 13.3: Response must include rbac_truncated; when True, client knows results may be incomplete."""
         mock_service = MagicMock()
@@ -228,7 +228,7 @@ class TargetListAllViewTests(TestCase):
         response = self.client.get('/api/v1/inventory/targets/all/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_list_all_targets_invalid_environment(self, mock_service_class):
         """Test invalid environment parameter returns 400."""
         mock_service = MagicMock()
@@ -401,7 +401,7 @@ class TargetServiceErrorTests(TestCase):
         # Prevent get_ad_groups from being callable
         del self.admin_user.get_ad_groups
 
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_list_targets_service_error_returns_503(self, mock_service_class):
         """Test that service errors return 503."""
         mock_service = MagicMock()
@@ -415,7 +415,7 @@ class TargetServiceErrorTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
         self.assertIn('ORA-00942', response.json()['detail'])
 
-    @patch('inventory.views.InventoryService')
+    @patch('inventory.views._inventory_service_factory')
     def test_list_all_targets_service_error_returns_503(self, mock_service_class):
         """Test that service errors on /targets/all return 503."""
         mock_service = MagicMock()

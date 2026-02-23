@@ -30,6 +30,7 @@
 
 ### Qualité du code
 
+- [Conformité SOLID](solid-guidelines.md) — Patterns SRP/OCP/LSP/ISP/DIP avec exemples du code réel (Epic 33)
 - [mypy](mypy-developer-guide.md) — Guide développeur mypy
 - [Gestion des dépendances](dependency-management.md) — Gestion des dépendances Python
 - [Feature flags](feature-flags-redis-upgrade.md) — Feature flags et Redis

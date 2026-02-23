@@ -290,7 +290,7 @@ export function ActionsAdminPanel({ notification, modal, isDark }: ActionsAdminP
       />
 
       <Modal
-        title="Confirmation de desactivation en cascade"
+        title="Confirmation de désactivation en cascade"
         open={cascadeModalOpen}
         onCancel={() => {
           setCascadeModalOpen(false);
@@ -299,13 +299,13 @@ export function ActionsAdminPanel({ notification, modal, isDark }: ActionsAdminP
           setCascadeReason('');
         }}
         onOk={handleCascadeConfirm}
-        okText="Confirmer la desactivation"
+        okText="Confirmer la désactivation"
         okType="danger"
         cancelText="Annuler"
       >
         <p>
-          L'action <strong>{cascadeAction?.name}</strong> est referencee par{' '}
-          {cascadeWorkflows.length} workflow(s) qui seront egalement desactive(s) :
+          L'action <strong>{cascadeAction?.name}</strong> est utilisée dans le(s) workflow(s) suivant(s).
+          Si vous confirmez, <strong>l'action et ces workflows seront désactivés</strong> :
         </p>
         <ul style={{ marginBottom: 16 }}>
           {cascadeWorkflows.map((wf) => (

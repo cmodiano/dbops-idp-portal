@@ -13,9 +13,8 @@ from rest_framework.test import APIClient
 from rest_framework import status as http_status
 
 from catalog.serializers import ActionSerializer, ActionCreateSerializer
-from catalog.services import CatalogService
-from integrations.models import Integration, IntegrationTypeCatalogue, IntegrationRole
-from reference.models import RefPlatform, RefEngine
+from integrations.models import IntegrationRole
+from reference.models import RefEngine
 from tests.factories import (
     UserFactory,
     ActionFactory,
@@ -32,18 +31,11 @@ class TestActionPlatformIntegrationValidation(TestCase):
         """Set up reference data for validation tests."""
         self.user = UserFactory(username='testuser', profile='DBA')
 
-        # Create REF_PLATFORMS entries
-        RefPlatform.objects.create(code='AAP', label='AAP', display_order=1, is_active=1)
-        RefPlatform.objects.create(code='GitHub Actions', label='GitHub Actions', display_order=2, is_active=1)
-        RefPlatform.objects.create(code='Azure DevOps', label='Azure DevOps', display_order=3, is_active=1)
-        RefPlatform.objects.create(code='Terraform', label='Terraform', display_order=4, is_active=1)
-        RefPlatform.objects.create(code='Tower', label='Ansible Tower', display_order=5, is_active=1)
-        RefPlatform.objects.create(code='Terraform Cloud', label='Terraform Cloud', display_order=6, is_active=1)
-
         # Create REF_ENGINES (needed for action creation)
         RefEngine.objects.create(code='Oracle', label='Oracle', display_order=1, is_active=1)
 
-        # Create IntegrationTypeCatalogue entries — platforms
+        # Story 31.9: IntegrationTypeCatalogue is now the source of truth for platforms
+        # (replaces REF_PLATFORMS)
         IntegrationTypeCatalogueFactory(
             code='aap', name='AAP', integration_role=IntegrationRole.PLATFORM,
         )
@@ -119,7 +111,7 @@ class TestActionPlatformIntegrationValidation(TestCase):
             'item_type': 'action',
             'engine': 'Oracle',
             'platform': 'Tower',
-            'integration_id': self.integration_tower.id,
+            'integration_id': self.integration_aap.id,  # Tower is alias for AAP (see _PLATFORM_ALIAS)
         })
         self.assertTrue(serializer.is_valid(), serializer.errors)
 
@@ -269,26 +261,7 @@ class TestActionPlatformIntegrationValidation(TestCase):
         self.assertFalse(serializer.is_valid())
         self.assertIn('integration_id', serializer.errors)
 
-    # ===== Mapping coverage =====
-
-    def test_mapping_covers_all_platform_types(self):
-        """AC3/4.7: All platform types in IntegrationTypeCatalogue have mapping."""
-        platform_types = IntegrationTypeCatalogue.objects.filter(
-            integration_role=IntegrationRole.PLATFORM
-        ).values_list('code', flat=True)
-
-        platform_codes = set(RefPlatform.objects.active().values_list('code', flat=True))
-
-        # Normalize platform codes for matching
-        normalized_codes = {code.lower().replace(' ', '_') for code in platform_codes}
-
-        for integration_type_code in platform_types:
-            self.assertIn(
-                integration_type_code,
-                normalized_codes,
-                f"IntegrationTypeCatalogue platform '{integration_type_code}' "
-                f"has no matching REF_PLATFORMS entry (normalized codes: {normalized_codes})"
-            )
+    # Story 31.9: test_mapping_covers_all_platform_types removed (RefPlatform no longer exists)
 
 
 @pytest.mark.django_db
@@ -302,11 +275,9 @@ class TestActionPlatformIntegrationE2E(TestCase):
         self.client.force_authenticate(user=self.dbops_user)
 
         # Reference data
-        RefPlatform.objects.create(code='AAP', label='AAP', display_order=1, is_active=1)
-        RefPlatform.objects.create(code='GitHub Actions', label='GitHub Actions', display_order=2, is_active=1)
         RefEngine.objects.create(code='Oracle', label='Oracle', display_order=1, is_active=1)
 
-        # IntegrationTypeCatalogue
+        # Story 31.9: IntegrationTypeCatalogue replaces REF_PLATFORMS
         IntegrationTypeCatalogueFactory(
             code='aap', name='AAP', integration_role=IntegrationRole.PLATFORM,
         )
