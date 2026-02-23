@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Typography, Button, Table, Space, Card, Tag, Checkbox, Modal, Input } from 'antd';
-import type { NotificationInstance } from 'antd/es/notification/interface';
-import type { HookAPI as ModalHookAPI } from 'antd/es/modal/useModal';
+import { Typography, Button, Table, Space, Card, Tag, Checkbox, Modal, Input, App } from 'antd';
+
+type NotificationInstance = ReturnType<typeof App.useApp>['notification'];
+type ModalHookAPI = ReturnType<typeof App.useApp>['modal'];
 import {
   PlusOutlined,
   ReloadOutlined,

@@ -8,7 +8,7 @@
 
 import { memo, useRef } from 'react';
 import { Form, Alert, Typography } from 'antd';
-import type { Rule } from 'antd/es/form';
+import type { FormRule as Rule } from 'antd';
 import { useAuth } from '../../contexts/AuthContext';
 import { InfoCircleOutlined } from '@ant-design/icons';
 import type { CatalogActionDetail } from '../../services/catalog_service';
