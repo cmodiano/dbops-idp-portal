@@ -34,6 +34,8 @@ from inventory.rbac_filter import (
     InventoryRBACFilter,
     MAX_TARGETS_FOR_RBAC_FILTER,
 )
+from inventory.permission_aggregator import RBACPermissionAggregator
+from inventory.target_loader import TargetLoader
 from profiles.models import Profile
 from core.environment import EnvironmentHelper
 from core.middleware import get_correlation_id
@@ -68,6 +70,19 @@ class InventoryService:
         self.source_resolver = InventorySourceResolver()
         self.query_executor = InventoryQueryExecutor()
         self.rbac_filter = InventoryRBACFilter()
+        # Story 34.8 - AC3: DI collaborators instantiated after base components.
+        # Lambdas used so monkey-patching in tests (self.service.list_x = mock) is honoured
+        # at call time (Python resolves self.list_x via instance __dict__ first).
+        self.permission_aggregator = RBACPermissionAggregator(
+            list_environments_fn=lambda: self.list_environments(),
+            get_default_environments_fn=lambda: self.get_default_environments(),
+        )
+        self.target_loader = TargetLoader(
+            query_executor=self.query_executor,
+            list_targets_fn=lambda *args, **kwargs: self.list_targets(*args, **kwargs),
+            list_servers_fn=lambda *args, **kwargs: self.list_servers(*args, **kwargs),
+            get_mapper_fn=lambda: self._get_inventory_mapper(),
+        )
 
     # --- Backward compatibility delegations ---
 
@@ -499,14 +514,14 @@ class InventoryService:
             return [], 0, False
 
         # Step 1: Aggregate permissions
-        permissions = self._aggregate_profile_permissions(profiles, environment, correlation_id or "")
+        permissions = self.permission_aggregator.aggregate(profiles, environment, correlation_id or "")
         if permissions is None:
             return [], 0, False
 
         allowed_environments = permissions['allowed_environments']
 
         # Step 2: Load targets
-        all_targets, rbac_truncated = self._load_targets(
+        all_targets, rbac_truncated = self.target_loader.load(
             permissions, allowed_environments, search, target_type, user_id, correlation_id or ""
         )
 
@@ -541,218 +556,18 @@ class InventoryService:
     def _aggregate_profile_permissions(
         self, profiles: QuerySet[Profile], environment: str | None, correlation_id: str
     ) -> dict[str, Any] | None:
-        """
-        Aggregate permissions from all user profiles.
-
-        Args:
-            profiles: QuerySet of user's Profile objects
-            environment: Optional environment filter
-            correlation_id: Correlation ID for logging
-
-        Returns:
-            Dict with keys: has_all_access, target_restrictions, attribute_filters,
-            all_access_attribute_filters, exclusion_patterns, allowed_environments.
-            Returns None if no environments are allowed.
-
-        Story 26.1 - AC4: Step 1 of list_targets_for_user pipeline.
-        """
-        allowed_environments: set[str] = set()
-        target_restrictions: list[tuple[str, list[str] | None]] = []
-        attribute_filters: list[dict | None] = []
-        all_exclusion_patterns: list[str] = []
-        has_all_access = False
-        all_access_attribute_filters: list[dict | None] = []
-
-        for profile in profiles:
-            is_admin = getattr(profile, 'is_admin', 0) == 1
-
-            action_perm = getattr(profile, 'profileactionpermission', None)
-            if action_perm:
-                envs = action_perm.get_environments()
-                if envs:
-                    for e in envs:
-                        if isinstance(e, str):
-                            raw_env = EnvironmentHelper.normalize(e)
-                            normalized_env = self._normalize_environment(e)
-                            allowed_environments.add(normalized_env)
-                            if raw_env and raw_env != normalized_env:
-                                allowed_environments.add(raw_env)
-            elif is_admin:
-                try:
-                    allowed_environments.update(self.list_environments())
-                except InventoryServiceError:
-                    allowed_environments.update(self.get_default_environments())
-
-            target_perm = getattr(profile, 'profiletargetpermission', None)
-            attr_filter = None
-            if target_perm:
-                try:
-                    attr_filter = target_perm.get_filter_by_attribute()
-                except Exception as e:
-                    logger.error(
-                        "rbac_filter_by_attribute_error",
-                        profile_id=profile.id,
-                        error=str(e),
-                        correlation_id=correlation_id,
-                        exc_info=True
-                    )
-
-                try:
-                    patterns = target_perm.get_exclusion_patterns()
-                    if patterns:
-                        all_exclusion_patterns.extend(patterns)
-                        logger.debug(
-                            "rbac_exclusion_patterns_collected",
-                            profile_id=profile.id,
-                            patterns=patterns,
-                            correlation_id=correlation_id
-                        )
-                except Exception as e:
-                    logger.error(
-                        "rbac_exclusion_patterns_error",
-                        profile_id=profile.id,
-                        error=str(e),
-                        correlation_id=correlation_id,
-                        exc_info=True
-                    )
-
-            if target_perm:
-                perm_type = target_perm.permission_type
-                if perm_type == 'ALL':
-                    has_all_access = True
-                    all_access_attribute_filters.append(attr_filter)
-                elif perm_type == 'PATTERN':
-                    patterns = target_perm.get_target_patterns()
-                    if patterns:
-                        target_restrictions.append(('PATTERN', patterns))
-                        attribute_filters.append(attr_filter)
-                elif perm_type == 'LIST':
-                    names = target_perm.get_target_names()
-                    if names:
-                        target_restrictions.append(('LIST', names))
-                        attribute_filters.append(attr_filter)
-            elif is_admin:
-                has_all_access = True
-                all_access_attribute_filters.append(None)
-
-        # Admin fallback for empty environments
-        if not allowed_environments and any(getattr(p, 'is_admin', 0) == 1 for p in profiles):
-            try:
-                allowed_environments = set(self.list_environments())
-            except InventoryServiceError:
-                allowed_environments = set(self.get_default_environments())
-
-        # Apply environment filter (Story 26.7 AC4: using EnvironmentHelper)
-        if environment:
-            if not EnvironmentHelper.is_in(environment, list(allowed_environments)):
-                return None
-            allowed_environments = {e for e in allowed_environments if EnvironmentHelper.matches(e, environment)}
-
-        if not allowed_environments:
-            return None
-
-        return {
-            'has_all_access': has_all_access,
-            'target_restrictions': target_restrictions,
-            'attribute_filters': attribute_filters,
-            'all_access_attribute_filters': all_access_attribute_filters,
-            'exclusion_patterns': all_exclusion_patterns,
-            'allowed_environments': allowed_environments,
-        }
+        """Backward-compat delegation to permission_aggregator.aggregate (Story 34.8 - AC3)."""
+        return self.permission_aggregator.aggregate(profiles, environment, correlation_id)
 
     def _load_targets(
         self, permissions: dict, allowed_environments: set[str],
         search: str | None, target_type: str | None,
         user_id: int, correlation_id: str,
     ) -> tuple[list[dict], bool]:
-        """
-        Load targets from inventory source.
-
-        Args:
-            permissions: Aggregated permissions dict
-            allowed_environments: Set of allowed environment values
-            search: Optional search query
-            target_type: Optional target type filter
-            user_id: User ID for logging
-            correlation_id: Correlation ID for logging
-
-        Returns:
-            Tuple of (all_targets list, rbac_truncated bool)
-
-        Story 26.1 - AC4: Step 2 of list_targets_for_user pipeline.
-        """
-        mapper = self._get_inventory_mapper()
-        use_multi_table = mapper is not None and mapper.is_multi_table
-
-        if use_multi_table:
-            all_targets = []
-            failed_envs = []
-            for env in allowed_environments:
-                try:
-                    servers = self.list_servers(environment=env)
-                    for s in servers:
-                        target = {
-                            'name': s.get('name', ''),
-                            'environment': s.get('environment', ''),
-                            'target_type': 'server',
-                            'metadata': None,
-                        }
-                        for key, val in s.items():
-                            if key not in target:
-                                target[key] = val
-                        all_targets.append(target)
-                except InventoryServiceError as e:
-                    failed_envs.append(env)
-                    logger.warning(
-                        "list_servers_failed_for_env",
-                        environment=env,
-                        user_id=user_id,
-                        error=str(e),
-                        correlation_id=correlation_id,
-                    )
-
-            if failed_envs and len(failed_envs) == len(allowed_environments):
-                logger.error(
-                    "list_targets_for_user_all_environments_failed",
-                    user_id=user_id,
-                    failed_environments=failed_envs,
-                    correlation_id=correlation_id,
-                )
-                raise InventoryServiceError(
-                    f"Failed to load servers from all {len(failed_envs)} allowed environments"
-                )
-
-            rbac_truncated = False
-
-            logger.info(
-                "rbac_using_multi_table_servers",
-                user_id=user_id,
-                environments_checked=len(allowed_environments),
-                environments_failed=len(failed_envs),
-                total_servers=len(all_targets),
-                correlation_id=correlation_id,
-            )
-        else:
-            all_targets, total_available = self.list_targets(
-                environment=None,
-                search=search,
-                target_type=target_type,
-                page=1,
-                page_size=MAX_TARGETS_FOR_RBAC_FILTER
-            )
-            rbac_truncated = total_available > MAX_TARGETS_FOR_RBAC_FILTER
-
-            if total_available > MAX_TARGETS_FOR_RBAC_FILTER:
-                logger.warning(
-                    "rbac_filter_truncated",
-                    total_available=total_available,
-                    max_loaded=MAX_TARGETS_FOR_RBAC_FILTER,
-                    user_id=user_id,
-                    correlation_id=correlation_id,
-                    message="Inventory too large for in-memory RBAC filtering. Results may be incomplete."
-                )
-
-        return all_targets, rbac_truncated
+        """Backward-compat delegation to target_loader.load (Story 34.8 - AC3)."""
+        return self.target_loader.load(
+            permissions, allowed_environments, search, target_type, user_id, correlation_id
+        )
 
     def _apply_rbac_chain_for_user(
         self, all_targets: list[dict], allowed_environments: set[str],
@@ -809,56 +624,19 @@ class InventoryService:
 
     def _normalize_environment(self, raw_env: str) -> str:
         """
-        Normalize environment value from external sources.
-        Handles legacy aliases like 'certif' -> 'staging'.
+        Backward-compat delegation to permission_aggregator._normalize_environment.
 
-        Args:
-            raw_env: Raw environment string
-
-        Returns:
-            Normalized environment value
+        Story 34.8 - AC3: tests call self.service._normalize_environment() directly.
         """
-        env_aliases = {
-            'certif': 'staging',
-            'certification': 'staging',
-            'stg': 'staging',
-            'development': 'dev',
-            'production': 'prod',
-        }
-        normalized = EnvironmentHelper.normalize(raw_env)
-        if normalized in env_aliases:
-            return env_aliases[normalized]
-        return normalized
+        return self.permission_aggregator._normalize_environment(raw_env)
 
     def get_allowed_environments_for_user(self, ad_groups: list[str]) -> set[str]:
         """
-        Get allowed environments for a user based on their profiles.
+        Backward-compat delegation to permission_aggregator.get_allowed_environments.
 
-        Args:
-            ad_groups: User's AD groups
-
-        Returns:
-            Set of allowed environment values (includes both raw and normalized).
+        Story 34.8 - AC3: tests call self.service.get_allowed_environments_for_user() directly.
         """
-        profiles = Profile.objects.find_by_ad_groups(ad_groups).prefetch_related(
-            'profileactionpermission'
-        )
-
-        allowed_environments: set[str] = set()
-        for profile in profiles:
-            action_perm = getattr(profile, 'profileactionpermission', None)
-            if action_perm:
-                envs = action_perm.get_environments()
-                if envs:
-                    for e in envs:
-                        if isinstance(e, str):
-                            raw_env = EnvironmentHelper.normalize(e)
-                            normalized_env = self._normalize_environment(e)
-                            allowed_environments.add(normalized_env)
-                            if raw_env and raw_env != normalized_env:
-                                allowed_environments.add(raw_env)
-
-        return allowed_environments
+        return self.permission_aggregator.get_allowed_environments(ad_groups)
 
     def list_environments(self) -> list[str]:
         """
