@@ -8,7 +8,7 @@ filtering, and single-action access checks.
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import structlog
 from django.core.cache import cache
@@ -38,7 +38,7 @@ class CatalogRBACService:
     def __init__(
         self,
         profile_service: ProfileService | None = None,
-        inventory_service=None,
+        inventory_service: Any = None,
     ) -> None:
         """
         Args:
@@ -82,7 +82,7 @@ class CatalogRBACService:
                 cache_key = f'rbac:permissions:user:{user.id}:v:{cache_version}'
                 cached = cache.get(cache_key)
                 if cached is not None:
-                    return cached
+                    return cast(dict, cached)
         except Exception:
             # Cache unavailability should not break permission lookups
             pass

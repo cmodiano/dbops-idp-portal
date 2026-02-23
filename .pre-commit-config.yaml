@@ -27,4 +27,12 @@ repos:
             .*\.md$
           )$
 
-  # Mypy: run from idp-portal directory using the local hook in idp-portal/.pre-commit-config.yaml
+  # Mypy (Django backend): runs at commit using project venv (Django plugin needs project settings).
+  - repo: local
+    hooks:
+      - id: mypy-django-backend
+        name: mypy (django_backend)
+        entry: "bash -c 'V=idp-portal/django_backend/.venv/bin/python; if [ -x \"$V\" ] && \"$V\" -c \"import mypy\" 2>/dev/null; then \"$V\" -m mypy --config-file=idp-portal/django_backend/pyproject.toml --no-error-summary idp-portal/django_backend; else echo \"Skip mypy (no mypy in .venv). Install: cd idp-portal/django_backend && uv sync --extra dev\"; fi'"
+        language: system
+        files: ^idp-portal/django_backend/.*\.py$
+        pass_filenames: false

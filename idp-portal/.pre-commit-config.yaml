@@ -1,9 +1,9 @@
-# Pre-commit hooks configuration
-# Story 15.1: Security audit - Secret detection
-# Install: pip install pre-commit && pre-commit install
+# Pre-commit hooks for idp-portal (when run from idp-portal directory)
+# For repo root (recommended): use the root .pre-commit-config.yaml and run "pre-commit install" from repo root.
+# Story 15.1: Secret detection | Story 26.16: mypy enforcement
 
 repos:
-  # Secret detection - prevent secrets from being committed
+  # Secret detection
   - repo: https://github.com/Yelp/detect-secrets
     rev: v1.5.0
     hooks:
@@ -17,3 +17,14 @@ repos:
             .*\.venv/.*|
             .*security-reports/.*
           )$
+
+  # Mypy type check (Django backend) — blocks commit on error
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy (django_backend)
+        entry: bash -c 'cd django_backend && mypy . --config-file=pyproject.toml --no-error-summary'
+        language: system
+        types: [python]
+        files: ^django_backend/.*\.py$
+        pass_filenames: false

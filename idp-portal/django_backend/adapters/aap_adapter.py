@@ -70,6 +70,7 @@ class AAPAdapter(BaseAdapter):
         extra_vars: dict | None = None,
         limit: str | None = None,
         correlation_id: str | None = None,
+        **kwargs: object,
     ) -> dict:
         """Launch a job template or workflow job template on AAP.
 
@@ -179,6 +180,7 @@ class AAPAdapter(BaseAdapter):
         platform_job_id: str,
         resource_type: str = "job_template",
         correlation_id: str | None = None,
+        **kwargs: object,
     ) -> dict:
         """Get current status of an AAP job.
 
@@ -250,6 +252,7 @@ class AAPAdapter(BaseAdapter):
         platform_job_id: str,
         resource_type: str = "job_template",
         correlation_id: str | None = None,
+        **kwargs: object,
     ) -> dict:
         """Retrieve stdout logs for an AAP job.
 
@@ -475,6 +478,7 @@ class AAPAdapter(BaseAdapter):
         platform_job_id: str,
         resource_type: str = "job_template",
         correlation_id: str | None = None,
+        **kwargs: object,
     ) -> None:
         """Attempt to cancel a running job on AAP.
 

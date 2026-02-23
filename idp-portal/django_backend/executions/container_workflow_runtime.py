@@ -19,7 +19,7 @@ Architecture:
 import time
 import structlog
 from threading import Thread
-from typing import Dict, Any, List
+from typing import Dict, Any, List, cast
 
 from django.conf import settings
 from django.db import close_old_connections
@@ -339,8 +339,7 @@ class ContainerWorkflowRuntime:
         })
         parent_step.save()
 
-        status: ExecutionStatus = child_execution.status
-        return status
+        return cast(ExecutionStatus, child_execution.status)
 
     def run(self) -> None:
         """

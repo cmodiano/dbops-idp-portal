@@ -136,7 +136,7 @@ def _calculate_backoff(attempt: int) -> float:
     attempt 1: DB_RETRY_BACKOFF_BASE * 2
     attempt N: DB_RETRY_BACKOFF_BASE * 2^N, capped at 5s
     """
-    base = getattr(settings, 'DB_RETRY_BACKOFF_BASE', 0.5)
+    base: float = float(getattr(settings, 'DB_RETRY_BACKOFF_BASE', 0.5))
     delay = base * (2 ** attempt)
     return min(delay, 5.0)
 

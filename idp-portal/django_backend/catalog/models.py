@@ -184,7 +184,8 @@ class BusinessRulePolicy(models.Model):
             return None
         rules = self.policy_json.get('on_step_output')
         if rules and isinstance(rules, list) and len(rules) > 0:
-            return rules[0].get('when', {}).get('step_type')
+            step_type = rules[0].get('when', {}).get('step_type')
+            return str(step_type) if step_type is not None else None
         return None
 
 
@@ -325,13 +326,13 @@ class Action(models.Model):
         if self.business_rule_policy_id:
             policy = self.business_rule_policy
             if policy and policy.is_active:
-                return policy.policy_json
+                return policy.policy_json  # type: ignore[return-value]
             logger.warning(
                 "business_rule_policy_inactive: action_id=%s, policy_id=%s",
                 self.id, self.business_rule_policy_id,
             )
             return None
-        return self.business_rule_policies
+        return self.business_rule_policies  # type: ignore[return-value]
 
     def clean(self) -> None:
         """Validate model fields before save."""

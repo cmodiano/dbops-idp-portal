@@ -95,6 +95,7 @@ class AzureDevOpsAdapter(BaseAdapter):
         variables: dict | None = None,
         branch: str | None = None,
         correlation_id: str | None = None,
+        **kwargs: object,
     ) -> dict:
         """Launch a pipeline run on Azure DevOps.
 
@@ -226,6 +227,7 @@ class AzureDevOpsAdapter(BaseAdapter):
         platform_job_id: str,
         pipeline_id: str,
         correlation_id: str | None = None,
+        **kwargs: object,
     ) -> dict:
         """Get current status of an Azure DevOps pipeline run.
 
@@ -347,6 +349,7 @@ class AzureDevOpsAdapter(BaseAdapter):
         platform_job_id: str,
         pipeline_id: str,
         correlation_id: str | None = None,
+        **kwargs: object,
     ) -> dict:
         """Retrieve logs for an Azure DevOps pipeline run.
 
@@ -554,6 +557,7 @@ class AzureDevOpsAdapter(BaseAdapter):
         platform_job_id: str,
         pipeline_id: str,
         correlation_id: str | None = None,
+        **kwargs: object,
     ) -> None:
         """Attempt to cancel a running pipeline run on Azure DevOps.
 

@@ -26,20 +26,20 @@ Design choice (Option A — see ADR adr-006)
 """
 from __future__ import annotations
 
-from typing import Callable
+from typing import Any, Callable
 
 # ---------------------------------------------------------------------------
 # Internal registry — maps service name → zero-argument factory callable.
 # Empty in production; populated by tests via override_service().
 # ---------------------------------------------------------------------------
-_service_registry: dict[str, Callable] = {}
+_service_registry: dict[str, Callable[[], Any]] = {}
 
 
 # ---------------------------------------------------------------------------
 # Public factory helpers
 # ---------------------------------------------------------------------------
 
-def get_profile_service():
+def get_profile_service() -> Any:
     """Return a ProfileService instance (overridable in tests)."""
     factory = _service_registry.get('profile_service')
     if factory:
@@ -48,7 +48,7 @@ def get_profile_service():
     return ProfileService()
 
 
-def get_execution_service():
+def get_execution_service() -> Any:
     """Return an ExecutionService instance (overridable in tests)."""
     factory = _service_registry.get('execution_service')
     if factory:
@@ -57,7 +57,7 @@ def get_execution_service():
     return ExecutionService()
 
 
-def get_catalog_service():
+def get_catalog_service() -> Any:
     """Return a CatalogService instance (overridable in tests)."""
     factory = _service_registry.get('catalog_service')
     if factory:
@@ -66,7 +66,7 @@ def get_catalog_service():
     return CatalogService()
 
 
-def get_inventory_service():
+def get_inventory_service() -> Any:
     """Return an InventoryService instance (overridable in tests)."""
     factory = _service_registry.get('inventory_service')
     if factory:

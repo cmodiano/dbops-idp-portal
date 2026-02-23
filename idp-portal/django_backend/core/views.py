@@ -57,7 +57,7 @@ def health_check(request: Any) -> Response:
         Status code: 200 if healthy, 503 if degraded
     """
     correlation_id = get_correlation_id()
-    health_data = {
+    health_data: dict[str, Any] = {
         "status": "healthy",
         "timestamp": ensure_utc_isoformat(datetime.now(timezone.utc)),
     }

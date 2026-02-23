@@ -37,8 +37,8 @@ class PlatformTypeCatalogueSerializer(serializers.ModelSerializer):
     """Story 31.9: Serializer for IntegrationTypeCatalogue (role=platform).
     Replaces RefPlatformSerializer. Compatible response format."""
 
-    label = serializers.CharField(source='name')
-    normalized_code = serializers.CharField(source='code')
+    label: serializers.CharField = serializers.CharField(source='name')
+    normalized_code: serializers.CharField = serializers.CharField(source='code')
 
     class Meta:
         model = IntegrationTypeCatalogue

@@ -41,10 +41,10 @@ def resolve_credential(
     if integration and getattr(integration, 'secret_service_id', None):
         from integrations.models import Integration as IntegrationModel
 
+        sid = getattr(integration, 'secret_service_id', None)
+        assert sid is not None  # we only enter when getattr returned truthy
         try:
-            vault_integration = IntegrationModel.objects.get(
-                id=integration.secret_service_id
-            )
+            vault_integration = IntegrationModel.objects.get(id=int(sid))
         except IntegrationModel.DoesNotExist:
             logger.error(
                 "resolve_credential_vault_not_found",

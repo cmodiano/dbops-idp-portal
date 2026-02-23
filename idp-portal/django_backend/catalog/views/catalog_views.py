@@ -54,7 +54,7 @@ class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
     # Override in tests: view._execution_service_class = MockExecutionService
     _execution_service_class = None
 
-    def get_execution_service(self):
+    def get_execution_service(self) -> Any:
         """Return an ExecutionService instance (overridable in tests)."""
         from executions.services import ExecutionService  # noqa: PLC0415
         cls = self._execution_service_class or ExecutionService

@@ -315,7 +315,7 @@ class JiraService:
                     if status_code in (200, 201, 204):
                         if expect_no_content or status_code == 204:
                             return {}
-                        return response.json()
+                        return response.json()  # type: ignore[no-any-return]
 
                     # Transient errors — retry
                     if status_code in _TRANSIENT_STATUS_CODES:

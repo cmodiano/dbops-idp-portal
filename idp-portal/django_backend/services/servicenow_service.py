@@ -86,7 +86,7 @@ class ServiceNowService:
                     change_number=change_number,
                     base_url=self.base_url,
                 )
-                return change_number
+                return str(change_number)
         except httpx.TimeoutException as exc:
             logger.error("servicenow_create_change_timeout", base_url=self.base_url, error=str(exc))
             raise ServiceUnavailableError(

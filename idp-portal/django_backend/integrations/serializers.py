@@ -313,7 +313,7 @@ class IntegrationListSerializer(serializers.ModelSerializer):
     Excludes config for performance.
     """
     auth_flow = serializers.CharField(required=False, allow_null=True)
-    secret_service_id = serializers.PrimaryKeyRelatedField(
+    secret_service_id: serializers.PrimaryKeyRelatedField = serializers.PrimaryKeyRelatedField(
         source='secret_service',
         read_only=True,
     )

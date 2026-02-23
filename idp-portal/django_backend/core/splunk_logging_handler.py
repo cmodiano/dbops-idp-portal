@@ -22,7 +22,7 @@ import logging
 import os
 import queue
 import threading
-from typing import Any
+from typing import Any, cast
 
 import structlog
 
@@ -167,12 +167,12 @@ class SplunkLoggingHandler(logging.Handler):
             if isinstance(record.msg, str):
                 event = json.loads(record.msg)
                 if isinstance(event, dict):
-                    return event
+                    return cast(dict[str, Any], event)
         except (json.JSONDecodeError, TypeError):
             pass
 
         # Fallback: build event from LogRecord attributes
-        event: dict[str, Any] = {
+        fallback_event: dict[str, Any] = {
             "event": record.getMessage(),
             "level": record.levelname,
             "logger": record.name,
@@ -183,9 +183,9 @@ class SplunkLoggingHandler(logging.Handler):
         for key in ("correlation_id", "user_id", "execution_id"):
             value = getattr(record, key, None)
             if value is not None:
-                event[key] = value
+                fallback_event[key] = value
 
-        return event
+        return fallback_event
 
     def flush(self) -> None:
         """Flush buffered events to Splunk HEC via SplunkAdapter.send_batch()."""

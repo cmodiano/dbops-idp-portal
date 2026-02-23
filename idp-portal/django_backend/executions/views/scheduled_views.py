@@ -32,7 +32,7 @@ from executions.serializers import (
 )
 from core.environment import EnvironmentHelper
 from core.permissions import IsDBAOrDBOPS
-from executions.services import SchedulingService
+from executions.scheduling_service import SchedulingService
 from executions.utils import (
     parse_int,
     parse_iso_datetime,

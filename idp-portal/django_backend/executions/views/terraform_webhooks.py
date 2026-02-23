@@ -253,7 +253,7 @@ def _broadcast_terraform_webhook_update(
     """Broadcast webhook status update to execution's WebSocket group."""
     try:
         from channels.layers import get_channel_layer  # type: ignore[import-untyped]
-        from asgiref.sync import async_to_sync  # type: ignore[import-untyped]
+        from asgiref.sync import async_to_sync
 
         channel_layer = get_channel_layer()
         if channel_layer is None:

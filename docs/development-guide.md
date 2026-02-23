@@ -75,13 +75,26 @@ ruff check . --fix
 mypy .
 ```
 
-### Pre-commit
+### Pre-commit (mypy + detect-secrets)
+
+Pre-commit is configured at **repository root** (`.pre-commit-config.yaml`). It runs **mypy** on `idp-portal/django_backend` (blocking on error) and **detect-secrets** on `idp-portal/`.
+
+**1. Install pre-commit** (required once; use a venv or your usual Python):
 
 ```bash
 pip install pre-commit
+# or with uv:  uv tool install pre-commit  (then use `pre-commit` from PATH)
+```
+
+**2. Install hooks and run** (from repository root):
+
+```bash
+# From repository root (parent of idp-portal/)
 pre-commit install
 pre-commit run --all-files
 ```
+
+Mypy requires backend dev deps to be installed (e.g. `cd idp-portal/django_backend && uv pip install -r requirements-dev.lock`).
 
 ### Variables d'environnement
 

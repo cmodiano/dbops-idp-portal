@@ -169,7 +169,7 @@ class NotificationService:
 
     def notify(self, destination_type: str, **kwargs: Any) -> None:
         """Dispatch vers la méthode de destination appropriée."""
-        dispatch = {
+        dispatch: dict[str, Any] = {
             "email": self.send_email,
             "teams": self.send_teams,
             "page_individual": self.send_page_individual,
@@ -182,7 +182,7 @@ class NotificationService:
                 destination_type=destination_type,
             )
             return
-        handler(**kwargs)
+        handler(**kwargs)  # type: ignore[misc]
 
     def notify_execution_event(
         self,
