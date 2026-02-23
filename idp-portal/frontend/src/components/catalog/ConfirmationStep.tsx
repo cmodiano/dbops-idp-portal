@@ -1,6 +1,8 @@
 /**
  * ConfirmationStep - Step 3 of the execution wizard.
  * Story 17.2, Task 4.3.
+ * Story 34.13 (SOLID-FE-7): Reduced from 15 to 12 props — 3 props moved
+ * to WizardExecutionContext (derivedEnvironment, currentImpact, environmentsCache).
  *
  * Shows execution recap and handles submit/scheduling.
  */
@@ -15,13 +17,13 @@ import {
   Typography,
 } from 'antd';
 import type { CatalogActionDetail } from '../../services/catalog_service';
-import type { ExecutionEnvironment, ImpactLevel, InventoryItem } from '../../types/api';
 import { ImpactIndicator } from '../shared/ImpactIndicator';
 import type { SchedulingState } from '../../hooks/useExecutionSubmit';
 import { SchedulingPanel } from './SchedulingPanel';
 import type { UseSchedulingValidationReturn } from '../../hooks/useSchedulingValidation';
 import type { Target } from './TargetSelector';
 import { getEnvironmentLabel, isProductionEnvironment } from '../../utils/environmentHelpers';
+import { useWizardExecutionContext } from '../../contexts/WizardExecutionContext';
 
 const { Text, Title } = Typography;
 
@@ -30,11 +32,10 @@ import { STEP_DESCRIPTIONS_SIMPLIFIED } from '../../utils/stepDescriptions';
 export interface ConfirmationStepProps {
   action: CatalogActionDetail;
   selectedTargets: Target[];
-  derivedEnvironment: ExecutionEnvironment | null;
-  currentImpact: ImpactLevel | null;
+  // 3 props moved to WizardExecutionContext:
+  // derivedEnvironment, currentImpact, environmentsCache
   parameters: Record<string, unknown>;
   submitError: string | null;
-  environmentsCache: InventoryItem[] | null;
   isScheduling: boolean;
   scheduling: SchedulingState;
   onSchedulingChange: (updates: Partial<SchedulingState>) => void;
@@ -50,11 +51,8 @@ export interface ConfirmationStepProps {
 export const ConfirmationStep = memo(function ConfirmationStep({
   action,
   selectedTargets,
-  derivedEnvironment,
-  currentImpact,
   parameters,
   submitError,
-  environmentsCache,
   isScheduling,
   scheduling,
   onSchedulingChange,
@@ -65,6 +63,11 @@ export const ConfirmationStep = memo(function ConfirmationStep({
   onPageMeChange,
 }: ConfirmationStepProps) {
   const { isBusinessProfile } = useAuth();
+  const {
+    derivedEnvironment,
+    currentImpact,
+    environmentsCache,
+  } = useWizardExecutionContext();
   const changeConfig = action?.change_type_config?.[derivedEnvironment?.toUpperCase() ?? ''];
   const isChangeRequired = changeConfig?.required ?? false;
 

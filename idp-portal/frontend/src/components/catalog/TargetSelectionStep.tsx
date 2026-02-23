@@ -1,6 +1,10 @@
 /**
  * TargetSelectionStep - Step 1 of the execution wizard.
  * Story 17.2, Task 4.1.
+ * Story 34.13 (SOLID-FE-7): Reduced from 19 to 12 props — 7 props moved
+ * to WizardExecutionContext (derivedEnvironment, hasMixedEnvironments,
+ * currentImpact, environmentsCache, inventoryWarnings, resolvedPatternTargets,
+ * patternResolving).
  *
  * Handles target selection (list, pattern, manual) or environment selection (fallback).
  */
@@ -18,10 +22,11 @@ import {
 } from 'antd';
 import { WarningOutlined, LoadingOutlined } from '@ant-design/icons';
 import type { CatalogActionDetail } from '../../services/catalog_service';
-import type { ExecutionEnvironment, InventoryItem } from '../../types/api';
+import type { ExecutionEnvironment } from '../../types/api';
 import { ImpactIndicator } from '../shared/ImpactIndicator';
 import { TargetSelector, type Target } from './TargetSelector';
 import { getEnvironmentLabel, isProductionEnvironment } from '../../utils/environmentHelpers';
+import { useWizardExecutionContext } from '../../contexts/WizardExecutionContext';
 
 const { Text } = Typography;
 
@@ -46,13 +51,9 @@ export interface TargetSelectionStepProps {
   onManualTargetInputChange: (input: string) => void;
   selectedEnvironment: ExecutionEnvironment | null;
   onEnvironmentChange: (env: ExecutionEnvironment) => void;
-  derivedEnvironment: ExecutionEnvironment | null;
-  hasMixedEnvironments: boolean;
-  currentImpact: import('../../types/api').ImpactLevel | null;
-  environmentsCache: InventoryItem[] | null;
-  inventoryWarnings: Record<string, boolean>;
-  resolvedPatternTargets: Array<{ name: string; environment: string }>;
-  patternResolving: boolean;
+  // 7 props moved to WizardExecutionContext:
+  // derivedEnvironment, hasMixedEnvironments, currentImpact,
+  // environmentsCache, inventoryWarnings, resolvedPatternTargets, patternResolving
 }
 
 import { STEP_DESCRIPTIONS_SIMPLIFIED } from '../../utils/stepDescriptions';
@@ -70,17 +71,20 @@ export const TargetSelectionStep = memo(function TargetSelectionStep({
   onManualTargetInputChange,
   selectedEnvironment,
   onEnvironmentChange,
-  derivedEnvironment,
-  hasMixedEnvironments,
-  currentImpact,
-  environmentsCache,
-  inventoryWarnings,
-  resolvedPatternTargets,
-  patternResolving,
 }: TargetSelectionStepProps) {
   const firstFieldRef = useRef<HTMLElement | null>(null);
   const { isBusinessProfile } = useAuth();
   const requiresTarget = action?.requires_target !== false;
+
+  const {
+    environmentsCache,
+    inventoryWarnings,
+    derivedEnvironment,
+    hasMixedEnvironments,
+    currentImpact,
+    resolvedPatternTargets,
+    patternResolving,
+  } = useWizardExecutionContext();
 
   const manualTargetCount = useMemo(() => {
     return manualTargetInput
