@@ -1,13 +1,18 @@
 """
-Tests for Story 23.5: validate_parameters_schema_inventory.
+Tests for Story 23.5 + 37.4: validate_parameters_schema_inventory.
 
-Validates that parameters_schema with source='inventory' requires a valid inventory_type.
+Validates that parameters_schema with source='inventory' requires a valid inventory_type
+and that the optional inventory_value_column is a valid column for that inventory_type.
 """
 
 import pytest
 from rest_framework import serializers
 
-from catalog.serializers import validate_parameters_schema_inventory, VALID_INVENTORY_TYPES
+from catalog.serializers import (
+    validate_parameters_schema_inventory,
+    VALID_INVENTORY_TYPES,
+    VALID_INVENTORY_VALUE_COLUMNS,
+)
 
 
 class TestValidateParametersSchemaInventory:
@@ -165,3 +170,214 @@ class TestValidateParametersSchemaInventory:
         }
         with pytest.raises(serializers.ValidationError):
             validate_parameters_schema_inventory(schema)
+
+
+class TestInventoryValueColumn:
+    """Story 37.4: Tests for optional inventory_value_column property."""
+
+    def test_inventory_value_column_valid_name_passes(self):
+        """4.1 — servers + inventory_value_column=name → passe."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "target": {
+                    "type": "string",
+                    "source": "inventory",
+                    "inventory_type": "servers",
+                    "inventory_value_column": "name",
+                }
+            },
+        }
+        result = validate_parameters_schema_inventory(schema)
+        assert result == schema
+
+    def test_inventory_value_column_valid_id_passes(self):
+        """4.2 — databases + inventory_value_column=id → passe."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "db": {
+                    "type": "string",
+                    "source": "inventory",
+                    "inventory_type": "databases",
+                    "inventory_value_column": "id",
+                }
+            },
+        }
+        result = validate_parameters_schema_inventory(schema)
+        assert result == schema
+
+    def test_inventory_value_column_valid_server_ref_passes(self):
+        """4.3 — instances + inventory_value_column=server_ref → passe."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "inst": {
+                    "type": "string",
+                    "source": "inventory",
+                    "inventory_type": "instances",
+                    "inventory_value_column": "server_ref",
+                }
+            },
+        }
+        result = validate_parameters_schema_inventory(schema)
+        assert result == schema
+
+    def test_inventory_value_column_invalid_fails_with_message(self):
+        """4.4 — servers + inventory_value_column=bad_col → exception avec message explicite."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "target": {
+                    "type": "string",
+                    "source": "inventory",
+                    "inventory_type": "servers",
+                    "inventory_value_column": "bad_col",
+                }
+            },
+        }
+        with pytest.raises(serializers.ValidationError) as exc_info:
+            validate_parameters_schema_inventory(schema)
+        error = str(exc_info.value)
+        assert "target" in error
+        assert "inventory_value_column" in error
+        assert "must be one of" in error
+        assert "servers" in error
+
+    def test_inventory_value_column_wrong_type_fails(self):
+        """4.5 — databases + inventory_value_column=engine_type (non autorisé) → exception."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "db": {
+                    "type": "string",
+                    "source": "inventory",
+                    "inventory_type": "databases",
+                    "inventory_value_column": "engine_type",
+                }
+            },
+        }
+        with pytest.raises(serializers.ValidationError):
+            validate_parameters_schema_inventory(schema)
+
+    def test_inventory_value_column_absent_passes(self):
+        """4.6 — schéma sans inventory_value_column → rétrocompatibilité (AC #4)."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "srv": {
+                    "type": "string",
+                    "source": "inventory",
+                    "inventory_type": "servers",
+                }
+            },
+        }
+        result = validate_parameters_schema_inventory(schema)
+        assert result == schema
+
+    def test_inventory_value_column_none_passes(self):
+        """4.7 — inventory_value_column=None explicite → passe (AC #4)."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "srv": {
+                    "type": "string",
+                    "source": "inventory",
+                    "inventory_type": "servers",
+                    "inventory_value_column": None,
+                }
+            },
+        }
+        result = validate_parameters_schema_inventory(schema)
+        assert result == schema
+
+    @pytest.mark.parametrize(
+        "inventory_type,column",
+        [
+            (itype, col)
+            for itype, cols in VALID_INVENTORY_VALUE_COLUMNS.items()
+            for col in cols
+        ],
+    )
+    def test_all_valid_columns_per_type(self, inventory_type, column):
+        """4.8 — chaque colonne valide par inventory_type → passe."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "target": {
+                    "type": "string",
+                    "source": "inventory",
+                    "inventory_type": inventory_type,
+                    "inventory_value_column": column,
+                }
+            },
+        }
+        result = validate_parameters_schema_inventory(schema)
+        assert result == schema
+
+    def test_inventory_value_column_persisted_in_schema(self):
+        """4.9 — round-trip : la fonction retourne exactement le schéma passé (AC #3)."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "instance": {
+                    "type": "string",
+                    "source": "inventory",
+                    "inventory_type": "instances",
+                    "inventory_value_column": "server_ref",
+                }
+            },
+        }
+        result = validate_parameters_schema_inventory(schema)
+        assert result is schema  # même objet, pas de copie
+
+    def test_inventory_value_column_empty_string_fails(self):
+        """Edge case — inventory_value_column='' (chaîne vide) → n'est pas None, doit échouer."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "target": {
+                    "type": "string",
+                    "source": "inventory",
+                    "inventory_type": "servers",
+                    "inventory_value_column": "",
+                }
+            },
+        }
+        with pytest.raises(serializers.ValidationError):
+            validate_parameters_schema_inventory(schema)
+
+    def test_inventory_value_column_invalid_on_second_param_fails(self):
+        """Multi-params — premier param valide, second param avec colonne invalide → exception sur le second."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "first": {
+                    "type": "string",
+                    "source": "inventory",
+                    "inventory_type": "servers",
+                    "inventory_value_column": "name",  # valide
+                },
+                "second": {
+                    "type": "string",
+                    "source": "inventory",
+                    "inventory_type": "databases",
+                    "inventory_value_column": "engine_type",  # invalide pour databases
+                },
+            },
+        }
+        with pytest.raises(serializers.ValidationError) as exc_info:
+            validate_parameters_schema_inventory(schema)
+        assert "second" in str(exc_info.value)
+
+
+def test_valid_inventory_value_columns_covers_all_inventory_types():
+    """M1 — Invariant : VALID_INVENTORY_VALUE_COLUMNS doit couvrir exactement VALID_INVENTORY_TYPES.
+
+    Sans cet invariant, un nouveau type ajouté dans VALID_INVENTORY_TYPES sans mise à jour
+    de VALID_INVENTORY_VALUE_COLUMNS produirait un message d'erreur vide : 'must be one of: '.
+    """
+    assert set(VALID_INVENTORY_VALUE_COLUMNS.keys()) == set(VALID_INVENTORY_TYPES), (
+        "VALID_INVENTORY_VALUE_COLUMNS keys must match VALID_INVENTORY_TYPES exactly. "
+        "Update VALID_INVENTORY_VALUE_COLUMNS when adding a new inventory type."
+    )

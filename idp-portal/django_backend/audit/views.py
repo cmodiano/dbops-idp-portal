@@ -15,8 +15,7 @@ from rest_framework.views import APIView
 from core.exceptions import BadRequestError, ForbiddenError
 from core.utils import ensure_utc_isoformat
 from core.models import AuditLog, AuditEntityType, AuditActionType
-from executions.models import Execution
-from executions.models import ExecutionStatus
+from executions.models import Execution, ExecutionStatus
 from idp_auth.models import User
 from profiles.models import Profile
 
@@ -187,7 +186,7 @@ def _build_audit_queryset(request):
             )
         # Filter by current execution status so "En cours" shows only executions still in progress
         exec_statuses = _EXECUTION_STATUS_BY_FILTER[status_filter]
-        exec_ids = Execution.objects.filter(status__in=exec_statuses).values_list("id", flat=True)
+        exec_ids = Execution.objects.filter(status__in=exec_statuses).values_list("id", flat=True)  # type: ignore[assignment]
         qs = qs.filter(entity_id__in=exec_ids)
 
     # Story 27.8: Filter by correlation_id (exact match)

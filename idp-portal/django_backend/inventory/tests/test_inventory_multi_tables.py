@@ -56,11 +56,8 @@ FLAT_TABLE_CONFIG = {
 }
 
 
-class ReadServersFromConfigTests(TestCase):
-    """Tests for _read_servers_from_config (AC3)."""
-
-    def setUp(self):
-        self.service = InventoryService()
+class InventoryTestMixin:
+    """Shared helper for multi-table inventory tests."""
 
     def _create_inventory_db(self, config):
         return Integration.objects.create(
@@ -69,6 +66,13 @@ class ReadServersFromConfigTests(TestCase):
             base_url='oracle://localhost',
             config=json.dumps(config),
         )
+
+
+class ReadServersFromConfigTests(InventoryTestMixin, TestCase):
+    """Tests for _read_servers_from_config (AC3)."""
+
+    def setUp(self):
+        self.service = InventoryService()
 
     @patch('inventory.services.connection')
     def test_read_servers_multi_table(self, mock_conn):
@@ -180,19 +184,11 @@ class ReadServersFromConfigTests(TestCase):
             self.assertEqual(results, [])
 
 
-class ReadInstancesFromConfigTests(TestCase):
+class ReadInstancesFromConfigTests(InventoryTestMixin, TestCase):
     """Tests for _read_instances_from_config (AC4)."""
 
     def setUp(self):
         self.service = InventoryService()
-
-    def _create_inventory_db(self, config):
-        return Integration.objects.create(
-            type=IntegrationType.INVENTORY_DB,
-            name='DB Inventory',
-            base_url='oracle://localhost',
-            config=json.dumps(config),
-        )
 
     @patch('inventory.services.connection')
     def test_read_instances_multi_table(self, mock_conn):
@@ -286,19 +282,11 @@ class ReadInstancesFromConfigTests(TestCase):
         self.assertEqual(results, [])
 
 
-class ReadDatabasesFromConfigTests(TestCase):
+class ReadDatabasesFromConfigTests(InventoryTestMixin, TestCase):
     """Tests for _read_databases_from_config (AC5)."""
 
     def setUp(self):
         self.service = InventoryService()
-
-    def _create_inventory_db(self, config):
-        return Integration.objects.create(
-            type=IntegrationType.INVENTORY_DB,
-            name='DB Inventory',
-            base_url='oracle://localhost',
-            config=json.dumps(config),
-        )
 
     @patch('inventory.services.connection')
     def test_read_databases_multi_table(self, mock_conn):
@@ -518,7 +506,7 @@ class ExecuteMappedQueryTests(TestCase):
 # Story 37.1: Environnement dérivé depuis la table servers (JOIN)
 # ─────────────────────────────────────────────────────────────────────────────
 
-class ReadInstancesEnvFromServersTests(TestCase):
+class ReadInstancesEnvFromServersTests(InventoryTestMixin, TestCase):
     """
     Story 37.1 AC1, AC4 — Environment filter for instances uses JOIN instances → servers.
     Tests 6.1 and 6.5.
@@ -526,14 +514,6 @@ class ReadInstancesEnvFromServersTests(TestCase):
 
     def setUp(self):
         self.service = InventoryService()
-
-    def _create_inventory_db(self, config):
-        return Integration.objects.create(
-            type=IntegrationType.INVENTORY_DB,
-            name='DB Inventory',
-            base_url='oracle://localhost',
-            config=json.dumps(config),
-        )
 
     def _make_mock_cursor(self, mock_conn, rows=None, description=None):
         mock_cursor = MagicMock()
@@ -646,7 +626,7 @@ class ReadInstancesEnvFromServersTests(TestCase):
         self.assertIn('inst.ENV', sql)
 
 
-class ReadDatabasesEnvFromServersTests(TestCase):
+class ReadDatabasesEnvFromServersTests(InventoryTestMixin, TestCase):
     """
     Story 37.1 AC2, AC3, AC4 — Environment filter for databases uses JOIN → servers.
     Tests 6.2, 6.3, 6.4.
@@ -654,14 +634,6 @@ class ReadDatabasesEnvFromServersTests(TestCase):
 
     def setUp(self):
         self.service = InventoryService()
-
-    def _create_inventory_db(self, config):
-        return Integration.objects.create(
-            type=IntegrationType.INVENTORY_DB,
-            name='DB Inventory',
-            base_url='oracle://localhost',
-            config=json.dumps(config),
-        )
 
     def _make_mock_cursor(self, mock_conn, rows=None):
         mock_cursor = MagicMock()
@@ -814,19 +786,11 @@ MULTI_TABLE_CONFIG_NO_ENGINE = {
 }
 
 
-class EngineTypeFilterInstancesTests(TestCase):
+class EngineTypeFilterInstancesTests(InventoryTestMixin, TestCase):
     """Story 37.2: engine_type filter for instances via servers JOIN (AC1, AC3, AC4)."""
 
     def setUp(self):
         self.service = InventoryService()
-
-    def _create_inventory_db(self, config):
-        return Integration.objects.create(
-            type=IntegrationType.INVENTORY_DB,
-            name='DB Inventory',
-            base_url='oracle://localhost',
-            config=json.dumps(config),
-        )
 
     def _make_mock_cursor(self, mock_conn, rows=None):
         mock_cursor = MagicMock()
@@ -934,19 +898,11 @@ class EngineTypeFilterInstancesTests(TestCase):
         self.assertIsInstance(result, list)
 
 
-class EngineTypeFilterDatabasesTests(TestCase):
+class EngineTypeFilterDatabasesTests(InventoryTestMixin, TestCase):
     """Story 37.2: engine_type filter for databases via servers JOIN (AC2, AC3, AC4)."""
 
     def setUp(self):
         self.service = InventoryService()
-
-    def _create_inventory_db(self, config):
-        return Integration.objects.create(
-            type=IntegrationType.INVENTORY_DB,
-            name='DB Inventory',
-            base_url='oracle://localhost',
-            config=json.dumps(config),
-        )
 
     def _make_mock_cursor(self, mock_conn, rows=None):
         mock_cursor = MagicMock()

@@ -189,8 +189,8 @@ describe('useExecutionsData — Story 36.3 : polling observateur', () => {
     const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
     mockListExecutions.mockResolvedValue(makeListResponse([makeExecution(1, 'COMPLETED', 42)]));
 
-    renderHook(() => useExecutionsData(defaultFilters, false));
-    await waitFor(() => expect(mockListExecutions).toHaveBeenCalled());
+    const { result } = renderHook(() => useExecutionsData(defaultFilters, false));
+    await waitFor(() => expect(result.current.loading).toBe(false));
 
     const pollingCall = setTimeoutSpy.mock.calls.find((args) => args[1] === 30_000);
     expect(pollingCall).toBeDefined();

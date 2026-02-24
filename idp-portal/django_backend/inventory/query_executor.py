@@ -17,7 +17,12 @@ import structlog
 from django.db import DatabaseError, InterfaceError
 
 from core.environment import EnvironmentHelper
-from inventory.mapper import InventoryMapper, MapperValidationError
+from inventory.mapper import (
+    SAFE_COLUMN_NAME_PATTERN,
+    InventoryMapper,
+    MapperValidationError,
+    _validate_column_name,
+)
 from integrations.models import Integration, IntegrationType
 from core.middleware import get_correlation_id
 
@@ -262,14 +267,22 @@ class InventoryQueryExecutor:
         Build a table-aliased SELECT clause directly from entity config.
 
         Avoids str.replace fragility when column names share substrings.
+        Validates id_column and all column names/concepts to prevent SQL injection.
         Example: entity_cfg with id_column="INST_ID", columns={"name": "INST_NAME"},
         alias="inst" → "inst.INST_ID AS id, inst.INST_NAME AS name"
         """
         parts = []
         id_col = entity_cfg.get('id_column')
         if id_col:
+            _validate_column_name(id_col)
             parts.append(f"{table_alias}.{id_col} AS id")
         for concept, col in entity_cfg.get('columns', {}).items():
+            if not SAFE_COLUMN_NAME_PATTERN.match(concept):
+                raise MapperValidationError(
+                    f"Invalid concept name: '{concept}'. "
+                    "Must match pattern: [A-Za-z_][A-Za-z0-9_]*"
+                )
+            _validate_column_name(col)
             parts.append(f"{table_alias}.{col} AS {concept}")
         return ", ".join(parts)
 
@@ -339,7 +352,6 @@ class InventoryQueryExecutor:
 
             # Standard single-entity query
             table = mapper.get_table_name(entity_plural)
-            select = mapper.build_select_clause(entity_plural)
 
             # Story 37.1: Check if servers config available for env-from-server JOIN
             has_servers_config = mapper.get_entity_config('servers') is not None
@@ -471,8 +483,18 @@ class InventoryQueryExecutor:
                     correlation_id=correlation_id,
                 )
 
+            if entity_type == 'instance' and (environment or engine_type) and not has_servers_config:
+                # Fallback: log warning, continue to local column filter below (symmetric with databases)
+                logger.warning(
+                    "environment_filter_fallback_to_local_column",
+                    entity=entity_plural,
+                    reason="servers entity not configured",
+                    correlation_id=correlation_id,
+                )
+
             # Default path: servers always use their own env column;
             # instances/databases fallback here only when servers config is absent.
+            select = mapper.build_select_clause(entity_plural)
             filters = {}
             if environment:
                 filters['environment'] = environment
@@ -556,7 +578,6 @@ class InventoryQueryExecutor:
 
         # Instances multi-server path
         table = mapper.get_table_name(entity_plural)
-        select = mapper.build_select_clause(entity_plural)
         server_ref_col = mapper.get_column(entity_plural, 'server_ref')
 
         in_params = {f'p_server_{i}': sn for i, sn in enumerate(server_names)}

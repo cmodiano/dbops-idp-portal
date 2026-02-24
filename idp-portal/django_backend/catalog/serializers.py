@@ -29,6 +29,12 @@ _PLATFORM_ALIAS: dict[str, str] = {
 
 VALID_INVENTORY_TYPES = ('servers', 'instances', 'databases')
 
+VALID_INVENTORY_VALUE_COLUMNS: dict[str, tuple[str, ...]] = {
+    'servers':   ('name', 'id', 'environment', 'engine_type'),
+    'instances': ('name', 'id', 'server_ref', 'db_ref'),
+    'databases': ('name', 'id'),
+}
+
 
 def _validate_platform_integration_consistency(
     platform: str | None,
@@ -78,10 +84,11 @@ def _validate_platform_integration_consistency(
 
 def validate_parameters_schema_inventory(value: Any) -> Any:
     """
-    Story 23.5: Validate inventory_type in parameters_schema properties.
+    Story 23.5 + 37.4: Validate inventory parameters in parameters_schema.
 
-    If a parameter property has source='inventory', inventory_type must be one of
-    'servers', 'instances', or 'databases'.
+    If a parameter property has source='inventory':
+    - inventory_type must be one of 'servers', 'instances', 'databases'.
+    - inventory_value_column (optional) must be an allowed column for the inventory_type.
     """
     if not value or not isinstance(value, dict):
         return value
@@ -106,6 +113,15 @@ def validate_parameters_schema_inventory(value: Any) -> Any:
                 f"Parameter '{param_name}': inventory_type must be one of: "
                 f"{', '.join(VALID_INVENTORY_TYPES)}"
             )
+        # Story 37.4 — validate optional inventory_value_column
+        inventory_value_column = prop.get('inventory_value_column')
+        if inventory_value_column is not None:
+            allowed = VALID_INVENTORY_VALUE_COLUMNS.get(inventory_type, ())
+            if inventory_value_column not in allowed:
+                raise serializers.ValidationError(
+                    f"Parameter '{param_name}': inventory_value_column must be one of: "
+                    f"{', '.join(allowed)} for inventory_type '{inventory_type}'"
+                )
 
     return value
 
@@ -306,7 +322,7 @@ class ActionSerializer(ActionFieldValidationMixin, serializers.ModelSerializer):
         return None
 
     def validate_parameters_schema(self, value: Any) -> Any:
-        """Story 23.5: Validate inventory_type in parameters_schema."""
+        """Story 23.5 + 37.4: Validate inventory_type and inventory_value_column in parameters_schema."""
         return validate_parameters_schema_inventory(value)
 
     def validate_gate_config(self, value: Any) -> Any:
