@@ -35,6 +35,8 @@ export interface IntegrationFormValues {
   config_advanced?: string | null;
   secret_service_id?: number | null;
   token_url?: string | null;
+  scope?: string | null; // Story 31.12: OAuth2 scope (oauth2_client_credentials)
+  header_name?: string | null; // Story 31.12: API key header name (api_key)
 }
 
 export interface IntegrationFormProps {
@@ -74,7 +76,9 @@ export function IntegrationForm({
   const watchAuthFlow = Form.useWatch('auth_flow', form);
   const isInventoryDb = (watchType ?? '').trim().toLowerCase() === 'inventory_db';
   const isVaultType = (watchType ?? '').trim().toLowerCase() === 'vault';
-  const isTokenFlow = watchAuthFlow === 'token' || watchAuthFlow === 'basic_then_token';
+  const isTokenFlow = watchAuthFlow === 'token' || watchAuthFlow === 'basic_then_token' || watchAuthFlow === 'oauth2_client_credentials'; // Story 31.12: extended
+  const isOauth2Flow = watchAuthFlow === 'oauth2_client_credentials'; // Story 31.12
+  const isApiKeyFlow = watchAuthFlow === 'api_key'; // Story 31.12
 
   // Story 27.11: Load Vault integrations for secret service dropdown
   const { vaultIntegrations } = useVaultIntegrations();
@@ -107,6 +111,12 @@ export function IntegrationForm({
               : undefined,
           secret_service_id: editIntegration.secret_service_id ?? undefined,
           token_url: editIntegration.token_url ?? undefined,
+          scope: editIntegration.auth_flow === 'oauth2_client_credentials'
+            ? ((editIntegration.config as Record<string, unknown>)?.scope as string ?? undefined)
+            : undefined, // Story 31.12
+          header_name: editIntegration.auth_flow === 'api_key'
+            ? ((editIntegration.config as Record<string, unknown>)?.header_name as string ?? undefined)
+            : undefined, // Story 31.12
         }
       : null;
 
@@ -137,6 +147,12 @@ export function IntegrationForm({
               : undefined,
           secret_service_id: editIntegration.secret_service_id ?? undefined,
           token_url: editIntegration.token_url ?? undefined,
+          scope: editIntegration.auth_flow === 'oauth2_client_credentials'
+            ? ((editIntegration.config as Record<string, unknown>)?.scope as string ?? undefined)
+            : undefined, // Story 31.12
+          header_name: editIntegration.auth_flow === 'api_key'
+            ? ((editIntegration.config as Record<string, unknown>)?.header_name as string ?? undefined)
+            : undefined, // Story 31.12
         });
       }, 0);
       return () => clearTimeout(t);
@@ -158,6 +174,8 @@ export function IntegrationForm({
         config_advanced: undefined,
         secret_service_id: undefined,
         token_url: undefined,
+        scope: undefined, // Story 31.12
+        header_name: undefined, // Story 31.12
       });
     }
   }, [open, editIntegration, form]);
@@ -203,6 +221,15 @@ export function IntegrationForm({
         secret_service_id: isVaultType ? null : (values.secret_service_id || null),
         token_url: isTokenFlow ? (values.token_url?.trim() || null) : null, // Story 31.11
       };
+      // Story 31.12: auth config fields stored in config JSON (mutually exclusive with isInventoryDb)
+      if (!isInventoryDb) {
+        if (isOauth2Flow) {
+          payload.config = { scope: values.scope?.trim() || null };
+        } else if (isApiKeyFlow) {
+          payload.config = { header_name: values.header_name?.trim() || null };
+        }
+        // Autres flows : config omis (undefined)
+      }
       if (isInventoryDb) {
         if (values.config_advanced?.trim()) {
           try {
@@ -360,6 +387,8 @@ export function IntegrationForm({
             config_advanced: undefined,
             secret_service_id: undefined,
             token_url: undefined,
+            scope: undefined, // Story 31.12
+            header_name: undefined, // Story 31.12
           }
         }
         key={editIntegration ? `edit-${editIntegration.id}` : 'create'}
@@ -531,6 +560,32 @@ export function IntegrationForm({
             <Input
               placeholder="https://auth.example.com/oauth/token"
               aria-label="URL du token"
+            />
+          </Form.Item>
+        )}
+        {/* Story 31.12: Scope OAuth2 — visible si oauth2_client_credentials (AC3) */}
+        {isOauth2Flow && (
+          <Form.Item
+            name="scope"
+            label="Scope OAuth2"
+            help="Scopes OAuth2 séparés par des espaces. Optionnel selon le serveur d'autorisation."
+          >
+            <Input
+              placeholder="openid profile email"
+              aria-label="Scope OAuth2"
+            />
+          </Form.Item>
+        )}
+        {/* Story 31.12: Nom du header — visible si api_key (AC4) */}
+        {isApiKeyFlow && (
+          <Form.Item
+            name="header_name"
+            label="Nom du header"
+            help="Nom du header HTTP pour la clé API (ex. X-API-Key, Authorization, X-Auth-Token). Défaut si vide : X-API-Key."
+          >
+            <Input
+              placeholder="X-API-Key"
+              aria-label="Nom du header"
             />
           </Form.Item>
         )}

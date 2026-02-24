@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 from typing import TYPE_CHECKING
 
+import requests
 import structlog
 from core.exceptions import BadRequestError
 
@@ -94,6 +95,10 @@ def build_auth_headers_from_credentials(
     if auth_flow == "basic":
         encoded = base64.b64encode(credential_ref.encode()).decode()
         return {"Authorization": f"Basic {encoded}"}
+    if auth_flow == "api_key":
+        # Story 31.12: api_key without config access — use X-API-Key as header name
+        # For custom header_name, use build_auth_headers(integration) instead
+        return {"X-API-Key": credential_ref}
     # pat and token (default): Bearer
     return {"Authorization": f"Bearer {credential_ref}"}
 
@@ -141,6 +146,54 @@ def build_auth_headers(
             message="Integration credential_ref is empty",
             details={"integration_id": integration_id, "auth_flow": auth_flow},
         )
+
+    # Story 31.12: api_key — use header_name from config
+    if auth_flow == "api_key":
+        config = getattr(integration, 'get_config', lambda: {})() or {}
+        header_name = config.get('header_name') or 'X-API-Key'
+        resolved = resolve_credential(credential_ref, correlation_id, integration)
+        logger.debug("build_auth_headers_api_key", integration_id=integration_id, header_name=header_name)
+        return {header_name: resolved}
+
+    # Story 31.12: oauth2_client_credentials — POST to token_url for access token
+    if auth_flow == "oauth2_client_credentials":
+        token_url = getattr(integration, 'token_url', None)
+        if not token_url:
+            raise BadRequestError(
+                code="MISSING_TOKEN_URL",
+                message="token_url is required for oauth2_client_credentials flow",
+                details={"integration_id": integration_id},
+            )
+        config = getattr(integration, 'get_config', lambda: {})() or {}
+        scope = config.get('scope')
+        resolved = resolve_credential(credential_ref, correlation_id, integration)
+        # credential_ref format: "client_id:client_secret" (same convention as basic auth)
+        if ':' in resolved:
+            client_id, client_secret = resolved.split(':', 1)
+        else:
+            client_id, client_secret = resolved, ''
+        data: dict = {"grant_type": "client_credentials", "client_id": client_id, "client_secret": client_secret}
+        if scope:
+            data["scope"] = scope
+        try:
+            resp = requests.post(token_url, data=data, timeout=10)
+            resp.raise_for_status()
+            access_token = resp.json().get("access_token")
+            if not access_token:
+                raise BadRequestError(
+                    code="OAUTH2_NO_ACCESS_TOKEN",
+                    message="OAuth2 token endpoint did not return access_token",
+                    details={"integration_id": integration_id, "token_url": token_url},
+                )
+            logger.debug("build_auth_headers_oauth2_success", integration_id=integration_id)
+            return {"Authorization": f"Bearer {access_token}"}
+        except requests.RequestException as exc:
+            logger.error("build_auth_headers_oauth2_error", integration_id=integration_id, error=str(exc))
+            raise BadRequestError(
+                code="OAUTH2_TOKEN_REQUEST_FAILED",
+                message=f"Failed to acquire OAuth2 token: {str(exc)}",
+                details={"integration_id": integration_id, "token_url": token_url},
+            ) from exc
 
     try:
         # Story 27.6/27.11: Resolve Vault references via VaultService (multi-instance)

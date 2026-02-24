@@ -61,8 +61,8 @@ export const FALLBACK_INTEGRATION_TYPES: IntegrationTypeCatalogue[] = [
   },
 ];
 
-/** Authentication flow types (Story 4.9 AC2). */
-export type AuthFlow = 'token' | 'basic' | 'basic_then_token' | 'pat';
+/** Authentication flow types (Story 4.9 AC2, Story 31.12). */
+export type AuthFlow = 'token' | 'basic' | 'basic_then_token' | 'pat' | 'oauth2_client_credentials' | 'api_key';
 
 /** Labels for auth flows (french). */
 export const AUTH_FLOW_LABELS: Record<AuthFlow, string> = {
@@ -70,6 +70,8 @@ export const AUTH_FLOW_LABELS: Record<AuthFlow, string> = {
   basic: 'Basic (Username/Password)',
   basic_then_token: 'Basic puis Token',
   pat: 'PAT (Personal Access Token)',
+  oauth2_client_credentials: 'OAuth2 Client Credentials',
+  api_key: 'API Key (header)', // pragma: allowlist secret
 };
 
 /** Story 13.1: config for inventory_db (schema + table). */

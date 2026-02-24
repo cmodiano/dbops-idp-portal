@@ -151,6 +151,14 @@ async function selectType(user: ReturnType<typeof userEvent.setup>, label: RegEx
   await user.click(option);
 }
 
+/** Helper to select an auth flow via the combobox (Stories 31.11, 31.12). */
+async function selectAuthFlow(user: ReturnType<typeof userEvent.setup>, flowLabel: string) {
+  const select = screen.getByRole('combobox', { name: /Flow d'authentification/ });
+  await user.click(select);
+  const option = await screen.findByTitle(flowLabel);
+  await user.click(option);
+}
+
 describe('IntegrationForm', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -679,14 +687,6 @@ describe('IntegrationForm', () => {
   // === Story 31.11: token_url field ===
 
   describe('token_url field', () => {
-    /** Helper to select an auth flow via the combobox. */
-    async function selectAuthFlow(user: ReturnType<typeof userEvent.setup>, flowLabel: string) {
-      const select = screen.getByRole('combobox', { name: /Flow d'authentification/ });
-      await user.click(select);
-      const option = await screen.findByTitle(flowLabel);
-      await user.click(option);
-    }
-
     it('31.11: champ visible quand auth_flow = token', async () => {
       const user = userEvent.setup();
       renderWithApp(<IntegrationForm {...defaultProps} />);
@@ -803,6 +803,187 @@ describe('IntegrationForm', () => {
         })
       );
     }, 15000);
+  });
+
+  // === Story 31.12 — Dynamic auth fields ===
+
+  describe('Story 31.12 - dynamic auth fields', () => {
+    // --- Visibilité scope ---
+
+    it('affiche scope avec oauth2_client_credentials', async () => {
+      const user = userEvent.setup();
+      renderWithApp(<IntegrationForm {...defaultProps} />);
+      await selectAuthFlow(user, 'OAuth2 Client Credentials');
+      await waitFor(() => {
+        expect(screen.getByLabelText(/Scope OAuth2/)).toBeInTheDocument();
+      });
+    });
+
+    it("n'affiche pas scope avec token", async () => {
+      const user = userEvent.setup();
+      renderWithApp(<IntegrationForm {...defaultProps} />);
+      await selectAuthFlow(user, 'Token (Bearer)');
+      await waitFor(() => {
+        expect(screen.queryByLabelText(/Scope OAuth2/)).not.toBeInTheDocument();
+      });
+    });
+
+    it("n'affiche pas scope avec api_key", async () => {
+      const user = userEvent.setup();
+      renderWithApp(<IntegrationForm {...defaultProps} />);
+      await selectAuthFlow(user, 'API Key (header)');
+      await waitFor(() => {
+        expect(screen.queryByLabelText(/Scope OAuth2/)).not.toBeInTheDocument();
+      });
+    });
+
+    it("n'affiche pas scope sans flow sélectionné", () => {
+      renderWithApp(<IntegrationForm {...defaultProps} />);
+      expect(screen.queryByLabelText(/Scope OAuth2/)).not.toBeInTheDocument();
+    });
+
+    // --- Visibilité header_name ---
+
+    it('affiche header_name avec api_key', async () => {
+      const user = userEvent.setup();
+      renderWithApp(<IntegrationForm {...defaultProps} />);
+      await selectAuthFlow(user, 'API Key (header)');
+      await waitFor(() => {
+        expect(screen.getByLabelText(/Nom du header/)).toBeInTheDocument();
+      });
+    });
+
+    it("n'affiche pas header_name avec oauth2_client_credentials", async () => {
+      const user = userEvent.setup();
+      renderWithApp(<IntegrationForm {...defaultProps} />);
+      await selectAuthFlow(user, 'OAuth2 Client Credentials');
+      await waitFor(() => {
+        expect(screen.queryByLabelText(/Nom du header/)).not.toBeInTheDocument();
+      });
+    });
+
+    it("n'affiche pas header_name avec token", async () => {
+      const user = userEvent.setup();
+      renderWithApp(<IntegrationForm {...defaultProps} />);
+      await selectAuthFlow(user, 'Token (Bearer)');
+      await waitFor(() => {
+        expect(screen.queryByLabelText(/Nom du header/)).not.toBeInTheDocument();
+      });
+    });
+
+    it("n'affiche pas header_name sans flow sélectionné", () => {
+      renderWithApp(<IntegrationForm {...defaultProps} />);
+      expect(screen.queryByLabelText(/Nom du header/)).not.toBeInTheDocument();
+    });
+
+    // --- Extension token_url (AC2) ---
+
+    it('affiche token_url avec oauth2_client_credentials', async () => {
+      const user = userEvent.setup();
+      renderWithApp(<IntegrationForm {...defaultProps} />);
+      await selectAuthFlow(user, 'OAuth2 Client Credentials');
+      await waitFor(() => {
+        expect(screen.getByLabelText(/URL du token/)).toBeInTheDocument();
+      });
+    });
+
+    // --- Payload ---
+
+    it('soumission oauth2_client_credentials → payload inclut token_url et config.scope', async () => {
+      const user = userEvent.setup();
+      renderWithApp(<IntegrationForm {...defaultProps} />);
+      await selectType(user, /Type d'intégration/, 'Ansible Automation Platform');
+      await user.type(screen.getByLabelText(/^Nom/), 'Jira Cloud');
+      await user.type(screen.getByLabelText(/URL de base/), 'https://jira.example.com');
+      await selectAuthFlow(user, 'OAuth2 Client Credentials');
+      await waitFor(() => expect(screen.getByLabelText(/URL du token/)).toBeInTheDocument());
+      await user.type(screen.getByLabelText(/URL du token/), 'https://auth.example.com/token');
+      await waitFor(() => expect(screen.getByLabelText(/Scope OAuth2/)).toBeInTheDocument());
+      await user.type(screen.getByLabelText(/Scope OAuth2/), 'api:read');
+      await user.click(screen.getByRole('button', { name: /Créer/i }));
+      await waitFor(() => expect(mockOnSubmit).toHaveBeenCalled(), { timeout: 10000 });
+      expect(mockOnSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          auth_flow: 'oauth2_client_credentials',
+          token_url: 'https://auth.example.com/token',
+          config: { scope: 'api:read' },
+        })
+      );
+    }, 15000);
+
+    it('soumission api_key → payload inclut config.header_name', async () => {
+      const user = userEvent.setup();
+      renderWithApp(<IntegrationForm {...defaultProps} />);
+      await selectType(user, /Type d'intégration/, 'Ansible Automation Platform');
+      await user.type(screen.getByLabelText(/^Nom/), 'Custom API');
+      await user.type(screen.getByLabelText(/URL de base/), 'https://api.example.com');
+      await selectAuthFlow(user, 'API Key (header)');
+      await waitFor(() => expect(screen.getByLabelText(/Nom du header/)).toBeInTheDocument());
+      await user.type(screen.getByLabelText(/Nom du header/), 'X-Auth-Token');
+      await user.click(screen.getByRole('button', { name: /Créer/i }));
+      await waitFor(() => expect(mockOnSubmit).toHaveBeenCalled(), { timeout: 10000 });
+      expect(mockOnSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          auth_flow: 'api_key',
+          config: { header_name: 'X-Auth-Token' },
+        })
+      );
+    }, 15000);
+
+    it('soumission token → pas de config dans le payload', async () => {
+      const user = userEvent.setup();
+      renderWithApp(<IntegrationForm {...defaultProps} />);
+      await selectType(user, /Type d'intégration/, 'Ansible Automation Platform');
+      await user.type(screen.getByLabelText(/^Nom/), 'AAP Token');
+      await user.type(screen.getByLabelText(/URL de base/), 'https://aap.example.com');
+      await selectAuthFlow(user, 'Token (Bearer)');
+      await user.click(screen.getByRole('button', { name: /Créer/i }));
+      await waitFor(() => expect(mockOnSubmit).toHaveBeenCalled(), { timeout: 10000 });
+      const callArg = mockOnSubmit.mock.calls[0][0] as Record<string, unknown>;
+      expect(callArg.config).toBeUndefined();
+    }, 15000);
+
+    // --- Préremplissage édition ---
+
+    it('prérempli scope en édition (oauth2_client_credentials + config.scope)', async () => {
+      const editIntegrationOauth2 = {
+        id: 20,
+        type: 'aap',
+        name: 'Jira Cloud',
+        base_url: 'https://jira.example.com',
+        credential_ref: null,
+        icon: null,
+        auth_flow: 'oauth2_client_credentials' as const,
+        token_url: 'https://login.microsoftonline.com/tenant/oauth2/v2.0/token',
+        config: { scope: 'api:read' },
+        created_at: '2026-02-01T00:00:00Z',
+        updated_at: '2026-02-01T00:00:00Z',
+      };
+      renderWithApp(<IntegrationForm {...defaultProps} editIntegration={editIntegrationOauth2} />);
+      await waitFor(() => {
+        expect(screen.getByLabelText(/Scope OAuth2/)).toHaveValue('api:read');
+      });
+    });
+
+    it('prérempli header_name en édition (api_key + config.header_name)', async () => {
+      const editIntegrationApiKey = {
+        id: 21,
+        type: 'aap',
+        name: 'Custom API',
+        base_url: 'https://api.example.com',
+        credential_ref: null,
+        icon: null,
+        auth_flow: 'api_key' as const,
+        token_url: null,
+        config: { header_name: 'X-Auth-Token' },
+        created_at: '2026-02-01T00:00:00Z',
+        updated_at: '2026-02-01T00:00:00Z',
+      };
+      renderWithApp(<IntegrationForm {...defaultProps} editIntegration={editIntegrationApiKey} />);
+      await waitFor(() => {
+        expect(screen.getByLabelText(/Nom du header/)).toHaveValue('X-Auth-Token');
+      });
+    });
   });
 
   it('27.11: submits credential_ref as null when type is vault', async () => {
