@@ -86,8 +86,7 @@ describe('useEligibleActions', () => {
   });
 
   it('gère un retour non-array en retournant un tableau vide', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(getEligibleActionsForWorkflow).mockResolvedValueOnce(null as any);
+    vi.mocked(getEligibleActionsForWorkflow).mockResolvedValueOnce(null as never);
 
     const { result } = renderHook(() => useEligibleActions());
 

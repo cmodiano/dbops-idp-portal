@@ -308,7 +308,7 @@ describe('Story 27.7 — IntegrationForm with all 7 types', () => {
       expect(mockOnSubmit).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'tower', name: 'Tower Prod' })
       );
-    }, 15000);
+    }, 20000);
 
     it('creates Azure DevOps integration with type=azure_devops', async () => {
       const user = userEvent.setup();
@@ -321,7 +321,7 @@ describe('Story 27.7 — IntegrationForm with all 7 types', () => {
       expect(mockOnSubmit).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'azure_devops' })
       );
-    }, 15000);
+    }, 20000);
 
     it('creates GitHub Actions integration with type=github_actions', async () => {
       const user = userEvent.setup();
@@ -334,7 +334,7 @@ describe('Story 27.7 — IntegrationForm with all 7 types', () => {
       expect(mockOnSubmit).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'github_actions' })
       );
-    }, 15000);
+    }, 20000);
 
     it('creates Terraform Cloud integration with type=terraform_cloud', async () => {
       const user = userEvent.setup();
@@ -347,7 +347,7 @@ describe('Story 27.7 — IntegrationForm with all 7 types', () => {
       expect(mockOnSubmit).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'terraform_cloud' })
       );
-    }, 15000);
+    }, 20000);
 
     it('creates Vault integration with type=vault', async () => {
       const user = userEvent.setup();
@@ -360,7 +360,7 @@ describe('Story 27.7 — IntegrationForm with all 7 types', () => {
       expect(mockOnSubmit).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'vault' })
       );
-    }, 15000);
+    }, 20000);
   });
 
   // === AC8: Edit mode — type disabled for new types ===

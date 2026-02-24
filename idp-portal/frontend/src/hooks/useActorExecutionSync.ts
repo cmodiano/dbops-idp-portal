@@ -135,12 +135,14 @@ export function useActorExecutionSync(
   // Cleanup total au démontage
   useEffect(() => {
     isMountedRef.current = true;
+    const wsMapRef = wsMap.current;
+    const pollMapRef = pollMap.current;
     return () => {
       isMountedRef.current = false;
-      wsMap.current.forEach((ws) => ws.close());
-      wsMap.current.clear();
-      pollMap.current.forEach((intervalId) => clearInterval(intervalId));
-      pollMap.current.clear();
+      wsMapRef.forEach((ws) => ws.close());
+      wsMapRef.clear();
+      pollMapRef.forEach((intervalId) => clearInterval(intervalId));
+      pollMapRef.clear();
     };
   }, []);
 }
