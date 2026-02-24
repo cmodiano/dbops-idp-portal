@@ -23,7 +23,7 @@ const mockEntry: AuditExecutionEntry = {
   details: {
     environment: 'prod',
     action_id: 10,
-    servicenow_change_id: null,
+    servicenow_change_id: undefined,
   },
 };
 
@@ -85,12 +85,12 @@ describe('AuditTable', () => {
     });
 
     it('returns "Action #N" when action_name is null and details has action_id', () => {
-      const entry = { ...mockEntry, action_name: undefined, details: { action_id: 10, environment: 'prod', servicenow_change_id: null } };
+      const entry = { ...mockEntry, action_name: undefined, details: { action_id: 10, environment: 'prod', servicenow_change_id: undefined } };
       expect(getActionName(entry)).toBe('Action #10');
     });
 
     it('returns "Action inconnue" when no action info', () => {
-      const entry = { ...mockEntry, action_name: undefined, details: { action_id: null, environment: 'prod', servicenow_change_id: null } };
+      const entry = { ...mockEntry, action_name: undefined, details: { action_id: undefined, environment: 'prod', servicenow_change_id: undefined } };
       expect(getActionName(entry)).toBe('Action inconnue');
     });
   });
