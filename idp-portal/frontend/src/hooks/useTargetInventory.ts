@@ -172,7 +172,6 @@ export function useTargetInventory({
         setInventoryData(data);
       })
       .finally(() => setLoadingInventory(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- inventoryData excluded: read via ref to avoid infinite loop (effect calls setInventoryData)
   }, [open, currentStep, parameterFields, environment, selectedServerNames, engineType]);
 
   return {

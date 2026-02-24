@@ -91,7 +91,7 @@ export function StepDetailDrawer({
     if (status === 'FAILED') return <CloseCircleOutlined style={{ color: token.colorError, fontSize: 18 }} />;
     if (status === 'RUNNING') return <LoadingOutlined spin style={{ color: token.colorWarning, fontSize: 18 }} />;
     return <ClockCircleOutlined style={{ color: token.colorTextQuaternary, fontSize: 18 }} />;
-  }, [executionStep?.status]);
+  }, [executionStep?.status, token.colorSuccess, token.colorError, token.colorWarning, token.colorTextQuaternary]);
 
   // Parse step output (logs) — raw JSON for fallback or when no child execution
   const stepLogs = useMemo(() => {

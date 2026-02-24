@@ -96,8 +96,7 @@ export async function fetchStatsByTechnology(
   filters: DashboardFilters = {},
 ): Promise<TechnologyStats[]> {
   // Remove engine from filters since it's the grouping key
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { engine, ...restFilters } = filters;
+  const { engine: _, ...restFilters } = filters;
   const params = buildFilterParams({ days: 14, ...restFilters });
   return apiFetch<TechnologyStats[]>(`/dashboard/stats-by-technology?${params.toString()}`);
 }
@@ -116,8 +115,7 @@ export async function fetchStatsByEnvironment(
   filters: DashboardFilters = {},
 ): Promise<EnvironmentStats[]> {
   // Remove environment from filters since it's the grouping key
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { environment, ...restFilters } = filters;
+  const { environment: _, ...restFilters } = filters;
   const params = buildFilterParams({ days: 14, ...restFilters });
   return apiFetch<EnvironmentStats[]>(`/dashboard/stats-by-environment?${params.toString()}`);
 }

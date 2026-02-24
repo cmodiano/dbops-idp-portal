@@ -494,7 +494,6 @@ vi.mock('@xyflow/react', async () => {
   let nodeDoubleClickCb: ((event: unknown, node: unknown) => void) | null = null;
 
   return {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     ReactFlow: ({ children, nodes, edges, onConnect, onNodeDoubleClick, ...rest }: Record<string, unknown>) => {
       nodeDoubleClickCb = onNodeDoubleClick as typeof nodeDoubleClickCb;
       return actualReact.createElement('div', { 'data-testid': 'react-flow-canvas', ...rest },

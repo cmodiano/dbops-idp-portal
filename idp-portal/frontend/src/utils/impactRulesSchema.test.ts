@@ -137,9 +137,7 @@ describe('round-trip conversion', () => {
     const back = impactRulesToList(rules);
 
     // Compare without ids
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- omit id for comparison
     const withoutIds = back.map(({ id: _, ...rest }) => rest);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- omit id for comparison
     const originalWithoutIds = original.map(({ id: _, ...rest }) => rest);
     expect(withoutIds).toEqual(originalWithoutIds);
   });
