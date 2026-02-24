@@ -63,16 +63,18 @@ jobs:
       - name: Verify requirements.lock is up-to-date
         working-directory: idp-portal/django_backend
         run: |
-          uv pip compile pyproject.toml -o requirements.lock.check --python-version 3.12
-          diff -u requirements.lock requirements.lock.check || {
+          uv pip compile pyproject.toml -o requirements.lock.check --python-version 3.12 --no-header
+          tail -n +3 requirements.lock > requirements.lock.stripped
+          diff -u requirements.lock.stripped requirements.lock.check || {
             echo "❌ requirements.lock is out of date! Run: uv pip compile pyproject.toml -o requirements.lock --python-version 3.12"
             exit 1
           }
       - name: Verify requirements-dev.lock is up-to-date
         working-directory: idp-portal/django_backend
         run: |
-          uv pip compile pyproject.toml --extra dev -o requirements-dev.lock.check --python-version 3.12
-          diff -u requirements-dev.lock requirements-dev.lock.check || {
+          uv pip compile pyproject.toml --extra dev -o requirements-dev.lock.check --python-version 3.12 --no-header
+          tail -n +3 requirements-dev.lock > requirements-dev.lock.stripped
+          diff -u requirements-dev.lock.stripped requirements-dev.lock.check || {
             echo "❌ requirements-dev.lock is out of date! Run: uv pip compile pyproject.toml --extra dev -o requirements-dev.lock --python-version 3.12"
             exit 1
           }
@@ -147,6 +149,7 @@ jobs:
         working-directory: idp-portal/frontend
         run: npm run test:coverage
       - name: Upload coverage to Codecov
+        if: always()
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}

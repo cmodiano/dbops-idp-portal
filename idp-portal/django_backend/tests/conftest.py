@@ -26,6 +26,21 @@ from tests.factories import (
 
 
 # ============================================================================
+# Cache Cleanup (prevent cross-test pollution from in-memory caches)
+# ============================================================================
+
+@pytest.fixture(autouse=True)
+def _clear_catalog_caches():
+    """Clear in-memory catalog caches between tests to prevent stale data."""
+    from catalog.views._shared import _catalog_cache, _tags_cache
+    _catalog_cache.clear()
+    _tags_cache.clear()
+    yield
+    _catalog_cache.clear()
+    _tags_cache.clear()
+
+
+# ============================================================================
 # User Fixtures
 # ============================================================================
 
