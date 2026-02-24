@@ -83,12 +83,18 @@ class Command(BaseCommand):
                     policy = None
                     self.stdout.write(f'  [DRY-RUN] Créerait: "{name}"')
                 else:
+                    if action.created_by is None:
+                        self.stdout.write(self.style.WARNING(
+                            f'  Avertissement: action "{action.name}" (id={action.id}) '
+                            f'sans created_by — ignorée.'
+                        ))
+                        continue
                     policy = BusinessRulePolicy.objects.create(
                         name=name,
                         description=f'Migré automatiquement depuis l\'action "{action.name}"',
                         policy_json=policy_json,
                         is_active=True,
-                        created_by=action.created_by or Action.objects.first().created_by,
+                        created_by=action.created_by,
                     )
                     created += 1
 
