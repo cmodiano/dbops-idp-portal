@@ -316,13 +316,9 @@ class ContainerWorkflowRuntime:
             )
             now = timezone.now()
             Execution.objects.filter(id=child_execution.id).update(
-                status=ExecutionStatus.RUNNING,
-                started_at=now,
-            )
-            completed_at = timezone.now()
-            Execution.objects.filter(id=child_execution.id).update(
                 status=ExecutionStatus.COMPLETED,
-                completed_at=completed_at,
+                started_at=now,
+                completed_at=now,
             )
 
         # Refresh in-memory object for downstream status check (after all updates)

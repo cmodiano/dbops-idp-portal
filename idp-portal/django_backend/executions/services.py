@@ -432,11 +432,6 @@ class ExecutionService:
         #   violating SOC1 compliance. An execution that requires approval must
         #   go through RUNNING (after DBA approval) or REJECTED (if DBA refuses).
         #
-        # TODO (Story 7.4): Approval transitions must use dedicated endpoints:
-        #   - PENDING_APPROVAL → RUNNING via POST /api/v1/executions/{id}/approve
-        #   - PENDING_APPROVAL → REJECTED via POST /api/v1/executions/{id}/reject
-        #   These endpoints are not yet implemented.
-        #
         # Valid transitions by state (with business rationale):
         # ┌─────────────────────┬────────────────────────────────────────────────────────┐
         # │ From State          │ To State → Business Rationale                          │
@@ -503,6 +498,7 @@ class ExecutionService:
         if not audit_action_type:
             logger.warning(
                 "unknown_execution_status_for_audit",
+                execution_id=execution.id,
                 status=new_status,
                 correlation_id=get_correlation_id()
             )

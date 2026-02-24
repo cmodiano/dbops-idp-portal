@@ -360,6 +360,11 @@ Dériver l'environnement depuis la table servers (JOIN instances→servers, data
 **Phase :** Growth (Phase 2)
 **Référence :** planning-artifacts/epic-37-inventaire-environnement-serveur-colonne-engine.md
 
+### Epic 38 : Codebase Review Audit #3 — Corrections des issues ouvertes
+Corriger les issues restantes du CODEBASE-REVIEW (audit #3) : N+1, double update, TODO obsolète, log execution_id, consolidation STATUS_CONFIG, nested key TopNav, asyncio.run→async_to_sync ; backlog : audit except Exception, migration DIP services.
+**Phase :** Growth (Phase 2)
+**Référence :** planning-artifacts/epic-38-codebase-review-audit-3-corrections.md
+
 ---
 
 ## Epic 1 : Bootstrap Projet & Authentification

@@ -1,6 +1,6 @@
 # Revue Exhaustive du Codebase — IDP Portal
 
-**Date :** 2026-02-23 (mise à jour — refactoring SOLID complété)
+**Date :** 2026-02-23 (mise à jour — audit complet #3)
 **Scope :** Backend Django + Frontend React
 **Auteur :** Claude Code (revue automatisée)
 
@@ -24,7 +24,8 @@
 14. [Analyse SOLID — Backend](#14-analyse-solid--backend)
 15. [Analyse SOLID — Frontend](#15-analyse-solid--frontend)
 16. [Observations post-refactoring](#16-observations-post-refactoring)
-17. [Récapitulatif par priorité](#17-récapitulatif-par-priorité)
+17. [Audit #3 — Nouveaux findings (2026-02-23)](#17-audit-3--nouveaux-findings-2026-02-23)
+18. [Récapitulatif par priorité](#18-récapitulatif-par-priorité)
 
 ---
 
@@ -569,7 +570,54 @@ Les 3 premiers pourraient potentiellement être consolidés. `IntegrationsTable`
 
 ---
 
-## 17. Récapitulatif par priorité
+## 17. Audit #3 — Nouveaux findings (2026-02-23)
+
+### Sécurité — Aucun nouveau problème
+
+Audit complet couvrant : SQL injection (query_executor.py vérifié — paramétrage correct, regex validation), SSRF, désérialisation, permissions manquantes, secrets hardcodés, CORS, fichiers, CSRF, settings Django, bypass auth, WebSocket auth, webhooks HMAC, Celery serializers. **Résultat : RAS.** La posture sécurité est excellente.
+
+### Code quality — Backend
+
+| # | Sévérité | Description | Fichier | Lignes |
+|---|----------|-------------|---------|--------|
+| **NEW-BE-1** | MEDIUM | N+1 query : `Action.objects.get(id=ref_id)` dans boucle `for ref_id in ref_ids` | `catalog/services.py` | 62-73 |
+| **NEW-BE-2** | MEDIUM | Double `.update()` consécutif sur même exécution (RUNNING puis immédiatement COMPLETED) — redondant et 2x `timezone.now()` | `executions/container_workflow_runtime.py` | 317-326 |
+| **NEW-BE-3** | LOW | TODO obsolète : « These endpoints are not yet implemented » alors que `approval_views.py` les implémente | `executions/services.py` | 435-438 |
+| **NEW-BE-4** | LOW | `asyncio.run()` x2 dans tâche Celery — risque de conflit event loop. `async_to_sync` (asgiref) déjà utilisé ailleurs dans le projet | `executions/tasks/polling.py` | 313, 320 |
+| **NEW-BE-5** | LOW | Log `unknown_execution_status_for_audit` sans `execution_id` — debugging difficile | `executions/services.py` | 504-507 |
+
+**Corrections recommandées :**
+
+- **NEW-BE-1** : Remplacer la boucle par `Action.objects.in_bulk(ref_ids)` (pattern déjà utilisé dans `workflow_parsing.py:241`)
+- **NEW-BE-2** : Fusionner en un seul `.update(status=COMPLETED, started_at=now, completed_at=now)`
+- **NEW-BE-3** : Supprimer ou mettre à jour le commentaire TODO
+- **NEW-BE-4** : Remplacer `asyncio.run()` par `async_to_sync()` d'asgiref
+- **NEW-BE-5** : Ajouter `execution_id=execution_id` au log
+
+### Code quality — Frontend
+
+| # | Sévérité | Description | Fichier | Lignes |
+|---|----------|-------------|---------|--------|
+| **NEW-FE-1** | LOW | Nested key props redondants (key sur button + wrapper) | `components/layout/TopNav.tsx` | 155-203 |
+
+**Points positifs confirmés :**
+- Aucun `dangerouslySetInnerHTML` dans le code
+- Aucun secret/URL hardcodé
+- ErrorBoundary en place
+- WebSocket hooks utilisent `mounted` ref (pas de memory leak)
+- 345+ attributs ARIA (bonne couverture accessibilité)
+- Aucun `.catch(() => {})` vide en code de production (seulement en tests)
+
+### Mise à jour des issues précédentes
+
+| # | Issue précédente | Ancien statut | Nouveau statut | Détails |
+|---|------------------|---------------|----------------|---------|
+| 16.2 | `except Exception` résiduels | 33 occurrences | **77 occurrences** (40 fichiers .py) | Comptage précédent limité à `executions/`. Inclut maintenant tout le backend. La majorité sont documentés `noqa: BLE001` ou dans des contextes de résilience (webhooks, polling, adapters, vault) |
+| 16.3 | `.catch(() => {})` résiduels | 21 occurrences | **0 en production** ✅ RESOLVED | Plus que 2 occurrences en fichiers test. Issue fermée |
+
+---
+
+## 18. Récapitulatif par priorité
 
 ### Issues OUVERTES restantes
 
@@ -584,13 +632,18 @@ Les 3 premiers pourraient potentiellement être consolidés. `IntegrationsTable`
 | # | Issue | Type | Effort |
 |---|-------|------|--------|
 | SOLID-FE-10 | STATUS_CONFIG duplication résiduelle dans 5 fichiers | Frontend | Faible |
+| NEW-BE-1 | N+1 query dans `_validate_workflow_can_be_published()` | Backend | Faible |
+| NEW-BE-2 | Double `.update()` redondant (container workflow non-simulation) | Backend | Faible |
 
 #### LOW (backlog)
 
 | # | Issue | Type | Effort |
 |---|-------|------|--------|
-| 16.2 | `except Exception` résiduels (33 occurrences backend) | Backend | Faible |
-| 16.3 | `.catch(() => {})` résiduels (21 occurrences frontend) | Frontend | Faible |
+| NEW-BE-3 | TODO obsolète (approval endpoints implémentés) | Backend | Trivial |
+| NEW-BE-4 | `asyncio.run()` dans Celery (préférer `async_to_sync`) | Backend | Faible |
+| NEW-BE-5 | Log sans `execution_id` | Backend | Trivial |
+| NEW-FE-1 | Nested key props redondants (TopNav) | Frontend | Trivial |
+| 16.2 | `except Exception` résiduels (77 occurrences, 40 fichiers backend) | Backend | Faible |
 | INCON-2 | MD5 hash collision (documenté, acceptable pour N<1000) | Backend | — |
 | PERF-4 | `<style>` inline dans 3 composants (impact négligeable) | Frontend | — |
 
@@ -622,37 +675,39 @@ Les 3 premiers pourraient potentiellement être consolidés. `IntegrationsTable`
 | Nouveaux findings §13 | 5/5 | 0 |
 | **SOLID Backend (§14)** | **11/11** | **0** |
 | **SOLID Frontend (§15)** | **10/11** | **1** |
-| **Observations post-refactoring (§16)** | 1 (16.1 DOCUMENTED) | **3 (+ 1 INFO)** |
-| **Total** | **97/97** | **4 (+ 1 INFO)** |
+| **Observations post-refactoring (§16)** | 2 (16.1 DOCUMENTED, 16.3 RESOLVED) | **1 (16.2) + 1 INFO** |
+| **Audit #3 (§17)** | **0** | **6** |
+| **Total** | **99/105** | **6 MEDIUM+LOW (+ 1 INFO)** |
 
 ---
 
 ### Priorités de refactoring recommandées
 
 **Sprint immédiat (quick wins) :**
-1. SOLID-FE-10 — Consolider `STATUS_CONFIG` résiduel dans `ExecutionView.tsx` et `StepDetailDrawer.tsx` vers `execution-status.ts`
-2. 16.2/16.3 — Audit des `except Exception` et `.catch(() => {})` résiduels pour vérifier documentation
+1. NEW-BE-1 — Remplacer boucle `.get()` par `Action.objects.in_bulk(ref_ids)` dans `catalog/services.py`
+2. NEW-BE-2 — Fusionner les 2 `.update()` en un seul dans `container_workflow_runtime.py`
+3. NEW-BE-3 — Supprimer le TODO obsolète dans `executions/services.py:435-438`
+4. NEW-BE-5 — Ajouter `execution_id` au log dans `executions/services.py:504-507`
+5. SOLID-FE-10 — Consolider `STATUS_CONFIG` résiduel
 
-**Backlog structurel :**
-1. SOLID-FE-4 — Migration progressive des ~25 composants vers hooks pour les appels service (effort élevé, à traiter story par story)
+**Backlog technique :**
+1. NEW-BE-4 — Migrer `asyncio.run()` vers `async_to_sync()` dans `polling.py`
+2. 16.2 — Audit des 77 `except Exception` résiduels pour vérifier documentation
+3. SOLID-FE-4 — Migration progressive des ~25 composants vers hooks (effort élevé, story par story)
 
 ---
 
-### Comparaison avec la revue précédente (21/02 → 23/02)
+### Comparaison avec les revues précédentes
 
-| Métrique | 21/02 | 23/02 | Évolution |
-|----------|-------|-------|-----------|
-| Issues ouvertes | 26 | 4 (+1 INFO) | **-22 (-85%)** |
-| Issues CRITICAL | 1 | 0 | **-1** |
-| Issues HIGH | 8 | 1 | **-7** |
-| Issues MEDIUM | 13 | 1 | **-12** |
-| Issues LOW | 4 | 4 | = (dont 2 nouvelles observations) |
-| Issues SOLID backend | 11 ouvertes | 0 ouvertes | **Toutes résolues** |
-| Issues SOLID frontend | 11 ouvertes | 1 ouverte | **10 résolues** |
-| Fichier le plus long (FE) | 735 lignes | 547 lignes | **-25%** |
-| Fichier le plus long (BE) | 1296 lignes | 856 lignes | **-34%** |
-| Custom hooks | 32 | 45 | **+41%** |
-| React Contexts | 4 | 5 | +1 (WizardExecutionContext) |
-| Lignes de production (FE) | ~35 300 | ~33 354 | **-5.5%** |
+| Métrique | 21/02 | 23/02 (v2) | 23/02 (v3) | Évolution v2→v3 |
+|----------|-------|------------|------------|-----------------|
+| Issues ouvertes | 26 | 4 (+1 INFO) | 6 (+1 INFO) | +2 MEDIUM, +4 LOW (nouveaux findings) |
+| Issues CRITICAL | 1 | 0 | 0 | = |
+| Issues HIGH | 8 | 1 | 1 | = |
+| Issues MEDIUM | 13 | 1 | 3 | +2 (N+1 query, double update) |
+| Issues LOW | 4 | 4 | 7 | +3 (TODO obsolète, asyncio, log, key props) |
+| Sécurité | 11 issues | 0 ouvertes | **0 ouvertes** | Posture sécurité confirmée excellente |
+| `.catch(() => {})` vides FE | 21 | 21 | **0 en prod** ✅ | Issue fermée |
+| `except Exception` BE | 33 | 33 | **77** (comptage complet) | Comptage élargi au backend entier |
 
-**Bilan global (2026-02-23) :** Sur les 97 findings cumulés (72 originaux + 5 nouveaux §13 + 22 SOLID), **97 sont résolus** (dont 16.1 DOCUMENTED — dette documentée, implémentation optionnelle). La dette technique SOLID a été systématiquement traitée via les Stories 34.1 à 34.15, avec des résultats mesurables : le plus gros composant frontend est passé de 735 à 148 lignes, le plus gros module backend de 1296 à 521 lignes. L'architecture est significativement plus modulaire, testable et maintenable. Le seul finding HIGH restant (SOLID-FE-4 : couplage direct services) est un refactoring structurel progressif qui nécessite une approche story-by-story.
+**Bilan global (audit #3) :** Sur 105 findings cumulés, **99 sont résolus**. Les 6 issues ouvertes sont de sévérité MEDIUM (2) et LOW (4) — aucune issue CRITICAL ou de sécurité. La posture sécurité a été confirmée excellente par un audit dédié (SQL injection, SSRF, permissions, secrets, CORS, CSRF, webhooks HMAC, WebSocket auth, Celery serializers). Les nouveaux findings sont principalement des optimisations mineures de code quality. Le `.catch(() => {})` résiduel frontend (§16.3) est désormais résolu — 0 occurrence en production.

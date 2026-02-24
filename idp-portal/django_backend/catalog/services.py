@@ -57,12 +57,13 @@ def _validate_workflow_can_be_published(workflow_action: Action, context: str = 
     if not ref_ids:
         return
 
+    int_ref_ids = [int(r) for r in ref_ids]
+    found_actions: dict[int, Action] = Action.objects.in_bulk(int_ref_ids)
     missing: list[int] = []
     not_published: list[dict[str, Any]] = []
-    for ref_id in ref_ids:
-        try:
-            ref_action = Action.objects.get(id=ref_id)
-        except Action.DoesNotExist:
+    for ref_id in int_ref_ids:
+        ref_action = found_actions.get(ref_id)
+        if ref_action is None:
             missing.append(ref_id)
             continue
         if ref_action.status != ActionStatus.PUBLISHED:

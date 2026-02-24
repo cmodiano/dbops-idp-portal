@@ -483,3 +483,13 @@ development_status:
     37-4-parametre-inventory-value-column-backend: done # code-review 2026-02-23: 2 MEDIUM + 3 LOW fixes (invariant test VALID_INVENTORY_VALUE_COLUMNS↔VALID_INVENTORY_TYPES, multi-param test, docstring, assertion L4, empty string edge case), 36/36 tests pass
     37-5-parametre-inventory-value-column-frontend: done # code-review 2026-02-23: 2 HIGH + 2 MEDIUM + 1 LOW fixes (double onParamChange React batching bug, no-op tests replaced, empty string fallback), 100/100 tests pass
     epic-37-retrospective: optional
+    # === Epic 38: Codebase Review Audit #3 — Corrections des issues ouvertes ===
+    # Réf: idp-portal/CODEBASE-REVIEW.md §17–18, planning-artifacts/epic-38-codebase-review-audit-3-corrections.md
+    epic-38: in-progress
+    38-1-quick-wins-backend-n1-double-update-todo-log: done # NEW-BE-1, NEW-BE-2, NEW-BE-3, NEW-BE-5 — code-review 2026-02-23: 1M fixé (double ligne commentaire), 2L action items
+    38-2-consolidation-status-config-residuel-frontend: backlog # SOLID-FE-10, 16.4
+    38-3-frontend-nested-key-props-topnav: backlog # NEW-FE-1
+    38-4-backend-asyncio-run-to-async-to-sync-polling: backlog # NEW-BE-4
+    38-5-audit-except-exception-residuels-documentation: backlog # 16.2
+    38-6-migration-dip-services-composants-hooks: backlog # SOLID-FE-4
+    epic-38-retrospective: optional
