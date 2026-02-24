@@ -74,7 +74,8 @@ describe('useExecutionView', () => {
     vi.mocked(executionService.getExecution).mockResolvedValue(mockWorkflowExecution);
     vi.mocked(catalogService.fetchCatalogActionById).mockResolvedValue({
       data: { id: 20, name: 'Workflow', item_type: 'workflow', workflow_steps: [] } as never,
-      status: 200,
+      can_execute: true,
+      allowed_environments: [],
     });
     const { result } = renderHook(() => useExecutionView(2));
     await waitFor(() => expect(result.current.loading).toBe(false));

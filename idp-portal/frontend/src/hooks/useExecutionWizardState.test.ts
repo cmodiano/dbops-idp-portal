@@ -271,7 +271,7 @@ describe('useExecutionWizardState — setters', () => {
     expect(result.current.requiresTarget).toBe(false);
 
     await act(async () => {
-      result.current.setSelectedTargets([{ id: '1', name: 'srv1', environment: 'DEV' }]);
+      result.current.setSelectedTargets([{ name: 'srv1', environment: 'DEV', target_type: 'server', metadata: null }]);
     });
     expect(result.current.effectiveTargetNames).toEqual(['srv1']);
 
@@ -292,7 +292,7 @@ describe('useExecutionWizardState — setters', () => {
     // Use setSelectedTargets to cover the targets-based derivedEnvironment branch (lines 197-198)
     // and the target_names truthy branch (line 406)
     await act(async () => {
-      result.current.setSelectedTargets([{ id: '1', name: 'srv1', environment: 'DEV' }]);
+      result.current.setSelectedTargets([{ name: 'srv1', environment: 'DEV', target_type: 'server', metadata: null }]);
     });
     await act(async () => {
       await result.current.handleSubmitScheduled();

@@ -5,19 +5,33 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { usePlatformIntegrations } from './usePlatformIntegrations';
 import * as integrationsService from '../services/integrations_service';
-import type { IntegrationResponse } from '../types/api';
+import type { IntegrationResponse, IntegrationTypeCatalogue } from '../types/api';
 
 vi.mock('../services/integrations_service');
 
-const mockPlatformType = { code: 'aap', name: 'Ansible', integration_role: 'platform' };
+const mockPlatformType: IntegrationTypeCatalogue = {
+  code: 'aap',
+  name: 'Ansible',
+  description: 'Ansible Automation Platform',
+  version: '1.0',
+  is_active: true,
+  integration_role: 'platform',
+  created_at: '2025-01-01T00:00:00Z',
+  updated_at: '2025-01-01T00:00:00Z',
+  actions: [],
+};
 const mockAAPIntegration: IntegrationResponse = {
   id: 1,
   name: 'AAP Instance 1',
   type: 'aap',
-  status: 'active',
-  engine: 'aap',
+  base_url: 'https://aap.example.com',
+  credential_ref: null,
+  icon: null,
+  auth_flow: null,
+  status: 'valid',
   config: {},
   created_at: '2025-01-01T00:00:00Z',
+  updated_at: '2025-01-01T00:00:00Z',
 };
 const mockInvalidIntegration: IntegrationResponse = {
   ...mockAAPIntegration,
@@ -28,10 +42,14 @@ const mockOtherIntegration: IntegrationResponse = {
   id: 3,
   name: 'Vault Instance',
   type: 'vault',
-  status: 'active',
-  engine: 'vault',
+  base_url: 'https://vault.example.com',
+  credential_ref: null,
+  icon: null,
+  auth_flow: null,
+  status: 'valid',
   config: {},
   created_at: '2025-01-01T00:00:00Z',
+  updated_at: '2025-01-01T00:00:00Z',
 };
 
 describe('usePlatformIntegrations', () => {

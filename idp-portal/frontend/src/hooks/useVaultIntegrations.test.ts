@@ -13,20 +13,28 @@ const mockVaultIntegration: IntegrationResponse = {
   id: 1,
   name: 'HashiCorp Vault',
   type: 'vault',
-  status: 'active',
-  engine: 'vault',
+  base_url: 'https://vault.example.com',
+  credential_ref: null,
+  icon: null,
+  auth_flow: null,
+  status: 'valid',
   config: {},
   created_at: '2025-01-01T00:00:00Z',
+  updated_at: '2025-01-01T00:00:00Z',
 };
 
 const mockOtherIntegration: IntegrationResponse = {
   id: 2,
   name: 'AAP Platform',
   type: 'aap',
-  status: 'active',
-  engine: 'aap',
+  base_url: 'https://aap.example.com',
+  credential_ref: null,
+  icon: null,
+  auth_flow: null,
+  status: 'valid',
   config: {},
   created_at: '2025-01-01T00:00:00Z',
+  updated_at: '2025-01-01T00:00:00Z',
 };
 
 const mockInvalidVault: IntegrationResponse = {

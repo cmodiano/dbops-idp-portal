@@ -2,10 +2,10 @@
  * Tests for useScheduledExecutions hook (Story 39.7 — coverage).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { renderHook, waitFor, act } from '@testing-library/react';
 import { useScheduledExecutions } from './useScheduledExecutions';
 import * as scheduledService from '../services/scheduled_execution_service';
-import type { ScheduledExecutionListItem } from '../types/api';
+import type { ScheduledExecutionListItem, ScheduledExecutionListResponse } from '../types/api';
 
 vi.mock('../services/scheduled_execution_service');
 vi.mock('../services/logger', () => ({
@@ -13,24 +13,28 @@ vi.mock('../services/logger', () => ({
 }));
 
 const mockExecution: ScheduledExecutionListItem = {
-  id: 1,
+  scheduled_execution_id: 1,
   action_id: 10,
   action_name: 'Deploy',
+  user_id: 1,
+  user_name: 'alice',
   environment: 'prod',
-  targets: [],
   parameters: null,
   scheduled_at: '2025-06-01T10:00:00Z',
   recurring_pattern: null,
-  status: 'PENDING',
+  status: 'pending',
   created_at: '2025-01-01T00:00:00Z',
 };
 
-const mockApiResponse = {
+const mockApiResponse: ScheduledExecutionListResponse = {
   data: [mockExecution],
   available_actions: [{ action_id: 10, action_name: 'Deploy' }],
-  total: 1,
-  page: 1,
-  page_size: 100,
+  pagination: {
+    total: 1,
+    page: 1,
+    page_size: 100,
+    total_pages: 1,
+  },
 };
 
 describe('useScheduledExecutions', () => {
@@ -55,7 +59,7 @@ describe('useScheduledExecutions', () => {
     });
 
     expect(result.current.executions).toHaveLength(1);
-    expect(result.current.executions[0].id).toBe(1);
+    expect(result.current.executions[0].scheduled_execution_id).toBe(1);
     expect(result.current.availableActions).toHaveLength(1);
     expect(result.current.loading).toBe(false);
   });
@@ -94,7 +98,12 @@ describe('useScheduledExecutions', () => {
   });
 
   it('toggleRecurrence returns success on success', async () => {
-    vi.mocked(scheduledService.toggleRecurringPattern).mockResolvedValue(undefined);
+    vi.mocked(scheduledService.toggleRecurringPattern).mockResolvedValue({
+      pattern_type: 'daily',
+      pattern_config: { hour: 9, minute: 0 },
+      next_execution_date: null,
+      is_active: true,
+    });
     const { result } = renderHook(() => useScheduledExecutions());
 
     let toggleResult: { success: boolean };
@@ -136,9 +145,12 @@ describe('useScheduledExecutions', () => {
   it('handles response without available_actions', async () => {
     vi.mocked(scheduledService.listScheduledExecutions).mockResolvedValue({
       data: [mockExecution],
-      total: 1,
-      page: 1,
-      page_size: 100,
+      pagination: {
+        total: 1,
+        page: 1,
+        page_size: 100,
+        total_pages: 1,
+      },
     });
     const { result } = renderHook(() => useScheduledExecutions());
 

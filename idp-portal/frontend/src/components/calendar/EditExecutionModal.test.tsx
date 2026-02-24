@@ -8,29 +8,27 @@ import { EditExecutionModal } from './EditExecutionModal';
 import type { ScheduledExecutionListItem } from '../../types/api';
 
 const mockNonRecurringExecution: ScheduledExecutionListItem = {
-  id: 1,
+  scheduled_execution_id: 1,
   action_id: 10,
   action_name: 'Deploy App',
+  user_id: 1,
+  user_name: 'alice',
   environment: 'prod',
-  targets: [],
   parameters: null,
   scheduled_at: '2025-06-01T10:00:00Z',
   recurring_pattern: null,
-  status: 'PENDING',
+  status: 'pending',
   created_at: '2025-01-01T00:00:00Z',
 };
 
 const mockRecurringExecution: ScheduledExecutionListItem = {
   ...mockNonRecurringExecution,
-  id: 2,
+  scheduled_execution_id: 2,
   recurring_pattern: {
-    id: 1,
-    type: 'daily',
-    hour: 9,
-    minute: 0,
-    day_of_week: null,
-    cron_expression: null,
-    active: true,
+    pattern_type: 'daily',
+    pattern_config: { hour: 9, minute: 0 },
+    next_execution_date: null,
+    is_active: true,
   },
   scheduled_at: null,
 };

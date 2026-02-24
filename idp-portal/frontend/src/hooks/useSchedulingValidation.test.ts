@@ -101,7 +101,7 @@ describe('useSchedulingValidation', () => {
     it('calls onResult with validating=true before response', async () => {
       const { result } = renderHook(() => useSchedulingValidation());
       const onResult = vi.fn();
-      vi.mocked(scheduledService.validateCronExpression).mockResolvedValue({ valid: true, error: null });
+      vi.mocked(scheduledService.validateCronExpression).mockResolvedValue({ valid: true, error: '' });
       vi.mocked(scheduledService.getCronNextExecutions).mockResolvedValue([]);
 
       await act(async () => {
@@ -113,7 +113,7 @@ describe('useSchedulingValidation', () => {
     });
 
     it('validates valid cron expression and returns next executions', async () => {
-      vi.mocked(scheduledService.validateCronExpression).mockResolvedValue({ valid: true, error: null });
+      vi.mocked(scheduledService.validateCronExpression).mockResolvedValue({ valid: true, error: '' });
       vi.mocked(scheduledService.getCronNextExecutions).mockResolvedValue([
         '2025-06-01T09:00:00Z',
         '2025-06-02T09:00:00Z',
@@ -154,7 +154,7 @@ describe('useSchedulingValidation', () => {
     });
 
     it('uses default error message when validation returns no error', async () => {
-      vi.mocked(scheduledService.validateCronExpression).mockResolvedValue({ valid: false, error: null });
+      vi.mocked(scheduledService.validateCronExpression).mockResolvedValue({ valid: false, error: '' });
 
       const { result } = renderHook(() => useSchedulingValidation());
       const onResult = vi.fn();
@@ -202,7 +202,7 @@ describe('useSchedulingValidation', () => {
     });
 
     it('calls validateCronDebounced for non-custom preset', async () => {
-      vi.mocked(scheduledService.validateCronExpression).mockResolvedValue({ valid: true, error: null });
+      vi.mocked(scheduledService.validateCronExpression).mockResolvedValue({ valid: true, error: '' });
       vi.mocked(scheduledService.getCronNextExecutions).mockResolvedValue([]);
 
       const { result } = renderHook(() => useSchedulingValidation());

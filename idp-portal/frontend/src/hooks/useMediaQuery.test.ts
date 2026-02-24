@@ -19,7 +19,7 @@ describe('useMediaQuery', () => {
     changeHandler = null;
     mockMatches = false;
 
-    vi.spyOn(window, 'matchMedia').mockImplementation((query: string) => ({
+    vi.spyOn(window, 'matchMedia').mockImplementation(((query: string) => ({
       matches: mockMatches,
       media: query,
       onchange: null,
@@ -28,7 +28,7 @@ describe('useMediaQuery', () => {
       addEventListener: mockAddEventListener,
       removeEventListener: mockRemoveEventListener,
       dispatchEvent: vi.fn(),
-    }));
+    })) as unknown as (query: string) => MediaQueryList);
   });
 
   afterEach(() => {

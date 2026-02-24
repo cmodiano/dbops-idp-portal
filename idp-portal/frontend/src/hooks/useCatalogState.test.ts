@@ -312,7 +312,18 @@ describe('useCatalogState', () => {
     const { result } = renderHook(() => useCatalogState(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    const suggestion = { action_id: 1, name: 'Fix Action', description: null };
+    const suggestion = {
+      action_id: 1,
+      action_name: 'Fix Action',
+      action_description: null,
+      matching_rule: {
+        error_pattern: '.*',
+        target_action_id: 1,
+        environments: ['prod'],
+        auto_trigger: false,
+        risk_level: 'low' as const,
+      },
+    };
 
     await act(async () => {
       await result.current.handleRemediationSuggestionClick(suggestion);
