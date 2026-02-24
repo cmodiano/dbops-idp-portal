@@ -491,5 +491,5 @@ development_status:
     38-3-frontend-nested-key-props-topnav: done # NEW-FE-1 — code-review 2026-02-23: 0H 1M 2L, L1 fixé (doc AC3), M1+L2 notés
     38-4-backend-asyncio-run-to-async-to-sync-polling: done # NEW-BE-4 — code-review 2026-02-23: 0H 1M 2L, M1 fixé (docstring test), L1 fixé (completion notes), L2 noté
     38-5-audit-except-exception-residuels-documentation: done # 16.2 — code-review 2026-02-23: 1H 2M 1L, tous fixés (décomptes corrigés, 11 noqa standardisés)
-    38-6-migration-dip-services-composants-hooks: backlog # SOLID-FE-4
+    38-6-migration-dip-services-composants-hooks: done # SOLID-FE-4 — code-review 2026-02-23: 1H 3M 3L, 4 fixés (dep manquante, cast unsafe, error state, Promise.all)
     epic-38-retrospective: optional

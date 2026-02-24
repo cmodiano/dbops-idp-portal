@@ -11,14 +11,13 @@
  * - Reset button with active filter count badge
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
 import { Card, Form, Row, Col, DatePicker, Select, Button, Badge, Space, theme } from 'antd';
 import { FilterOutlined, ClearOutlined } from '@ant-design/icons';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
 import type { ExecutionFilters } from '../../types/api';
-import { fetchExecutionTags } from '../../services/execution_service';
-import { fetchCatalogActions, type CatalogAction } from '../../services/catalog_service';
+import { useExecutionFilterOptions } from '../../hooks/useExecutionFilterOptions';
 import { useEngines } from '../../hooks/useEngines';
 import { useEnvironments } from '../../hooks/useEnvironments';
 
@@ -73,11 +72,8 @@ export function ExecutionsFiltersPanel({
   // Story 13.7: Load environments from inventory
   const { environmentOptions, loading: environmentsLoading } = useEnvironments();
 
-  // Tags and actions for selects
-  const [tags, setTags] = useState<string[]>([]);
-  const [tagsLoading, setTagsLoading] = useState(false);
-  const [actions, setActions] = useState<CatalogAction[]>([]);
-  const [actionsLoading, setActionsLoading] = useState(false);
+  // Story 38.6: DIP — use hook instead of direct service imports
+  const { tags, tagsLoading, actions, actionsLoading } = useExecutionFilterOptions();
 
   const apply = useCallback(
     (newFilters: ExecutionFilters) => {
@@ -85,44 +81,6 @@ export function ExecutionsFiltersPanel({
     },
     [onApplyFilters]
   );
-
-  // Load tags on mount
-  useEffect(() => {
-    let cancelled = false;
-    setTagsLoading(true);
-    fetchExecutionTags()
-      .then((data) => {
-        if (!cancelled) setTags(data);
-      })
-      .catch(() => {
-        if (!cancelled) setTags([]);
-      })
-      .finally(() => {
-        if (!cancelled) setTagsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Load actions on mount: use catalog (RBAC) so any user with execution access sees actions they can see
-  useEffect(() => {
-    let cancelled = false;
-    setActionsLoading(true);
-    fetchCatalogActions()
-      .then((data) => {
-        if (!cancelled) setActions(data);
-      })
-      .catch(() => {
-        if (!cancelled) setActions([]);
-      })
-      .finally(() => {
-        if (!cancelled) setActionsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // Convert date strings to Dayjs for RangePicker
   const dateRangeValue: [Dayjs, Dayjs] | null =

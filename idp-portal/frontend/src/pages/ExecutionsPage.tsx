@@ -25,7 +25,7 @@ import { useExecutionDetail } from '../hooks/useExecutionDetail';
 import { useExecutionRestart } from '../hooks/useExecutionRestart';
 import { useExecutionsData } from '../hooks/useExecutionsData';
 import { getExecutionsColumns, isRunning } from './executions/executionsColumns';
-import { cancelExecution } from '../services/execution_service';
+import { useCancelRunningExecution } from '../hooks/useCancelRunningExecution';
 import { useAuth } from '../contexts/AuthContext';
 import type { ExecutionResponse } from '../types/api';
 import { ExecutionWizard } from '../components/catalog/ExecutionWizard';
@@ -86,6 +86,9 @@ export default function ExecutionsPage() {
     loading: drawerLoading, error: drawerError, openExecution, closeDrawer,
   } = useExecutionDetail();
 
+  // Story 38.6: DIP — use hook instead of direct service import
+  const { cancelRunningExecution } = useCancelRunningExecution();
+
   // Cancel state (Story 17.14)
   const isCancellingRef = useRef(false);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
@@ -117,7 +120,7 @@ export default function ExecutionsPage() {
         isCancellingRef.current = true;
         setCancellingId(executionId);
         try {
-          await cancelExecution(executionId);
+          await cancelRunningExecution(executionId);
           notification.success({ title: MESSAGES.CANCEL_SUCCESS });
           if (!isRefreshingRef.current) {
             isRefreshingRef.current = true;
@@ -133,7 +136,7 @@ export default function ExecutionsPage() {
         }
       },
     });
-  }, [modal, notification, refetchCurrentState, cancellingId, isRefreshingRef]);
+  }, [modal, notification, refetchCurrentState, cancellingId, isRefreshingRef, cancelRunningExecution]);
 
   // Scope change (Story 8.9)
   const handleScopeChange = useCallback((scope: typeof activeScope) => {

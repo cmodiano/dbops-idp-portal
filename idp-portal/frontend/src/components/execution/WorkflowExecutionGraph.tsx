@@ -16,8 +16,7 @@
  */
 
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { getExecutionSteps } from '../../services/execution_service';
-import logger from '../../services/logger';
+import { useExecutionSteps } from '../../hooks/useExecutionSteps';
 import {
   ReactFlow,
   Controls,
@@ -144,27 +143,8 @@ function WorkflowExecutionGraphInner({
   const TERMINAL_STATUSES = ['COMPLETED', 'FAILED', 'CANCELLED', 'REJECTED'];
   const isTerminal = execution ? TERMINAL_STATUSES.includes(execution.status) : false;
 
-  // One-time fetch for terminal executions (load steps without WS/polling)
-  const [staticSteps, setStaticSteps] = useState<ExecutionStepResponse[]>([]);
-  const [stepsError, setStepsError] = useState<string | null>(null);
-  useEffect(() => {
-    if (isTerminal && executionId) {
-      setStepsError(null);
-      getExecutionSteps(executionId)
-        .then((steps) => {
-          setStaticSteps(steps);
-          setStepsError(null);
-        })
-        .catch((err: unknown) => {
-          const message = err instanceof Error ? err.message : 'Erreur inconnue';
-          logger.error('Failed to load execution steps', {
-            executionId,
-            error: message,
-          });
-          setStepsError(message);
-        });
-    }
-  }, [isTerminal, executionId]);
+  // Story 38.6: DIP — use hook instead of direct service import for terminal steps
+  const { steps: staticSteps, error: stepsError } = useExecutionSteps(executionId, isTerminal);
 
   // Skip WebSocket entirely in simulation mode (no WS server in Docker/dev)
   const forcePolling = import.meta.env.VITE_SIMULATE_EXECUTION === 'true';
@@ -348,7 +328,6 @@ function WorkflowExecutionGraphInner({
           title="Erreur de chargement des étapes"
           description={stepsError}
           style={{ marginBottom: 8 }}
-          onClose={() => setStepsError(null)}
         />
       )}
       {/* AC10: Legend */}

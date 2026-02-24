@@ -10,14 +10,13 @@
  * - Reset button with active filter count badge
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
 import { Card, Form, Row, Col, DatePicker, Select, Button, Badge, Space, theme } from 'antd';
 import { FilterOutlined, ClearOutlined } from '@ant-design/icons';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
 import type { CalendarFilters } from '../../hooks/useCalendarFilters';
-import type { IntegrationResponse } from '../../types/api';
-import { getIntegrations } from '../../services/integrations_service';
+import { useIntegrations } from '../../hooks/useIntegrations';
 import { useEngines } from '../../hooks/useEngines';
 import { useEnvironments } from '../../hooks/useEnvironments';
 import { useAuth } from '../../contexts/AuthContext';
@@ -62,9 +61,8 @@ export function CalendarFiltersPanel({
   // Story 13.7: Load environments from inventory (only when authenticated to avoid 401)
   const { environmentOptions, loading: environmentsLoading } = useEnvironments({ enabled: !!user });
 
-  // Platforms for select
-  const [integrations, setIntegrations] = useState<IntegrationResponse[]>([]);
-  const [integrationsLoading, setIntegrationsLoading] = useState(false);
+  // Story 38.6: DIP — use hook instead of direct service import
+  const { integrations, loading: integrationsLoading } = useIntegrations();
 
   const apply = useCallback(
     (newFilters: CalendarFilters) => {
@@ -72,25 +70,6 @@ export function CalendarFiltersPanel({
     },
     [onApplyFilters]
   );
-
-  // Load integrations on mount (for platform filter)
-  useEffect(() => {
-    let cancelled = false;
-    setIntegrationsLoading(true);
-    getIntegrations()
-      .then((data) => {
-        if (!cancelled) setIntegrations(data);
-      })
-      .catch(() => {
-        if (!cancelled) setIntegrations([]);
-      })
-      .finally(() => {
-        if (!cancelled) setIntegrationsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // Convert date strings to Dayjs for RangePicker
   const dateRangeValue: [Dayjs, Dayjs] | null =
