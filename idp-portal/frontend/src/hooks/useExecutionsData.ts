@@ -76,6 +76,8 @@ export interface UseExecutionsDataReturn {
   refetchCurrentState: () => Promise<void>;
   // Story 36.2: trigger immediate refresh after wizard submission
   refresh: () => void;
+  /** Update a single execution in the list (e.g. when drawer receives real-time completion). */
+  updateExecutionInList: (id: number, patch: Partial<ExecutionResponse>) => void;
   // Computed
   PAGE_SIZE: number;
 }
@@ -294,6 +296,13 @@ export const useExecutionsData = (
     fetchData(currentPageRef.current, activeScopeRef.current);
   }, [fetchData]);
 
+  // Update one execution in list (e.g. when detail drawer receives real-time status change)
+  const updateExecutionInList = useCallback((id: number, patch: Partial<ExecutionResponse>) => {
+    setExecutions((prev) =>
+      prev.map((e) => (e.id === id ? { ...e, ...patch } : e)),
+    );
+  }, []);
+
   return {
     executions, loading, error, currentPage, setCurrentPage, totalCount,
     sortField, setSortField, sortOrder, setSortOrder,
@@ -301,7 +310,7 @@ export const useExecutionsData = (
     statsData, statsLoading, timeSeriesData, timeSeriesLoading,
     pendingApprovals, pendingApprovalsLoading, loadPendingApprovals,
     integrationIconsMap,
-    isRefreshingRef, refetchCurrentState, refresh,
+    isRefreshingRef, refetchCurrentState, refresh, updateExecutionInList,
     PAGE_SIZE,
   };
 };

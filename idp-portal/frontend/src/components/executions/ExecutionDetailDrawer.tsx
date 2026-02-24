@@ -83,6 +83,7 @@ export const ExecutionDetailDrawer: React.FC<ExecutionDetailDrawerProps> = ({
             execution={execution}
             steps={steps}
             mode="realtime"
+            onExecutionUpdate={onExecutionUpdate}
           />
         </ErrorBoundary>
       )

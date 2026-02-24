@@ -67,7 +67,8 @@ export default function ExecutionsPage() {
     activeScope, setActiveScope, userHasChosenScope,
     statsData, statsLoading, timeSeriesData, timeSeriesLoading,
     pendingApprovals, pendingApprovalsLoading, loadPendingApprovals,
-    integrationIconsMap, isRefreshingRef, refetchCurrentState, refresh, PAGE_SIZE,
+    integrationIconsMap, isRefreshingRef, refetchCurrentState, refresh,
+    updateExecutionInList, PAGE_SIZE,
   } = useExecutionsData(filters, canApprove);
 
   // Scope sync (Story 8.9, 36.1)
@@ -140,6 +141,14 @@ export default function ExecutionsPage() {
     setActiveScope(scope);
     setCurrentPage(1);
   }, [setActiveScope, setCurrentPage, userHasChosenScope]);
+
+  // When detail drawer receives real-time execution update (e.g. completion), sync list
+  const handleExecutionUpdate = useCallback(
+    (updated: ExecutionResponse) => {
+      updateExecutionInList(updated.id, updated);
+    },
+    [updateExecutionInList],
+  );
 
   // Approval complete (Story 8.8, 22.14)
   const handleApprovalComplete = useCallback(() => {
@@ -294,7 +303,7 @@ export default function ExecutionsPage() {
       <ExecutionDetailDrawer
         open={drawerOpen} execution={selectedExecution} steps={selectedSteps}
         actionDetail={selectedActionDetail} loading={drawerLoading} error={drawerError}
-        onClose={closeDrawer} onExecutionUpdate={() => {}}
+        onClose={closeDrawer} onExecutionUpdate={handleExecutionUpdate}
       />
 
       <ExecutionWizard
