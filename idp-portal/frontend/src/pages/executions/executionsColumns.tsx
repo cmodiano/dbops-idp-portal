@@ -20,9 +20,10 @@ import type {
   ExecutionScope,
 } from '../../types/api';
 import type { User } from '../../types/common';
+import { RUNNING_STATUSES } from '../../constants/executions';
 
-/** Running statuses that appear first with visual indicator (AC3, Story 9.9 AC2). */
-export const RUNNING_STATUSES: ExecutionStatusType[] = ['RUNNING', 'SUBMITTED', 'PENDING_APPROVAL'];
+/** Re-export for tests and consumers that import from this module. */
+export { RUNNING_STATUSES };
 
 /** Format duration from ISO timestamps. */
 export function formatDuration(startedAt: string | null, completedAt: string | null): string {

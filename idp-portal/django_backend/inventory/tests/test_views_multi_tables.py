@@ -124,12 +124,36 @@ class SerializerTests(TestCase):
         s = InstanceFilterParamsSerializer(data=data)
         self.assertTrue(s.is_valid(), s.errors)
 
+    def test_instance_filter_with_engine_type(self):
+        data = {'environment': 'dev', 'engine_type': 'oracle'}
+        s = InstanceFilterParamsSerializer(data=data)
+        self.assertTrue(s.is_valid(), s.errors)
+        self.assertEqual(s.validated_data['engine_type'], 'oracle')
+
+    def test_instance_filter_engine_type_max_length(self):
+        data = {'environment': 'dev', 'engine_type': 'x' * 21}
+        s = InstanceFilterParamsSerializer(data=data)
+        self.assertFalse(s.is_valid())
+        self.assertIn('engine_type', s.errors)
+
     # --- DatabaseFilterParamsSerializer ---
 
     def test_database_filter_valid(self):
         data = {'environment': 'dev', 'server_name': 'srv01'}
         s = DatabaseFilterParamsSerializer(data=data)
         self.assertTrue(s.is_valid(), s.errors)
+
+    def test_database_filter_with_engine_type(self):
+        data = {'environment': 'dev', 'engine_type': 'oracle'}
+        s = DatabaseFilterParamsSerializer(data=data)
+        self.assertTrue(s.is_valid(), s.errors)
+        self.assertEqual(s.validated_data['engine_type'], 'oracle')
+
+    def test_database_filter_engine_type_max_length(self):
+        data = {'environment': 'dev', 'engine_type': 'x' * 21}
+        s = DatabaseFilterParamsSerializer(data=data)
+        self.assertFalse(s.is_valid())
+        self.assertIn('engine_type', s.errors)
 
     def test_database_filter_both_server_params_rejected(self):
         data = {'environment': 'dev', 'server_name': 'srv01', 'server_names': ['srv02']}
@@ -291,7 +315,7 @@ class ListInstancesViewTests(BaseMultiTableViewTest):
         self.assertEqual(len(data['data']), 1)
         # No RBAC check since no server filter
         mock_svc.list_instances.assert_called_once_with(
-            environment='dev', server_name=None, server_names=None,
+            environment='dev', engine_type=None, server_name=None, server_names=None,
         )
 
     @patch('inventory.views._inventory_service_factory')
@@ -365,6 +389,38 @@ class ListInstancesViewTests(BaseMultiTableViewTest):
         self.assertEqual(response.status_code, 500)
         self.assertIn('detail', response.json())
 
+    @patch('inventory.views._inventory_service_factory')
+    def test_list_instances_engine_type_accepted(self, mock_service_cls):
+        """10.1 Story 37.2 AC1: engine_type query param accepted → 200, propagated to service."""
+        mock_svc = mock_service_cls.return_value
+        mock_svc.list_instances.return_value = []
+
+        response = self.client.get('/api/v1/inventory/instances/', {
+            'environment': 'dev',
+            'engine_type': 'oracle',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        mock_svc.list_instances.assert_called_once_with(
+            environment='dev', engine_type='oracle', server_name=None, server_names=None,
+        )
+
+    @patch('inventory.views._inventory_service_factory')
+    def test_list_databases_engine_type_accepted(self, mock_service_cls):
+        """10.1 Story 37.2 AC2: engine_type query param accepted for databases → 200, propagated to service."""
+        mock_svc = mock_service_cls.return_value
+        mock_svc.list_databases.return_value = []
+
+        response = self.client.get('/api/v1/inventory/databases/', {
+            'environment': 'dev',
+            'engine_type': 'oracle',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        mock_svc.list_databases.assert_called_once_with(
+            environment='dev', engine_type='oracle', server_name=None, server_names=None,
+        )
+
 
 class ListDatabasesViewTests(BaseMultiTableViewTest):
     """Tests for list_databases endpoint. Task 8.4."""
@@ -433,7 +489,7 @@ class ListDatabasesViewTests(BaseMultiTableViewTest):
 
         self.assertEqual(response.status_code, 200)
         mock_svc.list_databases.assert_called_once_with(
-            environment='dev', server_name=None, server_names=None,
+            environment='dev', engine_type=None, server_name=None, server_names=None,
         )
 
     def test_list_databases_400_missing_environment(self):

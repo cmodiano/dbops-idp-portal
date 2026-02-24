@@ -478,7 +478,7 @@ development_status:
     # Réf: planning-artifacts/epic-37-inventaire-environnement-serveur-colonne-engine.md, spec-inventaire-environnement-serveur-colonne-engine.md
     epic-37: in-progress
     37-1-deriver-environnement-depuis-table-servers: done # code-review 2026-02-23: 1 CRITICAL + 2 HIGH + 2 MEDIUM fixes (double-prefix bug SELECT, aliasing helper, dead code removed, error re-wrap), 33/33 tests pass
-    37-2-filtre-engine-type-instances-databases-backend: backlog
+    37-2-filtre-engine-type-instances-databases-backend: done # code-review 2026-02-23: 2 MEDIUM + 2 LOW fixes (env conditionnel multi-server, tests serializer engine_type, db_select supprimé, help_text), 104/104 tests pass
     37-3-frontend-passer-engine-type-appels-inventaire: backlog
     37-4-parametre-inventory-value-column-backend: backlog
     37-5-parametre-inventory-value-column-frontend: backlog

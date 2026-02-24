@@ -774,3 +774,281 @@ class ReadDatabasesEnvFromServersTests(TestCase):
         self.assertIn('d.DB_ID', sql)
         self.assertIn('d.DB_NAME', sql)
         self.assertIn('d.ENV', sql)
+
+
+# ---------------------------------------------------------------------------
+# Story 37.2 — engine_type filter for instances and databases
+# ---------------------------------------------------------------------------
+
+# Config without engine_type mapping in servers (for AC4 tests)
+MULTI_TABLE_CONFIG_NO_ENGINE = {
+    "entities": {
+        "servers": {
+            "table": "DBOPS_SERVERS",
+            "id_column": "SERVER_ID",
+            "columns": {
+                "name": "HOSTNAME",
+                "environment": "ENV",
+                # engine_type intentionally absent
+            },
+        },
+        "instances": {
+            "table": "DBOPS_INSTANCES",
+            "id_column": "INSTANCE_ID",
+            "columns": {
+                "name": "INSTANCE_NAME",
+                "environment": "ENV",
+                "server_ref": "SERVER_NAME",
+                "db_ref": "DB_NAME",
+            },
+        },
+        "databases": {
+            "table": "DBOPS_DATABASES",
+            "id_column": "DB_ID",
+            "columns": {
+                "name": "DB_NAME",
+                "environment": "ENV",
+            },
+        },
+    }
+}
+
+
+class EngineTypeFilterInstancesTests(TestCase):
+    """Story 37.2: engine_type filter for instances via servers JOIN (AC1, AC3, AC4)."""
+
+    def setUp(self):
+        self.service = InventoryService()
+
+    def _create_inventory_db(self, config):
+        return Integration.objects.create(
+            type=IntegrationType.INVENTORY_DB,
+            name='DB Inventory',
+            base_url='oracle://localhost',
+            config=json.dumps(config),
+        )
+
+    def _make_mock_cursor(self, mock_conn, rows=None):
+        mock_cursor = MagicMock()
+        mock_cursor.description = [('ID',), ('NAME',), ('ENVIRONMENT',), ('SERVER_REF',), ('DB_REF',)]
+        mock_cursor.fetchall.return_value = rows or []
+        mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+        mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        return mock_cursor
+
+    @patch('inventory.services.connection')
+    def test_read_instances_engine_type_join_servers(self, mock_conn):
+        """10.2 AC1: engine_type filter uses JOIN instances → servers; filter on srv.ENGINE."""
+        self._create_inventory_db(MULTI_TABLE_CONFIG)
+        mock_cursor = self._make_mock_cursor(mock_conn)
+
+        self.service.list_instances(environment='dev', engine_type='oracle')
+
+        sql = mock_cursor.execute.call_args[0][0]
+        params = mock_cursor.execute.call_args[0][1]
+
+        # JOIN servers must be present
+        self.assertIn('DBOPS_SERVERS', sql)
+        self.assertIn('JOIN', sql.upper())
+        # Filter on srv.ENGINE (engine_type column of servers in MULTI_TABLE_CONFIG)
+        self.assertIn('srv.ENGINE', sql)
+        # engine_type filter must NOT be applied directly on instances columns
+        self.assertNotIn('inst.ENGINE', sql)
+        # Bind parameters
+        self.assertEqual(params['p_engine_type'], 'oracle')
+        self.assertEqual(params['p_environment'], 'dev')
+
+    @patch('inventory.services.connection')
+    def test_read_instances_engine_type_and_environment_combined(self, mock_conn):
+        """10.3 AC1: Both environment and engine_type filters combined in the same JOIN."""
+        self._create_inventory_db(MULTI_TABLE_CONFIG)
+        mock_cursor = self._make_mock_cursor(mock_conn)
+
+        self.service.list_instances(environment='dev', engine_type='oracle')
+
+        sql = mock_cursor.execute.call_args[0][0]
+        params = mock_cursor.execute.call_args[0][1]
+
+        # Both conditions in WHERE
+        self.assertIn('srv.ENV', sql)
+        self.assertIn('srv.ENGINE', sql)
+        self.assertEqual(params['p_environment'], 'dev')
+        self.assertEqual(params['p_engine_type'], 'oracle')
+        # Single JOIN to servers (not duplicated)
+        self.assertEqual(sql.upper().count('DBOPS_SERVERS'), 1)
+
+    @patch('inventory.services.connection')
+    def test_read_instances_multi_server_engine_type(self, mock_conn):
+        """10.4 AC1: Multi-server path also applies engine_type filter via srv.ENGINE."""
+        self._create_inventory_db(MULTI_TABLE_CONFIG)
+        mock_cursor = self._make_mock_cursor(mock_conn)
+
+        self.service.list_instances(
+            environment='dev', engine_type='oracle', server_names=['srv01', 'srv02']
+        )
+
+        sql = mock_cursor.execute.call_args[0][0]
+        params = mock_cursor.execute.call_args[0][1]
+
+        # JOIN servers + IN clause + engine_type condition
+        self.assertIn('DBOPS_SERVERS', sql)
+        self.assertIn('IN (', sql)
+        self.assertIn('srv.ENGINE', sql)
+        self.assertEqual(params['p_engine_type'], 'oracle')
+        self.assertIn('p_server_0', params)
+        self.assertIn('p_server_1', params)
+
+    @patch('inventory.services.connection')
+    def test_no_engine_type_no_filter_instances(self, mock_conn):
+        """10.8 AC3: Absence of engine_type → no engine condition in SQL (regression)."""
+        self._create_inventory_db(MULTI_TABLE_CONFIG)
+        mock_cursor = self._make_mock_cursor(mock_conn)
+
+        self.service.list_instances(environment='dev')
+
+        sql = mock_cursor.execute.call_args[0][0]
+        params = mock_cursor.execute.call_args[0][1]
+
+        # No engine_type bind parameter
+        self.assertNotIn(':p_engine_type', sql)
+        self.assertNotIn('p_engine_type', params)
+        # Environment filter still applied via servers JOIN
+        self.assertIn('srv.ENV', sql)
+
+    @patch('inventory.services.connection')
+    def test_engine_type_not_mapped_warning_skipped_instances(self, mock_conn):
+        """10.9 AC4: engine_type absent from servers config → warning, no exception, filter ignored."""
+        self._create_inventory_db(MULTI_TABLE_CONFIG_NO_ENGINE)
+        mock_cursor = self._make_mock_cursor(mock_conn)
+
+        # Must NOT raise an exception
+        result = self.service.list_instances(environment='dev', engine_type='oracle')
+
+        sql = mock_cursor.execute.call_args[0][0]
+        params = mock_cursor.execute.call_args[0][1]
+
+        # engine_type filter is silently ignored
+        self.assertNotIn(':p_engine_type', sql)
+        self.assertNotIn('p_engine_type', params)
+        # Environment filter still applied (if mapped)
+        self.assertIsInstance(result, list)
+
+
+class EngineTypeFilterDatabasesTests(TestCase):
+    """Story 37.2: engine_type filter for databases via servers JOIN (AC2, AC3, AC4)."""
+
+    def setUp(self):
+        self.service = InventoryService()
+
+    def _create_inventory_db(self, config):
+        return Integration.objects.create(
+            type=IntegrationType.INVENTORY_DB,
+            name='DB Inventory',
+            base_url='oracle://localhost',
+            config=json.dumps(config),
+        )
+
+    def _make_mock_cursor(self, mock_conn, rows=None):
+        mock_cursor = MagicMock()
+        mock_cursor.description = [('ID',), ('NAME',), ('ENVIRONMENT',)]
+        mock_cursor.fetchall.return_value = rows or []
+        mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+        mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        return mock_cursor
+
+    @patch('inventory.services.connection')
+    def test_read_databases_engine_type_join_servers(self, mock_conn):
+        """10.5 AC2: Standard databases path applies engine_type filter via srv.ENGINE."""
+        self._create_inventory_db(MULTI_TABLE_CONFIG)
+        mock_cursor = self._make_mock_cursor(mock_conn)
+
+        self.service.list_databases(environment='dev', engine_type='oracle')
+
+        sql = mock_cursor.execute.call_args[0][0]
+        params = mock_cursor.execute.call_args[0][1]
+
+        # Triple JOIN: databases → instances → servers
+        self.assertIn('DBOPS_DATABASES', sql)
+        self.assertIn('DBOPS_INSTANCES', sql)
+        self.assertIn('DBOPS_SERVERS', sql)
+        # engine_type filter on servers
+        self.assertIn('srv.ENGINE', sql)
+        self.assertEqual(params['p_engine_type'], 'oracle')
+        self.assertEqual(params['p_environment'], 'dev')
+        # No direct databases.ENGINE filter
+        self.assertNotIn('d.ENGINE', sql)
+
+    @patch('inventory.services.connection')
+    def test_read_databases_multi_server_engine_type(self, mock_conn):
+        """10.6 AC2: Multi-server databases path applies engine_type filter."""
+        self._create_inventory_db(MULTI_TABLE_CONFIG)
+        mock_cursor = self._make_mock_cursor(mock_conn)
+
+        self.service.list_databases(
+            environment='dev', engine_type='oracle', server_names=['srv01', 'srv02']
+        )
+
+        sql = mock_cursor.execute.call_args[0][0]
+        params = mock_cursor.execute.call_args[0][1]
+
+        # All three tables + engine_type condition
+        self.assertIn('DBOPS_DATABASES', sql)
+        self.assertIn('DBOPS_INSTANCES', sql)
+        self.assertIn('DBOPS_SERVERS', sql)
+        self.assertIn('srv.ENGINE', sql)
+        self.assertIn('IN (', sql)
+        self.assertEqual(params['p_engine_type'], 'oracle')
+        self.assertIn('p_server_0', params)
+
+    @patch('inventory.services.connection')
+    def test_read_databases_via_instances_engine_type(self, mock_conn):
+        """10.7 AC2: databases via instances path (server_name) applies engine_type filter."""
+        self._create_inventory_db(MULTI_TABLE_CONFIG)
+        mock_cursor = self._make_mock_cursor(mock_conn)
+
+        self.service.list_databases(
+            environment='dev', engine_type='oracle', server_name='srv-01'
+        )
+
+        sql = mock_cursor.execute.call_args[0][0]
+        params = mock_cursor.execute.call_args[0][1]
+
+        # All three tables present (databases → instances → servers JOIN)
+        self.assertIn('DBOPS_DATABASES', sql)
+        self.assertIn('DBOPS_INSTANCES', sql)
+        self.assertIn('DBOPS_SERVERS', sql)
+        # engine_type condition via servers
+        self.assertIn('srv.ENGINE', sql)
+        self.assertEqual(params['p_engine_type'], 'oracle')
+        self.assertEqual(params['p_environment'], 'dev')
+        self.assertEqual(params['p_server_name'], 'srv-01')
+
+    @patch('inventory.services.connection')
+    def test_no_engine_type_no_filter_databases(self, mock_conn):
+        """10.8 AC3: Absence of engine_type → no engine condition in SQL (regression)."""
+        self._create_inventory_db(MULTI_TABLE_CONFIG)
+        mock_cursor = self._make_mock_cursor(mock_conn)
+
+        self.service.list_databases(environment='dev')
+
+        sql = mock_cursor.execute.call_args[0][0]
+        params = mock_cursor.execute.call_args[0][1]
+
+        self.assertNotIn(':p_engine_type', sql)
+        self.assertNotIn('p_engine_type', params)
+        self.assertIn('srv.ENV', sql)
+
+    @patch('inventory.services.connection')
+    def test_engine_type_not_mapped_warning_skipped_databases(self, mock_conn):
+        """10.9 AC4: engine_type absent from servers config → warning, no exception, filter ignored."""
+        self._create_inventory_db(MULTI_TABLE_CONFIG_NO_ENGINE)
+        mock_cursor = self._make_mock_cursor(mock_conn)
+
+        result = self.service.list_databases(environment='dev', engine_type='oracle')
+
+        sql = mock_cursor.execute.call_args[0][0]
+        params = mock_cursor.execute.call_args[0][1]
+
+        self.assertNotIn(':p_engine_type', sql)
+        self.assertNotIn('p_engine_type', params)
+        self.assertIsInstance(result, list)

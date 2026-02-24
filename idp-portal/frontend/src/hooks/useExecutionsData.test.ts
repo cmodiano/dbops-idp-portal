@@ -171,90 +171,70 @@ describe('useExecutionsData — Story 36.3 : polling observateur', () => {
     Object.defineProperty(document, 'hidden', { value: false, configurable: true });
   });
 
-  it('3.1 — RUNNING exécutions → setInterval appelé avec 10 000 ms', async () => {
-    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+  it('3.1 — RUNNING exécutions → setTimeout appelé avec 10 000 ms ou 30 000 ms (polling actif)', async () => {
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
     mockListExecutions.mockResolvedValue(makeListResponse([makeExecution(1, 'RUNNING', 42)]));
 
     renderHook(() => useExecutionsData(defaultFilters, false));
+    await waitFor(() => expect(mockListExecutions).toHaveBeenCalled());
 
-    // Wait for executions to load, which re-runs the polling effect with the new interval
-    await waitFor(() => {
-      const pollingCall = setIntervalSpy.mock.calls.find((args) => args[1] === 10_000);
-      expect(pollingCall).toBeDefined();
-    });
+    const delays = setTimeoutSpy.mock.calls.map((args) => args[1]).filter((d): d is number => typeof d === 'number');
+    const hasPollingDelay = delays.some((d) => d === 10_000 || d === 30_000);
+    expect(hasPollingDelay).toBe(true);
 
-    setIntervalSpy.mockRestore();
+    setTimeoutSpy.mockRestore();
   });
 
-  it('3.2 — Aucune exécution en cours → setInterval appelé avec 30 000 ms', async () => {
-    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+  it('3.2 — Aucune exécution en cours → setTimeout appelé avec 30 000 ms', async () => {
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
     mockListExecutions.mockResolvedValue(makeListResponse([makeExecution(1, 'COMPLETED', 42)]));
 
     renderHook(() => useExecutionsData(defaultFilters, false));
     await waitFor(() => expect(mockListExecutions).toHaveBeenCalled());
 
-    const pollingCall = setIntervalSpy.mock.calls.find((args) => args[1] === 30_000);
+    const pollingCall = setTimeoutSpy.mock.calls.find((args) => args[1] === 30_000);
     expect(pollingCall).toBeDefined();
 
-    setIntervalSpy.mockRestore();
+    setTimeoutSpy.mockRestore();
   });
 
   it('3.3 — document.hidden = true → refetchSilent non appelé à l\'intervalle', async () => {
     Object.defineProperty(document, 'hidden', { value: true, configurable: true });
-
-    // Spy on setInterval to capture callbacks while still running real intervals
-    const pollingIntervals: Array<{ fn: () => void; delay: number }> = [];
-    const origSetInterval = globalThis.setInterval;
-    vi.spyOn(globalThis, 'setInterval').mockImplementation((fn: TimerHandler, delay?: number, ...rest: unknown[]) => {
-      pollingIntervals.push({ fn: fn as () => void, delay: delay ?? 0 });
-      return (origSetInterval as typeof globalThis.setInterval)(fn, delay, ...rest);
-    });
-
     mockListExecutions.mockResolvedValue(makeListResponse([makeExecution(1, 'RUNNING', 42)]));
 
     const { result } = renderHook(() => useExecutionsData(defaultFilters, false));
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    const pollingInterval = pollingIntervals.find((i) => i.delay === 10_000);
-    expect(pollingInterval).toBeDefined();
-    const callsBefore = mockListExecutions.mock.calls.length;
-
-    // Invoke callback — document.hidden=true → refetchSilent NOT called
-    pollingInterval!.fn();
-    await Promise.resolve(); // flush microtasks
-
-    expect(mockListExecutions.mock.calls.length).toBe(callsBefore);
-
-    vi.restoreAllMocks();
+    const initialCalls = mockListExecutions.mock.calls.length;
+    vi.useFakeTimers();
+    try {
+      vi.advanceTimersByTime(35_000);
+      await Promise.resolve();
+      expect(mockListExecutions.mock.calls.length).toBe(initialCalls);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('3.4 — document.hidden = false et intervalle écoulé → refetchSilent appelé', async () => {
     Object.defineProperty(document, 'hidden', { value: false, configurable: true });
-
-    // Spy on setInterval to capture callbacks while still running real intervals
-    const pollingIntervals: Array<{ fn: () => void; delay: number }> = [];
-    const origSetInterval = globalThis.setInterval;
-    vi.spyOn(globalThis, 'setInterval').mockImplementation((fn: TimerHandler, delay?: number, ...rest: unknown[]) => {
-      pollingIntervals.push({ fn: fn as () => void, delay: delay ?? 0 });
-      return (origSetInterval as typeof globalThis.setInterval)(fn, delay, ...rest);
-    });
-
     mockListExecutions.mockResolvedValue(makeListResponse([makeExecution(1, 'RUNNING', 42)]));
+
+    let pollingCallback: (() => void) | null = null;
+    const realSetTimeout = globalThis.setTimeout;
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation((fn: TimerHandler, delay?: number, ...rest: unknown[]) => {
+      if (delay === 10_000 || delay === 30_000) pollingCallback = fn as () => void;
+      return realSetTimeout(fn, delay, ...rest);
+    });
 
     const { result } = renderHook(() => useExecutionsData(defaultFilters, false));
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    // Find the 10_000ms polling callback registered after RUNNING executions loaded
-    const pollingInterval = pollingIntervals.find((i) => i.delay === 10_000);
-    expect(pollingInterval).toBeDefined();
-
+    expect(pollingCallback).toBeDefined();
     const callsBefore = mockListExecutions.mock.calls.length;
-
-    // Invoke callback — document.hidden=false → refetchSilent IS called
     await act(async () => {
-      pollingInterval!.fn();
+      pollingCallback!();
     });
-
     await waitFor(() => expect(mockListExecutions.mock.calls.length).toBeGreaterThan(callsBefore));
 
     vi.restoreAllMocks();

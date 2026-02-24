@@ -125,6 +125,11 @@ class InstanceFilterParamsSerializer(serializers.Serializer):
         max_length=50,
         help_text="Target environment (required)"
     )
+    engine_type = serializers.CharField(
+        required=False,
+        max_length=20,
+        help_text="Filter by engine type (oracle, sqlserver, postgres, etc.)"
+    )
     server_name = serializers.CharField(
         required=False,
         max_length=255,
@@ -152,6 +157,11 @@ class DatabaseFilterParamsSerializer(serializers.Serializer):
         required=True,
         max_length=50,
         help_text="Target environment (required)"
+    )
+    engine_type = serializers.CharField(
+        required=False,
+        max_length=20,
+        help_text="Filter by engine type (oracle, sqlserver, postgres, etc.)"
     )
     server_name = serializers.CharField(
         required=False,

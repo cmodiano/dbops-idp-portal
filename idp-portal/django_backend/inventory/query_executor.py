@@ -329,12 +329,12 @@ class InventoryQueryExecutor:
         try:
             # Database with server_name filter: join via instances
             if entity_type == 'database' and server_name and mapper.get_entity_config('instances'):
-                return self._read_databases_via_instances(mapper, environment, server_name)
+                return self._read_databases_via_instances(mapper, environment, server_name, engine_type=engine_type)
 
             # Multi-server IN clause path (instances or databases)
             if server_names:
                 return self._read_entity_multi_server(
-                    mapper, entity_plural, environment or "", server_names
+                    mapper, entity_plural, environment or "", server_names, engine_type=engine_type
                 )
 
             # Standard single-entity query
@@ -344,69 +344,110 @@ class InventoryQueryExecutor:
             # Story 37.1: Check if servers config available for env-from-server JOIN
             has_servers_config = mapper.get_entity_config('servers') is not None
 
-            # Story 37.1 Task 1: Instances with environment — derive from servers via JOIN
+            # Story 37.1/37.2 Task 1/5: Instances with environment or engine_type — derive from servers via JOIN
             # AC1, AC4: The local environment column on instances is ignored; use servers.env via JOIN.
-            if entity_type == 'instance' and environment and has_servers_config:
+            if entity_type == 'instance' and (environment or engine_type) and has_servers_config:
                 srv_table = mapper.get_table_name('servers')
                 srv_name_col = mapper.get_column('servers', 'name')
-                srv_env_col = mapper.get_column('servers', 'environment')
                 inst_server_ref_col = mapper.get_column(entity_plural, 'server_ref')
 
                 # Prefix instances columns with 'inst.' alias to avoid JOIN ambiguity
                 entity_cfg = mapper.get_entity_config(entity_plural) or {}
                 aliased_select = self._build_aliased_select(entity_cfg, 'inst')
 
-                inst_params: dict[str, Any] = {'p_environment': environment}
+                inst_conditions: list[str] = []
+                inst_params: dict[str, Any] = {}
+
+                if environment:
+                    srv_env_col = mapper.get_column('servers', 'environment')
+                    inst_conditions.append(f"UPPER(srv.{srv_env_col}) = UPPER(:p_environment)")  # nosec B608 - column validated by mapper
+                    inst_params['p_environment'] = environment
+
+                if engine_type:
+                    try:
+                        srv_engine_col = mapper.get_column('servers', 'engine_type')
+                        inst_conditions.append(f"UPPER(srv.{srv_engine_col}) = UPPER(:p_engine_type)")  # nosec B608 - column validated by mapper
+                        inst_params['p_engine_type'] = engine_type
+                    except MapperValidationError:
+                        logger.warning(
+                            "engine_type_not_mapped_in_servers",
+                            entity=entity_plural,
+                            engine_type=engine_type,
+                            correlation_id=correlation_id,
+                        )
+
+                if server_name:
+                    inst_conditions.append(f"UPPER(inst.{inst_server_ref_col}) = UPPER(:p_server_ref)")  # nosec B608 - column validated by mapper
+                    inst_params['p_server_ref'] = server_name
+
+                where_str = ("WHERE " + " AND ".join(inst_conditions)) if inst_conditions else ""
+
                 inst_inner = (
                     f"SELECT {aliased_select} "  # nosec B608 - table/columns validated by mapper
                     f"FROM {table} inst "  # nosec B608 - table validated by mapper
                     f"INNER JOIN {srv_table} srv "  # nosec B608 - table validated by mapper
                     f"ON UPPER(inst.{inst_server_ref_col}) = UPPER(srv.{srv_name_col}) "  # nosec B608 - columns validated by mapper
-                    f"WHERE UPPER(srv.{srv_env_col}) = UPPER(:p_environment)"  # nosec B608 - column validated by mapper
+                    f"{where_str} ORDER BY name"  # nosec B608 - where_str built from validated columns
                 )
-                # Task 1.2: Cumulate server_ref filter with env JOIN
-                if server_name:
-                    inst_inner += f" AND UPPER(inst.{inst_server_ref_col}) = UPPER(:p_server_ref)"  # nosec B608 - column validated by mapper
-                    inst_params['p_server_ref'] = server_name
-                inst_inner += " ORDER BY name"
                 inst_sql = f"SELECT * FROM ({inst_inner}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"  # nosec B608
 
                 logger.info(
                     "reading_instances_from_config",
                     table=table,
-                    has_env_filter=True,
+                    has_env_filter=bool(environment),
+                    has_engine_filter=bool(engine_type),
                     has_server_filter=bool(server_name),
                     env_from_servers=True,
                     correlation_id=correlation_id,
                 )
                 return self.execute_mapped_query(inst_sql, inst_params)
 
-            # Story 37.1 Task 2: Databases (no server_name, no server_names) with environment
+            # Story 37.1/37.2 Task 2/6: Databases (no server_name, no server_names) with environment or engine_type
             # → derive from servers via JOIN databases → instances → servers (AC2, AC4).
             # The local environment column on databases is ignored when servers config is available.
             has_instances_config = mapper.get_entity_config('instances') is not None
-            if entity_type == 'database' and environment and has_servers_config and has_instances_config:
+            if entity_type == 'database' and (environment or engine_type) and has_servers_config and has_instances_config:
                 db_table = mapper.get_table_name('databases')
                 inst_table = mapper.get_table_name('instances')
                 srv_table = mapper.get_table_name('servers')
-                db_select = mapper.build_select_clause('databases')
                 db_name_col = mapper.get_column('databases', 'name')
                 inst_db_ref_col = mapper.get_column('instances', 'db_ref')
                 inst_server_ref_col = mapper.get_column('instances', 'server_ref')
                 srv_name_col = mapper.get_column('servers', 'name')
-                srv_env_col = mapper.get_column('servers', 'environment')
 
                 # Prefix databases columns with 'd.' alias to avoid JOIN ambiguity
                 db_entity_cfg = mapper.get_entity_config('databases') or {}
                 aliased_db_select = self._build_aliased_select(db_entity_cfg, 'd')
 
-                db_params: dict[str, Any] = {'p_environment': environment}
+                db_conditions: list[str] = []
+                db_params: dict[str, Any] = {}
+
+                if environment:
+                    srv_env_col = mapper.get_column('servers', 'environment')
+                    db_conditions.append(f"UPPER(srv.{srv_env_col}) = UPPER(:p_environment)")  # nosec B608 - column validated by mapper
+                    db_params['p_environment'] = environment
+
+                if engine_type:
+                    try:
+                        srv_engine_col = mapper.get_column('servers', 'engine_type')
+                        db_conditions.append(f"UPPER(srv.{srv_engine_col}) = UPPER(:p_engine_type)")  # nosec B608 - column validated by mapper
+                        db_params['p_engine_type'] = engine_type
+                    except MapperValidationError:
+                        logger.warning(
+                            "engine_type_not_mapped_in_servers",
+                            entity=entity_plural,
+                            engine_type=engine_type,
+                            correlation_id=correlation_id,
+                        )
+
+                where_db_str = ("WHERE " + " AND ".join(db_conditions)) if db_conditions else ""
+
                 db_inner = (
                     f"SELECT DISTINCT {aliased_db_select} "  # nosec B608 - table/columns validated by mapper
                     f"FROM {db_table} d "  # nosec B608 - table validated by mapper
                     f"INNER JOIN {inst_table} i ON UPPER(i.{inst_db_ref_col}) = UPPER(d.{db_name_col}) "  # nosec B608 - columns validated by mapper
                     f"INNER JOIN {srv_table} srv ON UPPER(i.{inst_server_ref_col}) = UPPER(srv.{srv_name_col}) "  # nosec B608 - columns validated by mapper
-                    f"WHERE UPPER(srv.{srv_env_col}) = UPPER(:p_environment)"  # nosec B608 - column validated by mapper
+                    f"{where_db_str}"  # nosec B608 - where_db_str built from validated columns
                     f" ORDER BY d.{db_name_col}"  # nosec B608 - column validated by mapper
                 )
                 db_sql = f"SELECT * FROM ({db_inner}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"  # nosec B608
@@ -414,7 +455,8 @@ class InventoryQueryExecutor:
                 logger.info(
                     "reading_databases_from_config",
                     table=db_table,
-                    has_env_filter=True,
+                    has_env_filter=bool(environment),
+                    has_engine_filter=bool(engine_type),
                     env_from_servers=True,
                     correlation_id=correlation_id,
                 )
@@ -492,6 +534,7 @@ class InventoryQueryExecutor:
         entity_plural: str,
         environment: str,
         server_names: list[str],
+        engine_type: str | None = None,
     ) -> list[dict]:
         """
         Read entities filtered by multiple server names using IN clause.
@@ -501,6 +544,7 @@ class InventoryQueryExecutor:
             entity_plural: Entity name ('instances' or 'databases')
             environment: Target environment
             server_names: List of server names
+            engine_type: Optional engine type filter
 
         Returns:
             List of entity dicts
@@ -508,7 +552,7 @@ class InventoryQueryExecutor:
         correlation_id = get_correlation_id()
 
         if entity_plural == 'databases':
-            return self._read_databases_multi_server(mapper, environment, server_names)
+            return self._read_databases_multi_server(mapper, environment, server_names, engine_type=engine_type)
 
         # Instances multi-server path
         table = mapper.get_table_name(entity_plural)
@@ -518,7 +562,7 @@ class InventoryQueryExecutor:
         in_params = {f'p_server_{i}': sn for i, sn in enumerate(server_names)}
         in_placeholders = ', '.join(f":{key}" for key in in_params.keys())
 
-        params = {**in_params, 'p_environment': environment}
+        params: dict[str, Any] = {**in_params}
 
         # Story 37.1 Task 3: Derive environment from servers via JOIN (AC1, AC3)
         # Replace local instances.ENV filter with INNER JOIN on servers table.
@@ -532,13 +576,35 @@ class InventoryQueryExecutor:
         entity_cfg = mapper.get_entity_config(entity_plural) or {}
         aliased_select = self._build_aliased_select(entity_cfg, 'inst')
 
+        # Build WHERE conditions list for composable filtering (environment is optional)
+        where_conditions = []
+        if environment:
+            where_conditions.append(f"UPPER(srv.{srv_env_col}) = UPPER(:p_environment)")  # nosec B608 - column validated by mapper
+            params['p_environment'] = environment
+        where_conditions.append(f"UPPER(inst.{server_ref_col}) IN ({in_placeholders})")  # nosec B608 - column validated by mapper
+
+        # Story 37.2 Task 7.3: Add engine_type filter if provided
+        if engine_type:
+            try:
+                srv_engine_col = mapper.get_column('servers', 'engine_type')
+                where_conditions.append(f"UPPER(srv.{srv_engine_col}) = UPPER(:p_engine_type)")  # nosec B608 - column validated by mapper
+                params['p_engine_type'] = engine_type
+            except MapperValidationError:
+                logger.warning(
+                    "engine_type_not_mapped_in_servers",
+                    entity=entity_plural,
+                    engine_type=engine_type,
+                    correlation_id=correlation_id,
+                )
+
+        where_str = "WHERE " + " AND ".join(where_conditions)  # always at least one condition (IN clause)
+
         inner_sql = (
             f"SELECT {aliased_select} "  # nosec B608 - table/columns validated by mapper
             f"FROM {table} inst "  # nosec B608 - table validated by mapper
             f"INNER JOIN {srv_table} srv "  # nosec B608 - table validated by mapper
             f"ON UPPER(inst.{server_ref_col}) = UPPER(srv.{srv_name_col}) "  # nosec B608 - columns validated by mapper
-            f"WHERE UPPER(srv.{srv_env_col}) = UPPER(:p_environment) "  # nosec B608 - column validated by mapper
-            f"AND UPPER(inst.{server_ref_col}) IN ({in_placeholders}) "  # nosec B608 - column validated by mapper
+            f"{where_str} "  # nosec B608 - where_str built from validated columns
             f"ORDER BY name"
         )
 
@@ -548,6 +614,7 @@ class InventoryQueryExecutor:
             f"reading_{entity_plural}_from_config_multi",
             table=table,
             server_count=len(server_names),
+            has_engine_filter=bool(engine_type),
             env_from_servers=True,
             correlation_id=correlation_id,
         )
@@ -559,6 +626,7 @@ class InventoryQueryExecutor:
         mapper: InventoryMapper,
         environment: str,
         server_names: list[str],
+        engine_type: str | None = None,
     ) -> list[dict]:
         """
         Read databases filtered by multiple servers via JOIN with instances.
@@ -567,6 +635,7 @@ class InventoryQueryExecutor:
             mapper: Configured InventoryMapper
             environment: Target environment
             server_names: List of server names
+            engine_type: Optional engine type filter
 
         Returns:
             List of database dicts
@@ -582,15 +651,13 @@ class InventoryQueryExecutor:
         db_name_col = mapper.get_column('databases', 'name')
         inst_db_ref_col = mapper.get_column('instances', 'db_ref')
         inst_server_ref_col = mapper.get_column('instances', 'server_ref')
-        db_select = mapper.build_select_clause('databases')
-
         # Prefix DB columns with alias 'd'
         aliased_select = self._build_aliased_select(entity_config, 'd')
 
         in_params = {f'p_server_{i}': sn for i, sn in enumerate(server_names)}
         in_placeholders = ', '.join(f":{key}" for key in in_params.keys())
 
-        params = {**in_params, 'p_environment': environment}
+        params: dict[str, Any] = {**in_params}
 
         # Story 37.1 Task 4: Derive environment from servers via additional JOIN (AC3, AC4)
         # Replace d.db_env_col filter with JOIN databases → instances → servers.
@@ -600,13 +667,35 @@ class InventoryQueryExecutor:
         srv_name_col = mapper.get_column('servers', 'name')
         srv_env_col = mapper.get_column('servers', 'environment')
 
+        # Build WHERE conditions list for composable filtering (environment is optional)
+        where_conditions = []
+        if environment:
+            where_conditions.append(f"UPPER(srv.{srv_env_col}) = UPPER(:p_environment)")  # nosec B608 - column validated by mapper
+            params['p_environment'] = environment
+        where_conditions.append(f"UPPER(i.{inst_server_ref_col}) IN ({in_placeholders})")  # nosec B608 - column validated by mapper
+
+        # Story 37.2 Task 8.3: Add engine_type filter if provided
+        if engine_type:
+            try:
+                srv_engine_col = mapper.get_column('servers', 'engine_type')
+                where_conditions.append(f"UPPER(srv.{srv_engine_col}) = UPPER(:p_engine_type)")  # nosec B608 - column validated by mapper
+                params['p_engine_type'] = engine_type
+            except MapperValidationError:
+                logger.warning(
+                    "engine_type_not_mapped_in_servers",
+                    entity="databases",
+                    engine_type=engine_type,
+                    correlation_id=correlation_id,
+                )
+
+        where_str = "WHERE " + " AND ".join(where_conditions)  # always at least one condition (IN clause)
+
         inner_sql = (
             f"SELECT DISTINCT {aliased_select} "  # nosec B608 - table/columns validated by mapper
             f"FROM {db_table} d "  # nosec B608 - table validated by mapper
             f"INNER JOIN {inst_table} i ON UPPER(i.{inst_db_ref_col}) = UPPER(d.{db_name_col}) "  # nosec B608 - columns validated by mapper
             f"INNER JOIN {srv_table} srv ON UPPER(i.{inst_server_ref_col}) = UPPER(srv.{srv_name_col}) "  # nosec B608 - columns validated by mapper
-            f"WHERE UPPER(srv.{srv_env_col}) = UPPER(:p_environment) "  # nosec B608 - column validated by mapper
-            f"AND UPPER(i.{inst_server_ref_col}) IN ({in_placeholders}) "  # nosec B608 - column validated by mapper
+            f"{where_str} "  # nosec B608 - where_str built from validated columns
             f"ORDER BY d.{db_name_col}"  # nosec B608 - column validated by mapper
         )
 
@@ -617,6 +706,7 @@ class InventoryQueryExecutor:
             db_table=db_table,
             inst_table=inst_table,
             server_count=len(server_names),
+            has_engine_filter=bool(engine_type),
             env_from_servers=True,
             correlation_id=correlation_id,
         )
@@ -628,6 +718,7 @@ class InventoryQueryExecutor:
         mapper: InventoryMapper,
         environment: str | None,
         server_name: str,
+        engine_type: str | None = None,
     ) -> list[dict]:
         """
         Read databases by joining through instances table.
@@ -637,6 +728,7 @@ class InventoryQueryExecutor:
             mapper: Configured InventoryMapper
             environment: Optional environment filter
             server_name: Server name to filter by
+            engine_type: Optional engine type filter
 
         Returns:
             List of database dicts
@@ -648,7 +740,6 @@ class InventoryQueryExecutor:
         db_name_col = mapper.get_column('databases', 'name')
         inst_db_ref_col = mapper.get_column('instances', 'db_ref')
         inst_server_ref_col = mapper.get_column('instances', 'server_ref')
-        db_select = mapper.build_select_clause('databases')
 
         entity_config = mapper.get_entity_config('databases') or {}
 
@@ -663,22 +754,40 @@ class InventoryQueryExecutor:
         )
         params: dict[str, Any] = {'p_server_name': server_name}
 
+        has_servers_config = mapper.get_entity_config('servers') is not None
+
         if environment:
             # Story 37.1 Task 5: Derive environment from servers via JOIN (AC1, AC4)
             # The local environment column on databases is ignored when servers config is available.
-            has_servers_config = mapper.get_entity_config('servers') is not None
             if has_servers_config:
                 srv_table = mapper.get_table_name('servers')
                 srv_name_col = mapper.get_column('servers', 'name')
                 srv_env_col = mapper.get_column('servers', 'environment')
+                params['p_environment'] = environment
+
+                # Story 37.2 Task 9.3: Add engine_type filter to existing servers JOIN
+                engine_type_condition = ""
+                if engine_type:
+                    try:
+                        srv_engine_col = mapper.get_column('servers', 'engine_type')
+                        engine_type_condition = f" AND UPPER(srv.{srv_engine_col}) = UPPER(:p_engine_type)"  # nosec B608 - column validated by mapper
+                        params['p_engine_type'] = engine_type
+                    except MapperValidationError:
+                        logger.warning(
+                            "engine_type_not_mapped_in_servers",
+                            entity="databases_via_instances",
+                            engine_type=engine_type,
+                            correlation_id=correlation_id,
+                        )
+
                 inner_sql = (
                     inner_sql_base +
                     f"INNER JOIN {srv_table} srv "  # nosec B608 - table validated by mapper
                     f"ON UPPER(i.{inst_server_ref_col}) = UPPER(srv.{srv_name_col}) "  # nosec B608 - columns validated by mapper
                     f"WHERE UPPER(srv.{srv_env_col}) = UPPER(:p_environment) "  # nosec B608 - column validated by mapper
                     f"AND UPPER(i.{inst_server_ref_col}) = UPPER(:p_server_name)"  # nosec B608 - column validated by mapper
+                    f"{engine_type_condition}"  # nosec B608 - engine_type_condition built from validated column
                 )
-                params['p_environment'] = environment
             else:
                 # Fallback: filter on local databases.ENV column
                 logger.warning(
@@ -694,7 +803,30 @@ class InventoryQueryExecutor:
                     f" AND UPPER(d.{db_env_col}) = UPPER(:p_environment)"
                 )
                 params['p_environment'] = environment
+        elif engine_type and has_servers_config:
+            # Story 37.2 Task 9.4: engine_type without environment — add servers JOIN + engine filter
+            try:
+                srv_engine_col = mapper.get_column('servers', 'engine_type')
+                srv_table = mapper.get_table_name('servers')
+                srv_name_col = mapper.get_column('servers', 'name')
+                params['p_engine_type'] = engine_type
+                inner_sql = (
+                    inner_sql_base +
+                    f"INNER JOIN {srv_table} srv "  # nosec B608 - table validated by mapper
+                    f"ON UPPER(i.{inst_server_ref_col}) = UPPER(srv.{srv_name_col}) "  # nosec B608 - columns validated by mapper
+                    f"WHERE UPPER(i.{inst_server_ref_col}) = UPPER(:p_server_name) "  # nosec B608 - column validated by mapper
+                    f"AND UPPER(srv.{srv_engine_col}) = UPPER(:p_engine_type)"  # nosec B608 - column validated by mapper
+                )
+            except MapperValidationError:
+                logger.warning(
+                    "engine_type_not_mapped_in_servers",
+                    entity="databases_via_instances",
+                    engine_type=engine_type,
+                    correlation_id=correlation_id,
+                )
+                inner_sql = inner_sql_base + f"WHERE UPPER(i.{inst_server_ref_col}) = UPPER(:p_server_name)"
         else:
+            # Story 37.2 Task 9.5: no environment, no engine_type — unchanged behaviour
             inner_sql = inner_sql_base + f"WHERE UPPER(i.{inst_server_ref_col}) = UPPER(:p_server_name)"
 
         inner_sql += f" ORDER BY d.{db_name_col}"
@@ -770,6 +902,7 @@ class InventoryQueryExecutor:
         environment: str | None = None,
         server_name: str | None = None,
         server_names: list[str] | None = None,
+        engine_type: str | None = None,
     ) -> list[dict]:
         """
         Read instances from config-driven multi-table mapping.
@@ -778,6 +911,7 @@ class InventoryQueryExecutor:
             environment: Optional environment filter
             server_name: Optional single server name filter
             server_names: Optional multiple server names for IN clause
+            engine_type: Optional engine type filter
 
         Returns:
             List of instance dicts
@@ -785,6 +919,7 @@ class InventoryQueryExecutor:
         return self._read_entity_from_config(
             'instance', environment=environment,
             server_name=server_name, server_names=server_names,
+            engine_type=engine_type,
         )
 
     def read_databases(
@@ -792,6 +927,7 @@ class InventoryQueryExecutor:
         environment: str | None = None,
         server_name: str | None = None,
         server_names: list[str] | None = None,
+        engine_type: str | None = None,
     ) -> list[dict]:
         """
         Read databases from config-driven multi-table mapping.
@@ -800,6 +936,7 @@ class InventoryQueryExecutor:
             environment: Optional environment filter
             server_name: Optional single server name filter
             server_names: Optional multiple server names for IN clause
+            engine_type: Optional engine type filter
 
         Returns:
             List of database dicts
@@ -807,4 +944,5 @@ class InventoryQueryExecutor:
         return self._read_entity_from_config(
             'database', environment=environment,
             server_name=server_name, server_names=server_names,
+            engine_type=engine_type,
         )

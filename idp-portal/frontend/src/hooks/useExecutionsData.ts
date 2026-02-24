@@ -108,7 +108,7 @@ export const useExecutionsData = (
   const currentPageRef = useRef(currentPage);
   const activeScopeRef = useRef(activeScope);
   const isRefreshingRef = useRef(false);
-  const refetchSilentRef = useRef(refetchSilent);
+  const refetchSilentRef = useRef<(() => Promise<void>) | null>(null);
   const hasRunningRef = useRef(false);
 
   useEffect(() => { currentPageRef.current = currentPage; }, [currentPage]);
@@ -163,26 +163,37 @@ export const useExecutionsData = (
     }
   }, [filters]);
 
+  // Keep hasRunningRef in sync so polling effect can read it without listing executions in deps.
+  useEffect(() => {
+    hasRunningRef.current = executions.some((e) => RUNNING_STATUSES.includes(e.status));
+  }, [executions]);
+
   // Poll so the list stays up to date: observer interval when running, slower otherwise.
   // Respects Page Visibility API: skip poll when tab is hidden, fire immediately on tab focus (Story 36.3).
+  // Uses refs so this effect does not re-run when executions change (avoids tearing down/restarting interval).
   useEffect(() => {
-    const hasRunning = executions.some((e) => RUNNING_STATUSES.includes(e.status));
-    const intervalMs = hasRunning ? OBSERVER_POLL_INTERVAL_MS : BACKGROUND_POLL_INTERVAL_MS;
+    refetchSilentRef.current = refetchSilent;
 
-    const intervalId = setInterval(() => {
-      if (!document.hidden) refetchSilent();
-    }, intervalMs);
+    const scheduleNext = () => {
+      const delay = hasRunningRef.current ? OBSERVER_POLL_INTERVAL_MS : BACKGROUND_POLL_INTERVAL_MS;
+      return window.setTimeout(() => {
+        if (!document.hidden) refetchSilentRef.current?.();
+        timeoutIdRef.current = scheduleNext();
+      }, delay);
+    };
+
+    const timeoutIdRef = { current: scheduleNext() };
 
     const handleVisibility = () => {
-      if (!document.hidden) refetchSilent();
+      if (!document.hidden) refetchSilentRef.current?.();
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
-      clearInterval(intervalId);
+      clearTimeout(timeoutIdRef.current);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [executions, refetchSilent]);
+  }, [refetchSilent]);
 
   // Time series (Story 9.10)
   useEffect(() => {

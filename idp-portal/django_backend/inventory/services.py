@@ -114,15 +114,17 @@ class InventoryService:
 
     def _read_instances_from_config(self, environment: str | None = None,
                                      server_name: str | None = None,
-                                     server_names: list[str] | None = None) -> list[dict[str, Any]]:
+                                     server_names: list[str] | None = None,
+                                     engine_type: str | None = None) -> list[dict[str, Any]]:
         """Delegate to query_executor.read_instances (backward compat)."""
-        return self.query_executor.read_instances(environment, server_name, server_names)
+        return self.query_executor.read_instances(environment, server_name, server_names, engine_type=engine_type)
 
     def _read_databases_from_config(self, environment: str | None = None,
                                      server_name: str | None = None,
-                                     server_names: list[str] | None = None) -> list[dict[str, Any]]:
+                                     server_names: list[str] | None = None,
+                                     engine_type: str | None = None) -> list[dict[str, Any]]:
         """Delegate to query_executor.read_databases (backward compat)."""
-        return self.query_executor.read_databases(environment, server_name, server_names)
+        return self.query_executor.read_databases(environment, server_name, server_names, engine_type=engine_type)
 
     # --- Public API methods (orchestration) ---
 
@@ -291,6 +293,7 @@ class InventoryService:
     def list_instances(
         self,
         environment: str,
+        engine_type: str | None = None,
         server_name: str | None = None,
         server_names: list[str] | None = None,
     ) -> list[dict]:
@@ -301,6 +304,7 @@ class InventoryService:
 
         Args:
             environment: Target environment (required)
+            engine_type: Optional filter by engine type
             server_name: Filter by single server
             server_names: Filter by multiple servers
 
@@ -323,17 +327,18 @@ class InventoryService:
         try:
             if server_names:
                 result = self.query_executor.read_instances(
-                    environment, server_names=server_names
+                    environment, server_names=server_names, engine_type=engine_type
                 )
             else:
                 result = self.query_executor.read_instances(
-                    environment, server_name=server_name
+                    environment, server_name=server_name, engine_type=engine_type
                 )
 
             server_filter = server_name or (f"[{len(server_names)} servers]" if server_names else None)
             logger.info(
                 "inventory_list_instances",
                 environment=environment,
+                engine_type=engine_type,
                 server_filter=server_filter,
                 nb_results=len(result),
                 correlation_id=correlation_id,
@@ -380,6 +385,7 @@ class InventoryService:
     def list_databases(
         self,
         environment: str,
+        engine_type: str | None = None,
         server_name: str | None = None,
         server_names: list[str] | None = None,
     ) -> list[dict]:
@@ -390,6 +396,7 @@ class InventoryService:
 
         Args:
             environment: Target environment (required)
+            engine_type: Optional filter by engine type
             server_name: Filter by single server
             server_names: Filter by multiple servers
 
@@ -412,17 +419,18 @@ class InventoryService:
         try:
             if server_names:
                 result = self.query_executor.read_databases(
-                    environment, server_names=server_names
+                    environment, server_names=server_names, engine_type=engine_type
                 )
             else:
                 result = self.query_executor.read_databases(
-                    environment, server_name=server_name
+                    environment, server_name=server_name, engine_type=engine_type
                 )
 
             server_filter = server_name or (f"[{len(server_names)} servers]" if server_names else None)
             logger.info(
                 "inventory_list_databases",
                 environment=environment,
+                engine_type=engine_type,
                 server_filter=server_filter,
                 nb_results=len(result),
                 correlation_id=correlation_id,
