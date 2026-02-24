@@ -204,4 +204,123 @@ describe('useCatalogState', () => {
     });
     expect(result.current.hasActiveFilters).toBe(false);
   });
+
+  it('handleExecuteClick: ouvre le wizard d\'exécution', async () => {
+    const { result } = renderHook(() => useCatalogState(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.executionWizardOpen).toBe(false);
+
+    act(() => {
+      result.current.handleExecuteClick();
+    });
+
+    expect(result.current.executionWizardOpen).toBe(true);
+  });
+
+  it('handleExecutionSuccess: ferme le wizard et ouvre la vue d\'exécution', async () => {
+    const { result } = renderHook(() => useCatalogState(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // Open wizard first
+    act(() => {
+      result.current.setExecutionWizardOpen(true);
+    });
+
+    await act(async () => {
+      result.current.handleExecutionSuccess(42);
+    });
+
+    await waitFor(() => {
+      expect(result.current.executionWizardOpen).toBe(false);
+      expect(result.current.executionViewId).toBe(42);
+      expect(result.current.drawerVisible).toBe(false);
+    });
+  });
+
+  it('handleBackToCatalog: réinitialise tous les états de navigation', async () => {
+    const { result } = renderHook(() => useCatalogState(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // Set various states
+    act(() => {
+      result.current.setActiveExecutionId(5);
+      result.current.setExecutionWizardOpen(true);
+      result.current.setExecutionViewId(10);
+    });
+
+    await act(async () => {
+      result.current.handleBackToCatalog();
+    });
+
+    await waitFor(() => {
+      expect(result.current.activeExecutionId).toBeNull();
+      expect(result.current.executionWizardOpen).toBe(false);
+      expect(result.current.executionViewId).toBeNull();
+    });
+  });
+
+  it('handleToggleFavorite: ajoute un favori', async () => {
+    const { result } = renderHook(() => useCatalogState(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // mockNonFavoriteAction (id=2) is not a favorite
+    const mockEvent = { stopPropagation: vi.fn() } as unknown as React.MouseEvent;
+
+    await act(async () => {
+      await result.current.handleToggleFavorite(2, mockEvent);
+    });
+
+    expect(catalogService.addFavorite).toHaveBeenCalledWith(2);
+    expect(result.current.favorites.has(2)).toBe(true);
+  });
+
+  it('handleToggleFavorite: supprime un favori existant', async () => {
+    const { result } = renderHook(() => useCatalogState(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // action id=1 is a favorite
+    const mockEvent = { stopPropagation: vi.fn() } as unknown as React.MouseEvent;
+
+    await act(async () => {
+      await result.current.handleToggleFavorite(1, mockEvent);
+    });
+
+    expect(catalogService.removeFavorite).toHaveBeenCalledWith(1);
+    expect(result.current.favorites.has(1)).toBe(false);
+  });
+
+  it('handleDrawerClose: ferme le drawer', async () => {
+    const { result } = renderHook(() => useCatalogState(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // Open the drawer first via handleActionClick
+    await act(async () => {
+      await result.current.handleActionClick(mockFavoriteAction);
+    });
+
+    await waitFor(() => expect(result.current.drawerVisible).toBe(true));
+
+    act(() => {
+      result.current.handleDrawerClose();
+    });
+
+    expect(result.current.drawerVisible).toBe(false);
+  });
+
+  it('handleRemediationSuggestionClick: charge l\'action et ouvre le wizard', async () => {
+    const { result } = renderHook(() => useCatalogState(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const suggestion = { action_id: 1, name: 'Fix Action', description: null };
+
+    await act(async () => {
+      await result.current.handleRemediationSuggestionClick(suggestion);
+    });
+
+    await waitFor(() => {
+      expect(result.current.executionWizardOpen).toBe(true);
+      expect(catalogService.fetchCatalogActionById).toHaveBeenCalledWith(1);
+    });
+  });
 });

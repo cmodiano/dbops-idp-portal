@@ -261,4 +261,78 @@ describe('useEditExecution', () => {
 
     expect(updateScheduledExecution).not.toHaveBeenCalled();
   });
+
+  it('submitEdit sets environment when no target_names', async () => {
+    mockValidateFields.mockResolvedValue({
+      scheduled_at: { utc: () => ({ format: () => '2026-03-15T10:00:00Z' }) },
+      target_names: null,
+      environment: 'PROD',
+    });
+    const { result } = renderEditHook();
+    act(() => { result.current.openEditModal(makeExec()); });
+    await act(async () => { await result.current.submitEdit(); });
+    expect(updateScheduledExecution).toHaveBeenCalledWith(
+      42, expect.objectContaining({ environment: 'PROD' }),
+    );
+  });
+
+  it('submitEdit builds cron recurring_pattern', async () => {
+    mockValidateFields.mockResolvedValue({
+      pattern_type: 'cron', cron_expression: '0 9 * * *', target_names: ['server1'],
+    });
+    const { result } = renderEditHook();
+    act(() => {
+      result.current.openEditModal(makeExec({
+        recurring_pattern: { pattern_type: 'cron', pattern_config: { cron_expression: '0 9 * * *' }, is_active: true, next_execution_date: null },
+      }));
+    });
+    await act(async () => { await result.current.submitEdit(); });
+    expect(updateScheduledExecution).toHaveBeenCalledWith(
+      42, expect.objectContaining({ recurring_pattern: expect.objectContaining({ pattern_type: 'cron' }) }),
+    );
+  });
+
+  it('submitEdit builds daily recurring_pattern', async () => {
+    mockValidateFields.mockResolvedValue({
+      pattern_type: 'daily', pattern_hour: 9, pattern_minute: 30, target_names: ['server1'],
+    });
+    const { result } = renderEditHook();
+    act(() => {
+      result.current.openEditModal(makeExec({
+        recurring_pattern: { pattern_type: 'daily', pattern_config: { hour: 9, minute: 0 }, is_active: true, next_execution_date: null },
+      }));
+    });
+    await act(async () => { await result.current.submitEdit(); });
+    expect(updateScheduledExecution).toHaveBeenCalledWith(
+      42, expect.objectContaining({ recurring_pattern: expect.objectContaining({ pattern_type: 'daily' }) }),
+    );
+  });
+
+  it('submitEdit builds weekly recurring_pattern', async () => {
+    mockValidateFields.mockResolvedValue({
+      pattern_type: 'weekly', pattern_hour: 10, pattern_minute: 0, pattern_day_of_week: 2, target_names: ['server1'],
+    });
+    const { result } = renderEditHook();
+    act(() => {
+      result.current.openEditModal(makeExec({
+        recurring_pattern: { pattern_type: 'weekly', pattern_config: { hour: 10, minute: 0, day_of_week: 2 }, is_active: true, next_execution_date: null },
+      }));
+    });
+    await act(async () => { await result.current.submitEdit(); });
+    expect(updateScheduledExecution).toHaveBeenCalledWith(
+      42, expect.objectContaining({ recurring_pattern: expect.objectContaining({ pattern_type: 'weekly' }) }),
+    );
+  });
+
+  it('submitEdit handles generic error', async () => {
+    vi.mocked(updateScheduledExecution).mockRejectedValue(new Error('Server error'));
+    const { result } = renderEditHook();
+    act(() => { result.current.openEditModal(makeExec()); });
+    act(() => { result.current.submitEdit(); });
+    await waitFor(() => {
+      expect(mockNotification.error).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Erreur' }),
+      );
+    });
+  });
 });

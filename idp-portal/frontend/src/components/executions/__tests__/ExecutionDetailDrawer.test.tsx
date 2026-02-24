@@ -22,9 +22,18 @@ vi.mock('../../execution/WorkflowExecutionGraph', () => ({
   ),
 }));
 
-// Mock ErrorBoundary to just render children
+// Mock ErrorBoundary - supports error simulation via ErrorBoundary.simulateError flag
+let simulateErrorBoundaryError = false;
 vi.mock('../../ErrorBoundary', () => ({
-  ErrorBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  ErrorBoundary: ({ children, fallback }: {
+    children: React.ReactNode;
+    fallback: (err: Error, reset: () => void) => React.ReactNode;
+  }) => {
+    if (simulateErrorBoundaryError) {
+      return <>{fallback(new Error('Test render error'), vi.fn())}</>;
+    }
+    return <>{children}</>;
+  },
 }));
 
 // Mock Ant Design components
@@ -167,5 +176,112 @@ describe('ExecutionDetailDrawer', () => {
     await userEvent.click(closeBtn);
 
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders null content when execution is null (no loading, no error)', () => {
+    render(
+      <ExecutionDetailDrawer
+        {...defaultProps}
+        execution={null}
+        loading={false}
+        error={null}
+      />,
+    );
+
+    expect(screen.queryByTestId('skeleton')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('alert')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('execution-timeline')).not.toBeInTheDocument();
+  });
+
+  it('uses fallback title when action_name is null', () => {
+    const executionNoName = { ...baseExecution, action_name: null };
+    render(
+      <ExecutionDetailDrawer
+        {...defaultProps}
+        execution={executionNoName}
+      />,
+    );
+
+    expect(screen.getByTestId('drawer-title')).toHaveTextContent('Action #10');
+  });
+
+  it('shows timeline for workflow type when actionDetail has no workflow_steps', () => {
+    render(
+      <ExecutionDetailDrawer
+        {...defaultProps}
+        execution={workflowExecution}
+        actionDetail={{
+          id: 10,
+          name: 'Workflow',
+          item_type: 'workflow',
+          workflow_steps: [],
+        } as never}
+      />,
+    );
+
+    expect(screen.getByTestId('execution-timeline')).toBeInTheDocument();
+    expect(screen.queryByTestId('workflow-execution-graph')).not.toBeInTheDocument();
+  });
+
+  it('shows timeline for workflow type when actionDetail is null', () => {
+    render(
+      <ExecutionDetailDrawer
+        {...defaultProps}
+        execution={workflowExecution}
+        actionDetail={null}
+      />,
+    );
+
+    expect(screen.getByTestId('execution-timeline')).toBeInTheDocument();
+    expect(screen.queryByTestId('workflow-execution-graph')).not.toBeInTheDocument();
+  });
+
+  it('shows action title with action_name', () => {
+    render(
+      <ExecutionDetailDrawer
+        {...defaultProps}
+        execution={baseExecution}
+      />,
+    );
+
+    expect(screen.getByTestId('drawer-title')).toHaveTextContent('Deploy App');
+  });
+
+  it('renders workflow ErrorBoundary fallback on error', () => {
+    simulateErrorBoundaryError = true;
+    try {
+      render(
+        <ExecutionDetailDrawer
+          {...defaultProps}
+          execution={workflowExecution}
+          actionDetail={{
+            id: 10, name: 'Workflow', item_type: 'workflow',
+            workflow_steps: [{ step_order: 1, action_id: 11, action_name: 'Step 1' }],
+          } as never}
+        />,
+      );
+      const alert = screen.getByTestId('alert');
+      expect(alert).toBeInTheDocument();
+      expect(alert).toHaveAttribute('data-type', 'error');
+    } finally {
+      simulateErrorBoundaryError = false;
+    }
+  });
+
+  it('renders timeline ErrorBoundary fallback on error', () => {
+    simulateErrorBoundaryError = true;
+    try {
+      render(
+        <ExecutionDetailDrawer
+          {...defaultProps}
+          execution={baseExecution}
+          actionDetail={null}
+        />,
+      );
+      const alert = screen.getByTestId('alert');
+      expect(alert).toBeInTheDocument();
+    } finally {
+      simulateErrorBoundaryError = false;
+    }
   });
 });

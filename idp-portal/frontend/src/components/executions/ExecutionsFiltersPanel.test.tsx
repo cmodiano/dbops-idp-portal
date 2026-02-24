@@ -225,5 +225,45 @@ describe('ExecutionsFiltersPanel', () => {
         expect.objectContaining({ status: 'COMPLETED' }),
       );
     });
+
+    it("appelle onApplyFilters quand le moteur change", async () => {
+      const user = userEvent.setup();
+      const onApplyFilters = vi.fn();
+      renderFiltersPanel({ onApplyFilters });
+
+      const engineSelect = screen.getByTestId('filter-engine');
+      await user.click(engineSelect);
+
+      await waitFor(() => {
+        const option = screen.queryByText('Oracle');
+        if (option) return option;
+        throw new Error('Oracle option not found');
+      });
+      await user.click(screen.getByText('Oracle'));
+
+      expect(onApplyFilters).toHaveBeenCalledWith(
+        expect.objectContaining({ engine: 'oracle' }),
+      );
+    });
+
+    it("appelle onApplyFilters quand l'action change", async () => {
+      const user = userEvent.setup();
+      const onApplyFilters = vi.fn();
+      renderFiltersPanel({ onApplyFilters });
+
+      const actionSelect = screen.getByTestId('filter-action');
+      await user.click(actionSelect);
+
+      await waitFor(() => {
+        const option = screen.queryByText('Action Oracle');
+        if (option) return option;
+        throw new Error('Action Oracle option not found');
+      });
+      await user.click(screen.getByText('Action Oracle'));
+
+      expect(onApplyFilters).toHaveBeenCalledWith(
+        expect.objectContaining({ action_id: 1 }),
+      );
+    });
   });
 });
