@@ -10,12 +10,16 @@
 
 | Métrique | Valeur |
 |----------|--------|
-| Couverture globale backend | **84,65 %** (13 431 lignes, 1 785 manquantes) |
+| Couverture globale backend | **84,65 %** combinée statements + branches (`branch=True`) |
+| Instructions backend | 11 646 couvertes / 13 431 totales (1 785 manquantes) |
+| Branches backend | 2 797 couvertes / 3 632 totales |
 | Tests backend exécutés | 3 477 passés, 3 ignorés |
 | Durée suite backend | ~134 s |
 | Couverture globale frontend (lignes) | **79,14 %** |
 | Couverture globale frontend (instructions) | **77,57 %** |
 | Périmètre frontend ciblé | `src/hooks/**/*.ts` + `src/components/**/*.tsx` |
+
+> **Note méthodologique :** Le pourcentage 84,65 % est calculé par pytest-cov avec `branch=True` : (instructions couvertes + branches couvertes) / (instructions totales + branches totales) = (11 646 + 2 797) / (13 431 + 3 632). Ne pas confondre "instructions" (statements) avec "lignes" (lines) — une ligne peut contenir plusieurs instructions.
 
 Le backend dépasse le seuil de 80 % globalement mais **24 fichiers** sont en dessous. Le frontend est sous le seuil global (77,57 % stmts) avec plusieurs fichiers à 0 % ou très bas.
 

@@ -11,3 +11,6 @@ CODE_REVIEW_*_FINDINGS.md
 # BMAD workflow artifacts (dev/planning only — not for production branches)
 _bmad-output/
 
+# pytest-cov generated JSON report (artefact de build, ne pas commiter)
+idp-portal/django_backend/coverage.json
+
