@@ -2,13 +2,12 @@
 Tests for executions/scheduling_service.py — SchedulingService.
 Story 39.4 — Tâche 2.
 """
-import pytest
 from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone
 
 from executions.models import (
-    ScheduledExecution, ScheduledExecutionStatus, RecurringPattern,
+    ScheduledExecutionStatus, RecurringPattern,
 )
 from executions.scheduling_service import SchedulingService
 from core.models import AuditLog
@@ -18,7 +17,6 @@ from tests.factories import (
 )
 
 
-@pytest.mark.django_db
 class TestSchedulingService(TestCase):
     """Tests for SchedulingService — all branches of create/list/update/cancel/pending."""
 
@@ -137,22 +135,29 @@ class TestSchedulingService(TestCase):
 
     def test_list_all_with_scheduled_from_filter(self):
         """2.5d: Filter by scheduled_from."""
-        future = timezone.now() + timedelta(hours=5)
-        ScheduledExecutionFactory(user=self.user, action=self.action, scheduled_at=future)
-        results, total = self.service.list_all(
-            scheduled_from=timezone.now() + timedelta(hours=3)
-        )
-        # At least one result with scheduled_at >= from
-        self.assertGreaterEqual(total, 0)
+        scheduled_from = timezone.now() + timedelta(hours=3)
+        scheduled_at = timezone.now() + timedelta(hours=5)
+        ScheduledExecutionFactory(user=self.user, action=self.action, scheduled_at=scheduled_at)
+        results, total = self.service.list_all(scheduled_from=scheduled_from)
+        self.assertGreaterEqual(total, 1)
+        for r in results:
+            self.assertGreaterEqual(
+                r.scheduled_at, scheduled_from,
+                f"scheduled_at {r.scheduled_at} should be >= scheduled_from {scheduled_from}",
+            )
 
     def test_list_all_with_scheduled_to_filter(self):
         """2.5e: Filter by scheduled_to."""
-        past = timezone.now() - timedelta(hours=5)
-        ScheduledExecutionFactory(user=self.user, action=self.action, scheduled_at=past)
-        results, total = self.service.list_all(
-            scheduled_to=timezone.now() - timedelta(hours=1)
-        )
-        self.assertGreaterEqual(total, 0)
+        scheduled_to = timezone.now() - timedelta(hours=1)
+        scheduled_at = timezone.now() - timedelta(hours=5)
+        ScheduledExecutionFactory(user=self.user, action=self.action, scheduled_at=scheduled_at)
+        results, total = self.service.list_all(scheduled_to=scheduled_to)
+        self.assertGreaterEqual(total, 1)
+        for r in results:
+            self.assertLessEqual(
+                r.scheduled_at, scheduled_to,
+                f"scheduled_at {r.scheduled_at} should be <= scheduled_to {scheduled_to}",
+            )
 
     # ----------------------------------------------------------------
     # Tâche 2.6 — get_by_id: trouvé → instance retournée
@@ -335,9 +340,18 @@ class TestSchedulingService(TestCase):
     def test_list_pending_with_explicit_before_datetime(self):
         """2.16: With explicit before_datetime → delegates to ScheduledExecution.objects.list_pending."""
         explicit_dt = timezone.now() + timedelta(hours=24)
+        before_dt = timezone.now() - timedelta(hours=1)
+        after_dt = timezone.now() + timedelta(hours=48)
+        se_before = ScheduledExecutionFactory(
+            user=self.user, action=self.action,
+            status='pending', scheduled_at=before_dt,
+        )
+        se_after = ScheduledExecutionFactory(
+            user=self.user, action=self.action,
+            status='pending', scheduled_at=after_dt,
+        )
         qs = self.service.list_pending(before_datetime=explicit_dt)
-        # Should return a queryset without error
         self.assertIsNotNone(qs)
-        # It's a QuerySet (lazy)
-        count = qs.count()
-        self.assertGreaterEqual(count, 0)
+        result_ids = list(qs.values_list('id', flat=True))
+        self.assertIn(se_before.id, result_ids)
+        self.assertNotIn(se_after.id, result_ids)

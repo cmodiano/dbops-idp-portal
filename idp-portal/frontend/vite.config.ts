@@ -29,6 +29,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'lcov'],
       reportsDirectory: './coverage',
+      reportOnFailure: true,
       include: ['src/hooks/**/*.ts', 'src/components/**/*.tsx'],
       exclude: ['**/*.test.ts', '**/*.test.tsx', '**/node_modules/**', 'src/test-setup.ts'],
     },

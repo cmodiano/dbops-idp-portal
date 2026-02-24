@@ -18,7 +18,6 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from executions.models import (
-    ScheduledExecution,
     ScheduledExecutionStatus,
 )
 from tests.factories import (

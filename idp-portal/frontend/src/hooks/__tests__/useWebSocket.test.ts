@@ -3,7 +3,7 @@
  * Tests WebSocket connection, auth flow, message handling, reconnection.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, waitFor, act } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { useWebSocket } from '../useWebSocket';
 import * as executionService from '../../services/execution_service';
 import type { ExecutionResponse, ExecutionStepResponse } from '../../types/api';
@@ -252,6 +252,7 @@ describe('useWebSocket', () => {
 
     await act(async () => {
       await Promise.resolve();
+      await Promise.resolve();
     });
 
     const ws = MockWebSocket.instances[0];
@@ -259,7 +260,7 @@ describe('useWebSocket', () => {
       ws.simulateMessage({ type: 'execution_complete' });
     });
 
-    // The execution status should be updated
+    expect(result.current.execution?.status).toBe('COMPLETED');
     expect(ws.close).toHaveBeenCalled();
   });
 

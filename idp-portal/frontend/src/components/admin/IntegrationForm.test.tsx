@@ -491,7 +491,7 @@ describe('IntegrationForm', () => {
   });
 
   it('AC7: successful submission with active type', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     renderWithApp(<IntegrationForm {...defaultProps} />);
 
     await selectType(user, /Type d'intégration/, 'Ansible Automation Platform');

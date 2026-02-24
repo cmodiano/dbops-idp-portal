@@ -8,7 +8,6 @@ import logging
 import os
 from unittest.mock import MagicMock, patch
 
-import pytest
 import structlog
 
 
@@ -116,8 +115,8 @@ def test_get_logger_returns_bound_logger():
 
     lg = get_logger('test.module')
     assert lg is not None
-    # Vérifie que c'est bien un BoundLogger structlog (ou proxy BoundLoggerBase)
-    assert isinstance(lg, (structlog.stdlib.BoundLogger, structlog.BoundLoggerBase))
+    # structlog.get_logger() returns a BoundLoggerLazyProxy, not BoundLogger directly.
+    # Verify it exposes the expected logging interface.
     assert hasattr(lg, 'info')
     assert hasattr(lg, 'warning')
     assert hasattr(lg, 'error')

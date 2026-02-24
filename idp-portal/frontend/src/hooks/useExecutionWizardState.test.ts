@@ -2,7 +2,7 @@
  * Tests for useExecutionWizardState hook (Story 39.7 — coverage).
  */
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
-import { renderHook, act, waitFor, cleanup } from '@testing-library/react';
+import { renderHook, act, cleanup } from '@testing-library/react';
 import React from 'react';
 import { App } from 'antd';
 import { useExecutionWizardState } from './useExecutionWizardState';
@@ -271,7 +271,7 @@ describe('useExecutionWizardState — setters', () => {
     expect(result.current.requiresTarget).toBe(false);
 
     await act(async () => {
-      result.current.setSelectedTargets([{ id: '1', name: 'srv1', environment: 'DEV' }]);
+      result.current.setSelectedTargets([{ name: 'srv1', environment: 'DEV', target_type: 'server', metadata: null }]);
     });
     expect(result.current.effectiveTargetNames).toEqual(['srv1']);
 
@@ -292,7 +292,7 @@ describe('useExecutionWizardState — setters', () => {
     // Use setSelectedTargets to cover the targets-based derivedEnvironment branch (lines 197-198)
     // and the target_names truthy branch (line 406)
     await act(async () => {
-      result.current.setSelectedTargets([{ id: '1', name: 'srv1', environment: 'DEV' }]);
+      result.current.setSelectedTargets([{ name: 'srv1', environment: 'DEV', target_type: 'server', metadata: null }]);
     });
     await act(async () => {
       await result.current.handleSubmitScheduled();

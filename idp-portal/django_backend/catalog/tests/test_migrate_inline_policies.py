@@ -193,7 +193,7 @@ class TestMigrateInlinePoliciesCommand(TestCase):
 
     def test_duplicate_name_gets_suffix(self):
         """3.8: Conflit de nom → suffixe ' (1)'."""
-        action = self._create_action_with_inline_policy(name='MyAction')
+        self._create_action_with_inline_policy(name='MyAction')
         expected_name = 'Migré depuis action "MyAction"'
         # Pré-créer une policy avec le même nom mais un JSON différent (évite réutilisation)
         BusinessRulePolicy.objects.create(

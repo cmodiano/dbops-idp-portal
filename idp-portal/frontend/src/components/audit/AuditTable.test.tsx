@@ -11,15 +11,19 @@ const mockEntry: AuditExecutionEntry = {
   id: 1,
   entity_id: 100,
   item_type: 'action',
-  user_id: 5,
+  user_id: '5',
   user_name: 'alice',
   action_name: 'Deploy App',
-  derived_status: 'COMPLETED',
+  derived_status: 'success',
   timestamp: '2025-01-15T10:30:00Z',
+  action_type: 'EXECUTE',
+  entity_type: 'execution',
+  ip_address: null,
+  correlation_id: null,
   details: {
     environment: 'prod',
     action_id: 10,
-    servicenow_change_id: null,
+    servicenow_change_id: undefined,
   },
 };
 
@@ -29,7 +33,7 @@ const mockWorkflowEntry: AuditExecutionEntry = {
   entity_id: 200,
   item_type: 'workflow',
   action_name: 'Full Deploy Workflow',
-  derived_status: 'RUNNING',
+  derived_status: 'running',
 };
 
 const mockChildEntry: AuditExecutionEntry = {
@@ -44,6 +48,7 @@ const mockPagination: PaginationInfo = {
   total: 100,
   page: 1,
   page_size: 25,
+  total_pages: 4,
 };
 
 const defaultProps: AuditTableProps = {
@@ -80,12 +85,12 @@ describe('AuditTable', () => {
     });
 
     it('returns "Action #N" when action_name is null and details has action_id', () => {
-      const entry = { ...mockEntry, action_name: null, details: { action_id: 10, environment: 'prod', servicenow_change_id: null } };
+      const entry = { ...mockEntry, action_name: undefined, details: { action_id: 10, environment: 'prod', servicenow_change_id: undefined } };
       expect(getActionName(entry)).toBe('Action #10');
     });
 
     it('returns "Action inconnue" when no action info', () => {
-      const entry = { ...mockEntry, action_name: null, details: { action_id: null, environment: 'prod', servicenow_change_id: null } };
+      const entry = { ...mockEntry, action_name: undefined, details: { action_id: undefined, environment: 'prod', servicenow_change_id: undefined } };
       expect(getActionName(entry)).toBe('Action inconnue');
     });
   });
@@ -146,7 +151,7 @@ describe('AuditTable', () => {
     });
 
     it('shows dash when no user info', () => {
-      const entryNoUser = { ...mockEntry, user_name: null, user_id: null };
+      const entryNoUser = { ...mockEntry, user_name: null, user_id: null as unknown as string };
       render(<AuditTable {...defaultProps} topLevelEntries={[entryNoUser]} />);
       // The "—" char from the column render
       expect(document.querySelector('td')).toBeInTheDocument();
@@ -200,14 +205,14 @@ describe('AuditTable', () => {
     });
 
     it('renders unknown status with fallback config', () => {
-      const unknownEntry = { ...mockEntry, derived_status: 'UNKNOWN_STATUS' };
+      const unknownEntry = { ...mockEntry, derived_status: 'UNKNOWN_STATUS' as unknown as AuditExecutionEntry['derived_status'] };
       render(<AuditTable {...defaultProps} topLevelEntries={[unknownEntry]} />);
       // Should not crash, renders with fallback
       expect(screen.getByText('Deploy App')).toBeInTheDocument();
     });
 
     it('shows environment as "—" when null', () => {
-      const entryNoEnv = { ...mockEntry, details: { ...mockEntry.details, environment: null } };
+      const entryNoEnv = { ...mockEntry, details: { ...mockEntry.details, environment: undefined } };
       render(<AuditTable {...defaultProps} topLevelEntries={[entryNoEnv]} />);
       // Environment column shows "—" for null
       expect(document.querySelector('td')).toBeInTheDocument();

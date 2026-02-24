@@ -7,6 +7,7 @@ import { useExecutionView } from './useExecutionView';
 import * as executionService from '../services/execution_service';
 import * as catalogService from '../services/catalog_service';
 import type { ExecutionResponse } from '../types/api';
+import type { CatalogActionDetailResponse } from '../services/catalog_service';
 
 vi.mock('../services/execution_service');
 vi.mock('../services/catalog_service');
@@ -73,8 +74,9 @@ describe('useExecutionView', () => {
   it('loads workflow details for workflow execution', async () => {
     vi.mocked(executionService.getExecution).mockResolvedValue(mockWorkflowExecution);
     vi.mocked(catalogService.fetchCatalogActionById).mockResolvedValue({
-      data: { id: 20, name: 'Workflow', item_type: 'workflow', workflow_steps: [] } as never,
-      status: 200,
+      data: { id: 20, name: 'Workflow', item_type: 'workflow', workflow_steps: [] } as unknown as CatalogActionDetailResponse['data'],
+      can_execute: true,
+      allowed_environments: [],
     });
     const { result } = renderHook(() => useExecutionView(2));
     await waitFor(() => expect(result.current.loading).toBe(false));
