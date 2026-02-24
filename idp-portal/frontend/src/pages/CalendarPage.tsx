@@ -3,7 +3,7 @@
  * Refactored in Story 26.6: extracted utils, hooks, and components.
  */
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useEffect, useCallback, useMemo } from 'react';
 import { App, Typography, Spin, Alert, Popover, Space, theme, Segmented } from 'antd';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
@@ -20,12 +20,11 @@ import { useCalendarFilters } from '../hooks/useCalendarFilters';
 import { useCalendarState } from '../hooks/useCalendarState';
 import { useCancelExecution } from '../hooks/useCancelExecution';
 import { useEditExecution } from '../hooks/useEditExecution';
-import { listScheduledExecutions, toggleRecurringPattern } from '../services/scheduled_execution_service';
+import { useScheduledExecutions } from '../hooks/useScheduledExecutions';
 import { ENV_COLORS, ENV_LABELS, mapToCalendarEvent } from '../utils/calendarEventUtils';
 import type { CalendarEvent } from '../utils/calendarEventUtils';
-import type { ScheduledExecutionListItem, ScheduledExecutionFilters } from '../types/api';
+import type { ScheduledExecutionFilters } from '../types/api';
 import './CalendarPage.css';
-import logger from '../services/logger';
 
 const { Title, Text } = Typography;
 
@@ -46,51 +45,32 @@ export function CalendarPage() {
     handleViewChange,
   } = useCalendarState();
 
-  const [executions, setExecutions] = useState<ScheduledExecutionListItem[]>([]);
-  const [availableActions, setAvailableActions] = useState<{ action_id: number; action_name: string }[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [togglingPatternId, setTogglingPatternId] = useState<number | null>(null);
-  const initialLoadDone = useRef(false);
+  // Story 38.6: DIP — use hook instead of direct service imports
+  const {
+    executions, availableActions, loading, error, togglingPatternId,
+    fetchExecutions: fetchScheduled, toggleRecurrence,
+  } = useScheduledExecutions();
 
-  const fetchExecutions = useCallback(async () => {
-    if (!initialLoadDone.current) {
-      setLoading(true);
+  // Build API filters and fetch
+  const doFetch = useCallback(() => {
+    const apiFilters: ScheduledExecutionFilters = {};
+    if (filters.action_id != null && !Number.isNaN(filters.action_id)) apiFilters.action_id = filters.action_id;
+    if (filters.environment) apiFilters.environment = filters.environment;
+    if (filters.engine) apiFilters.engine = filters.engine;
+    if (filters.platform) apiFilters.platform = filters.platform;
+    if (filters.start_date && filters.end_date) {
+      apiFilters.scheduled_from = filters.start_date;
+      apiFilters.scheduled_to = filters.end_date;
+    } else if (dateRange) {
+      apiFilters.scheduled_from = dateRange.start;
+      apiFilters.scheduled_to = dateRange.end;
     }
-    setError(null);
-    try {
-      const apiFilters: ScheduledExecutionFilters = {};
-      if (filters.action_id != null && !Number.isNaN(filters.action_id)) apiFilters.action_id = filters.action_id;
-      if (filters.environment) apiFilters.environment = filters.environment;
-      if (filters.engine) apiFilters.engine = filters.engine;
-      if (filters.platform) apiFilters.platform = filters.platform;
-      if (filters.start_date && filters.end_date) {
-        apiFilters.scheduled_from = filters.start_date;
-        apiFilters.scheduled_to = filters.end_date;
-      } else if (dateRange) {
-        apiFilters.scheduled_from = dateRange.start;
-        apiFilters.scheduled_to = dateRange.end;
-      }
-
-      const response = await listScheduledExecutions(apiFilters, 100, 0);
-      setExecutions(response.data);
-      if (response.available_actions) {
-        setAvailableActions(response.available_actions);
-      }
-    } catch (err) {
-      setError('Erreur lors du chargement des exécutions planifiées');
-      if (import.meta.env.DEV) {
-        logger.error('Failed to fetch scheduled executions', { error: err instanceof Error ? err.message : String(err) });
-      }
-    } finally {
-      setLoading(false);
-      initialLoadDone.current = true;
-    }
-  }, [filters.action_id, filters.environment, filters.engine, filters.platform, filters.start_date, filters.end_date, dateRange]);
+    fetchScheduled(apiFilters);
+  }, [filters.action_id, filters.environment, filters.engine, filters.platform, filters.start_date, filters.end_date, dateRange, fetchScheduled]);
 
   useEffect(() => {
-    fetchExecutions();
-  }, [fetchExecutions]);
+    doFetch();
+  }, [doFetch]);
 
   const {
     executionToCancel,
@@ -99,7 +79,7 @@ export function CalendarPage() {
     openCancelModal,
     closeCancelModal,
     confirmCancel,
-  } = useCancelExecution(fetchExecutions, closePopover);
+  } = useCancelExecution(doFetch, closePopover);
 
   const {
     executionToEdit,
@@ -110,7 +90,7 @@ export function CalendarPage() {
     openEditModal,
     closeEditModal,
     submitEdit,
-  } = useEditExecution(fetchExecutions, closePopover);
+  } = useEditExecution(doFetch, closePopover);
 
   const calendarEvents: CalendarEvent[] = useMemo(() => {
     return executions
@@ -121,27 +101,23 @@ export function CalendarPage() {
 
   const handleToggleRecurrence = useCallback(
     async (id: number, newState: boolean) => {
-      setTogglingPatternId(id);
-      try {
-        await toggleRecurringPattern(id, newState);
+      const result = await toggleRecurrence(id, newState);
+      if (result.success) {
         notification.success({
           message: newState ? 'Récurrence activée' : 'Récurrence désactivée',
           description: newState
             ? 'La récurrence a été activée avec succès'
             : 'La récurrence a été désactivée avec succès',
         });
-        fetchExecutions();
-      } catch (err: unknown) {
-        const msg = (err as Error).message ?? '';
+        await doFetch();
+      } else {
         notification.error({
           message: 'Erreur',
-          description: msg || 'Une erreur est survenue',
+          description: result.error || 'Une erreur est survenue',
         });
-      } finally {
-        setTogglingPatternId(null);
       }
     },
-    [fetchExecutions, notification]
+    [toggleRecurrence, doFetch, notification]
   );
 
   return (

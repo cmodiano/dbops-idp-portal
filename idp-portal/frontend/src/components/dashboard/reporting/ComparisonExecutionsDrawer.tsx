@@ -9,7 +9,8 @@ import { Drawer, Table, Tag, Empty, Button } from 'antd';
 import type { TableProps } from 'antd';
 import { Link } from 'react-router';
 
-import type { ComparisonDimension, ComparisonMetric, DashboardRecentExecution } from '../../../types/api';
+import type { ComparisonDimension, ComparisonMetric, DashboardRecentExecution, ExecutionStatusType } from '../../../types/api';
+import { EXECUTION_STATUS_TAG_COLORS } from '../../../utils/execution-status';
 
 export interface ComparisonExecutionsDrawerProps {
   /** Whether the drawer is open. */
@@ -31,20 +32,6 @@ export interface ComparisonExecutionsDrawerProps {
 }
 
 const EMPTY_EXECUTIONS: DashboardRecentExecution[] = [];
-
-// Couleurs comparaison — cas spécialisé reporting, format string CSS (pas Ant Design Badge), config locale justifiée.
-// Utilisé avec <Tag color={...}> (CSS strings) et non <Badge status={...}> (BadgeStatusType).
-/** Status tag colors. */
-const STATUS_COLORS: Record<string, string> = {
-  COMPLETED: 'green',
-  FAILED: 'red',
-  RUNNING: 'blue',
-  PENDING: 'default',
-  SUBMITTED: 'processing',
-  CANCELLED: 'default',
-  PENDING_APPROVAL: 'orange',
-  REJECTED: 'red',
-};
 
 /** Metric labels. */
 const METRIC_LABELS: Record<ComparisonMetric, string> = {
@@ -74,7 +61,7 @@ const columns: TableProps<DashboardRecentExecution>['columns'] = [
     dataIndex: 'status',
     key: 'status',
     width: 120,
-    render: (status) => <Tag color={STATUS_COLORS[status] || 'default'}>{status}</Tag>,
+    render: (status: ExecutionStatusType) => <Tag color={EXECUTION_STATUS_TAG_COLORS[status] || 'default'}>{status}</Tag>,
   },
   {
     title: 'Durée',

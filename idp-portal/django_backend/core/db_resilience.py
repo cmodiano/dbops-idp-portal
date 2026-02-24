@@ -108,7 +108,7 @@ def _is_mid_commit_error(exc: Exception) -> bool:
     # the error happened during or after commit → uncertain.
     try:
         return not connection.in_atomic_block
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001 — graceful-degradation: connection state check may fail, assume worst case
         # If we can't check, assume worst case
         return True
 
@@ -233,7 +233,7 @@ class DatabaseResilienceMiddleware:
             close_old_connections()
             try:
                 connection.ensure_connection()
-            except Exception as conn_exc:
+            except Exception as conn_exc:  # noqa: BLE001 — resilience-boundary: reconnect loop must continue on any DB error
                 logger.warning(
                     "db_reconnect_failed",
                     correlation_id=correlation_id,

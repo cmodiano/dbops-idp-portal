@@ -1,6 +1,7 @@
 """
 Story 28.1: business_rule_policies validation tests (AC7).
 Story 31.6: gate_config validation tests (AC#5).
+Story 39.3: validate_gate_conditions and validate_notification_config tests (AC#1).
 
 Tests for validate_business_rule_policies:
 - Valid schema passes
@@ -14,11 +15,43 @@ Tests for validate_gate_config:
 - Valid gate_config passes
 - Invalid integration raises error
 - Wrong type integration raises error
+
+Tests for validate_gate_conditions:
+- Not a list raises ValidationError
+- Condition not a dict raises error
+- Missing 'type' raises error
+- 'type' not string raises error
+- 'type' invalid raises error
+- Negative timeout_hours raises error
+- String timeout raises error
+- Invalid on_timeout raises error
+- Valid complete condition passes
+- Empty list passes
+
+Tests for validate_notification_config:
+- None passes
+- Non-dict raises error
+- channels not list raises error
+- channel not dict raises error
+- Invalid channel type raises error
+- enabled not bool raises error
+- conditions not list raises error
+- Invalid condition raises error
+- Teams http webhook raises error
+- Teams vault webhook passes
+- Teams https webhook passes
+- page_individual_enabled not bool raises error
+- Valid full config passes
 """
 import pytest
 from rest_framework.exceptions import ValidationError
 
-from catalog.validators import validate_business_rule_policies, validate_gate_config
+from catalog.validators import (
+    validate_business_rule_policies,
+    validate_gate_config,
+    validate_gate_conditions,
+    validate_notification_config,
+)
 
 
 # --- Valid schema fixture ---
@@ -504,3 +537,182 @@ class TestValidateGateConfigIntegration:
         integration = IntegrationFactory(type='aap', name='AAP Wrong Type')
         with pytest.raises(ValidationError, match="servicenow"):
             validate_gate_config({"servicenow_change": {"integration_id": integration.id}})
+
+
+# ============================================================================
+# Story 39.3: validate_gate_conditions tests (AC#1)
+# ============================================================================
+
+class TestValidateGateConditions:
+    """Story 39.3: validate_gate_conditions — toutes les branches (AC#1)."""
+
+    def test_not_a_list_raises(self):
+        """1.1: entrée non-liste → ValidationError."""
+        with pytest.raises(ValidationError, match="must be a list"):
+            validate_gate_conditions("invalid")
+
+    def test_condition_not_dict_raises(self):
+        """1.2: condition non-dict → erreur accumulée."""
+        with pytest.raises(ValidationError):
+            validate_gate_conditions(["not_a_dict"])
+
+    def test_missing_type_raises(self):
+        """1.3: 'type' manquant → erreur."""
+        with pytest.raises(ValidationError, match="required"):
+            validate_gate_conditions([{}])
+
+    def test_type_not_string_raises(self):
+        """1.4: 'type' non-string → erreur."""
+        with pytest.raises(ValidationError, match="must be a string"):
+            validate_gate_conditions([{"type": 123}])
+
+    def test_invalid_type_raises(self):
+        """1.5: 'type' invalide → erreur."""
+        with pytest.raises(ValidationError, match="must be one of"):
+            validate_gate_conditions([{"type": "invalid_type"}])
+
+    def test_negative_timeout_raises(self):
+        """1.6: 'timeout_hours' négatif → erreur."""
+        with pytest.raises(ValidationError, match="positive number"):
+            validate_gate_conditions([{"type": "maintenance_window", "timeout_hours": -1}])
+
+    def test_string_timeout_raises(self):
+        """1.6b: 'timeout_hours' string → erreur."""
+        with pytest.raises(ValidationError, match="positive number"):
+            validate_gate_conditions([{"type": "maintenance_window", "timeout_hours": "2h"}])
+
+    def test_invalid_on_timeout_raises(self):
+        """1.7: 'on_timeout' invalide → erreur."""
+        with pytest.raises(ValidationError, match="on_timeout"):
+            validate_gate_conditions([{"type": "maintenance_window", "on_timeout": "IGNORE"}])
+
+    def test_valid_complete_condition_passes(self):
+        """1.8: cas valide complet → pas d'erreur."""
+        validate_gate_conditions([{
+            "type": "maintenance_window",
+            "timeout_hours": 2.0,
+            "on_timeout": "FAIL"
+        }])
+
+    def test_empty_list_passes(self):
+        """1.9: liste vide → pas d'erreur."""
+        validate_gate_conditions([])
+
+    def test_valid_all_types(self):
+        """Tous les types valides passent."""
+        for gate_type in ('maintenance_window', 'time_window', 'approval_granted', 'target_state'):
+            validate_gate_conditions([{"type": gate_type}])
+
+    def test_on_timeout_skip_passes(self):
+        """on_timeout='SKIP' est valide."""
+        validate_gate_conditions([{"type": "time_window", "on_timeout": "SKIP"}])
+
+    def test_zero_timeout_raises(self):
+        """timeout_hours=0 → pas positif → erreur."""
+        with pytest.raises(ValidationError, match="positive number"):
+            validate_gate_conditions([{"type": "maintenance_window", "timeout_hours": 0}])
+
+    def test_multiple_conditions_one_invalid(self):
+        """Plusieurs conditions dont une invalide → erreur."""
+        with pytest.raises(ValidationError):
+            validate_gate_conditions([
+                {"type": "maintenance_window"},
+                {"type": "bad_type"},
+            ])
+
+
+# ============================================================================
+# Story 39.3: validate_notification_config tests (AC#1)
+# ============================================================================
+
+class TestValidateNotificationConfig:
+    """Story 39.3: validate_notification_config — toutes les branches (AC#1)."""
+
+    def test_none_passes(self):
+        """1.10: None → pas d'erreur."""
+        validate_notification_config(None)
+
+    def test_non_dict_raises(self):
+        """1.11: non-dict → ValidationError."""
+        with pytest.raises(ValidationError, match="objet JSON"):
+            validate_notification_config("invalid")
+
+    def test_channels_not_list_raises(self):
+        """1.12: channels non-liste → ValidationError."""
+        with pytest.raises(ValidationError, match="liste"):
+            validate_notification_config({"channels": "email"})
+
+    def test_channel_not_dict_raises(self):
+        """1.13: channel non-dict → ValidationError."""
+        with pytest.raises(ValidationError):
+            validate_notification_config({"channels": ["email"]})
+
+    def test_invalid_channel_type_raises(self):
+        """1.14: type invalide → ValidationError."""
+        with pytest.raises(ValidationError, match="invalide"):
+            validate_notification_config({"channels": [{"type": "sms"}]})
+
+    def test_enabled_not_bool_raises(self):
+        """1.15: enabled non-bool → ValidationError."""
+        with pytest.raises(ValidationError, match="booléen"):
+            validate_notification_config({"channels": [{"type": "email", "enabled": "yes"}]})
+
+    def test_conditions_not_list_raises(self):
+        """1.16: conditions non-liste → ValidationError."""
+        with pytest.raises(ValidationError, match="liste"):
+            validate_notification_config({"channels": [{"type": "email", "conditions": "on_failure"}]})
+
+    def test_invalid_condition_raises(self):
+        """1.17: condition invalide → ValidationError."""
+        with pytest.raises(ValidationError, match="invalide"):
+            validate_notification_config({"channels": [{"type": "email", "conditions": ["on_warning"]}]})
+
+    def test_teams_http_webhook_raises(self):
+        """1.18: webhook http (non-https, non vault:) → ValidationError."""
+        with pytest.raises(ValidationError, match="https://"):
+            validate_notification_config({"channels": [{
+                "type": "teams",
+                "webhook_url_ref": "http://example.com/hook"
+            }]})
+
+    def test_teams_vault_webhook_passes(self):
+        """1.19: webhook vault: → pas d'erreur."""
+        validate_notification_config({"channels": [{
+            "type": "teams",
+            "webhook_url_ref": "vault:secret/teams/hook"
+        }]})
+
+    def test_teams_https_webhook_passes(self):
+        """1.20: webhook https → pas d'erreur."""
+        validate_notification_config({"channels": [{
+            "type": "teams",
+            "webhook_url_ref": "https://outlook.office.com/webhook/test"
+        }]})
+
+    def test_page_individual_not_bool_raises(self):
+        """1.21: page_individual_enabled non-bool → ValidationError."""
+        with pytest.raises(ValidationError, match="booléen"):
+            validate_notification_config({"channels": [], "page_individual_enabled": "yes"})
+
+    def test_valid_full_config_passes(self):
+        """1.22: config valide complète → pas d'erreur."""
+        validate_notification_config({
+            "channels": [
+                {"type": "email", "enabled": True, "conditions": ["on_failure", "on_success"]},
+                {"type": "teams", "enabled": False, "webhook_url_ref": "vault:secret/teams"},
+                {"type": "page_dba", "conditions": ["always"]},
+            ],
+            "page_individual_enabled": False
+        })
+
+    def test_no_channels_key_passes(self):
+        """Dict sans 'channels' → channels=[]) → pas d'erreur."""
+        validate_notification_config({})
+
+    def test_empty_channels_passes(self):
+        """channels=[] → pas d'erreur."""
+        validate_notification_config({"channels": []})
+
+    def test_teams_empty_webhook_passes(self):
+        """webhook_url_ref vide → pas de validation URL → pas d'erreur."""
+        validate_notification_config({"channels": [{"type": "teams", "webhook_url_ref": ""}]})

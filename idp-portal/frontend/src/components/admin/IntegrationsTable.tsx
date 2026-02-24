@@ -12,7 +12,7 @@ import { AUTH_FLOW_LABELS } from '../../types/api';
 import { getIconUrl } from '../../utils/iconUrl';
 import { validateIntegration, validateAllIntegrations } from '../../services/integrations_service';
 
-// Statut intégration (admin) — domaine différent des statuts d'exécution, config locale justifiée.
+// Statut intégration (admin) — domaine différent des statuts d'exécution, config locale justifiée (SOLID-FE-10).
 // Clés = IntegrationStatusType (valid/invalid/deprecated), format { text } différent de { label } exécution.
 /** Story 24.3: Status badge configuration. */
 const STATUS_CONFIG: Record<string, { color: string; text: string }> = {

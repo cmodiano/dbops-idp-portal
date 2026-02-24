@@ -5,6 +5,7 @@ Thick mode is required for TIMESTAMP WITH TIME ZONE (DPY-3022: named time zones
 are not supported in thin mode).
 Story 20.3: Loads Celery app on Django startup.
 """
+import logging
 import os
 
 # Story 20.3: Import Celery app so that shared_task uses this app
@@ -26,9 +27,7 @@ def _init_oracle_client_if_needed():
 
             oracledb.init_oracle_client(lib_dir=lib_dir)
             _oracle_client_initialized = True
-        except Exception as e:
-            # Story 17.6: Justified broad catch - Oracle client init can fail in various ways
-            import logging
+        except Exception as e:  # noqa: BLE001 — graceful-degradation: Oracle thick mode init failure falls back to thin mode
             logging.getLogger(__name__).warning(
                 "Oracle thick mode init failed, falling back to thin mode: %s", str(e)
             )

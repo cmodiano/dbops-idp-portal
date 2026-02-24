@@ -148,7 +148,7 @@ def build_auth_headers(
         return build_auth_headers_from_credentials(resolved, auth_flow)
     except BadRequestError:
         raise
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — logged-and-wrapped: unexpected credential error wrapped in BadRequestError
         logger.error(
             "build_auth_headers_encoding_error",
             integration_id=integration_id,

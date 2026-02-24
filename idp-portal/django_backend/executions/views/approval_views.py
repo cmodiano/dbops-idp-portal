@@ -162,7 +162,7 @@ class ApproveExecutionView(APIView):
         # Launch the workflow (same as post-execution create when not PENDING_APPROVAL)
         try:
             ExecutionService.launch_workflow(execution, correlation_id)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — catch-all-mark-failed: approval launch failure marks execution INTEGRATION_ERROR
             logger.error(
                 "integration_error_on_approval_launch",
                 execution_id=execution.id,

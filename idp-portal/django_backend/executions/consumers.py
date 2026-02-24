@@ -7,6 +7,7 @@ Story 27.1: Enhanced with channel layer group messaging for AAP job monitoring.
 import json
 
 import structlog
+from channels.exceptions import StopConsumer  # type: ignore[import-untyped]
 
 from core.consumers import AuthenticatedWebSocketConsumer
 
@@ -23,6 +24,10 @@ class ExecutionConsumer(AuthenticatedWebSocketConsumer):
 
     async def connect(self) -> None:
         self.execution_id = self.scope["url_route"]["kwargs"].get("execution_id")
+        if not self.execution_id:
+            logger.error("ws_execution_missing_execution_id")
+            await self.close()
+            return
         self.group_name = f"execution_{self.execution_id}"
         await super().connect()
 
@@ -60,7 +65,7 @@ class ExecutionConsumer(AuthenticatedWebSocketConsumer):
                     execution_id=self.execution_id,
                     group_name=self.group_name,
                 )
-            except Exception as e:  # noqa: BLE001 — broad catch justified: group_discard is best-effort cleanup, must not raise
+            except Exception as e:  # noqa: BLE001 — best-effort-non-critical: group_discard is best-effort cleanup, must not raise
                 # MEDIUM-7 FIX: Log warning but don't raise (best-effort cleanup)
                 logger.warning(
                     "ws_execution_group_discard_failed",
@@ -76,40 +81,34 @@ class ExecutionConsumer(AuthenticatedWebSocketConsumer):
     # Channel layer message handlers — called via group_send
     # ---------------------------------------------------------------
 
+    async def _safe_send(self, payload: dict) -> None:
+        """Send JSON payload, suppressing errors on closing connections."""
+        try:
+            await self.send(text_data=json.dumps(payload))
+        except StopConsumer:
+            return
+        except Exception as e:  # noqa: BLE001 — best-effort-non-critical: log dropped messages on closing sockets
+            logger.debug("ws_execution_send_failed", error=str(e), error_type=type(e).__name__)
+
     async def step_update(self, event: dict) -> None:
         """Forward step_update event to WebSocket client."""
-        await self.send(text_data=json.dumps({
-            "type": "step_update",
-            "data": event.get("data", {}),
-        }))
+        await self._safe_send({"type": "step_update", "data": event.get("data", {})})
 
     async def log_update(self, event: dict) -> None:
         """Forward log_update event to WebSocket client (Story 27.1)."""
-        await self.send(text_data=json.dumps({
-            "type": "log_update",
-            "data": event.get("data", {}),
-        }))
+        await self._safe_send({"type": "log_update", "data": event.get("data", {})})
 
     async def execution_complete(self, event: dict) -> None:
         """Forward execution_complete event to WebSocket client."""
-        await self.send(text_data=json.dumps({
-            "type": "execution_complete",
-            "data": event.get("data", {}),
-        }))
+        await self._safe_send({"type": "execution_complete", "data": event.get("data", {})})
 
     async def execution_failed(self, event: dict) -> None:
         """Forward execution_failed event to WebSocket client."""
-        await self.send(text_data=json.dumps({
-            "type": "execution_failed",
-            "data": event.get("data", {}),
-        }))
+        await self._safe_send({"type": "execution_failed", "data": event.get("data", {})})
 
     async def status_update(self, event: dict) -> None:
         """Forward status_update event to WebSocket client (Story 27.1)."""
-        await self.send(text_data=json.dumps({
-            "type": "status_update",
-            "data": event.get("data", {}),
-        }))
+        await self._safe_send({"type": "status_update", "data": event.get("data", {})})
 
 
 class DashboardConsumer(AuthenticatedWebSocketConsumer):

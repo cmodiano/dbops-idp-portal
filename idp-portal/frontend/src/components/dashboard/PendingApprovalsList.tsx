@@ -16,7 +16,7 @@ import {
 } from '@ant-design/icons';
 
 import type { ExecutionResponse } from '../../types/api';
-import { approveExecution, rejectExecution } from '../../services/execution_service';
+import { usePendingApprovals } from '../../hooks/usePendingApprovals';
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -33,11 +33,12 @@ export function PendingApprovalsList({
   onActionComplete,
 }: PendingApprovalsListProps) {
   const { message } = App.useApp();
+  // Story 38.6: DIP — use hook instead of direct service imports
+  const { approve, reject, approveLoading, rejectLoading } = usePendingApprovals(onActionComplete);
   const [approveModalOpen, setApproveModalOpen] = useState(false);
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [selectedExecution, setSelectedExecution] = useState<ExecutionResponse | null>(null);
   const [comment, setComment] = useState('');
-  const [actionLoading, setActionLoading] = useState(false);
 
   const handleApproveClick = (execution: ExecutionResponse) => {
     setSelectedExecution(execution);
@@ -53,33 +54,23 @@ export function PendingApprovalsList({
 
   const handleApproveConfirm = async () => {
     if (!selectedExecution) return;
-    setActionLoading(true);
-    try {
-      await approveExecution(selectedExecution.id, comment || undefined);
+    const result = await approve(selectedExecution.id, comment || undefined);
+    if (result.success) {
       message.success(`Exécution #${selectedExecution.id} approuvée`);
       setApproveModalOpen(false);
-      onActionComplete();
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erreur lors de l\'approbation';
-      message.error(errorMessage);
-    } finally {
-      setActionLoading(false);
+    } else {
+      message.error(result.error);
     }
   };
 
   const handleRejectConfirm = async () => {
     if (!selectedExecution) return;
-    setActionLoading(true);
-    try {
-      await rejectExecution(selectedExecution.id, comment || undefined);
+    const result = await reject(selectedExecution.id, comment || undefined);
+    if (result.success) {
       message.success(`Exécution #${selectedExecution.id} refusée`);
       setRejectModalOpen(false);
-      onActionComplete();
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erreur lors du refus';
-      message.error(errorMessage);
-    } finally {
-      setActionLoading(false);
+    } else {
+      message.error(result.error);
     }
   };
 
@@ -175,7 +166,7 @@ export function PendingApprovalsList({
         open={approveModalOpen}
         onCancel={() => setApproveModalOpen(false)}
         onOk={handleApproveConfirm}
-        confirmLoading={actionLoading}
+        confirmLoading={approveLoading}
         okText="Approuver"
         okButtonProps={{ style: { backgroundColor: '#10B981', borderColor: '#10B981' } }}
         cancelText="Annuler"
@@ -211,7 +202,7 @@ export function PendingApprovalsList({
         open={rejectModalOpen}
         onCancel={() => setRejectModalOpen(false)}
         onOk={handleRejectConfirm}
-        confirmLoading={actionLoading}
+        confirmLoading={rejectLoading}
         okText="Refuser"
         okButtonProps={{ danger: true }}
         cancelText="Annuler"

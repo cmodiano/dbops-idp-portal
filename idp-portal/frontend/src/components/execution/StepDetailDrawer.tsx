@@ -8,13 +8,13 @@
  * of the child action instead of raw JSON.
  */
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo } from 'react';
 import { Drawer, Space, Typography, Badge, Alert, Card, Spin, theme } from 'antd';
 import { CloseOutlined, CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import { StructuredErrorCard } from './StructuredErrorCard';
 import { ExecutionTimeline } from './ExecutionTimeline';
-import { getExecution, getExecutionSteps } from '../../services/execution_service';
-import type { ExecutionStepResponse, WorkflowStep, ExecutionResponse } from '../../types/api';
+import { useChildExecution } from '../../hooks/useChildExecution';
+import type { ExecutionStepResponse, WorkflowStep } from '../../types/api';
 import { STEP_STATUS_BADGE_CONFIG } from '../../utils/execution-status';
 
 const { Title, Text } = Typography;
@@ -111,42 +111,13 @@ export function StepDetailDrawer({
     return typeof id === 'number' && Number.isFinite(id) ? id : null;
   }, [executionStep?.output]);
 
-  // Fetch child execution + steps when step has child_execution_id
-  const [childExecution, setChildExecution] = useState<ExecutionResponse | null>(null);
-  const [childSteps, setChildSteps] = useState<ExecutionStepResponse[]>([]);
-  const [childLoading, setChildLoading] = useState(false);
-  const [childError, setChildError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open || childExecutionId == null) {
-      setChildExecution(null);
-      setChildSteps([]);
-      setChildError(null);
-      return;
-    }
-    let cancelled = false;
-    setChildLoading(true);
-    setChildError(null);
-    Promise.all([getExecution(childExecutionId), getExecutionSteps(childExecutionId)])
-      .then(([exec, steps]) => {
-        if (!cancelled) {
-          setChildExecution(exec);
-          setChildSteps(steps);
-          setChildLoading(false);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setChildError(err instanceof Error ? err.message : 'Erreur de chargement');
-          setChildExecution(null);
-          setChildSteps([]);
-          setChildLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [open, childExecutionId]);
+  // Story 38.6: DIP — use hook instead of direct service imports
+  const {
+    childExecution,
+    childSteps,
+    loading: childLoading,
+    error: childError,
+  } = useChildExecution(childExecutionId, open);
 
   const showChildTimeline = childExecutionId != null && childExecution != null && !childError;
 

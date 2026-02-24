@@ -113,7 +113,7 @@ def _load_flags_from_database() -> dict[str, Any]:
             correlation_id=get_correlation_id(),
         )
         # Return empty dict (fallback) - feature flags non disponibles ne doivent pas bloquer l'app
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — graceful-degradation: unexpected ORM errors return empty dict, app continues
         # Story 22.11: Justified broad catch - Unexpected ORM errors must not break app startup
         # Pattern: Return empty dict as graceful degradation instead of raising
         logger.error(

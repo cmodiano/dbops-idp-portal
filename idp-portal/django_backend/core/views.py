@@ -75,7 +75,7 @@ def health_check(request: Any) -> Response:
             "conn_health_checks": db_settings.get('CONN_HEALTH_CHECKS', False),
             "connection_usable": connection.is_usable(),
         }
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — graceful-degradation: health check reports degraded status on any DB error
         # Story 17.6: Justified broad catch - DB connection can raise various exceptions
         logger.error(
             "health_check_failed",
@@ -105,7 +105,7 @@ def health_check(request: Any) -> Response:
                 health_data["vault"] = "reachable"
             else:
                 raise ConnectionError(f"Vault returned {response.status_code}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — graceful-degradation: health check reports degraded status on any Vault error
             # Story 17.6: Justified broad catch - Health check must handle any connectivity issue
             logger.warning(
                 "health_check_failed",
@@ -135,7 +135,7 @@ def health_check(request: Any) -> Response:
                 health_data["servicenow"] = "reachable"
             else:
                 raise ConnectionError(f"ServiceNow returned {response.status_code}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — graceful-degradation: health check reports degraded status on any ServiceNow error
             # Story 17.6: Justified broad catch - Health check must handle any connectivity issue
             logger.warning(
                 "health_check_failed",

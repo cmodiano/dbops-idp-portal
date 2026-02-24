@@ -11,18 +11,15 @@
  * Delegates real-time timeline rendering to ExecutionTimeline (Story 4.6, 19.0).
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { Drawer, Spin, Alert, Button, Space, Badge, Typography } from 'antd';
 import { CloseOutlined, ReloadOutlined } from '@ant-design/icons';
 import { ExecutionTimeline } from './ExecutionTimeline';
 import { WorkflowExecutionGraph } from './WorkflowExecutionGraph';
-import { getExecution } from '../../services/execution_service';
-import { fetchCatalogActionById } from '../../services/catalog_service';
-import type { ExecutionResponse, ExecutionStatusType, RemediationSuggestion, ActionEngine } from '../../types/api';
-import type { CatalogActionDetail } from '../../services/catalog_service';
+import { useExecutionView } from '../../hooks/useExecutionView';
+import type { ExecutionStatusType, RemediationSuggestion, ActionEngine } from '../../types/api';
 import { getItemTypeIcon } from '../../utils/iconHelpers';
 import { EXECUTION_STATUS_BADGE_CONFIG } from '../../utils/execution-status';
-import logger from '../../services/logger';
 
 const { Text, Title } = Typography;
 
@@ -44,10 +41,8 @@ const ENV_BADGE: Record<string, { color: string; label: string }> = {
 
 
 export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggestionClick }: ExecutionViewProps) {
-  const [execution, setExecution] = useState<ExecutionResponse | null>(null);
-  const [actionDetail, setActionDetail] = useState<CatalogActionDetail | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
+  // Story 38.6: DIP — use hook instead of direct service imports
+  const { execution, actionDetail, loading, error, refresh, handleExecutionUpdate } = useExecutionView(executionId);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   // AC1/AC10: Detect type (action simple vs workflow)
@@ -64,10 +59,7 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
   // Story 19.4 AC10: Focus management — move focus to close button when drawer opens
   useEffect(() => {
     if (executionId != null && closeButtonRef.current) {
-      // Ant Design Drawer animation duration: 0.3s (from antd source: motionDurationMid = 0.2s, use 350ms for safety)
-      // Only focus if drawer is still open after animation completes
       const timer = setTimeout(() => {
-        // Verify drawer still open before focusing (avoid race condition)
         if (executionId != null && closeButtonRef.current && document.contains(closeButtonRef.current)) {
           closeButtonRef.current.focus();
         }
@@ -76,73 +68,11 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
     }
   }, [executionId]);
 
-  // Initial load + Story 19.2: load workflow details for graph
-  useEffect(() => {
-    if (executionId == null) {
-      setExecution(null);
-      setActionDetail(null);
-      setLoading(false);
-      setError(null);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    getExecution(executionId)
-      .then(async (data) => {
-        setExecution(data);
-        setError(null);
-        // Story 19.2 AC2: Load workflow definition if this is a workflow execution
-        // Use catalog API (accessible to all users) instead of admin API (DBOPS only)
-        if (data.item_type === 'workflow' && data.action_id) {
-          try {
-            const { data: actionDetailData } = await fetchCatalogActionById(data.action_id);
-            setActionDetail(actionDetailData);
-          } catch (err) {
-            logger.warn('ExecutionView: Failed to load workflow details', {
-              action_id: data.action_id,
-              error: err instanceof Error ? err.message : String(err),
-            });
-          }
-        }
-      })
-      .catch((err) => {
-        setError(err instanceof Error ? err : new Error(String(err)));
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  }, [executionId]);
-
   // AC7: Close and redirect
   const handleClose = useCallback(() => {
     onClose();
     redirectOnClose?.();
   }, [onClose, redirectOnClose]);
-
-  // Sync execution status from WorkflowExecutionGraph polling/WS
-  const handleExecutionUpdate = useCallback((updated: ExecutionResponse) => {
-    setExecution((prev) => {
-      if (!prev) return updated;
-      // Only update if status or completed_at changed
-      if (prev.status !== updated.status || prev.completed_at !== updated.completed_at) {
-        return { ...prev, status: updated.status, completed_at: updated.completed_at, started_at: updated.started_at ?? prev.started_at };
-      }
-      return prev;
-    });
-  }, []);
-
-  // AC9: Manual refresh
-  const handleRefresh = useCallback(async () => {
-    if (executionId == null) return;
-    try {
-      const data = await getExecution(executionId);
-      setExecution(data);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error(String(err)));
-    }
-  }, [executionId]);
 
   // AC8: Elapsed or total duration
   const getDuration = () => {
@@ -274,7 +204,7 @@ export function ExecutionView({ executionId, onClose, redirectOnClose, onSuggest
             title="Connexion perdue. Tentative de reconnexion..."
             description={error.message}
             action={
-              <Button size="small" onClick={handleRefresh} icon={<ReloadOutlined />}>
+              <Button size="small" onClick={refresh} icon={<ReloadOutlined />}>
                 Rafraîchir
               </Button>
             }

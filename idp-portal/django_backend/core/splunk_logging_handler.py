@@ -46,7 +46,7 @@ def _get_config() -> dict[str, Any]:
             splunk_config = getattr(settings, "SPLUNK_CONFIG", {})
             hec_url = splunk_config.get("HEC_URL", "")
             hec_token = hec_token or splunk_config.get("HEC_TOKEN", "")
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001 — graceful-degradation: Django settings may not be available at import time
             pass
 
     return {
@@ -156,7 +156,7 @@ class SplunkLoggingHandler(logging.Handler):
             if self._buffer.qsize() >= self.batch_size:
                 self.flush()
 
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001 — resilience-boundary: logging handler must never propagate errors to application
             # Never let handler errors propagate to the application
             self.handleError(record)
 
@@ -226,7 +226,7 @@ class SplunkLoggingHandler(logging.Handler):
             finally:
                 loop.close()
 
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — best-effort-non-critical: Splunk unavailable, log warning and drop events
             # Splunk unavailable: log warning locally, drop events
             # Use standard logging to avoid recursion
             logging.getLogger(__name__).warning(

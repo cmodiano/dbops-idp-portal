@@ -1,13 +1,13 @@
 /**
- * Tests for execution-status.ts (Story 35.1 — consolidation STATUS_CONFIG résiduel).
+ * Tests for execution-status.ts (Story 35.1, 38.2 — consolidation STATUS_CONFIG résiduel).
  *
- * Vérifie que les nouveaux exports EXECUTION_STATUS_BADGE_CONFIG et STEP_STATUS_BADGE_CONFIG
- * couvrent tous les statuts attendus avec les bons types Ant Design Badge.
+ * Vérifie que les exports couvrent tous les statuts attendus avec les bons types Ant Design Badge/Tag.
  */
 
 import { describe, it, expect } from 'vitest';
 import {
   EXECUTION_STATUS_BADGE_CONFIG,
+  EXECUTION_STATUS_TAG_COLORS,
   STEP_STATUS_BADGE_CONFIG,
   STEP_STATUS_COLOR,
   AUDIT_STATUS_CONFIG,
@@ -131,6 +131,57 @@ describe('STEP_STATUS_BADGE_CONFIG', () => {
 
   it('CANCELLED → default', () => {
     expect(STEP_STATUS_BADGE_CONFIG.CANCELLED.color).toBe('default');
+  });
+});
+
+describe('EXECUTION_STATUS_TAG_COLORS (Story 38.2 — Tag colors pour reporting)', () => {
+  const expectedStatuses = [
+    'SUBMITTED',
+    'RUNNING',
+    'COMPLETED',
+    'FAILED',
+    'CANCELLED',
+    'INTEGRATION_ERROR',
+    'PENDING_APPROVAL',
+    'REJECTED',
+  ] as const;
+
+  it("couvre les 8 statuts d'exécution", () => {
+    expectedStatuses.forEach((status) => {
+      expect(EXECUTION_STATUS_TAG_COLORS).toHaveProperty(status);
+    });
+  });
+
+  it('chaque entrée est un string non vide (nom couleur CSS Ant Design Tag)', () => {
+    expectedStatuses.forEach((status) => {
+      const color = EXECUTION_STATUS_TAG_COLORS[status];
+      expect(typeof color).toBe('string');
+      expect(color.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('COMPLETED → green', () => {
+    expect(EXECUTION_STATUS_TAG_COLORS.COMPLETED).toBe('green');
+  });
+
+  it('FAILED → red', () => {
+    expect(EXECUTION_STATUS_TAG_COLORS.FAILED).toBe('red');
+  });
+
+  it('RUNNING → blue', () => {
+    expect(EXECUTION_STATUS_TAG_COLORS.RUNNING).toBe('blue');
+  });
+
+  it('SUBMITTED → processing', () => {
+    expect(EXECUTION_STATUS_TAG_COLORS.SUBMITTED).toBe('processing');
+  });
+
+  it('PENDING_APPROVAL → orange', () => {
+    expect(EXECUTION_STATUS_TAG_COLORS.PENDING_APPROVAL).toBe('orange');
+  });
+
+  it('CANCELLED → default', () => {
+    expect(EXECUTION_STATUS_TAG_COLORS.CANCELLED).toBe('default');
   });
 });
 

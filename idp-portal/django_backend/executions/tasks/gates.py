@@ -93,7 +93,7 @@ def evaluate_waiting_gates(self: Any) -> dict:
                 _update_waiting_context(step, gate_status, correlation_id or "")
                 still_waiting += 1
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — resilience-boundary: gate evaluation must continue for other steps on error
             # AC9: Error handling — log and continue
             logger.error(
                 "evaluate_waiting_gates_error",
@@ -114,7 +114,7 @@ def evaluate_waiting_gates(self: Any) -> dict:
                 }
                 step.set_output(output)
                 step.save()
-            except Exception as save_error:
+            except Exception as save_error:  # noqa: BLE001 — best-effort-non-critical: error persist failure must not break gate loop
                 logger.error(
                     "evaluate_waiting_gates_error_persist_failed",
                     step_id=step.id,
@@ -372,7 +372,7 @@ def _handle_gate_timeout(step: ExecutionStep, gate_status: dict, correlation_id:
                     step_id=step.id,
                     correlation_id=correlation_id,
                 )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — resilience-boundary: timeout execution update failure logged, task continues
             logger.error(
                 "evaluate_waiting_gates_step_timeout_execution_update_error",
                 execution_id=step.execution_id,

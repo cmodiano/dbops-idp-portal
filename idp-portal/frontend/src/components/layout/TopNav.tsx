@@ -162,7 +162,6 @@ export function TopNav() {
               : undefined;
           const buttonContent = (
             <button
-              key={key}
               onClick={() => handleNavClick(key)}
               className={`nav-pill ${isActive ? 'nav-pill-active' : ''}`}
               aria-label={dashboardAriaLabel}

@@ -287,7 +287,7 @@ class ContainerWorkflowRuntime:
             # HIGH-2: Wrap simulation in try-except to handle failures explicitly
             try:
                 SimulationService._run_simulation(child_execution.id, force_success=True)
-            except Exception as sim_error:
+            except Exception as sim_error:  # noqa: BLE001 — catch-all-mark-failed: simulation failure marks child FAILED, parent continues
                 logger.error(
                     "container_workflow_simulation_failed",
                     child_execution_id=child_execution.id,
@@ -316,13 +316,9 @@ class ContainerWorkflowRuntime:
             )
             now = timezone.now()
             Execution.objects.filter(id=child_execution.id).update(
-                status=ExecutionStatus.RUNNING,
-                started_at=now,
-            )
-            completed_at = timezone.now()
-            Execution.objects.filter(id=child_execution.id).update(
                 status=ExecutionStatus.COMPLETED,
-                completed_at=completed_at,
+                started_at=now,
+                completed_at=now,
             )
 
         # Refresh in-memory object for downstream status check (after all updates)
@@ -363,7 +359,7 @@ class ContainerWorkflowRuntime:
         # Story 31.6: Create ServiceNow change if required before RUNNING
         try:
             self._create_servicenow_change_if_required(self.execution.environment)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — catch-all-mark-failed: ServiceNow failure marks execution FAILED
             logger.error(
                 "execution_servicenow_change_failed",
                 execution_id=self.execution.id,
@@ -435,7 +431,7 @@ class ContainerWorkflowRuntime:
         # Story 31.6: Create ServiceNow change if required before RUNNING
         try:
             self._create_servicenow_change_if_required(self.execution.environment)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — catch-all-mark-failed: ServiceNow failure marks execution FAILED
             logger.error(
                 "execution_servicenow_change_failed",
                 execution_id=self.execution.id,
@@ -569,7 +565,7 @@ class ContainerWorkflowRuntime:
 
             self._execute_workflow_steps()
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — catch-all-mark-failed: ensures parent execution is marked FAILED on any error
             # Catch-all: ensure the parent execution is marked as FAILED
             logger.error(
                 "container_workflow_thread_error",
@@ -586,7 +582,7 @@ class ContainerWorkflowRuntime:
                     execution.completed_at = timezone.now()
                     execution.error_message = f"Workflow thread error: {e}"
                     execution.save(update_fields=['status', 'completed_at', 'error_message'])
-            except Exception:  # noqa: BLE001
+            except Exception:  # noqa: BLE001 — best-effort-non-critical: cleanup after thread error must not raise
                 logger.error("container_workflow_thread_cleanup_failed", execution_id=execution_id, exc_info=True)
         finally:
             close_old_connections()

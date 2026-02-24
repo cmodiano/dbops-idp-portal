@@ -139,7 +139,7 @@ class RuleEngine:
 
         try:
             artifact = interpreter.interpret(step_type, step_output)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — logged-and-reraised: interpreter can raise any error, logged then re-raised
             logger.error(
                 "interpreter_failed",
                 step_type=step_type,

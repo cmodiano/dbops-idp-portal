@@ -214,7 +214,7 @@ class ExecutionsCreateView(APIView):
                 )
             else:
                 pass
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — catch-all-mark-failed: execution launch failure marks INTEGRATION_ERROR
             # Story 22.11: Justified broad catch - multiple services
             exec_logger.error(
                 "integration_error_on_execution",
@@ -414,7 +414,7 @@ class ExecutionCancelView(APIView):
                 platform_job_id=platform_job_id,
                 correlation_id=get_correlation_id(),
             )
-        except Exception as e:  # noqa: BLE001 — broad catch justified: adapter may raise various exceptions, remote cancellation is best-effort
+        except Exception as e:  # noqa: BLE001 — best-effort-non-critical: adapter may raise various exceptions, remote cancellation is best-effort
             # Story 17.6: Justified broad catch — adapter may raise various exceptions
             exec_logger.warning(
                 "remote_cancellation_failed",
@@ -598,7 +598,7 @@ class ExecutionLogsView(APIView):
                     loop.close()
         except ServiceUnavailableError:
             raise
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — logged-and-wrapped: adapter error logged then wrapped in ServiceUnavailableError
             exec_logger.error(
                 "execution_logs_adapter_error",
                 execution_id=execution_id,

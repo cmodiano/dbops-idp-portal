@@ -302,7 +302,7 @@ def _broadcast_webhook_update(
             execution_id=execution_id,
             correlation_id=correlation_id,
         )
-    except Exception as e:  # noqa: BLE001 — broad catch justified: webhook must return 200 even if broadcast fails (resilience)
+    except Exception as e:  # noqa: BLE001 — resilience-boundary: webhook must return 200 even if broadcast fails
         logger.error(
             "github_webhook_broadcast_error",
             execution_id=execution_id,

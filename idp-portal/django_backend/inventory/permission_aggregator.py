@@ -76,7 +76,7 @@ class RBACPermissionAggregator:
             if target_perm:
                 try:
                     attr_filter = target_perm.get_filter_by_attribute()
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 — graceful-degradation: filter attribute error logged, aggregation continues
                     logger.error(
                         "rbac_filter_by_attribute_error",
                         profile_id=profile.id,
@@ -95,7 +95,7 @@ class RBACPermissionAggregator:
                             patterns=patterns,
                             correlation_id=correlation_id
                         )
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 — graceful-degradation: exclusion patterns error logged, aggregation continues
                     logger.error(
                         "rbac_exclusion_patterns_error",
                         profile_id=profile.id,
@@ -110,15 +110,33 @@ class RBACPermissionAggregator:
                     has_all_access = True
                     all_access_attribute_filters.append(attr_filter)
                 elif perm_type == 'PATTERN':
-                    patterns = target_perm.get_target_patterns()
-                    if patterns:
-                        target_restrictions.append(('PATTERN', patterns))
-                        attribute_filters.append(attr_filter)
+                    try:
+                        patterns = target_perm.get_target_patterns()
+                        if patterns:
+                            target_restrictions.append(('PATTERN', patterns))
+                            attribute_filters.append(attr_filter)
+                    except Exception as e:  # noqa: BLE001 — graceful-degradation: target patterns error logged, aggregation continues
+                        logger.error(
+                            "rbac_target_patterns_error",
+                            profile_id=profile.id,
+                            error=str(e),
+                            correlation_id=correlation_id,
+                            exc_info=True
+                        )
                 elif perm_type == 'LIST':
-                    names = target_perm.get_target_names()
-                    if names:
-                        target_restrictions.append(('LIST', names))
-                        attribute_filters.append(attr_filter)
+                    try:
+                        names = target_perm.get_target_names()
+                        if names:
+                            target_restrictions.append(('LIST', names))
+                            attribute_filters.append(attr_filter)
+                    except Exception as e:  # noqa: BLE001 — graceful-degradation: target names error logged, aggregation continues
+                        logger.error(
+                            "rbac_target_names_error",
+                            profile_id=profile.id,
+                            error=str(e),
+                            correlation_id=correlation_id,
+                            exc_info=True
+                        )
             elif is_admin:
                 has_all_access = True
                 all_access_attribute_filters.append(None)
@@ -184,12 +202,12 @@ class RBACPermissionAggregator:
         for e in envs:
             if isinstance(e, str):
                 basic_env = EnvironmentHelper.normalize(e)
-                normalized_env = self._normalize_environment(e)
+                normalized_env = self._normalize_environment(e, _pre_normalized=basic_env)
                 target_set.add(normalized_env)
                 if basic_env and basic_env != normalized_env:
                     target_set.add(basic_env)
 
-    def _normalize_environment(self, raw_env: str | None) -> str:
+    def _normalize_environment(self, raw_env: str | None, *, _pre_normalized: str | None = None) -> str:
         """
         Normalize environment value from external sources.
         Handles legacy aliases like 'certif' -> 'staging'.
@@ -211,7 +229,7 @@ class RBACPermissionAggregator:
             'development': 'dev',
             'production': 'prod',
         }
-        normalized = EnvironmentHelper.normalize(raw_env)
+        normalized = _pre_normalized if _pre_normalized is not None else EnvironmentHelper.normalize(raw_env)
         if normalized in env_aliases:
             return env_aliases[normalized]
         return normalized

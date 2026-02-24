@@ -100,7 +100,7 @@ class IntegrationViewSet(viewsets.ViewSet):
         except InvalidStateError:
             # Re-raise InvalidStateError (e.g., INVALID_CONFIG from JSON Schema validation)
             raise
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — logged-and-wrapped: unexpected error wrapped in InvalidStateError for API response
             logger.exception(
                 "create_integration_unexpected_error",
                 extra={"error": str(e), "error_type": type(e).__name__},
@@ -158,7 +158,7 @@ class IntegrationViewSet(viewsets.ViewSet):
         except InvalidStateError:
             # Re-raise InvalidStateError (e.g., INVALID_CONFIG from JSON Schema validation)
             raise
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — logged-and-wrapped: unexpected error wrapped in InvalidStateError for API response
             logger.exception(
                 "update_integration_unexpected_error",
                 extra={"error": str(e), "error_type": type(e).__name__},

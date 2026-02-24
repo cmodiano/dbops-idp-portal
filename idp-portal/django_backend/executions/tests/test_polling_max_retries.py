@@ -3,7 +3,7 @@ Tests for Story 30.7 — Polling max retries, gate timeout, and cache documentat
 
 Covers:
 - RACE-1: MAX_POLLING_RETRIES for all 5 polling tasks
-- CELERY-3: asyncio.run() usage (implicit — tasks work correctly)
+- CELERY-3: async_to_sync() usage (implicit — tasks work correctly)
 - CELERY-4: Gate timeout workflow continuation
 - CELERY-5: Gate timeout SKIPPED with error_message
 - RACE-2: select_for_update() in catalog services
