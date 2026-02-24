@@ -2,7 +2,7 @@
  * Tests for useExecutionWizardState hook (Story 39.7 — coverage).
  */
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
-import { renderHook, act, waitFor, cleanup } from '@testing-library/react';
+import { renderHook, act, cleanup } from '@testing-library/react';
 import React from 'react';
 import { App } from 'antd';
 import { useExecutionWizardState } from './useExecutionWizardState';

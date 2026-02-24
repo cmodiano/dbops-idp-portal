@@ -2,7 +2,7 @@
  * Tests for useScheduledExecutions hook (Story 39.7 — coverage).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor, act } from '@testing-library/react';
+import { renderHook, waitFor } from '@testing-library/react';
 import { useScheduledExecutions } from './useScheduledExecutions';
 import * as scheduledService from '../services/scheduled_execution_service';
 import type { ScheduledExecutionListItem } from '../types/api';

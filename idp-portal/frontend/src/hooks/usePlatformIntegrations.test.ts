@@ -2,7 +2,7 @@
  * Tests for usePlatformIntegrations hook (Story 39.7 — coverage).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor, act } from '@testing-library/react';
+import { renderHook, waitFor } from '@testing-library/react';
 import { usePlatformIntegrations } from './usePlatformIntegrations';
 import * as integrationsService from '../services/integrations_service';
 import type { IntegrationResponse } from '../types/api';
