@@ -6,12 +6,10 @@ import csv
 import json
 from datetime import datetime, timezone
 
-import pytest
 from django.test import TestCase
 from core.services import AuditService
 
 
-@pytest.mark.django_db
 class TestAuditService(TestCase):
     """Tests for AuditService."""
     
@@ -69,7 +67,6 @@ class TestAuditService(TestCase):
 # Tâche 3 — Tests export_to_csv / export_to_pdf / list_all étendus
 # ---------------------------------------------------------------------------
 
-@pytest.mark.django_db
 class TestAuditServiceExport(TestCase):
     """Tests pour export_to_csv() et export_to_pdf()."""
 
@@ -170,7 +167,6 @@ class TestAuditServiceExport(TestCase):
     def test_export_to_csv_non_json_details(self):
         """export_to_csv() with non-JSON details → raw string preserved."""
         from core.models import AuditLog
-        from django.utils import timezone as dj_tz
 
         # Créer une entrée avec details non-JSON directement via le manager
         AuditLog.objects.create(
@@ -179,7 +175,6 @@ class TestAuditServiceExport(TestCase):
             entity_type='raw_entity',
             entity_id=40,
             details='not valid json {{}',
-            timestamp=dj_tz.now(),
         )
         output = AuditService.export_to_csv(user_id='raw-user')
         content = output.read()
@@ -192,7 +187,6 @@ class TestAuditServiceExport(TestCase):
             AuditService.export_to_pdf()
 
 
-@pytest.mark.django_db
 class TestAuditServiceListAllFilters(TestCase):
     """Tests étendus pour list_all() : date_from, date_to, entity_id, pagination."""
 

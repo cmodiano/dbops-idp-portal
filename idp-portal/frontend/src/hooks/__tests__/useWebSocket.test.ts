@@ -248,9 +248,10 @@ describe('useWebSocket', () => {
 
   it('handles execution_complete message', async () => {
     vi.mocked(executionService.getExecution).mockResolvedValue({ ...mockExecution, status: 'COMPLETED' });
-    renderHook(() => useWebSocket(1));
+    const { result } = renderHook(() => useWebSocket(1));
 
     await act(async () => {
+      await Promise.resolve();
       await Promise.resolve();
     });
 
@@ -259,7 +260,7 @@ describe('useWebSocket', () => {
       ws.simulateMessage({ type: 'execution_complete' });
     });
 
-    // The execution status should be updated
+    expect(result.current.execution?.status).toBe('COMPLETED');
     expect(ws.close).toHaveBeenCalled();
   });
 

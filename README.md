@@ -86,7 +86,7 @@ Voir [idp-portal/README.md](idp-portal/README.md) pour la configuration complèt
 
 ## Structure du projet
 
-```
+```text
 ├── idp-portal/
 │   ├── frontend/          # SPA React
 │   ├── django_backend/    # API REST Django

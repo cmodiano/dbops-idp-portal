@@ -10,7 +10,7 @@ vi.mock('../services/scheduled_execution_service', () => ({
 }));
 
 vi.mock('../utils/debounce', () => ({
-  debounce: (fn: Function) => fn, // no debounce in tests
+  debounce: <T extends (...args: unknown[]) => unknown>(fn: T) => fn as T, // no debounce in tests
 }));
 
 describe('useSchedulingValidation', () => {
