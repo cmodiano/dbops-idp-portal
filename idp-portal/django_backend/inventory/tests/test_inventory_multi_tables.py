@@ -531,7 +531,7 @@ class ReadInstancesEnvFromServersTests(InventoryTestMixin, TestCase):
         self._create_inventory_db(MULTI_TABLE_CONFIG)
         mock_cursor = self._make_mock_cursor(mock_conn, rows=[(1, 'inst-01', 'dev', 'srv01', 'db01')])
 
-        results = self.service._read_instances_from_config(environment='dev')
+        self.service._read_instances_from_config(environment='dev')
 
         sql = mock_cursor.execute.call_args[0][0]
         params = mock_cursor.execute.call_args[0][1]

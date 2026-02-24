@@ -18,7 +18,6 @@ from rest_framework.request import Request
 from catalog.models import Action
 from core.exceptions import BadRequestError
 from core.permissions import is_admin_user
-from executions.utils.rbac_helpers import get_allowed_action_ids_for_user
 
 # Fixed-offset UTC — Oracle Thin Mode ne supporte pas les named timezones (DPY-3022)
 UTC = dt_timezone(timedelta(0))
@@ -128,14 +127,10 @@ def apply_scope_filter(qs: QuerySet, *, user: Any, scope: str) -> tuple[QuerySet
         # Admins (DBA/DBOPS) voient tout — comportement actuel inchangé (AC3)
         return qs, "all"
 
-    # Utilisateurs non-admin : filtrer par leurs action IDs autorisés via RBAC (AC2, AC6)
-    allowed_ids = get_allowed_action_ids_for_user(user)
-    if allowed_ids is None:
-        # actions_type='all' dans les permissions → accès complet
-        return qs, "all"
-    # Set vide → aucune exécution visible (AC7)
-    qs = qs.filter(action_id__in=allowed_ids)
-    return qs, "all"
+    # Utilisateurs non-admin : isolation des données — scope=all se replie sur scope=mine
+    # Les non-admins ne peuvent jamais voir les exécutions des autres utilisateurs (AC3 sécurité)
+    qs = qs.filter(user_id=user.id)
+    return qs, "mine"
 
 
 def apply_execution_filters(qs: QuerySet, *, request: Request) -> tuple[QuerySet, date | None, date | None]:

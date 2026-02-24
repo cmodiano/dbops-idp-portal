@@ -277,67 +277,51 @@ class TestApplyScopeFilter(TestCase):
         qs.filter.assert_not_called()
 
     def test_all_scope_for_non_dba_with_specific_action_permissions(self):
-        """Story 36.1 — subtask 2.2: non-admin filtre par action IDs autorisés (AC2, AC6)."""
+        """Non-admin avec scope=all → repli sur scope=mine (isolation des données, AC3 sécurité)."""
         user = MagicMock()
         user.id = 42
         user.profile = "business"
         qs = MagicMock()
 
-        with patch(
-            'executions.utils.filters.get_allowed_action_ids_for_user',
-            return_value={1, 2, 3}
-        ):
-            result_qs, effective = apply_scope_filter(qs, user=user, scope="all")
+        result_qs, effective = apply_scope_filter(qs, user=user, scope="all")
 
-        assert effective == "all"
-        qs.filter.assert_called_once_with(action_id__in={1, 2, 3})
+        assert effective == "mine"
+        qs.filter.assert_called_once_with(user_id=42)
 
     def test_all_scope_for_non_dba_with_all_access_permission(self):
-        """Story 36.1 — subtask 2.3: None retourné → accès complet, aucun filtre (AC2)."""
+        """Non-admin avec scope=all → repli sur scope=mine, même si profil 'all' (isolation AC3)."""
         user = MagicMock()
         user.id = 42
         user.profile = "business"
         qs = MagicMock()
 
-        with patch(
-            'executions.utils.filters.get_allowed_action_ids_for_user',
-            return_value=None
-        ):
-            result_qs, effective = apply_scope_filter(qs, user=user, scope="all")
+        result_qs, effective = apply_scope_filter(qs, user=user, scope="all")
 
-        assert effective == "all"
-        qs.filter.assert_not_called()
+        assert effective == "mine"
+        qs.filter.assert_called_once_with(user_id=42)
 
     def test_all_scope_for_non_dba_with_empty_permissions(self):
-        """Story 36.1 — subtask 2.4: set() vide → filter appelé, résultat vide (AC7)."""
+        """Non-admin avec scope=all → repli sur scope=mine (isolation AC3)."""
         user = MagicMock()
         user.id = 42
         user.profile = "business"
         qs = MagicMock()
 
-        with patch(
-            'executions.utils.filters.get_allowed_action_ids_for_user',
-            return_value=set()
-        ):
-            result_qs, effective = apply_scope_filter(qs, user=user, scope="all")
+        result_qs, effective = apply_scope_filter(qs, user=user, scope="all")
 
-        assert effective == "all"
-        qs.filter.assert_called_once_with(action_id__in=set())
+        assert effective == "mine"
+        qs.filter.assert_called_once_with(user_id=42)
 
-    def test_all_scope_returns_all_as_effective_scope_for_any_user(self):
-        """Story 36.1 — subtask 2.5: effective_scope == 'all' même pour non-admin (AC6)."""
+    def test_all_scope_returns_mine_as_effective_scope_for_non_admin(self):
+        """Non-admin avec scope=all → effective_scope == 'mine' (isolation données AC3)."""
         user = MagicMock()
         user.id = 42
         user.profile = "business"
         qs = MagicMock()
 
-        with patch(
-            'executions.utils.filters.get_allowed_action_ids_for_user',
-            return_value={10, 20}
-        ):
-            result_qs, effective = apply_scope_filter(qs, user=user, scope="all")
+        result_qs, effective = apply_scope_filter(qs, user=user, scope="all")
 
-        assert effective == "all"  # Pas de fallback silencieux vers 'mine'
+        assert effective == "mine"  # Isolation des données : non-admin voit uniquement ses exécutions
 
     def test_invalid_scope_raises_bad_request(self):
         user = MagicMock()
@@ -353,8 +337,7 @@ class TestApplyScopeFilter(TestCase):
         user.profile = "business"
         qs = MagicMock()
 
-        with patch('executions.utils.filters.get_allowed_action_ids_for_user', return_value=set()):
-            result_qs, effective = apply_scope_filter(qs, user=user, scope=None)
+        result_qs, effective = apply_scope_filter(qs, user=user, scope=None)
         assert effective == "mine"
 
 
