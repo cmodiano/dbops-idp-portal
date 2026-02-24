@@ -8,3 +8,6 @@ CODE_REVIEW_*_FINDINGS.md
 # Claude per-developer local settings (user-specific, do not share)
 .claude/settings.local.json
 
+# BMAD workflow artifacts (dev/planning only — not for production branches)
+_bmad-output/
+
