@@ -244,6 +244,7 @@ describe('IntegrationForm', () => {
         credential_ref: null,
         icon: null,
         auth_flow: null,
+        token_url: null, // Story 31.11: null quand flow non-token
       })
     );
     expect(mockOnSuccess).toHaveBeenCalled();
@@ -713,6 +714,15 @@ describe('IntegrationForm', () => {
       });
     });
 
+    it('31.11: champ absent quand auth_flow = pat', async () => {
+      const user = userEvent.setup();
+      renderWithApp(<IntegrationForm {...defaultProps} />);
+      await selectAuthFlow(user, 'PAT (Personal Access Token)');
+      await waitFor(() => {
+        expect(screen.queryByLabelText(/URL du token/)).not.toBeInTheDocument();
+      });
+    });
+
     it('31.11: champ absent quand aucun flow sélectionné', () => {
       renderWithApp(<IntegrationForm {...defaultProps} />);
       expect(screen.queryByLabelText(/URL du token/)).not.toBeInTheDocument();
@@ -737,10 +747,10 @@ describe('IntegrationForm', () => {
       });
     });
 
-    it('31.11: URL invalide → message d\'erreur à la validation', async () => {
+    it('31.11: URL invalide → champ marqué invalid à la validation', async () => {
       const user = userEvent.setup();
       renderWithApp(<IntegrationForm {...defaultProps} />);
-      // Fill required fields first so only token_url validation fails
+      // Fill required fields so that only token_url validation fails
       await selectType(user, /Type d'intégration/, 'Ansible Automation Platform');
       await user.type(screen.getByLabelText(/^Nom/), 'Test');
       await user.type(screen.getByLabelText(/URL de base/), 'https://aap.example.com');
@@ -750,9 +760,12 @@ describe('IntegrationForm', () => {
       });
       await user.type(screen.getByLabelText(/URL du token/), 'not-a-valid-url');
       await user.click(screen.getByRole('button', { name: /Créer/i }));
+      // Validation fails: token_url has invalid URL → input should be marked aria-invalid
       await waitFor(() => {
-        expect(screen.getByText(/L'URL doit être valide/)).toBeInTheDocument();
-      });
+        expect(screen.getByLabelText(/URL du token/)).toHaveAttribute('aria-invalid', 'true');
+      }, { timeout: 5000 });
+      // Also verify onSubmit was NOT called (validation rejected)
+      expect(mockOnSubmit).not.toHaveBeenCalled();
     }, 15000);
 
     it('31.11: soumission avec flow token → payload inclut token_url', async () => {

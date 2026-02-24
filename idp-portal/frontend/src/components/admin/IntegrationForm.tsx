@@ -1,8 +1,9 @@
 /**
- * IntegrationForm — création/édition d'intégration (Story 2.28, 4.9, 13.1, 24.2, 27.11).
+ * IntegrationForm — création/édition d'intégration (Story 2.28, 4.9, 13.1, 24.2, 27.11, 31.11).
  * Story 24.2: Type restreint au catalogue backend (Select), actions disponibles, mode édition disabled, validation type actif.
  * Story 13.1: Si type = inventory_db, champs Schéma et Table (config) pour inventaire BD.
  * Story 27.11: credential_ref masqué si type vault, texte d'aide secret 0, champ secret_service_id pour types != vault.
+ * Story 31.11: Champ token_url conditionnel (visible si flow = token | basic_then_token), inclus dans le payload.
  */
 
 import { useEffect, useState } from 'react';
