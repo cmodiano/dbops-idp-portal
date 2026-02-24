@@ -283,7 +283,7 @@ def poll_platform_job_status(
     Returns:
         dict avec outcome: 'complete' | 'polling' | 'error' | 'exhausted'.
     """
-    import asyncio
+    from asgiref.sync import async_to_sync  # noqa: PLC0415
     import executions.tasks as _tasks  # noqa: PLC0415
 
     correlation_id = _tasks.get_correlation_id()
@@ -310,19 +310,15 @@ def poll_platform_job_status(
             **(adapter_kwargs or {}),
         )
 
-        status_data = asyncio.run(
-            adapter.get_status(
-                platform_job_id=platform_job_id,
-                correlation_id=correlation_id,
-                **(poll_kwargs or {}),
-            )
+        status_data = async_to_sync(adapter.get_status)(
+            platform_job_id=platform_job_id,
+            correlation_id=correlation_id,
+            **(poll_kwargs or {}),
         )
-        logs_data = asyncio.run(
-            adapter.get_job_logs(
-                platform_job_id=platform_job_id,
-                correlation_id=correlation_id,
-                **(poll_kwargs or {}),
-            )
+        logs_data = async_to_sync(adapter.get_job_logs)(
+            platform_job_id=platform_job_id,
+            correlation_id=correlation_id,
+            **(poll_kwargs or {}),
         )
     except Exception as e:
         logger.error(

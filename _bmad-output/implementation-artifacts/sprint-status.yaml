@@ -489,7 +489,7 @@ development_status:
     38-1-quick-wins-backend-n1-double-update-todo-log: done # NEW-BE-1, NEW-BE-2, NEW-BE-3, NEW-BE-5 — code-review 2026-02-23: 1M fixé (double ligne commentaire), 2L action items
     38-2-consolidation-status-config-residuel-frontend: done # SOLID-FE-10, 16.4 — consolidation EXECUTION_STATUS_TAG_COLORS, migration ComparisonExecutionsDrawer, commentaires SOLID-FE-10; code-review 2026-02-23: 1M fixé (tests manquants), 2L fixés
     38-3-frontend-nested-key-props-topnav: done # NEW-FE-1 — code-review 2026-02-23: 0H 1M 2L, L1 fixé (doc AC3), M1+L2 notés
-    38-4-backend-asyncio-run-to-async-to-sync-polling: backlog # NEW-BE-4
+    38-4-backend-asyncio-run-to-async-to-sync-polling: done # NEW-BE-4 — code-review 2026-02-23: 0H 1M 2L, M1 fixé (docstring test), L1 fixé (completion notes), L2 noté
     38-5-audit-except-exception-residuels-documentation: backlog # 16.2
     38-6-migration-dip-services-composants-hooks: backlog # SOLID-FE-4
     epic-38-retrospective: optional
