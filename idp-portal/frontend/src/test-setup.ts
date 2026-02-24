@@ -2,6 +2,9 @@
  * Test setup for Vitest with React Testing Library.
  */
 
+// Force UTC timezone for deterministic date rendering across environments
+process.env.TZ = 'UTC';
+
 import '@testing-library/jest-dom';
 
 // Mock matchMedia for Ant Design components
