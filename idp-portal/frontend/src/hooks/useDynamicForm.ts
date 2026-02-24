@@ -22,6 +22,8 @@ export interface ParameterField {
   default?: unknown;
   /** Story 23.5: Inventory source type for inventory-backed fields. */
   inventorySource?: InventorySourceType;
+  /** Story 37.5: Column to use as value/label in inventory dropdowns. */
+  inventoryValueColumn?: string;
 }
 
 export function extractParameterFields(schema: Record<string, unknown> | null): ParameterField[] {
@@ -77,6 +79,12 @@ export function extractParameterFields(schema: Record<string, unknown> | null): 
           return undefined;
         }
         return invType as InventorySourceType;
+      })(),
+      // Extraire inventoryValueColumn depuis le schéma (Story 37.5)
+      inventoryValueColumn: (() => {
+        if ((prop as Record<string, unknown>)?.source !== 'inventory') return undefined;
+        const col = (prop as Record<string, unknown>)?.inventory_value_column as string | undefined;
+        return col || undefined;
       })(),
     };
   });

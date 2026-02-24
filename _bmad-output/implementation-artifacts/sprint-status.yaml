@@ -481,5 +481,5 @@ development_status:
     37-2-filtre-engine-type-instances-databases-backend: done # code-review 2026-02-23: 2 MEDIUM + 2 LOW fixes (env conditionnel multi-server, tests serializer engine_type, db_select supprimé, help_text), 104/104 tests pass
     37-3-frontend-passer-engine-type-appels-inventaire: done # code-review 2026-02-23: 2 MEDIUM fixes (DEV-log previous value bug x2, coverage databases engine_type AC2+AC3), 24/24 tests pass
     37-4-parametre-inventory-value-column-backend: done # code-review 2026-02-23: 2 MEDIUM + 3 LOW fixes (invariant test VALID_INVENTORY_VALUE_COLUMNS↔VALID_INVENTORY_TYPES, multi-param test, docstring, assertion L4, empty string edge case), 36/36 tests pass
-    37-5-parametre-inventory-value-column-frontend: backlog
+    37-5-parametre-inventory-value-column-frontend: done # code-review 2026-02-23: 2 HIGH + 2 MEDIUM + 1 LOW fixes (double onParamChange React batching bug, no-op tests replaced, empty string fallback), 100/100 tests pass
     epic-37-retrospective: optional

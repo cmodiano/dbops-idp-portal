@@ -66,6 +66,10 @@ export function schemaToParameterList(schema: ParametersJsonSchema | null | unde
     if (typeof prop.inventory_type === 'string' && ['servers', 'instances', 'databases'].includes(prop.inventory_type)) {
       def.inventory_type = prop.inventory_type as ParameterDefinition['inventory_type'];
     }
+    // Story 37.5: Extract inventory_value_column from schema properties
+    if (typeof prop.inventory_value_column === 'string' && prop.inventory_value_column) {
+      def.inventory_value_column = prop.inventory_value_column;
+    }
     list.push(def);
   }
   return list;
@@ -111,6 +115,10 @@ export function parameterListToSchema(list: ParameterDefinition[]): ParametersJs
       (base as Record<string, unknown>).source = 'inventory';
       if (p.inventory_type) {
         (base as Record<string, unknown>).inventory_type = p.inventory_type;
+      }
+      // Story 37.5: Write inventory_value_column only within inventory source block
+      if (p.inventory_value_column) {
+        (base as Record<string, unknown>).inventory_value_column = p.inventory_value_column;
       }
     }
     properties[name] = base;

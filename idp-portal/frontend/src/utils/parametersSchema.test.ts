@@ -287,3 +287,96 @@ describe('Story 23.5 - Inventory source/type in parameters schema', () => {
     });
   });
 });
+
+// Story 37.5: Tests pour inventory_value_column
+describe('Story 37.5 - inventory_value_column in parameters schema', () => {
+  it('test_schema_to_list_extracts_inventory_value_column', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        inst_ref: {
+          type: 'string',
+          source: 'inventory',
+          inventory_type: 'instances',
+          inventory_value_column: 'server_ref',
+        },
+      },
+    };
+    const list = schemaToParameterList(schema);
+    expect(list).toHaveLength(1);
+    expect(list[0].inventory_value_column).toBe('server_ref');
+    expect(list[0].source).toBe('inventory');
+    expect(list[0].inventory_type).toBe('instances');
+  });
+
+  it('test_schema_to_list_absent_inventory_value_column', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        srv: {
+          type: 'string',
+          source: 'inventory',
+          inventory_type: 'servers',
+        },
+      },
+    };
+    const list = schemaToParameterList(schema);
+    expect(list[0].inventory_value_column).toBeUndefined();
+  });
+
+  it('test_list_to_schema_writes_inventory_value_column', () => {
+    const list: ParameterDefinition[] = [
+      {
+        name: 'env_ref',
+        type: 'string',
+        required: false,
+        source: 'inventory',
+        inventory_type: 'servers',
+        inventory_value_column: 'environment',
+      },
+    ];
+    const schema = parameterListToSchema(list);
+    expect(schema?.properties?.env_ref).toMatchObject({
+      source: 'inventory',
+      inventory_type: 'servers',
+      inventory_value_column: 'environment',
+    });
+  });
+
+  it('test_list_to_schema_omits_inventory_value_column_when_absent', () => {
+    const list: ParameterDefinition[] = [
+      {
+        name: 'srv',
+        type: 'string',
+        required: false,
+        source: 'inventory',
+        inventory_type: 'servers',
+      },
+    ];
+    const schema = parameterListToSchema(list);
+    expect(schema?.properties?.srv).not.toHaveProperty('inventory_value_column');
+  });
+
+  it('test_round_trip_inventory_value_column', () => {
+    const original = {
+      type: 'object',
+      properties: {
+        db_ref: {
+          type: 'string',
+          source: 'inventory',
+          inventory_type: 'databases',
+          inventory_value_column: 'id',
+        },
+      },
+      required: ['db_ref'],
+    };
+    const list = schemaToParameterList(original);
+    const back = parameterListToSchema(list);
+    expect(back?.properties?.db_ref).toMatchObject({
+      source: 'inventory',
+      inventory_type: 'databases',
+      inventory_value_column: 'id',
+    });
+    expect(back?.required).toContain('db_ref');
+  });
+});

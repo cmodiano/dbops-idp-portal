@@ -73,10 +73,15 @@ export function renderFieldInput(
             (String(option?.label ?? '')).toLowerCase().includes(input.toLowerCase())
           }
           notFoundContent={loadingInventory ? undefined : notFoundMessage}
-          options={items.map((item) => ({
-            value: item.id,
-            label: item.name,
-          }))}
+          options={items.map((item) => {
+            // Story 37.5: Use configured column if set, else default (id as value, name as label)
+            if (field.inventoryValueColumn) {
+              const colVal = (item as Record<string, unknown>)[field.inventoryValueColumn];
+              const strVal = colVal != null && colVal !== '' ? String(colVal) : item.name;
+              return { value: strVal, label: strVal };
+            }
+            return { value: item.id, label: item.name };
+          })}
         />
         {hasWarning && (
           <Badge

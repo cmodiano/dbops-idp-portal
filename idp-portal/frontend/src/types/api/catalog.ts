@@ -329,6 +329,8 @@ export interface ParameterDefinition {
   source?: 'manual' | 'inventory';
   /** Story 23.5: Inventory entity type when source is 'inventory'. */
   inventory_type?: InventorySourceType;
+  /** Story 37.5: Column used as value/label in inventory dropdown (optional). */
+  inventory_value_column?: string;
 }
 
 /**
