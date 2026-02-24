@@ -59,6 +59,23 @@ export const STEP_STATUS_BADGE_CONFIG: Record<ExecutionStepStatus | 'CANCELLED',
   CANCELLED: { color: 'default', label: 'Annulé' },
 };
 
+/**
+ * Couleurs Ant Design <Tag color={...}> pour les statuts d'exécution.
+ * Utilisé par les composants reporting qui affichent le statut en Tag (pas Badge).
+ * Tag accepte des noms CSS ('green', 'red', 'blue') tandis que Badge utilise BadgeStatusType ('success', 'error').
+ * Cf. SOLID-FE-10 — consolidation depuis ComparisonExecutionsDrawer.
+ */
+export const EXECUTION_STATUS_TAG_COLORS: Record<ExecutionStatusType, string> = {
+  SUBMITTED: 'processing',
+  RUNNING: 'blue',
+  COMPLETED: 'green',
+  FAILED: 'red',
+  CANCELLED: 'default',
+  INTEGRATION_ERROR: 'red',
+  PENDING_APPROVAL: 'orange',
+  REJECTED: 'red',
+};
+
 /** Display config for audit execution statuses (migrated from AuditPage.tsx). */
 export const AUDIT_STATUS_CONFIG: Record<string, { color: string; label: string }> = {
   success: { color: 'success', label: 'Succès' },
