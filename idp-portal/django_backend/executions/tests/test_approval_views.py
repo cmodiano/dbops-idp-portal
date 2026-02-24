@@ -7,13 +7,13 @@ Branches NON couvertes dans test_approval_endpoints.py :
 """
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from executions.models import Execution, ExecutionStatus
+from executions.models import ExecutionStatus
 from executions.services import ExecutionService
 from executions.views.approval_views import ApproveExecutionView, RejectExecutionView
 from tests.factories import ActionFactory, ExecutionFactory, IntegrationFactory, UserFactory

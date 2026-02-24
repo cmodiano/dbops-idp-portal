@@ -9,7 +9,7 @@ Couvre les 4 fonctions :
 - validate_workflow_referenced_actions
 """
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from django.test import TestCase
 
 from core.exceptions import BadRequestError, NotFoundError

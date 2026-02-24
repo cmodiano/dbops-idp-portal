@@ -8,7 +8,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from executions.models import (
-    ScheduledExecution, ScheduledExecutionStatus, RecurringPattern,
+    ScheduledExecutionStatus, RecurringPattern,
 )
 from executions.scheduling_service import SchedulingService
 from core.models import AuditLog

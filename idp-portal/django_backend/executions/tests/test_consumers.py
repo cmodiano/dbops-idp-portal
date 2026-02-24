@@ -6,7 +6,7 @@ Stratégie : tests unitaires async avec AsyncMock pour éviter le routing ASGI c
 """
 import json
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from channels.exceptions import StopConsumer  # type: ignore[import-untyped]
 

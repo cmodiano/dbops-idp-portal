@@ -6,8 +6,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 
 # ---------------------------------------------------------------------------
 # 1.1  user=None → []

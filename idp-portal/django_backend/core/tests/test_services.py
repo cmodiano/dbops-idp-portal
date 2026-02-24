@@ -80,7 +80,7 @@ class TestAuditServiceExport(TestCase):
         content = output.read()
         assert 'Timestamp' in content
         # header seulement : une seule ligne (+ éventuel \r\n final)
-        lines = [l for l in content.splitlines() if l.strip()]
+        lines = [line for line in content.splitlines() if line.strip()]
         assert len(lines) == 1
 
     # 3.2  export_to_csv() avec données → lignes CSV correctement formatées
@@ -173,7 +173,7 @@ class TestAuditServiceExport(TestCase):
         from django.utils import timezone as dj_tz
 
         # Créer une entrée avec details non-JSON directement via le manager
-        entry = AuditLog.objects.create(
+        AuditLog.objects.create(
             user_id='raw-user',
             action_type='ACTION_CREATED',
             entity_type='raw_entity',

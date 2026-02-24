@@ -5,7 +5,6 @@ Story 39.4 — Tâche 4.
 Pattern d'import lazy : le code fait `import executions.utils as _eu` → patcher via
 `patch('executions.utils.ProfileService')`.
 """
-import pytest
 from unittest.mock import patch, MagicMock
 from django.test import TestCase
 
@@ -130,8 +129,6 @@ class TestGetAllowedActionIdsForUser(TestCase):
     def test_tag_patterns_resolved_to_action_ids(self):
         """4.8: tag_patterns → resolved via ActionTag.objects.filter(), unioned with action_ids."""
         from tests.factories import ActionFactory, TagFactory, ActionTagFactory
-        from catalog.models import ActionStatus
-
         action1 = ActionFactory(status='published')
         tag = TagFactory(name='oracle-rbac-test')
         ActionTagFactory(action=action1, tag=tag)
