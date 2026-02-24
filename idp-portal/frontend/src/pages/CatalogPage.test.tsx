@@ -242,7 +242,7 @@ describe('CatalogPage', () => {
     });
 
     // Switching to "Mes actions" also doesn't send category
-    const myActionsTab = screen.getByRole('tab', { name: /Mes actions/i });
+    const myActionsTab = await screen.findByRole('tab', { name: /Mes actions/i });
     await userEvent.click(myActionsTab);
 
     await waitFor(() => {
