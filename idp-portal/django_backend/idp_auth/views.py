@@ -308,7 +308,7 @@ class CurrentUserProfileView(APIView):
             try:
                 profile_service = ProfileService()
                 cumulative_permissions = profile_service.get_cumulative_permissions(user.id, ad_groups)  # type: ignore[arg-type]
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — graceful-degradation: ProfileService failure sets permissions to None
                 # Story 17.6: Justified broad catch - ProfileService can raise various exceptions
                 correlation_id = get_correlation_id()
                 logger.error(

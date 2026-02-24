@@ -119,7 +119,7 @@ class InventoryQueryExecutor:
 
         except InventoryServiceError:
             raise
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — logged-and-wrapped: query error wrapped in InventoryServiceError
             logger.error(
                 "mapped_query_execution_error",
                 error=str(e),
@@ -247,7 +247,7 @@ class InventoryQueryExecutor:
         except InventoryServiceError:
             # Re-raise our own exceptions
             raise
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — logged-and-wrapped: Oracle DB errors wrapped in InventoryServiceError
             # Story 17.6: Justified broad catch - Oracle DB can raise various exceptions
             logger.error(
                 "oracle_inventory_read_error",
@@ -540,7 +540,7 @@ class InventoryQueryExecutor:
                 exc_info=True,
             )
             raise InventoryServiceError(f"Database error reading {entity_plural}: {e}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — logged-and-wrapped: config read error wrapped in InventoryServiceError
             logger.error(
                 f"read_{entity_plural}_from_config_error",
                 error=str(e),

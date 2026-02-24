@@ -93,7 +93,7 @@ def _mark_execution_polling_exhausted(
             execution_id=execution_id,
             correlation_id=correlation_id,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — resilience-boundary: polling exhausted update error logged, task completes
         logger.error(
             "polling_exhausted_update_error",
             execution_id=execution_id,
@@ -167,7 +167,7 @@ def _broadcast_execution_update(
             )
     except ImportError:
         logger.debug("poll_broadcast_skipped_no_channels", execution_id=execution_id)
-    except Exception as e:  # noqa: BLE001 — broad catch justified: channels broadcast is non-critical, polling must not be interrupted
+    except Exception as e:  # noqa: BLE001 — best-effort-non-critical: channels broadcast is non-critical, polling must not be interrupted
         logger.warning(
             "poll_broadcast_error",
             execution_id=execution_id,
@@ -227,7 +227,7 @@ def _update_execution_from_poll(
             execution_id=execution_id,
             correlation_id=correlation_id,
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — resilience-boundary: poll update error logged, Celery task completes gracefully
         logger.error(
             "poll_update_error",
             execution_id=execution_id,
@@ -320,7 +320,7 @@ def poll_platform_job_status(
             correlation_id=correlation_id,
             **(poll_kwargs or {}),
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — resilience-boundary: adapter error logged, polling returns error outcome
         logger.error(
             "poll_platform_job_status_adapter_error",
             execution_id=execution_id,

@@ -252,7 +252,7 @@ class SimulationService:
                 correlation_id=get_correlation_id(),
             )
             raise  # Re-raise pour permettre Celery retry si appelé comme task
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — logged-and-reraised: simulation logs unexpected error then re-raises
             # Story 22.11: Justified broad catch - Simulation thread must handle any unexpected error gracefully
             logger.error(
                 "simulation_unexpected_error",

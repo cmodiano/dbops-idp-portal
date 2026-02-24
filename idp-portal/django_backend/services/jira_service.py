@@ -341,7 +341,7 @@ class JiraService:
                     error_code = _ERROR_CODES.get(status_code, f"JIRA_ERROR_{status_code}")
                     try:
                         error_body = response.text
-                    except Exception:  # noqa: BLE001 — httpx may raise StreamClosed, DecodeError, etc.
+                    except Exception:  # noqa: BLE001 — graceful-degradation: httpx may raise StreamClosed, DecodeError, etc.
                         error_body = ""
 
                     logger.error(
@@ -386,7 +386,7 @@ class JiraService:
             except ServiceUnavailableError:
                 raise
 
-            except Exception as exc:  # noqa: BLE001 — resilience: convert any unexpected error to ServiceUnavailableError with logging
+            except Exception as exc:  # noqa: BLE001 — logged-and-wrapped: unexpected error converted to ServiceUnavailableError with logging
                 logger.error(
                     "jira_unexpected_error",
                     url=url,

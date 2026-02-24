@@ -545,7 +545,7 @@ class ExecutionService:
                             page_me_user_name=page_me_user_name,
                             correlation_id=_correlation_id,
                         )
-                    except Exception as exc:
+                    except Exception as exc:  # noqa: BLE001 — best-effort-non-critical: notification dispatch failure must not break execution
                         logger.error(
                             "notification_dispatch_failed",
                             execution_id=_execution_id_snap,
@@ -555,7 +555,7 @@ class ExecutionService:
                         )
 
                 _tx.on_commit(_send_notifications)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — best-effort-non-critical: notification setup failure must not break execution
                 logger.error(
                     "notification_setup_failed",
                     execution_id=execution_id,

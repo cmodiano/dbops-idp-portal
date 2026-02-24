@@ -189,7 +189,7 @@ class FeatureFlagUpdateView(APIView):
                 },
                 correlation_id=get_correlation_id(),
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — best-effort-non-critical: audit failure must not block flag update
             # Story 22.11: Justified broad catch - Audit failures must not block flag updates
             logger.warning(
                 "feature_flag_audit_error",

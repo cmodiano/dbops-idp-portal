@@ -61,7 +61,7 @@ def sanitize_svg(svg_bytes: bytes) -> bytes:
     """
     try:
         root = DefusedET.fromstring(svg_bytes)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — logged-and-wrapped: XML parsing can raise various errors, wrapped in InvalidStateError
         raise InvalidStateError(
             code="INVALID_SVG",
             message="Fichier SVG invalide ou malformé",
@@ -139,7 +139,7 @@ class UploadIconView(APIView):
             return self._do_upload(request)
         except (BadRequestError, InvalidStateError):
             raise
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — logged-and-wrapped: unexpected upload error wrapped in InvalidStateError
             logger.exception(
                 "icon_upload_unexpected_error",
                 extra={"error": str(e), "error_type": type(e).__name__},

@@ -43,7 +43,7 @@ def is_cancelled(execution_id: int) -> bool:
         is_cancelled_status = _check_db(execution_id)
         cache.set(cache_key, is_cancelled_status, timeout=CANCELLATION_CACHE_TTL)
         return is_cancelled_status
-    except Exception as e:  # noqa: BLE001 — broad catch justified: Redis can fail in various ways, must fall back to DB for robustness
+    except Exception as e:  # noqa: BLE001 — resilience-boundary: Redis can fail in various ways, must fall back to DB
         # Story 20.3: Justified broad catch - Redis can fail in various ways,
         # must always fall back to DB for robustness
         logger.warning(
@@ -72,7 +72,7 @@ def mark_cancelled(execution_id: int) -> None:
     cache_key = f"execution_cancelled:{execution_id}"
     try:
         cache.set(cache_key, True, timeout=CANCELLATION_CACHE_TTL)
-    except Exception as e:  # noqa: BLE001 — broad catch justified: Redis failures should not break cancellation flow
+    except Exception as e:  # noqa: BLE001 — best-effort-non-critical: Redis failures should not break cancellation flow
         # Story 20.3: Justified broad catch - Redis failures should not break cancellation
         logger.warning(
             "cancellation_cache_mark_error",

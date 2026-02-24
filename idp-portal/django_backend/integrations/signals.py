@@ -63,7 +63,7 @@ def audit_integration_type_catalogue(sender, instance, created, **kwargs):
             },
             correlation_id=get_correlation_id(),  # Fix Issue #3
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — logged-and-reraised: SOC1 compliance requires audit trail, re-raise to prevent save
         # Story 30.8 ERR-4 (Option A — strict): Re-raise to prevent save without audit.
         # SOC1 compliance requires immutable audit trail.
         logger.critical(
@@ -98,7 +98,7 @@ def audit_integration_action(sender, instance, created, **kwargs):
             },
             correlation_id=get_correlation_id(),  # Fix Issue #3
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — logged-and-reraised: SOC1 compliance requires audit trail, re-raise to prevent save
         # Story 30.8 ERR-4 (Option A — strict): Re-raise to prevent save without audit.
         logger.critical(
             "audit_entry_creation_failed",

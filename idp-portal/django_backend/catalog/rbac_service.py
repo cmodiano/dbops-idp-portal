@@ -83,7 +83,7 @@ class CatalogRBACService:
                 cached = cache.get(cache_key)
                 if cached is not None:
                     return cast(dict, cached)
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001 — best-effort-non-critical: cache unavailability must not break permission lookups
             # Cache unavailability should not break permission lookups
             pass
 
@@ -91,7 +91,7 @@ class CatalogRBACService:
         try:
             profile_service = self._profile_service or ProfileService()
             permissions = profile_service.get_cumulative_permissions(user.id, ad_groups)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — graceful-degradation: ProfileService failure returns None (no RBAC filtering)
             # Story 17.6: Justified broad catch - ProfileService can raise various exceptions
             logger.warning(
                 "profile_service_unavailable_no_rbac_filtering",
@@ -136,7 +136,7 @@ class CatalogRBACService:
             try:
                 inventory_service = self._inventory_service or InventoryService()
                 environments = set(inventory_service.list_environments())
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — graceful-degradation: InventoryService failure falls back to default environments
                 # Story 17.6: Justified broad catch - InventoryService can raise various exceptions
                 logger.warning(
                     "inventory_service_unavailable_fallback_environments",
@@ -164,7 +164,7 @@ class CatalogRBACService:
             )
             cache_key = f'rbac:permissions:user:{user.id}:v:{cache_version}'
             cache.set(cache_key, result, RBAC_CACHE_TTL)
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001 — best-effort-non-critical: cache write failure must not break permission lookups
             # Cache unavailability should not break permission lookups
             pass
 

@@ -27,7 +27,7 @@ def get_user_ad_groups(user: Any) -> list[str]:  # Any: Django User varies (cust
     if hasattr(user, 'get_ad_groups') and callable(user.get_ad_groups):
         try:
             ad_groups = user.get_ad_groups() or []
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — graceful-degradation: get_ad_groups() can raise various DB/LDAP errors, return empty list
             # Story 17.6: Justified broad catch - get_ad_groups() can raise various exceptions
             logger.warning(
                 "get_ad_groups_failed",

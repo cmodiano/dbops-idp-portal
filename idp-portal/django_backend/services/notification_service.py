@@ -47,7 +47,7 @@ class NotificationService:
                 recipient_domain=_domain,
                 correlation_id=correlation_id,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — best-effort-non-critical: email notification failure must not break caller
             logger.error(
                 "notification_failed",
                 destination_type="email",
@@ -79,7 +79,7 @@ class NotificationService:
                 destination_type="teams",
                 correlation_id=correlation_id,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — best-effort-non-critical: Teams notification failure must not break caller
             logger.error(
                 "notification_failed",
                 destination_type="teams",
@@ -120,7 +120,7 @@ class NotificationService:
                 user_id=user_id,
                 correlation_id=correlation_id,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — best-effort-non-critical: page individual notification failure must not break caller
             logger.error(
                 "notification_failed",
                 destination_type="page_individual",
@@ -159,7 +159,7 @@ class NotificationService:
                 destination_type="page_dba",
                 correlation_id=correlation_id,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — best-effort-non-critical: page DBA notification failure must not break caller
             logger.error(
                 "notification_failed",
                 destination_type="page_dba",

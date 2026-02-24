@@ -280,7 +280,7 @@ class InventoryService:
                 correlation_id=correlation_id,
             )
             raise InventoryServiceError("Invalid inventory configuration") from e
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — logged-and-wrapped: server listing error wrapped in InventoryServiceError
             logger.error(
                 "inventory_list_servers_failed",
                 environment=environment,
@@ -372,7 +372,7 @@ class InventoryService:
                 correlation_id=correlation_id,
             )
             raise InventoryServiceError("Invalid inventory configuration") from e
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — logged-and-wrapped: instance listing error wrapped in InventoryServiceError
             logger.error(
                 "inventory_list_instances_failed",
                 environment=environment,
@@ -464,7 +464,7 @@ class InventoryService:
                 correlation_id=correlation_id,
             )
             raise InventoryServiceError("Invalid inventory configuration") from e
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — logged-and-wrapped: database listing error wrapped in InventoryServiceError
             logger.error(
                 "inventory_list_databases_failed",
                 environment=environment,

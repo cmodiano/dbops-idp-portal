@@ -201,7 +201,7 @@ class RequestResponseLoggingMiddleware:
 
             return response
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — logged-and-reraised: middleware logs error then re-raises to Django handler
             # Story 17.6: Justified broad catch - Middleware must not break request chain
             duration_ms = int((time.time() - start_time) * 1000)
             user_id = self._get_user_id(request)

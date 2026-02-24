@@ -76,7 +76,7 @@ class RBACPermissionAggregator:
             if target_perm:
                 try:
                     attr_filter = target_perm.get_filter_by_attribute()
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 — graceful-degradation: filter attribute error logged, aggregation continues
                     logger.error(
                         "rbac_filter_by_attribute_error",
                         profile_id=profile.id,
@@ -95,7 +95,7 @@ class RBACPermissionAggregator:
                             patterns=patterns,
                             correlation_id=correlation_id
                         )
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 — graceful-degradation: exclusion patterns error logged, aggregation continues
                     logger.error(
                         "rbac_exclusion_patterns_error",
                         profile_id=profile.id,

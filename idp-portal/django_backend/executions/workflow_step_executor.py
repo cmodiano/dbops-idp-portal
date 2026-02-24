@@ -321,7 +321,7 @@ class StepExecutor:
                 }
             )
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — catch-all-mark-failed: step failure marks step FAILED, logged with full traceback
             # Story 17.6: Justified broad catch - Step can raise any exception from adapters
             execution_step.status = ExecutionStepStatus.FAILED
             execution_step.completed_at = timezone.now()
@@ -450,7 +450,7 @@ class StepExecutor:
             )
             return adapter_result
 
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — graceful-degradation: adapter failure logged CRITICAL, falls back to simulated response
             # Adapter call failed (unsupported platform, missing params, network error, etc.)
             # Log CRITICAL and fall back to simulated response so the workflow can continue.
             # Real adapter failures are surfaced via the 'simulated' flag in step output.

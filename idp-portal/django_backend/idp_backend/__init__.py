@@ -26,7 +26,7 @@ def _init_oracle_client_if_needed():
 
             oracledb.init_oracle_client(lib_dir=lib_dir)
             _oracle_client_initialized = True
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — graceful-degradation: Oracle thick mode init failure falls back to thin mode
             # Story 17.6: Justified broad catch - Oracle client init can fail in various ways
             import logging
             logging.getLogger(__name__).warning(
