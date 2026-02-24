@@ -19,14 +19,20 @@ export function useExecutionSteps(executionId: number | null, enabled: boolean) 
       setError(null);
       return;
     }
+    let cancelled = false;
     setError(null);
     getExecutionSteps(executionId)
-      .then(setSteps)
+      .then((data) => {
+        if (!cancelled) setSteps(data);
+      })
       .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : 'Erreur inconnue';
-        logger.error('Failed to load execution steps', { executionId, error: message });
-        setError(message);
+        if (!cancelled) {
+          const message = err instanceof Error ? err.message : 'Erreur inconnue';
+          logger.error('Failed to load execution steps', { executionId, error: message });
+          setError(message);
+        }
       });
+    return () => { cancelled = true; };
   }, [enabled, executionId]);
 
   return { steps, error };

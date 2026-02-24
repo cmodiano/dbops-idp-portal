@@ -51,7 +51,7 @@ class NotificationService:
             logger.error(
                 "notification_failed",
                 destination_type="email",
-                error=str(exc),
+                error=type(exc).__name__,
                 correlation_id=correlation_id,
             )
 
@@ -83,7 +83,7 @@ class NotificationService:
             logger.error(
                 "notification_failed",
                 destination_type="teams",
-                error=str(exc),
+                error=type(exc).__name__,
                 correlation_id=correlation_id,
             )
 
@@ -124,7 +124,7 @@ class NotificationService:
             logger.error(
                 "notification_failed",
                 destination_type="page_individual",
-                error=str(exc),
+                error=type(exc).__name__,
                 correlation_id=correlation_id,
             )
 
@@ -163,7 +163,7 @@ class NotificationService:
             logger.error(
                 "notification_failed",
                 destination_type="page_dba",
-                error=str(exc),
+                error=type(exc).__name__,
                 correlation_id=correlation_id,
             )
 
@@ -251,11 +251,12 @@ class NotificationService:
 
             elif ch_type == "page_dba" and can_page:
                 api_url = channel.get("api_url", "")
+                event_label = "a réussi" if event == "on_success" else "a échoué"
                 self.send_page_dba(
                     api_url=api_url,
                     message=(
                         f"Action critique '{action.name}' [{env}] "
-                        f"a échoué (exécution {execution.id})"
+                        f"{event_label} (exécution {execution.id})"
                     ),
                     action_name=action.name,
                     execution_id=execution.id,
@@ -265,12 +266,13 @@ class NotificationService:
 
         # Page individuel — option à l'exécution
         if page_me and page_individual_enabled and can_page and page_me_user_id:
+            page_me_event_label = "a réussi" if event == "on_success" else "a échoué"
             self.send_page_individual(
                 user_id=page_me_user_id,
                 user_name=page_me_user_name or page_me_user_id,
                 message=(
                     f"Action '{action.name}' [{env}] "
-                    f"a échoué (exécution {execution.id})"
+                    f"{page_me_event_label} (exécution {execution.id})"
                 ),
                 action_name=action.name,
                 execution_id=execution.id,

@@ -109,7 +109,7 @@ export function CalendarPage() {
             ? 'La récurrence a été activée avec succès'
             : 'La récurrence a été désactivée avec succès',
         });
-        doFetch();
+        await doFetch();
       } else {
         notification.error({
           message: 'Erreur',

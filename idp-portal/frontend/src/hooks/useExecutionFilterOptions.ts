@@ -11,15 +11,13 @@ import type { CatalogAction } from '../services/catalog_service';
 
 export function useExecutionFilterOptions() {
   const [tags, setTags] = useState<string[]>([]);
-  const [tagsLoading, setTagsLoading] = useState(false);
   const [actions, setActions] = useState<CatalogAction[]>([]);
-  const [actionsLoading, setActionsLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   // Load tags and actions on mount
   useEffect(() => {
     let cancelled = false;
-    setTagsLoading(true);
-    setActionsLoading(true);
+    setLoading(true);
     Promise.all([
       fetchExecutionTags().catch(() => [] as string[]),
       fetchCatalogActions().catch(() => [] as CatalogAction[]),
@@ -29,13 +27,10 @@ export function useExecutionFilterOptions() {
         setActions(actionsData);
       }
     }).finally(() => {
-      if (!cancelled) {
-        setTagsLoading(false);
-        setActionsLoading(false);
-      }
+      if (!cancelled) setLoading(false);
     });
     return () => { cancelled = true; };
   }, []);
 
-  return { tags, tagsLoading, actions, actionsLoading };
+  return { tags, actions, loading };
 }

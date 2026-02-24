@@ -8,33 +8,34 @@ import { useState, useCallback } from 'react';
 import { approveExecution, rejectExecution } from '../services/execution_service';
 
 export function usePendingApprovals(onActionComplete: () => void) {
-  const [actionLoading, setActionLoading] = useState(false);
+  const [approveLoading, setApproveLoading] = useState(false);
+  const [rejectLoading, setRejectLoading] = useState(false);
 
   const approve = useCallback(async (executionId: number, comment?: string) => {
-    setActionLoading(true);
+    setApproveLoading(true);
     try {
       await approveExecution(executionId, comment);
-      onActionComplete();
+      try { onActionComplete(); } catch { /* callback errors must not mask successful approval */ }
       return { success: true as const };
     } catch (err) {
       return { success: false as const, error: err instanceof Error ? err.message : 'Erreur lors de l\'approbation' };
     } finally {
-      setActionLoading(false);
+      setApproveLoading(false);
     }
   }, [onActionComplete]);
 
   const reject = useCallback(async (executionId: number, comment?: string) => {
-    setActionLoading(true);
+    setRejectLoading(true);
     try {
       await rejectExecution(executionId, comment);
-      onActionComplete();
+      try { onActionComplete(); } catch { /* callback errors must not mask successful rejection */ }
       return { success: true as const };
     } catch (err) {
       return { success: false as const, error: err instanceof Error ? err.message : 'Erreur lors du refus' };
     } finally {
-      setActionLoading(false);
+      setRejectLoading(false);
     }
   }, [onActionComplete]);
 
-  return { approve, reject, actionLoading };
+  return { approve, reject, approveLoading, rejectLoading };
 }

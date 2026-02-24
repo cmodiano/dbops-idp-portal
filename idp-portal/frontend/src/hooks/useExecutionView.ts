@@ -28,17 +28,19 @@ export function useExecutionView(executionId: number | null) {
       return;
     }
 
+    let cancelled = false;
     setLoading(true);
     setError(null);
     getExecution(executionId)
       .then(async (data) => {
+        if (cancelled) return;
         setExecution(data);
         setError(null);
         // Load workflow definition if this is a workflow execution
         if (data.item_type === 'workflow' && data.action_id) {
           try {
             const { data: actionDetailData } = await fetchCatalogActionById(data.action_id);
-            setActionDetail(actionDetailData);
+            if (!cancelled) setActionDetail(actionDetailData);
           } catch (err) {
             logger.warn('useExecutionView: Failed to load workflow details', {
               action_id: data.action_id,
@@ -48,11 +50,12 @@ export function useExecutionView(executionId: number | null) {
         }
       })
       .catch((err) => {
-        setError(err instanceof Error ? err : new Error(String(err)));
+        if (!cancelled) setError(err instanceof Error ? err : new Error(String(err)));
       })
       .finally(() => {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       });
+    return () => { cancelled = true; };
   }, [executionId]);
 
   // Manual refresh

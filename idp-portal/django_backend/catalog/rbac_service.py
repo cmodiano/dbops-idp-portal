@@ -83,9 +83,8 @@ class CatalogRBACService:
                 cached = cache.get(cache_key)
                 if cached is not None:
                     return cast(dict, cached)
-        except Exception:  # noqa: BLE001 — best-effort-non-critical: cache unavailability must not break permission lookups
-            # Cache unavailability should not break permission lookups
-            pass
+        except Exception as e:  # noqa: BLE001 — best-effort-non-critical: cache unavailability must not break permission lookups
+            logger.debug("rbac_cache_unavailable", error=str(e), exc_info=True)
 
         ad_groups = get_user_ad_groups(user)
         try:

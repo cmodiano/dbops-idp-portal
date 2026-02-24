@@ -264,10 +264,11 @@ class InventoryService:
 
         except ValueError:
             raise
-        except InventoryServiceError:
+        except InventoryServiceError as e:
             logger.error(
                 "inventory_list_servers_failed",
                 environment=environment,
+                error=str(e),
                 correlation_id=correlation_id,
             )
             raise
@@ -356,10 +357,11 @@ class InventoryService:
 
         except ValueError:
             raise
-        except InventoryServiceError:
+        except InventoryServiceError as e:
             logger.error(
                 "inventory_list_instances_failed",
                 environment=environment,
+                error=str(e),
                 correlation_id=correlation_id,
             )
             raise
@@ -448,10 +450,11 @@ class InventoryService:
 
         except ValueError:
             raise
-        except InventoryServiceError:
+        except InventoryServiceError as e:
             logger.error(
                 "inventory_list_databases_failed",
                 environment=environment,
+                error=str(e),
                 correlation_id=correlation_id,
             )
             raise

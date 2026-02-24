@@ -73,7 +73,7 @@ export function ExecutionsFiltersPanel({
   const { environmentOptions, loading: environmentsLoading } = useEnvironments();
 
   // Story 38.6: DIP — use hook instead of direct service imports
-  const { tags, tagsLoading, actions, actionsLoading } = useExecutionFilterOptions();
+  const { tags, actions, loading: filterOptionsLoading } = useExecutionFilterOptions();
 
   const apply = useCallback(
     (newFilters: ExecutionFilters) => {
@@ -143,7 +143,7 @@ export function ExecutionsFiltersPanel({
                 allowClear
                 showSearch
                 optionFilterProp="label"
-                loading={actionsLoading}
+                loading={filterOptionsLoading}
                 value={filters.action_id}
                 onChange={(value) => apply({ ...filters, action_id: value ?? null })}
                 options={actions.map((a) => ({ label: a.name, value: a.id }))}
@@ -177,7 +177,7 @@ export function ExecutionsFiltersPanel({
                 placeholder="Tous les tags"
                 allowClear
                 maxTagCount={2}
-                loading={tagsLoading}
+                loading={filterOptionsLoading}
                 value={filters.tags ?? []}
                 onChange={(value) =>
                   apply({ ...filters, tags: value.length > 0 ? value : null })

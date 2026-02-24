@@ -18,6 +18,7 @@ export function useChildExecution(childExecutionId: number | null, enabled: bool
     if (!enabled || childExecutionId == null) {
       setChildExecution(null);
       setChildSteps([]);
+      setLoading(false);
       setError(null);
       return;
     }

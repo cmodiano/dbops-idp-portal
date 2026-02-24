@@ -8,7 +8,8 @@ import structlog
 
 from datetime import datetime, timedelta
 from django.db import transaction
-from django.db.models import Q, Count, QuerySet
+from django.db.models import Avg, ExpressionWrapper, F, Q, Count, QuerySet
+from django.db.models import DurationField
 from django.utils import timezone
 from executions.models import (
     Execution, ExecutionStep, ExecutionStatus, ExecutionStepStatus,
@@ -419,7 +420,7 @@ class ExecutionService:
             raise ValueError(f"Invalid user_id: {user_id}")
 
         try:
-            execution = Execution.objects.get(id=execution_id)
+            execution = Execution.objects.select_for_update().select_related('action').get(id=execution_id)
         except Execution.DoesNotExist:
             return None
 
@@ -502,8 +503,8 @@ class ExecutionService:
                 status=new_status,
                 correlation_id=get_correlation_id()
             )
-            audit_action_type = AuditActionType.EXECUTION_SUBMITTED  # Fallback
-        
+            return execution
+
         # Audit
         AuditService.create_entry(
             user_id=user_id,
@@ -718,33 +719,19 @@ class ExecutionService:
         )
         
         # CRITICAL-2: Calculate avg_execution_time_ms from started_at and completed_at
-        # Only for COMPLETED executions with both timestamps
+        # Only for COMPLETED executions with both timestamps — aggregated DB-side
         completed_executions = queryset.filter(
             status=ExecutionStatus.COMPLETED,
             started_at__isnull=False,
             completed_at__isnull=False
         )
-        durations = []
-        for exec in completed_executions:
-            try:
-                assert exec.completed_at is not None and exec.started_at is not None
-                delta = (exec.completed_at - exec.started_at).total_seconds() * 1000
-                if delta >= 0:
-                    durations.append(delta)
-            except (TypeError, AttributeError) as e:
-                # Story 17.6: Specific catch for invalid timestamp data
-                logger.debug(
-                    "execution_duration_calculation_skipped",
-                    execution_id=exec.id,
-                    started_at=exec.started_at,
-                    completed_at=exec.completed_at,
-                    error=str(e),
-                    error_type=type(e).__name__,
-                    correlation_id=get_correlation_id(),
-                )
-                continue
-        
-        avg_time_ms = round(sum(durations) / len(durations), 2) if durations else None
+        avg_duration = completed_executions.aggregate(
+            avg_duration=Avg(ExpressionWrapper(
+                F('completed_at') - F('started_at'),
+                output_field=DurationField()
+            ))
+        )['avg_duration']
+        avg_time_ms = round(avg_duration.total_seconds() * 1000, 2) if avg_duration else None
         
         # MEDIUM-4: Add structured logging
         logger.info(

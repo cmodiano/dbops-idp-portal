@@ -34,7 +34,7 @@ export function PendingApprovalsList({
 }: PendingApprovalsListProps) {
   const { message } = App.useApp();
   // Story 38.6: DIP — use hook instead of direct service imports
-  const { approve, reject, actionLoading } = usePendingApprovals(onActionComplete);
+  const { approve, reject, approveLoading, rejectLoading } = usePendingApprovals(onActionComplete);
   const [approveModalOpen, setApproveModalOpen] = useState(false);
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [selectedExecution, setSelectedExecution] = useState<ExecutionResponse | null>(null);
@@ -166,7 +166,7 @@ export function PendingApprovalsList({
         open={approveModalOpen}
         onCancel={() => setApproveModalOpen(false)}
         onOk={handleApproveConfirm}
-        confirmLoading={actionLoading}
+        confirmLoading={approveLoading}
         okText="Approuver"
         okButtonProps={{ style: { backgroundColor: '#10B981', borderColor: '#10B981' } }}
         cancelText="Annuler"
@@ -202,7 +202,7 @@ export function PendingApprovalsList({
         open={rejectModalOpen}
         onCancel={() => setRejectModalOpen(false)}
         onOk={handleRejectConfirm}
-        confirmLoading={actionLoading}
+        confirmLoading={rejectLoading}
         okText="Refuser"
         okButtonProps={{ danger: true }}
         cancelText="Annuler"
