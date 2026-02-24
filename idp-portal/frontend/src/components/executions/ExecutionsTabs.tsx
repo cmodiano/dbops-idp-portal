@@ -34,7 +34,7 @@ export interface ExecutionsTabsProps {
 export function ExecutionsTabs({
   activeScope,
   onScopeChange,
-  canViewAll,
+  canViewAll: _canViewAll,
 }: ExecutionsTabsProps) {
   const { effectiveMode } = useTheme();
   const isDark = effectiveMode === 'dark';

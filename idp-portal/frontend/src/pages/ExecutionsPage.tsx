@@ -67,7 +67,7 @@ export default function ExecutionsPage() {
     activeScope, setActiveScope, userHasChosenScope,
     statsData, statsLoading, timeSeriesData, timeSeriesLoading,
     pendingApprovals, pendingApprovalsLoading, loadPendingApprovals,
-    integrationIconsMap, isRefreshingRef, refetchCurrentState, refresh,
+    integrationIconsMap, isRefreshingRef, refetchCurrentState, refresh: _refresh,
     updateExecutionInList, PAGE_SIZE,
   } = useExecutionsData(filters, canApprove);
 

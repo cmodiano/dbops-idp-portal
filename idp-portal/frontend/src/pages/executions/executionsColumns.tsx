@@ -5,6 +5,7 @@
  * Defines all 9 columns for the executions table with handlers and state.
  * Pattern: pages/admin/actionsColumns.tsx
  */
+/* eslint-disable react-refresh/only-export-components */
 import { Button, Space, Tooltip } from 'antd';
 import { RedoOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import type { TableProps } from 'antd';

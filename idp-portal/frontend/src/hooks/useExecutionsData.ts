@@ -30,7 +30,6 @@ import type {
   ExecutionFilters,
   DashboardStats,
   DashboardTimeSeriesPoint,
-  ExecutionStatusType,
 } from '../types/api';
 import logger from '../services/logger';
 import { useAuth } from '../contexts/AuthContext';
