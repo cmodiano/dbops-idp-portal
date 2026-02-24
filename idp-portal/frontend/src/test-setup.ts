@@ -29,6 +29,16 @@ global.ResizeObserver = class ResizeObserver {
   disconnect() {}
 };
 
+// Suppress React "not wrapped in act(...)" warnings.
+// These are caused by async effects (data fetching, Ant Design animations) that resolve
+// after test assertions. They do not indicate bugs — just noise from concurrent state updates
+// in components rendered during tests. See: https://github.com/testing-library/react-testing-library/issues/1061
+const _originalConsoleError = console.error.bind(console);
+console.error = (...args: Parameters<typeof console.error>) => {
+  if (typeof args[0] === 'string' && args[0].includes('not wrapped in act(')) return;
+  _originalConsoleError(...args);
+};
+
 // Suppress jsdom "Not implemented: Window's getComputedStyle() with pseudo-elements"
 // jsdom does not implement pseudo-element style resolution; antd's CSS-in-JS triggers
 // this on every render, producing noise in the test output.
