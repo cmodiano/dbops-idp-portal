@@ -21,6 +21,8 @@ export interface UseTargetInventoryOptions {
   environment: string | null;
   /** Names of servers selected at step 1, used to filter instances/databases (Story 23.6). */
   selectedServerNames?: string[];
+  /** Story 37.3 - Engine type of the action to filter inventory by technology. */
+  engineType?: string | null;
 }
 
 export interface UseTargetInventoryReturn {
@@ -36,6 +38,7 @@ export function useTargetInventory({
   parameterFields,
   environment,
   selectedServerNames = [],
+  engineType = null,  // Story 37.3
 }: UseTargetInventoryOptions): UseTargetInventoryReturn {
   const [environmentsCache, setEnvironmentsCache] = useState<InventoryItem[] | null>(null);
   const [inventoryData, setInventoryData] = useState<Record<string, InventoryItem[]>>({});
@@ -44,6 +47,8 @@ export function useTargetInventory({
   const lastInventoryEnvRef = useRef<string | null>(null);
   // Story 23.6 - Track previous selectedServerNames for cache invalidation
   const lastServerNamesRef = useRef<string[] | null>(null);
+  // Story 37.3 - Track previous engineType for cache invalidation
+  const lastEngineTypeRef = useRef<string | null>(null);
   // Story 30.4 - Ref to avoid inventoryData in useEffect deps (prevents infinite loop)
   const inventoryDataRef = useRef(inventoryData);
   inventoryDataRef.current = inventoryData;
@@ -88,10 +93,11 @@ export function useTargetInventory({
     // Story 23.6 - Invalidate cache if selected servers change
     const serverNamesChanged = JSON.stringify(lastServerNamesRef.current) !== JSON.stringify(selectedServerNames);
     if (serverNamesChanged) {
+      const previousServerNames = lastServerNamesRef.current;
       lastServerNamesRef.current = selectedServerNames;
       // Story 23.6 - Log cache invalidation for debugging (HIGH-3 fix)
       if (import.meta.env.DEV) {
-        const prevNames = JSON.stringify(lastServerNamesRef.current || []);
+        const prevNames = JSON.stringify(previousServerNames || []);
         const newNames = JSON.stringify(selectedServerNames);
         // Use logger for DEV mode debugging
         logger.debug('[useTargetInventory] Cache invalidation: server_names changed', {
@@ -102,14 +108,27 @@ export function useTargetInventory({
       }
     }
 
+    // Story 37.3 - Invalidate cache if engine_type changes
+    const engineTypeChanged = lastEngineTypeRef.current !== engineType;
+    if (engineTypeChanged) {
+      const previousEngineType = lastEngineTypeRef.current;
+      lastEngineTypeRef.current = engineType;
+      if (import.meta.env.DEV) {
+        logger.debug('[useTargetInventory] Cache invalidation: engine_type changed', {
+          previous: previousEngineType,
+          current: engineType,
+          environment,
+        });
+      }
+    }
+
     const toFetch: Array<'databases' | 'servers' | 'instances'> = [];
     const cached: Record<string, InventoryItem[]> = {};
 
     sourcesToLoad.forEach((source) => {
       // Story 23.6 - For instances/databases, also invalidate on server_names change
-      const needsRefetch = source === 'instances' || source === 'databases'
-        ? envChanged || serverNamesChanged
-        : envChanged;
+      // Story 37.3 - engine_type change invalidates all inventory types (servers too)
+      const needsRefetch = envChanged || serverNamesChanged || engineTypeChanged;
       const currentData = inventoryDataRef.current;
       if (!needsRefetch && currentData[source] && currentData[source].length > 0) {
         cached[source] = currentData[source];
@@ -127,9 +146,11 @@ export function useTargetInventory({
           // Story 23.6 - Pass server_names for instances/databases
           // MEDIUM-1 fix: Validate selectedServerNames format before API call
           const validServerNames = selectedServerNames.filter(name => typeof name === 'string' && name.trim().length > 0);
+          // Story 37.3 - Pass engine_type for all inventory types
+          const engineTypeOption = engineType ? { engine_type: engineType } : {};
           const options = (source === 'instances' || source === 'databases')
-            ? { server_names: validServerNames }
-            : undefined;
+            ? { server_names: validServerNames, ...engineTypeOption }
+            : (Object.keys(engineTypeOption).length > 0 ? engineTypeOption : undefined);
           const items = await fetchInventoryItems(source, environment, options);
           setInventoryWarnings((prev) => ({ ...prev, [source]: false }));
           return [source, items] as const;
@@ -152,7 +173,7 @@ export function useTargetInventory({
       })
       .finally(() => setLoadingInventory(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps -- inventoryData excluded: read via ref to avoid infinite loop (effect calls setInventoryData)
-  }, [open, currentStep, parameterFields, environment, selectedServerNames]);
+  }, [open, currentStep, parameterFields, environment, selectedServerNames, engineType]);
 
   return {
     environmentsCache,

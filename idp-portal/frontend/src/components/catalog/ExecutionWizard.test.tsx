@@ -655,7 +655,7 @@ describe('ExecutionWizard', () => {
       });
 
       // Verify databases were fetched
-      expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', { server_names: [] });
+      expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', expect.objectContaining({ server_names: [] }));
     });
 
     it('displays warning badge when inventory unavailable (503)', async () => {
@@ -793,7 +793,7 @@ describe('ExecutionWizard', () => {
 
       // Check that fetchInventoryItems was called with databases (caching is internal to the service)
       await waitFor(() => {
-        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', { server_names: [] });
+        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', expect.objectContaining({ server_names: [] }));
       });
     });
 
@@ -904,7 +904,7 @@ describe('ExecutionWizard', () => {
 
       // Should NOT use expired cache - error should propagate without cache fallback
       await waitFor(() => {
-        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', { server_names: [] });
+        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', expect.objectContaining({ server_names: [] }));
       });
 
       // Verify error is shown (no cache fallback for expired data)
@@ -933,7 +933,7 @@ describe('ExecutionWizard', () => {
       await user.click(screen.getByRole('button', { name: /suivant/i }));
 
       await waitFor(() => {
-        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', { server_names: [] });
+        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', expect.objectContaining({ server_names: [] }));
       });
 
       // Verify no sessionStorage.setItem calls for inventory_cache_databases_dev
@@ -971,7 +971,7 @@ describe('ExecutionWizard', () => {
       await user.click(screen.getByRole('button', { name: /suivant/i }));
 
       await waitFor(() => {
-        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', { server_names: [] });
+        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', expect.objectContaining({ server_names: [] }));
       });
 
       // Verify old localStorage data still exists (migration doesn't auto-clean)

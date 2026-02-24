@@ -234,6 +234,153 @@ describe('useTargetInventory - Story 23.6', () => {
     });
   });
 
+  it('test_engine_type_passed_to_fetch_servers : passe engine_type à fetchInventoryItems pour servers', async () => {
+    renderHook(() =>
+      useTargetInventory({
+        open: true,
+        currentStep: 1,
+        parameterFields: [{ inventorySource: 'servers' }],
+        environment: 'dev',
+        selectedServerNames: [],
+        engineType: 'Oracle',
+      })
+    );
+
+    await waitFor(() => {
+      expect(fetchInventoryItems).toHaveBeenCalledWith(
+        'servers',
+        'dev',
+        expect.objectContaining({ engine_type: 'Oracle' })
+      );
+    });
+  });
+
+  it('test_engine_type_passed_to_fetch_instances : passe engine_type à fetchInventoryItems pour instances', async () => {
+    renderHook(() =>
+      useTargetInventory({
+        open: true,
+        currentStep: 1,
+        parameterFields: [{ inventorySource: 'instances' }],
+        environment: 'dev',
+        selectedServerNames: ['srv01'],
+        engineType: 'Oracle',
+      })
+    );
+
+    await waitFor(() => {
+      expect(fetchInventoryItems).toHaveBeenCalledWith(
+        'instances',
+        'dev',
+        expect.objectContaining({ engine_type: 'Oracle', server_names: ['srv01'] })
+      );
+    });
+  });
+
+  it('test_engine_type_change_invalidates_cache : changement engineType → rechargement inventaire', async () => {
+    const { rerender } = renderHook(
+      (props) =>
+        useTargetInventory({
+          open: true,
+          currentStep: 1,
+          parameterFields: [{ inventorySource: 'servers' }],
+          environment: 'dev',
+          selectedServerNames: [],
+          engineType: props.engineType,
+        }),
+      { initialProps: { engineType: 'Oracle' as string | null } }
+    );
+
+    await waitFor(() => {
+      expect(fetchInventoryItems).toHaveBeenCalledWith(
+        'servers',
+        'dev',
+        expect.objectContaining({ engine_type: 'Oracle' })
+      );
+    });
+
+    const callsAfterFirstLoad = vi.mocked(fetchInventoryItems).mock.calls.filter(
+      (call) => call[0] === 'servers'
+    ).length;
+
+    // Changer engineType → devrait déclencher un rechargement
+    rerender({ engineType: 'SQL Server' });
+
+    await waitFor(() => {
+      const serversCalls = vi.mocked(fetchInventoryItems).mock.calls.filter(
+        (call) => call[0] === 'servers'
+      );
+      expect(serversCalls.length).toBeGreaterThan(callsAfterFirstLoad);
+      const lastCall = serversCalls[serversCalls.length - 1];
+      expect(lastCall[2]).toEqual(expect.objectContaining({ engine_type: 'SQL Server' }));
+    });
+  });
+
+  it('test_no_engine_type_no_filter : action sans engine → fetchInventoryItems sans engine_type (AC3)', async () => {
+    renderHook(() =>
+      useTargetInventory({
+        open: true,
+        currentStep: 1,
+        parameterFields: [{ inventorySource: 'servers' }],
+        environment: 'dev',
+        selectedServerNames: [],
+        engineType: null,
+      })
+    );
+
+    await waitFor(() => {
+      const serversCalls = vi.mocked(fetchInventoryItems).mock.calls.filter(
+        (call) => call[0] === 'servers'
+      );
+      expect(serversCalls.length).toBeGreaterThanOrEqual(1);
+      const lastCall = serversCalls[serversCalls.length - 1];
+      // engine_type ne doit pas être présent (undefined ou absent)
+      expect(lastCall[2]?.engine_type).toBeUndefined();
+    });
+  });
+
+  it('test_engine_type_passed_to_fetch_databases : passe engine_type à fetchInventoryItems pour databases (AC2)', async () => {
+    renderHook(() =>
+      useTargetInventory({
+        open: true,
+        currentStep: 1,
+        parameterFields: [{ inventorySource: 'databases' }],
+        environment: 'dev',
+        selectedServerNames: ['srv01'],
+        engineType: 'Oracle',
+      })
+    );
+
+    await waitFor(() => {
+      expect(fetchInventoryItems).toHaveBeenCalledWith(
+        'databases',
+        'dev',
+        expect.objectContaining({ engine_type: 'Oracle', server_names: ['srv01'] })
+      );
+    });
+  });
+
+  it('test_no_engine_type_databases : databases sans engine → engine_type absent (AC3)', async () => {
+    renderHook(() =>
+      useTargetInventory({
+        open: true,
+        currentStep: 1,
+        parameterFields: [{ inventorySource: 'databases' }],
+        environment: 'dev_ac3_db',
+        selectedServerNames: [],
+        engineType: null,
+      })
+    );
+
+    await waitFor(() => {
+      const dbCalls = vi.mocked(fetchInventoryItems).mock.calls.filter(
+        (call) => call[0] === 'databases'
+      );
+      expect(dbCalls.length).toBeGreaterThanOrEqual(1);
+      const lastCall = dbCalls[dbCalls.length - 1];
+      expect(lastCall[2]?.engine_type).toBeUndefined();
+    });
+  });
+
   it('pas de rechargement si selectedServerNames inchangé', async () => {
     // Use a separate spy to track calls precisely
     const spy = vi.fn();
