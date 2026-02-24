@@ -4,13 +4,22 @@
 name: CI
 
 on:
+  workflow_dispatch:  # Run manually (e.g. for develop branch); gate job allows manual runs
   push:
     branches: [main]
   pull_request:
     branches: [main]
 
 jobs:
+  gate:
+    if: (github.ref != 'refs/heads/develop' && github.base_ref != 'develop' && github.head_ref != 'develop') || github.event_name == 'workflow_dispatch'
+    name: Gate
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Gate passed"
+
   lint-backend:
+    needs: [gate]
     name: Lint Django Backend (ruff)
     runs-on: ubuntu-latest
     steps:
@@ -25,6 +34,7 @@ jobs:
         run: ruff check .
 
   lint-frontend:
+    needs: [gate]
     name: Lint Frontend (eslint)
     runs-on: ubuntu-latest
     steps:
@@ -40,6 +50,7 @@ jobs:
         run: npm run lint
 
   verify-lockfiles:
+    needs: [gate]
     name: Verify Lockfiles Up-to-Date
     runs-on: ubuntu-latest
     steps:
@@ -67,6 +78,7 @@ jobs:
           }
 
   typecheck-backend:
+    needs: [gate]
     name: Type Check Django Backend (mypy)
     runs-on: ubuntu-latest
     steps:
@@ -86,6 +98,7 @@ jobs:
         run: mypy . --no-error-summary
 
   typecheck-frontend:
+    needs: [gate]
     name: Type Check Frontend (tsc)
     runs-on: ubuntu-latest
     steps:
@@ -101,6 +114,7 @@ jobs:
         run: npx tsc -b --noEmit
 
   test-backend:
+    needs: [gate]
     name: Test Django Backend (pytest)
     runs-on: ubuntu-latest
     steps:
@@ -118,6 +132,7 @@ jobs:
         run: pytest tests/ -v --ignore=tests/integration/
 
   test-frontend:
+    needs: [gate]
     name: Test Frontend (vitest)
     runs-on: ubuntu-latest
     steps:
@@ -148,9 +163,9 @@ jobs:
           retention-days: 7
 
   build-frontend:
+    needs: [gate, lint-frontend, typecheck-frontend, test-frontend]
     name: Build Frontend (vite)
     runs-on: ubuntu-latest
-    needs: [lint-frontend, typecheck-frontend, test-frontend]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -190,6 +205,7 @@ jobs:
   # =============================================================
 
   security-functional-tests:
+    needs: [gate]
     name: Security Functional Tests (pytest -m security)
     runs-on: ubuntu-latest
     steps:
@@ -221,6 +237,7 @@ jobs:
           retention-days: 30
 
   security-sast-backend:
+    needs: [gate]
     name: SAST Backend (Bandit)
     runs-on: ubuntu-latest
     steps:
@@ -246,6 +263,7 @@ jobs:
           retention-days: 30
 
   security-dependencies-backend:
+    needs: [gate]
     name: Dependency Scan Backend (pip-audit)
     runs-on: ubuntu-latest
     steps:
@@ -281,6 +299,7 @@ jobs:
           retention-days: 30
 
   security-dependencies-frontend:
+    needs: [gate]
     name: Dependency Scan Frontend (npm audit)
     runs-on: ubuntu-latest
     steps:
@@ -310,6 +329,7 @@ jobs:
           retention-days: 30
 
   security-secrets:
+    needs: [gate]
     name: Secret Detection (detect-secrets)
     runs-on: ubuntu-latest
     steps:

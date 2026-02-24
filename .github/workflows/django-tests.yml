@@ -4,14 +4,21 @@
 name: Django Tests
 
 on:
+  workflow_dispatch:  # Run manually (e.g. for develop branch)
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
+    paths:
+      - 'idp-portal/django_backend/**'
+      - '.github/workflows/django-tests.yml'
+  pull_request:
+    branches: [ main ]
     paths:
       - 'idp-portal/django_backend/**'
       - '.github/workflows/django-tests.yml'
 
 jobs:
   test:
+    if: (github.ref != 'refs/heads/develop' && github.base_ref != 'develop') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -71,6 +78,7 @@ jobs:
           retention-days: 7
 
   lint:
+    if: (github.ref != 'refs/heads/develop' && github.base_ref != 'develop') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -84,6 +92,7 @@ jobs:
         run: ruff check .
 
   type-check:
+    if: (github.ref != 'refs/heads/develop' && github.base_ref != 'develop') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

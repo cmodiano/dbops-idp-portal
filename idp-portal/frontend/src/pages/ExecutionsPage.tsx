@@ -53,7 +53,9 @@ export default function ExecutionsPage() {
     user?.profile?.toLowerCase() === 'dba' || user?.profile?.toLowerCase() === 'dbops',
     [user?.profile]
   );
-  const canViewAll = canApprove;
+  // Story 36.1 AC1: tous les utilisateurs authentifiés voient l'onglet "Toutes les exécutions".
+  // Le backend applique le filtrage RBAC par action IDs autorisés.
+  const canViewAll = true;
 
   // Filters (Story 9.10)
   const { filters, applyFilters, resetFilters, activeFilterCount } = useExecutionFilters();
@@ -65,16 +67,18 @@ export default function ExecutionsPage() {
     activeScope, setActiveScope, userHasChosenScope,
     statsData, statsLoading, timeSeriesData, timeSeriesLoading,
     pendingApprovals, pendingApprovalsLoading, loadPendingApprovals,
-    integrationIconsMap, isRefreshingRef, refetchCurrentState, PAGE_SIZE,
+    integrationIconsMap, isRefreshingRef, refetchCurrentState, refresh,
+    updateExecutionInList, PAGE_SIZE,
   } = useExecutionsData(filters, canApprove);
 
-  // Scope sync (Story 8.9)
+  // Scope sync (Story 8.9, 36.1)
+  // Story 36.1 AC1: scope par défaut = 'all' pour tous les utilisateurs authentifiés.
+  // Le backend filtre selon les droits RBAC, pas le frontend.
   useEffect(() => {
     if (userHasChosenScope.current) return;
-    if (authLoading) { if (activeScope !== 'mine') setActiveScope('mine'); return; }
-    if (canViewAll && activeScope === 'mine') { setActiveScope('all'); return; }
-    if (!canViewAll && activeScope === 'all') { setActiveScope('mine'); }
-  }, [authLoading, canViewAll, activeScope, setActiveScope, userHasChosenScope]);
+    if (authLoading) { if (activeScope !== 'all') setActiveScope('all'); return; }
+    if (activeScope === 'mine') setActiveScope('all');
+  }, [authLoading, activeScope, setActiveScope, userHasChosenScope]);
 
   // Drawer hook (Story 26.4 AC2)
   const {
@@ -91,6 +95,11 @@ export default function ExecutionsPage() {
     restartWizardOpen, restartAction, restartAllowedEnvs, restartInitialParams,
     restartLoadingId, handleRestartExecution, handleRestartWizardClose, handleRestartSuccess,
   } = useExecutionRestart(refetchCurrentState, isRefreshingRef);
+
+  // Story 36.2 AC4: after wizard success, refresh via useExecutionRestart's refetchCurrentState (no duplicate fetch)
+  const handleWizardSuccess = useCallback((executionId: number) => {
+    handleRestartSuccess(executionId);
+  }, [handleRestartSuccess]);
 
   // Cancel handler (Story 17.14)
   const handleCancelExecution = useCallback((executionId: number) => {
@@ -132,6 +141,14 @@ export default function ExecutionsPage() {
     setActiveScope(scope);
     setCurrentPage(1);
   }, [setActiveScope, setCurrentPage, userHasChosenScope]);
+
+  // When detail drawer receives real-time execution update (e.g. completion), sync list
+  const handleExecutionUpdate = useCallback(
+    (updated: ExecutionResponse) => {
+      updateExecutionInList(updated.id, updated);
+    },
+    [updateExecutionInList],
+  );
 
   // Approval complete (Story 8.8, 22.14)
   const handleApprovalComplete = useCallback(() => {
@@ -181,9 +198,9 @@ export default function ExecutionsPage() {
   const columns = useMemo(() =>
     getExecutionsColumns(
       { onCancelExecution: handleCancelExecution, onRestartExecution: handleRestartExecution },
-      { activeScope, sortField, sortOrder, integrationIconsMap, user, canViewAll, cancellingId, restartLoadingId },
+      { activeScope, sortField, sortOrder, integrationIconsMap, user, canViewAll, canManage: canApprove, cancellingId, restartLoadingId },
     ),
-    [activeScope, sortField, sortOrder, integrationIconsMap, user, canViewAll, cancellingId, handleCancelExecution, restartLoadingId, handleRestartExecution]
+    [activeScope, sortField, sortOrder, integrationIconsMap, user, canViewAll, canApprove, cancellingId, handleCancelExecution, restartLoadingId, handleRestartExecution]
   );
 
   const handleTableChange = (
@@ -286,12 +303,12 @@ export default function ExecutionsPage() {
       <ExecutionDetailDrawer
         open={drawerOpen} execution={selectedExecution} steps={selectedSteps}
         actionDetail={selectedActionDetail} loading={drawerLoading} error={drawerError}
-        onClose={closeDrawer} onExecutionUpdate={() => {}}
+        onClose={closeDrawer} onExecutionUpdate={handleExecutionUpdate}
       />
 
       <ExecutionWizard
         open={restartWizardOpen} action={restartAction} allowedEnvironments={restartAllowedEnvs}
-        onCancel={handleRestartWizardClose} onSuccess={handleRestartSuccess} initialParams={restartInitialParams}
+        onCancel={handleRestartWizardClose} onSuccess={handleWizardSuccess} initialParams={restartInitialParams}
       />
     </div>
   );

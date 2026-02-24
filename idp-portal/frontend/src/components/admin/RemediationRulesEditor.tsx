@@ -217,7 +217,7 @@ const RuleCard: React.FC<RuleCardProps> = ({
           <Alert
             type="error"
             showIcon
-            message="Auto-déclenchement INTERDIT en Production"
+            title="Auto-déclenchement INTERDIT en Production"
             description="L'auto-déclenchement est bloqué en environnement Production. Cette règle sera refusée par l'API. Retirez 'prod' des environnements autorisés."
             style={{ marginTop: 8 }}
           />

@@ -58,7 +58,8 @@ def calculate_next_execution_date(pattern_type: str, pattern_config: dict, refer
             ) from exc
         # ISO weekday: Monday=1..Sunday=7
         current_dow = reference.isoweekday()
-        days_ahead = (day_of_week - current_dow) % 7
+        # `or 7` ensures same-day patterns always schedule next week, not later today
+        days_ahead = (day_of_week - current_dow) % 7 or 7
         candidate = (reference + timedelta(days=days_ahead)).replace(hour=hour, minute=minute, second=0, microsecond=0)
         if candidate <= reference:
             candidate = candidate + timedelta(days=7)

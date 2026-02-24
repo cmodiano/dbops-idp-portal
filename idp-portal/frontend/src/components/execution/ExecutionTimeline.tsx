@@ -6,7 +6,7 @@
  * JSX extracted to: ExecutionStatusBanners, RemediationPanel, TimelineList, StepLogsDrawer.
  */
 
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { LoadingOutlined } from '@ant-design/icons';
 import { Spin, Typography } from 'antd';
 import { useRemediationSuggestions } from '../../hooks/useRemediationSuggestions';
@@ -39,6 +39,8 @@ export interface ExecutionTimelineProps {
   onSuggestionClick?: (suggestion: RemediationSuggestion) => void;
   /** When true, timeline is shown inside the workflow step drawer (child execution). Do not show "Voir le workflow parent". */
   embedInWorkflowStepDrawer?: boolean;
+  /** Callback when execution is updated via real-time (e.g. completion) so parent list can sync. */
+  onExecutionUpdate?: (execution: ExecutionResponse) => void;
 }
 
 export function ExecutionTimeline({
@@ -51,6 +53,7 @@ export function ExecutionTimeline({
   errorCardVariant = 'default',
   onSuggestionClick,
   embedInWorkflowStepDrawer = false,
+  onExecutionUpdate,
 }: ExecutionTimelineProps) {
   const { steps, execution, loading, error, isPolling, useRealtime, lastMessage } = useExecutionData({
     executionId,
@@ -60,6 +63,11 @@ export function ExecutionTimeline({
   });
 
   const autoRemediationState = useAutoRemediationState(lastMessage, executionId);
+
+  // Notify parent when execution updates (e.g. RUNNING → COMPLETED) so list stays in sync
+  useEffect(() => {
+    if (execution && onExecutionUpdate) onExecutionUpdate(execution);
+  }, [execution, onExecutionUpdate]);
 
   const { expandedId, setExpandedId, logsDrawerStepId, setLogsDrawerStepId, logsDrawerStep, logsDrawerContentRef } =
     useStepUIState(steps);

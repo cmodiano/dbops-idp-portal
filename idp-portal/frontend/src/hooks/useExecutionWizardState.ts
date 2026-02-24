@@ -225,6 +225,7 @@ export function useExecutionWizardState({
     parameterFields,
     environment: envForInventory,
     selectedServerNames,
+    engineType: action?.engine ?? null,  // Story 37.3 - Filter inventory by action's engine
   });
 
   // === DIP: Workflow step actions via useWorkflowStepActions ===

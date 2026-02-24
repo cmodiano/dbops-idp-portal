@@ -73,6 +73,13 @@ const INVENTORY_TYPE_OPTIONS: { value: InventorySourceType; label: string }[] = 
   { value: 'databases', label: 'Bases de données' },
 ];
 
+/** Story 37.5: Allowed value columns per inventory type. Mirrors VALID_INVENTORY_VALUE_COLUMNS in catalog/serializers.py. */
+const INVENTORY_VALUE_COLUMN_OPTIONS: Record<InventorySourceType, { value: string; label: string }[]> = {
+  servers:   [{ value: 'name', label: 'name' }, { value: 'id', label: 'id' }, { value: 'environment', label: 'environment' }, { value: 'engine_type', label: 'engine_type' }],
+  instances: [{ value: 'name', label: 'name' }, { value: 'id', label: 'id' }, { value: 'server_ref', label: 'server_ref' }, { value: 'db_ref', label: 'db_ref' }],
+  databases: [{ value: 'name', label: 'name' }, { value: 'id', label: 'id' }],
+};
+
 interface SortableParamCardProps {
   param: ParameterDefinition;
   index: number;
@@ -230,12 +237,7 @@ const SortableParamCard: React.FC<SortableParamCardProps> = ({
           >
             <Select
               value={param.source ?? 'manual'}
-              onChange={(v) => {
-                onParamChange(index, 'source', v);
-                if (v === 'manual') {
-                  onParamChange(index, 'inventory_type', undefined);
-                }
-              }}
+              onChange={(v) => onParamChange(index, 'source', v)}
               options={SOURCE_OPTIONS}
               style={{ width: 180 }}
               placeholder="Choisir la source"
@@ -264,6 +266,30 @@ const SortableParamCard: React.FC<SortableParamCardProps> = ({
                 style={{ width: 200 }}
                 placeholder="Choisir le type d'entite"
                 aria-label={`Type inventaire parametre ${index + 1}`}
+              />
+            </Form.Item>
+          )}
+
+          {(param.source === 'inventory' && param.inventory_type) && (
+            <Form.Item
+              label={
+                <span>
+                  Colonne valeur{' '}
+                  <Tooltip title="Colonne de l'entité inventaire utilisée comme valeur et libellé du paramètre (défaut : name → id/name selon comportement actuel).">
+                    <InfoCircleOutlined style={{ color: 'rgba(0,0,0,0.45)' }} />
+                  </Tooltip>
+                </span>
+              }
+              style={{ marginBottom: 0 }}
+            >
+              <Select
+                value={param.inventory_value_column}
+                onChange={(v) => onParamChange(index, 'inventory_value_column', v || undefined)}
+                options={INVENTORY_VALUE_COLUMN_OPTIONS[param.inventory_type]}
+                style={{ width: 180 }}
+                allowClear
+                placeholder="Par défaut (name)"
+                aria-label={`Colonne valeur parametre ${index + 1}`}
               />
             </Form.Item>
           )}
@@ -303,7 +329,12 @@ export const ParametersEditor: React.FC<ParametersEditorProps> = ({ value = EMPT
       // Story 23.5: Reset inventory_type when source changes to manual
       if (fieldValue === 'manual') {
         current.inventory_type = undefined;
+        current.inventory_value_column = undefined; // Story 37.5
       }
+    } else if (field === 'inventory_type') {
+      // Story 37.5: Reset inventory_value_column when inventory_type changes (valid columns differ per type)
+      current.inventory_type = fieldValue as ParameterDefinition['inventory_type'];
+      current.inventory_value_column = undefined;
     } else {
       (current as Record<string, unknown>)[field] = fieldValue;
     }

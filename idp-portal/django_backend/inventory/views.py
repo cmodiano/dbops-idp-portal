@@ -453,6 +453,7 @@ def list_servers(request: Request) -> Response:
     description="Returns instances filtered by environment and optionally by server. Applies RBAC filtering.",
     parameters=[
         OpenApiParameter('environment', str, required=True, description="Target environment (required)"),
+        OpenApiParameter('engine_type', str, required=False, description="Filter by engine type"),
         OpenApiParameter('server_name', str, required=False, description="Filter by single server name"),
         OpenApiParameter('server_names', str, required=False, description="Filter by multiple server names (multi-value)", many=True),
     ],
@@ -486,6 +487,7 @@ def list_instances(request: Request) -> Response:
 
     params = params_serializer.validated_data
     environment = params['environment']
+    engine_type = params.get('engine_type')
     server_name = params.get('server_name')
     server_names = params.get('server_names')
 
@@ -500,6 +502,7 @@ def list_instances(request: Request) -> Response:
     try:
         instances = inventory_service.list_instances(
             environment=environment,
+            engine_type=engine_type,
             server_name=server_name,
             server_names=server_names,
         )
@@ -522,6 +525,7 @@ def list_instances(request: Request) -> Response:
         "inventory_api_list_instances",
         user_id=user.id,
         environment=environment,
+        engine_type=engine_type,
         server_filter={'server_name': server_name, 'server_names': server_names},
         nb_results=len(instances),
         correlation_id=correlation_id,
@@ -535,6 +539,7 @@ def list_instances(request: Request) -> Response:
     description="Returns databases filtered by environment and optionally by server. Applies RBAC filtering.",
     parameters=[
         OpenApiParameter('environment', str, required=True, description="Target environment (required)"),
+        OpenApiParameter('engine_type', str, required=False, description="Filter by engine type"),
         OpenApiParameter('server_name', str, required=False, description="Filter by single server name"),
         OpenApiParameter('server_names', str, required=False, description="Filter by multiple server names (multi-value)", many=True),
     ],
@@ -568,6 +573,7 @@ def list_databases(request: Request) -> Response:
 
     params = params_serializer.validated_data
     environment = params['environment']
+    engine_type = params.get('engine_type')
     server_name = params.get('server_name')
     server_names = params.get('server_names')
 
@@ -582,6 +588,7 @@ def list_databases(request: Request) -> Response:
     try:
         databases = inventory_service.list_databases(
             environment=environment,
+            engine_type=engine_type,
             server_name=server_name,
             server_names=server_names,
         )
@@ -604,6 +611,7 @@ def list_databases(request: Request) -> Response:
         "inventory_api_list_databases",
         user_id=user.id,
         environment=environment,
+        engine_type=engine_type,
         server_filter={'server_name': server_name, 'server_names': server_names},
         nb_results=len(databases),
         correlation_id=correlation_id,

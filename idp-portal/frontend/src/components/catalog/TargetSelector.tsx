@@ -188,7 +188,7 @@ export function TargetSelector({
       <Alert
         type="error"
         showIcon
-        message="Erreur"
+        title="Erreur"
         description={error}
         style={{ marginBottom: 16 }}
       />

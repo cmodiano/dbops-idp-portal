@@ -87,7 +87,7 @@ class InventoryMultiTableIntegrationTests(TestCase):
         mock_svc.list_targets_for_user.assert_called_once()
         # Verify service was called with validated server_name
         mock_svc.list_instances.assert_called_once_with(
-            environment='dev', server_name='srv01', server_names=None,
+            environment='dev', engine_type=None, server_name='srv01', server_names=None,
         )
 
     @patch('inventory.views.get_correlation_id', return_value='int-test-003')
@@ -209,5 +209,5 @@ class InventoryMultiTableIntegrationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         # Verify service called with server_names list
         mock_svc.list_instances.assert_called_once_with(
-            environment='dev', server_name=None, server_names=['srv01', 'srv02'],
+            environment='dev', engine_type=None, server_name=None, server_names=['srv01', 'srv02'],
         )

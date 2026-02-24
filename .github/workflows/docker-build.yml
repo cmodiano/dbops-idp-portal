@@ -13,6 +13,7 @@ env:
 
 jobs:
   build-backend:
+    if: github.ref != 'refs/heads/develop' && github.base_ref != 'develop' && github.head_ref != 'develop'
     name: Build Backend Image
     runs-on: ubuntu-latest
 
@@ -74,6 +75,7 @@ jobs:
           fi
 
   build-frontend:
+    if: github.ref != 'refs/heads/develop' && github.base_ref != 'develop' && github.head_ref != 'develop'
     name: Build Frontend Image
     runs-on: ubuntu-latest
 

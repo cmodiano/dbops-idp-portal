@@ -364,7 +364,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
               <Alert
                 type="warning"
                 showIcon
-                message="Aucune intégration de type plateforme n'est disponible. Créez-en une dans Admin > Intégrations."
+                title="Aucune intégration de type plateforme n'est disponible. Créez-en une dans Admin > Intégrations."
                 style={{ marginBottom: 16 }}
               />
             )}
@@ -373,7 +373,7 @@ export function ActionForm({ open, onCancel, onSubmit, loading, error, editActio
               <Alert
                 type="info"
                 showIcon
-                message={`Cette action utilise l'ancienne plateforme « ${editAction.platform} ». Sélectionnez une intégration pour la mettre à jour.`}
+                title={`Cette action utilise l'ancienne plateforme « ${editAction.platform} ». Sélectionnez une intégration pour la mettre à jour.`}
                 style={{ marginBottom: 16 }}
               />
             )}

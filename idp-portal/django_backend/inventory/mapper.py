@@ -25,6 +25,13 @@ Config format (stored in Integration.config JSON):
       }
     }
 
+  Note on environment filtering (Story 37.1):
+    When the 'servers' entity is configured, the environment filter for instances and
+    databases is derived from the servers table via JOIN, not from the local 'environment'
+    column on instances/databases. The local 'environment' column on instances/databases
+    is optional in "env-from-server" mode; it may be mapped but will be ignored for
+    environment filtering purposes.
+
   Flat table (fallback):
     {
       "flat_table": {

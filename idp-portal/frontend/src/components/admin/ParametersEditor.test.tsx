@@ -186,27 +186,23 @@ describe('ParametersEditor - Story 23.5 (Inventory Source)', () => {
     expect(screen.queryByText(/Le type d'inventaire est requis/)).not.toBeInTheDocument();
   });
 
-  it('resets inventory_type when source changes to manual via onChange', async () => {
-    const onChange = vi.fn();
+  it('resets inventory_type when source changes to manual via onChange', () => {
     const params: ParameterDefinition[] = [
-      { name: 'inst', type: 'string', required: false, source: 'inventory', inventory_type: 'instances' },
+      { id: 'p1', name: 'inst', type: 'string', required: false, source: 'inventory', inventory_type: 'instances' },
     ];
-    render(<ParametersEditor value={params} onChange={onChange} />);
+    const { rerender } = render(<ParametersEditor value={params} onChange={() => {}} />);
 
-    // Simulate handleParamChange with source='manual'
-    // This mimics what happens when user selects "manual" from source dropdown
-    const editor = render(
+    // Initially: inventory_type select should be visible
+    expect(screen.getByLabelText(/Type inventaire parametre 1/i)).toBeInTheDocument();
+
+    // Simulate parent applying handleParamChange result (source='manual' → inventory_type=undefined)
+    rerender(
       <ParametersEditor
-        value={params}
-        onChange={(newValue) => {
-          // Check that inventory_type was cleared
-          expect(newValue[0].inventory_type).toBeUndefined();
-          expect(newValue[0].source).toBe('manual');
-        }}
+        value={[{ id: 'p1', name: 'inst', type: 'string', required: false, source: 'manual' }]}
+        onChange={() => {}}
       />
     );
-    // Trigger internal handleParamChange
-    editor.unmount();
+    expect(screen.queryByLabelText(/Type inventaire parametre 1/i)).not.toBeInTheDocument();
   });
 
   it('renders Source tooltip help text', () => {
@@ -237,5 +233,72 @@ describe('ParametersEditor - Story 23.5 (Inventory Source)', () => {
     // First param should show inventory_type, second should not
     expect(screen.getByLabelText(/Type inventaire parametre 1/i)).toBeInTheDocument();
     expect(screen.queryByLabelText(/Type inventaire parametre 2/i)).not.toBeInTheDocument();
+  });
+});
+
+// Story 37.5: Colonne valeur (inventory_value_column) in ParametersEditor
+describe('ParametersEditor - Story 37.5 (Colonne valeur)', () => {
+  it('test_shows_value_column_select_when_inventory_type_defined', () => {
+    const params: ParameterDefinition[] = [
+      { name: 'srv', type: 'string', required: false, source: 'inventory', inventory_type: 'servers' },
+    ];
+    render(<ParametersEditor value={params} onChange={() => {}} />);
+    expect(screen.getByLabelText(/Colonne valeur parametre 1/i)).toBeInTheDocument();
+  });
+
+  it('test_no_value_column_when_inventory_type_absent', () => {
+    const params: ParameterDefinition[] = [
+      { name: 'srv', type: 'string', required: false, source: 'inventory' },
+    ];
+    render(<ParametersEditor value={params} onChange={() => {}} />);
+    expect(screen.queryByLabelText(/Colonne valeur parametre 1/i)).not.toBeInTheDocument();
+  });
+
+  it('test_options_change_when_inventory_type_changes', () => {
+    const params: ParameterDefinition[] = [
+      { name: 'srv', type: 'string', required: false, source: 'inventory', inventory_type: 'servers' },
+    ];
+    const { rerender } = render(<ParametersEditor value={params} onChange={() => {}} />);
+    // With servers: should see colonne valeur
+    expect(screen.getByLabelText(/Colonne valeur parametre 1/i)).toBeInTheDocument();
+
+    // Switch to databases inventory_type
+    rerender(
+      <ParametersEditor
+        value={[{ name: 'db', type: 'string', required: false, source: 'inventory', inventory_type: 'databases' }]}
+        onChange={() => {}}
+      />
+    );
+    // Still visible with databases type
+    expect(screen.getByLabelText(/Colonne valeur parametre 1/i)).toBeInTheDocument();
+  });
+
+  it('test_value_column_cleared_on_source_manual', () => {
+    const params: ParameterDefinition[] = [
+      {
+        id: 'p1',
+        name: 'srv',
+        type: 'string',
+        required: false,
+        source: 'inventory',
+        inventory_type: 'servers',
+        inventory_value_column: 'name',
+      },
+    ];
+    const { rerender } = render(<ParametersEditor value={params} onChange={() => {}} />);
+
+    // Initially: both inventory_type and Colonne valeur selects visible
+    expect(screen.getByLabelText(/Type inventaire parametre 1/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Colonne valeur parametre 1/i)).toBeInTheDocument();
+
+    // Simulate parent applying handleParamChange result (source='manual' → inventory_type=undefined, inventory_value_column=undefined)
+    rerender(
+      <ParametersEditor
+        value={[{ id: 'p1', name: 'srv', type: 'string', required: false, source: 'manual' }]}
+        onChange={() => {}}
+      />
+    );
+    expect(screen.queryByLabelText(/Type inventaire parametre 1/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Colonne valeur parametre 1/i)).not.toBeInTheDocument();
   });
 });

@@ -265,15 +265,63 @@ class TestApplyScopeFilter(TestCase):
         assert effective == "all"
         qs.filter.assert_not_called()
 
-    def test_all_scope_for_non_dba_falls_back_to_mine(self):
+    def test_all_scope_for_dbops(self):
+        """Story 36.1 AC3: DBOPS (admin) voit tout sans filtre, comme DBA."""
+        user = MagicMock()
+        user.id = 2
+        user.profile = "DBOPS"
+        qs = MagicMock()
+
+        result_qs, effective = apply_scope_filter(qs, user=user, scope="all")
+        assert effective == "all"
+        qs.filter.assert_not_called()
+
+    def test_all_scope_for_non_dba_with_specific_action_permissions(self):
+        """Non-admin avec scope=all → repli sur scope=mine (isolation des données, AC3 sécurité)."""
         user = MagicMock()
         user.id = 42
         user.profile = "business"
         qs = MagicMock()
 
         result_qs, effective = apply_scope_filter(qs, user=user, scope="all")
+
         assert effective == "mine"
         qs.filter.assert_called_once_with(user_id=42)
+
+    def test_all_scope_for_non_dba_with_all_access_permission(self):
+        """Non-admin avec scope=all → repli sur scope=mine, même si profil 'all' (isolation AC3)."""
+        user = MagicMock()
+        user.id = 42
+        user.profile = "business"
+        qs = MagicMock()
+
+        result_qs, effective = apply_scope_filter(qs, user=user, scope="all")
+
+        assert effective == "mine"
+        qs.filter.assert_called_once_with(user_id=42)
+
+    def test_all_scope_for_non_dba_with_empty_permissions(self):
+        """Non-admin avec scope=all → repli sur scope=mine (isolation AC3)."""
+        user = MagicMock()
+        user.id = 42
+        user.profile = "business"
+        qs = MagicMock()
+
+        result_qs, effective = apply_scope_filter(qs, user=user, scope="all")
+
+        assert effective == "mine"
+        qs.filter.assert_called_once_with(user_id=42)
+
+    def test_all_scope_returns_mine_as_effective_scope_for_non_admin(self):
+        """Non-admin avec scope=all → effective_scope == 'mine' (isolation données AC3)."""
+        user = MagicMock()
+        user.id = 42
+        user.profile = "business"
+        qs = MagicMock()
+
+        result_qs, effective = apply_scope_filter(qs, user=user, scope="all")
+
+        assert effective == "mine"  # Isolation des données : non-admin voit uniquement ses exécutions
 
     def test_invalid_scope_raises_bad_request(self):
         user = MagicMock()

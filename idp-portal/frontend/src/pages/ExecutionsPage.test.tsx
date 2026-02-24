@@ -67,11 +67,19 @@ vi.mock('../services/catalog_service', () => ({
   }),
   fetchCatalogActions: vi.fn().mockResolvedValue([]),
 }));
+// Story 36.2: capture onSuccess to test post-wizard refresh trigger
+let _wizardOnSuccess: ((id: number) => void) | undefined;
 vi.mock('../components/catalog/ExecutionWizard', () => ({
-  ExecutionWizard: ({ open }: { open: boolean }) => open ? <div data-testid="execution-wizard">Wizard</div> : null,
+  ExecutionWizard: ({ open, onSuccess }: { open: boolean; onSuccess?: (id: number) => void }) => {
+    _wizardOnSuccess = onSuccess;
+    return open ? <div data-testid="execution-wizard">Wizard</div> : null;
+  },
 }));
 vi.mock('../hooks/useWebSocket', () => ({
   useWebSocket: () => ({ steps: [], execution: null, loading: false, error: null }),
+}));
+vi.mock('../hooks/useActorExecutionSync', () => ({
+  useActorExecutionSync: vi.fn(),
 }));
 
 /** Mock auth session with profile */
@@ -398,9 +406,9 @@ describe('ExecutionsPage', () => {
         expect(screen.getByText('Action 1')).toBeInTheDocument();
       });
 
-      // API called with limit 25, offset 0, scope 'mine' (and optional filters)
+      // API called with limit 25, offset 0, scope 'all' (Story 36.1: default for all users)
       // Story 9.10: listExecutions now also takes filters
-      expect(executionService.listExecutions).toHaveBeenCalledWith(25, 0, 'mine', expect.any(Object));
+      expect(executionService.listExecutions).toHaveBeenCalledWith(25, 0, 'all', expect.any(Object));
     });
   });
 
@@ -740,7 +748,8 @@ describe('ExecutionsPage', () => {
       });
     });
 
-    it('shows only "Mes exécutions" tab for CLIENT user (AC6)', async () => {
+    it('shows both tabs for CLIENT user (Story 36.1 AC1)', async () => {
+      // Story 36.1: tous les utilisateurs voient les deux onglets, le backend filtre
       mockAuthSession('CLIENT');
       await act(async () => {
         renderWithProviders();
@@ -748,20 +757,19 @@ describe('ExecutionsPage', () => {
 
       await waitFor(() => {
         expect(screen.getByRole('tab', { name: /Mes exécutions/i })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: /Toutes les exécutions/i })).toBeInTheDocument();
       });
-
-      expect(screen.queryByRole('tab', { name: /Toutes les exécutions/i })).not.toBeInTheDocument();
     });
 
-    it('calls listExecutions with scope=mine by default for non-DBA (AC3)', async () => {
+    it('calls listExecutions with scope=all by default for non-DBA (Story 36.1 AC1)', async () => {
+      // Story 36.1: scope par défaut = 'all' pour tous, le backend filtre par RBAC
       mockAuthSession('CLIENT');
       await act(async () => {
         renderWithProviders();
       });
 
       await waitFor(() => {
-        // Story 9.10: listExecutions now also takes filters
-        expect(executionService.listExecutions).toHaveBeenCalledWith(25, 0, 'mine', expect.any(Object));
+        expect(executionService.listExecutions).toHaveBeenCalledWith(25, 0, 'all', expect.any(Object));
       });
     });
 
@@ -962,15 +970,15 @@ describe('ExecutionsPage', () => {
       });
     });
 
-    it('fetchExecutionStats is called with scope=mine by default for non-DBA (AC3)', async () => {
+    it('fetchExecutionStats is called with scope=all by default for non-DBA (Story 36.1 AC1)', async () => {
+      // Story 36.1: scope par défaut = 'all' pour tous les utilisateurs
       mockAuthSession('CLIENT');
       await act(async () => {
         renderWithProviders();
       });
 
       await waitFor(() => {
-        // Story 9.10: fetchExecutionStats now also takes filters
-        expect(executionService.fetchExecutionStats).toHaveBeenCalledWith('mine', expect.any(Object));
+        expect(executionService.fetchExecutionStats).toHaveBeenCalledWith('all', expect.any(Object));
       });
     });
 
@@ -1163,16 +1171,18 @@ describe('ExecutionsPage', () => {
       const table = screen.getByRole('table');
       const headers = within(table).getAllByRole('columnheader');
 
-      // Story 9.9 AC7: Order should be Statut, Action, Technologie, Plateforme, Environnement, Date, Durée
-      // (Utilisateur only visible for scope=all) — first column is expand icon (empty header)
+      // Story 9.9 AC7 / Story 36.1: scope=all is default → Utilisateur column is visible
+      // Order: Statut, Action, Technologie, Plateforme, Utilisateur, Environnement, Date, Durée
+      // First column is expand icon (empty header)
       const dataHeaders = headers.filter(h => h.textContent?.trim());
       expect(dataHeaders[0]).toHaveTextContent('Statut');
       expect(dataHeaders[1]).toHaveTextContent('Action');
       expect(dataHeaders[2]).toHaveTextContent('Technologie');
       expect(dataHeaders[3]).toHaveTextContent('Plateforme');
-      expect(dataHeaders[4]).toHaveTextContent('Environnement');
-      expect(dataHeaders[5]).toHaveTextContent('Date');
-      expect(dataHeaders[6]).toHaveTextContent('Durée');
+      expect(dataHeaders[4]).toHaveTextContent('Utilisateur');
+      expect(dataHeaders[5]).toHaveTextContent('Environnement');
+      expect(dataHeaders[6]).toHaveTextContent('Date');
+      expect(dataHeaders[7]).toHaveTextContent('Durée');
     });
 
     it('renders Technologie column with engine icons (AC4)', async () => {
@@ -1450,16 +1460,18 @@ describe('ExecutionsPage', () => {
       const table = screen.getByRole('table');
       const headers = within(table).getAllByRole('columnheader');
 
-      // Story 9.9 AC7: Statut, Action, Technologie, Plateforme, Environnement, Date, Durée (no Utilisateur for scope=mine)
+      // Story 9.9 AC7 / Story 36.1: scope=all is default → Utilisateur column is visible
+      // Order: Statut, Action, Technologie, Plateforme, Utilisateur, Environnement, Date, Durée
       // First column is expand icon (empty header)
       const dataHeaders = headers.filter(h => h.textContent?.trim());
       expect(dataHeaders[0]).toHaveTextContent('Statut');
       expect(dataHeaders[1]).toHaveTextContent('Action');
       expect(dataHeaders[2]).toHaveTextContent('Technologie');
       expect(dataHeaders[3]).toHaveTextContent('Plateforme');
-      expect(dataHeaders[4]).toHaveTextContent('Environnement');
-      expect(dataHeaders[5]).toHaveTextContent('Date');
-      expect(dataHeaders[6]).toHaveTextContent('Durée');
+      expect(dataHeaders[4]).toHaveTextContent('Utilisateur');
+      expect(dataHeaders[5]).toHaveTextContent('Environnement');
+      expect(dataHeaders[6]).toHaveTextContent('Date');
+      expect(dataHeaders[7]).toHaveTextContent('Durée');
     });
 
     it('status, technologie, plateforme columns are not sortable (AC7)', async () => {
@@ -1932,6 +1944,121 @@ describe('ExecutionsPage', () => {
             25, 25, expect.any(String), expect.any(Object)
           );
         });
+      });
+    });
+  });
+  // ============================================================
+  // Story 36.1 — Vue partagée : liste et droits RBAC
+  // ============================================================
+  describe('Story 36.1 — Vue partagée RBAC', () => {
+    it('shows "Toutes les exécutions" tab for all user profiles (AC1)', async () => {
+      for (const profile of ['DBA', 'DBOPS', 'CLIENT', 'business', 'auditor']) {
+        vi.resetAllMocks();
+        vi.spyOn(App, 'useApp').mockReturnValue({
+          message: mockMessage as any,
+          notification: mockNotification as any,
+          modal: {} as any,
+        });
+        vi.mocked(getIntegrations).mockResolvedValue([]);
+        vi.mocked(executionService.listExecutions).mockResolvedValue({
+          data: mockExecutions,
+          pagination: { page: 1, page_size: 25, total: 3, total_pages: 1 },
+        });
+        vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
+          data: [],
+          pagination: { page: 1, page_size: 50, total: 0, total_pages: 0 },
+        });
+        vi.mocked(executionService.fetchExecutionStats).mockResolvedValue({
+          executions_jour: 0, taux_succes_pct: 0, executions_en_cours: 0, executions_en_erreur: 0,
+        });
+        vi.mocked(executionService.fetchExecutionTimeSeries).mockResolvedValue([]);
+        vi.mocked(executionService.fetchExecutionTags).mockResolvedValue([]);
+        vi.mocked(fetchCatalogActions).mockResolvedValue([]);
+        mockAuthSession(profile);
+
+        const { unmount } = await act(async () => renderWithProviders());
+        await waitFor(() => {
+          expect(screen.getByRole('tab', { name: /Toutes les exécutions/i })).toBeInTheDocument();
+          expect(screen.getByRole('tab', { name: /Mes exécutions/i })).toBeInTheDocument();
+        });
+        unmount();
+      }
+    });
+
+    it('initializes scope to "all" for non-DBA user (AC1, subtask 4.2)', async () => {
+      mockAuthSession('business');
+      await act(async () => {
+        renderWithProviders();
+      });
+
+      await waitFor(() => {
+        expect(vi.mocked(executionService.listExecutions)).toHaveBeenCalledWith(
+          25, 0, 'all', expect.any(Object)
+        );
+      });
+    });
+
+    it('shows "Utilisateur" column in table when scope=all (AC4, subtask 4.3)', async () => {
+      // scope=all is default → colonne Utilisateur doit être visible
+      const executionsWithUser: typeof mockExecutions = [
+        { ...mockExecutions[0], user_display_name: 'Alice Dupont' },
+        { ...mockExecutions[1], user_display_name: null },
+      ];
+      vi.mocked(executionService.listExecutions).mockResolvedValue({
+        data: executionsWithUser,
+        pagination: { page: 1, page_size: 25, total: 2, total_pages: 1 },
+      });
+
+      mockAuthSession('business');
+      await act(async () => {
+        renderWithProviders();
+      });
+
+      await waitFor(() => {
+        // "Toutes les exécutions" tab = scope=all (default pour tous)
+        const allTab = screen.queryByRole('tab', { name: /Toutes les exécutions/i });
+        expect(allTab).toBeInTheDocument();
+      });
+
+      // La colonne "Utilisateur" doit être dans le tableau
+      const table = screen.getByRole('table');
+      const headers = within(table).getAllByRole('columnheader');
+      const headerTexts = headers.map(h => h.textContent);
+      expect(headerTexts).toContain('Utilisateur');
+    });
+  });
+  // ── Story 36.2 — Trigger refresh post-wizard ──────────────────────────────
+  describe('Story 36.2 — Trigger refresh post-wizard (AC4)', () => {
+    it('6.1 — après fermeture réussie du wizard (onSuccess), refresh() est appelé (listExecutions rappelé)', async () => {
+      vi.mocked(executionService.listExecutions).mockResolvedValue({
+        data: mockExecutions,
+        pagination: { page: 1, page_size: 25, total: mockExecutions.length, total_pages: 1 },
+      });
+      vi.mocked(executionService.listPendingApprovals).mockResolvedValue({
+        data: [],
+        pagination: { page: 1, page_size: 50, total: 0, total_pages: 1 },
+      });
+
+      await act(async () => {
+        renderWithProviders();
+      });
+
+      // Attendre le chargement initial — _wizardOnSuccess est capturé lors du premier rendu
+      await waitFor(() => {
+        expect(vi.mocked(executionService.listExecutions)).toHaveBeenCalled();
+        expect(_wizardOnSuccess).toBeDefined();
+      });
+
+      const callsBefore = vi.mocked(executionService.listExecutions).mock.calls.length;
+
+      // Déclencher onSuccess du wizard (simule la soumission réussie d'une exécution)
+      await act(async () => {
+        _wizardOnSuccess!(99);
+      });
+
+      // refresh() doit relancer listExecutions
+      await waitFor(() => {
+        expect(vi.mocked(executionService.listExecutions).mock.calls.length).toBeGreaterThan(callsBefore);
       });
     });
   });

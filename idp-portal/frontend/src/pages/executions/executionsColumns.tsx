@@ -20,9 +20,10 @@ import type {
   ExecutionScope,
 } from '../../types/api';
 import type { User } from '../../types/common';
+import { RUNNING_STATUSES } from '../../constants/executions';
 
-/** Running statuses that appear first with visual indicator (AC3, Story 9.9 AC2). */
-export const RUNNING_STATUSES: ExecutionStatusType[] = ['RUNNING', 'SUBMITTED', 'PENDING_APPROVAL'];
+/** Re-export for tests and consumers that import from this module. */
+export { RUNNING_STATUSES };
 
 /** Format duration from ISO timestamps. */
 export function formatDuration(startedAt: string | null, completedAt: string | null): string {
@@ -68,6 +69,8 @@ export interface ExecutionColumnState {
   integrationIconsMap: IntegrationIconsMap | null;
   user: User | null;
   canViewAll: boolean;
+  /** Whether the user can manage (cancel/restart) other users' executions (DBA/DBOPS only). */
+  canManage: boolean;
   cancellingId: number | null;
   restartLoadingId: number | null;
 }
@@ -175,10 +178,9 @@ export const getExecutionsColumns = (
       align: 'center' as const,
       render: (_: unknown, record: ExecutionResponse) => {
         const isCancellable = record.status === 'SUBMITTED' || record.status === 'RUNNING';
-        const canCancel = isCancellable && (
-          record.user_id === state.user?.id || state.canViewAll
-        );
-        const canRestart = record.user_id === state.user?.id || state.canViewAll;
+        const isOwner = record.user_id === state.user?.id;
+        const canCancel = isCancellable && (isOwner || state.canManage);
+        const canRestart = isOwner || state.canManage;
 
         if (!canCancel && !canRestart) return null;
         return (

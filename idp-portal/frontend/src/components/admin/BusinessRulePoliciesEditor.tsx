@@ -245,7 +245,7 @@ export function BusinessRulePoliciesEditor({ value = '', onChange }: BusinessRul
         <Alert
           type="error"
           showIcon
-          message={validationError}
+          title={validationError}
           style={{ marginTop: 8 }}
           data-testid="validation-error"
         />

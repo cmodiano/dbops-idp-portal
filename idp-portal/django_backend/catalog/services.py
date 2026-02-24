@@ -44,11 +44,12 @@ _VALID_TRANSITIONS = {
 }
 
 
-def _validate_workflow_can_be_published(workflow_action: Action) -> None:
+def _validate_workflow_can_be_published(workflow_action: Action, context: str = "publier") -> None:
     """
     Ensure all referenced actions in a workflow are published (not disabled).
     Prevents publishing a workflow whose step actions are disabled (avoids runtime errors).
     Raises BadRequestError with details if any referenced action is missing or not published.
+    context: verb for messages (e.g. "publier", "réactiver").
     """
     from executions.utils import extract_workflow_referenced_action_ids
 
@@ -74,12 +75,12 @@ def _validate_workflow_can_be_published(workflow_action: Action) -> None:
     if missing:
         if len(missing) == 1:
             msg = (
-                f"Impossible de publier le workflow : l'action référencée (id {missing[0]}) "
+                f"Impossible de {context} le workflow : l'action référencée (id {missing[0]}) "
                 "n'existe pas ou n'est plus disponible."
             )
         else:
             ids_str = ", ".join(str(i) for i in missing)
-            msg = f"Impossible de publier le workflow : les actions référencées ({ids_str}) n'existent pas."
+            msg = f"Impossible de {context} le workflow : les actions référencées ({ids_str}) n'existent pas."
         raise BadRequestError(
             code="REFERENCED_ACTION_NOT_FOUND",
             message=msg,
@@ -94,13 +95,13 @@ def _validate_workflow_can_be_published(workflow_action: Action) -> None:
         first = not_published[0]
         if len(not_published) == 1:
             msg = (
-                f"Impossible de publier le workflow : l'action référencée « {first['action_name']} » "
+                f"Impossible de {context} le workflow : l'action référencée « {first['action_name']} » "
                 f"n'est pas publiée (statut: {first['status']}). Réactivez-la ou retirez-la du workflow."
             )
         else:
             parts = [f"« {p['action_name']} » (statut: {p['status']})" for p in not_published]
             msg = (
-                f"Impossible de publier le workflow : les actions référencées ne sont pas toutes publiées : "
+                f"Impossible de {context} le workflow : les actions référencées ne sont pas toutes publiées : "
                 f"{', '.join(parts)}. Réactivez-les ou retirez-les du workflow."
             )
         raise BadRequestError(
@@ -457,9 +458,9 @@ class CatalogService:
         # Validate transition
         new_status = _validate_transition(action.status, transition)
 
-        # Workflow: cannot publish if any referenced action is disabled or missing
-        if transition == 'publish' and action.item_type == ActionItemType.WORKFLOW:
-            _validate_workflow_can_be_published(action)
+        # Workflow: cannot publish or enable if any referenced action is disabled or missing
+        if action.item_type == ActionItemType.WORKFLOW and transition in ('publish', 'enable'):
+            _validate_workflow_can_be_published(action, context="réactiver" if transition == "enable" else "publier")
         
         # Update status
         old_status = action.status
@@ -622,6 +623,10 @@ class CatalogService:
                 message="Seule une action désactivée peut être réactivée",
                 details={"current_status": action.status},
             )
+
+        # Workflow: cannot reactivate if any referenced action is disabled or missing
+        if action.item_type == ActionItemType.WORKFLOW:
+            _validate_workflow_can_be_published(action, context="réactiver")
 
         action.status = ActionStatus.PUBLISHED
         action.deleted_at = None

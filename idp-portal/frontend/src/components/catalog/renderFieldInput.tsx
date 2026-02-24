@@ -42,7 +42,7 @@ export function renderFieldInput(
             type="info"
             showIcon
             closable={false}
-            message={`Veuillez d'abord sélectionner un serveur à l'étape 1 pour afficher les ${entityLabel} disponibles.`}
+            title={`Veuillez d'abord sélectionner un serveur à l'étape 1 pour afficher les ${entityLabel} disponibles.`}
             style={{ marginBottom: 8 }}
           />
           <Select
@@ -73,10 +73,15 @@ export function renderFieldInput(
             (String(option?.label ?? '')).toLowerCase().includes(input.toLowerCase())
           }
           notFoundContent={loadingInventory ? undefined : notFoundMessage}
-          options={items.map((item) => ({
-            value: item.id,
-            label: item.name,
-          }))}
+          options={items.map((item) => {
+            // Story 37.5: Use configured column if set, else default (id as value, name as label)
+            if (field.inventoryValueColumn) {
+              const colVal = (item as Record<string, unknown>)[field.inventoryValueColumn];
+              const strVal = colVal != null && colVal !== '' ? String(colVal) : item.name;
+              return { value: strVal, label: strVal };
+            }
+            return { value: item.id, label: item.name };
+          })}
         />
         {hasWarning && (
           <Badge

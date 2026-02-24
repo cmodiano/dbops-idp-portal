@@ -385,8 +385,8 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 export async function fetchInventoryItems(
   type: 'databases' | 'servers' | 'instances' | 'environments',
   environment?: string,
-  /** Story 23.6 - Optional server names to filter instances/databases. */
-  options?: { server_names?: string[] }
+  /** Story 23.6 - Optional server names to filter instances/databases. Story 37.3 - engine_type filter. */
+  options?: { server_names?: string[]; engine_type?: string }
 ): Promise<InventoryItem[]> {
   // Story 23.6 - Build query string with optional server_names filter
   const queryParams = new URLSearchParams();
@@ -394,13 +394,17 @@ export async function fetchInventoryItems(
   if (options?.server_names && options.server_names.length > 0) {
     queryParams.set('server_names', options.server_names.join(','));
   }
+  // Story 37.3 - Pass engine_type for servers/instances/databases
+  if (options?.engine_type) queryParams.set('engine_type', options.engine_type);
   const params = queryParams.toString() ? `?${queryParams.toString()}` : '';
   // MEDIUM-2 fix: Include server_names in cache key to prevent incorrect cache hits
   // Story 23.6 - Cache must differentiate by server_names filter
   const serverNamesSuffix = options?.server_names && options.server_names.length > 0
     ? `_${options.server_names.join(',')}`
     : '';
-  const cacheKey = `inventory_cache_${type}${environment ? `_${environment}` : ''}${serverNamesSuffix}`;
+  // Story 37.3 - Include engine_type in cache key to prevent incorrect cache hits
+  const engineTypeSuffix = options?.engine_type ? `_et_${options.engine_type}` : '';
+  const cacheKey = `inventory_cache_${type}${environment ? `_${environment}` : ''}${serverNamesSuffix}${engineTypeSuffix}`;
   const apiKey = `${type}${params}`;
 
   // Special handling for environments: share cache with fetchEnvironments

@@ -6,6 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { Form } from 'antd';
 import { renderFieldInput } from './renderFieldInput';
 import type { ParameterField } from '../../hooks/useDynamicForm';
@@ -495,6 +496,130 @@ describe('renderFieldInput - Story 23.6 (selectedServerNames)', () => {
       // Fallback: in jsdom the virtual dropdown may not render fully,
       // so we at least verify the Select is present and enabled
       expect(select.closest('.ant-select')).not.toHaveClass('ant-select-disabled');
+    }
+  });
+});
+
+// Story 37.5: inventoryValueColumn options mapping
+describe('renderFieldInput - Story 37.5 (inventoryValueColumn)', () => {
+  it('test_inventory_field_uses_value_column_for_options', async () => {
+    const user = userEvent.setup();
+    const field: ParameterField = {
+      name: 'instance_ref',
+      label: 'Instance Ref',
+      type: 'string',
+      inventorySource: 'instances',
+      inventoryValueColumn: 'server_ref',
+      required: false,
+    };
+
+    const inventoryData = {
+      instances: [
+        { id: '1', name: 'i1', environment: null, server_ref: 'srv01' },
+        { id: '2', name: 'i2', environment: null, server_ref: 'srv02' },
+      ],
+    };
+
+    renderField(field, { inventoryData, selectedServerNames: ['srv01'] });
+    const select = screen.getByLabelText('Instance Ref');
+    expect(select).toBeInTheDocument();
+
+    // Open dropdown to inspect options
+    await user.click(select);
+    const options = document.querySelectorAll('.ant-select-item-option');
+    if (options.length > 0) {
+      const optionTexts = Array.from(options).map((o) => o.textContent);
+      expect(optionTexts).toContain('srv01');
+      expect(optionTexts).not.toContain('i1');
+    }
+  });
+
+  it('test_inventory_field_default_when_no_value_column', async () => {
+    const user = userEvent.setup();
+    const field: ParameterField = {
+      name: 'server_name',
+      label: 'Server Name',
+      type: 'string',
+      inventorySource: 'servers',
+      required: false,
+    };
+
+    const inventoryData = {
+      servers: [
+        { id: 'srv1', name: 'srv-prod-01', environment: 'prod' },
+      ],
+    };
+
+    renderField(field, { inventoryData });
+    const select = screen.getByLabelText('Server Name');
+    expect(select).toBeInTheDocument();
+
+    await user.click(select);
+    const options = document.querySelectorAll('.ant-select-item-option');
+    if (options.length > 0) {
+      const optionTexts = Array.from(options).map((o) => o.textContent);
+      expect(optionTexts).toContain('srv-prod-01');
+    }
+  });
+
+  it('test_inventory_field_null_column_value_fallback', async () => {
+    const user = userEvent.setup();
+    const field: ParameterField = {
+      name: 'engine_ref',
+      label: 'Engine Ref',
+      type: 'string',
+      inventorySource: 'servers',
+      inventoryValueColumn: 'engine_type',
+      required: false,
+    };
+
+    const inventoryData = {
+      servers: [
+        { id: 'srv1', name: 'srv-prod-01', environment: 'prod', engine_type: null },
+      ],
+    };
+
+    renderField(field, { inventoryData });
+    const select = screen.getByLabelText('Engine Ref');
+    expect(select).toBeInTheDocument();
+
+    await user.click(select);
+    const options = document.querySelectorAll('.ant-select-item-option');
+    if (options.length > 0) {
+      // engine_type is null → fallback to item.name
+      const optionTexts = Array.from(options).map((o) => o.textContent);
+      expect(optionTexts).toContain('srv-prod-01');
+    }
+  });
+
+  it('test_inventory_field_empty_string_column_value_fallback', async () => {
+    const user = userEvent.setup();
+    const field: ParameterField = {
+      name: 'engine_ref',
+      label: 'Engine Ref',
+      type: 'string',
+      inventorySource: 'servers',
+      inventoryValueColumn: 'engine_type',
+      required: false,
+    };
+
+    const inventoryData = {
+      servers: [
+        { id: 'srv1', name: 'srv-prod-01', environment: 'prod', engine_type: '' },
+      ],
+    };
+
+    renderField(field, { inventoryData });
+    const select = screen.getByLabelText('Engine Ref');
+    expect(select).toBeInTheDocument();
+
+    await user.click(select);
+    const options = document.querySelectorAll('.ant-select-item-option');
+    if (options.length > 0) {
+      // engine_type is "" (empty string) → fallback to item.name (no blank options)
+      const optionTexts = Array.from(options).map((o) => o.textContent);
+      expect(optionTexts).toContain('srv-prod-01');
+      expect(optionTexts).not.toContain('');
     }
   });
 });

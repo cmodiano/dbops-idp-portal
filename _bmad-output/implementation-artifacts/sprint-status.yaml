@@ -467,3 +467,19 @@ development_status:
     35-4-revue-fichiers-backend-volumineux: done # 2026-02-23: commentaires Responsabilité ajoutés aux 6 fichiers justifiés, propositions découpage documentées, CODEBASE-REVIEW §16.1 → DOCUMENTED — code-review: 2 MEDIUM + 2 LOW fixes (compteurs §17, classes principales, scope, File List)
     35-5-corriger-ou-supprimer-tests-en-echec: done # 2026-02-23: 93 backend + 113 frontend → 0 failures. Backend 3488 passed, frontend 2440 passed (180 files). KNOWN_ISSUES.md updated. code-review: 1H+2M+2L auto-corrigés (File List factories.py, KNOWN_ISSUES.md 3e skip documenté, catégorisation views/__init__.py)
     epic-35-retrospective: optional
+    # === Epic 36: Vue Exécutions partagée et mise à jour du statut ===
+    # Réf: planning-artifacts/epic-36-vue-executions-partagee-mise-a-jour-statut.md, spec-vue-executions-partagee-mise-a-jour-statut.md
+    epic-36: in-progress
+    36-1-vue-partagee-liste-et-droits-rbac: done
+    36-2-mise-a-jour-immediate-pour-acteur: done # code-review 2026-02-23: 2 HIGH fixes (ws.close() → fallback polling bug, sync cleanup), 2 MEDIUM fixes (test 4.7 étendu + tests 4.3b/4.4b, File List 5 fichiers manquants), 88 frontend tests pass
+    36-3-polling-pour-observateurs: done # code-review 2026-02-23: M1 BACKGROUND 10k→30k (linter revert fixé), M2 test 3.3 .find() robustesse, M3 JSDoc tests mis à jour
+    epic-36-retrospective: optional
+    # === Epic 37: Inventaire — Environnement par serveur, colonne paramètre, filtre engine_type ===
+    # Réf: planning-artifacts/epic-37-inventaire-environnement-serveur-colonne-engine.md, spec-inventaire-environnement-serveur-colonne-engine.md
+    epic-37: in-progress
+    37-1-deriver-environnement-depuis-table-servers: done # code-review 2026-02-23: 1 CRITICAL + 2 HIGH + 2 MEDIUM fixes (double-prefix bug SELECT, aliasing helper, dead code removed, error re-wrap), 33/33 tests pass
+    37-2-filtre-engine-type-instances-databases-backend: done # code-review 2026-02-23: 2 MEDIUM + 2 LOW fixes (env conditionnel multi-server, tests serializer engine_type, db_select supprimé, help_text), 104/104 tests pass
+    37-3-frontend-passer-engine-type-appels-inventaire: done # code-review 2026-02-23: 2 MEDIUM fixes (DEV-log previous value bug x2, coverage databases engine_type AC2+AC3), 24/24 tests pass
+    37-4-parametre-inventory-value-column-backend: done # code-review 2026-02-23: 2 MEDIUM + 3 LOW fixes (invariant test VALID_INVENTORY_VALUE_COLUMNS↔VALID_INVENTORY_TYPES, multi-param test, docstring, assertion L4, empty string edge case), 36/36 tests pass
+    37-5-parametre-inventory-value-column-frontend: done # code-review 2026-02-23: 2 HIGH + 2 MEDIUM + 1 LOW fixes (double onParamChange React batching bug, no-op tests replaced, empty string fallback), 100/100 tests pass
+    epic-37-retrospective: optional

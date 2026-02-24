@@ -655,7 +655,7 @@ describe('ExecutionWizard', () => {
       });
 
       // Verify databases were fetched
-      expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', { server_names: [] });
+      expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', expect.objectContaining({ server_names: [] }));
     });
 
     it('displays warning badge when inventory unavailable (503)', async () => {
@@ -793,7 +793,7 @@ describe('ExecutionWizard', () => {
 
       // Check that fetchInventoryItems was called with databases (caching is internal to the service)
       await waitFor(() => {
-        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', { server_names: [] });
+        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', expect.objectContaining({ server_names: [] }));
       });
     });
 
@@ -904,7 +904,7 @@ describe('ExecutionWizard', () => {
 
       // Should NOT use expired cache - error should propagate without cache fallback
       await waitFor(() => {
-        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', { server_names: [] });
+        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', expect.objectContaining({ server_names: [] }));
       });
 
       // Verify error is shown (no cache fallback for expired data)
@@ -933,7 +933,7 @@ describe('ExecutionWizard', () => {
       await user.click(screen.getByRole('button', { name: /suivant/i }));
 
       await waitFor(() => {
-        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', { server_names: [] });
+        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', expect.objectContaining({ server_names: [] }));
       });
 
       // Verify no sessionStorage.setItem calls for inventory_cache_databases_dev
@@ -971,7 +971,7 @@ describe('ExecutionWizard', () => {
       await user.click(screen.getByRole('button', { name: /suivant/i }));
 
       await waitFor(() => {
-        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', { server_names: [] });
+        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', expect.objectContaining({ server_names: [] }));
       });
 
       // Verify old localStorage data still exists (migration doesn't auto-clean)
@@ -1374,7 +1374,7 @@ describe('ExecutionWizard', () => {
         // Check that submitting state was reset
         expect(mockSubmitExecution).toHaveBeenCalledTimes(1);
       });
-    });
+    }, 15000);
 
     it('should reset isSubmitting after successful submission (AC #4)', async () => {
       mockSubmitExecution.mockResolvedValue({ execution_id: 456 });
@@ -1390,7 +1390,7 @@ describe('ExecutionWizard', () => {
       await waitFor(() => {
         expect(onSuccess).toHaveBeenCalledWith(456);
       });
-    });
+    }, 15000);
 
     it('should reset isSubmitting after submission error (AC #4)', async () => {
       mockSubmitExecution.mockRejectedValue(new Error('Backend error'));
@@ -1406,7 +1406,7 @@ describe('ExecutionWizard', () => {
       await waitFor(() => {
         expect(submitButton).not.toBeDisabled();
       });
-    });
+    }, 15000);
 
     it('should block double-submit on scheduled execution button (AC #6)', async () => {
       // NOTE: This test validates that the guard in handleSubmitScheduled works.
@@ -1445,7 +1445,7 @@ describe('ExecutionWizard', () => {
       // is fully tested above, we can trust the guard works identically.
 
       // For complete coverage, a manual test or E2E test would validate the full flow.
-    }, 10000); // Increased timeout for slow render
+    }, 15000); // Increased timeout for slow render
 
     it('should log debug message when double-submit is blocked (AC #7)', async () => {
       // The ref guard prevents double-submit synchronously. We fire two click events

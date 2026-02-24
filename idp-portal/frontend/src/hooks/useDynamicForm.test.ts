@@ -216,3 +216,53 @@ describe('useDynamicForm', () => {
     expect(result.current.parameterFields).toBe(first);
   });
 });
+
+// Story 37.5: Tests pour inventoryValueColumn
+describe('Story 37.5 - inventoryValueColumn extraction', () => {
+  it('test_extracts_inventory_value_column_from_schema', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        db_name: {
+          type: 'string',
+          source: 'inventory',
+          inventory_type: 'databases',
+          inventory_value_column: 'id',
+        },
+      },
+    };
+    const fields = extractParameterFields(schema);
+    expect(fields[0].inventorySource).toBe('databases');
+    expect(fields[0].inventoryValueColumn).toBe('id');
+  });
+
+  it('test_absent_inventory_value_column_gives_undefined', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        srv: {
+          type: 'string',
+          source: 'inventory',
+          inventory_type: 'servers',
+        },
+      },
+    };
+    const fields = extractParameterFields(schema);
+    expect(fields[0].inventoryValueColumn).toBeUndefined();
+  });
+
+  it('test_inventory_value_column_ignored_when_not_inventory', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          source: 'manual',
+          inventory_value_column: 'name',
+        },
+      },
+    };
+    const fields = extractParameterFields(schema);
+    expect(fields[0].inventoryValueColumn).toBeUndefined();
+  });
+});

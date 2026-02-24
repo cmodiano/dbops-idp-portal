@@ -145,11 +145,12 @@ describe('ExecutionWizard - Story 23.6 (selectedServerNames)', () => {
     }, { timeout: 5000 });
 
     // Verify server_names is empty array (no targets selected)
+    // Story 37.3: engine_type is also passed since action.engine = 'Oracle'
     const instanceCalls = vi.mocked(fetchInventoryItems).mock.calls.filter(
       (call) => call[0] === 'instances'
     );
     const lastCall = instanceCalls[instanceCalls.length - 1];
-    expect(lastCall[2]).toEqual({ server_names: [] });
+    expect(lastCall[2]).toEqual(expect.objectContaining({ server_names: [] }));
   });
 
   it('action sans paramètre inventaire ne déclenche pas fetchInventoryItems pour instances', async () => {

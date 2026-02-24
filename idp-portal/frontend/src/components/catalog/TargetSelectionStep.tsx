@@ -189,7 +189,7 @@ export const TargetSelectionStep = memo(function TargetSelectionStep({
               type="warning"
               showIcon
               icon={<WarningOutlined />}
-              message="Attention"
+              title="Attention"
               description="Les cibles selectionnees appartiennent a des environnements differents. Cela peut causer des problemes."
               style={{ marginBottom: 16 }}
             />
@@ -268,7 +268,7 @@ export const TargetSelectionStep = memo(function TargetSelectionStep({
 
       {derivedEnvironment && isProductionEnvironment(derivedEnvironment) && (
         <Alert
-          message="Avertissement - Environnement Production"
+          title="Avertissement - Environnement Production"
           description="Vous etes sur le point d'executer une action en production. Verifiez attentivement les parametres."
           type="warning"
           showIcon

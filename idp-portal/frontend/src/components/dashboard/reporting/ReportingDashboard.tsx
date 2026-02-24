@@ -246,7 +246,7 @@ export function ReportingDashboard() {
           {error && (
             <Alert
               type="error"
-              message="Erreur de chargement"
+              title="Erreur de chargement"
               description={error}
               showIcon
               closable
@@ -291,7 +291,7 @@ export function ReportingDashboard() {
           {comparisonError && (
             <Alert
               type="error"
-              message="Erreur de comparaison"
+              title="Erreur de comparaison"
               description={comparisonError}
               showIcon
               closable

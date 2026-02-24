@@ -5,4 +5,7 @@ export interface InventoryItem {
   id: string;
   name: string;
   environment: string | null;
+  engine_type?: string | null;  // servers (Story 37.5)
+  server_ref?: string | null;   // instances (Story 37.5)
+  db_ref?: string | null;       // instances (Story 37.5)
 }
