@@ -87,6 +87,7 @@ export interface IntegrationCreate {
   auth_flow?: AuthFlow | null; // Story 4.9 AC2: authentication flow
   config?: IntegrationConfigInventoryDb | Record<string, unknown> | null; // Story 13.1: inventory_db schema/table
   secret_service_id?: number | null; // Story 27.11: FK Vault instance for secret resolution
+  token_url?: string | null; // Story 31.11: separate OAuth token endpoint URL
 }
 
 export interface IntegrationUpdate {
@@ -98,6 +99,7 @@ export interface IntegrationUpdate {
   auth_flow?: AuthFlow | null; // Story 4.9 AC2: authentication flow
   config?: IntegrationConfigInventoryDb | Record<string, unknown> | null; // Story 13.1: inventory_db schema/table
   secret_service_id?: number | null; // Story 27.11: FK Vault instance for secret resolution
+  token_url?: string | null; // Story 31.11: separate OAuth token endpoint URL
 }
 
 /** Story 24.3: Integration validation status values. */
@@ -140,6 +142,7 @@ export interface IntegrationResponse {
   status?: IntegrationStatusType; // Story 24.3: validation status
   config?: IntegrationConfigInventoryDb | Record<string, unknown> | null; // Story 13.1: inventory_db schema/table
   secret_service_id?: number | null; // Story 27.11: FK Vault instance for secret resolution
+  token_url?: string | null; // Story 31.11: separate OAuth token endpoint URL
   created_at: string;
   updated_at: string;
 }

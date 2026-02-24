@@ -33,6 +33,7 @@ export interface IntegrationFormValues {
   table?: string | null;
   config_advanced?: string | null;
   secret_service_id?: number | null;
+  token_url?: string | null;
 }
 
 export interface IntegrationFormProps {
@@ -69,8 +70,10 @@ export function IntegrationForm({
 
   const watchIcon = Form.useWatch('icon', form);
   const watchType = Form.useWatch('type', form);
+  const watchAuthFlow = Form.useWatch('auth_flow', form);
   const isInventoryDb = (watchType ?? '').trim().toLowerCase() === 'inventory_db';
   const isVaultType = (watchType ?? '').trim().toLowerCase() === 'vault';
+  const isTokenFlow = watchAuthFlow === 'token' || watchAuthFlow === 'basic_then_token';
 
   // Story 27.11: Load Vault integrations for secret service dropdown
   const { vaultIntegrations } = useVaultIntegrations();
@@ -102,6 +105,7 @@ export function IntegrationForm({
               ? JSON.stringify(editConfig, null, 2)
               : undefined,
           secret_service_id: editIntegration.secret_service_id ?? undefined,
+          token_url: editIntegration.token_url ?? undefined,
         }
       : null;
 
@@ -131,6 +135,7 @@ export function IntegrationForm({
               ? JSON.stringify(cfg, null, 2)
               : undefined,
           secret_service_id: editIntegration.secret_service_id ?? undefined,
+          token_url: editIntegration.token_url ?? undefined,
         });
       }, 0);
       return () => clearTimeout(t);
@@ -151,6 +156,7 @@ export function IntegrationForm({
         table: undefined,
         config_advanced: undefined,
         secret_service_id: undefined,
+        token_url: undefined,
       });
     }
   }, [open, editIntegration, form]);
@@ -194,6 +200,7 @@ export function IntegrationForm({
         icon: effectiveIcon ?? null,
         auth_flow: values.auth_flow || null,
         secret_service_id: isVaultType ? null : (values.secret_service_id || null),
+        token_url: isTokenFlow ? (values.token_url?.trim() || null) : null, // Story 31.11
       };
       if (isInventoryDb) {
         if (values.config_advanced?.trim()) {
@@ -351,6 +358,7 @@ export function IntegrationForm({
             table: undefined,
             config_advanced: undefined,
             secret_service_id: undefined,
+            token_url: undefined,
           }
         }
         key={editIntegration ? `edit-${editIntegration.id}` : 'create'}
@@ -501,6 +509,30 @@ export function IntegrationForm({
             aria-label="Flow d'authentification"
           />
         </Form.Item>
+        {isTokenFlow && (
+          <Form.Item
+            name="token_url"
+            label="URL du token"
+            help="URL d'acquisition du token OAuth, si différente de l'URL de base (ex. serveur d'authentification séparé). Laissez vide pour utiliser l'URL de base."
+            rules={[
+              {
+                validator: (_, v) => {
+                  const s = (v ?? '').toString().trim();
+                  if (!s) return Promise.resolve();
+                  if (!URL_PATTERN.test(s)) {
+                    return Promise.reject(new Error("L'URL doit être valide (commencer par http:// ou https://)"));
+                  }
+                  return Promise.resolve();
+                },
+              },
+            ]}
+          >
+            <Input
+              placeholder="https://auth.example.com/oauth/token"
+              aria-label="URL du token"
+            />
+          </Form.Item>
+        )}
         <Form.Item label="Icône" tooltip="Uploader une icône ou saisir une URL">
           <Space orientation="vertical" style={{ width: '100%' }}>
             <Upload

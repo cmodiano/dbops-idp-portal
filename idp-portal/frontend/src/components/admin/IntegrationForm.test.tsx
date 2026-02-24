@@ -126,6 +126,7 @@ const mockOnSubmit = vi.fn().mockResolvedValue({
   credential_ref: null,
   icon: null,
   auth_flow: 'token',
+  token_url: null,
   created_at: '2026-01-28T10:00:00Z',
   updated_at: '2026-01-28T10:00:00Z',
 } as IntegrationResponse);
@@ -672,6 +673,123 @@ describe('IntegrationForm', () => {
       expect(screen.getByLabelText(/Référence credentials/)).toBeInTheDocument();
     });
     expect(screen.queryByLabelText(/Service de secrets/)).not.toBeInTheDocument();
+  });
+
+  // === Story 31.11: token_url field ===
+
+  describe('token_url field', () => {
+    /** Helper to select an auth flow via the combobox. */
+    async function selectAuthFlow(user: ReturnType<typeof userEvent.setup>, flowLabel: string) {
+      const select = screen.getByRole('combobox', { name: /Flow d'authentification/ });
+      await user.click(select);
+      const option = await screen.findByTitle(flowLabel);
+      await user.click(option);
+    }
+
+    it('31.11: champ visible quand auth_flow = token', async () => {
+      const user = userEvent.setup();
+      renderWithApp(<IntegrationForm {...defaultProps} />);
+      await selectAuthFlow(user, 'Token (Bearer)');
+      await waitFor(() => {
+        expect(screen.getByLabelText(/URL du token/)).toBeInTheDocument();
+      });
+    });
+
+    it('31.11: champ visible quand auth_flow = basic_then_token', async () => {
+      const user = userEvent.setup();
+      renderWithApp(<IntegrationForm {...defaultProps} />);
+      await selectAuthFlow(user, 'Basic puis Token');
+      await waitFor(() => {
+        expect(screen.getByLabelText(/URL du token/)).toBeInTheDocument();
+      });
+    });
+
+    it('31.11: champ absent quand auth_flow = basic', async () => {
+      const user = userEvent.setup();
+      renderWithApp(<IntegrationForm {...defaultProps} />);
+      await selectAuthFlow(user, 'Basic (Username/Password)');
+      await waitFor(() => {
+        expect(screen.queryByLabelText(/URL du token/)).not.toBeInTheDocument();
+      });
+    });
+
+    it('31.11: champ absent quand aucun flow sélectionné', () => {
+      renderWithApp(<IntegrationForm {...defaultProps} />);
+      expect(screen.queryByLabelText(/URL du token/)).not.toBeInTheDocument();
+    });
+
+    it('31.11: prérempli en édition avec token_url existant', async () => {
+      const editIntegration: IntegrationResponse = {
+        id: 5,
+        type: 'aap',
+        name: 'AAP Token',
+        base_url: 'https://aap.example.com',
+        credential_ref: null,
+        icon: null,
+        auth_flow: 'token',
+        token_url: 'https://auth.example.com/oauth/token',
+        created_at: '2026-01-28T10:00:00Z',
+        updated_at: '2026-01-28T10:00:00Z',
+      };
+      renderWithApp(<IntegrationForm {...defaultProps} editIntegration={editIntegration} />);
+      await waitFor(() => {
+        expect(screen.getByLabelText(/URL du token/)).toHaveValue('https://auth.example.com/oauth/token');
+      });
+    });
+
+    it('31.11: URL invalide → message d\'erreur à la validation', async () => {
+      const user = userEvent.setup();
+      renderWithApp(<IntegrationForm {...defaultProps} />);
+      // Fill required fields first so only token_url validation fails
+      await selectType(user, /Type d'intégration/, 'Ansible Automation Platform');
+      await user.type(screen.getByLabelText(/^Nom/), 'Test');
+      await user.type(screen.getByLabelText(/URL de base/), 'https://aap.example.com');
+      await selectAuthFlow(user, 'Token (Bearer)');
+      await waitFor(() => {
+        expect(screen.getByLabelText(/URL du token/)).toBeInTheDocument();
+      });
+      await user.type(screen.getByLabelText(/URL du token/), 'not-a-valid-url');
+      await user.click(screen.getByRole('button', { name: /Créer/i }));
+      await waitFor(() => {
+        expect(screen.getByText(/L'URL doit être valide/)).toBeInTheDocument();
+      });
+    }, 15000);
+
+    it('31.11: soumission avec flow token → payload inclut token_url', async () => {
+      const user = userEvent.setup();
+      renderWithApp(<IntegrationForm {...defaultProps} />);
+      await selectType(user, /Type d'intégration/, 'Ansible Automation Platform');
+      await user.type(screen.getByLabelText(/^Nom/), 'AAP Token');
+      await user.type(screen.getByLabelText(/URL de base/), 'https://aap.example.com');
+      await selectAuthFlow(user, 'Token (Bearer)');
+      await waitFor(() => {
+        expect(screen.getByLabelText(/URL du token/)).toBeInTheDocument();
+      });
+      await user.type(screen.getByLabelText(/URL du token/), 'https://auth.example.com/oauth/token');
+      await user.click(screen.getByRole('button', { name: /Créer/i }));
+      await waitFor(() => expect(mockOnSubmit).toHaveBeenCalled(), { timeout: 10000 });
+      expect(mockOnSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          token_url: 'https://auth.example.com/oauth/token',
+        })
+      );
+    }, 15000);
+
+    it('31.11: soumission avec flow basic → payload a token_url: null', async () => {
+      const user = userEvent.setup();
+      renderWithApp(<IntegrationForm {...defaultProps} />);
+      await selectType(user, /Type d'intégration/, 'Ansible Automation Platform');
+      await user.type(screen.getByLabelText(/^Nom/), 'AAP Basic');
+      await user.type(screen.getByLabelText(/URL de base/), 'https://aap.example.com');
+      await selectAuthFlow(user, 'Basic (Username/Password)');
+      await user.click(screen.getByRole('button', { name: /Créer/i }));
+      await waitFor(() => expect(mockOnSubmit).toHaveBeenCalled(), { timeout: 10000 });
+      expect(mockOnSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          token_url: null,
+        })
+      );
+    }, 15000);
   });
 
   it('27.11: submits credential_ref as null when type is vault', async () => {
