@@ -148,11 +148,13 @@ jobs:
         working-directory: idp-portal/frontend
         run: npm ci
       - name: Run vitest with coverage
+        id: vitest
         working-directory: idp-portal/frontend
         run: npm run test:coverage
+        continue-on-error: true
       - name: Upload coverage to Codecov
         if: always()
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: idp-portal/frontend/coverage/lcov.info
@@ -166,6 +168,9 @@ jobs:
           name: frontend-coverage-report
           path: idp-portal/frontend/coverage/
           retention-days: 7
+      - name: Fail job if tests failed
+        if: steps.vitest.outcome == 'failure'
+        run: exit 1
 
   build-frontend:
     needs: [gate, lint-frontend, typecheck-frontend, test-frontend]
