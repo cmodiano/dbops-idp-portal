@@ -39,7 +39,7 @@ class MockWebSocket {
   static instances: MockWebSocket[] = [];
 
   url: string;
-  readyState = WebSocket.CONNECTING;
+  readyState: number = WebSocket.CONNECTING;
   onopen: ((event: Event) => void) | null = null;
   onmessage: ((event: MessageEvent) => void) | null = null;
   onclose: ((event: CloseEvent) => void) | null = null;

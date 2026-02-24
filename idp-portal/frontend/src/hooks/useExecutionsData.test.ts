@@ -62,7 +62,7 @@ function makeExecution(id: number, status: ExecutionResponse['status'], userId =
 }
 
 function makeListResponse(executions: ExecutionResponse[]) {
-  return { data: executions, pagination: { total: executions.length, page: 1, page_size: 25 } };
+  return { data: executions, pagination: { total: executions.length, page: 1, page_size: 25, total_pages: 1 } };
 }
 
 const defaultFilters: ExecutionFilters = {};
@@ -222,10 +222,10 @@ describe('useExecutionsData — Story 36.3 : polling observateur', () => {
 
     let pollingCallback: (() => void) | null = null;
     const realSetTimeout = globalThis.setTimeout;
-    vi.spyOn(globalThis, 'setTimeout').mockImplementation((fn: TimerHandler, delay?: number, ...rest: unknown[]) => {
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: TimerHandler, delay?: number, ...rest: unknown[]) => {
       if (delay === 10_000 || delay === 30_000) pollingCallback = fn as () => void;
       return realSetTimeout(fn, delay, ...rest);
-    });
+    }) as typeof setTimeout);
 
     const { result } = renderHook(() => useExecutionsData(defaultFilters, false));
     await waitFor(() => expect(result.current.loading).toBe(false));
