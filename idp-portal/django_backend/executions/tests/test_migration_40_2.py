@@ -12,10 +12,18 @@ Pour exécuter localement (Oracle Docker requis) :
 """
 
 import pytest
+from django.conf import settings
 from django.db import connection
 
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        "oracle" not in settings.DATABASES["default"]["ENGINE"],
+        reason="Oracle-specific tests (USER_TABLES, USER_PART_TABLES, etc.) require Oracle DB",
+    ),
+]
 
-@pytest.mark.integration
+
 class TestMigration40_2Partitioning:
     """
     Tests de validation de la migration V084 — partitionnement mensuel INTERVAL sur EXECUTIONS.
@@ -173,17 +181,21 @@ class TestMigration40_2Partitioning:
         obsolete_indexes = ('IDX_EXECUTIONS_ACTION_ID', 'IDX_EXECUTIONS_CREATED_AT')
 
         with connection.cursor() as cursor:
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT INDEX_NAME
                 FROM USER_INDEXES
                 WHERE TABLE_NAME = 'EXECUTIONS'
-                  AND INDEX_NAME IN ('IDX_EXECUTIONS_ACTION_ID', 'IDX_EXECUTIONS_CREATED_AT')
-            """)
+                  AND INDEX_NAME IN (%s, %s)
+                """,
+                obsolete_indexes,
+            )
             rows = cursor.fetchall()
 
         found_obsolete = [r[0] for r in rows]
         assert not found_obsolete, (
             f"Anciens index obsolètes encore présents après V084 : {found_obsolete}. "
+            f"Attendus supprimés : {obsolete_indexes}. "
             "Ces index auraient dû être supprimés avec EXECUTIONS_OLD."
         )
 

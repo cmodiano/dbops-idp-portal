@@ -56,3 +56,33 @@ app.conf.beat_schedule = {
         'schedule': _gate_schedule,
     },
 }
+
+# Story 42.1: Celery Beat — process pending scheduled executions
+# Environment variables:
+#   CELERY_BEAT_PROCESS_SCHEDULED_EXECUTIONS_INTERVAL: seconds (default: 60.0)
+#   CELERY_BEAT_PROCESS_SCHEDULED_EXECUTIONS_CRONTAB: crontab expression overrides interval
+_sched_crontab = os.getenv('CELERY_BEAT_PROCESS_SCHEDULED_EXECUTIONS_CRONTAB')
+if _sched_crontab:
+    parts = _sched_crontab.split()
+    if len(parts) == 5:
+        _sched_schedule = crontab(
+            minute=parts[0],
+            hour=parts[1],
+            day_of_month=parts[2],
+            month_of_year=parts[3],
+            day_of_week=parts[4],
+        )
+    else:
+        logger.warning(  # type: ignore[call-arg]
+            "celery_beat_invalid_sched_crontab_fallback_interval",
+            crontab=_sched_crontab,
+            fallback_interval=60.0,
+        )
+        _sched_schedule = 60.0
+else:
+    _sched_schedule = float(os.getenv('CELERY_BEAT_PROCESS_SCHEDULED_EXECUTIONS_INTERVAL', '60.0'))
+
+app.conf.beat_schedule['process-pending-scheduled-executions'] = {
+    'task': 'executions.tasks.process_pending_scheduled_executions',
+    'schedule': _sched_schedule,
+}

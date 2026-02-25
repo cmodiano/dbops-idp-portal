@@ -12,10 +12,18 @@ Pour exécuter localement (Oracle Docker requis) :
 """
 
 import pytest
+from django.conf import settings
 from django.db import connection
 
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        "oracle" not in settings.DATABASES["default"]["ENGINE"],
+        reason="Oracle-specific tests (USER_TABLES, USER_PART_TABLES, etc.) require Oracle DB",
+    ),
+]
 
-@pytest.mark.integration
+
 class TestMigration40_3ReferencePartitioning:
     """
     Tests de validation de la migration V085 — Reference Partitioning sur EXECUTION_STEPS.

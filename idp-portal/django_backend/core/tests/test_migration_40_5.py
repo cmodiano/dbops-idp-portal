@@ -20,10 +20,18 @@ Couverture AC#8 et AC#9 :
 """
 
 import pytest
+from django.conf import settings
 from django.db import connection
 
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        "oracle" not in settings.DATABASES["default"]["ENGINE"],
+        reason="Oracle-specific tests (USER_OBJECTS, USER_TABLES, etc.) require Oracle DB",
+    ),
+]
 
-@pytest.mark.integration
+
 class TestMigration40_5PurgeProcedure:
     """
     Tests de validation de la migration V087 — PKG_IDP_MAINTENANCE.

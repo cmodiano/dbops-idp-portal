@@ -48,6 +48,8 @@ class AuditActionType(models.TextChoices):
     SCHEDULED_EXECUTION_EXECUTED = 'SCHEDULED_EXECUTION_EXECUTED', 'Scheduled Execution Executed'
     SCHEDULED_EXECUTION_CANCELLED = 'SCHEDULED_EXECUTION_CANCELLED', 'Scheduled Execution Cancelled'
     SCHEDULED_EXECUTION_RECURRING_DISABLED = 'SCHEDULED_EXECUTION_RECURRING_DISABLED', 'Scheduled Execution Recurring Disabled'
+    # Story 42.1: Celery Beat triggered a scheduled execution
+    SCHEDULED_EXECUTION_CELERY_TRIGGERED = 'SCHEDULED_EXECUTION_CELERY_TRIGGERED', 'Scheduled Execution Celery Triggered'
     # User types (added for AuthService)
     USER_CREATED = 'USER_CREATED', 'User Created'
     USER_UPDATED = 'USER_UPDATED', 'User Updated'
