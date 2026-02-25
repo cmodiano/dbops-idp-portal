@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import secrets
-from datetime import datetime
 
 from django.db import models
 from django.utils import timezone

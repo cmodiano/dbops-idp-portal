@@ -4,7 +4,7 @@ POST /api/v1/auth/token - Exchange API key for JWT.
 """
 
 import pytest
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 from jose import jwt
