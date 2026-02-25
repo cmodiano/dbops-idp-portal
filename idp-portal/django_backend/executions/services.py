@@ -26,6 +26,41 @@ from integrations.models import IntegrationStatus
 logger = structlog.get_logger(__name__)
 
 
+# Story 43.2: Clés sensibles à exclure des paramètres d'audit (case-insensitive)
+_SENSITIVE_PARAM_KEYS = frozenset({
+    'password', 'secret', 'api_key', 'token', 'private_key',
+    'credential', '_env_config'
+})
+
+
+def _sanitize_parameters(parameters: dict | None) -> dict | None:
+    """
+    Retourne une copie des paramètres sans les clés sensibles.
+    Filtrage récursif sur les valeurs dict imbriquées et les listes de dicts.
+    Les dicts imbriqués entièrement sensibles sont exclus (pas inclus comme None).
+    Retourne None si parameters est None ou si le résultat est vide.
+    """
+    if not parameters:
+        return None
+    sanitized: dict = {}
+    for k, v in parameters.items():
+        if k.lower() in _SENSITIVE_PARAM_KEYS:
+            continue
+        if isinstance(v, dict):
+            sanitized_v = _sanitize_parameters(v)
+            if sanitized_v is not None:
+                sanitized[k] = sanitized_v
+            # dict imbriqué entièrement sensible → clé exclue (pas incluse comme None)
+        elif isinstance(v, list):
+            sanitized[k] = [
+                _sanitize_parameters(item) if isinstance(item, dict) else item
+                for item in v
+            ]
+        else:
+            sanitized[k] = v
+    return sanitized if sanitized else None
+
+
 class ExecutionService:
     """
     Service for execution business logic.
@@ -239,6 +274,13 @@ class ExecutionService:
         # Story 4.12 (AC6): include workflow_step_parameters when provided
         if isinstance(parameters, dict) and isinstance(parameters.get("workflow_step_parameters"), dict):
             audit_details["workflow_step_parameters"] = parameters.get("workflow_step_parameters")
+        # Story 43.2: inclure les paramètres d'exécution nettoyés dans audit_details
+        sanitized_params = _sanitize_parameters(parameters)
+        if sanitized_params:
+            # Exclure workflow_step_parameters si déjà inclus séparément dans audit_details
+            sanitized_params.pop("workflow_step_parameters", None)
+            if sanitized_params:
+                audit_details["parameters"] = sanitized_params
         if source:
             audit_details['source'] = source
         if ip_address:
