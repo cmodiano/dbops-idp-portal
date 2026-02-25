@@ -5,6 +5,7 @@ import io
 from datetime import datetime
 from math import ceil
 
+from django.db.models import Q
 from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -146,7 +147,41 @@ def _resolve_user_names(user_ids: list[str]) -> dict[str, str]:
 
 
 def _build_audit_queryset(request):
-    qs = AuditLog.objects.filter(entity_type=AuditEntityType.EXECUTION)
+    # Story 43.1: base sans filtre — toutes les entités
+    qs = AuditLog.objects.all()
+
+    # Filtre entity_type (optionnel, Story 43.1)
+    entity_type_param = (request.query_params.get("entity_type") or "").strip()
+    if entity_type_param:
+        if entity_type_param not in AuditEntityType.values:
+            raise BadRequestError(
+                code="BAD_REQUEST",
+                message="entity_type invalide",
+                details={"entity_type": entity_type_param},
+            )
+        qs = qs.filter(entity_type=entity_type_param)
+
+    # Filtre action_type (optionnel, Story 43.1)
+    action_type_param = (request.query_params.get("action_type") or "").strip()
+    if action_type_param:
+        if action_type_param not in AuditActionType.values:
+            raise BadRequestError(
+                code="BAD_REQUEST",
+                message="action_type invalide",
+                details={"action_type": action_type_param},
+            )
+        qs = qs.filter(action_type=action_type_param)
+
+    # Filtre user par recherche icontains (Story 43.1)
+    user_search = (request.query_params.get("user") or "").strip()
+    if user_search:
+        matching_users = User.objects.filter(
+            Q(username__icontains=user_search) | Q(display_name__icontains=user_search)
+        ).values_list("id", flat=True)
+        user_id_strs = [str(uid) for uid in matching_users]
+        qs = qs.filter(
+            Q(user_id__in=user_id_strs) | Q(user_id__icontains=user_search)
+        )
 
     dt_from = _parse_dt(request.query_params.get("from"), name="from")
     dt_to = _parse_dt(request.query_params.get("to"), name="to")
@@ -155,39 +190,55 @@ def _build_audit_queryset(request):
     if dt_to:
         qs = qs.filter(timestamp__lte=dt_to)
 
-    environment = (request.query_params.get("environment") or "").strip()
-    if environment:
-        exec_ids = Execution.objects.filter(environment=environment).values("id")
-        qs = qs.filter(entity_id__in=exec_ids)
+    # Filtres execution-only : ne s'appliquent que si entity_type=execution ou non filtré (Story 43.1, AC6)
+    # AC6: ignorés silencieusement pour les autres types
+    is_execution_scope = entity_type_param in ("", "execution")
+    if is_execution_scope:
+        # Helper: applique un filtre execution-only sans exclure les entrées non-exécution
+        # Quand entity_type=execution : filtre tout le queryset (déjà limité aux EXECUTION)
+        # Quand aucun entity_type : ne filtre que les EXECUTION, laisse les autres intactes
+        def _apply_exec_filter(qs, exec_ids_qs):
+            if entity_type_param == "execution":
+                return qs.filter(entity_id__in=exec_ids_qs)
+            # Aucun entity_type fourni : garder les non-exécutions, filtrer les exécutions
+            return qs.filter(
+                ~Q(entity_type=AuditEntityType.EXECUTION) | Q(entity_id__in=exec_ids_qs)
+            )
 
-    action_id = request.query_params.get("action_id")
-    if action_id is not None and action_id != "":
-        aid = _parse_int(action_id, 0, name="action_id")
-        exec_ids = Execution.objects.filter(action_id=aid).values("id")
-        qs = qs.filter(entity_id__in=exec_ids)
+        environment = (request.query_params.get("environment") or "").strip()
+        if environment:
+            exec_ids = Execution.objects.filter(environment=environment).values("id")
+            qs = _apply_exec_filter(qs, exec_ids)
 
-    # Filter by action engine (REF_ENGINES code)
-    engine_type = (request.query_params.get("engine_type") or "").strip()
-    if engine_type:
-        exec_ids = Execution.objects.filter(action__engine=engine_type).values("id")
-        qs = qs.filter(entity_id__in=exec_ids)
+        action_id = request.query_params.get("action_id")
+        if action_id is not None and action_id != "":
+            aid = _parse_int(action_id, 0, name="action_id")
+            exec_ids = Execution.objects.filter(action_id=aid).values("id")
+            qs = _apply_exec_filter(qs, exec_ids)
 
+        # Filter by action engine (REF_ENGINES code)
+        engine_type = (request.query_params.get("engine_type") or "").strip()
+        if engine_type:
+            exec_ids = Execution.objects.filter(action__engine=engine_type).values("id")
+            qs = _apply_exec_filter(qs, exec_ids)
+
+        status_filter = (request.query_params.get("status") or "").strip()
+        if status_filter:
+            if status_filter not in _EXECUTION_STATUS_BY_FILTER:
+                raise BadRequestError(
+                    code="BAD_REQUEST",
+                    message="status invalide",
+                    details={"status": status_filter},
+                )
+            # Filter by current execution status so "En cours" shows only executions still in progress
+            exec_statuses = _EXECUTION_STATUS_BY_FILTER[status_filter]
+            exec_ids = Execution.objects.filter(status__in=exec_statuses).values_list("id", flat=True)  # type: ignore[assignment]
+            qs = _apply_exec_filter(qs, exec_ids)
+
+    # Story 6.3: user_id exact match (rétro-compatibilité)
     user_id = (request.query_params.get("user_id") or "").strip()
     if user_id:
         qs = qs.filter(user_id=user_id)
-
-    status_filter = (request.query_params.get("status") or "").strip()
-    if status_filter:
-        if status_filter not in _EXECUTION_STATUS_BY_FILTER:
-            raise BadRequestError(
-                code="BAD_REQUEST",
-                message="status invalide",
-                details={"status": status_filter},
-            )
-        # Filter by current execution status so "En cours" shows only executions still in progress
-        exec_statuses = _EXECUTION_STATUS_BY_FILTER[status_filter]
-        exec_ids = Execution.objects.filter(status__in=exec_statuses).values_list("id", flat=True)  # type: ignore[assignment]
-        qs = qs.filter(entity_id__in=exec_ids)
 
     # Story 27.8: Filter by correlation_id (exact match)
     correlation_id = (request.query_params.get("correlation_id") or "").strip()
@@ -215,21 +266,25 @@ def _build_audit_queryset(request):
 
 class AuditExecutionsView(APIView):
     """
-    GET /audit/executions (Story 6.3, Story 27.8)
+    GET /audit/executions (Story 6.3, Story 27.8, Story 43.1)
 
     Query parameters:
+      - entity_type: Filter by entity type (action, execution, user, integration, ...) [Story 43.1]
+                     Sans filtre : retourne toutes les entrées d'audit.
+      - action_type: Filter by audit action type (ACTION_CREATED, EXECUTION_COMPLETED, ...) [Story 43.1]
+      - user: Recherche icontains sur username ou display_name [Story 43.1]
       - from/to: ISO 8601 date range filter
-      - environment: Filter by execution environment
-      - action_id: Filter by action ID
-      - engine_type: Filter by action engine (REF_ENGINES code, e.g. Oracle, SQL Server)
-      - user_id: Filter by user ID
-      - status: Filter by derived status (success, failed, running)
+      - environment: Filter by execution environment (execution-only, ignoré si entity_type != execution)
+      - action_id: Filter by action ID (execution-only)
+      - engine_type: Filter by action engine (REF_ENGINES code) (execution-only)
+      - user_id: Filter by exact user ID (rétro-compatibilité Story 6.3)
+      - status: Filter by derived status (success, failed, running) (execution-only)
       - correlation_id: Filter by exact correlation ID (Story 27.8)
       - sort/order: Sort field and direction
       - limit/offset: Pagination
 
     Returns:
-      { "data": AuditExecutionEntry[], "pagination": PaginationInfo }
+      { "data": AuditEntry[], "pagination": PaginationInfo }
     """
 
     permission_classes = [IsAuthenticated]
@@ -253,7 +308,8 @@ class AuditExecutionsView(APIView):
         total = qs.count()
 
         rows = list(qs[offset : offset + limit])
-        execution_ids = [r.entity_id for r in rows if r.entity_id]
+        # Story 43.1 T3.2: batch query uniquement sur les IDs d'exécution
+        execution_ids = [r.entity_id for r in rows if r.entity_type == AuditEntityType.EXECUTION and r.entity_id]
         executions = (
             Execution.objects.filter(id__in=execution_ids)
             .select_related("action")
@@ -266,7 +322,8 @@ class AuditExecutionsView(APIView):
         data = []
         for r in rows:
             details = r.get_details()
-            exec_obj = exec_by_id.get(r.entity_id)
+            # Story 43.1 T3.1: ne pas tenter de récupérer Execution pour les entrées non-exécution
+            exec_obj = exec_by_id.get(r.entity_id) if r.entity_type == AuditEntityType.EXECUTION else None
 
             if details is None and exec_obj is not None:
                 details = {
@@ -280,13 +337,17 @@ class AuditExecutionsView(APIView):
                 # Always enrich with current execution status (not stale audit-time status)
                 details["status"] = exec_obj.status
 
-            action_name = None
-            if exec_obj is not None and getattr(exec_obj, "action", None) is not None:
-                action_name = exec_obj.action.name
-
-            # Derive parent_execution_id and item_type for frontend grouping
-            parent_execution_id = getattr(exec_obj, "parent_execution_id", None) if exec_obj else None
-            item_type = getattr(exec_obj.action, "item_type", None) if exec_obj and getattr(exec_obj, "action", None) else None
+            # Story 43.1 T3.3: champs execution-only = None pour les entrées non-exécution
+            if r.entity_type == AuditEntityType.EXECUTION:
+                action_name = exec_obj.action.name if exec_obj is not None and getattr(exec_obj, "action", None) is not None else None
+                derived_status = _derive_status(r.action_type, details)
+                parent_execution_id = getattr(exec_obj, "parent_execution_id", None) if exec_obj else None
+                item_type = getattr(exec_obj.action, "item_type", None) if exec_obj and getattr(exec_obj, "action", None) else None
+            else:
+                action_name = None
+                derived_status = None
+                parent_execution_id = None
+                item_type = None
 
             data.append(
                 {
@@ -296,12 +357,12 @@ class AuditExecutionsView(APIView):
                     "user_name": user_name_by_id.get(r.user_id) if r.user_id else None,
                     "action_type": r.action_type,
                     "entity_type": r.entity_type,
-                    "entity_id": int(r.entity_id),
+                    "entity_id": int(r.entity_id) if r.entity_id else None,
                     "action_name": action_name,
                     "details": details,
                     "ip_address": r.ip_address,
                     "correlation_id": r.correlation_id,
-                    "derived_status": _derive_status(r.action_type, details),
+                    "derived_status": derived_status,
                     "parent_execution_id": parent_execution_id,
                     "item_type": item_type,
                 }
@@ -363,7 +424,8 @@ class AuditExportView(APIView):
 
         # Build CSV
         rows = list(qs[:10_000])
-        execution_ids = [r.entity_id for r in rows if r.entity_id]
+        # Story 43.1: batch query uniquement sur les IDs d'exécution (pas les autres entity_types)
+        execution_ids = [r.entity_id for r in rows if r.entity_type == AuditEntityType.EXECUTION and r.entity_id]
         executions = (
             Execution.objects.filter(id__in=execution_ids)
             .select_related("action")
@@ -397,7 +459,8 @@ class AuditExportView(APIView):
 
         for r in rows:
             details = r.get_details() or {}
-            exec_obj = exec_by_id.get(r.entity_id)
+            # Story 43.1: ne récupérer l'Execution que pour les entrées de type EXECUTION
+            exec_obj = exec_by_id.get(r.entity_id) if r.entity_type == AuditEntityType.EXECUTION else None
             writer.writerow(
                 [
                     r.id,
@@ -405,7 +468,7 @@ class AuditExportView(APIView):
                     r.user_id or "",
                     user_name_by_id_export.get(r.user_id) or r.user_id or "",
                     r.action_type,
-                    int(r.entity_id),
+                    int(r.entity_id) if r.entity_id else None,
                     details.get("action_id") or (exec_obj.action_id if exec_obj else ""),
                     (exec_obj.action.name if exec_obj and getattr(exec_obj, "action", None) else ""),
                     details.get("environment") or (exec_obj.environment if exec_obj else ""),
