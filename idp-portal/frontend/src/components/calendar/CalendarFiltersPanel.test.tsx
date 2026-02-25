@@ -53,8 +53,8 @@ describe('CalendarFiltersPanel', () => {
     vi.clearAllMocks();
 
     vi.mocked(integrationsService.getIntegrations).mockResolvedValue([
-      { id: 1, type: 'aap', name: 'AAP', base_url: 'https://aap.example.com', credential_ref: null, icon: null, auth_flow: null, created_at: '2026-01-01', updated_at: '2026-01-01' },
-      { id: 2, type: 'terraform', name: 'Terraform', base_url: 'https://tf.example.com', credential_ref: null, icon: null, auth_flow: null, created_at: '2026-01-01', updated_at: '2026-01-01' },
+      { id: 1, type: 'aap', name: 'AAP', base_url: 'https://aap.example.com', credential_ref: null, icon: null, auth_flow: null, token_url: null, created_at: '2026-01-01', updated_at: '2026-01-01' },
+      { id: 2, type: 'terraform', name: 'Terraform', base_url: 'https://tf.example.com', credential_ref: null, icon: null, auth_flow: null, token_url: null, created_at: '2026-01-01', updated_at: '2026-01-01' },
     ]);
   });
 

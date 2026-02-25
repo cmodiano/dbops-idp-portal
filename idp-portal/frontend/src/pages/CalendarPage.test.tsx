@@ -122,7 +122,7 @@ describe('CalendarPage', () => {
       mockScheduledExecutionsResponse
     );
     vi.mocked(integrationsService.getIntegrations).mockResolvedValue([
-      { id: 1, type: 'aap', name: 'AAP Prod', base_url: 'https://aap.example.com', credential_ref: null, icon: null, auth_flow: null, created_at: '2026-01-01', updated_at: '2026-01-01' },
+      { id: 1, type: 'aap', name: 'AAP Prod', base_url: 'https://aap.example.com', credential_ref: null, icon: null, auth_flow: null, token_url: null, created_at: '2026-01-01', updated_at: '2026-01-01' },
     ]);
     vi.mocked(executionService.fetchInventoryTargets).mockResolvedValue([]);
   });
