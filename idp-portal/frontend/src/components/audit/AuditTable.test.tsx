@@ -181,12 +181,23 @@ describe('AuditTable', () => {
       expect(getEntityLabel(entry)).toBe('#42');
     });
 
-    it('test_getEntityLabel_function — returns — when no entity_id', () => {
+    it('test_getEntityLabel_function — returns #0 when entity_id is 0 (valid zero)', () => {
       const entry = {
         ...mockEntry,
         action_name: undefined,
         entity_type: 'execution' as const,
         entity_id: 0,
+        details: { action_id: undefined, environment: 'prod', servicenow_change_id: undefined },
+      };
+      expect(getEntityLabel(entry)).toBe('#0');
+    });
+
+    it('test_getEntityLabel_function — returns — when entity_id is null', () => {
+      const entry = {
+        ...mockEntry,
+        action_name: undefined,
+        entity_type: 'execution' as const,
+        entity_id: null as unknown as number,
         details: { action_id: undefined, environment: 'prod', servicenow_change_id: undefined },
       };
       expect(getEntityLabel(entry)).toBe('—');
@@ -262,7 +273,7 @@ describe('AuditTable', () => {
       expect(screen.getByText('Deploy App')).toBeInTheDocument();
     });
 
-    it('test_column_headers_include_new_columns — renders new column headers', () => {
+    it('renders column headers: Entité, Type, Opération, Utilisateur, Statut, Date', () => {
       render(<AuditTable {...defaultProps} />);
       expect(screen.getByText('Entité')).toBeInTheDocument();
       expect(screen.getByText('Type')).toBeInTheDocument();
@@ -327,10 +338,14 @@ describe('AuditTable', () => {
     it('shows dash for operation when action type has no known suffix', () => {
       const unknownOpEntry = { ...mockEntry, action_type: 'USER_LOGIN' };
       render(<AuditTable {...defaultProps} topLevelEntries={[unknownOpEntry]} />);
-      // getOperationConfig('USER_LOGIN') → fallback '—'
-      const cells = document.querySelectorAll('td');
-      const dashCells = Array.from(cells).filter(c => c.textContent?.trim() === '—');
-      expect(dashCells.length).toBeGreaterThan(0);
+      // getOperationConfig('USER_LOGIN') → fallback '—'; assert the Opération column cell specifically
+      const headers = Array.from(document.querySelectorAll('thead th'));
+      const opColIndex = headers.findIndex((th) => th.textContent?.trim() === 'Opération');
+      expect(opColIndex).toBeGreaterThanOrEqual(0);
+      const firstDataRow = document.querySelector('tbody tr');
+      const cells = Array.from(firstDataRow?.querySelectorAll('td') ?? []);
+      const opCell = cells[opColIndex];
+      expect(opCell?.textContent?.trim()).toBe('—');
     });
 
     it('renders workflow entry with expandable indicator', () => {
@@ -408,8 +423,13 @@ describe('AuditTable', () => {
         action_type: 'ACTION_CREATED',
       };
       render(<AuditTable {...defaultProps} topLevelEntries={[actionEntry]} />);
-      // No ant-tag should be rendered (status = — for non-execution)
-      expect(document.querySelectorAll('.ant-tag')).toHaveLength(0);
+      const headers = Array.from(document.querySelectorAll('thead th'));
+      const statusColIndex = headers.findIndex((th) => th.textContent?.trim() === 'Statut');
+      expect(statusColIndex).toBeGreaterThanOrEqual(0);
+      const firstDataRow = document.querySelector('tbody tr');
+      const cells = Array.from(firstDataRow?.querySelectorAll('td') ?? []);
+      const statusCell = cells[statusColIndex];
+      expect(statusCell?.textContent?.trim()).toBe('—');
     });
 
     it('test_non_execution_entry_shows_dash_for_environment — Environnement affiche — pour une intégration (colonne rendue visible)', () => {
@@ -443,15 +463,6 @@ describe('AuditTable', () => {
         (td) => td.textContent?.trim() === '—',
       );
       expect(dashCells.length).toBeGreaterThan(0);
-    });
-
-    it('test_column_headers_include_new_columns — Entité, Type, Opération sont dans les en-têtes', () => {
-      render(<AuditTable {...defaultProps} />);
-      const headers = document.querySelectorAll('th');
-      const headerTexts = Array.from(headers).map(h => h.textContent?.trim());
-      expect(headerTexts).toContain('Entité');
-      expect(headerTexts).toContain('Type');
-      expect(headerTexts).toContain('Opération');
     });
 
     it('renders column toggle button', () => {

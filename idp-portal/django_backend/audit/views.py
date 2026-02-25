@@ -310,7 +310,7 @@ class AuditExecutionsView(APIView):
 
         rows = list(qs[offset : offset + limit])
         # Story 43.1 T3.2: batch query uniquement sur les IDs d'exécution
-        execution_ids = [r.entity_id for r in rows if r.entity_type == AuditEntityType.EXECUTION and r.entity_id]
+        execution_ids = [r.entity_id for r in rows if r.entity_type == AuditEntityType.EXECUTION and r.entity_id is not None]
         executions = (
             Execution.objects.filter(id__in=execution_ids)
             .select_related("action")
@@ -426,7 +426,7 @@ class AuditExportView(APIView):
         # Build CSV
         rows = list(qs[:10_000])
         # Story 43.1: batch query uniquement sur les IDs d'exécution (pas les autres entity_types)
-        execution_ids = [r.entity_id for r in rows if r.entity_type == AuditEntityType.EXECUTION and r.entity_id]
+        execution_ids = [r.entity_id for r in rows if r.entity_type == AuditEntityType.EXECUTION and r.entity_id is not None]
         executions = (
             Execution.objects.filter(id__in=execution_ids)
             .select_related("action")

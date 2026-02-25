@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router';
 import { App, ConfigProvider } from 'antd';
@@ -486,7 +486,7 @@ describe('AuditPage', () => {
     });
 
     it('test_user_search_filters_data: saisir "john" dans champ utilisateur → API appelée avec user=john après debounce', async () => {
-      const user = userEvent.setup();
+      vi.useFakeTimers();
       renderWithProviders(<AuditPage />);
 
       await waitFor(() => {
@@ -494,16 +494,15 @@ describe('AuditPage', () => {
       });
 
       const input = screen.getByPlaceholderText('Rechercher un utilisateur');
-      await user.type(input, 'john');
+      fireEvent.change(input, { target: { value: 'john' } });
+      vi.advanceTimersByTime(300);
 
-      await waitFor(
-        () => {
-          expect(mockListExecutionAudit).toHaveBeenCalledWith(
-            expect.objectContaining({ user: 'john' }),
-          );
-        },
-        { timeout: 2000 },
-      );
+      await waitFor(() => {
+        expect(mockListExecutionAudit).toHaveBeenCalledWith(
+          expect.objectContaining({ user: 'john' }),
+        );
+      });
+      vi.useRealTimers();
     });
 
     it("test_page_title_updated: le titre affiche \"Journal d'audit\"", async () => {
@@ -516,6 +515,7 @@ describe('AuditPage', () => {
 
     it('test_export_includes_new_filters: export CSV transmet entity_type, action_type, user', async () => {
       mockExportAuditReport.mockResolvedValue(undefined);
+      vi.useFakeTimers();
       const user = userEvent.setup();
       renderWithProviders(<AuditPage />);
 
@@ -534,16 +534,14 @@ describe('AuditPage', () => {
 
       // Saisir une recherche utilisateur → user=alice (après debounce 300ms)
       const userInput = screen.getByPlaceholderText('Rechercher un utilisateur');
-      await user.type(userInput, 'alice');
+      fireEvent.change(userInput, { target: { value: 'alice' } });
+      vi.advanceTimersByTime(300);
 
-      await waitFor(
-        () => {
-          expect(mockListExecutionAudit).toHaveBeenCalledWith(
-            expect.objectContaining({ user: 'alice' }),
-          );
-        },
-        { timeout: 2000 },
-      );
+      await waitFor(() => {
+        expect(mockListExecutionAudit).toHaveBeenCalledWith(
+          expect.objectContaining({ user: 'alice' }),
+        );
+      });
 
       // Exporter en CSV — doit transmettre entity_type ET user
       const exportButton = screen.getByRole('button', { name: /Exporter/i });
@@ -564,6 +562,7 @@ describe('AuditPage', () => {
           }),
         );
       });
+      vi.useRealTimers();
     });
 
     it('test_pagination_resets_on_filter_change: changement d\'onglet envoie offset=0 (AC6)', async () => {

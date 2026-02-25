@@ -154,6 +154,9 @@ const OPERATION_SUFFIX_MAP: Array<{ suffix: string; config: OperationConfig }> =
   { suffix: '_TRIGGERED', config: { label: 'Déclencher', icon: <PlayCircleOutlined />, color: 'blue' } },
   { suffix: '_BLOCKED', config: { label: 'Bloquer', icon: <CloseOutlined />, color: 'red' } },
   { suffix: '_FORBIDDEN', config: { label: 'Interdit', icon: <CloseOutlined />, color: 'red' } },
+  { suffix: '_INTEGRATION', config: { label: 'Intégration', icon: <ExclamationCircleOutlined />, color: 'orange' } },
+  { suffix: '_EXHAUSTED', config: { label: 'Polling épuisé', icon: <ExclamationCircleOutlined />, color: 'orange' } },
+  { suffix: '_WARNING', config: { label: 'Avertissement', icon: <ExclamationCircleOutlined />, color: 'orange' } },
 ];
 
 const FALLBACK_OPERATION: OperationConfig = { label: '—', icon: null, color: 'default' };

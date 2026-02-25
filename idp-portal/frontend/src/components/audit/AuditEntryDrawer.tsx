@@ -21,6 +21,22 @@ import { ACTION_TYPE_LABELS, ENTITY_TYPE_LABELS, formatDate, getEntityLabel } fr
 
 const { Text } = Typography;
 
+/** User-friendly labels for audit detail keys (Détails section). */
+const DETAIL_KEY_LABELS: Record<string, string> = {
+  action_name: 'Nom de l\'action',
+  action_id: 'ID action',
+  previous_status: 'Statut précédent',
+  new_status: 'Nouveau statut',
+  environment: 'Environnement',
+  status: 'Statut',
+  name: 'Nom',
+  integration_id: 'ID intégration',
+  integration_name: 'Nom intégration',
+  integration_type: 'Type intégration',
+  integration_status: 'Statut intégration',
+  reason: 'Raison',
+};
+
 export interface AuditEntryDrawerProps {
   open: boolean;
   entry: AuditExecutionEntry | null;
@@ -103,7 +119,7 @@ export function AuditEntryDrawer({
                 {Object.entries(entry.details)
                   .filter(([, v]) => v !== null && v !== undefined && v !== '')
                   .map(([key, value]) => (
-                    <Descriptions.Item key={key} label={key}>
+                    <Descriptions.Item key={key} label={DETAIL_KEY_LABELS[key] ?? key}>
                       {typeof value === 'object' ? (
                         <pre style={{ margin: 0, fontSize: 11, whiteSpace: 'pre-wrap' }}>
                           {JSON.stringify(value, null, 2)}
