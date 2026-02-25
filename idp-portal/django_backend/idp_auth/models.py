@@ -118,7 +118,7 @@ class APIKeyManager(models.Manager['APIKey']):
     def verify_key(self, raw_key: str) -> 'APIKey | None':
         key_hash = _hash_key(raw_key)
         try:
-            instance = self.get(key_hash=key_hash, is_active=True)
+            instance = self.select_related('user').get(key_hash=key_hash, is_active=True)
         except self.model.DoesNotExist:
             return None
         if instance.expires_at is not None:
