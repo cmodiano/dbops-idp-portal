@@ -13,7 +13,7 @@
 2. [Groupements logiques](#2-groupements-logiques)
 3. [Analyse des dépendances inter-scripts](#3-analyse-des-dépendances-inter-scripts)
 4. [Classification par idempotence](#4-classification-par-idempotence)
-5. [Scripts de cleanup/drop — importance pour la consolidation](#5-scripts-de-cleanUpdrop--importance-pour-la-consolidation)
+5. [Scripts de cleanup/drop — importance pour la consolidation](#5-scripts-de-cleanupdrop--importance-pour-la-consolidation)
 6. [Stratégies de consolidation](#6-stratégies-de-consolidation)
 7. [Stratégie recommandée](#7-stratégie-recommandée)
 8. [Risques documentés](#8-risques-documentés)
@@ -151,7 +151,7 @@
 
 ### 3.1 Graphe de dépendances par FK et ALTER TABLE
 
-```
+```text
 USERS (V001)
   ├── ACTIONS_CATALOG.CREATED_BY → USERS.ID (V002)
   ├── USER_PERMISSIONS → USERS (V005)
@@ -370,7 +370,7 @@ WHERE generated = 'N';
 
 ### Plan d'implémentation de la baseline (Story 41-2)
 
-```
+```text
 idp-portal/database/
   baseline/
     baseline_schema_v083.sql                    ← NOUVEAU (à créer en 41-2) — appliqué via SQL*Plus, pas via Flyway
@@ -383,7 +383,6 @@ idp-portal/database/
 ```
 
 > **Pourquoi hors de `migrations/` ?** Les versions Flyway doivent être numériques (ex: `1`, `1.2`, `83`). Tout composant non-numérique dans le nom (ex: `_consolidated`) cause une erreur de parsing Flyway. Ce script n'est pas une migration Flyway mais un script SQL d'initialisation pour nouveaux environnements.
-
 > **Important :** Les scripts V000–V083 originaux **restent dans `migrations/`** pour les environnements existants (dev, staging, prod). Le script consolidé est utilisé **uniquement pour nouveaux environnements**.
 
 ### Tables dans l'état final post-V083
@@ -596,12 +595,12 @@ flyway -url=jdbc:oracle:thin:@NEW_ENV:1521/XEPDB1 info
 
 Les rollbacks sont disponibles uniquement pour les scripts de partitionnement :
 
-```
+```text
 idp-portal/database/rollback/
-  rollback_V084__partition_executions.sql
-  rollback_V085__partition_execution_steps.sql
-  rollback_V086__partition_audit_log.sql
-  rollback_V087__create_purge_procedure.sql
+  V084__partition_executions_rollback.sql
+  V085__partition_execution_steps_rollback.sql
+  V086__partition_audit_log_rollback.sql
+  V087__create_purge_procedure_rollback.sql
 ```
 
 > **Attention :** Le rollback des partitionnements est destructif (DROP TABLE PARTITION). Toujours sauvegarder les données avant rollback sur un environnement non-vierge.
