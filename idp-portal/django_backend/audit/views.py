@@ -446,6 +446,7 @@ class AuditExportView(APIView):
                 "user_id",
                 "user_name",
                 "action_type",
+                "entity_type",          # Story 43.6
                 "execution_id",
                 "action_id",
                 "action_name",
@@ -468,9 +469,11 @@ class AuditExportView(APIView):
                     r.user_id or "",
                     user_name_by_id_export.get(r.user_id) or r.user_id or "",
                     r.action_type,
-                    int(r.entity_id) if r.entity_id else None,
+                    r.entity_type,          # Story 43.6
+                    (int(r.entity_id) if r.entity_id else "") if r.entity_type == AuditEntityType.EXECUTION else "",
                     details.get("action_id") or (exec_obj.action_id if exec_obj else ""),
-                    (exec_obj.action.name if exec_obj and getattr(exec_obj, "action", None) else ""),
+                    (exec_obj.action.name if exec_obj and getattr(exec_obj, "action", None) else "")
+                    or details.get("action_name", ""),      # Story 43.6 : fallback depuis details
                     details.get("environment") or (exec_obj.environment if exec_obj else ""),
                     details.get("status") or (exec_obj.status if exec_obj else ""),
                     details.get("servicenow_change_id") or (exec_obj.servicenow_change_id if exec_obj else ""),
