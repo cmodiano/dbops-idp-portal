@@ -27,6 +27,26 @@ repos:
             .*\.md$
           )$
 
+  # ESLint (frontend): runs on staged .ts/.tsx/.js/.jsx files
+  - repo: local
+    hooks:
+      - id: eslint-frontend
+        name: eslint (frontend)
+        entry: bash -c 'cd idp-portal/frontend && npm run lint'
+        language: system
+        files: ^idp-portal/frontend/.*\.(ts|tsx|js|jsx)$
+        pass_filenames: false
+
+  # TypeScript type check (frontend)
+  - repo: local
+    hooks:
+      - id: typecheck-frontend
+        name: typecheck (frontend)
+        entry: bash -c 'cd idp-portal/frontend && npm run typecheck'
+        language: system
+        files: ^idp-portal/frontend/.*\.(ts|tsx|js|jsx)$
+        pass_filenames: false
+
   # Mypy (Django backend): runs at commit using project venv (Django plugin needs project settings).
   - repo: local
     hooks:

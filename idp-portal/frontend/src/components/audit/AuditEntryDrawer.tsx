@@ -16,7 +16,8 @@ import type {
   ExecutionStepResponse,
 } from '../../types/api';
 import { AUDIT_STATUS_CONFIG as STATUS_CONFIG } from '../../utils/execution-status';
-import { ACTION_TYPE_LABELS, ENTITY_TYPE_LABELS, formatDate, getEntityLabel } from './AuditTable';
+import { ACTION_TYPE_LABELS } from '../../constants/auditActionTypes';
+import { ENTITY_TYPE_LABELS, formatDate, getEntityLabel } from './auditLabels';
 
 const { Text } = Typography;
 
@@ -70,7 +71,7 @@ export function AuditEntryDrawer({
       {loading ? (
         <Skeleton active paragraph={{ rows: 8 }} />
       ) : error ? (
-        <Alert type="error" message="Erreur de chargement" description={error} showIcon />
+        <Alert type="error" title="Erreur de chargement" description={error} showIcon />
       ) : entry ? (
         <div>
           {/* Audit entry details — common fields */}

@@ -184,12 +184,26 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 
+# Directory where collectstatic gathers all static files for production deployment.
+# Required for: `python manage.py collectstatic` and production static file serving.
+# Story 45.1: Added to fix missing admin icons (black squares) when DEBUG=False.
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
 # Ensure static/icons/ directory exists so STATICFILES_DIRS always includes it.
 # Without this, if Django starts before any icon is uploaded, the dir doesn't exist,
 # STATICFILES_DIRS becomes [] and StaticFilesHandler can't serve uploaded icons
 # even after they're written to disk (finders are loaded once at startup).
 (BASE_DIR / 'static' / 'icons').mkdir(parents=True, exist_ok=True)
 STATICFILES_DIRS = [BASE_DIR / 'static']
+
+# Explicit staticfiles finders order (Story 45.1):
+# AppDirectoriesFinder MUST be included so Django admin icons from
+# django.contrib.admin/static/ are discoverable.
+# FileSystemFinder serves project-level static files (static/icons/, etc.)
+STATICFILES_FINDERS = [
+    'django.contrib.staticfiles.finders.FileSystemFinder',
+    'django.contrib.staticfiles.finders.AppDirectoriesFinder',
+]
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

@@ -5,16 +5,11 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import {
-  AuditTable,
-  formatDate,
-  getActionName,
-  getEntityLabel,
-  getOperationConfig,
-  ACTION_TYPE_LABELS,
-  ENTITY_TYPE_LABELS,
-} from './AuditTable';
+import { AuditTable } from './AuditTable';
 import type { AuditTableProps } from './AuditTable';
+import { ACTION_TYPE_LABELS } from '../../constants/auditActionTypes';
+import { ENTITY_TYPE_LABELS, formatDate, getActionName, getEntityLabel } from './auditLabels';
+import { getOperationConfig } from './auditTableOperations';
 import type { AuditExecutionEntry, PaginationInfo } from '../../types/api';
 
 const mockEntry: AuditExecutionEntry = {

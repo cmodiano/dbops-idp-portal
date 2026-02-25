@@ -6,98 +6,23 @@
  */
 
 import { useState } from 'react';
-import type { ReactNode } from 'react';
 import { Typography, Table, Tag, Space, Popover, Checkbox, Button } from 'antd';
 import type { TableProps } from 'antd';
-import {
-  PlusOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  CheckCircleOutlined,
-  CloseOutlined,
-  PlayCircleOutlined,
-  ExclamationCircleOutlined,
-  StopOutlined,
-  SyncOutlined,
-  ClockCircleOutlined,
-  SendOutlined,
-  TableOutlined,
-} from '@ant-design/icons';
+import { CheckCircleOutlined, TableOutlined } from '@ant-design/icons';
 import type {
   AuditExecutionEntry,
   PaginationInfo,
 } from '../../types/api';
 import { ACTION_TYPE_LABELS } from '../../constants/auditActionTypes';
 import { AUDIT_STATUS_CONFIG as STATUS_CONFIG } from '../../utils/execution-status';
+import { ENTITY_TYPE_LABELS, formatDate, getEntityLabel } from './auditLabels';
+import { getOperationConfig } from './auditTableOperations';
 
 const { Text } = Typography;
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
 type TableOnChange<T> = NonNullable<TableProps<T>['onChange']>;
-
-// ─── Mappings ────────────────────────────────────────────────────────────────
-
-export { ACTION_TYPE_LABELS };
-
-export const ENTITY_TYPE_LABELS: Record<string, string> = {
-  action: 'Action',
-  execution: 'Exécution',
-  integration: 'Intégration',
-  profile: 'Profil',
-  user: 'Utilisateur',
-  permission: 'Permission',
-  scheduled_execution: 'Exécution planifiée',
-  feature_flag: 'Feature Flag',
-  integration_type_catalogue: 'Catalogue intégration',
-  integration_action: 'Action intégration',
-  business_rule_policy: 'Politique',
-};
-
-interface OperationConfig {
-  label: string;
-  icon: ReactNode;
-  color: string;
-}
-
-const OPERATION_SUFFIX_MAP: Array<{ suffix: string; config: OperationConfig }> = [
-  { suffix: '_PENDING_APPROVAL', config: { label: 'En attente', icon: <ClockCircleOutlined />, color: 'orange' } },
-  { suffix: '_APPROVED', config: { label: 'Approuver', icon: <CheckCircleOutlined />, color: 'green' } },
-  { suffix: '_REJECTED', config: { label: 'Rejeter', icon: <CloseOutlined />, color: 'red' } },
-  { suffix: '_PUBLISHED', config: { label: 'Publier', icon: <CheckCircleOutlined />, color: 'green' } },
-  { suffix: '_SUBMITTED', config: { label: 'Soumettre', icon: <SendOutlined />, color: 'blue' } },
-  { suffix: '_COMPLETED', config: { label: 'Terminer', icon: <CheckCircleOutlined />, color: 'green' } },
-  { suffix: '_FAILED', config: { label: 'Échouer', icon: <ExclamationCircleOutlined />, color: 'red' } },
-  { suffix: '_CANCELLED', config: { label: 'Annuler', icon: <StopOutlined />, color: 'volcano' } },
-  { suffix: '_RUNNING', config: { label: 'Démarrer', icon: <PlayCircleOutlined />, color: 'blue' } },
-  { suffix: '_DELETED', config: { label: 'Supprimer', icon: <DeleteOutlined />, color: 'red' } },
-  { suffix: '_CREATED', config: { label: 'Créer', icon: <PlusOutlined />, color: 'green' } },
-  { suffix: '_UPDATED', config: { label: 'Modifier', icon: <EditOutlined />, color: 'blue' } },
-  { suffix: '_DISABLED', config: { label: 'Désactiver', icon: <StopOutlined />, color: 'orange' } },
-  { suffix: '_ENABLED', config: { label: 'Activer', icon: <CheckCircleOutlined />, color: 'green' } },
-  { suffix: '_REACTIVATED', config: { label: 'Réactiver', icon: <SyncOutlined />, color: 'blue' } },
-  { suffix: '_DEACTIVATED', config: { label: 'Désactiver', icon: <StopOutlined />, color: 'orange' } },
-  { suffix: '_EXECUTED', config: { label: 'Exécuter', icon: <PlayCircleOutlined />, color: 'blue' } },
-  { suffix: '_TRIGGERED', config: { label: 'Déclencher', icon: <PlayCircleOutlined />, color: 'blue' } },
-  { suffix: '_BLOCKED', config: { label: 'Bloquer', icon: <CloseOutlined />, color: 'red' } },
-  { suffix: '_FORBIDDEN', config: { label: 'Interdit', icon: <CloseOutlined />, color: 'red' } },
-  { suffix: '_BLOCKED_INVALID_INTEGRATION', config: { label: 'Bloquer', icon: <CloseOutlined />, color: 'red' } },
-  { suffix: '_INVALID_INTEGRATION', config: { label: 'Bloquer', icon: <CloseOutlined />, color: 'red' } },
-  { suffix: '_INTEGRATION', config: { label: 'Intégration', icon: <ExclamationCircleOutlined />, color: 'orange' } },
-  { suffix: '_EXHAUSTED', config: { label: 'Polling épuisé', icon: <ExclamationCircleOutlined />, color: 'orange' } },
-  { suffix: '_WARNING', config: { label: 'Avertissement', icon: <ExclamationCircleOutlined />, color: 'orange' } },
-];
-
-const FALLBACK_OPERATION: OperationConfig = { label: '—', icon: null, color: 'default' };
-
-// eslint-disable-next-line react-refresh/only-export-components
-export function getOperationConfig(actionType: string): OperationConfig {
-  if (!actionType) return FALLBACK_OPERATION;
-  for (const { suffix, config } of OPERATION_SUFFIX_MAP) {
-    if (actionType.endsWith(suffix)) return config;
-  }
-  return FALLBACK_OPERATION;
-}
 
 // ─── Column visibility ────────────────────────────────────────────────────────
 
@@ -112,58 +37,6 @@ const COLUMN_VISIBILITY_OPTIONS = [
   { label: 'Date', value: 'timestamp' },
   { label: 'Change SN', value: 'servicenow' },
 ];
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-/** Format date for display. */
-// eslint-disable-next-line react-refresh/only-export-components
-export function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '—';
-  const date = new Date(dateStr);
-  return date.toLocaleString('fr-FR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-/** Get entity label for the Entité column. Replaces getActionName. */
-// eslint-disable-next-line react-refresh/only-export-components
-export function getEntityLabel(entry: AuditExecutionEntry): string {
-  if (entry.action_name) {
-    return entry.action_name;
-  }
-  if (entry.entity_type === 'action') {
-    const name = (entry.details?.name ?? entry.details?.action_name) as string | undefined;
-    if (name) return name;
-    return `Action #${entry.entity_id}`;
-  }
-  if (entry.entity_type === 'integration') {
-    const code = (entry.details?.action_code ?? entry.details?.integration_type_code) as string | undefined;
-    if (code) return code;
-    return `Intégration #${entry.entity_id}`;
-  }
-  if (entry.entity_type === 'profile') {
-    const name = entry.details?.name as string | undefined;
-    if (name) return name;
-    return `Profil #${entry.entity_id}`;
-  }
-  if (entry.entity_type === 'user') {
-    return entry.user_name ?? entry.user_id ?? `Utilisateur #${entry.entity_id}`;
-  }
-  if (entry.entity_id != null) {
-    return `#${entry.entity_id}`;
-  }
-  return '—';
-}
-
-/** @deprecated Use getEntityLabel instead. */
-// eslint-disable-next-line react-refresh/only-export-components
-export function getActionName(entry: AuditExecutionEntry): string {
-  return getEntityLabel(entry);
-}
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
