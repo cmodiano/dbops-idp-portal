@@ -48,6 +48,13 @@ export interface UseAuditFiltersReturn {
   setStatus: React.Dispatch<React.SetStateAction<AuditStatusFilter | undefined>>;
   correlationId: string;
   setCorrelationId: React.Dispatch<React.SetStateAction<string>>;
+  // Nouveaux filtres Story 43.3
+  entityType: string | undefined;
+  setEntityType: React.Dispatch<React.SetStateAction<string | undefined>>;
+  actionType: string | undefined;
+  setActionType: React.Dispatch<React.SetStateAction<string | undefined>>;
+  userSearchInput: string;
+  setUserSearchInput: React.Dispatch<React.SetStateAction<string>>;
   // Pagination / tri
   currentPage: number;
   pageSize: number;
@@ -91,6 +98,11 @@ export function useAuditFilters(): UseAuditFiltersReturn {
   const [actionId, setActionId] = useState<number | undefined>();
   const [status, setStatus] = useState<AuditStatusFilter | undefined>();
   const [correlationId, setCorrelationId] = useState<string>('');
+  // Story 43.3 — new filters
+  const [entityType, setEntityType] = useState<string | undefined>();
+  const [actionType, setActionType] = useState<string | undefined>();
+  const [userSearchInput, setUserSearchInput] = useState<string>('');
+  const [userSearch, setUserSearch] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [sortField, setSortField] = useState<string>('timestamp');
@@ -129,6 +141,9 @@ export function useAuditFilters(): UseAuditFiltersReturn {
         action_id: actionId,
         status,
         correlation_id: correlationId || undefined,
+        entity_type: entityType,
+        action_type: actionType,
+        user: userSearch || undefined,
         sort: apiSortField,
         order: apiSortOrder,
         limit: pageSize,
@@ -141,7 +156,7 @@ export function useAuditFilters(): UseAuditFiltersReturn {
     } finally {
       setLoading(false);
     }
-  }, [dateRange, environment, engineType, actionId, status, correlationId, sortField, sortOrder, pageSize]);
+  }, [dateRange, environment, engineType, actionId, status, correlationId, entityType, actionType, userSearch, sortField, sortOrder, pageSize]);
 
   // Initial load and filter changes
   useEffect(() => {
@@ -151,7 +166,15 @@ export function useAuditFilters(): UseAuditFiltersReturn {
   // Reset to page 1 when filters, sort or page size change
   useEffect(() => {
     setCurrentPage(1);
-  }, [dateRange, environment, engineType, actionId, status, correlationId, sortField, sortOrder, pageSize]);
+  }, [dateRange, environment, engineType, actionId, status, correlationId, entityType, actionType, userSearch, sortField, sortOrder, pageSize]);
+
+  // Debounce 300ms for user search input (Story 43.3)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setUserSearch(userSearchInput);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [userSearchInput]);
 
   // Load published actions for filter dropdown
   useEffect(() => {
@@ -182,7 +205,7 @@ export function useAuditFilters(): UseAuditFiltersReturn {
     setSelectedSteps([]);
 
     try {
-      if (record.entity_id) {
+      if (record.entity_type === 'execution' && record.entity_id) {
         const [execution, steps] = await Promise.all([
           getExecution(record.entity_id),
           getExecutionSteps(record.entity_id),
@@ -243,6 +266,9 @@ export function useAuditFilters(): UseAuditFiltersReturn {
         action_id: actionId,
         status,
         correlation_id: correlationId || undefined,
+        entity_type: entityType,
+        action_type: actionType,
+        user: userSearch || undefined,
         sort: apiSortField,
         order: apiSortOrder,
       });
@@ -253,7 +279,7 @@ export function useAuditFilters(): UseAuditFiltersReturn {
     } finally {
       setExporting(false);
     }
-  }, [dateRange, environment, engineType, actionId, status, correlationId, sortField, sortOrder, message]);
+  }, [dateRange, environment, engineType, actionId, status, correlationId, entityType, actionType, userSearch, sortField, sortOrder, message]);
 
   // Group workflow children under parent (accordion-style)
   const { topLevelEntries, childrenByParentId } = useMemo(() => {
@@ -288,6 +314,12 @@ export function useAuditFilters(): UseAuditFiltersReturn {
     setStatus,
     correlationId,
     setCorrelationId,
+    entityType,
+    setEntityType,
+    actionType,
+    setActionType,
+    userSearchInput,
+    setUserSearchInput,
     currentPage,
     pageSize,
     sortField,

@@ -37,7 +37,7 @@ vi.spyOn(App, 'useApp').mockReturnValue({
 const mockListExecutionAudit = vi.fn();
 const mockExportAuditReport = vi.fn();
 vi.mock('../services/audit_service', () => ({
-  listExecutionAudit: () => mockListExecutionAudit(),
+  listExecutionAudit: (...args: unknown[]) => mockListExecutionAudit(...args),
   exportAuditReport: (...args: unknown[]) => mockExportAuditReport(...args),
 }));
 
@@ -136,7 +136,7 @@ describe('AuditPage', () => {
     renderWithProviders(<AuditPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Audit des exécutions')).toBeInTheDocument();
+      expect(screen.getByText("Journal d'audit")).toBeInTheDocument();
     });
 
     // Check table headers (use getAllByRole for table headers)
@@ -181,7 +181,7 @@ describe('AuditPage', () => {
     renderWithProviders(<AuditPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Audit des exécutions')).toBeInTheDocument();
+      expect(screen.getByText("Journal d'audit")).toBeInTheDocument();
     });
 
     // Check filter placeholders
@@ -435,6 +435,196 @@ describe('AuditPage', () => {
     });
   });
 
+  describe('Filtres entity_type, action_type, user (Story 43.3)', () => {
+    beforeEach(() => {
+      mockListExecutionAudit.mockResolvedValue({
+        data: mockAuditEntries,
+        pagination: { page: 1, page_size: 50, total: 2, total_pages: 1 },
+      });
+    });
+
+    it('test_entity_type_tab_filters_data: clic onglet Actions → API appelée avec entity_type=action', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<AuditPage />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: /actions/i })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('tab', { name: /actions/i }));
+
+      await waitFor(() => {
+        expect(mockListExecutionAudit).toHaveBeenCalledWith(
+          expect.objectContaining({ entity_type: 'action' }),
+        );
+      });
+    });
+
+    it('test_action_type_select_filters_data: sélectionner ACTION_PUBLISHED → API appelée avec action_type=ACTION_PUBLISHED', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<AuditPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('audit-filter-action-type')).toBeInTheDocument();
+      });
+
+      const actionTypeSelect = screen.getByTestId('audit-filter-action-type');
+      await user.click(actionTypeSelect);
+
+      await waitFor(() => {
+        expect(screen.getByText('Action publiée')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByText('Action publiée'));
+
+      await waitFor(() => {
+        expect(mockListExecutionAudit).toHaveBeenCalledWith(
+          expect.objectContaining({ action_type: 'ACTION_PUBLISHED' }),
+        );
+      });
+    });
+
+    it('test_user_search_filters_data: saisir "john" dans champ utilisateur → API appelée avec user=john après debounce', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<AuditPage />);
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('Rechercher un utilisateur')).toBeInTheDocument();
+      });
+
+      const input = screen.getByPlaceholderText('Rechercher un utilisateur');
+      await user.type(input, 'john');
+
+      await waitFor(
+        () => {
+          expect(mockListExecutionAudit).toHaveBeenCalledWith(
+            expect.objectContaining({ user: 'john' }),
+          );
+        },
+        { timeout: 2000 },
+      );
+    });
+
+    it("test_page_title_updated: le titre affiche \"Journal d'audit\"", async () => {
+      renderWithProviders(<AuditPage />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { name: /Journal d'audit/i })).toBeInTheDocument();
+      });
+    });
+
+    it('test_export_includes_new_filters: export CSV transmet entity_type, action_type, user', async () => {
+      mockExportAuditReport.mockResolvedValue(undefined);
+      const user = userEvent.setup();
+      renderWithProviders(<AuditPage />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: /actions/i })).toBeInTheDocument();
+      });
+
+      // Sélectionner l'onglet "Actions" → entity_type=action
+      await user.click(screen.getByRole('tab', { name: /actions/i }));
+
+      await waitFor(() => {
+        expect(mockListExecutionAudit).toHaveBeenCalledWith(
+          expect.objectContaining({ entity_type: 'action' }),
+        );
+      });
+
+      // Saisir une recherche utilisateur → user=alice (après debounce 300ms)
+      const userInput = screen.getByPlaceholderText('Rechercher un utilisateur');
+      await user.type(userInput, 'alice');
+
+      await waitFor(
+        () => {
+          expect(mockListExecutionAudit).toHaveBeenCalledWith(
+            expect.objectContaining({ user: 'alice' }),
+          );
+        },
+        { timeout: 2000 },
+      );
+
+      // Exporter en CSV — doit transmettre entity_type ET user
+      const exportButton = screen.getByRole('button', { name: /Exporter/i });
+      await user.click(exportButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('CSV')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByText('CSV'));
+
+      await waitFor(() => {
+        expect(mockExportAuditReport).toHaveBeenCalledWith(
+          'csv',
+          expect.objectContaining({
+            entity_type: 'action',
+            user: 'alice',
+          }),
+        );
+      });
+    });
+
+    it('test_pagination_resets_on_filter_change: changement d\'onglet envoie offset=0 (AC6)', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<AuditPage />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: /actions/i })).toBeInTheDocument();
+      });
+
+      // Réinitialiser le compteur après le chargement initial
+      mockListExecutionAudit.mockClear();
+
+      // Cliquer sur l'onglet "Actions"
+      await user.click(screen.getByRole('tab', { name: /actions/i }));
+
+      // Le dernier appel doit avoir offset=0 (page 1) et entity_type=action
+      await waitFor(() => {
+        const calls = mockListExecutionAudit.mock.calls;
+        const lastCall = calls[calls.length - 1]?.[0];
+        expect(lastCall).toMatchObject({ entity_type: 'action', offset: 0 });
+      });
+    });
+
+    it('test_drawer_no_execution_call_for_non_exec_entry: clic sur entrée entity_type=action → getExecution non appelé', async () => {
+      const mockActionEntry = {
+        id: 3,
+        timestamp: '2026-01-30T11:00:00',
+        user_id: '1',
+        action_type: 'ACTION_PUBLISHED',
+        entity_type: 'action',
+        entity_id: 55,
+        action_name: 'Mon action publiée',
+        details: { action_id: 55 },
+        ip_address: null,
+        correlation_id: null,
+        derived_status: 'success' as const,
+      };
+
+      mockListExecutionAudit.mockResolvedValue({
+        data: [mockActionEntry],
+        pagination: { page: 1, page_size: 50, total: 1, total_pages: 1 },
+      });
+
+      const user = userEvent.setup();
+      renderWithProviders(<AuditPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Mon action publiée')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByText('Mon action publiée'));
+
+      await waitFor(() => {
+        expect(screen.getByText("Détail d'audit")).toBeInTheDocument();
+      });
+
+      expect(mockGetExecution).not.toHaveBeenCalled();
+      expect(mockGetExecutionSteps).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Export functionality (Story 6.4)', () => {
     beforeEach(() => {
       mockListExecutionAudit.mockResolvedValue({
@@ -448,7 +638,7 @@ describe('AuditPage', () => {
       renderWithProviders(<AuditPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('Audit des exécutions')).toBeInTheDocument();
+        expect(screen.getByText("Journal d'audit")).toBeInTheDocument();
       });
 
       const exportButton = screen.getByRole('button', { name: /Exporter/i });
@@ -460,7 +650,7 @@ describe('AuditPage', () => {
       renderWithProviders(<AuditPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('Audit des exécutions')).toBeInTheDocument();
+        expect(screen.getByText("Journal d'audit")).toBeInTheDocument();
       });
 
       const exportButton = screen.getByRole('button', { name: /Exporter/i });
@@ -477,7 +667,7 @@ describe('AuditPage', () => {
       renderWithProviders(<AuditPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('Audit des exécutions')).toBeInTheDocument();
+        expect(screen.getByText("Journal d'audit")).toBeInTheDocument();
       });
 
       const exportButton = screen.getByRole('button', { name: /Exporter/i });
@@ -499,7 +689,7 @@ describe('AuditPage', () => {
       renderWithProviders(<AuditPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('Audit des exécutions')).toBeInTheDocument();
+        expect(screen.getByText("Journal d'audit")).toBeInTheDocument();
       });
 
       const exportButton = screen.getByRole('button', { name: /Exporter/i });
@@ -521,7 +711,7 @@ describe('AuditPage', () => {
       renderWithProviders(<AuditPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('Audit des exécutions')).toBeInTheDocument();
+        expect(screen.getByText("Journal d'audit")).toBeInTheDocument();
       });
 
       const exportButton = screen.getByRole('button', { name: /Exporter/i });
@@ -544,7 +734,7 @@ describe('AuditPage', () => {
       renderWithProviders(<AuditPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('Audit des exécutions')).toBeInTheDocument();
+        expect(screen.getByText("Journal d'audit")).toBeInTheDocument();
       });
 
       const exportButton = screen.getByRole('button', { name: /Exporter/i });

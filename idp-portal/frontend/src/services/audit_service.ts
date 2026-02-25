@@ -44,6 +44,15 @@ function buildQueryString(filters: AuditExecutionFilters): string {
   if (filters.correlation_id) {
     params.set('correlation_id', filters.correlation_id);
   }
+  if (filters.entity_type) {
+    params.set('entity_type', filters.entity_type);
+  }
+  if (filters.action_type) {
+    params.set('action_type', filters.action_type);
+  }
+  if (filters.user) {
+    params.set('user', filters.user);
+  }
   if (filters.sort) {
     params.set('sort', filters.sort);
   }
@@ -119,6 +128,15 @@ export async function exportAuditReport(
   }
   if (filters.correlation_id) {
     params.set('correlation_id', filters.correlation_id);
+  }
+  if (filters.entity_type) {
+    params.set('entity_type', filters.entity_type);
+  }
+  if (filters.action_type) {
+    params.set('action_type', filters.action_type);
+  }
+  if (filters.user) {
+    params.set('user', filters.user);
   }
 
   // Download file as blob with auth + 401 retry support.
