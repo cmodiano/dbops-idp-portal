@@ -46,6 +46,9 @@ ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',') if os.getenv('ALLOWED_
 INSTALLED_APPS = [
     # Third-party apps (Daphne MUST be before staticfiles per daphne.E001)
     'daphne',  # Story 22.13: ASGI server for WebSocket support (must be before staticfiles)
+    # Story 45.2: jazzmin DOIT être avant django.contrib.admin pour que ses templates soient chargés.
+    # NE PAS déplacer : daphne reste en 1re position (contrainte WebSocket), jazzmin en 2e.
+    'jazzmin',
     # Django contrib apps
     'django.contrib.admin',
     'django.contrib.auth',
@@ -69,6 +72,88 @@ INSTALLED_APPS = [
     'reference',
     'help',  # Story 31.7 - Aide contextuelle
 ]
+
+# ─── Django Jazzmin Admin Theme (Story 45.2) ────────────────────────────────
+# Thème moderne pour Django Admin avec sidebar de navigation.
+# Choisi vs django-admin-interface : configuration Python versionnée, pas de migration DB.
+# Compatibilité : django-jazzmin>=3.0.0, Django 5.1+, compatible APIKeyAdmin (Story 44.5).
+JAZZMIN_SETTINGS = {
+    # Titre de l'onglet navigateur
+    "site_title": "IDP Portal Admin",
+    # En-tête du menu latéral
+    "site_header": "IDP Portal",
+    # Logo texte affiché dans la sidebar
+    "site_brand": "IDP Portal",
+    # Message de bienvenue sur la page de login
+    "welcome_sign": "Bienvenue dans l'administration IDP Portal",
+    # Copyright dans le footer
+    "copyright": "DBOPS Team",
+
+    # Recherche globale dans l'admin (modèles indexés dans la barre de recherche)
+    "search_model": ["auth.user", "idp_auth.APIKey"],
+
+    # Affichage de la sidebar de navigation
+    "show_sidebar": True,
+    "navigation_expanded": True,  # Menus ouverts par défaut pour faciliter la navigation
+
+    # Icônes Font Awesome 5 Free pour les apps et modèles
+    "icons": {
+        "auth": "fas fa-users-cog",
+        "auth.user": "fas fa-user",
+        "auth.Group": "fas fa-users",
+        "idp_auth.APIKey": "fas fa-key",  # pragma: allowlist secret
+        "catalog": "fas fa-book",
+        "executions": "fas fa-play-circle",
+        "inventory": "fas fa-server",
+        "integrations": "fas fa-plug",
+    },
+    # Icône par défaut si non spécifiée ci-dessus
+    "default_icon_parents": "fas fa-chevron-circle-right",
+    "default_icon_children": "fas fa-circle",
+
+    # Éviter les requêtes vers CDN Google Fonts (sécurité intranet/entreprise)
+    "use_google_fonts_cdn": False,
+
+    # Désactivé en production pour éviter les modifications accidentelles de l'UI
+    "show_ui_builder": False,
+
+    # Format horizontal_tabs pour une meilleure lisibilité des formulaires complexes
+    "changeform_format": "horizontal_tabs",
+
+    # Boutons d'action : non collants en haut (comportement standard)
+    "actions_sticky_top": False,
+}
+
+# Ajustements visuels (thème AdminLTE/Bootstrap) — séparé de JAZZMIN_SETTINGS
+# pour permettre une configuration granulaire du rendu.
+JAZZMIN_UI_TWEAKS = {
+    "navbar_small_text": False,
+    "footer_small_text": False,
+    "body_small_text": False,
+    "brand_small_text": False,
+    "brand_colour": "navbar-dark",
+    "accent": "accent-primary",
+    # Sidebar sombre pour la distinguer visuellement de la zone de contenu
+    "sidebar": "sidebar-dark-primary",
+    "sidebar_nav_small_text": False,
+    "sidebar_disable_expand": False,
+    "sidebar_nav_child_indent": True,
+    "sidebar_nav_compact_style": False,
+    "sidebar_nav_legacy_style": False,
+    "sidebar_nav_flat_style": False,
+    # Thème clair par défaut ; dark mode activé via toggle navigateur → "darkly" (Bootswatch)
+    "theme": "default",
+    "dark_mode_theme": "darkly",
+    "button_classes": {
+        "primary": "btn-outline-primary",
+        "secondary": "btn-outline-secondary",
+        "info": "btn-outline-info",
+        "warning": "btn-outline-warning",
+        "danger": "btn-outline-danger",
+        "success": "btn-outline-success",
+    },
+}
+# ─────────────────────────────────────────────────────────────────────────────
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

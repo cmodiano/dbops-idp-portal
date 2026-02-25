@@ -46,6 +46,7 @@ dependencies = [
     "reportlab>=3.6.0",
     "puremagic>=1.30",
     "defusedxml>=0.7.1",
+    "django-jazzmin>=3.0.0,<4.0.0",
 ]
 
 [project.optional-dependencies]
