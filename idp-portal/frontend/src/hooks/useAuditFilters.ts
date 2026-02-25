@@ -130,7 +130,8 @@ export function useAuditFilters(): UseAuditFiltersReturn {
     try {
       const offset = (page - 1) * pageSize;
       // Map frontend sort field names to API sort field names
-      const apiSortField = sortField === 'action' ? 'action_type' : sortField;
+      // 'entity' is the column key for the Entité column (was 'action' before Story 43.4)
+      const apiSortField = (sortField === 'entity' || sortField === 'action') ? 'action_type' : sortField;
       const apiSortOrder = sortOrder === 'ascend' ? 'asc' : 'desc';
 
       const result = await listExecutionAudit({
@@ -256,7 +257,7 @@ export function useAuditFilters(): UseAuditFiltersReturn {
   const handleExport = useCallback(async (format: 'csv' | 'pdf') => {
     setExporting(true);
     try {
-      const apiSortField = sortField === 'action' ? 'action_type' : sortField;
+      const apiSortField = (sortField === 'entity' || sortField === 'action') ? 'action_type' : sortField;
       const apiSortOrder = sortOrder === 'ascend' ? 'asc' : 'desc';
       await exportAuditReport(format, {
         from: dateRange[0]?.startOf('day').toISOString(),

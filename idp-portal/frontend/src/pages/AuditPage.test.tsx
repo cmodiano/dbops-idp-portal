@@ -91,6 +91,7 @@ const mockAuditEntries = [
     id: 1,
     timestamp: '2026-01-30T10:00:00',
     user_id: '1',
+    action_name: 'Action #5',
     action_type: 'EXECUTION_COMPLETED',
     entity_type: 'execution',
     entity_id: 101,
@@ -103,6 +104,7 @@ const mockAuditEntries = [
     id: 2,
     timestamp: '2026-01-30T09:00:00',
     user_id: '2',
+    action_name: 'Action #6',
     action_type: 'EXECUTION_FAILED',
     entity_type: 'execution',
     entity_id: 102,
@@ -142,11 +144,12 @@ describe('AuditPage', () => {
     // Check table headers (use getAllByRole for table headers)
     const headers = screen.getAllByRole('columnheader');
     expect(headers.length).toBeGreaterThanOrEqual(6);
-    expect(screen.getByRole('columnheader', { name: /Action/ })).toBeInTheDocument();
+    // Story 43.4: "Action" renommée en "Entité", nouvelles colonnes Type/Opération
+    expect(screen.getByRole('columnheader', { name: /Entité/ })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: /Utilisateur/ })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: /Statut/ })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: /Date/ })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: /Change SN/ })).toBeInTheDocument();
+    // Story 43.4: Change SN est masquée par défaut — ne pas vérifier sa présence
   });
 
   it('AC1: displays audit entries in table', async () => {
@@ -158,18 +161,16 @@ describe('AuditPage', () => {
     renderWithProviders(<AuditPage />);
 
     await waitFor(() => {
-      // Check action names are displayed
+      // Check entity labels (enriched via action_name)
       expect(screen.getByText('Action #5')).toBeInTheDocument();
       expect(screen.getByText('Action #6')).toBeInTheDocument();
     });
 
-    // Check status tags
+    // Check status tags (Statut visible for execution entries)
     expect(screen.getByText('Succès')).toBeInTheDocument();
     expect(screen.getByText('Échec')).toBeInTheDocument();
 
-    // Check environments
-    expect(screen.getByText('PROD')).toBeInTheDocument();
-    expect(screen.getByText('DEV')).toBeInTheDocument();
+    // Story 43.4: Environnement est masqué par défaut — PROD/DEV non visibles
   });
 
   it('AC2: renders filter controls', async () => {
