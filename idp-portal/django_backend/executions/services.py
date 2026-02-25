@@ -33,11 +33,26 @@ _SENSITIVE_PARAM_KEYS = frozenset({
 })
 
 
+def _sanitize_list(lst: list) -> list:
+    """Récursivement assainit les éléments d'une liste (dicts, listes imbriquées, primitives)."""
+    out: list = []
+    for item in lst:
+        if isinstance(item, dict):
+            sanitized_item = _sanitize_parameters(item)
+            if sanitized_item is not None:
+                out.append(sanitized_item)
+        elif isinstance(item, list):
+            out.append(_sanitize_list(item))
+        else:
+            out.append(item)
+    return out
+
+
 def _sanitize_parameters(parameters: dict | None) -> dict | None:
     """
     Retourne une copie des paramètres sans les clés sensibles.
     Filtrage récursif sur les valeurs dict imbriquées et les listes de dicts.
-    Les dicts imbriqués entièrement sensibles sont exclus (pas inclus comme None).
+    Les dicts imbriqués entièrement sensibles sont exclus (pas incluse comme None).
     Retourne None si parameters est None ou si le résultat est vide.
     """
     if not parameters:
@@ -58,6 +73,8 @@ def _sanitize_parameters(parameters: dict | None) -> dict | None:
                     sanitized_item = _sanitize_parameters(item)
                     if sanitized_item is not None:
                         out.append(sanitized_item)
+                elif isinstance(item, list):
+                    out.append(_sanitize_list(item))
                 else:
                     out.append(item)
             sanitized[k] = out

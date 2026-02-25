@@ -532,6 +532,14 @@ describe('AuditPage', () => {
         );
       });
 
+      // Sélectionner une opération → action_type=ACTION_PUBLISHED
+      const actionTypeSelect = screen.getByTestId('audit-filter-action-type');
+      await user.click(actionTypeSelect);
+      await waitFor(() => {
+        expect(screen.getByText('Action publiée')).toBeInTheDocument();
+      });
+      await user.click(screen.getByText('Action publiée'));
+
       // Saisir une recherche utilisateur → user=alice (après debounce 300ms)
       const userInput = screen.getByPlaceholderText('Rechercher un utilisateur');
       fireEvent.change(userInput, { target: { value: 'alice' } });
@@ -558,6 +566,7 @@ describe('AuditPage', () => {
           'csv',
           expect.objectContaining({
             entity_type: 'action',
+            action_type: 'ACTION_PUBLISHED',
             user: 'alice',
           }),
         );

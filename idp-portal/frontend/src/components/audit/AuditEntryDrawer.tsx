@@ -9,7 +9,6 @@
  */
 
 import { Typography, Drawer, Card, Descriptions, Tag, Skeleton, Alert, Divider } from 'antd';
-import dayjs from 'dayjs';
 import { ExecutionTimeline } from '../execution/ExecutionTimeline';
 import type {
   AuditExecutionEntry,
@@ -71,7 +70,7 @@ export function AuditEntryDrawer({
       {loading ? (
         <Skeleton active paragraph={{ rows: 8 }} />
       ) : error ? (
-        <Alert type="error" title="Erreur de chargement" description={error} showIcon />
+        <Alert type="error" message="Erreur de chargement" description={error} showIcon />
       ) : entry ? (
         <div>
           {/* Audit entry details — common fields */}
@@ -90,13 +89,15 @@ export function AuditEntryDrawer({
                 {entry.details?.environment?.toUpperCase() || '—'}
               </Descriptions.Item>
             )}
-            {entry.entity_type === 'execution' && (
-              <Descriptions.Item label="Résultat">
-                <Tag color={STATUS_CONFIG[entry.derived_status]?.color}>
-                  {STATUS_CONFIG[entry.derived_status]?.label}
-                </Tag>
-              </Descriptions.Item>
-            )}
+            {entry.entity_type === 'execution' && (() => {
+              const config = STATUS_CONFIG[entry.derived_status];
+              if (!config) return null;
+              return (
+                <Descriptions.Item label="Résultat">
+                  <Tag color={config.color}>{config.label}</Tag>
+                </Descriptions.Item>
+              );
+            })()}
             <Descriptions.Item label="Adresse IP">{entry.ip_address || '—'}</Descriptions.Item>
             <Descriptions.Item label="Correlation ID">
               <Text copyable={entry.correlation_id ? { text: entry.correlation_id } : undefined}>
@@ -113,12 +114,15 @@ export function AuditEntryDrawer({
           </Descriptions>
 
           {/* Details for non-execution entries (action, integration, profile, user, etc.) */}
-          {entry.entity_type !== 'execution' && entry.details && Object.keys(entry.details).length > 0 && (
+          {entry.entity_type !== 'execution' && (() => {
+            const filteredDetails = entry.details
+              ? Object.entries(entry.details).filter(([, v]) => v !== null && v !== undefined && v !== '')
+              : [];
+            if (filteredDetails.length === 0) return null;
+            return (
             <Card title="Détails" size="small" style={{ marginBottom: 24 }}>
               <Descriptions column={1} size="small">
-                {Object.entries(entry.details)
-                  .filter(([, v]) => v !== null && v !== undefined && v !== '')
-                  .map(([key, value]) => (
+                {filteredDetails.map(([key, value]) => (
                     <Descriptions.Item key={key} label={DETAIL_KEY_LABELS[key] ?? key}>
                       {typeof value === 'object' ? (
                         <pre style={{ margin: 0, fontSize: 11, whiteSpace: 'pre-wrap' }}>
@@ -131,7 +135,8 @@ export function AuditEntryDrawer({
                   ))}
               </Descriptions>
             </Card>
-          )}
+            );
+          })()}
 
           {/* Approval section for EXECUTION_APPROVED */}
           {entry.action_type === 'EXECUTION_APPROVED' && (
@@ -145,7 +150,7 @@ export function AuditEntryDrawer({
                 </Descriptions.Item>
                 {execution?.approved_at && (
                   <Descriptions.Item label="Date d'approbation">
-                    {dayjs(execution.approved_at).format('DD/MM/YYYY HH:mm')}
+                    {formatDate(execution.approved_at)}
                   </Descriptions.Item>
                 )}
                 {execution?.approval_comment && (

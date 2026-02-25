@@ -27,6 +27,7 @@ import type {
   AuditExecutionEntry,
   PaginationInfo,
 } from '../../types/api';
+import { ACTION_TYPE_LABELS } from '../../constants/auditActionTypes';
 import { AUDIT_STATUS_CONFIG as STATUS_CONFIG } from '../../utils/execution-status';
 
 const { Text } = Typography;
@@ -37,81 +38,7 @@ type TableOnChange<T> = NonNullable<TableProps<T>['onChange']>;
 
 // ─── Mappings ────────────────────────────────────────────────────────────────
 
-export const ACTION_TYPE_LABELS: Record<string, string> = {
-  // Actions
-  ACTION_CREATED: 'Action créée',
-  ACTION_UPDATED: 'Action modifiée',
-  ACTION_PUBLISHED: 'Action publiée',
-  ACTION_DISABLED: 'Action désactivée',
-  ACTION_DISABLED_INTEGRATION_DELETED: 'Action désactivée (intégration supprimée)',
-  ACTION_ENABLED: 'Action activée',
-  ACTION_DELETED: 'Action supprimée',
-  ACTION_DEACTIVATED: 'Action désactivée',
-  ACTION_REACTIVATED: 'Action réactivée',
-  // Profils
-  PROFILE_CREATED: 'Profil créé',
-  PROFILE_UPDATED: 'Profil modifié',
-  PROFILE_DELETED: 'Profil supprimé',
-  PROFILE_UPDATE_REJECTED: 'Mise à jour profil rejetée',
-  // Intégrations
-  INTEGRATION_CREATED: 'Intégration créée',
-  INTEGRATION_UPDATED: 'Intégration modifiée',
-  INTEGRATION_DELETED: 'Intégration supprimée',
-  INTEGRATION_STATUS_UPDATED: 'Statut intégration mis à jour',
-  INTEGRATION_MARKED_LEGACY: 'Intégration marquée legacy',
-  INTEGRATION_TYPE_CREATED: 'Type intégration créé',
-  INTEGRATION_TYPE_UPDATED: 'Type intégration modifié',
-  INTEGRATION_ACTION_CREATED: 'Action intégration créée',
-  INTEGRATION_ACTION_UPDATED: 'Action intégration modifiée',
-  // Exécutions
-  EXECUTION_SUBMITTED: 'Exécution soumise',
-  EXECUTION_RUNNING: 'Exécution en cours',
-  EXECUTION_COMPLETED: 'Exécution terminée',
-  EXECUTION_FAILED: 'Exécution échouée',
-  EXECUTION_CANCELLED: 'Exécution annulée',
-  EXECUTION_PENDING_APPROVAL: "En attente d'approbation",
-  EXECUTION_APPROVED: 'Exécution approuvée',
-  EXECUTION_REJECTED: 'Exécution rejetée',
-  EXECUTION_INTEGRATION_ERROR: 'Erreur intégration',
-  EXECUTION_TARGET_FORBIDDEN: 'Cible interdite',
-  EXECUTION_BLOCKED_INVALID_INTEGRATION: 'Exécution bloquée (intégration invalide)',
-  EXECUTION_DEPRECATED_INTEGRATION_WARNING: 'Avertissement intégration dépréciée',
-  EXECUTION_POLLING_EXHAUSTED: 'Polling épuisé',
-  // Steps
-  EXECUTION_STEP_RETRY_ATTEMPT: 'Tentative de retry',
-  EXECUTION_STEP_RETRY_SUCCESS: 'Retry réussi',
-  EXECUTION_STEP_RETRY_EXHAUSTED: 'Retry épuisé',
-  EXECUTION_STEP_RETRY_ABORTED: 'Retry annulé',
-  EXECUTION_STEP_WAITING: 'Étape en attente',
-  EXECUTION_STEP_GATE_SATISFIED: 'Condition satisfaite',
-  EXECUTION_STEP_GATE_TIMEOUT: 'Délai condition expiré',
-  EXECUTION_STEP_POLICY_APPROVAL_REQUIRED: 'Approbation requise',
-  EXECUTION_STEP_POLICY_AUTO_APPROVED: 'Auto-approuvé',
-  EXECUTION_STEP_POLICY_EVALUATION_FAILED: 'Évaluation politique échouée',
-  WORKFLOW_STEP_BLOCKED_INVALID_INTEGRATION: 'Étape bloquée (intégration invalide)',
-  // Planifiées
-  SCHEDULED_EXECUTION_CREATED: 'Exécution planifiée créée',
-  SCHEDULED_EXECUTION_RECURRING_CREATED: 'Exécution récurrente créée',
-  SCHEDULED_EXECUTION_EXECUTED: 'Exécution planifiée exécutée',
-  SCHEDULED_EXECUTION_CANCELLED: 'Exécution planifiée annulée',
-  SCHEDULED_EXECUTION_RECURRING_DISABLED: 'Exécution récurrente désactivée',
-  SCHEDULED_EXECUTION_CELERY_TRIGGERED: 'Déclenchée par Celery',
-  // Utilisateurs
-  USER_CREATED: 'Utilisateur créé',
-  USER_UPDATED: 'Utilisateur modifié',
-  USER_LOGIN: 'Connexion',
-  USER_LOGOUT: 'Déconnexion',
-  USER_REFRESH: 'Token rafraîchi',
-  FAVORITE_ADDED: 'Favori ajouté',
-  FAVORITE_REMOVED: 'Favori supprimé',
-  // Feature flags
-  FEATURE_FLAG_UPDATED: 'Feature flag modifié',
-  FEATURE_FLAG_CREATED: 'Feature flag créé',
-  // Policies
-  POLICY_CREATED: 'Politique créée',
-  POLICY_UPDATED: 'Politique modifiée',
-  POLICY_DELETED: 'Politique supprimée',
-};
+export { ACTION_TYPE_LABELS };
 
 export const ENTITY_TYPE_LABELS: Record<string, string> = {
   action: 'Action',
@@ -154,6 +81,8 @@ const OPERATION_SUFFIX_MAP: Array<{ suffix: string; config: OperationConfig }> =
   { suffix: '_TRIGGERED', config: { label: 'Déclencher', icon: <PlayCircleOutlined />, color: 'blue' } },
   { suffix: '_BLOCKED', config: { label: 'Bloquer', icon: <CloseOutlined />, color: 'red' } },
   { suffix: '_FORBIDDEN', config: { label: 'Interdit', icon: <CloseOutlined />, color: 'red' } },
+  { suffix: '_BLOCKED_INVALID_INTEGRATION', config: { label: 'Bloquer', icon: <CloseOutlined />, color: 'red' } },
+  { suffix: '_INVALID_INTEGRATION', config: { label: 'Bloquer', icon: <CloseOutlined />, color: 'red' } },
   { suffix: '_INTEGRATION', config: { label: 'Intégration', icon: <ExclamationCircleOutlined />, color: 'orange' } },
   { suffix: '_EXHAUSTED', config: { label: 'Polling épuisé', icon: <ExclamationCircleOutlined />, color: 'orange' } },
   { suffix: '_WARNING', config: { label: 'Avertissement', icon: <ExclamationCircleOutlined />, color: 'orange' } },

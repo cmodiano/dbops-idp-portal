@@ -124,6 +124,23 @@ class TestSanitizeParametersPure:
         assert len(result["servers"]) == 3
         assert {"password": "x"} not in result["servers"]
 
+        # Nested list structures: recursion preserves list nesting while sanitizing dicts
+        params_nested = {
+            "servers": [
+                [{"password": "...", "host": "..."}, {"password": "only"}],
+                [{"password": "only"}],
+            ],
+        }
+        result_nested = _sanitize_parameters(params_nested)
+        assert result_nested is not None
+        # Inner dict with both host and password → host preserved
+        assert result_nested["servers"][0][0] == {"host": "..."}
+        # Inner dict with only sensitive keys → removed from list
+        assert len(result_nested["servers"][0]) == 1
+        assert {"password": "only"} not in result_nested["servers"][0]
+        # Second inner list: only sensitive dict → list becomes empty
+        assert result_nested["servers"][1] == []
+
 
 # ---------------------------------------------------------------------------
 # T3.1–T3.4, T3.6 — Tests d'intégration avec DB

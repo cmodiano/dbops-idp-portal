@@ -476,7 +476,7 @@ class AuditExportView(APIView):
                     (exec_obj.action.name if exec_obj and getattr(exec_obj, "action", None) else "")
                     or details.get("action_name", ""),      # Story 43.6 : fallback depuis details
                     details.get("environment") or (exec_obj.environment if exec_obj else ""),
-                    details.get("status") or (exec_obj.status if exec_obj else ""),
+                    (exec_obj.status if exec_obj else details.get("status") or ""),
                     details.get("servicenow_change_id") or (exec_obj.servicenow_change_id if exec_obj else ""),
                     r.ip_address or "",
                     r.correlation_id or "",

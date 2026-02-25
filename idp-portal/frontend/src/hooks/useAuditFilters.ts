@@ -220,7 +220,7 @@ export function useAuditFilters(): UseAuditFiltersReturn {
     setSelectedSteps([]);
 
     try {
-      if (record.entity_type === 'execution' && record.entity_id) {
+      if (record.entity_type === 'execution' && record.entity_id != null) {
         const [execution, steps] = await Promise.all([
           getExecution(record.entity_id),
           getExecutionSteps(record.entity_id),
@@ -253,9 +253,10 @@ export function useAuditFilters(): UseAuditFiltersReturn {
       }
 
       const singleSorter = Array.isArray(sorter) ? sorter[0] : sorter;
-      if (singleSorter?.field) {
-        if (singleSorter.order) {
-          setSortField(singleSorter.field as string);
+      const sortKey = (singleSorter?.field ?? singleSorter?.columnKey) as string | undefined;
+      if (sortKey) {
+        if (singleSorter?.order) {
+          setSortField(sortKey);
           setSortOrder(singleSorter.order);
         } else {
           // User removed sort — reset to default
@@ -283,7 +284,7 @@ export function useAuditFilters(): UseAuditFiltersReturn {
         correlation_id: correlationId || undefined,
         entity_type: entityType,
         action_type: actionType,
-        user: userSearch || undefined,
+        user: userSearchInput.trim() || undefined,
         sort: apiSortField,
         order: apiSortOrder,
       });
@@ -294,7 +295,7 @@ export function useAuditFilters(): UseAuditFiltersReturn {
     } finally {
       setExporting(false);
     }
-  }, [dateRange, environment, engineType, actionId, status, correlationId, entityType, actionType, userSearch, getApiSortField, sortOrder, message]);
+  }, [dateRange, environment, engineType, actionId, status, correlationId, entityType, actionType, userSearchInput, getApiSortField, sortOrder, message]);
 
   // Group workflow children under parent (accordion-style)
   const { topLevelEntries, childrenByParentId } = useMemo(() => {

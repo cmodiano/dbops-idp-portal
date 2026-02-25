@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime
 
 from django.db import models
+from django.utils import timezone
 
 
 class UserManager(models.Manager["User"]):
@@ -122,7 +123,7 @@ class APIKeyManager(models.Manager['APIKey']):
         except self.model.DoesNotExist:
             return None
         if instance.expires_at is not None:
-            now = datetime.now(tz=timezone.utc)
+            now = timezone.now()
             if instance.expires_at < now:
                 return None
         return instance
