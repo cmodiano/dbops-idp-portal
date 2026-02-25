@@ -1,8 +1,9 @@
 /**
- * IntegrationForm — création/édition d'intégration (Story 2.28, 4.9, 13.1, 24.2, 27.11).
+ * IntegrationForm — création/édition d'intégration (Story 2.28, 4.9, 13.1, 24.2, 27.11, 31.11).
  * Story 24.2: Type restreint au catalogue backend (Select), actions disponibles, mode édition disabled, validation type actif.
  * Story 13.1: Si type = inventory_db, champs Schéma et Table (config) pour inventaire BD.
  * Story 27.11: credential_ref masqué si type vault, texte d'aide secret 0, champ secret_service_id pour types != vault.
+ * Story 31.11: Champ token_url conditionnel (visible si flow = token | basic_then_token | oauth2_client_credentials), inclus dans le payload.
  */
 
 import { useEffect, useState } from 'react';
@@ -33,6 +34,9 @@ export interface IntegrationFormValues {
   table?: string | null;
   config_advanced?: string | null;
   secret_service_id?: number | null;
+  token_url?: string | null;
+  scope?: string | null; // Story 31.12: OAuth2 scope (oauth2_client_credentials)
+  header_name?: string | null; // Story 31.12: API key header name (api_key)
 }
 
 export interface IntegrationFormProps {
@@ -47,6 +51,12 @@ export interface IntegrationFormProps {
 
 /** URL pattern: must start with http(s):// and have a valid hostname. */
 const URL_PATTERN = /^https?:\/\/[a-zA-Z0-9][-a-zA-Z0-9.]*[a-zA-Z0-9]/;
+
+/** Extract string from config, avoiding fragile double casts. */
+function getConfigString(config: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = config?.[key];
+  return typeof value === 'string' ? value : undefined;
+}
 
 export function IntegrationForm({
   open,
@@ -69,8 +79,12 @@ export function IntegrationForm({
 
   const watchIcon = Form.useWatch('icon', form);
   const watchType = Form.useWatch('type', form);
+  const watchAuthFlow = Form.useWatch('auth_flow', form);
   const isInventoryDb = (watchType ?? '').trim().toLowerCase() === 'inventory_db';
   const isVaultType = (watchType ?? '').trim().toLowerCase() === 'vault';
+  const isTokenFlow = watchAuthFlow === 'token' || watchAuthFlow === 'basic_then_token' || watchAuthFlow === 'oauth2_client_credentials'; // Story 31.12: extended
+  const isOauth2Flow = watchAuthFlow === 'oauth2_client_credentials'; // Story 31.12
+  const isApiKeyFlow = watchAuthFlow === 'api_key'; // Story 31.12
 
   // Story 27.11: Load Vault integrations for secret service dropdown
   const { vaultIntegrations } = useVaultIntegrations();
@@ -102,6 +116,13 @@ export function IntegrationForm({
               ? JSON.stringify(editConfig, null, 2)
               : undefined,
           secret_service_id: editIntegration.secret_service_id ?? undefined,
+          token_url: editIntegration.token_url ?? undefined,
+          scope: editIntegration.auth_flow === 'oauth2_client_credentials'
+            ? getConfigString(editIntegration.config as Record<string, unknown>, 'scope')
+            : undefined, // Story 31.12
+          header_name: editIntegration.auth_flow === 'api_key'
+            ? getConfigString(editIntegration.config as Record<string, unknown>, 'header_name')
+            : undefined, // Story 31.12
         }
       : null;
 
@@ -131,6 +152,13 @@ export function IntegrationForm({
               ? JSON.stringify(cfg, null, 2)
               : undefined,
           secret_service_id: editIntegration.secret_service_id ?? undefined,
+          token_url: editIntegration.token_url ?? undefined,
+          scope: editIntegration.auth_flow === 'oauth2_client_credentials'
+            ? getConfigString(editIntegration.config as Record<string, unknown>, 'scope')
+            : undefined, // Story 31.12
+          header_name: editIntegration.auth_flow === 'api_key'
+            ? getConfigString(editIntegration.config as Record<string, unknown>, 'header_name')
+            : undefined, // Story 31.12
         });
       }, 0);
       return () => clearTimeout(t);
@@ -151,6 +179,9 @@ export function IntegrationForm({
         table: undefined,
         config_advanced: undefined,
         secret_service_id: undefined,
+        token_url: undefined,
+        scope: undefined, // Story 31.12
+        header_name: undefined, // Story 31.12
       });
     }
   }, [open, editIntegration, form]);
@@ -194,7 +225,17 @@ export function IntegrationForm({
         icon: effectiveIcon ?? null,
         auth_flow: values.auth_flow || null,
         secret_service_id: isVaultType ? null : (values.secret_service_id || null),
+        token_url: isTokenFlow ? (values.token_url?.trim() || null) : null, // Story 31.11
       };
+      // Story 31.12: auth config fields stored in config JSON (mutually exclusive with isInventoryDb)
+      if (!isInventoryDb) {
+        if (isOauth2Flow) {
+          payload.config = { scope: values.scope?.trim() || null };
+        } else if (isApiKeyFlow) {
+          payload.config = { header_name: values.header_name?.trim() || null };
+        }
+        // Autres flows : config omis (undefined)
+      }
       if (isInventoryDb) {
         if (values.config_advanced?.trim()) {
           try {
@@ -351,6 +392,9 @@ export function IntegrationForm({
             table: undefined,
             config_advanced: undefined,
             secret_service_id: undefined,
+            token_url: undefined,
+            scope: undefined, // Story 31.12
+            header_name: undefined, // Story 31.12
           }
         }
         key={editIntegration ? `edit-${editIntegration.id}` : 'create'}
@@ -501,6 +545,56 @@ export function IntegrationForm({
             aria-label="Flow d'authentification"
           />
         </Form.Item>
+        {isTokenFlow && (
+          <Form.Item
+            name="token_url"
+            label="URL du token"
+            help="URL d'acquisition du token OAuth, si différente de l'URL de base (ex. serveur d'authentification séparé). Laissez vide pour utiliser l'URL de base."
+            rules={[
+              {
+                validator: (_, v) => {
+                  const s = (v ?? '').toString().trim();
+                  if (!s) return Promise.resolve();
+                  if (!URL_PATTERN.test(s)) {
+                    return Promise.reject(new Error("L'URL doit être valide (commencer par http:// ou https://)"));
+                  }
+                  return Promise.resolve();
+                },
+              },
+            ]}
+          >
+            <Input
+              placeholder="https://auth.example.com/oauth/token"
+              aria-label="URL du token"
+            />
+          </Form.Item>
+        )}
+        {/* Story 31.12: Scope OAuth2 — visible si oauth2_client_credentials (AC3) */}
+        {isOauth2Flow && (
+          <Form.Item
+            name="scope"
+            label="Scope OAuth2"
+            help="Scopes OAuth2 séparés par des espaces. Optionnel selon le serveur d'autorisation."
+          >
+            <Input
+              placeholder="openid profile email"
+              aria-label="Scope OAuth2"
+            />
+          </Form.Item>
+        )}
+        {/* Story 31.12: Nom du header — visible si api_key (AC4) */}
+        {isApiKeyFlow && (
+          <Form.Item
+            name="header_name"
+            label="Nom du header"
+            help="Nom du header HTTP pour la clé API (ex. X-API-Key, Authorization, X-Auth-Token). Défaut si vide : X-API-Key."
+          >
+            <Input
+              placeholder="X-API-Key"
+              aria-label="Nom du header"
+            />
+          </Form.Item>
+        )}
         <Form.Item label="Icône" tooltip="Uploader une icône ou saisir une URL">
           <Space orientation="vertical" style={{ width: '100%' }}>
             <Upload

@@ -19,6 +19,7 @@ const mockVaultIntegration: IntegrationResponse = {
   auth_flow: null,
   status: 'valid',
   config: {},
+  token_url: null,
   created_at: '2025-01-01T00:00:00Z',
   updated_at: '2025-01-01T00:00:00Z',
 };
@@ -33,6 +34,7 @@ const mockOtherIntegration: IntegrationResponse = {
   auth_flow: null,
   status: 'valid',
   config: {},
+  token_url: null,
   created_at: '2025-01-01T00:00:00Z',
   updated_at: '2025-01-01T00:00:00Z',
 };

@@ -24,6 +24,10 @@ from executions.tasks.gates import (  # noqa: E402
     _transition_step_to_running,
     _update_waiting_context,
 )
+from executions.tasks.scheduled import (  # noqa: E402
+    process_pending_scheduled_executions,
+    _update_recurring_scheduled_execution,
+)
 from executions.tasks.polling import (  # noqa: E402
     poll_platform_job_status,
     poll_aap_job_status,
@@ -49,6 +53,8 @@ __all__ = [
     "poll_terraform_cloud_run_status",
     # Constants
     "MAX_POLLING_RETRIES",
+    # Story 42.1: Celery Beat task for scheduled executions
+    "process_pending_scheduled_executions",
     # Internal helpers re-exported for test patchability
     "logger",
     "get_correlation_id",
@@ -56,6 +62,7 @@ __all__ = [
     "_handle_gate_timeout",
     "_transition_step_to_running",
     "_update_waiting_context",
+    "_update_recurring_scheduled_execution",
     "_mark_execution_polling_exhausted",
     "_broadcast_execution_update",
     "_update_execution_from_poll",

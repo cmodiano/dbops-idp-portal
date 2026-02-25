@@ -243,6 +243,27 @@ class TestIntegrationUpdateSerializerVaultValidation(TestCase):
         self.assertIn('credential_ref', s.errors)
 
 
+class TestIntegrationCreateSerializerStory3112(TestCase):
+    """Story 31.12: oauth2_client_credentials and api_key are valid auth_flow values."""
+
+    def test_create_with_oauth2_client_credentials(self):
+        data = {
+            'type': 'aap', 'name': 'Jira Cloud', 'base_url': 'https://jira.example.com',
+            'auth_flow': 'oauth2_client_credentials',
+            'token_url': 'https://login.microsoftonline.com/tenant/oauth2/v2.0/token',
+        }
+        s = IntegrationCreateSerializer(data=data)
+        self.assertTrue(s.is_valid(), s.errors)
+
+    def test_create_with_api_key(self):
+        data = {
+            'type': 'aap', 'name': 'Custom API', 'base_url': 'https://api.example.com',
+            'auth_flow': 'api_key',
+        }
+        s = IntegrationCreateSerializer(data=data)
+        self.assertTrue(s.is_valid(), s.errors)
+
+
 @pytest.mark.django_db
 class TestIntegrationReadSerializers(TestCase):
     """Tests for IntegrationSerializer and IntegrationListSerializer."""

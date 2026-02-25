@@ -7,15 +7,26 @@ Story 27.6: Vault credential_ref resolution via VaultService.
 from __future__ import annotations
 
 import base64
+import time
 from typing import TYPE_CHECKING
 
+import requests
 import structlog
+from django.core.cache import cache
+
 from core.exceptions import BadRequestError
 
 if TYPE_CHECKING:
     from integrations.models import Integration
 
 logger = structlog.get_logger(__name__)
+
+# OAuth2 token cache: keyed by (integration_id, scope) to avoid blocking request threads.
+# Stores {"access_token": str, "expires_at": float}. TTL uses expires_in from response
+# or 300s conservative default. Cache key prefix.
+_OAUTH2_CACHE_PREFIX = "oauth2_token"
+_OAUTH2_CACHE_TTL = 3600  # Max cache duration (1h) — actual TTL from expires_in
+_OAUTH2_TOKEN_REQUEST_TIMEOUT = 5
 
 
 def resolve_credential(
@@ -94,6 +105,10 @@ def build_auth_headers_from_credentials(
     if auth_flow == "basic":
         encoded = base64.b64encode(credential_ref.encode()).decode()
         return {"Authorization": f"Basic {encoded}"}
+    if auth_flow == "api_key":
+        # Story 31.12: api_key without config access — use X-API-Key as header name
+        # For custom header_name, use build_auth_headers(integration) instead
+        return {"X-API-Key": credential_ref}
     # pat and token (default): Bearer
     return {"Authorization": f"Bearer {credential_ref}"}
 
@@ -141,6 +156,77 @@ def build_auth_headers(
             message="Integration credential_ref is empty",
             details={"integration_id": integration_id, "auth_flow": auth_flow},
         )
+
+    # Story 31.12: api_key — use header_name from config
+    if auth_flow == "api_key":
+        config = getattr(integration, 'get_config', lambda: {})() or {}
+        header_name = config.get('header_name') or 'X-API-Key'
+        resolved = resolve_credential(credential_ref, correlation_id, integration)
+        logger.debug("build_auth_headers_api_key", integration_id=integration_id, header_name=header_name)
+        return {header_name: resolved}
+
+    # Story 31.12: oauth2_client_credentials — POST to token_url for access token
+    # Token cache keyed by (integration_id, scope) to avoid blocking request threads.
+    if auth_flow == "oauth2_client_credentials":
+        token_url = getattr(integration, 'token_url', None)
+        if not token_url:
+            raise BadRequestError(
+                code="MISSING_TOKEN_URL",
+                message="token_url is required for oauth2_client_credentials flow",
+                details={"integration_id": integration_id},
+            )
+        config = getattr(integration, 'get_config', lambda: {})() or {}
+        scope = config.get('scope')
+        scope_key = (scope or '') or ''
+        cache_key = f"{_OAUTH2_CACHE_PREFIX}:{integration_id}:{scope_key}"
+
+        # Check cache first — return cached token if not expired
+        cached = cache.get(cache_key)
+        if cached and isinstance(cached, dict):
+            access_token = cached.get("access_token")
+            expires_at = cached.get("expires_at", 0)
+            if access_token and expires_at > time.time():
+                logger.debug("build_auth_headers_oauth2_cache_hit", integration_id=integration_id)
+                return {"Authorization": f"Bearer {access_token}"}
+
+        resolved = resolve_credential(credential_ref, correlation_id, integration)
+        # credential_ref format: "client_id:client_secret" (same convention as basic auth)
+        if ':' in resolved:
+            client_id, client_secret = resolved.split(':', 1)
+        else:
+            client_id, client_secret = resolved, ''
+        data: dict = {"grant_type": "client_credentials", "client_id": client_id, "client_secret": client_secret}
+        if scope:
+            data["scope"] = scope
+        try:
+            resp = requests.post(token_url, data=data, timeout=_OAUTH2_TOKEN_REQUEST_TIMEOUT)
+            resp.raise_for_status()
+            body = resp.json()
+            access_token = body.get("access_token")
+            if not access_token:
+                raise BadRequestError(
+                    code="OAUTH2_NO_ACCESS_TOKEN",
+                    message="OAuth2 token endpoint did not return access_token",
+                    details={"integration_id": integration_id, "token_url": token_url},
+                )
+            # Store in cache with expiry (expires_in or conservative 300s, minus 30s skew)
+            expires_in = body.get("expires_in")
+            if isinstance(expires_in, (int, float)) and expires_in > 0:
+                ttl_seconds = int(expires_in) - 30
+            else:
+                ttl_seconds = 300 - 30  # 270s conservative default
+            ttl_seconds = max(60, min(ttl_seconds, _OAUTH2_CACHE_TTL))
+            expires_at = time.time() + ttl_seconds
+            cache.set(cache_key, {"access_token": access_token, "expires_at": expires_at}, timeout=ttl_seconds)
+            logger.debug("build_auth_headers_oauth2_success", integration_id=integration_id)
+            return {"Authorization": f"Bearer {access_token}"}
+        except requests.RequestException as exc:
+            logger.error("build_auth_headers_oauth2_error", integration_id=integration_id, error=str(exc))
+            raise BadRequestError(
+                code="OAUTH2_TOKEN_REQUEST_FAILED",
+                message=f"Failed to acquire OAuth2 token: {str(exc)}",
+                details={"integration_id": integration_id, "token_url": token_url},
+            ) from exc
 
     try:
         # Story 27.6/27.11: Resolve Vault references via VaultService (multi-instance)

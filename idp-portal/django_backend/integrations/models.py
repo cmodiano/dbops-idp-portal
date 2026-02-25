@@ -37,6 +37,8 @@ class AuthFlow(models.TextChoices):
     BASIC = 'basic', 'Basic'
     BASIC_THEN_TOKEN = 'basic_then_token', 'Basic Then Token'
     PAT = 'pat', 'Personal Access Token'
+    OAUTH2_CLIENT_CREDENTIALS = 'oauth2_client_credentials', 'OAuth2 Client Credentials'  # Story 31.12
+    API_KEY = 'api_key', 'API Key (header personnalisé)'  # Story 31.12  # pragma: allowlist secret
 
 
 class IntegrationStatus(models.TextChoices):

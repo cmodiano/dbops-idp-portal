@@ -5,7 +5,7 @@ Story M.8 - Task 5: Enhanced error handling with structured logging.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Union, cast
 
 import structlog
 
@@ -112,6 +112,34 @@ class VaultAccessDeniedError(VaultError):
         super().__init__(code="VAULT_ACCESS_DENIED", message=message, details=details)
 
 
+# Keys whose values must not be exposed in HTTP responses (can leak token URLs, internal hostnames, etc.)
+_SENSITIVE_DETAIL_KEYS = frozenset({
+    "token_url", "base_url", "vault_addr", "secret_service_id",
+    "credential_ref", "client_secret", "access_token", "refresh_token",
+})
+
+
+def sanitize_exception_details(details: dict[str, Any]) -> dict[str, Any]:
+    """
+    Sanitize exception details before attaching to HTTP response.
+    Redacts sensitive keys (token_url, base_url, etc.) to prevent
+    information leakage in 4xx/5xx responses. Full details are logged server-side.
+    """
+    if not details:
+        return {}
+    sanitized: dict[str, Any] = {}
+    sensitive_lower = {k.lower() for k in _SENSITIVE_DETAIL_KEYS}
+    for key, value in details.items():
+        key_lower = key.lower() if isinstance(key, str) else ""
+        if key in _SENSITIVE_DETAIL_KEYS or key_lower in sensitive_lower:
+            sanitized[key] = "[REDACTED]"
+        elif isinstance(value, dict):
+            sanitized[key] = sanitize_exception_details(value)
+        else:
+            sanitized[key] = value
+    return sanitized
+
+
 def _get_request_context(context: dict[str, Any]) -> dict[str, Any]:
     """Extract request context for logging."""
     request = context.get('request')
@@ -147,153 +175,44 @@ def custom_exception_handler(exc: Exception, context: dict[str, Any]) -> Respons
     response = exception_handler(exc, context)
     request_context = _get_request_context(context)
 
-    # Handle custom exceptions (these are expected, log at warning level)
-    if isinstance(exc, NotFoundError):
-        logger.warning(
-            "handled_exception",
-            exception_type="NotFoundError",
-            code=exc.code,
-            message=exc.message,
-            **request_context
-        )
-        resp = Response(
-            {
-                "error": {
-                    "code": exc.code,
-                    "message": exc.message,
-                    "details": exc.details
-                }
-            },
-            status=status.HTTP_404_NOT_FOUND
-        )
-        resp['X-Correlation-ID'] = request_context.get('correlation_id', '')
-        return resp
-
-    if isinstance(exc, BadRequestError):
-        logger.warning(
-            "handled_exception",
-            exception_type="BadRequestError",
-            code=exc.code,
-            message=exc.message,
-            **request_context
-        )
-        resp = Response(
-            {
-                "error": {
-                    "code": exc.code,
-                    "message": exc.message,
-                    "details": exc.details
-                }
-            },
-            status=status.HTTP_400_BAD_REQUEST
-        )
-        resp['X-Correlation-ID'] = request_context.get('correlation_id', '')
-        return resp
-
-    if isinstance(exc, InvalidStateError):
-        logger.warning(
-            "handled_exception",
-            exception_type="InvalidStateError",
-            code=exc.code,
-            message=exc.message,
-            **request_context
-        )
-        resp = Response(
-            {
-                "error": {
-                    "code": exc.code,
-                    "message": exc.message,
-                    "details": exc.details
-                }
-            },
-            status=status.HTTP_400_BAD_REQUEST
-        )
-        resp['X-Correlation-ID'] = request_context.get('correlation_id', '')
-        return resp
-
-    if isinstance(exc, UnauthorizedError):
-        logger.warning(
-            "handled_exception",
-            exception_type="UnauthorizedError",
-            code=exc.code,
-            message=exc.message,
-            **request_context
-        )
-        resp = Response(
-            {
-                "error": {
-                    "code": exc.code,
-                    "message": exc.message,
-                    "details": exc.details
-                }
-            },
-            status=status.HTTP_401_UNAUTHORIZED
-        )
-        resp['X-Correlation-ID'] = request_context.get('correlation_id', '')
-        return resp
-
-    if isinstance(exc, ForbiddenError):
-        logger.warning(
-            "handled_exception",
-            exception_type="ForbiddenError",
-            code=exc.code,
-            message=exc.message,
-            **request_context
-        )
-        resp = Response(
-            {
-                "error": {
-                    "code": exc.code,
-                    "message": exc.message,
-                    "details": exc.details
-                }
-            },
-            status=status.HTTP_403_FORBIDDEN
-        )
-        resp['X-Correlation-ID'] = request_context.get('correlation_id', '')
-        return resp
-
-    if isinstance(exc, ServiceUnavailableError):
-        logger.warning(
-            "handled_exception",
-            exception_type="ServiceUnavailableError",
-            code=exc.code,
-            message=exc.message,
-            **request_context
-        )
-        resp = Response(
-            {
-                "error": {
-                    "code": exc.code,
-                    "message": exc.message,
-                    "details": exc.details
-                }
-            },
-            status=status.HTTP_503_SERVICE_UNAVAILABLE
-        )
-        resp['X-Correlation-ID'] = request_context.get('correlation_id', '')
-        return resp
-
-    if isinstance(exc, ConflictError):
-        logger.warning(
-            "handled_exception",
-            exception_type="ConflictError",
-            code=exc.code,
-            message=exc.message,
-            **request_context
-        )
-        resp = Response(
-            {
-                "error": {
-                    "code": exc.code,
-                    "message": exc.message,
-                    "details": exc.details
-                }
-            },
-            status=status.HTTP_409_CONFLICT
-        )
-        resp['X-Correlation-ID'] = request_context.get('correlation_id', '')
-        return resp
+    # Handle custom exceptions (these are expected, log at warning level with full details)
+    _CUSTOM_EXCEPTIONS = (
+        (NotFoundError, status.HTTP_404_NOT_FOUND),
+        (BadRequestError, status.HTTP_400_BAD_REQUEST),
+        (InvalidStateError, status.HTTP_400_BAD_REQUEST),
+        (UnauthorizedError, status.HTTP_401_UNAUTHORIZED),
+        (ForbiddenError, status.HTTP_403_FORBIDDEN),
+        (ServiceUnavailableError, status.HTTP_503_SERVICE_UNAVAILABLE),
+        (ConflictError, status.HTTP_409_CONFLICT),
+    )
+    _CustomExc = Union[
+        NotFoundError, BadRequestError, InvalidStateError,
+        UnauthorizedError, ForbiddenError, ServiceUnavailableError, ConflictError,
+    ]
+    for exc_cls, http_status in _CUSTOM_EXCEPTIONS:
+        if isinstance(exc, exc_cls):
+            cust = cast(_CustomExc, exc)
+            logger.warning(
+                "handled_exception",
+                exception_type=type(cust).__name__,
+                code=cust.code,
+                message=cust.message,
+                details=cust.details,
+                **request_context
+            )
+            sanitized_details = sanitize_exception_details(cust.details)
+            resp = Response(
+                {
+                    "error": {
+                        "code": cust.code,
+                        "message": cust.message,
+                        "details": sanitized_details
+                    }
+                },
+                status=http_status
+            )
+            resp['X-Correlation-ID'] = request_context.get('correlation_id', '')
+            return resp
 
     # Handle DRF exceptions
     if response is not None:
