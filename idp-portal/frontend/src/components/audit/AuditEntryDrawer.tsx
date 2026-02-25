@@ -1,11 +1,13 @@
 /**
- * AuditEntryDrawer — Story 34.11 (SOLID-FE-3)
+ * AuditEntryDrawer — Story 34.11 (SOLID-FE-3), Story 43.5
  *
  * Drawer de détail d'une entrée d'audit : qui, quoi, quand, paramètres, timeline.
+ * Story 43.5 : section "Approbation" conditionnelle pour EXECUTION_APPROVED.
  * Extrait de AuditPage.tsx.
  */
 
-import { Typography, Drawer, Card, Descriptions, Tag, Skeleton, Alert } from 'antd';
+import { Typography, Drawer, Card, Descriptions, Tag, Skeleton, Alert, Divider } from 'antd';
+import dayjs from 'dayjs';
 import { ExecutionTimeline } from '../execution/ExecutionTimeline';
 import type {
   AuditExecutionEntry,
@@ -13,7 +15,7 @@ import type {
   ExecutionStepResponse,
 } from '../../types/api';
 import { AUDIT_STATUS_CONFIG as STATUS_CONFIG } from '../../utils/execution-status';
-import { formatDate, getActionName } from './AuditTable';
+import { formatDate, getEntityLabel } from './AuditTable';
 
 const { Text } = Typography;
 
@@ -53,7 +55,7 @@ export function AuditEntryDrawer({
           {/* Audit entry details */}
           <Descriptions bordered column={1} size="small" style={{ marginBottom: 24 }}>
             <Descriptions.Item label="Qui">{entry.user_name ?? entry.user_id ?? '—'}</Descriptions.Item>
-            <Descriptions.Item label="Quoi">{getActionName(entry)}</Descriptions.Item>
+            <Descriptions.Item label="Quoi">{getEntityLabel(entry)}</Descriptions.Item>
             <Descriptions.Item label="Quand">{formatDate(entry.timestamp)}</Descriptions.Item>
             <Descriptions.Item label="Environnement">
               {entry.details?.environment?.toUpperCase() || '—'}
@@ -77,6 +79,30 @@ export function AuditEntryDrawer({
               </Descriptions.Item>
             )}
           </Descriptions>
+
+          {/* Approval section for EXECUTION_APPROVED */}
+          {entry.action_type === 'EXECUTION_APPROVED' && (
+            <>
+              <Divider titlePlacement="left" plain style={{ fontSize: 13 }}>
+                Approbation
+              </Divider>
+              <Descriptions size="small" column={1} style={{ marginBottom: 16 }}>
+                <Descriptions.Item label="Approuvé par">
+                  {entry.user_name ?? entry.user_id ?? '—'}
+                </Descriptions.Item>
+                {execution?.approved_at && (
+                  <Descriptions.Item label="Date d'approbation">
+                    {dayjs(execution.approved_at).format('DD/MM/YYYY HH:mm')}
+                  </Descriptions.Item>
+                )}
+                {execution?.approval_comment && (
+                  <Descriptions.Item label="Commentaire">
+                    {execution.approval_comment}
+                  </Descriptions.Item>
+                )}
+              </Descriptions>
+            </>
+          )}
 
           {/* Parameters if available */}
           {entry.details?.parameters && (

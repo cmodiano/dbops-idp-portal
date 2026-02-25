@@ -300,8 +300,16 @@ export function AuditTable({
       dataIndex: 'user_name',
       key: 'user_id',
       width: 140,
-      render: (_: string | null, record: AuditExecutionEntry) =>
-        record.user_name ?? record.user_id ?? '—',
+      render: (_: string | null, record: AuditExecutionEntry) => {
+        if (record.action_type === 'EXECUTION_APPROVED') {
+          return (
+            <Tag icon={<CheckCircleOutlined />} color="green">
+              Approuvé par {record.user_name ?? record.user_id}
+            </Tag>
+          );
+        }
+        return record.user_name ?? record.user_id ?? '—';
+      },
     },
     {
       title: 'Catégorie',

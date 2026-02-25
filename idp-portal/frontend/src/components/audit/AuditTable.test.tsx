@@ -485,5 +485,41 @@ describe('AuditTable', () => {
       const headerTexts = Array.from(headers).map(h => h.textContent?.trim());
       expect(headerTexts).not.toContain('Change SN');
     });
+
+    // ── Story 43.5 — new tests ────────────────────────────────────────────────
+
+    it('test_user_column_shows_approved_by_badge_for_execution_approved — badge Approuvé par pour EXECUTION_APPROVED', () => {
+      const approvedEntry: AuditExecutionEntry = {
+        ...mockEntry,
+        action_type: 'EXECUTION_APPROVED',
+        user_name: 'Jean Dupont',
+        entity_type: 'execution',
+      };
+      render(<AuditTable {...defaultProps} topLevelEntries={[approvedEntry]} />);
+      expect(screen.getByText(/Approuvé par Jean Dupont/i)).toBeInTheDocument();
+    });
+
+    it('test_user_column_shows_user_name_for_non_approved — user_name normal pour EXECUTION_SUBMITTED', () => {
+      const submittedEntry: AuditExecutionEntry = {
+        ...mockEntry,
+        action_type: 'EXECUTION_SUBMITTED',
+        user_name: 'Marie Martin',
+      };
+      render(<AuditTable {...defaultProps} topLevelEntries={[submittedEntry]} />);
+      expect(screen.queryByText(/Approuvé par/i)).not.toBeInTheDocument();
+      expect(screen.getByText('Marie Martin')).toBeInTheDocument();
+    });
+
+    it('test_user_column_badge_falls_back_to_user_id_when_user_name_null — badge utilise user_id si user_name null', () => {
+      const approvedEntryNoName: AuditExecutionEntry = {
+        ...mockEntry,
+        action_type: 'EXECUTION_APPROVED',
+        user_name: null,
+        user_id: '99',
+        entity_type: 'execution',
+      };
+      render(<AuditTable {...defaultProps} topLevelEntries={[approvedEntryNoName]} />);
+      expect(screen.getByText(/Approuvé par 99/i)).toBeInTheDocument();
+    });
   });
 });
