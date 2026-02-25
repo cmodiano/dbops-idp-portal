@@ -101,6 +101,7 @@ JAZZMIN_SETTINGS = {
         "auth": "fas fa-users-cog",
         "auth.user": "fas fa-user",
         "auth.Group": "fas fa-users",
+        "idp_auth.user": "fas fa-id-badge",
         "idp_auth.APIKey": "fas fa-key",  # pragma: allowlist secret
         "catalog": "fas fa-book",
         "executions": "fas fa-play-circle",
