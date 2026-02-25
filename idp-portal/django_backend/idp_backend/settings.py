@@ -259,7 +259,7 @@ SPECTACULAR_SETTINGS = {
         {'name': 'catalog', 'description': "Gestion du catalogue d'actions"},
         {'name': 'executions', 'description': "Exécution et suivi des actions"},
         {'name': 'profiles', 'description': "Gestion des profils et permissions RBAC"},
-        {'name': 'inventory', 'description': "Inventaire des targets et environnements"},
+        {'name': 'inventory', 'description': "Inventaire des targets et environnements — **Usage interne uniquement** (non exposé dans la doc publique)"},
         {'name': 'integrations', 'description': "Intégrations plateformes distantes"},
         {'name': 'audit', 'description': "Audit trail et conformité SOC1"},
         {'name': 'auth', 'description': "Authentification SAML et JWT"},

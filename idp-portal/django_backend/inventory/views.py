@@ -3,6 +3,10 @@ Views for inventory API.
 Story 13.1 - Target API endpoints with RBAC filtering.
 Story 23.3 - Multi-table inventory API: /servers, /instances, /databases.
 No local DB - reads from external sources.
+
+⚠️  INTERNAL USE ONLY — Ces endpoints sont réservés au frontend (TargetSelector,
+ExecutionWizard). Ils ne sont pas exposés dans la documentation API publique.
+Cf. Story 44.3 — @extend_schema(exclude=True) sur toutes les vues.
 """
 
 from __future__ import annotations
@@ -65,6 +69,7 @@ class IsAdminOrIntegration(BasePermission):
         return profiles.filter(is_admin=1).exists()
 
 
+@extend_schema(exclude=True)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def list_targets(request: Request) -> Response:
@@ -160,6 +165,7 @@ def list_targets(request: Request) -> Response:
     })
 
 
+@extend_schema(exclude=True)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, IsAdminOrIntegration])
 def list_all_targets(request: Request) -> Response:
@@ -251,6 +257,7 @@ def list_all_targets(request: Request) -> Response:
     })
 
 
+@extend_schema(exclude=True)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def list_environments(request: Request) -> Response:
@@ -381,6 +388,7 @@ def _validate_server_access(
             response_only=True,
         )
     ],
+    exclude=True,  # Story 44.3: Usage interne uniquement — non exposé dans la doc publique
 )
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -470,6 +478,7 @@ def list_servers(request: Request) -> Response:
             response_only=True,
         )
     ],
+    exclude=True,  # Story 44.3: Usage interne uniquement — non exposé dans la doc publique
 )
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -556,6 +565,7 @@ def list_instances(request: Request) -> Response:
             response_only=True,
         )
     ],
+    exclude=True,  # Story 44.3: Usage interne uniquement — non exposé dans la doc publique
 )
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
