@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import hashlib
+import secrets
+from datetime import datetime, timezone
+
 from django.db import models
 
 
@@ -80,3 +84,77 @@ class User(models.Model):
 
     def __str__(self) -> str:
         return self.username
+
+
+class APIKeyScope(models.TextChoices):
+    EXECUTIONS = 'executions', 'Executions'
+    CATALOG = 'catalog', 'Catalog'
+    FULL = 'full', 'Full'
+
+
+def _hash_key(raw_key: str) -> str:
+    return hashlib.sha256(raw_key.encode('utf-8')).hexdigest()
+
+
+def _generate_raw_key() -> str:
+    return secrets.token_urlsafe(32)
+
+
+class APIKeyManager(models.Manager['APIKey']):
+
+    def create_key(self, user: 'User', name: str, scope: str | None = None) -> tuple['APIKey', str]:
+        if scope is not None and scope not in APIKeyScope.values:
+            raise ValueError(f"Invalid scope '{scope}'. Valid scopes: {list(APIKeyScope.values)}")
+        raw_key = _generate_raw_key()
+        key_hash = _hash_key(raw_key)
+        instance = self.create(
+            user=user,
+            name=name,
+            key_hash=key_hash,
+            scope=scope,
+        )
+        return instance, raw_key
+
+    def verify_key(self, raw_key: str) -> 'APIKey | None':
+        key_hash = _hash_key(raw_key)
+        try:
+            instance = self.get(key_hash=key_hash, is_active=True)
+        except self.model.DoesNotExist:
+            return None
+        if instance.expires_at is not None:
+            now = datetime.now(tz=timezone.utc)
+            if instance.expires_at < now:
+                return None
+        return instance
+
+
+class APIKey(models.Model):
+    id = models.BigAutoField(primary_key=True, db_column='ID')
+    user = models.ForeignKey(
+        'idp_auth.User',
+        on_delete=models.CASCADE,
+        db_column='USER_ID',
+        related_name='api_keys',
+    )
+    key_hash = models.CharField(max_length=64, unique=True, db_column='KEY_HASH')
+    name = models.CharField(max_length=255, blank=True, default='', db_column='NAME')
+    scope = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        choices=APIKeyScope.choices,
+        db_column='SCOPE',
+    )
+    expires_at = models.DateTimeField(null=True, blank=True, db_column='EXPIRES_AT')
+    is_active = models.BooleanField(default=True, db_column='IS_ACTIVE')
+    created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
+    updated_at = models.DateTimeField(auto_now=True, db_column='UPDATED_AT')
+
+    objects = APIKeyManager()
+
+    class Meta:
+        db_table = 'API_KEYS'
+        ordering = ['-created_at']
+
+    def __str__(self) -> str:
+        return f'APIKey({self.name}, user={self.user_id})'

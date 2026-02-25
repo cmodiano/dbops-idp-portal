@@ -52,10 +52,15 @@ def _sanitize_parameters(parameters: dict | None) -> dict | None:
                 sanitized[k] = sanitized_v
             # dict imbriqué entièrement sensible → clé exclue (pas incluse comme None)
         elif isinstance(v, list):
-            sanitized[k] = [
-                _sanitize_parameters(item) if isinstance(item, dict) else item
-                for item in v
-            ]
+            out: list = []
+            for item in v:
+                if isinstance(item, dict):
+                    sanitized_item = _sanitize_parameters(item)
+                    if sanitized_item is not None:
+                        out.append(sanitized_item)
+                else:
+                    out.append(item)
+            sanitized[k] = out
         else:
             sanitized[k] = v
     return sanitized if sanitized else None
@@ -271,13 +276,14 @@ class ExecutionService:
             'action_name': action.name,
             'environment': environment,
         }
-        # Story 4.12 (AC6): include workflow_step_parameters when provided
-        if isinstance(parameters, dict) and isinstance(parameters.get("workflow_step_parameters"), dict):
-            audit_details["workflow_step_parameters"] = parameters.get("workflow_step_parameters")
+        # Story 4.12 (AC6): include workflow_step_parameters when provided (sanitized)
+        raw_wsp = parameters.get("workflow_step_parameters") if isinstance(parameters, dict) else None
+        sanitized_wsp = _sanitize_parameters(raw_wsp) if isinstance(raw_wsp, dict) else None
+        if sanitized_wsp:
+            audit_details["workflow_step_parameters"] = sanitized_wsp
         # Story 43.2: inclure les paramètres d'exécution nettoyés dans audit_details
         sanitized_params = _sanitize_parameters(parameters)
         if sanitized_params:
-            # Exclure workflow_step_parameters si déjà inclus séparément dans audit_details
             sanitized_params.pop("workflow_step_parameters", None)
             if sanitized_params:
                 audit_details["parameters"] = sanitized_params

@@ -207,19 +207,19 @@ def _build_audit_queryset(request):
 
         environment = (request.query_params.get("environment") or "").strip()
         if environment:
-            exec_ids = Execution.objects.filter(environment=environment).values("id")
+            exec_ids = Execution.objects.filter(environment=environment).values_list("id", flat=True)
             qs = _apply_exec_filter(qs, exec_ids)
 
         action_id = request.query_params.get("action_id")
         if action_id is not None and action_id != "":
             aid = _parse_int(action_id, 0, name="action_id")
-            exec_ids = Execution.objects.filter(action_id=aid).values("id")
+            exec_ids = Execution.objects.filter(action_id=aid).values_list("id", flat=True)
             qs = _apply_exec_filter(qs, exec_ids)
 
         # Filter by action engine (REF_ENGINES code)
         engine_type = (request.query_params.get("engine_type") or "").strip()
         if engine_type:
-            exec_ids = Execution.objects.filter(action__engine=engine_type).values("id")
+            exec_ids = Execution.objects.filter(action__engine=engine_type).values_list("id", flat=True)
             qs = _apply_exec_filter(qs, exec_ids)
 
         status_filter = (request.query_params.get("status") or "").strip()
@@ -232,7 +232,7 @@ def _build_audit_queryset(request):
                 )
             # Filter by current execution status so "En cours" shows only executions still in progress
             exec_statuses = _EXECUTION_STATUS_BY_FILTER[status_filter]
-            exec_ids = Execution.objects.filter(status__in=exec_statuses).values_list("id", flat=True)  # type: ignore[assignment]
+            exec_ids = Execution.objects.filter(status__in=exec_statuses).values_list("id", flat=True)
             qs = _apply_exec_filter(qs, exec_ids)
 
     # Story 6.3: user_id exact match (rétro-compatibilité)
@@ -251,6 +251,7 @@ def _build_audit_queryset(request):
         "timestamp": "timestamp",
         "user_id": "user_id",
         "action_type": "action_type",
+        "entity_type": "entity_type",
     }
     if sort not in sort_map:
         raise BadRequestError(code="BAD_REQUEST", message="sort invalide", details={"sort": sort})
@@ -357,7 +358,7 @@ class AuditExecutionsView(APIView):
                     "user_name": user_name_by_id.get(r.user_id) if r.user_id else None,
                     "action_type": r.action_type,
                     "entity_type": r.entity_type,
-                    "entity_id": int(r.entity_id) if r.entity_id else None,
+                    "entity_id": None if r.entity_id is None else int(r.entity_id),
                     "action_name": action_name,
                     "details": details,
                     "ip_address": r.ip_address,
@@ -470,7 +471,7 @@ class AuditExportView(APIView):
                     user_name_by_id_export.get(r.user_id) or r.user_id or "",
                     r.action_type,
                     r.entity_type,          # Story 43.6
-                    (int(r.entity_id) if r.entity_id else "") if r.entity_type == AuditEntityType.EXECUTION else "",
+                    ("" if r.entity_id is None else int(r.entity_id)) if r.entity_type == AuditEntityType.EXECUTION else "",
                     details.get("action_id") or (exec_obj.action_id if exec_obj else ""),
                     (exec_obj.action.name if exec_obj and getattr(exec_obj, "action", None) else "")
                     or details.get("action_name", ""),      # Story 43.6 : fallback depuis details

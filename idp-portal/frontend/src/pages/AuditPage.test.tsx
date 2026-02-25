@@ -132,7 +132,7 @@ describe('AuditPage', () => {
   it('AC1: renders table with correct columns', async () => {
     mockListExecutionAudit.mockResolvedValue({
       data: mockAuditEntries,
-      pagination: { page: 1, page_size: 25, total: 2, total_pages: 1 },
+      pagination: { page: 1, page_size: 50, total: 2, total_pages: 1 },
     });
 
     renderWithProviders(<AuditPage />);
@@ -155,7 +155,7 @@ describe('AuditPage', () => {
   it('AC1: displays audit entries in table', async () => {
     mockListExecutionAudit.mockResolvedValue({
       data: mockAuditEntries,
-      pagination: { page: 1, page_size: 25, total: 2, total_pages: 1 },
+      pagination: { page: 1, page_size: 50, total: 2, total_pages: 1 },
     });
 
     renderWithProviders(<AuditPage />);
@@ -176,7 +176,7 @@ describe('AuditPage', () => {
   it('AC2: renders filter controls', async () => {
     mockListExecutionAudit.mockResolvedValue({
       data: [],
-      pagination: { page: 1, page_size: 25, total: 0, total_pages: 1 },
+      pagination: { page: 1, page_size: 50, total: 0, total_pages: 1 },
     });
 
     renderWithProviders(<AuditPage />);
@@ -193,7 +193,7 @@ describe('AuditPage', () => {
   it('AC5: displays pagination with correct count', async () => {
     mockListExecutionAudit.mockResolvedValue({
       data: mockAuditEntries,
-      pagination: { page: 1, page_size: 25, total: 100, total_pages: 4 },
+      pagination: { page: 1, page_size: 50, total: 100, total_pages: 4 },
     });
 
     renderWithProviders(<AuditPage />);
@@ -234,7 +234,7 @@ describe('AuditPage', () => {
   it('AC3: clicking row opens drawer', async () => {
     mockListExecutionAudit.mockResolvedValue({
       data: mockAuditEntries,
-      pagination: { page: 1, page_size: 25, total: 2, total_pages: 1 },
+      pagination: { page: 1, page_size: 50, total: 2, total_pages: 1 },
     });
 
     mockGetExecution.mockResolvedValue({
@@ -272,7 +272,7 @@ describe('AuditPage', () => {
     beforeEach(() => {
       mockListExecutionAudit.mockResolvedValue({
         data: mockAuditEntries,
-        pagination: { page: 1, page_size: 25, total: 2, total_pages: 1 },
+        pagination: { page: 1, page_size: 50, total: 2, total_pages: 1 },
       });
     });
 
@@ -630,7 +630,7 @@ describe('AuditPage', () => {
     beforeEach(() => {
       mockListExecutionAudit.mockResolvedValue({
         data: mockAuditEntries,
-        pagination: { page: 1, page_size: 25, total: 2, total_pages: 1 },
+        pagination: { page: 1, page_size: 50, total: 2, total_pages: 1 },
       });
       mockExportAuditReport.mockResolvedValue(undefined);
     });

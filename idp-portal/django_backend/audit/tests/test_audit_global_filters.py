@@ -67,7 +67,7 @@ class TestAuditGlobalFilters:
         entity_types = {entry["entity_type"] for entry in data}
         assert AuditEntityType.EXECUTION in entity_types
         assert AuditEntityType.ACTION in entity_types
-        assert len(data) >= 2
+        assert len(data) == 2
 
     def test_audit_filter_entity_type_action(self, rf: APIRequestFactory) -> None:
         """AC2 : entity_type=action filtre correctement — uniquement les entrées action."""
@@ -153,6 +153,46 @@ class TestAuditGlobalFilters:
         data = response.data["data"]
         assert len(data) == 1
         assert data[0]["user_id"] == str(doe.id)
+
+    def test_audit_filter_combined_entity_action_user(self, rf: APIRequestFactory) -> None:
+        """Combined filter: entity_type=action, action_type=ACTION_CREATED, user=john returns only matching entry."""
+        from idp_auth.models import User
+        john = User.objects.create(username="john", display_name="John Doe")
+        alice = User.objects.create(username="alice", display_name="Alice")
+
+        _create_audit_log(
+            entity_type=AuditEntityType.ACTION,
+            action_type=AuditActionType.ACTION_CREATED,
+            entity_id=10,
+            user_id=str(john.id),
+        )
+        _create_audit_log(
+            entity_type=AuditEntityType.ACTION,
+            action_type=AuditActionType.ACTION_UPDATED,
+            entity_id=11,
+            user_id=str(john.id),
+        )
+        _create_audit_log(
+            entity_type=AuditEntityType.ACTION,
+            action_type=AuditActionType.ACTION_CREATED,
+            entity_id=12,
+            user_id=str(alice.id),
+        )
+        _create_audit_log(
+            entity_type=AuditEntityType.EXECUTION,
+            action_type=AuditActionType.EXECUTION_COMPLETED,
+            entity_id=1,
+            user_id=str(john.id),
+        )
+
+        response = _get_audit(rf, "entity_type=action&action_type=ACTION_CREATED&user=john")
+
+        assert response.status_code == 200
+        data = response.data["data"]
+        assert len(data) == 1
+        assert data[0]["entity_type"] == AuditEntityType.ACTION
+        assert data[0]["action_type"] == AuditActionType.ACTION_CREATED
+        assert data[0]["user_id"] == str(john.id)
 
     def test_audit_filter_execution_only_ignored_for_non_exec(self, rf: APIRequestFactory) -> None:
         """AC6 : entity_type=action&environment=prod → filtre environment ignoré (pas de 400)."""

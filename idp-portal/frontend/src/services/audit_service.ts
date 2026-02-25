@@ -102,42 +102,9 @@ export async function exportAuditReport(
   format: 'csv' | 'pdf',
   filters: AuditExecutionFilters = {},
 ): Promise<void> {
-  const params = new URLSearchParams();
+  const baseQuery = buildQueryString(filters);
+  const params = new URLSearchParams(baseQuery.startsWith('?') ? baseQuery.slice(1) : baseQuery);
   params.set('fmt', format);
-
-  if (filters.from) {
-    params.set('from', filters.from);
-  }
-  if (filters.to) {
-    params.set('to', filters.to);
-  }
-  if (filters.environment) {
-    params.set('environment', filters.environment);
-  }
-  if (filters.action_id !== undefined) {
-    params.set('action_id', String(filters.action_id));
-  }
-  if (filters.engine_type) {
-    params.set('engine_type', filters.engine_type);
-  }
-  if (filters.user_id) {
-    params.set('user_id', filters.user_id);
-  }
-  if (filters.status) {
-    params.set('status', filters.status);
-  }
-  if (filters.correlation_id) {
-    params.set('correlation_id', filters.correlation_id);
-  }
-  if (filters.entity_type) {
-    params.set('entity_type', filters.entity_type);
-  }
-  if (filters.action_type) {
-    params.set('action_type', filters.action_type);
-  }
-  if (filters.user) {
-    params.set('user', filters.user);
-  }
 
   // Download file as blob with auth + 401 retry support.
   const blob = await apiFetchBlob(`/audit/export/?${params.toString()}`);

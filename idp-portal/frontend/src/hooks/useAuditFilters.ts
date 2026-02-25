@@ -7,7 +7,7 @@
  * Pattern: same as useCatalogState (Story 34-10), useCalendarState (Story 26.6).
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { App } from 'antd';
 import type { Dayjs } from 'dayjs';
 import type { TableProps } from 'antd';
@@ -123,15 +123,24 @@ export function useAuditFilters(): UseAuditFiltersReturn {
   // Export
   const [exporting, setExporting] = useState(false);
 
+  // Map frontend sort field names to API sort field names (shared by fetchData and handleExport)
+  const getApiSortField = useCallback(() => {
+    if (sortField === 'entity') return 'entity_type';
+    if (sortField === 'action') return 'action_type';
+    return sortField;
+  }, [sortField]);
+
+  // Stale-response guard: only the latest request updates state
+  const latestRequestIdRef = useRef(0);
+
   // Fetch data (AC2, AC5)
   const fetchData = useCallback(async (page: number) => {
+    const requestId = ++latestRequestIdRef.current;
     setLoading(true);
     setError(null);
     try {
       const offset = (page - 1) * pageSize;
-      // Map frontend sort field names to API sort field names
-      // 'entity' is the column key for the Entité column (was 'action' before Story 43.4)
-      const apiSortField = (sortField === 'entity' || sortField === 'action') ? 'action_type' : sortField;
+      const apiSortField = getApiSortField();
       const apiSortOrder = sortOrder === 'ascend' ? 'asc' : 'desc';
 
       const result = await listExecutionAudit({
@@ -150,14 +159,18 @@ export function useAuditFilters(): UseAuditFiltersReturn {
         limit: pageSize,
         offset,
       });
+      if (requestId !== latestRequestIdRef.current) return;
       setEntries(result.data);
       setPagination(result.pagination);
     } catch (err) {
+      if (requestId !== latestRequestIdRef.current) return;
       setError(err instanceof Error ? err.message : 'Erreur de chargement');
     } finally {
-      setLoading(false);
+      if (requestId === latestRequestIdRef.current) {
+        setLoading(false);
+      }
     }
-  }, [dateRange, environment, engineType, actionId, status, correlationId, entityType, actionType, userSearch, sortField, sortOrder, pageSize]);
+  }, [dateRange, environment, engineType, actionId, status, correlationId, entityType, actionType, userSearch, getApiSortField, sortOrder, pageSize]);
 
   // Initial load and filter changes
   useEffect(() => {
@@ -172,7 +185,8 @@ export function useAuditFilters(): UseAuditFiltersReturn {
   // Debounce 300ms for user search input (Story 43.3)
   useEffect(() => {
     const timer = setTimeout(() => {
-      setUserSearch(userSearchInput);
+      const trimmed = userSearchInput.trim();
+      setUserSearch(trimmed);
     }, 300);
     return () => clearTimeout(timer);
   }, [userSearchInput]);
@@ -257,7 +271,7 @@ export function useAuditFilters(): UseAuditFiltersReturn {
   const handleExport = useCallback(async (format: 'csv' | 'pdf') => {
     setExporting(true);
     try {
-      const apiSortField = (sortField === 'entity' || sortField === 'action') ? 'action_type' : sortField;
+      const apiSortField = getApiSortField();
       const apiSortOrder = sortOrder === 'ascend' ? 'asc' : 'desc';
       await exportAuditReport(format, {
         from: dateRange[0]?.startOf('day').toISOString(),
@@ -280,7 +294,7 @@ export function useAuditFilters(): UseAuditFiltersReturn {
     } finally {
       setExporting(false);
     }
-  }, [dateRange, environment, engineType, actionId, status, correlationId, entityType, actionType, userSearch, sortField, sortOrder, message]);
+  }, [dateRange, environment, engineType, actionId, status, correlationId, entityType, actionType, userSearch, getApiSortField, sortOrder, message]);
 
   // Group workflow children under parent (accordion-style)
   const { topLevelEntries, childrenByParentId } = useMemo(() => {

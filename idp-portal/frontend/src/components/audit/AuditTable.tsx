@@ -221,7 +221,7 @@ export function getEntityLabel(entry: AuditExecutionEntry): string {
   if (entry.entity_type === 'user') {
     return entry.user_name ?? entry.user_id ?? `Utilisateur #${entry.entity_id}`;
   }
-  if (entry.entity_id) {
+  if (entry.entity_id != null) {
     return `#${entry.entity_id}`;
   }
   return '—';

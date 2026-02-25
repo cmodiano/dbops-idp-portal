@@ -110,6 +110,7 @@ class TestSanitizeParametersPure:
             "servers": [
                 {"host": "server1.example.com", "password": "secret1"},
                 {"host": "server2.example.com", "api_key": "key2"},
+                {"password": "x"},  # Regression: dict with only sensitive keys → excluded
                 "plain_string_item",
             ],
         }
@@ -119,6 +120,9 @@ class TestSanitizeParametersPure:
         assert result["servers"][0] == {"host": "server1.example.com"}
         assert result["servers"][1] == {"host": "server2.example.com"}
         assert result["servers"][2] == "plain_string_item"
+        # Dict with only sensitive keys is removed, not included as None
+        assert len(result["servers"]) == 3
+        assert {"password": "x"} not in result["servers"]
 
 
 # ---------------------------------------------------------------------------
