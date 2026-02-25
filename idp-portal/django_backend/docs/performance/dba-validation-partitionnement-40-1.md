@@ -32,7 +32,7 @@
 | `created_at` | DateTimeField (auto_now_add) | `CREATED_AT` | **clé de partition cible** | Jamais modifié |
 
 **Index existants (`models.py:173–174`) :**
-```
+```text
 idx_exec_action_created : (ACTION_ID, CREATED_AT)
 ```
 
@@ -355,7 +355,7 @@ Contrainte `unique_together = [['execution', 'step_order']]` → index unique Or
 
 ### Ordre impératif des migrations
 
-```
+```text
 40.2 : Migration EXECUTIONS (partitionnement CREATED_AT)
     ↓
 40.3 : Migration EXECUTION_STEPS (Reference Partitioning sur EXECUTIONS)

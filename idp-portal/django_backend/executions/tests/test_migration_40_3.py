@@ -292,46 +292,60 @@ class TestMigration40_3ReferencePartitioning:
         Note : Ce test nécessite les droits EXPLAIN PLAN et PLAN_TABLE.
         Il peut être ignoré si les droits ne sont pas disponibles en CI.
         """
-        with connection.cursor() as cursor:
-            # Purger d'éventuels résidus AVANT de générer un nouveau plan
-            # (Oracle ne remplace pas les entrées existantes pour un même STATEMENT_ID)
-            cursor.execute("DELETE FROM PLAN_TABLE WHERE STATEMENT_ID = 'TEST_40_3_JOIN'")
+        partition_rows: list[tuple[str, str | None]] = []
+        try:
+            with connection.cursor() as cursor:
+                # Purger d'éventuels résidus AVANT de générer un nouveau plan
+                # (Oracle ne remplace pas les entrées existantes pour un même STATEMENT_ID)
+                cursor.execute("DELETE FROM PLAN_TABLE WHERE STATEMENT_ID = 'TEST_40_3_JOIN'")
 
-            # Générer le plan d'exécution pour une jointure EXECUTIONS ↔ EXECUTION_STEPS
-            # avec filtre sur CREATED_AT (partition pruning sur EXECUTIONS → cascade REFERENCE)
-            cursor.execute("""
-                EXPLAIN PLAN SET STATEMENT_ID = 'TEST_40_3_JOIN' FOR
-                SELECT s.ID, s.STEP_NAME, s.STATUS
-                FROM EXECUTIONS e
-                JOIN EXECUTION_STEPS s ON s.EXECUTION_ID = e.ID
-                WHERE e.CREATED_AT BETWEEN SYSTIMESTAMP - INTERVAL '30' DAY AND SYSTIMESTAMP
-            """)
+                # Générer le plan d'exécution pour une jointure EXECUTIONS ↔ EXECUTION_STEPS
+                # avec filtre sur CREATED_AT (partition pruning sur EXECUTIONS → cascade REFERENCE)
+                cursor.execute("""
+                    EXPLAIN PLAN SET STATEMENT_ID = 'TEST_40_3_JOIN' FOR
+                    SELECT s.ID, s.STEP_NAME, s.STATUS
+                    FROM EXECUTIONS e
+                    JOIN EXECUTION_STEPS s ON s.EXECUTION_ID = e.ID
+                    WHERE e.CREATED_AT BETWEEN SYSTIMESTAMP - INTERVAL '30' DAY AND SYSTIMESTAMP
+                """)
 
-            # Récupérer les opérations de partition du plan
-            cursor.execute("""
-                SELECT OPERATION, OPTIONS
-                FROM PLAN_TABLE
-                WHERE STATEMENT_ID = 'TEST_40_3_JOIN'
-                  AND (OPTIONS LIKE '%REFERENCE%' OR OPERATION LIKE '%PARTITION%')
-                ORDER BY ID
-            """)
-            partition_rows = cursor.fetchall()
+                # Récupérer les opérations de partition du plan
+                cursor.execute("""
+                    SELECT OPERATION, OPTIONS
+                    FROM PLAN_TABLE
+                    WHERE STATEMENT_ID = 'TEST_40_3_JOIN'
+                      AND (OPTIONS LIKE '%REFERENCE%' OR OPERATION LIKE '%PARTITION%')
+                    ORDER BY ID
+                """)
+                partition_rows = cursor.fetchall()
 
-            # Nettoyer après lecture
-            cursor.execute("DELETE FROM PLAN_TABLE WHERE STATEMENT_ID = 'TEST_40_3_JOIN'")
+                # Nettoyer après lecture
+                cursor.execute("DELETE FROM PLAN_TABLE WHERE STATEMENT_ID = 'TEST_40_3_JOIN'")
+        except Exception as db_exc:
+            if 'ORA-00942' in str(db_exc):
+                partition_rows = []
+            else:
+                raise
 
         if not partition_rows:
-            # Vérifier si PLAN_TABLE est accessible
-            with connection.cursor() as cursor:
-                cursor.execute("DELETE FROM PLAN_TABLE WHERE STATEMENT_ID = 'TEST_40_3_JOIN_CHECK'")
-                cursor.execute(
-                    "EXPLAIN PLAN SET STATEMENT_ID = 'TEST_40_3_JOIN_CHECK' FOR SELECT 1 FROM DUAL"
-                )
-                cursor.execute(
-                    "SELECT COUNT(*) FROM PLAN_TABLE WHERE STATEMENT_ID = 'TEST_40_3_JOIN_CHECK'"
-                )
-                plan_accessible = cursor.fetchone()[0] > 0
-                cursor.execute("DELETE FROM PLAN_TABLE WHERE STATEMENT_ID = 'TEST_40_3_JOIN_CHECK'")
+            # Vérifier si PLAN_TABLE est accessible (fallback quand plan vide ou ORA-00942)
+            plan_accessible = False
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("DELETE FROM PLAN_TABLE WHERE STATEMENT_ID = 'TEST_40_3_JOIN_CHECK'")
+                    cursor.execute(
+                        "EXPLAIN PLAN SET STATEMENT_ID = 'TEST_40_3_JOIN_CHECK' FOR SELECT 1 FROM DUAL"
+                    )
+                    cursor.execute(
+                        "SELECT COUNT(*) FROM PLAN_TABLE WHERE STATEMENT_ID = 'TEST_40_3_JOIN_CHECK'"
+                    )
+                    plan_accessible = cursor.fetchone()[0] > 0
+                    cursor.execute("DELETE FROM PLAN_TABLE WHERE STATEMENT_ID = 'TEST_40_3_JOIN_CHECK'")
+            except Exception as check_exc:
+                if 'ORA-00942' in str(check_exc):
+                    plan_accessible = False
+                else:
+                    raise
 
             if not plan_accessible:
                 pytest.skip("PLAN_TABLE non accessible ou EXPLAIN PLAN non supporté dans cet environnement")

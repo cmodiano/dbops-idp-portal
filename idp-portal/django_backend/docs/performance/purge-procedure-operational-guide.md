@@ -53,7 +53,7 @@ Rationale : EXECUTIONS et AUDIT_LOG sont partitionnées mensuellement (INTERVAL 
 
 **Conclusion** : le `DROP PARTITION` lui-même est quasi-instantané et n'impacte pas les DML en cours sur les autres partitions. Seuls les pré-requis DML (UPDATE/DELETE) peuvent prendre plus longtemps selon le volume.
 
-**Recommendation** : exécuter d'abord en mode `dry_run=1` pour estimer le volume avant l'exécution réelle.
+**Recommandation** : exécuter d'abord en mode `dry_run=1` pour estimer le volume avant l'exécution réelle.
 
 ---
 

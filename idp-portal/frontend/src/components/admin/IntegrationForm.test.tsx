@@ -527,6 +527,7 @@ describe('IntegrationForm', () => {
       icon: null,
       auth_flow: null,
       status: 'invalid',
+      token_url: null,
       created_at: '2026-01-28T10:00:00Z',
       updated_at: '2026-01-28T10:00:00Z',
     };
@@ -545,6 +546,7 @@ describe('IntegrationForm', () => {
       icon: null,
       auth_flow: null,
       status: 'invalid',
+      token_url: null,
       created_at: '2026-01-28T10:00:00Z',
       updated_at: '2026-01-28T10:00:00Z',
     };
@@ -563,6 +565,7 @@ describe('IntegrationForm', () => {
       icon: null,
       auth_flow: null,
       status: 'deprecated',
+      token_url: null,
       created_at: '2026-01-28T10:00:00Z',
       updated_at: '2026-01-28T10:00:00Z',
     };
@@ -581,6 +584,7 @@ describe('IntegrationForm', () => {
       icon: null,
       auth_flow: null,
       status: 'deprecated',
+      token_url: null,
       created_at: '2026-01-28T10:00:00Z',
       updated_at: '2026-01-28T10:00:00Z',
     };
@@ -599,6 +603,7 @@ describe('IntegrationForm', () => {
       icon: null,
       auth_flow: null,
       status: 'valid',
+      token_url: null,
       created_at: '2026-01-28T10:00:00Z',
       updated_at: '2026-01-28T10:00:00Z',
     };

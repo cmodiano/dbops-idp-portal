@@ -8,6 +8,7 @@ import base64
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests as _req
 
 from adapters.utils import build_auth_headers_from_credentials, build_auth_headers
 from core.exceptions import BadRequestError
@@ -124,8 +125,9 @@ class TestBuildAuthHeaders:
         mock_response.raise_for_status = MagicMock()
 
         with patch("adapters.utils.resolve_credential", return_value="client_id:client_secret"):
-            with patch("requests.post", return_value=mock_response) as mock_post:
-                result = build_auth_headers(integration)
+            with patch("adapters.utils.cache.get", return_value=None):
+                with patch("requests.post", return_value=mock_response) as mock_post:
+                    result = build_auth_headers(integration)
 
         assert result == {"Authorization": "Bearer mock_token"}
         mock_post.assert_called_once_with(
@@ -136,7 +138,7 @@ class TestBuildAuthHeaders:
                 "client_secret": "client_secret",
                 "scope": "api:read",
             },
-            timeout=10,
+            timeout=5,
         )
 
     def test_oauth2_missing_token_url_raises(self):
@@ -152,16 +154,16 @@ class TestBuildAuthHeaders:
 
     def test_oauth2_token_request_failure_raises(self):
         """Story 31.12: oauth2_client_credentials + requests.post fails → BadRequestError."""
-        import requests as _req
         integration = _make_integration(
             auth_flow="oauth2_client_credentials",
             credential_ref="client_id:client_secret",
             token_url="https://auth.example.com/token",
         )
         with patch("adapters.utils.resolve_credential", return_value="client_id:client_secret"):
-            with patch("requests.post", side_effect=_req.RequestException("Connection refused")):
-                with pytest.raises(BadRequestError) as exc_info:
-                    build_auth_headers(integration)
+            with patch("adapters.utils.cache.get", return_value=None):
+                with patch("requests.post", side_effect=_req.RequestException("Connection refused")):
+                    with pytest.raises(BadRequestError) as exc_info:
+                        build_auth_headers(integration)
         assert exc_info.value.code == "OAUTH2_TOKEN_REQUEST_FAILED"
 
     def test_oauth2_no_access_token_in_response_raises(self):
@@ -176,9 +178,10 @@ class TestBuildAuthHeaders:
         mock_response.raise_for_status = MagicMock()
 
         with patch("adapters.utils.resolve_credential", return_value="client_id:client_secret"):
-            with patch("requests.post", return_value=mock_response):
-                with pytest.raises(BadRequestError) as exc_info:
-                    build_auth_headers(integration)
+            with patch("adapters.utils.cache.get", return_value=None):
+                with patch("requests.post", return_value=mock_response):
+                    with pytest.raises(BadRequestError) as exc_info:
+                        build_auth_headers(integration)
         assert exc_info.value.code == "OAUTH2_NO_ACCESS_TOKEN"
 
     def test_oauth2_credential_without_colon_uses_empty_secret(self):
@@ -193,8 +196,9 @@ class TestBuildAuthHeaders:
         mock_response.raise_for_status = MagicMock()
 
         with patch("adapters.utils.resolve_credential", return_value="just_client_id"):
-            with patch("requests.post", return_value=mock_response) as mock_post:
-                result = build_auth_headers(integration)
+            with patch("adapters.utils.cache.get", return_value=None):
+                with patch("requests.post", return_value=mock_response) as mock_post:
+                    result = build_auth_headers(integration)
 
         assert result == {"Authorization": "Bearer mock_token"}
         mock_post.assert_called_once_with(
@@ -204,5 +208,32 @@ class TestBuildAuthHeaders:
                 "client_id": "just_client_id",
                 "client_secret": "",
             },
-            timeout=10,
+            timeout=5,
         )
+
+    def test_oauth2_success_without_scope(self):
+        """Story 31.12: oauth2_client_credentials without scope → no scope key in POST data."""
+        integration = _make_integration(
+            auth_flow="oauth2_client_credentials",
+            credential_ref="client_id:client_secret",
+            token_url="https://auth.example.com/token",
+            config={},  # no scope
+        )
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"access_token": "mock_token"}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("adapters.utils.resolve_credential", return_value="client_id:client_secret"):
+            with patch("adapters.utils.cache.get", return_value=None):
+                with patch("requests.post", return_value=mock_response) as mock_post:
+                    result = build_auth_headers(integration)
+
+        assert result == {"Authorization": "Bearer mock_token"}
+        call_kwargs = mock_post.call_args
+        assert call_kwargs[0][0] == "https://auth.example.com/token"
+        data = call_kwargs[1]["data"]
+        assert "grant_type" in data
+        assert "client_id" in data
+        assert "client_secret" in data
+        assert "scope" not in data
+        assert call_kwargs[1]["timeout"] == 5

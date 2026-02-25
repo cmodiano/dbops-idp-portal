@@ -148,6 +148,7 @@ const mockOnSubmit = vi.fn().mockResolvedValue({
   credential_ref: null,
   icon: null,
   auth_flow: null,
+  token_url: null,
   created_at: '2026-02-14T10:00:00Z',
   updated_at: '2026-02-14T10:00:00Z',
 } as IntegrationResponse);
@@ -375,6 +376,7 @@ describe('Story 27.7 — IntegrationForm with all 7 types', () => {
         credential_ref: 'vault:secret/data/tower/prod#token',
         icon: null,
         auth_flow: null,
+        token_url: null,
         created_at: '2026-02-14T10:00:00Z',
         updated_at: '2026-02-14T10:00:00Z',
       };
@@ -396,6 +398,7 @@ describe('Story 27.7 — IntegrationForm with all 7 types', () => {
         credential_ref: null,
         icon: null,
         auth_flow: 'pat',
+        token_url: null,
         created_at: '2026-02-14T10:00:00Z',
         updated_at: '2026-02-14T10:00:00Z',
       };

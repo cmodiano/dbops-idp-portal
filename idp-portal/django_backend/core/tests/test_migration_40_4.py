@@ -364,57 +364,73 @@ class TestMigration40_4RangeIntervalPartitioning:
         Il peut être ignoré si les droits ne sont pas disponibles en CI.
         """
         statement_id = 'TEST_40_4_PRUNING'
+        partition_rows: list[tuple[str, str | None]] = []
 
-        with connection.cursor() as cursor:
-            # Purger d'éventuels résidus AVANT de générer un nouveau plan
-            # (Oracle ne remplace pas les entrées existantes pour un même STATEMENT_ID)
-            cursor.execute(
-                f"DELETE FROM PLAN_TABLE WHERE STATEMENT_ID = '{statement_id}'"
-            )
+        try:
+            with connection.cursor() as cursor:
+                # Purger d'éventuels résidus AVANT de générer un nouveau plan
+                # (Oracle ne remplace pas les entrées existantes pour un même STATEMENT_ID)
+                cursor.execute(
+                    f"DELETE FROM PLAN_TABLE WHERE STATEMENT_ID = '{statement_id}'"
+                )
 
-            # Générer le plan d'exécution pour une requête filtrée par TIMESTAMP
-            # Dates LITTÉRALES (pas SYSTIMESTAMP) : l'optimiseur peut calculer statiquement
-            # les partitions concernées et générer PARTITION RANGE SINGLE ou ITERATOR.
-            cursor.execute(f"""
-                EXPLAIN PLAN SET STATEMENT_ID = '{statement_id}' FOR
-                SELECT ID, ACTION_TYPE, USER_ID
-                FROM AUDIT_LOG
-                WHERE TIMESTAMP BETWEEN TIMESTAMP '2024-01-01 00:00:00'
-                  AND TIMESTAMP '2024-02-01 00:00:00'
-            """)
+                # Générer le plan d'exécution pour une requête filtrée par TIMESTAMP
+                # Dates LITTÉRALES (pas SYSTIMESTAMP) : l'optimiseur peut calculer statiquement
+                # les partitions concernées et générer PARTITION RANGE SINGLE ou ITERATOR.
+                cursor.execute(f"""
+                    EXPLAIN PLAN SET STATEMENT_ID = '{statement_id}' FOR
+                    SELECT ID, ACTION_TYPE, USER_ID
+                    FROM AUDIT_LOG
+                    WHERE TIMESTAMP BETWEEN TIMESTAMP '2024-01-01 00:00:00'
+                      AND TIMESTAMP '2024-02-01 00:00:00'
+                """)
 
-            # Récupérer les opérations de partition du plan
-            cursor.execute(f"""
-                SELECT OPERATION, OPTIONS
-                FROM PLAN_TABLE
-                WHERE STATEMENT_ID = '{statement_id}'
-                  AND OPERATION = 'PARTITION RANGE'
-                ORDER BY ID
-            """)
-            partition_rows = cursor.fetchall()
+                # Récupérer les opérations de partition du plan
+                # Accept both OPERATION='PARTITION' (OPTIONS='RANGE ITERATOR'/'RANGE SINGLE')
+                # and OPERATION='PARTITION RANGE' (OPTIONS='ITERATOR'/'SINGLE') — Oracle version variance
+                cursor.execute(f"""
+                    SELECT OPERATION, OPTIONS
+                    FROM PLAN_TABLE
+                    WHERE STATEMENT_ID = '{statement_id}'
+                      AND (OPERATION = 'PARTITION' OR OPERATION = 'PARTITION RANGE')
+                    ORDER BY ID
+                """)
+                partition_rows = cursor.fetchall()
 
-            # Nettoyer après lecture
-            cursor.execute(
-                f"DELETE FROM PLAN_TABLE WHERE STATEMENT_ID = '{statement_id}'"
-            )
+                # Nettoyer après lecture
+                cursor.execute(
+                    f"DELETE FROM PLAN_TABLE WHERE STATEMENT_ID = '{statement_id}'"
+                )
+        except Exception as db_exc:
+            if 'ORA-00942' in str(db_exc):
+                partition_rows = []
+            else:
+                raise
 
         if not partition_rows:
-            # Vérifier si PLAN_TABLE est accessible
+            # Vérifier si PLAN_TABLE est accessible (fallback quand plan vide ou ORA-00942)
             check_id = 'TEST_40_4_CHECK'
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    f"DELETE FROM PLAN_TABLE WHERE STATEMENT_ID = '{check_id}'"
-                )
-                cursor.execute(
-                    f"EXPLAIN PLAN SET STATEMENT_ID = '{check_id}' FOR SELECT 1 FROM DUAL"
-                )
-                cursor.execute(
-                    f"SELECT COUNT(*) FROM PLAN_TABLE WHERE STATEMENT_ID = '{check_id}'"
-                )
-                plan_accessible = cursor.fetchone()[0] > 0
-                cursor.execute(
-                    f"DELETE FROM PLAN_TABLE WHERE STATEMENT_ID = '{check_id}'"
-                )
+            plan_accessible = False
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        f"DELETE FROM PLAN_TABLE WHERE STATEMENT_ID = '{check_id}'"
+                    )
+                    cursor.execute(
+                        f"EXPLAIN PLAN SET STATEMENT_ID = '{check_id}' FOR SELECT 1 FROM DUAL"
+                    )
+                    cursor.execute(
+                        f"SELECT COUNT(*) FROM PLAN_TABLE WHERE STATEMENT_ID = '{check_id}'"
+                    )
+                    plan_accessible = cursor.fetchone()[0] > 0
+                    cursor.execute(
+                        f"DELETE FROM PLAN_TABLE WHERE STATEMENT_ID = '{check_id}'"
+                    )
+            except Exception as check_exc:
+                if 'ORA-00942' in str(check_exc):
+                    plan_accessible = False
+                else:
+                    raise
 
             if not plan_accessible:
                 pytest.skip(
@@ -428,12 +444,12 @@ class TestMigration40_4RangeIntervalPartitioning:
                 )
 
         # Vérifier PARTITION RANGE ITERATOR ou SINGLE — preuve du partition pruning actif.
-        # PARTITION RANGE ALL (toutes partitions scannées) = pas de pruning = ÉCHEC AC#3.
-        # Avec des dates littérales, l'optimiseur DOIT produire SINGLE ou ITERATOR si
-        # le partitionnement Range INTERVAL est correctement configuré sur TIMESTAMP.
+        # OPTIONS peut être 'ITERATOR'/'SINGLE' (OPERATION='PARTITION RANGE') ou
+        # 'RANGE ITERATOR'/'RANGE SINGLE' (OPERATION='PARTITION') selon version Oracle.
+        # PARTITION RANGE ALL = pas de pruning = ÉCHEC AC#3.
         pruning_found = any(
-            row[1] in ('ITERATOR', 'SINGLE')
-            for row in partition_rows
+            opt and ('ITERATOR' in opt or 'SINGLE' in opt) and 'ALL' not in (opt or '')
+            for _, opt in partition_rows
         )
 
         assert pruning_found, (

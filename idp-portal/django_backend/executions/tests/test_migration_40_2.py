@@ -75,10 +75,9 @@ class TestMigration40_2Partitioning:
         AC#2 — Les données doivent être intégralement préservées après migration.
 
         Stratégie de validation :
-        1. EXECUTIONS_MIGRATION_CHECK ne doit plus exister : sa suppression en Phase 11
-           prouve que la validation Phase 10 (COUNT avant = COUNT après) a réussi.
-           Si elle existe encore, la migration n'a pas terminé ou a détecté un écart.
-        2. COUNT(*) sur EXECUTIONS doit être >= 0 (requête accessible post-migration).
+        EXECUTIONS_MIGRATION_CHECK ne doit plus exister : sa suppression en Phase 11
+        prouve que la validation Phase 10 (COUNT avant = COUNT après) a réussi.
+        Si elle existe encore, la migration n'a pas terminé ou a détecté un écart.
 
         Note : La comparaison avant/après est réalisée par la migration elle-même (Phase 10).
         Ce test valide que cette vérification a bien eu lieu et a réussi.
@@ -95,15 +94,6 @@ class TestMigration40_2Partitioning:
             "Cela indique que la migration V084 n'a pas atteint la Phase 11 (nettoyage) "
             "ou que la Phase 10 a détecté un écart de COUNT(*) et a levé une exception. "
             "Vérifier l'état de la migration et les logs Flyway."
-        )
-
-        with connection.cursor() as cursor:
-            # Vérification 2 : la table est accessible et la requête COUNT fonctionne
-            cursor.execute("SELECT COUNT(*) FROM EXECUTIONS")
-            count = cursor.fetchone()[0]
-
-        assert count >= 0, (
-            "Impossible d'exécuter COUNT(*) sur EXECUTIONS après migration V084."
         )
 
     def test_existing_fk_constraints_valid(self, db):
@@ -206,29 +196,36 @@ class TestMigration40_2Partitioning:
         Note : Ce test nécessite DBMS_XPLAN et les droits d'exécution d'EXPLAIN PLAN.
         Il peut être ignoré si les droits ne sont pas disponibles en CI.
         """
-        with connection.cursor() as cursor:
-            # Purger d'éventuels résidus de runs précédents AVANT de générer un nouveau plan
-            # (Oracle ne remplace pas les entrées existantes pour un même STATEMENT_ID)
-            cursor.execute("DELETE FROM PLAN_TABLE WHERE STATEMENT_ID = 'V084_PRUNING_TEST'")
+        plan_rows: list[tuple[str, str | None]] = []
+        try:
+            with connection.cursor() as cursor:
+                # Purger d'éventuels résidus de runs précédents AVANT de générer un nouveau plan
+                # (Oracle ne remplace pas les entrées existantes pour un même STATEMENT_ID)
+                cursor.execute("DELETE FROM PLAN_TABLE WHERE STATEMENT_ID = 'V084_PRUNING_TEST'")
 
-            # Générer le plan d'exécution
-            cursor.execute("EXPLAIN PLAN SET STATEMENT_ID = 'V084_PRUNING_TEST' FOR "
-                           "SELECT COUNT(*) FROM EXECUTIONS "
-                           "WHERE CREATED_AT >= TIMESTAMP '2025-01-01 00:00:00' "
-                           "AND CREATED_AT < TIMESTAMP '2025-02-01 00:00:00'")
+                # Générer le plan d'exécution
+                cursor.execute("EXPLAIN PLAN SET STATEMENT_ID = 'V084_PRUNING_TEST' FOR "
+                              "SELECT COUNT(*) FROM EXECUTIONS "
+                              "WHERE CREATED_AT >= TIMESTAMP '2025-01-01 00:00:00' "
+                              "AND CREATED_AT < TIMESTAMP '2025-02-01 00:00:00'")
 
-            # Récupérer les opérations du plan
-            cursor.execute("""
-                SELECT OPERATION, OPTIONS
-                FROM PLAN_TABLE
-                WHERE STATEMENT_ID = 'V084_PRUNING_TEST'
-                  AND OPERATION = 'PARTITION'
-                ORDER BY ID
-            """)
-            plan_rows = cursor.fetchall()
+                # Récupérer les opérations du plan
+                cursor.execute("""
+                    SELECT OPERATION, OPTIONS
+                    FROM PLAN_TABLE
+                    WHERE STATEMENT_ID = 'V084_PRUNING_TEST'
+                      AND OPERATION = 'PARTITION'
+                    ORDER BY ID
+                """)
+                plan_rows = cursor.fetchall()
 
-            # Nettoyer après lecture
-            cursor.execute("DELETE FROM PLAN_TABLE WHERE STATEMENT_ID = 'V084_PRUNING_TEST'")
+                # Nettoyer après lecture
+                cursor.execute("DELETE FROM PLAN_TABLE WHERE STATEMENT_ID = 'V084_PRUNING_TEST'")
+        except Exception as db_exc:
+            if 'ORA-00942' in str(db_exc):
+                plan_rows = []
+            else:
+                raise
 
         if not plan_rows:
             pytest.skip("PLAN_TABLE non accessible ou EXPLAIN PLAN non supporté dans cet environnement")

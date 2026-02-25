@@ -3,7 +3,7 @@
  * Story 24.2: Type restreint au catalogue backend (Select), actions disponibles, mode édition disabled, validation type actif.
  * Story 13.1: Si type = inventory_db, champs Schéma et Table (config) pour inventaire BD.
  * Story 27.11: credential_ref masqué si type vault, texte d'aide secret 0, champ secret_service_id pour types != vault.
- * Story 31.11: Champ token_url conditionnel (visible si flow = token | basic_then_token), inclus dans le payload.
+ * Story 31.11: Champ token_url conditionnel (visible si flow = token | basic_then_token | oauth2_client_credentials), inclus dans le payload.
  */
 
 import { useEffect, useState } from 'react';
@@ -51,6 +51,12 @@ export interface IntegrationFormProps {
 
 /** URL pattern: must start with http(s):// and have a valid hostname. */
 const URL_PATTERN = /^https?:\/\/[a-zA-Z0-9][-a-zA-Z0-9.]*[a-zA-Z0-9]/;
+
+/** Extract string from config, avoiding fragile double casts. */
+function getConfigString(config: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = config?.[key];
+  return typeof value === 'string' ? value : undefined;
+}
 
 export function IntegrationForm({
   open,
@@ -112,10 +118,10 @@ export function IntegrationForm({
           secret_service_id: editIntegration.secret_service_id ?? undefined,
           token_url: editIntegration.token_url ?? undefined,
           scope: editIntegration.auth_flow === 'oauth2_client_credentials'
-            ? ((editIntegration.config as Record<string, unknown>)?.scope as string ?? undefined)
+            ? getConfigString(editIntegration.config as Record<string, unknown>, 'scope')
             : undefined, // Story 31.12
           header_name: editIntegration.auth_flow === 'api_key'
-            ? ((editIntegration.config as Record<string, unknown>)?.header_name as string ?? undefined)
+            ? getConfigString(editIntegration.config as Record<string, unknown>, 'header_name')
             : undefined, // Story 31.12
         }
       : null;
@@ -148,10 +154,10 @@ export function IntegrationForm({
           secret_service_id: editIntegration.secret_service_id ?? undefined,
           token_url: editIntegration.token_url ?? undefined,
           scope: editIntegration.auth_flow === 'oauth2_client_credentials'
-            ? ((editIntegration.config as Record<string, unknown>)?.scope as string ?? undefined)
+            ? getConfigString(editIntegration.config as Record<string, unknown>, 'scope')
             : undefined, // Story 31.12
           header_name: editIntegration.auth_flow === 'api_key'
-            ? ((editIntegration.config as Record<string, unknown>)?.header_name as string ?? undefined)
+            ? getConfigString(editIntegration.config as Record<string, unknown>, 'header_name')
             : undefined, // Story 31.12
         });
       }, 0);
