@@ -14,12 +14,12 @@ Tests:
 
 import pytest
 from datetime import timedelta
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock
 
 from django.utils import timezone
 
 from core.models import AuditActionType
-from executions.models import ScheduledExecution, ScheduledExecutionStatus
+from executions.models import ScheduledExecutionStatus
 from executions.tasks.scheduled import process_pending_scheduled_executions
 from tests.factories import (
     ScheduledExecutionFactory,
@@ -196,11 +196,11 @@ class TestProcessPendingScheduledExecutions:
 
     def test_audit_entry_created_for_each_successful_trigger(self):
         """T5.8: Audit entry créée pour chaque déclenchement réussi."""
-        se1 = ScheduledExecutionFactory(
+        ScheduledExecutionFactory(
             scheduled_at=timezone.now() - timedelta(minutes=5),
             status='pending',
         )
-        se2 = ScheduledExecutionFactory(
+        ScheduledExecutionFactory(
             scheduled_at=timezone.now() - timedelta(minutes=3),
             status='pending',
         )
@@ -249,11 +249,11 @@ class TestProcessPendingScheduledExecutions:
         """AC8 résilience: erreur sur une scheduled_execution ne bloque pas les autres."""
         from core.exceptions import BadRequestError
 
-        se_error = ScheduledExecutionFactory(
+        ScheduledExecutionFactory(
             scheduled_at=timezone.now() - timedelta(minutes=10),
             status='pending',
         )
-        se_ok = ScheduledExecutionFactory(
+        ScheduledExecutionFactory(
             scheduled_at=timezone.now() - timedelta(minutes=5),
             status='pending',
         )
