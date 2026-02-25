@@ -213,6 +213,7 @@ REST_FRAMEWORK = {
         'execution': os.getenv('THROTTLE_EXECUTION_RATE', '30/minute'),
         'general_api': os.getenv('THROTTLE_API_RATE', '100/minute'),
         'public': os.getenv('THROTTLE_PUBLIC_RATE', '50/minute'),
+        'api_key_token': os.getenv('THROTTLE_API_KEY_TOKEN_RATE', '10/minute'),
     },
     'DEFAULT_PAGINATION_CLASS': 'core.pagination.CustomPageNumberPagination',
     'PAGE_SIZE': 25,
@@ -258,7 +259,7 @@ SPECTACULAR_SETTINGS = {
         {'name': 'catalog', 'description': "Gestion du catalogue d'actions"},
         {'name': 'executions', 'description': "Exécution et suivi des actions"},
         {'name': 'profiles', 'description': "Gestion des profils et permissions RBAC"},
-        {'name': 'inventory', 'description': "Inventaire des targets et environnements"},
+        {'name': 'inventory', 'description': "Inventaire des targets et environnements — **Usage interne uniquement** (non exposé dans la doc publique)"},
         {'name': 'integrations', 'description': "Intégrations plateformes distantes"},
         {'name': 'audit', 'description': "Audit trail et conformité SOC1"},
         {'name': 'auth', 'description': "Authentification SAML et JWT"},
@@ -347,6 +348,7 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
     'x-correlation-id',  # SEC-9: Unified with frontend (was x-idp-request-id)
+    'x-api-key',  # Story 44.2 - API key token exchange endpoint
 ]
 
 # ============================================================================

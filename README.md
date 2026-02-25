@@ -1,9 +1,9 @@
 # IDP Portal — Plateforme interne pour les opérations base de données
 
 [![CI](https://github.com/cmodiano/dbops-idp-portal/actions/workflows/ci.yml/badge.svg)](https://github.com/cmodiano/dbops-idp-portal/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/cmodiano/dbops-idp-portal/graph/badge.svg)](https://codecov.io/gh/cmodiano/dbops-idp-portal)
-[![Couverture Backend](https://codecov.io/gh/cmodiano/dbops-idp-portal/branch/main/graph/badge.svg?flag=django-backend)](https://codecov.io/gh/cmodiano/dbops-idp-portal?flag=django-backend)
-[![Couverture Frontend](https://codecov.io/gh/cmodiano/dbops-idp-portal/branch/main/graph/badge.svg?flag=frontend)](https://codecov.io/gh/cmodiano/dbops-idp-portal?flag=frontend)
+[![coverage](https://img.shields.io/codecov/c/github/cmodiano/dbops-idp-portal/main?label=overall)](https://codecov.io/gh/cmodiano/dbops-idp-portal)
+[![backend](https://img.shields.io/codecov/c/github/cmodiano/dbops-idp-portal/main?flag=django-backend&label=backend)](https://codecov.io/gh/cmodiano/dbops-idp-portal?flag=django-backend)
+[![frontend](https://img.shields.io/codecov/c/github/cmodiano/dbops-idp-portal/main?flag=frontend&label=frontend)](https://codecov.io/gh/cmodiano/dbops-idp-portal?flag=frontend)
 
 **IDP Portal** est une plateforme interne pour les opérations base de données. Elle offre un portail unifié pour les équipes DBOPS afin de gérer les actions, exécuter des workflows, suivre les exécutions et administrer le catalogue, les profils et les intégrations.
 

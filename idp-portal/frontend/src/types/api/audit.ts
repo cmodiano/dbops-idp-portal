@@ -45,6 +45,12 @@ export interface AuditExecutionFilters {
   user_id?: string;
   status?: AuditStatusFilter;
   correlation_id?: string;
+  /** Filter by entity type (action, execution, integration, profile, user, etc.) — Story 43.3. */
+  entity_type?: string;
+  /** Filter by action type (ACTION_PUBLISHED, EXECUTION_SUBMITTED, etc.) — Story 43.3. */
+  action_type?: string;
+  /** User search (icontains on username/display_name) — Story 43.3. Different from user_id (exact match). */
+  user?: string;
   sort?: string; // Sort field: timestamp, user_id, action_type
   order?: string; // Sort order: asc, desc
   limit?: number;

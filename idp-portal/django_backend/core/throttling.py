@@ -5,7 +5,7 @@ Uses DRF built-in throttling with configurable rates via environment variables.
 All auth views are DRF APIViews, so DRF throttling covers everything.
 
 IMPORTANT: All throttle class scopes MUST be globally unique to avoid cache key collisions.
-Current scopes: auth, token_refresh, execution, general_api, public
+Current scopes: auth, token_refresh, execution, general_api, public, api_key_token
 """
 
 from __future__ import annotations
@@ -90,6 +90,21 @@ class PublicEndpointThrottle(_RateLimitEnabledMixin, AnonRateThrottle):
     Keyed by IP address. Default: 50 requests/minute.
     """
     scope = 'public'
+
+    def get_cache_key(self, request: Any, view: Any) -> str:
+        return self.cache_format % {
+            'scope': self.scope,
+            'ident': get_client_ip(request),
+        }
+
+
+class ApiKeyTokenThrottle(_RateLimitEnabledMixin, AnonRateThrottle):
+    """Rate limit for API key token exchange endpoint.
+
+    Keyed by IP address. Default: 10 requests/minute.
+    IMPORTANT: scope must be globally unique — see throttling.py header comment.
+    """
+    scope = 'api_key_token'
 
     def get_cache_key(self, request: Any, view: Any) -> str:
         return self.cache_format % {

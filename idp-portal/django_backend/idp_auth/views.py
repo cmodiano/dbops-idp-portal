@@ -17,7 +17,7 @@ from rest_framework import status
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated, AllowAny
 
-from idp_auth.models import User
+from idp_auth.models import User, APIKey
 from idp_auth.serializers import UserProfileSerializer, TokenRefreshResponseSerializer
 from idp_auth.services import AuthService
 from idp_auth.saml_utils import create_saml_auth
@@ -29,7 +29,7 @@ from core.exceptions import ForbiddenError, UnauthorizedError, NotFoundError
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id
-from core.throttling import AuthEndpointThrottle, TokenRefreshThrottle, PublicEndpointThrottle
+from core.throttling import AuthEndpointThrottle, TokenRefreshThrottle, PublicEndpointThrottle, ApiKeyTokenThrottle
 from core.utils import ensure_utc_isoformat
 from catalog.models import Action
 
@@ -500,3 +500,75 @@ class UserFavoriteItemView(APIView):
         # Idempotent: removing a non-existing favorite is still 204
         AuthService().remove_favorite(request.user.id, action_id)  # type: ignore[arg-type]
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class APIKeyTokenView(APIView):
+    """
+    POST /auth/token - Échanger une API key contre un JWT access token.
+    Permet la consommation programmatique de l'API (scripts CI/CD).
+    """
+    permission_classes = [AllowAny]
+    throttle_classes = [ApiKeyTokenThrottle]
+
+    def post(self, request: Request) -> Response:
+        raw_key = request.META.get('HTTP_X_API_KEY', '').strip()
+        if not raw_key:
+            raise UnauthorizedError(
+                code='MISSING_API_KEY',
+                message='Header X-API-Key manquant',
+                details={}
+            )
+
+        api_key = APIKey.objects.verify_key(raw_key)
+        correlation_id = get_correlation_id()
+
+        if api_key is None:
+            logger.warning(
+                'api_key_token_exchange_failed',
+                reason='invalid_or_expired_key',
+                correlation_id=correlation_id,
+            )
+            AuditService.create_entry(
+                user_id='unknown',
+                action_type=AuditActionType.API_KEY_TOKEN_EXCHANGE,
+                entity_type=AuditEntityType.USER,
+                entity_id=0,
+                details={'success': False, 'reason': 'invalid_or_expired_key'}
+            )
+            raise UnauthorizedError(
+                code='INVALID_API_KEY',
+                message='API key invalide, expirée ou révoquée',
+                details={}
+            )
+
+        user = api_key.user
+        token_data = {
+            'sub': str(user.id),
+            'username': user.username,
+            'profile': user.profile,
+            'ad_groups': [user.profile],
+        }
+        access_token = create_access_token(token_data)
+        expires_in = settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
+
+        logger.info(
+            'api_key_token_exchange_success',
+            key_name=api_key.name,
+            user_id=user.id,
+            correlation_id=correlation_id,
+        )
+        AuditService.create_entry(
+            user_id=str(user.id),
+            action_type=AuditActionType.API_KEY_TOKEN_EXCHANGE,
+            entity_type=AuditEntityType.USER,
+            entity_id=user.id,
+            details={'success': True, 'key_name': api_key.name, 'scope': api_key.scope}
+        )
+
+        return Response({
+            'data': {
+                'access_token': access_token,
+                'token_type': 'Bearer',
+                'expires_in': expires_in,
+            }
+        })

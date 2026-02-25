@@ -194,6 +194,7 @@ describe('IntegrationForm', () => {
           credential_ref: null,
           icon: null,
           auth_flow: 'token',
+          token_url: null,
           created_at: '2026-01-28T10:00:00Z',
           updated_at: '2026-01-28T10:00:00Z',
         }}
@@ -274,6 +275,7 @@ describe('IntegrationForm', () => {
       credential_ref: 'secret/aap/prod',
       icon: 'https://example.com/aap.png',
       auth_flow: 'token' as const,
+      token_url: null,
       created_at: '2026-01-28T10:00:00Z',
       updated_at: '2026-01-28T10:00:00Z',
     };
@@ -408,6 +410,7 @@ describe('IntegrationForm', () => {
       credential_ref: null,
       icon: null,
       auth_flow: null,
+      token_url: null,
       created_at: '2026-01-28T10:00:00Z',
       updated_at: '2026-01-28T10:00:00Z',
     };
@@ -426,6 +429,7 @@ describe('IntegrationForm', () => {
       credential_ref: null,
       icon: null,
       auth_flow: null,
+      token_url: null,
       created_at: '2026-01-28T10:00:00Z',
       updated_at: '2026-01-28T10:00:00Z',
     };
@@ -448,6 +452,7 @@ describe('IntegrationForm', () => {
       credential_ref: null,
       icon: null,
       auth_flow: null,
+      token_url: null,
       created_at: '2026-01-28T10:00:00Z',
       updated_at: '2026-01-28T10:00:00Z',
     };

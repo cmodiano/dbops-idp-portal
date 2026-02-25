@@ -12,6 +12,7 @@ from idp_auth.views import (
     LogoutView,
     UserFavoritesView,
     UserFavoriteItemView,
+    APIKeyTokenView,
 )
 
 app_name = 'idp_auth'
@@ -20,6 +21,9 @@ urlpatterns = [
     # SAML endpoints (Story M.7)
     path('auth/saml/login/', SAMLLoginView.as_view(), name='saml-login'),
     path('auth/saml/callback/', SAMLCallbackView.as_view(), name='saml-callback'),
+
+    # API key token exchange (Story 44.2)
+    path('auth/token/', APIKeyTokenView.as_view(), name='api-key-token'),
 
     # JWT auth endpoints
     path('auth/me/', CurrentUserProfileView.as_view(), name='current-user-profile'),

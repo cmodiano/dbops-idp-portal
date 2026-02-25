@@ -42,11 +42,13 @@ L'API REST est construite avec Django REST Framework (DRF). Tous les endpoints s
 
 ## Authentification
 
-Tous les endpoints (sauf `/health`) requièrent un token JWT dans le header:
+Tous les endpoints (sauf `/health` et `POST /api/v1/auth/token`) requièrent un token JWT dans le header:
 
 ```
 Authorization: Bearer <jwt_token>
 ```
+
+> **Exception :** `POST /api/v1/auth/token` est `AllowAny` — il accepte une `X-API-Key` et retourne un JWT sans authentification préalable.
 
 ## Endpoints par domaine
 
@@ -78,6 +80,42 @@ Authorization: Bearer <jwt_token>
 | POST | `/api/v1/auth/saml/callback` | Callback IdP SAML |
 | POST | `/api/v1/auth/refresh` | Rafraîchit le token JWT |
 | GET | `/api/v1/auth/me` | Retourne le profil utilisateur courant |
+| POST | `/api/v1/auth/token` | Échange une API key contre un JWT (usage programmatique) |
+
+#### POST /auth/token — Échange API key → JWT
+
+Permet d'obtenir un token JWT de façon programmatique, sans flux SAML interactif. Destiné aux scripts CI/CD et à l'automatisation.
+
+**Permission :** `AllowAny` (aucune authentification préalable)
+**Rate limit :** 10 requêtes/minute par IP (protection brute-force)
+**Header requis :** `X-API-Key: <raw_api_key>`
+
+**Réponse 200 :**
+```json
+{
+  "data": {
+    "access_token": "<jwt>",
+    "token_type": "Bearer",
+    "expires_in": 1800
+  }
+}
+```
+
+**Réponse 401 :**
+```json
+{
+  "error": {
+    "code": "MISSING_API_KEY | INVALID_API_KEY",
+    "message": "...",
+    "details": {}
+  }
+}
+```
+
+**JWT émis :** même format que les tokens SAML (`sub`, `username`, `profile`, `ad_groups`). Les droits RBAC sont ceux de l'utilisateur associé à la clé.
+**Audit :** chaque tentative (succès/échec) est tracée avec type `API_KEY_TOKEN_EXCHANGE`.
+
+> **Voir aussi :** [`docs/api-self-service.md`](../api-self-service.md) pour des exemples curl et bash complets.
 
 ### Catalogue (Admin)
 
@@ -175,6 +213,26 @@ Authorization: Bearer <jwt_token>
 | GET | `/api/v1/scheduled-executions/{id}` | Détails |
 | PATCH | `/api/v1/scheduled-executions/{id}` | Modifier (cancel, toggle) |
 | GET | `/api/v1/scheduled-executions/pending` | Pending pour scheduler externe |
+
+## API interne (usage interne uniquement)
+
+Ces endpoints sont fonctionnels et protégés par authentification, mais **ne sont pas destinés à la consommation externe**. Ils sont réservés au frontend (TargetSelector, ExecutionWizard) et sont exclus du schéma OpenAPI public (Swagger/ReDoc).
+
+### Inventaire
+
+> **⚠️ INTERNAL USE ONLY** — Ces endpoints ne sont pas documentés dans le schéma Swagger public.
+> Ils ne sont pas conçus pour la consommation par des scripts, CI/CD ou intégrations externes.
+> Les consommateurs API externes fournissent des `target_names` connus — ils n'ont pas besoin de l'inventaire.
+> Cf. Story 44.3 — `@extend_schema(exclude=True)` appliqué sur toutes les vues.
+
+| Méthode | Endpoint | Permission |
+|---------|----------|-----------|
+| GET | `/api/v1/inventory/targets/` | `IsAuthenticated` |
+| GET | `/api/v1/inventory/targets/all/` | `IsAdminOrIntegration` |
+| GET | `/api/v1/inventory/environments/` | `IsAuthenticated` |
+| GET | `/api/v1/inventory/servers/` | `IsAuthenticated` |
+| GET | `/api/v1/inventory/instances/` | `IsAuthenticated` |
+| GET | `/api/v1/inventory/databases/` | `IsAuthenticated` |
 
 ## Serializers
 
@@ -287,8 +345,11 @@ GET /api/v1/catalog/actions?page=2&page_size=50
 | 400 | `VALIDATION_ERROR` | Erreur de validation |
 | 400 | `INVALID_STATE` | État invalide (ex: transition de statut) |
 | 401 | `UNAUTHORIZED` | Token manquant ou invalide |
+| 401 | `MISSING_API_KEY` | Header `X-API-Key` absent (`POST /auth/token`) |
+| 401 | `INVALID_API_KEY` | API key invalide, révoquée ou expirée (`POST /auth/token`) |
 | 403 | `FORBIDDEN` | Permission refusée |
 | 404 | `NOT_FOUND` | Ressource non trouvée |
+| 429 | — | Rate limit atteint (ex: `POST /auth/token` → 10 req/min par IP) |
 | 500 | `INTERNAL_ERROR` | Erreur serveur |
 
 ### Exemples
@@ -329,7 +390,8 @@ GET /api/v1/catalog/actions?page=2&page_size=50
 
 | Header | Description | Obligatoire |
 |--------|-------------|-------------|
-| `Authorization` | Bearer token JWT | Oui (sauf /health) |
+| `Authorization` | Bearer token JWT | Oui (sauf `/health` et `POST /auth/token`) |
+| `X-API-Key` | API key brute pour `POST /auth/token` uniquement | Oui pour `POST /auth/token` |
 | `Content-Type` | `application/json` | Oui pour POST/PUT |
 | `X-Idp-Request-Id` | Correlation ID (propagé si fourni) | Non |
 
@@ -356,4 +418,8 @@ Le catalogue utilise un cache in-memory TTL 5 minutes pour améliorer les perfor
 
 ## Rate limiting
 
-Non implémenté actuellement. Prévu pour une future version.
+| Endpoint | Limite | Scope |
+|----------|--------|-------|
+| `POST /api/v1/auth/token` | 10 requêtes/minute | Par IP (protection brute-force sur l'échange API key) |
+
+Les autres endpoints n'ont pas de rate limiting configuré pour le moment.

@@ -1,12 +1,13 @@
 /**
- * AuditPage - Consultation historique d'audit (Story 6.3).
+ * AuditPage - Journal d'audit global (Story 6.3, Story 43.3).
  *
- * AC1: Table with columns: action, user, environment, status, date, ServiceNow change.
- * AC2: Filters: period, environment, action, user, status (real-time).
- * AC3: Drawer with full details: who, what, when, parameters, result, logs, timeline.
- * AC4: Sortable columns (click header).
- * AC5: Pagination 25 per page.
- * AC8: Access restricted to auditors (is_auditor=true).
+ * Story 6.3: AC1 (colonnes table), AC2 (filtres de base), AC3 (drawer détail),
+ *            AC4 (tri), AC5 (pagination 50/page), AC8 (accès auditeurs).
+ *
+ * Story 43.3: AC1 (onglets entity_type), AC2 (Select action_type groupé),
+ *             AC3 (Input utilisateur + debounce 300ms), AC4 (intégration API),
+ *             AC5 (titre "Journal d'audit"), AC6 (reset pagination),
+ *             AC7 (export inclut nouveaux filtres), AC8 (guard drawer non-exécution).
  */
 
 import {
@@ -22,6 +23,7 @@ import {
   Dropdown,
   Tooltip,
   Tag,
+  Tabs,
 } from 'antd';
 import type { MenuProps } from 'antd';
 import { DownloadOutlined } from '@ant-design/icons';
@@ -30,6 +32,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useAuditFilters } from '../hooks/useAuditFilters';
 import { AuditTable } from '../components/audit/AuditTable';
 import { AuditEntryDrawer } from '../components/audit/AuditEntryDrawer';
+import { ACTION_TYPE_OPTIONS } from '../constants/auditActionTypes';
 import type { AuditStatusFilter } from '../types/api';
 
 const { Title, Text } = Typography;
@@ -45,6 +48,15 @@ const STATUS_OPTIONS: { value: AuditStatusFilter; label: string }[] = [
   { value: 'success', label: 'Succès' },
   { value: 'failed', label: 'Échec' },
   { value: 'running', label: 'En cours' },
+];
+
+const ENTITY_TYPE_TABS = [
+  { key: '', label: 'Tous' },
+  { key: 'action', label: 'Actions' },
+  { key: 'execution', label: 'Exécutions' },
+  { key: 'integration', label: 'Intégrations' },
+  { key: 'profile', label: 'Profils' },
+  { key: 'user', label: 'Utilisateurs' },
 ];
 
 const PERIOD_PRESETS: { label: string; value: [Dayjs, Dayjs] }[] = [
@@ -73,6 +85,12 @@ export default function AuditPage() {
     setStatus,
     correlationId,
     setCorrelationId,
+    entityType,
+    setEntityType,
+    actionType,
+    setActionType,
+    userSearchInput,
+    setUserSearchInput,
     currentPage,
     pageSize,
     sortField,
@@ -124,7 +142,15 @@ export default function AuditPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <Title level={2}>Audit des exécutions</Title>
+      <Title level={2}>Journal d'audit</Title>
+
+      {/* Onglets entity_type (AC1) */}
+      <Tabs
+        activeKey={entityType ?? ''}
+        onChange={(key) => setEntityType(key || undefined)}
+        items={ENTITY_TYPE_TABS.map((tab) => ({ key: tab.key, label: tab.label }))}
+        style={{ marginBottom: 8 }}
+      />
 
       {error && <Alert type="error" title="Erreur" description={error} showIcon style={{ marginBottom: 16 }} />}
 
@@ -180,6 +206,29 @@ export default function AuditPage() {
               onChange={setStatus}
               allowClear
               style={{ width: 120 }}
+            />
+            {/* Filtre opération (action_type) — AC2 */}
+            <Select
+              placeholder="Opération"
+              aria-label="Filtre Opération (action_type)"
+              options={ACTION_TYPE_OPTIONS}
+              value={actionType}
+              onChange={(v) => setActionType(v ?? undefined)}
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              style={{ width: 220 }}
+              data-testid="audit-filter-action-type"
+            />
+            {/* Recherche utilisateur — AC3 */}
+            <Input
+              placeholder="Rechercher un utilisateur"
+              aria-label="Recherche utilisateur"
+              value={userSearchInput}
+              onChange={(e) => setUserSearchInput(e.target.value)}
+              allowClear
+              style={{ width: 200 }}
+              data-testid="audit-filter-user-search"
             />
             <Tooltip title="Rechercher toutes les traces d'une exécution par son identifiant de corrélation">
               <Input

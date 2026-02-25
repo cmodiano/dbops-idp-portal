@@ -7,7 +7,7 @@
  * Pattern: same as useCatalogState (Story 34-10), useCalendarState (Story 26.6).
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { App } from 'antd';
 import type { Dayjs } from 'dayjs';
 import type { TableProps } from 'antd';
@@ -48,6 +48,13 @@ export interface UseAuditFiltersReturn {
   setStatus: React.Dispatch<React.SetStateAction<AuditStatusFilter | undefined>>;
   correlationId: string;
   setCorrelationId: React.Dispatch<React.SetStateAction<string>>;
+  // Nouveaux filtres Story 43.3
+  entityType: string | undefined;
+  setEntityType: React.Dispatch<React.SetStateAction<string | undefined>>;
+  actionType: string | undefined;
+  setActionType: React.Dispatch<React.SetStateAction<string | undefined>>;
+  userSearchInput: string;
+  setUserSearchInput: React.Dispatch<React.SetStateAction<string>>;
   // Pagination / tri
   currentPage: number;
   pageSize: number;
@@ -91,6 +98,11 @@ export function useAuditFilters(): UseAuditFiltersReturn {
   const [actionId, setActionId] = useState<number | undefined>();
   const [status, setStatus] = useState<AuditStatusFilter | undefined>();
   const [correlationId, setCorrelationId] = useState<string>('');
+  // Story 43.3 — new filters
+  const [entityType, setEntityType] = useState<string | undefined>();
+  const [actionType, setActionType] = useState<string | undefined>();
+  const [userSearchInput, setUserSearchInput] = useState<string>('');
+  const [userSearch, setUserSearch] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [sortField, setSortField] = useState<string>('timestamp');
@@ -111,14 +123,24 @@ export function useAuditFilters(): UseAuditFiltersReturn {
   // Export
   const [exporting, setExporting] = useState(false);
 
+  // Map frontend sort field names to API sort field names (shared by fetchData and handleExport)
+  const getApiSortField = useCallback(() => {
+    if (sortField === 'entity') return 'entity_type';
+    if (sortField === 'action') return 'action_type';
+    return sortField;
+  }, [sortField]);
+
+  // Stale-response guard: only the latest request updates state
+  const latestRequestIdRef = useRef(0);
+
   // Fetch data (AC2, AC5)
   const fetchData = useCallback(async (page: number) => {
+    const requestId = ++latestRequestIdRef.current;
     setLoading(true);
     setError(null);
     try {
       const offset = (page - 1) * pageSize;
-      // Map frontend sort field names to API sort field names
-      const apiSortField = sortField === 'action' ? 'action_type' : sortField;
+      const apiSortField = getApiSortField();
       const apiSortOrder = sortOrder === 'ascend' ? 'asc' : 'desc';
 
       const result = await listExecutionAudit({
@@ -129,19 +151,26 @@ export function useAuditFilters(): UseAuditFiltersReturn {
         action_id: actionId,
         status,
         correlation_id: correlationId || undefined,
+        entity_type: entityType,
+        action_type: actionType,
+        user: userSearch || undefined,
         sort: apiSortField,
         order: apiSortOrder,
         limit: pageSize,
         offset,
       });
+      if (requestId !== latestRequestIdRef.current) return;
       setEntries(result.data);
       setPagination(result.pagination);
     } catch (err) {
+      if (requestId !== latestRequestIdRef.current) return;
       setError(err instanceof Error ? err.message : 'Erreur de chargement');
     } finally {
-      setLoading(false);
+      if (requestId === latestRequestIdRef.current) {
+        setLoading(false);
+      }
     }
-  }, [dateRange, environment, engineType, actionId, status, correlationId, sortField, sortOrder, pageSize]);
+  }, [dateRange, environment, engineType, actionId, status, correlationId, entityType, actionType, userSearch, getApiSortField, sortOrder, pageSize]);
 
   // Initial load and filter changes
   useEffect(() => {
@@ -151,7 +180,16 @@ export function useAuditFilters(): UseAuditFiltersReturn {
   // Reset to page 1 when filters, sort or page size change
   useEffect(() => {
     setCurrentPage(1);
-  }, [dateRange, environment, engineType, actionId, status, correlationId, sortField, sortOrder, pageSize]);
+  }, [dateRange, environment, engineType, actionId, status, correlationId, entityType, actionType, userSearch, sortField, sortOrder, pageSize]);
+
+  // Debounce 300ms for user search input (Story 43.3)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const trimmed = userSearchInput.trim();
+      setUserSearch(trimmed);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [userSearchInput]);
 
   // Load published actions for filter dropdown
   useEffect(() => {
@@ -182,7 +220,7 @@ export function useAuditFilters(): UseAuditFiltersReturn {
     setSelectedSteps([]);
 
     try {
-      if (record.entity_id) {
+      if (record.entity_type === 'execution' && record.entity_id != null) {
         const [execution, steps] = await Promise.all([
           getExecution(record.entity_id),
           getExecutionSteps(record.entity_id),
@@ -215,9 +253,10 @@ export function useAuditFilters(): UseAuditFiltersReturn {
       }
 
       const singleSorter = Array.isArray(sorter) ? sorter[0] : sorter;
-      if (singleSorter?.field) {
-        if (singleSorter.order) {
-          setSortField(singleSorter.field as string);
+      const sortKey = (singleSorter?.field ?? singleSorter?.columnKey) as string | undefined;
+      if (sortKey) {
+        if (singleSorter?.order) {
+          setSortField(sortKey);
           setSortOrder(singleSorter.order);
         } else {
           // User removed sort — reset to default
@@ -233,7 +272,7 @@ export function useAuditFilters(): UseAuditFiltersReturn {
   const handleExport = useCallback(async (format: 'csv' | 'pdf') => {
     setExporting(true);
     try {
-      const apiSortField = sortField === 'action' ? 'action_type' : sortField;
+      const apiSortField = getApiSortField();
       const apiSortOrder = sortOrder === 'ascend' ? 'asc' : 'desc';
       await exportAuditReport(format, {
         from: dateRange[0]?.startOf('day').toISOString(),
@@ -243,6 +282,9 @@ export function useAuditFilters(): UseAuditFiltersReturn {
         action_id: actionId,
         status,
         correlation_id: correlationId || undefined,
+        entity_type: entityType,
+        action_type: actionType,
+        user: userSearchInput.trim() || undefined,
         sort: apiSortField,
         order: apiSortOrder,
       });
@@ -253,7 +295,7 @@ export function useAuditFilters(): UseAuditFiltersReturn {
     } finally {
       setExporting(false);
     }
-  }, [dateRange, environment, engineType, actionId, status, correlationId, sortField, sortOrder, message]);
+  }, [dateRange, environment, engineType, actionId, status, correlationId, entityType, actionType, userSearchInput, getApiSortField, sortOrder, message]);
 
   // Group workflow children under parent (accordion-style)
   const { topLevelEntries, childrenByParentId } = useMemo(() => {
@@ -288,6 +330,12 @@ export function useAuditFilters(): UseAuditFiltersReturn {
     setStatus,
     correlationId,
     setCorrelationId,
+    entityType,
+    setEntityType,
+    actionType,
+    setActionType,
+    userSearchInput,
+    setUserSearchInput,
     currentPage,
     pageSize,
     sortField,

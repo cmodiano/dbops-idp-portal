@@ -6,9 +6,14 @@
 CODE_REVIEW_*_FINDINGS.md
 
 # Claude per-developer local settings (user-specific, do not share)
+.claude/
 .claude/settings.local.json
 
+# Cursor per-developer local settings (user-specific, do not share)
+.cursor/
+
 # BMAD workflow artifacts (dev/planning only — not for production branches)
+_bmad/
 _bmad-output/
 
 # pytest-cov generated JSON report (artefact de build, ne pas commiter)
