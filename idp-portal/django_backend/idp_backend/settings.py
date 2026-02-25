@@ -123,6 +123,14 @@ JAZZMIN_SETTINGS = {
 
     # Boutons d'action : non collants en haut (comportement standard)
     "actions_sticky_top": False,
+
+    # ─── Ordre de la sidebar (Story 45.4) ──────────────────────────────────────
+    # auth : Django admin users (User, Group) — authentification de l'interface admin
+    # idp_auth : Utilisateurs SAML/DBOPS + API Keys — domaine métier applicatif
+    "order_with_respect_to": [
+        "auth",
+        "idp_auth",
+    ],
 }
 
 # Ajustements visuels (thème AdminLTE/Bootstrap) — séparé de JAZZMIN_SETTINGS

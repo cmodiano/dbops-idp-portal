@@ -1,14 +1,18 @@
 """
 Tests de configuration django-jazzmin.
 Story 45.2 — Installer et configurer un thème Admin.
+Story 45.4 — Regrouper et organiser les modèles par domaine.
 
 Ces tests vérifient que :
 1. jazzmin est présent dans INSTALLED_APPS AVANT django.contrib.admin (AC2)
 2. JAZZMIN_SETTINGS configure correctement la sidebar, le titre, la recherche (AC3, AC4)
 3. JAZZMIN_UI_TWEAKS active le toggle dark/light mode (AC5)
 4. La contrainte d'ordre INSTALLED_APPS (daphne > jazzmin > django.contrib.admin) est respectée
+5. IdpAuthConfig.verbose_name est correctement défini (Story 45.4 AC1)
+6. JAZZMIN_SETTINGS["order_with_respect_to"] place auth avant idp_auth (Story 45.4 AC3)
 """
 
+from django.apps import apps as django_apps
 from django.conf import settings
 from django.test import TestCase
 
@@ -137,4 +141,53 @@ class TestJazzminUiTweaks(TestCase):
             settings.JAZZMIN_UI_TWEAKS.get('sidebar'),
             'sidebar-dark-primary',
             "sidebar doit être 'sidebar-dark-primary' pour une sidebar sombre distinctive.",
+        )
+
+
+class TestIdpAuthAppConfig(TestCase):
+    """Vérifie la configuration AppConfig de idp_auth (Story 45.4 — AC1)."""
+
+    def test_idp_auth_verbose_name(self):
+        """verbose_name de idp_auth doit être 'Authentification SAML & Clés API' (AC1).
+
+        jazzmin utilise AppConfig.verbose_name comme libellé de section dans la sidebar.
+        Ce test fige la valeur — toute modification accidentelle sera immédiatement détectée.
+        """
+        app_config = django_apps.get_app_config('idp_auth')
+        self.assertEqual(
+            app_config.verbose_name,
+            "Authentification SAML & Clés API",
+            "IdpAuthConfig.verbose_name doit être 'Authentification SAML & Clés API' "
+            "pour que la sidebar jazzmin affiche le bon libellé de section (Story 45.4 AC1).",
+        )
+
+
+class TestJazzminSidebarOrder(TestCase):
+    """Vérifie l'ordre de la sidebar jazzmin (Story 45.4 — AC3)."""
+
+    def test_order_with_respect_to_configured(self):
+        """JAZZMIN_SETTINGS doit contenir la clé order_with_respect_to (AC3)."""
+        self.assertIn(
+            'order_with_respect_to',
+            settings.JAZZMIN_SETTINGS,
+            "order_with_respect_to doit être défini dans JAZZMIN_SETTINGS pour contrôler "
+            "l'ordre de la sidebar (Story 45.4 AC3).",
+        )
+
+    def test_auth_before_idp_auth_in_sidebar(self):
+        """auth doit précéder idp_auth dans order_with_respect_to (AC3).
+
+        Règle métier : la section authentification Django (Users/Groups admin) précède
+        la section authentification SAML/DBOPS (idp_auth).
+        """
+        order = settings.JAZZMIN_SETTINGS.get('order_with_respect_to', [])
+        self.assertIn('auth', order, "auth doit être dans order_with_respect_to.")
+        self.assertIn('idp_auth', order, "idp_auth doit être dans order_with_respect_to.")
+        auth_index = order.index('auth')
+        idp_auth_index = order.index('idp_auth')
+        self.assertLess(
+            auth_index,
+            idp_auth_index,
+            f"auth (position {auth_index}) doit précéder idp_auth (position {idp_auth_index}) "
+            "dans order_with_respect_to (Story 45.4 AC3).",
         )
