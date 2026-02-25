@@ -18,6 +18,7 @@ from unittest.mock import patch, MagicMock, call
 
 from django.utils import timezone
 
+from core.models import AuditActionType
 from executions.models import ScheduledExecution, ScheduledExecutionStatus
 from executions.tasks.scheduled import process_pending_scheduled_executions
 from tests.factories import (
@@ -216,10 +217,10 @@ class TestProcessPendingScheduledExecutions:
         # Audit should be called once per successful trigger
         assert mock_audit.call_count == 2
 
-        # Verify audit call parameters
+        # Verify audit call uses the correct action type
         for audit_call in mock_audit.call_args_list:
             kwargs = audit_call.kwargs if audit_call.kwargs else audit_call[1]
-            assert kwargs.get('action_type') is not None or audit_call[0][1] is not None
+            assert kwargs.get('action_type') == AuditActionType.SCHEDULED_EXECUTION_CELERY_TRIGGERED
 
     def test_batch_size_respected(self):
         """T5.9: Batch size respecté (slice [:max_batch])."""

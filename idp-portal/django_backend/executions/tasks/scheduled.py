@@ -45,7 +45,10 @@ def process_pending_scheduled_executions(self: Any) -> dict:
     max_batch = int(os.getenv('CELERY_BEAT_PROCESS_SCHEDULED_MAX_BATCH', '50'))
     now = timezone.now()
 
-    # AC2: select_for_update(skip_locked=True) prevents double processing by multiple workers
+    # AC2: select_for_update(skip_locked=True) prevents double processing by multiple workers.
+    # transaction.atomic() is required so that the SELECT FOR UPDATE is issued within a proper
+    # database transaction; without it the row locks are released immediately in autocommit mode,
+    # rendering skip_locked ineffective and raising TransactionManagementError on strict backends.
     pending_qs = (
         ScheduledExecution.objects
         .list_pending(now)
@@ -53,7 +56,8 @@ def process_pending_scheduled_executions(self: Any) -> dict:
         .select_related('action', 'user', 'recurringpattern')
         [:max_batch]
     )
-    se_list = list(pending_qs)
+    with transaction.atomic():
+        se_list = list(pending_qs)
     count = len(se_list)
 
     logger.info(
@@ -106,42 +110,47 @@ def process_pending_scheduled_executions(self: Any) -> dict:
             rp = getattr(se, 'recurringpattern', None)
             is_recurring_active = rp is not None and rp.is_active == 1
 
-            if is_recurring_active and rp is not None:
-                # AC6: Recurring active — keep status=pending, update next_execution_date
-                _update_recurring_scheduled_execution(se, rp, execution)
-            else:
-                # AC5: One-time (or inactive recurring) — atomic update to executed
-                updated = ScheduledExecution.objects.filter(
-                    id=se.id,
-                    status=ScheduledExecutionStatus.PENDING,
-                ).update(
-                    status=ScheduledExecutionStatus.EXECUTED,
-                    execution_id=execution.id,
-                    updated_at=timezone.now(),
-                )
-                if updated == 0:
-                    # Another worker already processed this entry
-                    logger.info(
-                        "process_pending_scheduled_executions_already_processed",
-                        se_id=se.id,
-                        correlation_id=correlation_id,
-                    )
-                    continue
-
-            # AC7: Audit trail for each successful trigger
-            AuditService.create_entry(
-                user_id=str(se.user_id),
-                action_type=AuditActionType.SCHEDULED_EXECUTION_CELERY_TRIGGERED,
-                entity_type=AuditEntityType.SCHEDULED_EXECUTION,
-                entity_id=se.id,
-                details={
+            # Build audit kwargs once; shared by both paths (one-time and recurring).
+            audit_kwargs = {
+                'user_id': str(se.user_id),
+                'action_type': AuditActionType.SCHEDULED_EXECUTION_CELERY_TRIGGERED,
+                'entity_type': AuditEntityType.SCHEDULED_EXECUTION,
+                'entity_id': se.id,
+                'details': {
                     'action_id': se.action_id,
                     'action_name': se.action.name,
                     'environment': se.environment,
                     'execution_id': execution.id,
                 },
-                correlation_id=correlation_id,
-            )
+                'correlation_id': correlation_id,
+            }
+
+            if is_recurring_active and rp is not None:
+                # AC6 + AC7: Recurring active — keep status=pending, update next_execution_date,
+                # and write audit trail — all within a single atomic transaction.
+                _update_recurring_scheduled_execution(se, rp, execution, audit_kwargs)
+            else:
+                # AC5 + AC7: One-time (or inactive recurring) — atomic update to executed
+                # and audit trail within the same transaction to ensure consistency.
+                with transaction.atomic():
+                    updated = ScheduledExecution.objects.filter(
+                        id=se.id,
+                        status=ScheduledExecutionStatus.PENDING,
+                    ).update(
+                        status=ScheduledExecutionStatus.EXECUTED,
+                        execution_id=execution.id,
+                        updated_at=timezone.now(),
+                    )
+                    if updated == 0:
+                        # Another worker already processed this entry
+                        logger.info(
+                            "process_pending_scheduled_executions_already_processed",
+                            se_id=se.id,
+                            correlation_id=correlation_id,
+                        )
+                        continue
+                    # AC7: Audit written atomically with the status update
+                    AuditService.create_entry(**audit_kwargs)
 
             logger.info(
                 "process_pending_scheduled_executions_triggered",
@@ -176,9 +185,11 @@ def _update_recurring_scheduled_execution(
     se: ScheduledExecution,
     rp: RecurringPattern,
     execution: Any,
+    audit_kwargs: dict,
 ) -> None:
     """
-    AC6: Atomically update a recurring active ScheduledExecution after triggering.
+    AC6 + AC7: Atomically update a recurring active ScheduledExecution after triggering,
+    and write the audit trail within the same transaction.
 
     Keeps status=pending, links execution_id, recalculates next_execution_date.
     """
@@ -194,3 +205,5 @@ def _update_recurring_scheduled_execution(
             execution_id=execution.id,
             updated_at=timezone.now(),
         )
+        # AC7: Audit written atomically with the recurring updates
+        AuditService.create_entry(**audit_kwargs)

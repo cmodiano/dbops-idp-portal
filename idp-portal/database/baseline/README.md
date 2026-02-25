@@ -39,7 +39,7 @@ flyway \
 
 > Cette commande enregistre une ligne dans `flyway_schema_history` indiquant que la base est déjà au niveau V083 (success=true). Flyway ne re-jouera pas V000–V083.
 
-### Étape 3 : Appliquer les migrations incrémantales V084–V088
+### Étape 3 : Appliquer les migrations incrémentales V084–V088
 
 ```bash
 flyway \
@@ -63,7 +63,7 @@ flyway \
 
 Le résultat attendu :
 
-```
+```text
 +------------+---------+-------------------------------+--------+---------------------+----------+
 | Category   | Version | Description                   | Type   | Installed On        | State    |
 +------------+---------+-------------------------------+--------+---------------------+----------+
@@ -190,7 +190,7 @@ flyway -url=... validate
 
 Des scripts de rollback sont disponibles pour les partitionnements :
 
-```
+```text
 database/rollback/
   V084__partition_executions_rollback.sql
   V085__partition_execution_steps_rollback.sql

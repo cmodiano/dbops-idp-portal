@@ -178,8 +178,6 @@ class TestMigration40_2Partitioning:
         IDX_EXECUTIONS_ACTION_ID et IDX_EXECUTIONS_CREATED_AT.
         Ces index existaient sur EXECUTIONS_OLD et ont été détruits avec DROP TABLE PURGE.
         """
-        obsolete_indexes = ('IDX_EXECUTIONS_ACTION_ID', 'IDX_EXECUTIONS_CREATED_AT')
-
         with connection.cursor() as cursor:
             cursor.execute(
                 """
@@ -188,14 +186,13 @@ class TestMigration40_2Partitioning:
                 WHERE TABLE_NAME = 'EXECUTIONS'
                   AND INDEX_NAME IN (%s, %s)
                 """,
-                obsolete_indexes,
+                ('IDX_EXECUTIONS_ACTION_ID', 'IDX_EXECUTIONS_CREATED_AT'),
             )
             rows = cursor.fetchall()
 
         found_obsolete = [r[0] for r in rows]
         assert not found_obsolete, (
             f"Anciens index obsolètes encore présents après V084 : {found_obsolete}. "
-            f"Attendus supprimés : {obsolete_indexes}. "
             "Ces index auraient dû être supprimés avec EXECUTIONS_OLD."
         )
 
