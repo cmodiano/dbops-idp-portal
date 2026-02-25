@@ -32,17 +32,46 @@ curl -s -I http://localhost:8000/api/v1/auth/saml/login
 # Extraire le token depuis le header Location
 ```
 
-#### 3. Token long-lived (à venir)
+#### 3. Via API key (programmatique)
 
-Pour l'automatisation en production, un mécanisme de tokens long-lived ou API keys sera implémenté (voir backlog / roadmap).
+Pour l'automatisation en production (scripts, CI/CD), utilisez une API key pour obtenir un token JWT sans interaction navigateur :
 
-### Utilisation du token
+**Prérequis :** Une API key doit avoir été créée et communiquée par l'équipe DBOPS.
 
-Incluez le token dans le header `Authorization` de chaque requête :
+**Étape 1 — Obtenir un token :**
 
+```bash
+curl -s -X POST https://portail.example.com/api/v1/auth/token \
+  -H "X-API-Key: <votre_api_key>"
 ```
-Authorization: Bearer <votre_token_jwt>
+
+**Réponse :**
+```json
+{
+  "data": {
+    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "token_type": "Bearer",
+    "expires_in": 1800
+  }
+}
 ```
+
+**Étape 2 — Utiliser le token :**
+
+Incluez le token dans le header `Authorization` pour les appels suivants :
+```
+Authorization: Bearer <access_token>
+```
+
+> **Note :** Le token a une durée de vie de 30 minutes. Après expiration, répétez l'étape 1 pour obtenir un nouveau token. Le rate limiting est de 10 requêtes/minute par IP sur cet endpoint.
+
+**Erreurs possibles :**
+
+| Code | Signification |
+|------|--------------|
+| `MISSING_API_KEY` | Le header `X-API-Key` est absent ou vide |
+| `INVALID_API_KEY` | La clé est invalide, révoquée ou expirée |
+| 429 Too Many Requests | Rate limit atteint (10 req/min par IP) |
 
 ## Endpoint POST /api/v1/executions
 
@@ -191,6 +220,62 @@ curl -X GET "${API_URL}/executions/${EXECUTION_ID}/steps" \
   -H "Authorization: Bearer ${TOKEN}"
 ```
 
+### Bash — Obtention de token via API key + exécution
+
+```bash
+#!/bin/bash
+set -euo pipefail
+
+# Configuration
+API_URL="https://portail.example.com/api/v1"
+API_KEY="${IDP_API_KEY:?La variable IDP_API_KEY doit être définie}"
+CORRELATION_ID=$(uuidgen)
+
+# Étape 1 : Obtenir un token JWT via l'API key
+echo "🔑 Obtention du token..."
+TOKEN_RESPONSE=$(curl -s -f -X POST "${API_URL}/auth/token" \
+  -H "X-API-Key: ${API_KEY}")
+
+ACCESS_TOKEN=$(echo "${TOKEN_RESPONSE}" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['access_token'])")
+echo "✅ Token obtenu (valide 30 min)"
+
+# Étape 2 : Déclencher une exécution
+echo "🚀 Déclenchement de l'exécution..."
+EXEC_RESPONSE=$(curl -s -f -X POST "${API_URL}/executions" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -H "X-Idp-Request-Id: ${CORRELATION_ID}" \
+  -d '{
+    "action_id": 42,
+    "target_names": ["srv-dev-oracle-01"],
+    "parameters": {"database_name": "TESTDB"}
+  }')
+
+EXECUTION_ID=$(echo "${EXEC_RESPONSE}" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['execution_id'])")
+echo "✅ Exécution créée : ID=${EXECUTION_ID}"
+
+# Étape 3 : Attendre la fin (polling)
+echo "⏳ Attente de la fin..."
+TERMINAL_STATUSES=("COMPLETED" "FAILED" "CANCELLED" "REJECTED")
+for i in $(seq 1 60); do
+  STATUS_RESPONSE=$(curl -s -H "Authorization: Bearer ${ACCESS_TOKEN}" "${API_URL}/executions/${EXECUTION_ID}")
+  STATUS=$(echo "${STATUS_RESPONSE}" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['status'])")
+  echo "  [${i}/60] Status: ${STATUS}"
+
+  for ts in "${TERMINAL_STATUSES[@]}"; do
+    if [ "${STATUS}" = "${ts}" ]; then
+      echo "✅ Terminé : ${STATUS}"
+      exit $([ "${STATUS}" = "COMPLETED" ] && echo 0 || echo 1)
+    fi
+  done
+
+  sleep 5
+done
+
+echo "❌ Timeout : l'exécution n'est pas terminée après 5 minutes"
+exit 1
+```
+
 ### Python avec requests
 
 ```python
@@ -312,7 +397,10 @@ Chaque exécution créée via l'API est tracée dans l'audit avec :
 
 | Erreur | Cause | Solution |
 |--------|-------|----------|
-| 401 "Token invalide ou expire" | Token JWT expiré | Rafraîchir le token via `/auth/refresh` ou se reconnecter |
+| 401 `MISSING_API_KEY` | Le header `X-API-Key` est absent | Ajouter le header `X-API-Key` à la requête `/auth/token` |
+| 401 `INVALID_API_KEY` | Clé invalide, révoquée ou expirée | Contacter l'équipe DBOPS pour obtenir une nouvelle clé |
+| 429 Too Many Requests | Rate limit sur `/auth/token` atteint (10/min) | Attendre 1 minute avant de réessayer |
+| 401 "Token invalide ou expire" | Token JWT expiré | Rafraîchir le token via `/auth/refresh` ou répéter l'étape 1 (API key) |
 | 403 "Cible non autorisée" | Target non permis par le profil | Vérifier les permissions du profil ou utiliser un autre target |
 | 400 "target_names requis" | Action nécessite des targets | Ajouter `target_names` avec au moins un target valide |
 | 400 "environnements différents" | Targets de plusieurs environnements | Utiliser des targets du même environnement |
@@ -320,7 +408,7 @@ Chaque exécution créée via l'API est tracée dans l'audit avec :
 
 ## Limites et bonnes pratiques
 
-1. **Rate limiting** : Pas de rate limiting pour le MVP, mais prévoir un délai entre les appels en batch
+1. **Rate limiting** : L'endpoint `/auth/token` est limité à 10 requêtes/minute par IP (protection brute-force). Pour les appels à `/executions`, prévoir un délai entre les appels en batch
 2. **Timeout** : Les requêtes timeout après 120 secondes — pour les exécutions longues, utilisez le polling
 3. **Idempotence** : Chaque appel crée une nouvelle exécution — utilisez le correlation ID pour éviter les doublons
 4. **Taille payload** : Limiter les paramètres à quelques KB
@@ -330,5 +418,6 @@ Chaque exécution créée via l'API est tracée dans l'audit avec :
 Liens relatifs à la base URL du portail (ex. `https://portail.example.com`) :
 
 - Documentation API complète (OpenAPI/Swagger) : `/api/docs`
+- Référence complète des endpoints : [`docs/backend/api-reference.md`](backend/api-reference.md)
 - Guide d'administration des actions : `/docs/admin-actions.md`
 - Architecture RBAC et permissions : `/docs/rbac.md`
