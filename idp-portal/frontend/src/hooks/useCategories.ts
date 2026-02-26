@@ -45,6 +45,16 @@ function getOrFetchCategories(): Promise<RefCategory[]> {
 }
 
 /**
+ * Invalidate the shared categories cache (Story 48.7, AC1).
+ * Forces next useCategories() mount to re-fetch from API.
+ */
+export function invalidateCategoriesCache(): void {
+  cachedCategories = null;
+  loadingPromise = null;
+  cacheError = null;
+}
+
+/**
  * Hook to fetch and cache categories from REF_CATEGORIES table.
  * Returns categories as options array for Select components.
  * Uses shared cache to prevent duplicate API calls.

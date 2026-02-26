@@ -13,6 +13,7 @@ import {
   MoonOutlined,
   AuditOutlined,
   BellOutlined,
+  KeyOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router';
 import { useAuth } from '../../contexts/AuthContext';
@@ -96,6 +97,12 @@ export function TopNav() {
       disabled: true,
     },
     { type: 'divider' },
+    {
+      key: 'api-keys',
+      label: 'Mes clés API',
+      icon: <KeyOutlined />,
+      onClick: () => navigate('/api-keys'),
+    },
     {
       key: 'logout',
       label: 'Déconnexion',

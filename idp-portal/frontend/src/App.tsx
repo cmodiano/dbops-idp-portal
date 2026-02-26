@@ -16,6 +16,7 @@ const CalendarPage = lazy(() => import('./pages/CalendarPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const AuditPage = lazy(() => import('./pages/AuditPage'));
+const ApiKeysPage = lazy(() => import('./pages/ApiKeysPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const AuthCallbackPage = lazy(() => import('./pages/AuthCallbackPage'));
@@ -117,6 +118,7 @@ function ThemedApp() {
                   <Route path="/dashboard" element={<Navigate to="/analytics" replace />} />
                   <Route path="/admin" element={<AdminGuard><AdminPage /></AdminGuard>} />
                   <Route path="/audit" element={<AuditGuard><AuditPage /></AuditGuard>} />
+                  <Route path="/api-keys" element={<ApiKeysPage />} />
                 </Route>
                 <Route path="*" element={<NotFoundPage />} />
                 </Routes>

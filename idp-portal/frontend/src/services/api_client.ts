@@ -246,8 +246,22 @@ export async function parseErrorResponse(
   response: Response,
   captureBody = false,
 ): Promise<{ message: string; body?: ApiError['responseBody'] }> {
-  // Rate limiting: user-friendly message with Retry-After if available
+  // Rate limiting: prefer backend message (e.g. API_KEY_LIMIT_REACHED) when present
   if (response.status === 429) {
+    const contentType = response.headers.get('content-type');
+    if (contentType?.includes('application/json')) {
+      try {
+        const body = await response.json();
+        if (body?.error?.message) {
+          return {
+            message: body.error.message,
+            body: captureBody ? body : undefined,
+          };
+        }
+      } catch {
+        // Fall through to generic message
+      }
+    }
     const retryAfter = response.headers.get('Retry-After');
     let waitTime = 'quelques instants';
     if (retryAfter) {

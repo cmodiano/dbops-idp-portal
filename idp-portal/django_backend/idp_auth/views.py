@@ -4,12 +4,14 @@ Story M.7 - Full SAML and JWT auth implementation.
 Story M.8 - Task 9: Structured logging with structlog.
 """
 
+from typing import cast
 
 import structlog
 
 from django.conf import settings
 from django.http import HttpResponse
 from django.shortcuts import redirect
+from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -18,7 +20,12 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated, AllowAny
 
 from idp_auth.models import User, APIKey
-from idp_auth.serializers import UserProfileSerializer, TokenRefreshResponseSerializer
+from idp_auth.serializers import (
+    APIKeyCreateSerializer,
+    APIKeyListSerializer,
+    TokenRefreshResponseSerializer,
+    UserProfileSerializer,
+)
 from idp_auth.services import AuthService
 from idp_auth.saml_utils import create_saml_auth
 from idp_auth.jwt_utils import create_access_token, create_refresh_token, verify_token
@@ -572,3 +579,91 @@ class APIKeyTokenView(APIView):
                 'expires_in': expires_in,
             }
         })
+
+
+class APIKeysView(APIView):
+    """
+    POST /auth/api-keys - Create API key for authenticated user (raw_key returned once).
+    GET /auth/api-keys - List current user's active API keys (without raw_key).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        user_id = cast(int, request.user.id)
+        queryset = APIKey.objects.filter(
+            user_id=user_id,
+            is_active=True,
+        ).order_by('-created_at')
+        serializer = APIKeyListSerializer(queryset, many=True)
+        return Response({'data': serializer.data})
+
+    def post(self, request: Request) -> Response:
+        # Story 44.7 AC7: enforce business cap of 5 active keys per user.
+        user_id = cast(int, request.user.id)
+        active_keys_count = APIKey.objects.filter(
+            user_id=user_id,
+            is_active=True,
+        ).count()
+        if active_keys_count >= 5:
+            return Response(
+                {
+                    "error": {
+                        "code": "API_KEY_LIMIT_REACHED",
+                        "message": "Limite de 5 clés API actives atteinte",
+                        "details": {"max_active_keys": 5},
+                    }
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
+        serializer = APIKeyCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        api_key, raw_key = APIKey.objects.create_key(
+            user=cast(User, request.user),
+            name=serializer.validated_data['name'],
+            scope=serializer.validated_data.get('scope'),
+        )
+
+        return Response(
+            {
+                'data': {
+                    'id': api_key.id,
+                    'name': api_key.name,
+                    'scope': api_key.scope,
+                    'created_at': api_key.created_at.isoformat(),
+                    'raw_key': raw_key,
+                }
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class APIKeyDetailView(APIView):
+    """
+    DELETE /auth/api-keys/{id} - Revoke current user's API key (soft delete).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request: Request, pk: int) -> Response:
+        try:
+            api_key = APIKey.objects.get(pk=pk)
+        except APIKey.DoesNotExist:
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message="API key introuvable",
+                details={"api_key_id": pk},
+            )
+
+        if api_key.user_id != cast(int, request.user.id):
+            raise ForbiddenError(
+                code="FORBIDDEN",
+                message="Vous ne pouvez révoquer que vos propres clés API",
+                details={"api_key_id": pk},
+            )
+
+        if api_key.is_active:
+            api_key.is_active = False
+            api_key.save(update_fields=['is_active', 'updated_at'])
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
