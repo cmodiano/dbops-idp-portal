@@ -9,7 +9,6 @@ Covers:
 """
 from __future__ import annotations
 
-import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 
 from executions.tasks.polling import PLATFORM_QUEUE_MAP, poll_platform_job_status
