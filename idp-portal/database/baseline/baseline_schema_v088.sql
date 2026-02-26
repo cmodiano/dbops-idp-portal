@@ -2,7 +2,7 @@
 -- Baseline Schema V088 — IDP Portal
 -- ===========================================================================
 -- Date            : 2026-02-25
--- Version couverte: V000–V088 (89 migrations Flyway consolidées)
+-- Version couverte: V000–V090 (91 migrations Flyway consolidées)
 -- Auteur          : Agent de développement (Story 41-2)
 --
 -- Usage           : NOUVEAUX ENVIRONNEMENTS UNIQUEMENT (base Oracle vierge)
@@ -12,12 +12,12 @@
 --   1. sqlplus idp_user/password@HOST:1521/XEPDB1 @database/baseline/baseline_schema_v088.sql
 --   2. flyway -baselineVersion=88 -baselineDescription=baseline_schema_v088 baseline
 --
--- Ce script couvre TOUTES les migrations V000–V088. Aucune migration incrémentale
--- n'est nécessaire après application. État identique à V000→V088 sans phases intermédiaires.
+-- Ce script couvre TOUTES les migrations V000–V090. Aucune migration incrémentale
+-- n'est nécessaire après application. État identique à V000→V090 sans phases intermédiaires.
 -- ===========================================================================
 --
 -- Objets créés :
---   25 tables, indexes, contraintes, trigger, package PKG_IDP_MAINTENANCE, données de référence
+--   27 tables, indexes, contraintes, trigger, package PKG_IDP_MAINTENANCE, données de référence
 --
 -- Exclusions (éléments neutralisés par les migrations) :
 --   - SCHEMA_VERSION (créée V000, droppée V015)
@@ -49,6 +49,40 @@ CREATE TABLE USERS (
 );
 
 CREATE UNIQUE INDEX UK_USERS_USERNAME ON USERS(USERNAME);
+
+-- ---------------------------------------------------------------------------
+-- AUTH_USER (V089) — django.contrib.auth pour admin Django
+-- ---------------------------------------------------------------------------
+CREATE TABLE AUTH_USER (
+    ID              NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    PASSWORD        VARCHAR2(128) NOT NULL,
+    LAST_LOGIN      TIMESTAMP,
+    IS_SUPERUSER    NUMBER(1) DEFAULT 0 NOT NULL,
+    USERNAME        VARCHAR2(150) NOT NULL,
+    FIRST_NAME      VARCHAR2(150),
+    LAST_NAME       VARCHAR2(150),
+    EMAIL          VARCHAR2(254),
+    IS_STAFF        NUMBER(1) DEFAULT 0 NOT NULL,
+    IS_ACTIVE       NUMBER(1) DEFAULT 1 NOT NULL,
+    DATE_JOINED     TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    CONSTRAINT CK_AUTH_USER_IS_SUPERUSER CHECK (IS_SUPERUSER IN (0, 1)),
+    CONSTRAINT CK_AUTH_USER_IS_STAFF    CHECK (IS_STAFF IN (0, 1)),
+    CONSTRAINT CK_AUTH_USER_IS_ACTIVE   CHECK (IS_ACTIVE IN (0, 1))
+);
+
+CREATE UNIQUE INDEX UK_AUTH_USER_USERNAME ON AUTH_USER(USERNAME);
+
+-- ---------------------------------------------------------------------------
+-- DJANGO_SESSION (V090) — django.contrib.sessions pour login admin
+-- ---------------------------------------------------------------------------
+CREATE TABLE DJANGO_SESSION (
+    SESSION_KEY   VARCHAR2(40) NOT NULL,
+    SESSION_DATA  CLOB NOT NULL,
+    EXPIRE_DATE   TIMESTAMP NOT NULL,
+    CONSTRAINT PK_DJANGO_SESSION PRIMARY KEY (SESSION_KEY)
+);
+
+CREATE INDEX IDX_DJANGO_SESSION_EXPIRE_DATE ON DJANGO_SESSION(EXPIRE_DATE);
 
 -- ---------------------------------------------------------------------------
 -- TAGS (V007)

@@ -19,7 +19,9 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Load .env from project root (django_backend/) so AUTH_DEV_BYPASS etc. are found regardless of cwd
-load_dotenv(BASE_DIR / '.env')
+# Fallback: idp-portal/.env.development when django_backend/.env does not exist
+load_dotenv(BASE_DIR.parent / '.env.development')
+load_dotenv(BASE_DIR / '.env', override=True)
 
 
 # Quick-start development settings - unsuitable for production
@@ -577,6 +579,21 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
 CELERY_TASK_ALWAYS_EAGER = os.getenv('CELERY_TASK_ALWAYS_EAGER', 'False').lower() == 'true'
 CELERY_TASK_EAGER_PROPAGATES = True
+
+# Story 47.1 — Queues dédiées par plateforme (bulkhead pattern)
+# Note: PLATFORM_QUEUE_MAP est défini dans executions/tasks/polling.py (utilisé au runtime).
+# CELERY_TASK_ROUTES route les shims nommés ; poll_platform_job_status se route via queue= kwarg.
+CELERY_TASK_ROUTES = {
+    'executions.tasks.poll_aap_job_status': {'queue': 'aap'},
+    'executions.tasks.poll_tower_job_status': {'queue': 'aap'},
+    'executions.tasks.poll_azure_devops_run_status': {'queue': 'azure'},
+    'executions.tasks.poll_github_actions_run_status': {'queue': 'github'},
+    'executions.tasks.poll_terraform_cloud_run_status': {'queue': 'terraform'},
+    # Tasks Beat restent sur default
+    'executions.tasks.evaluate_waiting_gates': {'queue': 'default'},
+    'executions.tasks.process_pending_scheduled_executions': {'queue': 'default'},
+    'executions.tasks.retry_workflow_step': {'queue': 'default'},
+}
 
 # ============================================================================
 # Django Channels / WebSocket Configuration (Story 22.13)

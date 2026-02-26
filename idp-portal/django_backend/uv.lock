@@ -630,6 +630,18 @@ wheels = [
 ]
 
 [[package]]
+name = "django-jazzmin"
+version = "3.0.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/0f/d4/11c45a10ee994eae97734b37816ea569b51a8575dc38496e674088879956/django_jazzmin-3.0.3.tar.gz", hash = "sha256:ed830ae4a0509aeec8e2caa626965c5dd72f11da83776807ba2a807fc99584d5", size = 2423031, upload-time = "2026-02-25T16:17:07.883Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ad/df/c81a5cb9db0a1c6abfed60c8794525774ae1aa5809c9f32fe0038a83ae36/django_jazzmin-3.0.3-py3-none-any.whl", hash = "sha256:a0e6afecf8a792eeaba06c7713ecddcfc6cbf349e47466cea2d484283eb87f31", size = 2495107, upload-time = "2026-02-25T16:17:06.195Z" },
+]
+
+[[package]]
 name = "django-stubs"
 version = "5.2.9"
 source = { registry = "https://pypi.org/simple" }
@@ -828,6 +840,7 @@ dependencies = [
     { name = "defusedxml" },
     { name = "django" },
     { name = "django-cors-headers" },
+    { name = "django-jazzmin" },
     { name = "djangorestframework" },
     { name = "drf-spectacular" },
     { name = "gunicorn" },
@@ -881,6 +894,7 @@ requires-dist = [
     { name = "detect-secrets", marker = "extra == 'dev'", specifier = ">=1.5.0" },
     { name = "django", specifier = ">=5.1.0,<6.0" },
     { name = "django-cors-headers", specifier = ">=4.3.0" },
+    { name = "django-jazzmin", specifier = ">=3.0.0,<4.0.0" },
     { name = "django-stubs", marker = "extra == 'dev'", specifier = ">=5.1.0" },
     { name = "djangorestframework", specifier = ">=3.15.0" },
     { name = "djangorestframework-stubs", marker = "extra == 'dev'", specifier = ">=3.15.0" },

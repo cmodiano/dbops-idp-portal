@@ -26,6 +26,15 @@ from core.models import AuditActionType, AuditEntityType
 
 logger = structlog.get_logger(__name__)
 
+# Story 47.1 — Queues dédiées par plateforme (bulkhead pattern)
+PLATFORM_QUEUE_MAP = {
+    'aap': 'aap',
+    'tower': 'aap',              # Tower = variante AAP, même queue
+    'azure_devops': 'azure',
+    'github_actions': 'github',
+    'terraform_cloud': 'terraform',
+}
+
 # Story 30.7 (RACE-1): Maximum polling retries before marking execution as FAILED.
 # 20 retries × 5s default interval ≈ 100s minimum; sufficient for transient failures.
 MAX_POLLING_RETRIES = 20
@@ -355,6 +364,7 @@ def poll_platform_job_status(
                 "poll_kwargs": poll_kwargs,
             },
             countdown=poll_interval,
+            queue=PLATFORM_QUEUE_MAP.get(platform_type, 'default'),
         )
         return {"outcome": "error", "error": str(e), "retry_count": retry_count}
 
@@ -404,6 +414,7 @@ def poll_platform_job_status(
             "poll_kwargs": poll_kwargs,
         },
         countdown=poll_interval,
+        queue=PLATFORM_QUEUE_MAP.get(platform_type, 'default'),
     )
 
     logger.info(
