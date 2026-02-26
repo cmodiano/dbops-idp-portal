@@ -3,7 +3,7 @@ DRF Authentication backend for JWT tokens.
 Story M.7 - Task 4.5-4.8
 """
 
-import logging
+import structlog
 from typing import Any
 
 from django.conf import settings
@@ -13,7 +13,7 @@ from rest_framework.exceptions import AuthenticationFailed
 from idp_auth.jwt_utils import verify_token
 from idp_auth.models import User
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class JWTAuthentication(BaseAuthentication):

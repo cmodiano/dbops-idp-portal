@@ -5,12 +5,12 @@ Story 25.4: change_type_config validation (allowed, requires_maintenance_window,
 Story 28.1: business_rule_policies validation for step output policies.
 """
 
-import logging
+import structlog
 import re
 
 from rest_framework.exceptions import ValidationError
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 VALID_GATE_CONDITION_TYPES = (

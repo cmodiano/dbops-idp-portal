@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import json
-import logging
+import structlog
 from typing import cast
 from django.db import models
 from django.db.models import Q
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class ProfileManager(models.Manager):

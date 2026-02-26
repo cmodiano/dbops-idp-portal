@@ -6,10 +6,10 @@ can be added without modifying services/__init__.py.
 """
 from __future__ import annotations
 
-import logging
+import structlog
 from typing import Any, Callable
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class ServiceRegistry:
@@ -37,8 +37,8 @@ class ServiceRegistry:
         """
         if service_type in self._registry:
             logger.warning(
-                "ServiceRegistry: overwriting existing factory for service_type=%r",
-                service_type,
+                "service_registry_overwrite",
+                service_type=service_type,
             )
         self._registry[service_type] = factory
 

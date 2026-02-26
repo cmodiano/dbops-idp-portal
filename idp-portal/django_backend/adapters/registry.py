@@ -6,12 +6,12 @@ can be added without modifying adapters/__init__.py.
 """
 from __future__ import annotations
 
-import logging
+import structlog
 from typing import Any, Callable
 
 from adapters.base_adapter import BaseAdapter
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class AdapterRegistry:
@@ -41,8 +41,8 @@ class AdapterRegistry:
         """
         if platform_type in self._registry:
             logger.warning(
-                "AdapterRegistry: overwriting existing factory for platform_type=%r",
-                platform_type,
+                "adapter_registry_overwrite",
+                platform_type=platform_type,
             )
         self._registry[platform_type] = factory
 

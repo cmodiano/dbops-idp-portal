@@ -634,7 +634,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | **NEW-BE-7** | MEDIUM | Double `.save()` dans `create_integration()` — premier save après `set_config()`, second après validation de status | `integrations/services.py` | 140, 146 |
 | **NEW-BE-8** | MEDIUM | Double `.save()` dans `update_integration()` — save principal puis save status si changé | `integrations/services.py` | 263, 272 |
 | **NEW-BE-9** | MEDIUM | N+1 dans `deactivate_action()` — `.save()` individuel + audit en boucle sur `affected_workflows` | `catalog/services.py` | 585-603 |
-| **NEW-BE-10** | LOW | `import logging` (stdlib) au lieu de `structlog` dans 25 fichiers non-test. Le reste du projet utilise structlog. Incohérence qui prive ces modules du contexte structuré (correlation_id, user_id) | Voir liste ci-dessous | — |
+| ~~**NEW-BE-10**~~ ✅ Résolu | LOW | `import logging` (stdlib) au lieu de `structlog` dans 25 fichiers non-test. Le reste du projet utilise structlog. Incohérence qui prive ces modules du contexte structuré (correlation_id, user_id) | Voir liste ci-dessous | — | **Résolu — Story 48.6 (2026-02-26)** |
 
 **Fichiers `import logging` (non-test, à migrer vers structlog) :**
 `integrations/signals.py`, `integrations/views.py`, `integrations/upload_views.py`, `integrations/models.py`, `catalog/models.py`, `catalog/validators.py`, `executions/models.py`, `profiles/models.py`, `profiles/cache.py`, `adapters/registry.py`, `services/registry.py`, `utils/json_helpers.py`, `idp_auth/authentication.py`
@@ -704,7 +704,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 |---|-------|------|--------|
 | SEC-13 | `SERVICENOW_VERIFY_TLS` désactivable en production | Sécurité | Trivial |
 | SEC-14 | Pas de vérification path traversal sur écriture icône | Sécurité | Trivial |
-| NEW-BE-10 | `import logging` (stdlib) au lieu de `structlog` dans 13+ fichiers | Backend | Faible |
+| ~~NEW-BE-10~~ ✅ Résolu | ~~`import logging` (stdlib) au lieu de `structlog` dans 13+ fichiers~~ | Backend | Faible | **Résolu — Story 48.6 (2026-02-26)** |
 | NEW-FE-1 | Nested key props redondants (TopNav) | Frontend | Trivial |
 | NEW-FE-2 | Cache module-level sans invalidation (useCategories) | Frontend | Faible |
 | NEW-FE-3 | `.catch()` silencieux (ReportingDashboard) | Frontend | Trivial |
@@ -743,8 +743,8 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | **SOLID Frontend (§15)** | **10/11** | **1** |
 | **Observations post-refactoring (§16)** | 2 (16.1 DOCUMENTED, 16.3 RESOLVED) | **1 (16.2) + 1 INFO** |
 | **Audit #3 (§17)** | **5/6** | **1** (NEW-FE-1) |
-| **Audit #4 (§18)** | **0** | **12** |
-| **Total** | **104/119** | **15 (2 HIGH, 5 MEDIUM, 7 LOW, 1 INFO)** |
+| **Audit #4 (§18)** | **1** | **11** |
+| **Total** | **105/119** | **14 (2 HIGH, 5 MEDIUM, 6 LOW, 1 INFO)** |
 
 ---
 
@@ -759,7 +759,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 
 **Backlog technique :**
 1. SEC-13/14 — Corrections sécurité mineures (TLS, path traversal)
-2. NEW-BE-10 — Migration progressive `import logging` → `structlog` (13+ fichiers)
+2. ~~NEW-BE-10 — Migration progressive `import logging` → `structlog` (13+ fichiers)~~ ✅ Résolu — Story 48.6 (2026-02-26)
 3. SOLID-FE-4 — Migration progressive des ~25 composants vers hooks (effort élevé, story par story)
 4. ~~SOLID-FE-10 — Consolider `STATUS_CONFIG` résiduel~~ ✅ Résolu — Story 48.5 (2026-02-26)
 5. 16.2 — Audit des 77 `except Exception` résiduels pour vérifier documentation

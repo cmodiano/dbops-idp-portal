@@ -4,10 +4,10 @@ Centralized utilities for handling JSON data stored in Oracle CLOB fields.
 """
 
 import json
-import logging
+import structlog
 from typing import Any
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def serialize_json(value: Any, field_name: str = "field", entity_id: int | None = None) -> str | None:

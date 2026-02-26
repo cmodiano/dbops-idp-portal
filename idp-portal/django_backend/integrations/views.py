@@ -2,7 +2,7 @@
 Views for integrations CRUD endpoints.
 """
 
-import logging
+import structlog
 from typing import Any
 
 from asgiref.sync import async_to_sync
@@ -23,7 +23,7 @@ from core.models import AuditActionType, AuditEntityType
 from core.services import AuditService
 from core.middleware import get_correlation_id
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class IntegrationViewSet(viewsets.ViewSet):
@@ -103,7 +103,8 @@ class IntegrationViewSet(viewsets.ViewSet):
         except Exception as e:  # noqa: BLE001 — logged-and-wrapped: unexpected error wrapped in InvalidStateError for API response
             logger.exception(
                 "create_integration_unexpected_error",
-                extra={"error": str(e), "error_type": type(e).__name__},
+                error=str(e),
+                error_type=type(e).__name__,
             )
             raise InvalidStateError(
                 code="VALIDATION_ERROR",
@@ -161,7 +162,8 @@ class IntegrationViewSet(viewsets.ViewSet):
         except Exception as e:  # noqa: BLE001 — logged-and-wrapped: unexpected error wrapped in InvalidStateError for API response
             logger.exception(
                 "update_integration_unexpected_error",
-                extra={"error": str(e), "error_type": type(e).__name__},
+                error=str(e),
+                error_type=type(e).__name__,
             )
             raise InvalidStateError(
                 code="VALIDATION_ERROR",
