@@ -69,11 +69,13 @@ def _factory_terraform_cloud(base_url: str, auth_headers: dict, timeout: float |
 # Registration — add new platforms here, never touch get_platform_adapter()
 # ---------------------------------------------------------------------------
 
-adapter_registry.register("aap", _factory_aap)
-adapter_registry.register("tower", _factory_tower)
-adapter_registry.register("azure_devops", _factory_azure_devops)
-adapter_registry.register("github_actions", _factory_github_actions)
-adapter_registry.register("terraform_cloud", _factory_terraform_cloud)
+# Story 47.4: queue param derives the Celery queue from the registry.
+# Default queue = platform_type; explicit value when multiple platforms share a queue.
+adapter_registry.register("aap", _factory_aap)                              # queue='aap'
+adapter_registry.register("tower", _factory_tower, queue="aap")             # tower shares aap queue
+adapter_registry.register("azure_devops", _factory_azure_devops, queue="azure")
+adapter_registry.register("github_actions", _factory_github_actions, queue="github")
+adapter_registry.register("terraform_cloud", _factory_terraform_cloud, queue="terraform")
 
 
 # ---------------------------------------------------------------------------

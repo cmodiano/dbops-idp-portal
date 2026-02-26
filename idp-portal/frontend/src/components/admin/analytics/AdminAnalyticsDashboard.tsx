@@ -7,16 +7,17 @@
  * - Period selector (30j, 90j, 12 mois)
  * - EngineBarChart and ProfileBarChart in 2-column grid
  * - AdoptionTrendChart full-width
+ *
+ * Story 48.8 (SOLID-FE-4, AC2): fetchAdminAnalytics encapsulé dans useAdminAnalytics hook (DIP).
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Row, Col, Statistic, Card, Segmented, Alert, Skeleton, App } from 'antd';
 import { FileTextOutlined } from '@ant-design/icons';
 import { EngineBarChart } from './EngineBarChart';
 import { ProfileBarChart } from './ProfileBarChart';
 import { AdoptionTrendChart } from './AdoptionTrendChart';
-import { fetchAdminAnalytics } from '../../../services/admin_service';
-import type { AdminAnalytics } from '../../../types/api';
+import { useAdminAnalytics } from '../../../hooks/useAdminAnalytics';
 
 /** Period options for the selector. */
 const periodOptions = [
@@ -28,28 +29,11 @@ const periodOptions = [
 export function AdminAnalyticsDashboard() {
   const { notification } = App.useApp();
   const [period, setPeriod] = useState<number>(90);
-  const [data, setData] = useState<AdminAnalytics | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadData = useCallback(async (days: number) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const analytics = await fetchAdminAnalytics(days);
-      setData(analytics);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erreur de chargement des métriques';
-      setError(message);
-      notification.error({ title: 'Erreur', description: message });
-    } finally {
-      setLoading(false);
-    }
-  }, [notification]);
+  const { data, loading, error } = useAdminAnalytics(period);
 
   useEffect(() => {
-    loadData(period);
-  }, [period, loadData]);
+    if (error) notification.error({ title: 'Erreur', description: error });
+  }, [error, notification]);
 
   const handlePeriodChange = (value: number | string) => {
     setPeriod(value as number);

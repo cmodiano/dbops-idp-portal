@@ -46,7 +46,7 @@ def trigger_platform_job(
     from integrations.models import Integration  # noqa: PLC0415
     from executions.models import ExecutionStep  # noqa: PLC0415
     from executions.tasks.polling import (  # noqa: PLC0415
-        poll_platform_job_status, PLATFORM_QUEUE_MAP,
+        poll_platform_job_status, get_platform_queue,
     )
     from executions.models import ExecutionStepStatus  # noqa: PLC0415
     from django.utils import timezone as tz  # noqa: PLC0415
@@ -134,7 +134,7 @@ def trigger_platform_job(
                     "poll_interval": 5,
                     "retry_count": 0,
                 },
-                queue=PLATFORM_QUEUE_MAP.get(platform_type, "default"),
+                queue=get_platform_queue(platform_type),
             )
 
         return {"outcome": "dispatched", "platform_job_id": platform_job_id}

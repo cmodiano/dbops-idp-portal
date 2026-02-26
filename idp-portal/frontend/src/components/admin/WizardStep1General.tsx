@@ -1,12 +1,14 @@
 /**
  * WizardStep1General — Étape 1 du wizard (Général) extraite de ActionWizard::stepContent (Story 33.5, Task 5).
  * Contient : type, nom, description, catégorie, moteur, intégration, tags.
+ *
+ * Story 48.8 (SOLID-FE-4, AC3): checkActionNameAvailable encapsulé dans useActionNameAvailability hook (DIP).
  */
 import { Form, Input, Select, Alert, Radio } from 'antd';
 import type { FormInstance } from 'antd';
 import type { ActionDetail } from '../../types/api';
 import SectionHelp from '../common/SectionHelp';
-import { checkActionNameAvailable } from '../../services/admin_service';
+import { useActionNameAvailability } from '../../hooks/useActionNameAvailability';
 
 const { TextArea } = Input;
 
@@ -47,6 +49,8 @@ export function WizardStep1General({
   categoryOptions,
   categoriesLoading,
 }: WizardStep1GeneralProps) {
+  const { checkName } = useActionNameAvailability();
+
   return (
     <>
       {/* Story 9.5 / 2.29: Type selector — hidden when initialItemType is set or in edit mode */}
@@ -73,7 +77,7 @@ export function WizardStep1General({
             validator: async (_, value) => {
               const name = value ? String(value).trim() : '';
               if (!name) return;
-              const available = await checkActionNameAvailable(name, editAction?.id);
+              const available = await checkName(name, editAction?.id);
               if (!available) {
                 return Promise.reject(new Error('Une action ou un workflow avec ce nom existe déjà.'));
               }

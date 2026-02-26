@@ -581,23 +581,36 @@ CELERY_TIMEZONE = 'UTC'
 CELERY_TASK_ALWAYS_EAGER = os.getenv('CELERY_TASK_ALWAYS_EAGER', 'False').lower() == 'true'
 CELERY_TASK_EAGER_PROPAGATES = True
 
-# Story 47.1 — Queues dédiées par plateforme (bulkhead pattern)
-# Note: PLATFORM_QUEUE_MAP est défini dans executions/tasks/polling.py (utilisé au runtime).
-# CELERY_TASK_ROUTES route les shims nommés ; poll_platform_job_status se route via queue= kwarg.
+# Story 47.4 — CELERY_TASK_ROUTES construit dynamiquement depuis l'AdapterRegistry.
+# Ajouter une nouvelle plateforme dans adapters/__init__.py suffit : aucune modification ici.
+# Les adapters/ n'ont pas de dépendances sur les modèles Django → import sûr ici.
+import adapters as _adapters_pkg  # noqa: F401,E402 — déclenche l'enregistrement des adapters
+from adapters.registry import adapter_registry as _adapter_registry  # noqa: E402
+
+# Mapping shim task name → platform_type (pour les routes des shims backward-compat).
+# Les nouvelles plateformes sans shim utilisent poll_platform_job_status directement.
+_SHIM_PLATFORM_MAP = {
+    'executions.tasks.poll_aap_job_status': 'aap',
+    'executions.tasks.poll_tower_job_status': 'tower',
+    'executions.tasks.poll_azure_devops_run_status': 'azure_devops',
+    'executions.tasks.poll_github_actions_run_status': 'github_actions',
+    'executions.tasks.poll_terraform_cloud_run_status': 'terraform_cloud',
+}
+
 CELERY_TASK_ROUTES = {
-    'executions.tasks.poll_aap_job_status': {'queue': 'aap'},
-    'executions.tasks.poll_tower_job_status': {'queue': 'aap'},
-    'executions.tasks.poll_azure_devops_run_status': {'queue': 'azure'},
-    'executions.tasks.poll_github_actions_run_status': {'queue': 'github'},
-    'executions.tasks.poll_terraform_cloud_run_status': {'queue': 'terraform'},
+    task: {'queue': _adapter_registry.get_queue(platform)}
+    for task, platform in _SHIM_PLATFORM_MAP.items()
+}
+CELERY_TASK_ROUTES.update({
     # Tasks Beat restent sur default
     'executions.tasks.evaluate_waiting_gates': {'queue': 'default'},
     'executions.tasks.process_pending_scheduled_executions': {'queue': 'default'},
     'executions.tasks.retry_workflow_step': {'queue': 'default'},
     # Story 47.2 — Trigger async ; la queue spécifique est passée via apply_async(queue=...) au runtime.
-    # Cette route est un fallback pour le dispatch sans queue explicite.
     'executions.tasks.trigger_platform_job': {'queue': 'default'},
-}
+})
+
+del _adapters_pkg, _adapter_registry, _SHIM_PLATFORM_MAP  # nettoyer le namespace settings
 
 # ============================================================================
 # Django Channels / WebSocket Configuration (Story 22.13)

@@ -7,9 +7,11 @@
  * - Delete (X) per rule; inline validation: error_pattern required, target_action_id required
  * - Action dropdown populated from catalog
  * - Same pattern as ImpactRulesEditor
+ *
+ * Story 48.8 (SOLID-FE-4, AC4): fetchCatalogActions encapsulé dans useRemediationCatalogActions hook (DIP).
  */
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
   Button,
   Input,
@@ -25,9 +27,9 @@ import {
 } from 'antd';
 import { PlusOutlined, DeleteOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import type { RemediationRule, RiskLevel } from '../../types/api';
-import { fetchCatalogActions, type CatalogAction } from '../../services/catalog_service';
+import type { CatalogAction } from '../../services/catalog_service';
+import { useRemediationCatalogActions } from '../../hooks/useRemediationCatalogActions';
 import { useEnvironments } from '../../hooks/useEnvironments';
-import logger from '../../services/logger';
 
 const { Text } = Typography;
 
@@ -232,18 +234,8 @@ export const RemediationRulesEditor: React.FC<RemediationRulesEditorProps> = ({
   onChange,
   currentActionId,
 }) => {
-  const [actions, setActions] = useState<CatalogAction[]>([]);
+  const { catalogActions } = useRemediationCatalogActions();
   const { environments, environmentOptions, loading: environmentsLoading } = useEnvironments();
-
-  // Load actions for dropdown
-  useEffect(() => {
-    fetchCatalogActions()
-      .then(setActions)
-      .catch((err) => {
-        logger.error('Failed to load actions for remediation rules', { error: err instanceof Error ? err.message : String(err) });
-        setActions([]);
-      });
-  }, []);
 
   const handleAdd = () => {
     const newRule: RemediationRuleDefinition = {
@@ -283,7 +275,7 @@ export const RemediationRulesEditor: React.FC<RemediationRulesEditorProps> = ({
             key={rule.id ?? `rule-${index}`}
             rule={rule}
             index={index}
-            actions={actions}
+            actions={catalogActions}
             currentActionId={currentActionId}
             environmentOptions={environmentOptions}
             environmentsLoading={environmentsLoading}

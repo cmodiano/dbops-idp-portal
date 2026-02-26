@@ -26,14 +26,15 @@ from core.models import AuditActionType, AuditEntityType
 
 logger = structlog.get_logger(__name__)
 
-# Story 47.1 — Queues dédiées par plateforme (bulkhead pattern)
-PLATFORM_QUEUE_MAP = {
-    'aap': 'aap',
-    'tower': 'aap',              # Tower = variante AAP, même queue
-    'azure_devops': 'azure',
-    'github_actions': 'github',
-    'terraform_cloud': 'terraform',
-}
+
+def get_platform_queue(platform_type: str) -> str:
+    """Story 47.4: Resolve Celery queue for platform_type from AdapterRegistry.
+
+    Replaces hardcoded PLATFORM_QUEUE_MAP. Returns 'default' for unknown types.
+    Adding a new platform only requires registering it in adapters/__init__.py.
+    """
+    from adapters.registry import adapter_registry  # noqa: PLC0415
+    return adapter_registry.get_queue(platform_type)
 
 # Story 30.7 (RACE-1): Maximum polling retries before marking execution as FAILED.
 # 20 retries × 5s default interval ≈ 100s minimum; sufficient for transient failures.
@@ -364,7 +365,7 @@ def poll_platform_job_status(
                 "poll_kwargs": poll_kwargs,
             },
             countdown=poll_interval,
-            queue=PLATFORM_QUEUE_MAP.get(platform_type, 'default'),
+            queue=get_platform_queue(platform_type),
         )
         return {"outcome": "error", "error": str(e), "retry_count": retry_count}
 
@@ -414,7 +415,7 @@ def poll_platform_job_status(
             "poll_kwargs": poll_kwargs,
         },
         countdown=poll_interval,
-        queue=PLATFORM_QUEUE_MAP.get(platform_type, 'default'),
+        queue=get_platform_queue(platform_type),
     )
 
     logger.info(

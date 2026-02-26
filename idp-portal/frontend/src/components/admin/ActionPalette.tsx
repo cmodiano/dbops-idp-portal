@@ -1,14 +1,14 @@
 /**
  * ActionPalette — Sidebar with draggable published actions for the visual workflow builder (Story 16.5, AC1-AC2).
  *
- * Actions are loaded via getEligibleActionsForWorkflow() and rendered as draggable cards.
+ * Actions are loaded via useEligibleActions hook (DIP pattern, Story 48.8, AC1).
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Input, Spin, Alert, Typography, theme } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import type { ActionListItem } from '../../types/api';
-import { getEligibleActionsForWorkflow } from '../../services/admin_service';
+import { useEligibleActions } from '../../hooks/useEligibleActions';
 
 const { Text } = Typography;
 
@@ -18,30 +18,16 @@ export interface ActionPaletteProps {
 
 export const ActionPalette: React.FC<ActionPaletteProps> = ({ disabled = false }) => {
   const { token } = theme.useToken();
-  const [actions, setActions] = useState<ActionListItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { eligibleActions, loadingActions, loadError } = useEligibleActions();
   const [search, setSearch] = useState('');
 
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-    getEligibleActionsForWorkflow()
-      .then((list) => setActions(Array.isArray(list) ? list : []))
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : 'Erreur de chargement');
-        setActions([]);
-      })
-      .finally(() => setLoading(false));
-  }, []);
-
   const filtered = search
-    ? actions.filter(
+    ? eligibleActions.filter(
         (a) =>
           a.name.toLowerCase().includes(search.toLowerCase()) ||
           (a.engine ?? '').toLowerCase().includes(search.toLowerCase())
       )
-    : actions;
+    : eligibleActions;
 
   const onDragStart = (event: React.DragEvent, action: ActionListItem) => {
     if (disabled) return;
@@ -77,13 +63,13 @@ export const ActionPalette: React.FC<ActionPaletteProps> = ({ disabled = false }
       />
 
       <div style={{ flex: 1, overflowY: 'auto' }}>
-        {loading && (
+        {loadingActions && (
           <div style={{ textAlign: 'center', padding: 16 }}>
             <Spin size="small" />
           </div>
         )}
-        {error && <Alert type="error" title={error} showIcon />}
-        {!loading && !error && filtered.length === 0 && (
+        {loadError && <Alert type="error" title={loadError} showIcon />}
+        {!loadingActions && !loadError && filtered.length === 0 && (
           <Text type="secondary" style={{ fontSize: 12 }}>
             Aucune action disponible
           </Text>

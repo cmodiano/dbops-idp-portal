@@ -105,6 +105,16 @@ class TestAdapterRegistry:
         with pytest.raises(ValueError, match="gitlab_ci"):
             self.registry.get("gitlab_ci")
 
+    def test_unregister_removes_from_queue_map(self) -> None:
+        """Story 47.4: unregister() removes from _queue_map so get_queue returns 'default'."""
+        self.registry.register("mock", _mock_factory)  # queue defaults to "mock"
+        assert self.registry.get_queue("mock") == "mock"
+        assert "mock" in self.registry.list_queues()
+
+        self.registry.unregister("mock")
+        assert self.registry.get_queue("mock") == "default"
+        assert "mock" not in self.registry.list_queues()
+
 
 # ---------------------------------------------------------------------------
 # Module-level adapter_registry integration tests (AC: 1, 3)

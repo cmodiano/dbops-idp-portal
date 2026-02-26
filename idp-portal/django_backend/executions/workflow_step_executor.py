@@ -244,7 +244,7 @@ class StepExecutor:
             # Story 47.2: Dispatch async si integration, simulated si pas d'integration
             if integration:
                 from executions.tasks.trigger import trigger_platform_job  # noqa: PLC0415
-                from executions.tasks.polling import PLATFORM_QUEUE_MAP  # noqa: PLC0415
+                from executions.tasks.polling import get_platform_queue  # noqa: PLC0415
 
                 # Calculer trigger_kwargs (même logique que call_platform_adapter lignes 425–434)
                 trigger_kwargs: dict[str, Any] = {"correlation_id": self.correlation_id}
@@ -263,7 +263,7 @@ class StepExecutor:
                         "integration_id": integration.id,
                         "trigger_kwargs": trigger_kwargs,
                     },
-                    queue=PLATFORM_QUEUE_MAP.get(integration.type, "default"),
+                    queue=get_platform_queue(integration.type),
                 )
 
                 logger.info(
