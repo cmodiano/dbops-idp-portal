@@ -4,9 +4,8 @@ from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group, User as AuthUser
 from django.test import TestCase
 
-from idp_auth.admin import APIKeyAdmin, CustomGroupAdmin, CustomUserAdmin, IDPUserAdmin
-from idp_auth.models import APIKey
-from idp_auth.models import User as IDPUser
+from idp_auth.admin import CustomGroupAdmin, CustomUserAdmin, IDPUserAdmin
+from idp_auth.models import APIKey, User as IDPUser
 
 
 class TestCustomUserAdmin(TestCase):
@@ -71,14 +70,13 @@ class TestIDPUserAdmin(TestCase):
         self.assertFalse(self.admin.has_delete_permission(request, obj))
 
 
-class TestAPIKeyAdminListFilter(TestCase):
-    def setUp(self):
-        self.site = AdminSite()
-        self.admin = APIKeyAdmin(APIKey, self.site)
+class TestAPIKeyNotInAdmin(TestCase):
+    """Story 44.8: API keys gérées via portail self-service, pas dans Django Admin."""
 
-    def test_list_filter_includes_user(self):
-        self.assertIn('user', self.admin.list_filter)
+    def test_api_key_not_registered_in_admin(self):
+        from django.contrib import admin
 
-    def test_list_filter_preserves_existing(self):
-        self.assertIn('is_active', self.admin.list_filter)
-        self.assertIn('scope', self.admin.list_filter)
+        self.assertFalse(
+            admin.site.is_registered(APIKey),
+            "APIKey must not be registered in Django Admin (Story 44.8)",
+        )

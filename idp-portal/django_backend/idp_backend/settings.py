@@ -80,7 +80,7 @@ INSTALLED_APPS = [
 # ─── Django Jazzmin Admin Theme (Story 45.2) ────────────────────────────────
 # Thème moderne pour Django Admin avec sidebar de navigation.
 # Choisi vs django-admin-interface : configuration Python versionnée, pas de migration DB.
-# Compatibilité : django-jazzmin>=3.0.0, Django 5.1+, compatible APIKeyAdmin (Story 44.5).
+# Compatibilité : django-jazzmin>=3.0.0, Django 5.1+. API keys gérées via portail self-service (Story 44.7), admin retiré (Story 44.8).
 JAZZMIN_SETTINGS = {
     # Titre de l'onglet navigateur
     "site_title": "IDP Portal Admin",
@@ -94,7 +94,7 @@ JAZZMIN_SETTINGS = {
     "copyright": "DBOPS Team",
 
     # Recherche globale dans l'admin (modèles indexés dans la barre de recherche)
-    "search_model": ["auth.user", "idp_auth.APIKey"],
+    "search_model": ["auth.user"],
 
     # Affichage de la sidebar de navigation
     "show_sidebar": True,
@@ -106,7 +106,6 @@ JAZZMIN_SETTINGS = {
         "auth.user": "fas fa-user",
         "auth.Group": "fas fa-users",
         "idp_auth.user": "fas fa-id-badge",
-        "idp_auth.APIKey": "fas fa-key",  # pragma: allowlist secret
         "catalog": "fas fa-book",
         "executions": "fas fa-play-circle",
         "inventory": "fas fa-server",
@@ -130,7 +129,7 @@ JAZZMIN_SETTINGS = {
 
     # ─── Ordre de la sidebar (Story 45.4) ──────────────────────────────────────
     # auth : Django admin users (User, Group) — authentification de l'interface admin
-    # idp_auth : Utilisateurs SAML/DBOPS + API Keys — domaine métier applicatif
+    # idp_auth : Utilisateurs SAML/DBOPS — domaine métier applicatif (API keys via portail self-service)
     "order_with_respect_to": [
         "auth",
         "idp_auth",
