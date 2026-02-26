@@ -27,12 +27,32 @@ export const STYLE_TOKENS = {
     'Azure DevOps': '#0078D4',
     Terraform: '#7B42BC',
   } as const,
-  /** Impact indicator colors (triple coding, UX spec). */
+  /* Impact badge palette — Story 46.3 (Badges standardisation couleurs)
+   * Progression chromatique : vert → jaune → orange → rouge
+   * WCAG-friendly (texte teinté sur fond ~15% opacité via Ant Design <Tag color="#HEX">)
+   * Écart de teinte (hue) entre niveaux adjacents : ~55° / ~21° / ~14° — tous perceptibles (seuil humain ~10°)
+   */
   impactColor: {
-    low: '#10B981',
-    medium: '#F59E0B',
-    high: '#F97316',
-    critical: '#EF4444',
+    low:      '#10B981', // green-500  — Faible : aucun impact sur service            (hue ~160°)
+    medium:   '#EAB308', // yellow-500 — Moyen  : impact possible sur perfs           (hue ~45°) — CHANGÉ #F59E0B (amber, trop proche de high)
+    high:     '#F97316', // orange-500 — Élevé  : indisponibilité de service          (hue ~24°)
+    critical: '#EF4444', // red-500    — Critique : indisponibilité + cas spéciaux   (hue ~0°)
+  } as const,
+  /* Environment badge palette — Story 46.3
+   * Couleurs fixes par type d'environnement — sémantiquement distincts des badges d'impact
+   * Note : production (#EF4444) et staging (#F97316) partagent intentionnellement les teintes
+   * de critical/high pour renforcer la sémantique de gravité (production = critique).
+   * Fallback sur gris pour environnements inconnus
+   */
+  environmentBadgeColor: {
+    production:  '#EF4444', // red-500    — Production critique
+    prod:        '#EF4444', // alias
+    staging:     '#F97316', // orange-500 — Pré-production
+    preprod:     '#F97316', // alias
+    dev:         '#3B82F6', // blue-500   — Développement
+    development: '#3B82F6', // alias
+    test:        '#8B5CF6', // violet-500 — Environnement de test
+    default:     '#6B7280', // gray-500   — Environnement inconnu
   } as const,
   /**
    * Tag category palette (charte graphique).

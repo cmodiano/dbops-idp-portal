@@ -16,10 +16,12 @@ import {
   renderEngineIcon,
   renderPlatformIcon,
   renderPlateformeIcon,
+  getEnvironmentBadgeColor,
   STATUS_CONFIG,
   ENGINE_ICONS_CONFIG,
   PLATFORM_ICONS_CONFIG,
 } from './executionRenderers';
+import { STYLE_TOKENS } from '../theme/styleTokens';
 import type { ExecutionStatusType, ActionEngine, ActionPlatform } from '../types/api';
 
 const renderWithTheme = (ui: React.ReactElement) =>
@@ -275,6 +277,60 @@ describe('executionRenderers', () => {
         expect(PLATFORM_ICONS_CONFIG[platform]).toHaveProperty('Icon');
         expect(PLATFORM_ICONS_CONFIG[platform]).toHaveProperty('color');
       });
+    });
+  });
+
+  describe('Story 46.3 — getEnvironmentBadgeColor (AC5)', () => {
+    it('retourne la couleur production pour "production" (lowercase)', () => {
+      expect(getEnvironmentBadgeColor('production')).toBe(STYLE_TOKENS.environmentBadgeColor.production);
+    });
+
+    it('retourne la couleur production pour "PRODUCTION" (uppercase)', () => {
+      expect(getEnvironmentBadgeColor('PRODUCTION')).toBe(STYLE_TOKENS.environmentBadgeColor.production);
+    });
+
+    it('retourne la couleur production pour "prod" alias', () => {
+      expect(getEnvironmentBadgeColor('prod')).toBe(STYLE_TOKENS.environmentBadgeColor.prod);
+    });
+
+    it('retourne la couleur staging pour "staging"', () => {
+      expect(getEnvironmentBadgeColor('staging')).toBe(STYLE_TOKENS.environmentBadgeColor.staging);
+    });
+
+    it('retourne la couleur preprod pour "preprod"', () => {
+      expect(getEnvironmentBadgeColor('preprod')).toBe(STYLE_TOKENS.environmentBadgeColor.preprod);
+    });
+
+    it('retourne la couleur dev pour "dev"', () => {
+      expect(getEnvironmentBadgeColor('dev')).toBe(STYLE_TOKENS.environmentBadgeColor.dev);
+    });
+
+    it('retourne la couleur development pour "development"', () => {
+      expect(getEnvironmentBadgeColor('development')).toBe(STYLE_TOKENS.environmentBadgeColor.development);
+    });
+
+    it('retourne la couleur test pour "test"', () => {
+      expect(getEnvironmentBadgeColor('test')).toBe(STYLE_TOKENS.environmentBadgeColor.test);
+    });
+
+    it('retourne gris pour un environnement inconnu', () => {
+      expect(getEnvironmentBadgeColor('recette')).toBe(STYLE_TOKENS.environmentBadgeColor.default);
+    });
+
+    it('retourne gris pour une chaîne vide', () => {
+      expect(getEnvironmentBadgeColor('')).toBe(STYLE_TOKENS.environmentBadgeColor.default);
+    });
+
+    it('retourne gris pour null', () => {
+      expect(getEnvironmentBadgeColor(null)).toBe(STYLE_TOKENS.environmentBadgeColor.default);
+    });
+
+    it('retourne gris pour undefined', () => {
+      expect(getEnvironmentBadgeColor(undefined)).toBe(STYLE_TOKENS.environmentBadgeColor.default);
+    });
+
+    it('normalise les tirets et underscores (pre-prod → preprod)', () => {
+      expect(getEnvironmentBadgeColor('pre-prod')).toBe(STYLE_TOKENS.environmentBadgeColor.preprod);
     });
   });
 });

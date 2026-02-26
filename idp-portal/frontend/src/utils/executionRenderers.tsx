@@ -36,6 +36,19 @@ import { useTheme } from '../contexts/ThemeContext';
 import { getIconUrl } from './iconUrl';
 import { getEngineIconUrl } from './engineIconCache';
 
+/**
+ * Returns the fixed badge color for a given environment name (Story 46.3, AC5).
+ * Uses STYLE_TOKENS.environmentBadgeColor for consistency — fallback on gray for unknowns.
+ *
+ * @param env - Environment name (e.g. "production", "staging", "dev")
+ */
+export function getEnvironmentBadgeColor(env: string | undefined | null): string {
+  if (!env) return STYLE_TOKENS.environmentBadgeColor.default;
+  const key = env.toLowerCase().replace(/[^a-z]/g, '');
+  return (STYLE_TOKENS.environmentBadgeColor as Record<string, string>)[key]
+    ?? STYLE_TOKENS.environmentBadgeColor.default;
+}
+
 /** Engine icon size in execution tables (px) - clearly visible vendor logos.
  * Increased from 44px to 56px for better visibility and proportion with platform icons.
  */
