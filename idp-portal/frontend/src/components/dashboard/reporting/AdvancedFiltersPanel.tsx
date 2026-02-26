@@ -214,6 +214,7 @@ export function AdvancedFiltersPanel({
         onClick={handleReset}
         disabled={activeFiltersCount === 0 || loading}
         data-testid="filter-reset"
+        style={{ minHeight: 44 }}
       >
         Réinitialiser
       </Button>

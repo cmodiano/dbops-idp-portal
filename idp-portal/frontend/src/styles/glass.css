@@ -610,7 +610,20 @@ html.dark .ant-tabs-tab-active .ant-tabs-tab-btn {
 }
 
 .ant-picker-large .ant-picker-input {
-  min-height: 44px;
+  min-height: 44px !important;
+}
+
+/* Utility classes for touch targets (opt-in) */
+.touch-target {
+  min-height: 44px !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+.touch-target-sm {
+  min-height: 36px !important;
+  display: flex !important;
+  align-items: center !important;
 }
 
 /* S'assurer que les dropdowns et popovers ne sont pas affectés */

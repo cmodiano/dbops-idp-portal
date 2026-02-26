@@ -206,6 +206,7 @@ export function CalendarFiltersPanel({
                 onClick={handleReset}
                 disabled={activeFilterCount === 0 || loading}
                 data-testid="filter-reset"
+                style={{ minHeight: 44 }}
               >
                 Réinitialiser
               </Button>

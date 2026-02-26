@@ -115,10 +115,11 @@ describe('HorizontalFilters', () => {
       expect(largeSelects.length).toBe(2);
     });
 
-    it('aucun Select n\'a size="small" ou size="middle" exclusivement', () => {
+    it('aucun Select n\'a size="small" ou size="middle"', () => {
       const { container } = render(<HorizontalFilters {...defaultProps} />);
 
       expect(container.querySelectorAll('.ant-select-sm')).toHaveLength(0);
+      expect(container.querySelectorAll('.ant-select-md')).toHaveLength(0);
     });
   });
 });

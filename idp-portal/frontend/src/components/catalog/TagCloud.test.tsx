@@ -152,11 +152,12 @@ describe('TagCloud', () => {
       expect(handleChange).toHaveBeenCalledWith(['oracle']);
     });
 
-    it('le bouton réinitialiser n\'a pas size="small"', () => {
+    it('le bouton réinitialiser respecte la hauteur minimale 44px', () => {
       renderWithTheme(<TagCloud tags={mockTags} selectedTags={['oracle']} onSelectionChange={() => {}} />);
 
       const resetBtn = screen.getByRole('button', { name: 'Réinitialiser les filtres par tags' });
-      expect(resetBtn).not.toHaveClass('ant-btn-sm');
+      const minHeight = window.getComputedStyle(resetBtn).minHeight;
+      expect(parseInt(minHeight, 10)).toBeGreaterThanOrEqual(44);
     });
   });
 });
