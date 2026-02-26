@@ -346,7 +346,23 @@ REST_FRAMEWORK = {
 # ============================================================================
 SPECTACULAR_SETTINGS = {
     'TITLE': 'DBOps Portal API',
-    'DESCRIPTION': "API REST pour le portail DBOps — Gestion et exécution d'actions DBA",
+    'DESCRIPTION': """API REST pour le portail DBOps — Gestion et exécution d'actions DBA
+
+## Authentification via API key
+
+Pour tester les endpoints protégés dans Swagger UI avec une API key (sans flow SAML) :
+
+1. **Obtenir un JWT** : Appeler `POST /api/v1/auth/token` avec le header `X-API-Key` contenant votre clé API
+2. **Copier le token** : Extraire `access_token` de la réponse JSON (`data.access_token`)
+3. **Authorize** : Cliquer sur le bouton "Authorize" en haut à droite, coller le token (sans préfixe "Bearer" — Swagger l'ajoute automatiquement)
+
+```
+curl -X POST http://localhost:8000/api/v1/auth/token \\
+  -H "X-API-Key: <votre_clé>" | jq .data.access_token
+```
+
+> **Note** : Rate limit 10 requêtes/minute sur `POST /auth/token`. Les clés API se créent depuis le portail → menu utilisateur → "Mes clés API".
+""",
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
     'SWAGGER_UI_SETTINGS': {
@@ -356,6 +372,8 @@ SPECTACULAR_SETTINGS = {
     },
     'COMPONENT_SPLIT_REQUEST': True,
     'SCHEMA_PATH_PREFIX': r'/api/v1',
+    # bearerAuth est le scheme global (tous les endpoints protégés).
+    # apiKeyAuth est endpoint-specific (POST /auth/token uniquement, via @extend_schema security=[]).
     'SECURITY': [{'bearerAuth': []}],
     'APPEND_COMPONENTS': {
         'securitySchemes': {
@@ -363,7 +381,13 @@ SPECTACULAR_SETTINGS = {
                 'type': 'http',
                 'scheme': 'bearer',
                 'bearerFormat': 'JWT',
-            }
+            },
+            'apiKeyAuth': {
+                'type': 'apiKey',
+                'in': 'header',
+                'name': 'X-API-Key',
+                'description': 'API key pour échanger contre un JWT via POST /auth/token',
+            },
         }
     },
     'TAGS': [

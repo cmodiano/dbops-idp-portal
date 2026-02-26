@@ -18,6 +18,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiResponse
 
 from idp_auth.models import User, APIKey
 from idp_auth.serializers import (
@@ -514,9 +515,33 @@ class APIKeyTokenView(APIView):
     POST /auth/token - Échanger une API key contre un JWT access token.
     Permet la consommation programmatique de l'API (scripts CI/CD).
     """
+
     permission_classes = [AllowAny]
     throttle_classes = [ApiKeyTokenThrottle]
 
+    @extend_schema(
+        tags=['auth'],
+        summary='Échanger API key contre JWT',
+        description=(
+            'Échange une API key (header X-API-Key) contre un token JWT. '
+            'Utilisez ce token dans le bouton Authorize de Swagger UI pour tester les endpoints protégés. '
+            'Rate limit : 10 requêtes/minute.'
+        ),
+        parameters=[
+            OpenApiParameter(
+                name='X-API-Key',
+                type=str,
+                location=OpenApiParameter.HEADER,
+                required=True,
+                description='API key (créée via portail ou commande create_api_key)',
+            ),
+        ],
+        responses={
+            200: OpenApiResponse(description='Token JWT retourné dans data.access_token'),
+            401: OpenApiResponse(description='MISSING_API_KEY ou INVALID_API_KEY'),
+        },
+        auth=['apiKeyAuth'],
+    )
     def post(self, request: Request) -> Response:
         raw_key = request.META.get('HTTP_X_API_KEY', '').strip()
         if not raw_key:
