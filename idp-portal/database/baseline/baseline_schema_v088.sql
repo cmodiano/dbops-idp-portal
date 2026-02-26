@@ -875,6 +875,13 @@ CREATE OR REPLACE PACKAGE BODY PKG_IDP_MAINTENANCE AS
         v_part_date     DATE;
         v_rows_estimate NUMBER;
     BEGIN
+        IF p_retention_months IS NULL OR p_retention_months < 1 OR p_retention_months > 600 THEN
+            RAISE_APPLICATION_ERROR(-20001, 'purge_executions: p_retention_months must be between 1 and 600, got ' || NVL(TO_CHAR(p_retention_months), 'NULL'));
+        END IF;
+        IF p_dry_run NOT IN (0, 1) THEN
+            RAISE_APPLICATION_ERROR(-20002, 'purge_executions: p_dry_run must be 0 or 1, got ' || NVL(TO_CHAR(p_dry_run), 'NULL'));
+        END IF;
+
         v_cutoff_date := ADD_MONTHS(TRUNC(SYSDATE, 'MM'), -p_retention_months);
 
         FOR r IN (
@@ -909,6 +916,14 @@ CREATE OR REPLACE PACKAGE BODY PKG_IDP_MAINTENANCE AS
 
                     log_maintenance('EXECUTIONS', r.PARTITION_NAME, 'PREREQ_DELETE',
                         'SUCCESS', 0, 'EXECUTION_TARGETS orphelins supprimés: ' || SQL%ROWCOUNT || ' rows');
+
+                    EXECUTE IMMEDIATE
+                        'DELETE FROM SCHEDULED_EXECUTIONS '
+                        || 'WHERE EXECUTION_ID IN '
+                        || '(SELECT ID FROM EXECUTIONS PARTITION (' || r.PARTITION_NAME || '))';
+
+                    log_maintenance('EXECUTIONS', r.PARTITION_NAME, 'PREREQ_DELETE',
+                        'SUCCESS', 0, 'SCHEDULED_EXECUTIONS references supprimées: ' || SQL%ROWCOUNT || ' rows');
 
                     COMMIT;
 
@@ -949,6 +964,13 @@ CREATE OR REPLACE PACKAGE BODY PKG_IDP_MAINTENANCE AS
         v_part_date     DATE;
         v_rows_estimate NUMBER;
     BEGIN
+        IF p_retention_months IS NULL OR p_retention_months < 1 OR p_retention_months > 600 THEN
+            RAISE_APPLICATION_ERROR(-20003, 'purge_audit_log: p_retention_months must be between 1 and 600, got ' || NVL(TO_CHAR(p_retention_months), 'NULL'));
+        END IF;
+        IF p_dry_run NOT IN (0, 1) THEN
+            RAISE_APPLICATION_ERROR(-20004, 'purge_audit_log: p_dry_run must be 0 or 1, got ' || NVL(TO_CHAR(p_dry_run), 'NULL'));
+        END IF;
+
         v_cutoff_date := ADD_MONTHS(TRUNC(SYSDATE, 'MM'), -p_retention_months);
 
         FOR r IN (

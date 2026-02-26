@@ -37,7 +37,7 @@ flyway \
   baseline
 ```
 
-> Cette commande enregistre une ligne dans `flyway_schema_history` indiquant que la base est déjà au niveau V088 (success=true). Flyway ne re-jouera pas V000–V088. **Aucune migration incrémentale n'est nécessaire.**
+> Cette commande enregistre une ligne dans `flyway_schema_history` indiquant que la base est déjà au niveau V088 (success=true). Flyway ne re-jouera pas V000–V088. **Aucune migration incrémentale n'est nécessaire pour V000–V088.** Les migrations futures (V089 et au-delà) devront toutefois être appliquées via `flyway migrate` lorsqu'elles seront disponibles — ne pas les ignorer.
 
 ### Étape 3 : Vérifier le résultat
 

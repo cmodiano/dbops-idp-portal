@@ -32,7 +32,7 @@ repos:
     hooks:
       - id: eslint-frontend
         name: eslint (frontend)
-        entry: bash -c 'cd idp-portal/frontend && npm run lint'
+        entry: "bash -c 'if [ ! -d idp-portal/frontend/node_modules ]; then echo \"Skip eslint (no node_modules). Install: cd idp-portal/frontend && npm install\"; exit 0; fi; cd idp-portal/frontend && npm run lint'"
         language: system
         files: ^idp-portal/frontend/.*\.(ts|tsx|js|jsx)$
         pass_filenames: false
@@ -42,7 +42,7 @@ repos:
     hooks:
       - id: typecheck-frontend
         name: typecheck (frontend)
-        entry: bash -c 'cd idp-portal/frontend && npm run typecheck'
+        entry: "bash -c 'if [ ! -d idp-portal/frontend/node_modules ]; then echo \"Skip typecheck (no node_modules). Install: cd idp-portal/frontend && npm install\"; exit 0; fi; cd idp-portal/frontend && npm run typecheck'"
         language: system
         files: ^idp-portal/frontend/.*\.(ts|tsx|js|jsx)$
         pass_filenames: false

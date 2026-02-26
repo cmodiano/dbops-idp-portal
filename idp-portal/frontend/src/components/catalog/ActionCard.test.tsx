@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { ThemeProvider } from '../../contexts/ThemeContext';
 import { ActionCard } from './ActionCard';
 import type { ActionPreviewData } from '../../types/api';
@@ -269,6 +270,18 @@ describe('ActionCard', () => {
 
       const ctaButton = screen.getByRole('button', { name: /Voir les détails de Creer PDB Oracle/ });
       fireEvent.click(ctaButton);
+
+      expect(handleClick).toHaveBeenCalledTimes(1);
+    });
+
+    it('keyDown Enter sur le CTA appelle onClick exactement 1 fois (stopPropagation empêche double-déclenchement)', async () => {
+      const handleClick = vi.fn();
+      const user = userEvent.setup();
+      renderWithTheme(<ActionCard action={mockAction} onClick={handleClick} variant="default" />);
+
+      const ctaButton = screen.getByRole('button', { name: /Voir les détails de Creer PDB Oracle/ });
+      ctaButton.focus();
+      await user.keyboard('{Enter}');
 
       expect(handleClick).toHaveBeenCalledTimes(1);
     });

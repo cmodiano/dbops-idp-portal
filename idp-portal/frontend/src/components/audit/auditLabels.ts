@@ -23,6 +23,7 @@ export const ENTITY_TYPE_LABELS: Record<string, string> = {
 export function formatDate(dateStr: string | null): string {
   if (!dateStr) return '—';
   const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return '—';
   return date.toLocaleString('fr-FR', {
     day: '2-digit',
     month: '2-digit',
@@ -38,18 +39,18 @@ export function getEntityLabel(entry: AuditExecutionEntry): string {
     return entry.action_name;
   }
   if (entry.entity_type === 'action') {
-    const name = (entry.details?.name ?? entry.details?.action_name) as string | undefined;
-    if (name) return name;
+    const raw = entry.details?.name ?? entry.details?.action_name;
+    if (typeof raw === 'string') return raw;
     return `Action #${entry.entity_id}`;
   }
   if (entry.entity_type === 'integration') {
-    const code = (entry.details?.action_code ?? entry.details?.integration_type_code) as string | undefined;
-    if (code) return code;
+    const raw = entry.details?.action_code ?? entry.details?.integration_type_code;
+    if (typeof raw === 'string') return raw;
     return `Intégration #${entry.entity_id}`;
   }
   if (entry.entity_type === 'profile') {
-    const name = entry.details?.name as string | undefined;
-    if (name) return name;
+    const raw = entry.details?.name;
+    if (typeof raw === 'string') return raw;
     return `Profil #${entry.entity_id}`;
   }
   if (entry.entity_type === 'user') {

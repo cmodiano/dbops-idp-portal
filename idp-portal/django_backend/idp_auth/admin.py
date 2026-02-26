@@ -88,6 +88,10 @@ class APIKeyAdmin(admin.ModelAdmin):
             if obj.expires_at:
                 instance.expires_at = obj.expires_at
                 instance.save(update_fields=['expires_at', 'updated_at'])
+            obj.pk = instance.pk
+            obj.id = instance.id
+            obj.expires_at = instance.expires_at
+            obj.updated_at = getattr(instance, 'updated_at', None)
             self.message_user(
                 request,
                 f"Clé créée (ID={instance.id}). Copiez-la MAINTENANT — elle ne sera plus affichée : {raw_key}",

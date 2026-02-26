@@ -35,6 +35,7 @@ class TestJazzminInstalledApps(TestCase):
         et l'interface admin utilise le thème Django par défaut.
         """
         apps = list(settings.INSTALLED_APPS)
+        self.assertIn('jazzmin', apps, "jazzmin doit être dans INSTALLED_APPS.")
         self.assertIn('django.contrib.admin', apps, "django.contrib.admin doit être dans INSTALLED_APPS.")
         jazzmin_index = apps.index('jazzmin')
         admin_index = apps.index('django.contrib.admin')
@@ -57,6 +58,9 @@ class TestJazzminInstalledApps(TestCase):
     def test_installed_apps_order_daphne_jazzmin_admin(self):
         """L'ordre daphne > jazzmin > django.contrib.admin doit être respecté simultanément."""
         apps = list(settings.INSTALLED_APPS)
+        self.assertIn('daphne', apps, "daphne doit être dans INSTALLED_APPS.")
+        self.assertIn('jazzmin', apps, "jazzmin doit être dans INSTALLED_APPS.")
+        self.assertIn('django.contrib.admin', apps, "django.contrib.admin doit être dans INSTALLED_APPS.")
         daphne_index = apps.index('daphne')
         jazzmin_index = apps.index('jazzmin')
         admin_index = apps.index('django.contrib.admin')

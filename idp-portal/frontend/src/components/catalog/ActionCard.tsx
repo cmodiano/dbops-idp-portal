@@ -275,6 +275,9 @@ export function ActionCard({
                 e.stopPropagation();
                 onClick?.();
               }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') e.stopPropagation();
+              }}
               aria-label={
                 isBusiness
                   ? `Exécuter ${action.name || 'cette action'}`
