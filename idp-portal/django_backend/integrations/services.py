@@ -134,16 +134,28 @@ class IntegrationService:
                 secret_service_id=integration_data.get('secret_service_id'),
             )
             
-            # Set config if provided
+            # NEW-BE-7: Fusionner les saves post-create en un seul appel
+            needs_save = False
+            update_fields = []
+
             if 'config' in integration_data:
                 integration.set_config(integration_data['config'])
-                integration.save()
+                update_fields.append('config')
+                needs_save = True
 
             # Story 24.3: Compute status from catalogue
             computed_status = IntegrationValidationService.validate_integration(integration)
             if integration.status != computed_status:
                 integration.status = computed_status
-                integration.save(update_fields=['status', 'updated_at'])
+                update_fields.extend(['status', 'updated_at'])
+                needs_save = True
+
+            if needs_save:
+                # Toujours inclure updated_at : auto_now=True ne se déclenche pas via
+                # save(update_fields=[...]) sauf si le champ est explicitement listé.
+                if 'updated_at' not in update_fields:
+                    update_fields.append('updated_at')
+                integration.save(update_fields=update_fields)
 
             warnings = []
             if computed_status != IntegrationStatus.VALID:
@@ -259,17 +271,16 @@ class IntegrationService:
         
         old_status = integration.status
 
-        try:
-            integration.save()
-        except IntegrityError:
-            raise ValueError(f"Une intégration avec le nom '{integration_update_data.get('name', integration.name)}' existe déjà")
-
-        # Story 24.3: Recompute status if type changed
+        # NEW-BE-8: Calculer le status AVANT le save pour éviter le double save
         computed_status = IntegrationValidationService.validate_integration(integration)
         warnings = []
         if integration.status != computed_status:
             integration.status = computed_status
-            integration.save(update_fields=['status', 'updated_at'])
+
+        try:
+            integration.save()
+        except IntegrityError:
+            raise ValueError(f"Une intégration avec le nom '{integration_update_data.get('name', integration.name)}' existe déjà")
 
         if old_status != integration.status:
             AuditService.create_entry(
@@ -330,14 +341,16 @@ class IntegrationService:
 
         linked_actions = list(Action.objects.filter(integration_id=integration_id))
         now = timezone.now()
-        disabled_count = 0
 
+        # NEW-BE-6: Bulk update en 1 requête SQL (N+1 → 1)
+        Action.objects.filter(integration_id=integration_id).update(
+            status=ActionStatus.DISABLED,
+            updated_at=now
+        )
+        disabled_count = len(linked_actions)
+
+        # Audit individuel par action (SOC1 — inchangé)
         for action in linked_actions:
-            action.status = ActionStatus.DISABLED
-            action.updated_at = now
-            action.save(update_fields=['status', 'updated_at'])
-            disabled_count += 1
-
             if user:
                 AuditService.create_entry(
                     user_id=str(user.id),
