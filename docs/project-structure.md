@@ -1,6 +1,6 @@
 # Structure du projet – test
 
-**Date :** 2026-02-21  
+**Date :** 2026-02-26  
 **Type de dépôt :** multi-part (2 parties)
 
 ---
@@ -23,7 +23,7 @@ Chaque partie est documentée séparément selon les exigences de son type (web 
 | frontend      | idp-portal/frontend     | web             | Frontend      |
 | django_backend| idp-portal/django_backend | backend       | Django Backend |
 
-- **frontend** : SPA React 19 + Vite 7, Ant Design, React Router ; consomme l’API du backend.
+- **frontend** : SPA React 19 + Vite 7, Ant Design, React Router ; consomme l'API du backend.
 - **django_backend** : Django 5.1, Django REST Framework, Python 3.12 ; API REST, modèles, exécutions, catalogue, intégrations.
 
 ---

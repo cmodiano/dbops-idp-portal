@@ -192,6 +192,25 @@ describe('ReportingDashboard', () => {
     });
   });
 
+  // Story 48.3 AC2: fetchFilterOptions failure is traced via console.warn (not silent)
+  it('logs console.warn when fetchFilterOptions fails (Story 48.3, AC2)', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.mocked(dashboardService.fetchFilterOptions).mockRejectedValue(new Error('Filter fetch failed'));
+
+    await act(async () => {
+      renderWithRouter(<ReportingDashboard />);
+    });
+
+    await waitFor(() => {
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[ReportingDashboard] fetchFilterOptions failed, using fallback options',
+        expect.any(Error),
+      );
+    });
+
+    warnSpy.mockRestore();
+  });
+
   // Story 8.5: Export button integration test
   it('renders export button (Story 8.5, Task 10.6)', async () => {
     await act(async () => {

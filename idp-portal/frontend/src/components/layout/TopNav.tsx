@@ -1,4 +1,5 @@
 import './TopNav.css';
+import { Fragment } from 'react';
 import { Dropdown, Avatar, Space, Typography, theme, Badge, Tooltip } from 'antd';
 import {
   AppstoreOutlined,
@@ -199,7 +200,7 @@ export function TopNav() {
               {buttonContent}
             </Badge>
           ) : (
-            <span key={key}>{buttonContent}</span>
+            <Fragment key={key}>{buttonContent}</Fragment>
           );
         })}
       </div>
