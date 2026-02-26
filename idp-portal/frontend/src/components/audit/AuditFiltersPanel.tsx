@@ -108,8 +108,7 @@ export function AuditFiltersPanel({
       >
         <Button
           icon={<ClearOutlined />}
-          size="large"
-          style={{ minHeight: 44 }}
+          size="middle"
           onClick={onResetFilters}
           disabled={activeFilterCount === 0}
           data-testid="audit-filter-reset"
@@ -133,10 +132,9 @@ export function AuditFiltersPanel({
       style={{ marginBottom: 16 }}
       data-testid="audit-filters-panel"
     >
-      <Space wrap>
+      <Space wrap align="center">
         <RangePicker
-          size="large"
-          style={{ minHeight: 44 }}
+          size="middle"
           presets={PERIOD_PRESETS}
           value={dateRange}
           onChange={(dates) => setDateRange(dates || [null, null])}
@@ -144,8 +142,8 @@ export function AuditFiltersPanel({
           allowClear
         />
         <Select
-          size="large"
-          style={{ width: 140, minHeight: 44 }}
+          size="middle"
+          style={{ width: 140 }}
           placeholder="Environnement"
           aria-label="Filtre Environnement"
           options={environmentOptions}
@@ -156,8 +154,8 @@ export function AuditFiltersPanel({
           data-testid="audit-filter-environment"
         />
         <Select
-          size="large"
-          style={{ width: 160, minHeight: 44 }}
+          size="middle"
+          style={{ width: 160 }}
           placeholder="Moteur"
           aria-label="Filtre Moteur (engine_type)"
           options={engineOptions}
@@ -168,8 +166,8 @@ export function AuditFiltersPanel({
           data-testid="audit-filter-engine-type"
         />
         <Select
-          size="large"
-          style={{ width: 200, minHeight: 44 }}
+          size="middle"
+          style={{ width: 200 }}
           placeholder="Action"
           aria-label="Filtre Action"
           options={actions.map((a) => ({ label: a.name, value: a.id }))}
@@ -182,8 +180,8 @@ export function AuditFiltersPanel({
           data-testid="audit-filter-action"
         />
         <Select
-          size="large"
-          style={{ width: 120, minHeight: 44 }}
+          size="middle"
+          style={{ width: 120 }}
           placeholder="Statut"
           options={STATUS_OPTIONS}
           value={status}
@@ -191,8 +189,8 @@ export function AuditFiltersPanel({
           allowClear
         />
         <Select
-          size="large"
-          style={{ width: 220, minHeight: 44 }}
+          size="middle"
+          style={{ width: 220 }}
           placeholder="Opération"
           aria-label="Filtre Opération (action_type)"
           options={ACTION_TYPE_OPTIONS}
@@ -205,8 +203,8 @@ export function AuditFiltersPanel({
           data-testid="audit-filter-action-type"
         />
         <Input
-          size="large"
-          style={{ width: 200, minHeight: 44 }}
+          size="middle"
+          style={{ width: 200 }}
           placeholder="Rechercher un utilisateur"
           aria-label="Recherche utilisateur"
           value={userSearchInput}
@@ -216,8 +214,8 @@ export function AuditFiltersPanel({
         />
         <Tooltip title="Rechercher toutes les traces d'une exécution par son identifiant de corrélation">
           <Input
-            size="large"
-            style={{ width: 220, minHeight: 44 }}
+            size="middle"
+            style={{ width: 220 }}
             placeholder="Correlation ID"
             value={correlationId}
             onChange={(e) => setCorrelationId(e.target.value)}

@@ -148,73 +148,72 @@ export function AdvancedFiltersPanel({
       <FilterOutlined style={{ color: '#8c8c8c' }} />
 
       <Select
-        size="large"
+        size="middle"
         placeholder="Moteur"
         allowClear
         value={filters.engine}
         onChange={handleEngineChange}
         options={engineOptions}
-        style={{ width: 160, minHeight: 44 }}
+        style={{ width: 160 }}
         disabled={loading}
         data-testid="filter-engine"
       />
 
       <Select
-        size="large"
+        size="middle"
         placeholder="Environnement"
         allowClear
         value={filters.environment}
         onChange={handleEnvironmentChange}
         options={environmentOptions}
-        style={{ width: 170, minHeight: 44 }}
+        style={{ width: 170 }}
         disabled={loading}
         data-testid="filter-environment"
       />
 
       <Select
-        size="large"
+        size="middle"
         mode="multiple"
         placeholder="Tags"
         allowClear
         value={filters.tags || []}
         onChange={handleTagsChange}
         options={tagOptions}
-        style={{ minWidth: 170, maxWidth: 300, minHeight: 44 }}
+        style={{ minWidth: 170, maxWidth: 300 }}
         disabled={loading || tagOptions.length === 0}
         maxTagCount="responsive"
         data-testid="filter-tags"
       />
 
       <Select
-        size="large"
+        size="middle"
         placeholder="Statut"
         allowClear
         value={filters.status}
         onChange={handleStatusChange}
         options={STATUS_OPTIONS}
-        style={{ width: 150, minHeight: 44 }}
+        style={{ width: 150 }}
         disabled={loading}
         data-testid="filter-status"
       />
 
       <RangePicker
-        size="large"
+        size="middle"
         value={dateRangeValue}
         onChange={handleDateRangeChange}
         format="DD/MM/YYYY"
         placeholder={['Date début', 'Date fin']}
         disabled={loading}
         data-testid="filter-date-range"
-        style={{ width: 260, minHeight: 44 }}
+        style={{ width: 260 }}
       />
 
       <Button
-        size="large"
+        size="middle"
         icon={<ClearOutlined />}
         onClick={handleReset}
         disabled={activeFiltersCount === 0 || loading}
         data-testid="filter-reset"
-        style={{ minHeight: 44 }}
       >
         Réinitialiser
       </Button>

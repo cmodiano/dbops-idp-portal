@@ -95,24 +95,14 @@ describe('HorizontalFilters', () => {
     expect(selects).toHaveLength(2);
   });
 
-  describe('Story 46.2 — taille minimale 44px (WCAG 2.5.5)', () => {
-    it('les Select ont un style minHeight >= 44px', () => {
+  describe('Taille des champs (size middle pour UI compacte)', () => {
+    it('les Select ont size="middle" (classe ant-select, pas ant-select-lg)', () => {
       const { container } = render(<HorizontalFilters {...defaultProps} />);
 
       const selects = container.querySelectorAll('.ant-select');
       expect(selects.length).toBe(2);
-      selects.forEach((select) => {
-        const el = select as HTMLElement;
-        const minHeight = parseInt(el.style.minHeight);
-        expect(minHeight).toBeGreaterThanOrEqual(44);
-      });
-    });
-
-    it('les Select ont size="large" (classe ant-select-lg)', () => {
-      const { container } = render(<HorizontalFilters {...defaultProps} />);
-
-      const largeSelects = container.querySelectorAll('.ant-select-lg');
-      expect(largeSelects.length).toBe(2);
+      // size="middle" = pas de ant-select-lg (pas de classe large)
+      expect(container.querySelectorAll('.ant-select-lg')).toHaveLength(0);
     });
 
     it('aucun Select n\'a size="small"', () => {

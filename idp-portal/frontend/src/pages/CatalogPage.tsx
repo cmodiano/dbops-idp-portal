@@ -83,8 +83,7 @@ export default function CatalogPage() {
     <Badge count={activeFilterCount} style={{ backgroundColor: token.colorPrimary }}>
       <Button
         icon={<ClearOutlined />}
-        size="large"
-        style={{ minHeight: 44 }}
+        size="middle"
         onClick={resetFilters}
         disabled={activeFilterCount === 0}
       >

@@ -406,8 +406,11 @@ export function renderStatusIndicator(status: ExecutionStatusType): React.ReactN
   return <StatusIndicator status={status} />;
 }
 
-/** Status config with icons for RecentExecutions component (legacy compatibility).
- * Includes Icon component for full status display with text. */
+// Status config avec icons — config locale justifiée (SOLID-FE-10).
+// Usage Icon (RecentExecutions) + couleur hex ≠ Badge Ant Design (BadgeStatusType).
+// EXECUTION_STATUS_BADGE_CONFIG (utils/execution-status.ts) = badges sans icônes.
+// Ce config inclut Icon component (ClockCircleOutlined, SyncOutlined…) absent de la source partagée.
+// Consommateurs : RecentExecutions.tsx — ne pas supprimer ni migrer vers execution-status.ts.
 export const STATUS_CONFIG: Record<
   ExecutionStatusType,
   { label: string; Icon: React.ComponentType<{ spin?: boolean; style?: React.CSSProperties }>; color: string }
