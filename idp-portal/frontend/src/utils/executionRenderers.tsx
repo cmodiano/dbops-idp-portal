@@ -323,9 +323,18 @@ export function renderIntegrationIcon(
   );
 }
 
-/** Status badge configuration for status indicator (AC2, AC3).
+/**
+ * Status badge configuration for StatusIndicator component (AC2, AC3).
  * - processing: Pulsing animation for running states
  * - success/error/default/warning: Fixed color for terminal states
+ *
+ * SOLID-FE-10 — config locale justifiée : NE PAS remplacer par EXECUTION_STATUS_BADGE_CONFIG.
+ * Différences intentionnelles avec execution-status.ts :
+ *   1. Labels FÉMININS ("Soumise", "Terminée", "Annulée") pour renderers de colonnes inline
+ *      (vs. masculins "Soumis", "Terminé", "Annulé" dans EXECUTION_STATUS_BADGE_CONFIG pour ExecutionView standalone)
+ *   2. Champ `color` (hex) pour la bordure du Tag — absent de EXECUTION_STATUS_BADGE_CONFIG (BadgeStatusType uniquement)
+ *   3. PENDING_APPROVAL = "En attente" (court) vs "En attente approbation" (précis) — usage différent
+ * Privé : consommé uniquement par StatusIndicator dans ce fichier.
  */
 const STATUS_BADGE_CONFIG: Record<
   ExecutionStatusType,

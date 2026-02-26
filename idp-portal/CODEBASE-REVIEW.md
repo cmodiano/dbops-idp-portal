@@ -491,7 +491,7 @@ Plus aucun import Ant Design dans `api_client.ts`.
 
 ---
 
-### SOLID-FE-10 [MEDIUM] — ✅ PARTIELLEMENT RESOLVED (Story 34.2) — Status mapping consolidé
+### SOLID-FE-10 [MEDIUM] — ✅ RÉSOLU — Story 48.5 (2026-02-26) — Status mapping consolidé
 
 **Avant :** Mapping status dupliqué dans 3 fichiers.
 
@@ -501,7 +501,7 @@ Plus aucun import Ant Design dans `api_client.ts`.
 
 Les composants `ExecutionTimeline/TimelineStepItem.tsx` et `AuditTable.tsx` / `AuditEntryDrawer.tsx` importent depuis cette utility.
 
-**Résiduel :** Des `STATUS_CONFIG` locaux restent dans `ExecutionView.tsx`, `StepDetailDrawer.tsx`, `WorkflowExecutionGraph.tsx`, `IntegrationsTable.tsx`, `ComparisonExecutionsDrawer.tsx`. Certains sont spécifiques à leur domaine (status intégration ≠ status exécution ≠ status step), d'autres sont des doublons résiduels.
+**Résolution complète (Story 48.5, 2026-02-26) :** Audit des 5 fichiers ciblés — `ExecutionView.tsx`, `StepDetailDrawer.tsx`, `ComparisonExecutionsDrawer.tsx` importent depuis `utils/execution-status.ts`. `WorkflowExecutionGraph.tsx` conserve `STATUS_COLORS` local (React Flow hex ≠ Ant Design Badge, SELECTED sans équivalent partagé). `IntegrationsTable.tsx` conserve `STATUS_CONFIG` local (domaine distinct : valid/invalid/deprecated ≠ statuts d'exécution). `executionRenderers.tsx STATUS_CONFIG` conservé avec justification SOLID-FE-10 (utilisé par `RecentExecutions.tsx`, inclut Icon components absents de la source partagée). Aucune duplication active — chaque config locale est justifiée par domaine ou format différent.
 
 ---
 
@@ -693,7 +693,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | # | Issue | Type | Effort |
 |---|-------|------|--------|
 | SEC-12 | Validation URL minimale (accepte IP privées, credentials, ports arbitraires) | Sécurité | Faible |
-| SOLID-FE-10 | STATUS_CONFIG duplication résiduelle dans 5 fichiers | Frontend | Faible |
+| ~~SOLID-FE-10~~ ✅ | ~~STATUS_CONFIG duplication résiduelle dans 5 fichiers~~ Résolu — Story 48.5 (2026-02-26) | Frontend | — |
 | NEW-BE-7 | Double `.save()` dans `IntegrationService.create_integration()` | Backend | Trivial |
 | NEW-BE-8 | Double `.save()` dans `IntegrationService.update_integration()` | Backend | Trivial |
 | NEW-BE-9 | N+1 `.save()` en boucle dans `CatalogService.deactivate_action()` | Backend | Faible |
@@ -761,7 +761,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 1. SEC-13/14 — Corrections sécurité mineures (TLS, path traversal)
 2. NEW-BE-10 — Migration progressive `import logging` → `structlog` (13+ fichiers)
 3. SOLID-FE-4 — Migration progressive des ~25 composants vers hooks (effort élevé, story par story)
-4. SOLID-FE-10 — Consolider `STATUS_CONFIG` résiduel
+4. ~~SOLID-FE-10 — Consolider `STATUS_CONFIG` résiduel~~ ✅ Résolu — Story 48.5 (2026-02-26)
 5. 16.2 — Audit des 77 `except Exception` résiduels pour vérifier documentation
 
 ---

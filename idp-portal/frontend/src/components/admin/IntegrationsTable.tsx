@@ -12,8 +12,10 @@ import { AUTH_FLOW_LABELS } from '../../types/api';
 import { getIconUrl } from '../../utils/iconUrl';
 import { validateIntegration, validateAllIntegrations } from '../../services/integrations_service';
 
-// Statut intégration (admin) — domaine différent des statuts d'exécution, config locale justifiée (SOLID-FE-10).
-// Clés = IntegrationStatusType (valid/invalid/deprecated), format { text } différent de { label } exécution.
+// Statut intégration (admin) — domaine distinct, config locale justifiée (SOLID-FE-10, Story 48.5 2026-02-26).
+// Clés = IntegrationStatusType (valid/invalid/deprecated) ≠ statuts d'exécution (SUBMITTED/RUNNING/COMPLETED…).
+// Format { color, text } différent de { color: BadgeStatusType, label } dans execution-status.ts.
+// Seul consommateur = IntegrationsTable → extraction vers utils/integration-status.ts non justifiée.
 /** Story 24.3: Status badge configuration. */
 const STATUS_CONFIG: Record<string, { color: string; text: string }> = {
   valid: { color: 'success', text: 'Valide' },
