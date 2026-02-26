@@ -294,6 +294,7 @@ describe('ActionCard', () => {
     });
 
     it('affiche le badge "Incomplet" quand tags est null (pas de tags du tout)', () => {
+      // Double cast: simule une API retournant null au lieu de [] ; bypass TypeScript pour ce test edge-case
       const incompleteAction = { ...mockAction, description: null, tags: null as unknown as string[] };
       renderWithTheme(<ActionCard action={incompleteAction} onClick={vi.fn()} />);
 

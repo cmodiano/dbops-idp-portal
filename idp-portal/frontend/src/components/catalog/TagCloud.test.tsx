@@ -144,6 +144,7 @@ describe('TagCloud', () => {
       });
     });
 
+    // Régression: vérifie que le clic sur un tag appelle onChange (comportement déjà couvert par "toggles tag selection on click (AC2)")
     it('les tags existants restent sélectionnables (onChange appelé au clic)', () => {
       const handleChange = vi.fn();
       renderWithTheme(<TagCloud tags={mockTags} selectedTags={[]} onSelectionChange={handleChange} />);
@@ -156,8 +157,8 @@ describe('TagCloud', () => {
       renderWithTheme(<TagCloud tags={mockTags} selectedTags={['oracle']} onSelectionChange={() => {}} />);
 
       const resetBtn = screen.getByRole('button', { name: 'Réinitialiser les filtres par tags' });
-      const minHeight = window.getComputedStyle(resetBtn).minHeight;
-      expect(parseInt(minHeight, 10)).toBeGreaterThanOrEqual(44);
+      const minHeight = parseInt(resetBtn.style.minHeight || '0', 10);
+      expect(minHeight).toBeGreaterThanOrEqual(44);
     });
   });
 });

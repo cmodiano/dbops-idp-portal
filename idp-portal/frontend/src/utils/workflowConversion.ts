@@ -100,7 +100,7 @@ export function workflowStepsToReactFlow(
         targetHandle: 'input',
         type: 'customEdge',
         animated: false,
-        style: { stroke: '#ff4d4f', strokeWidth: 2 },
+        style: { stroke: STYLE_TOKENS.iconError, strokeWidth: 2 },
         label: 'erreur',
         labelStyle: { fontSize: 10, fill: STYLE_TOKENS.textError },
       });
@@ -114,7 +114,7 @@ export function workflowStepsToReactFlow(
         targetHandle: 'input',
         type: 'customEdge',
         animated: false,
-        style: { stroke: '#ff4d4f', strokeWidth: 2 },
+        style: { stroke: STYLE_TOKENS.iconError, strokeWidth: 2 },
         label: 'erreur',
         labelStyle: { fontSize: 10, fill: STYLE_TOKENS.textError },
       });

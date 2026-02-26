@@ -167,7 +167,7 @@ function WorkflowBuilderCanvasInner({
           id: `${params.source}_${sourceHandle}_${params.target}`,
           type: 'customEdge',
           animated: false,
-          style: { stroke: isSuccess ? STYLE_TOKENS.iconSuccess : '#ff4d4f', strokeWidth: 2 },
+          style: { stroke: isSuccess ? STYLE_TOKENS.iconSuccess : STYLE_TOKENS.iconError, strokeWidth: 2 },
           label: isSuccess ? 'succès' : 'erreur',
           labelStyle: { fontSize: 10, fill: isSuccess ? STYLE_TOKENS.textSuccess : STYLE_TOKENS.textError },
         } as Edge;

@@ -14,10 +14,10 @@ Ces tests vérifient que :
 
 from django.apps import apps as django_apps
 from django.conf import settings
-from django.test import TestCase
+from django.test import SimpleTestCase
 
 
-class TestJazzminInstalledApps(TestCase):
+class TestJazzminInstalledApps(SimpleTestCase):
     """Vérifie que jazzmin est correctement positionné dans INSTALLED_APPS (AC2)."""
 
     def test_jazzmin_in_installed_apps(self):
@@ -68,7 +68,7 @@ class TestJazzminInstalledApps(TestCase):
         self.assertLess(jazzmin_index, admin_index, "jazzmin doit précéder django.contrib.admin.")
 
 
-class TestJazzminSettings(TestCase):
+class TestJazzminSettings(SimpleTestCase):
     """Vérifie que JAZZMIN_SETTINGS est correctement configuré (AC3, AC4)."""
 
     def test_jazzmin_settings_defined(self):
@@ -116,7 +116,7 @@ class TestJazzminSettings(TestCase):
         )
 
 
-class TestJazzminUiTweaks(TestCase):
+class TestJazzminUiTweaks(SimpleTestCase):
     """Vérifie que JAZZMIN_UI_TWEAKS active le toggle dark/light mode (AC5)."""
 
     def test_jazzmin_ui_tweaks_defined(self):
@@ -148,7 +148,7 @@ class TestJazzminUiTweaks(TestCase):
         )
 
 
-class TestIdpAuthAppConfig(TestCase):
+class TestIdpAuthAppConfig(SimpleTestCase):
     """Vérifie la configuration AppConfig de idp_auth (Story 45.4 — AC1)."""
 
     def test_idp_auth_verbose_name(self):
@@ -166,7 +166,7 @@ class TestIdpAuthAppConfig(TestCase):
         )
 
 
-class TestJazzminSidebarOrder(TestCase):
+class TestJazzminSidebarOrder(SimpleTestCase):
     """Vérifie l'ordre de la sidebar jazzmin (Story 45.4 — AC3)."""
 
     def test_order_with_respect_to_configured(self):

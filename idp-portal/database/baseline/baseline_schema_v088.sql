@@ -918,12 +918,12 @@ CREATE OR REPLACE PACKAGE BODY PKG_IDP_MAINTENANCE AS
                         'SUCCESS', 0, 'EXECUTION_TARGETS orphelins supprimés: ' || SQL%ROWCOUNT || ' rows');
 
                     EXECUTE IMMEDIATE
-                        'DELETE FROM SCHEDULED_EXECUTIONS '
+                        'UPDATE SCHEDULED_EXECUTIONS SET EXECUTION_ID = NULL '
                         || 'WHERE EXECUTION_ID IN '
                         || '(SELECT ID FROM EXECUTIONS PARTITION (' || r.PARTITION_NAME || '))';
 
-                    log_maintenance('EXECUTIONS', r.PARTITION_NAME, 'PREREQ_DELETE',
-                        'SUCCESS', 0, 'SCHEDULED_EXECUTIONS references supprimées: ' || SQL%ROWCOUNT || ' rows');
+                    log_maintenance('EXECUTIONS', r.PARTITION_NAME, 'PREREQ_UPDATE',
+                        'SUCCESS', 0, 'SCHEDULED_EXECUTIONS EXECUTION_ID détachés: ' || SQL%ROWCOUNT || ' rows');
 
                     COMMIT;
 

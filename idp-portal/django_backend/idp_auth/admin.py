@@ -71,7 +71,7 @@ class APIKeyAdmin(admin.ModelAdmin):
     actions = ['revoke_api_keys']
 
     def has_add_permission(self, request: HttpRequest) -> bool:
-        return True
+        return super().has_add_permission(request)
 
     def get_form(self, request: HttpRequest, obj: Any = None, change: bool = False, **kwargs: Any) -> type[ModelForm[Any]]:
         if obj is None:
