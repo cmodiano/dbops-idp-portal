@@ -86,7 +86,11 @@ export function ActionCard({
   const isPreview = variant === 'preview';
   const isBusiness = variant === 'business' || isBusinessProfile;
   const isClickable = !!onClick && !isPreview;
+  const isCtaVisible = !isPreview; // AC 2 Story 46.1: CTA visible même sans onClick (disabled si pas d'onClick)
   const isWorkflow = action.item_type === 'workflow';
+
+  // Story 46.1: action incomplète = pas de description ET pas de tags
+  const isIncomplete = !action.description && (!action.tags || action.tags.length === 0);
 
   // Story 7.1 AC2: Sanitize description for business users
   const displayDescription = isBusiness
@@ -148,6 +152,10 @@ export function ActionCard({
             <span style={{ flexShrink: 0 }}>
               <ImpactIndicator level={action.impact_level} size="small" />
             </span>
+          )}
+          {/* Badge "Incomplet" — Story 46.1 */}
+          {isIncomplete && !isPreview && (
+            <Tag color="warning" style={{ margin: 0, fontSize: 11 }}>Incomplet</Tag>
           )}
         </div>
 
@@ -255,6 +263,29 @@ export function ActionCard({
             </Tooltip>
           )}
         </div>
+        {/* CTA explicite — affordance (Story 46.1) */}
+        {/* AC 2: visible en variant default/business, désactivé si pas d'onClick */}
+        {isCtaVisible && (
+          <div style={{ marginTop: 8 }}>
+            <Button
+              type="default"
+              size="small"
+              disabled={!isClickable}
+              onClick={(e) => {
+                e.stopPropagation();
+                onClick?.();
+              }}
+              aria-label={
+                isBusiness
+                  ? `Exécuter ${action.name || 'cette action'}`
+                  : `Voir les détails de ${action.name || 'cette action'}`
+              }
+              style={{ width: '100%' }}
+            >
+              {isBusiness ? 'Exécuter' : 'Voir les détails'}
+            </Button>
+          </div>
+        )}
       </Space>
     </Card>
   );

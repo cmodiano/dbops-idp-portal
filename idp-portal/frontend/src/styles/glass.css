@@ -71,7 +71,7 @@ html.dark .ant-card {
 
 html.light .ant-card:hover:not(.card-preview) {
   background: rgba(255, 255, 255, 0.68) !important;
-  border-color: rgba(255, 255, 255, 0.75);
+  border-color: rgba(0, 135, 78, 0.35);  /* Story 46.1: vert primaire translucide */
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.03),
     0 0 56px rgba(0, 0, 0, 0.06),
@@ -80,7 +80,7 @@ html.light .ant-card:hover:not(.card-preview) {
 }
 
 html.dark .ant-card:hover:not(.card-preview) {
-  border-color: rgba(255, 255, 255, 0.18);
+  border-color: rgba(0, 184, 94, 0.45);  /* Story 46.1: vert primaire lumineux dark mode */
   background: rgba(38, 38, 52, 0.95) !important;
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.3),

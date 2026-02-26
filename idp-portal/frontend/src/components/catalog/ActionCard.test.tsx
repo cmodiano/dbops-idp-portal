@@ -202,6 +202,92 @@ describe('ActionCard', () => {
     });
   });
 
+  // Story 46.1: affordance — CTA, badge "Incomplet"
+  describe('Story 46.1 — affordance', () => {
+    it('affiche le CTA "Voir les détails" quand onClick fourni, variant default', () => {
+      const handleClick = vi.fn();
+      renderWithTheme(<ActionCard action={mockAction} onClick={handleClick} variant="default" />);
+
+      expect(screen.getByRole('button', { name: /Voir les détails de Creer PDB Oracle/ })).toBeInTheDocument();
+      expect(screen.getByText('Voir les détails')).toBeInTheDocument();
+    });
+
+    it('affiche le CTA "Exécuter" quand onClick fourni, variant business', () => {
+      const handleClick = vi.fn();
+      renderWithTheme(<ActionCard action={mockAction} onClick={handleClick} variant="business" />);
+
+      expect(screen.getByRole('button', { name: /Exécuter Creer PDB Oracle/ })).toBeInTheDocument();
+      expect(screen.getByText('Exécuter')).toBeInTheDocument();
+    });
+
+    it('n\'affiche pas le CTA en variant preview', () => {
+      const handleClick = vi.fn();
+      renderWithTheme(<ActionCard action={mockAction} onClick={handleClick} variant="preview" />);
+
+      expect(screen.queryByText('Voir les détails')).not.toBeInTheDocument();
+      expect(screen.queryByText('Exécuter')).not.toBeInTheDocument();
+    });
+
+    it('affiche le badge "Incomplet" quand description null ET tags vide', () => {
+      const incompleteAction = { ...mockAction, description: null, tags: [] };
+      renderWithTheme(<ActionCard action={incompleteAction} onClick={vi.fn()} />);
+
+      expect(screen.getByText('Incomplet')).toBeInTheDocument();
+    });
+
+    it('n\'affiche pas le badge "Incomplet" quand description présente', () => {
+      renderWithTheme(<ActionCard action={mockAction} onClick={vi.fn()} />);
+
+      expect(screen.queryByText('Incomplet')).not.toBeInTheDocument();
+    });
+
+    it('n\'affiche pas le badge "Incomplet" quand tags présents (même sans description)', () => {
+      const actionWithTagsNoDesc = { ...mockAction, description: null, tags: ['oracle'] };
+      renderWithTheme(<ActionCard action={actionWithTagsNoDesc} onClick={vi.fn()} />);
+
+      expect(screen.queryByText('Incomplet')).not.toBeInTheDocument();
+    });
+
+    it('n\'affiche pas le badge "Incomplet" en variant preview', () => {
+      const incompleteAction = { ...mockAction, description: null, tags: [] };
+      renderWithTheme(<ActionCard action={incompleteAction} variant="preview" />);
+
+      expect(screen.queryByText('Incomplet')).not.toBeInTheDocument();
+    });
+
+    it('le CTA a un aria-label explicite', () => {
+      const handleClick = vi.fn();
+      renderWithTheme(<ActionCard action={mockAction} onClick={handleClick} variant="default" />);
+
+      const ctaButton = screen.getByRole('button', { name: /Voir les détails de Creer PDB Oracle/ });
+      expect(ctaButton).toHaveAttribute('aria-label', 'Voir les détails de Creer PDB Oracle');
+    });
+
+    it('cliquer le CTA appelle onClick exactement 1 fois (stopPropagation empêche double-déclenchement)', () => {
+      const handleClick = vi.fn();
+      renderWithTheme(<ActionCard action={mockAction} onClick={handleClick} variant="default" />);
+
+      const ctaButton = screen.getByRole('button', { name: /Voir les détails de Creer PDB Oracle/ });
+      fireEvent.click(ctaButton);
+
+      expect(handleClick).toHaveBeenCalledTimes(1);
+    });
+
+    it('affiche le CTA désactivé quand aucun onClick fourni (AC 2: désactivé, pas absent)', () => {
+      renderWithTheme(<ActionCard action={mockAction} variant="default" />);
+
+      const ctaButton = screen.getByRole('button', { name: /Voir les détails/ });
+      expect(ctaButton).toBeDisabled();
+    });
+
+    it('affiche le badge "Incomplet" quand tags est null (pas de tags du tout)', () => {
+      const incompleteAction = { ...mockAction, description: null, tags: null as unknown as string[] };
+      renderWithTheme(<ActionCard action={incompleteAction} onClick={vi.fn()} />);
+
+      expect(screen.getByText('Incomplet')).toBeInTheDocument();
+    });
+  });
+
   // Story 7.1: Business variant tests
   describe('business variant (Story 7.1)', () => {
     const actionWithTechnicalTerms: ActionPreviewData = {

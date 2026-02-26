@@ -2,7 +2,7 @@
 -- Story 9.8: Script de validation de la contrainte CHECK CK_AUDIT_LOG_ACTION_TYPE
 --
 -- Usage:
---   sqlplus idp_app/changeme@localhost:1521/FREEPDB1 @scripts/validate-audit-log-constraint.sql
+--   sqlplus idp_app/Oracle123!@localhost:1521/FREEPDB1 @scripts/validate-audit-log-constraint.sql
 --
 -- Ce script vérifie que tous les action types attendus sont présents dans la contrainte CHECK.
 -- Il échoue avec RAISE_APPLICATION_ERROR si des types sont manquants.
