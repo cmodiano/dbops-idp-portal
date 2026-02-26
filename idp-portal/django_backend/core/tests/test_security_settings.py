@@ -29,12 +29,15 @@ def _run_settings_check(env_overrides: dict, expect_error: bool = True) -> subpr
     Returns:
         CompletedProcess with stdout/stderr.
     """
-    # Build a clean env with only what we need
+    # Build a clean env with only what we need.
+    # DJANGO_SECURITY_TEST=1 prevents settings.py from loading .env.development,
+    # so we can test fail-fast when secrets are missing (CI may have .env committed).
     env = {
         'PATH': os.environ.get('PATH', ''),
         'HOME': os.environ.get('HOME', ''),
         'PYTHONPATH': DJANGO_BACKEND_DIR,
         'DJANGO_SETTINGS_MODULE': 'idp_backend.settings',
+        'DJANGO_SECURITY_TEST': '1',
     }
     env.update(env_overrides)
 
@@ -141,6 +144,7 @@ class TestBothSecretsRequired:
             'HOME': os.environ.get('HOME', ''),
             'PYTHONPATH': DJANGO_BACKEND_DIR,
             'DJANGO_SETTINGS_MODULE': 'idp_backend.settings',
+            'DJANGO_SECURITY_TEST': '1',  # Skip .env so we test fail-fast
         }
         result = subprocess.run(
             [sys.executable, '-m', 'django', 'check', '--deploy'],

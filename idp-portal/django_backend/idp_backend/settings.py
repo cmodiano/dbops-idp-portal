@@ -20,8 +20,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Load .env from project root (django_backend/) so AUTH_DEV_BYPASS etc. are found regardless of cwd
 # Fallback: idp-portal/.env.development when django_backend/.env does not exist
-load_dotenv(BASE_DIR.parent / '.env.development')
-load_dotenv(BASE_DIR / '.env', override=True)
+# Skip when DJANGO_SECURITY_TEST=1 (core/tests/test_security_settings.py) to test fail-fast without .env
+if os.getenv('DJANGO_SECURITY_TEST') != '1':
+    load_dotenv(BASE_DIR.parent / '.env.development')
+    load_dotenv(BASE_DIR / '.env', override=True)
 
 
 # Quick-start development settings - unsuitable for production
