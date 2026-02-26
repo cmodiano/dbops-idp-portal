@@ -261,6 +261,19 @@ class UploadIconView(APIView):
 
         # Write file to disk with error handling
         icon_path = icons_dir / unique_filename
+
+        # SEC-14: Defense-in-depth — verify path stays inside icons_dir (path traversal prevention)
+        if not icon_path.resolve().is_relative_to(icons_dir.resolve()):
+            logger.error(
+                "icon_upload_path_traversal",
+                extra={"icon_path": str(icon_path.resolve()), "icons_dir": str(icons_dir.resolve())},
+            )
+            raise BadRequestError(
+                code="PATH_TRAVERSAL_DETECTED",
+                message="Chemin d'écriture invalide — tentative de path traversal détectée.",
+                details={},
+            )
+
         try:
             with open(icon_path, 'wb') as f:
                 if sanitized_content is not None:

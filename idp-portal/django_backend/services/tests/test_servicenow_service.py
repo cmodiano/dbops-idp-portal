@@ -8,6 +8,7 @@ Tests:
 """
 import pytest
 from unittest.mock import patch, MagicMock
+from django.test import override_settings
 
 import httpx
 
@@ -125,3 +126,46 @@ class TestServiceNowCreateChange:
             self.service.create_change(short_description="Network error")
 
         assert "indisponible" in exc_info.value.message.lower()
+
+
+class TestServiceNowTLSEnforcement:
+    """SEC-13: TLS forced in production (Story 48.4)."""
+
+    def setup_method(self):
+        self.service = ServiceNowService(
+            base_url="https://snow.example.com",
+            auth_headers={"Authorization": "Bearer test-token"},
+        )
+
+    def _make_mock_client(self, mock_client_class):
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"result": {"number": "CHG0001"}}
+        mock_response.raise_for_status = MagicMock()
+        mock_client = MagicMock()
+        mock_client.post.return_value = mock_response
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client_class.return_value = mock_client
+        return mock_client
+
+    @patch("services.servicenow_service.httpx.Client")
+    @override_settings(DEBUG=False, SERVICENOW_VERIFY_TLS=False)
+    def test_tls_forced_in_production(self, mock_client_class):
+        """SEC-13: verify=True even when SERVICENOW_VERIFY_TLS=False in production (DEBUG=False)."""
+        self._make_mock_client(mock_client_class)
+
+        self.service.create_change(short_description="SEC-13 prod test")
+
+        call_kwargs = mock_client_class.call_args[1]
+        assert call_kwargs["verify"] is True, "TLS doit être forcé True en production"
+
+    @patch("services.servicenow_service.httpx.Client")
+    @override_settings(DEBUG=True, SERVICENOW_VERIFY_TLS=False)
+    def test_tls_override_allowed_in_debug(self, mock_client_class):
+        """SEC-13: verify=False respected in DEBUG=True (dev environment)."""
+        self._make_mock_client(mock_client_class)
+
+        self.service.create_change(short_description="SEC-13 dev test")
+
+        call_kwargs = mock_client_class.call_args[1]
+        assert call_kwargs["verify"] is False, "verify=False doit être respecté en DEBUG mode"

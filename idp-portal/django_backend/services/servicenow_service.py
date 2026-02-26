@@ -40,6 +40,13 @@ class ServiceNowService:
         self.auth_headers = auth_headers
         logger.info("servicenow_service_initialized", base_url=self.base_url)
 
+    def _get_verify_tls(self) -> bool:
+        """SEC-13: Return TLS verification flag, forced True in production (DEBUG=False)."""
+        verify_tls = getattr(settings, 'SERVICENOW_VERIFY_TLS', True)
+        if not settings.DEBUG:
+            verify_tls = True
+        return verify_tls
+
     def create_change(
         self,
         change_model_code: str | None = None,
@@ -73,7 +80,7 @@ class ServiceNowService:
             payload["chg_model"] = change_model_code
 
         timeout = getattr(settings, 'SERVICENOW_TIMEOUT', 30)
-        verify_tls = getattr(settings, 'SERVICENOW_VERIFY_TLS', True)
+        verify_tls = self._get_verify_tls()
 
         try:
             with httpx.Client(headers=self.auth_headers, timeout=timeout, verify=verify_tls) as client:
