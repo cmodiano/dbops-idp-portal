@@ -368,7 +368,7 @@ class TestWorkflowRuntimeGateConditions:
         assert output['gate_status'][0]['satisfied'] is False
 
     def test_step_without_gate_conditions_executes_normally(self):
-        """If step has NO gate_conditions, ExecutionStep is created normally."""
+        """If step has NO gate_conditions, ExecutionStep is created normally (not WAITING)."""
         ref_action = self._create_ref_action()
 
         execution = self._create_workflow([
@@ -383,12 +383,18 @@ class TestWorkflowRuntimeGateConditions:
 
         runtime = WorkflowRuntime(execution)
         step_def = runtime.workflow_steps[0]
-        result = runtime._execute_step(step_def)
+
+        # Story 47.2: avec integration → async dispatch. Mocker apply_async pour éviter
+        # l'exécution ALWAYS_EAGER qui tenterait de vraiment appeler l'adapter AAP.
+        from unittest.mock import patch
+        with patch("executions.tasks.trigger.trigger_platform_job.apply_async"):
+            result = runtime._execute_step(step_def)
 
         assert result.outcome == StepOutcome.SUCCESS
 
         step = ExecutionStep.objects.get(execution=execution, step_order=1)
-        assert step.status == 'COMPLETED'
+        # Story 47.2: async dispatch → step reste RUNNING jusqu'à ce que trigger_platform_job complète
+        assert step.status == 'RUNNING'
 
     def test_step_with_empty_gate_conditions_executes_normally(self):
         """Empty gate_conditions list means no gates — normal execution."""
@@ -446,7 +452,11 @@ class TestWorkflowRuntimeGateConditions:
         ])
 
         runtime = WorkflowRuntime(execution)
-        final_status = runtime.run()
+        # Story 47.2: avec integration → async dispatch. Mocker apply_async pour éviter
+        # l'exécution ALWAYS_EAGER qui tenterait de vraiment appeler l'adapter AAP.
+        from unittest.mock import patch
+        with patch("executions.tasks.trigger.trigger_platform_job.apply_async"):
+            final_status = runtime.run()
 
         # Workflow should stay RUNNING (not COMPLETED or FAILED)
         assert final_status == ExecutionStatus.RUNNING
@@ -454,8 +464,8 @@ class TestWorkflowRuntimeGateConditions:
         steps = ExecutionStep.objects.filter(execution=execution).order_by('step_order')
         assert steps.count() == 2
 
-        # First step completed normally
-        assert steps[0].status == 'COMPLETED'
+        # First step async-dispatched → reste RUNNING jusqu'à ce que trigger_platform_job complète
+        assert steps[0].status == 'RUNNING'
 
         # Second step is WAITING
         assert steps[1].status == 'WAITING'

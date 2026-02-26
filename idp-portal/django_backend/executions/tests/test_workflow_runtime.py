@@ -26,7 +26,7 @@ from executions.workflow_runtime import (
 )
 from executions.models import Execution, ExecutionStatus, ExecutionStep, ExecutionStepStatus
 from catalog.models import ActionStatus, ActionItemType
-from tests.factories import UserFactory, ActionFactory
+from tests.factories import UserFactory, ActionFactory, IntegrationFactory
 
 
 @pytest.mark.django_db
@@ -271,6 +271,13 @@ class TestWorkflowRuntimeExecution:
             status=ActionStatus.PUBLISHED,
         )
 
+        # Story 47.3: actions need integration — fail-fast otherwise
+        integration = IntegrationFactory.create(type="aap")
+        ref_action_1.integration = integration
+        ref_action_1.save()
+        ref_action_2.integration = integration
+        ref_action_2.save()
+
         action = ActionFactory(
             name="Success Workflow",
             category="Administration",
@@ -311,7 +318,8 @@ class TestWorkflowRuntimeExecution:
 
         runtime = WorkflowRuntime(execution)
         with patch("executions.workflow_runtime.AuditService.create_entry") as create_entry:
-            final_status = runtime.run()
+            with patch("executions.tasks.trigger.trigger_platform_job.apply_async"):
+                final_status = runtime.run()
 
         # Verify final status
         assert final_status == ExecutionStatus.COMPLETED
@@ -358,6 +366,11 @@ class TestWorkflowRuntimeExecution:
             platform="AAP",
             status=ActionStatus.PUBLISHED,
         )
+
+        # Story 47.3: error handler action needs integration for async dispatch
+        integration = IntegrationFactory.create(type="aap")
+        ref_action_err.integration = integration
+        ref_action_err.save()
 
         action = ActionFactory(
             name="Error Workflow",
@@ -432,7 +445,8 @@ class TestWorkflowRuntimeExecution:
         runtime._execute_step = mock_execute
 
         with patch("executions.workflow_runtime.AuditService.create_entry") as create_entry:
-            final_status = runtime.run()
+            with patch("executions.tasks.trigger.trigger_platform_job.apply_async"):
+                final_status = runtime.run()
 
         # Should complete (error handler ran successfully)
         assert final_status == ExecutionStatus.COMPLETED
@@ -465,6 +479,13 @@ class TestWorkflowRuntimeExecution:
             platform="AAP",
             status=ActionStatus.PUBLISHED,
         )
+
+        # Story 47.3: actions need integration — steps must succeed to trigger the loop
+        integration = IntegrationFactory.create(type="aap")
+        ref_action_1.integration = integration
+        ref_action_1.save()
+        ref_action_2.integration = integration
+        ref_action_2.save()
 
         action = ActionFactory(
             name="Loop Workflow",
@@ -506,7 +527,8 @@ class TestWorkflowRuntimeExecution:
 
         runtime = WorkflowRuntime(execution)
         with patch("executions.workflow_runtime.AuditService.create_entry"):
-            final_status = runtime.run()
+            with patch("executions.tasks.trigger.trigger_platform_job.apply_async"):
+                final_status = runtime.run()
 
         # Should fail due to loop detection
         assert final_status == ExecutionStatus.FAILED
@@ -587,6 +609,13 @@ class TestWorkflowRuntimeStory412StepParameters:
             status=ActionStatus.PUBLISHED,
             item_type=ActionItemType.WORKFLOW,
         )
+        # Story 47.3: actions need integration — fail-fast otherwise
+        integration = IntegrationFactory.create(type="aap")
+        self.ref_action_1.integration = integration
+        self.ref_action_1.save()
+        self.ref_action_2.integration = integration
+        self.ref_action_2.save()
+
         self.action.execution_steps = ([
             {
                 "step_id": "s1",
@@ -658,7 +687,8 @@ class TestWorkflowRuntimeStory412StepParameters:
 
         runtime = WorkflowRuntime(execution)
         with patch("executions.workflow_runtime.AuditService.create_entry"):
-            runtime.run()
+            with patch("executions.tasks.trigger.trigger_platform_job.apply_async"):
+                runtime.run()
 
         steps = ExecutionStep.objects.filter(execution=execution).order_by("step_order")
         assert steps.count() == 2
@@ -669,9 +699,13 @@ class TestWorkflowRuntimeStory412StepParameters:
         assert out2.get("parameters_used") == {"y": "step2_val"}
         assert out2.get("delegated_from_workflow") is True
 
-    def test_step_loads_referenced_action_and_prepares_adapter_payload(self):
-        """AC5 COMPLETE: Step loads referenced action and prepares full adapter payload."""
-        # Create a referenced action with platform AAP
+    def test_step_loads_referenced_action_and_dispatches_async(self):
+        """AC5 UPDATED (Story 47.3): Step loads referenced action and dispatches async trigger.
+
+        Story 47.3 supprime le chemin simulé : avec integration → async dispatch.
+        """
+        from tests.factories import IntegrationFactory
+        # Create a referenced action with platform AAP and an integration
         ref_action = ActionFactory(
             name="Referenced AAP Action",
             category="Administration",
@@ -679,6 +713,8 @@ class TestWorkflowRuntimeStory412StepParameters:
             platform="AAP",
             status=ActionStatus.PUBLISHED,
         )
+        integration = IntegrationFactory.create(type="aap")
+        ref_action.integration = integration
 
         # Create workflow with step referencing the action
         workflow = ActionFactory(
@@ -718,31 +754,24 @@ class TestWorkflowRuntimeStory412StepParameters:
         # Run workflow
         runtime = WorkflowRuntime(execution)
         with patch("executions.workflow_runtime.AuditService.create_entry"):
-            runtime.run()
+            with patch("executions.tasks.trigger.trigger_platform_job.apply_async") as mock_apply:
+                with patch("catalog.models.Action.objects") as mock_qs:
+                    mock_qs.select_related.return_value.get.return_value = ref_action
+                    runtime.run()
 
-        # Verify step output
+        # Verify step is RUNNING (async dispatched — trigger_platform_job gère la suite)
         step = ExecutionStep.objects.filter(execution=execution).first()
         assert step is not None
         output = step.get_output() or {}
 
-        # AC5: Verify adapter payload was prepared
+        # AC5 Updated: Verify adapter async dispatch was prepared
         assert output.get("adapter_ready") is True
-        assert "adapter_payload_prepared" in output
-
-        payload = output["adapter_payload_prepared"]
-        assert payload["action_id"] == ref_action.id
-        assert payload["action_name"] == "Referenced AAP Action"
-        assert payload["platform"] == "AAP"
-        assert payload["environment"] == "dev"
-        assert payload["parameters"] == {"database": "PROD01", "action": "restart"}
-        assert "correlation_id" in payload
-        assert payload["execution_id"] == execution.id
-
-        # AC6: Verify audit trail
-        assert output.get("parameters_used") == {"database": "PROD01", "action": "restart"}
+        assert output.get("async_dispatched") is True
         assert output.get("delegated_from_workflow") is True
         assert output.get("referenced_action_id") == ref_action.id
         assert output.get("referenced_action_name") == "Referenced AAP Action"
+        assert output.get("parameters_used") == {"database": "PROD01", "action": "restart"}
+        mock_apply.assert_called_once()
 
 
 @pytest.mark.django_db
@@ -808,21 +837,19 @@ class TestCallPlatformAdapter:
         )
         self.runtime = WorkflowRuntime(self.execution)
 
-    def test_no_integration_returns_simulated_with_audit(self):
-        """When action has no integration, return simulated response + CRITICAL log."""
+    def test_no_integration_raises_value_error(self):
+        """Story 47.3 fail-fast: sans integration, lève ValueError (plus de succès simulé)."""
         step = ExecutionStep.objects.create(
             execution=self.execution, step_order=1,
             step_name="Test", step_type="platform",
             status=ExecutionStepStatus.RUNNING,
         )
-        with patch("executions.workflow_runtime.AuditService.create_entry") as audit:
-            result = self.runtime._call_platform_adapter(
+        import pytest
+        with pytest.raises(ValueError) as exc_info:
+            self.runtime._call_platform_adapter(
                 self.ref_action, None, {"parameters": {}}, step,
             )
-        assert result["simulated"] is True
-        assert "SIMULATED" in result["message"]
-        audit.assert_called_once()
-        assert audit.call_args.kwargs["details"]["warning"] == "SIMULATED_ADAPTER_RESPONSE"
+        assert "No integration configured" in str(exc_info.value)
 
     def test_adapter_call_success(self):
         """When adapter exists and works, return real adapter result."""
@@ -851,9 +878,10 @@ class TestCallPlatformAdapter:
         assert result["platform_job_id"] == "42"
         assert result.get("simulated") is None
 
-    def test_adapter_call_failure_falls_back_to_simulated(self):
-        """When adapter raises, fall back to simulated response with CRITICAL audit."""
+    def test_adapter_call_failure_reraises_exception(self):
+        """Story 47.3 fail-fast: adapter raises → exception re-raised (plus de succès simulé)."""
         from unittest.mock import MagicMock
+        import pytest
         step = ExecutionStep.objects.create(
             execution=self.execution, step_order=1,
             step_name="Test", step_type="platform",
@@ -865,12 +893,9 @@ class TestCallPlatformAdapter:
 
         with patch("adapters.get_platform_adapter", side_effect=ImportError("no adapter")):
             with patch("adapters.utils.build_auth_headers", return_value={}):
-                with patch("executions.workflow_runtime.AuditService.create_entry") as audit:
-                    result = self.runtime._call_platform_adapter(
+                with pytest.raises(ImportError) as exc_info:
+                    self.runtime._call_platform_adapter(
                         self.ref_action, integration,
                         {"parameters": {}}, step,
                     )
-        assert result["simulated"] is True
-        assert "adapter call failed" in result["message"]
-        audit.assert_called_once()
-        assert audit.call_args.kwargs["details"]["warning"] == "SIMULATED_ADAPTER_RESPONSE"
+        assert "no adapter" in str(exc_info.value)

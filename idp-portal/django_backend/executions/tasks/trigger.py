@@ -139,7 +139,7 @@ def trigger_platform_job(
 
         return {"outcome": "dispatched", "platform_job_id": platform_job_id}
 
-    except Exception as exc:  # noqa: BLE001 — Story 47.3 ajoutera fail-fast ; ici log CRITICAL
+    except Exception as exc:  # noqa: BLE001 — broad-catch-fail-fast: all adapter errors mark execution INTEGRATION_ERROR with audit trail
         logger.critical(
             "trigger_platform_job_failed",
             execution_step_id=execution_step_id,
@@ -149,10 +149,45 @@ def trigger_platform_job(
             correlation_id=correlation_id,
             exc_info=True,
         )
-        # Marquer l'étape FAILED pour éviter qu'elle reste bloquée en RUNNING indéfiniment.
-        # Story 47.3 remplacera ce bloc par une propagation d'erreur explicite.
+        # Marquer l'étape FAILED (déjà en place depuis fix H2 Story 47.2)
         execution_step.status = ExecutionStepStatus.FAILED
         execution_step.completed_at = tz.now()
         execution_step.error_message = f"{type(exc).__name__}: {str(exc)}"
         execution_step.save()
+
+        # Story 47.3 : fail-fast complet — step FAILED + execution INTEGRATION_ERROR + audit
+        from executions.models import Execution, ExecutionStatus  # noqa: PLC0415
+        from core.services import AuditService  # noqa: PLC0415
+        from core.models import AuditActionType, AuditEntityType  # noqa: PLC0415
+        try:
+            execution = Execution.objects.get(id=execution_id)
+            if execution.status not in (
+                ExecutionStatus.COMPLETED,
+                ExecutionStatus.FAILED,
+                ExecutionStatus.CANCELLED,
+                ExecutionStatus.REJECTED,
+            ):
+                execution.status = ExecutionStatus.INTEGRATION_ERROR
+                execution.save(update_fields=["status"])
+            AuditService.create_entry(
+                user_id=str(execution.user_id),
+                action_type=AuditActionType.EXECUTION_INTEGRATION_ERROR,
+                entity_type=AuditEntityType.EXECUTION,
+                entity_id=execution_id,
+                details={
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                    "step_id": execution_step_id,
+                    "adapter": "trigger_platform_job",
+                },
+                correlation_id=correlation_id,
+            )
+        except Exception as inner_exc:  # noqa: BLE001 — best-effort audit, ne doit pas masquer l'erreur principale
+            logger.error(
+                "trigger_platform_job_audit_failed",
+                execution_id=execution_id,
+                error=str(inner_exc),
+                correlation_id=correlation_id,
+            )
+
         return {"outcome": "error", "error": str(exc)}

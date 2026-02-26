@@ -65,8 +65,10 @@ class TestStepExecutorSuccess(TransactionTestCase):
 
     @patch("executions.workflow_step_executor.AuditService.create_entry")
     def test_step_success(self, mock_audit):
+        """execute() avec integration → dispatch async, step RUNNING."""
+        from tests.factories import IntegrationFactory
         ref_action = ActionFactory()
-        ref_action.integration = None  # no integration → simulated adapter
+        ref_action.integration = IntegrationFactory.create(type="aap")
 
         step = {
             'step_id': 'step-ok', 'name': 'OK Step', 'order': 1,
@@ -76,17 +78,14 @@ class TestStepExecutorSuccess(TransactionTestCase):
         with patch("catalog.models.Action.objects") as mock_qs:
             mock_qs.select_related.return_value.get.return_value = ref_action
 
-            with patch.object(self.executor, 'call_platform_adapter',
-                              return_value={'status': 'success', 'simulated': True}):
-                with patch.object(self.executor, '_evaluate_policy_if_needed',
-                                  return_value=None):
-                    result = self.executor.execute(step, step_order=1, step_parameters={'key': 'val'})
+            with patch("executions.tasks.trigger.trigger_platform_job.apply_async"):
+                result = self.executor.execute(step, step_order=1, step_parameters={'key': 'val'})
 
         assert result.is_success
         from executions.models import ExecutionStep, ExecutionStepStatus
         step_record = ExecutionStep.objects.filter(execution=self.execution).first()
         assert step_record is not None
-        assert step_record.status == ExecutionStepStatus.COMPLETED
+        assert step_record.status == ExecutionStepStatus.RUNNING  # async dispatched — reste RUNNING
 
 
 # ---------------------------------------------------------------------------
@@ -147,24 +146,23 @@ class TestCallPlatformAdapter(TransactionTestCase):
         )
         self.executor = StepExecutor(self.execution, "test-corr")
 
-    @patch("executions.workflow_step_executor.AuditService.create_entry")
-    def test_no_integration_returns_simulated_response(self, mock_audit):
-        """Sans integration, retourne une réponse simulée."""
+    def test_no_integration_raises_value_error(self):
+        """Sans integration, lève ValueError avec message explicite (Story 47.3 fail-fast)."""
         referenced_action = MagicMock()
         referenced_action.id = 1
         referenced_action.name = "Test Action"
         referenced_action.platform = "AAP"
 
-        result = self.executor.call_platform_adapter(
-            referenced_action, None, {'parameters': {}}, self.execution_step
-        )
+        with self.assertRaises(ValueError) as ctx:
+            self.executor.call_platform_adapter(
+                referenced_action, None, {'parameters': {}}, self.execution_step
+            )
 
-        assert result['simulated'] is True
-        assert result['status'] == 'success'
-        mock_audit.assert_called_once()
+        assert "No integration configured for action 1" in str(ctx.exception)
+        assert "AAP" in str(ctx.exception)
 
-    def test_adapter_call_failure_falls_back_to_simulated(self):
-        """Quand l'adapter échoue, retourne une réponse simulée avec log CRITICAL."""
+    def test_adapter_call_failure_reraises_exception(self):
+        """Quand l'adapter échoue, l'exception est re-raised (Story 47.3 fail-fast)."""
         referenced_action = MagicMock()
         referenced_action.id = 1
         referenced_action.name = "Test Action"
@@ -177,13 +175,13 @@ class TestCallPlatformAdapter(TransactionTestCase):
 
         with patch("adapters.get_platform_adapter",
                    side_effect=Exception("Adapter not found")):
-            with patch("executions.workflow_step_executor.AuditService.create_entry"):
-                with patch("adapters.utils.build_auth_headers", return_value={}):
-                    result = self.executor.call_platform_adapter(
+            with patch("adapters.utils.build_auth_headers", return_value={}):
+                with self.assertRaises(Exception) as ctx:
+                    self.executor.call_platform_adapter(
                         referenced_action, integration, {'parameters': {}}, self.execution_step
                     )
 
-        assert result['simulated'] is True
+        assert "Adapter not found" in str(ctx.exception)
 
 
 # ---------------------------------------------------------------------------
@@ -314,14 +312,14 @@ class TestStepExecutorAsyncDispatch(TransactionTestCase):
         assert step_record.status == ExecutionStepStatus.RUNNING  # PAS COMPLETED
 
     @patch("executions.workflow_step_executor.AuditService.create_entry")
-    def test_execute_without_integration_uses_simulated_path(self, mock_audit):
-        """execute() sans integration → call_platform_adapter (simulated), step COMPLETED."""
+    def test_execute_without_integration_returns_error_step_failed(self, mock_audit):
+        """execute() sans integration → StepResult(ERROR), step FAILED (Story 47.3 fail-fast)."""
         ref_action = ActionFactory()
-        ref_action.integration = None  # pas d'integration → chemin simulated
+        ref_action.integration = None  # pas d'integration → fail-fast
 
         step = {
-            'step_id': 'step-sim',
-            'name': 'Simulated Step',
+            'step_id': 'step-noint',
+            'name': 'No Integration Step',
             'order': 1,
             'referenced_action_id': ref_action.id,
         }
@@ -329,17 +327,20 @@ class TestStepExecutorAsyncDispatch(TransactionTestCase):
         with patch("catalog.models.Action.objects") as mock_qs:
             mock_qs.select_related.return_value.get.return_value = ref_action
 
-            with patch.object(self.executor, 'call_platform_adapter',
-                              return_value={'status': 'success', 'simulated': True}):
-                with patch.object(self.executor, '_evaluate_policy_if_needed',
-                                  return_value=None):
-                    result = self.executor.execute(step, step_order=1, step_parameters={})
+            result = self.executor.execute(step, step_order=1, step_parameters={})
 
         from executions.workflow_runtime import StepOutcome
-        assert result.outcome == StepOutcome.SUCCESS
-        assert result.output.get('async_dispatched') is None
+        assert result.outcome == StepOutcome.ERROR
+        assert result.error_details['error_type'] == 'NO_INTEGRATION'
 
         from executions.models import ExecutionStep, ExecutionStepStatus
         step_record = ExecutionStep.objects.filter(execution=self.execution).first()
         assert step_record is not None
-        assert step_record.status == ExecutionStepStatus.COMPLETED
+        assert step_record.status == ExecutionStepStatus.FAILED
+        assert "No integration configured" in step_record.error_message
+
+        # Vérifier audit EXECUTION_INTEGRATION_ERROR créé
+        mock_audit.assert_called_once()
+        call_kwargs = mock_audit.call_args
+        from core.models import AuditActionType
+        assert call_kwargs.kwargs.get('action_type') == AuditActionType.EXECUTION_INTEGRATION_ERROR
