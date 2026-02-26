@@ -241,58 +241,117 @@ class StepExecutor:
                 correlation_id=self.correlation_id,
             )
 
-            # Story 30.15 AC2/AC3: Real adapter call via get_platform_adapter()
-            adapter_response = self.call_platform_adapter(
-                referenced_action, integration, adapter_payload, execution_step,
-            )
+            # Story 47.2: Dispatch async si integration, simulated si pas d'integration
+            if integration:
+                from executions.tasks.trigger import trigger_platform_job  # noqa: PLC0415
+                from executions.tasks.polling import PLATFORM_QUEUE_MAP  # noqa: PLC0415
 
-            step_output_data = {
-                'adapter_ready': True,
-                'adapter_payload_prepared': adapter_payload,
-                'adapter_response': adapter_response,
-                'step_id': step_id,
-                'step_name': step_name,
-                'outcome': StepOutcome.SUCCESS.value,
-                'parameters_used': step_parameters,
-                'delegated_from_workflow': True,
-                'referenced_action_id': referenced_action.id,
-                'referenced_action_name': referenced_action.name,
-            }
+                # Calculer trigger_kwargs (même logique que call_platform_adapter lignes 425–434)
+                trigger_kwargs: dict[str, Any] = {"correlation_id": self.correlation_id}
+                params = adapter_payload.get("parameters") or {}
+                if params.get("template_id"):
+                    trigger_kwargs["template_id"] = str(params["template_id"])
+                if params.get("resource_type"):
+                    trigger_kwargs["resource_type"] = params["resource_type"]
+                if params.get("extra_vars"):
+                    trigger_kwargs["extra_vars"] = params["extra_vars"]
 
-            # Story 28.2: Evaluate business_rule_policies after step output
-            policy_result = self._evaluate_policy_if_needed(
-                execution_step, referenced_action, step_output_data,
-            )
-            if policy_result is not None:
-                # PolicyEvaluator decided — step is WAITING or auto-approved
-                execution_step.set_output(step_output_data)
-                execution_step.save()
-                return policy_result
+                trigger_platform_job.apply_async(
+                    kwargs={
+                        "execution_step_id": execution_step.id,
+                        "execution_id": self.execution.id,
+                        "integration_id": integration.id,
+                        "trigger_kwargs": trigger_kwargs,
+                    },
+                    queue=PLATFORM_QUEUE_MAP.get(integration.type, "default"),
+                )
 
-            execution_step.status = ExecutionStepStatus.COMPLETED
-            execution_step.completed_at = timezone.now()
-            execution_step.set_output(step_output_data)
-            execution_step.save()
+                logger.info(
+                    "workflow_step_trigger_dispatched_async",
+                    execution_id=self.execution.id,
+                    step_id=execution_step.id,
+                    platform=referenced_action.platform,
+                    integration_id=integration.id,
+                    correlation_id=self.correlation_id,
+                )
 
-            logger.info(
-                "workflow_step_completed",
-                execution_id=self.execution.id,
-                step_id=step_id,
-                step_name=step_name,
-                referenced_action_id=referenced_action.id,
-                adapter_ready=True,
-                correlation_id=self.correlation_id,
-            )
-
-            return StepResult(
-                outcome=StepOutcome.SUCCESS,
-                output={
+                step_output_data = {
+                    'adapter_ready': True,
+                    'async_dispatched': True,
                     'step_id': step_id,
                     'step_name': step_name,
+                    'outcome': StepOutcome.SUCCESS.value,
+                    'parameters_used': step_parameters,
+                    'delegated_from_workflow': True,
                     'referenced_action_id': referenced_action.id,
-                    'adapter_payload_prepared': True,
+                    'referenced_action_name': referenced_action.name,
                 }
-            )
+                execution_step.set_output(step_output_data)
+                execution_step.save()  # status reste RUNNING — trigger_platform_job gère la suite
+
+                return StepResult(
+                    outcome=StepOutcome.SUCCESS,
+                    output={
+                        'step_id': step_id,
+                        'step_name': step_name,
+                        'async_dispatched': True,
+                        'referenced_action_id': referenced_action.id,
+                    },
+                )
+
+            else:
+                # Pas d'integration → chemin simulated (Story 47.3 supprimera ce fallback)
+                adapter_response = self.call_platform_adapter(
+                    referenced_action, None, adapter_payload, execution_step,
+                )
+
+                step_output_data = {
+                    'adapter_ready': True,
+                    'adapter_payload_prepared': adapter_payload,
+                    'adapter_response': adapter_response,
+                    'step_id': step_id,
+                    'step_name': step_name,
+                    'outcome': StepOutcome.SUCCESS.value,
+                    'parameters_used': step_parameters,
+                    'delegated_from_workflow': True,
+                    'referenced_action_id': referenced_action.id,
+                    'referenced_action_name': referenced_action.name,
+                }
+
+                # Story 28.2: Evaluate business_rule_policies after step output
+                policy_result = self._evaluate_policy_if_needed(
+                    execution_step, referenced_action, step_output_data,
+                )
+                if policy_result is not None:
+                    # PolicyEvaluator decided — step is WAITING or auto-approved
+                    execution_step.set_output(step_output_data)
+                    execution_step.save()
+                    return policy_result
+
+                execution_step.status = ExecutionStepStatus.COMPLETED
+                execution_step.completed_at = timezone.now()
+                execution_step.set_output(step_output_data)
+                execution_step.save()
+
+                logger.info(
+                    "workflow_step_completed",
+                    execution_id=self.execution.id,
+                    step_id=step_id,
+                    step_name=step_name,
+                    referenced_action_id=referenced_action.id,
+                    adapter_ready=True,
+                    correlation_id=self.correlation_id,
+                )
+
+                return StepResult(
+                    outcome=StepOutcome.SUCCESS,
+                    output={
+                        'step_id': step_id,
+                        'step_name': step_name,
+                        'referenced_action_id': referenced_action.id,
+                        'adapter_payload_prepared': True,
+                    }
+                )
 
         except ValueError as e:
             # Handle validation errors (missing referenced_action_id, action not found)

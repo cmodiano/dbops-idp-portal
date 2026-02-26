@@ -261,3 +261,85 @@ class TestEvaluatePolicyIfNeeded(TransactionTestCase):
 
         assert result is not None
         assert result.is_waiting
+
+
+# ---------------------------------------------------------------------------
+# TestStepExecutorAsyncDispatch — Story 47.2 : dispatch async via Celery
+# ---------------------------------------------------------------------------
+
+class TestStepExecutorAsyncDispatch(TransactionTestCase):
+    """StepExecutor.execute() avec integration → dispatch async trigger_platform_job."""
+
+    def setUp(self):
+        from tests.factories import IntegrationFactory
+        self.user = UserFactory()
+        self.action = ActionFactory(item_type="workflow")
+        from executions.models import Execution, ExecutionStatus
+        self.execution = Execution.objects.create(
+            action=self.action, user=self.user,
+            environment="dev", status=ExecutionStatus.RUNNING,
+        )
+        self.integration = IntegrationFactory.create(type="aap")
+        self.executor = StepExecutor(self.execution, "test-corr-async")
+
+    @patch("executions.workflow_step_executor.AuditService.create_entry")
+    def test_execute_with_integration_dispatches_async(self, mock_audit):
+        """execute() avec integration → trigger_platform_job.apply_async appelé, step reste RUNNING."""
+        ref_action = ActionFactory()
+        ref_action.integration = self.integration
+
+        step = {
+            'step_id': 'step-async',
+            'name': 'Async Step',
+            'order': 1,
+            'referenced_action_id': ref_action.id,
+        }
+
+        with patch("executions.tasks.trigger.trigger_platform_job.apply_async") as mock_apply_async:
+            with patch("catalog.models.Action.objects") as mock_qs:
+                mock_qs.select_related.return_value.get.return_value = ref_action
+
+                result = self.executor.execute(step, step_order=1, step_parameters={'template_id': '5'})
+
+        from executions.workflow_runtime import StepOutcome
+        assert result.outcome == StepOutcome.SUCCESS
+        assert result.output.get('async_dispatched') is True
+        mock_apply_async.assert_called_once()
+        call_kwargs = mock_apply_async.call_args
+        assert call_kwargs.kwargs['kwargs']['integration_id'] == self.integration.id
+
+        from executions.models import ExecutionStep, ExecutionStepStatus
+        step_record = ExecutionStep.objects.filter(execution=self.execution).first()
+        assert step_record is not None
+        assert step_record.status == ExecutionStepStatus.RUNNING  # PAS COMPLETED
+
+    @patch("executions.workflow_step_executor.AuditService.create_entry")
+    def test_execute_without_integration_uses_simulated_path(self, mock_audit):
+        """execute() sans integration → call_platform_adapter (simulated), step COMPLETED."""
+        ref_action = ActionFactory()
+        ref_action.integration = None  # pas d'integration → chemin simulated
+
+        step = {
+            'step_id': 'step-sim',
+            'name': 'Simulated Step',
+            'order': 1,
+            'referenced_action_id': ref_action.id,
+        }
+
+        with patch("catalog.models.Action.objects") as mock_qs:
+            mock_qs.select_related.return_value.get.return_value = ref_action
+
+            with patch.object(self.executor, 'call_platform_adapter',
+                              return_value={'status': 'success', 'simulated': True}):
+                with patch.object(self.executor, '_evaluate_policy_if_needed',
+                                  return_value=None):
+                    result = self.executor.execute(step, step_order=1, step_parameters={})
+
+        from executions.workflow_runtime import StepOutcome
+        assert result.outcome == StepOutcome.SUCCESS
+        assert result.output.get('async_dispatched') is None
+
+        from executions.models import ExecutionStep, ExecutionStepStatus
+        step_record = ExecutionStep.objects.filter(execution=self.execution).first()
+        assert step_record is not None
+        assert step_record.status == ExecutionStepStatus.COMPLETED
