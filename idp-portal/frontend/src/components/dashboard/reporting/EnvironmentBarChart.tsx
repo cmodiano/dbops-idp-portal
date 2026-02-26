@@ -59,12 +59,12 @@ function CustomTooltip({ active, payload, label }: { active?: boolean; payload?:
       padding: '8px 12px',
       border: '1px solid var(--color-border-secondary, #d9d9d9)',
       borderRadius: 4,
-      fontSize: 12,
+      fontSize: 13,
     }}>
       <div style={{ fontWeight: 600, marginBottom: 4 }}>{label}</div>
-      <div>Executions: {data.count}</div>
+      <div>Exécutions: {data.count}</div>
       {data.success_rate !== null && (
-        <div>Taux de succes: {data.success_rate.toFixed(1)}%</div>
+        <div>Taux de succès: {data.success_rate.toFixed(1)}%</div>
       )}
     </div>
   );
@@ -73,7 +73,7 @@ function CustomTooltip({ active, payload, label }: { active?: boolean; payload?:
 export function EnvironmentBarChart({ data, loading = false }: EnvironmentBarChartProps) {
   if (loading) {
     return (
-      <Card title="Repartition par environnement" size="small">
+      <Card title={<span style={{ fontSize: 15, fontWeight: 600 }}>Répartition par environnement</span>} size="small">
         <Skeleton active paragraph={{ rows: 3 }} />
       </Card>
     );
@@ -81,25 +81,25 @@ export function EnvironmentBarChart({ data, loading = false }: EnvironmentBarCha
 
   if (!data.length) {
     return (
-      <Card title="Repartition par environnement" size="small">
-        <Empty description="Aucune execution sur la periode" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+      <Card title={<span style={{ fontSize: 15, fontWeight: 600 }}>Répartition par environnement</span>} size="small">
+        <Empty description="Aucune exécution sur la période" image={Empty.PRESENTED_IMAGE_SIMPLE} />
       </Card>
     );
   }
 
   return (
-    <Card title="Repartition par environnement" size="small">
+    <Card title={<span style={{ fontSize: 15, fontWeight: 600 }}>Répartition par environnement</span>} size="small">
       <ResponsiveContainer width="100%" height={Math.max(MIN_CHART_HEIGHT, data.length * BAR_HEIGHT_PER_ITEM)}>
         <BarChart
           data={data}
           layout="vertical"
           margin={{ top: 8, right: 24, left: 0, bottom: 8 }}
-          aria-label="Graphique des executions par environnement"
+          aria-label="Graphique des exécutions par environnement"
         >
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" horizontal={false} />
           <XAxis
             type="number"
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: 13 }}
             tickLine={false}
             axisLine={{ stroke: 'rgba(0,0,0,0.06)' }}
             allowDecimals={false}
@@ -107,7 +107,7 @@ export function EnvironmentBarChart({ data, loading = false }: EnvironmentBarCha
           <YAxis
             type="category"
             dataKey="environment"
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: 13 }}
             tickLine={false}
             axisLine={false}
             width={80}

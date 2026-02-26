@@ -86,7 +86,7 @@ describe('ReportingDashboard', () => {
 
       await waitFor(() => {
         // Charts should still be visible
-        expect(screen.getByText('Repartition par technologie')).toBeInTheDocument();
+        expect(screen.getByText('Répartition par technologie')).toBeInTheDocument();
       });
 
       // StatCard labels should NOT be present
@@ -102,8 +102,8 @@ describe('ReportingDashboard', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText('Repartition par technologie')).toBeInTheDocument();
-        expect(screen.getByText('Repartition par environnement')).toBeInTheDocument();
+        expect(screen.getByText('Répartition par technologie')).toBeInTheDocument();
+        expect(screen.getByText('Répartition par environnement')).toBeInTheDocument();
         expect(screen.getByText('Tendances temporelles')).toBeInTheDocument();
       });
     });
@@ -164,8 +164,8 @@ describe('ReportingDashboard', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Repartition par technologie')).toBeInTheDocument();
-      expect(screen.getByText('Repartition par environnement')).toBeInTheDocument();
+      expect(screen.getByText('Répartition par technologie')).toBeInTheDocument();
+      expect(screen.getByText('Répartition par environnement')).toBeInTheDocument();
     });
   });
 

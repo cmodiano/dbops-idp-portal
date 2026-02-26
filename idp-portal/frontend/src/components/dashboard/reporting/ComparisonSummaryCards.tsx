@@ -15,6 +15,7 @@ import {
 } from '@ant-design/icons';
 import { DeltaBadge } from './DeltaBadge';
 import type { ComparisonResult, ComparisonMetric } from '../../../types/api';
+import { STYLE_TOKENS } from '../../../theme/styleTokens';
 
 const { Text } = Typography;
 
@@ -39,7 +40,7 @@ const METRIC_CONFIG: Array<{
   {
     key: 'success_rate',
     label: 'Taux de succès',
-    icon: <CheckCircleOutlined style={{ color: '#52c41a' }} />,
+    icon: <CheckCircleOutlined style={{ color: STYLE_TOKENS.iconSuccess }} />,
     suffix: '%',
     invertDelta: false,
     formatter: (v) => v !== null ? `${v.toFixed(1)}%` : 'N/A',
@@ -94,13 +95,13 @@ export function ComparisonSummaryCards({ data, loading = false, onMetricClick }:
                 <>
                   <Row gutter={8}>
                     <Col span={12}>
-                      <div style={{ fontSize: 11, color: '#8c8c8c' }}>{data.value1}</div>
+                      <div style={{ fontSize: 12, color: STYLE_TOKENS.textMuted }}>{data.value1}</div>
                       <div style={{ fontSize: 16, fontWeight: 600 }}>
                         {formatter ? formatter(value1) : (value1 ?? 'N/A')}
                       </div>
                     </Col>
                     <Col span={12}>
-                      <div style={{ fontSize: 11, color: '#8c8c8c' }}>{data.value2}</div>
+                      <div style={{ fontSize: 12, color: STYLE_TOKENS.textMuted }}>{data.value2}</div>
                       <div style={{ fontSize: 16, fontWeight: 600 }}>
                         {formatter ? formatter(value2) : (value2 ?? 'N/A')}
                       </div>

@@ -28,7 +28,7 @@ describe('TechnologyBarChart', () => {
   it('renders chart title with data', () => {
     render(<TechnologyBarChart data={mockData} loading={false} />);
 
-    expect(screen.getByText('Repartition par technologie')).toBeInTheDocument();
+    expect(screen.getByText('Répartition par technologie')).toBeInTheDocument();
     // Chart card should be present (chart content depends on recharts rendering)
     expect(document.querySelector('.ant-card-body')).toBeInTheDocument();
   });
@@ -36,14 +36,14 @@ describe('TechnologyBarChart', () => {
   it('renders empty state when no data', () => {
     render(<TechnologyBarChart data={[]} loading={false} />);
 
-    expect(screen.getByText('Repartition par technologie')).toBeInTheDocument();
+    expect(screen.getByText('Répartition par technologie')).toBeInTheDocument();
     expect(screen.getByText('Aucune execution sur la periode')).toBeInTheDocument();
   });
 
   it('renders skeleton when loading', () => {
     render(<TechnologyBarChart data={[]} loading={true} />);
 
-    expect(screen.getByText('Repartition par technologie')).toBeInTheDocument();
+    expect(screen.getByText('Répartition par technologie')).toBeInTheDocument();
     // Skeleton has specific structure
     expect(document.querySelector('.ant-skeleton')).toBeInTheDocument();
   });
@@ -55,7 +55,7 @@ describe('TechnologyBarChart', () => {
 
     render(<TechnologyBarChart data={singleData} loading={false} />);
 
-    expect(screen.getByText('Repartition par technologie')).toBeInTheDocument();
+    expect(screen.getByText('Répartition par technologie')).toBeInTheDocument();
     expect(document.querySelector('.ant-card-body')).toBeInTheDocument();
   });
 });

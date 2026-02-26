@@ -46,7 +46,7 @@ describe('AdminAnalyticsDashboard', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Actions publiees')).toBeInTheDocument();
+      expect(screen.getByText('Actions publiées')).toBeInTheDocument();
     });
 
     expect(screen.getByText('15')).toBeInTheDocument();
@@ -94,10 +94,10 @@ describe('AdminAnalyticsDashboard', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Executions par moteur')).toBeInTheDocument();
+      expect(screen.getByText('Exécutions par moteur')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('Executions par profil')).toBeInTheDocument();
+    expect(screen.getByText('Exécutions par profil')).toBeInTheDocument();
     expect(screen.getByText("Tendance d'adoption (par semaine)")).toBeInTheDocument();
   });
 });

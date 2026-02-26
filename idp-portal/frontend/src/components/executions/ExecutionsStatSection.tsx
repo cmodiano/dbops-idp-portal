@@ -44,6 +44,8 @@ export const ExecutionsStatSection: React.FC<ExecutionsStatSectionProps> = ({
           value={statsData?.executions_jour ?? 0}
           icon={<RocketOutlined />}
           loading={statsLoading}
+          tooltip="Nombre d'exécutions soumises ou démarrées aujourd'hui (depuis minuit)"
+          zeroText="Aucune pour l'instant"
         />
       </Col>
       <Col xs={24} sm={12} md={6}>
@@ -54,6 +56,7 @@ export const ExecutionsStatSection: React.FC<ExecutionsStatSectionProps> = ({
           icon={<CheckCircleOutlined />}
           variant="success"
           loading={statsLoading}
+          tooltip="Pourcentage d'exécutions terminées avec succès sur la période"
         />
       </Col>
       <Col xs={24} sm={12} md={6}>
@@ -63,6 +66,7 @@ export const ExecutionsStatSection: React.FC<ExecutionsStatSectionProps> = ({
           icon={<SyncOutlined spin={!statsLoading && (statsData?.executions_en_cours ?? 0) > 0} />}
           variant="inProgress"
           loading={statsLoading}
+          tooltip="Exécutions actuellement en cours d'exécution"
         />
       </Col>
       <Col xs={24} sm={12} md={6}>
@@ -72,6 +76,7 @@ export const ExecutionsStatSection: React.FC<ExecutionsStatSectionProps> = ({
           icon={<ExclamationCircleOutlined />}
           variant="error"
           loading={statsLoading}
+          tooltip="Exécutions terminées avec erreur (période filtrée ou aujourd'hui)"
         />
       </Col>
     </Row>

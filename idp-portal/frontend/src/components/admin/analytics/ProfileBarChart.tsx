@@ -49,7 +49,7 @@ const BAR_HEIGHT_PER_ITEM = 50;
 export function ProfileBarChart({ data, loading = false }: ProfileBarChartProps) {
   if (loading) {
     return (
-      <Card title="Executions par profil" size="small">
+      <Card title={<span style={{ fontSize: 15, fontWeight: 600 }}>Exécutions par profil</span>} size="small">
         <Skeleton active paragraph={{ rows: 4 }} />
       </Card>
     );
@@ -57,25 +57,25 @@ export function ProfileBarChart({ data, loading = false }: ProfileBarChartProps)
 
   if (!data.length) {
     return (
-      <Card title="Executions par profil" size="small">
-        <Empty description="Aucune execution" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+      <Card title={<span style={{ fontSize: 15, fontWeight: 600 }}>Exécutions par profil</span>} size="small">
+        <Empty description="Aucune exécution" image={Empty.PRESENTED_IMAGE_SIMPLE} />
       </Card>
     );
   }
 
   return (
-    <Card title="Executions par profil" size="small">
+    <Card title={<span style={{ fontSize: 15, fontWeight: 600 }}>Exécutions par profil</span>} size="small">
       <ResponsiveContainer width="100%" height={Math.max(MIN_CHART_HEIGHT, data.length * BAR_HEIGHT_PER_ITEM)}>
         <BarChart
           data={data}
           layout="vertical"
           margin={{ top: 8, right: 24, left: 0, bottom: 8 }}
-          aria-label="Graphique des executions par profil utilisateur"
+          aria-label="Graphique des exécutions par profil utilisateur"
         >
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" horizontal={false} />
           <XAxis
             type="number"
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: 13 }}
             tickLine={false}
             axisLine={{ stroke: 'rgba(0,0,0,0.06)' }}
             allowDecimals={false}
@@ -83,14 +83,14 @@ export function ProfileBarChart({ data, loading = false }: ProfileBarChartProps)
           <YAxis
             type="category"
             dataKey="profile"
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: 13 }}
             tickLine={false}
             axisLine={false}
             width={100}
           />
           <Tooltip
-            formatter={(value: number | undefined) => [value ?? 0, 'Executions']}
-            contentStyle={{ fontSize: 12 }}
+            formatter={(value: number | undefined) => [value ?? 0, 'Exécutions']}
+            contentStyle={{ fontSize: 13 }}
             labelStyle={{ fontWeight: 600 }}
           />
           <Bar dataKey="count" name="Executions" radius={[0, 4, 4, 0]}>

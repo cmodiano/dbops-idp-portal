@@ -146,8 +146,8 @@ describe('DashboardPage', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Repartition par technologie')).toBeInTheDocument();
-      expect(screen.getByText('Repartition par environnement')).toBeInTheDocument();
+      expect(screen.getByText('Répartition par technologie')).toBeInTheDocument();
+      expect(screen.getByText('Répartition par environnement')).toBeInTheDocument();
       expect(screen.getByText('Tendances temporelles')).toBeInTheDocument();
     });
   });

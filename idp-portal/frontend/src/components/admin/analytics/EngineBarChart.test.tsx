@@ -21,7 +21,7 @@ describe('EngineBarChart', () => {
   it('renders chart with data', () => {
     render(<EngineBarChart data={mockData} loading={false} />);
 
-    expect(screen.getByText('Executions par moteur')).toBeInTheDocument();
+    expect(screen.getByText('Exécutions par moteur')).toBeInTheDocument();
     // Check that the chart container exists
     expect(document.querySelector('.recharts-responsive-container')).toBeTruthy();
   });
@@ -29,14 +29,14 @@ describe('EngineBarChart', () => {
   it('renders empty state when no data', () => {
     render(<EngineBarChart data={[]} loading={false} />);
 
-    expect(screen.getByText('Executions par moteur')).toBeInTheDocument();
+    expect(screen.getByText('Exécutions par moteur')).toBeInTheDocument();
     expect(screen.getByText('Aucune execution')).toBeInTheDocument();
   });
 
   it('renders skeleton when loading', () => {
     render(<EngineBarChart data={[]} loading={true} />);
 
-    expect(screen.getByText('Executions par moteur')).toBeInTheDocument();
+    expect(screen.getByText('Exécutions par moteur')).toBeInTheDocument();
     // Skeleton should be present (Ant Design renders animated placeholder)
     expect(document.querySelector('.ant-skeleton')).toBeTruthy();
   });
@@ -44,6 +44,6 @@ describe('EngineBarChart', () => {
   it('renders chart with single engine', () => {
     render(<EngineBarChart data={[{ engine: 'Oracle', count: 50 }]} loading={false} />);
 
-    expect(screen.getByText('Executions par moteur')).toBeInTheDocument();
+    expect(screen.getByText('Exécutions par moteur')).toBeInTheDocument();
   });
 });

@@ -39,7 +39,7 @@ export function AdminAnalyticsDashboard() {
       const analytics = await fetchAdminAnalytics(days);
       setData(analytics);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erreur de chargement des metriques';
+      const message = err instanceof Error ? err.message : 'Erreur de chargement des métriques';
       setError(message);
       notification.error({ title: 'Erreur', description: message });
     } finally {
@@ -77,7 +77,7 @@ export function AdminAnalyticsDashboard() {
               <Skeleton.Input active size="large" style={{ width: 120 }} />
             ) : (
               <Statistic
-                title="Actions publiees"
+                title="Actions publiées"
                 value={data?.total_published_actions ?? 0}
                 prefix={<FileTextOutlined />}
                 styles={{ content: { color: '#3B82F6' } }}
