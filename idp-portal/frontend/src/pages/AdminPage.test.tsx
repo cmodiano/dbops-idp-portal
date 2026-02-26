@@ -96,4 +96,48 @@ describe('AdminPage', () => {
       );
     });
   });
+
+  describe('Story 46.6 — Administration densité et sous-navigation', () => {
+    it('affiche le nouveau sous-titre complet', async () => {
+      renderAdminPage();
+      await waitFor(
+        () => {
+          expect(
+            screen.getByText('Gérez les actions, profils, intégrations, règles métier et configurations du portail')
+          ).toBeInTheDocument();
+        },
+        { timeout: 5000 }
+      );
+    });
+
+    it('rend 8 onglets avec leurs libellés', async () => {
+      renderAdminPage();
+      const expectedLabels = [
+        'Actions', 'Profils', 'Intégrations', 'Règles métier',
+        'Catégories', 'Moteurs', 'Métriques', 'Feature Flags',
+      ];
+      await waitFor(
+        () => {
+          expectedLabels.forEach((label) => {
+            expect(screen.getByText(label)).toBeInTheDocument();
+          });
+        },
+        { timeout: 5000 }
+      );
+    });
+
+    it('rend des icônes SVG sur chaque onglet (AC1)', async () => {
+      const { container } = renderAdminPage();
+      await waitFor(
+        () => {
+          // Ant Design icons render as <span role="img"> with aria-label
+          const tabBar = container.querySelector('.ant-tabs-nav');
+          expect(tabBar).toBeInTheDocument();
+          const iconSpans = tabBar!.querySelectorAll('span[role="img"]');
+          expect(iconSpans.length).toBeGreaterThanOrEqual(8);
+        },
+        { timeout: 5000 }
+      );
+    });
+  });
 });

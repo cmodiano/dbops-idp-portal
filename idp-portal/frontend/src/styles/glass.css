@@ -652,3 +652,12 @@ html.dark .ant-tabs-tab-active .ant-tabs-tab-btn {
     transform: none !important;
   }
 }
+
+/* Story 46.6 — Admin sous-navigation : onglet actif distinct */
+.ant-tabs-tab-active .ant-tabs-tab-btn {
+  font-weight: 600;
+}
+
+.ant-tabs-ink-bar {
+  height: 3px !important;
+}
