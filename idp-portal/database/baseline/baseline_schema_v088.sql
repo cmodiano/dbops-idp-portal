@@ -1,24 +1,23 @@
 -- ===========================================================================
--- Baseline Schema V083 — IDP Portal
+-- Baseline Schema V088 — IDP Portal
 -- ===========================================================================
--- Date            : 2026-02-24
--- Version couverte: V000–V083 (84 migrations Flyway consolidées)
+-- Date            : 2026-02-25
+-- Version couverte: V000–V088 (89 migrations Flyway consolidées)
 -- Auteur          : Agent de développement (Story 41-2)
 --
 -- Usage           : NOUVEAUX ENVIRONNEMENTS UNIQUEMENT (base Oracle vierge)
 -- Interdit sur    : Environnements existants (dev, staging, prod) — INCHANGÉS
 --
 -- Procédure de déploiement :
---   1. sqlplus idp_user/password@HOST:1521/XEPDB1 @database/baseline/baseline_schema_v083.sql
---   2. flyway -baselineVersion=83 -baselineDescription=baseline_schema_v083 baseline
---   3. flyway migrate   (applique V084, V085, V086, V087, V088)
+--   1. sqlplus idp_user/password@HOST:1521/XEPDB1 @database/baseline/baseline_schema_v088.sql
+--   2. flyway -baselineVersion=88 -baselineDescription=baseline_schema_v088 baseline
 --
--- Ce script ne remplace pas les migrations V000–V083 dans database/migrations/.
--- Celles-ci restent intactes pour les environnements existants.
+-- Ce script couvre TOUTES les migrations V000–V088. Aucune migration incrémentale
+-- n'est nécessaire après application. État identique à V000→V088 sans phases intermédiaires.
 -- ===========================================================================
 --
 -- Objets créés :
---   24 tables, indexes, contraintes, trigger, données de référence
+--   25 tables, indexes, contraintes, trigger, package PKG_IDP_MAINTENANCE, données de référence
 --
 -- Exclusions (éléments neutralisés par les migrations) :
 --   - SCHEMA_VERSION (créée V000, droppée V015)
@@ -28,7 +27,7 @@
 --   - Colonne CHANGE_MODEL_CODE sur ACTIONS_CATALOG (droppée V019)
 --   - Contraintes droppées : CK_ACTIONS_CATALOG_CATEGORY (V018),
 --     CK_ACTIONS_CATALOG_ENGINE (V050), CK_ACTIONS_CATALOG_PLATFORM (V052),
---     CHK_EXECUTION_ENV (V053), CHK_SCHEDULED_ENV (V053)
+--     CHK_EXECUTION_ENV (V053), CHK_SCHEDULED_ENV (V053) — env dicté par inventaire
 --   - CK_INTEGRATIONS_TYPE (droppée V024 — TYPE est désormais libre)
 -- ===========================================================================
 
@@ -84,8 +83,8 @@ CREATE INDEX IDX_PROFILES_AD_GROUP ON PROFILES(AD_GROUP);
 COMMENT ON COLUMN PROFILES.AD_GROUP IS 'Groupe AD associé au profil (ex. GRP-IDP-ASSURANCE).';
 
 -- ---------------------------------------------------------------------------
--- INTEGRATIONS (V020 + V024 + V026 + V064 + V077)
--- Etat final pré-V088 : AUTH_FLOW = état V024 (V088 est incrémental post-baseline)
+-- INTEGRATIONS (V020 + V024 + V026 + V064 + V077 + V088)
+-- AUTH_FLOW inclut oauth2_client_credentials, api_key (V088)
 -- ---------------------------------------------------------------------------
 CREATE TABLE INTEGRATIONS (
     ID              NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -104,7 +103,10 @@ CREATE TABLE INTEGRATIONS (
 
     CONSTRAINT UK_INTEGRATIONS_NAME     UNIQUE (NAME),
     CONSTRAINT CK_INTEGRATIONS_AUTH_FLOW CHECK (
-        AUTH_FLOW IS NULL OR AUTH_FLOW IN ('token', 'basic', 'basic_then_token', 'pat')
+        AUTH_FLOW IS NULL OR AUTH_FLOW IN (
+            'token', 'basic', 'basic_then_token', 'pat',
+            'oauth2_client_credentials', 'api_key'
+        )
     ),
     CONSTRAINT CK_INTEGRATIONS_STATUS   CHECK (
         STATUS IN ('valid', 'invalid', 'deprecated')
@@ -117,7 +119,7 @@ CREATE INDEX IDX_INTEGRATION_STATUS  ON INTEGRATIONS(STATUS);
 
 COMMENT ON TABLE INTEGRATIONS IS 'Remote platform configuration for execution (AAP, ServiceNow, Terraform, etc.)';
 COMMENT ON COLUMN INTEGRATIONS.TYPE IS 'Integration type: free-form platform name (V024)';
-COMMENT ON COLUMN INTEGRATIONS.AUTH_FLOW IS 'Authentication flow: token, basic, basic_then_token, pat (état V024 ; V088 incrémental ajoutera oauth2_client_credentials, api_key)';
+COMMENT ON COLUMN INTEGRATIONS.AUTH_FLOW IS 'Authentication flow: token, basic, basic_then_token, pat, oauth2_client_credentials, api_key (V088)';
 COMMENT ON COLUMN INTEGRATIONS.STATUS IS 'Integration validation status: valid, invalid, deprecated';
 COMMENT ON COLUMN INTEGRATIONS.SECRET_SERVICE_ID IS 'ID intégration Vault pour résoudre les secrets (NULL = Vault par défaut)';
 
@@ -492,12 +494,11 @@ COMMENT ON TABLE INTEGRATION_ACTIONS IS 'Actions supported by each integration t
 
 -- ---------------------------------------------------------------------------
 -- AUDIT_LOG (V004 + V028 + V029 + V032 + V034 + V035 + V039 + V040
---            + V044 + V045 + V047 + V058 + V065 + V068 + V069 + V079)
--- CK_AUDIT_LOG_ACTION_TYPE  = état V079 (~65 types ; V086 incrémental le recrée)
--- CK_AUDIT_LOG_ENTITY_TYPE  = état V045
+--            + V044 + V045 + V047 + V058 + V065 + V068 + V069 + V079 + V086)
+-- Partitionnée par TIMESTAMP (Range INTERVAL mensuel) — Story 40.4
 -- ---------------------------------------------------------------------------
 CREATE TABLE AUDIT_LOG (
-    ID             NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    ID             NUMBER GENERATED BY DEFAULT ON NULL AS IDENTITY,
     TIMESTAMP      TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
     USER_ID        VARCHAR2(100) NOT NULL,
     ACTION_TYPE    VARCHAR2(100) NOT NULL,
@@ -507,7 +508,15 @@ CREATE TABLE AUDIT_LOG (
     IP_ADDRESS     VARCHAR2(45),
     CORRELATION_ID VARCHAR2(64),
 
-    CONSTRAINT CK_AUDIT_LOG_ACTION_TYPE CHECK (
+    CONSTRAINT PK_AUDIT_LOG PRIMARY KEY (ID)
+)
+PARTITION BY RANGE (TIMESTAMP)
+INTERVAL (NUMTOYMINTERVAL(1, 'MONTH'))
+(
+    PARTITION P_INITIAL VALUES LESS THAN (TIMESTAMP '2020-01-01 00:00:00')
+);
+
+ALTER TABLE AUDIT_LOG ADD CONSTRAINT CK_AUDIT_LOG_ACTION_TYPE CHECK (
         ACTION_TYPE IN (
             -- Action lifecycle
             'ACTION_CREATED', 'ACTION_UPDATED', 'ACTION_PUBLISHED',
@@ -566,36 +575,35 @@ CREATE TABLE AUDIT_LOG (
             -- Feature flags
             'FEATURE_FLAG_CREATED', 'FEATURE_FLAG_UPDATED'
         )
-    ),
-    CONSTRAINT CK_AUDIT_LOG_ENTITY_TYPE CHECK (
-        ENTITY_TYPE IN ('action', 'user', 'permission', 'execution', 'scheduled_execution', 'integration', 'profile')
-    )
 );
 
--- Indexes
-CREATE INDEX IDX_AUDIT_LOG_TIMESTAMP                ON AUDIT_LOG(TIMESTAMP);
-CREATE INDEX IDX_AUDIT_LOG_ENTITY                   ON AUDIT_LOG(ENTITY_TYPE, ENTITY_ID);
-CREATE INDEX IDX_AUDIT_LOG_USER                     ON AUDIT_LOG(USER_ID);
-CREATE INDEX IDX_AUDIT_LOG_ACTION_TYPE              ON AUDIT_LOG(ACTION_TYPE);
-CREATE INDEX IDX_AUDIT_LOG_CORRELATION              ON AUDIT_LOG(CORRELATION_ID);
-CREATE INDEX IDX_AUDIT_LOG_ENTITY_TYPE_TIMESTAMP    ON AUDIT_LOG(ENTITY_TYPE, TIMESTAMP DESC);
+ALTER TABLE AUDIT_LOG ADD CONSTRAINT CK_AUDIT_LOG_ENTITY_TYPE CHECK (
+    ENTITY_TYPE IN ('action', 'user', 'permission', 'execution', 'scheduled_execution', 'integration', 'profile')
+);
 
-COMMENT ON TABLE AUDIT_LOG IS 'Append-only audit log. No UPDATE or DELETE allowed (SOC1/NFR8).';
-COMMENT ON COLUMN AUDIT_LOG.CORRELATION_ID IS 'Request correlation ID linking audit entry to technical logs.';
-COMMENT ON COLUMN AUDIT_LOG.ACTION_TYPE IS 'V079: état final pré-V086 (~65 types). V086 (incrémental) recrée cette contrainte.';
+-- Indexes locaux prefixed (V086)
+CREATE INDEX IDX_AUDIT_LOG_TIMESTAMP         ON AUDIT_LOG(TIMESTAMP) LOCAL;
+CREATE INDEX IDX_AUDITLOG_CREATED_ENTITY    ON AUDIT_LOG(TIMESTAMP, ENTITY_TYPE, ENTITY_ID) LOCAL;
+CREATE INDEX IDX_AUDITLOG_CREATED_USER       ON AUDIT_LOG(TIMESTAMP, USER_ID) LOCAL;
+CREATE INDEX IDX_AUDIT_LOG_CREATED_ACTION    ON AUDIT_LOG(TIMESTAMP, ACTION_TYPE) LOCAL;
+CREATE INDEX IDX_AUDIT_LOG_CORRELATION       ON AUDIT_LOG(CORRELATION_ID);
+
+COMMENT ON TABLE AUDIT_LOG IS 'Append-only audit log. Range INTERVAL Partitioned by TIMESTAMP (monthly). Story 40.4. SOC1/NFR8: immutable via trigger TRG_AUDIT_LOG_IMMUTABLE.';
+COMMENT ON COLUMN AUDIT_LOG.TIMESTAMP IS 'Partition key (Range INTERVAL monthly). Auto-set to SYSTIMESTAMP on INSERT. V086.';
+COMMENT ON COLUMN AUDIT_LOG.ID IS 'Primary key, IDENTITY column (BY DEFAULT ON NULL). Backed by global unique index PK_AUDIT_LOG.';
+COMMENT ON COLUMN AUDIT_LOG.CORRELATION_ID IS 'Optional correlation ID for cross-request tracing. Indexed via IDX_AUDIT_LOG_CORRELATION (GLOBAL) for queries without date filter.';
 
 -- ===========================================================================
 -- PHASE 3 : Tables executions
 -- ===========================================================================
 
 -- ---------------------------------------------------------------------------
--- EXECUTIONS (V023 + V030 + V033 + V048 + V057)
--- Timestamps : plain TIMESTAMP UTC (V048 convertit TIMESTAMP WITH TIME ZONE → TIMESTAMP)
--- CHK_EXECUTION_ENV exclu (droppé V053)
--- CHK_EXECUTION_STATUS = état V057 (incluant INTEGRATION_ERROR)
+-- EXECUTIONS (V023 + V030 + V033 + V048 + V057 + V084)
+-- Partitionnée par CREATED_AT (Range INTERVAL mensuel) — Story 40.2
+-- Pas de CHK_EXECUTION_ENV : l'environnement est dicté par l'inventaire (validé par l'app)
 -- ---------------------------------------------------------------------------
 CREATE TABLE EXECUTIONS (
-    ID                   NUMBER GENERATED BY DEFAULT ON NULL AS IDENTITY PRIMARY KEY,
+    ID                   NUMBER GENERATED BY DEFAULT ON NULL AS IDENTITY,
     ACTION_ID            NUMBER NOT NULL,
     USER_ID              NUMBER NOT NULL,
     ENVIRONMENT          VARCHAR2(50) NOT NULL,
@@ -605,15 +613,13 @@ CREATE TABLE EXECUTIONS (
     STARTED_AT           TIMESTAMP,
     COMPLETED_AT         TIMESTAMP,
     CREATED_AT           TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
-    -- V030
-    APPROVED_BY          NUMBER(10),
-    APPROVED_AT          TIMESTAMP,
-    APPROVAL_COMMENT     VARCHAR2(1000),
-    -- V033
-    PARENT_EXECUTION_ID  NUMBER(19),
-    -- V057
-    ERROR_MESSAGE        CLOB,
+    APPROVED_BY           NUMBER(10),
+    APPROVED_AT           TIMESTAMP,
+    APPROVAL_COMMENT      VARCHAR2(1000),
+    PARENT_EXECUTION_ID   NUMBER(19),
+    ERROR_MESSAGE         CLOB,
 
+    CONSTRAINT PK_EXECUTIONS PRIMARY KEY (ID),
     CONSTRAINT FK_EXECUTIONS_ACTION      FOREIGN KEY (ACTION_ID)   REFERENCES ACTIONS_CATALOG(ID),
     CONSTRAINT FK_EXECUTIONS_USER        FOREIGN KEY (USER_ID)     REFERENCES USERS(ID),
     CONSTRAINT CHK_EXECUTION_STATUS      CHECK (STATUS IN (
@@ -621,27 +627,31 @@ CREATE TABLE EXECUTIONS (
         'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED', 'REJECTED'
     )),
     CONSTRAINT FK_EXECUTIONS_APPROVED_BY FOREIGN KEY (APPROVED_BY) REFERENCES USERS(ID),
-    CONSTRAINT FK_EXECUTIONS_PARENT      FOREIGN KEY (PARENT_EXECUTION_ID) REFERENCES EXECUTIONS(ID)
+    CONSTRAINT FK_EXECUTIONS_PARENT      FOREIGN KEY (PARENT_EXECUTION_ID) REFERENCES EXECUTIONS(ID) ON DELETE SET NULL
+        DEFERRABLE INITIALLY DEFERRED
+)
+PARTITION BY RANGE (CREATED_AT)
+INTERVAL (NUMTOYMINTERVAL(1, 'MONTH'))
+(
+    PARTITION P_BEFORE_2024 VALUES LESS THAN (TIMESTAMP '2024-01-01 00:00:00')
 );
 
-CREATE INDEX IDX_EXECUTIONS_STATUS          ON EXECUTIONS(STATUS);
-CREATE INDEX IDX_EXECUTIONS_USER_ID         ON EXECUTIONS(USER_ID);
-CREATE INDEX IDX_EXECUTIONS_ACTION_ID       ON EXECUTIONS(ACTION_ID);
-CREATE INDEX IDX_EXECUTIONS_CREATED_AT      ON EXECUTIONS(CREATED_AT);
+CREATE INDEX IDX_EXECUTIONS_CREATED_ACTION ON EXECUTIONS(CREATED_AT, ACTION_ID) LOCAL;
+CREATE INDEX IDX_EXECUTIONS_CREATED_USER   ON EXECUTIONS(CREATED_AT, USER_ID) LOCAL;
+CREATE INDEX IDX_EXECUTIONS_CREATED_STATUS ON EXECUTIONS(CREATED_AT, STATUS) LOCAL;
+CREATE INDEX IDX_EXECUTIONS_PARENT_ID      ON EXECUTIONS(PARENT_EXECUTION_ID);
 CREATE INDEX IDX_EXECUTIONS_PENDING_APPROVAL ON EXECUTIONS(CASE WHEN STATUS = 'PENDING_APPROVAL' THEN ID END);
-CREATE INDEX IDX_EXECUTIONS_PARENT_ID       ON EXECUTIONS(PARENT_EXECUTION_ID);
-CREATE INDEX IDX_EXEC_ACTION_CREATED        ON EXECUTIONS(ACTION_ID, CREATED_AT);
 
-COMMENT ON TABLE EXECUTIONS IS 'Execution records for actions (Story 4.1).';
-COMMENT ON COLUMN EXECUTIONS.CREATED_AT IS 'UTC timestamp (plain TIMESTAMP). Convention: all timestamps in UTC.';
-COMMENT ON COLUMN EXECUTIONS.STATUS IS 'Execution status: SUBMITTED, INTEGRATION_ERROR, PENDING_APPROVAL, RUNNING, COMPLETED, FAILED, CANCELLED, REJECTED.';
+COMMENT ON TABLE EXECUTIONS IS 'Execution records for actions. Partitioned by CREATED_AT (monthly INTERVAL). Story 40.2.';
+COMMENT ON COLUMN EXECUTIONS.CREATED_AT IS 'UTC TIMESTAMP used as partition key (monthly INTERVAL partitioning). V084.';
+COMMENT ON COLUMN EXECUTIONS.ID IS 'Primary key, IDENTITY column. Backed by global unique index (PK_EXECUTIONS). V084.';
 
 -- ---------------------------------------------------------------------------
--- EXECUTION_STEPS (V025 + V048 + V067)
--- CHK_STEP_STATUS = état V067 (incluant WAITING)
+-- EXECUTION_STEPS (V025 + V048 + V067 + V085)
+-- Reference Partitioning via FK EXECUTION_ID → EXECUTIONS (Story 40.3)
 -- ---------------------------------------------------------------------------
 CREATE TABLE EXECUTION_STEPS (
-    ID               NUMBER GENERATED BY DEFAULT ON NULL AS IDENTITY PRIMARY KEY,
+    ID               NUMBER GENERATED BY DEFAULT ON NULL AS IDENTITY,
     EXECUTION_ID     NUMBER NOT NULL,
     STEP_ORDER       NUMBER NOT NULL,
     STEP_NAME        VARCHAR2(255) NOT NULL,
@@ -654,17 +664,27 @@ CREATE TABLE EXECUTION_STEPS (
     ERROR_MESSAGE    CLOB,
     CREATED_AT       TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
 
-    CONSTRAINT FK_EXEC_STEPS_EXECUTION FOREIGN KEY (EXECUTION_ID) REFERENCES EXECUTIONS(ID) ON DELETE CASCADE,
-    CONSTRAINT CHK_STEP_STATUS CHECK (STATUS IN ('PENDING', 'WAITING', 'RUNNING', 'COMPLETED', 'FAILED', 'SKIPPED')),
-    CONSTRAINT CHK_STEP_TYPE   CHECK (STEP_TYPE IN ('vault', 'servicenow', 'platform', 'prerequisite', 'verification')),
-    CONSTRAINT UQ_EXEC_STEP_ORDER UNIQUE (EXECUTION_ID, STEP_ORDER)
-);
+    CONSTRAINT PK_EXECUTION_STEPS PRIMARY KEY (ID),
+    CONSTRAINT FK_EXEC_STEPS_EXECUTION
+        FOREIGN KEY (EXECUTION_ID) REFERENCES EXECUTIONS(ID) ON DELETE CASCADE
+)
+PARTITION BY REFERENCE (FK_EXEC_STEPS_EXECUTION);
 
-CREATE INDEX IDX_EXEC_STEPS_EXECUTION_ID ON EXECUTION_STEPS(EXECUTION_ID);
-CREATE INDEX IDX_EXEC_STEPS_STATUS       ON EXECUTION_STEPS(STATUS);
+ALTER TABLE EXECUTION_STEPS ADD CONSTRAINT UK_EXEC_STEPS_EXEC_ORDER
+    UNIQUE (EXECUTION_ID, STEP_ORDER) USING INDEX LOCAL;
 
-COMMENT ON TABLE EXECUTION_STEPS IS 'Execution step records (Story 4.3).';
-COMMENT ON COLUMN EXECUTION_STEPS.STATUS IS 'Step status: PENDING, WAITING (gate), RUNNING, COMPLETED, FAILED, SKIPPED.';
+ALTER TABLE EXECUTION_STEPS ADD CONSTRAINT CHK_STEP_STATUS
+    CHECK (STATUS IN ('PENDING', 'WAITING', 'RUNNING', 'COMPLETED', 'FAILED', 'SKIPPED'));
+
+ALTER TABLE EXECUTION_STEPS ADD CONSTRAINT CHK_STEP_TYPE
+    CHECK (STEP_TYPE IN ('vault', 'servicenow', 'platform', 'prerequisite', 'verification'));
+
+CREATE INDEX IDX_EXEC_STEPS_EXECUTION_ID ON EXECUTION_STEPS(EXECUTION_ID) LOCAL;
+CREATE INDEX IDX_EXEC_STEPS_EXEC_STATUS  ON EXECUTION_STEPS(EXECUTION_ID, STATUS) LOCAL;
+
+COMMENT ON TABLE EXECUTION_STEPS IS 'Execution step records. Reference Partitioned by FK EXECUTION_ID → EXECUTIONS (monthly INTERVAL). Story 40.3.';
+COMMENT ON COLUMN EXECUTION_STEPS.EXECUTION_ID IS 'FK to EXECUTIONS.ID — partition key héritée (Reference Partitioning). V085.';
+COMMENT ON COLUMN EXECUTION_STEPS.ID IS 'Primary key, IDENTITY column. Backed by global unique index (PK_EXECUTION_STEPS). V085.';
 
 -- ---------------------------------------------------------------------------
 -- EXECUTION_TARGETS (V066)
@@ -755,7 +775,6 @@ COMMENT ON COLUMN RECURRING_PATTERNS.NEXT_EXECUTION_DATE IS 'UTC timestamp (plai
 -- ---------------------------------------------------------------------------
 -- TRG_AUDIT_LOG_IMMUTABLE (V054)
 -- Défense en profondeur : interdit UPDATE et DELETE sur AUDIT_LOG (SOC1/NFR8)
--- Note : V086 (incrémental post-baseline) recrée ce trigger sur AUDIT_LOG partitionné
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TRIGGER TRG_AUDIT_LOG_IMMUTABLE
 BEFORE UPDATE OR DELETE ON AUDIT_LOG
@@ -764,6 +783,237 @@ BEGIN
     RAISE_APPLICATION_ERROR(-20001,
         'AUDIT_LOG is immutable - UPDATE and DELETE operations are forbidden (SOC1/NFR8)');
 END;
+/
+
+-- ===========================================================================
+-- PHASE 4b : Maintenance et purge (V087)
+-- ===========================================================================
+
+-- ---------------------------------------------------------------------------
+-- IDP_MAINTENANCE_LOG (V087)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IDP_MAINTENANCE_LOG (
+    ID             NUMBER GENERATED BY DEFAULT ON NULL AS IDENTITY CONSTRAINT PK_IDP_MAINTENANCE_LOG PRIMARY KEY,
+    EXECUTED_AT    TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    TABLE_NAME     VARCHAR2(64)  NOT NULL,
+    PARTITION_NAME VARCHAR2(64)  NOT NULL,
+    ACTION         VARCHAR2(32)  NOT NULL,
+    STATUS         VARCHAR2(16)  NOT NULL,
+    DRY_RUN        NUMBER(1)     DEFAULT 1 NOT NULL,
+    NOTES          VARCHAR2(500)
+);
+
+CREATE INDEX IDX_MAINT_LOG_EXECUTED_AT ON IDP_MAINTENANCE_LOG(EXECUTED_AT);
+
+COMMENT ON TABLE IDP_MAINTENANCE_LOG IS 'Log des opérations de maintenance (purge partitions). Story 40.5. Créée par V087.';
+
+-- ---------------------------------------------------------------------------
+-- PKG_IDP_MAINTENANCE (V087)
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE PACKAGE PKG_IDP_MAINTENANCE AS
+    gc_retention_executions  CONSTANT NUMBER := 24;
+    gc_retention_audit_log   CONSTANT NUMBER := 12;
+
+    PROCEDURE purge_old_partitions(
+        p_retention_executions  IN NUMBER  DEFAULT 24,
+        p_retention_audit_log   IN NUMBER  DEFAULT 12,
+        p_dry_run               IN NUMBER  DEFAULT 1
+    );
+
+    PROCEDURE purge_executions(
+        p_retention_months  IN NUMBER  DEFAULT 24,
+        p_dry_run           IN NUMBER  DEFAULT 1
+    );
+
+    PROCEDURE purge_audit_log(
+        p_retention_months  IN NUMBER  DEFAULT 12,
+        p_dry_run           IN NUMBER  DEFAULT 1
+    );
+
+END PKG_IDP_MAINTENANCE;
+/
+
+CREATE OR REPLACE PACKAGE BODY PKG_IDP_MAINTENANCE AS
+
+    PROCEDURE log_maintenance(
+        p_table_name     IN VARCHAR2,
+        p_partition_name IN VARCHAR2,
+        p_action         IN VARCHAR2,
+        p_status         IN VARCHAR2,
+        p_dry_run        IN NUMBER,
+        p_notes          IN VARCHAR2 DEFAULT NULL
+    ) IS
+    BEGIN
+        INSERT INTO IDP_MAINTENANCE_LOG
+            (TABLE_NAME, PARTITION_NAME, ACTION, STATUS, DRY_RUN, NOTES)
+        VALUES
+            (p_table_name, p_partition_name, p_action, p_status, p_dry_run, p_notes);
+    EXCEPTION
+        WHEN OTHERS THEN
+            DBMS_OUTPUT.PUT_LINE(
+                'WARNING: IDP_MAINTENANCE_LOG insert failed for '
+                || p_table_name || '/' || p_partition_name
+                || ' — ' || SQLERRM
+            );
+    END log_maintenance;
+
+    FUNCTION get_partition_date(p_high_value IN VARCHAR2) RETURN DATE IS
+        v_date DATE;
+    BEGIN
+        EXECUTE IMMEDIATE 'SELECT ' || p_high_value || ' FROM DUAL' INTO v_date;
+        RETURN v_date;
+    EXCEPTION
+        WHEN OTHERS THEN
+            RETURN NULL;
+    END get_partition_date;
+
+    PROCEDURE purge_executions(
+        p_retention_months  IN NUMBER  DEFAULT 24,
+        p_dry_run           IN NUMBER  DEFAULT 1
+    ) IS
+        v_cutoff_date   DATE;
+        v_part_date     DATE;
+        v_rows_estimate NUMBER;
+    BEGIN
+        v_cutoff_date := ADD_MONTHS(TRUNC(SYSDATE, 'MM'), -p_retention_months);
+
+        FOR r IN (
+            SELECT PARTITION_NAME, HIGH_VALUE
+            FROM   USER_TAB_PARTITIONS
+            WHERE  TABLE_NAME = 'EXECUTIONS'
+            AND    PARTITION_NAME != 'P_BEFORE_2024'
+            ORDER BY PARTITION_POSITION
+        ) LOOP
+            v_part_date := get_partition_date(r.HIGH_VALUE);
+
+            IF v_part_date IS NULL THEN
+                log_maintenance('EXECUTIONS', r.PARTITION_NAME, 'SKIP', 'SKIPPED',
+                    p_dry_run, 'HIGH_VALUE non convertible: ' || SUBSTR(r.HIGH_VALUE, 1, 100));
+                CONTINUE;
+            END IF;
+
+            IF v_part_date <= v_cutoff_date THEN
+                IF p_dry_run = 0 THEN
+                    EXECUTE IMMEDIATE
+                        'UPDATE EXECUTIONS SET PARENT_EXECUTION_ID = NULL '
+                        || 'WHERE PARENT_EXECUTION_ID IN '
+                        || '(SELECT ID FROM EXECUTIONS PARTITION (' || r.PARTITION_NAME || '))';
+
+                    log_maintenance('EXECUTIONS', r.PARTITION_NAME, 'PREREQ_UPDATE',
+                        'SUCCESS', 0, 'PARENT_EXECUTION_ID nullified: ' || SQL%ROWCOUNT || ' rows');
+
+                    EXECUTE IMMEDIATE
+                        'DELETE FROM EXECUTION_TARGETS '
+                        || 'WHERE EXECUTION_ID IN '
+                        || '(SELECT ID FROM EXECUTIONS PARTITION (' || r.PARTITION_NAME || '))';
+
+                    log_maintenance('EXECUTIONS', r.PARTITION_NAME, 'PREREQ_DELETE',
+                        'SUCCESS', 0, 'EXECUTION_TARGETS orphelins supprimés: ' || SQL%ROWCOUNT || ' rows');
+
+                    COMMIT;
+
+                    EXECUTE IMMEDIATE
+                        'ALTER TABLE EXECUTIONS DROP PARTITION ' || r.PARTITION_NAME
+                        || ' UPDATE GLOBAL INDEXES';
+
+                    log_maintenance('EXECUTIONS', r.PARTITION_NAME, 'DROP', 'SUCCESS', 0,
+                        'EXECUTION_STEPS cascade automatique (Reference Partitioning V085)');
+                ELSE
+                    BEGIN
+                        EXECUTE IMMEDIATE
+                            'SELECT COUNT(*) FROM EXECUTIONS PARTITION (' || r.PARTITION_NAME || ')'
+                            INTO v_rows_estimate;
+                    EXCEPTION
+                        WHEN OTHERS THEN v_rows_estimate := -1;
+                    END;
+
+                    log_maintenance('EXECUTIONS', r.PARTITION_NAME, 'DROP', 'DRY_RUN', 1,
+                        'Estimated rows: ' || v_rows_estimate
+                        || ' | HIGH_VALUE: ' || TO_CHAR(v_part_date, 'YYYY-MM-DD'));
+                END IF;
+            END IF;
+        END LOOP;
+
+        COMMIT;
+    EXCEPTION
+        WHEN OTHERS THEN
+            ROLLBACK;
+            RAISE;
+    END purge_executions;
+
+    PROCEDURE purge_audit_log(
+        p_retention_months  IN NUMBER  DEFAULT 12,
+        p_dry_run           IN NUMBER  DEFAULT 1
+    ) IS
+        v_cutoff_date   DATE;
+        v_part_date     DATE;
+        v_rows_estimate NUMBER;
+    BEGIN
+        v_cutoff_date := ADD_MONTHS(TRUNC(SYSDATE, 'MM'), -p_retention_months);
+
+        FOR r IN (
+            SELECT PARTITION_NAME, HIGH_VALUE
+            FROM   USER_TAB_PARTITIONS
+            WHERE  TABLE_NAME = 'AUDIT_LOG'
+            AND    PARTITION_NAME != 'P_INITIAL'
+            ORDER BY PARTITION_POSITION
+        ) LOOP
+            v_part_date := get_partition_date(r.HIGH_VALUE);
+
+            IF v_part_date IS NULL THEN
+                log_maintenance('AUDIT_LOG', r.PARTITION_NAME, 'SKIP', 'SKIPPED',
+                    p_dry_run, 'HIGH_VALUE non convertible: ' || SUBSTR(r.HIGH_VALUE, 1, 100));
+                CONTINUE;
+            END IF;
+
+            IF v_part_date <= v_cutoff_date THEN
+                IF p_dry_run = 0 THEN
+                    EXECUTE IMMEDIATE
+                        'ALTER TABLE AUDIT_LOG DROP PARTITION ' || r.PARTITION_NAME
+                        || ' UPDATE GLOBAL INDEXES';
+
+                    log_maintenance('AUDIT_LOG', r.PARTITION_NAME, 'DROP', 'SUCCESS', 0, NULL);
+                ELSE
+                    BEGIN
+                        EXECUTE IMMEDIATE
+                            'SELECT COUNT(*) FROM AUDIT_LOG PARTITION (' || r.PARTITION_NAME || ')'
+                            INTO v_rows_estimate;
+                    EXCEPTION
+                        WHEN OTHERS THEN v_rows_estimate := -1;
+                    END;
+
+                    log_maintenance('AUDIT_LOG', r.PARTITION_NAME, 'DROP', 'DRY_RUN', 1,
+                        'Estimated rows: ' || v_rows_estimate
+                        || ' | HIGH_VALUE: ' || TO_CHAR(v_part_date, 'YYYY-MM-DD'));
+                END IF;
+            END IF;
+        END LOOP;
+
+        COMMIT;
+    EXCEPTION
+        WHEN OTHERS THEN
+            ROLLBACK;
+            RAISE;
+    END purge_audit_log;
+
+    PROCEDURE purge_old_partitions(
+        p_retention_executions  IN NUMBER  DEFAULT 24,
+        p_retention_audit_log   IN NUMBER  DEFAULT 12,
+        p_dry_run               IN NUMBER  DEFAULT 1
+    ) IS
+    BEGIN
+        purge_executions(
+            p_retention_months => p_retention_executions,
+            p_dry_run          => p_dry_run
+        );
+
+        purge_audit_log(
+            p_retention_months => p_retention_audit_log,
+            p_dry_run          => p_dry_run
+        );
+    END purge_old_partitions;
+
+END PKG_IDP_MAINTENANCE;
 /
 
 -- ===========================================================================
@@ -802,15 +1052,18 @@ INSERT INTO REF_CATEGORIES (CODE, LABEL, DISPLAY_ORDER, IS_ACTIVE) VALUES ('autr
 COMMIT;
 
 -- ===========================================================================
--- FIN DU SCRIPT BASELINE V083
+-- FIN DU SCRIPT BASELINE V088
 -- ===========================================================================
 -- Après application de ce script :
---   1. flyway baseline -baselineVersion=83 -baselineDescription=baseline_schema_v083
---   2. flyway migrate   (applique V084, V085, V086, V087, V088)
+--   flyway baseline -baselineVersion=88 -baselineDescription=baseline_schema_v088
+--
+-- Aucune migration incrémentale requise — état identique à V000→V088.
 --
 -- Validation rapide :
---   SELECT COUNT(*) FROM user_tables;             -- doit retourner 24
+--   SELECT COUNT(*) FROM user_tables;             -- doit retourner 25
+--   SELECT table_name FROM user_part_tables;      -- EXECUTIONS, EXECUTION_STEPS, AUDIT_LOG
 --   SELECT status FROM user_triggers WHERE trigger_name = 'TRG_AUDIT_LOG_IMMUTABLE'; -- ENABLED
+--   SELECT status FROM user_objects WHERE object_name = 'PKG_IDP_MAINTENANCE';       -- VALID
 --   SELECT COUNT(*) FROM REF_ENGINES;             -- doit retourner 6
 --   SELECT COUNT(*) FROM REF_CATEGORIES;          -- doit retourner 6
 -- ===========================================================================
