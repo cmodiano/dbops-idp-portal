@@ -89,5 +89,6 @@ export const STYLE_TOKENS = {
   textWarning: '#92400e', // amber-800 Tailwind — ~7.2:1 sur blanc ✅ WCAG AA texte
   iconWarning: '#b45309', // amber-700 Tailwind — ~4.8:1 sur blanc ✅ WCAG AA texte+non-texte
   textError:   '#b91c1c', // red-700 Tailwind   — ~6.4:1 sur blanc ✅ WCAG AA texte
+  iconError:   '#dc2626', // red-600 Tailwind   — ~4.7:1 sur blanc ✅ WCAG AA texte+non-texte (remplace #ff4d4f ~3.1:1)
   textMuted:   '#595959', // gray               — ~7.0:1 sur blanc ✅ WCAG AA texte (remplace #8c8c8c ~3.4:1)
 } as const;

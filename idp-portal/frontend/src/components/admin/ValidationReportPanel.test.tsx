@@ -7,6 +7,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ValidationReportPanel from './ValidationReportPanel';
 import type { ValidationResult } from '../../utils/workflowValidation';
+import { STYLE_TOKENS } from '../../theme/styleTokens';
 
 describe('ValidationReportPanel', () => {
   const validResult: ValidationResult = {
@@ -147,5 +148,76 @@ describe('ValidationReportPanel', () => {
     expect(screen.getByText('Nœud : a')).toBeInTheDocument();
     expect(screen.getByText('Nœud : b')).toBeInTheDocument();
     expect(screen.getByText('Nœud : c')).toBeInTheDocument();
+  });
+});
+
+describe('Story 46.4 — ValidationReportPanel contraste WCAG AA', () => {
+  const validResult: ValidationResult = { valid: true, errors: [] };
+  const invalidResult: ValidationResult = {
+    valid: false,
+    errors: [
+      { nodeId: 'a', type: 'error', message: 'Erreur test' },
+      { nodeId: 'b', type: 'warning', message: 'Avertissement test' },
+    ],
+  };
+
+  it('success text uses STYLE_TOKENS.textSuccess (≥ 4.5:1 WCAG AA, not #52c41a)', () => {
+    render(
+      <ValidationReportPanel
+        validation={validResult}
+        open={true}
+        onClose={vi.fn()}
+        onGoToNode={vi.fn()}
+      />,
+    );
+    const successText = screen.getByText('Workflow valide');
+    // JSDOM serializes hex → rgb(): #166534 → rgb(22, 101, 52); #52c41a → rgb(82, 196, 26)
+    const computedColor = window.getComputedStyle(successText).color;
+    expect(computedColor).toBe('rgb(22, 101, 52)');     // STYLE_TOKENS.textSuccess
+    expect(computedColor).not.toBe('rgb(82, 196, 26)'); // old inaccessible #52c41a
+    // Also verify the token value itself is accessible
+    expect(STYLE_TOKENS.textSuccess).toBe('#166534');
+  });
+
+  it('node ID text uses STYLE_TOKENS.textMuted (≥ 4.5:1, not #8c8c8c)', () => {
+    render(
+      <ValidationReportPanel
+        validation={invalidResult}
+        open={true}
+        onClose={vi.fn()}
+        onGoToNode={vi.fn()}
+      />,
+    );
+    const nodeText = screen.getByText('Nœud : a');
+    // JSDOM serializes hex → rgb(): #595959 → rgb(89, 89, 89); #8c8c8c → rgb(140, 140, 140)
+    const computedColor = window.getComputedStyle(nodeText).color;
+    expect(computedColor).toBe('rgb(89, 89, 89)');       // STYLE_TOKENS.textMuted
+    expect(computedColor).not.toBe('rgb(140, 140, 140)'); // old inaccessible #8c8c8c
+    expect(STYLE_TOKENS.textMuted).toBe('#595959');
+  });
+
+  it('STYLE_TOKENS.textSuccess is not #52c41a (WCAG AA compliance)', () => {
+    expect(STYLE_TOKENS.textSuccess).not.toBe('#52c41a');
+    expect(STYLE_TOKENS.textSuccess).toBe('#166534');
+  });
+
+  it('STYLE_TOKENS.textMuted is not #8c8c8c (WCAG AA compliance)', () => {
+    expect(STYLE_TOKENS.textMuted).not.toBe('#8c8c8c');
+    expect(STYLE_TOKENS.textMuted).toBe('#595959');
+  });
+
+  it('STYLE_TOKENS.iconWarning is not #fa8c16 (WCAG AA compliance ≥ 3:1)', () => {
+    expect(STYLE_TOKENS.iconWarning).not.toBe('#fa8c16');
+    expect(STYLE_TOKENS.iconWarning).toBe('#b45309');
+  });
+
+  it('STYLE_TOKENS.textError is not #ff4d4f for text (WCAG AA compliance)', () => {
+    expect(STYLE_TOKENS.textError).not.toBe('#ff4d4f');
+    expect(STYLE_TOKENS.textError).toBe('#b91c1c');
+  });
+
+  it('STYLE_TOKENS.iconError is not #ff4d4f (WCAG AA compliance ≥ 3:1)', () => {
+    expect(STYLE_TOKENS.iconError).not.toBe('#ff4d4f');
+    expect(STYLE_TOKENS.iconError).toBe('#dc2626');
   });
 });

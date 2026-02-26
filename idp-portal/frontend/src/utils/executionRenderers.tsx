@@ -88,7 +88,7 @@ const PLATFORM_ICONS: Record<ActionPlatform, { Icon: React.ComponentType<{ style
  */
 export function renderPlatformIcon(platform: ActionPlatform | string | null | undefined): React.ReactNode {
   if (!platform) {
-    return <span style={{ color: '#d9d9d9' }}>—</span>;
+    return <span style={{ color: STYLE_TOKENS.textMuted }}>—</span>;
   }
 
   const config = PLATFORM_ICONS[platform as ActionPlatform];
@@ -227,7 +227,7 @@ export function renderEngineIcon(
 
   // No engine - fallback
   if (!engine) {
-    return <span style={{ color: '#d9d9d9' }}>—</span>;
+    return <span style={{ color: STYLE_TOKENS.textMuted }}>—</span>;
   }
 
   // Known engine
@@ -303,7 +303,7 @@ export function renderIntegrationIcon(
 ): React.ReactNode {
   const label = integrationName || platform;
   if (!label) {
-    return <span style={{ color: '#d9d9d9' }}>—</span>;
+    return <span style={{ color: STYLE_TOKENS.textMuted }}>—</span>;
   }
 
   const iconSrc = getIconUrl(integrationIcon);
@@ -362,9 +362,9 @@ function StatusIndicator({ status }: { status: ExecutionStatusType }): React.Rea
   const isRunning = config.status === 'processing';
 
   const borderColor = config.color;
-  const textColor = config.status === 'error' ? '#EF4444' :
-                    config.status === 'success' ? '#10B981' :
-                    config.status === 'warning' ? '#F59E0B' :
+  const textColor = config.status === 'error' ? STYLE_TOKENS.textError :
+                    config.status === 'success' ? STYLE_TOKENS.textSuccess :
+                    config.status === 'warning' ? STYLE_TOKENS.textWarning :
                     config.status === 'processing' ? config.color : token.colorText;
 
   return (

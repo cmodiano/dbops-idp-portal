@@ -18,6 +18,7 @@
  */
 
 import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react';
+import { STYLE_TOKENS } from '../../theme/styleTokens';
 import {
   ReactFlow,
   Controls,
@@ -166,9 +167,9 @@ function WorkflowBuilderCanvasInner({
           id: `${params.source}_${sourceHandle}_${params.target}`,
           type: 'customEdge',
           animated: false,
-          style: { stroke: isSuccess ? '#52c41a' : '#ff4d4f', strokeWidth: 2 },
+          style: { stroke: isSuccess ? STYLE_TOKENS.iconSuccess : '#ff4d4f', strokeWidth: 2 },
           label: isSuccess ? 'succès' : 'erreur',
-          labelStyle: { fontSize: 10, fill: isSuccess ? '#52c41a' : '#ff4d4f' },
+          labelStyle: { fontSize: 10, fill: isSuccess ? STYLE_TOKENS.textSuccess : STYLE_TOKENS.textError },
         } as Edge;
         return addEdge(newEdge, filtered);
       });
@@ -232,9 +233,9 @@ function WorkflowBuilderCanvasInner({
               targetHandle: 'input',
               type: 'customEdge',
               animated: false,
-              style: { stroke: '#52c41a', strokeWidth: 2 },
+              style: { stroke: STYLE_TOKENS.iconSuccess, strokeWidth: 2 },
               label: 'succès',
-              labelStyle: { fontSize: 10, fill: '#52c41a' },
+              labelStyle: { fontSize: 10, fill: STYLE_TOKENS.textSuccess },
             } as Edge,
           ]);
         } else {
@@ -254,9 +255,9 @@ function WorkflowBuilderCanvasInner({
                 targetHandle: 'input',
                 type: 'customEdge',
                 animated: false,
-                style: { stroke: '#52c41a', strokeWidth: 2 },
+                style: { stroke: STYLE_TOKENS.iconSuccess, strokeWidth: 2 },
                 label: 'succès',
-                labelStyle: { fontSize: 10, fill: '#52c41a' },
+                labelStyle: { fontSize: 10, fill: STYLE_TOKENS.textSuccess },
               } as Edge,
             ];
           });

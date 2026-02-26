@@ -7,6 +7,7 @@
 import type { Node, Edge } from '@xyflow/react';
 import type { WorkflowStep } from '../types/api';
 import type { WorkflowStepNodeData } from '../components/admin/WorkflowStepNode';
+import { STYLE_TOKENS } from '../theme/styleTokens';
 
 /** Generate unique step ID using crypto.randomUUID or fallback. */
 export function generateStepId(): string {
@@ -71,9 +72,9 @@ export function workflowStepsToReactFlow(
         targetHandle: 'input',
         type: 'customEdge',
         animated: false,
-        style: { stroke: '#52c41a', strokeWidth: 2 },
+        style: { stroke: STYLE_TOKENS.iconSuccess, strokeWidth: 2 },
         label: 'succès',
-        labelStyle: { fontSize: 10, fill: '#52c41a' },
+        labelStyle: { fontSize: 10, fill: STYLE_TOKENS.textSuccess },
       });
     } else {
       // on_success_step_id=null means "end of workflow" — draw edge to End node for clarity
@@ -85,9 +86,9 @@ export function workflowStepsToReactFlow(
         targetHandle: 'input',
         type: 'customEdge',
         animated: false,
-        style: { stroke: '#52c41a', strokeWidth: 2 },
+        style: { stroke: STYLE_TOKENS.iconSuccess, strokeWidth: 2 },
         label: 'succès',
-        labelStyle: { fontSize: 10, fill: '#52c41a' },
+        labelStyle: { fontSize: 10, fill: STYLE_TOKENS.textSuccess },
       });
     }
     if (step.on_error_step_id) {
@@ -101,7 +102,7 @@ export function workflowStepsToReactFlow(
         animated: false,
         style: { stroke: '#ff4d4f', strokeWidth: 2 },
         label: 'erreur',
-        labelStyle: { fontSize: 10, fill: '#ff4d4f' },
+        labelStyle: { fontSize: 10, fill: STYLE_TOKENS.textError },
       });
     } else {
       // on_error_step_id=null means "end/fail" — draw edge to End node for clarity
@@ -115,7 +116,7 @@ export function workflowStepsToReactFlow(
         animated: false,
         style: { stroke: '#ff4d4f', strokeWidth: 2 },
         label: 'erreur',
-        labelStyle: { fontSize: 10, fill: '#ff4d4f' },
+        labelStyle: { fontSize: 10, fill: STYLE_TOKENS.textError },
       });
     }
   });
@@ -157,9 +158,9 @@ export function workflowStepsToReactFlow(
         targetHandle: 'input',
         type: 'customEdge',
         animated: false,
-        style: { stroke: '#52c41a', strokeWidth: 2 },
+        style: { stroke: STYLE_TOKENS.iconSuccess, strokeWidth: 2 },
         label: 'succès',
-        labelStyle: { fontSize: 10, fill: '#52c41a' },
+        labelStyle: { fontSize: 10, fill: STYLE_TOKENS.textSuccess },
       });
     }
   }

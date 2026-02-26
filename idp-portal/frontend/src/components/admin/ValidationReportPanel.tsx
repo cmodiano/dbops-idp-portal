@@ -14,6 +14,7 @@ import {
   CheckCircleOutlined,
 } from '@ant-design/icons';
 import type { ValidationResult } from '../../utils/workflowValidation';
+import { STYLE_TOKENS } from '../../theme/styleTokens';
 
 interface ValidationReportPanelProps {
   validation: ValidationResult | null;
@@ -32,14 +33,14 @@ const ErrorItem: React.FC<{ item: ValidationErrorItem; onGoToNode: (nodeId: stri
   <Flex justify="space-between" align="center" style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
     <Flex gap={8} align="start">
       {item.type === 'error' ? (
-        <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: 16, marginTop: 2 }} />
+        <CloseCircleOutlined style={{ color: STYLE_TOKENS.iconError, fontSize: 16, marginTop: 2 }} />
       ) : (
-        <WarningOutlined style={{ color: '#fa8c16', fontSize: 16, marginTop: 2 }} />
+        <WarningOutlined style={{ color: STYLE_TOKENS.iconWarning, fontSize: 16, marginTop: 2 }} />
       )}
       <div>
         <div style={{ fontWeight: 500 }}>{item.message}</div>
         {item.nodeId && (
-          <div style={{ fontSize: 12, color: '#8c8c8c' }}>Nœud : {item.nodeId}</div>
+          <div style={{ fontSize: 12, color: STYLE_TOKENS.textMuted }}>Nœud : {item.nodeId}</div>
         )}
       </div>
     </Flex>
@@ -86,21 +87,21 @@ const ValidationReportPanel: React.FC<ValidationReportPanelProps> = ({
           <Statistic
             title="Erreurs"
             value={errors.length}
-            prefix={<CloseCircleOutlined style={{ color: '#ff4d4f' }} />}
-            styles={{ content: { color: errors.length > 0 ? '#ff4d4f' : undefined } }}
+            prefix={<CloseCircleOutlined style={{ color: STYLE_TOKENS.iconError }} />}
+            styles={{ content: { color: errors.length > 0 ? STYLE_TOKENS.textError : undefined } }}
           />
           <Statistic
             title="Avertissements"
             value={warnings.length}
-            prefix={<WarningOutlined style={{ color: '#fa8c16' }} />}
-            styles={{ content: { color: warnings.length > 0 ? '#fa8c16' : undefined } }}
+            prefix={<WarningOutlined style={{ color: STYLE_TOKENS.iconWarning }} />}
+            styles={{ content: { color: warnings.length > 0 ? STYLE_TOKENS.textWarning : undefined } }}
           />
         </Space>
 
         {validation.valid && (
           <div style={{ textAlign: 'center', padding: '16px 0' }}>
-            <CheckCircleOutlined style={{ fontSize: 48, color: '#52c41a' }} />
-            <div style={{ marginTop: 8, fontWeight: 600, color: '#52c41a' }}>
+            <CheckCircleOutlined style={{ fontSize: 48, color: STYLE_TOKENS.iconSuccess }} />
+            <div style={{ marginTop: 8, fontWeight: 600, color: STYLE_TOKENS.textSuccess }}>
               Workflow valide
             </div>
           </div>
