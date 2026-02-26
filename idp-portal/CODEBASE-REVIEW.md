@@ -650,7 +650,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 
 | # | Sévérité | Description | Fichier | Lignes |
 |---|----------|-------------|---------|--------|
-| **NEW-FE-2** | LOW | Cache module-level sans mécanisme d'invalidation — sessions longues afficheront des catégories obsolètes | `hooks/useCategories.ts` | 18-44 |
+| ~~**NEW-FE-2**~~ ✅ Résolu | ~~LOW — Cache module-level sans mécanisme d'invalidation — sessions longues afficheront des catégories obsolètes~~ | `hooks/useCategories.ts` | 18-44 | **Résolu — Story 48.7 (2026-02-26)** |
 | **NEW-FE-3** | LOW | `.catch()` silencieux sans logging — `fetchFilterOptions()` échoue sans trace | `components/dashboard/reporting/ReportingDashboard.tsx` | 160-165 |
 | **NEW-FE-4** | LOW | Prop `allowedEnvironments` passée puis explicitement ignorée (`void allowedEnvironments`) — code mort | `components/catalog/ActionDrawerPreview.tsx` | 99 |
 
@@ -706,7 +706,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | SEC-14 | Pas de vérification path traversal sur écriture icône | Sécurité | Trivial |
 | ~~NEW-BE-10~~ ✅ Résolu | ~~`import logging` (stdlib) au lieu de `structlog` dans 13+ fichiers~~ | Backend | Faible | **Résolu — Story 48.6 (2026-02-26)** |
 | NEW-FE-1 | Nested key props redondants (TopNav) | Frontend | Trivial |
-| NEW-FE-2 | Cache module-level sans invalidation (useCategories) | Frontend | Faible |
+| ~~NEW-FE-2~~ ✅ Résolu | ~~Cache module-level sans invalidation (useCategories)~~ | Frontend | Faible | **Résolu — Story 48.7 (2026-02-26)** |
 | NEW-FE-3 | `.catch()` silencieux (ReportingDashboard) | Frontend | Trivial |
 | NEW-FE-4 | Prop `allowedEnvironments` ignorée (code mort) | Frontend | Trivial |
 | 16.2 | `except Exception` résiduels (77 occurrences, 40 fichiers backend) | Backend | Faible |

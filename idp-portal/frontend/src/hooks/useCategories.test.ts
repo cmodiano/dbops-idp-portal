@@ -29,6 +29,7 @@ describe('useCategories', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.categories).toEqual(mockCategories);
     expect(getCategories).toHaveBeenCalledTimes(1);
+    expect(getCategories).toHaveBeenCalledWith(true); // active-only filter
   });
 
   it('utilise le cache — pas de double requête API', async () => {

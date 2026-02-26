@@ -2,6 +2,7 @@
  * Hook to load categories from reference API (Story 2.30).
  * Caches result to avoid multiple API calls.
  * Pattern: identical to useEngines (Story 13.7).
+ * Cache invalidation via invalidateCategoriesCache() (Story 48.7).
  */
 
 import { useState, useEffect } from 'react';
