@@ -99,9 +99,9 @@ export function PendingApprovalsList({
       title: 'Environnement',
       dataIndex: 'environment',
       key: 'environment',
-      render: (env: string) => (
+      render: (env: string | null) => (
         <Tag color={getEnvironmentBadgeColor(env)}>
-          {env.toUpperCase()}
+          {(env ?? '').toUpperCase()}
         </Tag>
       ),
     },
@@ -170,7 +170,7 @@ export function PendingApprovalsList({
         onOk={handleApproveConfirm}
         confirmLoading={approveLoading}
         okText="Approuver"
-        okButtonProps={{ style: { backgroundColor: '#10B981', borderColor: '#10B981' } }}
+        okButtonProps={{ style: { backgroundColor: STYLE_TOKENS.impactColor.low, borderColor: STYLE_TOKENS.impactColor.low } }}
         cancelText="Annuler"
       >
         {selectedExecution && (
@@ -178,7 +178,7 @@ export function PendingApprovalsList({
             <p>
               Vous êtes sur le point d'approuver l'exécution de{' '}
               <strong>{selectedExecution.action_name || `Action #${selectedExecution.action_id}`}</strong>{' '}
-              en environnement <Tag color={getEnvironmentBadgeColor(selectedExecution.environment)}>{selectedExecution.environment.toUpperCase()}</Tag>
+              en environnement <Tag color={getEnvironmentBadgeColor(selectedExecution.environment)}>{(selectedExecution.environment ?? '').toUpperCase()}</Tag>
             </p>
             <p style={{ color: '#666', fontSize: 13 }}>
               L'exécution sera lancée immédiatement après approbation.
@@ -214,7 +214,7 @@ export function PendingApprovalsList({
             <p>
               Vous êtes sur le point de refuser l'exécution de{' '}
               <strong>{selectedExecution.action_name || `Action #${selectedExecution.action_id}`}</strong>{' '}
-              en environnement <Tag color={getEnvironmentBadgeColor(selectedExecution.environment)}>{selectedExecution.environment.toUpperCase()}</Tag>
+              en environnement <Tag color={getEnvironmentBadgeColor(selectedExecution.environment)}>{(selectedExecution.environment ?? '').toUpperCase()}</Tag>
             </p>
             <p style={{ color: '#666', fontSize: 13 }}>
               Le demandeur sera notifié du refus.

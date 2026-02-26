@@ -79,4 +79,15 @@ export const STYLE_TOKENS = {
   tagTextOnLight: '#1f2937',
   /** Text on dark tag backgrounds (dark mode). */
   tagTextOnDark: '#e5e7eb',
+  /* Text contrast tokens — Story 46.4 (Accessibilité Contraste WCAG AA)
+   * Toutes les couleurs ci-dessous sont calculées pour texte sur blanc (#FFFFFF) et fond clair (#FFFFFF).
+   * Ratios vérifiés selon WCAG 2.1 §1.4.3 (texte normal ≥ 4.5:1) et §1.4.11 (non-texte ≥ 3:1).
+   * NE PAS utiliser #52c41a ou #fa8c16 pour du texte visible — ils échouent (< 3:1).
+   */
+  textSuccess: '#166534', // green-800 Tailwind — ~6.8:1 sur blanc ✅ WCAG AA texte
+  iconSuccess: '#16a34a', // green-600 Tailwind — ~3.15:1 sur blanc ✅ WCAG AA non-texte
+  textWarning: '#92400e', // amber-800 Tailwind — ~7.2:1 sur blanc ✅ WCAG AA texte
+  iconWarning: '#b45309', // amber-700 Tailwind — ~4.8:1 sur blanc ✅ WCAG AA texte+non-texte
+  textError:   '#b91c1c', // red-700 Tailwind   — ~6.4:1 sur blanc ✅ WCAG AA texte
+  textMuted:   '#595959', // gray               — ~7.0:1 sur blanc ✅ WCAG AA texte (remplace #8c8c8c ~3.4:1)
 } as const;
