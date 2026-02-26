@@ -232,6 +232,7 @@ export function ExecutionsFiltersPanel({
             <Form.Item label=" " style={{ marginBottom: 12 }}>
               <Button
                 size="large"
+                style={{ minHeight: 44 }}
                 icon={<ClearOutlined />}
                 onClick={handleReset}
                 disabled={activeFilterCount === 0 || loading}

@@ -3,8 +3,8 @@
  * State extracted to useCatalogState hook (Story 34.10, SOLID-FE-2).
  */
 
-import { Typography, Input, Row, Col, Empty, Skeleton, Button, Space, Card, Drawer } from 'antd';
-import { AppstoreOutlined, BarsOutlined, SearchOutlined } from '@ant-design/icons';
+import { Typography, Input, Row, Col, Empty, Skeleton, Button, Space, Card, Badge, Drawer, theme } from 'antd';
+import { AppstoreOutlined, BarsOutlined, SearchOutlined, FilterOutlined, ClearOutlined } from '@ant-design/icons';
 import { ActionCard } from '../components/catalog/ActionCard';
 import { ActionDrawerPreview } from '../components/catalog/ActionDrawerPreview';
 import { ActionTable } from '../components/catalog/ActionTable';
@@ -49,6 +49,7 @@ function toPreviewData(action: CatalogAction, stats?: ActionStats | null): Actio
 
 export default function CatalogPage() {
   const { isAuthenticated } = useAuth();
+  const { token } = theme.useToken();
   const {
     viewMode, handleViewModeChange,
     activeCategory, handleCategoryChange,
@@ -68,6 +69,29 @@ export default function CatalogPage() {
     executionViewId, setExecutionViewId,
     handleRemediationSuggestionClick,
   } = useCatalogState();
+
+  // Story 46.7: Nombre de filtres actifs (category excluant 'tout' et 'mes-actions', tags, engines, impacts)
+  const activeFilterCount = [
+    activeCategory && !['tout', 'mes-actions'].includes(activeCategory) ? 1 : 0,
+    filterTags.length,
+    filterEngines.length,
+    filterImpacts.length,
+  ].reduce((acc, n) => acc + n, 0);
+
+  // Story 46.7: Extra de la Card filtres (Badge + bouton reset)
+  const filterCardExtra = (
+    <Badge count={activeFilterCount} style={{ backgroundColor: token.colorPrimary }}>
+      <Button
+        icon={<ClearOutlined />}
+        size="large"
+        style={{ minHeight: 44 }}
+        onClick={resetFilters}
+        disabled={activeFilterCount === 0}
+      >
+        Réinitialiser
+      </Button>
+    </Badge>
+  );
 
   const renderActionCard = (action: CatalogAction) => (
     <div key={action.id}>
@@ -132,26 +156,42 @@ export default function CatalogPage() {
           favoritesCount={favorites.size}
         />
 
-        {activeCategory !== 'mes-actions' && (
-          <HorizontalFilters
+        {/* Story 46.7: Card filtres avec FilterOutlined + Badge actifs + Reset (AC1, AC3, AC4, AC5) */}
+        <Card
+          size="small"
+          title={
+            <Space>
+              <FilterOutlined />
+              Filtres
+            </Space>
+          }
+          extra={filterCardExtra}
+          style={{ marginBottom: 16 }}
+        >
+          {/* AC3: TagCloud dans la Card pour que le header "Filtres" + FilterOutlined couvre aussi les filtres par tags */}
+          {activeCategory !== 'mes-actions' && tagsWithCounts.length > 0 && (
+            <TagCloud tags={tagsWithCounts} selectedTags={filterTags} onSelectionChange={setFilterTags} />
+          )}
+          {activeCategory !== 'mes-actions' && (
+            <HorizontalFilters
+              selectedEngines={filterEngines}
+              selectedImpacts={filterImpacts}
+              onEnginesChange={setFilterEngines}
+              onImpactsChange={setFilterImpacts}
+            />
+          )}
+          <ActiveFiltersChips
+            activeCategory={activeCategory}
+            selectedTags={filterTags}
             selectedEngines={filterEngines}
             selectedImpacts={filterImpacts}
-            onEnginesChange={setFilterEngines}
-            onImpactsChange={setFilterImpacts}
+            onRemoveCategory={() => handleCategoryChange('tout')}
+            onRemoveTag={(tag) => setFilterTags((prev) => prev.filter((t) => t !== tag))}
+            onRemoveEngine={(engine) => setFilterEngines((prev) => prev.filter((e) => e !== engine))}
+            onRemoveImpact={(impact) => setFilterImpacts((prev) => prev.filter((i) => i !== impact))}
+            onClearAll={resetFilters}
           />
-        )}
-
-        <ActiveFiltersChips
-          activeCategory={activeCategory}
-          selectedTags={filterTags}
-          selectedEngines={filterEngines}
-          selectedImpacts={filterImpacts}
-          onRemoveCategory={() => handleCategoryChange('tout')}
-          onRemoveTag={(tag) => setFilterTags((prev) => prev.filter((t) => t !== tag))}
-          onRemoveEngine={(engine) => setFilterEngines((prev) => prev.filter((e) => e !== engine))}
-          onRemoveImpact={(impact) => setFilterImpacts((prev) => prev.filter((i) => i !== impact))}
-          onClearAll={resetFilters}
-        />
+        </Card>
 
         <Space style={{ marginBottom: 16, width: '100%', justifyContent: 'space-between' }} wrap>
           <Space.Compact>
@@ -177,10 +217,6 @@ export default function CatalogPage() {
             onChange={(e) => setSearchText(e.target.value)}
           />
         </Space>
-
-        {activeCategory !== 'mes-actions' && tagsWithCounts.length > 0 && (
-          <TagCloud tags={tagsWithCounts} selectedTags={filterTags} onSelectionChange={setFilterTags} />
-        )}
 
         <Text type="secondary" aria-live="polite" style={{ display: 'block', marginBottom: 16 }}>
           {loading ? 'Chargement…' : `${filteredActions.length} action${filteredActions.length !== 1 ? 's' : ''}`}
