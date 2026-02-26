@@ -593,6 +593,9 @@ CELERY_TASK_ROUTES = {
     'executions.tasks.evaluate_waiting_gates': {'queue': 'default'},
     'executions.tasks.process_pending_scheduled_executions': {'queue': 'default'},
     'executions.tasks.retry_workflow_step': {'queue': 'default'},
+    # Story 47.2 — Trigger async ; la queue spécifique est passée via apply_async(queue=...) au runtime.
+    # Cette route est un fallback pour le dispatch sans queue explicite.
+    'executions.tasks.trigger_platform_job': {'queue': 'default'},
 }
 
 # ============================================================================

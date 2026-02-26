@@ -2,7 +2,7 @@
 -- Baseline Schema V088 — IDP Portal
 -- ===========================================================================
 -- Date            : 2026-02-25
--- Version couverte: V000–V090 (91 migrations Flyway consolidées)
+-- Version couverte: V000–V093 (94 migrations Flyway consolidées)
 -- Auteur          : Agent de développement (Story 41-2)
 --
 -- Usage           : NOUVEAUX ENVIRONNEMENTS UNIQUEMENT (base Oracle vierge)
@@ -12,12 +12,12 @@
 --   1. sqlplus idp_user/password@HOST:1521/XEPDB1 @database/baseline/baseline_schema_v088.sql
 --   2. flyway -baselineVersion=88 -baselineDescription=baseline_schema_v088 baseline
 --
--- Ce script couvre TOUTES les migrations V000–V090. Aucune migration incrémentale
--- n'est nécessaire après application. État identique à V000→V090 sans phases intermédiaires.
+-- Ce script couvre TOUTES les migrations V000–V093. Aucune migration incrémentale
+-- n'est nécessaire après application. État identique à V000→V093 sans phases intermédiaires.
 -- ===========================================================================
 --
 -- Objets créés :
---   27 tables, indexes, contraintes, trigger, package PKG_IDP_MAINTENANCE, données de référence
+--   33 tables, indexes, contraintes, trigger, package PKG_IDP_MAINTENANCE, données de référence
 --
 -- Exclusions (éléments neutralisés par les migrations) :
 --   - SCHEMA_VERSION (créée V000, droppée V015)
@@ -71,6 +71,89 @@ CREATE TABLE AUTH_USER (
 );
 
 CREATE UNIQUE INDEX UK_AUTH_USER_USERNAME ON AUTH_USER(USERNAME);
+
+-- ---------------------------------------------------------------------------
+-- AUTH_GROUP (V092) — django.contrib.auth Group
+-- ---------------------------------------------------------------------------
+CREATE TABLE AUTH_GROUP (
+    ID   NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    NAME VARCHAR2(150) NOT NULL,
+    CONSTRAINT UK_AUTH_GROUP_NAME UNIQUE (NAME)
+);
+
+-- ---------------------------------------------------------------------------
+-- AUTH_USER_GROUPS (V092) — M2M auth_user ↔ auth_group
+-- ---------------------------------------------------------------------------
+CREATE TABLE AUTH_USER_GROUPS (
+    ID       NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    USER_ID  NUMBER NOT NULL,
+    GROUP_ID NUMBER NOT NULL,
+    CONSTRAINT FK_AUTH_USER_GROUPS_USER  FOREIGN KEY (USER_ID)  REFERENCES AUTH_USER(ID) ON DELETE CASCADE,
+    CONSTRAINT FK_AUTH_USER_GROUPS_GROUP FOREIGN KEY (GROUP_ID) REFERENCES AUTH_GROUP(ID) ON DELETE CASCADE,
+    CONSTRAINT UK_AUTH_USER_GROUPS_USER_GROUP UNIQUE (USER_ID, GROUP_ID)
+);
+
+CREATE INDEX IDX_AUTH_USER_GROUPS_USER_ID  ON AUTH_USER_GROUPS(USER_ID);
+CREATE INDEX IDX_AUTH_USER_GROUPS_GROUP_ID ON AUTH_USER_GROUPS(GROUP_ID);
+
+-- ---------------------------------------------------------------------------
+-- DJANGO_CONTENT_TYPE (V093) — django.contrib.contenttypes
+-- ---------------------------------------------------------------------------
+CREATE TABLE DJANGO_CONTENT_TYPE (
+    ID        NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    APP_LABEL VARCHAR2(100) NOT NULL,
+    MODEL     VARCHAR2(100) NOT NULL,
+    CONSTRAINT UK_DJANGO_CONTENT_TYPE_APP_MODEL UNIQUE (APP_LABEL, MODEL)
+);
+
+-- ---------------------------------------------------------------------------
+-- AUTH_PERMISSION (V093) — django.contrib.auth Permission
+-- ---------------------------------------------------------------------------
+CREATE TABLE AUTH_PERMISSION (
+    ID              NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    NAME            VARCHAR2(255) NOT NULL,
+    CONTENT_TYPE_ID NUMBER NOT NULL,
+    CODENAME        VARCHAR2(100) NOT NULL,
+    CONSTRAINT FK_AUTH_PERMISSION_CONTENT_TYPE FOREIGN KEY (CONTENT_TYPE_ID) REFERENCES DJANGO_CONTENT_TYPE(ID) ON DELETE CASCADE,
+    CONSTRAINT UK_AUTH_PERMISSION_CONTENT_CODENAME UNIQUE (CONTENT_TYPE_ID, CODENAME)
+);
+
+CREATE INDEX IDX_AUTH_PERMISSION_CONTENT_TYPE ON AUTH_PERMISSION(CONTENT_TYPE_ID);
+
+-- ---------------------------------------------------------------------------
+-- AUTH_USER_USER_PERMISSIONS (V093) — M2M auth_user ↔ auth_permission
+-- ---------------------------------------------------------------------------
+CREATE TABLE AUTH_USER_USER_PERMISSIONS (
+    ID            NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    USER_ID       NUMBER NOT NULL,
+    PERMISSION_ID NUMBER NOT NULL,
+    CONSTRAINT FK_AUTH_USER_PERM_USER       FOREIGN KEY (USER_ID)       REFERENCES AUTH_USER(ID) ON DELETE CASCADE,
+    CONSTRAINT FK_AUTH_USER_PERM_PERMISSION  FOREIGN KEY (PERMISSION_ID) REFERENCES AUTH_PERMISSION(ID) ON DELETE CASCADE,
+    CONSTRAINT UK_AUTH_USER_PERM_USER_PERM UNIQUE (USER_ID, PERMISSION_ID)
+);
+
+CREATE INDEX IDX_AUTH_USER_PERM_USER_ID       ON AUTH_USER_USER_PERMISSIONS(USER_ID);
+CREATE INDEX IDX_AUTH_USER_PERM_PERMISSION_ID ON AUTH_USER_USER_PERMISSIONS(PERMISSION_ID);
+
+-- ---------------------------------------------------------------------------
+-- API_KEYS (V091) — idp_auth.APIKey pour accès API par clé
+-- ---------------------------------------------------------------------------
+CREATE TABLE API_KEYS (
+    ID              NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    USER_ID         NUMBER NOT NULL,
+    KEY_HASH        VARCHAR2(64) NOT NULL,
+    NAME            VARCHAR2(255) DEFAULT '' NOT NULL,
+    SCOPE           VARCHAR2(50),
+    EXPIRES_AT      TIMESTAMP,
+    IS_ACTIVE       NUMBER(1) DEFAULT 1 NOT NULL,
+    CREATED_AT      TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    UPDATED_AT      TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    CONSTRAINT FK_API_KEYS_USER FOREIGN KEY (USER_ID) REFERENCES USERS(ID) ON DELETE CASCADE,
+    CONSTRAINT CK_API_KEYS_IS_ACTIVE CHECK (IS_ACTIVE IN (0, 1))
+);
+
+CREATE UNIQUE INDEX UK_API_KEYS_KEY_HASH ON API_KEYS(KEY_HASH);
+CREATE INDEX IDX_API_KEYS_USER_ID ON API_KEYS(USER_ID);
 
 -- ---------------------------------------------------------------------------
 -- DJANGO_SESSION (V090) — django.contrib.sessions pour login admin
