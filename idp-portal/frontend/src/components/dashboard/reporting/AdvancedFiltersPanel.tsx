@@ -148,62 +148,68 @@ export function AdvancedFiltersPanel({
       <FilterOutlined style={{ color: '#8c8c8c' }} />
 
       <Select
+        size="large"
         placeholder="Moteur"
         allowClear
         value={filters.engine}
         onChange={handleEngineChange}
         options={engineOptions}
-        style={{ width: 140 }}
+        style={{ width: 160, minHeight: 44 }}
         disabled={loading}
         data-testid="filter-engine"
       />
 
       <Select
+        size="large"
         placeholder="Environnement"
         allowClear
         value={filters.environment}
         onChange={handleEnvironmentChange}
         options={environmentOptions}
-        style={{ width: 150 }}
+        style={{ width: 170, minHeight: 44 }}
         disabled={loading}
         data-testid="filter-environment"
       />
 
       <Select
+        size="large"
         mode="multiple"
         placeholder="Tags"
         allowClear
         value={filters.tags || []}
         onChange={handleTagsChange}
         options={tagOptions}
-        style={{ minWidth: 150, maxWidth: 300 }}
+        style={{ minWidth: 170, maxWidth: 300, minHeight: 44 }}
         disabled={loading || tagOptions.length === 0}
         maxTagCount="responsive"
         data-testid="filter-tags"
       />
 
       <Select
+        size="large"
         placeholder="Statut"
         allowClear
         value={filters.status}
         onChange={handleStatusChange}
         options={STATUS_OPTIONS}
-        style={{ width: 130 }}
+        style={{ width: 150, minHeight: 44 }}
         disabled={loading}
         data-testid="filter-status"
       />
 
       <RangePicker
+        size="large"
         value={dateRangeValue}
         onChange={handleDateRangeChange}
         format="DD/MM/YYYY"
         placeholder={['Date début', 'Date fin']}
         disabled={loading}
         data-testid="filter-date-range"
-        style={{ width: 240 }}
+        style={{ width: 260, minHeight: 44 }}
       />
 
       <Button
+        size="large"
         icon={<ClearOutlined />}
         onClick={handleReset}
         disabled={activeFiltersCount === 0 || loading}

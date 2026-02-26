@@ -125,7 +125,8 @@ export function ExecutionsFiltersPanel({
           <Col xs={24} md={8}>
             <Form.Item label="Période" style={{ marginBottom: 12 }}>
               <RangePicker
-                style={{ width: '100%' }}
+                size="large"
+                style={{ width: '100%', minHeight: 44 }}
                 format="DD/MM/YYYY"
                 placeholder={['Date début', 'Date fin']}
                 presets={DATE_PRESETS}
@@ -139,6 +140,8 @@ export function ExecutionsFiltersPanel({
           <Col xs={24} md={8}>
             <Form.Item label="Action" style={{ marginBottom: 12 }}>
               <Select
+                size="large"
+                style={{ minHeight: 44 }}
                 placeholder="Toutes les actions"
                 allowClear
                 showSearch
@@ -155,6 +158,8 @@ export function ExecutionsFiltersPanel({
           <Col xs={24} md={8}>
             <Form.Item label="Technologie" style={{ marginBottom: 12 }}>
               <Select
+                size="large"
+                style={{ minHeight: 44 }}
                 placeholder="Toutes les technologies"
                 allowClear
                 value={filters.engine}
@@ -173,6 +178,8 @@ export function ExecutionsFiltersPanel({
           <Col xs={24} md={6}>
             <Form.Item label="Tags" style={{ marginBottom: 12 }}>
               <Select
+                size="large"
+                style={{ minHeight: 44 }}
                 mode="multiple"
                 placeholder="Tous les tags"
                 allowClear
@@ -191,6 +198,8 @@ export function ExecutionsFiltersPanel({
           <Col xs={24} md={5}>
             <Form.Item label="Statut" style={{ marginBottom: 12 }}>
               <Select
+                size="large"
+                style={{ minHeight: 44 }}
                 placeholder="Tous les statuts"
                 allowClear
                 value={filters.status}
@@ -204,6 +213,8 @@ export function ExecutionsFiltersPanel({
           <Col xs={24} md={5}>
             <Form.Item label="Environnement" style={{ marginBottom: 12 }}>
               <Select
+                size="large"
+                style={{ minHeight: 44 }}
                 placeholder="Tous les env."
                 allowClear
                 value={filters.environment}
@@ -220,6 +231,7 @@ export function ExecutionsFiltersPanel({
           <Col xs={24} md={8}>
             <Form.Item label=" " style={{ marginBottom: 12 }}>
               <Button
+                size="large"
                 icon={<ClearOutlined />}
                 onClick={handleReset}
                 disabled={activeFilterCount === 0 || loading}

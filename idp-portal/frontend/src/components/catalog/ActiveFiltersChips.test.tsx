@@ -171,4 +171,47 @@ describe('ActiveFiltersChips', () => {
 
     expect(screen.getByRole('group', { name: 'Filtres actifs' })).toBeInTheDocument();
   });
+
+  describe('Story 46.2 — taille minimale 44px (WCAG 2.5.5)', () => {
+    it('le chip catégorie a un style minHeight >= 44px', () => {
+      renderWithTheme(
+        <ActiveFiltersChips
+          {...defaultProps}
+          activeCategory="patching"
+        />
+      );
+
+      const categoryTag = screen.getByText('Catégorie: Patching').closest('.ant-tag') as HTMLElement;
+      expect(categoryTag).toBeTruthy();
+      const minHeight = parseInt(categoryTag.style.minHeight);
+      expect(minHeight).toBeGreaterThanOrEqual(44);
+    });
+
+    it('les chips tag ont un style minHeight >= 44px', () => {
+      renderWithTheme(
+        <ActiveFiltersChips
+          {...defaultProps}
+          selectedTags={['oracle']}
+        />
+      );
+
+      const tagChip = screen.getByText('Tag: oracle').closest('.ant-tag') as HTMLElement;
+      expect(tagChip).toBeTruthy();
+      const minHeight = parseInt(tagChip.style.minHeight);
+      expect(minHeight).toBeGreaterThanOrEqual(44);
+    });
+
+    it('le bouton reset n\'a pas size="small"', () => {
+      renderWithTheme(
+        <ActiveFiltersChips
+          {...defaultProps}
+          selectedTags={['oracle']}
+        />
+      );
+
+      const resetBtn = screen.getByText('Réinitialiser tous les filtres').closest('button');
+      expect(resetBtn).toBeTruthy();
+      expect(resetBtn).not.toHaveClass('ant-btn-sm');
+    });
+  });
 });

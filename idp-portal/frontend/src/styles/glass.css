@@ -599,6 +599,26 @@ html.dark .ant-tabs-tab-active .ant-tabs-tab-btn {
   border-radius: 3px 3px 0 0;
 }
 
+/* === Story 46.2 — Zones cliquables min 44px (WCAG 2.5.5 Target Size) === */
+.ant-select-lg .ant-select-selector {
+  min-height: 44px !important;
+  align-items: center !important;
+}
+
+.ant-picker-large {
+  min-height: 44px !important;
+}
+
+.ant-picker-large .ant-picker-input {
+  min-height: 44px;
+}
+
+/* S'assurer que les dropdowns et popovers ne sont pas affectés */
+.ant-select-dropdown,
+.ant-picker-dropdown {
+  min-height: auto !important;
+}
+
 /* === Reduced motion: disable animations for users who prefer it (WCAG) === */
 @media (prefers-reduced-motion: reduce) {
   *,

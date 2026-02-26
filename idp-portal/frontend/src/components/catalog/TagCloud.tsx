@@ -83,9 +83,12 @@ export function TagCloud({ tags, selectedTags, onSelectionChange }: TagCloudProp
               onChange={(checked) => handleTagToggle(tag.name, checked)}
               style={{
                 cursor: 'pointer',
-                padding: '4px 12px',
+                padding: '10px 16px',
                 borderRadius: 16,
                 fontSize: 13,
+                minHeight: 44,
+                display: 'inline-flex',
+                alignItems: 'center',
                 ...tagStyle,
                 border: isSelected ? `2px solid ${STYLE_TOKENS.colorPrimary}` : tagStyle.border,
               }}
@@ -98,10 +101,10 @@ export function TagCloud({ tags, selectedTags, onSelectionChange }: TagCloudProp
       {selectedTags.length > 0 && (
         <Button
           type="link"
-          size="small"
           icon={<CloseCircleOutlined />}
           onClick={handleReset}
           aria-label="Réinitialiser les filtres par tags"
+          style={{ minHeight: 44 }}
         >
           Réinitialiser
         </Button>

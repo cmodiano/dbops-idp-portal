@@ -130,4 +130,33 @@ describe('TagCloud', () => {
 
     expect(handleChange).toHaveBeenCalledWith(['oracle']);
   });
+
+  describe('Story 46.2 — taille minimale 44px (WCAG 2.5.5)', () => {
+    it('chaque CheckableTag a un style minHeight >= 44px', () => {
+      renderWithTheme(<TagCloud tags={mockTags} selectedTags={[]} onSelectionChange={() => {}} />);
+
+      const checkableTags = document.querySelectorAll('.ant-tag-checkable');
+      expect(checkableTags.length).toBeGreaterThan(0);
+      checkableTags.forEach((tag) => {
+        const el = tag as HTMLElement;
+        const minHeight = parseInt(el.style.minHeight);
+        expect(minHeight).toBeGreaterThanOrEqual(44);
+      });
+    });
+
+    it('les tags existants restent sélectionnables (onChange appelé au clic)', () => {
+      const handleChange = vi.fn();
+      renderWithTheme(<TagCloud tags={mockTags} selectedTags={[]} onSelectionChange={handleChange} />);
+
+      fireEvent.click(screen.getByText('oracle (5)'));
+      expect(handleChange).toHaveBeenCalledWith(['oracle']);
+    });
+
+    it('le bouton réinitialiser n\'a pas size="small"', () => {
+      renderWithTheme(<TagCloud tags={mockTags} selectedTags={['oracle']} onSelectionChange={() => {}} />);
+
+      const resetBtn = screen.getByRole('button', { name: 'Réinitialiser les filtres par tags' });
+      expect(resetBtn).not.toHaveClass('ant-btn-sm');
+    });
+  });
 });

@@ -94,4 +94,31 @@ describe('HorizontalFilters', () => {
     const selects = container.querySelectorAll('.ant-select');
     expect(selects).toHaveLength(2);
   });
+
+  describe('Story 46.2 — taille minimale 44px (WCAG 2.5.5)', () => {
+    it('les Select ont un style minHeight >= 44px', () => {
+      const { container } = render(<HorizontalFilters {...defaultProps} />);
+
+      const selects = container.querySelectorAll('.ant-select');
+      expect(selects.length).toBe(2);
+      selects.forEach((select) => {
+        const el = select as HTMLElement;
+        const minHeight = parseInt(el.style.minHeight);
+        expect(minHeight).toBeGreaterThanOrEqual(44);
+      });
+    });
+
+    it('les Select ont size="large" (classe ant-select-lg)', () => {
+      const { container } = render(<HorizontalFilters {...defaultProps} />);
+
+      const largeSelects = container.querySelectorAll('.ant-select-lg');
+      expect(largeSelects.length).toBe(2);
+    });
+
+    it('aucun Select n\'a size="small" ou size="middle" exclusivement', () => {
+      const { container } = render(<HorizontalFilters {...defaultProps} />);
+
+      expect(container.querySelectorAll('.ant-select-sm')).toHaveLength(0);
+    });
+  });
 });
