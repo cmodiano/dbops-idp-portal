@@ -1,6 +1,6 @@
 # Contrats API – Django Backend
 
-**Date :** 2026-02-21  
+**Date :** 2026-02-26  
 **Base URL :** `/api/v1/` (préfixe racine projet : `/api/v1/`)
 
 ---
@@ -135,6 +135,13 @@
 |---------|--------|-------------|
 | POST | `webhooks/github/workflow_run` | GitHub Actions workflow run |
 | POST | `webhooks/terraform/run` | Terraform Cloud run |
+
+---
+
+### API Keys (idp_auth)
+| Méthode | Chemin | Description |
+|---------|--------|-------------|
+| POST | `auth/token/` | Obtenir un token JWT via API key |
 
 ---
 

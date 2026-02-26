@@ -1,6 +1,6 @@
 # test – Vue d’ensemble du projet
 
-**Date :** 2026-02-21  
+**Date :** 2026-02-26  
 **Type :** multi-part (Frontend + Backend)  
 **Architecture :** SPA React + API REST Django
 
