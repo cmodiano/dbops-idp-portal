@@ -969,10 +969,11 @@ CREATE OR REPLACE PACKAGE BODY PKG_IDP_MAINTENANCE AS
     EXCEPTION
         WHEN OTHERS THEN
             DBMS_OUTPUT.PUT_LINE(
-                'WARNING: IDP_MAINTENANCE_LOG insert failed for '
+                'WARNING: log_maintenance insert failed for '
                 || p_table_name || '/' || p_partition_name
                 || ' — ' || SQLERRM
             );
+            RAISE;
     END log_maintenance;
 
     FUNCTION get_partition_date(p_high_value IN VARCHAR2) RETURN DATE IS

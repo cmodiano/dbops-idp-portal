@@ -72,9 +72,9 @@ export function workflowStepsToReactFlow(
         targetHandle: 'input',
         type: 'customEdge',
         animated: false,
-        style: { stroke: STYLE_TOKENS.iconSuccess, strokeWidth: 2 },
+        style: { stroke: STYLE_TOKENS.iconSuccess, strokeWidth: STYLE_TOKENS.edgeStrokeWidth },
         label: 'succès',
-        labelStyle: { fontSize: 10, fill: STYLE_TOKENS.textSuccess },
+        labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textSuccess },
       });
     } else {
       // on_success_step_id=null means "end of workflow" — draw edge to End node for clarity
@@ -86,9 +86,9 @@ export function workflowStepsToReactFlow(
         targetHandle: 'input',
         type: 'customEdge',
         animated: false,
-        style: { stroke: STYLE_TOKENS.iconSuccess, strokeWidth: 2 },
+        style: { stroke: STYLE_TOKENS.iconSuccess, strokeWidth: STYLE_TOKENS.edgeStrokeWidth },
         label: 'succès',
-        labelStyle: { fontSize: 10, fill: STYLE_TOKENS.textSuccess },
+        labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textSuccess },
       });
     }
     if (step.on_error_step_id) {
@@ -100,9 +100,9 @@ export function workflowStepsToReactFlow(
         targetHandle: 'input',
         type: 'customEdge',
         animated: false,
-        style: { stroke: STYLE_TOKENS.iconError, strokeWidth: 2 },
+        style: { stroke: STYLE_TOKENS.iconError, strokeWidth: STYLE_TOKENS.edgeStrokeWidth },
         label: 'erreur',
-        labelStyle: { fontSize: 10, fill: STYLE_TOKENS.textError },
+        labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textError },
       });
     } else {
       // on_error_step_id=null means "end/fail" — draw edge to End node for clarity
@@ -114,9 +114,9 @@ export function workflowStepsToReactFlow(
         targetHandle: 'input',
         type: 'customEdge',
         animated: false,
-        style: { stroke: STYLE_TOKENS.iconError, strokeWidth: 2 },
+        style: { stroke: STYLE_TOKENS.iconError, strokeWidth: STYLE_TOKENS.edgeStrokeWidth },
         label: 'erreur',
-        labelStyle: { fontSize: 10, fill: STYLE_TOKENS.textError },
+        labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textError },
       });
     }
   });
@@ -158,9 +158,9 @@ export function workflowStepsToReactFlow(
         targetHandle: 'input',
         type: 'customEdge',
         animated: false,
-        style: { stroke: STYLE_TOKENS.iconSuccess, strokeWidth: 2 },
+        style: { stroke: STYLE_TOKENS.iconSuccess, strokeWidth: STYLE_TOKENS.edgeStrokeWidth },
         label: 'succès',
-        labelStyle: { fontSize: 10, fill: STYLE_TOKENS.textSuccess },
+        labelStyle: { fontSize: STYLE_TOKENS.edgeLabelFontSize, fill: STYLE_TOKENS.textSuccess },
       });
     }
   }

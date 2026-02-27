@@ -14,6 +14,10 @@ export const STYLE_TOKENS = {
   engineIconSize: 40,
   /** Workflow icon color (Story 18.2). */
   workflowColor: '#722ed1',
+  /** Edge stroke width (workflow canvas). */
+  edgeStrokeWidth: 2,
+  /** Edge label font size (workflow canvas). */
+  edgeLabelFontSize: 10,
   /** Engine icon colors (UX spec). */
   engineIconColor: {
     Oracle: '#EF4444',
