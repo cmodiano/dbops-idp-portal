@@ -70,6 +70,8 @@ class ExecutionEnvironmentValidationTests(TestCase):
     def test_create_execution_with_certification_environment(self):
         """Story 53.2 AC3 : Création d'exécution avec environment='certification' → HTTP 201
         et valeur enregistrée telle quelle en base (pas d'alias vers 'staging')."""
+        from executions.models import Execution
+
         response = self.client.post('/api/v1/executions/', {
             'action_id': self.action.id,
             'environment': 'certification',
@@ -77,11 +79,15 @@ class ExecutionEnvironmentValidationTests(TestCase):
         }, format='json')
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data.get('environment'), 'certification')
+        execution_id = response.data['data']['execution_id']
+        execution = Execution.objects.get(id=execution_id)
+        self.assertEqual(execution.environment, 'certification')
 
     def test_create_execution_with_developpement_environment(self):
         """Story 53.2 AC4 : Création d'exécution avec environment='developpement' → HTTP 201
         et valeur enregistrée telle quelle en base (pas d'alias vers 'dev')."""
+        from executions.models import Execution
+
         response = self.client.post('/api/v1/executions/', {
             'action_id': self.action.id,
             'environment': 'developpement',
@@ -89,7 +95,9 @@ class ExecutionEnvironmentValidationTests(TestCase):
         }, format='json')
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data.get('environment'), 'developpement')
+        execution_id = response.data['data']['execution_id']
+        execution = Execution.objects.get(id=execution_id)
+        self.assertEqual(execution.environment, 'developpement')
 
     def test_regular_execution_accepts_any_env_no_inventory_validation(self):
         """Story 53.2 / Story 26.10 : Les exécutions régulières n'effectuent pas de validation
