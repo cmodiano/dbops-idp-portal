@@ -84,6 +84,8 @@ class AuditActionType(models.TextChoices):
     INTEGRATION_ACTION_UPDATED = 'INTEGRATION_ACTION_UPDATED', 'Integration Action Updated'
     # Story 24.3: Integration status validation audit
     INTEGRATION_STATUS_UPDATED = 'INTEGRATION_STATUS_UPDATED', 'Integration Status Updated'
+    # Story 51.2: Integration health check manual test
+    INTEGRATION_HEALTH_CHECK_TESTED = 'INTEGRATION_HEALTH_CHECK_TESTED', 'Integration Health Check Tested'
     # Story 24.4: Migration and execution guard-rail audit types
     INTEGRATION_MARKED_LEGACY = 'INTEGRATION_MARKED_LEGACY', 'Integration Marked Legacy'
     EXECUTION_BLOCKED_INVALID_INTEGRATION = 'EXECUTION_BLOCKED_INVALID_INTEGRATION', 'Execution Blocked Invalid Integration'
