@@ -59,7 +59,7 @@ describe('TrendLineChart', () => {
     render(<TrendLineChart data={[]} loading={false} />);
 
     expect(screen.getByText('Tendances temporelles')).toBeInTheDocument();
-    expect(screen.getByText('Aucune donnee sur la periode')).toBeInTheDocument();
+    expect(screen.getByText('Aucune donnée sur la période')).toBeInTheDocument();
   });
 
   it('renders skeleton when loading', () => {

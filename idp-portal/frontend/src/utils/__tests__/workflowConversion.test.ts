@@ -113,7 +113,7 @@ describe('workflowStepsToReactFlow', () => {
       (e) => e.source === 'step-1' && e.sourceHandle === 'success' && e.target === 'step-2'
     );
     expect(successEdge).toBeDefined();
-    expect(successEdge!.style).toEqual(expect.objectContaining({ stroke: '#52c41a' }));
+    expect(successEdge!.style).toEqual(expect.objectContaining({ stroke: '#16a34a' }));
   });
 
   it('creates error edges between steps when on_error_step_id is set', () => {
@@ -126,7 +126,7 @@ describe('workflowStepsToReactFlow', () => {
       (e) => e.source === 'step-1' && e.sourceHandle === 'error' && e.target === 'step-2'
     );
     expect(errorEdge).toBeDefined();
-    expect(errorEdge!.style).toEqual(expect.objectContaining({ stroke: '#ff4d4f' }));
+    expect(errorEdge!.style).toEqual(expect.objectContaining({ stroke: '#dc2626' }));
   });
 
   it('positions nodes in a grid layout', () => {

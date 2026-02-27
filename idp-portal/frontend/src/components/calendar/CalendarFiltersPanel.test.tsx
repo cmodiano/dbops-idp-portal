@@ -12,6 +12,21 @@ import type { CalendarFilters } from '../../hooks/useCalendarFilters';
 import * as integrationsService from '../../services/integrations_service';
 
 vi.mock('../../services/integrations_service');
+vi.mock('../../contexts/AuthContext', () => ({
+  useAuth: () => ({ user: { id: 1, username: 'test' }, loading: false }),
+}));
+vi.mock('../../hooks/useEnvironments', () => ({
+  useEnvironments: () => ({
+    environments: ['dev', 'staging', 'prod'],
+    loading: false,
+    error: null,
+    environmentOptions: [
+      { value: 'dev', label: 'Développement' },
+      { value: 'staging', label: 'Staging' },
+      { value: 'prod', label: 'Production' },
+    ],
+  }),
+}));
 
 const defaultFilters: CalendarFilters = {
   action_id: null,

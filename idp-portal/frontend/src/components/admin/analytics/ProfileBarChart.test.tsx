@@ -28,7 +28,7 @@ describe('ProfileBarChart', () => {
     render(<ProfileBarChart data={[]} loading={false} />);
 
     expect(screen.getByText('Exécutions par profil')).toBeInTheDocument();
-    expect(screen.getByText('Aucune execution')).toBeInTheDocument();
+    expect(screen.getByText('Aucune exécution')).toBeInTheDocument();
   });
 
   it('renders skeleton when loading', () => {

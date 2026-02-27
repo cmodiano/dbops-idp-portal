@@ -30,7 +30,7 @@ describe('EngineBarChart', () => {
     render(<EngineBarChart data={[]} loading={false} />);
 
     expect(screen.getByText('Exécutions par moteur')).toBeInTheDocument();
-    expect(screen.getByText('Aucune execution')).toBeInTheDocument();
+    expect(screen.getByText('Aucune exécution')).toBeInTheDocument();
   });
 
   it('renders skeleton when loading', () => {

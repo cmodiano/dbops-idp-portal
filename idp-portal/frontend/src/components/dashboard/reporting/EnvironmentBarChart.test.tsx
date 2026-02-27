@@ -37,7 +37,7 @@ describe('EnvironmentBarChart', () => {
     render(<EnvironmentBarChart data={[]} loading={false} />);
 
     expect(screen.getByText('Répartition par environnement')).toBeInTheDocument();
-    expect(screen.getByText('Aucune execution sur la periode')).toBeInTheDocument();
+    expect(screen.getByText('Aucune exécution sur la période')).toBeInTheDocument();
   });
 
   it('renders skeleton when loading', () => {

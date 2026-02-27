@@ -112,7 +112,7 @@ describe('workflowStepsToReactFlow', () => {
 
     const errorEdge = edges.find((e) => e.source === 'a' && e.sourceHandle === 'error' && e.target === 'c');
     expect(errorEdge).toBeDefined();
-    expect(errorEdge!.style?.stroke).toBe('#ff4d4f');
+    expect(errorEdge!.style?.stroke).toBe('#dc2626');
     expect(errorEdge!.label).toBe('erreur');
   });
 
