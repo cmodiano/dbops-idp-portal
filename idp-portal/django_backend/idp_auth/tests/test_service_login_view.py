@@ -189,13 +189,12 @@ class TestServiceLoginView(TestCase):
     @patch('idp_auth.views.LDAPService')
     def test_throttle_applied_on_request(self, mock_ldap_class, mock_audit):
         """AC9 : Le throttle est évalué pour chaque requête (mock throttle → 429)."""
-        from rest_framework.throttling import SimpleRateThrottle
-        from unittest.mock import patch as mock_patch
+        from core.throttling import ServiceLoginThrottle
 
         mock_ldap = mock_ldap_class.return_value
         mock_ldap.authenticate.return_value = (False, [], None)
 
-        with mock_patch.object(SimpleRateThrottle, 'allow_request', return_value=False):
+        with patch.object(ServiceLoginThrottle, 'allow_request', return_value=False):
             response = self.client.post(
                 ENDPOINT,
                 {'username': 'svc', 'password': 'pass'},

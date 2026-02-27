@@ -11,6 +11,7 @@ Couvre :
 """
 from __future__ import annotations
 
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -69,6 +70,7 @@ class TestLDAPServiceAuthenticate(TestCase):
         ]
         mock_conn = MagicMock()
         mock_conn_cls.return_value = mock_conn
+        mock_conn.search.return_value = True
         mock_conn.entries = [_make_entry(groups, "John Doe")]
 
         success, ad_groups, display_name = self.service.authenticate("svc-ci", "secret")
@@ -83,14 +85,15 @@ class TestLDAPServiceAuthenticate(TestCase):
     def test_authenticate_success_no_entries(
         self, mock_server_cls: MagicMock, mock_conn_cls: MagicMock
     ) -> None:
-        """Bind réussi mais aucune entrée LDAP → groupes vides, display_name None."""
+        """Bind réussi mais aucune entrée LDAP → False (silent failure évité)."""
         mock_conn = MagicMock()
         mock_conn_cls.return_value = mock_conn
+        mock_conn.search.return_value = True
         mock_conn.entries = []
 
         success, ad_groups, display_name = self.service.authenticate("svc-ci", "secret")
 
-        assert success is True
+        assert success is False
         assert ad_groups == []
         assert display_name is None
 
@@ -177,6 +180,7 @@ class TestLDAPServiceAuthenticate(TestCase):
         """Le template DN complet (format CN=...) est correctement résolu."""
         mock_conn = MagicMock()
         mock_conn_cls.return_value = mock_conn
+        mock_conn.search.return_value = True
         mock_conn.entries = []
 
         self.service.authenticate("svc-ci", "secret")
@@ -203,9 +207,11 @@ def test_password_not_logged_on_success(
     mock_server_cls: MagicMock, mock_conn_cls: MagicMock, caplog: pytest.LogCaptureFixture
 ) -> None:
     """AC6 : le mot de passe ne figure jamais dans les logs (cas succès)."""
+    caplog.set_level(logging.INFO, logger="idp_auth.ldap_service")
     mock_conn = MagicMock()
     mock_conn_cls.return_value = mock_conn
-    mock_conn.entries = []
+    mock_conn.search.return_value = True
+    mock_conn.entries = [_make_entry([], "Test User")]
 
     LDAPService().authenticate("svc-ci", "super_secret_password")
 
@@ -221,6 +227,7 @@ def test_password_not_logged_on_bind_error(
     mock_server_cls: MagicMock, mock_conn_cls: MagicMock, caplog: pytest.LogCaptureFixture
 ) -> None:
     """AC6 : le mot de passe ne figure jamais dans les logs (cas bind raté)."""
+    caplog.set_level(logging.INFO, logger="idp_auth.ldap_service")
     mock_conn_cls.side_effect = LDAPBindError("Invalid credentials")
 
     LDAPService().authenticate("svc-ci", "super_secret_password")
@@ -237,6 +244,7 @@ def test_password_not_logged_on_ldap_error(
     mock_server_cls: MagicMock, mock_conn_cls: MagicMock, caplog: pytest.LogCaptureFixture
 ) -> None:
     """AC6 : le mot de passe ne figure jamais dans les logs (cas LDAP indisponible)."""
+    caplog.set_level(logging.INFO, logger="idp_auth.ldap_service")
     mock_conn_cls.side_effect = LDAPException("Connection refused")
 
     with pytest.raises(LDAPUnavailableError):

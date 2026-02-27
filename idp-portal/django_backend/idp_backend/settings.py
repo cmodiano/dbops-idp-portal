@@ -325,6 +325,7 @@ REST_FRAMEWORK = {
         'general_api': os.getenv('THROTTLE_API_RATE', '100/minute'),
         'public': os.getenv('THROTTLE_PUBLIC_RATE', '50/minute'),
         'api_key_token': os.getenv('THROTTLE_API_KEY_TOKEN_RATE', '10/minute'),
+        'service_login': os.getenv('THROTTLE_SERVICE_LOGIN_RATE', '5/minute'),
     },
     'DEFAULT_PAGINATION_CLASS': 'core.pagination.CustomPageNumberPagination',
     'PAGE_SIZE': 25,
@@ -497,6 +498,9 @@ LDAP_BASE_DN = os.getenv("LDAP_BASE_DN", "")   # ex: DC=example,DC=com
 #   UPN:     "{username}@example.com"
 #   Full DN: "CN={username},OU=ServiceAccounts,DC=example,DC=com"
 LDAP_USER_DN_TEMPLATE = os.getenv("LDAP_USER_DN_TEMPLATE", "{username}")
+# Timeouts (seconds) to avoid hanging threads on connect/receive
+LDAP_CONNECT_TIMEOUT = int(os.getenv("LDAP_CONNECT_TIMEOUT", "10"))
+LDAP_RECEIVE_TIMEOUT = int(os.getenv("LDAP_RECEIVE_TIMEOUT", "10"))
 
 # ============================================================================
 # SAML Configuration (Story M.7)

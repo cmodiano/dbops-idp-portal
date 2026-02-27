@@ -42,6 +42,8 @@ class LDAPService:
         ldap_uri = settings.LDAP_URI
         base_dn = settings.LDAP_BASE_DN
         dn_template = settings.LDAP_USER_DN_TEMPLATE
+        connect_timeout = settings.LDAP_CONNECT_TIMEOUT
+        receive_timeout = settings.LDAP_RECEIVE_TIMEOUT
 
         if not ldap_uri:
             logger.error("ldap_uri_not_configured")
@@ -53,14 +55,21 @@ class LDAPService:
 
         try:
             user_dn = dn_template.format(username=username)
-        except KeyError as exc:
+        except (KeyError, ValueError) as exc:
             logger.error("ldap_dn_template_error", error=str(exc))
             raise LDAPUnavailableError(f"Template DN mal configuré : {exc}") from exc
         log = logger.bind(ldap_username=username, ldap_uri=ldap_uri)
 
         try:
-            server = Server(ldap_uri, get_info=None)
-            conn = Connection(server, user=user_dn, password=password, auto_bind=True)
+            server = Server(ldap_uri, get_info=None, connect_timeout=connect_timeout)
+            conn = Connection(
+                server,
+                user=user_dn,
+                password=password,
+                auto_bind=True,
+                receive_timeout=receive_timeout,
+                raise_exceptions=True,
+            )
         except LDAPBindError:
             log.warning("ldap_bind_failed")
             return False, [], None
@@ -69,22 +78,26 @@ class LDAPService:
             raise LDAPUnavailableError(f"LDAP indisponible : {exc}") from exc
 
         try:
-            conn.search(
+            search_ok = conn.search(
                 search_base=base_dn,
                 search_filter=f"(sAMAccountName={escape_filter_chars(username)})",
                 attributes=["memberOf", "displayName"],
             )
-            ad_groups: list[str] = []
-            display_name: str | None = None
-            if conn.entries:
-                entry = conn.entries[0]
-                raw_groups = entry["memberOf"].values if "memberOf" in entry else []
-                ad_groups = [str(g) for g in raw_groups]
-                display_name = (
-                    str(entry["displayName"].value)
-                    if "displayName" in entry and entry["displayName"].value
-                    else None
+            if not search_ok or not conn.entries:
+                log.warning(
+                    "ldap_search_no_results",
+                    search_ok=search_ok,
+                    entries_count=len(conn.entries) if conn.entries else 0,
                 )
+                return False, [], None
+            entry = conn.entries[0]
+            raw_groups = entry["memberOf"].values if "memberOf" in entry else []
+            ad_groups = [str(g) for g in raw_groups]
+            display_name = (
+                str(entry["displayName"].value)
+                if "displayName" in entry and entry["displayName"].value
+                else None
+            )
             log.info("ldap_authenticate_success", groups_count=len(ad_groups))
             return True, ad_groups, display_name
         except LDAPException as exc:
