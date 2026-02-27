@@ -168,6 +168,80 @@ class TestLDAPServiceAuthenticate(TestCase):
             self.service.authenticate("svc-ci", "secret")
 
     # ------------------------------------------------------------------
+    # AC2a — displayName présent mais .value = None → display_name=None
+    # ------------------------------------------------------------------
+
+    @patch("idp_auth.ldap_service.Connection")
+    @patch("idp_auth.ldap_service.Server")
+    def test_display_name_value_is_none_returns_none(
+        self, mock_server_cls: MagicMock, mock_conn_cls: MagicMock
+    ) -> None:
+        """AC2a : displayName présent dans l'entrée mais .value = None → display_name=None."""
+        mock_conn = MagicMock()
+        mock_conn_cls.return_value = mock_conn
+        mock_conn.search.return_value = True
+        # Entrée avec displayName présent mais .value = None (présent mais vide)
+        mock_conn.entries = [_make_entry(["CN=GRP-IDP-DBOPS,OU=Groups,DC=example,DC=com"], None)]
+
+        success, ad_groups, display_name = self.service.authenticate("svc-ci", "secret")
+
+        assert success is True
+        assert display_name is None
+
+    # ------------------------------------------------------------------
+    # AC2b — Injection LDAP : username échappé par escape_filter_chars
+    # ------------------------------------------------------------------
+
+    @patch("idp_auth.ldap_service.Connection")
+    @patch("idp_auth.ldap_service.Server")
+    def test_ldap_injection_username_is_escaped(
+        self, mock_server_cls: MagicMock, mock_conn_cls: MagicMock
+    ) -> None:
+        """AC2b : username contenant ( ) est échappé par escape_filter_chars dans le filtre."""
+        from ldap3.utils.conv import escape_filter_chars
+
+        mock_conn = MagicMock()
+        mock_conn_cls.return_value = mock_conn
+        mock_conn.search.return_value = False
+        mock_conn.entries = []
+
+        self.service.authenticate("svc)(cn=*", "pass")
+
+        search_call = mock_conn.search.call_args
+        search_filter = search_call.kwargs.get("search_filter") or search_call[1].get(
+            "search_filter"
+        )
+        # Le filtre ne doit pas contenir le string injecté brut
+        assert "svc)(cn=*" not in search_filter
+        # Le filtre doit contenir la valeur correctement échappée par escape_filter_chars
+        expected_escaped = escape_filter_chars("svc)(cn=*")
+        assert expected_escaped in search_filter
+
+    # ------------------------------------------------------------------
+    # AC2c — Template DN par défaut {username} résout correctement
+    # ------------------------------------------------------------------
+
+    @override_settings(LDAP_USER_DN_TEMPLATE="{username}")
+    @patch("idp_auth.ldap_service.Connection")
+    @patch("idp_auth.ldap_service.Server")
+    def test_default_dn_template_uses_username_only(
+        self, mock_server_cls: MagicMock, mock_conn_cls: MagicMock
+    ) -> None:
+        """AC2c : LDAP_USER_DN_TEMPLATE='{username}' → Connection appelé avec user=nom brut."""
+        mock_conn = MagicMock()
+        mock_conn_cls.return_value = mock_conn
+        mock_conn.search.return_value = True
+        mock_conn.entries = []
+
+        self.service.authenticate("svc-ci", "secret")
+
+        call_kwargs = mock_conn_cls.call_args
+        user = call_kwargs.kwargs.get("user") or (
+            call_kwargs[1].get("user") if call_kwargs[1] else None
+        )
+        assert user == "svc-ci"
+
+    # ------------------------------------------------------------------
     # Vérification du DN template
     # ------------------------------------------------------------------
 
