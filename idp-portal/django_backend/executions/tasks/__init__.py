@@ -40,6 +40,7 @@ from executions.tasks.polling import (  # noqa: E402
     _mark_execution_polling_exhausted,
     _broadcast_execution_update,
     _update_execution_from_poll,
+    _forward_platform_logs_to_splunk,
 )
 from executions.tasks.trigger import trigger_platform_job  # noqa: E402
 
@@ -69,4 +70,5 @@ __all__ = [
     "_mark_execution_polling_exhausted",
     "_broadcast_execution_update",
     "_update_execution_from_poll",
+    "_forward_platform_logs_to_splunk",
 ]

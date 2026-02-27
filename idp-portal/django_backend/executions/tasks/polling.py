@@ -248,6 +248,76 @@ def _update_execution_from_poll(
         )
 
 
+def _forward_platform_logs_to_splunk(
+    execution_id: int,
+    platform_job_id: str,
+    platform_type: str,
+    logs_content: str,
+    correlation_id: str | None = None,
+) -> None:
+    """Forward platform logs to Splunk HEC at terminal state (best-effort).
+
+    Silently skipped when no active Splunk integration is configured.
+    """
+    if not logs_content:
+        return
+
+    try:
+        from integrations.models import Integration  # noqa: PLC0415
+        from adapters.utils import build_auth_headers  # noqa: PLC0415
+        from services import get_service_client  # noqa: PLC0415
+        from asgiref.sync import async_to_sync  # noqa: PLC0415
+
+        integration = Integration.objects.filter(type="splunk", status="valid").first()
+        if integration is None:
+            logger.debug(
+                "splunk_integration_not_configured",
+                execution_id=execution_id,
+                correlation_id=correlation_id,
+            )
+            return
+
+        auth_headers = build_auth_headers(integration, correlation_id=correlation_id)
+        # Splunk HEC expects "Authorization: Splunk {token}", not "Bearer {token}"
+        auth_value = auth_headers.get("Authorization", "")
+        if auth_value.startswith("Bearer "):
+            auth_headers["Authorization"] = "Splunk " + auth_value[len("Bearer "):]
+
+        splunk_client = get_service_client(
+            "splunk",
+            base_url=integration.base_url,
+            auth_headers=auth_headers,
+        )
+        async_to_sync(splunk_client.send_event)(
+            event={
+                "event": "platform_log",
+                "execution_id": execution_id,
+                "platform_job_id": platform_job_id,
+                "platform_type": platform_type,
+                "content": logs_content,
+                "correlation_id": correlation_id,
+            },
+            sourcetype="idp:platform_log",
+            correlation_id=correlation_id,
+        )
+        logger.info(
+            "platform_logs_forwarded_to_splunk",
+            execution_id=execution_id,
+            platform_job_id=platform_job_id,
+            correlation_id=correlation_id,
+        )
+    except Exception as exc:  # noqa: BLE001 — best-effort: Splunk forwarding must never interrupt polling
+        logger.warning(
+            "platform_logs_splunk_forward_error",
+            execution_id=execution_id,
+            platform_job_id=platform_job_id,
+            error=str(exc),
+            error_type=type(exc).__name__,
+            correlation_id=correlation_id,
+            exc_info=True,
+        )
+
+
 # ---------------------------------------------------------------------------
 # Story 34.5 (SOLID-BE-3): Tâche Celery générique — OCP poller
 # ---------------------------------------------------------------------------
@@ -398,6 +468,13 @@ def poll_platform_job_status(
             platform_job_id=platform_job_id,
             platform_type=platform_type,
             idp_status=idp_status,
+            correlation_id=correlation_id,
+        )
+        _tasks._forward_platform_logs_to_splunk(
+            execution_id=execution_id,
+            platform_job_id=platform_job_id,
+            platform_type=platform_type,
+            logs_content=logs_data.get("content", ""),
             correlation_id=correlation_id,
         )
         return {"outcome": "complete", "status": idp_status}

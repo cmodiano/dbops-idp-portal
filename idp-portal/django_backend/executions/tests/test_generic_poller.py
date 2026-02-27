@@ -14,6 +14,7 @@ from unittest.mock import patch, MagicMock, AsyncMock
 from executions.tasks import (
     MAX_POLLING_RETRIES,
     poll_platform_job_status,
+    _forward_platform_logs_to_splunk,
 )
 
 
@@ -319,3 +320,185 @@ class TestPollTerraformCloudShimDelegates:
         assert call_kwargs["adapter_kwargs"]["organization"] == "my-org"
         assert call_kwargs["poll_kwargs"] == {}
         assert call_kwargs["retry_count"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Test 7 — Splunk platform log forwarding
+# ---------------------------------------------------------------------------
+
+
+class TestForwardPlatformLogsToSplunk:
+    """Platform logs are forwarded to Splunk at terminal state (best-effort)."""
+
+    @patch("integrations.models.Integration.objects")
+    @patch("adapters.utils.build_auth_headers", return_value={"Authorization": "Bearer tok123"})
+    @patch("services.get_service_client")
+    @patch("asgiref.sync.async_to_sync")
+    def test_terminal_calls_splunk(
+        self,
+        mock_async_to_sync: MagicMock,
+        mock_get_client: MagicMock,
+        mock_build_auth: MagicMock,
+        mock_integration_qs: MagicMock,
+    ) -> None:
+        """When a splunk integration exists, send_event is called with correct payload."""
+        mock_integration = MagicMock(base_url="https://splunk.example.com")
+        mock_integration_qs.filter.return_value.first.return_value = mock_integration
+
+        mock_send_event = MagicMock()
+        mock_async_to_sync.return_value = mock_send_event
+
+        _forward_platform_logs_to_splunk(
+            execution_id=100,
+            platform_job_id="job-splunk-1",
+            platform_type="aap",
+            logs_content="Job output here",
+            correlation_id="corr-splunk-1",
+        )
+
+        # Verify integration query
+        mock_integration_qs.filter.assert_called_once_with(type="splunk", status="valid")
+
+        # Verify auth header Bearer→Splunk transformation
+        mock_build_auth.assert_called_once_with(mock_integration, correlation_id="corr-splunk-1")
+        mock_get_client.assert_called_once_with(
+            "splunk",
+            base_url="https://splunk.example.com",
+            auth_headers={"Authorization": "Splunk tok123"},
+        )
+
+        # Verify send_event called with correct payload
+        mock_send_event.assert_called_once()
+        call_kwargs = mock_send_event.call_args[1]
+        assert call_kwargs["event"]["event"] == "platform_log"
+        assert call_kwargs["event"]["execution_id"] == 100
+        assert call_kwargs["event"]["platform_job_id"] == "job-splunk-1"
+        assert call_kwargs["event"]["platform_type"] == "aap"
+        assert call_kwargs["event"]["content"] == "Job output here"
+        assert call_kwargs["event"]["correlation_id"] == "corr-splunk-1"
+        assert call_kwargs["sourcetype"] == "idp:platform_log"
+        assert call_kwargs["correlation_id"] == "corr-splunk-1"
+
+    @patch("integrations.models.Integration.objects")
+    def test_no_splunk_integration_skips_gracefully(
+        self,
+        mock_integration_qs: MagicMock,
+    ) -> None:
+        """When no splunk integration configured, function returns silently."""
+        mock_integration_qs.filter.return_value.first.return_value = None
+
+        # Should not raise
+        _forward_platform_logs_to_splunk(
+            execution_id=101,
+            platform_job_id="job-no-splunk",
+            platform_type="aap",
+            logs_content="Some logs",
+            correlation_id="corr-no-splunk",
+        )
+
+    @patch("integrations.models.Integration.objects")
+    @patch("adapters.utils.build_auth_headers", return_value={"Authorization": "Bearer x"})
+    @patch("services.get_service_client")
+    @patch("asgiref.sync.async_to_sync")
+    def test_splunk_error_is_best_effort(
+        self,
+        mock_async_to_sync: MagicMock,
+        mock_get_client: MagicMock,
+        mock_build_auth: MagicMock,
+        mock_integration_qs: MagicMock,
+    ) -> None:
+        """When send_event raises, the error is swallowed (best-effort)."""
+        mock_integration = MagicMock(base_url="https://splunk.example.com")
+        mock_integration_qs.filter.return_value.first.return_value = mock_integration
+
+        mock_async_to_sync.return_value = MagicMock(side_effect=ConnectionError("Splunk down"))
+
+        # Should not raise
+        _forward_platform_logs_to_splunk(
+            execution_id=102,
+            platform_job_id="job-err",
+            platform_type="github_actions",
+            logs_content="Some logs",
+            correlation_id="corr-err",
+        )
+
+    def test_empty_logs_skips(self) -> None:
+        """When logs_content is empty, no DB query or Splunk call is made."""
+        # If it tried to query Integration, it would fail (no Django DB configured in unit test)
+        _forward_platform_logs_to_splunk(
+            execution_id=103,
+            platform_job_id="job-empty",
+            platform_type="aap",
+            logs_content="",
+            correlation_id="corr-empty",
+        )
+
+
+class TestPollTerminalCallsSplunk:
+    """Integration: poll_platform_job_status calls _forward_platform_logs_to_splunk at terminal."""
+
+    @patch("executions.tasks._forward_platform_logs_to_splunk")
+    @patch("executions.tasks._broadcast_execution_update")
+    @patch("executions.tasks._update_execution_from_poll")
+    @patch("executions.tasks.get_correlation_id", return_value="test-corr-splunk")
+    def test_terminal_triggers_splunk_forward(
+        self,
+        mock_corr: MagicMock,
+        mock_update: MagicMock,
+        mock_broadcast: MagicMock,
+        mock_forward: MagicMock,
+    ) -> None:
+        """At terminal state, _forward_platform_logs_to_splunk is called."""
+        mock_adapter = MagicMock()
+        mock_adapter.get_status = AsyncMock(return_value={"status": "COMPLETED"})
+        mock_adapter.get_job_logs = AsyncMock(
+            return_value={"complete": True, "content": "Final output"}
+        )
+
+        with patch("adapters.get_platform_adapter", return_value=mock_adapter):
+            with patch("adapters.utils.build_auth_headers_from_credentials", return_value={}):
+                result = poll_platform_job_status(
+                    execution_id=200,
+                    platform_job_id="job-fwd-1",
+                    platform_type="aap",
+                )
+
+        assert result["outcome"] == "complete"
+        mock_forward.assert_called_once_with(
+            execution_id=200,
+            platform_job_id="job-fwd-1",
+            platform_type="aap",
+            logs_content="Final output",
+            correlation_id="test-corr-splunk",
+        )
+
+    @patch("executions.tasks._forward_platform_logs_to_splunk")
+    @patch("executions.tasks.poll_platform_job_status.apply_async")
+    @patch("executions.tasks._broadcast_execution_update")
+    @patch("executions.tasks._update_execution_from_poll")
+    @patch("executions.tasks.get_correlation_id", return_value="test-corr-nosplunk")
+    def test_non_terminal_skips_splunk(
+        self,
+        mock_corr: MagicMock,
+        mock_update: MagicMock,
+        mock_broadcast: MagicMock,
+        mock_apply: MagicMock,
+        mock_forward: MagicMock,
+    ) -> None:
+        """Non-terminal state does NOT call _forward_platform_logs_to_splunk."""
+        mock_adapter = MagicMock()
+        mock_adapter.get_status = AsyncMock(return_value={"status": "RUNNING"})
+        mock_adapter.get_job_logs = AsyncMock(
+            return_value={"complete": False, "content": "Still running..."}
+        )
+
+        with patch("adapters.get_platform_adapter", return_value=mock_adapter):
+            with patch("adapters.utils.build_auth_headers_from_credentials", return_value={}):
+                result = poll_platform_job_status(
+                    execution_id=201,
+                    platform_job_id="job-fwd-2",
+                    platform_type="aap",
+                )
+
+        assert result["outcome"] == "polling"
+        mock_forward.assert_not_called()
