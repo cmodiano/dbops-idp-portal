@@ -127,11 +127,22 @@ class TargetListViewTests(TestCase):
         self.assertIn('rbac_truncated', data)
         self.assertTrue(data['rbac_truncated'])
 
-    def test_list_targets_invalid_environment(self):
-        """Test invalid environment parameter."""
+    @patch('inventory.views._inventory_service_factory')
+    def test_list_targets_any_environment_accepted(self, mock_service_class):
+        """Test any environment string is accepted (no more ChoiceField restriction)."""
+        mock_service = MagicMock()
+        mock_service.list_targets_for_user.return_value = (
+            [{'name': 'srv-01', 'environment': 'quelconque', 'target_type': 'server', 'metadata': None}],
+            1,
+            False,
+        )
+        mock_service_class.return_value = mock_service
+
         self._authenticate()
-        response = self.client.get('/api/v1/inventory/targets/', {'environment': 'invalid'})
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        response = self.client.get('/api/v1/inventory/targets/', {'environment': 'quelconque'})
+        # CharField accepte toute chaîne — pas de 400 ValidationError (ancien comportement ChoiceField)
+        self.assertNotEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
 
 class TargetListAllViewTests(TestCase):

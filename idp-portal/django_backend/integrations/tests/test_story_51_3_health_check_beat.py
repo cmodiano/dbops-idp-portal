@@ -71,6 +71,36 @@ class TestHealthCheckAllIntegrations:
             exc_info=True,
         )
 
+    def test_dispatch_exception_continues_and_logs(self):
+        """Si .delay() lève pour une intégration, on logge et on continue; count = succès uniquement."""
+        mock_ids = [1, 2, 3]
+        with (
+            patch('integrations.models.Integration') as mock_model,
+            patch('integrations.tasks.run_integration_health_check') as mock_task,
+            patch('integrations.tasks.logger') as mock_logger,
+        ):
+            mock_model.objects.all.return_value.only.return_value.values_list.return_value = mock_ids
+            # .delay(2) raises, others succeed
+            def delay_side_effect(integration_id):
+                if integration_id == 2:
+                    raise RuntimeError("Broker unavailable")
+                return None
+
+            mock_task.delay.side_effect = delay_side_effect
+            from integrations.tasks import health_check_all_integrations
+            health_check_all_integrations()
+
+        assert mock_task.delay.call_count == 3
+        mock_logger.exception.assert_called_once_with(
+            "health_check_all_dispatch_error",
+            integration_id=2,
+            error="Broker unavailable",
+        )
+        mock_logger.info.assert_any_call(
+            "health_check_all_dispatched",
+            count=2,
+        )
+
 
 class TestHealthCheckBeatScheduleRegistered:
     """Vérifie que le schedule Beat est enregistré correctement."""

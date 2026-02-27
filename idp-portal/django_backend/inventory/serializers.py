@@ -8,7 +8,7 @@ No DB model - works with dicts from external sources.
 from __future__ import annotations
 
 from rest_framework import serializers
-from inventory.models import TargetEnvironment, TargetType
+from inventory.models import TargetType
 
 
 class TargetSerializer(serializers.Serializer):
@@ -17,9 +17,9 @@ class TargetSerializer(serializers.Serializer):
     Works with dicts from external sources (API or DBOPS_INVENTORY).
     """
     name = serializers.CharField(help_text="Target name")
-    environment = serializers.ChoiceField(
-        choices=TargetEnvironment.CHOICES,
-        help_text="Target environment (dev, staging, prod)"
+    environment = serializers.CharField(
+        max_length=50,
+        help_text="Target environment (valeur brute inventaire, ex. developpement, certification, production)"
     )
     target_type = serializers.ChoiceField(
         choices=TargetType.CHOICES,
@@ -36,10 +36,10 @@ class TargetFilterParamsSerializer(serializers.Serializer):
     """
     Serializer for target list filter parameters.
     """
-    environment = serializers.ChoiceField(
-        choices=TargetEnvironment.CHOICES,
+    environment = serializers.CharField(
+        max_length=50,
         required=False,
-        help_text="Filter by environment"
+        help_text="Filter by environment (valeur brute inventaire)"
     )
     search = serializers.CharField(
         required=False,

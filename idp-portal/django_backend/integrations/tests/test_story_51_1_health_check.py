@@ -599,6 +599,46 @@ class TestRunIntegrationHealthCheckTask:
         integration.refresh_from_db()
         assert integration.health_status == "unknown"
 
+    def test_task_resolve_adapter_path_runs_real_helper(self, db):
+        """Exercice _resolve_and_check_adapter via run_integration_health_check (sans patch)."""
+        from integrations.tasks import run_integration_health_check
+        from integrations.health_check import IHealthCheckable, HealthCheckResult, HealthCheckStatus
+
+        integration = self._create_integration(db, itype="aap", name="HC AAP Real Path")
+        ok_result = HealthCheckResult(
+            status=HealthCheckStatus.OK,
+            checked_at=datetime.now(timezone.utc),
+        )
+        mock_adapter = MagicMock(spec=IHealthCheckable)
+        mock_adapter.health_check = AsyncMock(return_value=ok_result)
+
+        with patch("adapters.get_platform_adapter", return_value=mock_adapter), \
+             patch("adapters.utils.build_auth_headers", return_value={"Authorization": "Bearer x"}):
+            run_integration_health_check(integration.id)
+
+        integration.refresh_from_db()
+        assert integration.health_status == "ok"
+
+    def test_task_resolve_service_path_runs_real_helper(self, db):
+        """Exercice _resolve_and_check_service via run_integration_health_check."""
+        from integrations.tasks import run_integration_health_check
+        from integrations.health_check import IHealthCheckable, HealthCheckResult, HealthCheckStatus
+
+        integration = self._create_integration(db, itype="splunk", name="HC Splunk")
+        ok_result = HealthCheckResult(
+            status=HealthCheckStatus.OK,
+            checked_at=datetime.now(timezone.utc),
+        )
+        mock_service = MagicMock(spec=IHealthCheckable)
+        mock_service.health_check = AsyncMock(return_value=ok_result)
+
+        with patch("services.get_service_client", return_value=mock_service), \
+             patch("adapters.utils.build_auth_headers", return_value={"Authorization": "Splunk x"}):
+            run_integration_health_check(integration.id)
+
+        integration.refresh_from_db()
+        assert integration.health_status == "ok"
+
     def test_task_captures_unexpected_exception(self, db):
         """Exception inattendue → health_status=error, pas de raise."""
         from integrations.tasks import run_integration_health_check

@@ -214,3 +214,26 @@ class TestTestConnectionEndpoint:
         assert call_kwargs["action_type"] == AuditActionType.INTEGRATION_HEALTH_CHECK_TESTED
         assert call_kwargs["details"]["status"] == "error"
         assert call_kwargs["details"]["error_message"] == "Timeout"
+
+    def test_test_connection_dispatch_exception_returns_error(self, db):
+        """Si le dispatch lève une exception, on logge et on retourne status=error."""
+        integration = _create_integration()
+
+        self.client.force_authenticate(user=self.dbops_user)
+
+        with patch("integrations.tasks._resolve_and_check_adapter", side_effect=RuntimeError("Broker down")), \
+             patch("integrations.views.logger") as mock_logger, \
+             patch("integrations.views.AuditService.create_entry"):
+            response = self.client.post(self._url(integration.id))
+
+        assert response.status_code == 200
+        data = response.data["data"]
+        assert data["status"] == "error"
+        assert "Broker down" in (data.get("message") or "")
+
+        mock_logger.exception.assert_called_once_with(
+            "test_connection_dispatch_error",
+            integration_id=integration.id,
+            error="Broker down",
+            error_type="RuntimeError",
+        )
