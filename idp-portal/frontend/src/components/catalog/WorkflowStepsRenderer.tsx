@@ -87,11 +87,11 @@ export const WorkflowStepsRenderer = memo(function WorkflowStepsRenderer({
           <div
             key={`${step.order}-${step.referenced_action_id}`}
             style={{
-              border: '1px solid #d9d9d9',
+              border: '1px solid var(--ant-color-border-secondary)',
               borderRadius: 8,
               padding: 12,
               marginBottom: 12,
-              background: '#fafafa',
+              background: 'var(--ant-color-bg-container)',
             }}
           >
             <Title level={5} style={{ marginTop: 0, marginBottom: 8 }}>
