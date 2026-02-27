@@ -25,6 +25,7 @@ from core.exceptions import (
     VaultSecretNotFoundError,
     VaultUnavailableError,
 )
+from integrations.health_check import HealthCheckResult, HealthCheckStatus, IHealthCheckable
 
 logger = structlog.get_logger(__name__)
 
@@ -131,7 +132,7 @@ class ParsedCredentialRef:
     key: str | None
 
 
-class VaultService:
+class VaultService(IHealthCheckable):
     """HashiCorp Vault client with retry, circuit breaker, and TTL cache.
 
     Configuration via environment variables:
@@ -500,6 +501,50 @@ class VaultService:
         Kept for backward compatibility with tests.
         """
         self._ensure_token_valid()
+
+    # ------------------------------------------------------------------
+    # Health check — Story 51.1
+    # ------------------------------------------------------------------
+
+    async def health_check(self) -> HealthCheckResult:
+        """Ping Vault via GET /v1/sys/health.
+
+        Vault /v1/sys/health retourne :
+          - 200 : active
+          - 429 : standby (Vault HA, toujours accessible)
+          - 473 : performance standby
+          - 503 : sealed / not initialised
+        200/429/473 → OK ; 503 ou erreur réseau → ERROR.
+        """
+        from datetime import datetime, timezone as tz
+        url = f"{self.vault_addr}/v1/sys/health"
+        headers: dict[str, str] = {}
+        if self._vault_token:
+            headers["X-Vault-Token"] = self._vault_token
+        if self.vault_namespace:
+            headers["X-Vault-Namespace"] = self.vault_namespace
+        try:
+            response = self._session.get(url, headers=headers, timeout=self._timeout)
+            # 200, 429, 473 = Vault is reachable
+            if response.status_code in (200, 429, 473):
+                logger.info("vault_health_check_ok", vault_addr=self.vault_addr, status=response.status_code)
+                return HealthCheckResult(
+                    status=HealthCheckStatus.OK,
+                    checked_at=datetime.now(tz.utc),
+                )
+            logger.warning("vault_health_check_error", vault_addr=self.vault_addr, status=response.status_code)
+            return HealthCheckResult(
+                status=HealthCheckStatus.ERROR,
+                checked_at=datetime.now(tz.utc),
+                error_message=f"Vault /v1/sys/health returned HTTP {response.status_code}",
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("vault_health_check_error", vault_addr=self.vault_addr, error=str(exc))
+            return HealthCheckResult(
+                status=HealthCheckStatus.ERROR,
+                checked_at=datetime.now(tz.utc),
+                error_message=str(exc),
+            )
 
 
 # Module-level singleton

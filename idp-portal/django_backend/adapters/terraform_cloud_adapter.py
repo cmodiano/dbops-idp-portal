@@ -23,6 +23,7 @@ import structlog
 
 from adapters.base_adapter import BaseAdapter
 from core.exceptions import ServiceUnavailableError
+from integrations.health_check import HealthCheckResult, HealthCheckStatus, IHealthCheckable
 
 logger = structlog.get_logger(__name__)
 
@@ -82,7 +83,7 @@ def map_terraform_cloud_status(tc_status: str) -> str:
     return mapped if mapped is not None else "SUBMITTED"
 
 
-class TerraformCloudAdapter(BaseAdapter):
+class TerraformCloudAdapter(BaseAdapter, IHealthCheckable):
     """Adapter for interacting with Terraform Cloud REST API v2.
 
     Requires base_url, organization, and auth_headers at init.
@@ -747,3 +748,37 @@ class TerraformCloudAdapter(BaseAdapter):
                 return "TERRAFORM_POLICY_FAILED"
             return "TERRAFORM_VALIDATION_ERROR"
         return "TERRAFORM_HTTP_ERROR"
+
+    # ------------------------------------------------------------------
+    # Health check — Story 51.1
+    # ------------------------------------------------------------------
+
+    async def health_check(self) -> HealthCheckResult:
+        """Valide la connectivité et le token Terraform Cloud via GET /api/v2/account/details.
+
+        /api/v2/account/details est un endpoint authentifié : retourne 401 si le token
+        est invalide, contrairement à /api/v2/ping qui est non authentifié.
+        """
+        # Use /account/details (authenticated) to validate the Bearer token.
+        # /ping is unauthenticated and would not detect invalid tokens.
+        url = f"{self.base_url}/account/details"
+        try:
+            async with httpx.AsyncClient(
+                headers=self.auth_headers,
+                timeout=self.timeout,
+                verify=self.verify_ssl,
+            ) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+            logger.info("terraform_cloud_health_check_ok", base_url=self.base_url)
+            return HealthCheckResult(
+                status=HealthCheckStatus.OK,
+                checked_at=datetime.now(tz=timezone.utc),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("terraform_cloud_health_check_error", base_url=self.base_url, error=str(exc))
+            return HealthCheckResult(
+                status=HealthCheckStatus.ERROR,
+                checked_at=datetime.now(tz=timezone.utc),
+                error_message=str(exc),
+            )

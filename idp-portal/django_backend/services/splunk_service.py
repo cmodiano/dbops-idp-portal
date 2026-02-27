@@ -13,6 +13,7 @@ import httpx
 import structlog
 
 from core.exceptions import ServiceUnavailableError
+from integrations.health_check import HealthCheckResult, HealthCheckStatus, IHealthCheckable
 
 logger = structlog.get_logger(__name__)
 
@@ -25,7 +26,7 @@ SPLUNK_RETRY_DELAY = 5.0
 _TRANSIENT_STATUS_CODES = frozenset({500, 503})
 
 
-class SplunkService:
+class SplunkService(IHealthCheckable):
     """Service for sending events to Splunk HTTP Event Collector.
 
     Splunk is a consumed service (logging/observability), not a platform that
@@ -279,6 +280,34 @@ class SplunkService:
             message="Splunk HEC max retries exceeded",
             details={"url": url},
         ) from last_exc
+
+    # ------------------------------------------------------------------
+    # Health check — Story 51.1
+    # ------------------------------------------------------------------
+
+    async def health_check(self) -> HealthCheckResult:
+        """Ping Splunk via GET /services/server/info et valide l'authentification."""
+        from datetime import datetime, timezone as tz
+        url = f"{self.base_url}/services/server/info"
+        try:
+            async with httpx.AsyncClient(
+                headers=self.auth_headers,
+                timeout=self.timeout,
+            ) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+            logger.info("splunk_health_check_ok", base_url=self.base_url)
+            return HealthCheckResult(
+                status=HealthCheckStatus.OK,
+                checked_at=datetime.now(tz.utc),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("splunk_health_check_error", base_url=self.base_url, error=str(exc))
+            return HealthCheckResult(
+                status=HealthCheckStatus.ERROR,
+                checked_at=datetime.now(tz.utc),
+                error_message=str(exc),
+            )
 
 
 # Backward-compatible alias (Story 27.9 renamed SplunkAdapter → SplunkService)

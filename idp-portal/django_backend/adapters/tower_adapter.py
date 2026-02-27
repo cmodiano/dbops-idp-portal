@@ -16,6 +16,7 @@ import structlog
 
 from adapters.base_adapter import BaseAdapter
 from core.exceptions import ServiceUnavailableError
+from integrations.health_check import HealthCheckResult, HealthCheckStatus, IHealthCheckable
 
 logger = structlog.get_logger(__name__)
 
@@ -35,7 +36,7 @@ TOWER_DEFAULT_TIMEOUT = 30.0
 TOWER_LOGS_TIMEOUT = 60.0
 
 
-class TowerAdapter(BaseAdapter):
+class TowerAdapter(BaseAdapter, IHealthCheckable):
     """Adapter for interacting with Ansible Tower / AWX API v2.
 
     Requires base_url and auth_headers to be provided at init.
@@ -419,3 +420,31 @@ class TowerAdapter(BaseAdapter):
             platform_job_id=platform_job_id,
             correlation_id=correlation_id,
         )
+
+    # ------------------------------------------------------------------
+    # Health check — Story 51.1
+    # ------------------------------------------------------------------
+
+    async def health_check(self) -> HealthCheckResult:
+        """Ping Tower/AWX via GET /api/v2/ping/ et valide l'authentification."""
+        url = f"{self.base_url}/api/v2/ping/"
+        try:
+            async with httpx.AsyncClient(
+                headers=self.auth_headers,
+                timeout=self.timeout,
+                verify=False,  # nosec B501  # noqa: S501 — corporate CAs handled externally (consistent with other TowerAdapter methods)
+            ) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+            logger.info("tower_health_check_ok", base_url=self.base_url)
+            return HealthCheckResult(
+                status=HealthCheckStatus.OK,
+                checked_at=datetime.now(tz=timezone.utc),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("tower_health_check_error", base_url=self.base_url, error=str(exc))
+            return HealthCheckResult(
+                status=HealthCheckStatus.ERROR,
+                checked_at=datetime.now(tz=timezone.utc),
+                error_message=str(exc),
+            )

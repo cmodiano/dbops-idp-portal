@@ -22,6 +22,7 @@ import structlog
 
 from adapters.base_adapter import BaseAdapter
 from core.exceptions import ServiceUnavailableError
+from integrations.health_check import HealthCheckResult, HealthCheckStatus, IHealthCheckable
 
 logger = structlog.get_logger(__name__)
 
@@ -65,7 +66,7 @@ def _map_azure_devops_status(state: str, result: str | None) -> str:
     return mapped if mapped is not None else "SUBMITTED"
 
 
-class AzureDevOpsAdapter(BaseAdapter):
+class AzureDevOpsAdapter(BaseAdapter, IHealthCheckable):
     """Adapter for interacting with Azure DevOps Pipelines API v7.1+.
 
     Requires base_url, pipeline_id, and auth_headers to be provided at init.
@@ -644,3 +645,30 @@ class AzureDevOpsAdapter(BaseAdapter):
             platform_job_id=platform_job_id,
             correlation_id=correlation_id,
         )
+
+    # ------------------------------------------------------------------
+    # Health check — Story 51.1
+    # ------------------------------------------------------------------
+
+    async def health_check(self) -> HealthCheckResult:
+        """Ping Azure DevOps via GET /_apis/?api-version=7.0 et valide l'authentification PAT."""
+        url = f"{self.base_url}/_apis/?api-version={API_VERSION}"
+        try:
+            async with httpx.AsyncClient(
+                headers=self.auth_headers,
+                timeout=self.timeout,
+            ) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+            logger.info("azure_devops_health_check_ok", base_url=self.base_url)
+            return HealthCheckResult(
+                status=HealthCheckStatus.OK,
+                checked_at=datetime.now(tz=timezone.utc),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("azure_devops_health_check_error", base_url=self.base_url, error=str(exc))
+            return HealthCheckResult(
+                status=HealthCheckStatus.ERROR,
+                checked_at=datetime.now(tz=timezone.utc),
+                error_message=str(exc),
+            )

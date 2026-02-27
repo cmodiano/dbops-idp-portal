@@ -254,6 +254,13 @@ class TestResolveCredentialMultiInstance(TestCase):
     """Tests for resolve_credential() with multi-instance Vault."""
 
     def setUp(self):
+        # Neutralise le signal post_save → health check task (Story 51.1) pour éviter
+        # que les créations d'Integration dans setUp n'appellent VaultService en double.
+        patcher = patch('integrations.tasks.run_integration_health_check')
+        self.mock_health_task = patcher.start()
+        self.mock_health_task.delay = MagicMock()
+        self.addCleanup(patcher.stop)
+
         self.vault_prod = Integration.objects.create(
             type=IntegrationType.VAULT,
             name='Vault Prod',

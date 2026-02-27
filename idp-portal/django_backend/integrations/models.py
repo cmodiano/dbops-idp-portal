@@ -31,6 +31,13 @@ def _validate_json_schema(value: dict) -> None:
             raise ValidationError("JSON Schema 'properties' must be a dictionary")
 
 
+class HealthStatus(models.TextChoices):
+    """Story 51.1: Health check status for Integration model."""
+    OK = 'ok', 'OK'
+    ERROR = 'error', 'Erreur'
+    UNKNOWN = 'unknown', 'Inconnu'
+
+
 class AuthFlow(models.TextChoices):
     """Authentication flow enum."""
     TOKEN = 'token', 'Token'
@@ -147,6 +154,17 @@ class Integration(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True, db_column='CREATED_AT')
     updated_at = models.DateTimeField(auto_now=True, db_column='UPDATED_AT')
+
+    # Story 51.1: Health check fields
+    health_status = models.CharField(
+        max_length=10,
+        choices=HealthStatus.choices,
+        default=HealthStatus.UNKNOWN,
+        db_column='HEALTH_STATUS',
+        db_index=True,
+    )
+    health_checked_at = models.DateTimeField(null=True, blank=True, db_column='HEALTH_CHECKED_AT')
+    health_error_message = models.TextField(null=True, blank=True, db_column='HEALTH_ERROR_MESSAGE')
 
     # Custom manager
     objects = IntegrationManager()

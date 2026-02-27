@@ -26,6 +26,7 @@ import structlog
 
 from adapters.base_adapter import BaseAdapter
 from core.exceptions import ServiceUnavailableError
+from integrations.health_check import HealthCheckResult, HealthCheckStatus, IHealthCheckable
 
 logger = structlog.get_logger(__name__)
 
@@ -83,7 +84,7 @@ def _map_github_actions_status(status: str, conclusion: str | None) -> str:
     return mapped if mapped is not None else "SUBMITTED"
 
 
-class GitHubActionsAdapter(BaseAdapter):
+class GitHubActionsAdapter(BaseAdapter, IHealthCheckable):
     """Adapter for interacting with GitHub Actions REST API v3.
 
     Requires base_url, owner, repo, and auth_headers at init.
@@ -718,3 +719,31 @@ class GitHubActionsAdapter(BaseAdapter):
             platform_job_id=platform_job_id,
             correlation_id=correlation_id,
         )
+
+    # ------------------------------------------------------------------
+    # Health check — Story 51.1
+    # ------------------------------------------------------------------
+
+    async def health_check(self) -> HealthCheckResult:
+        """Ping GitHub API via GET {base_url}/ et valide le token Bearer."""
+        url = f"{self.base_url}/"
+        try:
+            async with httpx.AsyncClient(
+                headers=self.auth_headers,
+                timeout=self.timeout,
+                verify=self.verify_ssl,
+            ) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+            logger.info("github_actions_health_check_ok", base_url=self.base_url)
+            return HealthCheckResult(
+                status=HealthCheckStatus.OK,
+                checked_at=datetime.now(tz=timezone.utc),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("github_actions_health_check_error", base_url=self.base_url, error=str(exc))
+            return HealthCheckResult(
+                status=HealthCheckStatus.ERROR,
+                checked_at=datetime.now(tz=timezone.utc),
+                error_message=str(exc),
+            )

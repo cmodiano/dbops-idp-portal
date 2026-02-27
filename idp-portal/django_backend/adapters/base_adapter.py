@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
+from integrations.health_check import IHealthCheckable  # noqa: F401 — re-exported for adapter use
+
 
 class ITriggerableAdapter(ABC):
     """Interface core — toute plateforme doit supporter trigger/status/logs."""
@@ -125,4 +127,4 @@ class BaseAdapter(ITriggerableAdapter, ICancellableAdapter):
     """
 
 
-__all__ = ["ITriggerableAdapter", "ICancellableAdapter", "BaseAdapter"]
+__all__ = ["ITriggerableAdapter", "ICancellableAdapter", "BaseAdapter", "IHealthCheckable"]

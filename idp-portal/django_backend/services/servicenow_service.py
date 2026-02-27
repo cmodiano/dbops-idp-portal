@@ -13,11 +13,12 @@ import structlog
 from django.conf import settings
 
 from core.exceptions import ServiceUnavailableError
+from integrations.health_check import HealthCheckResult, HealthCheckStatus, IHealthCheckable
 
 logger = structlog.get_logger(__name__)
 
 
-class ServiceNowService:
+class ServiceNowService(IHealthCheckable):
     """ServiceNow ITSM service client.
 
     ServiceNow is a consumed service for change management (opening, updating,
@@ -34,10 +35,12 @@ class ServiceNowService:
         self,
         base_url: str,
         auth_headers: dict[str, str],
+        timeout: float = 30.0,
         **kwargs: object,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.auth_headers = auth_headers
+        self.timeout = timeout
         logger.info("servicenow_service_initialized", base_url=self.base_url)
 
     def _get_verify_tls(self) -> bool:
@@ -137,3 +140,32 @@ class ServiceNowService:
             "ServiceNowService.close_change() is not yet implemented. "
             "See integration-type-catalogue.md for specification."
         )
+
+    # ------------------------------------------------------------------
+    # Health check — Story 51.1
+    # ------------------------------------------------------------------
+
+    async def health_check(self) -> HealthCheckResult:
+        """Ping ServiceNow via GET table API (sysparm_limit=1) et valide l'authentification."""
+        from datetime import datetime, timezone as tz
+        url = f"{self.base_url}/api/now/table/sys_properties?sysparm_limit=1"
+        try:
+            async with httpx.AsyncClient(
+                headers=self.auth_headers,
+                timeout=self.timeout,
+                verify=self._get_verify_tls(),
+            ) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+            logger.info("servicenow_health_check_ok", base_url=self.base_url)
+            return HealthCheckResult(
+                status=HealthCheckStatus.OK,
+                checked_at=datetime.now(tz.utc),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("servicenow_health_check_error", base_url=self.base_url, error=str(exc))
+            return HealthCheckResult(
+                status=HealthCheckStatus.ERROR,
+                checked_at=datetime.now(tz.utc),
+                error_message=str(exc),
+            )
