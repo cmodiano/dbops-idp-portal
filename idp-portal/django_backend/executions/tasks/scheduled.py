@@ -49,15 +49,20 @@ def process_pending_scheduled_executions(self: Any) -> dict:
     # transaction.atomic() is required so that the SELECT FOR UPDATE is issued within a proper
     # database transaction; without it the row locks are released immediately in autocommit mode,
     # rendering skip_locked ineffective and raising TransactionManagementError on strict backends.
-    pending_qs = (
-        ScheduledExecution.objects
-        .list_pending(now)
-        .select_for_update(skip_locked=True)
-        .select_related('action', 'user', 'recurringpattern')
-        [:max_batch]
-    )
+    # Oracle does not support LIMIT/OFFSET with select_for_update; use two-step: fetch IDs with
+    # limit first, then select_for_update on those IDs (no limit in the locking query).
     with transaction.atomic():
-        se_list = list(pending_qs)
+        pending_ids = list(
+            ScheduledExecution.objects.list_pending(now).values_list('id', flat=True)[:max_batch]
+        )
+        if not pending_ids:
+            return {'processed': 0, 'triggered': 0, 'errors': 0}
+        se_list = list(
+            ScheduledExecution.objects.filter(id__in=pending_ids)
+            .select_for_update(skip_locked=True)
+            .select_related('action', 'user', 'recurringpattern')
+            .order_by('id')
+        )
     count = len(se_list)
 
     logger.info(
@@ -150,7 +155,7 @@ def process_pending_scheduled_executions(self: Any) -> dict:
                         )
                         continue
                     # AC7: Audit written atomically with the status update
-                    AuditService.create_entry(**audit_kwargs)
+                    AuditService.create_entry(**audit_kwargs)  # type: ignore[arg-type]
 
             logger.info(
                 "process_pending_scheduled_executions_triggered",
