@@ -11,7 +11,6 @@ import structlog
 from django.conf import settings
 from django.http import HttpResponse
 from django.shortcuts import redirect
-from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.request import Request
 from rest_framework.response import Response
