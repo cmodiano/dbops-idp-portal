@@ -75,7 +75,6 @@ class InventoryService:
         # at call time (Python resolves self.list_x via instance __dict__ first).
         self.permission_aggregator = RBACPermissionAggregator(
             list_environments_fn=lambda: self.list_environments(),
-            get_default_environments_fn=lambda: self.get_default_environments(),
         )
         self.target_loader = TargetLoader(
             query_executor=self.query_executor,
@@ -717,8 +716,8 @@ class InventoryService:
         return result
 
     def get_default_environments(self) -> list[str]:
-        """Get default environment values as fallback."""
-        return ['dev', 'staging', 'prod']
+        """Get default environment values as fallback. Returns empty list — inventory is the only source of truth."""
+        return []
 
     # --- Maintenance window ---
 

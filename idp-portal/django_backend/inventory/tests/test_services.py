@@ -307,12 +307,10 @@ class InventoryServiceRBACTests(TestCase):
         envs = self.service.get_allowed_environments_for_user(['GRP-UNKNOWN'])
         self.assertEqual(envs, set())
 
-    def test_get_allowed_environments_includes_raw_and_normalized(self):
+    def test_get_allowed_environments_certif_no_alias(self):
         """
-        Story 21.2, Task 2.1: get_allowed_environments_for_user should return
-        both raw and normalized values for aliases (e.g., certif → {staging, certif}).
-        
-        LOW-2 FIX: Updated reference to Task 2.1 (not AC1 which is about list_targets_for_user).
+        Story 53.1 / Story 21.2, Task 2.1: get_allowed_environments_for_user returns raw
+        lowercased values only — no alias mapping (certif does NOT become staging).
         """
         certif_profile = Profile.objects.create(
             name='certif-profile',
@@ -327,11 +325,10 @@ class InventoryServiceRBACTests(TestCase):
 
         envs = self.service.get_allowed_environments_for_user(['GRP-CERTIF'])
         
-        # Should include both normalized (staging) and raw (certif) for alias
-        # Lab has no alias, so only lab is included
-        self.assertIn('staging', envs)  # Normalized from certif
-        self.assertIn('certif', envs)   # Raw value
-        self.assertIn('lab', envs)      # No alias, raw value only
+        # Story 53.1 — no alias mapping; only lowercase values stored
+        self.assertIn('certif', envs)   # Inventory value (lowercased)
+        self.assertIn('lab', envs)      # Inventory value (lowercased)
+        self.assertNotIn('staging', envs)  # certif is no longer aliased to staging
 
 
 class InventoryServiceSecurityTests(TestCase):
@@ -392,16 +389,16 @@ class InventoryServiceEnvironmentNormalizationTests(TestCase):
         self.assertEqual(self.service._normalize_environment('staging'), 'staging')
         self.assertEqual(self.service._normalize_environment('prod'), 'prod')
 
-    def test_normalize_certif_to_staging(self):
-        """Test that 'certif' is normalized to 'staging'."""
-        self.assertEqual(self.service._normalize_environment('certif'), 'staging')
-        self.assertEqual(self.service._normalize_environment('certification'), 'staging')
+    def test_normalize_inventory_values_passthrough(self):
+        """Story 53.1 — certif/certification pass through without alias mapping."""
+        self.assertEqual(self.service._normalize_environment('certif'), 'certif')
+        self.assertEqual(self.service._normalize_environment('certification'), 'certification')
 
-    def test_normalize_aliases(self):
-        """Test normalization of common aliases."""
-        self.assertEqual(self.service._normalize_environment('stg'), 'staging')
-        self.assertEqual(self.service._normalize_environment('development'), 'dev')
-        self.assertEqual(self.service._normalize_environment('production'), 'prod')
+    def test_normalize_no_aliases(self):
+        """Story 53.1 — stg/development/production pass through as-is (no alias mapping)."""
+        self.assertEqual(self.service._normalize_environment('stg'), 'stg')
+        self.assertEqual(self.service._normalize_environment('development'), 'development')
+        self.assertEqual(self.service._normalize_environment('production'), 'production')
 
     def test_normalize_unknown_returns_raw_value(self):
         """
@@ -549,14 +546,11 @@ class RBACEnvironmentFilterTests(TestCase):
         self.assertNotIn('srv-prod-02', names)
 
     @patch('inventory.services.connection')
-    def test_list_targets_certif_normalized_to_staging(self, mock_connection):
+    def test_list_targets_staging_profile_cannot_access_certif(self, mock_connection):
         """
-        Story 21.2, AC1: RBAC environment matching with raw values.
-        Profile with 'staging' permission should NOT access targets with 'certif' unless
-        the profile explicitly has 'certif' in its allowed environments.
-        
-        HIGH-1 FIX: This profile has ["dev", "staging"] only, so certif targets are filtered out.
-        For testing certif alias matching, see test_list_targets_profile_env_certif_normalized_to_staging.
+        Story 53.1 / Story 21.2, AC1: Profile with 'staging' does NOT access 'certif' targets.
+        No alias mapping — certif and staging are distinct inventory values.
+        Profile has ["dev", "staging"] only, so certif/certification targets are filtered out.
         """
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = (2,)
@@ -576,15 +570,11 @@ class RBACEnvironmentFilterTests(TestCase):
         self.assertEqual(len(targets), 0)
 
     @patch('inventory.services.connection')
-    def test_list_targets_profile_env_certif_normalized_to_staging(self, mock_connection):
+    def test_list_targets_profile_env_certif_exact_match(self, mock_connection):
         """
-        Story 21.2, AC1: Profile with 'certif' should access 'certif' targets.
-        allowed_environments includes both normalized (staging) and raw (certif) values.
-        Targets return raw environment values from inventory.
-
-        Story 21.3 FIX: Profile with ["certif"] produces allowed_environments = {staging, certif}.
-        Target with raw env 'certification' (lowercased from Oracle) is NOT 'certif' and NOT 'staging',
-        so it is correctly filtered out. Only 'certif' targets match.
+        Story 53.1 / Story 21.2, AC1: Profile with 'certif' accesses ONLY 'certif' targets.
+        No alias mapping — allowed_environments = {certif} only (not {staging, certif}).
+        Target with env 'certification' does NOT match 'certif', so it is filtered out.
         """
         # Profile with raw "certif" in DB (no "staging" string)
         certif_only_profile = Profile.objects.create(
@@ -615,11 +605,11 @@ class RBACEnvironmentFilterTests(TestCase):
             ad_groups=['GRP-CERTIF-ONLY']
         )
 
-        # Profile certif → allowed_environments = {staging, certif}
+        # Story 53.1: allowed_environments = {certif} (no alias mapping)
         # Target 'certif' matches 'certif' → included
-        # Target 'certification' doesn't match 'staging' or 'certif' → excluded
+        # Target 'certification' does not match 'certif' → excluded
         self.assertEqual(total, 1)
-        self.assertEqual(targets[0]['environment'], 'certif')  # Raw value
+        self.assertEqual(targets[0]['environment'], 'certif')
 
     @patch('inventory.services.connection')
     def test_list_targets_profile_lab_dev_case_insensitive(self, mock_connection):
@@ -1200,25 +1190,25 @@ class InventoryRawEnvironmentTests(TestCase):
 
     # -- Task 1.1: Verify alias coverage --
 
-    def test_normalize_alias_certif(self):
-        """Alias certif → staging."""
-        self.assertEqual(self.service._normalize_environment('certif'), 'staging')
+    def test_normalize_inventory_certif_passthrough(self):
+        """Story 53.1 — certif is no longer aliased to staging; passes through as-is."""
+        self.assertEqual(self.service._normalize_environment('certif'), 'certif')
 
-    def test_normalize_alias_certification(self):
-        """Alias certification → staging."""
-        self.assertEqual(self.service._normalize_environment('certification'), 'staging')
+    def test_normalize_inventory_certification_passthrough(self):
+        """Story 53.1 — certification passes through as-is (inventory value)."""
+        self.assertEqual(self.service._normalize_environment('certification'), 'certification')
 
-    def test_normalize_alias_stg(self):
-        """Alias stg → staging."""
-        self.assertEqual(self.service._normalize_environment('stg'), 'staging')
+    def test_normalize_inventory_stg_passthrough(self):
+        """Story 53.1 — stg is no longer aliased to staging; passes through."""
+        self.assertEqual(self.service._normalize_environment('stg'), 'stg')
 
-    def test_normalize_alias_development(self):
-        """Alias development → dev."""
-        self.assertEqual(self.service._normalize_environment('development'), 'dev')
+    def test_normalize_inventory_development_passthrough(self):
+        """Story 53.1 — development passes through as-is (inventory value)."""
+        self.assertEqual(self.service._normalize_environment('development'), 'development')
 
-    def test_normalize_alias_production(self):
-        """Alias production → prod."""
-        self.assertEqual(self.service._normalize_environment('production'), 'prod')
+    def test_normalize_inventory_production_passthrough(self):
+        """Story 53.1 — production passes through as-is (inventory value)."""
+        self.assertEqual(self.service._normalize_environment('production'), 'production')
 
     # -- Task 1.2: Non-standard environments returned as-is --
 
@@ -1239,9 +1229,9 @@ class InventoryRawEnvironmentTests(TestCase):
         self.assertEqual(self.service._normalize_environment('custom_env'), 'custom_env')
 
     def test_normalize_case_handling(self):
-        """Input is lowercased and trimmed."""
+        """Input is lowercased and trimmed. Story 53.1 — CERTIF → certif (no alias)."""
         self.assertEqual(self.service._normalize_environment('  LAB  '), 'lab')
-        self.assertEqual(self.service._normalize_environment('CERTIF'), 'staging')
+        self.assertEqual(self.service._normalize_environment('CERTIF'), 'certif')
 
     def test_normalize_edge_cases(self):
         """Edge cases: None, empty, whitespace."""
@@ -1383,8 +1373,8 @@ class RBACNonStandardEnvironmentTests(TestCase):
     # -- Task 2.2: Profile certif → certif targets (raw + normalized) --
 
     @patch('inventory.services.connection')
-    def test_profile_certif_allows_certif_and_staging_targets(self, mock_connection):
-        """Profile with certif → allowed_environments includes {staging, certif}."""
+    def test_profile_certif_allows_only_certif_targets(self, mock_connection):
+        """Story 53.1 — Profile with certif → allowed_environments = {certif} only (no alias to staging)."""
         certif_profile = Profile.objects.create(
             name='certif-team', description='Certif', ad_group='GRP-CERTIF-TEAM'
         )
@@ -1409,10 +1399,10 @@ class RBACNonStandardEnvironmentTests(TestCase):
             user_id=1, ad_groups=['GRP-CERTIF-TEAM']
         )
 
-        # certif → allowed = {staging, certif} → matches certif and staging targets
-        self.assertEqual(total, 2)
+        # certif → allowed = {certif} only; staging and prod excluded
+        self.assertEqual(total, 1)
         envs = {t['environment'] for t in targets}
-        self.assertEqual(envs, {'certif', 'staging'})
+        self.assertEqual(envs, {'certif'})
 
     # -- Task 2.3: Multi-environment profile --
 
@@ -1544,39 +1534,36 @@ class RBACNonStandardEnvironmentTests(TestCase):
 
 class EnvironmentVariantLegacyAliasTests(TestCase):
     """
-    Story 21.3, Task 5: Tests for legacy environment alias variants.
-    Validates that aliases work and RBAC handles raw vs normalized correctly.
+    Story 21.3, Task 5 / Story 53.1: Environment normalization — no alias mapping.
+    Inventory is the sole source of truth; values pass through as lowercased.
     """
 
     def setUp(self):
         self.service = InventoryService()
 
-    def test_alias_certif_to_staging(self):
-        """certif normalizes to staging."""
-        self.assertEqual(self.service._normalize_environment('certif'), 'staging')
+    def test_alias_certif_passthrough(self):
+        """Story 53.1 — certif passes through as certif (no alias to staging)."""
+        self.assertEqual(self.service._normalize_environment('certif'), 'certif')
 
-    def test_alias_certification_to_staging(self):
-        """certification normalizes to staging."""
-        self.assertEqual(self.service._normalize_environment('certification'), 'staging')
+    def test_alias_certification_passthrough(self):
+        """Story 53.1 — certification passes through as certification."""
+        self.assertEqual(self.service._normalize_environment('certification'), 'certification')
 
-    def test_alias_stg_to_staging(self):
-        """stg normalizes to staging."""
-        self.assertEqual(self.service._normalize_environment('stg'), 'staging')
+    def test_alias_stg_passthrough(self):
+        """Story 53.1 — stg passes through as stg (no alias to staging)."""
+        self.assertEqual(self.service._normalize_environment('stg'), 'stg')
 
-    def test_alias_development_to_dev(self):
-        """development normalizes to dev."""
-        self.assertEqual(self.service._normalize_environment('development'), 'dev')
+    def test_alias_development_passthrough(self):
+        """Story 53.1 — development passes through as development (no alias to dev)."""
+        self.assertEqual(self.service._normalize_environment('development'), 'development')
 
-    def test_alias_production_to_prod(self):
-        """production normalizes to prod."""
-        self.assertEqual(self.service._normalize_environment('production'), 'prod')
+    def test_alias_production_passthrough(self):
+        """Story 53.1 — production passes through as production (no alias to prod)."""
+        self.assertEqual(self.service._normalize_environment('production'), 'production')
 
     @patch('inventory.services.connection')
-    def test_rbac_certif_profile_matches_certif_and_staging_targets(self, mock_connection):
-        """
-        Task 5.6: Profile with 'certif' authorizes targets with both
-        'certif' (raw) AND 'staging' (normalized) environments.
-        """
+    def test_rbac_certif_profile_matches_only_certif_targets(self, mock_connection):
+        """Story 53.1 — Profile with 'certif' authorizes ONLY certif targets (no staging alias)."""
         certif_profile = Profile.objects.create(
             name='certif-rbac', description='Certif RBAC', ad_group='GRP-CERTIF-RBAC'
         )
@@ -1601,13 +1588,13 @@ class EnvironmentVariantLegacyAliasTests(TestCase):
             user_id=1, ad_groups=['GRP-CERTIF-RBAC']
         )
 
-        # Profile certif → allowed = {staging, certif} → both certif and staging match
-        self.assertEqual(total, 2)
+        # Profile certif → allowed = {certif} only; staging and prod excluded
+        self.assertEqual(total, 1)
         envs = {t['environment'] for t in targets}
-        self.assertEqual(envs, {'certif', 'staging'})
+        self.assertEqual(envs, {'certif'})
 
-    def test_get_allowed_environments_certif_includes_staging_and_raw(self):
-        """get_allowed_environments for 'certif' returns both staging and certif."""
+    def test_get_allowed_environments_certif_returns_certif_only(self):
+        """Story 53.1 — get_allowed_environments for 'certif' returns only certif (no staging alias)."""
         profile = Profile.objects.create(
             name='certif-env', description='Certif env', ad_group='GRP-CERTIF-ENV'
         )
@@ -1618,8 +1605,8 @@ class EnvironmentVariantLegacyAliasTests(TestCase):
 
         envs = self.service.get_allowed_environments_for_user(['GRP-CERTIF-ENV'])
 
-        self.assertIn('staging', envs)  # Normalized
-        self.assertIn('certif', envs)   # Raw
+        self.assertIn('certif', envs)
+        self.assertNotIn('staging', envs)  # Story 53.1: alias mapping removed
 
 
 class InventoryIntegrationEndToEndTests(TestCase):
@@ -1679,6 +1666,59 @@ class InventoryIntegrationEndToEndTests(TestCase):
         self.assertIn('dev', envs)
         self.assertNotIn('prod', envs)
 
+    # -- AC#1 Story 53.1: Valeurs réelles Oracle (developpement, certification, production) --
+
+    @patch('inventory.services.connection')
+    def test_ac1_inventory_oracle_values_developpement(self, mock_connection):
+        """
+        Story 53.1, AC#1 + AC#2: list_servers(environment='developpement') retourne les serveurs
+        quand l'inventaire Oracle contient ENV='developpement'.
+        Aucun appel avec 'dev' — seules les valeurs brutes de l'inventaire sont utilisées.
+        """
+        profile = Profile.objects.create(
+            name='e2e-oracle', description='E2E Oracle values', ad_group='GRP-E2E-ORACLE'
+        )
+        ProfileActionPermission.objects.create(
+            profile=profile, permission_type='ALL',
+            environments_json='["developpement", "certification", "production"]'
+        )
+        ProfileTargetPermission.objects.create(
+            profile=profile, permission_type='ALL'
+        )
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (3,)
+        mock_cursor.fetchall.return_value = [
+            ('srv-dev-fr-01', 'developpement', 'server'),
+            ('srv-certif-fr-01', 'certification', 'server'),
+            ('srv-prod-fr-01', 'production', 'server'),
+        ]
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
+
+        # AC#1: developpement retourne les serveurs
+        targets, total, _ = self.service.list_targets_for_user(
+            user_id=1, ad_groups=['GRP-E2E-ORACLE']
+        )
+        self.assertEqual(total, 3)
+        envs = {t['environment'] for t in targets}
+        self.assertEqual(envs, {'developpement', 'certification', 'production'})
+
+        # AC#1: filtrer par 'developpement' retourne uniquement les serveurs developpement
+        dev_targets, dev_total, _ = self.service.list_targets_for_user(
+            user_id=1, ad_groups=['GRP-E2E-ORACLE'], environment='developpement'
+        )
+        self.assertEqual(dev_total, 1)
+        self.assertEqual(dev_targets[0]['environment'], 'developpement')
+
+        # AC#2: allowed_environments ne contient pas 'dev' — valeurs brutes Oracle uniquement
+        allowed = self.service.get_allowed_environments_for_user(['GRP-E2E-ORACLE'])
+        self.assertIn('developpement', allowed)
+        self.assertIn('certification', allowed)
+        self.assertIn('production', allowed)
+        self.assertNotIn('dev', allowed)
+        self.assertNotIn('staging', allowed)
+        self.assertNotIn('prod', allowed)
+
     # -- Task 6.2: Mixed environments scenario --
 
     @patch('inventory.services.connection')
@@ -1710,12 +1750,12 @@ class InventoryIntegrationEndToEndTests(TestCase):
             user_id=1, ad_groups=['GRP-E2E-MIXED']
         )
 
-        # certif → allowed = {staging, certif, lab, dev}
-        # lab matches lab, dev matches dev, certif matches certif, staging matches staging
-        # prod excluded
-        self.assertEqual(total, 4)
+        # Story 53.1 — certif → allowed = {certif} only (no alias to staging)
+        # allowed_environments = {lab, certif, dev}
+        # lab matches lab, dev matches dev, certif matches certif; staging and prod excluded
+        self.assertEqual(total, 3)
         envs = {t['environment'] for t in targets}
-        self.assertEqual(envs, {'lab', 'dev', 'certif', 'staging'})
+        self.assertEqual(envs, {'lab', 'dev', 'certif'})
 
     # -- Task 6.3: Case-insensitive consistency --
 
@@ -1795,3 +1835,20 @@ class InventoryIntegrationEndToEndTests(TestCase):
         self.assertEqual(total, 5)
         self.assertEqual(len(targets), 1)
         self.assertEqual(targets[0]['name'], 'srv-lab-05')
+
+
+class InventoryServiceDefaultEnvironmentsTests(TestCase):
+    """Story 53.1 — get_default_environments() doit retourner [] (inventaire = seule source de vérité)."""
+
+    def setUp(self):
+        self.service = InventoryService()
+
+    def test_get_default_environments_returns_empty_list(self):
+        """get_default_environments() retourne [] — aucun fallback codé en dur."""
+        result = self.service.get_default_environments()
+        self.assertEqual(result, [])
+
+    def test_get_default_environments_is_list(self):
+        """Le retour est bien une liste (pas None, pas un set)."""
+        result = self.service.get_default_environments()
+        self.assertIsInstance(result, list)
