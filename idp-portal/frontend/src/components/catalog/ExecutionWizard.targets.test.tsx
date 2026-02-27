@@ -18,10 +18,10 @@ import type { CatalogActionDetail } from '../../services/catalog_service';
 // Mock targets response
 const mockTargetsResponse = {
   items: [
-    { name: 'srv-dev-01', environment: 'dev', target_type: 'server', metadata: null },
-    { name: 'srv-dev-02', environment: 'dev', target_type: 'server', metadata: null },
-    { name: 'srv-staging-01', environment: 'staging', target_type: 'server', metadata: null },
-    { name: 'db-prod-01', environment: 'prod', target_type: 'database', metadata: null },
+    { name: 'srv-dev-01', environment: 'developpement', target_type: 'server', metadata: null },
+    { name: 'srv-dev-02', environment: 'developpement', target_type: 'server', metadata: null },
+    { name: 'srv-staging-01', environment: 'certification', target_type: 'server', metadata: null },
+    { name: 'db-prod-01', environment: 'production', target_type: 'database', metadata: null },
   ],
   total: 4,
   page: 1,
@@ -31,9 +31,9 @@ const mockTargetsResponse = {
 
 // Mock environments response
 const mockEnvironmentsResponse = [
-  { id: 'dev', name: 'Developpement', environment: null },
-  { id: 'staging', name: 'Staging', environment: null },
-  { id: 'prod', name: 'Production', environment: null },
+  { id: 'developpement', name: 'Developpement', environment: null },
+  { id: 'certification', name: 'Certification', environment: null },
+  { id: 'production', name: 'Production', environment: null },
 ];
 
 // Mock the API client (TargetSelector and fetchInventoryTargets use apiFetchRaw)
@@ -60,10 +60,10 @@ vi.mock('../../services/execution_service', () => ({
     return [];
   }),
   fetchInventoryTargets: vi.fn().mockResolvedValue([
-    { name: 'srv-dev-01', environment: 'dev', target_type: 'server', metadata: null },
-    { name: 'srv-dev-02', environment: 'dev', target_type: 'server', metadata: null },
-    { name: 'srv-staging-01', environment: 'staging', target_type: 'server', metadata: null },
-    { name: 'db-prod-01', environment: 'prod', target_type: 'database', metadata: null },
+    { name: 'srv-dev-01', environment: 'developpement', target_type: 'server', metadata: null },
+    { name: 'srv-dev-02', environment: 'developpement', target_type: 'server', metadata: null },
+    { name: 'srv-staging-01', environment: 'certification', target_type: 'server', metadata: null },
+    { name: 'db-prod-01', environment: 'production', target_type: 'database', metadata: null },
   ]),
 }));
 
@@ -81,9 +81,9 @@ const mockActionWithTargets: CatalogActionDetail = {
   platform: 'AAP',
   parameters_schema: null,
   impact_rules: {
-    DEV: { level: 'low', criteria: null },
-    STAGING: { level: 'medium', criteria: null },
-    PROD: { level: 'high', criteria: null },
+    developpement: { level: 'low', criteria: null },
+    certification: { level: 'medium', criteria: null },
+    production: { level: 'high', criteria: null },
   },
   impact_level: null,
   default_impact_level: 'medium',
@@ -107,7 +107,7 @@ describe('ExecutionWizard - Target Selection (Story 13.2)', () => {
   const defaultProps = {
     open: true,
     action: mockActionWithTargets,
-    allowedEnvironments: ['dev', 'staging', 'prod'],
+    allowedEnvironments: ['developpement', 'certification', 'production'],
     onCancel: vi.fn(),
     onSuccess: vi.fn(),
   };
@@ -215,7 +215,7 @@ describe('ExecutionWizard - Target Selection (Story 13.2)', () => {
 
       // Should show environment group headers (Developpement, Staging, Production)
       expect(screen.getByText('Développement')).toBeInTheDocument();
-      expect(screen.getByText('Staging')).toBeInTheDocument();
+      expect(screen.getByText('Certification')).toBeInTheDocument();
       expect(screen.getByText('Production')).toBeInTheDocument();
     });
 

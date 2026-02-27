@@ -15,11 +15,17 @@ from profiles.models import Profile
 @pytest.mark.django_db
 class TestProfilePermissionsViews(TestCase):
     """Tests for profile permissions endpoints."""
-    
+
     def setUp(self):
         """Set up test data."""
         self.client = APIClient()
-        
+
+        # Mock inventory list_environments so environment validation works without Oracle DB
+        patcher = patch('profiles.validation.InventoryService.list_environments',
+                        return_value=['developpement', 'certification', 'production', 'lab'])
+        self.mock_list_envs = patcher.start()
+        self.addCleanup(patcher.stop)
+
         # Create DBOPS user
         self.dbops_user = User.objects.create(
             username='dbops_user',
@@ -55,7 +61,7 @@ class TestProfilePermissionsViews(TestCase):
         data = {
             'actions_type': 'list',
             'action_ids': [1, 2, 3],
-            'environments': ['PROD', 'DEV']
+            'environments': ['production', 'developpement']
         }
         response = self.client.put(f'/api/v1/admin/profiles/{self.profile.id}/actions/', data, format='json')
         
@@ -70,7 +76,7 @@ class TestProfilePermissionsViews(TestCase):
         data = {
             'actions_type': 'pattern',
             'tag_patterns': ['tag:oracle*', 'tag:database*'],
-            'environments': ['PROD']
+            'environments': ['production']
         }
         response = self.client.put(f'/api/v1/admin/profiles/{self.profile.id}/actions/', data, format='json')
         

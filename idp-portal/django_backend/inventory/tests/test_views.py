@@ -29,7 +29,7 @@ class TargetListViewTests(TestCase):
         ProfileActionPermission.objects.create(
             profile=self.profile,
             permission_type='ALL',
-            environments_json='["dev", "staging", "prod"]'
+            environments_json='["developpement", "certification", "production"]'
         )
         ProfileTargetPermission.objects.create(
             profile=self.profile,
@@ -243,7 +243,7 @@ class TargetListAllViewTests(TestCase):
     def test_list_all_targets_invalid_environment(self, mock_service_class):
         """Test invalid environment parameter returns 400."""
         mock_service = MagicMock()
-        mock_service.list_environments.return_value = ['dev', 'staging', 'prod']
+        mock_service.list_environments.return_value = ['developpement', 'certification', 'production']
         mock_service_class.return_value = mock_service
 
         self.client.force_authenticate(user=self.admin_user)
@@ -273,14 +273,14 @@ class TargetRBACTests(TestCase):
         ProfileActionPermission.objects.create(
             profile=self.profile,
             permission_type='ALL',
-            environments_json='["dev"]'  # Only dev access
+            environments_json='["developpement"]'  # Only developpement access
         )
         ProfileTargetPermission.objects.create(
             profile=self.profile,
             permission_type='ALL'
         )
 
-        # Mock user with dev-only access
+        # Mock user with developpement-only access
         self.mock_user = MagicMock()
         self.mock_user.id = 1
         self.mock_user.ad_groups = ['GRP-DEV-ONLY']
@@ -298,8 +298,8 @@ class TargetRBACTests(TestCase):
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = (2,)
         mock_cursor.fetchall.return_value = [
-            ('dev-srv-01', 'dev', 'server'),
-            ('prod-srv-01', 'prod', 'server'),  # Should be filtered out by RBAC
+            ('dev-srv-01', 'developpement', 'server'),
+            ('prod-srv-01', 'production', 'server'),  # Should be filtered out by RBAC
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -307,15 +307,15 @@ class TargetRBACTests(TestCase):
         response = self.client.get('/api/v1/inventory/targets/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.json()
-        # Should only see dev targets
+        # Should only see developpement targets
         for item in data['items']:
-            self.assertEqual(item['environment'], 'dev')
+            self.assertEqual(item['environment'], 'developpement')
 
     @patch('inventory.services.connection')
     def test_request_forbidden_environment(self, mock_connection):
         """Test that requesting forbidden environment returns empty."""
         self._authenticate()
-        response = self.client.get('/api/v1/inventory/targets/', {'environment': 'prod'})
+        response = self.client.get('/api/v1/inventory/targets/', {'environment': 'production'})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.json()
         self.assertEqual(data['total'], 0)
@@ -337,7 +337,7 @@ class TargetPatternPermissionTests(TestCase):
         ProfileActionPermission.objects.create(
             profile=self.profile,
             permission_type='ALL',
-            environments_json='["dev", "staging", "prod"]'
+            environments_json='["developpement", "certification", "production"]'
         )
         ProfileTargetPermission.objects.create(
             profile=self.profile,
@@ -363,10 +363,10 @@ class TargetPatternPermissionTests(TestCase):
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = (4,)
         mock_cursor.fetchall.return_value = [
-            ('web-srv-01', 'dev', 'server'),
-            ('web-srv-02', 'dev', 'server'),
-            ('db-srv-01', 'dev', 'database'),  # Should be filtered
-            ('app-srv-01', 'dev', 'server'),   # Should be filtered
+            ('web-srv-01', 'developpement', 'server'),
+            ('web-srv-02', 'developpement', 'server'),
+            ('db-srv-01', 'developpement', 'database'),  # Should be filtered
+            ('app-srv-01', 'developpement', 'server'),   # Should be filtered
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -397,7 +397,7 @@ class TargetServiceErrorTests(TestCase):
         ProfileActionPermission.objects.create(
             profile=self.admin_profile,
             permission_type='ALL',
-            environments_json='["dev", "staging", "prod"]'
+            environments_json='["developpement", "certification", "production"]'
         )
         ProfileTargetPermission.objects.create(
             profile=self.admin_profile,

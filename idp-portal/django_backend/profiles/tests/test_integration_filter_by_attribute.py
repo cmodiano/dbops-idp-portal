@@ -11,13 +11,13 @@ from inventory.services import InventoryService
 
 
 MOCK_SERVERS = [
-    {'name': 'oracle-srv-01', 'environment': 'dev', 'engine_type': 'oracle'},
-    {'name': 'oracle-srv-02', 'environment': 'dev', 'engine_type': 'oracle'},
-    {'name': 'sql-srv-01', 'environment': 'dev', 'engine_type': 'sqlserver'},
-    {'name': 'sql-srv-02', 'environment': 'dev', 'engine_type': 'sqlserver'},
-    {'name': 'mysql-srv-01', 'environment': 'dev', 'engine_type': 'mysql'},
-    {'name': 'oracle-prod-01', 'environment': 'prod', 'engine_type': 'oracle'},
-    {'name': 'sql-prod-01', 'environment': 'prod', 'engine_type': 'sqlserver'},
+    {'name': 'oracle-srv-01', 'environment': 'developpement', 'engine_type': 'oracle'},
+    {'name': 'oracle-srv-02', 'environment': 'developpement', 'engine_type': 'oracle'},
+    {'name': 'sql-srv-01', 'environment': 'developpement', 'engine_type': 'sqlserver'},
+    {'name': 'sql-srv-02', 'environment': 'developpement', 'engine_type': 'sqlserver'},
+    {'name': 'mysql-srv-01', 'environment': 'developpement', 'engine_type': 'mysql'},
+    {'name': 'oracle-prod-01', 'environment': 'production', 'engine_type': 'oracle'},
+    {'name': 'sql-prod-01', 'environment': 'production', 'engine_type': 'sqlserver'},
 ]
 
 
@@ -53,7 +53,7 @@ class TestIntegrationFilterByAttribute(TestCase):
         """
         self._create_profile_with_filter(
             'oracle_dba', 'GRP-ORACLE-DBA',
-            envs=['dev', 'prod'],
+            envs=['developpement', 'production'],
             perm_type='ALL',
             filter_attr={"engine_type": ["oracle"]},
         )
@@ -61,13 +61,13 @@ class TestIntegrationFilterByAttribute(TestCase):
         mock_mapper_obj = MagicMock()
         mock_mapper_obj.is_multi_table = True
         mock_mapper.return_value = mock_mapper_obj
-        mock_list_servers.return_value = [s for s in MOCK_SERVERS if s['environment'] == 'dev']
+        mock_list_servers.return_value = [s for s in MOCK_SERVERS if s['environment'] == 'developpement']
 
         service = InventoryService()
         results, total, truncated = service.list_targets_for_user(
             user_id=1,
             ad_groups=['GRP-ORACLE-DBA'],
-            environment='dev',
+            environment='developpement',
         )
 
         names = [r['name'] for r in results]
@@ -85,13 +85,13 @@ class TestIntegrationFilterByAttribute(TestCase):
         """
         self._create_profile_with_filter(
             'oracle_dba', 'GRP-ORACLE-DBA',
-            envs=['dev'],
+            envs=['developpement'],
             perm_type='ALL',
             filter_attr={"engine_type": ["oracle"]},
         )
         self._create_profile_with_filter(
             'sql_dba', 'GRP-SQL-DBA',
-            envs=['dev'],
+            envs=['developpement'],
             perm_type='ALL',
             filter_attr={"engine_type": ["sqlserver"]},
         )
@@ -99,13 +99,13 @@ class TestIntegrationFilterByAttribute(TestCase):
         mock_mapper_obj = MagicMock()
         mock_mapper_obj.is_multi_table = True
         mock_mapper.return_value = mock_mapper_obj
-        mock_list_servers.return_value = [s for s in MOCK_SERVERS if s['environment'] == 'dev']
+        mock_list_servers.return_value = [s for s in MOCK_SERVERS if s['environment'] == 'developpement']
 
         service = InventoryService()
         results, total, truncated = service.list_targets_for_user(
             user_id=1,
             ad_groups=['GRP-ORACLE-DBA', 'GRP-SQL-DBA'],
-            environment='dev',
+            environment='developpement',
         )
 
         names = [r['name'] for r in results]
@@ -122,7 +122,7 @@ class TestIntegrationFilterByAttribute(TestCase):
         """
         self._create_profile_with_filter(
             'pg_dba', 'GRP-PG-DBA',
-            envs=['dev'],
+            envs=['developpement'],
             perm_type='ALL',
             filter_attr={"engine_type": ["postgresql"]},
         )
@@ -130,13 +130,13 @@ class TestIntegrationFilterByAttribute(TestCase):
         mock_mapper_obj = MagicMock()
         mock_mapper_obj.is_multi_table = True
         mock_mapper.return_value = mock_mapper_obj
-        mock_list_servers.return_value = [s for s in MOCK_SERVERS if s['environment'] == 'dev']
+        mock_list_servers.return_value = [s for s in MOCK_SERVERS if s['environment'] == 'developpement']
 
         service = InventoryService()
         results, total, truncated = service.list_targets_for_user(
             user_id=1,
             ad_groups=['GRP-PG-DBA'],
-            environment='dev',
+            environment='developpement',
         )
 
         self.assertEqual(total, 0)
@@ -150,7 +150,7 @@ class TestIntegrationFilterByAttribute(TestCase):
         """
         self._create_profile_with_filter(
             'mixed_dba', 'GRP-MIXED-DBA',
-            envs=['dev'],
+            envs=['developpement'],
             perm_type='LIST',
             filter_attr={"engine_type": ["oracle"]},
             target_names=['oracle-srv-01', 'sql-srv-01', 'mysql-srv-01'],
@@ -159,13 +159,13 @@ class TestIntegrationFilterByAttribute(TestCase):
         mock_mapper_obj = MagicMock()
         mock_mapper_obj.is_multi_table = True
         mock_mapper.return_value = mock_mapper_obj
-        mock_list_servers.return_value = [s for s in MOCK_SERVERS if s['environment'] == 'dev']
+        mock_list_servers.return_value = [s for s in MOCK_SERVERS if s['environment'] == 'developpement']
 
         service = InventoryService()
         results, total, truncated = service.list_targets_for_user(
             user_id=1,
             ad_groups=['GRP-MIXED-DBA'],
-            environment='dev',
+            environment='developpement',
         )
 
         names = [r['name'] for r in results]

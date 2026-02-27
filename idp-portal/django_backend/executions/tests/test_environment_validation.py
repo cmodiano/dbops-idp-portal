@@ -46,7 +46,7 @@ class ExecutionEnvironmentValidationTests(TestCase):
         """Test creating execution with valid environment."""
         response = self.client.post('/api/v1/executions/', {
             'action_id': self.action.id,
-            'environment': 'dev',
+            'environment': 'developpement',
             'parameters': {}
         }, format='json')
 
@@ -122,13 +122,13 @@ class ExecutionEnvironmentValidationTests(TestCase):
 
         self.client.post('/api/v1/scheduled-executions/', {
             'action_id': self.action.id,
-            'environment': 'dev',
+            'environment': 'developpement',
             'parameters': {},
             'scheduled_at': '2026-02-10T10:00:00Z'
         }, format='json')
 
         # Should call validation
-        mock_validate.assert_called_once_with('dev', user_id=self.user.id)
+        mock_validate.assert_called_once_with('developpement', user_id=self.user.id)
 
     @patch('inventory.services.InventoryService.list_environments')
     def test_validate_environment_lab_case_insensitive(self, mock_list_envs):
@@ -138,7 +138,7 @@ class ExecutionEnvironmentValidationTests(TestCase):
         """
         from executions.utils import validate_environment_against_inventory
 
-        mock_list_envs.return_value = ['dev', 'lab', 'staging', 'prod']
+        mock_list_envs.return_value = ['developpement', 'lab', 'certification', 'production']
 
         # Should not raise - lab is valid
         validate_environment_against_inventory('lab')
@@ -151,7 +151,7 @@ class ExecutionEnvironmentValidationTests(TestCase):
         from executions.utils import validate_environment_against_inventory
         from core.exceptions import BadRequestError
 
-        mock_list_envs.return_value = ['dev', 'lab', 'staging', 'prod']
+        mock_list_envs.return_value = ['developpement', 'lab', 'certification', 'production']
 
         with self.assertRaises(BadRequestError) as cm:
             validate_environment_against_inventory('invalid')
@@ -246,7 +246,7 @@ class ValidateEnvironmentAgainstInventoryTests(TestCase):
         """'LAB', 'Lab', 'lAb' all match 'lab' in inventory."""
         from executions.utils import validate_environment_against_inventory
 
-        mock_list_envs.return_value = ['dev', 'lab', 'staging', 'prod']
+        mock_list_envs.return_value = ['developpement', 'lab', 'certification', 'production']
 
         # All case variants should pass
         validate_environment_against_inventory('LAB')
@@ -261,7 +261,7 @@ class ValidateEnvironmentAgainstInventoryTests(TestCase):
         from executions.utils import validate_environment_against_inventory
         from core.exceptions import BadRequestError
 
-        mock_list_envs.return_value = ['dev', 'lab', 'staging', 'prod']
+        mock_list_envs.return_value = ['developpement', 'lab', 'certification', 'production']
 
         with self.assertRaises(BadRequestError) as cm:
             validate_environment_against_inventory('invalid_env', user_id=123)
@@ -294,7 +294,7 @@ class ValidateEnvironmentAgainstInventoryTests(TestCase):
         from executions.utils import validate_environment_against_inventory
         from core.exceptions import BadRequestError
 
-        mock_list_envs.return_value = ['dev', 'staging', 'prod']
+        mock_list_envs.return_value = ['developpement', 'certification', 'production']
 
         with self.assertRaises(BadRequestError):
             validate_environment_against_inventory('invalid_env', user_id=456)
@@ -323,7 +323,7 @@ class ValidateEnvironmentAgainstInventoryTests(TestCase):
         """Non-standard envs (qa, uat, certif) pass if present in inventory."""
         from executions.utils import validate_environment_against_inventory
 
-        mock_list_envs.return_value = ['dev', 'lab', 'qa', 'uat', 'certif', 'staging', 'prod']
+        mock_list_envs.return_value = ['developpement', 'lab', 'qa', 'uat', 'certif', 'certification', 'production']
 
         # All should pass without exception
         validate_environment_against_inventory('qa')

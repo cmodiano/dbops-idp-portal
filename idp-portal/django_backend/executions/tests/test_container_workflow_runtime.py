@@ -82,7 +82,7 @@ class TestContainerWorkflowRuntimeBasic:
         execution = Execution.objects.create(
             action=action,
             user=self.user,
-            environment='dev',
+            environment='developpement',
             status=ExecutionStatus.SUBMITTED,
         )
         if parameters:
@@ -126,7 +126,7 @@ class TestContainerWorkflowRuntimeBasic:
         runtime.run_sync()
 
         for child in runtime.child_executions:
-            assert child.environment == 'dev'
+            assert child.environment == 'developpement'
 
     @patch('executions.container_workflow_runtime.AuditService')
     def test_child_executions_inherit_user(self, mock_audit):
@@ -230,7 +230,7 @@ class TestContainerWorkflowParameterInjection:
         execution = Execution.objects.create(
             action=self.workflow_action,
             user=self.user,
-            environment='dev',
+            environment='developpement',
             status=ExecutionStatus.SUBMITTED,
         )
         execution.set_parameters(parameters)
@@ -265,7 +265,7 @@ class TestContainerWorkflowParameterInjection:
         execution = Execution.objects.create(
             action=self.workflow_action,
             user=self.user,
-            environment='dev',
+            environment='developpement',
             status=ExecutionStatus.SUBMITTED,
         )
         execution.set_parameters(parameters)
@@ -284,7 +284,7 @@ class TestContainerWorkflowParameterInjection:
         execution = Execution.objects.create(
             action=self.workflow_action,
             user=self.user,
-            environment='dev',
+            environment='developpement',
             status=ExecutionStatus.SUBMITTED,
         )
         execution.set_parameters(parameters)
@@ -306,7 +306,7 @@ class TestContainerWorkflowParameterInjection:
         execution = Execution.objects.create(
             action=self.workflow_action,
             user=self.user,
-            environment='dev',
+            environment='developpement',
             status=ExecutionStatus.SUBMITTED,
         )
         execution.set_parameters(parameters)
@@ -353,7 +353,7 @@ class TestContainerWorkflowFailurePropagation:
         )
         execution = Execution.objects.create(
             action=workflow, user=self.user,
-            environment='dev', status=ExecutionStatus.SUBMITTED,
+            environment='developpement', status=ExecutionStatus.SUBMITTED,
         )
         runtime = ContainerWorkflowRuntime(execution)
         result = runtime.run_sync()
@@ -383,7 +383,7 @@ class TestContainerWorkflowFailurePropagation:
         )
         execution = Execution.objects.create(
             action=workflow, user=self.user,
-            environment='dev', status=ExecutionStatus.SUBMITTED,
+            environment='developpement', status=ExecutionStatus.SUBMITTED,
         )
         runtime = ContainerWorkflowRuntime(execution)
         result = runtime.run_sync()
@@ -404,7 +404,7 @@ class TestContainerWorkflowFailurePropagation:
         )
         execution = Execution.objects.create(
             action=workflow, user=self.user,
-            environment='dev', status=ExecutionStatus.SUBMITTED,
+            environment='developpement', status=ExecutionStatus.SUBMITTED,
         )
         runtime = ContainerWorkflowRuntime(execution)
         result = runtime.run_sync()
@@ -424,7 +424,7 @@ class TestContainerWorkflowFailurePropagation:
         )
         execution = Execution.objects.create(
             action=workflow, user=self.user,
-            environment='dev', status=ExecutionStatus.SUBMITTED,
+            environment='developpement', status=ExecutionStatus.SUBMITTED,
         )
         runtime = ContainerWorkflowRuntime(execution)
         result = runtime.run_sync()
@@ -448,7 +448,7 @@ class TestContainerWorkflowFailurePropagation:
         )
         execution = Execution.objects.create(
             action=workflow, user=self.user,
-            environment='dev', status=ExecutionStatus.SUBMITTED,
+            environment='developpement', status=ExecutionStatus.SUBMITTED,
         )
         runtime = ContainerWorkflowRuntime(execution)
         result = runtime.run_sync()
@@ -485,7 +485,7 @@ class TestContainerWorkflowStatusManagement:
         )
         execution = Execution.objects.create(
             action=workflow, user=self.user,
-            environment='dev', status=ExecutionStatus.SUBMITTED,
+            environment='developpement', status=ExecutionStatus.SUBMITTED,
         )
         runtime = ContainerWorkflowRuntime(execution)
         runtime.run_sync()
@@ -507,7 +507,7 @@ class TestContainerWorkflowStatusManagement:
         )
         execution = Execution.objects.create(
             action=workflow, user=self.user,
-            environment='dev', status=ExecutionStatus.SUBMITTED,
+            environment='developpement', status=ExecutionStatus.SUBMITTED,
         )
         runtime = ContainerWorkflowRuntime(execution)
         runtime.run_sync()
@@ -530,7 +530,7 @@ class TestContainerWorkflowStatusManagement:
         )
         execution = Execution.objects.create(
             action=workflow, user=self.user,
-            environment='dev', status=ExecutionStatus.SUBMITTED,
+            environment='developpement', status=ExecutionStatus.SUBMITTED,
         )
         runtime = ContainerWorkflowRuntime(execution)
         runtime.run_sync()
@@ -571,7 +571,7 @@ class TestContainerWorkflowIntegration:
         )
         execution = Execution.objects.create(
             action=workflow, user=self.user,
-            environment='dev', status=ExecutionStatus.SUBMITTED,
+            environment='developpement', status=ExecutionStatus.SUBMITTED,
         )
         runtime = ContainerWorkflowRuntime(execution)
         result = runtime.run_sync()
@@ -597,7 +597,7 @@ class TestContainerWorkflowIntegration:
         )
         execution = Execution.objects.create(
             action=workflow, user=self.user,
-            environment='dev', status=ExecutionStatus.SUBMITTED,
+            environment='developpement', status=ExecutionStatus.SUBMITTED,
         )
         runtime = ContainerWorkflowRuntime(execution)
         runtime.run_sync()
@@ -621,7 +621,7 @@ class TestContainerWorkflowIntegration:
         )
         execution = Execution.objects.create(
             action=workflow, user=self.user,
-            environment='dev', status=ExecutionStatus.SUBMITTED,
+            environment='developpement', status=ExecutionStatus.SUBMITTED,
         )
         runtime = ContainerWorkflowRuntime(execution)
         result = runtime.run_sync()
@@ -661,7 +661,7 @@ class TestContainerWorkflowChildSteps:
         return Execution.objects.create(
             action=self.workflow_action,
             user=self.user,
-            environment='dev',
+            environment='developpement',
             status=ExecutionStatus.SUBMITTED,
         )
 

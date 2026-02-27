@@ -64,10 +64,10 @@ class TestYamlItemToActionPayload(TestCase):
     """Tests for _yaml_item_to_action_payload()."""
 
     def test_all_type(self):
-        item = {"actions": {"type": "all"}, "environments": ["PROD"]}
+        item = {"actions": {"type": "all"}, "environments": ["production"]}
         result = _yaml_item_to_action_payload(item)
         self.assertEqual(result["actions_type"], "all")
-        self.assertEqual(result["environments"], ["PROD"])
+        self.assertEqual(result["environments"], ["production"])
 
     def test_list_type_with_ids(self):
         item = {"actions": {"type": "list", "list": [1, 2]}}
@@ -238,7 +238,7 @@ class TestExportProfilesYaml(TestCase):
         )
         ProfileActionPermission.objects.create(
             profile=profile, permission_type="LIST",
-            action_ids_json="[1,2]", tag_patterns_json="[]", environments_json='["PROD"]'
+            action_ids_json="[1,2]", tag_patterns_json="[]", environments_json='["production"]'
         )
         ProfileTargetPermission.objects.create(
             profile=profile, permission_type="PATTERN",
@@ -256,7 +256,7 @@ class TestExportProfilesYaml(TestCase):
         self.assertEqual(p["actions"]["list"], [1, 2])
         self.assertEqual(p["targets"]["type"], "pattern")
         self.assertEqual(p["targets"]["patterns"], ["srv-*"])
-        self.assertEqual(p["environments"], ["PROD"])
+        self.assertEqual(p["environments"], ["production"])
 
     def test_export_profile_no_permissions(self):
         """Profile without permissions exports with type='all' defaults."""
@@ -310,7 +310,7 @@ class TestImportProfilesYaml(TestCase):
             "ad_group": "GRP-P",
             "actions": {"type": "list", "list": [10, 20]},
             "targets": {"type": "pattern", "patterns": ["db-*"]},
-            "environments": ["PROD", "DEV"],
+            "environments": ["production", "developpement"],
         }])
         import_profiles_yaml(content)
 

@@ -73,7 +73,7 @@ class TestStory255MutexValidation(TestCase):
         backup_exec = Execution.objects.create(
             user=self.user,
             action=self.action_backup,
-            environment='prod',
+            environment='production',
             status=ExecutionStatus.RUNNING,
         )
         ExecutionTarget.objects.create(
@@ -82,10 +82,10 @@ class TestStory255MutexValidation(TestCase):
             target_id='srv-prod-01',
             target_name='srv-prod-01',
         )
-        
+
         # Mock inventory
         allowed_targets = [
-            {'name': 'srv-prod-01', 'environment': 'prod', 'target_type': 'server', 'metadata': None},
+            {'name': 'srv-prod-01', 'environment': 'production', 'target_type': 'server', 'metadata': None},
         ]
         with patch('executions.validators.target_validator.InventoryService') as MockInventory:
             mock_inst = MagicMock()
@@ -125,7 +125,7 @@ class TestStory255MutexValidation(TestCase):
         backup_exec = Execution.objects.create(
             user=self.user,
             action=self.action_backup,
-            environment='prod',
+            environment='production',
             status=ExecutionStatus.RUNNING,
         )
         ExecutionTarget.objects.create(
@@ -134,10 +134,10 @@ class TestStory255MutexValidation(TestCase):
             target_id='srv-prod-01',
             target_name='srv-prod-01',
         )
-        
+
         # Mock inventory with different target
         allowed_targets = [
-            {'name': 'srv-prod-02', 'environment': 'prod', 'target_type': 'server', 'metadata': None},
+            {'name': 'srv-prod-02', 'environment': 'production', 'target_type': 'server', 'metadata': None},
         ]
         with patch('executions.validators.target_validator.InventoryService') as MockInventory:
             mock_inst = MagicMock()
@@ -582,7 +582,7 @@ class TestStory255MutexValidation(TestCase):
         with patch('executions.validators.target_validator.InventoryService') as MockInventory, \
              patch('executions.utils.validate_environment_against_inventory'):
             mock_inst = MagicMock()
-            mock_inst.list_environments.return_value = ['dev', 'staging', 'prod']
+            mock_inst.list_environments.return_value = ['developpement', 'certification', 'production']
             MockInventory.return_value = mock_inst
 
             # Submit global action without targets
