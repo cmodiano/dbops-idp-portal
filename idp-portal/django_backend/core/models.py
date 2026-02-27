@@ -57,6 +57,8 @@ class AuditActionType(models.TextChoices):
     USER_LOGOUT = 'USER_LOGOUT', 'User Logout'
     USER_REFRESH = 'USER_REFRESH', 'User Refresh Token'
     API_KEY_TOKEN_EXCHANGE = 'API_KEY_TOKEN_EXCHANGE', 'API Key Token Exchange'  # pragma: allowlist secret
+    # Story 49.3: Service account LDAP login
+    SERVICE_LOGIN = 'SERVICE_LOGIN', 'Service Account Login'
     FAVORITE_ADDED = 'FAVORITE_ADDED', 'Favorite Added'
     FAVORITE_REMOVED = 'FAVORITE_REMOVED', 'Favorite Removed'
     # Story 16.4: Retry audit types

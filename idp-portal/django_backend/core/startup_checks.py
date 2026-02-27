@@ -142,6 +142,7 @@ def validate_rate_limit_config() -> None:
         'THROTTLE_EXECUTION_RATE': os.getenv('THROTTLE_EXECUTION_RATE', '30/minute'),
         'THROTTLE_API_RATE': os.getenv('THROTTLE_API_RATE', '100/minute'),
         'THROTTLE_PUBLIC_RATE': os.getenv('THROTTLE_PUBLIC_RATE', '50/minute'),
+        'THROTTLE_SERVICE_LOGIN_RATE': os.getenv('THROTTLE_SERVICE_LOGIN_RATE', '5/minute'),
     }
 
     invalid = []

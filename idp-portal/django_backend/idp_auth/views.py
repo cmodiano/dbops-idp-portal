@@ -38,7 +38,7 @@ from core.exceptions import ForbiddenError, UnauthorizedError, NotFoundError, Se
 from core.services import AuditService
 from core.models import AuditActionType, AuditEntityType
 from core.middleware import get_correlation_id
-from core.throttling import AuthEndpointThrottle, TokenRefreshThrottle, PublicEndpointThrottle, ApiKeyTokenThrottle
+from core.throttling import AuthEndpointThrottle, TokenRefreshThrottle, PublicEndpointThrottle, ApiKeyTokenThrottle, ServiceLoginThrottle
 from core.utils import ensure_utc_isoformat
 from catalog.models import Action
 
@@ -517,7 +517,7 @@ class ServiceLoginView(APIView):
     Story 49.2.
     """
     permission_classes = [AllowAny]
-    throttle_classes = [AuthEndpointThrottle]
+    throttle_classes = [ServiceLoginThrottle]
 
     @extend_schema(
         tags=['auth'],
@@ -525,7 +525,7 @@ class ServiceLoginView(APIView):
         description=(
             "Authentifie un compte de service (username/password) contre l'Active Directory via LDAP. "
             'Retourne un JWT access token et positionne un cookie refresh_token httpOnly. '
-            'Rate limit : 10 requêtes/minute par IP.'
+            'Rate limit : 5 requêtes/minute par IP.'
         ),
         request=ServiceLoginRequestSerializer,
         responses={
@@ -554,7 +554,7 @@ class ServiceLoginView(APIView):
             log.error('service_login_ldap_unavailable', error=str(exc))
             AuditService.create_entry(
                 user_id='unknown',
-                action_type=AuditActionType.USER_LOGIN,
+                action_type=AuditActionType.SERVICE_LOGIN,
                 entity_type=AuditEntityType.USER,
                 entity_id=0,
                 details={'success': False, 'reason': 'ldap_unavailable', 'username': username},
@@ -570,7 +570,7 @@ class ServiceLoginView(APIView):
             log.warning('service_login_invalid_credentials', ldap_username=username)
             AuditService.create_entry(
                 user_id='unknown',
-                action_type=AuditActionType.USER_LOGIN,
+                action_type=AuditActionType.SERVICE_LOGIN,
                 entity_type=AuditEntityType.USER,
                 entity_id=0,
                 details={'success': False, 'reason': 'invalid_credentials', 'username': username},
@@ -587,7 +587,7 @@ class ServiceLoginView(APIView):
             log.warning('service_login_no_profile', ldap_username=username, ad_groups=ad_groups)
             AuditService.create_entry(
                 user_id='unknown',
-                action_type=AuditActionType.USER_LOGIN,
+                action_type=AuditActionType.SERVICE_LOGIN,
                 entity_type=AuditEntityType.USER,
                 entity_id=0,
                 details={'success': False, 'reason': 'no_profile', 'username': username, 'ad_groups': ad_groups},
@@ -623,7 +623,7 @@ class ServiceLoginView(APIView):
         log.info('service_login_success', ldap_username=username, profile=profile_for_db)
         AuditService.create_entry(
             user_id=str(user.id),
-            action_type=AuditActionType.USER_LOGIN,
+            action_type=AuditActionType.SERVICE_LOGIN,
             entity_type=AuditEntityType.USER,
             entity_id=user.id,
             details={'success': True, 'username': username, 'profile': profile_for_db, 'ad_groups': ad_groups},

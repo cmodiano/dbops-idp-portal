@@ -1,6 +1,7 @@
 """
 Tests unitaires pour ServiceLoginView — POST /api/v1/auth/service-login/
 Story 49.2 : Backend endpoint authentification compte de service (username+password → JWT).
+Story 49.3 : ServiceLoginThrottle + AuditActionType.SERVICE_LOGIN.
 """
 
 import pytest
@@ -8,6 +9,7 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework import status
+from core.models import AuditActionType
 
 ENDPOINT = '/api/v1/auth/service-login/'
 
@@ -177,13 +179,14 @@ class TestServiceLoginView(TestCase):
         response = self.client.post(ENDPOINT, {'password': 'secret'}, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    # ---------- AC9 : Rate limiting ----------
+    # ---------- AC9/AC10 : Rate limiting ----------
 
     def test_throttle_class_is_configured(self):
-        """AC9 : AuthEndpointThrottle actif sur ServiceLoginView."""
+        """AC10 : ServiceLoginThrottle (pas AuthEndpointThrottle) actif sur ServiceLoginView — Story 49.3."""
         from idp_auth.views import ServiceLoginView
-        from core.throttling import AuthEndpointThrottle
-        self.assertIn(AuthEndpointThrottle, ServiceLoginView.throttle_classes)
+        from core.throttling import AuthEndpointThrottle, ServiceLoginThrottle
+        self.assertIn(ServiceLoginThrottle, ServiceLoginView.throttle_classes)
+        self.assertNotIn(AuthEndpointThrottle, ServiceLoginView.throttle_classes)
 
     @patch('idp_auth.views.AuditService')
     @patch('idp_auth.views.LDAPService')
@@ -194,7 +197,8 @@ class TestServiceLoginView(TestCase):
         mock_ldap = mock_ldap_class.return_value
         mock_ldap.authenticate.return_value = (False, [], None)
 
-        with patch.object(ServiceLoginThrottle, 'allow_request', return_value=False):
+        with patch.object(ServiceLoginThrottle, 'allow_request', return_value=False), \
+             patch.object(ServiceLoginThrottle, 'wait', return_value=60):
             response = self.client.post(
                 ENDPOINT,
                 {'username': 'svc', 'password': 'pass'},
@@ -202,6 +206,52 @@ class TestServiceLoginView(TestCase):
             )
 
         self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+    # ---------- AC10 : Audit utilise SERVICE_LOGIN — Story 49.3 ----------
+
+    @patch('idp_auth.views.AuditService')
+    @patch('idp_auth.views.Profile')
+    @patch('idp_auth.views.LDAPService')
+    @patch('idp_auth.views.AuthService')
+    def test_audit_uses_service_login_action_type(
+        self, mock_auth_service, mock_ldap_class, mock_profile, mock_audit
+    ):
+        """AC10 : Audit entrée succès utilise SERVICE_LOGIN (pas USER_LOGIN) — Story 49.3."""
+        from idp_auth.views import ServiceLoginView  # noqa: F401
+        # Arrange (succès)
+        mock_ldap = mock_ldap_class.return_value
+        mock_ldap.authenticate.return_value = (True, ['CN=GRP-IDP-DBOPS,DC=example,DC=com'], 'Svc Account')
+        mock_profile_obj = MagicMock()
+        mock_profile_obj.name = 'DBOPS'
+        mock_profile.objects.find_by_ad_groups.return_value = [mock_profile_obj]
+        mock_user = MagicMock()
+        mock_user.id = 99
+        mock_user.username = 'svc-test'
+        mock_user.profile = 'dbops'
+        mock_auth_service.return_value.create_or_update_user.return_value = mock_user
+
+        # Act
+        self.client.post(ENDPOINT, {'username': 'svc-test', 'password': 'secret'}, format='json')
+
+        # Assert : dernier appel audit utilise SERVICE_LOGIN
+        calls = mock_audit.create_entry.call_args_list
+        self.assertTrue(len(calls) >= 1)
+        audit_call = calls[-1]
+        action_type = audit_call.kwargs.get('action_type') or audit_call[1].get('action_type')
+        self.assertEqual(action_type, AuditActionType.SERVICE_LOGIN)
+
+    @patch('idp_auth.views.AuditService')
+    @patch('idp_auth.views.LDAPService')
+    def test_audit_failure_uses_service_login_action_type(self, mock_ldap_class, mock_audit):
+        """AC10 : Audit entrée d'échec utilise SERVICE_LOGIN (pas USER_LOGIN) — Story 49.3."""
+        mock_ldap = mock_ldap_class.return_value
+        mock_ldap.authenticate.return_value = (False, [], None)
+
+        self.client.post(ENDPOINT, {'username': 'svc', 'password': 'wrong'}, format='json')
+
+        mock_audit.create_entry.assert_called_once()
+        call_kwargs = mock_audit.create_entry.call_args.kwargs
+        self.assertEqual(call_kwargs['action_type'], AuditActionType.SERVICE_LOGIN)
 
 
 # ---------- AC8 : Password non loggué — tests pytest standalone ----------
