@@ -91,6 +91,20 @@ class ExecutionEnvironmentValidationTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data.get('environment'), 'developpement')
 
+    def test_regular_execution_accepts_any_env_no_inventory_validation(self):
+        """Story 53.2 / Story 26.10 : Les exécutions régulières n'effectuent pas de validation
+        d'environnement contre l'inventaire — tout env string est accepté (HTTP 201).
+        Le RBAC/permission_aggregator contrôle l'accès, pas cette couche.
+        """
+        response = self.client.post('/api/v1/executions/', {
+            'action_id': self.action.id,
+            'environment': 'dev',
+            'parameters': {}
+        }, format='json')
+
+        # 'dev' n'est plus dans l'inventaire brut mais aucune validation n'est faite ici
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
     @patch('executions.views.scheduled_views.validate_environment_against_inventory')
     @patch('executions.views.scheduled_views.SchedulingService')
     def test_create_scheduled_execution_with_valid_environment(self, mock_sched_service, mock_validate):
@@ -348,20 +362,6 @@ class ValidateEnvironmentAgainstInventoryTests(TestCase):
             validate_environment_against_inventory('dev')
 
         self.assertEqual(cm.exception.code, 'INVALID_ENVIRONMENT')
-
-    def test_regular_execution_accepts_any_env_no_inventory_validation(self):
-        """Story 53.2 / Story 26.10 : Les exécutions régulières n'effectuent pas de validation
-        d'environnement contre l'inventaire — tout env string est accepté (HTTP 201).
-        Le RBAC/permission_aggregator contrôle l'accès, pas cette couche.
-        """
-        response = self.client.post('/api/v1/executions/', {
-            'action_id': self.action.id,
-            'environment': 'dev',
-            'parameters': {}
-        }, format='json')
-
-        # 'dev' n'est plus dans l'inventaire brut mais aucune validation n'est faite ici
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
 
 # =============================================================================

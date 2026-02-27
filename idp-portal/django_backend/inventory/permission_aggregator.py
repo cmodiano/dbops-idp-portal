@@ -198,7 +198,7 @@ class RBACPermissionAggregator:
                 if basic_env:
                     target_set.add(basic_env)
 
-    def _normalize_environment(self, raw_env: str | None, *, _pre_normalized: str | None = None) -> str:
+    def _normalize_environment(self, raw_env: str | None) -> str:
         """Normalize environment to lowercase only. No alias mapping — inventory is the source of truth.
 
         Extrait de InventoryService._normalize_environment (Story 34.8 - AC1).
@@ -213,4 +213,4 @@ class RBACPermissionAggregator:
         """
         if not raw_env:
             return ''
-        return _pre_normalized if _pre_normalized is not None else EnvironmentHelper.normalize(raw_env)
+        return EnvironmentHelper.normalize(raw_env)
