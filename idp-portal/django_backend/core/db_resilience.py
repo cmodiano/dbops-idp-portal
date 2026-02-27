@@ -108,7 +108,7 @@ def _is_mid_commit_error(exc: Exception) -> bool:
     # the error happened during or after commit → uncertain.
     try:
         return not connection.in_atomic_block
-    except Exception:  # noqa: BLE001 — graceful-degradation: connection state check may fail, assume worst case
+    except Exception as _:  # noqa: BLE001 — graceful-degradation: connection state check may fail, assume worst case
         # If we can't check, assume worst case
         return True
 

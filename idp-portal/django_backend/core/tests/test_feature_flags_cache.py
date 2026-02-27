@@ -50,7 +50,7 @@ class TestThunderingHerdPrevention:
             try:
                 result = feature_flags._get_all_flags()
                 results.append(result)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — test: collect errors for assertion
                 errors.append(e)
 
         with patch('core.feature_flags._load_flags_from_database', side_effect=slow_db_load):

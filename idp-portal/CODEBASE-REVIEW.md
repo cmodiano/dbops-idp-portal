@@ -550,9 +550,13 @@ Les 6 fichiers "cohérent/justifié" disposent désormais d'un commentaire `# Re
 
 ---
 
-### 16.2 [LOW] — `except Exception` résiduels (33 occurrences backend)
+### 16.2 [LOW] — `except Exception` résiduels (77 occurrences backend) — ✅ RESOLVED (Story 48.9 — 2026-02-26)
 
-33 occurrences de `except Exception` dans `executions/` (16 fichiers). La plupart sont documentées (`noqa: BLE001`) ou dans des contextes de résilience (webhooks, polling, runtime). Les cas non documentés dans les fichiers nouveaux/refactorisés (ex. `container_workflow_runtime.py` — 5 occurrences) mériteraient une revue pour vérifier qu'ils sont tous justifiés.
+**Audit final Story 48.9 (2026-02-26) :** 77 occurrences inventoriées dans 40 fichiers backend. **100 % conformes** — toutes avec `noqa: BLE001` et commentaire de catégorie (resilience-boundary, graceful-degradation, catch-all-mark-failed, best-effort-non-critical, logged-and-reraised, logged-and-wrapped). Aucune correction nécessaire.
+
+Rapport détaillé : [`django_backend/docs/story-48-9-except-exception-audit-report.md`](django_backend/docs/story-48-9-except-exception-audit-report.md)
+
+~~33 occurrences de `except Exception` dans `executions/` (16 fichiers). La plupart sont documentées (`noqa: BLE001`) ou dans des contextes de résilience (webhooks, polling, runtime). Les cas non documentés dans les fichiers nouveaux/refactorisés (ex. `container_workflow_runtime.py` — 5 occurrences) mériteraient une revue pour vérifier qu'ils sont tous justifiés.~~
 
 ---
 
@@ -609,7 +613,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 
 | # | Issue précédente | Ancien statut | Nouveau statut | Détails |
 |---|------------------|---------------|----------------|---------|
-| 16.2 | `except Exception` résiduels | 33 occurrences | **77 occurrences** (40 fichiers .py) | Comptage précédent limité à `executions/`. Inclut maintenant tout le backend. La majorité sont documentés `noqa: BLE001` ou dans des contextes de résilience (webhooks, polling, adapters, vault) |
+| 16.2 | `except Exception` résiduels | 33 occurrences | **✅ RESOLVED (Story 48.9)** | 77 occurrences auditées, 100 % conformes (`noqa: BLE001` + catégorie). Rapport: `docs/story-48-9-except-exception-audit-report.md` |
 | 16.3 | `.catch(() => {})` résiduels | 21 occurrences | **0 en production** ✅ RESOLVED | Plus que 2 occurrences en fichiers test. Issue fermée |
 
 ---
@@ -745,7 +749,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | Nouveaux findings §13 | 5/5 | 0 |
 | **SOLID Backend (§14)** | **11/11** | **0** |
 | **SOLID Frontend (§15)** | **10/11** | **1** |
-| **Observations post-refactoring (§16)** | 2 (16.1 DOCUMENTED, 16.3 RESOLVED) | **1 (16.2) + 1 INFO** |
+| **Observations post-refactoring (§16)** | 3 (16.1 DOCUMENTED, 16.2 RESOLVED Story 48.9, 16.3 RESOLVED) | **1 INFO** |
 | **Audit #3 (§17)** | **5/6** | **1** (NEW-FE-1) |
 | **Audit #4 (§18)** | **1** | **11** |
 | **Total** | **105/119** | **14 (2 HIGH, 5 MEDIUM, 6 LOW, 1 INFO)** |
@@ -766,7 +770,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 2. ~~NEW-BE-10 — Migration progressive `import logging` → `structlog` (13+ fichiers)~~ ✅ Résolu — Story 48.6 (2026-02-26)
 3. SOLID-FE-4 — Migration progressive des ~25 composants vers hooks (effort élevé, story par story)
 4. ~~SOLID-FE-10 — Consolider `STATUS_CONFIG` résiduel~~ ✅ Résolu — Story 48.5 (2026-02-26)
-5. 16.2 — Audit des 77 `except Exception` résiduels pour vérifier documentation
+5. ~~16.2 — Audit des 77 `except Exception` résiduels pour vérifier documentation~~ ✅ Résolu — Story 48.9 (2026-02-26)
 
 ---
 
@@ -781,7 +785,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | Issues LOW | 4 | 4 | 7 | 7 | -4 résolus (NEW-BE-3/4/5, NEW-BE-2), +4 nouveaux (SEC-13/14, FE-2/3/4, BE-10) |
 | Sécurité | 11 issues | 0 ouvertes | **0 ouvertes** | **3 ouvertes** (1 MEDIUM, 2 LOW) | +3 nouveaux (validation URL, TLS, path) |
 | `.catch(() => {})` vides FE | 21 | 21 | **0 en prod** ✅ | **0 en prod** ✅ | = |
-| `except Exception` BE | 33 | 33 | **77** | **77** | = |
+| `except Exception` BE | 33 | 33 | **77** | **77 — 100 % conformes** ✅ | RESOLVED Story 48.9 |
 | `import logging` inconsistants | — | — | — | **25 fichiers** (13+ non-test) | Nouveau comptage |
 
 **Bilan global (audit #4) :** Sur 119 findings cumulés, **104 sont résolus** (87%). Les 5 issues de l'audit #3 (NEW-BE-1 à BE-5) sont toutes corrigées. L'audit #4 identifie **12 nouvelles issues** dont 1 de sécurité MEDIUM (validation URL), 1 N+1 HIGH (IntegrationService), et 4 MEDIUM (double saves, cascade deactivation). La posture sécurité reste bonne — aucune issue CRITICAL — mais la validation URL des intégrations mérite une correction rapide. L'architecture SOLID backend est exemplaire (registries, ISP, DI). Le principal chantier frontend reste la migration progressive des services directs vers hooks (SOLID-FE-4).

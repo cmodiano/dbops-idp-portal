@@ -37,6 +37,6 @@ def invalidate_permissions_cache() -> None:
             cache_key=RBAC_CACHE_VERSION_KEY,
             ttl_seconds=RBAC_CACHE_TTL,
         )
-    except Exception:  # noqa: BLE001 — best-effort-non-critical: cache unavailability must not break profile operations
+    except Exception as _:  # noqa: BLE001 — best-effort-non-critical: cache unavailability must not break profile operations
         # Cache unavailability should not break profile operations
         logger.warning('rbac_permissions_cache_invalidation_failed', exc_info=True)
