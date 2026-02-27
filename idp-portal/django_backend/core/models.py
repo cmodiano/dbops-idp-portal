@@ -32,6 +32,7 @@ class AuditActionType(models.TextChoices):
     INTEGRATION_DELETED = 'INTEGRATION_DELETED', 'Integration Deleted'
     # Execution types (added for ExecutionService)
     EXECUTION_SUBMITTED = 'EXECUTION_SUBMITTED', 'Execution Submitted'
+    EXECUTION_STARTED = 'EXECUTION_STARTED', 'Execution Started'  # Legacy: in Oracle constraint, use EXECUTION_RUNNING for new writes
     EXECUTION_INTEGRATION_ERROR = 'EXECUTION_INTEGRATION_ERROR', 'Execution Integration Error'  # Story 18.6
     EXECUTION_RUNNING = 'EXECUTION_RUNNING', 'Execution Running'
     EXECUTION_COMPLETED = 'EXECUTION_COMPLETED', 'Execution Completed'

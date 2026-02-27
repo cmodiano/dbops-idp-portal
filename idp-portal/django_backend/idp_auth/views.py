@@ -533,6 +533,9 @@ class ServiceLoginView(APIView):
             400: OpenApiResponse(description='Validation — username ou password manquant'),
             401: OpenApiResponse(description='INVALID_CREDENTIALS — credentials invalides'),
             403: OpenApiResponse(description='NO_PROFILE — aucun profil AD associé'),
+            429: OpenApiResponse(
+                description='429 Too Many Requests — RATE_LIMIT_EXCEEDED — trop de tentatives, réessayez plus tard',
+            ),
             503: OpenApiResponse(description='LDAP_UNAVAILABLE — service LDAP inaccessible'),
         },
     )

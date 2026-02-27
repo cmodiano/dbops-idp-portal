@@ -6,6 +6,7 @@ Story 49.3 : ServiceLoginThrottle + AuditActionType.SERVICE_LOGIN.
 
 import pytest
 from unittest.mock import MagicMock, patch
+from django.core.cache import cache
 from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework import status
@@ -18,6 +19,7 @@ class TestServiceLoginView(TestCase):
     """Tests for POST /auth/service-login/ endpoint."""
 
     def setUp(self):
+        cache.clear()  # Reset ServiceLoginThrottle state for test isolation
         self.client = APIClient()
 
     # ---------- AC1, AC5, AC6, AC7 : Succès 200 ----------
@@ -271,7 +273,7 @@ def test_password_not_in_structlog_on_invalid_credentials(mock_ldap_class, mock_
     log_calls = []
 
     def capture_log(*args, **kwargs):
-        log_calls.append(kwargs)
+        log_calls.append({'args': args, 'kwargs': kwargs})
 
     with patch('idp_auth.views.logger') as mock_logger:
         bound_logger = MagicMock()
@@ -281,11 +283,15 @@ def test_password_not_in_structlog_on_invalid_credentials(mock_ldap_class, mock_
         client = APIClient()
         client.post(ENDPOINT, {'username': 'svc', 'password': 'secret-password'}, format='json')
 
-    # Aucun appel de log ne doit contenir 'secret-password'
-    for call_kwargs in log_calls:
-        for value in call_kwargs.values():
+    # Aucun appel de log ne doit contenir 'secret-password' (args ou kwargs)
+    for call in log_calls:
+        for value in call['args']:
             assert 'secret-password' not in str(value), (
-                f"Le password a été loggué dans: {call_kwargs}"
+                f"Le password a été loggué dans args: {call}"
+            )
+        for value in call['kwargs'].values():
+            assert 'secret-password' not in str(value), (
+                f"Le password a été loggué dans kwargs: {call}"
             )
 
 
@@ -302,16 +308,23 @@ def test_password_not_in_structlog_on_ldap_unavailable(mock_ldap_class, mock_aud
 
     error_calls = []
 
+    def capture_error(*args, **kwargs):
+        error_calls.append({'args': args, 'kwargs': kwargs})
+
     with patch('idp_auth.views.logger') as mock_logger:
         bound_logger = MagicMock()
         mock_logger.bind.return_value = bound_logger
-        bound_logger.error.side_effect = lambda *a, **kw: error_calls.append(kw)
+        bound_logger.error.side_effect = capture_error
 
         client = APIClient()
         client.post(ENDPOINT, {'username': 'svc', 'password': 'very-secret'}, format='json')
 
-    for call_kwargs in error_calls:
-        for value in call_kwargs.values():
+    for call in error_calls:
+        for value in call['args']:
             assert 'very-secret' not in str(value), (
-                f"Le password a été loggué dans: {call_kwargs}"
+                f"Le password a été loggué dans args: {call}"
+            )
+        for value in call['kwargs'].values():
+            assert 'very-secret' not in str(value), (
+                f"Le password a été loggué dans kwargs: {call}"
             )
