@@ -34,3 +34,37 @@ class UserModelTest(TestCase):
         User.objects.create(username='testuser', profile='DBA')
         with self.assertRaises(Exception):  # IntegrityError
             User.objects.create(username='testuser', profile='DBA')
+
+    def test_create_user_with_email(self):
+        """Story 50.1: User peut être créé avec un email."""
+        user = User.objects.create(
+            username='emailuser',
+            profile='DBA',
+            email='emailuser@example.com'
+        )
+        self.assertEqual(user.email, 'emailuser@example.com')
+
+    def test_create_user_without_email_defaults_to_none(self):
+        """Story 50.1: email est NULL par défaut si non fourni."""
+        user = User.objects.create(
+            username='noemailuser',
+            profile='DBA'
+        )
+        self.assertIsNone(user.email)
+
+    def test_user_manager_create_or_update_with_email(self):
+        """Story 50.1: UserManager.create_or_update stocke l'email."""
+        user = User.objects.create_or_update(
+            username='mgremailuser',
+            profile='DBA',
+            email='mgr@example.com'
+        )
+        self.assertEqual(user.email, 'mgr@example.com')
+
+    def test_user_manager_create_or_update_without_email(self):
+        """Story 50.1: UserManager.create_or_update sans email → email=None."""
+        user = User.objects.create_or_update(
+            username='mgrnoemailuser',
+            profile='DBA'
+        )
+        self.assertIsNone(user.email)

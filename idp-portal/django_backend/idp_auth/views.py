@@ -197,6 +197,13 @@ class SAMLCallbackView(APIView):
         display_name = attributes.get("displayName", [None])[0] if attributes.get("displayName") else None
         raw_profile = attributes.get("profile", [_DEFAULT_PROFILE])[0] if attributes.get("profile") else _DEFAULT_PROFILE
         saml_subject = name_id
+        email = (
+            (attributes.get("mail") or [None])[0]
+            or (attributes.get("email") or [None])[0]
+            or (attributes.get("emailAddress") or [None])[0]
+            or (attributes.get("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress") or [None])[0]
+            or None
+        )
 
         # Extract AD groups
         ad_groups = _extract_ad_groups(attributes, raw_profile)
@@ -237,6 +244,7 @@ class SAMLCallbackView(APIView):
             display_name=display_name,
             profile=profile_for_db,
             saml_subject=saml_subject,
+            email=email,
         )
 
         # Audit login
@@ -352,6 +360,7 @@ class CurrentUserProfileView(APIView):
             'is_auditor': is_auditor,
             'navigation_tabs': navigation_tabs,
             'is_business_profile': is_business_profile(profile_name),
+            'email': getattr(user, 'email', None),
         }
 
         serializer = UserProfileSerializer(profile_data)
@@ -602,6 +611,11 @@ class ServiceLoginView(APIView):
             )
 
         # Step 5: JIT create/update user
+        # Note: email intentionnellement absent — les comptes de service s'authentifient
+        # via LDAP et n'ont pas de claim email SAML. Ils sont distincts des utilisateurs
+        # SAML interactifs. email=None (valeur par défaut) est transmis à update_or_create,
+        # ce qui écraserait un email existant si le même username existait en SAML.
+        # Par convention, les usernames service-account et SAML ne se chevauchent pas.
         profile_for_db = profiles[0].name.lower()
         auth_service = AuthService()
         user = auth_service.create_or_update_user(

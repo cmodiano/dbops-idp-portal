@@ -204,6 +204,25 @@ class TestAuthService(TestCase):
 
     # --- Tests 1.1–1.12 : branches manquantes ---
 
+    def test_create_or_update_user_with_email(self):
+        """Story 50.1: create_or_update_user() avec email → email stocké sur le user."""
+        user = self.service.create_or_update_user(
+            username='emailserviceuser',
+            display_name='Email User',
+            profile='DBA',
+            email='emailserviceuser@example.com'
+        )
+        self.assertEqual(user.email, 'emailserviceuser@example.com')
+
+    def test_create_or_update_user_without_email(self):
+        """Story 50.1: create_or_update_user() sans email → email=None."""
+        user = self.service.create_or_update_user(
+            username='noemailserviceuser',
+            display_name='No Email User',
+            profile='DBA'
+        )
+        self.assertIsNone(user.email)
+
     def test_create_or_update_user_update_branch(self):
         """1.1 create_or_update_user() — mise à jour d'un user existant → audit USER_UPDATED."""
         # Créer l'utilisateur une première fois

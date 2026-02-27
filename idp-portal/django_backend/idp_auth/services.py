@@ -26,16 +26,18 @@ class AuthService:
     """
     
     def create_or_update_user(self, username: str, display_name: str | None = None,
-                             profile: str | None = None, saml_subject: str | None = None) -> User:
+                             profile: str | None = None, saml_subject: str | None = None,
+                             email: str | None = None) -> User:
         """
         Create or update a user (UPSERT on username).
-        
+
         Args:
             username: Username (unique identifier)
             display_name: Optional display name
             profile: Optional profile name
             saml_subject: Optional SAML subject
-        
+            email: Optional email address
+
         Returns:
             User instance
         """
@@ -45,6 +47,7 @@ class AuthService:
                 'display_name': display_name,
                 'profile': profile or '',
                 'saml_subject': saml_subject,
+                'email': email,
             }
         )
         
@@ -54,7 +57,7 @@ class AuthService:
             action_type=AuditActionType.USER_CREATED if created else AuditActionType.USER_UPDATED,
             entity_type=AuditEntityType.USER,
             entity_id=user.id,
-            details={'username': user.username, 'profile': user.profile}
+            details={'username': user.username, 'profile': user.profile, 'email': user.email}
         )
         
         return user
