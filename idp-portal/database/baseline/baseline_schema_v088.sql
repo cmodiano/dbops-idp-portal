@@ -2,7 +2,7 @@
 -- Baseline Schema V088 — IDP Portal
 -- ===========================================================================
 -- Date            : 2026-02-25
--- Version couverte: V000–V097 (98 migrations Flyway consolidées)
+-- Version couverte: V000–V098 (99 migrations Flyway consolidées)
 -- Auteur          : Agent de développement (Story 41-2)
 --
 -- Usage           : NOUVEAUX ENVIRONNEMENTS UNIQUEMENT (base Oracle vierge)
@@ -12,8 +12,8 @@
 --   1. sqlplus idp_user/password@HOST:1521/XEPDB1 @database/baseline/baseline_schema_v088.sql
 --   2. flyway -baselineVersion=88 -baselineDescription=baseline_schema_v088 baseline
 --
--- Ce script couvre TOUTES les migrations V000–V097. Aucune migration incrémentale
--- n'est nécessaire après application. État identique à V000→V097 sans phases intermédiaires.
+-- Ce script couvre TOUTES les migrations V000–V098. Aucune migration incrémentale
+-- n'est nécessaire après application. État identique à V000→V098 sans phases intermédiaires.
 -- ===========================================================================
 --
 -- Objets créés :
@@ -201,8 +201,9 @@ CREATE INDEX IDX_PROFILES_AD_GROUP ON PROFILES(AD_GROUP);
 COMMENT ON COLUMN PROFILES.AD_GROUP IS 'Groupe AD associé au profil (ex. GRP-IDP-ASSURANCE).';
 
 -- ---------------------------------------------------------------------------
--- INTEGRATIONS (V020 + V024 + V026 + V064 + V077 + V088)
+-- INTEGRATIONS (V020 + V024 + V026 + V064 + V077 + V088 + V098)
 -- AUTH_FLOW inclut oauth2_client_credentials, api_key (V088)
+-- Health check: HEALTH_STATUS, HEALTH_CHECKED_AT, HEALTH_ERROR_MESSAGE (V098)
 -- ---------------------------------------------------------------------------
 CREATE TABLE INTEGRATIONS (
     ID              NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -218,6 +219,9 @@ CREATE TABLE INTEGRATIONS (
     CONFIG          CLOB,
     STATUS          VARCHAR2(20) DEFAULT 'valid' NOT NULL,
     SECRET_SERVICE_ID NUMBER(19),
+    HEALTH_STATUS   VARCHAR2(10) DEFAULT 'unknown' NOT NULL,
+    HEALTH_CHECKED_AT TIMESTAMP NULL,
+    HEALTH_ERROR_MESSAGE CLOB NULL,
 
     CONSTRAINT UK_INTEGRATIONS_NAME     UNIQUE (NAME),
     CONSTRAINT CK_INTEGRATIONS_AUTH_FLOW CHECK (
@@ -229,17 +233,24 @@ CREATE TABLE INTEGRATIONS (
     CONSTRAINT CK_INTEGRATIONS_STATUS   CHECK (
         STATUS IN ('valid', 'invalid', 'deprecated')
     ),
+    CONSTRAINT CK_INTEGRATIONS_HEALTH_STATUS CHECK (
+        HEALTH_STATUS IN ('ok', 'error', 'unknown')
+    ),
     CONSTRAINT FK_INTEGRATION_SECRET_SERVICE FOREIGN KEY (SECRET_SERVICE_ID) REFERENCES INTEGRATIONS(ID)
 );
 
 CREATE INDEX IDX_INTEGRATIONS_TYPE   ON INTEGRATIONS(TYPE);
 CREATE INDEX IDX_INTEGRATION_STATUS  ON INTEGRATIONS(STATUS);
+CREATE INDEX IDX_INTEGRATIONS_HEALTH_STATUS ON INTEGRATIONS(HEALTH_STATUS);
 
 COMMENT ON TABLE INTEGRATIONS IS 'Remote platform configuration for execution (AAP, ServiceNow, Terraform, etc.)';
 COMMENT ON COLUMN INTEGRATIONS.TYPE IS 'Integration type: free-form platform name (V024)';
 COMMENT ON COLUMN INTEGRATIONS.AUTH_FLOW IS 'Authentication flow: token, basic, basic_then_token, pat, oauth2_client_credentials, api_key (V088)';
 COMMENT ON COLUMN INTEGRATIONS.STATUS IS 'Integration validation status: valid, invalid, deprecated';
 COMMENT ON COLUMN INTEGRATIONS.SECRET_SERVICE_ID IS 'ID intégration Vault pour résoudre les secrets (NULL = Vault par défaut)';
+COMMENT ON COLUMN INTEGRATIONS.HEALTH_STATUS IS 'Health check result: ok, error, unknown (Story 51.1)';
+COMMENT ON COLUMN INTEGRATIONS.HEALTH_CHECKED_AT IS 'Last health check timestamp';
+COMMENT ON COLUMN INTEGRATIONS.HEALTH_ERROR_MESSAGE IS 'Error message when health_status=error';
 
 -- ---------------------------------------------------------------------------
 -- REF_ENGINES (V049 + V078)
