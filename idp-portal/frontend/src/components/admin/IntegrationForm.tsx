@@ -237,11 +237,14 @@ export function IntegrationForm({
         // Autres flows : config omis (undefined)
       }
       if (isInventoryDb) {
+        const schemaVal = values.schema?.trim() || null;
+        const tableVal = values.table?.trim() || null;
+        let config: Record<string, unknown> = {};
         if (values.config_advanced?.trim()) {
           try {
             const parsed = JSON.parse(values.config_advanced.trim()) as Record<string, unknown>;
             if (typeof parsed === 'object' && parsed !== null && (parsed.entities != null || parsed.flat_table != null)) {
-              (payload as IntegrationCreate).config = parsed;
+              config = { ...parsed };
             } else {
               message.warning('Config JSON : utilisez "entities" (multi-tables) ou "flat_table" (une table). Voir le guide de mapping inventaire.');
               return;
@@ -250,11 +253,14 @@ export function IntegrationForm({
             message.error('Config JSON invalide. Vérifiez la syntaxe.');
             return;
           }
-        } else if (values.schema?.trim() || values.table?.trim()) {
-          (payload as IntegrationCreate).config = {
-            schema: values.schema?.trim() || null,
-            table: values.table?.trim() || null,
-          };
+        }
+        // Always persist schema and table when provided (fix: schema was lost when config_advanced was used)
+        if (schemaVal != null || tableVal != null) {
+          config.schema = schemaVal;
+          config.table = tableVal;
+        }
+        if (Object.keys(config).length > 0) {
+          (payload as IntegrationCreate).config = config;
         }
       }
       const res = await onSubmit(payload);

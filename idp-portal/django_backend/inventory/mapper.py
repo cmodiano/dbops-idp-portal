@@ -104,12 +104,13 @@ class InventoryMapper:
     def get_table_name(self, entity_name: str) -> str:
         """
         Get and validate the table name for an entity.
+        Prepends config.schema when table has no schema prefix (no dot).
 
         Args:
             entity_name: Entity name (servers, instances, databases)
 
         Returns:
-            Validated table name
+            Validated table name (schema.table if schema configured and table has no dot)
 
         Raises:
             MapperValidationError: If entity not configured or table name invalid
@@ -125,6 +126,12 @@ class InventoryMapper:
                 f"Entity '{entity_name}' missing 'table' in config"
             )
         _validate_table_name(table)
+        # Prepend schema if table has no schema prefix and config has schema
+        schema = self._config.get('schema') or self._config.get('db_schema')
+        if schema and '.' not in table:
+            full_name = f"{schema}.{table}"
+            _validate_table_name(full_name)
+            return full_name
         return cast(str, table)
 
     def get_column(self, entity_name: str, concept: str) -> str:

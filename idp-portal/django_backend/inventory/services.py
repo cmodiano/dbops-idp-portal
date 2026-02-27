@@ -193,9 +193,14 @@ class InventoryService:
         config = integration.get_config() or {}
 
         # Resolve table: flat_table.table, or schema + table
+        schema_name = config.get('schema') or config.get('db_schema') or 'DBOPS_INVENTORY'
         flat_table = config.get('flat_table')
         if isinstance(flat_table, dict) and flat_table.get('table'):
-            table_or_synonym = flat_table['table']
+            raw_table = flat_table['table']
+            # Prepend schema if table has no schema prefix (no dot)
+            table_or_synonym = (
+                f"{schema_name}.{raw_table}" if '.' not in raw_table else raw_table
+            )
             columns = flat_table.get('columns') or {}
             column_mapping = {
                 'name': columns.get('name', 'NAME'),
@@ -203,7 +208,6 @@ class InventoryService:
                 'type': columns.get('type', 'TYPE'),
             }
         else:
-            schema_name = config.get('schema') or config.get('db_schema') or 'DBOPS_INVENTORY'
             table_name = config.get('table') or config.get('table_view') or 'INVENTORY_TABLE'
             table_or_synonym = f"{schema_name}.{table_name}"
             column_mapping = None

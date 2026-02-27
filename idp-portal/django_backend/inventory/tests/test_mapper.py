@@ -91,6 +91,24 @@ class InventoryMapperMultiTableTests(TestCase):
     def test_get_table_name_databases(self):
         self.assertEqual(self.mapper.get_table_name('databases'), 'DBOPS_DATABASES')
 
+    def test_get_table_name_prepends_schema_when_configured(self):
+        """When config has schema and entity table has no dot, prepend schema."""
+        config_with_schema = {**MULTI_TABLE_CONFIG, 'schema': 'DBOPS_INVENTORY'}
+        mapper = InventoryMapper(config_with_schema)
+        self.assertEqual(mapper.get_table_name('servers'), 'DBOPS_INVENTORY.DBOPS_SERVERS')
+        self.assertEqual(mapper.get_table_name('instances'), 'DBOPS_INVENTORY.DBOPS_INSTANCES')
+
+    def test_get_table_name_does_not_prepend_when_table_has_schema(self):
+        """When entity table already has schema prefix, do not double-prefix."""
+        config = {
+            'schema': 'OTHER_SCHEMA',
+            'entities': {
+                'servers': {'table': 'DBOPS_INVENTORY.DBOPS_SERVERS', 'id_column': 'ID', 'columns': {'name': 'N'}},
+            },
+        }
+        mapper = InventoryMapper(config)
+        self.assertEqual(mapper.get_table_name('servers'), 'DBOPS_INVENTORY.DBOPS_SERVERS')
+
     def test_get_table_name_not_configured(self):
         with self.assertRaises(MapperValidationError) as ctx:
             self.mapper.get_table_name('nonexistent')
