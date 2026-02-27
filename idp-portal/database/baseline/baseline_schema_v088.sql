@@ -10,7 +10,7 @@
 --
 -- Procédure de déploiement :
 --   1. sqlplus idp_user/password@HOST:1521/XEPDB1 @database/baseline/baseline_schema_v088.sql
---   2. flyway -baselineVersion=88 -baselineDescription=baseline_schema_v088 baseline
+--   2. flyway -baselineVersion=98 -baselineDescription=baseline_schema_v088 baseline
 --
 -- Ce script couvre TOUTES les migrations V000–V098. Aucune migration incrémentale
 -- n'est nécessaire après application. État identique à V000→V098 sans phases intermédiaires.
@@ -1208,7 +1208,7 @@ COMMIT;
 -- FIN DU SCRIPT BASELINE V088
 -- ===========================================================================
 -- Après application de ce script :
---   flyway baseline -baselineVersion=88 -baselineDescription=baseline_schema_v088
+--   flyway baseline -baselineVersion=98 -baselineDescription=baseline_schema_v088
 --
 -- Aucune migration incrémentale requise — état identique à V000→V088.
 --

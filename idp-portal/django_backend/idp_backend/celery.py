@@ -35,13 +35,22 @@ if _gate_crontab:
     # Example: "*/5 * * * *" = every 5 minutes
     parts = _gate_crontab.split()
     if len(parts) == 5:
-        _gate_schedule = crontab(
-            minute=parts[0],
-            hour=parts[1],
-            day_of_month=parts[2],
-            month_of_year=parts[3],
-            day_of_week=parts[4],
-        )
+        try:
+            _gate_schedule = crontab(
+                minute=parts[0],
+                hour=parts[1],
+                day_of_month=parts[2],
+                month_of_year=parts[3],
+                day_of_week=parts[4],
+            )
+        except Exception as exc:
+            logger.warning(
+                "celery_beat_invalid_crontab_fallback_interval: crontab=%r error=%s fallback_interval=%s",
+                _gate_crontab,
+                exc,
+                60.0,
+            )
+            _gate_schedule = 60.0
     else:
         logger.warning(
             "celery_beat_invalid_crontab_fallback_interval: crontab=%r fallback_interval=%s",
@@ -50,7 +59,15 @@ if _gate_crontab:
         )
         _gate_schedule = 60.0
 else:
-    _gate_schedule = float(os.getenv('CELERY_BEAT_EVALUATE_GATES_INTERVAL', '60.0'))
+    try:
+        _gate_schedule = float(os.getenv('CELERY_BEAT_EVALUATE_GATES_INTERVAL', '60.0'))
+    except ValueError as exc:
+        logger.warning(
+            "celery_beat_invalid_interval: value=%r error=%s fallback=60.0",
+            os.getenv('CELERY_BEAT_EVALUATE_GATES_INTERVAL'),
+            exc,
+        )
+        _gate_schedule = 60.0
 
 app.conf.beat_schedule = {
     'evaluate-waiting-gates': {
@@ -67,13 +84,22 @@ _sched_crontab = os.getenv('CELERY_BEAT_PROCESS_SCHEDULED_EXECUTIONS_CRONTAB')
 if _sched_crontab:
     parts = _sched_crontab.split()
     if len(parts) == 5:
-        _sched_schedule = crontab(
-            minute=parts[0],
-            hour=parts[1],
-            day_of_month=parts[2],
-            month_of_year=parts[3],
-            day_of_week=parts[4],
-        )
+        try:
+            _sched_schedule = crontab(
+                minute=parts[0],
+                hour=parts[1],
+                day_of_month=parts[2],
+                month_of_year=parts[3],
+                day_of_week=parts[4],
+            )
+        except Exception as exc:
+            logger.warning(
+                "celery_beat_invalid_sched_crontab_fallback_interval: crontab=%r error=%s fallback_interval=%s",
+                _sched_crontab,
+                exc,
+                60.0,
+            )
+            _sched_schedule = 60.0
     else:
         logger.warning(
             "celery_beat_invalid_sched_crontab_fallback_interval: crontab=%r fallback_interval=%s",
@@ -82,7 +108,15 @@ if _sched_crontab:
         )
         _sched_schedule = 60.0
 else:
-    _sched_schedule = float(os.getenv('CELERY_BEAT_PROCESS_SCHEDULED_EXECUTIONS_INTERVAL', '60.0'))
+    try:
+        _sched_schedule = float(os.getenv('CELERY_BEAT_PROCESS_SCHEDULED_EXECUTIONS_INTERVAL', '60.0'))
+    except ValueError as exc:
+        logger.warning(
+            "celery_beat_invalid_sched_interval: value=%r error=%s fallback=60.0",
+            os.getenv('CELERY_BEAT_PROCESS_SCHEDULED_EXECUTIONS_INTERVAL'),
+            exc,
+        )
+        _sched_schedule = 60.0
 
 app.conf.beat_schedule['process-pending-scheduled-executions'] = {
     'task': 'executions.tasks.process_pending_scheduled_executions',
@@ -97,13 +131,22 @@ _health_check_crontab = os.getenv('CELERY_BEAT_HEALTH_CHECK_CRONTAB')
 if _health_check_crontab:
     parts = _health_check_crontab.split()
     if len(parts) == 5:
-        _health_check_schedule = crontab(
-            minute=parts[0],
-            hour=parts[1],
-            day_of_month=parts[2],
-            month_of_year=parts[3],
-            day_of_week=parts[4],
-        )
+        try:
+            _health_check_schedule = crontab(
+                minute=parts[0],
+                hour=parts[1],
+                day_of_month=parts[2],
+                month_of_year=parts[3],
+                day_of_week=parts[4],
+            )
+        except Exception as exc:
+            logger.warning(
+                "celery_beat_invalid_health_check_crontab_fallback_interval: crontab=%r error=%s fallback_interval=%s",
+                _health_check_crontab,
+                exc,
+                3600.0,
+            )
+            _health_check_schedule = 3600.0
     else:
         logger.warning(
             "celery_beat_invalid_health_check_crontab_fallback_interval: crontab=%r fallback_interval=%s",
@@ -114,9 +157,11 @@ if _health_check_crontab:
 else:
     try:
         _health_check_schedule = float(os.getenv('CELERY_BEAT_HEALTH_CHECK_INTERVAL', '3600.0'))
-    except ValueError:
+    except ValueError as exc:
         logger.warning(
-            "celery_beat_invalid_health_check_interval: invalid value, falling back to 3600.0",
+            "celery_beat_invalid_health_check_interval: value=%r error=%s fallback=3600.0",
+            os.getenv('CELERY_BEAT_HEALTH_CHECK_INTERVAL'),
+            exc,
         )
         _health_check_schedule = 3600.0
 

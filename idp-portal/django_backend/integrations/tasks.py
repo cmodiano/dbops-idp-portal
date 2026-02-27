@@ -11,6 +11,7 @@ Appelé depuis :
 """
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 import structlog
@@ -36,6 +37,28 @@ _SERVICE_TYPES = {"servicenow", "jira", "splunk"}
 
 # Vault est un service à instanciation spéciale (credentials directs)
 _VAULT_TYPE = "vault"
+
+_MAX_HEALTH_ERROR_LENGTH = 500
+
+
+def _sanitize_health_error_message(msg: str | None) -> str | None:
+    """Sanitize error message before persisting: strip stack traces, redact URLs, limit length."""
+    if not msg or not msg.strip():
+        return None
+    lines = msg.splitlines()
+    # Keep only non-traceback lines (strip "  File ", "Traceback", "  at ")
+    kept = [
+        line for line in lines
+        if not line.strip().startswith("File ") and not line.strip().startswith("Traceback")
+        and "  at " not in line[:20]
+    ]
+    text = " ".join(kept) if kept else msg
+    # Redact URLs (http://, https://)
+    text = re.sub(r"https?://[^\s]+", "[REDACTED]", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    if len(text) > _MAX_HEALTH_ERROR_LENGTH:
+        text = text[: _MAX_HEALTH_ERROR_LENGTH] + "…"
+    return text or None
 
 
 def _resolve_and_check_adapter(integration) -> "HealthCheckResult":
@@ -174,7 +197,11 @@ def _resolve_and_check_vault(integration) -> "HealthCheckResult":
             integration_id=integration.id,
             error=str(exc),
         )
-        vault_token = ""
+        return HealthCheckResult(
+            status=HealthCheckStatus.ERROR,
+            checked_at=timezone.now(),
+            error_message=f"Erreur résolution credentials : {exc}",
+        )
 
     try:
         vault_svc = VaultService(
@@ -253,10 +280,11 @@ def run_integration_health_check(self, integration_id: int) -> None:
         )
 
     # Mise à jour des champs health check — update direct pour éviter les signaux imbriqués
+    sanitized_error = _sanitize_health_error_message(result.error_message)
     Integration.objects.filter(id=integration_id).update(
         health_status=result.status.value,
         health_checked_at=result.checked_at,
-        health_error_message=result.error_message,
+        health_error_message=sanitized_error,
     )
 
     logger.info(

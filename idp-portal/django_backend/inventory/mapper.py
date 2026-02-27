@@ -206,7 +206,10 @@ class InventoryMapper:
         entity = self.get_entity_config(entity_name)
         if not entity:
             return False
-        return (entity.get('ref_join') or '').lower() == 'id'
+        ref_join = entity.get('ref_join')
+        if not isinstance(ref_join, str):
+            return False
+        return ref_join.lower() == 'id'
 
     def build_select_clause(self, entity_name: str) -> str:
         """

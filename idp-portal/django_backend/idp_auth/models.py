@@ -7,15 +7,18 @@ from django.db import models
 from django.utils import timezone
 
 
+_UNSET = object()
+
+
 class UserManager(models.Manager["User"]):
     """
     Custom manager for User model.
     Provides query methods for common user queries.
     """
-    
+
     def create_or_update(self, username: str, display_name: str | None = None,
                         profile: str | None = None, saml_subject: str | None = None,
-                        email: str | None = None) -> User:
+                        email: str | None | object = _UNSET) -> User:
         """
         Create or update a user (UPSERT on username).
 
@@ -34,7 +37,7 @@ class UserManager(models.Manager["User"]):
             'profile': profile or '',
             'saml_subject': saml_subject,
         }
-        if email is not None:
+        if email is not _UNSET:
             defaults['email'] = email
         user, created = self.update_or_create(
             username=username,

@@ -201,12 +201,20 @@ class InventoryService:
         # Flat table path
         schema_name = config.get('schema') or config.get('db_schema') or 'DBOPS_INVENTORY'
         flat_table = config.get('flat_table')
-        if isinstance(flat_table, dict) and flat_table.get('table'):
-            raw_table = flat_table['table']
+        if isinstance(flat_table, dict):
+            raw_table = flat_table.get('table')
+            if not isinstance(raw_table, str) or not raw_table.strip():
+                raise InventoryServiceError(
+                    "flat_table.table must be a non-empty string"
+                )
+            columns = flat_table.get('columns') or {}
+            if not isinstance(columns, dict):
+                raise InventoryServiceError(
+                    "flat_table.columns must be a dict"
+                )
             table_or_synonym = (
                 f"{schema_name}.{raw_table}" if '.' not in raw_table else raw_table
             )
-            columns = flat_table.get('columns') or {}
             column_mapping = {
                 'name': columns.get('name', 'NAME'),
                 'environment': columns.get('environment', 'ENVIRONMENT'),
@@ -214,6 +222,10 @@ class InventoryService:
             }
         else:
             table_name = config.get('table') or config.get('table_view') or 'INVENTORY_TABLE'
+            if not isinstance(table_name, str):
+                raise InventoryServiceError(
+                    "config table/table_view must be a string"
+                )
             table_or_synonym = (
                 f"{schema_name}.{table_name}" if '.' not in table_name else table_name
             )
@@ -251,7 +263,7 @@ class InventoryService:
                 error=str(e),
                 correlation_id=correlation_id,
             )
-            return [], 0
+            raise
 
         all_targets: list[dict[str, Any]] = []
         for s in servers:

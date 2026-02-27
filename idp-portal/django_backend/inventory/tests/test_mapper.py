@@ -158,6 +158,23 @@ class InventoryMapperMultiTableTests(TestCase):
         self.assertEqual(self.mapper.get_id_column('instances'), 'INSTANCE_ID')
         self.assertEqual(self.mapper.get_id_column('databases'), 'DB_ID')
 
+    def test_refs_join_on_id_non_string_returns_false(self):
+        """Non-string ref_join values (None, int, list) are handled gracefully and return False."""
+        for ref_join_val in (None, 1, [], {}, True):
+            with self.subTest(ref_join=ref_join_val):
+                config = {
+                    "entities": {
+                        "instances": {
+                            "table": "I",
+                            "id_column": "ID",
+                            "columns": {"name": "N", "server_ref": "SID"},
+                            "ref_join": ref_join_val,
+                        },
+                    }
+                }
+                mapper = InventoryMapper(config)
+                self.assertFalse(mapper.refs_join_on_id('instances'))
+
     def test_build_select_clause_servers(self):
         select = self.mapper.build_select_clause('servers')
         # Should contain id column and mapped columns

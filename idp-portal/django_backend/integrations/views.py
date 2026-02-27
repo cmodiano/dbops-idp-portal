@@ -395,6 +395,7 @@ class IntegrationViewSet(viewsets.ViewSet):
             _resolve_and_check_adapter,
             _resolve_and_check_service,
             _resolve_and_check_vault,
+            _sanitize_health_error_message,
             _ADAPTER_TYPE_ALIASES,
             _ADAPTER_TYPES,
             _SERVICE_TYPES,
@@ -445,10 +446,11 @@ class IntegrationViewSet(viewsets.ViewSet):
             result = HealthCheckResult(status=HealthCheckStatus.ERROR, checked_at=timezone.now(), error_message=str(exc))
 
         # Mise à jour BD (évite signal récursif)
+        sanitized_error = _sanitize_health_error_message(result.error_message)
         Integration.objects.filter(id=integration_id).update(
             health_status=result.status.value,
             health_checked_at=result.checked_at,
-            health_error_message=result.error_message,
+            health_error_message=sanitized_error,
         )
 
         # Audit
@@ -460,14 +462,14 @@ class IntegrationViewSet(viewsets.ViewSet):
             details={
                 'status': result.status.value,
                 'checked_at': result.checked_at.isoformat(),
-                'error_message': result.error_message,
+                'error_message': sanitized_error,
             },
             correlation_id=get_correlation_id(),
         )
 
         return Response({"data": {
             "status": result.status.value,
-            "message": result.error_message,
+            "message": sanitized_error,
             "checked_at": result.checked_at.isoformat(),
         }})
 

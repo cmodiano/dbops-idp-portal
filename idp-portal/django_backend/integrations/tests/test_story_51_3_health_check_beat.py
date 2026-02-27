@@ -22,7 +22,10 @@ def _compute_health_check_schedule(env: dict[str, str]) -> float | crontab:
                 day_of_week=parts[4],
             )
         return 3600.0  # fallback sur crontab invalide
-    return float(env.get('CELERY_BEAT_HEALTH_CHECK_INTERVAL', '3600.0'))
+    try:
+        return float(env.get('CELERY_BEAT_HEALTH_CHECK_INTERVAL', '3600.0'))
+    except ValueError:
+        return 3600.0
 
 
 class TestHealthCheckAllIntegrations:
@@ -151,6 +154,11 @@ class TestHealthCheckScheduleParsing:
     def test_invalid_crontab_falls_back_to_default(self):
         """Crontab avec mauvais nombre de parties → fallback 3600.0."""
         schedule = _compute_health_check_schedule({'CELERY_BEAT_HEALTH_CHECK_CRONTAB': 'invalid'})
+        assert schedule == 3600.0
+
+    def test_invalid_interval_falls_back_to_default(self):
+        """CELERY_BEAT_HEALTH_CHECK_INTERVAL invalide (non numérique) → fallback 3600.0."""
+        schedule = _compute_health_check_schedule({'CELERY_BEAT_HEALTH_CHECK_INTERVAL': 'abc'})
         assert schedule == 3600.0
 
     def test_crontab_takes_priority_over_interval(self):

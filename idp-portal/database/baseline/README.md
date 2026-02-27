@@ -32,12 +32,12 @@ flyway \
   -url=jdbc:oracle:thin:@NEW_ENV:1521/XEPDB1 \
   -user=idp_user \
   -password=password \
-  -baselineVersion=88 \
+  -baselineVersion=98 \
   -baselineDescription=baseline_schema_v088 \
   baseline
 ```
 
-> Cette commande enregistre une ligne dans `flyway_schema_history` indiquant que la base est déjà au niveau V088 (success=true). Flyway ne re-jouera pas V000–V088. **Aucune migration incrémentale n'est nécessaire pour V000–V088.** Les migrations futures (V089 et au-delà) devront toutefois être appliquées via `flyway migrate` lorsqu'elles seront disponibles — ne pas les ignorer.
+> Cette commande enregistre une ligne dans `flyway_schema_history` indiquant que la base est déjà au niveau V098 (success=true). Flyway ne re-jouera pas V000–V098. **Aucune migration incrémentale n'est nécessaire pour V000–V098.** Les migrations futures (V099 et au-delà) devront toutefois être appliquées via `flyway migrate` lorsqu'elles seront disponibles — ne pas les ignorer.
 
 ### Étape 3 : Vérifier le résultat
 
@@ -55,7 +55,7 @@ Le résultat attendu :
 +------------+---------+-------------------------------+--------+---------------------+----------+
 | Category   | Version | Description                   | Type   | Installed On        | State    |
 +------------+---------+-------------------------------+--------+---------------------+----------+
-| Versioned  | 88      | baseline schema v088          | BASELN | ...                 | Baseline |
+| Versioned  | 98      | baseline schema v088          | BASELN | ...                 | Baseline |
 +------------+---------+-------------------------------+--------+---------------------+----------+
 ```
 
@@ -65,10 +65,10 @@ Le résultat attendu :
 
 ```bash
 # Comportement normal — aucune modification
-flyway migrate  # Applique uniquement les nouvelles migrations (V089+ futures)
+flyway migrate  # Applique uniquement les nouvelles migrations (V098+ futures)
 ```
 
-Les environnements existants ont déjà V000–V088 dans `flyway_schema_history`. Ce script ne les affecte pas.
+Les environnements existants ont déjà V000–V098 dans `flyway_schema_history`. Ce script ne les affecte pas.
 
 ---
 
@@ -113,19 +113,19 @@ Les environnements existants ont déjà V000–V088 dans `flyway_schema_history`
 
 ## Plan de validation — Procédure via Docker
 
-Pour valider que le schéma produit par `baseline_schema_v088.sql` est identique à celui produit par V000–V088 :
+Pour valider que le schéma produit par `baseline_schema_v088.sql` est identique à celui produit par V000–V098 :
 
 ```bash
 # 1. Démarrer deux instances Oracle Docker
 docker-compose up oracle-a oracle-b
 
-# 2. Sur oracle-a : appliquer la chaîne complète V000–V088
+# 2. Sur oracle-a : appliquer la chaîne complète V000–V098
 flyway -url=jdbc:oracle:thin:@oracle-a:1521/XEPDB1 migrate
 
 # 3. Sur oracle-b : appliquer le baseline uniquement
 sqlplus idp_user/password@oracle-b:1521/XEPDB1 @database/baseline/baseline_schema_v088.sql
 flyway -url=jdbc:oracle:thin:@oracle-b:1521/XEPDB1 \
-       -baselineVersion=88 \
+       -baselineVersion=98 \
        -baselineDescription=baseline_schema_v088 \
        baseline
 

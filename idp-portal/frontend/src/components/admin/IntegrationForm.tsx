@@ -19,6 +19,7 @@ import { useIntegrationTypes } from '../../hooks/useIntegrationTypes';
 import { useVaultIntegrations } from '../../hooks/useVaultIntegrations';
 import { AvailableActionsPanel } from './AvailableActionsPanel';
 import { testConnection } from '../../services/integrations_service';
+import { ApiError } from '../../services/api_client';
 
 /** Auth flow options for Select (Story 4.9 AC2). */
 const AUTH_FLOW_OPTIONS: { value: AuthFlow; label: string }[] = (
@@ -112,8 +113,9 @@ export function IntegrationForm({
       } else {
         message.error(`Connexion échouée : ${result.message ?? 'Erreur inconnue'}`);
       }
-    } catch {
-      message.error('Impossible de tester la connexion');
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Impossible de tester la connexion';
+      message.error(msg);
     } finally {
       setTestLoading(false);
     }

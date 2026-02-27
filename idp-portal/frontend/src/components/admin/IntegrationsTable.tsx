@@ -177,6 +177,8 @@ export function IntegrationsTable({
       title: 'Auth Flow',
       dataIndex: 'auth_flow',
       key: 'auth_flow',
+      width: 160,
+      ellipsis: true,
       render: (flow: string | null) => (
         flow ? <Tag color="blue">{AUTH_FLOW_LABELS[flow as keyof typeof AUTH_FLOW_LABELS] || flow}</Tag> : '—'
       ),
@@ -185,6 +187,7 @@ export function IntegrationsTable({
       title: 'URL',
       dataIndex: 'base_url',
       key: 'base_url',
+      width: 200,
       ellipsis: true,
       render: (url: string) => truncateUrl(url),
       sorter: (a, b) => a.base_url.localeCompare(b.base_url),

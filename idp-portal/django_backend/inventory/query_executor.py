@@ -186,9 +186,13 @@ class InventoryQueryExecutor:
         env_col = column_mapping.get('environment', 'ENVIRONMENT')
         type_col = column_mapping.get('type', 'TYPE')
         for col in (name_col, env_col, type_col):
+            if not isinstance(col, str):
+                raise InventoryServiceError(
+                    f"Invalid column name in mapping: expected string, got {type(col).__name__}"
+                )
             try:
                 _validate_column_name(col)
-            except MapperValidationError as e:
+            except (MapperValidationError, TypeError) as e:
                 raise InventoryServiceError(
                     f"Invalid column name in mapping: '{col}'. Must be alphanumeric with underscore."
                 ) from e
@@ -445,14 +449,18 @@ class InventoryQueryExecutor:
                 inst_table = mapper.get_table_name('instances')
                 srv_table = mapper.get_table_name('servers')
                 db_name_col = mapper.get_column('databases', 'name')
-                db_id_col = mapper.get_id_column('databases')
                 inst_db_ref_col = mapper.get_column('instances', 'db_ref')
                 inst_server_ref_col = mapper.get_column('instances', 'server_ref')
                 srv_name_col = mapper.get_column('servers', 'name')
-                srv_id_col = mapper.get_id_column('servers')
                 ref_join_id = mapper.refs_join_on_id('instances')
-                inst_db_join = f"i.{inst_db_ref_col} = d.{db_id_col}" if ref_join_id else f"UPPER(i.{inst_db_ref_col}) = UPPER(d.{db_name_col})"
-                inst_srv_join = f"i.{inst_server_ref_col} = srv.{srv_id_col}" if ref_join_id else f"UPPER(i.{inst_server_ref_col}) = UPPER(srv.{srv_name_col})"
+                if ref_join_id:
+                    db_id_col = mapper.get_id_column('databases')
+                    srv_id_col = mapper.get_id_column('servers')
+                    inst_db_join = f"i.{inst_db_ref_col} = d.{db_id_col}"
+                    inst_srv_join = f"i.{inst_server_ref_col} = srv.{srv_id_col}"
+                else:
+                    inst_db_join = f"UPPER(i.{inst_db_ref_col}) = UPPER(d.{db_name_col})"
+                    inst_srv_join = f"UPPER(i.{inst_server_ref_col}) = UPPER(srv.{srv_name_col})"
 
                 # Prefix databases columns with 'd.' alias to avoid JOIN ambiguity
                 db_entity_cfg = mapper.get_entity_config('databases') or {}
@@ -635,9 +643,13 @@ class InventoryQueryExecutor:
         ref_join_id = mapper.refs_join_on_id(entity_plural)
         srv_table = mapper.get_table_name('servers')
         srv_name_col = mapper.get_column('servers', 'name')
-        srv_id_col = mapper.get_id_column('servers')
-        srv_join_col = srv_id_col if ref_join_id else srv_name_col
-        srv_join_on = f"inst.{server_ref_col} = srv.{srv_join_col}" if ref_join_id else f"UPPER(inst.{server_ref_col}) = UPPER(srv.{srv_name_col})"
+        if ref_join_id:
+            srv_id_col = mapper.get_id_column('servers')
+            srv_join_col = srv_id_col
+            srv_join_on = f"inst.{server_ref_col} = srv.{srv_join_col}"
+        else:
+            srv_join_col = srv_name_col
+            srv_join_on = f"UPPER(inst.{server_ref_col}) = UPPER(srv.{srv_name_col})"
         server_filter_col = srv_name_col if ref_join_id else server_ref_col
         server_filter_alias = "srv" if ref_join_id else "inst"
 
@@ -726,15 +738,19 @@ class InventoryQueryExecutor:
         db_table = mapper.get_table_name('databases')
         inst_table = mapper.get_table_name('instances')
         db_name_col = mapper.get_column('databases', 'name')
-        db_id_col = mapper.get_id_column('databases')
         inst_db_ref_col = mapper.get_column('instances', 'db_ref')
         inst_server_ref_col = mapper.get_column('instances', 'server_ref')
         ref_join_id = mapper.refs_join_on_id('instances')
         srv_table = mapper.get_table_name('servers')
         srv_name_col = mapper.get_column('servers', 'name')
-        srv_id_col = mapper.get_id_column('servers')
-        inst_db_join = f"i.{inst_db_ref_col} = d.{db_id_col}" if ref_join_id else f"UPPER(i.{inst_db_ref_col}) = UPPER(d.{db_name_col})"
-        inst_srv_join = f"i.{inst_server_ref_col} = srv.{srv_id_col}" if ref_join_id else f"UPPER(i.{inst_server_ref_col}) = UPPER(srv.{srv_name_col})"
+        if ref_join_id:
+            db_id_col = mapper.get_id_column('databases')
+            srv_id_col = mapper.get_id_column('servers')
+            inst_db_join = f"i.{inst_db_ref_col} = d.{db_id_col}"
+            inst_srv_join = f"i.{inst_server_ref_col} = srv.{srv_id_col}"
+        else:
+            inst_db_join = f"UPPER(i.{inst_db_ref_col}) = UPPER(d.{db_name_col})"
+            inst_srv_join = f"UPPER(i.{inst_server_ref_col}) = UPPER(srv.{srv_name_col})"
         server_filter_col = srv_name_col if ref_join_id else inst_server_ref_col
         server_filter_alias = "srv" if ref_join_id else "i"
 
@@ -818,15 +834,19 @@ class InventoryQueryExecutor:
         db_table = mapper.get_table_name('databases')
         inst_table = mapper.get_table_name('instances')
         db_name_col = mapper.get_column('databases', 'name')
-        db_id_col = mapper.get_id_column('databases')
         inst_db_ref_col = mapper.get_column('instances', 'db_ref')
         inst_server_ref_col = mapper.get_column('instances', 'server_ref')
         ref_join_id = mapper.refs_join_on_id('instances')
         srv_table = mapper.get_table_name('servers')
         srv_name_col = mapper.get_column('servers', 'name')
-        srv_id_col = mapper.get_id_column('servers')
-        inst_db_join = f"i.{inst_db_ref_col} = d.{db_id_col}" if ref_join_id else f"UPPER(i.{inst_db_ref_col}) = UPPER(d.{db_name_col})"
-        inst_srv_join = f"i.{inst_server_ref_col} = srv.{srv_id_col}" if ref_join_id else f"UPPER(i.{inst_server_ref_col}) = UPPER(srv.{srv_name_col})"
+        if ref_join_id:
+            db_id_col = mapper.get_id_column('databases')
+            srv_id_col = mapper.get_id_column('servers')
+            inst_db_join = f"i.{inst_db_ref_col} = d.{db_id_col}"
+            inst_srv_join = f"i.{inst_server_ref_col} = srv.{srv_id_col}"
+        else:
+            inst_db_join = f"UPPER(i.{inst_db_ref_col}) = UPPER(d.{db_name_col})"
+            inst_srv_join = f"UPPER(i.{inst_server_ref_col}) = UPPER(srv.{srv_name_col})"
         server_filter = f"UPPER(srv.{srv_name_col}) = UPPER(:p_server_name)" if ref_join_id else f"UPPER(i.{inst_server_ref_col}) = UPPER(:p_server_name)"
 
         entity_config = mapper.get_entity_config('databases') or {}

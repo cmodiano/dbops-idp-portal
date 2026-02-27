@@ -262,7 +262,7 @@ class AzureDevOpsAdapter(BaseAdapter, IHealthCheckable):
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=self.timeout,
-                verify=False,  # nosec B501  # noqa: S501
+                verify=self.verify_ssl,
             ) as client:
                 response = await client.get(url)
                 response.raise_for_status()
@@ -398,7 +398,7 @@ class AzureDevOpsAdapter(BaseAdapter, IHealthCheckable):
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=AZURE_DEVOPS_LOGS_TIMEOUT,
-                verify=False,  # nosec B501  # noqa: S501
+                verify=self.verify_ssl,
             ) as client:
                 # Step 1: Get log listing
                 logs_response = await client.get(logs_list_url)
@@ -594,7 +594,7 @@ class AzureDevOpsAdapter(BaseAdapter, IHealthCheckable):
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=self.timeout,
-                verify=False,  # nosec B501  # noqa: S501
+                verify=self.verify_ssl,
             ) as client:
                 response = await client.patch(
                     url,
