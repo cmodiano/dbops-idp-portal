@@ -181,7 +181,11 @@ class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
 
 ## Filtrage RBAC dans les ViewSets
 
-### Récupération des permissions
+> **Story 26.3 :** La logique ci-dessous a été extraite dans `CatalogRBACService`
+> (`catalog/rbac_service.py`). Utiliser `CatalogRBACService().get_permissions(user)`,
+> `filter_actions()` et `check_action()` à la place des fonctions legacy.
+
+### Récupération des permissions (legacy — voir CatalogRBACService)
 
 ```python
 def _get_cumulative_permissions_for_user(user):
@@ -293,45 +297,35 @@ def _check_rbac_for_action(action, cumulative_permissions):
     return False
 ```
 
-### Exemple dans CatalogActionViewSet
+### Exemple actuel (CatalogActionViewSet)
 
 ```python
-class CatalogActionViewSet(viewsets.ReadOnlyModelViewSet):
+# Utiliser CatalogRBACService (Story 26.3)
+from catalog.rbac_service import CatalogRBACService
 
-    def list(self, request):
-        # Récupérer les permissions de l'utilisateur
-        cumulative_permissions = _get_cumulative_permissions_for_user(request.user)
+rbac_service = CatalogRBACService()
 
-        # Filtrer le queryset
-        queryset = self.get_queryset()
-        if cumulative_permissions:
-            actions_list = list(queryset)
-            filtered_actions = _filter_by_rbac(actions_list, cumulative_permissions)
-            queryset = queryset.filter(id__in=[a.id for a in filtered_actions])
+def list(self, request):
+    cumulative_permissions = rbac_service.get_permissions(request.user)
+    queryset = self.get_queryset()
+    if cumulative_permissions:
+        actions_list = list(queryset)
+        filtered_actions = rbac_service.filter_actions(actions_list, cumulative_permissions)
+        queryset = queryset.filter(id__in=[a.id for a in filtered_actions])
+    # ...
 
-        serializer = self.get_serializer(queryset, many=True)
-        return Response({"data": serializer.data})
-
-    def retrieve(self, request, pk=None):
-        instance = self.get_object()
-
-        # Vérifier l'accès RBAC
-        cumulative_permissions = _get_cumulative_permissions_for_user(request.user)
-        if cumulative_permissions:
-            if not _check_rbac_for_action(instance, cumulative_permissions):
-                raise NotFoundError(message="Action non trouvée")
-
-        serializer = self.get_serializer(instance)
-
-        # Ajouter les environnements autorisés
-        data = serializer.data
-        data['allowed_environments'] = cumulative_permissions.get('environments', [])
-        data['can_execute'] = len(data['allowed_environments']) > 0
-
-        return Response({"data": data})
+def retrieve(self, request, pk=None):
+    instance = self.get_object()
+    cumulative_permissions = rbac_service.get_permissions(request.user)
+    if cumulative_permissions:
+        if not rbac_service.check_action(instance, cumulative_permissions):
+            raise NotFoundError(message="Action non trouvée")
+    # ...
 ```
 
 ## Cumul des permissions multi-profils
+
+> **Spec de référence :** `_bmad-output/planning-artifacts/spec-rbac-cumul-permissions-multi-groupes.md`
 
 Quand un utilisateur appartient à plusieurs AD groups, ses permissions sont **cumulées** (union):
 
@@ -347,10 +341,51 @@ Quand un utilisateur appartient à plusieurs AD groups, ses permissions sont **c
 #   tag_patterns: ["oracle"]
 #   environments: ["staging"]
 
-# Permissions cumulées:
+# Permissions cumulées (via CatalogRBACService.get_permissions):
 #   action_ids: [1, 2, 3, 4]
 #   tag_patterns: ["oracle"]
 #   environments: ["dev", "staging"]
+```
+
+### Implémentation actuelle
+
+Le cumul est réalisé en deux étapes :
+
+1. **`ProfileService.get_cumulative_permissions(user_id, ad_groups)`** (`profiles/services.py`)
+   — Résout les profils via `Profile.objects.find_by_ad_groups(ad_groups)` et retourne une liste brute de permissions par profil (une entrée par profil correspondant).
+
+2. **`CatalogRBACService.get_permissions(user)`** (`catalog/rbac_service.py`)
+   — Agrège les permissions via union (`set.update()`) sur `action_ids`, `tag_patterns` et `environments`. Si un profil a `actions_type='all'`, le résultat final est `'all'` (most permissive wins).
+
+3. **`CurrentUserProfileView.get()`** (`idp_auth/views.py`)
+   — Expose `cumulative_permissions` au frontend via `GET /auth/me` pour le filtrage côté catalogue.
+
+### Formats de permissions (Story 2.31 H2)
+
+| Endpoint / Service | Format retourné |
+|--------------------|----------------|
+| **`GET /auth/me`** (`CurrentUserProfileView`) | Format brut `ProfileService` : `{action_permissions: [{actions_type, action_ids, tag_patterns, environments}, ...], target_permissions: [...]}` |
+| **`CatalogRBACService.get_permissions()`** (catalogue) | Format agrégé : `{actions_type, action_ids, tag_patterns, environments}` |
+
+Le frontend qui consomme `/auth/me` reçoit le format brut. Le catalogue API utilise `CatalogRBACService` et retourne des résultats déjà filtrés. Si le frontend doit filtrer côté client, il doit agréger les `action_permissions` comme le fait `CatalogRBACService.get_permissions()`.
+
+### Matching des tag_patterns (Story 2.31 M3)
+
+`CatalogRBACService.filter_actions()` utilise une **intersection exacte** (`act_tags & tag_patterns`), pas de matching glob (fnmatch). Les patterns comme `db-*` ou `*-prod` ne matchent pas — seuls les tags littéraux (ex. `oracle`, `sql-server`) sont supportés. Pour des patterns glob, une évolution future serait nécessaire.
+
+### Cas d'usage : DBA multi-technologies (PRD / spec)
+
+Des DBAs qui travaillent sur **SQL** et **Oracle** appartiennent à deux groupes (ex. `DBA-SQL`, `DBA-ORACLE`), chacun lié à un profil distinct. Le portail doit leur donner accès aux **actions et droits des deux technologies** (union). Si un profil autorise X et l'autre non, l'action X est autorisée (most permissive wins).
+
+```python
+# DBA appartenant à [GRP-DBA-SQL, GRP-DBA-ORACLE]
+# Profil SQL  : tag_patterns=["sql-server"], environments=["dev", "staging"]
+# Profil Oracle : tag_patterns=["oracle"], environments=["prod"]
+#
+# Résultat CatalogRBACService.get_permissions() :
+#   actions_type: "pattern"
+#   tag_patterns: ["oracle", "sql-server"]   ← union
+#   environments: ["dev", "prod", "staging"] ← union
 ```
 
 ## Diagramme de flux

@@ -110,24 +110,22 @@ export function WizardStep1General({
         />
       </Form.Item>
 
-      {/* Story 2.30: Category field for actions only (not workflows) */}
-      {!isWorkflow && (
-        <Form.Item
-          name="category"
-          label="Catégorie"
-          rules={[{ required: false }]}
-          tooltip="La catégorie permet d'organiser les actions dans le catalogue"
-        >
-          <Select
-            options={categoryOptions}
-            placeholder={categoriesLoading ? 'Chargement...' : 'Sélectionnez une catégorie'}
-            loading={categoriesLoading}
-            disabled={isReadOnly}
-            allowClear
-            aria-label="Catégorie"
-          />
-        </Form.Item>
-      )}
+      {/* Story 2.30: Category field — actions and workflows (workflows: optional, default 'autres' backend) */}
+      <Form.Item
+        name="category"
+        label="Catégorie"
+        rules={[{ required: false }]}
+        tooltip={isWorkflow ? "Catégorie du workflow (optionnel, défaut: Autres)" : "La catégorie permet d'organiser les actions dans le catalogue"}
+      >
+        <Select
+          options={categoryOptions}
+          placeholder={categoriesLoading ? 'Chargement...' : (isWorkflow ? 'Autres (défaut)' : 'Sélectionnez une catégorie')}
+          loading={categoriesLoading}
+          disabled={isReadOnly}
+          allowClear
+          aria-label="Catégorie"
+        />
+      </Form.Item>
 
       {/* Only show engine/platform for actions, not workflows */}
       {!isWorkflow && (

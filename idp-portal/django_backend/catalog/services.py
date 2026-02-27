@@ -181,15 +181,21 @@ class CatalogService:
                 )
                 raise ValueError(f"Integration {integration_id} not found")
 
+        # Workflows: default category to 'autres' when null (DB may have CATEGORY NOT NULL)
+        item_type = action_data.get('item_type', ActionItemType.ACTION)
+        category = action_data.get('category')
+        if item_type == ActionItemType.WORKFLOW and not category:
+            category = 'autres'
+
         # Create the action
         action = Action.objects.create(
             name=action_data['name'],
             description=action_data.get('description'),
-            category=action_data.get('category'),
+            category=category,
             engine=action_data.get('engine'),
             platform=action_data.get('platform'),
             status=status,
-            item_type=action_data.get('item_type', ActionItemType.ACTION),
+            item_type=item_type,
             created_by=created_by_user,
             documentation_md=action_data.get('documentation_md'),
             default_impact_level=action_data.get('default_impact_level'),
@@ -420,13 +426,15 @@ class CatalogService:
         if 'tags' in action_update_data:
             self._sync_tags(action, action_update_data['tags'])
         
-        # Audit
+        # Audit (Story 2.31 L1: add correlation_id for consistency)
+        correlation_id = get_correlation_id()
         AuditService.create_entry(
             user_id=str(user.id),
             action_type=AuditActionType.ACTION_UPDATED,
             entity_type=AuditEntityType.ACTION,
             entity_id=action.id,
-            details={'name': action.name}
+            details={'name': action.name},
+            correlation_id=correlation_id,
         )
 
         return action  # type: ignore[no-any-return]

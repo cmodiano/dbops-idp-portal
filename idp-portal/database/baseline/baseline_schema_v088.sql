@@ -344,12 +344,13 @@ COMMENT ON COLUMN BUSINESS_RULE_POLICIES.POLICY_JSON IS 'JSON schema defining bu
 -- Exclusions : RBAC_POLICIES (col. V002, droppée V013), CHANGE_MODEL_CODE (ajoutée V017, droppée V019)
 -- Contraintes exclues (car droppées) : CK_ACTIONS_CATALOG_CATEGORY (V018),
 --   CK_ACTIONS_CATALOG_ENGINE (V050), CK_ACTIONS_CATALOG_PLATFORM (V052)
+-- V018: CATEGORY rendu nullable (migration vers tags-only, Story 2.23)
 -- ---------------------------------------------------------------------------
 CREATE TABLE ACTIONS_CATALOG (
     ID                      NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     NAME                    VARCHAR2(255) NOT NULL,
     DESCRIPTION             VARCHAR2(4000),
-    CATEGORY                VARCHAR2(50) NOT NULL,
+    CATEGORY                VARCHAR2(50),
     ENGINE                  VARCHAR2(50),
     PLATFORM                VARCHAR2(50),
     PARAMETERS_SCHEMA       CLOB,
