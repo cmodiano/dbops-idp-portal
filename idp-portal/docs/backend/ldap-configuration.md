@@ -94,7 +94,7 @@ LDAP_CONNECT_TIMEOUT=5     # environnement avec latence faible
 LDAP_CONNECT_TIMEOUT=30    # environnement avec latence élevée ou LDAPS lent
 ```
 
-Si le timeout est atteint, `LDAPUnavailableError` est levée → réponse `401 LDAP_UNAVAILABLE`.
+Si le timeout est atteint, `LDAPUnavailableError` est levée → réponse `503 LDAP_UNAVAILABLE`.
 
 ---
 

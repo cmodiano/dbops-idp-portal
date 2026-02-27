@@ -112,7 +112,8 @@ curl -s -X POST https://portail.example.com/api/v1/auth/service-login \
 **Étape 2 — Utiliser le token :**
 
 Incluez le token dans le header `Authorization` pour les appels suivants :
-```
+
+```http
 Authorization: Bearer <access_token>
 ```
 
