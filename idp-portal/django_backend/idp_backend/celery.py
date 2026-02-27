@@ -2,6 +2,8 @@
 Celery application configuration for IDP Portal.
 Story 20.3: Asynchronous retry with Celery.
 Story 25.3: Celery Beat schedule for evaluate_waiting_gates.
+Story 42.1: Celery Beat schedule for process_pending_scheduled_executions.
+Story 51.3: Celery Beat schedule for health_check_all_integrations.
 """
 
 import os
@@ -85,4 +87,34 @@ else:
 app.conf.beat_schedule['process-pending-scheduled-executions'] = {
     'task': 'executions.tasks.process_pending_scheduled_executions',
     'schedule': _sched_schedule,
+}
+
+# Story 51.3: Celery Beat — periodic health check of all integrations
+# Environment variables:
+#   CELERY_BEAT_HEALTH_CHECK_INTERVAL: seconds (default: 3600.0)
+#   CELERY_BEAT_HEALTH_CHECK_CRONTAB: crontab expression overrides interval (e.g., "0 * * * *")
+_health_check_crontab = os.getenv('CELERY_BEAT_HEALTH_CHECK_CRONTAB')
+if _health_check_crontab:
+    parts = _health_check_crontab.split()
+    if len(parts) == 5:
+        _health_check_schedule = crontab(
+            minute=parts[0],
+            hour=parts[1],
+            day_of_month=parts[2],
+            month_of_year=parts[3],
+            day_of_week=parts[4],
+        )
+    else:
+        logger.warning(  # type: ignore[call-arg]
+            "celery_beat_invalid_health_check_crontab_fallback_interval",
+            crontab=_health_check_crontab,
+            fallback_interval=3600.0,
+        )
+        _health_check_schedule = 3600.0
+else:
+    _health_check_schedule = float(os.getenv('CELERY_BEAT_HEALTH_CHECK_INTERVAL', '3600.0'))
+
+app.conf.beat_schedule['health-check-all-integrations'] = {
+    'task': 'integrations.tasks.health_check_all_integrations',
+    'schedule': _health_check_schedule,
 }

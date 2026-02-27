@@ -265,3 +265,35 @@ def run_integration_health_check(self, integration_id: int) -> None:
         integration_type=itype,
         health_status=result.status.value,
     )
+
+
+@shared_task
+def health_check_all_integrations() -> None:
+    """Lance le health check périodique de toutes les intégrations.
+
+    Tâche Celery Beat — schedule configuré dans idp_backend/celery.py.
+    Dispatche run_integration_health_check.delay(id) pour chaque intégration.
+
+    Note:
+        Cette tâche ne lève pas d'exception — toutes les erreurs sont capturées.
+    """
+    from integrations.models import Integration
+
+    try:
+        logger.info("health_check_all_start")
+        integration_ids = list(Integration.objects.all().only('id').values_list('id', flat=True))
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "health_check_all_query_error",
+            error=str(exc),
+            exc_info=True,
+        )
+        return
+
+    for integration_id in integration_ids:
+        run_integration_health_check.delay(integration_id)
+
+    logger.info(
+        "health_check_all_dispatched",
+        count=len(integration_ids),
+    )
