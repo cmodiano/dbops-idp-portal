@@ -43,6 +43,7 @@ from executions.tasks.polling import (  # noqa: E402
     _forward_platform_logs_to_splunk,
 )
 from executions.tasks.trigger import trigger_platform_job  # noqa: E402
+from executions.tasks.cleanup import purge_old_platform_logs  # noqa: E402
 
 __all__ = [
     # Public tasks
@@ -71,4 +72,6 @@ __all__ = [
     "_broadcast_execution_update",
     "_update_execution_from_poll",
     "_forward_platform_logs_to_splunk",
+    # Cleanup task
+    "purge_old_platform_logs",
 ]

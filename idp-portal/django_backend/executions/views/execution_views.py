@@ -45,6 +45,33 @@ exec_logger = structlog.get_logger(__name__)
 _dba_permission = IsDBAOrDBOPS()
 
 
+def _retrieve_purged_logs_from_splunk(output: dict, execution_id: int) -> dict:
+    """Best-effort retrieval of purged platform logs from Splunk.
+
+    If successful, injects ``platform_logs`` and ``logs_source`` into *output*.
+    On failure, returns *output* unchanged (``logs_purged=True`` stays visible
+    to the frontend so it can inform the user).
+    """
+    try:
+        from services.splunk_utils import get_splunk_service  # noqa: PLC0415
+        from asgiref.sync import async_to_sync  # noqa: PLC0415
+
+        splunk = get_splunk_service()
+        if splunk is None:
+            return output
+
+        content = async_to_sync(splunk.search_platform_logs)(execution_id=execution_id)
+        if content:
+            output["platform_logs"] = content
+            output["logs_source"] = "splunk"
+    except Exception:  # noqa: BLE001 — best-effort
+        exec_logger.exception(
+            "splunk_logs_retrieval_error",
+            execution_id=execution_id,
+        )
+    return output
+
+
 class ExecutionsCreateView(APIView):
     """POST /executions -> {data: ExecutionCreateResponse}
 
@@ -472,11 +499,17 @@ class ExecutionStepLogsView(APIView):
         if not _dba_permission.has_object_permission(request, self, execution):
             raise ForbiddenError(code="FORBIDDEN", message="Accès interdit", details={"execution_id": execution_id})
 
+        output = step.get_output() if hasattr(step, "get_output") else None
+
+        # If logs were purged, attempt retrieval from Splunk
+        if output and output.get("logs_purged"):
+            output = _retrieve_purged_logs_from_splunk(output, execution_id)
+
         return Response(
             {
                 "data": {
                     "step_id": step.id,
-                    "output": step.get_output() if hasattr(step, "get_output") else None,
+                    "output": output,
                     "error_message": step.error_message,
                     "started_at": ensure_utc_isoformat(step.started_at),
                     "completed_at": ensure_utc_isoformat(step.completed_at),
@@ -536,6 +569,9 @@ class ExecutionLogsView(APIView):
             step_logs = []
             for step in steps:
                 output = step.get_output() if hasattr(step, "get_output") else None
+                # If logs were purged, attempt retrieval from Splunk
+                if output and output.get("logs_purged"):
+                    output = _retrieve_purged_logs_from_splunk(output, execution_id)
                 step_logs.append({
                     "step_id": step.id,
                     "step_name": step.step_name,
