@@ -91,6 +91,24 @@ class InventoryMapperMultiTableTests(TestCase):
     def test_get_table_name_databases(self):
         self.assertEqual(self.mapper.get_table_name('databases'), 'DBOPS_DATABASES')
 
+    def test_get_table_name_prepends_schema_when_configured(self):
+        """When config has schema and entity table has no dot, prepend schema."""
+        config_with_schema = {**MULTI_TABLE_CONFIG, 'schema': 'DBOPS_INVENTORY'}
+        mapper = InventoryMapper(config_with_schema)
+        self.assertEqual(mapper.get_table_name('servers'), 'DBOPS_INVENTORY.DBOPS_SERVERS')
+        self.assertEqual(mapper.get_table_name('instances'), 'DBOPS_INVENTORY.DBOPS_INSTANCES')
+
+    def test_get_table_name_does_not_prepend_when_table_has_schema(self):
+        """When entity table already has schema prefix, do not double-prefix."""
+        config = {
+            'schema': 'OTHER_SCHEMA',
+            'entities': {
+                'servers': {'table': 'DBOPS_INVENTORY.DBOPS_SERVERS', 'id_column': 'ID', 'columns': {'name': 'N'}},
+            },
+        }
+        mapper = InventoryMapper(config)
+        self.assertEqual(mapper.get_table_name('servers'), 'DBOPS_INVENTORY.DBOPS_SERVERS')
+
     def test_get_table_name_not_configured(self):
         with self.assertRaises(MapperValidationError) as ctx:
             self.mapper.get_table_name('nonexistent')
@@ -112,8 +130,50 @@ class InventoryMapperMultiTableTests(TestCase):
 
     def test_get_id_column(self):
         self.assertEqual(self.mapper.get_id_column('servers'), 'SERVER_ID')
+
+    def test_refs_join_on_id_default_false(self):
+        """When ref_join is absent, refs_join_on_id returns False (name-based refs)."""
+        self.assertFalse(self.mapper.refs_join_on_id('instances'))
+
+    def test_refs_join_on_id_true(self):
+        """When ref_join is 'id', refs_join_on_id returns True (FK-based refs)."""
+        config_with_ref_join = {
+            "entities": {
+                "instances": {
+                    "table": "INSTANCE",
+                    "id_column": "ID",
+                    "columns": {"name": "NAME", "server_ref": "SERVER_ID", "db_ref": "DB_ID"},
+                    "ref_join": "id",
+                },
+            }
+        }
+        mapper = InventoryMapper(config_with_ref_join)
+        self.assertTrue(mapper.refs_join_on_id('instances'))
+
+    def test_refs_join_on_id_case_insensitive(self):
+        """ref_join 'ID' (uppercase) is treated as id-based."""
+        config = {"entities": {"instances": {"table": "I", "id_column": "ID", "columns": {"name": "N", "server_ref": "SID"}, "ref_join": "ID"}}}
+        mapper = InventoryMapper(config)
+        self.assertTrue(mapper.refs_join_on_id('instances'))
         self.assertEqual(self.mapper.get_id_column('instances'), 'INSTANCE_ID')
         self.assertEqual(self.mapper.get_id_column('databases'), 'DB_ID')
+
+    def test_refs_join_on_id_non_string_returns_false(self):
+        """Non-string ref_join values (None, int, list) are handled gracefully and return False."""
+        for ref_join_val in (None, 1, [], {}, True):
+            with self.subTest(ref_join=ref_join_val):
+                config = {
+                    "entities": {
+                        "instances": {
+                            "table": "I",
+                            "id_column": "ID",
+                            "columns": {"name": "N", "server_ref": "SID"},
+                            "ref_join": ref_join_val,
+                        },
+                    }
+                }
+                mapper = InventoryMapper(config)
+                self.assertFalse(mapper.refs_join_on_id('instances'))
 
     def test_build_select_clause_servers(self):
         select = self.mapper.build_select_clause('servers')

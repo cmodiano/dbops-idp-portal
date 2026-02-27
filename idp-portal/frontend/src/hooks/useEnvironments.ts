@@ -5,6 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { fetchEnvironments } from '../services/reference_service';
+import { getEnvironmentLabel } from '../utils/environmentHelpers';
 
 interface UseEnvironmentsResult {
   environments: string[];
@@ -34,7 +35,7 @@ export function invalidateEnvironmentsCache(): void {
 // Atomic function to ensure only one request is made
 function getOrFetchEnvironments(): Promise<string[]> {
   // If cached, return immediately
-  if (cachedEnvironments) {
+  if (cachedEnvironments !== null) {
     return Promise.resolve(cachedEnvironments);
   }
   
@@ -57,13 +58,12 @@ function getOrFetchEnvironments(): Promise<string[]> {
       const error = err instanceof Error ? err : new Error('Failed to load environments');
       cacheError = error;
       loadingPromise = null;
-      const fallback = ['dev', 'staging', 'prod'];
-      cachedEnvironments = fallback;
-      listeners.forEach((listener) => listener(fallback, error));
+      cachedEnvironments = [];  // liste vide — pas de fallback fictif
+      listeners.forEach((listener) => listener([], error));
       listeners.clear();
       // IMPORTANT: Do not rethrow. In test environments (and when inventory is temporarily down),
       // rethrowing leads to unhandled rejections and brittle UI tests.
-      return fallback;
+      return [];
     });
   
   return loadingPromise;
@@ -88,18 +88,18 @@ export function useEnvironments(options?: UseEnvironmentsOptions): UseEnvironmen
 
   useEffect(() => {
     if (!enabled) {
-      setEnvironments(cachedEnvironments || ['dev', 'staging', 'prod']);
+      setEnvironments(cachedEnvironments || []);
       setLoading(false);
       return;
     }
 
     let cancelled = false;
 
-    // If already cached, use it immediately
-    if (cachedEnvironments) {
+    // If already cached, use it immediately (preserve cacheError if fetch previously failed)
+    if (cachedEnvironments !== null) {
       setEnvironments(cachedEnvironments);
       setLoading(false);
-      setError(null);
+      setError(cacheError);
       return;
     }
 
@@ -112,7 +112,8 @@ export function useEnvironments(options?: UseEnvironmentsOptions): UseEnvironmen
         if (!cancelled) {
           setEnvironments(data);
           setLoading(false);
-          setError(null);
+          // Preserve error from cache if fetch failed (getOrFetchEnvironments resolves [] on error)
+          setError(cacheError);
         }
       })
       .catch((err) => {
@@ -120,7 +121,7 @@ export function useEnvironments(options?: UseEnvironmentsOptions): UseEnvironmen
           const error = err instanceof Error ? err : new Error('Failed to load environments');
           setError(error);
           // Fallback already set in cache by getOrFetchEnvironments
-          setEnvironments(cachedEnvironments || ['dev', 'staging', 'prod']);
+          setEnvironments(cachedEnvironments || []);
           setLoading(false);
         }
       });
@@ -131,18 +132,10 @@ export function useEnvironments(options?: UseEnvironmentsOptions): UseEnvironmen
   }, [enabled]);
 
   // Convert to options format for Select components
-  const environmentOptions = environments.map((env) => {
-    // Map environment codes to display labels
-    const labels: Record<string, string> = {
-      'dev': 'Développement',
-      'staging': 'Staging',
-      'prod': 'Production',
-    };
-    return {
-      value: env,
-      label: labels[env.toLowerCase()] || (env.charAt(0).toUpperCase() + env.slice(1).toLowerCase()),
-    };
-  });
+  const environmentOptions = environments.map((env) => ({
+    value: env,
+    label: getEnvironmentLabel(env),
+  }));
 
   return { environments, loading, error, environmentOptions };
 }

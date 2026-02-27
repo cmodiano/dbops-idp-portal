@@ -374,6 +374,106 @@ class IntegrationViewSet(viewsets.ViewSet):
             )
 
     @extend_schema(
+        summary="Tester la connexion d'une intégration (health check synchrone)",
+        responses={
+            200: inline_serializer(name='TestConnectionResponse', fields={
+                'data': inline_serializer(name='TestConnectionData', fields={
+                    'status': drf_serializers.ChoiceField(choices=['ok', 'error', 'unknown']),
+                    'message': drf_serializers.CharField(allow_null=True),
+                    'checked_at': drf_serializers.DateTimeField(),
+                }),
+            }),
+            401: OpenApiResponse(description='Authentication required'),
+            403: OpenApiResponse(description='Insufficient permissions (DBOPS/DBA profile required)'),
+            404: OpenApiResponse(description='Integration not found'),
+        },
+    )
+    @action(detail=True, methods=['post'], url_path='test-connection')
+    def test_connection(self, request, pk=None):
+        """POST /admin/integrations/{id}/test-connection/ — Health check synchrone."""
+        from integrations.tasks import (
+            _resolve_and_check_adapter,
+            _resolve_and_check_service,
+            _resolve_and_check_vault,
+            _sanitize_health_error_message,
+            _ADAPTER_TYPE_ALIASES,
+            _ADAPTER_TYPES,
+            _SERVICE_TYPES,
+            _VAULT_TYPE,
+        )
+        from integrations.health_check import HealthCheckStatus, HealthCheckResult
+        from integrations.models import Integration
+        from django.utils import timezone
+
+        try:
+            integration_id = int(pk)
+        except (ValueError, TypeError):
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message=f"Integration {pk} introuvable",
+                details={"integration_id": pk},
+            )
+
+        service = IntegrationService()
+        integration = service.get_by_id(integration_id)
+
+        if integration is None:
+            raise NotFoundError(
+                code="NOT_FOUND",
+                message=f"Integration {integration_id} introuvable",
+                details={"integration_id": integration_id},
+            )
+
+        # Dispatch synchrone (même logique que run_integration_health_check)
+        itype = integration.type
+        normalized_type = _ADAPTER_TYPE_ALIASES.get(itype, itype)
+        try:
+            if normalized_type in _ADAPTER_TYPES:
+                result = _resolve_and_check_adapter(integration)
+            elif itype == _VAULT_TYPE:
+                result = _resolve_and_check_vault(integration)
+            elif itype in _SERVICE_TYPES:
+                result = _resolve_and_check_service(integration)
+            else:
+                result = HealthCheckResult(status=HealthCheckStatus.UNKNOWN, checked_at=timezone.now(), error_message=None)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception(
+                "test_connection_dispatch_error",
+                integration_id=integration_id,
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
+            result = HealthCheckResult(status=HealthCheckStatus.ERROR, checked_at=timezone.now(), error_message=str(exc))
+
+        # Mise à jour BD (évite signal récursif)
+        sanitized_error = _sanitize_health_error_message(result.error_message)
+        Integration.objects.filter(id=integration_id).update(
+            health_status=result.status.value,
+            health_checked_at=result.checked_at,
+            health_error_message=sanitized_error,
+        )
+
+        # Audit
+        AuditService.create_entry(
+            user_id=str(request.user.id) if request.user and hasattr(request.user, 'id') else 'system',
+            action_type=AuditActionType.INTEGRATION_HEALTH_CHECK_TESTED,
+            entity_type=AuditEntityType.INTEGRATION,
+            entity_id=integration_id,
+            details={
+                'status': result.status.value,
+                'checked_at': result.checked_at.isoformat(),
+                'error_message': sanitized_error,
+            },
+            correlation_id=get_correlation_id(),
+        )
+
+        return Response({"data": {
+            "status": result.status.value,
+            "message": sanitized_error,
+            "checked_at": result.checked_at.isoformat(),
+        }})
+
+    @extend_schema(
         summary="Validate all integrations against the type catalogue",
         responses={
             200: inline_serializer(

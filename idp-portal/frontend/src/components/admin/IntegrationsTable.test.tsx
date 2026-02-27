@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from 'antd';
 import { IntegrationsTable } from './IntegrationsTable';
@@ -190,5 +190,72 @@ describe('IntegrationsTable', () => {
   it('renders Re-valider tout button in toolbar', () => {
     renderWithApp(<IntegrationsTable {...defaultProps} onRefresh={vi.fn()} />);
     expect(screen.getByRole('button', { name: /Re-valider tout/i })).toBeInTheDocument();
+  });
+
+  // Story 51.4: Health column tests
+  it('renders Santé column header', () => {
+    renderWithApp(<IntegrationsTable {...defaultProps} />);
+    expect(screen.getByText('Santé')).toBeInTheDocument();
+  });
+
+  it('affiche badge "Inconnu" (default) pour health_status=undefined', () => {
+    renderWithApp(<IntegrationsTable {...defaultProps} />);
+    // items[0] has no health_status — should default to 'unknown'
+    expect(screen.getByText('Inconnu')).toBeInTheDocument();
+  });
+
+  it('affiche badge "OK" pour health_status=ok', () => {
+    const okItems: IntegrationListItem[] = [
+      { ...items[0], health_status: 'ok', health_checked_at: '2026-02-27T10:00:00Z', health_error_message: null },
+    ];
+    renderWithApp(<IntegrationsTable {...defaultProps} dataSource={okItems} />);
+    expect(screen.getByText('OK')).toBeInTheDocument();
+  });
+
+  it('affiche badge "Erreur" pour health_status=error', () => {
+    const errorItems: IntegrationListItem[] = [
+      { ...items[0], health_status: 'error', health_checked_at: '2026-02-27T10:00:00Z', health_error_message: 'Connection refused' },
+    ];
+    renderWithApp(<IntegrationsTable {...defaultProps} dataSource={errorItems} />);
+    expect(screen.getByText('Erreur')).toBeInTheDocument();
+  });
+
+  it('badge health a un aria-label descriptif', () => {
+    const okItems: IntegrationListItem[] = [
+      { ...items[0], health_status: 'ok', health_checked_at: '2026-02-27T10:00:00Z', health_error_message: null },
+    ];
+    renderWithApp(<IntegrationsTable {...defaultProps} dataSource={okItems} />);
+    expect(screen.getByLabelText('Santé : OK')).toBeInTheDocument();
+  });
+
+  it('tooltip affiche health_error_message et date pour status=error', async () => {
+    const user = userEvent.setup();
+    const errorItems: IntegrationListItem[] = [
+      {
+        ...items[0],
+        health_status: 'error',
+        health_checked_at: '2026-02-27T10:00:00Z',
+        health_error_message: 'Connection refused',
+      },
+    ];
+    renderWithApp(<IntegrationsTable {...defaultProps} dataSource={errorItems} />);
+    const badge = screen.getByLabelText('Santé : Erreur');
+    await user.hover(badge);
+    await waitFor(() => {
+      expect(screen.getByText(/Erreur : Connection refused/)).toBeInTheDocument();
+    }, { timeout: 3000 });
+  });
+
+  it('tooltip affiche "Jamais vérifié" quand health_checked_at est null', async () => {
+    const user = userEvent.setup();
+    const unknownItems: IntegrationListItem[] = [
+      { ...items[0], health_status: 'unknown', health_checked_at: null, health_error_message: null },
+    ];
+    renderWithApp(<IntegrationsTable {...defaultProps} dataSource={unknownItems} />);
+    const badge = screen.getByLabelText('Santé : Inconnu');
+    await user.hover(badge);
+    await waitFor(() => {
+      expect(screen.getByText(/Jamais vérifié/)).toBeInTheDocument();
+    }, { timeout: 3000 });
   });
 });

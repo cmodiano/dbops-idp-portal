@@ -145,3 +145,37 @@ class TestValidateEnvironmentsAgainstInventory:
         """No audit trail created for empty environments."""
         validate_environments_against_inventory([])
         mock_audit_service.create_entry.assert_not_called()
+
+    def test_validate_raw_inventory_values_no_alias(self, mocker):
+        """
+        Story 53.2 AC8 : validate_environments_against_inventory accepte les valeurs brutes
+        de l'inventaire (developpement, certification, production) sans les ré-aliaser.
+        'certification' ne devient pas 'staging', 'developpement' ne devient pas 'dev'.
+        """
+        mock = mocker.patch('profiles.validation.InventoryService')
+        mock.return_value.list_environments.return_value = ['developpement', 'certification', 'production']
+
+        result = validate_environments_against_inventory(['developpement', 'certification'])
+        assert result == ['developpement', 'certification']
+
+    def test_validate_certification_not_aliased_to_staging(self, mocker):
+        """
+        Story 53.2 AC8 : 'certification' est retourné tel quel, pas remplacé par 'staging'.
+        """
+        mock = mocker.patch('profiles.validation.InventoryService')
+        mock.return_value.list_environments.return_value = ['developpement', 'certification', 'production']
+
+        result = validate_environments_against_inventory(['certification'])
+        assert result == ['certification']
+        assert 'staging' not in result
+
+    def test_validate_developpement_not_aliased_to_dev(self, mocker):
+        """
+        Story 53.2 AC8 : 'developpement' est retourné tel quel, pas remplacé par 'dev'.
+        """
+        mock = mocker.patch('profiles.validation.InventoryService')
+        mock.return_value.list_environments.return_value = ['developpement', 'certification', 'production']
+
+        result = validate_environments_against_inventory(['developpement'])
+        assert result == ['developpement']
+        assert 'dev' not in result

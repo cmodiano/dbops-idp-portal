@@ -24,10 +24,8 @@ class RBACPermissionAggregator:
     def __init__(
         self,
         list_environments_fn: Callable[[], list[str]],
-        get_default_environments_fn: Callable[[], list[str]],
     ) -> None:
         self._list_environments = list_environments_fn
-        self._get_default_environments = get_default_environments_fn
 
     def aggregate(
         self,
@@ -69,7 +67,7 @@ class RBACPermissionAggregator:
                 try:
                     allowed_environments.update(self._list_environments())
                 except InventoryServiceError:
-                    allowed_environments.update(self._get_default_environments())
+                    pass  # Inventory unavailable — no environments added (source of truth unavailable)
 
             target_perm = getattr(profile, 'profiletargetpermission', None)
             attr_filter = None
@@ -146,7 +144,7 @@ class RBACPermissionAggregator:
             try:
                 allowed_environments = set(self._list_environments())
             except InventoryServiceError:
-                allowed_environments = set(self._get_default_environments())
+                pass  # Inventory unavailable — no environments added (source of truth unavailable)
 
         # Apply environment filter (Story 26.7 AC4: using EnvironmentHelper)
         if environment:
@@ -193,43 +191,26 @@ class RBACPermissionAggregator:
         return allowed_environments
 
     def _add_normalized_environments(self, envs: list, target_set: set[str]) -> None:
-        """Add environment strings to target_set in both basic and alias-normalized forms.
-
-        Adds the alias-normalized form (e.g. 'certif' → 'staging') and, if different,
-        also the EnvironmentHelper-normalized form (lowercase/stripped) to preserve
-        backward-compat with callers that use either representation.
-        """
+        """Add environment values (lowercased) to target_set. No alias normalization — inventory is the source of truth."""
         for e in envs:
             if isinstance(e, str):
                 basic_env = EnvironmentHelper.normalize(e)
-                normalized_env = self._normalize_environment(e, _pre_normalized=basic_env)
-                target_set.add(normalized_env)
-                if basic_env and basic_env != normalized_env:
+                if basic_env:
                     target_set.add(basic_env)
 
-    def _normalize_environment(self, raw_env: str | None, *, _pre_normalized: str | None = None) -> str:
-        """
-        Normalize environment value from external sources.
-        Handles legacy aliases like 'certif' -> 'staging'.
+    def _normalize_environment(self, raw_env: str | None) -> str:
+        """Normalize environment to lowercase only. No alias mapping — inventory is the source of truth.
 
         Extrait de InventoryService._normalize_environment (Story 34.8 - AC1).
+        Note: kept for backward-compat delegation from InventoryService._normalize_environment.
+        Not called internally — _add_normalized_environments calls EnvironmentHelper.normalize directly.
 
         Args:
             raw_env: Raw environment string (None or empty returns '')
 
         Returns:
-            Normalized environment value
+            Normalized environment value (lowercase/stripped only)
         """
         if not raw_env:
             return ''
-        env_aliases = {
-            'certif': 'staging',
-            'certification': 'staging',
-            'stg': 'staging',
-            'development': 'dev',
-            'production': 'prod',
-        }
-        normalized = _pre_normalized if _pre_normalized is not None else EnvironmentHelper.normalize(raw_env)
-        if normalized in env_aliases:
-            return env_aliases[normalized]
-        return normalized
+        return EnvironmentHelper.normalize(raw_env)

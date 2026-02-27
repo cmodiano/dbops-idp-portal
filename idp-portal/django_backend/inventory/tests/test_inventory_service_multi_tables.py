@@ -116,15 +116,15 @@ class ListServersTests(TestCase):
         _setup_mock_cursor(mock_conn, [
             ('ID',), ('NAME',), ('ENVIRONMENT',), ('ENGINE_TYPE',),
         ], [
-            (1, 'srv-oracle-01', 'prod', 'Oracle'),
-            (2, 'srv-sql-01', 'prod', 'SQL Server'),
+            (1, 'srv-oracle-01', 'production', 'Oracle'),
+            (2, 'srv-sql-01', 'production', 'SQL Server'),
         ])
 
-        results = self.service.list_servers(environment='prod')
+        results = self.service.list_servers(environment='production')
 
         self.assertEqual(len(results), 2)
         self.assertEqual(results[0]['name'], 'srv-oracle-01')
-        self.assertEqual(results[0]['environment'], 'prod')
+        self.assertEqual(results[0]['environment'], 'production')
         self.assertEqual(results[0]['engine_type'], 'Oracle')
 
     @patch('inventory.services.connection')
@@ -134,10 +134,10 @@ class ListServersTests(TestCase):
         _setup_mock_cursor(mock_conn, [
             ('ID',), ('NAME',), ('ENVIRONMENT',), ('ENGINE_TYPE',),
         ], [
-            (1, 'srv-oracle-01', 'prod', 'Oracle'),
+            (1, 'srv-oracle-01', 'production', 'Oracle'),
         ])
 
-        results = self.service.list_servers(environment='prod', engine_type='Oracle')
+        results = self.service.list_servers(environment='production', engine_type='Oracle')
 
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]['engine_type'], 'Oracle')
@@ -147,11 +147,11 @@ class ListServersTests(TestCase):
         """AC1: Falls back to flat table when no entities.servers."""
         self._create_inventory_db(FLAT_TABLE_CONFIG)
         _setup_flat_mock_cursor(mock_conn, 2, [
-            ('fallback-srv-01', 'prod', 'server'),
-            ('fallback-srv-02', 'prod', 'server'),
+            ('fallback-srv-01', 'production', 'server'),
+            ('fallback-srv-02', 'production', 'server'),
         ])
 
-        results = self.service.list_servers(environment='prod')
+        results = self.service.list_servers(environment='production')
 
         self.assertEqual(len(results), 2)
         self.assertEqual(results[0]['name'], 'fallback-srv-01')
@@ -163,16 +163,16 @@ class ListServersTests(TestCase):
         self._create_inventory_db(MULTI_TABLE_CONFIG)
         _setup_mock_cursor(mock_conn, [
             ('ID',), ('NAME',), ('ENVIRONMENT',), ('ENGINE_TYPE',),
-        ], [(1, 'srv-01', 'prod', 'Oracle')])
+        ], [(1, 'srv-01', 'production', 'Oracle')])
 
         with patch('inventory.services.logger') as mock_logger:
-            self.service.list_servers(environment='prod')
+            self.service.list_servers(environment='production')
             # Check that inventory_list_servers was logged
             calls = [c for c in mock_logger.info.call_args_list
                      if c[0][0] == 'inventory_list_servers']
             self.assertEqual(len(calls), 1)
             kwargs = calls[0][1]
-            self.assertEqual(kwargs['environment'], 'prod')
+            self.assertEqual(kwargs['environment'], 'production')
             self.assertEqual(kwargs['nb_results'], 1)
 
     @patch('inventory.services.connection')
@@ -180,13 +180,13 @@ class ListServersTests(TestCase):
         """AC7: Logs warning when result count hits MAX_MULTI_TABLE_RESULTS."""
         self._create_inventory_db(MULTI_TABLE_CONFIG)
         # Generate exactly MAX_MULTI_TABLE_RESULTS results
-        rows = [(i, f'srv-{i}', 'prod', 'Oracle') for i in range(MAX_MULTI_TABLE_RESULTS)]
+        rows = [(i, f'srv-{i}', 'production', 'Oracle') for i in range(MAX_MULTI_TABLE_RESULTS)]
         _setup_mock_cursor(mock_conn, [
             ('ID',), ('NAME',), ('ENVIRONMENT',), ('ENGINE_TYPE',),
         ], rows)
 
         with patch('inventory.services.logger') as mock_logger:
-            self.service.list_servers(environment='prod')
+            self.service.list_servers(environment='production')
             warning_calls = [c for c in mock_logger.warning.call_args_list
                            if c[0][0] == 'inventory_result_limit_reached']
             self.assertEqual(len(warning_calls), 1)
@@ -218,7 +218,7 @@ class ListInstancesTests(TestCase):
         """AC2: Cannot specify both server_name and server_names."""
         with self.assertRaises(ValueError) as ctx:
             self.service.list_instances(
-                environment='prod',
+                environment='production',
                 server_name='srv-01',
                 server_names=['srv-01', 'srv-02']
             )
@@ -227,7 +227,7 @@ class ListInstancesTests(TestCase):
     def test_list_instances_rejects_empty_server_names(self):
         """AC2: Empty server_names list is rejected (likely caller error)."""
         with self.assertRaises(ValueError) as ctx:
-            self.service.list_instances(environment='prod', server_names=[])
+            self.service.list_instances(environment='production', server_names=[])
         self.assertIn("cannot be empty", str(ctx.exception))
 
     @patch('inventory.services.connection')
@@ -237,11 +237,11 @@ class ListInstancesTests(TestCase):
         _setup_mock_cursor(mock_conn, [
             ('ID',), ('NAME',), ('ENVIRONMENT',), ('SERVER_REF',), ('DB_REF',),
         ], [
-            (1, 'inst-01', 'prod', 'srv-01', 'db-01'),
-            (2, 'inst-02', 'prod', 'srv-02', 'db-02'),
+            (1, 'inst-01', 'production', 'srv-01', 'db-01'),
+            (2, 'inst-02', 'production', 'srv-02', 'db-02'),
         ])
 
-        results = self.service.list_instances(environment='prod')
+        results = self.service.list_instances(environment='production')
 
         self.assertEqual(len(results), 2)
         self.assertEqual(results[0]['name'], 'inst-01')
@@ -254,10 +254,10 @@ class ListInstancesTests(TestCase):
         _setup_mock_cursor(mock_conn, [
             ('ID',), ('NAME',), ('ENVIRONMENT',), ('SERVER_REF',), ('DB_REF',),
         ], [
-            (1, 'inst-01', 'prod', 'srv-01', 'db-01'),
+            (1, 'inst-01', 'production', 'srv-01', 'db-01'),
         ])
 
-        results = self.service.list_instances(environment='prod', server_name='srv-01')
+        results = self.service.list_instances(environment='production', server_name='srv-01')
 
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]['server_ref'], 'srv-01')
@@ -271,12 +271,12 @@ class ListInstancesTests(TestCase):
         _setup_mock_cursor(mock_conn, [
             ('ID',), ('NAME',), ('ENVIRONMENT',), ('SERVER_REF',), ('DB_REF',),
         ], [
-            (1, 'inst-01', 'prod', 'srv-01', 'db-01'),
-            (2, 'inst-02', 'prod', 'srv-02', 'db-02'),
+            (1, 'inst-01', 'production', 'srv-01', 'db-01'),
+            (2, 'inst-02', 'production', 'srv-02', 'db-02'),
         ])
 
         results = self.service.list_instances(
-            environment='prod', server_names=['srv-01', 'srv-02']
+            environment='production', server_names=['srv-01', 'srv-02']
         )
 
         self.assertEqual(len(results), 2)
@@ -292,11 +292,11 @@ class ListInstancesTests(TestCase):
         _setup_mock_cursor(mock_conn, [
             ('ID',), ('NAME',), ('ENVIRONMENT',), ('SERVER_REF',), ('DB_REF',),
         ], [
-            (1, 'inst-shared', 'prod', 'srv-01', 'db-01'),
+            (1, 'inst-shared', 'production', 'srv-01', 'db-01'),
         ])
 
         results = self.service.list_instances(
-            environment='prod', server_names=['srv-01', 'srv-02']
+            environment='production', server_names=['srv-01', 'srv-02']
         )
 
         self.assertEqual(len(results), 1)
@@ -309,7 +309,7 @@ class ListInstancesTests(TestCase):
             base_url='oracle://localhost',
             config=json.dumps(FLAT_TABLE_CONFIG),
         )
-        results = self.service.list_instances(environment='prod')
+        results = self.service.list_instances(environment='production')
         self.assertEqual(results, [])
 
     @patch('inventory.services.connection')
@@ -318,15 +318,15 @@ class ListInstancesTests(TestCase):
         self._create_inventory_db(MULTI_TABLE_CONFIG)
         _setup_mock_cursor(mock_conn, [
             ('ID',), ('NAME',), ('ENVIRONMENT',), ('SERVER_REF',), ('DB_REF',),
-        ], [(1, 'inst-01', 'prod', 'srv-01', 'db-01')])
+        ], [(1, 'inst-01', 'production', 'srv-01', 'db-01')])
 
         with patch('inventory.services.logger') as mock_logger:
-            self.service.list_instances(environment='prod', server_name='srv-01')
+            self.service.list_instances(environment='production', server_name='srv-01')
             calls = [c for c in mock_logger.info.call_args_list
                      if c[0][0] == 'inventory_list_instances']
             self.assertEqual(len(calls), 1)
             kwargs = calls[0][1]
-            self.assertEqual(kwargs['environment'], 'prod')
+            self.assertEqual(kwargs['environment'], 'production')
             self.assertEqual(kwargs['server_filter'], 'srv-01')
             self.assertEqual(kwargs['nb_results'], 1)
 
@@ -356,7 +356,7 @@ class ListDatabasesTests(TestCase):
         """AC3: Cannot specify both server_name and server_names."""
         with self.assertRaises(ValueError):
             self.service.list_databases(
-                environment='prod',
+                environment='production',
                 server_name='srv-01',
                 server_names=['srv-01']
             )
@@ -364,7 +364,7 @@ class ListDatabasesTests(TestCase):
     def test_list_databases_rejects_empty_server_names(self):
         """AC3: Empty server_names list is rejected (likely caller error)."""
         with self.assertRaises(ValueError) as ctx:
-            self.service.list_databases(environment='prod', server_names=[])
+            self.service.list_databases(environment='production', server_names=[])
         self.assertIn("cannot be empty", str(ctx.exception))
 
     @patch('inventory.services.connection')
@@ -374,11 +374,11 @@ class ListDatabasesTests(TestCase):
         _setup_mock_cursor(mock_conn, [
             ('ID',), ('NAME',), ('ENVIRONMENT',),
         ], [
-            (1, 'ORCL_PROD', 'prod'),
-            (2, 'MYDB_PROD', 'prod'),
+            (1, 'ORCL_PROD', 'production'),
+            (2, 'MYDB_PROD', 'production'),
         ])
 
-        results = self.service.list_databases(environment='prod')
+        results = self.service.list_databases(environment='production')
 
         self.assertEqual(len(results), 2)
         self.assertEqual(results[0]['name'], 'ORCL_PROD')
@@ -390,10 +390,10 @@ class ListDatabasesTests(TestCase):
         mock_cursor = _setup_mock_cursor(mock_conn, [
             ('ID',), ('NAME',), ('ENVIRONMENT',),
         ], [
-            (1, 'DB_01', 'prod'),
+            (1, 'DB_01', 'production'),
         ])
 
-        results = self.service.list_databases(environment='prod', server_name='srv-01')
+        results = self.service.list_databases(environment='production', server_name='srv-01')
 
         self.assertEqual(len(results), 1)
         sql = mock_cursor.execute.call_args[0][0]
@@ -409,12 +409,12 @@ class ListDatabasesTests(TestCase):
         _setup_mock_cursor(mock_conn, [
             ('ID',), ('NAME',), ('ENVIRONMENT',)
         ], [
-            (1, 'DB_01', 'prod'),
-            (2, 'DB_02', 'prod'),
+            (1, 'DB_01', 'production'),
+            (2, 'DB_02', 'production'),
         ])
 
         results = self.service.list_databases(
-            environment='prod', server_names=['srv-01', 'srv-02']
+            environment='production', server_names=['srv-01', 'srv-02']
         )
 
         self.assertEqual(len(results), 2)
@@ -427,7 +427,7 @@ class ListDatabasesTests(TestCase):
             base_url='oracle://localhost',
             config=json.dumps(FLAT_TABLE_CONFIG),
         )
-        results = self.service.list_databases(environment='prod')
+        results = self.service.list_databases(environment='production')
         self.assertEqual(results, [])
 
     @patch('inventory.services.connection')
@@ -436,10 +436,10 @@ class ListDatabasesTests(TestCase):
         self._create_inventory_db(MULTI_TABLE_CONFIG)
         _setup_mock_cursor(mock_conn, [
             ('ID',), ('NAME',), ('ENVIRONMENT',),
-        ], [(1, 'ORCL_PROD', 'prod')])
+        ], [(1, 'ORCL_PROD', 'production')])
 
         with patch('inventory.services.logger') as mock_logger:
-            self.service.list_databases(environment='prod')
+            self.service.list_databases(environment='production')
             calls = [c for c in mock_logger.info.call_args_list
                      if c[0][0] == 'inventory_list_databases']
             self.assertEqual(len(calls), 1)
@@ -471,7 +471,7 @@ class ListTargetsForUserMultiTableTests(TestCase):
         mock_profile = MagicMock()
         mock_profile.is_admin = 1
         mock_action_perm = MagicMock()
-        mock_action_perm.get_environments.return_value = ['prod']
+        mock_action_perm.get_environments.return_value = ['production']
         mock_profile.profileactionpermission = mock_action_perm
         mock_target_perm = MagicMock()
         mock_target_perm.permission_type = 'ALL'
@@ -487,12 +487,12 @@ class ListTargetsForUserMultiTableTests(TestCase):
         _setup_mock_cursor(mock_conn, [
             ('ID',), ('NAME',), ('ENVIRONMENT',), ('ENGINE_TYPE',),
         ], [
-            (1, 'srv-prod-01', 'prod', 'Oracle'),
-            (2, 'srv-prod-02', 'prod', 'SQL Server'),
+            (1, 'srv-prod-01', 'production', 'Oracle'),
+            (2, 'srv-prod-02', 'production', 'SQL Server'),
         ])
 
         results, total, rbac_truncated = self.service.list_targets_for_user(
-            user_id=1, ad_groups=['DBA_TEAM'], environment='prod'
+            user_id=1, ad_groups=['DBA_TEAM'], environment='production'
         )
 
         self.assertEqual(total, 2)
@@ -508,7 +508,7 @@ class ListTargetsForUserMultiTableTests(TestCase):
         mock_profile = MagicMock()
         mock_profile.is_admin = 1
         mock_action_perm = MagicMock()
-        mock_action_perm.get_environments.return_value = ['prod']
+        mock_action_perm.get_environments.return_value = ['production']
         mock_profile.profileactionpermission = mock_action_perm
         mock_target_perm = MagicMock()
         mock_target_perm.permission_type = 'ALL'
@@ -522,11 +522,11 @@ class ListTargetsForUserMultiTableTests(TestCase):
 
         # Mock cursor for legacy path (count + data)
         _setup_flat_mock_cursor(mock_conn, 1, [
-            ('srv-01', 'prod', 'server'),
+            ('srv-01', 'production', 'server'),
         ])
 
         results, total, rbac_truncated = self.service.list_targets_for_user(
-            user_id=1, ad_groups=['DBA_TEAM'], environment='prod'
+            user_id=1, ad_groups=['DBA_TEAM'], environment='production'
         )
 
         self.assertEqual(total, 1)
@@ -540,7 +540,7 @@ class ListTargetsForUserMultiTableTests(TestCase):
         mock_profile = MagicMock()
         mock_profile.is_admin = 0
         mock_action_perm = MagicMock()
-        mock_action_perm.get_environments.return_value = ['prod']
+        mock_action_perm.get_environments.return_value = ['production']
         mock_profile.profileactionpermission = mock_action_perm
         mock_target_perm = MagicMock()
         mock_target_perm.permission_type = 'LIST'
@@ -557,12 +557,12 @@ class ListTargetsForUserMultiTableTests(TestCase):
         _setup_mock_cursor(mock_conn, [
             ('ID',), ('NAME',), ('ENVIRONMENT',), ('ENGINE_TYPE',),
         ], [
-            (1, 'srv-prod-01', 'prod', 'Oracle'),
-            (2, 'srv-prod-02', 'prod', 'SQL Server'),
+            (1, 'srv-prod-01', 'production', 'Oracle'),
+            (2, 'srv-prod-02', 'production', 'SQL Server'),
         ])
 
         results, total, _ = self.service.list_targets_for_user(
-            user_id=1, ad_groups=['DBA_TEAM'], environment='prod'
+            user_id=1, ad_groups=['DBA_TEAM'], environment='production'
         )
 
         # Only srv-prod-01 allowed by LIST restriction
@@ -594,7 +594,7 @@ class ListTargetsForUserMultiTableTests(TestCase):
         mock_profile = MagicMock()
         mock_profile.is_admin = 1
         mock_action_perm = MagicMock()
-        mock_action_perm.get_environments.return_value = ['prod', 'staging']
+        mock_action_perm.get_environments.return_value = ['production', 'certification']
         mock_profile.profileactionpermission = mock_action_perm
         mock_target_perm = MagicMock()
         mock_target_perm.permission_type = 'ALL'
@@ -651,7 +651,7 @@ class ErrorHandlingTests(TestCase):
         self._create_inventory_db(bad_config)
 
         with self.assertRaises(InventoryServiceError):
-            self.service.list_servers(environment='prod')
+            self.service.list_servers(environment='production')
 
     @patch('inventory.services.connection')
     def test_list_servers_db_error_raises(self, mock_conn):
@@ -664,7 +664,7 @@ class ErrorHandlingTests(TestCase):
         mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
 
         with self.assertRaises(InventoryServiceError):
-            self.service.list_servers(environment='prod')
+            self.service.list_servers(environment='production')
 
     @patch('inventory.services.connection')
     def test_list_instances_db_error_raises(self, mock_conn):
@@ -677,7 +677,7 @@ class ErrorHandlingTests(TestCase):
         mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
 
         with self.assertRaises(InventoryServiceError):
-            self.service.list_instances(environment='prod')
+            self.service.list_instances(environment='production')
 
     @patch('inventory.services.connection')
     def test_list_databases_db_error_raises(self, mock_conn):
@@ -690,7 +690,7 @@ class ErrorHandlingTests(TestCase):
         mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
 
         with self.assertRaises(InventoryServiceError):
-            self.service.list_databases(environment='prod')
+            self.service.list_databases(environment='production')
 
     @patch('inventory.services.connection')
     def test_list_servers_error_logs_with_correlation_id(self, mock_conn):
@@ -704,7 +704,7 @@ class ErrorHandlingTests(TestCase):
 
         with patch('inventory.services.logger') as mock_logger:
             with self.assertRaises(InventoryServiceError):
-                self.service.list_servers(environment='prod')
+                self.service.list_servers(environment='production')
 
             error_calls = [c for c in mock_logger.error.call_args_list]
             self.assertTrue(len(error_calls) > 0)
@@ -722,7 +722,7 @@ class ErrorHandlingTests(TestCase):
         mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
 
         with self.assertRaises(InventoryServiceError):
-            self.service.list_servers(environment='prod')
+            self.service.list_servers(environment='production')
 
 
 # ---- AC5: RBAC documentation (verified in docstrings) ----
@@ -770,14 +770,14 @@ class PerformanceLimitsTests(TestCase):
     def test_list_instances_result_limit_warning(self, mock_conn):
         """AC7: Logs warning when instances hit MAX_MULTI_TABLE_RESULTS."""
         self._create_inventory_db(MULTI_TABLE_CONFIG)
-        rows = [(i, f'inst-{i}', 'prod', f'srv-{i}', f'db-{i}')
+        rows = [(i, f'inst-{i}', 'production', f'srv-{i}', f'db-{i}')
                 for i in range(MAX_MULTI_TABLE_RESULTS)]
         _setup_mock_cursor(mock_conn, [
             ('ID',), ('NAME',), ('ENVIRONMENT',), ('SERVER_REF',), ('DB_REF',),
         ], rows)
 
         with patch('inventory.services.logger') as mock_logger:
-            self.service.list_instances(environment='prod')
+            self.service.list_instances(environment='production')
             warning_calls = [c for c in mock_logger.warning.call_args_list
                            if c[0][0] == 'inventory_result_limit_reached']
             self.assertEqual(len(warning_calls), 1)
@@ -787,13 +787,13 @@ class PerformanceLimitsTests(TestCase):
     def test_list_databases_result_limit_warning(self, mock_conn):
         """AC7: Logs warning when databases hit MAX_MULTI_TABLE_RESULTS."""
         self._create_inventory_db(MULTI_TABLE_CONFIG)
-        rows = [(i, f'db-{i}', 'prod') for i in range(MAX_MULTI_TABLE_RESULTS)]
+        rows = [(i, f'db-{i}', 'production') for i in range(MAX_MULTI_TABLE_RESULTS)]
         _setup_mock_cursor(mock_conn, [
             ('ID',), ('NAME',), ('ENVIRONMENT',),
         ], rows)
 
         with patch('inventory.services.logger') as mock_logger:
-            self.service.list_databases(environment='prod')
+            self.service.list_databases(environment='production')
             warning_calls = [c for c in mock_logger.warning.call_args_list
                            if c[0][0] == 'inventory_result_limit_reached']
             self.assertEqual(len(warning_calls), 1)
@@ -807,7 +807,7 @@ class PerformanceLimitsTests(TestCase):
             ('ID',), ('NAME',), ('ENVIRONMENT',), ('ENGINE_TYPE',),
         ], [])
 
-        self.service.list_servers(environment='prod')
+        self.service.list_servers(environment='production')
 
         sql = mock_cursor.execute.call_args[0][0]
         self.assertIn('ROWNUM', sql)
@@ -821,12 +821,12 @@ class PerformanceLimitsTests(TestCase):
         mock_cursor = _setup_mock_cursor(mock_conn, [
             ('ID',), ('NAME',), ('ENVIRONMENT',), ('SERVER_REF',), ('DB_REF',),
         ], [
-            (1, 'inst-1', 'prod', 'srv-01', 'db-01'),
-            (2, 'inst-2', 'prod', 'srv-02', 'db-02'),
+            (1, 'inst-1', 'production', 'srv-01', 'db-01'),
+            (2, 'inst-2', 'production', 'srv-02', 'db-02'),
         ])
 
         results = self.service.list_instances(
-            environment='prod', server_names=['srv-01', 'srv-02']
+            environment='production', server_names=['srv-01', 'srv-02']
         )
 
         # Only 1 query with IN clause (not N queries for N servers)

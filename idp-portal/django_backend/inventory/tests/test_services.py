@@ -76,9 +76,9 @@ class InventoryServiceFallbackTests(TestCase):
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = (3,)  # count
         mock_cursor.fetchall.return_value = [
-            ('fallback-srv-01', 'DEV', 'SERVER'),
-            ('fallback-srv-02', 'PROD', 'SERVER'),
-            ('fallback-db-01', 'DEV', 'DATABASE'),
+            ('fallback-srv-01', 'DEVELOPPEMENT', 'SERVER'),
+            ('fallback-srv-02', 'PRODUCTION', 'SERVER'),
+            ('fallback-db-01', 'DEVELOPPEMENT', 'DATABASE'),
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -87,7 +87,7 @@ class InventoryServiceFallbackTests(TestCase):
         self.assertEqual(total, 3)
         self.assertEqual(len(targets), 3)
         self.assertEqual(targets[0]['name'], 'fallback-srv-01')
-        self.assertEqual(targets[0]['environment'], 'dev')
+        self.assertEqual(targets[0]['environment'], 'developpement')
 
     @patch('inventory.services.connection')
     def test_fallback_with_environment_filter(self, mock_connection):
@@ -95,12 +95,12 @@ class InventoryServiceFallbackTests(TestCase):
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = (2,)
         mock_cursor.fetchall.return_value = [
-            ('fallback-srv-01', 'DEV', 'SERVER'),
-            ('fallback-db-01', 'DEV', 'DATABASE'),
+            ('fallback-srv-01', 'DEVELOPPEMENT', 'SERVER'),
+            ('fallback-db-01', 'DEVELOPPEMENT', 'DATABASE'),
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
-        targets, total = self.service.list_targets(environment='dev')
+        targets, total = self.service.list_targets(environment='developpement')
 
         self.assertEqual(total, 2)
         # Verify SQL was called
@@ -151,6 +151,38 @@ class InventoryServiceDBSchemaTests(TestCase):
         call_args = str(mock_cursor.execute.call_args)
         self.assertIn('CMDB.SERVERS', call_args)
 
+    @patch('inventory.services.connection')
+    def test_list_from_db_schema_uses_flat_table_column_mapping(self, mock_connection):
+        """Test that flat_table config column mapping is used instead of hardcoded NAME, ENVIRONMENT, TYPE."""
+        import json
+        flat_config = {
+            'flat_table': {
+                'table': 'DBOPS_INVENTORY.INVENTORY_TARGETS',
+                'columns': {'name': 'HOSTNAME', 'environment': 'ENV', 'type': 'TARGET_TYPE'},
+            },
+        }
+        self.integration.config = json.dumps(flat_config)
+        self.integration.save()
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (1,)
+        mock_cursor.fetchall.return_value = [('srv-01', 'PRODUCTION', 'server')]
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
+
+        targets, total = self.service.list_targets()
+
+        self.assertEqual(total, 1)
+        self.assertEqual(targets[0]['name'], 'srv-01')
+        # Environment is normalized (Story 21.1, 26.7) - PRODUCTION becomes 'production' (lowercase)
+        self.assertEqual(targets[0]['environment'], 'production')
+        # Verify SQL uses mapped columns (HOSTNAME, ENV, TARGET_TYPE) not hardcoded NAME, ENVIRONMENT, TYPE
+        call_args = str(mock_cursor.execute.call_args_list)
+        self.assertIn('HOSTNAME', call_args)
+        self.assertIn('ENV', call_args)
+        self.assertIn('TARGET_TYPE', call_args)
+        # Ensure we use mapped columns, not hardcoded defaults
+        self.assertNotIn(', NAME,', call_args)
+        self.assertNotIn(', ENVIRONMENT,', call_args)
+
 
 class InventoryServiceRBACTests(TestCase):
     """Tests for RBAC filtering in InventoryService."""
@@ -168,7 +200,7 @@ class InventoryServiceRBACTests(TestCase):
         ProfileActionPermission.objects.create(
             profile=self.dev_profile,
             permission_type='ALL',
-            environments_json='["dev", "staging"]'
+            environments_json='["developpement", "certification"]'
         )
         ProfileTargetPermission.objects.create(
             profile=self.dev_profile,
@@ -186,7 +218,7 @@ class InventoryServiceRBACTests(TestCase):
         ProfileActionPermission.objects.create(
             profile=self.admin_profile,
             permission_type='ALL',
-            environments_json='["dev", "staging", "prod"]'
+            environments_json='["developpement", "certification", "production"]'
         )
         ProfileTargetPermission.objects.create(
             profile=self.admin_profile,
@@ -214,7 +246,7 @@ class InventoryServiceRBACTests(TestCase):
         targets, total, _ = self.service.list_targets_for_user(
             user_id=1,
             ad_groups=['GRP-DEV-TEAM'],
-            environment='prod'  # Not in allowed environments for dev-team
+            environment='production'  # Not in allowed environments for dev-team
         )
         self.assertEqual(total, 0)
 
@@ -224,10 +256,10 @@ class InventoryServiceRBACTests(TestCase):
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = (4,)
         mock_cursor.fetchall.return_value = [
-            ('web-srv-01', 'dev', 'server'),
-            ('api-srv-01', 'dev', 'server'),
-            ('db-srv-01', 'dev', 'database'),  # Should be filtered out
-            ('batch-srv-01', 'dev', 'server'),  # Should be filtered out
+            ('web-srv-01', 'developpement', 'server'),
+            ('api-srv-01', 'developpement', 'server'),
+            ('db-srv-01', 'developpement', 'database'),  # Should be filtered out
+            ('batch-srv-01', 'developpement', 'server'),  # Should be filtered out
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -248,9 +280,9 @@ class InventoryServiceRBACTests(TestCase):
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = (3,)
         mock_cursor.fetchall.return_value = [
-            ('web-srv-01', 'prod', 'server'),
-            ('db-srv-01', 'prod', 'database'),
-            ('batch-srv-01', 'prod', 'server'),
+            ('web-srv-01', 'production', 'server'),
+            ('db-srv-01', 'production', 'database'),
+            ('batch-srv-01', 'production', 'server'),
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -263,20 +295,18 @@ class InventoryServiceRBACTests(TestCase):
     def test_get_allowed_environments_for_user(self):
         """Test getting allowed environments from profiles."""
         envs = self.service.get_allowed_environments_for_user(['GRP-DEV-TEAM'])
-        self.assertEqual(envs, {'dev', 'staging'})
+        self.assertEqual(envs, {'developpement', 'certification'})
 
         envs = self.service.get_allowed_environments_for_user(['GRP-ADMIN'])
-        self.assertEqual(envs, {'dev', 'staging', 'prod'})
+        self.assertEqual(envs, {'developpement', 'certification', 'production'})
 
         envs = self.service.get_allowed_environments_for_user(['GRP-UNKNOWN'])
         self.assertEqual(envs, set())
 
-    def test_get_allowed_environments_includes_raw_and_normalized(self):
+    def test_get_allowed_environments_certif_no_alias(self):
         """
-        Story 21.2, Task 2.1: get_allowed_environments_for_user should return
-        both raw and normalized values for aliases (e.g., certif → {staging, certif}).
-        
-        LOW-2 FIX: Updated reference to Task 2.1 (not AC1 which is about list_targets_for_user).
+        Story 53.1 / Story 21.2, Task 2.1: get_allowed_environments_for_user returns raw
+        lowercased values only — no alias mapping (certif does NOT become staging).
         """
         certif_profile = Profile.objects.create(
             name='certif-profile',
@@ -291,11 +321,10 @@ class InventoryServiceRBACTests(TestCase):
 
         envs = self.service.get_allowed_environments_for_user(['GRP-CERTIF'])
         
-        # Should include both normalized (staging) and raw (certif) for alias
-        # Lab has no alias, so only lab is included
-        self.assertIn('staging', envs)  # Normalized from certif
-        self.assertIn('certif', envs)   # Raw value
-        self.assertIn('lab', envs)      # No alias, raw value only
+        # Story 53.1 — no alias mapping; only lowercase values stored
+        self.assertIn('certif', envs)   # Inventory value (lowercased)
+        self.assertIn('lab', envs)      # Inventory value (lowercased)
+        self.assertNotIn('staging', envs)  # certif is no longer aliased to staging
 
 
 class InventoryServiceSecurityTests(TestCase):
@@ -356,16 +385,16 @@ class InventoryServiceEnvironmentNormalizationTests(TestCase):
         self.assertEqual(self.service._normalize_environment('staging'), 'staging')
         self.assertEqual(self.service._normalize_environment('prod'), 'prod')
 
-    def test_normalize_certif_to_staging(self):
-        """Test that 'certif' is normalized to 'staging'."""
-        self.assertEqual(self.service._normalize_environment('certif'), 'staging')
-        self.assertEqual(self.service._normalize_environment('certification'), 'staging')
+    def test_normalize_inventory_values_passthrough(self):
+        """Story 53.1 — certif/certification pass through without alias mapping."""
+        self.assertEqual(self.service._normalize_environment('certif'), 'certif')
+        self.assertEqual(self.service._normalize_environment('certification'), 'certification')
 
-    def test_normalize_aliases(self):
-        """Test normalization of common aliases."""
-        self.assertEqual(self.service._normalize_environment('stg'), 'staging')
-        self.assertEqual(self.service._normalize_environment('development'), 'dev')
-        self.assertEqual(self.service._normalize_environment('production'), 'prod')
+    def test_normalize_no_aliases(self):
+        """Story 53.1 — stg/development/production pass through as-is (no alias mapping)."""
+        self.assertEqual(self.service._normalize_environment('stg'), 'stg')
+        self.assertEqual(self.service._normalize_environment('development'), 'development')
+        self.assertEqual(self.service._normalize_environment('production'), 'production')
 
     def test_normalize_unknown_returns_raw_value(self):
         """
@@ -430,15 +459,15 @@ class InventoryServiceEnvironmentNormalizationTests(TestCase):
     def test_list_environments_returns_raw_values(self, mock_connection):
         """
         Story 21.1, AC3: Test that list_environments() returns distinct raw values.
+        Uses SELECT DISTINCT on the environment column (not full target rows).
         Includes non-standard environments like 'lab'.
         """
         mock_cursor = MagicMock()
-        mock_cursor.fetchone.return_value = (4,)
+        # read_distinct_environments does SELECT DISTINCT ENVIRONMENT — returns single-column rows
         mock_cursor.fetchall.return_value = [
-            ('srv-dev-01', 'dev', 'SERVER'),
-            ('srv-lab-01', 'lab', 'SERVER'),
-            ('srv-lab-02', 'lab', 'DATABASE'),
-            ('srv-prod-01', 'prod', 'SERVER'),
+            ('developpement',),
+            ('lab',),
+            ('production',),
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -449,7 +478,7 @@ class InventoryServiceEnvironmentNormalizationTests(TestCase):
         environments = self.service.list_environments()
 
         # Should return distinct raw values (sorted)
-        self.assertEqual(environments, ['dev', 'lab', 'prod'])
+        self.assertEqual(environments, ['developpement', 'lab', 'production'])
         self.assertIn('lab', environments, "Non-standard environment 'lab' should be included")
 
 
@@ -476,7 +505,7 @@ class RBACEnvironmentFilterTests(TestCase):
         ProfileActionPermission.objects.create(
             profile=self.dev_staging_profile,
             permission_type='ALL',
-            environments_json='["dev", "staging"]'
+            environments_json='["developpement", "certification"]'
         )
         ProfileTargetPermission.objects.create(
             profile=self.dev_staging_profile,
@@ -492,10 +521,10 @@ class RBACEnvironmentFilterTests(TestCase):
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = (4,)
         mock_cursor.fetchall.return_value = [
-            ('srv-dev-01', 'dev', 'server'),
-            ('srv-stg-01', 'staging', 'server'),
-            ('srv-prod-01', 'prod', 'server'),  # Should be filtered out
-            ('srv-prod-02', 'prod', 'database'),  # Should be filtered out
+            ('srv-dev-01', 'developpement', 'server'),
+            ('srv-stg-01', 'certification', 'server'),
+            ('srv-prod-01', 'production', 'server'),  # Should be filtered out
+            ('srv-prod-02', 'production', 'database'),  # Should be filtered out
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -513,14 +542,11 @@ class RBACEnvironmentFilterTests(TestCase):
         self.assertNotIn('srv-prod-02', names)
 
     @patch('inventory.services.connection')
-    def test_list_targets_certif_normalized_to_staging(self, mock_connection):
+    def test_list_targets_staging_profile_cannot_access_certif(self, mock_connection):
         """
-        Story 21.2, AC1: RBAC environment matching with raw values.
-        Profile with 'staging' permission should NOT access targets with 'certif' unless
-        the profile explicitly has 'certif' in its allowed environments.
-        
-        HIGH-1 FIX: This profile has ["dev", "staging"] only, so certif targets are filtered out.
-        For testing certif alias matching, see test_list_targets_profile_env_certif_normalized_to_staging.
+        Story 53.1 / Story 21.2, AC1: Profile with 'staging' does NOT access 'certif' targets.
+        No alias mapping — certif and staging are distinct inventory values.
+        Profile has ["developpement", "certification"] only, so certif/certification targets are filtered out.
         """
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = (2,)
@@ -532,23 +558,20 @@ class RBACEnvironmentFilterTests(TestCase):
 
         targets, total, _ = self.service.list_targets_for_user(
             user_id=1,
-            ad_groups=['GRP-DEV-STAGING']  # Profile has ["dev", "staging"], NOT certif
+            ad_groups=['GRP-DEV-STAGING']  # Profile has ["developpement", "certification"], NOT certif
         )
 
-        # Profile does NOT have certif access, so targets are filtered out
-        self.assertEqual(total, 0)
-        self.assertEqual(len(targets), 0)
+        # Profile has 'certification' access: srv-certif-02 (certification) passes, srv-certif-01 (certif) is filtered out
+        self.assertEqual(total, 1)
+        self.assertEqual(len(targets), 1)
+        self.assertEqual(targets[0]['name'], 'srv-certif-02')
 
     @patch('inventory.services.connection')
-    def test_list_targets_profile_env_certif_normalized_to_staging(self, mock_connection):
+    def test_list_targets_profile_env_certif_exact_match(self, mock_connection):
         """
-        Story 21.2, AC1: Profile with 'certif' should access 'certif' targets.
-        allowed_environments includes both normalized (staging) and raw (certif) values.
-        Targets return raw environment values from inventory.
-
-        Story 21.3 FIX: Profile with ["certif"] produces allowed_environments = {staging, certif}.
-        Target with raw env 'certification' (lowercased from Oracle) is NOT 'certif' and NOT 'staging',
-        so it is correctly filtered out. Only 'certif' targets match.
+        Story 53.1 / Story 21.2, AC1: Profile with 'certif' accesses ONLY 'certif' targets.
+        No alias mapping — allowed_environments = {certif} only (not {staging, certif}).
+        Target with env 'certification' does NOT match 'certif', so it is filtered out.
         """
         # Profile with raw "certif" in DB (no "staging" string)
         certif_only_profile = Profile.objects.create(
@@ -579,27 +602,27 @@ class RBACEnvironmentFilterTests(TestCase):
             ad_groups=['GRP-CERTIF-ONLY']
         )
 
-        # Profile certif → allowed_environments = {staging, certif}
+        # Story 53.1: allowed_environments = {certif} (no alias mapping)
         # Target 'certif' matches 'certif' → included
-        # Target 'certification' doesn't match 'staging' or 'certif' → excluded
+        # Target 'certification' does not match 'certif' → excluded
         self.assertEqual(total, 1)
-        self.assertEqual(targets[0]['environment'], 'certif')  # Raw value
+        self.assertEqual(targets[0]['environment'], 'certif')
 
     @patch('inventory.services.connection')
     def test_list_targets_profile_lab_dev_case_insensitive(self, mock_connection):
         """
-        Story 21.2, AC1 / Task 5.2: Profile with ['lab','dev'] should access lab targets.
+        Story 21.2, AC1 / Task 5.2: Profile with ['lab','developpement'] should access lab targets.
         Case-insensitive matching, no alias needed for lab.
         """
         lab_dev_profile = Profile.objects.create(
             name='lab-dev-profile',
-            description='Lab and dev access',
+            description='Lab and developpement access',
             ad_group='GRP-LAB-DEV'
         )
         ProfileActionPermission.objects.create(
             profile=lab_dev_profile,
             permission_type='ALL',
-            environments_json='["lab", "dev"]'
+            environments_json='["lab", "developpement"]'
         )
         ProfileTargetPermission.objects.create(
             profile=lab_dev_profile,
@@ -610,8 +633,8 @@ class RBACEnvironmentFilterTests(TestCase):
         mock_cursor.fetchone.return_value = (3,)
         mock_cursor.fetchall.return_value = [
             ('srv-lab-01', 'lab', 'server'),
-            ('srv-dev-01', 'dev', 'server'),
-            ('srv-prod-01', 'prod', 'server'),  # Should be filtered out
+            ('srv-dev-01', 'developpement', 'server'),
+            ('srv-prod-01', 'production', 'server'),  # Should be filtered out
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -640,7 +663,7 @@ class RBACEnvironmentFilterTests(TestCase):
         ProfileActionPermission.objects.create(
             profile=profile,
             permission_type='ALL',
-            environments_json='["lab", "dev", "staging"]'
+            environments_json='["lab", "developpement", "certification"]'
         )
         ProfileTargetPermission.objects.create(
             profile=profile,
@@ -686,7 +709,7 @@ class RBACPatternRestrictionTests(TestCase):
         ProfileActionPermission.objects.create(
             profile=self.web_only_profile,
             permission_type='ALL',
-            environments_json='["dev"]'
+            environments_json='["developpement"]'
         )
         ProfileTargetPermission.objects.create(
             profile=self.web_only_profile,
@@ -703,10 +726,10 @@ class RBACPatternRestrictionTests(TestCase):
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = (4,)
         mock_cursor.fetchall.return_value = [
-            ('web-dev-01', 'dev', 'server'),
-            ('web-dev-02', 'dev', 'server'),
-            ('db-dev-01', 'dev', 'database'),  # Should be filtered out
-            ('api-dev-01', 'dev', 'server'),  # Should be filtered out
+            ('web-dev-01', 'developpement', 'server'),
+            ('web-dev-02', 'developpement', 'server'),
+            ('db-dev-01', 'developpement', 'database'),  # Should be filtered out
+            ('api-dev-01', 'developpement', 'server'),  # Should be filtered out
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -731,9 +754,9 @@ class RBACPatternRestrictionTests(TestCase):
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = (3,)
         mock_cursor.fetchall.return_value = [
-            ('WEB-DEV-01', 'dev', 'server'),  # Uppercase
-            ('Web-Dev-02', 'dev', 'server'),  # Mixed case
-            ('web-dev-03', 'dev', 'server'),  # Lowercase
+            ('WEB-DEV-01', 'developpement', 'server'),  # Uppercase
+            ('Web-Dev-02', 'developpement', 'server'),  # Mixed case
+            ('web-dev-03', 'developpement', 'server'),  # Lowercase
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -754,9 +777,9 @@ class RBACPatternRestrictionTests(TestCase):
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = (3,)
         mock_cursor.fetchall.return_value = [
-            ('web-dev-01', 'dev', 'server'),
-            ('web-prod-01', 'prod', 'server'),  # Should be filtered out (wrong env)
-            ('db-dev-01', 'dev', 'database'),  # Should be filtered out (wrong pattern)
+            ('web-dev-01', 'developpement', 'server'),
+            ('web-prod-01', 'production', 'server'),  # Should be filtered out (wrong env)
+            ('db-dev-01', 'developpement', 'database'),  # Should be filtered out (wrong pattern)
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -789,7 +812,7 @@ class RBACListRestrictionTests(TestCase):
         ProfileActionPermission.objects.create(
             profile=self.explicit_list_profile,
             permission_type='ALL',
-            environments_json='["dev", "staging"]'
+            environments_json='["developpement", "certification"]'
         )
         ProfileTargetPermission.objects.create(
             profile=self.explicit_list_profile,
@@ -806,10 +829,10 @@ class RBACListRestrictionTests(TestCase):
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = (4,)
         mock_cursor.fetchall.return_value = [
-            ('srv-01', 'dev', 'server'),
-            ('srv-02', 'staging', 'server'),
-            ('srv-03', 'dev', 'server'),  # Should be filtered out (not in list)
-            ('srv-04', 'staging', 'server'),  # Should be filtered out (not in list)
+            ('srv-01', 'developpement', 'server'),
+            ('srv-02', 'certification', 'server'),
+            ('srv-03', 'developpement', 'server'),  # Should be filtered out (not in list)
+            ('srv-04', 'certification', 'server'),  # Should be filtered out (not in list)
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -835,9 +858,9 @@ class RBACListRestrictionTests(TestCase):
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = (3,)
         mock_cursor.fetchall.return_value = [
-            ('srv-01', 'dev', 'server'),
-            ('srv-02', 'prod', 'server'),  # In list but wrong env
-            ('srv-03', 'dev', 'server'),  # Right env but not in list
+            ('srv-01', 'developpement', 'server'),
+            ('srv-02', 'production', 'server'),  # In list but wrong env
+            ('srv-03', 'developpement', 'server'),  # Right env but not in list
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -859,9 +882,9 @@ class RBACListRestrictionTests(TestCase):
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = (3,)
         mock_cursor.fetchall.return_value = [
-            ('srv-01', 'dev', 'server'),  # Exact match
-            ('SRV-02', 'staging', 'server'),  # Uppercase in inventory - should match srv-02
-            ('Srv-03', 'dev', 'server'),  # Not in list - should be filtered out
+            ('srv-01', 'developpement', 'server'),  # Exact match
+            ('SRV-02', 'certification', 'server'),  # Uppercase in inventory - should match srv-02
+            ('Srv-03', 'developpement', 'server'),  # Not in list - should be filtered out
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -897,7 +920,7 @@ class RBACMultiProfileUnionTests(TestCase):
         ProfileActionPermission.objects.create(
             profile=self.profile_a,
             permission_type='ALL',
-            environments_json='["dev"]'
+            environments_json='["developpement"]'
         )
         ProfileTargetPermission.objects.create(
             profile=self.profile_a,
@@ -914,7 +937,7 @@ class RBACMultiProfileUnionTests(TestCase):
         ProfileActionPermission.objects.create(
             profile=self.profile_b,
             permission_type='ALL',
-            environments_json='["staging"]'
+            environments_json='["certification"]'
         )
         ProfileTargetPermission.objects.create(
             profile=self.profile_b,
@@ -933,10 +956,10 @@ class RBACMultiProfileUnionTests(TestCase):
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = (4,)
         mock_cursor.fetchall.return_value = [
-            ('srv-01', 'dev', 'server'),
-            ('srv-02', 'dev', 'server'),  # DEV but not in profile A's list
-            ('srv-stg-01', 'staging', 'server'),
-            ('srv-prod-01', 'prod', 'server'),  # Should be filtered out
+            ('srv-01', 'developpement', 'server'),
+            ('srv-02', 'developpement', 'server'),  # DEV but not in profile A's list
+            ('srv-stg-01', 'certification', 'server'),
+            ('srv-prod-01', 'production', 'server'),  # Should be filtered out
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -974,7 +997,7 @@ class RBACMultiProfileUnionTests(TestCase):
         ProfileActionPermission.objects.create(
             profile=profile_c,
             permission_type='ALL',
-            environments_json='["dev"]'
+            environments_json='["developpement"]'
         )
         ProfileTargetPermission.objects.create(
             profile=profile_c,
@@ -991,7 +1014,7 @@ class RBACMultiProfileUnionTests(TestCase):
         ProfileActionPermission.objects.create(
             profile=profile_d,
             permission_type='ALL',
-            environments_json='["dev"]'
+            environments_json='["developpement"]'
         )
         ProfileTargetPermission.objects.create(
             profile=profile_d,
@@ -1002,10 +1025,10 @@ class RBACMultiProfileUnionTests(TestCase):
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = (4,)
         mock_cursor.fetchall.return_value = [
-            ('web-dev-01', 'dev', 'server'),
-            ('db-dev-01', 'dev', 'database'),
-            ('api-dev-01', 'dev', 'server'),  # Neither pattern matches
-            ('srv-prod-01', 'prod', 'server'),  # Wrong env
+            ('web-dev-01', 'developpement', 'server'),
+            ('db-dev-01', 'developpement', 'database'),
+            ('api-dev-01', 'developpement', 'server'),  # Neither pattern matches
+            ('srv-prod-01', 'production', 'server'),  # Wrong env
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -1078,7 +1101,7 @@ class RBACEdgeCaseTests(TestCase):
         ProfileActionPermission.objects.create(
             profile=admin_profile,
             permission_type='ALL',
-            environments_json='["dev", "staging", "prod"]'
+            environments_json='["developpement", "certification", "production"]'
         )
         ProfileTargetPermission.objects.create(
             profile=admin_profile,
@@ -1088,10 +1111,10 @@ class RBACEdgeCaseTests(TestCase):
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = (4,)
         mock_cursor.fetchall.return_value = [
-            ('srv-dev-01', 'dev', 'server'),
-            ('srv-stg-01', 'staging', 'server'),
-            ('srv-prod-01', 'prod', 'server'),
-            ('db-prod-01', 'prod', 'database'),
+            ('srv-dev-01', 'developpement', 'server'),
+            ('srv-stg-01', 'certification', 'server'),
+            ('srv-prod-01', 'production', 'server'),
+            ('db-prod-01', 'production', 'database'),
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -1114,7 +1137,7 @@ class RBACEdgeCaseTests(TestCase):
         ProfileActionPermission.objects.create(
             profile=profile,
             permission_type='ALL',
-            environments_json='["dev"]'
+            environments_json='["developpement"]'
         )
         ProfileTargetPermission.objects.create(
             profile=profile,
@@ -1124,11 +1147,11 @@ class RBACEdgeCaseTests(TestCase):
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = (5,)
         mock_cursor.fetchall.return_value = [
-            ('srv-dev-01', 'dev', 'server'),
-            ('srv-dev-02', 'dev', 'server'),
-            ('srv-dev-03', 'dev', 'server'),
-            ('srv-dev-04', 'dev', 'server'),
-            ('srv-dev-05', 'dev', 'server'),
+            ('srv-dev-01', 'developpement', 'server'),
+            ('srv-dev-02', 'developpement', 'server'),
+            ('srv-dev-03', 'developpement', 'server'),
+            ('srv-dev-04', 'developpement', 'server'),
+            ('srv-dev-05', 'developpement', 'server'),
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -1164,25 +1187,25 @@ class InventoryRawEnvironmentTests(TestCase):
 
     # -- Task 1.1: Verify alias coverage --
 
-    def test_normalize_alias_certif(self):
-        """Alias certif → staging."""
-        self.assertEqual(self.service._normalize_environment('certif'), 'staging')
+    def test_normalize_inventory_certif_passthrough(self):
+        """Story 53.1 — certif is no longer aliased to staging; passes through as-is."""
+        self.assertEqual(self.service._normalize_environment('certif'), 'certif')
 
-    def test_normalize_alias_certification(self):
-        """Alias certification → staging."""
-        self.assertEqual(self.service._normalize_environment('certification'), 'staging')
+    def test_normalize_inventory_certification_passthrough(self):
+        """Story 53.1 — certification passes through as-is (inventory value)."""
+        self.assertEqual(self.service._normalize_environment('certification'), 'certification')
 
-    def test_normalize_alias_stg(self):
-        """Alias stg → staging."""
-        self.assertEqual(self.service._normalize_environment('stg'), 'staging')
+    def test_normalize_inventory_stg_passthrough(self):
+        """Story 53.1 — stg is no longer aliased to staging; passes through."""
+        self.assertEqual(self.service._normalize_environment('stg'), 'stg')
 
-    def test_normalize_alias_development(self):
-        """Alias development → dev."""
-        self.assertEqual(self.service._normalize_environment('development'), 'dev')
+    def test_normalize_inventory_development_passthrough(self):
+        """Story 53.1 — development passes through as-is (inventory value)."""
+        self.assertEqual(self.service._normalize_environment('development'), 'development')
 
-    def test_normalize_alias_production(self):
-        """Alias production → prod."""
-        self.assertEqual(self.service._normalize_environment('production'), 'prod')
+    def test_normalize_inventory_production_passthrough(self):
+        """Story 53.1 — production passes through as-is (inventory value)."""
+        self.assertEqual(self.service._normalize_environment('production'), 'production')
 
     # -- Task 1.2: Non-standard environments returned as-is --
 
@@ -1203,9 +1226,9 @@ class InventoryRawEnvironmentTests(TestCase):
         self.assertEqual(self.service._normalize_environment('custom_env'), 'custom_env')
 
     def test_normalize_case_handling(self):
-        """Input is lowercased and trimmed."""
+        """Input is lowercased and trimmed. Story 53.1 — CERTIF → certif (no alias)."""
         self.assertEqual(self.service._normalize_environment('  LAB  '), 'lab')
-        self.assertEqual(self.service._normalize_environment('CERTIF'), 'staging')
+        self.assertEqual(self.service._normalize_environment('CERTIF'), 'certif')
 
     def test_normalize_edge_cases(self):
         """Edge cases: None, empty, whitespace."""
@@ -1259,13 +1282,12 @@ class InventoryRawEnvironmentTests(TestCase):
     def test_list_environments_with_non_standard(self, mock_connection):
         """list_environments() returns distinct raw values including non-standard."""
         mock_cursor = MagicMock()
-        mock_cursor.fetchone.return_value = (5,)
+        # read_distinct_environments does SELECT DISTINCT ENVIRONMENT — returns single-column rows
         mock_cursor.fetchall.return_value = [
-            ('srv-1', 'dev', 'SERVER'),
-            ('srv-2', 'lab', 'SERVER'),
-            ('srv-3', 'lab', 'DATABASE'),
-            ('srv-4', 'staging', 'SERVER'),
-            ('srv-5', 'prod', 'SERVER'),
+            ('certification',),
+            ('developpement',),
+            ('lab',),
+            ('production',),
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -1274,7 +1296,7 @@ class InventoryRawEnvironmentTests(TestCase):
 
         environments = self.service.list_environments()
 
-        self.assertEqual(sorted(environments), ['dev', 'lab', 'prod', 'staging'])
+        self.assertEqual(sorted(environments), ['certification', 'developpement', 'lab', 'production'])
         self.assertIn('lab', environments)
 
     # -- Task 1.5: Cache works with raw environments --
@@ -1283,10 +1305,10 @@ class InventoryRawEnvironmentTests(TestCase):
     def test_environments_cache_with_raw_values(self, mock_connection):
         """Cache stores and returns raw environment values correctly."""
         mock_cursor = MagicMock()
-        mock_cursor.fetchone.return_value = (2,)
+        # read_distinct_environments does SELECT DISTINCT ENVIRONMENT — returns single-column rows
         mock_cursor.fetchall.return_value = [
-            ('srv-lab-01', 'lab', 'SERVER'),
-            ('srv-dev-01', 'dev', 'SERVER'),
+            ('developpement',),
+            ('lab',),
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -1295,7 +1317,7 @@ class InventoryRawEnvironmentTests(TestCase):
 
         # First call — populates cache
         envs1 = self.service.list_environments()
-        self.assertEqual(sorted(envs1), ['dev', 'lab'])
+        self.assertEqual(sorted(envs1), ['developpement', 'lab'])
 
         # Second call — should use cache (cursor not called again for env list)
         envs2 = self.service.list_environments()
@@ -1332,7 +1354,7 @@ class RBACNonStandardEnvironmentTests(TestCase):
         mock_cursor.fetchall.return_value = [
             ('srv-lab-01', 'lab', 'server'),
             ('srv-lab-02', 'lab', 'database'),
-            ('srv-prod-01', 'prod', 'server'),
+            ('srv-prod-01', 'production', 'server'),
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -1347,8 +1369,8 @@ class RBACNonStandardEnvironmentTests(TestCase):
     # -- Task 2.2: Profile certif → certif targets (raw + normalized) --
 
     @patch('inventory.services.connection')
-    def test_profile_certif_allows_certif_and_staging_targets(self, mock_connection):
-        """Profile with certif → allowed_environments includes {staging, certif}."""
+    def test_profile_certif_allows_only_certif_targets(self, mock_connection):
+        """Story 53.1 — Profile with certif → allowed_environments = {certif} only (no alias to staging)."""
         certif_profile = Profile.objects.create(
             name='certif-team', description='Certif', ad_group='GRP-CERTIF-TEAM'
         )
@@ -1364,8 +1386,8 @@ class RBACNonStandardEnvironmentTests(TestCase):
         mock_cursor.fetchone.return_value = (3,)
         mock_cursor.fetchall.return_value = [
             ('srv-certif-01', 'certif', 'server'),
-            ('srv-stg-01', 'staging', 'server'),
-            ('srv-prod-01', 'prod', 'server'),
+            ('srv-stg-01', 'certification', 'server'),
+            ('srv-prod-01', 'production', 'server'),
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -1373,10 +1395,10 @@ class RBACNonStandardEnvironmentTests(TestCase):
             user_id=1, ad_groups=['GRP-CERTIF-TEAM']
         )
 
-        # certif → allowed = {staging, certif} → matches certif and staging targets
-        self.assertEqual(total, 2)
+        # certif → allowed = {certif} only; staging and prod excluded
+        self.assertEqual(total, 1)
         envs = {t['environment'] for t in targets}
-        self.assertEqual(envs, {'certif', 'staging'})
+        self.assertEqual(envs, {'certif'})
 
     # -- Task 2.3: Multi-environment profile --
 
@@ -1387,15 +1409,15 @@ class RBACNonStandardEnvironmentTests(TestCase):
         )
         ProfileActionPermission.objects.create(
             profile=multi_profile, permission_type='ALL',
-            environments_json='["lab", "dev", "staging"]'
+            environments_json='["lab", "developpement", "certification"]'
         )
 
         envs = self.service.get_allowed_environments_for_user(['GRP-MULTI-ENV'])
 
-        # lab has no alias, dev/staging have no alias → raw values only
+        # No alias mapping — raw values only
         self.assertIn('lab', envs)
-        self.assertIn('dev', envs)
-        self.assertIn('staging', envs)
+        self.assertIn('developpement', envs)
+        self.assertIn('certification', envs)
 
     # -- Task 2.4: Query param filter case-insensitive --
 
@@ -1443,7 +1465,7 @@ class RBACNonStandardEnvironmentTests(TestCase):
         )
         ProfileActionPermission.objects.create(
             profile=profile_a, permission_type='ALL',
-            environments_json='["lab", "dev"]'
+            environments_json='["lab", "developpement"]'
         )
         ProfileTargetPermission.objects.create(
             profile=profile_a, permission_type='ALL'
@@ -1454,7 +1476,7 @@ class RBACNonStandardEnvironmentTests(TestCase):
         )
         ProfileActionPermission.objects.create(
             profile=profile_b, permission_type='ALL',
-            environments_json='["staging"]'
+            environments_json='["certification"]'
         )
         ProfileTargetPermission.objects.create(
             profile=profile_b, permission_type='ALL'
@@ -1464,9 +1486,9 @@ class RBACNonStandardEnvironmentTests(TestCase):
         mock_cursor.fetchone.return_value = (4,)
         mock_cursor.fetchall.return_value = [
             ('srv-lab-01', 'lab', 'server'),
-            ('srv-dev-01', 'dev', 'server'),
-            ('srv-stg-01', 'staging', 'server'),
-            ('srv-prod-01', 'prod', 'server'),
+            ('srv-dev-01', 'developpement', 'server'),
+            ('srv-stg-01', 'certification', 'server'),
+            ('srv-prod-01', 'production', 'server'),
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -1474,10 +1496,10 @@ class RBACNonStandardEnvironmentTests(TestCase):
             user_id=1, ad_groups=['GRP-A-LD', 'GRP-B-STG']
         )
 
-        # Union of environments: lab, dev, staging → prod excluded
+        # Union of environments: lab, developpement, certification → production excluded
         self.assertEqual(total, 3)
         envs = {t['environment'] for t in targets}
-        self.assertEqual(envs, {'lab', 'dev', 'staging'})
+        self.assertEqual(envs, {'lab', 'developpement', 'certification'})
 
     def test_multi_profile_get_allowed_environments_union(self):
         """get_allowed_environments union from multiple profiles."""
@@ -1486,14 +1508,14 @@ class RBACNonStandardEnvironmentTests(TestCase):
         )
         ProfileActionPermission.objects.create(
             profile=p_a, permission_type='ALL',
-            environments_json='["lab", "dev"]'
+            environments_json='["lab", "developpement"]'
         )
         p_b = Profile.objects.create(
             name='pb', description='PB', ad_group='GRP-PB-UNION'
         )
         ProfileActionPermission.objects.create(
             profile=p_b, permission_type='ALL',
-            environments_json='["staging"]'
+            environments_json='["certification"]'
         )
 
         envs = self.service.get_allowed_environments_for_user(
@@ -1501,46 +1523,43 @@ class RBACNonStandardEnvironmentTests(TestCase):
         )
 
         self.assertIn('lab', envs)
-        self.assertIn('dev', envs)
-        self.assertIn('staging', envs)
-        self.assertNotIn('prod', envs)
+        self.assertIn('developpement', envs)
+        self.assertIn('certification', envs)
+        self.assertNotIn('production', envs)
 
 
 class EnvironmentVariantLegacyAliasTests(TestCase):
     """
-    Story 21.3, Task 5: Tests for legacy environment alias variants.
-    Validates that aliases work and RBAC handles raw vs normalized correctly.
+    Story 21.3, Task 5 / Story 53.1: Environment normalization — no alias mapping.
+    Inventory is the sole source of truth; values pass through as lowercased.
     """
 
     def setUp(self):
         self.service = InventoryService()
 
-    def test_alias_certif_to_staging(self):
-        """certif normalizes to staging."""
-        self.assertEqual(self.service._normalize_environment('certif'), 'staging')
+    def test_alias_certif_passthrough(self):
+        """Story 53.1 — certif passes through as certif (no alias to staging)."""
+        self.assertEqual(self.service._normalize_environment('certif'), 'certif')
 
-    def test_alias_certification_to_staging(self):
-        """certification normalizes to staging."""
-        self.assertEqual(self.service._normalize_environment('certification'), 'staging')
+    def test_alias_certification_passthrough(self):
+        """Story 53.1 — certification passes through as certification."""
+        self.assertEqual(self.service._normalize_environment('certification'), 'certification')
 
-    def test_alias_stg_to_staging(self):
-        """stg normalizes to staging."""
-        self.assertEqual(self.service._normalize_environment('stg'), 'staging')
+    def test_alias_stg_passthrough(self):
+        """Story 53.1 — stg passes through as stg (no alias to staging)."""
+        self.assertEqual(self.service._normalize_environment('stg'), 'stg')
 
-    def test_alias_development_to_dev(self):
-        """development normalizes to dev."""
-        self.assertEqual(self.service._normalize_environment('development'), 'dev')
+    def test_alias_development_passthrough(self):
+        """Story 53.1 — development passes through as development (no alias to dev)."""
+        self.assertEqual(self.service._normalize_environment('development'), 'development')
 
-    def test_alias_production_to_prod(self):
-        """production normalizes to prod."""
-        self.assertEqual(self.service._normalize_environment('production'), 'prod')
+    def test_alias_production_passthrough(self):
+        """Story 53.1 — production passes through as production (no alias to prod)."""
+        self.assertEqual(self.service._normalize_environment('production'), 'production')
 
     @patch('inventory.services.connection')
-    def test_rbac_certif_profile_matches_certif_and_staging_targets(self, mock_connection):
-        """
-        Task 5.6: Profile with 'certif' authorizes targets with both
-        'certif' (raw) AND 'staging' (normalized) environments.
-        """
+    def test_rbac_certif_profile_matches_only_certif_targets(self, mock_connection):
+        """Story 53.1 — Profile with 'certif' authorizes ONLY certif targets (no staging alias)."""
         certif_profile = Profile.objects.create(
             name='certif-rbac', description='Certif RBAC', ad_group='GRP-CERTIF-RBAC'
         )
@@ -1556,8 +1575,8 @@ class EnvironmentVariantLegacyAliasTests(TestCase):
         mock_cursor.fetchone.return_value = (3,)
         mock_cursor.fetchall.return_value = [
             ('srv-certif-01', 'certif', 'server'),
-            ('srv-staging-01', 'staging', 'server'),
-            ('srv-prod-01', 'prod', 'server'),
+            ('srv-staging-01', 'certification', 'server'),
+            ('srv-prod-01', 'production', 'server'),
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -1565,13 +1584,13 @@ class EnvironmentVariantLegacyAliasTests(TestCase):
             user_id=1, ad_groups=['GRP-CERTIF-RBAC']
         )
 
-        # Profile certif → allowed = {staging, certif} → both certif and staging match
-        self.assertEqual(total, 2)
+        # Profile certif → allowed = {certif} only; staging and prod excluded
+        self.assertEqual(total, 1)
         envs = {t['environment'] for t in targets}
-        self.assertEqual(envs, {'certif', 'staging'})
+        self.assertEqual(envs, {'certif'})
 
-    def test_get_allowed_environments_certif_includes_staging_and_raw(self):
-        """get_allowed_environments for 'certif' returns both staging and certif."""
+    def test_get_allowed_environments_certif_returns_certif_only(self):
+        """Story 53.1 — get_allowed_environments for 'certif' returns only certif (no staging alias)."""
         profile = Profile.objects.create(
             name='certif-env', description='Certif env', ad_group='GRP-CERTIF-ENV'
         )
@@ -1582,8 +1601,8 @@ class EnvironmentVariantLegacyAliasTests(TestCase):
 
         envs = self.service.get_allowed_environments_for_user(['GRP-CERTIF-ENV'])
 
-        self.assertIn('staging', envs)  # Normalized
-        self.assertIn('certif', envs)   # Raw
+        self.assertIn('certif', envs)
+        self.assertNotIn('staging', envs)  # Story 53.1: alias mapping removed
 
 
 class InventoryIntegrationEndToEndTests(TestCase):
@@ -1607,7 +1626,7 @@ class InventoryIntegrationEndToEndTests(TestCase):
         )
         ProfileActionPermission.objects.create(
             profile=profile, permission_type='ALL',
-            environments_json='["lab", "dev"]'
+            environments_json='["lab", "developpement"]'
         )
         ProfileTargetPermission.objects.create(
             profile=profile, permission_type='ALL'
@@ -1618,8 +1637,8 @@ class InventoryIntegrationEndToEndTests(TestCase):
         mock_cursor.fetchall.return_value = [
             ('srv-lab-01', 'lab', 'server'),
             ('srv-lab-02', 'lab', 'database'),
-            ('srv-dev-01', 'dev', 'server'),
-            ('srv-prod-01', 'prod', 'server'),
+            ('srv-dev-01', 'developpement', 'server'),
+            ('srv-prod-01', 'production', 'server'),
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -1627,7 +1646,7 @@ class InventoryIntegrationEndToEndTests(TestCase):
         all_targets, total, _ = self.service.list_targets_for_user(
             user_id=1, ad_groups=['GRP-E2E-LAB']
         )
-        self.assertEqual(total, 3)  # lab + dev, no prod
+        self.assertEqual(total, 3)  # lab + developpement, no production
 
         # Step 2: Filter by lab
         lab_targets, lab_total, _ = self.service.list_targets_for_user(
@@ -1640,8 +1659,61 @@ class InventoryIntegrationEndToEndTests(TestCase):
         # Step 3: Verify get_allowed_environments
         envs = self.service.get_allowed_environments_for_user(['GRP-E2E-LAB'])
         self.assertIn('lab', envs)
-        self.assertIn('dev', envs)
-        self.assertNotIn('prod', envs)
+        self.assertIn('developpement', envs)
+        self.assertNotIn('production', envs)
+
+    # -- AC#1 Story 53.1: Valeurs réelles Oracle (developpement, certification, production) --
+
+    @patch('inventory.services.connection')
+    def test_ac1_inventory_oracle_values_developpement(self, mock_connection):
+        """
+        Story 53.1, AC#1 + AC#2: list_servers(environment='developpement') retourne les serveurs
+        quand l'inventaire Oracle contient ENV='developpement'.
+        Aucun appel avec 'dev' — seules les valeurs brutes de l'inventaire sont utilisées.
+        """
+        profile = Profile.objects.create(
+            name='e2e-oracle', description='E2E Oracle values', ad_group='GRP-E2E-ORACLE'
+        )
+        ProfileActionPermission.objects.create(
+            profile=profile, permission_type='ALL',
+            environments_json='["developpement", "certification", "production"]'
+        )
+        ProfileTargetPermission.objects.create(
+            profile=profile, permission_type='ALL'
+        )
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (3,)
+        mock_cursor.fetchall.return_value = [
+            ('srv-dev-fr-01', 'developpement', 'server'),
+            ('srv-certif-fr-01', 'certification', 'server'),
+            ('srv-prod-fr-01', 'production', 'server'),
+        ]
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
+
+        # AC#1: developpement retourne les serveurs
+        targets, total, _ = self.service.list_targets_for_user(
+            user_id=1, ad_groups=['GRP-E2E-ORACLE']
+        )
+        self.assertEqual(total, 3)
+        envs = {t['environment'] for t in targets}
+        self.assertEqual(envs, {'developpement', 'certification', 'production'})
+
+        # AC#1: filtrer par 'developpement' retourne uniquement les serveurs developpement
+        dev_targets, dev_total, _ = self.service.list_targets_for_user(
+            user_id=1, ad_groups=['GRP-E2E-ORACLE'], environment='developpement'
+        )
+        self.assertEqual(dev_total, 1)
+        self.assertEqual(dev_targets[0]['environment'], 'developpement')
+
+        # AC#2: allowed_environments ne contient pas 'dev' — valeurs brutes Oracle uniquement
+        allowed = self.service.get_allowed_environments_for_user(['GRP-E2E-ORACLE'])
+        self.assertIn('developpement', allowed)
+        self.assertIn('certification', allowed)
+        self.assertIn('production', allowed)
+        self.assertNotIn('dev', allowed)
+        self.assertNotIn('staging', allowed)
+        self.assertNotIn('prod', allowed)
 
     # -- Task 6.2: Mixed environments scenario --
 
@@ -1653,7 +1725,7 @@ class InventoryIntegrationEndToEndTests(TestCase):
         )
         ProfileActionPermission.objects.create(
             profile=profile, permission_type='ALL',
-            environments_json='["lab", "certif", "dev"]'
+            environments_json='["lab", "certif", "developpement"]'
         )
         ProfileTargetPermission.objects.create(
             profile=profile, permission_type='ALL'
@@ -1663,10 +1735,10 @@ class InventoryIntegrationEndToEndTests(TestCase):
         mock_cursor.fetchone.return_value = (5,)
         mock_cursor.fetchall.return_value = [
             ('srv-lab-01', 'lab', 'server'),
-            ('srv-dev-01', 'dev', 'server'),
+            ('srv-dev-01', 'developpement', 'server'),
             ('srv-certif-01', 'certif', 'server'),
-            ('srv-staging-01', 'staging', 'server'),
-            ('srv-prod-01', 'prod', 'server'),
+            ('srv-staging-01', 'certification', 'server'),
+            ('srv-prod-01', 'production', 'server'),
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -1674,12 +1746,12 @@ class InventoryIntegrationEndToEndTests(TestCase):
             user_id=1, ad_groups=['GRP-E2E-MIXED']
         )
 
-        # certif → allowed = {staging, certif, lab, dev}
-        # lab matches lab, dev matches dev, certif matches certif, staging matches staging
-        # prod excluded
-        self.assertEqual(total, 4)
+        # Story 53.1 — certif → allowed = {certif} only (no alias to staging)
+        # allowed_environments = {lab, certif, developpement}
+        # lab matches lab, developpement matches developpement, certif matches certif; staging and production excluded
+        self.assertEqual(total, 3)
         envs = {t['environment'] for t in targets}
-        self.assertEqual(envs, {'lab', 'dev', 'certif', 'staging'})
+        self.assertEqual(envs, {'lab', 'developpement', 'certif'})
 
     # -- Task 6.3: Case-insensitive consistency --
 
@@ -1759,3 +1831,20 @@ class InventoryIntegrationEndToEndTests(TestCase):
         self.assertEqual(total, 5)
         self.assertEqual(len(targets), 1)
         self.assertEqual(targets[0]['name'], 'srv-lab-05')
+
+
+class InventoryServiceDefaultEnvironmentsTests(TestCase):
+    """Story 53.1 — get_default_environments() doit retourner [] (inventaire = seule source de vérité)."""
+
+    def setUp(self):
+        self.service = InventoryService()
+
+    def test_get_default_environments_returns_empty_list(self):
+        """get_default_environments() retourne [] — aucun fallback codé en dur."""
+        result = self.service.get_default_environments()
+        self.assertEqual(result, [])
+
+    def test_get_default_environments_is_list(self):
+        """Le retour est bien une liste (pas None, pas un set)."""
+        result = self.service.get_default_environments()
+        self.assertIsInstance(result, list)

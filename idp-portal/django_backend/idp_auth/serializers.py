@@ -35,6 +35,7 @@ class UserProfileSerializer(serializers.Serializer):
         required=False
     )
     is_business_profile = serializers.BooleanField(read_only=True, default=False)
+    email = serializers.EmailField(read_only=True, allow_null=True, required=False)
 
 
 class TokenRefreshResponseSerializer(serializers.Serializer):

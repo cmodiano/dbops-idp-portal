@@ -87,28 +87,28 @@ class TestValidateEnvironmentAgainstInventory(TestCase):
     @patch('executions.utils.InventoryService')
     def test_valid_environment_passes(self, MockInventoryService):
         mock_instance = MagicMock()
-        mock_instance.list_environments.return_value = ['dev', 'staging', 'prod']
+        mock_instance.list_environments.return_value = ['developpement', 'certification', 'production']
         MockInventoryService.return_value = mock_instance
 
         # Should not raise
-        validate_environment_against_inventory('dev')
+        validate_environment_against_inventory('developpement')
 
     @patch('executions.utils.InventoryService')
     def test_case_insensitive_validation(self, MockInventoryService):
         mock_instance = MagicMock()
-        mock_instance.list_environments.return_value = ['DEV', 'staging', 'PROD']
+        mock_instance.list_environments.return_value = ['DEVELOPPEMENT', 'certification', 'PRODUCTION']
         MockInventoryService.return_value = mock_instance
 
         # Case-insensitive, should not raise
-        validate_environment_against_inventory('dev')
-        validate_environment_against_inventory('Dev')
-        validate_environment_against_inventory('DEV')
+        validate_environment_against_inventory('developpement')
+        validate_environment_against_inventory('Developpement')
+        validate_environment_against_inventory('DEVELOPPEMENT')
 
     @patch('executions.utils.InventoryService')
     @patch('executions.utils.AuditService')
     def test_invalid_environment_raises_bad_request(self, MockAudit, MockInventoryService):
         mock_instance = MagicMock()
-        mock_instance.list_environments.return_value = ['dev', 'staging', 'prod']
+        mock_instance.list_environments.return_value = ['developpement', 'certification', 'production']
         MockInventoryService.return_value = mock_instance
 
         with pytest.raises(BadRequestError) as exc_info:

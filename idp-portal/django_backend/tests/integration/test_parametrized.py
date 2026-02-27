@@ -11,7 +11,7 @@ from idp_auth.models import User
 from catalog.models import Action, ActionStatus, ActionCategory, ActionEngine, ActionPlatform
 from catalog.services import CatalogService
 from integrations.models import Integration
-from executions.models import Execution, ExecutionStatus, ExecutionEnvironment
+from executions.models import Execution, ExecutionStatus
 from profiles.models import Profile
 
 
@@ -275,7 +275,7 @@ class TestParametrizedExecutionStatus:
         execution = Execution.objects.create(
             action=self.action,
             user=self.user,
-            environment='dev',
+            environment='developpement',
             status=status
         )
 
@@ -284,12 +284,12 @@ class TestParametrizedExecutionStatus:
         assert execution.status == status
 
     @pytest.mark.parametrize('environment', [
-        ExecutionEnvironment.DEV,
-        ExecutionEnvironment.STAGING,
-        ExecutionEnvironment.PROD,
+        'developpement',
+        'certification',
+        'production',
     ])
     def test_all_environments(self, environment):
-        """Test execution in all environments."""
+        """Test execution in all environments (raw inventory values — Story 53.2)."""
         execution = Execution.objects.create(
             action=self.action,
             user=self.user,

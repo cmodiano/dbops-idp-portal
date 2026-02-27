@@ -12,6 +12,7 @@ import httpx
 import structlog
 
 from core.exceptions import ServiceUnavailableError
+from integrations.health_check import HealthCheckResult, HealthCheckStatus, IHealthCheckable
 
 logger = structlog.get_logger(__name__)
 
@@ -32,7 +33,7 @@ _ERROR_CODES: dict[int, str] = {
 }
 
 
-class JiraService:
+class JiraService(IHealthCheckable):
     """Jira integration service client.
 
     Jira is a consumed service (issue tracking), not a platform that executes
@@ -406,3 +407,31 @@ class JiraService:
             message=f"Jira max retries ({MAX_RETRIES}) exceeded",
             details={"url": url},
         ) from last_exc
+
+    # ------------------------------------------------------------------
+    # Health check — Story 51.1
+    # ------------------------------------------------------------------
+
+    async def health_check(self) -> HealthCheckResult:
+        """Ping Jira via GET /rest/api/2/serverInfo et valide l'authentification."""
+        from datetime import datetime, timezone as tz
+        url = f"{self.base_url}/rest/api/2/serverInfo"
+        try:
+            async with httpx.AsyncClient(
+                headers=self.auth_headers,
+                timeout=self.timeout,
+            ) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+            logger.info("jira_health_check_ok", base_url=self.base_url)
+            return HealthCheckResult(
+                status=HealthCheckStatus.OK,
+                checked_at=datetime.now(tz.utc),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("jira_health_check_error", base_url=self.base_url, error=str(exc))
+            return HealthCheckResult(
+                status=HealthCheckStatus.ERROR,
+                checked_at=datetime.now(tz.utc),
+                error_message=str(exc),
+            )

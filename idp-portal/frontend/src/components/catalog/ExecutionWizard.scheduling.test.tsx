@@ -32,9 +32,9 @@ vi.mock('../../services/execution_service', () => ({
   fetchInventoryItems: vi.fn().mockImplementation(async (type: string) => {
     if (type === 'environments') {
       return [
-        { id: 'dev', name: 'Developpement', environment: null },
-        { id: 'staging', name: 'Staging', environment: null },
-        { id: 'prod', name: 'Production', environment: null },
+        { id: 'developpement', name: 'Développement', environment: null },
+        { id: 'certification', name: 'Certification', environment: null },
+        { id: 'production', name: 'Production', environment: null },
       ];
     }
     return [];
@@ -70,9 +70,9 @@ const mockAction: CatalogActionDetail = {
     required: ['pdb_name'],
   },
   impact_rules: {
-    DEV: { level: 'low', criteria: null },
-    STAGING: { level: 'medium', criteria: null },
-    PROD: { level: 'high', criteria: null },
+    developpement: { level: 'low', criteria: null },
+    certification: { level: 'medium', criteria: null },
+    production: { level: 'high', criteria: null },
   },
   impact_level: null,
   default_impact_level: 'medium',
@@ -81,9 +81,9 @@ const mockAction: CatalogActionDetail = {
   tags: ['oracle', 'provisioning'],
   requires_target: false,
   change_type_config: {
-    DEV: { required: false, change_model_code: null },
-    STAGING: { required: false, change_model_code: null },
-    PROD: { required: true, change_model_code: 'CHG001' },
+    DEVELOPPEMENT: { required: false, change_model_code: null },
+    CERTIFICATION: { required: false, change_model_code: null },
+    PRODUCTION: { required: true, change_model_code: 'CHG001' },
   },
   execution_count: 5,
 };
@@ -92,7 +92,7 @@ const mockAction: CatalogActionDetail = {
 async function navigateToStep3(user: ReturnType<typeof userEvent.setup>) {
   const select = screen.getByRole('combobox');
   await user.click(select);
-  await user.click(screen.getByText('Developpement'));
+  await user.click(screen.getByText('Développement'));
   await user.click(screen.getByRole('button', { name: /suivant/i }));
 
   await waitFor(() => expect(screen.getByLabelText('PDB Name')).toBeInTheDocument());
@@ -109,7 +109,7 @@ describe('ExecutionWizard - Scheduling (Story 11.5)', () => {
   const defaultProps = {
     open: true,
     action: mockAction,
-    allowedEnvironments: ['dev', 'staging', 'prod'],
+    allowedEnvironments: ['developpement', 'certification', 'production'],
     onCancel: vi.fn(),
     onSuccess: vi.fn(),
   };
@@ -211,7 +211,7 @@ describe('ExecutionWizard - Scheduling (Story 11.5)', () => {
         scheduled_execution_id: 42,
         action_id: 1,
         action_name: 'Create PDB Oracle',
-        environment: 'dev',
+        environment: 'developpement',
         status: 'pending',
         scheduled_at: '2026-03-15T14:30:00Z',
         parameters: { pdb_name: 'TEST_PDB' },
@@ -320,7 +320,7 @@ describe('ExecutionWizard - Scheduling (Story 11.5)', () => {
       await waitFor(() => {
         expect(submitExecution).toHaveBeenCalledWith({
           action_id: 1,
-          environment: 'dev',
+          environment: 'developpement',
           parameters: { pdb_name: 'TEST_PDB' },
           parent_execution_id: null,
         });

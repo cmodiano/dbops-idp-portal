@@ -164,6 +164,8 @@ class SerializerTests(TestCase):
 class BaseMultiTableViewTest(TestCase):
     """Base class for multi-table view tests."""
 
+    ALLOWED_SERVERS = {'srv01', 'srv02'}
+
     def setUp(self):
         self.client = APIClient()
         self.user = MagicMock()
@@ -179,9 +181,17 @@ class BaseMultiTableViewTest(TestCase):
         self.corr_id_patcher = patch('inventory.views.get_correlation_id', return_value='test-corr-id')
         self.mock_corr_id = self.corr_id_patcher.start()
 
+        # Default mock for RBAC — instances/databases always go through RBAC now
+        self.rbac_patcher = patch(
+            'inventory.views._get_rbac_allowed_servers',
+            return_value=self.ALLOWED_SERVERS,
+        )
+        self.mock_rbac = self.rbac_patcher.start()
+
     def tearDown(self):
         self.ad_groups_patcher.stop()
         self.corr_id_patcher.stop()
+        self.rbac_patcher.stop()
 
 
 class ListServersViewTests(BaseMultiTableViewTest):
@@ -191,11 +201,6 @@ class ListServersViewTests(BaseMultiTableViewTest):
     def test_list_servers_success_200(self, mock_service_cls):
         """AC1: Success 200 with valid environment."""
         mock_svc = mock_service_cls.return_value
-        mock_svc.list_targets_for_user.return_value = (
-            [{'name': 'srv01', 'environment': 'dev', 'target_type': 'server', 'metadata': None}],
-            1,
-            False,
-        )
         mock_svc.list_servers.return_value = [
             {'id': 'srv01', 'name': 'srv01', 'environment': 'dev', 'engine_type': 'oracle'},
         ]
@@ -218,15 +223,6 @@ class ListServersViewTests(BaseMultiTableViewTest):
     def test_list_servers_filter_engine_type(self, mock_service_cls):
         """AC1: engine_type filter works - verifies service receives the parameter."""
         mock_svc = mock_service_cls.return_value
-        mock_svc.list_targets_for_user.return_value = (
-            [
-                {'name': 'srv01', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
-                {'name': 'srv02', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
-            ],
-            2,
-            False,
-        )
-        # Service returns mixed engine types
         mock_svc.list_servers.return_value = [
             {'id': 'srv01', 'name': 'srv01', 'environment': 'dev', 'engine_type': 'oracle'},
             {'id': 'srv02', 'name': 'srv02', 'environment': 'dev', 'engine_type': 'postgres'},
@@ -238,22 +234,14 @@ class ListServersViewTests(BaseMultiTableViewTest):
         })
 
         self.assertEqual(response.status_code, 200)
-        # Verify service called with engine_type parameter
         mock_svc.list_servers.assert_called_once_with(environment='dev', engine_type='oracle')
-        # Note: actual filtering by engine_type is handled by InventoryService (story 23.2)
-        # This test verifies the API layer passes the parameter correctly
 
     @patch('inventory.views._inventory_service_factory')
     def test_list_servers_rbac_filters(self, mock_service_cls):
         """AC1: RBAC applied - only allowed servers returned."""
-        mock_svc = mock_service_cls.return_value
         # User only has access to srv01
-        mock_svc.list_targets_for_user.return_value = (
-            [{'name': 'srv01', 'environment': 'dev', 'target_type': 'server', 'metadata': None}],
-            1,
-            False,
-        )
-        # Service returns srv01 and srv02
+        self.mock_rbac.return_value = {'srv01'}
+        mock_svc = mock_service_cls.return_value
         mock_svc.list_servers.return_value = [
             {'id': 'srv01', 'name': 'srv01', 'environment': 'dev', 'engine_type': 'oracle'},
             {'id': 'srv02', 'name': 'srv02', 'environment': 'dev', 'engine_type': 'oracle'},
@@ -268,9 +256,19 @@ class ListServersViewTests(BaseMultiTableViewTest):
 
     @patch('inventory.views._inventory_service_factory')
     def test_list_servers_500_service_error(self, mock_service_cls):
-        """AC6: 500 on InventoryServiceError."""
+        """AC6: 500 on InventoryServiceError from RBAC."""
+        self.mock_rbac.side_effect = InventoryServiceError("DB error")
+
+        response = self.client.get('/api/v1/inventory/servers/', {'environment': 'dev'})
+
+        self.assertEqual(response.status_code, 500)
+        self.assertIn('detail', response.json())
+
+    @patch('inventory.views._inventory_service_factory')
+    def test_list_servers_500_list_servers_error(self, mock_service_cls):
+        """AC6: 500 on InventoryServiceError from list_servers."""
         mock_svc = mock_service_cls.return_value
-        mock_svc.list_targets_for_user.side_effect = InventoryServiceError("DB error")
+        mock_svc.list_servers.side_effect = InventoryServiceError("DB error")
 
         response = self.client.get('/api/v1/inventory/servers/', {'environment': 'dev'})
 
@@ -287,12 +285,10 @@ class ListServersViewTests(BaseMultiTableViewTest):
     def test_list_servers_logging(self, mock_service_cls):
         """AC6: Logging with correlation_id."""
         mock_svc = mock_service_cls.return_value
-        mock_svc.list_targets_for_user.return_value = ([], 0, False)
         mock_svc.list_servers.return_value = []
 
         response = self.client.get('/api/v1/inventory/servers/', {'environment': 'dev'})
         self.assertEqual(response.status_code, 200)
-        # Correlation ID was called
         self.mock_corr_id.assert_called()
 
 
@@ -301,7 +297,7 @@ class ListInstancesViewTests(BaseMultiTableViewTest):
 
     @patch('inventory.views._inventory_service_factory')
     def test_list_instances_success_env_only(self, mock_service_cls):
-        """AC2: Success 200 with environment only."""
+        """AC2: Success 200 with environment only — RBAC scoped to allowed servers."""
         mock_svc = mock_service_cls.return_value
         mock_svc.list_instances.return_value = [
             {'id': 'INST01', 'name': 'INST01', 'environment': 'dev', 'server_ref': 'srv01', 'db_ref': None},
@@ -313,16 +309,17 @@ class ListInstancesViewTests(BaseMultiTableViewTest):
         data = response.json()
         self.assertIn('data', data)
         self.assertEqual(len(data['data']), 1)
-        # No RBAC check since no server filter
+        # RBAC always checked — instances scoped to allowed servers
+        self.mock_rbac.assert_called_once()
+        # Effective server_names comes from RBAC allowed set
         mock_svc.list_instances.assert_called_once_with(
-            environment='dev', engine_type=None, server_name=None, server_names=None,
+            environment='dev', engine_type=None, server_name=None,
+            server_names=sorted(self.ALLOWED_SERVERS),
         )
 
     @patch('inventory.views._inventory_service_factory')
-    @patch('inventory.views._validate_server_access')
-    def test_list_instances_with_server_name_authorized(self, mock_validate, mock_service_cls):
+    def test_list_instances_with_server_name_authorized(self, mock_service_cls):
         """AC2: Success 200 when server_name authorized."""
-        mock_validate.return_value = ['srv01', 'srv02']
         mock_svc = mock_service_cls.return_value
         mock_svc.list_instances.return_value = [
             {'id': 'INST01', 'name': 'INST01', 'environment': 'dev', 'server_ref': 'srv01', 'db_ref': 'DB01'},
@@ -334,16 +331,11 @@ class ListInstancesViewTests(BaseMultiTableViewTest):
         })
 
         self.assertEqual(response.status_code, 200)
-        mock_validate.assert_called_once_with(self.user, 'dev', 'srv01', None)
         data = response.json()
         self.assertEqual(len(data['data']), 1)
 
-    @patch('inventory.views._validate_server_access')
-    def test_list_instances_server_name_unauthorized_403(self, mock_validate):
+    def test_list_instances_server_name_unauthorized_403(self):
         """AC2: 403 when server_name not authorized."""
-        from rest_framework.exceptions import PermissionDenied
-        mock_validate.side_effect = PermissionDenied("Access denied to server: srv99")
-
         response = self.client.get('/api/v1/inventory/instances/', {
             'environment': 'dev',
             'server_name': 'srv99',
@@ -351,14 +343,11 @@ class ListInstancesViewTests(BaseMultiTableViewTest):
 
         self.assertEqual(response.status_code, 403)
         data = response.json()
-        # Custom exception handler wraps in {"error": {"message": "..."}}
         self.assertIn('srv99', str(data))
 
     @patch('inventory.views._inventory_service_factory')
-    @patch('inventory.views._validate_server_access')
-    def test_list_instances_server_names_multi_value(self, mock_validate, mock_service_cls):
+    def test_list_instances_server_names_multi_value(self, mock_service_cls):
         """AC2: server_names multi-value works."""
-        mock_validate.return_value = ['srv01', 'srv02']
         mock_svc = mock_service_cls.return_value
         mock_svc.list_instances.return_value = [
             {'id': 'INST01', 'name': 'INST01', 'environment': 'dev', 'server_ref': 'srv01', 'db_ref': None},
@@ -401,8 +390,10 @@ class ListInstancesViewTests(BaseMultiTableViewTest):
         })
 
         self.assertEqual(response.status_code, 200)
+        # With no explicit server filter, effective_server_names comes from RBAC
         mock_svc.list_instances.assert_called_once_with(
-            environment='dev', engine_type='oracle', server_name=None, server_names=None,
+            environment='dev', engine_type='oracle', server_name=None,
+            server_names=sorted(self.ALLOWED_SERVERS),
         )
 
     @patch('inventory.views._inventory_service_factory')
@@ -418,7 +409,8 @@ class ListInstancesViewTests(BaseMultiTableViewTest):
 
         self.assertEqual(response.status_code, 200)
         mock_svc.list_databases.assert_called_once_with(
-            environment='dev', engine_type='oracle', server_name=None, server_names=None,
+            environment='dev', engine_type='oracle', server_name=None,
+            server_names=sorted(self.ALLOWED_SERVERS),
         )
 
 
@@ -426,10 +418,8 @@ class ListDatabasesViewTests(BaseMultiTableViewTest):
     """Tests for list_databases endpoint. Task 8.4."""
 
     @patch('inventory.views._inventory_service_factory')
-    @patch('inventory.views._validate_server_access')
-    def test_list_databases_with_server_name_authorized(self, mock_validate, mock_service_cls):
+    def test_list_databases_with_server_name_authorized(self, mock_service_cls):
         """AC3: Success 200 with authorized server_name."""
-        mock_validate.return_value = ['srv01']
         mock_svc = mock_service_cls.return_value
         mock_svc.list_databases.return_value = [
             {'id': 'DB01', 'name': 'DB01', 'environment': 'dev'},
@@ -445,12 +435,8 @@ class ListDatabasesViewTests(BaseMultiTableViewTest):
         self.assertIn('data', data)
         self.assertEqual(len(data['data']), 1)
 
-    @patch('inventory.views._validate_server_access')
-    def test_list_databases_server_name_unauthorized_403(self, mock_validate):
+    def test_list_databases_server_name_unauthorized_403(self):
         """AC3: 403 when server_name not authorized."""
-        from rest_framework.exceptions import PermissionDenied
-        mock_validate.side_effect = PermissionDenied("Access denied to server: srv99")
-
         response = self.client.get('/api/v1/inventory/databases/', {
             'environment': 'dev',
             'server_name': 'srv99',
@@ -459,10 +445,8 @@ class ListDatabasesViewTests(BaseMultiTableViewTest):
         self.assertEqual(response.status_code, 403)
 
     @patch('inventory.views._inventory_service_factory')
-    @patch('inventory.views._validate_server_access')
-    def test_list_databases_server_names_multi_value(self, mock_validate, mock_service_cls):
+    def test_list_databases_server_names_multi_value(self, mock_service_cls):
         """AC3: server_names list works."""
-        mock_validate.return_value = ['srv01', 'srv02']
         mock_svc = mock_service_cls.return_value
         mock_svc.list_databases.return_value = [
             {'id': 'DB01', 'name': 'DB01', 'environment': 'dev'},
@@ -479,7 +463,7 @@ class ListDatabasesViewTests(BaseMultiTableViewTest):
 
     @patch('inventory.views._inventory_service_factory')
     def test_list_databases_no_server_filter(self, mock_service_cls):
-        """AC3: Returns all databases for env without server filter."""
+        """AC3: Returns databases scoped by RBAC when no server filter."""
         mock_svc = mock_service_cls.return_value
         mock_svc.list_databases.return_value = [
             {'id': 'DB01', 'name': 'DB01', 'environment': 'dev'},
@@ -488,8 +472,10 @@ class ListDatabasesViewTests(BaseMultiTableViewTest):
         response = self.client.get('/api/v1/inventory/databases/', {'environment': 'dev'})
 
         self.assertEqual(response.status_code, 200)
+        # RBAC always enforced — scoped to allowed servers
         mock_svc.list_databases.assert_called_once_with(
-            environment='dev', engine_type=None, server_name=None, server_names=None,
+            environment='dev', engine_type=None, server_name=None,
+            server_names=sorted(self.ALLOWED_SERVERS),
         )
 
     def test_list_databases_400_missing_environment(self):
@@ -517,7 +503,7 @@ class ErrorHandlingTests(BaseMultiTableViewTest):
         test_cases = [
             {
                 'endpoint': '/api/v1/inventory/servers/',
-                'error_method': 'list_targets_for_user',
+                'error_method': 'list_servers',
                 'expected_detail': 'Failed to retrieve servers',
             },
             {
@@ -549,9 +535,29 @@ class ErrorHandlingTests(BaseMultiTableViewTest):
                 # Error should NOT reveal SQL or config details
                 self.assertNotIn('Connection refused', data['detail'])
 
+    @patch('inventory.views._inventory_service_factory')
+    def test_rbac_service_error_500_instances(self, mock_service_cls):
+        """500 when RBAC check raises InventoryServiceError on instances."""
+        self.mock_rbac.side_effect = InventoryServiceError("RBAC DB error")
+
+        response = self.client.get('/api/v1/inventory/instances/', {'environment': 'dev'})
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.json()['detail'], 'Failed to retrieve instances')
+
+    @patch('inventory.views._inventory_service_factory')
+    def test_rbac_service_error_500_databases(self, mock_service_cls):
+        """500 when RBAC check raises InventoryServiceError on databases."""
+        self.mock_rbac.side_effect = InventoryServiceError("RBAC DB error")
+
+        response = self.client.get('/api/v1/inventory/databases/', {'environment': 'dev'})
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.json()['detail'], 'Failed to retrieve databases')
+
 
 class ValidateServerAccessTests(TestCase):
-    """Tests for _validate_server_access helper. Task 8.6."""
+    """Tests for _get_rbac_allowed_servers and _validate_explicit_server_filter helpers."""
 
     def setUp(self):
         self.user = MagicMock()
@@ -560,42 +566,8 @@ class ValidateServerAccessTests(TestCase):
     @patch('inventory.views.get_correlation_id', return_value='test-corr-id')
     @patch('inventory.views.get_user_ad_groups', return_value=['GRP-DBA'])
     @patch('inventory.views._inventory_service_factory')
-    def test_server_authorized_passes(self, mock_service_cls, mock_ad_groups, mock_corr_id):
-        """Authorized server_name passes without exception."""
-        mock_svc = mock_service_cls.return_value
-        mock_svc.list_targets_for_user.return_value = (
-            [{'name': 'srv01', 'environment': 'dev', 'target_type': 'server', 'metadata': None}],
-            1,
-            False,
-        )
-
-        from inventory.views import _validate_server_access
-        result = _validate_server_access(self.user, 'dev', server_name='srv01')
-        self.assertIn('srv01', result)
-
-    @patch('inventory.views.get_correlation_id', return_value='test-corr-id')
-    @patch('inventory.views.get_user_ad_groups', return_value=['GRP-DBA'])
-    @patch('inventory.views._inventory_service_factory')
-    def test_server_unauthorized_raises_403(self, mock_service_cls, mock_ad_groups, mock_corr_id):
-        """Unauthorized server_name raises PermissionDenied."""
-        mock_svc = mock_service_cls.return_value
-        mock_svc.list_targets_for_user.return_value = (
-            [{'name': 'srv01', 'environment': 'dev', 'target_type': 'server', 'metadata': None}],
-            1,
-            False,
-        )
-
-        from rest_framework.exceptions import PermissionDenied
-        from inventory.views import _validate_server_access
-        with self.assertRaises(PermissionDenied) as ctx:
-            _validate_server_access(self.user, 'dev', server_name='srv99')
-        self.assertIn('srv99', str(ctx.exception.detail))
-
-    @patch('inventory.views.get_correlation_id', return_value='test-corr-id')
-    @patch('inventory.views.get_user_ad_groups', return_value=['GRP-DBA'])
-    @patch('inventory.views._inventory_service_factory')
-    def test_server_names_all_authorized(self, mock_service_cls, mock_ad_groups, mock_corr_id):
-        """All server_names authorized passes."""
+    def test_get_rbac_returns_allowed_set(self, mock_service_cls, mock_ad_groups, mock_corr_id):
+        """_get_rbac_allowed_servers returns set of allowed server names."""
         mock_svc = mock_service_cls.return_value
         mock_svc.list_targets_for_user.return_value = (
             [
@@ -606,44 +578,49 @@ class ValidateServerAccessTests(TestCase):
             False,
         )
 
-        from inventory.views import _validate_server_access
-        result = _validate_server_access(self.user, 'dev', server_names=['srv01', 'srv02'])
-        self.assertIn('srv01', result)
-        self.assertIn('srv02', result)
+        from inventory.views import _get_rbac_allowed_servers
+        result = _get_rbac_allowed_servers(mock_svc, self.user, 'dev')
+        self.assertEqual(result, {'srv01', 'srv02'})
 
     @patch('inventory.views.get_correlation_id', return_value='test-corr-id')
     @patch('inventory.views.get_user_ad_groups', return_value=['GRP-DBA'])
     @patch('inventory.views._inventory_service_factory')
-    def test_server_names_mixed_raises_403(self, mock_service_cls, mock_ad_groups, mock_corr_id):
-        """Mixed server_names (some unauthorized) raises PermissionDenied."""
+    def test_get_rbac_propagates_service_error(self, mock_service_cls, mock_ad_groups, mock_corr_id):
+        """_get_rbac_allowed_servers lets InventoryServiceError propagate."""
         mock_svc = mock_service_cls.return_value
-        mock_svc.list_targets_for_user.return_value = (
-            [{'name': 'srv01', 'environment': 'dev', 'target_type': 'server', 'metadata': None}],
-            1,
-            False,
-        )
+        mock_svc.list_targets_for_user.side_effect = InventoryServiceError("DB down")
 
+        from inventory.views import _get_rbac_allowed_servers
+        with self.assertRaises(InventoryServiceError):
+            _get_rbac_allowed_servers(mock_svc, self.user, 'dev')
+
+    def test_validate_explicit_server_authorized(self):
+        """Authorized server_name passes without exception."""
+        from inventory.views import _validate_explicit_server_filter
+        # Should not raise
+        _validate_explicit_server_filter({'srv01', 'srv02'}, self.user, 'dev', server_name='srv01')
+
+    def test_validate_explicit_server_unauthorized_raises_403(self):
+        """Unauthorized server_name raises PermissionDenied."""
         from rest_framework.exceptions import PermissionDenied
-        from inventory.views import _validate_server_access
+        from inventory.views import _validate_explicit_server_filter
         with self.assertRaises(PermissionDenied) as ctx:
-            _validate_server_access(self.user, 'dev', server_names=['srv01', 'srv99'])
+            _validate_explicit_server_filter({'srv01'}, self.user, 'dev', server_name='srv99')
         self.assertIn('srv99', str(ctx.exception.detail))
 
-    @patch('inventory.views.get_correlation_id', return_value='test-corr-id')
-    @patch('inventory.views.get_user_ad_groups', return_value=['GRP-DBA'])
-    @patch('inventory.views._inventory_service_factory')
-    def test_no_server_filter_returns_allowed(self, mock_service_cls, mock_ad_groups, mock_corr_id):
-        """No server filter returns list of allowed servers."""
-        mock_svc = mock_service_cls.return_value
-        mock_svc.list_targets_for_user.return_value = (
-            [{'name': 'srv01', 'environment': 'dev', 'target_type': 'server', 'metadata': None}],
-            1,
-            False,
-        )
+    def test_validate_explicit_server_names_all_authorized(self):
+        """All server_names authorized passes."""
+        from inventory.views import _validate_explicit_server_filter
+        # Should not raise
+        _validate_explicit_server_filter({'srv01', 'srv02'}, self.user, 'dev', server_names=['srv01', 'srv02'])
 
-        from inventory.views import _validate_server_access
-        result = _validate_server_access(self.user, 'dev')
-        self.assertEqual(result, ['srv01'])
+    def test_validate_explicit_server_names_mixed_raises_403(self):
+        """Mixed server_names (some unauthorized) raises PermissionDenied."""
+        from rest_framework.exceptions import PermissionDenied
+        from inventory.views import _validate_explicit_server_filter
+        with self.assertRaises(PermissionDenied) as ctx:
+            _validate_explicit_server_filter({'srv01'}, self.user, 'dev', server_names=['srv01', 'srv99'])
+        self.assertIn('srv99', str(ctx.exception.detail))
 
 
 class ResponseFormatTests(BaseMultiTableViewTest):
@@ -653,11 +630,6 @@ class ResponseFormatTests(BaseMultiTableViewTest):
     def test_servers_response_format(self, mock_service_cls):
         """Response format: { "data": [...] } for servers."""
         mock_svc = mock_service_cls.return_value
-        mock_svc.list_targets_for_user.return_value = (
-            [{'name': 'srv01', 'environment': 'dev', 'target_type': 'server', 'metadata': None}],
-            1,
-            False,
-        )
         mock_svc.list_servers.return_value = [
             {'id': 'srv01', 'name': 'srv01', 'environment': 'dev', 'engine_type': 'oracle'},
         ]

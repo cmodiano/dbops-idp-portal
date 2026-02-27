@@ -7,9 +7,10 @@ import { useState } from 'react';
 import { Table, Button, Space, Avatar, Tag, Tooltip, App } from 'antd';
 import type { TableProps } from 'antd';
 import { ReloadOutlined, ApiOutlined, EditOutlined, DeleteOutlined, SyncOutlined } from '@ant-design/icons';
-import type { IntegrationListItem, IntegrationStatusType } from '../../types/api';
+import type { IntegrationListItem, IntegrationStatusType, HealthStatus } from '../../types/api';
 import { AUTH_FLOW_LABELS } from '../../types/api';
 import { getIconUrl } from '../../utils/iconUrl';
+import { HEALTH_CONFIG } from '../../utils/healthConfig';
 import { validateIntegration, validateAllIntegrations } from '../../services/integrations_service';
 
 // Statut intégration (admin) — domaine distinct, config locale justifiée (SOLID-FE-10, Story 48.5 2026-02-26).
@@ -22,6 +23,13 @@ const STATUS_CONFIG: Record<string, { color: string; text: string }> = {
   invalid: { color: 'error', text: 'Invalide' },
   deprecated: { color: 'warning', text: 'Déprécié' },
 };
+
+function buildHealthTooltip(record: IntegrationListItem): string {
+  if (!record.health_checked_at) return 'Jamais vérifié';
+  const date = new Date(record.health_checked_at).toLocaleString('fr-CA');
+  const base = `Dernière vérification : ${date}`;
+  return record.health_error_message ? `${base}\nErreur : ${record.health_error_message}` : base;
+}
 
 export interface IntegrationsTableProps {
   dataSource: IntegrationListItem[];
@@ -150,9 +158,27 @@ export function IntegrationsTable({
       },
     },
     {
+      title: 'Santé',
+      key: 'health_status',
+      width: 110,
+      render: (_: unknown, record: IntegrationListItem) => {
+        const status: HealthStatus = record.health_status ?? 'unknown';
+        const cfg = HEALTH_CONFIG[status];
+        return (
+          <Tooltip title={buildHealthTooltip(record)}>
+            <Tag color={cfg.color} aria-label={cfg.ariaLabel}>
+              {cfg.text}
+            </Tag>
+          </Tooltip>
+        );
+      },
+    },
+    {
       title: 'Auth Flow',
       dataIndex: 'auth_flow',
       key: 'auth_flow',
+      width: 160,
+      ellipsis: true,
       render: (flow: string | null) => (
         flow ? <Tag color="blue">{AUTH_FLOW_LABELS[flow as keyof typeof AUTH_FLOW_LABELS] || flow}</Tag> : '—'
       ),
@@ -161,6 +187,7 @@ export function IntegrationsTable({
       title: 'URL',
       dataIndex: 'base_url',
       key: 'base_url',
+      width: 200,
       ellipsis: true,
       render: (url: string) => truncateUrl(url),
       sorter: (a, b) => a.base_url.localeCompare(b.base_url),

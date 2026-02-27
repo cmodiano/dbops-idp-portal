@@ -75,7 +75,6 @@ class InventoryService:
         # at call time (Python resolves self.list_x via instance __dict__ first).
         self.permission_aggregator = RBACPermissionAggregator(
             list_environments_fn=lambda: self.list_environments(),
-            get_default_environments_fn=lambda: self.get_default_environments(),
         )
         self.target_loader = TargetLoader(
             query_executor=self.query_executor,
@@ -188,23 +187,112 @@ class InventoryService:
     def _list_targets_from_db_schema(self, integration: Any, environment: str | None = None,
                                       search: str | None = None, target_type: str | None = None,
                                       page: int = 1, page_size: int = 25) -> tuple[list[dict[str, Any]], int]:
-        """List targets from DB schema inventory."""
+        """List targets from DB schema inventory. Uses config column mapping when available."""
         correlation_id = get_correlation_id()
         config = integration.get_config() or {}
+
+        # Multi-table (entities): use list_servers instead of flat table — avoids INVENTORY_TABLE default
+        mapper = InventoryMapper(config)
+        if mapper.is_multi_table:
+            return self._list_targets_from_multi_table(
+                mapper, environment, search, target_type, page, page_size, correlation_id
+            )
+
+        # Flat table path
         schema_name = config.get('schema') or config.get('db_schema') or 'DBOPS_INVENTORY'
-        table_name = config.get('table') or config.get('table_view') or 'INVENTORY_TABLE'
+        flat_table = config.get('flat_table')
+        if isinstance(flat_table, dict):
+            raw_table = flat_table.get('table')
+            if not isinstance(raw_table, str) or not raw_table.strip():
+                raise InventoryServiceError(
+                    "flat_table.table must be a non-empty string"
+                )
+            columns = flat_table.get('columns') or {}
+            if not isinstance(columns, dict):
+                raise InventoryServiceError(
+                    "flat_table.columns must be a dict"
+                )
+            table_or_synonym = (
+                f"{schema_name}.{raw_table}" if '.' not in raw_table else raw_table
+            )
+            column_mapping = {
+                'name': columns.get('name', 'NAME'),
+                'environment': columns.get('environment', 'ENVIRONMENT'),
+                'type': columns.get('type', 'TYPE'),
+            }
+        else:
+            table_name = config.get('table') or config.get('table_view') or 'INVENTORY_TABLE'
+            if not isinstance(table_name, str):
+                raise InventoryServiceError(
+                    "config table/table_view must be a string"
+                )
+            table_or_synonym = (
+                f"{schema_name}.{table_name}" if '.' not in table_name else table_name
+            )
+            column_mapping = None
 
         logger.info(
             "reading_db_schema_inventory",
-            schema=schema_name,
-            table=table_name,
+            table=table_or_synonym,
+            has_mapping=column_mapping is not None,
             correlation_id=correlation_id
         )
 
         return self.query_executor.read_oracle_inventory(
-            f"{schema_name}.{table_name}",
-            environment, search, target_type, page, page_size
+            table_or_synonym,
+            environment, search, target_type, page, page_size,
+            column_mapping=column_mapping,
         )
+
+    def _list_targets_from_multi_table(
+        self,
+        mapper: InventoryMapper,
+        environment: str | None,
+        search: str | None,
+        target_type: str | None,
+        page: int,
+        page_size: int,
+        correlation_id: str | None,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Build targets from multi-table entities (servers). Used when config has entities.servers."""
+        try:
+            servers = self.query_executor.read_servers(environment=environment)
+        except InventoryServiceError as e:
+            logger.warning(
+                "list_targets_from_multi_table_read_servers_failed",
+                error=str(e),
+                correlation_id=correlation_id,
+            )
+            raise
+
+        all_targets: list[dict[str, Any]] = []
+        for s in servers:
+            all_targets.append({
+                'name': s.get('name', ''),
+                'environment': s.get('environment', ''),
+                'target_type': 'server',
+                'metadata': None,
+            })
+
+        if search:
+            search_upper = search.upper()
+            all_targets = [t for t in all_targets if search_upper in (t.get('name') or '').upper()]
+
+        if target_type:
+            type_lower = target_type.lower()
+            all_targets = [t for t in all_targets if (t.get('target_type') or '').lower() == type_lower]
+
+        total = len(all_targets)
+        start = (page - 1) * page_size
+        page_results = all_targets[start : start + page_size]
+
+        logger.info(
+            "list_targets_from_multi_table",
+            total=total,
+            returned=len(page_results),
+            correlation_id=correlation_id,
+        )
+        return page_results, total
 
     def _list_targets_from_fallback(self, environment: str | None = None,
                                      search: str | None = None, target_type: str | None = None,
@@ -653,8 +741,10 @@ class InventoryService:
         """
         List distinct environments from inventory.
 
+        Uses SELECT DISTINCT for efficiency instead of loading all targets.
+
         Returns:
-            List of distinct environment values
+            Sorted list of distinct environment values
         """
         correlation_id = get_correlation_id()
 
@@ -669,23 +759,7 @@ class InventoryService:
             )
             return cached_result
 
-        self.source_resolver.get_active_inventory_integration()
-
-        targets, _ = self.list_targets(
-            environment=None,
-            search=None,
-            target_type=None,
-            page=1,
-            page_size=MAX_FLAT_TABLE_RESULTS
-        )
-
-        environments = set()
-        for target in targets:
-            env = target.get('environment')
-            if env:
-                environments.add(env)
-
-        result = sorted(environments)
+        result = self.query_executor.read_distinct_environments()
         _environments_cache[cache_key] = result
 
         logger.info(
@@ -698,8 +772,8 @@ class InventoryService:
         return result
 
     def get_default_environments(self) -> list[str]:
-        """Get default environment values as fallback."""
-        return ['dev', 'staging', 'prod']
+        """Get default environment values as fallback. Returns empty list — inventory is the only source of truth."""
+        return []
 
     # --- Maintenance window ---
 

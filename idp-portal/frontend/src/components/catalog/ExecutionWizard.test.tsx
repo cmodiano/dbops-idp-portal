@@ -39,9 +39,9 @@ vi.mock('../../contexts/AuthContext', () => ({
 
 // Mock environments data (always needed for environment selector) - use French labels to match UI
 const mockEnvironments: InventoryItem[] = [
-  { id: 'dev', name: 'Développement', environment: null },
-  { id: 'staging', name: 'Staging', environment: null },
-  { id: 'prod', name: 'Production', environment: null },
+  { id: 'developpement', name: 'Développement', environment: null },
+  { id: 'certification', name: 'Certification', environment: null },
+  { id: 'production', name: 'Production', environment: null },
 ];
 
 // Mock the execution service
@@ -50,9 +50,9 @@ vi.mock('../../services/execution_service', () => ({
   fetchInventoryItems: vi.fn().mockImplementation(async (type: string) => {
     if (type === 'environments') {
       return [
-        { id: 'dev', name: 'Développement', environment: null },
-        { id: 'staging', name: 'Staging', environment: null },
-        { id: 'prod', name: 'Production', environment: null },
+        { id: 'developpement', name: 'Développement', environment: null },
+        { id: 'certification', name: 'Certification', environment: null },
+        { id: 'production', name: 'Production', environment: null },
       ];
     }
     return [];
@@ -122,9 +122,9 @@ const mockAction: CatalogActionDetail = {
     required: ['pdb_name'],
   },
   impact_rules: {
-    DEV: { level: 'low', criteria: null },
-    STAGING: { level: 'medium', criteria: null },
-    PROD: { level: 'high', criteria: null },
+    developpement: { level: 'low', criteria: null },
+    certification: { level: 'medium', criteria: null },
+    production: { level: 'high', criteria: null },
   },
   impact_level: null,
   default_impact_level: 'medium',
@@ -132,9 +132,9 @@ const mockAction: CatalogActionDetail = {
   created_at: '2026-01-29T00:00:00Z',
   tags: ['oracle', 'provisioning'],
   change_type_config: {
-    DEV: { required: false, change_model_code: null },
-    STAGING: { required: false, change_model_code: null },
-    PROD: { required: true, change_model_code: 'CHG001' },
+    DEVELOPPEMENT: { required: false, change_model_code: null },
+    CERTIFICATION: { required: false, change_model_code: null },
+    PRODUCTION: { required: true, change_model_code: 'CHG001' },
   },
   execution_count: 5,
   // Story 13.2: Set to false to test legacy environment selection behavior
@@ -145,7 +145,7 @@ describe('ExecutionWizard', () => {
   const defaultProps = {
     open: true,
     action: mockAction,
-    allowedEnvironments: ['dev', 'staging', 'prod'],
+    allowedEnvironments: ['developpement', 'certification', 'production'],
     onCancel: vi.fn(),
     onSuccess: vi.fn(),
   };
@@ -281,7 +281,7 @@ describe('ExecutionWizard', () => {
 
     it('only shows allowed environments', async () => {
       render(
-        <ExecutionWizard {...defaultProps} allowedEnvironments={['dev', 'staging']} />,
+        <ExecutionWizard {...defaultProps} allowedEnvironments={['developpement', 'certification']} />,
         { wrapper: TestWrapper }
       );
 
@@ -296,7 +296,7 @@ describe('ExecutionWizard', () => {
       await waitFor(() => {
         expect(screen.getByText('Développement')).toBeInTheDocument();
       });
-      expect(screen.getByText('Staging')).toBeInTheDocument();
+      expect(screen.getByText('Certification')).toBeInTheDocument();
       // Prod should not be visible (not in allowed list)
     });
   });
@@ -368,7 +368,7 @@ describe('ExecutionWizard', () => {
             status: 'published',
           },
           can_execute: true,
-          allowed_environments: ['dev'],
+          allowed_environments: ['developpement'],
         })
         .mockResolvedValueOnce({
           data: {
@@ -378,14 +378,14 @@ describe('ExecutionWizard', () => {
             status: 'published',
           },
           can_execute: true,
-          allowed_environments: ['dev'],
+          allowed_environments: ['developpement'],
         });
 
       render(
         <ExecutionWizard
           {...defaultProps}
           action={workflowAction}
-          allowedEnvironments={['dev']}
+          allowedEnvironments={['developpement']}
         />,
         { wrapper: TestWrapper }
       );
@@ -443,14 +443,14 @@ describe('ExecutionWizard', () => {
           status: 'published',
         },
         can_execute: true,
-        allowed_environments: ['dev'],
+        allowed_environments: ['developpement'],
       });
 
       render(
         <ExecutionWizard
           {...defaultProps}
           action={workflowAction}
-          allowedEnvironments={['dev']}
+          allowedEnvironments={['developpement']}
         />,
         { wrapper: TestWrapper }
       );
@@ -613,8 +613,8 @@ describe('ExecutionWizard', () => {
 
     // Mock database items
     const mockDatabaseItems: InventoryItem[] = [
-      { id: 'db1', name: 'Database 1', environment: 'dev' },
-      { id: 'db2', name: 'Database 2', environment: 'prod' },
+      { id: 'db1', name: 'Database 1', environment: 'developpement' },
+      { id: 'db2', name: 'Database 2', environment: 'production' },
     ];
 
     beforeEach(() => {
@@ -655,7 +655,7 @@ describe('ExecutionWizard', () => {
       });
 
       // Verify databases were fetched
-      expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', expect.objectContaining({ server_names: [] }));
+      expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'developpement', expect.objectContaining({ server_names: [] }));
     });
 
     it('displays warning badge when inventory unavailable (503)', async () => {
@@ -678,7 +678,7 @@ describe('ExecutionWizard', () => {
       };
 
       const cachedServerItems: InventoryItem[] = [
-        { id: 'srv1', name: 'Server 1', environment: 'dev' },
+        { id: 'srv1', name: 'Server 1', environment: 'developpement' },
       ];
       const error503 = new Error('Inventaire temporairement indisponible — dernières valeurs en cache');
       (error503 as Error & { code: string }).code = 'INVENTORY_UNAVAILABLE';
@@ -730,7 +730,7 @@ describe('ExecutionWizard', () => {
       };
 
       const cachedItems: InventoryItem[] = [
-        { id: 'srv_cached', name: 'Cached Server', environment: 'dev' },
+        { id: 'srv_cached', name: 'Cached Server', environment: 'developpement' },
       ];
 
       // Set up sessionStorage cache (Story 22.17: migrated from localStorage)
@@ -793,7 +793,7 @@ describe('ExecutionWizard', () => {
 
       // Check that fetchInventoryItems was called with databases (caching is internal to the service)
       await waitFor(() => {
-        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', expect.objectContaining({ server_names: [] }));
+        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'developpement', expect.objectContaining({ server_names: [] }));
       });
     });
 
@@ -849,7 +849,7 @@ describe('ExecutionWizard', () => {
     // Story 22.17: Verify sessionStorage is the storage mechanism used
     it('uses sessionStorage (not localStorage) for inventory fallback (Story 22.17, AC1)', async () => {
       const cachedItems: InventoryItem[] = [
-        { id: 'db_session', name: 'Session DB', environment: 'dev' },
+        { id: 'db_session', name: 'Session DB', environment: 'developpement' },
       ];
 
       // Write to sessionStorage (simulating service behavior)
@@ -872,7 +872,7 @@ describe('ExecutionWizard', () => {
     // Story 22.17, AC2: Verify expired cache (>5 min) is rejected
     it('rejects sessionStorage cache older than 5 minutes (AC2)', async () => {
       const cachedItems: InventoryItem[] = [
-        { id: 'db_expired', name: 'Expired DB', environment: 'dev' },
+        { id: 'db_expired', name: 'Expired DB', environment: 'developpement' },
       ];
 
       // Create expired cache (6 minutes old)
@@ -904,7 +904,7 @@ describe('ExecutionWizard', () => {
 
       // Should NOT use expired cache - error should propagate without cache fallback
       await waitFor(() => {
-        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', expect.objectContaining({ server_names: [] }));
+        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'developpement', expect.objectContaining({ server_names: [] }));
       });
 
       // Verify error is shown (no cache fallback for expired data)
@@ -933,7 +933,7 @@ describe('ExecutionWizard', () => {
       await user.click(screen.getByRole('button', { name: /suivant/i }));
 
       await waitFor(() => {
-        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', expect.objectContaining({ server_names: [] }));
+        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'developpement', expect.objectContaining({ server_names: [] }));
       });
 
       // Verify no sessionStorage.setItem calls for inventory_cache_databases_dev
@@ -950,7 +950,7 @@ describe('ExecutionWizard', () => {
       // Simulate old localStorage cache from before migration
       localStorage.setItem(
         'inventory_cache_databases_dev',
-        JSON.stringify({ items: [{ id: 'old', name: 'Old DB', environment: 'dev' }], timestamp: Date.now() })
+        JSON.stringify({ items: [{ id: 'old', name: 'Old DB', environment: 'developpement' }], timestamp: Date.now() })
       );
 
       vi.mocked(fetchInventoryItems).mockImplementation(async (type: string) => {
@@ -971,7 +971,7 @@ describe('ExecutionWizard', () => {
       await user.click(screen.getByRole('button', { name: /suivant/i }));
 
       await waitFor(() => {
-        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'dev', expect.objectContaining({ server_names: [] }));
+        expect(fetchInventoryItems).toHaveBeenCalledWith('databases', 'developpement', expect.objectContaining({ server_names: [] }));
       });
 
       // Verify old localStorage data still exists (migration doesn't auto-clean)
@@ -1083,7 +1083,7 @@ describe('ExecutionWizard', () => {
   describe('Environment Auto-Selection (Story 7.2, Task 5.2)', () => {
     it('auto-selects environment when only one is allowed', async () => {
       render(
-        <ExecutionWizard {...defaultProps} allowedEnvironments={['dev']} />,
+        <ExecutionWizard {...defaultProps} allowedEnvironments={['developpement']} />,
         { wrapper: TestWrapper }
       );
 
@@ -1099,7 +1099,7 @@ describe('ExecutionWizard', () => {
 
     it('shows auto-selection message when environment is pre-selected', async () => {
       render(
-        <ExecutionWizard {...defaultProps} allowedEnvironments={['dev']} />,
+        <ExecutionWizard {...defaultProps} allowedEnvironments={['developpement']} />,
         { wrapper: TestWrapper }
       );
 
@@ -1110,7 +1110,7 @@ describe('ExecutionWizard', () => {
 
     it('does not auto-select when multiple environments are allowed', async () => {
       render(
-        <ExecutionWizard {...defaultProps} allowedEnvironments={['dev', 'staging']} />,
+        <ExecutionWizard {...defaultProps} allowedEnvironments={['developpement', 'certification']} />,
         { wrapper: TestWrapper }
       );
 
@@ -1170,7 +1170,7 @@ describe('ExecutionWizard', () => {
       render(
         <ExecutionWizard
           {...defaultProps}
-          initialParams={{ actionId: 1, environment: 'staging' }}
+          initialParams={{ actionId: 1, environment: 'certification' }}
         />,
         { wrapper: TestWrapper }
       );
@@ -1182,7 +1182,7 @@ describe('ExecutionWizard', () => {
 
       // The staging label should be visible in the rendered output
       await waitFor(() => {
-        expect(screen.getByText('Staging')).toBeInTheDocument();
+        expect(screen.getByText('Certification')).toBeInTheDocument();
       });
     });
 
@@ -1199,7 +1199,7 @@ describe('ExecutionWizard', () => {
           initialParams={{
             actionId: 1,
             targetNames: ['srv-dev-01', 'srv-dev-02'],
-            environment: 'dev',
+            environment: 'developpement',
           }}
         />,
         { wrapper: TestWrapper }
@@ -1223,7 +1223,7 @@ describe('ExecutionWizard', () => {
           {...defaultProps}
           initialParams={{
             actionId: 1,
-            environment: 'dev',
+            environment: 'developpement',
             parameters: { pdb_name: 'test_pdb', size_gb: 50 },
           }}
         />,
@@ -1258,7 +1258,7 @@ describe('ExecutionWizard', () => {
           {...defaultProps}
           initialParams={{
             actionId: 1,
-            environment: 'dev',
+            environment: 'developpement',
             parameters: { pdb_name: 'original_name' },
           }}
         />,

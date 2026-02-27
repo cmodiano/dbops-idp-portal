@@ -11,7 +11,7 @@ from django.dispatch import receiver
 from core.models import AuditActionType, AuditEntityType
 from core.services import AuditService
 from core.middleware import get_correlation_id
-from integrations.models import IntegrationTypeCatalogue, IntegrationAction
+from integrations.models import Integration, IntegrationTypeCatalogue, IntegrationAction
 
 logger = structlog.get_logger(__name__)
 
@@ -32,8 +32,10 @@ def _get_user_id_from_context() -> str:
 
 
 @receiver(post_save, sender=IntegrationTypeCatalogue)
-def audit_integration_type_catalogue(sender, instance, created, **kwargs):
+def audit_integration_type_catalogue(sender, instance, created, raw, **kwargs):
     """Log audit entry when IntegrationTypeCatalogue is created or updated."""
+    if raw:
+        return  # Skip during fixture load (loaddata) — avoids CK_AUDIT_LOG_ENTITY_TYPE violation
     action_type = (
         AuditActionType.INTEGRATION_TYPE_CREATED if created
         else AuditActionType.INTEGRATION_TYPE_UPDATED
@@ -76,8 +78,10 @@ def audit_integration_type_catalogue(sender, instance, created, **kwargs):
 
 
 @receiver(post_save, sender=IntegrationAction)
-def audit_integration_action(sender, instance, created, **kwargs):
+def audit_integration_action(sender, instance, created, raw, **kwargs):
     """Log audit entry when IntegrationAction is created or updated."""
+    if raw:
+        return  # Skip during fixture load (loaddata) — avoids CK_AUDIT_LOG_ENTITY_TYPE violation
     action_type = (
         AuditActionType.INTEGRATION_ACTION_CREATED if created
         else AuditActionType.INTEGRATION_ACTION_UPDATED
@@ -105,3 +109,23 @@ def audit_integration_action(sender, instance, created, **kwargs):
             error=str(exc),
         )
         raise
+
+
+# ---------------------------------------------------------------------------
+# Story 51.1: Health check à la sauvegarde d'une Integration
+# ---------------------------------------------------------------------------
+
+@receiver(post_save, sender=Integration)
+def trigger_health_check_on_save(sender, instance, created, raw, **kwargs):
+    """Déclenche un health check asynchrone à chaque sauvegarde d'une Integration.
+
+    ⚠️ Utilise .delay() pour éviter tout blocage de la sauvegarde.
+    ⚠️ Ignore les fixtures/migrations via le flag `raw=True`.
+    ⚠️ Import local pour éviter un import circulaire avec Celery.
+    """
+    if raw:
+        # Ignore les fixtures de test et les opérations loaddata/migrate
+        return
+    from django.db import transaction
+    from integrations.tasks import run_integration_health_check  # noqa: PLC0415 — import local anti-circulaire
+    transaction.on_commit(lambda: run_integration_health_check.delay(instance.id))

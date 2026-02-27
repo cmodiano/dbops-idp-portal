@@ -187,6 +187,223 @@ class TestSAMLCallbackView(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.data['error']['code'], 'SAML_NOT_AUTHENTICATED')
 
+    @patch('idp_auth.views.AuditService')
+    @patch('idp_auth.views.AuthService')
+    @patch('idp_auth.views.Profile')
+    @patch('idp_auth.views.create_saml_auth')
+    def test_saml_callback_extracts_email_from_mail_attribute(
+        self, mock_create_auth, mock_profile_model, mock_auth_service, mock_audit
+    ):
+        """Story 50.1 AC6: Email extrait depuis l'attribut 'mail'."""
+        from idp_auth.views import SAMLCallbackView
+
+        mock_auth = MagicMock()
+        mock_auth.get_errors.return_value = []
+        mock_auth.is_authenticated.return_value = True
+        mock_auth.get_nameid.return_value = 'testuser@example.com'
+        mock_auth.get_attributes.return_value = {
+            'username': ['testuser'],
+            'displayName': ['Test User'],
+            'groups': ['CN=DBA,OU=Groups,DC=example,DC=com'],
+            'mail': ['testuser@example.com'],
+        }
+        mock_create_auth.return_value = mock_auth
+
+        mock_profile = MagicMock()
+        mock_profile.name = 'dba'
+        mock_profile_model.objects.find_by_ad_groups.return_value = [mock_profile]
+
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_user.username = 'testuser'
+        mock_user.profile = 'dba'
+        mock_auth_service.return_value.create_or_update_user.return_value = mock_user
+
+        request = self.factory.post(
+            '/api/v1/auth/saml/callback',
+            data={'SAMLResponse': 'base64data'}
+        )
+        view = SAMLCallbackView.as_view()
+        view(request)
+
+        mock_auth_service.return_value.create_or_update_user.assert_called_once_with(
+            username='testuser',
+            display_name='Test User',
+            profile='dba',
+            saml_subject='testuser@example.com',
+            email='testuser@example.com',
+        )
+
+    @patch('idp_auth.views.AuditService')
+    @patch('idp_auth.views.AuthService')
+    @patch('idp_auth.views.Profile')
+    @patch('idp_auth.views.create_saml_auth')
+    def test_saml_callback_extracts_email_from_email_attribute(
+        self, mock_create_auth, mock_profile_model, mock_auth_service, mock_audit
+    ):
+        """Story 50.1 AC6: Email extrait depuis l'attribut alternatif 'email'."""
+        from idp_auth.views import SAMLCallbackView
+
+        mock_auth = MagicMock()
+        mock_auth.get_errors.return_value = []
+        mock_auth.is_authenticated.return_value = True
+        mock_auth.get_nameid.return_value = 'altuser@example.com'
+        mock_auth.get_attributes.return_value = {
+            'username': ['altuser'],
+            'groups': ['CN=DBA,OU=Groups,DC=example,DC=com'],
+            'email': ['altuser@example.com'],  # clé alternative
+        }
+        mock_create_auth.return_value = mock_auth
+
+        mock_profile = MagicMock()
+        mock_profile.name = 'dba'
+        mock_profile_model.objects.find_by_ad_groups.return_value = [mock_profile]
+
+        mock_user = MagicMock()
+        mock_user.id = 2
+        mock_user.username = 'altuser'
+        mock_user.profile = 'dba'
+        mock_auth_service.return_value.create_or_update_user.return_value = mock_user
+
+        request = self.factory.post(
+            '/api/v1/auth/saml/callback',
+            data={'SAMLResponse': 'base64data'}
+        )
+        view = SAMLCallbackView.as_view()
+        view(request)
+
+        call_kwargs = mock_auth_service.return_value.create_or_update_user.call_args
+        self.assertEqual(call_kwargs.kwargs.get('email'), 'altuser@example.com')
+
+    @patch('idp_auth.views.AuditService')
+    @patch('idp_auth.views.AuthService')
+    @patch('idp_auth.views.Profile')
+    @patch('idp_auth.views.create_saml_auth')
+    def test_saml_callback_no_email_attribute_passes_none(
+        self, mock_create_auth, mock_profile_model, mock_auth_service, mock_audit
+    ):
+        """Story 50.1 AC7: Sans attribut email, email=None est passé, aucune erreur."""
+        from idp_auth.views import SAMLCallbackView
+
+        mock_auth = MagicMock()
+        mock_auth.get_errors.return_value = []
+        mock_auth.is_authenticated.return_value = True
+        mock_auth.get_nameid.return_value = 'noemailer@example.com'
+        mock_auth.get_attributes.return_value = {
+            'username': ['noemailer'],
+            'groups': ['CN=DBA,OU=Groups,DC=example,DC=com'],
+            # pas d'attribut email
+        }
+        mock_create_auth.return_value = mock_auth
+
+        mock_profile = MagicMock()
+        mock_profile.name = 'dba'
+        mock_profile_model.objects.find_by_ad_groups.return_value = [mock_profile]
+
+        mock_user = MagicMock()
+        mock_user.id = 3
+        mock_user.username = 'noemailer'
+        mock_user.profile = 'dba'
+        mock_auth_service.return_value.create_or_update_user.return_value = mock_user
+
+        request = self.factory.post(
+            '/api/v1/auth/saml/callback',
+            data={'SAMLResponse': 'base64data'}
+        )
+        view = SAMLCallbackView.as_view()
+        response = view(request)
+
+        # Pas d'erreur levée
+        self.assertEqual(response.status_code, 302)
+        call_kwargs = mock_auth_service.return_value.create_or_update_user.call_args
+        self.assertIsNone(call_kwargs.kwargs.get('email'))
+
+    @patch('idp_auth.views.AuditService')
+    @patch('idp_auth.views.AuthService')
+    @patch('idp_auth.views.Profile')
+    @patch('idp_auth.views.create_saml_auth')
+    def test_saml_callback_extracts_email_from_emailAddress_attribute(
+        self, mock_create_auth, mock_profile_model, mock_auth_service, mock_audit
+    ):
+        """Story 50.1 AC6: Email extrait depuis l'attribut alternatif 'emailAddress'."""
+        from idp_auth.views import SAMLCallbackView
+
+        mock_auth = MagicMock()
+        mock_auth.get_errors.return_value = []
+        mock_auth.is_authenticated.return_value = True
+        mock_auth.get_nameid.return_value = 'addruser@example.com'
+        mock_auth.get_attributes.return_value = {
+            'username': ['addruser'],
+            'groups': ['CN=DBA,OU=Groups,DC=example,DC=com'],
+            'emailAddress': ['addruser@example.com'],  # clé emailAddress
+        }
+        mock_create_auth.return_value = mock_auth
+
+        mock_profile = MagicMock()
+        mock_profile.name = 'dba'
+        mock_profile_model.objects.find_by_ad_groups.return_value = [mock_profile]
+
+        mock_user = MagicMock()
+        mock_user.id = 4
+        mock_user.username = 'addruser'
+        mock_user.profile = 'dba'
+        mock_auth_service.return_value.create_or_update_user.return_value = mock_user
+
+        request = self.factory.post(
+            '/api/v1/auth/saml/callback',
+            data={'SAMLResponse': 'base64data'}
+        )
+        view = SAMLCallbackView.as_view()
+        view(request)
+
+        call_kwargs = mock_auth_service.return_value.create_or_update_user.call_args
+        self.assertEqual(call_kwargs.kwargs.get('email'), 'addruser@example.com')
+
+    @patch('idp_auth.views.AuditService')
+    @patch('idp_auth.views.AuthService')
+    @patch('idp_auth.views.Profile')
+    @patch('idp_auth.views.create_saml_auth')
+    def test_saml_callback_extracts_email_from_wsfed_claim(
+        self, mock_create_auth, mock_profile_model, mock_auth_service, mock_audit
+    ):
+        """Story 50.1 AC6: Email extrait depuis le claim WS-Fed emailaddress."""
+        from idp_auth.views import SAMLCallbackView
+
+        mock_auth = MagicMock()
+        mock_auth.get_errors.return_value = []
+        mock_auth.is_authenticated.return_value = True
+        mock_auth.get_nameid.return_value = 'wsfeduser@example.com'
+        mock_auth.get_attributes.return_value = {
+            'username': ['wsfeduser'],
+            'groups': ['CN=DBA,OU=Groups,DC=example,DC=com'],
+            'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress': [
+                'wsfeduser@example.com'
+            ],
+        }
+        mock_create_auth.return_value = mock_auth
+
+        mock_profile = MagicMock()
+        mock_profile.name = 'dba'
+        mock_profile_model.objects.find_by_ad_groups.return_value = [mock_profile]
+
+        mock_user = MagicMock()
+        mock_user.id = 5
+        mock_user.username = 'wsfeduser'
+        mock_user.profile = 'dba'
+        mock_auth_service.return_value.create_or_update_user.return_value = mock_user
+
+        request = self.factory.post(
+            '/api/v1/auth/saml/callback',
+            data={'SAMLResponse': 'base64data'}
+        )
+        view = SAMLCallbackView.as_view()
+        view(request)
+
+        call_kwargs = mock_auth_service.return_value.create_or_update_user.call_args
+        self.assertEqual(
+            call_kwargs.kwargs.get('email'), 'wsfeduser@example.com'
+        )
+
     @patch('idp_auth.views.Profile')
     @patch('idp_auth.views.create_saml_auth')
     def test_saml_callback_no_profile_returns_403(self, mock_create_auth, mock_profile_model):

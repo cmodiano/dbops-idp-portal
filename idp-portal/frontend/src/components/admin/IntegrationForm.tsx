@@ -7,16 +7,19 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Form, Input, Modal, Alert, Select, Avatar, Space, Button, Upload, App, Tag } from 'antd';
+import { Form, Input, Modal, Alert, Select, Avatar, Space, Button, Upload, App, Tag, Tooltip } from 'antd';
 import { useAuth } from '../../contexts/AuthContext';
 import type { UploadFile } from 'antd';
-import { UploadOutlined, ApiOutlined, InfoCircleOutlined, ExclamationCircleOutlined, WarningOutlined } from '@ant-design/icons';
-import type { AuthFlow, IntegrationCreate, IntegrationUpdate, IntegrationResponse } from '../../types/api';
+import { UploadOutlined, ApiOutlined, InfoCircleOutlined, ExclamationCircleOutlined, WarningOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import type { AuthFlow, IntegrationCreate, IntegrationUpdate, IntegrationResponse, HealthStatus, TestConnectionResponse } from '../../types/api';
 import { AUTH_FLOW_LABELS } from '../../types/api';
 import { getIconUrl } from '../../utils/iconUrl';
+import { HEALTH_CONFIG } from '../../utils/healthConfig';
 import { useIntegrationTypes } from '../../hooks/useIntegrationTypes';
 import { useVaultIntegrations } from '../../hooks/useVaultIntegrations';
 import { AvailableActionsPanel } from './AvailableActionsPanel';
+import { testConnection } from '../../services/integrations_service';
+import { ApiError } from '../../services/api_client';
 
 /** Auth flow options for Select (Story 4.9 AC2). */
 const AUTH_FLOW_OPTIONS: { value: AuthFlow; label: string }[] = (
@@ -47,6 +50,8 @@ export interface IntegrationFormProps {
   error?: string | null;
   editIntegration?: IntegrationResponse | null;
   onSuccess?: (integration: IntegrationResponse) => void;
+  /** Story 51.4: Callback pour propager le résultat d'un health check vers la liste parente. */
+  onHealthChecked?: (id: number, result: TestConnectionResponse) => void;
 }
 
 /** URL pattern: must start with http(s):// and have a valid hostname. */
@@ -66,6 +71,7 @@ export function IntegrationForm({
   error,
   editIntegration,
   onSuccess,
+  onHealthChecked,
 }: IntegrationFormProps) {
   const { message } = App.useApp();
   const { accessToken } = useAuth();
@@ -73,6 +79,47 @@ export function IntegrationForm({
   const isEdit = !!editIntegration;
   const [uploadedIconUrl, setUploadedIconUrl] = useState<string | null>(null);
   const [fileList, setFileList] = useState<UploadFile[]>([]);
+
+  // Story 51.4: Local health state (overrides editIntegration values after test)
+  const [localHealth, setLocalHealth] = useState<{
+    status: HealthStatus;
+    checked_at: string | null;
+    error_message: string | null;
+  } | null>(null);
+  const [testLoading, setTestLoading] = useState(false);
+
+  // Story 51.4: Reset local health when modal closes or integration changes
+  useEffect(() => {
+    setLocalHealth(null);
+  }, [open, editIntegration]);
+
+  const healthStatus: HealthStatus = localHealth?.status ?? editIntegration?.health_status ?? 'unknown';
+  const healthCheckedAt = localHealth?.checked_at ?? editIntegration?.health_checked_at ?? null;
+  const healthErrorMessage = localHealth?.error_message ?? editIntegration?.health_error_message ?? null;
+
+  const handleTestConnection = async () => {
+    if (!editIntegration?.id) return;
+    setTestLoading(true);
+    try {
+      const result = await testConnection(editIntegration.id);
+      setLocalHealth({
+        status: result.status,
+        checked_at: result.checked_at,
+        error_message: result.message,
+      });
+      onHealthChecked?.(editIntegration.id, result);
+      if (result.status === 'ok') {
+        message.success('Connexion réussie');
+      } else {
+        message.error(`Connexion échouée : ${result.message ?? 'Erreur inconnue'}`);
+      }
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Impossible de tester la connexion';
+      message.error(msg);
+    } finally {
+      setTestLoading(false);
+    }
+  };
 
   // Story 24.2 AC1: Fetch integration types from backend catalogue
   const { types: integrationTypes, loading: loadingTypes, isFallback } = useIntegrationTypes();
@@ -237,11 +284,14 @@ export function IntegrationForm({
         // Autres flows : config omis (undefined)
       }
       if (isInventoryDb) {
+        const schemaVal = values.schema?.trim() || null;
+        const tableVal = values.table?.trim() || null;
+        let config: Record<string, unknown> = {};
         if (values.config_advanced?.trim()) {
           try {
             const parsed = JSON.parse(values.config_advanced.trim()) as Record<string, unknown>;
             if (typeof parsed === 'object' && parsed !== null && (parsed.entities != null || parsed.flat_table != null)) {
-              (payload as IntegrationCreate).config = parsed;
+              config = { ...parsed };
             } else {
               message.warning('Config JSON : utilisez "entities" (multi-tables) ou "flat_table" (une table). Voir le guide de mapping inventaire.');
               return;
@@ -250,11 +300,14 @@ export function IntegrationForm({
             message.error('Config JSON invalide. Vérifiez la syntaxe.');
             return;
           }
-        } else if (values.schema?.trim() || values.table?.trim()) {
-          (payload as IntegrationCreate).config = {
-            schema: values.schema?.trim() || null,
-            table: values.table?.trim() || null,
-          };
+        }
+        // Always persist schema and table when provided (fix: schema was lost when config_advanced was used)
+        if (schemaVal != null || tableVal != null) {
+          config.schema = schemaVal;
+          config.table = tableVal;
+        }
+        if (Object.keys(config).length > 0) {
+          (payload as IntegrationCreate).config = config;
         }
       }
       const res = await onSubmit(payload);
@@ -375,6 +428,42 @@ export function IntegrationForm({
           style={{ marginBottom: 16 }}
           showIcon
         />
+      )}
+      {/* Story 51.4: Health status section (edit mode only) */}
+      {isEdit && (
+        <Space style={{ marginBottom: 16, width: '100%', justifyContent: 'space-between' }} align="center">
+          <Space align="center">
+            <span>État de santé :</span>
+            <Tooltip
+              title={
+                healthCheckedAt
+                  ? `Dernière vérification : ${new Date(healthCheckedAt).toLocaleString('fr-CA')}${healthErrorMessage ? `\nErreur : ${healthErrorMessage}` : ''}`
+                  : 'Jamais vérifié'
+              }
+            >
+              <Tag
+                color={HEALTH_CONFIG[healthStatus].color}
+                aria-label={HEALTH_CONFIG[healthStatus].ariaLabel}
+              >
+                {HEALTH_CONFIG[healthStatus].text}
+              </Tag>
+            </Tooltip>
+            {healthCheckedAt && (
+              <span style={{ fontSize: 12, color: '#888' }}>
+                {new Date(healthCheckedAt).toLocaleString('fr-CA')}
+              </span>
+            )}
+          </Space>
+          <Button
+            icon={<ThunderboltOutlined />}
+            loading={testLoading}
+            aria-busy={testLoading}
+            onClick={handleTestConnection}
+            size="small"
+          >
+            Tester la connexion
+          </Button>
+        </Space>
       )}
       <Form
         form={form}

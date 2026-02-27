@@ -13,6 +13,7 @@ import type {
   IntegrationValidateAllResponse,
   AAPTemplate,
   AAPTemplatesResponse,
+  TestConnectionResponse,
 } from '../types/api';
 
 /** Story 24.2 AC1: Fetch integration type catalogue from backend.
@@ -76,6 +77,15 @@ export async function validateIntegration(id: number): Promise<IntegrationValida
 /** Story 24.3: Batch validate all integrations. */
 export async function validateAllIntegrations(): Promise<IntegrationValidateAllResponse> {
   return apiFetch<IntegrationValidateAllResponse>('/admin/integrations/validate-all/', {
+    method: 'POST',
+  });
+}
+
+/** Story 51.4: Déclenche un health check synchrone sur une intégration.
+ * POST /admin/integrations/{id}/test-connection/
+ */
+export async function testConnection(id: number): Promise<TestConnectionResponse> {
+  return apiFetch<TestConnectionResponse>(`/admin/integrations/${id}/test-connection/`, {
     method: 'POST',
   });
 }

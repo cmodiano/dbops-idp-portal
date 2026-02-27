@@ -33,14 +33,14 @@ class InventoryEnvironmentsAPITests(TestCase):
     def test_list_environments_success(self, mock_service_class):
         """Test listing environments from inventory."""
         mock_service = MagicMock()
-        mock_service.list_environments.return_value = ['dev', 'staging', 'prod']
+        mock_service.list_environments.return_value = ['developpement', 'certification', 'production']
         mock_service_class.return_value = mock_service
 
         response = self.client.get('/api/v1/inventory/environments/')
-        
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIsInstance(response.data, list)
-        self.assertEqual(response.data, ['dev', 'staging', 'prod'])
+        self.assertEqual(response.data, ['developpement', 'certification', 'production'])
 
     @patch('inventory.views._inventory_service_factory')
     def test_list_environments_empty(self, mock_service_class):
@@ -83,37 +83,29 @@ class InventoryServiceEnvironmentsTests(TestCase):
         from inventory.services import _environments_cache
         _environments_cache.clear()
 
-    @patch('inventory.services.InventoryService.list_targets')
-    def test_list_environments_from_targets(self, mock_list_targets):
-        """Test extracting distinct environments from targets."""
-        mock_list_targets.return_value = (
-            [
-                {'name': 'target1', 'environment': 'dev', 'target_type': 'server'},
-                {'name': 'target2', 'environment': 'staging', 'target_type': 'database'},
-                {'name': 'target3', 'environment': 'dev', 'target_type': 'server'},
-                {'name': 'target4', 'environment': 'prod', 'target_type': 'database'},
-            ],
-            4
-        )
+    def test_list_environments_from_targets(self):
+        """Test extracting distinct environments via SELECT DISTINCT."""
+        mock_executor = MagicMock()
+        mock_executor.read_distinct_environments.return_value = [
+            'certification', 'developpement', 'production',
+        ]
 
         service = InventoryService()
+        service.query_executor = mock_executor
         environments = service.list_environments()
 
-        self.assertEqual(sorted(environments), ['dev', 'prod', 'staging'])
+        self.assertEqual(sorted(environments), ['certification', 'developpement', 'production'])
+        mock_executor.read_distinct_environments.assert_called_once()
 
-    @patch('inventory.services.InventoryService.list_targets')
-    def test_list_environments_normalized(self, mock_list_targets):
+    def test_list_environments_normalized(self):
         """Test environments are returned as-is without normalization."""
-        mock_list_targets.return_value = (
-            [
-                {'name': 'target1', 'environment': 'dev', 'target_type': 'server'},
-                {'name': 'target2', 'environment': 'certif', 'target_type': 'database'},
-                {'name': 'target3', 'environment': 'staging', 'target_type': 'server'},
-            ],
-            3
-        )
+        mock_executor = MagicMock()
+        mock_executor.read_distinct_environments.return_value = [
+            'certif', 'dev', 'staging',
+        ]
 
         service = InventoryService()
+        service.query_executor = mock_executor
         environments = service.list_environments()
 
         # No normalization - raw values returned

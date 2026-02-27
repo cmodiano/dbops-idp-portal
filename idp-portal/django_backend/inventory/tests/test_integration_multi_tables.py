@@ -120,8 +120,16 @@ class InventoryMultiTableIntegrationTests(TestCase):
     @patch('inventory.views.get_user_ad_groups', return_value=['GRP-DBA'])
     @patch('inventory.views._inventory_service_factory')
     def test_full_flow_databases_no_server_filter(self, mock_service_cls, mock_ad_groups, mock_corr_id):
-        """Task 9.4: All databases for environment without server filter."""
+        """Task 9.4: All databases for environment without server filter — RBAC scoped."""
         mock_svc = mock_service_cls.return_value
+        mock_svc.list_targets_for_user.return_value = (
+            [
+                {'name': 'srv01', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
+                {'name': 'srv02', 'environment': 'dev', 'target_type': 'server', 'metadata': None},
+            ],
+            2,
+            False,
+        )
         mock_svc.list_databases.return_value = [
             {'id': 'DB01', 'name': 'DB01', 'environment': 'dev'},
             {'id': 'DB02', 'name': 'DB02', 'environment': 'dev'},
@@ -132,8 +140,8 @@ class InventoryMultiTableIntegrationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(len(data['data']), 2)
-        # No RBAC check when no server filter
-        mock_svc.list_targets_for_user.assert_not_called()
+        # RBAC is always checked — databases scoped to allowed servers
+        mock_svc.list_targets_for_user.assert_called_once()
 
     @patch('inventory.views.get_correlation_id', return_value='int-test-005')
     @patch('inventory.views.get_user_ad_groups', return_value=['GRP-DBA'])

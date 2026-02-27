@@ -22,6 +22,7 @@ import structlog
 
 from adapters.base_adapter import BaseAdapter
 from core.exceptions import ServiceUnavailableError
+from integrations.health_check import HealthCheckResult, HealthCheckStatus, IHealthCheckable
 
 logger = structlog.get_logger(__name__)
 
@@ -65,7 +66,7 @@ def _map_azure_devops_status(state: str, result: str | None) -> str:
     return mapped if mapped is not None else "SUBMITTED"
 
 
-class AzureDevOpsAdapter(BaseAdapter):
+class AzureDevOpsAdapter(BaseAdapter, IHealthCheckable):
     """Adapter for interacting with Azure DevOps Pipelines API v7.1+.
 
     Requires base_url, pipeline_id, and auth_headers to be provided at init.
@@ -79,10 +80,12 @@ class AzureDevOpsAdapter(BaseAdapter):
         base_url: str,
         auth_headers: dict[str, str],
         timeout: float = AZURE_DEVOPS_DEFAULT_TIMEOUT,
+        verify_ssl: bool = False,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.auth_headers = auth_headers
         self.timeout = timeout
+        self.verify_ssl = verify_ssl
 
     # ------------------------------------------------------------------
     # Trigger (launch) — pipeline run
@@ -148,7 +151,7 @@ class AzureDevOpsAdapter(BaseAdapter):
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=self.timeout,
-                verify=False,  # nosec B501  # noqa: S501 — corporate CAs handled externally
+                verify=self.verify_ssl,
             ) as client:
                 response = await client.post(url, json=payload)
                 response.raise_for_status()
@@ -259,7 +262,7 @@ class AzureDevOpsAdapter(BaseAdapter):
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=self.timeout,
-                verify=False,  # nosec B501  # noqa: S501
+                verify=self.verify_ssl,
             ) as client:
                 response = await client.get(url)
                 response.raise_for_status()
@@ -395,7 +398,7 @@ class AzureDevOpsAdapter(BaseAdapter):
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=AZURE_DEVOPS_LOGS_TIMEOUT,
-                verify=False,  # nosec B501  # noqa: S501
+                verify=self.verify_ssl,
             ) as client:
                 # Step 1: Get log listing
                 logs_response = await client.get(logs_list_url)
@@ -591,7 +594,7 @@ class AzureDevOpsAdapter(BaseAdapter):
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=self.timeout,
-                verify=False,  # nosec B501  # noqa: S501
+                verify=self.verify_ssl,
             ) as client:
                 response = await client.patch(
                     url,
@@ -644,3 +647,31 @@ class AzureDevOpsAdapter(BaseAdapter):
             platform_job_id=platform_job_id,
             correlation_id=correlation_id,
         )
+
+    # ------------------------------------------------------------------
+    # Health check — Story 51.1
+    # ------------------------------------------------------------------
+
+    async def health_check(self) -> HealthCheckResult:
+        """Ping Azure DevOps via GET /_apis/?api-version=7.1 et valide l'authentification PAT."""
+        url = f"{self.base_url}/_apis/?api-version={API_VERSION}"
+        try:
+            async with httpx.AsyncClient(
+                headers=self.auth_headers,
+                timeout=self.timeout,
+                verify=self.verify_ssl,
+            ) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+            logger.info("azure_devops_health_check_ok", base_url=self.base_url)
+            return HealthCheckResult(
+                status=HealthCheckStatus.OK,
+                checked_at=datetime.now(tz=timezone.utc),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("azure_devops_health_check_error", base_url=self.base_url, error=str(exc))
+            return HealthCheckResult(
+                status=HealthCheckStatus.ERROR,
+                checked_at=datetime.now(tz=timezone.utc),
+                error_message=str(exc),
+            )

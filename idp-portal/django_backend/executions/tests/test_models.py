@@ -29,12 +29,12 @@ class ExecutionModelTest(TestCase):
         execution = Execution.objects.create(
             action=self.action,
             user=self.user,
-            environment='dev',
+            environment='developpement',
             status='SUBMITTED'
         )
         self.assertEqual(execution.action, self.action)
         self.assertEqual(execution.user, self.user)
-        self.assertEqual(execution.environment, 'dev')
+        self.assertEqual(execution.environment, 'developpement')
         self.assertEqual(execution.status, 'SUBMITTED')
         self.assertIsNotNone(execution.id)
         self.assertIsNotNone(execution.created_at)
@@ -44,7 +44,7 @@ class ExecutionModelTest(TestCase):
         execution = Execution.objects.create(
             action=self.action,
             user=self.user,
-            environment='dev'
+            environment='developpement'
         )
         params = {'database_name': 'testdb', 'schema': 'test'}
         execution.set_parameters(params)
@@ -60,7 +60,7 @@ class ExecutionModelTest(TestCase):
         execution = Execution.objects.create(
             action=self.action,
             user=self.user,
-            environment='prod',
+            environment='production',
             status='PENDING_APPROVAL',
             approved_by=approver,
             approval_comment='Approved for production'
@@ -88,7 +88,7 @@ class ExecutionStepModelTest(TestCase):
         self.execution = Execution.objects.create(
             action=self.action,
             user=self.user,
-            environment='dev'
+            environment='developpement'
         )
 
     def test_create_execution_step(self):
@@ -159,13 +159,13 @@ class ScheduledExecutionModelTest(TestCase):
         scheduled = ScheduledExecution.objects.create(
             action=self.action,
             user=self.user,
-            environment='dev',
+            environment='developpement',
             scheduled_at=timezone.now(),
             status='pending'
         )
         self.assertEqual(scheduled.action, self.action)
         self.assertEqual(scheduled.user, self.user)
-        self.assertEqual(scheduled.environment, 'dev')
+        self.assertEqual(scheduled.environment, 'developpement')
         self.assertEqual(scheduled.status, 'pending')
         self.assertIsNotNone(scheduled.id)
 
@@ -190,7 +190,7 @@ class RecurringPatternModelTest(TestCase):
         self.scheduled = ScheduledExecution.objects.create(
             action=self.action,
             user=self.user,
-            environment='dev',
+            environment='developpement',
             scheduled_at=timezone.now()
         )
 
@@ -262,7 +262,7 @@ class ExecutionWithTargetsTest(TestCase):
         ProfileActionPermission.objects.create(
             profile=self.profile,
             permission_type='ALL',
-            environments_json='["dev", "staging", "prod"]'
+            environments_json='["developpement", "certification", "production"]'
         )
         # Add target permissions (all targets)
         ProfileTargetPermission.objects.create(
@@ -275,7 +275,7 @@ class ExecutionWithTargetsTest(TestCase):
         execution = Execution.objects.create(
             action=self.action,
             user=self.user,
-            environment='dev',
+            environment='developpement',
             status='SUBMITTED'
         )
         params = {'_targets': ['srv-dev-01', 'srv-dev-02'], 'other_param': 'value'}

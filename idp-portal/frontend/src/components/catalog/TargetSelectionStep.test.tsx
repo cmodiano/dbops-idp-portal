@@ -70,7 +70,7 @@ const mockAction = {
 
 const defaultProps: TargetSelectionStepProps = {
   action: mockAction,
-  allowedEnvironments: ['dev', 'staging', 'prod', 'lab', 'qa'],
+  allowedEnvironments: ['developpement', 'certification', 'production', 'lab', 'qa'],
   selectedTargets: [],
   onTargetsChange: vi.fn(),
   targetInputMode: 'list',
@@ -87,7 +87,7 @@ describe('TargetSelectionStep - Story 21.5', () => {
   describe('Environment cache display (AC #1)', () => {
     it('displays environment options from cache', () => {
       const cache: InventoryItem[] = [
-        { id: 'dev', name: 'Développement', environment: null },
+        { id: 'developpement', name: 'Développement', environment: null },
         { id: 'lab', name: 'Lab', environment: null },
         { id: 'qa', name: 'QA', environment: null },
       ];
@@ -131,7 +131,7 @@ describe('TargetSelectionStep - Story 21.5', () => {
         <TestWrapper contextValue={{ ...defaultWizardContext, environmentsCache: cache }}>
           <TargetSelectionStep
             {...defaultProps}
-            allowedEnvironments={['dev', 'staging']}
+            allowedEnvironments={['developpement', 'certification']}
           />
         </TestWrapper>
       );
@@ -144,7 +144,7 @@ describe('TargetSelectionStep - Story 21.5', () => {
   describe('Production warning (AC #5)', () => {
     it('shows production warning for prod environment', () => {
       render(
-        <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'prod', environmentsCache: [] }}>
+        <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'production', environmentsCache: [] }}>
           <TargetSelectionStep {...defaultProps} />
         </TestWrapper>
       );
@@ -162,9 +162,9 @@ describe('TargetSelectionStep - Story 21.5', () => {
       expect(screen.getByText('Avertissement - Environnement Production')).toBeInTheDocument();
     });
 
-    it('shows production warning for production alias', () => {
+    it('shows production warning for prod alias', () => {
       render(
-        <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'production', environmentsCache: [] }}>
+        <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'prod', environmentsCache: [] }}>
           <TargetSelectionStep {...defaultProps} />
         </TestWrapper>
       );
@@ -186,7 +186,7 @@ describe('TargetSelectionStep - Story 21.5', () => {
   describe('Derived environment label (AC #2)', () => {
     it('displays derived environment with correct label for standard env', () => {
       render(
-        <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'dev', environmentsCache: [] }}>
+        <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'developpement', environmentsCache: [] }}>
           <TargetSelectionStep
             {...defaultProps}
             action={{ ...mockAction, requires_target: true }}

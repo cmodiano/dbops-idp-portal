@@ -13,6 +13,7 @@ import structlog
 
 from adapters.base_adapter import BaseAdapter
 from core.exceptions import ServiceUnavailableError
+from integrations.health_check import HealthCheckResult, HealthCheckStatus, IHealthCheckable
 
 logger = structlog.get_logger(__name__)
 
@@ -32,7 +33,7 @@ AAP_DEFAULT_TIMEOUT = 30.0
 AAP_LOGS_TIMEOUT = 60.0  # Longer timeout for potentially large log retrieval
 
 
-class AAPAdapter(BaseAdapter):
+class AAPAdapter(BaseAdapter, IHealthCheckable):
     """Adapter for interacting with Ansible Automation Platform API v2.
 
     Requires base_url and auth_headers to be provided at init.
@@ -525,3 +526,35 @@ class AAPAdapter(BaseAdapter):
             platform_job_id=platform_job_id,
             correlation_id=correlation_id,
         )
+
+    # ------------------------------------------------------------------
+    # Health check — Story 51.1
+    # ------------------------------------------------------------------
+
+    async def health_check(self) -> HealthCheckResult:
+        """Ping AAP via GET /api/v2/ping/ et valide l'authentification.
+
+        Returns:
+            HealthCheckResult avec status ok/error, timestamp, message d'erreur.
+        """
+        url = f"{self.base_url}/api/v2/ping/"
+        try:
+            async with httpx.AsyncClient(
+                headers=self.auth_headers,
+                timeout=self.timeout,
+                verify=self._verify,
+            ) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+            logger.info("aap_health_check_ok", base_url=self.base_url)
+            return HealthCheckResult(
+                status=HealthCheckStatus.OK,
+                checked_at=datetime.now(tz=timezone.utc),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("aap_health_check_error", base_url=self.base_url, error=str(exc))
+            return HealthCheckResult(
+                status=HealthCheckStatus.ERROR,
+                checked_at=datetime.now(tz=timezone.utc),
+                error_message=str(exc),
+            )

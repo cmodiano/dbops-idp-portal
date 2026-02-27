@@ -11,6 +11,7 @@ import {
   updateIntegration,
   deleteIntegration,
   getIntegrationTypes,
+  testConnection,
 } from './integrations_service';
 
 const base = {
@@ -165,5 +166,37 @@ describe('integrations_service', () => {
 
     const result = await getIntegrationTypes();
     expect(result).toEqual([]);
+  });
+
+  // Story 51.4: testConnection
+  it('testConnection appelle POST /admin/integrations/{id}/test-connection/', async () => {
+    const responseData = { status: 'ok', message: null, checked_at: '2026-02-27T10:00:00Z' };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: responseData }),
+    });
+    (global as unknown as { fetch: typeof fetch }).fetch = fetchMock;
+
+    const result = await testConnection(42);
+    expect(result).toEqual(responseData);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/admin/integrations/42/test-connection/',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('testConnection retourne status=error avec message', async () => {
+    const responseData = { status: 'error', message: 'Connection refused', checked_at: '2026-02-27T10:00:00Z' };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: responseData }),
+    });
+    (global as unknown as { fetch: typeof fetch }).fetch = fetchMock;
+
+    const result = await testConnection(1);
+    expect(result.status).toBe('error');
+    expect(result.message).toBe('Connection refused');
   });
 });

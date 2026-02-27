@@ -7,21 +7,6 @@ from dataclasses import dataclass
 from typing import Any
 
 
-class TargetEnvironment:
-    """Environment choices for targets."""
-    DEV = 'dev'
-    STAGING = 'staging'
-    PROD = 'prod'
-
-    CHOICES = [
-        (DEV, 'Développement'),
-        (STAGING, 'Certification'),
-        (PROD, 'Production'),
-    ]
-
-    VALUES = [DEV, STAGING, PROD]
-
-
 class TargetType:
     """Target type choices."""
     SERVER = 'server'
@@ -67,7 +52,7 @@ class Target:
         """Create Target from dictionary."""
         return cls(
             name=data.get('name', ''),
-            environment=data.get('environment', TargetEnvironment.DEV),
+            environment=data.get('environment', ''),
             target_type=data.get('target_type', TargetType.SERVER),
             metadata=data.get('metadata'),
         )

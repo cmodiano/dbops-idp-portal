@@ -11,13 +11,14 @@ from inventory.permission_aggregator import RBACPermissionAggregator
 from inventory.query_executor import InventoryServiceError
 
 
-def _make_aggregator(environments=None, default_environments=None):
-    """Helper: build RBACPermissionAggregator with mocked callables."""
-    environments = environments if environments is not None else ['dev', 'staging', 'prod']
-    default_environments = default_environments if default_environments is not None else ['dev', 'staging', 'prod']
+def _make_aggregator(environments=None):
+    """Helper: build RBACPermissionAggregator with mocked callables.
+
+    Story 53.1 — inventory is the sole source of truth; no default_environments fallback.
+    """
+    environments = environments if environments is not None else ['developpement', 'certification', 'production']
     return RBACPermissionAggregator(
         list_environments_fn=lambda: environments,
-        get_default_environments_fn=lambda: default_environments,
     )
 
 
@@ -69,12 +70,13 @@ class TestRBACPermissionAggregatorNormalize(TestCase):
         self.assertEqual(self.agg._normalize_environment('staging'), 'staging')
         self.assertEqual(self.agg._normalize_environment('prod'), 'prod')
 
-    def test_normalize_aliases(self):
-        self.assertEqual(self.agg._normalize_environment('certif'), 'staging')
-        self.assertEqual(self.agg._normalize_environment('certification'), 'staging')
-        self.assertEqual(self.agg._normalize_environment('stg'), 'staging')
-        self.assertEqual(self.agg._normalize_environment('development'), 'dev')
-        self.assertEqual(self.agg._normalize_environment('production'), 'prod')
+    def test_normalize_inventory_values_pass_through(self):
+        """Story 53.1 — Alias mapping removed; inventory values pass through as-is (lowercased)."""
+        self.assertEqual(self.agg._normalize_environment('developpement'), 'developpement')
+        self.assertEqual(self.agg._normalize_environment('certification'), 'certification')
+        self.assertEqual(self.agg._normalize_environment('production'), 'production')
+        self.assertEqual(self.agg._normalize_environment('certif'), 'certif')
+        self.assertEqual(self.agg._normalize_environment('development'), 'development')
 
     def test_normalize_unknown_returns_raw(self):
         self.assertEqual(self.agg._normalize_environment('lab'), 'lab')
@@ -82,7 +84,8 @@ class TestRBACPermissionAggregatorNormalize(TestCase):
         self.assertEqual(self.agg._normalize_environment('custom'), 'custom')
 
     def test_normalize_case_insensitive(self):
-        self.assertEqual(self.agg._normalize_environment('CERTIF'), 'staging')
+        """Story 53.1 — Uppercase is lowercased only; no alias mapping."""
+        self.assertEqual(self.agg._normalize_environment('CERTIF'), 'certif')
         self.assertEqual(self.agg._normalize_environment('  LAB  '), 'lab')
 
     def test_normalize_empty_string(self):
@@ -184,7 +187,7 @@ class TestRBACPermissionAggregatorAggregateAdmin(TestCase):
     """Tests pour aggregate() — profil admin (is_admin=1)."""
 
     def setUp(self):
-        self.agg = _make_aggregator(environments=['dev', 'staging', 'prod', 'lab'])
+        self.agg = _make_aggregator(environments=['developpement', 'certification', 'production', 'lab'])
 
     def test_admin_no_action_perm_uses_list_environments(self):
         """Admin without profileactionpermission falls back to list_environments_fn."""
@@ -194,23 +197,24 @@ class TestRBACPermissionAggregatorAggregateAdmin(TestCase):
         self.assertIn('lab', result['allowed_environments'])
         self.assertTrue(result['has_all_access'])
 
-    def test_admin_fallback_to_default_environments_on_error(self):
-        """Admin falls back to default environments when list_environments_fn raises."""
+    def test_admin_fallback_inventory_unavailable_returns_none(self):
+        """Story 53.1 — Admin fallback when list_environments_fn raises returns None (no hardcoded defaults)."""
+        def raise_inventory_error():
+            raise InventoryServiceError("fail")
+
         agg = RBACPermissionAggregator(
-            list_environments_fn=lambda: (_ for _ in ()).throw(InventoryServiceError("fail")),
-            get_default_environments_fn=lambda: ['dev', 'staging', 'prod'],
+            list_environments_fn=raise_inventory_error,
         )
         profile = _make_profile(is_admin=1, perm_type='ALL')
         result = agg.aggregate([profile], environment=None, correlation_id='cid')
-        self.assertIsNotNone(result)
-        self.assertIn('dev', result['allowed_environments'])
+        self.assertIsNone(result)
 
 
 class TestRBACPermissionAggregatorAggregateMixedAdminNonAdmin(TestCase):
     """Tests pour aggregate() — mélange admin + profil RBAC classique."""
 
     def setUp(self):
-        self.agg = _make_aggregator(environments=['dev', 'staging', 'prod', 'lab'])
+        self.agg = _make_aggregator(environments=['developpement', 'certification', 'production', 'lab'])
 
     def test_admin_and_non_admin_environments_merged(self):
         """Admin brings all environments; non-admin brings specific ones; union is returned."""
@@ -288,10 +292,10 @@ class TestRBACPermissionAggregatorAggregateEnvironmentFilter(TestCase):
         result = self.agg.aggregate([profile], environment='prod', correlation_id='cid')
         self.assertIsNone(result)
 
-    def test_environment_filter_certif_normalizes(self):
-        """'certif' environment filter works with normalized 'staging' env."""
-        profile = _make_profile(action_envs=['certif'], perm_type='ALL')
-        result = self.agg.aggregate([profile], environment='staging', correlation_id='cid')
+    def test_environment_filter_certification_exact_match(self):
+        """Story 53.1 — Inventory value 'certification' matches filter 'certification' (no alias mapping)."""
+        profile = _make_profile(action_envs=['certification'], perm_type='ALL')
+        result = self.agg.aggregate([profile], environment='certification', correlation_id='cid')
         self.assertIsNotNone(result)
 
 
@@ -324,12 +328,14 @@ class TestRBACPermissionAggregatorGetAllowedEnvironments(TestCase):
         self.assertEqual(result, set())
 
     @patch('inventory.permission_aggregator.Profile')
-    def test_certif_alias_normalized(self, mock_profile_cls):
-        profile = _make_profile(action_envs=['certif'])
+    def test_inventory_value_stored_as_is(self, mock_profile_cls):
+        """Story 53.1 — Inventory values are stored lowercased without alias mapping."""
+        profile = _make_profile(action_envs=['certification'])
         mock_qs = MagicMock()
         mock_qs.__iter__ = MagicMock(return_value=iter([profile]))
         mock_qs.prefetch_related.return_value = mock_qs
         mock_profile_cls.objects.find_by_ad_groups.return_value = mock_qs
 
         result = self.agg.get_allowed_environments(['GROUP_DBA'])
-        self.assertIn('staging', result)
+        self.assertIn('certification', result)
+        self.assertNotIn('staging', result)

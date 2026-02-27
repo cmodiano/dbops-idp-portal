@@ -107,6 +107,16 @@ export interface IntegrationUpdate {
 /** Story 24.3: Integration validation status values. */
 export type IntegrationStatusType = 'valid' | 'invalid' | 'deprecated';
 
+/** Story 51.4: Health check status. */
+export type HealthStatus = 'ok' | 'error' | 'unknown';
+
+/** Story 51.4: Response from POST /admin/integrations/{id}/test-connection/. */
+export interface TestConnectionResponse {
+  status: HealthStatus;
+  message: string | null;
+  checked_at: string; // ISO 8601
+}
+
 /** Story 24.3: Validation details returned by /validate endpoint. */
 export interface IntegrationValidationDetails {
   status: IntegrationStatusType;
@@ -145,6 +155,10 @@ export interface IntegrationResponse {
   config?: IntegrationConfigInventoryDb | Record<string, unknown> | null; // Story 13.1: inventory_db schema/table
   secret_service_id?: number | null; // Story 27.11: FK Vault instance for secret resolution
   token_url: string | null; // Story 31.11: separate OAuth token endpoint URL (always serialized by backend)
+  // Story 51.4: health check fields
+  health_status?: HealthStatus;
+  health_checked_at?: string | null;
+  health_error_message?: string | null;
   created_at: string;
   updated_at: string;
 }
