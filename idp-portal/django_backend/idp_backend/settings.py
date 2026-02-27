@@ -499,8 +499,22 @@ LDAP_BASE_DN = os.getenv("LDAP_BASE_DN", "")   # ex: DC=example,DC=com
 #   Full DN: "CN={username},OU=ServiceAccounts,DC=example,DC=com"
 LDAP_USER_DN_TEMPLATE = os.getenv("LDAP_USER_DN_TEMPLATE", "{username}")
 # Timeouts (seconds) to avoid hanging threads on connect/receive
-LDAP_CONNECT_TIMEOUT = int(os.getenv("LDAP_CONNECT_TIMEOUT", "10"))
-LDAP_RECEIVE_TIMEOUT = int(os.getenv("LDAP_RECEIVE_TIMEOUT", "10"))
+def _parse_ldap_timeout(name: str, default: str) -> int:
+    raw = os.getenv(name, default)
+    try:
+        val = int(raw)
+        if val < 0:
+            raise ValueError("must be non-negative")
+        return val
+    except (ValueError, TypeError):
+        raise ImproperlyConfigured(
+            f"{name} must be a valid non-negative integer (seconds). "
+            f"Current value: {raw!r}"
+        )
+
+
+LDAP_CONNECT_TIMEOUT = _parse_ldap_timeout("LDAP_CONNECT_TIMEOUT", "10")
+LDAP_RECEIVE_TIMEOUT = _parse_ldap_timeout("LDAP_RECEIVE_TIMEOUT", "10")
 
 # ============================================================================
 # SAML Configuration (Story M.7)
