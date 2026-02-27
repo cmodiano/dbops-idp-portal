@@ -408,12 +408,13 @@ class InventoryQueryExecutor:
 
                 where_str = ("WHERE " + " AND ".join(inst_conditions)) if inst_conditions else ""
 
+                inst_name_col = mapper.get_column(entity_plural, 'name')
                 inst_inner = (
                     f"SELECT {aliased_select} "  # nosec B608 - table/columns validated by mapper
                     f"FROM {table} inst "  # nosec B608 - table validated by mapper
                     f"INNER JOIN {srv_table} srv "  # nosec B608 - table validated by mapper
                     f"ON UPPER(inst.{inst_server_ref_col}) = UPPER(srv.{srv_name_col}) "  # nosec B608 - columns validated by mapper
-                    f"{where_str} ORDER BY name"  # nosec B608 - where_str built from validated columns
+                    f"{where_str} ORDER BY inst.{inst_name_col}"  # nosec B608 - where_str built from validated columns
                 )
                 inst_sql = f"SELECT * FROM ({inst_inner}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"  # nosec B608
 
@@ -519,10 +520,11 @@ class InventoryQueryExecutor:
 
             where_clause, params = mapper.build_where_clause(entity_plural, filters)
 
+            name_col = mapper.get_column(entity_plural, 'name')
             inner_sql = f"SELECT {select} FROM {table}"  # nosec B608 - table/columns validated by mapper
             if where_clause:
                 inner_sql += f" WHERE {where_clause}"
-            inner_sql += " ORDER BY name"
+            inner_sql += f" ORDER BY {name_col}"
             sql = f"SELECT * FROM ({inner_sql}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"  # nosec B608 - MAX_MULTI_TABLE_RESULTS is a constant, inner_sql validated above
 
             logger.info(
@@ -610,6 +612,7 @@ class InventoryQueryExecutor:
         # Prefix instances columns with 'inst.' alias to avoid JOIN ambiguity
         entity_cfg = mapper.get_entity_config(entity_plural) or {}
         aliased_select = self._build_aliased_select(entity_cfg, 'inst')
+        inst_name_col = mapper.get_column(entity_plural, 'name')
 
         # Build WHERE conditions list for composable filtering (environment is optional)
         where_conditions = []
@@ -640,7 +643,7 @@ class InventoryQueryExecutor:
             f"INNER JOIN {srv_table} srv "  # nosec B608 - table validated by mapper
             f"ON UPPER(inst.{server_ref_col}) = UPPER(srv.{srv_name_col}) "  # nosec B608 - columns validated by mapper
             f"{where_str} "  # nosec B608 - where_str built from validated columns
-            f"ORDER BY name"
+            f"ORDER BY inst.{inst_name_col}"
         )
 
         sql = f"SELECT * FROM ({inner_sql}) WHERE ROWNUM <= {MAX_MULTI_TABLE_RESULTS}"  # nosec B608
