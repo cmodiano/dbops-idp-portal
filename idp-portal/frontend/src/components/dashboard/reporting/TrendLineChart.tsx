@@ -41,7 +41,7 @@ function formatAxisDate(dateStr: string): string {
 export function TrendLineChart({ data, loading = false }: TrendLineChartProps) {
   if (loading) {
     return (
-      <Card title="Tendances temporelles" size="small">
+      <Card title={<span style={{ fontSize: 15, fontWeight: 600 }}>Tendances temporelles</span>} size="small">
         <Skeleton active paragraph={{ rows: 6 }} />
       </Card>
     );
@@ -49,8 +49,8 @@ export function TrendLineChart({ data, loading = false }: TrendLineChartProps) {
 
   if (!data.length) {
     return (
-      <Card title="Tendances temporelles" size="small">
-        <Empty description="Aucune donnee sur la periode" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+      <Card title={<span style={{ fontSize: 15, fontWeight: 600 }}>Tendances temporelles</span>} size="small">
+        <Empty description="Aucune donnée sur la période" image={Empty.PRESENTED_IMAGE_SIMPLE} />
       </Card>
     );
   }
@@ -61,23 +61,23 @@ export function TrendLineChart({ data, loading = false }: TrendLineChartProps) {
   }));
 
   return (
-    <Card title="Tendances temporelles" size="small">
+    <Card title={<span style={{ fontSize: 15, fontWeight: 600 }}>Tendances temporelles</span>} size="small">
       <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
         <LineChart
           data={chartData}
           margin={{ top: 8, right: 16, left: 0, bottom: 8 }}
-          aria-label="Graphique des executions par jour : succes et echecs"
+          aria-label="Graphique des exécutions par jour : succès et échecs"
         >
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
           <XAxis
             dataKey="dateLabel"
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: 13 }}
             tickLine={false}
             axisLine={{ stroke: 'rgba(0,0,0,0.06)' }}
           />
           <YAxis
             allowDecimals={false}
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: 13 }}
             tickLine={false}
             axisLine={false}
           />
@@ -85,14 +85,14 @@ export function TrendLineChart({ data, loading = false }: TrendLineChartProps) {
             labelFormatter={(label) => `Date: ${label}`}
             formatter={(value: number | undefined, name: string | undefined) => [
               value ?? 0,
-              name === 'success' ? 'Succes' : 'Echecs',
+              name === 'success' ? 'Succès' : 'Échecs',
             ]}
-            contentStyle={{ fontSize: 12 }}
+            contentStyle={{ fontSize: 13 }}
             labelStyle={{ fontWeight: 600 }}
           />
           <Legend
-            wrapperStyle={{ fontSize: 12 }}
-            formatter={(value) => (value === 'success' ? 'Succes' : 'Echecs')}
+            wrapperStyle={{ fontSize: 13 }}
+            formatter={(value) => (value === 'success' ? 'Succès' : 'Échecs')}
           />
           <Line
             type="monotone"

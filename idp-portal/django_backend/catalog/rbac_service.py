@@ -163,7 +163,7 @@ class CatalogRBACService:
             )
             cache_key = f'rbac:permissions:user:{user.id}:v:{cache_version}'
             cache.set(cache_key, result, RBAC_CACHE_TTL)
-        except Exception:  # noqa: BLE001 — best-effort-non-critical: cache write failure must not break permission lookups
+        except Exception as _:  # noqa: BLE001 — best-effort-non-critical: cache write failure must not break permission lookups
             # Cache unavailability should not break permission lookups
             pass
 

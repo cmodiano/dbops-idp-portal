@@ -1,6 +1,6 @@
 # Stack technique – test (idp-portal)
 
-**Date :** 2026-02-21
+**Date :** 2026-02-26
 
 ---
 
@@ -20,7 +20,7 @@
 | Markdown | react-markdown, remark-gfm, rehype-sanitize | ^10.1.0, ^4.0.1, ^6.0.0 | Contenu markdown sécurisé |
 | Utilitaires | js-yaml, html2canvas | ^4.1.1, ^1.4.1 | YAML, capture écran |
 | Tests | Vitest, Testing Library (React, user-event, jest-dom) | ^4.0.18, ^16.3.2 / ^14.6.1 / ^6.9.1 | Unit / composants |
-| Lint / qualité | ESLint, typescript-eslint, plugins React/Hooks/Refresh/Security | ^9.39.1, ^8.46.4 | Standards, sécurité |
+| Lint / qualité | ESLint, typescript-eslint, plugins React/Hooks/Refresh/Security | ^9.39.1, ^8.56.1 | Standards, sécurité |
 | Couverture | @vitest/coverage-v8 | ^4.0.18 | Couverture de code |
 
 ---
@@ -38,7 +38,7 @@
 | Cache / tâches | Redis, Celery[redis] | >=5.0.0, >=5.4.0 | Cache, file de tâches |
 | Auth | python-jose[cryptography], python3-saml | >=3.3.0, >=1.16.0 | JWT, SAML/SSO |
 | HTTP client | httpx, requests | >=0.27.0, >=2.32.5 | Appels sortants |
-| Config / secrets | python-dotenv | >=1.0.0 | Variables d’environnement |
+| Config / secrets | python-dotenv | >=1.0.0 | Variables d'environnement |
 | Logging | structlog | >=24.1.0 | Logs structurés |
 | Planification | croniter | >=6.0.0 | Crons |
 | Cache applicatif | cachetools | >=5.3.0 | Cache en mémoire |
@@ -46,6 +46,7 @@
 | PDF | reportlab | >=3.6.0 | Génération PDF |
 | CORS | django-cors-headers | >=4.3.0 | CORS |
 | Sécurité / XML | defusedxml | >=0.7.1 | Parsing XML sécurisé |
+| Admin UI | django-jazzmin | >=3.0.0,<4.0.0 | Interface admin Django |
 | Dev / tests | pytest, pytest-django, pytest-cov, pytest-mock, factory-boy, Faker, mypy, ruff, bandit, pip-audit, detect-secrets | (voir pyproject) | Tests, typage, qualité, sécurité |
 
 ---

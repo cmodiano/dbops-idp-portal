@@ -144,14 +144,19 @@ class TestGateConditionsIntegrationFlow:
             status=ExecutionStatus.SUBMITTED,
         )
 
-        runtime = WorkflowRuntime(execution)
-        final_status = runtime.run()
+        from unittest.mock import patch
+        # Story 47.2: avec integration → async dispatch. Mocker apply_async pour éviter
+        # l'exécution ALWAYS_EAGER qui tenterait de vraiment appeler l'adapter AAP.
+        with patch("executions.tasks.trigger.trigger_platform_job.apply_async"):
+            runtime = WorkflowRuntime(execution)
+            final_status = runtime.run()
 
         assert final_status == ExecutionStatus.RUNNING
 
         steps = ExecutionStep.objects.filter(execution=execution).order_by('step_order')
         assert steps.count() == 2
-        assert steps[0].status == 'COMPLETED'
+        # Story 47.2: step 1 async-dispatched → reste RUNNING jusqu'à trigger_platform_job
+        assert steps[0].status == 'RUNNING'
         assert steps[1].status == 'WAITING'
 
         # Verify both gate conditions are tracked

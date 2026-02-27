@@ -1,6 +1,6 @@
 # Revue Exhaustive du Codebase — IDP Portal
 
-**Date :** 2026-02-23 (mise à jour — audit complet #3)
+**Date :** 2026-02-26 (mise à jour — audit complet #4)
 **Scope :** Backend Django + Frontend React
 **Auteur :** Claude Code (revue automatisée)
 
@@ -25,7 +25,8 @@
 15. [Analyse SOLID — Frontend](#15-analyse-solid--frontend)
 16. [Observations post-refactoring](#16-observations-post-refactoring)
 17. [Audit #3 — Nouveaux findings (2026-02-23)](#17-audit-3--nouveaux-findings-2026-02-23)
-18. [Récapitulatif par priorité](#18-récapitulatif-par-priorité)
+18. [Audit #4 — Nouveaux findings (2026-02-26)](#18-audit-4--nouveaux-findings-2026-02-26)
+19. [Récapitulatif par priorité](#19-récapitulatif-par-priorité)
 
 ---
 
@@ -416,21 +417,25 @@
 
 ---
 
-### SOLID-FE-4 [HIGH] — ⚠️ AMÉLIORÉ, OUVERT — Couplage services directs
+### SOLID-FE-4 [HIGH] — 🔄 PILOTE COMPLÉTÉ, OUVERT — Couplage services directs
 
 **Avant :** 29 composants importent directement les services.
 
-**État actuel :** ~25 composants non-test importent encore directement `admin_service`, `catalog_service`, ou `execution_service`. Le pattern a été amélioré dans certains composants clés (hooks extraits, DI via context), mais le couplage structurel reste largement présent.
+**État actuel :** ~25 composants non-test importaient encore directement `admin_service`, `catalog_service`, ou `execution_service`. Le pattern a été amélioré dans certains composants clés (hooks extraits, DI via context), mais le couplage structurel reste largement présent.
 
-**Fichiers concernés (exemples non-test) :**
+**SOLID-FE-4 🔄 Pilote complété — 5/~25 composants migrés (ActionPalette, AdminAnalyticsDashboard, WizardStep1General, RemediationRulesEditor, ActionsAdminPanel) — Story 48.8 (2026-02-26)**
+
+Hooks créés : `useAdminAnalytics`, `useActionNameAvailability`, `useRemediationCatalogActions`, `useActionsAdminPanel` (+ `useEligibleActions` déjà existant pour ActionPalette).
+
+**Fichiers encore concernés (exemples non-test, ~20 restants) :**
 - `ExecutionWizard.tsx` → `catalog_service` + `execution_service`
 - `ActionWizard.tsx` → 7 fonctions de `admin_service`
 - `WorkflowStepsEditor.tsx` → `admin_service.getEligibleActionsForWorkflow()`
 - `ProfileForm.tsx`, `ProfileWizard.tsx` → `admin_service`
 - `IntegrationForm.tsx` → `admin_service`
-- Et ~19 autres composants
+- Et ~15 autres composants
 
-**Fix recommandé :** Migration progressive vers hooks et injection via props/context. Pattern existant dans `useExecutionWizardState`, `useCatalogState`, `useAuditFilters` peut servir de modèle.
+**Fix recommandé :** Continuer la migration progressive vers hooks (pattern établi par Story 48.8). Pattern de référence : `useActionsAdminPanel.ts`, `useAdminAnalytics.ts`.
 
 ---
 
@@ -490,7 +495,7 @@ Plus aucun import Ant Design dans `api_client.ts`.
 
 ---
 
-### SOLID-FE-10 [MEDIUM] — ✅ PARTIELLEMENT RESOLVED (Story 34.2) — Status mapping consolidé
+### SOLID-FE-10 [MEDIUM] — ✅ RÉSOLU — Story 48.5 (2026-02-26) — Status mapping consolidé
 
 **Avant :** Mapping status dupliqué dans 3 fichiers.
 
@@ -500,7 +505,7 @@ Plus aucun import Ant Design dans `api_client.ts`.
 
 Les composants `ExecutionTimeline/TimelineStepItem.tsx` et `AuditTable.tsx` / `AuditEntryDrawer.tsx` importent depuis cette utility.
 
-**Résiduel :** Des `STATUS_CONFIG` locaux restent dans `ExecutionView.tsx`, `StepDetailDrawer.tsx`, `WorkflowExecutionGraph.tsx`, `IntegrationsTable.tsx`, `ComparisonExecutionsDrawer.tsx`. Certains sont spécifiques à leur domaine (status intégration ≠ status exécution ≠ status step), d'autres sont des doublons résiduels.
+**Résolution complète (Story 48.5, 2026-02-26) :** Audit des 5 fichiers ciblés — `ExecutionView.tsx`, `StepDetailDrawer.tsx`, `ComparisonExecutionsDrawer.tsx` importent depuis `utils/execution-status.ts`. `WorkflowExecutionGraph.tsx` conserve `STATUS_COLORS` local (React Flow hex ≠ Ant Design Badge, SELECTED sans équivalent partagé). `IntegrationsTable.tsx` conserve `STATUS_CONFIG` local (domaine distinct : valid/invalid/deprecated ≠ statuts d'exécution). `executionRenderers.tsx STATUS_CONFIG` conservé avec justification SOLID-FE-10 (utilisé par `RecentExecutions.tsx`, inclut Icon components absents de la source partagée). Aucune duplication active — chaque config locale est justifiée par domaine ou format différent.
 
 ---
 
@@ -545,9 +550,13 @@ Les 6 fichiers "cohérent/justifié" disposent désormais d'un commentaire `# Re
 
 ---
 
-### 16.2 [LOW] — `except Exception` résiduels (33 occurrences backend)
+### 16.2 [LOW] — `except Exception` résiduels (77 occurrences backend) — ✅ RESOLVED (Story 48.9 — 2026-02-26)
 
-33 occurrences de `except Exception` dans `executions/` (16 fichiers). La plupart sont documentées (`noqa: BLE001`) ou dans des contextes de résilience (webhooks, polling, runtime). Les cas non documentés dans les fichiers nouveaux/refactorisés (ex. `container_workflow_runtime.py` — 5 occurrences) mériteraient une revue pour vérifier qu'ils sont tous justifiés.
+**Audit final Story 48.9 (2026-02-26) :** 77 occurrences inventoriées dans 40 fichiers backend. **100 % conformes** — toutes avec `noqa: BLE001` et commentaire de catégorie (resilience-boundary, graceful-degradation, catch-all-mark-failed, best-effort-non-critical, logged-and-reraised, logged-and-wrapped). Aucune correction nécessaire.
+
+Rapport détaillé : [`django_backend/docs/story-48-9-except-exception-audit-report.md`](django_backend/docs/story-48-9-except-exception-audit-report.md)
+
+~~33 occurrences de `except Exception` dans `executions/` (16 fichiers). La plupart sont documentées (`noqa: BLE001`) ou dans des contextes de résilience (webhooks, polling, runtime). Les cas non documentés dans les fichiers nouveaux/refactorisés (ex. `container_workflow_runtime.py` — 5 occurrences) mériteraient une revue pour vérifier qu'ils sont tous justifiés.~~
 
 ---
 
@@ -578,21 +587,13 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 
 ### Code quality — Backend
 
-| # | Sévérité | Description | Fichier | Lignes |
-|---|----------|-------------|---------|--------|
-| **NEW-BE-1** | MEDIUM | N+1 query : `Action.objects.get(id=ref_id)` dans boucle `for ref_id in ref_ids` | `catalog/services.py` | 62-73 |
-| **NEW-BE-2** | MEDIUM | Double `.update()` consécutif sur même exécution (RUNNING puis immédiatement COMPLETED) — redondant et 2x `timezone.now()` | `executions/container_workflow_runtime.py` | 317-326 |
-| **NEW-BE-3** | LOW | TODO obsolète : « These endpoints are not yet implemented » alors que `approval_views.py` les implémente | `executions/services.py` | 435-438 |
-| **NEW-BE-4** | LOW | `asyncio.run()` x2 dans tâche Celery — risque de conflit event loop. `async_to_sync` (asgiref) déjà utilisé ailleurs dans le projet | `executions/tasks/polling.py` | 313, 320 |
-| **NEW-BE-5** | LOW | Log `unknown_execution_status_for_audit` sans `execution_id` — debugging difficile | `executions/services.py` | 504-507 |
-
-**Corrections recommandées :**
-
-- **NEW-BE-1** : Remplacer la boucle par `Action.objects.in_bulk(ref_ids)` (pattern déjà utilisé dans `workflow_parsing.py:241`)
-- **NEW-BE-2** : Fusionner en un seul `.update(status=COMPLETED, started_at=now, completed_at=now)`
-- **NEW-BE-3** : Supprimer ou mettre à jour le commentaire TODO
-- **NEW-BE-4** : Remplacer `asyncio.run()` par `async_to_sync()` d'asgiref
-- **NEW-BE-5** : Ajouter `execution_id=execution_id` au log
+| # | Sévérité | Description | Fichier | Lignes | Statut |
+|---|----------|-------------|---------|--------|--------|
+| **NEW-BE-1** | MEDIUM | N+1 query : `Action.objects.get(id=ref_id)` dans boucle | `catalog/services.py` | 62-73 | ✅ RESOLVED — `Action.objects.in_bulk(int_ref_ids)` (ligne 61) |
+| **NEW-BE-2** | MEDIUM | Double `.update()` consécutif sur même exécution | `executions/container_workflow_runtime.py` | 317-326 | ✅ RESOLVED — Les deux `.update()` sont sur des branches `if/else` mutuellement exclusives |
+| **NEW-BE-3** | LOW | TODO obsolète (approval endpoints) | `executions/services.py` | 435-438 | ✅ RESOLVED — Commentaire remplacé par docstring appropriée |
+| **NEW-BE-4** | LOW | `asyncio.run()` x2 dans tâche Celery | `executions/tasks/polling.py` | 313, 320 | ✅ RESOLVED — Plus aucun `asyncio.run()` dans les tâches Celery |
+| **NEW-BE-5** | LOW | Log sans `execution_id` | `executions/services.py` | 504-507 | ✅ RESOLVED — `execution_id=execution.id` ajouté (ligne 567) |
 
 ### Code quality — Frontend
 
@@ -612,12 +613,79 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 
 | # | Issue précédente | Ancien statut | Nouveau statut | Détails |
 |---|------------------|---------------|----------------|---------|
-| 16.2 | `except Exception` résiduels | 33 occurrences | **77 occurrences** (40 fichiers .py) | Comptage précédent limité à `executions/`. Inclut maintenant tout le backend. La majorité sont documentés `noqa: BLE001` ou dans des contextes de résilience (webhooks, polling, adapters, vault) |
+| 16.2 | `except Exception` résiduels | 33 occurrences | **✅ RESOLVED (Story 48.9)** | 77 occurrences auditées, 100 % conformes (`noqa: BLE001` + catégorie). Rapport: `docs/story-48-9-except-exception-audit-report.md` |
 | 16.3 | `.catch(() => {})` résiduels | 21 occurrences | **0 en production** ✅ RESOLVED | Plus que 2 occurrences en fichiers test. Issue fermée |
 
 ---
 
-## 18. Récapitulatif par priorité
+## 18. Audit #4 — Nouveaux findings (2026-02-26)
+
+### Sécurité
+
+| # | Sévérité | Description | Fichier | Lignes |
+|---|----------|-------------|---------|--------|
+| **SEC-12** | MEDIUM | Validation URL minimale — accepte IP privées (127.0.0.1, 10.x), credentials dans URL (`user:pass@host`), ports arbitraires | `integrations/serializers.py` | 17-23 |
+| **SEC-13** | LOW | `SERVICENOW_VERIFY_TLS` configurable — un opérateur peut désactiver la vérification TLS en production. Défaut `True` atténue le risque | `services/servicenow_service.py` | 76 |
+| **SEC-14** | LOW | Pas de vérification `Path.resolve().is_relative_to()` sur le chemin d'écriture icônes. Atténué par UUID filename et `STATIC_ROOT` configuré par déploiement | `integrations/upload_views.py` | 248-263 |
+
+**Détails et corrections recommandées :**
+
+- **SEC-12** : La validation URL ne vérifie que le préfixe `http://` / `https://`. Recommandation : utiliser `urllib.parse.urlparse()` pour valider tous les composants, rejeter localhost/127.0.0.1/::1, les IP privées (RFC 1918), et les URL contenant des credentials (`userinfo@`). Cible : SSRF via URL d'intégration stockée.
+- **SEC-13** : Supprimer l'option `SERVICENOW_VERIFY_TLS` ou la forcer à `True` pour les URL non-localhost. Risque MITM si désactivé en production.
+- **SEC-14** : Ajouter `icon_path.resolve().is_relative_to(icons_dir.resolve())` avant l'écriture.
+
+### Code quality — Backend
+
+| # | Sévérité | Description | Fichier | Lignes |
+|---|----------|-------------|---------|--------|
+| **NEW-BE-6** | HIGH | N+1 dans `delete_integration()` — `.save()` individuel + `AuditService.create_entry()` en boucle sur `linked_actions`. Pour N actions, génère 2N requêtes au lieu d'un `bulk_update()` + batch | `integrations/services.py` | 335-353 |
+| **NEW-BE-7** | MEDIUM | Double `.save()` dans `create_integration()` — premier save après `set_config()`, second après validation de status | `integrations/services.py` | 140, 146 |
+| **NEW-BE-8** | MEDIUM | Double `.save()` dans `update_integration()` — save principal puis save status si changé | `integrations/services.py` | 263, 272 |
+| **NEW-BE-9** | MEDIUM | N+1 dans `deactivate_action()` — `.save()` individuel + audit en boucle sur `affected_workflows` | `catalog/services.py` | 585-603 |
+| ~~**NEW-BE-10**~~ ✅ Résolu | LOW | `import logging` (stdlib) au lieu de `structlog` dans 25 fichiers non-test. Le reste du projet utilise structlog. Incohérence qui prive ces modules du contexte structuré (correlation_id, user_id) | Voir liste ci-dessous | — | **Résolu — Story 48.6 (2026-02-26)** |
+
+**Fichiers `import logging` (non-test, à migrer vers structlog) :**
+`integrations/signals.py`, `integrations/views.py`, `integrations/upload_views.py`, `integrations/models.py`, `catalog/models.py`, `catalog/validators.py`, `executions/models.py`, `profiles/models.py`, `profiles/cache.py`, `adapters/registry.py`, `services/registry.py`, `utils/json_helpers.py`, `idp_auth/authentication.py`
+
+**Corrections recommandées :**
+
+- **NEW-BE-6** : Remplacer la boucle `.save()` par `Action.objects.filter(integration_id=id).update(status=DISABLED, updated_at=now)`, puis batch audit entries (ou accepter N inserts audit pour la traçabilité SOC1)
+- **NEW-BE-7/8** : Fusionner config + status en un seul `.save()` — définir status avant le premier save
+- **NEW-BE-9** : Remplacer par `Action.objects.filter(id__in=wf_ids).update(status=DISABLED, deleted_at=now, ...)` + batch audit
+- **NEW-BE-10** : Migrer progressivement vers `structlog.get_logger(__name__)`
+
+### Code quality — Frontend
+
+| # | Sévérité | Description | Fichier | Lignes |
+|---|----------|-------------|---------|--------|
+| ~~**NEW-FE-2**~~ ✅ Résolu | ~~LOW — Cache module-level sans mécanisme d'invalidation — sessions longues afficheront des catégories obsolètes~~ | `hooks/useCategories.ts` | 18-44 | **Résolu — Story 48.7 (2026-02-26)** |
+| **NEW-FE-3** | LOW | `.catch()` silencieux sans logging — `fetchFilterOptions()` échoue sans trace | `components/dashboard/reporting/ReportingDashboard.tsx` | 160-165 |
+| **NEW-FE-4** | LOW | Prop `allowedEnvironments` passée puis explicitement ignorée (`void allowedEnvironments`) — code mort | `components/catalog/ActionDrawerPreview.tsx` | 99 |
+
+**Points positifs confirmés (audit #4) :**
+- Aucun `dangerouslySetInnerHTML` dans le code
+- Pattern hooks DIP excellent : `useActionWizardState`, `useExecutionWizardState`, `useCatalogState`, `useAuditFilters` encapsulent correctement les services
+- 193 fichiers test frontend — couverture comprehensive
+- Composition de hooks cohérente (SRP par hook : filtres, data, detail, restart)
+- Aucune dépendance circulaire détectée (frontend ni backend)
+- Architecture SOLID backend exemplaire : registries (OCP), ISP adapters, DI via `core/di.py`
+- Documentation SOLID dans le code (références Story, commentaires `# Responsabilité`)
+- 340 fichiers test backend — couverture forte
+
+### Mise à jour des issues précédentes (§17)
+
+| # | Issue audit #3 | Ancien statut | Nouveau statut | Détails |
+|---|----------------|---------------|----------------|---------|
+| NEW-BE-1 | N+1 query `_validate_workflow_can_be_published()` | MEDIUM OUVERT | ✅ **RESOLVED** | `Action.objects.in_bulk(int_ref_ids)` (ligne 61) |
+| NEW-BE-2 | Double `.update()` container workflow | MEDIUM OUVERT | ✅ **RESOLVED** | Les deux `.update()` sont sur branches `if/else` mutuellement exclusives |
+| NEW-BE-3 | TODO obsolète | LOW OUVERT | ✅ **RESOLVED** | Commentaire remplacé par docstring |
+| NEW-BE-4 | `asyncio.run()` dans Celery | LOW OUVERT | ✅ **RESOLVED** | Plus aucun `asyncio.run()` dans les tâches |
+| NEW-BE-5 | Log sans `execution_id` | LOW OUVERT | ✅ **RESOLVED** | `execution_id=execution.id` ajouté (ligne 567) |
+| NEW-FE-1 | Nested key props TopNav | LOW OUVERT | ⚠️ **OUVERT** | Toujours présent |
+
+---
+
+## 19. Récapitulatif par priorité
 
 ### Issues OUVERTES restantes
 
@@ -626,23 +694,29 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | # | Issue | Type | Effort |
 |---|-------|------|--------|
 | SOLID-FE-4 | ~25 composants importent directement les services (couplage DIP) | Frontend | Élevé |
+| NEW-BE-6 | N+1 `.save()` en boucle dans `IntegrationService.delete_integration()` | Backend | Faible |
 
 #### MEDIUM
 
 | # | Issue | Type | Effort |
 |---|-------|------|--------|
-| SOLID-FE-10 | STATUS_CONFIG duplication résiduelle dans 5 fichiers | Frontend | Faible |
-| NEW-BE-1 | N+1 query dans `_validate_workflow_can_be_published()` | Backend | Faible |
-| NEW-BE-2 | Double `.update()` redondant (container workflow non-simulation) | Backend | Faible |
+| SEC-12 | Validation URL minimale (accepte IP privées, credentials, ports arbitraires) | Sécurité | Faible |
+| ~~SOLID-FE-10~~ ✅ | ~~STATUS_CONFIG duplication résiduelle dans 5 fichiers~~ Résolu — Story 48.5 (2026-02-26) | Frontend | — |
+| NEW-BE-7 | Double `.save()` dans `IntegrationService.create_integration()` | Backend | Trivial |
+| NEW-BE-8 | Double `.save()` dans `IntegrationService.update_integration()` | Backend | Trivial |
+| NEW-BE-9 | N+1 `.save()` en boucle dans `CatalogService.deactivate_action()` | Backend | Faible |
 
 #### LOW (backlog)
 
 | # | Issue | Type | Effort |
 |---|-------|------|--------|
-| NEW-BE-3 | TODO obsolète (approval endpoints implémentés) | Backend | Trivial |
-| NEW-BE-4 | `asyncio.run()` dans Celery (préférer `async_to_sync`) | Backend | Faible |
-| NEW-BE-5 | Log sans `execution_id` | Backend | Trivial |
+| SEC-13 | `SERVICENOW_VERIFY_TLS` désactivable en production | Sécurité | Trivial |
+| SEC-14 | Pas de vérification path traversal sur écriture icône | Sécurité | Trivial |
+| ~~NEW-BE-10~~ ✅ Résolu | ~~`import logging` (stdlib) au lieu de `structlog` dans 13+ fichiers~~ | Backend | Faible | **Résolu — Story 48.6 (2026-02-26)** |
 | NEW-FE-1 | Nested key props redondants (TopNav) | Frontend | Trivial |
+| ~~NEW-FE-2~~ ✅ Résolu | ~~Cache module-level sans invalidation (useCategories)~~ | Frontend | Faible | **Résolu — Story 48.7 (2026-02-26)** |
+| NEW-FE-3 | `.catch()` silencieux (ReportingDashboard) | Frontend | Trivial |
+| NEW-FE-4 | Prop `allowedEnvironments` ignorée (code mort) | Frontend | Trivial |
 | 16.2 | `except Exception` résiduels (77 occurrences, 40 fichiers backend) | Backend | Faible |
 | INCON-2 | MD5 hash collision (documenté, acceptable pour N<1000) | Backend | — |
 | PERF-4 | `<style>` inline dans 3 composants (impact négligeable) | Frontend | — |
@@ -675,39 +749,43 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | Nouveaux findings §13 | 5/5 | 0 |
 | **SOLID Backend (§14)** | **11/11** | **0** |
 | **SOLID Frontend (§15)** | **10/11** | **1** |
-| **Observations post-refactoring (§16)** | 2 (16.1 DOCUMENTED, 16.3 RESOLVED) | **1 (16.2) + 1 INFO** |
-| **Audit #3 (§17)** | **0** | **6** |
-| **Total** | **99/105** | **6 MEDIUM+LOW (+ 1 INFO)** |
+| **Observations post-refactoring (§16)** | 3 (16.1 DOCUMENTED, 16.2 RESOLVED Story 48.9, 16.3 RESOLVED) | **1 INFO** |
+| **Audit #3 (§17)** | **5/6** | **1** (NEW-FE-1) |
+| **Audit #4 (§18)** | **1** | **11** |
+| **Total** | **105/119** | **14 (2 HIGH, 5 MEDIUM, 6 LOW, 1 INFO)** |
 
 ---
 
 ### Priorités de refactoring recommandées
 
 **Sprint immédiat (quick wins) :**
-1. NEW-BE-1 — Remplacer boucle `.get()` par `Action.objects.in_bulk(ref_ids)` dans `catalog/services.py`
-2. NEW-BE-2 — Fusionner les 2 `.update()` en un seul dans `container_workflow_runtime.py`
-3. NEW-BE-3 — Supprimer le TODO obsolète dans `executions/services.py:435-438`
-4. NEW-BE-5 — Ajouter `execution_id` au log dans `executions/services.py:504-507`
-5. SOLID-FE-10 — Consolider `STATUS_CONFIG` résiduel
+1. SEC-12 — Renforcer `validate_url()` dans `integrations/serializers.py` (rejeter IP privées, credentials, ports dangereux)
+2. NEW-BE-6 — Remplacer `.save()` en boucle par `bulk_update()` dans `IntegrationService.delete_integration()`
+3. NEW-BE-7/8 — Fusionner double `.save()` dans `IntegrationService.create/update_integration()`
+4. NEW-BE-9 — Remplacer `.save()` en boucle par `bulk_update()` dans `CatalogService.deactivate_action()`
+5. NEW-FE-4 — Supprimer prop `allowedEnvironments` morte dans `ActionDrawerPreview.tsx`
 
 **Backlog technique :**
-1. NEW-BE-4 — Migrer `asyncio.run()` vers `async_to_sync()` dans `polling.py`
-2. 16.2 — Audit des 77 `except Exception` résiduels pour vérifier documentation
+1. SEC-13/14 — Corrections sécurité mineures (TLS, path traversal)
+2. ~~NEW-BE-10 — Migration progressive `import logging` → `structlog` (13+ fichiers)~~ ✅ Résolu — Story 48.6 (2026-02-26)
 3. SOLID-FE-4 — Migration progressive des ~25 composants vers hooks (effort élevé, story par story)
+4. ~~SOLID-FE-10 — Consolider `STATUS_CONFIG` résiduel~~ ✅ Résolu — Story 48.5 (2026-02-26)
+5. ~~16.2 — Audit des 77 `except Exception` résiduels pour vérifier documentation~~ ✅ Résolu — Story 48.9 (2026-02-26)
 
 ---
 
 ### Comparaison avec les revues précédentes
 
-| Métrique | 21/02 | 23/02 (v2) | 23/02 (v3) | Évolution v2→v3 |
-|----------|-------|------------|------------|-----------------|
-| Issues ouvertes | 26 | 4 (+1 INFO) | 6 (+1 INFO) | +2 MEDIUM, +4 LOW (nouveaux findings) |
-| Issues CRITICAL | 1 | 0 | 0 | = |
-| Issues HIGH | 8 | 1 | 1 | = |
-| Issues MEDIUM | 13 | 1 | 3 | +2 (N+1 query, double update) |
-| Issues LOW | 4 | 4 | 7 | +3 (TODO obsolète, asyncio, log, key props) |
-| Sécurité | 11 issues | 0 ouvertes | **0 ouvertes** | Posture sécurité confirmée excellente |
-| `.catch(() => {})` vides FE | 21 | 21 | **0 en prod** ✅ | Issue fermée |
-| `except Exception` BE | 33 | 33 | **77** (comptage complet) | Comptage élargi au backend entier |
+| Métrique | 21/02 | 23/02 (v2) | 23/02 (v3) | 26/02 (v4) | Évolution v3→v4 |
+|----------|-------|------------|------------|------------|-----------------|
+| Issues ouvertes | 26 | 4 (+1 INFO) | 6 (+1 INFO) | 15 (+1 INFO) | +12 nouveaux, -5 résolus (audit #3) |
+| Issues CRITICAL | 1 | 0 | 0 | 0 | = |
+| Issues HIGH | 8 | 1 | 1 | 2 | +1 (N+1 IntegrationService) |
+| Issues MEDIUM | 13 | 1 | 3 | 5 | +4 (SEC-12, double save x2, N+1 deactivate), -2 résolus |
+| Issues LOW | 4 | 4 | 7 | 7 | -4 résolus (NEW-BE-3/4/5, NEW-BE-2), +4 nouveaux (SEC-13/14, FE-2/3/4, BE-10) |
+| Sécurité | 11 issues | 0 ouvertes | **0 ouvertes** | **3 ouvertes** (1 MEDIUM, 2 LOW) | +3 nouveaux (validation URL, TLS, path) |
+| `.catch(() => {})` vides FE | 21 | 21 | **0 en prod** ✅ | **0 en prod** ✅ | = |
+| `except Exception` BE | 33 | 33 | **77** | **77 — 100 % conformes** ✅ | RESOLVED Story 48.9 |
+| `import logging` inconsistants | — | — | — | **25 fichiers** (13+ non-test) | Nouveau comptage |
 
-**Bilan global (audit #3) :** Sur 105 findings cumulés, **99 sont résolus**. Les 6 issues ouvertes sont de sévérité MEDIUM (2) et LOW (4) — aucune issue CRITICAL ou de sécurité. La posture sécurité a été confirmée excellente par un audit dédié (SQL injection, SSRF, permissions, secrets, CORS, CSRF, webhooks HMAC, WebSocket auth, Celery serializers). Les nouveaux findings sont principalement des optimisations mineures de code quality. Le `.catch(() => {})` résiduel frontend (§16.3) est désormais résolu — 0 occurrence en production.
+**Bilan global (audit #4) :** Sur 119 findings cumulés, **104 sont résolus** (87%). Les 5 issues de l'audit #3 (NEW-BE-1 à BE-5) sont toutes corrigées. L'audit #4 identifie **12 nouvelles issues** dont 1 de sécurité MEDIUM (validation URL), 1 N+1 HIGH (IntegrationService), et 4 MEDIUM (double saves, cascade deactivation). La posture sécurité reste bonne — aucune issue CRITICAL — mais la validation URL des intégrations mérite une correction rapide. L'architecture SOLID backend est exemplaire (registries, ISP, DI). Le principal chantier frontend reste la migration progressive des services directs vers hooks (SOLID-FE-4).

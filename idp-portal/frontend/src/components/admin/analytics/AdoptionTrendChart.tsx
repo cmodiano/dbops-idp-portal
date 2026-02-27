@@ -80,7 +80,7 @@ export function AdoptionTrendChart({ data, loading = false }: AdoptionTrendChart
 
   if (loading) {
     return (
-      <Card title="Tendance d'adoption (par semaine)" size="small">
+      <Card title={<span style={{ fontSize: 15, fontWeight: 600 }}>Tendance d'adoption (par semaine)</span>} size="small">
         <Skeleton active paragraph={{ rows: 6 }} />
       </Card>
     );
@@ -88,14 +88,14 @@ export function AdoptionTrendChart({ data, loading = false }: AdoptionTrendChart
 
   if (!data.length || !chartData.length) {
     return (
-      <Card title="Tendance d'adoption (par semaine)" size="small">
-        <Empty description="Aucune donnee" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+      <Card title={<span style={{ fontSize: 15, fontWeight: 600 }}>Tendance d'adoption (par semaine)</span>} size="small">
+        <Empty description="Aucune donnée" image={Empty.PRESENTED_IMAGE_SIMPLE} />
       </Card>
     );
   }
 
   return (
-    <Card title="Tendance d'adoption (par semaine)" size="small">
+    <Card title={<span style={{ fontSize: 15, fontWeight: 600 }}>Tendance d'adoption (par semaine)</span>} size="small">
       <ResponsiveContainer width="100%" height={300}>
         <LineChart
           data={chartData}
@@ -105,22 +105,22 @@ export function AdoptionTrendChart({ data, loading = false }: AdoptionTrendChart
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
           <XAxis
             dataKey="week"
-            tick={{ fontSize: 11 }}
+            tick={{ fontSize: 13 }}
             tickLine={false}
             axisLine={{ stroke: 'rgba(0,0,0,0.06)' }}
           />
           <YAxis
             allowDecimals={false}
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: 13 }}
             tickLine={false}
             axisLine={false}
           />
           <Tooltip
-            contentStyle={{ fontSize: 12 }}
+            contentStyle={{ fontSize: 13 }}
             labelStyle={{ fontWeight: 600 }}
             formatter={(value: number | undefined, name: string | undefined) => [value ?? 0, name ?? '']}
           />
-          <Legend wrapperStyle={{ fontSize: 12 }} />
+          <Legend wrapperStyle={{ fontSize: 13 }} />
           {engines.map((engine) => (
             <Line
               key={engine}

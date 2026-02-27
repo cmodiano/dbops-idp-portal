@@ -341,7 +341,7 @@ class JiraService:
                     error_code = _ERROR_CODES.get(status_code, f"JIRA_ERROR_{status_code}")
                     try:
                         error_body = response.text
-                    except Exception:  # noqa: BLE001 — graceful-degradation: httpx may raise StreamClosed, DecodeError, etc.
+                    except Exception as _:  # noqa: BLE001 — graceful-degradation: httpx may raise StreamClosed, DecodeError, etc.
                         error_body = ""
 
                     logger.error(

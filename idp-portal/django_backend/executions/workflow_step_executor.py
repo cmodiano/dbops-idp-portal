@@ -241,58 +241,107 @@ class StepExecutor:
                 correlation_id=self.correlation_id,
             )
 
-            # Story 30.15 AC2/AC3: Real adapter call via get_platform_adapter()
-            adapter_response = self.call_platform_adapter(
-                referenced_action, integration, adapter_payload, execution_step,
-            )
+            # Story 47.2: Dispatch async si integration, simulated si pas d'integration
+            if integration:
+                from executions.tasks.trigger import trigger_platform_job  # noqa: PLC0415
+                from executions.tasks.polling import get_platform_queue  # noqa: PLC0415
 
-            step_output_data = {
-                'adapter_ready': True,
-                'adapter_payload_prepared': adapter_payload,
-                'adapter_response': adapter_response,
-                'step_id': step_id,
-                'step_name': step_name,
-                'outcome': StepOutcome.SUCCESS.value,
-                'parameters_used': step_parameters,
-                'delegated_from_workflow': True,
-                'referenced_action_id': referenced_action.id,
-                'referenced_action_name': referenced_action.name,
-            }
+                # Calculer trigger_kwargs (même logique que call_platform_adapter lignes 425–434)
+                trigger_kwargs: dict[str, Any] = {"correlation_id": self.correlation_id}
+                params = adapter_payload.get("parameters") or {}
+                if params.get("template_id"):
+                    trigger_kwargs["template_id"] = str(params["template_id"])
+                if params.get("resource_type"):
+                    trigger_kwargs["resource_type"] = params["resource_type"]
+                if params.get("extra_vars"):
+                    trigger_kwargs["extra_vars"] = params["extra_vars"]
 
-            # Story 28.2: Evaluate business_rule_policies after step output
-            policy_result = self._evaluate_policy_if_needed(
-                execution_step, referenced_action, step_output_data,
-            )
-            if policy_result is not None:
-                # PolicyEvaluator decided — step is WAITING or auto-approved
-                execution_step.set_output(step_output_data)
-                execution_step.save()
-                return policy_result
+                trigger_platform_job.apply_async(
+                    kwargs={
+                        "execution_step_id": execution_step.id,
+                        "execution_id": self.execution.id,
+                        "integration_id": integration.id,
+                        "trigger_kwargs": trigger_kwargs,
+                    },
+                    queue=get_platform_queue(integration.type),
+                )
 
-            execution_step.status = ExecutionStepStatus.COMPLETED
-            execution_step.completed_at = timezone.now()
-            execution_step.set_output(step_output_data)
-            execution_step.save()
+                logger.info(
+                    "workflow_step_trigger_dispatched_async",
+                    execution_id=self.execution.id,
+                    step_id=execution_step.id,
+                    platform=referenced_action.platform,
+                    integration_id=integration.id,
+                    correlation_id=self.correlation_id,
+                )
 
-            logger.info(
-                "workflow_step_completed",
-                execution_id=self.execution.id,
-                step_id=step_id,
-                step_name=step_name,
-                referenced_action_id=referenced_action.id,
-                adapter_ready=True,
-                correlation_id=self.correlation_id,
-            )
-
-            return StepResult(
-                outcome=StepOutcome.SUCCESS,
-                output={
+                step_output_data = {
+                    'adapter_ready': True,
+                    'async_dispatched': True,
                     'step_id': step_id,
                     'step_name': step_name,
+                    'outcome': StepOutcome.SUCCESS.value,
+                    'parameters_used': step_parameters,
+                    'delegated_from_workflow': True,
                     'referenced_action_id': referenced_action.id,
-                    'adapter_payload_prepared': True,
+                    'referenced_action_name': referenced_action.name,
                 }
-            )
+                execution_step.set_output(step_output_data)
+                execution_step.save()  # status reste RUNNING — trigger_platform_job gère la suite
+
+                return StepResult(
+                    outcome=StepOutcome.SUCCESS,
+                    output={
+                        'step_id': step_id,
+                        'step_name': step_name,
+                        'async_dispatched': True,
+                        'referenced_action_id': referenced_action.id,
+                    },
+                )
+
+            else:
+                # Story 47.3 : fail fast — pas d'integration = erreur explicite, pas de succès simulé
+                error_msg = (
+                    f"No integration configured for action {referenced_action.id} "
+                    f"(platform: {referenced_action.platform}). "
+                    f"Configure an integration to enable platform execution."
+                )
+                execution_step.status = ExecutionStepStatus.FAILED
+                execution_step.completed_at = timezone.now()
+                execution_step.error_message = error_msg
+                execution_step.save()
+
+                logger.critical(
+                    "workflow_step_no_integration_fail_fast",
+                    execution_id=self.execution.id,
+                    step_id=execution_step.id,
+                    action_id=referenced_action.id,
+                    platform=referenced_action.platform,
+                    correlation_id=self.correlation_id,
+                )
+                AuditService.create_entry(
+                    user_id=str(self.execution.user_id),
+                    action_type=AuditActionType.EXECUTION_INTEGRATION_ERROR,
+                    entity_type=AuditEntityType.EXECUTION,
+                    entity_id=self.execution.id,
+                    details={
+                        'error': 'NO_INTEGRATION',
+                        'action_id': referenced_action.id,
+                        'platform': referenced_action.platform,
+                        'step_id': execution_step.id,
+                    },
+                    correlation_id=self.correlation_id,
+                )
+                return StepResult(
+                    outcome=StepOutcome.ERROR,
+                    error_message=error_msg,
+                    error_details={
+                        'step_id': step_id,
+                        'step_name': step_name,
+                        'error_type': 'NO_INTEGRATION',
+                        'platform': referenced_action.platform,
+                    },
+                )
 
         except ValueError as e:
             # Handle validation errors (missing referenced_action_id, action not found)
@@ -356,41 +405,17 @@ class StepExecutor:
         adapter_payload: dict,
         execution_step: ExecutionStep,
     ) -> dict:
-        """Call the real platform adapter if integration is configured, else log CRITICAL and return simulated response.
+        """Call the real platform adapter. Raises ValueError if no integration configured.
 
-        Story 30.15 AC2/AC3: Replaces simulated adapter call with real adapter infrastructure.
-        Falls back to simulated response with CRITICAL audit trail when adapter call is not possible.
+        Story 47.3: Fail-fast — no simulated responses. Missing integration raises ValueError.
+        Adapter exceptions are re-raised to be handled by execute() except handler.
         """
         if not integration:
-            logger.critical(
-                "workflow_step_no_integration_simulated",
-                execution_id=self.execution.id,
-                step_id=execution_step.id,
-                action_id=referenced_action.id,
-                action_name=referenced_action.name,
-                platform=referenced_action.platform,
-                correlation_id=self.correlation_id,
+            raise ValueError(
+                f"No integration configured for action {referenced_action.id} "
+                f"(platform: {referenced_action.platform}). "
+                f"Cannot call platform adapter without integration."
             )
-            AuditService.create_entry(
-                user_id=str(self.execution.user_id),
-                action_type=AuditActionType.EXECUTION_RUNNING,
-                entity_type=AuditEntityType.EXECUTION,
-                entity_id=self.execution.id,
-                details={
-                    'warning': 'SIMULATED_ADAPTER_RESPONSE',
-                    'reason': 'Action has no integration configured',
-                    'action_id': referenced_action.id,
-                    'platform': referenced_action.platform,
-                },
-                correlation_id=self.correlation_id,
-            )
-            return {
-                'status': 'success',
-                'simulated': True,
-                'job_id': f'sim-{self.execution.id}-{execution_step.id}',
-                'message': f'SIMULATED: {referenced_action.name} — no integration configured',
-                'platform': referenced_action.platform,
-            }
 
         try:
             from adapters import get_platform_adapter  # noqa: PLC0415
@@ -450,10 +475,7 @@ class StepExecutor:
             )
             return adapter_result
 
-        except Exception as exc:  # noqa: BLE001 — graceful-degradation: adapter failure logged CRITICAL, falls back to simulated response
-            # Adapter call failed (unsupported platform, missing params, network error, etc.)
-            # Log CRITICAL and fall back to simulated response so the workflow can continue.
-            # Real adapter failures are surfaced via the 'simulated' flag in step output.
+        except Exception as exc:  # noqa: BLE001 — re-raised: adapter errors propagated to execute() except handler
             logger.critical(
                 "workflow_step_adapter_call_failed",
                 execution_id=self.execution.id,
@@ -464,26 +486,7 @@ class StepExecutor:
                 correlation_id=self.correlation_id,
                 exc_info=True,
             )
-            AuditService.create_entry(
-                user_id=str(self.execution.user_id),
-                action_type=AuditActionType.EXECUTION_RUNNING,
-                entity_type=AuditEntityType.EXECUTION,
-                entity_id=self.execution.id,
-                details={
-                    'warning': 'SIMULATED_ADAPTER_RESPONSE',
-                    'reason': f'Adapter call failed: {type(exc).__name__}: {exc}',
-                    'action_id': referenced_action.id,
-                    'platform': referenced_action.platform,
-                },
-                correlation_id=self.correlation_id,
-            )
-            return {
-                'status': 'success',
-                'simulated': True,
-                'job_id': f'sim-{self.execution.id}-{execution_step.id}',
-                'message': f'SIMULATED: adapter call failed for {referenced_action.platform}: {exc}',
-                'platform': referenced_action.platform,
-            }
+            raise  # Story 47.3: fail fast — re-raise pour que execute() marque step FAILED
 
     def _evaluate_policy_if_needed(
         self,

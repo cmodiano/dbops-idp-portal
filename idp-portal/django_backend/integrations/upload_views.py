@@ -6,7 +6,7 @@ Story 30.5 — SEC-5/SEC-6/SEC-10: Extension allowlist, magic bytes validation, 
 import os
 import re
 import uuid
-import logging
+import structlog
 from pathlib import Path
 from django.conf import settings
 from rest_framework.views import APIView
@@ -21,7 +21,7 @@ import puremagic
 from defusedxml import ElementTree as DefusedET  # type: ignore[import-untyped]
 from xml.etree.ElementTree import Element
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # SEC-5: Extension allowlist for icon uploads
 ALLOWED_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.svg', '.gif'}
@@ -142,7 +142,8 @@ class UploadIconView(APIView):
         except Exception as e:  # noqa: BLE001 — logged-and-wrapped: unexpected upload error wrapped in InvalidStateError
             logger.exception(
                 "icon_upload_unexpected_error",
-                extra={"error": str(e), "error_type": type(e).__name__},
+                error=str(e),
+                error_type=type(e).__name__,
             )
             raise InvalidStateError(
                 code="UPLOAD_FAILED",
@@ -212,11 +213,9 @@ class UploadIconView(APIView):
             if not detected_mime or detected_mime not in ALLOWED_MIME_TYPES:
                 logger.warning(
                     "upload_magic_bytes_mismatch",
-                    extra={
-                        "declared_mime": file.content_type,
-                        "detected_mime": detected_mime,
-                        "upload_filename": file.name,
-                    }
+                    declared_mime=file.content_type,
+                    detected_mime=detected_mime,
+                    upload_filename=file.name,
                 )
                 raise BadRequestError(
                     code="MAGIC_BYTES_MISMATCH",
@@ -251,7 +250,8 @@ class UploadIconView(APIView):
         except OSError as e:
             logger.error(
                 "icon_upload_dir_failed",
-                extra={"error": str(e), "icons_dir": str(icons_dir)},
+                error=str(e),
+                icons_dir=str(icons_dir),
             )
             raise InvalidStateError(
                 code="UPLOAD_FAILED",
@@ -261,6 +261,20 @@ class UploadIconView(APIView):
 
         # Write file to disk with error handling
         icon_path = icons_dir / unique_filename
+
+        # SEC-14: Defense-in-depth — verify path stays inside icons_dir (path traversal prevention)
+        if not icon_path.resolve().is_relative_to(icons_dir.resolve()):
+            logger.error(
+                "icon_upload_path_traversal",
+                icon_path=str(icon_path.resolve()),
+                icons_dir=str(icons_dir.resolve()),
+            )
+            raise BadRequestError(
+                code="PATH_TRAVERSAL_DETECTED",
+                message="Chemin d'écriture invalide — tentative de path traversal détectée.",
+                details={},
+            )
+
         try:
             with open(icon_path, 'wb') as f:
                 if sanitized_content is not None:
@@ -273,11 +287,9 @@ class UploadIconView(APIView):
         except OSError as e:
             logger.error(
                 "icon_upload_failed",
-                extra={
-                    "error": str(e),
-                    "icon_path": str(icon_path),
-                    "file_size": file.size
-                }
+                error=str(e),
+                icon_path=str(icon_path),
+                file_size=file.size,
             )
             raise InvalidStateError(
                 code="UPLOAD_FAILED",

@@ -7,7 +7,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { TrendLineChart } from './TrendLineChart';
 import type { DashboardTimeSeriesPoint } from '../../../types/api';
 
-// Mock recharts to avoid ResponsiveContainer dimension issues in tests
+// Mock recharts to avoid ResponsiveContainer dimension issues in tests,
+// and expose LineChart aria-label + Legend formatter output (Story 46.5)
 vi.mock('recharts', async () => {
   const actual = await vi.importActual('recharts');
   return {
@@ -15,6 +16,28 @@ vi.mock('recharts', async () => {
     ResponsiveContainer: ({ children }: { children: React.ReactNode }) => (
       <div style={{ width: 500, height: 300 }}>{children}</div>
     ),
+    LineChart: ({
+      children,
+      'aria-label': ariaLabel,
+    }: {
+      children: React.ReactNode;
+      'aria-label'?: string;
+    }) => <div aria-label={ariaLabel}>{children}</div>,
+    Legend: ({
+      formatter,
+    }: {
+      formatter?: (value: string) => string;
+    }) => (
+      <div>
+        <span className="recharts-legend-item-text">{formatter?.('success')}</span>
+        <span className="recharts-legend-item-text">{formatter?.('failed')}</span>
+      </div>
+    ),
+    XAxis: () => null,
+    YAxis: () => null,
+    CartesianGrid: () => null,
+    Tooltip: () => null,
+    Line: () => null,
   };
 });
 
@@ -55,5 +78,30 @@ describe('TrendLineChart', () => {
 
     expect(screen.getByText('Tendances temporelles')).toBeInTheDocument();
     expect(document.querySelector('.ant-card-body')).toBeInTheDocument();
+  });
+});
+
+describe('Story 46.5 — Légendes et libellés lisibles', () => {
+  const mockData: DashboardTimeSeriesPoint[] = [
+    { date: '2026-01-28', success: 10, failed: 2 },
+    { date: '2026-01-29', success: 15, failed: 1 },
+  ];
+
+  it('aria-label contient les accents corrects : succès et échecs', () => {
+    render(<TrendLineChart data={mockData} loading={false} />);
+
+    const chartEl = document.querySelector('[aria-label]');
+    expect(chartEl?.getAttribute('aria-label')).toBe(
+      'Graphique des exécutions par jour : succès et échecs',
+    );
+  });
+
+  it('les légendes affichent "Succès" et "Échecs" avec accents', () => {
+    render(<TrendLineChart data={mockData} loading={false} />);
+
+    const legendItems = document.querySelectorAll('.recharts-legend-item-text');
+    const texts = Array.from(legendItems).map((el) => el.textContent);
+    expect(texts).toContain('Succès');
+    expect(texts).toContain('Échecs');
   });
 });

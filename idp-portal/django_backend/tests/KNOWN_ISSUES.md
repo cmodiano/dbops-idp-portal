@@ -82,6 +82,15 @@
 
 ---
 
+## ⏭️ Pre-existing Failures (Environment-Specific)
+
+| Test | Reason | Story |
+|------|--------|-------|
+| `profiles/tests/test_permissions_views.py::test_set_profile_actions_list` | Table DBOPS_INVENTORY absente en environnement local (Oracle non disponible) | 2.31 |
+| `profiles/tests/test_permissions_views.py::test_set_profile_actions_pattern` | Table DBOPS_INVENTORY absente en environnement local (Oracle non disponible) | 2.31 |
+
+---
+
 ## ⏭️ Skipped Tests (Justified)
 
 | Test | Reason |

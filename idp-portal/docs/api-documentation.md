@@ -17,12 +17,25 @@
 
 ## Authentification
 
-Pour tester les endpoints protégés dans Swagger UI :
+Deux flux d'authentification sont disponibles :
+
+### Flux SAML (interactif)
+
+Pour les utilisateurs connectés via le portail (SAML) :
 1. Cliquer sur **Authorize** en haut à droite
 2. Entrer votre token JWT : `Bearer <votre_token>`
 3. Cliquer sur **Authorize**
 
 > En mode développement avec `AUTH_DEV_BYPASS=True`, utiliser `Bearer dev-mock-token-for-testing`.
+
+### Flux API key (programmatique)
+
+Pour les scripts, pipelines CI/CD ou consommation API externe :
+1. Appeler `POST /api/v1/auth/token` avec le header `X-API-Key` contenant votre clé API
+2. Copier `access_token` de la réponse JSON (`data.access_token`)
+3. Cliquer **Authorize** et coller le token **sans préfixe "Bearer"** — Swagger l'ajoute automatiquement
+
+> Pour les détails complets (curl, erreurs, rate limit, création de clés), consulter [api-self-service.md](api-self-service.md) (doc interne) ou l'interface interactive [Swagger UI](http://localhost:8000/api/schema/swagger-ui/).
 
 ## Export du schéma
 

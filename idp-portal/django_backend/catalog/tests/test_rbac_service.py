@@ -2,11 +2,13 @@
 Tests for CatalogRBACService.
 
 Story 26.3 - AC7: Unit tests for the extracted RBAC service.
+Story 2.31 - H1: Integration tests (CatalogRBACService + ProfileService real DB).
 """
 from __future__ import annotations
 
 from unittest.mock import patch, MagicMock
 
+import pytest
 from django.core.cache import cache
 
 from catalog.rbac_service import CatalogRBACService
@@ -212,6 +214,90 @@ class TestGetPermissions:
         assert result['action_ids'] == [1, 2, 3]
         assert result['tag_patterns'] == ['db-*']
         assert result['environments'] == ['dev', 'prod']
+
+    @patch('catalog.rbac_service.ProfileService')
+    @patch('catalog.rbac_service.get_user_ad_groups')
+    def test_dba_multi_technologies_union(self, mock_ad_groups, mock_ps_class):
+        """AC2 — DBA SQL+Oracle : union des tag_patterns sql-server et oracle.
+
+        Vérifie que CatalogRBACService agrège correctement les permissions de deux profils
+        distincts (DBA-SQL et DBA-ORACLE) pour un DBA multi-technologies.
+        Réf : spec-rbac-cumul-permissions-multi-groupes.md, Story 2.31.
+        """
+        user = MagicMock()
+        user.is_authenticated = True
+        user.id = 42
+        mock_ad_groups.return_value = ['GRP-DBA-SQL', 'GRP-DBA-ORACLE']
+        # ProfileService retourne 2 entrées (une par profil), comme le fait l'implémentation réelle
+        mock_ps_class.return_value.get_cumulative_permissions.return_value = {
+            'action_permissions': [
+                {
+                    'actions_type': 'pattern',
+                    'action_ids': [],
+                    'tag_patterns': ['sql-server'],
+                    'environments': ['dev', 'staging'],
+                },
+                {
+                    'actions_type': 'pattern',
+                    'action_ids': [],
+                    'tag_patterns': ['oracle'],
+                    'environments': ['prod'],
+                },
+            ]
+        }
+
+        result = self.service.get_permissions(user)
+
+        assert result is not None
+        assert result['actions_type'] == 'pattern'
+        # Union des tag_patterns : sql-server ET oracle
+        assert 'sql-server' in result['tag_patterns']
+        assert 'oracle' in result['tag_patterns']
+        # Union des environnements
+        assert 'dev' in result['environments']
+        assert 'staging' in result['environments']
+        assert 'prod' in result['environments']
+
+    @patch('catalog.rbac_service.ProfileService')
+    @patch('catalog.rbac_service.get_user_ad_groups')
+    def test_conflict_resolved_by_union(self, mock_ad_groups, mock_ps_class):
+        """AC3 — Conflit résolu par union : si Profil 1 autorise action X et Profil 2 non → X autorisé.
+
+        La règle most permissive wins : un seul profil autorisant suffit.
+        Réf : spec-rbac-cumul-permissions-multi-groupes.md, Story 2.31.
+        """
+        user = MagicMock()
+        user.is_authenticated = True
+        user.id = 99
+        mock_ad_groups.return_value = ['GRP-ALLOW', 'GRP-DENY']
+        mock_ps_class.return_value.get_cumulative_permissions.return_value = {
+            'action_permissions': [
+                {
+                    'actions_type': 'list',
+                    'action_ids': [10],  # Profil 1 autorise action 10
+                    'tag_patterns': [],
+                    'environments': ['dev'],
+                },
+                {
+                    'actions_type': 'list',
+                    'action_ids': [20],  # Profil 2 n'autorise pas action 10
+                    'tag_patterns': [],
+                    'environments': ['staging'],
+                },
+            ]
+        }
+
+        result = self.service.get_permissions(user)
+
+        assert result is not None
+        assert result['actions_type'] == 'list'
+        # L'action 10 est autorisée par l'union (Profil 1 dit oui)
+        assert 10 in result['action_ids']
+        # L'action 20 est aussi autorisée (Profil 2 dit oui)
+        assert 20 in result['action_ids']
+        # Environnements : union des deux profils
+        assert 'dev' in result['environments']
+        assert 'staging' in result['environments']
 
     @patch('catalog.rbac_service.ProfileService')
     @patch('catalog.rbac_service.get_user_ad_groups')
@@ -483,3 +569,100 @@ class TestCheckAction:
         }
         result = self.service.check_action({'id': 3}, permissions)
         assert result is True
+
+
+@pytest.mark.django_db
+class TestGetPermissionsIntegration:
+    """
+    Integration tests: CatalogRBACService + ProfileService with real DB.
+
+    Story 2.31 H1: Task 5.2 — Verify full chain ProfileService (DB) → CatalogRBACService
+    for DBA multi-technologies case. No mocks.
+    """
+
+    def setup_method(self):
+        cache.clear()
+        self.service = CatalogRBACService()
+
+    def test_dba_multi_technologies_integration(self):
+        """AC2 — Full integration: 2 profiles in DB → CatalogRBACService returns union.
+
+        Verifies ProfileService.get_cumulative_permissions (real DB) feeds
+        CatalogRBACService.get_permissions() correctly.
+        """
+        from profiles.models import Profile, ProfileActionPermission
+
+        # Create DBA-SQL profile
+        profile_sql = Profile.objects.create(
+            name='DBA-SQL',
+            ad_group='GRP-DBA-SQL',
+        )
+        perm_sql = ProfileActionPermission.objects.create(
+            profile=profile_sql,
+            permission_type='PATTERN',
+        )
+        perm_sql.set_tag_patterns(['sql-server'])
+        perm_sql.set_environments(['dev', 'staging'])
+        perm_sql.save()
+
+        # Create DBA-ORACLE profile
+        profile_oracle = Profile.objects.create(
+            name='DBA-ORACLE',
+            ad_group='GRP-DBA-ORACLE',
+        )
+        perm_oracle = ProfileActionPermission.objects.create(
+            profile=profile_oracle,
+            permission_type='PATTERN',
+        )
+        perm_oracle.set_tag_patterns(['oracle'])
+        perm_oracle.set_environments(['prod'])
+        perm_oracle.save()
+
+        # User with both AD groups (no mock on ProfileService)
+        # MagicMock has get_ad_groups by default — override so get_user_ad_groups uses ad_groups
+        user = MagicMock()
+        user.id = 42
+        user.is_authenticated = True
+        user.ad_groups = ['GRP-DBA-SQL', 'GRP-DBA-ORACLE']
+        user.configure_mock(get_ad_groups=None)  # Force use of ad_groups attr
+
+        result = self.service.get_permissions(user)
+
+        assert result is not None
+        assert result['actions_type'] == 'pattern'
+        assert 'sql-server' in result['tag_patterns']
+        assert 'oracle' in result['tag_patterns']
+        assert 'dev' in result['environments']
+        assert 'staging' in result['environments']
+        assert 'prod' in result['environments']
+
+    def test_conflict_resolved_by_union_integration(self):
+        """AC3 — Full integration: Profil 1 allows action 10, Profil 2 does not → union allows 10."""
+        from profiles.models import Profile, ProfileActionPermission
+
+        profile1 = Profile.objects.create(name='Profil-Allow', ad_group='GRP-ALLOW')
+        perm1 = ProfileActionPermission.objects.create(profile=profile1, permission_type='LIST')
+        perm1.set_action_ids([10])
+        perm1.set_environments(['dev'])
+        perm1.save()
+
+        profile2 = Profile.objects.create(name='Profil-Deny', ad_group='GRP-DENY')
+        perm2 = ProfileActionPermission.objects.create(profile=profile2, permission_type='LIST')
+        perm2.set_action_ids([20])
+        perm2.set_environments(['staging'])
+        perm2.save()
+
+        user = MagicMock()
+        user.id = 99
+        user.is_authenticated = True
+        user.ad_groups = ['GRP-ALLOW', 'GRP-DENY']
+        user.configure_mock(get_ad_groups=None)  # Force use of ad_groups attr
+
+        result = self.service.get_permissions(user)
+
+        assert result is not None
+        assert result['actions_type'] == 'list'
+        assert 10 in result['action_ids']
+        assert 20 in result['action_ids']
+        assert 'dev' in result['environments']
+        assert 'staging' in result['environments']

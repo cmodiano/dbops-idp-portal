@@ -21,20 +21,20 @@ describe('ProfileBarChart', () => {
   it('renders chart with data', () => {
     render(<ProfileBarChart data={mockData} loading={false} />);
 
-    expect(screen.getByText('Executions par profil')).toBeInTheDocument();
+    expect(screen.getByText('Exécutions par profil')).toBeInTheDocument();
   });
 
   it('renders empty state when no data', () => {
     render(<ProfileBarChart data={[]} loading={false} />);
 
-    expect(screen.getByText('Executions par profil')).toBeInTheDocument();
+    expect(screen.getByText('Exécutions par profil')).toBeInTheDocument();
     expect(screen.getByText('Aucune execution')).toBeInTheDocument();
   });
 
   it('renders skeleton when loading', () => {
     render(<ProfileBarChart data={[]} loading={true} />);
 
-    expect(screen.getByText('Executions par profil')).toBeInTheDocument();
+    expect(screen.getByText('Exécutions par profil')).toBeInTheDocument();
     expect(document.querySelector('.ant-skeleton')).toBeTruthy();
   });
 });

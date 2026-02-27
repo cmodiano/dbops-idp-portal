@@ -58,6 +58,64 @@ class TestAPISchemaGeneration:
         assert bearer['scheme'] == 'bearer'
         assert bearer['bearerFormat'] == 'JWT'
 
+    def test_schema_has_api_key_auth_security_scheme(self):
+        """Story 44.9 AC1/AC5: Le schéma contient le security scheme apiKeyAuth avec description."""
+        client = APIClient()
+        schema = _get_schema(client)
+        components = schema.get('components', {})
+        security_schemes = components.get('securitySchemes', {})
+        assert 'apiKeyAuth' in security_schemes
+        api_key = security_schemes['apiKeyAuth']
+        assert api_key['type'] == 'apiKey'
+        assert api_key['in'] == 'header'
+        assert api_key['name'] == 'X-API-Key'
+        # M1: description doit être présente (AC1 spécifie le format complet)
+        assert 'description' in api_key, "apiKeyAuth doit inclure une description"
+        assert len(api_key['description']) > 0
+
+    def test_auth_token_endpoint_documents_x_api_key(self):
+        """Story 44.9 AC5: POST /auth/token documente le header X-API-Key requis."""
+        client = APIClient()
+        schema = _get_schema(client)
+        paths = schema.get('paths', {})
+        # Path may be /auth/token/ or /api/v1/auth/token/ depending on SCHEMA_PATH_PREFIX
+        token_path = paths.get('/auth/token/') or paths.get('/api/v1/auth/token/')
+        assert token_path is not None, "POST /auth/token doit être documenté dans le schéma"
+        post_op = token_path.get('post')
+        assert post_op is not None, "POST /auth/token doit avoir une opération post"
+        parameters = post_op.get('parameters', [])
+        header_params = [p for p in parameters if p.get('in') == 'header' and p.get('name') == 'X-API-Key']
+        assert len(header_params) >= 1, "POST /auth/token doit documenter le paramètre X-API-Key (header)"
+        # H2: le paramètre doit être required=True (un header manquant → 401)
+        assert header_params[0].get('required') is True, "X-API-Key doit être marqué required=True"
+
+    def test_auth_token_endpoint_has_api_key_security(self):
+        """Story 44.9 AC2: POST /auth/token est associé au scheme apiKeyAuth."""
+        client = APIClient()
+        schema = _get_schema(client)
+        paths = schema.get('paths', {})
+        token_path = paths.get('/auth/token/') or paths.get('/api/v1/auth/token/')
+        assert token_path is not None, "POST /auth/token doit être documenté dans le schéma"
+        post_op = token_path.get('post')
+        assert post_op is not None
+        security = post_op.get('security', [])
+        api_key_schemes = [s for s in security if 'apiKeyAuth' in s]
+        assert len(api_key_schemes) >= 1, "POST /auth/token doit référencer le scheme apiKeyAuth"
+
+    def test_schema_description_contains_api_key_workflow(self):
+        """Story 44.9 AC3: La description globale décrit le workflow API key en 3 étapes."""
+        client = APIClient()
+        schema = _get_schema(client)
+        description = schema.get('info', {}).get('description', '')
+        # Vérifier que le workflow en 3 étapes est documenté
+        assert 'X-API-Key' in description, "La description doit mentionner X-API-Key"
+        assert 'auth/token' in description, "La description doit mentionner POST /auth/token"
+        # Vérifier la mention du rate limiting
+        assert '10' in description, "La description doit mentionner le rate limit (10 req/min)"
+        # Vérifier la présence d'un exemple curl exploitable directement depuis Swagger UI
+        # (pas de lien vers fichier .md non accessible via navigateur)
+        assert 'curl' in description, "La description doit inclure un exemple curl utilisable"
+
     def test_schema_has_paths(self):
         """Le schéma contient des endpoints documentés."""
         client = APIClient()

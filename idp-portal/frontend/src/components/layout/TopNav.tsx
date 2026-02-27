@@ -1,4 +1,5 @@
 import './TopNav.css';
+import { Fragment } from 'react';
 import { Dropdown, Avatar, Space, Typography, theme, Badge, Tooltip } from 'antd';
 import {
   AppstoreOutlined,
@@ -12,6 +13,7 @@ import {
   MoonOutlined,
   AuditOutlined,
   BellOutlined,
+  KeyOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router';
 import { useAuth } from '../../contexts/AuthContext';
@@ -95,6 +97,12 @@ export function TopNav() {
       disabled: true,
     },
     { type: 'divider' },
+    {
+      key: 'api-keys',
+      label: 'Mes clés API',
+      icon: <KeyOutlined />,
+      onClick: () => navigate('/api-keys'),
+    },
     {
       key: 'logout',
       label: 'Déconnexion',
@@ -199,7 +207,7 @@ export function TopNav() {
               {buttonContent}
             </Badge>
           ) : (
-            <span key={key}>{buttonContent}</span>
+            <Fragment key={key}>{buttonContent}</Fragment>
           );
         })}
       </div>

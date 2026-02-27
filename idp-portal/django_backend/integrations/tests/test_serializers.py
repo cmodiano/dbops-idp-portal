@@ -35,6 +35,141 @@ class TestValidateUrl(TestCase):
     def test_empty_string_passthrough(self):
         self.assertEqual(validate_url(''), '')
 
+    # --- Story 48.1: SSRF prevention tests ---
+
+    def test_localhost_rejected(self):
+        """AC1: localhost is rejected."""
+        with self.assertRaises(drf_serializers.ValidationError):
+            validate_url('http://localhost/api')
+
+    def test_127_0_0_1_rejected(self):
+        """AC1: 127.0.0.1 is rejected."""
+        with self.assertRaises(drf_serializers.ValidationError):
+            validate_url('http://127.0.0.1:8080/')
+
+    def test_ipv6_loopback_rejected(self):
+        """AC1: ::1 (IPv6 loopback) is rejected."""
+        with self.assertRaises(drf_serializers.ValidationError):
+            validate_url('http://[::1]/api')
+
+    def test_private_ip_10_rejected(self):
+        """AC2: RFC 1918 10.x.x.x is rejected."""
+        with self.assertRaises(drf_serializers.ValidationError):
+            validate_url('http://10.0.0.1/api')
+
+    def test_private_ip_172_16_rejected(self):
+        """AC2: RFC 1918 172.16.x.x is rejected."""
+        with self.assertRaises(drf_serializers.ValidationError):
+            validate_url('http://172.16.0.1/api')
+
+    def test_private_ip_192_168_rejected(self):
+        """AC2: RFC 1918 192.168.x.x is rejected."""
+        with self.assertRaises(drf_serializers.ValidationError):
+            validate_url('http://192.168.1.1/api')
+
+    def test_credentials_in_url_rejected(self):
+        """AC3: URL with user:pass@host is rejected."""
+        with self.assertRaises(drf_serializers.ValidationError):
+            validate_url('https://user:pass@api.example.com')
+
+    def test_valid_public_https(self):
+        """AC5: Public HTTPS URL is accepted."""
+        result = validate_url('https://api.example.com')
+        self.assertEqual(result, 'https://api.example.com')
+
+    def test_valid_public_http(self):
+        """AC5: Public HTTP URL is accepted."""
+        result = validate_url('http://api.example.com')
+        self.assertEqual(result, 'http://api.example.com')
+
+    def test_valid_public_with_port(self):
+        """AC5: Public URL with port is accepted."""
+        result = validate_url('https://api.example.com:8443/path')
+        self.assertEqual(result, 'https://api.example.com:8443/path')
+
+    def test_valid_internal_fqdn_accepted(self):
+        """AC5: Internal FQDN (non-IP) is accepted — only IPs and localhost are blocked."""
+        result = validate_url('https://aap.prod.internal.corp')
+        self.assertEqual(result, 'https://aap.prod.internal.corp')
+
+    # --- Story 48.1 code-review fixes ---
+
+    def test_link_local_aws_metadata_rejected(self):
+        """HIGH fix: 169.254.169.254 (AWS/GCP/Azure metadata service) is rejected."""
+        with self.assertRaises(drf_serializers.ValidationError):
+            validate_url('http://169.254.169.254/latest/meta-data/')
+
+    def test_link_local_range_rejected(self):
+        """HIGH fix: Any 169.254.x.x address is rejected."""
+        with self.assertRaises(drf_serializers.ValidationError):
+            validate_url('http://169.254.0.1/api')
+
+    def test_ipv6_link_local_rejected(self):
+        """HIGH fix: IPv6 link-local fe80::/10 is rejected."""
+        with self.assertRaises(drf_serializers.ValidationError):
+            validate_url('http://[fe80::1]/api')
+
+    def test_zero_network_rejected(self):
+        """MEDIUM fix: 0.0.0.1 (0.0.0.0/8 network) is rejected."""
+        with self.assertRaises(drf_serializers.ValidationError):
+            validate_url('http://0.0.0.1/api')
+
+    def test_ipv6_ula_rejected(self):
+        """MEDIUM fix: IPv6 ULA fc00::/7 is rejected."""
+        with self.assertRaises(drf_serializers.ValidationError):
+            validate_url('http://[fd00::1]/api')
+
+    def test_0_0_0_0_rejected(self):
+        """LOW: 0.0.0.0 exact address is rejected."""
+        with self.assertRaises(drf_serializers.ValidationError):
+            validate_url('http://0.0.0.0/api')
+
+
+class TestIntegrationCreateSerializerSsrf(TestCase):
+    """Story 48.1: SSRF validation applied to base_url and token_url in IntegrationCreateSerializer."""
+
+    def test_base_url_localhost_rejected(self):
+        """AC6: base_url with localhost is rejected by IntegrationCreateSerializer."""
+        data = {'type': 'aap', 'name': 'Test', 'base_url': 'http://localhost/api'}
+        s = IntegrationCreateSerializer(data=data)
+        self.assertFalse(s.is_valid())
+        self.assertIn('base_url', s.errors)
+
+    def test_token_url_private_ip_rejected(self):
+        """AC6: token_url with private IP is rejected by IntegrationCreateSerializer."""
+        data = {
+            'type': 'aap', 'name': 'Test', 'base_url': 'https://api.example.com',
+            'token_url': 'http://192.168.1.1/token',
+        }
+        s = IntegrationCreateSerializer(data=data)
+        self.assertFalse(s.is_valid())
+        self.assertIn('token_url', s.errors)
+
+
+class TestIntegrationUpdateSerializerSsrf(TestCase):
+    """Story 48.1: SSRF validation applied to base_url and token_url in IntegrationUpdateSerializer."""
+
+    def test_base_url_private_ip_rejected(self):
+        """AC6: base_url with private IP is rejected by IntegrationUpdateSerializer."""
+        data = {'base_url': 'http://10.0.0.1/api'}
+        s = IntegrationUpdateSerializer(data=data)
+        self.assertFalse(s.is_valid())
+        self.assertIn('base_url', s.errors)
+
+    def test_token_url_private_ip_rejected(self):
+        """AC6 (code-review fix): token_url with private IP is rejected by IntegrationUpdateSerializer."""
+        data = {'token_url': 'http://192.168.1.1/token'}
+        s = IntegrationUpdateSerializer(data=data)
+        self.assertFalse(s.is_valid())
+        self.assertIn('token_url', s.errors)
+
+    def test_token_url_link_local_rejected(self):
+        """AC6 (code-review fix): token_url with link-local (metadata service) is rejected."""
+        data = {'token_url': 'http://169.254.169.254/token'}
+        s = IntegrationUpdateSerializer(data=data)
+        self.assertFalse(s.is_valid())
+        self.assertIn('token_url', s.errors)
+
 
 class TestIntegrationCreateSerializer(TestCase):
     """Tests for IntegrationCreateSerializer."""

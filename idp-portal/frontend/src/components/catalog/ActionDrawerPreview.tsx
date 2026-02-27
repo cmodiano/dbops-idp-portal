@@ -90,13 +90,12 @@ export function ActionDrawerPreview({
   action,
   visible = true,
   canExecute,
-  allowedEnvironments = EMPTY_ENVIRONMENTS,
+  allowedEnvironments: _allowedEnvironments = EMPTY_ENVIRONMENTS,  // Intentionnellement non utilisé — préfixe _ = conservé pour compatibilité des appelants
   onExecute,
   statsLoading = false,
 }: ActionDrawerPreviewProps) {
-  // Note: allowedEnvironments is passed to the component for future env-specific execute button logic
-  // Currently used in parent (CatalogPage) to determine canExecute; kept here for complete prop interface
-  void allowedEnvironments;
+  // Note: _allowedEnvironments est conservé dans l'interface pour la compatibilité des appelants
+  // (CatalogPage le passe pour future logique d'execute par env) — préfixe _ = intentionnellement non utilisé
   const { effectiveMode } = useTheme();
   const isDark = effectiveMode === 'dark';
   const { token } = theme.useToken();

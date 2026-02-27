@@ -1,12 +1,12 @@
 import json
-import logging
+import structlog
 from datetime import datetime
 from typing import Any, cast
 from django.db import models
 from idp_auth.models import User
 from catalog.models import Action
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class ExecutionEnvironment(models.TextChoices):

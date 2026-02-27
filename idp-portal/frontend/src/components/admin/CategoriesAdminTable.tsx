@@ -9,6 +9,7 @@ import type { TableProps } from 'antd';
 import { PlusOutlined, ReloadOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import type { RefCategory } from '../../types/api';
 import { getCategories, deleteCategory } from '../../services/categories_service';
+import { invalidateCategoriesCache } from '../../hooks/useCategories';
 import { CategoryForm } from './CategoryForm';
 
 export function CategoriesAdminTable() {
@@ -52,6 +53,7 @@ export function CategoriesAdminTable() {
       onOk: async () => {
         try {
           await deleteCategory(record.id);
+          invalidateCategoriesCache();
           notification.success({
             message: 'Succès',
             description: `Catégorie « ${record.label} » désactivée`,
@@ -70,6 +72,7 @@ export function CategoriesAdminTable() {
   const handleFormSuccess = () => {
     setFormOpen(false);
     setEditCategory(null);
+    invalidateCategoriesCache();
     fetchCategories();
   };
 

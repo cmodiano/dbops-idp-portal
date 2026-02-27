@@ -400,8 +400,8 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                       class="ant-form-item-control-input-content"
                     >
                       <div
-                        class="ant-picker ant-picker-range ant-picker-outlined css-dev-only-do-not-override-1d8anct css-var-root ant-picker-css-var"
-                        style="width: 100%;"
+                        class="ant-picker ant-picker-range ant-picker-large ant-picker-outlined css-dev-only-do-not-override-1d8anct css-var-root ant-picker-css-var"
+                        style="width: 100%; min-height: 44px;"
                       >
                         <div
                           class="ant-picker-input ant-picker-input-start"
@@ -522,8 +522,9 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                       class="ant-form-item-control-input-content"
                     >
                       <div
-                        class="ant-select ant-select-outlined ant-select-in-form-item css-var-root ant-select-css-var css-dev-only-do-not-override-1d8anct ant-select-single ant-select-show-arrow ant-select-show-search"
+                        class="ant-select ant-select-lg ant-select-outlined ant-select-in-form-item css-var-root ant-select-css-var css-dev-only-do-not-override-1d8anct ant-select-single ant-select-show-arrow ant-select-show-search"
                         data-testid="filter-action"
+                        style="min-height: 44px;"
                       >
                         <div
                           class="ant-select-content"
@@ -607,8 +608,9 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                       class="ant-form-item-control-input-content"
                     >
                       <div
-                        class="ant-select ant-select-outlined ant-select-in-form-item css-var-root ant-select-css-var css-dev-only-do-not-override-1d8anct ant-select-single ant-select-show-arrow"
+                        class="ant-select ant-select-lg ant-select-outlined ant-select-in-form-item css-var-root ant-select-css-var css-dev-only-do-not-override-1d8anct ant-select-single ant-select-show-arrow"
                         data-testid="filter-engine"
+                        style="min-height: 44px;"
                       >
                         <div
                           class="ant-select-content"
@@ -698,8 +700,9 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                       class="ant-form-item-control-input-content"
                     >
                       <div
-                        class="ant-select ant-select-outlined ant-select-in-form-item css-var-root ant-select-css-var css-dev-only-do-not-override-1d8anct ant-select-multiple ant-select-show-arrow ant-select-show-search"
+                        class="ant-select ant-select-lg ant-select-outlined ant-select-in-form-item css-var-root ant-select-css-var css-dev-only-do-not-override-1d8anct ant-select-multiple ant-select-show-arrow ant-select-show-search"
                         data-testid="filter-tags"
+                        style="min-height: 44px;"
                       >
                         <div
                           class="ant-select-content"
@@ -794,8 +797,9 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                       class="ant-form-item-control-input-content"
                     >
                       <div
-                        class="ant-select ant-select-outlined ant-select-in-form-item css-var-root ant-select-css-var css-dev-only-do-not-override-1d8anct ant-select-single ant-select-show-arrow"
+                        class="ant-select ant-select-lg ant-select-outlined ant-select-in-form-item css-var-root ant-select-css-var css-dev-only-do-not-override-1d8anct ant-select-single ant-select-show-arrow"
                         data-testid="filter-status"
+                        style="min-height: 44px;"
                       >
                         <div
                           class="ant-select-content"
@@ -880,8 +884,9 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                       class="ant-form-item-control-input-content"
                     >
                       <div
-                        class="ant-select ant-select-outlined ant-select-in-form-item css-var-root ant-select-css-var css-dev-only-do-not-override-1d8anct ant-select-single ant-select-show-arrow"
+                        class="ant-select ant-select-lg ant-select-outlined ant-select-in-form-item css-var-root ant-select-css-var css-dev-only-do-not-override-1d8anct ant-select-single ant-select-show-arrow"
                         data-testid="filter-environment"
+                        style="min-height: 44px;"
                       >
                         <div
                           class="ant-select-content"
@@ -966,7 +971,7 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                       class="ant-form-item-control-input-content"
                     >
                       <button
-                        class="ant-btn css-dev-only-do-not-override-1d8anct css-var-root ant-btn-default ant-btn-color-default ant-btn-variant-outlined"
+                        class="ant-btn css-dev-only-do-not-override-1d8anct css-var-root ant-btn-default ant-btn-color-default ant-btn-variant-outlined ant-btn-lg"
                         data-testid="filter-reset"
                         disabled=""
                         type="button"
@@ -1493,7 +1498,7 @@ exports[`ExecutionsPage - Compact Mode (Story 17.13) > compact table matches sna
                     >
                       <span
                         class="ant-tag ant-tag-filled css-dev-only-do-not-override-1d8anct css-var-root"
-                        style="margin: 0px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid rgb(16, 185, 129); background-color: rgb(255, 255, 255); color: rgb(16, 185, 129); padding: 1px 6px; font-size: 12px; line-height: 20px;"
+                        style="margin: 0px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid rgb(16, 185, 129); background-color: rgb(255, 255, 255); color: rgb(22, 101, 52); padding: 1px 6px; font-size: 12px; line-height: 20px;"
                       >
                         <span
                           class="ant-badge ant-badge-status ant-badge-not-a-wrapper css-dev-only-do-not-override-1d8anct css-var-root"

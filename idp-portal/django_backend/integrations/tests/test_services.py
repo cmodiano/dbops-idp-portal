@@ -402,3 +402,183 @@ class TestIntegrationServiceValidation(TestCase):
         )
         result = self.service.parse_config(integration)
         self.assertIsNone(result)
+
+
+# ─── Story 48.2: Tests de non-régression N+1 / double saves ──────────────────
+
+
+@pytest.mark.django_db
+class TestCreateIntegrationSingleSave(TestCase):
+    """Story 48.2 — NEW-BE-7 : create_integration() fusionne les saves post-create."""
+
+    def setUp(self):
+        self.service = IntegrationService()
+        self.user = UserFactory(profile='dbops')
+
+    def test_create_integration_with_config_stores_in_db(self):
+        """create_integration() avec config stocke la config correctement en DB (1 seul save post-create)."""
+        data = {
+            'type': 'aap',
+            'name': 'Integration Config Test 48.2',
+            'base_url': 'https://aap48.example.com',
+            'config': {'api_key': 'secret', 'timeout': 30},
+        }
+        integration = self.service.create_integration(data, user=self.user)
+
+        self.assertIsNotNone(integration.id)
+        # Config correctement persistée en DB
+        integration.refresh_from_db()
+        self.assertEqual(integration.get_config(), {'api_key': 'secret', 'timeout': 30})
+
+    def test_create_integration_without_config_no_extra_save(self):
+        """create_integration() sans config ni status change ne fait aucun save supplémentaire."""
+        data = {
+            'type': 'servicenow',
+            'name': 'Integration No Extra Save 48.2',
+            'base_url': 'https://sn48.example.com',
+        }
+        integration = self.service.create_integration(data)
+
+        self.assertIsNotNone(integration.id)
+        integration.refresh_from_db()
+        self.assertIsNone(integration.get_config())
+
+    def test_create_integration_with_config_max_one_extra_save(self):
+        """NEW-BE-7 : create_integration() avec config effectue au plus 1 save() supplémentaire après l'INSERT."""
+        from unittest.mock import patch
+
+        data = {
+            'type': 'aap',
+            'name': 'Save Count Test 48.2',
+            'base_url': 'https://aap48.example.com',
+            'config': {'api_key': 'secret'},
+        }
+
+        save_call_count = 0
+        original_save = Integration.save
+
+        def counting_save(instance, *args, **kwargs):
+            nonlocal save_call_count
+            save_call_count += 1
+            return original_save(instance, *args, **kwargs)
+
+        with patch.object(Integration, 'save', counting_save):
+            integration = self.service.create_integration(data, user=self.user)
+
+        # 1 INSERT (objects.create) + au plus 1 UPDATE post-create (config + status fusionnés)
+        self.assertLessEqual(
+            save_call_count, 2,
+            f"create_integration() avec config ne doit pas faire plus de 2 saves (actuel: {save_call_count})"
+        )
+        self.assertIsNotNone(integration.id)
+
+
+@pytest.mark.django_db
+class TestUpdateIntegrationSingleSave(TestCase):
+    """Story 48.2 — NEW-BE-8 : update_integration() met à jour le status en un seul save."""
+
+    def setUp(self):
+        self.service = IntegrationService()
+        self.user = UserFactory(profile='dbops')
+        self.integration = Integration.objects.create(
+            type='aap', name='Update Status Test 48.2', base_url='https://aap48.example.com'
+        )
+
+    def test_update_integration_status_reflected_in_db(self):
+        """update_integration() calcule le status avant save — le status final est persisté en DB."""
+        updated = self.service.update_integration(
+            self.integration.id, {'name': 'Update Status Test 48.2 Renamed'}, user=self.user
+        )
+        # Vérifier persistance en DB (pas uniquement en mémoire)
+        self.integration.refresh_from_db()
+        self.assertEqual(self.integration.name, 'Update Status Test 48.2 Renamed')
+        self.assertEqual(self.integration.status, updated.status)
+
+    def test_update_integration_status_change_single_save(self):
+        """NEW-BE-8 : quand validate_integration() retourne un statut différent, update_integration()
+        calcule le status AVANT le save unique — pas de second save conditionnel."""
+        from unittest.mock import patch
+        from integrations.models import IntegrationStatus
+        from integrations.validation_service import IntegrationValidationService
+
+        # Forcer un changement de statut : VALID → INVALID
+        save_call_count = 0
+        original_save = Integration.save
+
+        def counting_save(instance, *args, **kwargs):
+            nonlocal save_call_count
+            save_call_count += 1
+            return original_save(instance, *args, **kwargs)
+
+        with patch.object(Integration, 'save', counting_save), \
+             patch.object(IntegrationValidationService, 'validate_integration',
+                          return_value=IntegrationStatus.INVALID):
+            updated = self.service.update_integration(
+                self.integration.id, {'name': 'Status Change Single Save 48.2'}, user=self.user
+            )
+
+        # Le status calculé doit être persisté en DB
+        self.assertEqual(updated.status, IntegrationStatus.INVALID)
+        self.integration.refresh_from_db()
+        self.assertEqual(self.integration.status, IntegrationStatus.INVALID)
+        # Un seul save() (plus le calcul du status était AVANT le save)
+        self.assertEqual(save_call_count, 1,
+            f"update_integration() ne doit faire qu'1 save() même quand le status change (actuel: {save_call_count})")
+
+
+@pytest.mark.django_db
+class TestDeleteIntegration3PlusActions(TestCase):
+    """Story 48.2 — NEW-BE-6 : delete_integration() bulk update 3+ actions + audit par action."""
+
+    def setUp(self):
+        self.service = IntegrationService()
+        self.user = UserFactory(profile='dbops')
+        self.integration = Integration.objects.create(
+            type='aap', name='Integration With 3 Actions 48.2', base_url='https://aap48.example.com'
+        )
+
+    def test_delete_integration_3_actions_all_disabled(self):
+        """delete_integration() avec 3 actions liées les désactive toutes via bulk update."""
+        from catalog.models import Action, ActionStatus
+        actions = [
+            Action.objects.create(
+                name=f'Action {i} 48.2',
+                integration=self.integration,
+                engine='aap',
+                platform='aap',
+            )
+            for i in range(1, 4)
+        ]
+
+        result = self.service.delete_integration(self.integration.id, user=self.user)
+
+        self.assertEqual(result, {'deleted': True, 'disabled_actions_count': 3})
+        for action in actions:
+            action.refresh_from_db()
+            self.assertEqual(action.status, ActionStatus.DISABLED)
+
+    def test_delete_integration_3_actions_audit_per_action(self):
+        """delete_integration() avec 3 actions crée un audit ACTION_DISABLED_INTEGRATION_DELETED par action."""
+        from catalog.models import Action
+        from core.models import AuditLog, AuditActionType, AuditEntityType
+        actions = [
+            Action.objects.create(
+                name=f'Audit Action {i} 48.2',
+                integration=self.integration,
+                engine='aap',
+                platform='aap',
+            )
+            for i in range(1, 4)
+        ]
+
+        self.service.delete_integration(self.integration.id, user=self.user)
+
+        for action in actions:
+            audit = AuditLog.objects.filter(
+                entity_type=AuditEntityType.ACTION,
+                entity_id=action.id,
+                action_type=AuditActionType.ACTION_DISABLED_INTEGRATION_DELETED,
+            ).first()
+            self.assertIsNotNone(audit, f"Audit manquant pour action {action.name}")
+            details = audit.get_details()
+            self.assertEqual(details['reason'], 'integration_deleted')

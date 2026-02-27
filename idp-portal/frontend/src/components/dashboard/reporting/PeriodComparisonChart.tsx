@@ -18,6 +18,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import type { ComparisonResult } from '../../../types/api';
+import { STYLE_TOKENS } from '../../../theme/styleTokens';
 
 export interface PeriodComparisonChartProps {
   /** Comparison result data. */
@@ -32,7 +33,7 @@ export interface PeriodComparisonChartProps {
 
 /** Colors for the two periods. */
 const PERIOD1_COLOR = '#4096ff'; // Ant Design primary blue
-const PERIOD2_COLOR = '#52c41a'; // Ant Design success green
+const PERIOD2_COLOR = STYLE_TOKENS.iconSuccess; // #16a34a, ratio ~3.15:1 ✅ WCAG AA non-texte
 
 /** Tooltip payload entry type. */
 interface TooltipPayloadEntry {
@@ -57,7 +58,7 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
       padding: '8px 12px',
       border: '1px solid var(--color-border-secondary, #d9d9d9)',
       borderRadius: 4,
-      fontSize: 12,
+      fontSize: 13,
     }}>
       <div style={{ fontWeight: 600, marginBottom: 4 }}>{label}</div>
       {payload.map((entry, index) => (
@@ -77,7 +78,7 @@ export function PeriodComparisonChart({
 }: PeriodComparisonChartProps) {
   if (loading) {
     return (
-      <Card title="Comparaison des tendances" size="small">
+      <Card title={<span style={{ fontSize: 15, fontWeight: 600 }}>Comparaison des tendances</span>} size="small">
         <Skeleton active paragraph={{ rows: 6 }} />
       </Card>
     );
@@ -85,7 +86,7 @@ export function PeriodComparisonChart({
 
   if (!data) {
     return (
-      <Card title="Comparaison des tendances" size="small">
+      <Card title={<span style={{ fontSize: 15, fontWeight: 600 }}>Comparaison des tendances</span>} size="small">
         <Empty description="Sélectionnez deux périodes à comparer" image={Empty.PRESENTED_IMAGE_SIMPLE} />
       </Card>
     );
@@ -101,7 +102,7 @@ export function PeriodComparisonChart({
   ];
 
   return (
-    <Card title={`Comparaison: ${data.value1} vs ${data.value2}`} size="small">
+    <Card title={<span style={{ fontSize: 15, fontWeight: 600 }}>{`Comparaison: ${data.value1} vs ${data.value2}`}</span>} size="small">
       <ResponsiveContainer width="100%" height={300}>
         <BarChart
           data={chartData}
@@ -112,17 +113,17 @@ export function PeriodComparisonChart({
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
           <XAxis
             dataKey="metric"
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: 13 }}
             tickLine={false}
             axisLine={{ stroke: 'rgba(0,0,0,0.06)' }}
           />
           <YAxis
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: 13 }}
             tickLine={false}
             axisLine={{ stroke: 'rgba(0,0,0,0.06)' }}
           />
           <Tooltip content={<CustomTooltip />} />
-          <Legend />
+          <Legend wrapperStyle={{ fontSize: 13 }} />
           <Bar
             dataKey="period1"
             name={data.value1}

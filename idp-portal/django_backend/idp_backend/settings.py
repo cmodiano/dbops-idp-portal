@@ -19,7 +19,11 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Load .env from project root (django_backend/) so AUTH_DEV_BYPASS etc. are found regardless of cwd
-load_dotenv(BASE_DIR / '.env')
+# Fallback: idp-portal/.env.development when django_backend/.env does not exist
+# Skip when DJANGO_SECURITY_TEST=1 (core/tests/test_security_settings.py) to test fail-fast without .env
+if os.getenv('DJANGO_SECURITY_TEST') != '1':
+    load_dotenv(BASE_DIR.parent / '.env.development')
+    load_dotenv(BASE_DIR / '.env', override=True)
 
 
 # Quick-start development settings - unsuitable for production
@@ -46,6 +50,9 @@ ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',') if os.getenv('ALLOWED_
 INSTALLED_APPS = [
     # Third-party apps (Daphne MUST be before staticfiles per daphne.E001)
     'daphne',  # Story 22.13: ASGI server for WebSocket support (must be before staticfiles)
+    # Story 45.2: jazzmin DOIT être avant django.contrib.admin pour que ses templates soient chargés.
+    # NE PAS déplacer : daphne reste en 1re position (contrainte WebSocket), jazzmin en 2e.
+    'jazzmin',
     # Django contrib apps
     'django.contrib.admin',
     'django.contrib.auth',
@@ -69,6 +76,96 @@ INSTALLED_APPS = [
     'reference',
     'help',  # Story 31.7 - Aide contextuelle
 ]
+
+# ─── Django Jazzmin Admin Theme (Story 45.2) ────────────────────────────────
+# Thème moderne pour Django Admin avec sidebar de navigation.
+# Choisi vs django-admin-interface : configuration Python versionnée, pas de migration DB.
+# Compatibilité : django-jazzmin>=3.0.0, Django 5.1+. API keys gérées via portail self-service (Story 44.7), admin retiré (Story 44.8).
+JAZZMIN_SETTINGS = {
+    # Titre de l'onglet navigateur
+    "site_title": "IDP Portal Admin",
+    # En-tête du menu latéral
+    "site_header": "IDP Portal",
+    # Logo texte affiché dans la sidebar
+    "site_brand": "IDP Portal",
+    # Message de bienvenue sur la page de login
+    "welcome_sign": "Bienvenue dans l'administration IDP Portal",
+    # Copyright dans le footer
+    "copyright": "DBOPS Team",
+
+    # Recherche globale dans l'admin (modèles indexés dans la barre de recherche)
+    "search_model": ["auth.user"],
+
+    # Affichage de la sidebar de navigation
+    "show_sidebar": True,
+    "navigation_expanded": True,  # Menus ouverts par défaut pour faciliter la navigation
+
+    # Icônes Font Awesome 5 Free pour les apps et modèles
+    "icons": {
+        "auth": "fas fa-users-cog",
+        "auth.user": "fas fa-user",
+        "auth.Group": "fas fa-users",
+        "idp_auth.user": "fas fa-id-badge",
+        "catalog": "fas fa-book",
+        "executions": "fas fa-play-circle",
+        "inventory": "fas fa-server",
+        "integrations": "fas fa-plug",
+    },
+    # Icône par défaut si non spécifiée ci-dessus
+    "default_icon_parents": "fas fa-chevron-circle-right",
+    "default_icon_children": "fas fa-circle",
+
+    # Éviter les requêtes vers CDN Google Fonts (sécurité intranet/entreprise)
+    "use_google_fonts_cdn": False,
+
+    # Désactivé en production pour éviter les modifications accidentelles de l'UI
+    "show_ui_builder": False,
+
+    # Format horizontal_tabs pour une meilleure lisibilité des formulaires complexes
+    "changeform_format": "horizontal_tabs",
+
+    # Boutons d'action : non collants en haut (comportement standard)
+    "actions_sticky_top": False,
+
+    # ─── Ordre de la sidebar (Story 45.4) ──────────────────────────────────────
+    # auth : Django admin users (User, Group) — authentification de l'interface admin
+    # idp_auth : Utilisateurs SAML/DBOPS — domaine métier applicatif (API keys via portail self-service)
+    "order_with_respect_to": [
+        "auth",
+        "idp_auth",
+    ],
+}
+
+# Ajustements visuels (thème AdminLTE/Bootstrap) — séparé de JAZZMIN_SETTINGS
+# pour permettre une configuration granulaire du rendu.
+JAZZMIN_UI_TWEAKS = {
+    "navbar_small_text": False,
+    "footer_small_text": False,
+    "body_small_text": False,
+    "brand_small_text": False,
+    "brand_colour": "navbar-dark",
+    "accent": "accent-primary",
+    # Sidebar sombre pour la distinguer visuellement de la zone de contenu
+    "sidebar": "sidebar-dark-primary",
+    "sidebar_nav_small_text": False,
+    "sidebar_disable_expand": False,
+    "sidebar_nav_child_indent": True,
+    "sidebar_nav_compact_style": False,
+    "sidebar_nav_legacy_style": False,
+    "sidebar_nav_flat_style": False,
+    # Thème clair par défaut ; dark mode activé via toggle navigateur → "darkly" (Bootswatch)
+    "theme": "default",
+    "dark_mode_theme": "darkly",
+    "button_classes": {
+        "primary": "btn-outline-primary",
+        "secondary": "btn-outline-secondary",
+        "info": "btn-outline-info",
+        "warning": "btn-outline-warning",
+        "danger": "btn-outline-danger",
+        "success": "btn-outline-success",
+    },
+}
+# ─────────────────────────────────────────────────────────────────────────────
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -184,12 +281,26 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 
+# Directory where collectstatic gathers all static files for production deployment.
+# Required for: `python manage.py collectstatic` and production static file serving.
+# Story 45.1: Added to fix missing admin icons (black squares) when DEBUG=False.
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
 # Ensure static/icons/ directory exists so STATICFILES_DIRS always includes it.
 # Without this, if Django starts before any icon is uploaded, the dir doesn't exist,
 # STATICFILES_DIRS becomes [] and StaticFilesHandler can't serve uploaded icons
 # even after they're written to disk (finders are loaded once at startup).
 (BASE_DIR / 'static' / 'icons').mkdir(parents=True, exist_ok=True)
 STATICFILES_DIRS = [BASE_DIR / 'static']
+
+# Explicit staticfiles finders order (Story 45.1):
+# AppDirectoriesFinder MUST be included so Django admin icons from
+# django.contrib.admin/static/ are discoverable.
+# FileSystemFinder serves project-level static files (static/icons/, etc.)
+STATICFILES_FINDERS = [
+    'django.contrib.staticfiles.finders.FileSystemFinder',
+    'django.contrib.staticfiles.finders.AppDirectoriesFinder',
+]
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -235,7 +346,23 @@ REST_FRAMEWORK = {
 # ============================================================================
 SPECTACULAR_SETTINGS = {
     'TITLE': 'DBOps Portal API',
-    'DESCRIPTION': "API REST pour le portail DBOps — Gestion et exécution d'actions DBA",
+    'DESCRIPTION': """API REST pour le portail DBOps — Gestion et exécution d'actions DBA
+
+## Authentification via API key
+
+Pour tester les endpoints protégés dans Swagger UI avec une API key (sans flow SAML) :
+
+1. **Obtenir un JWT** : Appeler `POST /api/v1/auth/token` avec le header `X-API-Key` contenant votre clé API
+2. **Copier le token** : Extraire `access_token` de la réponse JSON (`data.access_token`)
+3. **Authorize** : Cliquer sur le bouton "Authorize" en haut à droite, coller le token (sans préfixe "Bearer" — Swagger l'ajoute automatiquement)
+
+```
+curl -X POST http://localhost:8000/api/v1/auth/token \\
+  -H "X-API-Key: <votre_clé>" | jq .data.access_token
+```
+
+> **Note** : Rate limit 10 requêtes/minute sur `POST /auth/token`. Les clés API se créent depuis le portail → menu utilisateur → "Mes clés API".
+""",
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
     'SWAGGER_UI_SETTINGS': {
@@ -245,6 +372,8 @@ SPECTACULAR_SETTINGS = {
     },
     'COMPONENT_SPLIT_REQUEST': True,
     'SCHEMA_PATH_PREFIX': r'/api/v1',
+    # bearerAuth est le scheme global (tous les endpoints protégés).
+    # apiKeyAuth est endpoint-specific (POST /auth/token uniquement, via @extend_schema security=[]).
     'SECURITY': [{'bearerAuth': []}],
     'APPEND_COMPONENTS': {
         'securitySchemes': {
@@ -252,7 +381,13 @@ SPECTACULAR_SETTINGS = {
                 'type': 'http',
                 'scheme': 'bearer',
                 'bearerFormat': 'JWT',
-            }
+            },
+            'apiKeyAuth': {
+                'type': 'apiKey',
+                'in': 'header',
+                'name': 'X-API-Key',
+                'description': 'API key pour échanger contre un JWT via POST /auth/token',
+            },
         }
     },
     'TAGS': [
@@ -469,6 +604,37 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
 CELERY_TASK_ALWAYS_EAGER = os.getenv('CELERY_TASK_ALWAYS_EAGER', 'False').lower() == 'true'
 CELERY_TASK_EAGER_PROPAGATES = True
+
+# Story 47.4 — CELERY_TASK_ROUTES construit dynamiquement depuis l'AdapterRegistry.
+# Ajouter une nouvelle plateforme dans adapters/__init__.py suffit : aucune modification ici.
+# Les adapters/ n'ont pas de dépendances sur les modèles Django → import sûr ici.
+import adapters as _adapters_pkg  # noqa: F401,E402 — déclenche l'enregistrement des adapters
+from adapters.registry import adapter_registry as _adapter_registry  # noqa: E402
+
+# Mapping shim task name → platform_type (pour les routes des shims backward-compat).
+# Les nouvelles plateformes sans shim utilisent poll_platform_job_status directement.
+_SHIM_PLATFORM_MAP = {
+    'executions.tasks.poll_aap_job_status': 'aap',
+    'executions.tasks.poll_tower_job_status': 'tower',
+    'executions.tasks.poll_azure_devops_run_status': 'azure_devops',
+    'executions.tasks.poll_github_actions_run_status': 'github_actions',
+    'executions.tasks.poll_terraform_cloud_run_status': 'terraform_cloud',
+}
+
+CELERY_TASK_ROUTES = {
+    task: {'queue': _adapter_registry.get_queue(platform)}
+    for task, platform in _SHIM_PLATFORM_MAP.items()
+}
+CELERY_TASK_ROUTES.update({
+    # Tasks Beat restent sur default
+    'executions.tasks.evaluate_waiting_gates': {'queue': 'default'},
+    'executions.tasks.process_pending_scheduled_executions': {'queue': 'default'},
+    'executions.tasks.retry_workflow_step': {'queue': 'default'},
+    # Story 47.2 — Trigger async ; la queue spécifique est passée via apply_async(queue=...) au runtime.
+    'executions.tasks.trigger_platform_job': {'queue': 'default'},
+})
+
+del _adapters_pkg, _adapter_registry, _SHIM_PLATFORM_MAP  # nettoyer le namespace settings
 
 # ============================================================================
 # Django Channels / WebSocket Configuration (Story 22.13)

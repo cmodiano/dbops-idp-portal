@@ -302,11 +302,12 @@ export function ActionWizard({
         gate_config: gateConfig,
         // Story 31.8: Notification configuration
         notification_config: notificationConfig,
-        // Only include engine/platform/integration_id/parameters_schema/category for actions
+        // category: both actions and workflows (workflows: optional, backend defaults to 'autres')
+        category: (values as Record<string, unknown>).category as string | undefined ?? null,
+        // Only include engine/platform/integration_id/parameters_schema for actions
         ...(isWorkflowSave
           ? {}
           : {
-              category: (values as Record<string, unknown>).category as string | undefined ?? null,
               engine: values.engine,
               // Story 31.1: Derive platform from integration type, send both
               integration_id: values.integration_id,

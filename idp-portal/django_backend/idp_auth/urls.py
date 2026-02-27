@@ -5,6 +5,8 @@ Story M.7 - Full SAML and JWT auth endpoints.
 
 from django.urls import path
 from idp_auth.views import (
+    APIKeyDetailView,
+    APIKeysView,
     SAMLLoginView,
     SAMLCallbackView,
     CurrentUserProfileView,
@@ -24,6 +26,8 @@ urlpatterns = [
 
     # API key token exchange (Story 44.2)
     path('auth/token/', APIKeyTokenView.as_view(), name='api-key-token'),
+    path('auth/api-keys/', APIKeysView.as_view(), name='api-keys'),
+    path('auth/api-keys/<int:pk>/', APIKeyDetailView.as_view(), name='api-key-detail'),
 
     # JWT auth endpoints
     path('auth/me/', CurrentUserProfileView.as_view(), name='current-user-profile'),

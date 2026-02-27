@@ -1,0 +1,1210 @@
+-- ===========================================================================
+-- Baseline Schema V088 — IDP Portal
+-- ===========================================================================
+-- Date            : 2026-02-25
+-- Version couverte: V000–V093 (94 migrations Flyway consolidées)
+-- Auteur          : Agent de développement (Story 41-2)
+--
+-- Usage           : NOUVEAUX ENVIRONNEMENTS UNIQUEMENT (base Oracle vierge)
+-- Interdit sur    : Environnements existants (dev, staging, prod) — INCHANGÉS
+--
+-- Procédure de déploiement :
+--   1. sqlplus idp_user/password@HOST:1521/XEPDB1 @database/baseline/baseline_schema_v088.sql
+--   2. flyway -baselineVersion=88 -baselineDescription=baseline_schema_v088 baseline
+--
+-- Ce script couvre TOUTES les migrations V000–V093. Aucune migration incrémentale
+-- n'est nécessaire après application. État identique à V000→V093 sans phases intermédiaires.
+-- ===========================================================================
+--
+-- Objets créés :
+--   33 tables, indexes, contraintes, trigger, package PKG_IDP_MAINTENANCE, données de référence
+--
+-- Exclusions (éléments neutralisés par les migrations) :
+--   - SCHEMA_VERSION (créée V000, droppée V015)
+--   - REF_PLATFORMS (créée V051, droppée V083)
+--   - Séquences legacy (droppées V016 — IDENTITY columns suffisent)
+--   - Colonne RBAC_POLICIES sur ACTIONS_CATALOG (droppée V013)
+--   - Colonne CHANGE_MODEL_CODE sur ACTIONS_CATALOG (droppée V019)
+--   - Contraintes droppées : CK_ACTIONS_CATALOG_CATEGORY (V018),
+--     CK_ACTIONS_CATALOG_ENGINE (V050), CK_ACTIONS_CATALOG_PLATFORM (V052),
+--     CHK_EXECUTION_ENV (V053), CHK_SCHEDULED_ENV (V053) — env dicté par inventaire
+--   - CK_INTEGRATIONS_TYPE (droppée V024 — TYPE est désormais libre)
+-- ===========================================================================
+
+-- ===========================================================================
+-- PHASE 1 : Tables sans dépendances (ou dépendances uniquement IDENTITY)
+-- ===========================================================================
+
+-- ---------------------------------------------------------------------------
+-- USERS (V001)
+-- ---------------------------------------------------------------------------
+CREATE TABLE USERS (
+    ID              NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    USERNAME        VARCHAR2(255) NOT NULL,
+    DISPLAY_NAME    VARCHAR2(255),
+    PROFILE         VARCHAR2(50) NOT NULL,
+    SAML_SUBJECT    VARCHAR2(512),
+    CREATED_AT      TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    UPDATED_AT      TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL
+);
+
+CREATE UNIQUE INDEX UK_USERS_USERNAME ON USERS(USERNAME);
+
+-- ---------------------------------------------------------------------------
+-- AUTH_USER (V089) — django.contrib.auth pour admin Django
+-- ---------------------------------------------------------------------------
+CREATE TABLE AUTH_USER (
+    ID              NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    PASSWORD        VARCHAR2(128) NOT NULL,
+    LAST_LOGIN      TIMESTAMP,
+    IS_SUPERUSER    NUMBER(1) DEFAULT 0 NOT NULL,
+    USERNAME        VARCHAR2(150) NOT NULL,
+    FIRST_NAME      VARCHAR2(150),
+    LAST_NAME       VARCHAR2(150),
+    EMAIL          VARCHAR2(254),
+    IS_STAFF        NUMBER(1) DEFAULT 0 NOT NULL,
+    IS_ACTIVE       NUMBER(1) DEFAULT 1 NOT NULL,
+    DATE_JOINED     TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    CONSTRAINT CK_AUTH_USER_IS_SUPERUSER CHECK (IS_SUPERUSER IN (0, 1)),
+    CONSTRAINT CK_AUTH_USER_IS_STAFF    CHECK (IS_STAFF IN (0, 1)),
+    CONSTRAINT CK_AUTH_USER_IS_ACTIVE   CHECK (IS_ACTIVE IN (0, 1))
+);
+
+CREATE UNIQUE INDEX UK_AUTH_USER_USERNAME ON AUTH_USER(USERNAME);
+
+-- ---------------------------------------------------------------------------
+-- AUTH_GROUP (V092) — django.contrib.auth Group
+-- ---------------------------------------------------------------------------
+CREATE TABLE AUTH_GROUP (
+    ID   NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    NAME VARCHAR2(150) NOT NULL,
+    CONSTRAINT UK_AUTH_GROUP_NAME UNIQUE (NAME)
+);
+
+-- ---------------------------------------------------------------------------
+-- AUTH_USER_GROUPS (V092) — M2M auth_user ↔ auth_group
+-- ---------------------------------------------------------------------------
+CREATE TABLE AUTH_USER_GROUPS (
+    ID       NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    USER_ID  NUMBER NOT NULL,
+    GROUP_ID NUMBER NOT NULL,
+    CONSTRAINT FK_AUTH_USER_GROUPS_USER  FOREIGN KEY (USER_ID)  REFERENCES AUTH_USER(ID) ON DELETE CASCADE,
+    CONSTRAINT FK_AUTH_USER_GROUPS_GROUP FOREIGN KEY (GROUP_ID) REFERENCES AUTH_GROUP(ID) ON DELETE CASCADE,
+    CONSTRAINT UK_AUTH_USER_GROUPS_USER_GROUP UNIQUE (USER_ID, GROUP_ID)
+);
+
+CREATE INDEX IDX_AUTH_USER_GROUPS_USER_ID  ON AUTH_USER_GROUPS(USER_ID);
+CREATE INDEX IDX_AUTH_USER_GROUPS_GROUP_ID ON AUTH_USER_GROUPS(GROUP_ID);
+
+-- ---------------------------------------------------------------------------
+-- DJANGO_CONTENT_TYPE (V093) — django.contrib.contenttypes
+-- ---------------------------------------------------------------------------
+CREATE TABLE DJANGO_CONTENT_TYPE (
+    ID        NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    APP_LABEL VARCHAR2(100) NOT NULL,
+    MODEL     VARCHAR2(100) NOT NULL,
+    CONSTRAINT UK_DJANGO_CONTENT_TYPE_APP_MODEL UNIQUE (APP_LABEL, MODEL)
+);
+
+-- ---------------------------------------------------------------------------
+-- AUTH_PERMISSION (V093) — django.contrib.auth Permission
+-- ---------------------------------------------------------------------------
+CREATE TABLE AUTH_PERMISSION (
+    ID              NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    NAME            VARCHAR2(255) NOT NULL,
+    CONTENT_TYPE_ID NUMBER NOT NULL,
+    CODENAME        VARCHAR2(100) NOT NULL,
+    CONSTRAINT FK_AUTH_PERMISSION_CONTENT_TYPE FOREIGN KEY (CONTENT_TYPE_ID) REFERENCES DJANGO_CONTENT_TYPE(ID) ON DELETE CASCADE,
+    CONSTRAINT UK_AUTH_PERMISSION_CONTENT_CODENAME UNIQUE (CONTENT_TYPE_ID, CODENAME)
+);
+
+CREATE INDEX IDX_AUTH_PERMISSION_CONTENT_TYPE ON AUTH_PERMISSION(CONTENT_TYPE_ID);
+
+-- ---------------------------------------------------------------------------
+-- AUTH_USER_USER_PERMISSIONS (V093) — M2M auth_user ↔ auth_permission
+-- ---------------------------------------------------------------------------
+CREATE TABLE AUTH_USER_USER_PERMISSIONS (
+    ID            NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    USER_ID       NUMBER NOT NULL,
+    PERMISSION_ID NUMBER NOT NULL,
+    CONSTRAINT FK_AUTH_USER_PERM_USER       FOREIGN KEY (USER_ID)       REFERENCES AUTH_USER(ID) ON DELETE CASCADE,
+    CONSTRAINT FK_AUTH_USER_PERM_PERMISSION  FOREIGN KEY (PERMISSION_ID) REFERENCES AUTH_PERMISSION(ID) ON DELETE CASCADE,
+    CONSTRAINT UK_AUTH_USER_PERM_USER_PERM UNIQUE (USER_ID, PERMISSION_ID)
+);
+
+CREATE INDEX IDX_AUTH_USER_PERM_USER_ID       ON AUTH_USER_USER_PERMISSIONS(USER_ID);
+CREATE INDEX IDX_AUTH_USER_PERM_PERMISSION_ID ON AUTH_USER_USER_PERMISSIONS(PERMISSION_ID);
+
+-- ---------------------------------------------------------------------------
+-- API_KEYS (V091) — idp_auth.APIKey pour accès API par clé
+-- ---------------------------------------------------------------------------
+CREATE TABLE API_KEYS (
+    ID              NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    USER_ID         NUMBER NOT NULL,
+    KEY_HASH        VARCHAR2(64) NOT NULL,
+    NAME            VARCHAR2(255) DEFAULT '' NOT NULL,
+    SCOPE           VARCHAR2(50),
+    EXPIRES_AT      TIMESTAMP,
+    IS_ACTIVE       NUMBER(1) DEFAULT 1 NOT NULL,
+    CREATED_AT      TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    UPDATED_AT      TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    CONSTRAINT FK_API_KEYS_USER FOREIGN KEY (USER_ID) REFERENCES USERS(ID) ON DELETE CASCADE,
+    CONSTRAINT CK_API_KEYS_IS_ACTIVE CHECK (IS_ACTIVE IN (0, 1))
+);
+
+CREATE UNIQUE INDEX UK_API_KEYS_KEY_HASH ON API_KEYS(KEY_HASH);
+CREATE INDEX IDX_API_KEYS_USER_ID ON API_KEYS(USER_ID);
+
+-- ---------------------------------------------------------------------------
+-- DJANGO_SESSION (V090) — django.contrib.sessions pour login admin
+-- ---------------------------------------------------------------------------
+CREATE TABLE DJANGO_SESSION (
+    SESSION_KEY   VARCHAR2(40) NOT NULL,
+    SESSION_DATA  CLOB NOT NULL,
+    EXPIRE_DATE   TIMESTAMP NOT NULL,
+    CONSTRAINT PK_DJANGO_SESSION PRIMARY KEY (SESSION_KEY)
+);
+
+CREATE INDEX IDX_DJANGO_SESSION_EXPIRE_DATE ON DJANGO_SESSION(EXPIRE_DATE);
+
+-- ---------------------------------------------------------------------------
+-- TAGS (V007)
+-- ---------------------------------------------------------------------------
+CREATE TABLE TAGS (
+    ID              NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    NAME            VARCHAR2(255) NOT NULL,
+    CREATED_AT      TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    CONSTRAINT UK_TAGS_NAME UNIQUE (NAME)
+);
+
+-- ---------------------------------------------------------------------------
+-- PROFILES (V010)
+-- ---------------------------------------------------------------------------
+CREATE TABLE PROFILES (
+    ID          NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    NAME        VARCHAR2(255) NOT NULL,
+    DESCRIPTION VARCHAR2(4000),
+    AD_GROUP    VARCHAR2(512) NOT NULL,
+    IS_ADMIN    NUMBER(1) DEFAULT 0 NOT NULL,
+    IS_AUDITOR  NUMBER(1) DEFAULT 0 NOT NULL,
+    CREATED_AT  TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    UPDATED_AT  TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+
+    CONSTRAINT UK_PROFILES_NAME    UNIQUE (NAME),
+    CONSTRAINT CK_PROFILES_IS_ADMIN   CHECK (IS_ADMIN IN (0, 1)),
+    CONSTRAINT CK_PROFILES_IS_AUDITOR CHECK (IS_AUDITOR IN (0, 1))
+);
+
+CREATE INDEX IDX_PROFILES_AD_GROUP ON PROFILES(AD_GROUP);
+
+COMMENT ON COLUMN PROFILES.AD_GROUP IS 'Groupe AD associé au profil (ex. GRP-IDP-ASSURANCE).';
+
+-- ---------------------------------------------------------------------------
+-- INTEGRATIONS (V020 + V024 + V026 + V064 + V077 + V088)
+-- AUTH_FLOW inclut oauth2_client_credentials, api_key (V088)
+-- ---------------------------------------------------------------------------
+CREATE TABLE INTEGRATIONS (
+    ID              NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    TYPE            VARCHAR2(100) NOT NULL,
+    NAME            VARCHAR2(255) NOT NULL,
+    BASE_URL        VARCHAR2(2000) NOT NULL,
+    CREDENTIAL_REF  VARCHAR2(500),
+    ICON            VARCHAR2(500),
+    CREATED_AT      TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    UPDATED_AT      TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    AUTH_FLOW       VARCHAR2(50),
+    TOKEN_URL       VARCHAR2(2000),
+    CONFIG          CLOB,
+    STATUS          VARCHAR2(20) DEFAULT 'valid' NOT NULL,
+    SECRET_SERVICE_ID NUMBER(19),
+
+    CONSTRAINT UK_INTEGRATIONS_NAME     UNIQUE (NAME),
+    CONSTRAINT CK_INTEGRATIONS_AUTH_FLOW CHECK (
+        AUTH_FLOW IS NULL OR AUTH_FLOW IN (
+            'token', 'basic', 'basic_then_token', 'pat',
+            'oauth2_client_credentials', 'api_key'
+        )
+    ),
+    CONSTRAINT CK_INTEGRATIONS_STATUS   CHECK (
+        STATUS IN ('valid', 'invalid', 'deprecated')
+    ),
+    CONSTRAINT FK_INTEGRATION_SECRET_SERVICE FOREIGN KEY (SECRET_SERVICE_ID) REFERENCES INTEGRATIONS(ID)
+);
+
+CREATE INDEX IDX_INTEGRATIONS_TYPE   ON INTEGRATIONS(TYPE);
+CREATE INDEX IDX_INTEGRATION_STATUS  ON INTEGRATIONS(STATUS);
+
+COMMENT ON TABLE INTEGRATIONS IS 'Remote platform configuration for execution (AAP, ServiceNow, Terraform, etc.)';
+COMMENT ON COLUMN INTEGRATIONS.TYPE IS 'Integration type: free-form platform name (V024)';
+COMMENT ON COLUMN INTEGRATIONS.AUTH_FLOW IS 'Authentication flow: token, basic, basic_then_token, pat, oauth2_client_credentials, api_key (V088)';
+COMMENT ON COLUMN INTEGRATIONS.STATUS IS 'Integration validation status: valid, invalid, deprecated';
+COMMENT ON COLUMN INTEGRATIONS.SECRET_SERVICE_ID IS 'ID intégration Vault pour résoudre les secrets (NULL = Vault par défaut)';
+
+-- ---------------------------------------------------------------------------
+-- REF_ENGINES (V049 + V078)
+-- ---------------------------------------------------------------------------
+CREATE TABLE REF_ENGINES (
+    ID              NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    CODE            VARCHAR2(50) NOT NULL,
+    LABEL           VARCHAR2(100) NOT NULL,
+    DISPLAY_ORDER   NUMBER DEFAULT 0 NOT NULL,
+    IS_ACTIVE       NUMBER(1) DEFAULT 1 NOT NULL,
+    ICON_URL        VARCHAR2(500 CHAR),
+
+    CONSTRAINT UK_REF_ENGINES_CODE   UNIQUE (CODE),
+    CONSTRAINT CK_REF_ENGINES_IS_ACTIVE CHECK (IS_ACTIVE IN (0, 1))
+);
+
+CREATE INDEX IDX_REF_ENGINES_IS_ACTIVE     ON REF_ENGINES(IS_ACTIVE);
+CREATE INDEX IDX_REF_ENGINES_DISPLAY_ORDER ON REF_ENGINES(DISPLAY_ORDER);
+
+COMMENT ON TABLE REF_ENGINES IS 'Reference table for database engines/technologies.';
+COMMENT ON COLUMN REF_ENGINES.ICON_URL IS 'URL image ou identifiant icône prédéfinie (Story 31.3). NULL = fallback vers icônes par défaut.';
+
+-- ---------------------------------------------------------------------------
+-- REF_CATEGORIES (V059)
+-- ---------------------------------------------------------------------------
+CREATE TABLE REF_CATEGORIES (
+    ID            NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    CODE          VARCHAR2(50)  NOT NULL UNIQUE,
+    LABEL         VARCHAR2(100) NOT NULL,
+    DISPLAY_ORDER NUMBER(10)    DEFAULT 0 NOT NULL,
+    IS_ACTIVE     NUMBER(1)     DEFAULT 1 NOT NULL
+);
+
+CREATE INDEX IDX_REF_CATEGORIES_ACTIVE_ORDER ON REF_CATEGORIES(IS_ACTIVE, DISPLAY_ORDER);
+
+-- ---------------------------------------------------------------------------
+-- INTEGRATION_TYPE_CATALOGUE (V061 + V072)
+-- ---------------------------------------------------------------------------
+CREATE TABLE INTEGRATION_TYPE_CATALOGUE (
+    CODE             VARCHAR2(50) PRIMARY KEY,
+    NAME             VARCHAR2(255) NOT NULL,
+    DESCRIPTION      CLOB DEFAULT '',
+    VERSION          VARCHAR2(20) DEFAULT '1.0' NOT NULL,
+    IS_ACTIVE        NUMBER(1) DEFAULT 1 NOT NULL,
+    CREATED_AT       TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    UPDATED_AT       TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    INTEGRATION_ROLE VARCHAR2(20) DEFAULT 'platform' NOT NULL,
+
+    CONSTRAINT CK_INTEGRATION_TYPE_CATALOGUE_IS_ACTIVE CHECK (IS_ACTIVE IN (0, 1)),
+    CONSTRAINT CHK_INTEGRATION_ROLE CHECK (INTEGRATION_ROLE IN ('platform', 'service'))
+);
+
+CREATE INDEX IDX_INTEGRATION_TYPE_CATALOGUE_IS_ACTIVE ON INTEGRATION_TYPE_CATALOGUE(IS_ACTIVE);
+
+COMMENT ON TABLE INTEGRATION_TYPE_CATALOGUE IS 'Formal catalogue of supported integration types (Story 24.1).';
+COMMENT ON COLUMN INTEGRATION_TYPE_CATALOGUE.INTEGRATION_ROLE IS 'Role: platform (execution) ou service (consommation)';
+
+-- ---------------------------------------------------------------------------
+-- CORE_FEATURE_FLAGS (V062)
+-- ---------------------------------------------------------------------------
+CREATE TABLE CORE_FEATURE_FLAGS (
+    ID              NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    FLAG_KEY        VARCHAR2(100) NOT NULL UNIQUE,
+    ENABLED         NUMBER(1) DEFAULT 0 NOT NULL,
+    ROLLOUT_PERCENT NUMBER(10) DEFAULT 100 NOT NULL,
+    DESCRIPTION     VARCHAR2(500) DEFAULT '',
+    UPDATED_AT      TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    UPDATED_BY      VARCHAR2(100) DEFAULT '',
+
+    CONSTRAINT CK_FEATURE_FLAGS_ENABLED  CHECK (ENABLED IN (0, 1)),
+    CONSTRAINT CK_FEATURE_FLAGS_ROLLOUT  CHECK (ROLLOUT_PERCENT BETWEEN 0 AND 100)
+);
+
+COMMENT ON TABLE CORE_FEATURE_FLAGS IS 'Feature flags for progressive rollout.';
+
+-- ---------------------------------------------------------------------------
+-- BUSINESS_RULE_POLICIES (V076)
+-- ---------------------------------------------------------------------------
+CREATE TABLE BUSINESS_RULE_POLICIES (
+    ID          NUMBER GENERATED BY DEFAULT ON NULL AS IDENTITY PRIMARY KEY,
+    NAME        VARCHAR2(200) NOT NULL,
+    DESCRIPTION VARCHAR2(500),
+    POLICY_JSON CLOB NOT NULL,
+    IS_ACTIVE   NUMBER(1) DEFAULT 1 NOT NULL,
+    CREATED_AT  TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    UPDATED_AT  TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    CREATED_BY_ID NUMBER NOT NULL,
+
+    CONSTRAINT UK_POLICY_NAME        UNIQUE (NAME),
+    CONSTRAINT FK_POLICY_CREATED_BY  FOREIGN KEY (CREATED_BY_ID) REFERENCES USERS(ID)
+);
+
+CREATE INDEX IDX_POLICY_IS_ACTIVE  ON BUSINESS_RULE_POLICIES(IS_ACTIVE);
+CREATE INDEX IDX_POLICY_CREATED_BY ON BUSINESS_RULE_POLICIES(CREATED_BY_ID);
+
+COMMENT ON TABLE BUSINESS_RULE_POLICIES IS 'Story 28.4: Catalogue of reusable business rule policies for actions.';
+COMMENT ON COLUMN BUSINESS_RULE_POLICIES.POLICY_JSON IS 'JSON schema defining business rule policies (on_step_output structure).';
+
+-- ---------------------------------------------------------------------------
+-- ACTIONS_CATALOG (V002 + V003 + V008 + V013 + V014 + V017 + V018 + V022
+--                  + V027 + V031 + V036 + V037 + V046 + V056 + V074 + V076
+--                  + V080 + V081 + V082)
+-- Exclusions : RBAC_POLICIES (col. V002, droppée V013), CHANGE_MODEL_CODE (ajoutée V017, droppée V019)
+-- Contraintes exclues (car droppées) : CK_ACTIONS_CATALOG_CATEGORY (V018),
+--   CK_ACTIONS_CATALOG_ENGINE (V050), CK_ACTIONS_CATALOG_PLATFORM (V052)
+-- V018: CATEGORY rendu nullable (migration vers tags-only, Story 2.23)
+-- ---------------------------------------------------------------------------
+CREATE TABLE ACTIONS_CATALOG (
+    ID                      NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    NAME                    VARCHAR2(255) NOT NULL,
+    DESCRIPTION             VARCHAR2(4000),
+    CATEGORY                VARCHAR2(50),
+    ENGINE                  VARCHAR2(50),
+    PLATFORM                VARCHAR2(50),
+    PARAMETERS_SCHEMA       CLOB,
+    IMPACT_RULES            CLOB,
+    STATUS                  VARCHAR2(20) DEFAULT 'draft' NOT NULL,
+    CREATED_BY              NUMBER,
+    CREATED_AT              TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    UPDATED_AT              TIMESTAMP,
+    -- V003
+    EXECUTION_STEPS         CLOB,
+    CHANGE_TYPE_CONFIG      CLOB,
+    -- V014
+    DEFAULT_IMPACT_LEVEL    VARCHAR2(20),
+    -- V022
+    DOCUMENTATION_MD        CLOB,
+    -- V027
+    ITEM_TYPE               VARCHAR2(20) DEFAULT 'action' NOT NULL,
+    -- V031
+    REMEDIATION_RULES       CLOB,
+    -- V036
+    INTEGRATION_ID          NUMBER,
+    -- V046
+    REQUIRES_TARGET         NUMBER(1) DEFAULT 1 NOT NULL,
+    -- V056
+    DELETED_AT              TIMESTAMP,
+    DELETED_BY              NUMBER,
+    DELETION_REASON         VARCHAR2(500),
+    -- V074
+    BUSINESS_RULE_POLICIES  CLOB,
+    -- V076
+    BUSINESS_RULE_POLICY_ID NUMBER,
+    -- V081
+    GATE_CONFIG             CLOB CHECK (GATE_CONFIG IS JSON),
+    -- V082
+    NOTIFICATION_CONFIG     CLOB CHECK (NOTIFICATION_CONFIG IS JSON),
+
+    -- Contraintes inline
+    CONSTRAINT UK_ACTIONS_CATALOG_NAME          UNIQUE (NAME),
+    CONSTRAINT FK_ACTIONS_CATALOG_USER          FOREIGN KEY (CREATED_BY) REFERENCES USERS(ID),
+    CONSTRAINT CK_ACTIONS_CATALOG_STATUS        CHECK (STATUS IN ('draft', 'published', 'disabled')),
+    CONSTRAINT CK_ACTIONS_CATALOG_DEF_IMPACT    CHECK (DEFAULT_IMPACT_LEVEL IS NULL OR DEFAULT_IMPACT_LEVEL IN ('low', 'medium', 'high', 'critical')),
+    CONSTRAINT CK_ACTIONS_CATALOG_ITEM_TYPE     CHECK (ITEM_TYPE IN ('action', 'workflow')),
+    CONSTRAINT CK_ACTIONS_CATALOG_ACTION_REQUIRES_ENGINE_PLATFORM CHECK (
+        (ITEM_TYPE = 'workflow') OR
+        (ITEM_TYPE = 'action' AND ENGINE IS NOT NULL AND PLATFORM IS NOT NULL)
+    ),
+    CONSTRAINT FK_ACTIONS_CATALOG_INTEGRATION   FOREIGN KEY (INTEGRATION_ID) REFERENCES INTEGRATIONS(ID),
+    CONSTRAINT FK_ACTIONS_CATALOG_DELETED_BY    FOREIGN KEY (DELETED_BY) REFERENCES USERS(ID),
+    CONSTRAINT CK_ACTIONS_SOFT_DELETE_CONSISTENCY CHECK (
+        (STATUS = 'disabled')
+        OR
+        (DELETED_AT IS NULL AND STATUS IN ('draft', 'published'))
+    ),
+    CONSTRAINT FK_ACTION_BUSINESS_RULE_POLICY   FOREIGN KEY (BUSINESS_RULE_POLICY_ID) REFERENCES BUSINESS_RULE_POLICIES(ID) ON DELETE SET NULL,
+    CONSTRAINT CHK_ACTION_POLICY_XOR CHECK (
+        (BUSINESS_RULE_POLICY_ID IS NOT NULL AND BUSINESS_RULE_POLICIES IS NULL) OR
+        (BUSINESS_RULE_POLICY_ID IS NULL AND BUSINESS_RULE_POLICIES IS NOT NULL) OR
+        (BUSINESS_RULE_POLICY_ID IS NULL AND BUSINESS_RULE_POLICIES IS NULL)
+    )
+);
+
+CREATE INDEX IDX_ACTIONS_CATALOG_STATUS         ON ACTIONS_CATALOG(STATUS);
+CREATE INDEX IDX_ACTIONS_CATALOG_ENGINE         ON ACTIONS_CATALOG(ENGINE);
+CREATE INDEX IDX_ACTIONS_CATALOG_ITEM_TYPE      ON ACTIONS_CATALOG(ITEM_TYPE);
+CREATE INDEX IDX_ACTIONS_CATALOG_REMEDIATION    ON ACTIONS_CATALOG(CASE WHEN REMEDIATION_RULES IS NOT NULL THEN ID END);
+CREATE INDEX IDX_ACTIONS_CATALOG_INTEGRATION_ID ON ACTIONS_CATALOG(INTEGRATION_ID);
+CREATE INDEX IDX_ACTIONS_CATALOG_DELETED_AT     ON ACTIONS_CATALOG(DELETED_AT);
+CREATE INDEX IDX_ACTION_BUSINESS_RULE_POLICY    ON ACTIONS_CATALOG(BUSINESS_RULE_POLICY_ID);
+
+COMMENT ON COLUMN ACTIONS_CATALOG.PARAMETERS_SCHEMA IS 'JSON Schema (draft-07) defining action parameters.';
+COMMENT ON COLUMN ACTIONS_CATALOG.IMPACT_RULES IS 'JSON object mapping environment to impact level.';
+COMMENT ON COLUMN ACTIONS_CATALOG.EXECUTION_STEPS IS 'JSON array of execution steps (V003).';
+COMMENT ON COLUMN ACTIONS_CATALOG.CHANGE_TYPE_CONFIG IS 'JSON object mapping environment to change type.';
+COMMENT ON COLUMN ACTIONS_CATALOG.DEFAULT_IMPACT_LEVEL IS 'Default impact level when no rule matches environment (V014).';
+COMMENT ON COLUMN ACTIONS_CATALOG.DOCUMENTATION_MD IS 'Markdown documentation for the action (V022).';
+COMMENT ON COLUMN ACTIONS_CATALOG.ITEM_TYPE IS 'Entry type: action or workflow (V027).';
+COMMENT ON COLUMN ACTIONS_CATALOG.REMEDIATION_RULES IS 'JSON array of remediation rule objects (V031).';
+COMMENT ON COLUMN ACTIONS_CATALOG.INTEGRATION_ID IS 'FK to INTEGRATIONS — platform integration for execution (V036).';
+COMMENT ON COLUMN ACTIONS_CATALOG.REQUIRES_TARGET IS 'Whether action requires target selection (V046).';
+COMMENT ON COLUMN ACTIONS_CATALOG.DELETED_AT IS 'When the action was soft-deleted (V056/V080). May be NULL when status=disabled: integration-deletion flow sets status only (two-phase disable, no soft-delete fields).';
+COMMENT ON COLUMN ACTIONS_CATALOG.DELETED_BY IS 'User who disabled the action (V056).';
+COMMENT ON COLUMN ACTIONS_CATALOG.DELETION_REASON IS 'Reason for deactivation (V056).';
+COMMENT ON COLUMN ACTIONS_CATALOG.BUSINESS_RULE_POLICIES IS 'Inline JSON business rule policies (V074).';
+COMMENT ON COLUMN ACTIONS_CATALOG.BUSINESS_RULE_POLICY_ID IS 'FK to BUSINESS_RULE_POLICIES catalogue (V076).';
+COMMENT ON COLUMN ACTIONS_CATALOG.GATE_CONFIG IS 'JSON configuration des gates par type (V081).';
+COMMENT ON COLUMN ACTIONS_CATALOG.NOTIFICATION_CONFIG IS 'JSON configuration des notifications (V082).';
+
+-- ===========================================================================
+-- PHASE 2 : Tables dépendantes d'ACTIONS_CATALOG et USERS
+-- ===========================================================================
+
+-- ---------------------------------------------------------------------------
+-- EXECUTION_LOG (V006) — table legacy, jamais supprimée
+-- ---------------------------------------------------------------------------
+CREATE TABLE EXECUTION_LOG (
+    ID              NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    ACTION_ID       NUMBER NOT NULL,
+    USER_ID         VARCHAR2(100) NOT NULL,
+    ENVIRONMENT     VARCHAR2(50) NOT NULL,
+    STARTED_AT      TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    COMPLETED_AT    TIMESTAMP,
+    STATUS          VARCHAR2(20) DEFAULT 'running' NOT NULL,
+
+    CONSTRAINT FK_EXEC_LOG_ACTION FOREIGN KEY (ACTION_ID) REFERENCES ACTIONS_CATALOG(ID),
+    CONSTRAINT CK_EXEC_LOG_STATUS CHECK (STATUS IN ('running', 'success', 'failed', 'cancelled'))
+);
+
+CREATE INDEX IDX_EXEC_LOG_ACTION   ON EXECUTION_LOG(ACTION_ID);
+CREATE INDEX IDX_EXEC_LOG_USER     ON EXECUTION_LOG(USER_ID);
+CREATE INDEX IDX_EXEC_LOG_STARTED  ON EXECUTION_LOG(STARTED_AT);
+
+COMMENT ON TABLE EXECUTION_LOG IS 'Tracks action executions for dashboard statistics.';
+
+-- ---------------------------------------------------------------------------
+-- USER_PERMISSIONS (V005)
+-- ---------------------------------------------------------------------------
+CREATE TABLE USER_PERMISSIONS (
+    USER_ID     NUMBER NOT NULL,
+    ACTION_ID   NUMBER NOT NULL,
+    ENVIRONMENT VARCHAR2(20) NOT NULL,
+    GRANTED_BY  NUMBER,
+    GRANTED_AT  TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+
+    CONSTRAINT PK_USER_PERMISSIONS PRIMARY KEY (USER_ID, ACTION_ID, ENVIRONMENT),
+    CONSTRAINT FK_USER_PERM_USER   FOREIGN KEY (USER_ID)   REFERENCES USERS(ID),
+    CONSTRAINT FK_USER_PERM_ACTION FOREIGN KEY (ACTION_ID) REFERENCES ACTIONS_CATALOG(ID) ON DELETE CASCADE,
+    CONSTRAINT CK_USER_PERM_ENV  CHECK (ENVIRONMENT IN ('DEV', 'QA', 'PROD'))
+);
+
+CREATE INDEX IDX_USER_PERM_USER   ON USER_PERMISSIONS(USER_ID);
+CREATE INDEX IDX_USER_PERM_ACTION ON USER_PERMISSIONS(ACTION_ID);
+
+-- ---------------------------------------------------------------------------
+-- ACTION_TAGS (V007 + V042)
+-- V042 ajoute ID comme clé primaire surrogate (Django ORM compatibility)
+-- Créé directement avec l'état final (ID + UK ACTION_ID/TAG_ID)
+-- ---------------------------------------------------------------------------
+CREATE TABLE ACTION_TAGS (
+    ID        NUMBER GENERATED BY DEFAULT ON NULL AS IDENTITY PRIMARY KEY,
+    ACTION_ID NUMBER NOT NULL,
+    TAG_ID    NUMBER NOT NULL,
+
+    CONSTRAINT UK_ACTION_TAGS_ACTION_TAG   UNIQUE (ACTION_ID, TAG_ID),
+    CONSTRAINT FK_ACTION_TAGS_ACTION FOREIGN KEY (ACTION_ID) REFERENCES ACTIONS_CATALOG(ID) ON DELETE CASCADE,
+    CONSTRAINT FK_ACTION_TAGS_TAG    FOREIGN KEY (TAG_ID)    REFERENCES TAGS(ID) ON DELETE CASCADE
+);
+
+CREATE INDEX IDX_ACTION_TAGS_ACTION ON ACTION_TAGS(ACTION_ID);
+CREATE INDEX IDX_ACTION_TAGS_TAG    ON ACTION_TAGS(TAG_ID);
+
+-- ---------------------------------------------------------------------------
+-- USER_FAVORITES (V021 + V043)
+-- V043 ajoute ID comme clé primaire surrogate (Django ORM compatibility)
+-- Créé directement avec l'état final
+-- ---------------------------------------------------------------------------
+CREATE TABLE USER_FAVORITES (
+    ID        NUMBER GENERATED BY DEFAULT ON NULL AS IDENTITY PRIMARY KEY,
+    USER_ID   NUMBER NOT NULL,
+    ACTION_ID NUMBER NOT NULL,
+    CREATED_AT TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+
+    CONSTRAINT UK_USER_FAVORITES_USER_ACTION UNIQUE (USER_ID, ACTION_ID),
+    CONSTRAINT FK_USER_FAVORITES_USER   FOREIGN KEY (USER_ID)   REFERENCES USERS(ID) ON DELETE CASCADE,
+    CONSTRAINT FK_USER_FAVORITES_ACTION FOREIGN KEY (ACTION_ID) REFERENCES ACTIONS_CATALOG(ID) ON DELETE CASCADE
+);
+
+CREATE INDEX IDX_USER_FAVORITES_USER_ID ON USER_FAVORITES(USER_ID);
+
+COMMENT ON TABLE USER_FAVORITES IS 'Favoris utilisateur (Story 3.1 AC14).';
+
+-- ---------------------------------------------------------------------------
+-- ACTION_MUTEX (V070)
+-- ---------------------------------------------------------------------------
+CREATE TABLE ACTION_MUTEX (
+    ID                   NUMBER(19) GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    ACTION_ID            NUMBER(19) NOT NULL,
+    INCOMPATIBLE_WITH_ID NUMBER(19) NOT NULL,
+    SAME_TARGET          NUMBER(1) NOT NULL,
+    DESCRIPTION          VARCHAR2(500),
+    CREATED_AT           TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+
+    CONSTRAINT FK_ACTION_MUTEX_ACTION       FOREIGN KEY (ACTION_ID)            REFERENCES ACTIONS_CATALOG(ID) ON DELETE CASCADE,
+    CONSTRAINT FK_ACTION_MUTEX_INCOMPATIBLE FOREIGN KEY (INCOMPATIBLE_WITH_ID) REFERENCES ACTIONS_CATALOG(ID) ON DELETE CASCADE,
+    CONSTRAINT UQ_ACTION_MUTEX_ACTION_INCOMPATIBLE UNIQUE (ACTION_ID, INCOMPATIBLE_WITH_ID),
+    CONSTRAINT CHK_ACTION_MUTEX_SAME_TARGET CHECK (SAME_TARGET IN (0, 1)),
+    CONSTRAINT CHK_ACTION_MUTEX_NOT_SELF    CHECK (ACTION_ID != INCOMPATIBLE_WITH_ID)
+);
+
+CREATE INDEX IDX_ACTION_MUTEX_ACTION       ON ACTION_MUTEX(ACTION_ID);
+CREATE INDEX IDX_ACTION_MUTEX_INCOMPATIBLE ON ACTION_MUTEX(INCOMPATIBLE_WITH_ID);
+
+COMMENT ON TABLE ACTION_MUTEX IS 'Mutual exclusion rules between actions (Story 25.5).';
+
+-- ---------------------------------------------------------------------------
+-- PROFILE_ACTION_PERMISSIONS (V011)
+-- ---------------------------------------------------------------------------
+CREATE TABLE PROFILE_ACTION_PERMISSIONS (
+    PROFILE_ID         NUMBER NOT NULL,
+    PERMISSION_TYPE    VARCHAR2(20) NOT NULL,
+    ACTION_IDS_JSON    CLOB,
+    TAG_PATTERNS_JSON  CLOB,
+    ENVIRONMENTS_JSON  CLOB,
+    CREATED_AT         TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    UPDATED_AT         TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+
+    CONSTRAINT PK_PROFILE_ACTION_PERMISSIONS PRIMARY KEY (PROFILE_ID),
+    CONSTRAINT FK_PROFILE_ACTION_PERM_PROFILE FOREIGN KEY (PROFILE_ID) REFERENCES PROFILES(ID) ON DELETE CASCADE,
+    CONSTRAINT CK_PROFILE_ACTION_PERM_TYPE    CHECK (PERMISSION_TYPE IN ('LIST', 'PATTERN', 'ALL'))
+);
+
+COMMENT ON COLUMN PROFILE_ACTION_PERMISSIONS.PERMISSION_TYPE IS 'LIST=actions spécifiques, PATTERN=par tags, ALL=toutes.';
+
+-- ---------------------------------------------------------------------------
+-- PROFILE_TARGET_PERMISSIONS (V012 + V060 + V071)
+-- ---------------------------------------------------------------------------
+CREATE TABLE PROFILE_TARGET_PERMISSIONS (
+    PROFILE_ID               NUMBER NOT NULL,
+    PERMISSION_TYPE          VARCHAR2(20) NOT NULL,
+    TARGET_NAMES_JSON        CLOB,
+    TARGET_PATTERNS_JSON     CLOB,
+    CREATED_AT               TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    UPDATED_AT               TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    FILTER_BY_ATTRIBUTE_JSON CLOB,
+    EXCLUSION_PATTERNS_JSON  CLOB,
+
+    CONSTRAINT PK_PROFILE_TARGET_PERMISSIONS  PRIMARY KEY (PROFILE_ID),
+    CONSTRAINT FK_PROFILE_TARGET_PERM_PROFILE FOREIGN KEY (PROFILE_ID) REFERENCES PROFILES(ID) ON DELETE CASCADE,
+    CONSTRAINT CK_PROFILE_TARGET_PERM_TYPE    CHECK (PERMISSION_TYPE IN ('LIST', 'PATTERN', 'ALL'))
+);
+
+COMMENT ON COLUMN PROFILE_TARGET_PERMISSIONS.FILTER_BY_ATTRIBUTE_JSON IS 'JSON dict filtering targets by inventory attributes (V060).';
+COMMENT ON COLUMN PROFILE_TARGET_PERMISSIONS.EXCLUSION_PATTERNS_JSON IS 'JSON array of patterns to exclude from allowed targets (V071).';
+
+-- ---------------------------------------------------------------------------
+-- INTEGRATION_ACTIONS (V061)
+-- ---------------------------------------------------------------------------
+CREATE TABLE INTEGRATION_ACTIONS (
+    ID                    NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    INTEGRATION_TYPE_CODE VARCHAR2(50) NOT NULL,
+    ACTION_CODE           VARCHAR2(100) NOT NULL,
+    ACTION_LABEL          VARCHAR2(255) NOT NULL,
+    DESCRIPTION           CLOB DEFAULT '',
+    REQUIRED_PARAMS       CLOB DEFAULT '{}',
+    OPTIONAL_PARAMS       CLOB DEFAULT '{}',
+    RESPONSE_FORMAT       CLOB DEFAULT '{}',
+    IS_ACTIVE             NUMBER(1) DEFAULT 1 NOT NULL,
+    CREATED_AT            TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    UPDATED_AT            TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+
+    CONSTRAINT FK_INTEGRATION_ACTIONS_TYPE     FOREIGN KEY (INTEGRATION_TYPE_CODE) REFERENCES INTEGRATION_TYPE_CATALOGUE(CODE) ON DELETE CASCADE,
+    CONSTRAINT UK_INTEGRATION_ACTIONS_TYPE_CODE UNIQUE (INTEGRATION_TYPE_CODE, ACTION_CODE),
+    CONSTRAINT CK_INTEGRATION_ACTIONS_IS_ACTIVE CHECK (IS_ACTIVE IN (0, 1))
+);
+
+CREATE INDEX IDX_INTEGRATION_ACTIONS_TYPE      ON INTEGRATION_ACTIONS(INTEGRATION_TYPE_CODE);
+CREATE INDEX IDX_INTEGRATION_ACTIONS_IS_ACTIVE ON INTEGRATION_ACTIONS(IS_ACTIVE);
+
+COMMENT ON TABLE INTEGRATION_ACTIONS IS 'Actions supported by each integration type (Story 24.1).';
+
+-- ---------------------------------------------------------------------------
+-- AUDIT_LOG (V004 + V028 + V029 + V032 + V034 + V035 + V039 + V040
+--            + V044 + V045 + V047 + V058 + V065 + V068 + V069 + V079 + V086)
+-- Partitionnée par TIMESTAMP (Range INTERVAL mensuel) — Story 40.4
+-- ---------------------------------------------------------------------------
+CREATE TABLE AUDIT_LOG (
+    ID             NUMBER GENERATED BY DEFAULT ON NULL AS IDENTITY,
+    TIMESTAMP      TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    USER_ID        VARCHAR2(100) NOT NULL,
+    ACTION_TYPE    VARCHAR2(100) NOT NULL,
+    ENTITY_TYPE    VARCHAR2(50) NOT NULL,
+    ENTITY_ID      NUMBER NOT NULL,
+    DETAILS        CLOB,
+    IP_ADDRESS     VARCHAR2(45),
+    CORRELATION_ID VARCHAR2(64),
+
+    CONSTRAINT PK_AUDIT_LOG PRIMARY KEY (ID)
+)
+PARTITION BY RANGE (TIMESTAMP)
+INTERVAL (NUMTOYMINTERVAL(1, 'MONTH'))
+(
+    PARTITION P_INITIAL VALUES LESS THAN (TIMESTAMP '2020-01-01 00:00:00')
+);
+
+ALTER TABLE AUDIT_LOG ADD CONSTRAINT CK_AUDIT_LOG_ACTION_TYPE CHECK (
+        ACTION_TYPE IN (
+            -- Action lifecycle
+            'ACTION_CREATED', 'ACTION_UPDATED', 'ACTION_PUBLISHED',
+            'ACTION_DISABLED', 'ACTION_DISABLED_INTEGRATION_DELETED', 'ACTION_ENABLED', 'ACTION_DELETED',
+            'ACTION_DEACTIVATED', 'ACTION_REACTIVATED',
+
+            -- Profile lifecycle
+            'PROFILE_CREATED', 'PROFILE_UPDATED', 'PROFILE_DELETED',
+            'PROFILE_UPDATE_REJECTED',
+
+            -- Integration lifecycle
+            'INTEGRATION_CREATED', 'INTEGRATION_UPDATED', 'INTEGRATION_DELETED',
+
+            -- Integration type catalogue
+            'INTEGRATION_TYPE_CREATED', 'INTEGRATION_TYPE_UPDATED',
+            'INTEGRATION_ACTION_CREATED', 'INTEGRATION_ACTION_UPDATED',
+
+            -- Integration status / migration
+            'INTEGRATION_STATUS_UPDATED', 'INTEGRATION_MARKED_LEGACY',
+
+            -- Execution lifecycle
+            'EXECUTION_SUBMITTED', 'EXECUTION_STARTED', 'EXECUTION_RUNNING',
+            'EXECUTION_COMPLETED', 'EXECUTION_FAILED', 'EXECUTION_CANCELLED',
+            'EXECUTION_PENDING_APPROVAL', 'EXECUTION_APPROVED', 'EXECUTION_REJECTED',
+            'EXECUTION_TARGET_FORBIDDEN', 'EXECUTION_INTEGRATION_ERROR',
+
+            -- Execution guard-rails invalid/deprecated integration
+            'EXECUTION_BLOCKED_INVALID_INTEGRATION', 'EXECUTION_DEPRECATED_INTEGRATION_WARNING',
+            'WORKFLOW_STEP_BLOCKED_INVALID_INTEGRATION',
+
+            -- ServiceNow change
+            'SERVICENOW_CHANGE_CREATED',
+
+            -- Remediation / auto-remediation
+            'REMEDIATION_EXECUTION_CREATED',
+            'AUTO_REMEDIATION_TRIGGERED', 'AUTO_REMEDIATION_SUCCESS', 'AUTO_REMEDIATION_FAILED',
+
+            -- Scheduled executions
+            'SCHEDULED_EXECUTION_CREATED', 'SCHEDULED_EXECUTION_RECURRING_CREATED',
+            'SCHEDULED_EXECUTION_EXECUTED', 'SCHEDULED_EXECUTION_CANCELLED',
+            'SCHEDULED_EXECUTION_RECURRING_DISABLED',
+
+            -- User / Auth / Favorites
+            'USER_CREATED', 'USER_UPDATED', 'USER_LOGIN', 'USER_LOGOUT', 'USER_REFRESH',
+            'FAVORITE_ADDED', 'FAVORITE_REMOVED',
+
+            -- Execution step retry
+            'EXECUTION_STEP_RETRY_ATTEMPT', 'EXECUTION_STEP_RETRY_SUCCESS',
+            'EXECUTION_STEP_RETRY_EXHAUSTED', 'EXECUTION_STEP_RETRY_ABORTED',
+
+            -- Condition gates
+            'EXECUTION_STEP_WAITING',
+            'EXECUTION_STEP_GATE_SATISFIED',
+            'EXECUTION_STEP_GATE_TIMEOUT',
+
+            -- Feature flags
+            'FEATURE_FLAG_CREATED', 'FEATURE_FLAG_UPDATED'
+        )
+);
+
+ALTER TABLE AUDIT_LOG ADD CONSTRAINT CK_AUDIT_LOG_ENTITY_TYPE CHECK (
+    ENTITY_TYPE IN ('action', 'user', 'permission', 'execution', 'scheduled_execution', 'integration', 'profile')
+);
+
+-- Indexes locaux prefixed (V086)
+CREATE INDEX IDX_AUDIT_LOG_TIMESTAMP         ON AUDIT_LOG(TIMESTAMP) LOCAL;
+CREATE INDEX IDX_AUDITLOG_CREATED_ENTITY    ON AUDIT_LOG(TIMESTAMP, ENTITY_TYPE, ENTITY_ID) LOCAL;
+CREATE INDEX IDX_AUDITLOG_CREATED_USER       ON AUDIT_LOG(TIMESTAMP, USER_ID) LOCAL;
+CREATE INDEX IDX_AUDIT_LOG_CREATED_ACTION    ON AUDIT_LOG(TIMESTAMP, ACTION_TYPE) LOCAL;
+CREATE INDEX IDX_AUDIT_LOG_CORRELATION       ON AUDIT_LOG(CORRELATION_ID);
+
+COMMENT ON TABLE AUDIT_LOG IS 'Append-only audit log. Range INTERVAL Partitioned by TIMESTAMP (monthly). Story 40.4. SOC1/NFR8: immutable via trigger TRG_AUDIT_LOG_IMMUTABLE.';
+COMMENT ON COLUMN AUDIT_LOG.TIMESTAMP IS 'Partition key (Range INTERVAL monthly). Auto-set to SYSTIMESTAMP on INSERT. V086.';
+COMMENT ON COLUMN AUDIT_LOG.ID IS 'Primary key, IDENTITY column (BY DEFAULT ON NULL). Backed by global unique index PK_AUDIT_LOG.';
+COMMENT ON COLUMN AUDIT_LOG.CORRELATION_ID IS 'Optional correlation ID for cross-request tracing. Indexed via IDX_AUDIT_LOG_CORRELATION (GLOBAL) for queries without date filter.';
+
+-- ===========================================================================
+-- PHASE 3 : Tables executions
+-- ===========================================================================
+
+-- ---------------------------------------------------------------------------
+-- EXECUTIONS (V023 + V030 + V033 + V048 + V057 + V084)
+-- Partitionnée par CREATED_AT (Range INTERVAL mensuel) — Story 40.2
+-- Pas de CHK_EXECUTION_ENV : l'environnement est dicté par l'inventaire (validé par l'app)
+-- ---------------------------------------------------------------------------
+CREATE TABLE EXECUTIONS (
+    ID                   NUMBER GENERATED BY DEFAULT ON NULL AS IDENTITY,
+    ACTION_ID            NUMBER NOT NULL,
+    USER_ID              NUMBER NOT NULL,
+    ENVIRONMENT          VARCHAR2(50) NOT NULL,
+    PARAMETERS           CLOB,
+    STATUS               VARCHAR2(20) DEFAULT 'SUBMITTED' NOT NULL,
+    SERVICENOW_CHANGE_ID VARCHAR2(100),
+    STARTED_AT           TIMESTAMP,
+    COMPLETED_AT         TIMESTAMP,
+    CREATED_AT           TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    APPROVED_BY           NUMBER(10),
+    APPROVED_AT           TIMESTAMP,
+    APPROVAL_COMMENT      VARCHAR2(1000),
+    PARENT_EXECUTION_ID   NUMBER(19),
+    ERROR_MESSAGE         CLOB,
+
+    CONSTRAINT PK_EXECUTIONS PRIMARY KEY (ID),
+    CONSTRAINT FK_EXECUTIONS_ACTION      FOREIGN KEY (ACTION_ID)   REFERENCES ACTIONS_CATALOG(ID),
+    CONSTRAINT FK_EXECUTIONS_USER        FOREIGN KEY (USER_ID)     REFERENCES USERS(ID),
+    CONSTRAINT CHK_EXECUTION_STATUS      CHECK (STATUS IN (
+        'SUBMITTED', 'INTEGRATION_ERROR', 'PENDING_APPROVAL',
+        'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED', 'REJECTED'
+    )),
+    CONSTRAINT FK_EXECUTIONS_APPROVED_BY FOREIGN KEY (APPROVED_BY) REFERENCES USERS(ID),
+    CONSTRAINT FK_EXECUTIONS_PARENT      FOREIGN KEY (PARENT_EXECUTION_ID) REFERENCES EXECUTIONS(ID) ON DELETE SET NULL
+        DEFERRABLE INITIALLY DEFERRED
+)
+PARTITION BY RANGE (CREATED_AT)
+INTERVAL (NUMTOYMINTERVAL(1, 'MONTH'))
+(
+    PARTITION P_BEFORE_2024 VALUES LESS THAN (TIMESTAMP '2024-01-01 00:00:00')
+);
+
+CREATE INDEX IDX_EXECUTIONS_CREATED_ACTION ON EXECUTIONS(CREATED_AT, ACTION_ID) LOCAL;
+CREATE INDEX IDX_EXECUTIONS_CREATED_USER   ON EXECUTIONS(CREATED_AT, USER_ID) LOCAL;
+CREATE INDEX IDX_EXECUTIONS_CREATED_STATUS ON EXECUTIONS(CREATED_AT, STATUS) LOCAL;
+CREATE INDEX IDX_EXECUTIONS_PARENT_ID      ON EXECUTIONS(PARENT_EXECUTION_ID);
+CREATE INDEX IDX_EXECUTIONS_PENDING_APPROVAL ON EXECUTIONS(CASE WHEN STATUS = 'PENDING_APPROVAL' THEN ID END);
+
+COMMENT ON TABLE EXECUTIONS IS 'Execution records for actions. Partitioned by CREATED_AT (monthly INTERVAL). Story 40.2.';
+COMMENT ON COLUMN EXECUTIONS.CREATED_AT IS 'UTC TIMESTAMP used as partition key (monthly INTERVAL partitioning). V084.';
+COMMENT ON COLUMN EXECUTIONS.ID IS 'Primary key, IDENTITY column. Backed by global unique index (PK_EXECUTIONS). V084.';
+
+-- ---------------------------------------------------------------------------
+-- EXECUTION_STEPS (V025 + V048 + V067 + V085)
+-- Reference Partitioning via FK EXECUTION_ID → EXECUTIONS (Story 40.3)
+-- ---------------------------------------------------------------------------
+CREATE TABLE EXECUTION_STEPS (
+    ID               NUMBER GENERATED BY DEFAULT ON NULL AS IDENTITY,
+    EXECUTION_ID     NUMBER NOT NULL,
+    STEP_ORDER       NUMBER NOT NULL,
+    STEP_NAME        VARCHAR2(255) NOT NULL,
+    STEP_TYPE        VARCHAR2(50) NOT NULL,
+    STATUS           VARCHAR2(20) DEFAULT 'PENDING' NOT NULL,
+    STARTED_AT       TIMESTAMP,
+    COMPLETED_AT     TIMESTAMP,
+    OUTPUT           CLOB,
+    PLATFORM_JOB_ID  VARCHAR2(255),
+    ERROR_MESSAGE    CLOB,
+    CREATED_AT       TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+
+    CONSTRAINT PK_EXECUTION_STEPS PRIMARY KEY (ID),
+    CONSTRAINT FK_EXEC_STEPS_EXECUTION
+        FOREIGN KEY (EXECUTION_ID) REFERENCES EXECUTIONS(ID) ON DELETE CASCADE
+)
+PARTITION BY REFERENCE (FK_EXEC_STEPS_EXECUTION);
+
+ALTER TABLE EXECUTION_STEPS ADD CONSTRAINT UK_EXEC_STEPS_EXEC_ORDER
+    UNIQUE (EXECUTION_ID, STEP_ORDER) USING INDEX LOCAL;
+
+ALTER TABLE EXECUTION_STEPS ADD CONSTRAINT CHK_STEP_STATUS
+    CHECK (STATUS IN ('PENDING', 'WAITING', 'RUNNING', 'COMPLETED', 'FAILED', 'SKIPPED'));
+
+ALTER TABLE EXECUTION_STEPS ADD CONSTRAINT CHK_STEP_TYPE
+    CHECK (STEP_TYPE IN ('vault', 'servicenow', 'platform', 'prerequisite', 'verification'));
+
+CREATE INDEX IDX_EXEC_STEPS_EXECUTION_ID ON EXECUTION_STEPS(EXECUTION_ID) LOCAL;
+CREATE INDEX IDX_EXEC_STEPS_EXEC_STATUS  ON EXECUTION_STEPS(EXECUTION_ID, STATUS) LOCAL;
+
+COMMENT ON TABLE EXECUTION_STEPS IS 'Execution step records. Reference Partitioned by FK EXECUTION_ID → EXECUTIONS (monthly INTERVAL). Story 40.3.';
+COMMENT ON COLUMN EXECUTION_STEPS.EXECUTION_ID IS 'FK to EXECUTIONS.ID — partition key héritée (Reference Partitioning). V085.';
+COMMENT ON COLUMN EXECUTION_STEPS.ID IS 'Primary key, IDENTITY column. Backed by global unique index (PK_EXECUTION_STEPS). V085.';
+
+-- ---------------------------------------------------------------------------
+-- EXECUTION_TARGETS (V066)
+-- ---------------------------------------------------------------------------
+CREATE TABLE EXECUTION_TARGETS (
+    ID              NUMBER(19) GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    EXECUTION_ID    NUMBER(19) NOT NULL,
+    TARGET_TYPE     VARCHAR2(50) NOT NULL,
+    TARGET_ID       VARCHAR2(200) NOT NULL,
+    TARGET_NAME     VARCHAR2(255) NOT NULL,
+    TARGET_METADATA CLOB,
+    CREATED_AT      TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+
+    CONSTRAINT FK_EXEC_TARGETS_EXEC FOREIGN KEY (EXECUTION_ID) REFERENCES EXECUTIONS(ID) ON DELETE CASCADE,
+    CONSTRAINT UQ_EXEC_TARGETS_EXEC_TYPE_ID UNIQUE (EXECUTION_ID, TARGET_TYPE, TARGET_ID)
+);
+
+CREATE INDEX IDX_EXEC_TARGETS_EXEC   ON EXECUTION_TARGETS(EXECUTION_ID);
+CREATE INDEX IDX_EXEC_TARGETS_TARGET ON EXECUTION_TARGETS(TARGET_TYPE, TARGET_ID);
+
+COMMENT ON TABLE EXECUTION_TARGETS IS 'Explicit link between executions and their targets (Story 25.1).';
+COMMENT ON COLUMN EXECUTION_TARGETS.TARGET_METADATA IS 'JSON snapshot of target metadata at execution time.';
+
+-- ---------------------------------------------------------------------------
+-- SCHEDULED_EXECUTIONS (V038 + V041 + V048)
+-- Timestamps : plain TIMESTAMP UTC (V048)
+-- CHK_SCHEDULED_ENV exclu (droppé V053)
+-- ---------------------------------------------------------------------------
+CREATE TABLE SCHEDULED_EXECUTIONS (
+    ID           NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    ACTION_ID    NUMBER NOT NULL,
+    USER_ID      NUMBER NOT NULL,
+    ENVIRONMENT  VARCHAR2(50) NOT NULL,
+    PARAMETERS   CLOB,
+    SCHEDULED_AT TIMESTAMP,
+    STATUS       VARCHAR2(20) DEFAULT 'pending' NOT NULL,
+    CREATED_AT   TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    UPDATED_AT   TIMESTAMP,
+    -- V041
+    CORRELATION_ID VARCHAR2(100),
+    EXECUTION_ID   NUMBER,
+
+    CONSTRAINT FK_SCHEDULED_EXEC_ACTION    FOREIGN KEY (ACTION_ID)    REFERENCES ACTIONS_CATALOG(ID),
+    CONSTRAINT FK_SCHEDULED_EXEC_USER      FOREIGN KEY (USER_ID)      REFERENCES USERS(ID),
+    CONSTRAINT CHK_SCHEDULED_STATUS        CHECK (STATUS IN ('pending', 'executed', 'cancelled')),
+    CONSTRAINT FK_SCHEDULED_EXEC_EXECUTION FOREIGN KEY (EXECUTION_ID) REFERENCES EXECUTIONS(ID)
+);
+
+CREATE INDEX IDX_SCHEDULED_EXEC_ACTION       ON SCHEDULED_EXECUTIONS(ACTION_ID);
+CREATE INDEX IDX_SCHEDULED_EXEC_USER         ON SCHEDULED_EXECUTIONS(USER_ID);
+CREATE INDEX IDX_SCHEDULED_EXEC_STATUS       ON SCHEDULED_EXECUTIONS(STATUS);
+CREATE INDEX IDX_SCHEDULED_EXEC_EXECUTION    ON SCHEDULED_EXECUTIONS(EXECUTION_ID);
+CREATE INDEX IDX_SCHEDULED_EXEC_SCHEDULED_AT ON SCHEDULED_EXECUTIONS(SCHEDULED_AT);
+
+COMMENT ON TABLE SCHEDULED_EXECUTIONS IS 'Exécutions planifiées pour le scheduler externe (Epic 11).';
+COMMENT ON COLUMN SCHEDULED_EXECUTIONS.SCHEDULED_AT IS 'UTC timestamp (plain TIMESTAMP). Convention: all timestamps in UTC.';
+
+-- ---------------------------------------------------------------------------
+-- RECURRING_PATTERNS (V038 + V048)
+-- Timestamps : plain TIMESTAMP UTC (V048)
+-- ---------------------------------------------------------------------------
+CREATE TABLE RECURRING_PATTERNS (
+    ID                     NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    SCHEDULED_EXECUTION_ID NUMBER NOT NULL,
+    PATTERN_TYPE           VARCHAR2(50) NOT NULL,
+    PATTERN_CONFIG         CLOB,
+    NEXT_EXECUTION_DATE    TIMESTAMP NOT NULL,
+    IS_ACTIVE              NUMBER(1) DEFAULT 1 NOT NULL,
+    CREATED_AT             TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    UPDATED_AT             TIMESTAMP,
+
+    CONSTRAINT FK_RECURRING_PATTERN_SCHED_EXEC FOREIGN KEY (SCHEDULED_EXECUTION_ID) REFERENCES SCHEDULED_EXECUTIONS(ID) ON DELETE CASCADE,
+    CONSTRAINT CHK_RECURRING_PATTERN_TYPE      CHECK (PATTERN_TYPE IN ('one_time', 'daily', 'weekly', 'cron')),
+    CONSTRAINT CHK_RECURRING_IS_ACTIVE         CHECK (IS_ACTIVE IN (0, 1)),
+    CONSTRAINT UNQ_RECURRING_SCHED_EXEC        UNIQUE (SCHEDULED_EXECUTION_ID)
+);
+
+CREATE INDEX IDX_RECURRING_NEXT_EXEC        ON RECURRING_PATTERNS(NEXT_EXECUTION_DATE);
+CREATE INDEX IDX_RECURRING_ACTIVE_PENDING   ON RECURRING_PATTERNS(IS_ACTIVE, NEXT_EXECUTION_DATE);
+
+COMMENT ON TABLE RECURRING_PATTERNS IS 'Patterns de récurrence pour SCHEDULED_EXECUTIONS (Epic 11).';
+COMMENT ON COLUMN RECURRING_PATTERNS.NEXT_EXECUTION_DATE IS 'UTC timestamp (plain TIMESTAMP). Convention: all timestamps in UTC.';
+
+-- ===========================================================================
+-- PHASE 4 : Trigger
+-- ===========================================================================
+
+-- ---------------------------------------------------------------------------
+-- TRG_AUDIT_LOG_IMMUTABLE (V054)
+-- Défense en profondeur : interdit UPDATE et DELETE sur AUDIT_LOG (SOC1/NFR8)
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE TRIGGER TRG_AUDIT_LOG_IMMUTABLE
+BEFORE UPDATE OR DELETE ON AUDIT_LOG
+FOR EACH ROW
+BEGIN
+    RAISE_APPLICATION_ERROR(-20001,
+        'AUDIT_LOG is immutable - UPDATE and DELETE operations are forbidden (SOC1/NFR8)');
+END;
+/
+
+-- ===========================================================================
+-- PHASE 4b : Maintenance et purge (V087)
+-- ===========================================================================
+
+-- ---------------------------------------------------------------------------
+-- IDP_MAINTENANCE_LOG (V087)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IDP_MAINTENANCE_LOG (
+    ID             NUMBER GENERATED BY DEFAULT ON NULL AS IDENTITY CONSTRAINT PK_IDP_MAINTENANCE_LOG PRIMARY KEY,
+    EXECUTED_AT    TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
+    TABLE_NAME     VARCHAR2(64)  NOT NULL,
+    PARTITION_NAME VARCHAR2(64)  NOT NULL,
+    ACTION         VARCHAR2(32)  NOT NULL,
+    STATUS         VARCHAR2(16)  NOT NULL,
+    DRY_RUN        NUMBER(1)     DEFAULT 1 NOT NULL,
+    NOTES          VARCHAR2(500)
+);
+
+CREATE INDEX IDX_MAINT_LOG_EXECUTED_AT ON IDP_MAINTENANCE_LOG(EXECUTED_AT);
+
+COMMENT ON TABLE IDP_MAINTENANCE_LOG IS 'Log des opérations de maintenance (purge partitions). Story 40.5. Créée par V087.';
+
+-- ---------------------------------------------------------------------------
+-- PKG_IDP_MAINTENANCE (V087)
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE PACKAGE PKG_IDP_MAINTENANCE AS
+    gc_retention_executions  CONSTANT NUMBER := 24;
+    gc_retention_audit_log   CONSTANT NUMBER := 12;
+
+    PROCEDURE purge_old_partitions(
+        p_retention_executions  IN NUMBER  DEFAULT 24,
+        p_retention_audit_log   IN NUMBER  DEFAULT 12,
+        p_dry_run               IN NUMBER  DEFAULT 1
+    );
+
+    PROCEDURE purge_executions(
+        p_retention_months  IN NUMBER  DEFAULT 24,
+        p_dry_run           IN NUMBER  DEFAULT 1
+    );
+
+    PROCEDURE purge_audit_log(
+        p_retention_months  IN NUMBER  DEFAULT 12,
+        p_dry_run           IN NUMBER  DEFAULT 1
+    );
+
+END PKG_IDP_MAINTENANCE;
+/
+
+CREATE OR REPLACE PACKAGE BODY PKG_IDP_MAINTENANCE AS
+
+    PROCEDURE log_maintenance(
+        p_table_name     IN VARCHAR2,
+        p_partition_name IN VARCHAR2,
+        p_action         IN VARCHAR2,
+        p_status         IN VARCHAR2,
+        p_dry_run        IN NUMBER,
+        p_notes          IN VARCHAR2 DEFAULT NULL
+    ) IS
+    BEGIN
+        INSERT INTO IDP_MAINTENANCE_LOG
+            (TABLE_NAME, PARTITION_NAME, ACTION, STATUS, DRY_RUN, NOTES)
+        VALUES
+            (p_table_name, p_partition_name, p_action, p_status, p_dry_run, p_notes);
+    EXCEPTION
+        WHEN OTHERS THEN
+            DBMS_OUTPUT.PUT_LINE(
+                'WARNING: log_maintenance insert failed for '
+                || p_table_name || '/' || p_partition_name
+                || ' — ' || SQLERRM
+            );
+            RAISE;
+    END log_maintenance;
+
+    FUNCTION get_partition_date(p_high_value IN VARCHAR2) RETURN DATE IS
+        v_date DATE;
+    BEGIN
+        EXECUTE IMMEDIATE 'SELECT ' || p_high_value || ' FROM DUAL' INTO v_date;
+        RETURN v_date;
+    EXCEPTION
+        WHEN OTHERS THEN
+            RETURN NULL;
+    END get_partition_date;
+
+    PROCEDURE purge_executions(
+        p_retention_months  IN NUMBER  DEFAULT 24,
+        p_dry_run           IN NUMBER  DEFAULT 1
+    ) IS
+        v_cutoff_date   DATE;
+        v_part_date     DATE;
+        v_rows_estimate NUMBER;
+    BEGIN
+        IF p_retention_months IS NULL OR p_retention_months < 1 OR p_retention_months > 600 THEN
+            RAISE_APPLICATION_ERROR(-20001, 'purge_executions: p_retention_months must be between 1 and 600, got ' || NVL(TO_CHAR(p_retention_months), 'NULL'));
+        END IF;
+        IF p_dry_run NOT IN (0, 1) THEN
+            RAISE_APPLICATION_ERROR(-20002, 'purge_executions: p_dry_run must be 0 or 1, got ' || NVL(TO_CHAR(p_dry_run), 'NULL'));
+        END IF;
+
+        v_cutoff_date := ADD_MONTHS(TRUNC(SYSDATE, 'MM'), -p_retention_months);
+
+        FOR r IN (
+            SELECT PARTITION_NAME, HIGH_VALUE
+            FROM   USER_TAB_PARTITIONS
+            WHERE  TABLE_NAME = 'EXECUTIONS'
+            AND    PARTITION_NAME != 'P_BEFORE_2024'
+            ORDER BY PARTITION_POSITION
+        ) LOOP
+            v_part_date := get_partition_date(r.HIGH_VALUE);
+
+            IF v_part_date IS NULL THEN
+                log_maintenance('EXECUTIONS', r.PARTITION_NAME, 'SKIP', 'SKIPPED',
+                    p_dry_run, 'HIGH_VALUE non convertible: ' || SUBSTR(r.HIGH_VALUE, 1, 100));
+                CONTINUE;
+            END IF;
+
+            IF v_part_date <= v_cutoff_date THEN
+                IF p_dry_run = 0 THEN
+                    EXECUTE IMMEDIATE
+                        'UPDATE EXECUTIONS SET PARENT_EXECUTION_ID = NULL '
+                        || 'WHERE PARENT_EXECUTION_ID IN '
+                        || '(SELECT ID FROM EXECUTIONS PARTITION (' || r.PARTITION_NAME || '))';
+
+                    log_maintenance('EXECUTIONS', r.PARTITION_NAME, 'PREREQ_UPDATE',
+                        'SUCCESS', 0, 'PARENT_EXECUTION_ID nullified: ' || SQL%ROWCOUNT || ' rows');
+
+                    EXECUTE IMMEDIATE
+                        'DELETE FROM EXECUTION_TARGETS '
+                        || 'WHERE EXECUTION_ID IN '
+                        || '(SELECT ID FROM EXECUTIONS PARTITION (' || r.PARTITION_NAME || '))';
+
+                    log_maintenance('EXECUTIONS', r.PARTITION_NAME, 'PREREQ_DELETE',
+                        'SUCCESS', 0, 'EXECUTION_TARGETS orphelins supprimés: ' || SQL%ROWCOUNT || ' rows');
+
+                    EXECUTE IMMEDIATE
+                        'UPDATE SCHEDULED_EXECUTIONS SET EXECUTION_ID = NULL '
+                        || 'WHERE EXECUTION_ID IN '
+                        || '(SELECT ID FROM EXECUTIONS PARTITION (' || r.PARTITION_NAME || '))';
+
+                    log_maintenance('EXECUTIONS', r.PARTITION_NAME, 'PREREQ_UPDATE',
+                        'SUCCESS', 0, 'SCHEDULED_EXECUTIONS EXECUTION_ID détachés: ' || SQL%ROWCOUNT || ' rows');
+
+                    COMMIT;
+
+                    EXECUTE IMMEDIATE
+                        'ALTER TABLE EXECUTIONS DROP PARTITION ' || r.PARTITION_NAME
+                        || ' UPDATE GLOBAL INDEXES';
+
+                    log_maintenance('EXECUTIONS', r.PARTITION_NAME, 'DROP', 'SUCCESS', 0,
+                        'EXECUTION_STEPS cascade automatique (Reference Partitioning V085)');
+                ELSE
+                    BEGIN
+                        EXECUTE IMMEDIATE
+                            'SELECT COUNT(*) FROM EXECUTIONS PARTITION (' || r.PARTITION_NAME || ')'
+                            INTO v_rows_estimate;
+                    EXCEPTION
+                        WHEN OTHERS THEN v_rows_estimate := -1;
+                    END;
+
+                    log_maintenance('EXECUTIONS', r.PARTITION_NAME, 'DROP', 'DRY_RUN', 1,
+                        'Estimated rows: ' || v_rows_estimate
+                        || ' | HIGH_VALUE: ' || TO_CHAR(v_part_date, 'YYYY-MM-DD'));
+                END IF;
+            END IF;
+        END LOOP;
+
+        COMMIT;
+    EXCEPTION
+        WHEN OTHERS THEN
+            ROLLBACK;
+            RAISE;
+    END purge_executions;
+
+    PROCEDURE purge_audit_log(
+        p_retention_months  IN NUMBER  DEFAULT 12,
+        p_dry_run           IN NUMBER  DEFAULT 1
+    ) IS
+        v_cutoff_date   DATE;
+        v_part_date     DATE;
+        v_rows_estimate NUMBER;
+    BEGIN
+        IF p_retention_months IS NULL OR p_retention_months < 1 OR p_retention_months > 600 THEN
+            RAISE_APPLICATION_ERROR(-20003, 'purge_audit_log: p_retention_months must be between 1 and 600, got ' || NVL(TO_CHAR(p_retention_months), 'NULL'));
+        END IF;
+        IF p_dry_run NOT IN (0, 1) THEN
+            RAISE_APPLICATION_ERROR(-20004, 'purge_audit_log: p_dry_run must be 0 or 1, got ' || NVL(TO_CHAR(p_dry_run), 'NULL'));
+        END IF;
+
+        v_cutoff_date := ADD_MONTHS(TRUNC(SYSDATE, 'MM'), -p_retention_months);
+
+        FOR r IN (
+            SELECT PARTITION_NAME, HIGH_VALUE
+            FROM   USER_TAB_PARTITIONS
+            WHERE  TABLE_NAME = 'AUDIT_LOG'
+            AND    PARTITION_NAME != 'P_INITIAL'
+            ORDER BY PARTITION_POSITION
+        ) LOOP
+            v_part_date := get_partition_date(r.HIGH_VALUE);
+
+            IF v_part_date IS NULL THEN
+                log_maintenance('AUDIT_LOG', r.PARTITION_NAME, 'SKIP', 'SKIPPED',
+                    p_dry_run, 'HIGH_VALUE non convertible: ' || SUBSTR(r.HIGH_VALUE, 1, 100));
+                CONTINUE;
+            END IF;
+
+            IF v_part_date <= v_cutoff_date THEN
+                IF p_dry_run = 0 THEN
+                    EXECUTE IMMEDIATE
+                        'ALTER TABLE AUDIT_LOG DROP PARTITION ' || r.PARTITION_NAME
+                        || ' UPDATE GLOBAL INDEXES';
+
+                    log_maintenance('AUDIT_LOG', r.PARTITION_NAME, 'DROP', 'SUCCESS', 0, NULL);
+                ELSE
+                    BEGIN
+                        EXECUTE IMMEDIATE
+                            'SELECT COUNT(*) FROM AUDIT_LOG PARTITION (' || r.PARTITION_NAME || ')'
+                            INTO v_rows_estimate;
+                    EXCEPTION
+                        WHEN OTHERS THEN v_rows_estimate := -1;
+                    END;
+
+                    log_maintenance('AUDIT_LOG', r.PARTITION_NAME, 'DROP', 'DRY_RUN', 1,
+                        'Estimated rows: ' || v_rows_estimate
+                        || ' | HIGH_VALUE: ' || TO_CHAR(v_part_date, 'YYYY-MM-DD'));
+                END IF;
+            END IF;
+        END LOOP;
+
+        COMMIT;
+    EXCEPTION
+        WHEN OTHERS THEN
+            ROLLBACK;
+            RAISE;
+    END purge_audit_log;
+
+    PROCEDURE purge_old_partitions(
+        p_retention_executions  IN NUMBER  DEFAULT 24,
+        p_retention_audit_log   IN NUMBER  DEFAULT 12,
+        p_dry_run               IN NUMBER  DEFAULT 1
+    ) IS
+    BEGIN
+        purge_executions(
+            p_retention_months => p_retention_executions,
+            p_dry_run          => p_dry_run
+        );
+
+        purge_audit_log(
+            p_retention_months => p_retention_audit_log,
+            p_dry_run          => p_dry_run
+        );
+    END purge_old_partitions;
+
+END PKG_IDP_MAINTENANCE;
+/
+
+-- ===========================================================================
+-- PHASE 5 : Données de référence
+-- ===========================================================================
+
+-- ---------------------------------------------------------------------------
+-- REF_ENGINES (V049 + V078)
+-- 6 lignes : Oracle, SQL Server, DB2, PostgreSQL, MySQL, Workflow
+-- ICON_URL = NULL (colonne ajoutée V078, pas de valeurs initiales)
+-- ---------------------------------------------------------------------------
+INSERT INTO REF_ENGINES (CODE, LABEL, DISPLAY_ORDER, IS_ACTIVE) VALUES ('Oracle',     'Oracle',     1, 1);
+INSERT INTO REF_ENGINES (CODE, LABEL, DISPLAY_ORDER, IS_ACTIVE) VALUES ('SQL Server', 'SQL Server', 2, 1);
+INSERT INTO REF_ENGINES (CODE, LABEL, DISPLAY_ORDER, IS_ACTIVE) VALUES ('DB2',        'DB2',        3, 1);
+INSERT INTO REF_ENGINES (CODE, LABEL, DISPLAY_ORDER, IS_ACTIVE) VALUES ('PostgreSQL', 'PostgreSQL', 4, 1);
+INSERT INTO REF_ENGINES (CODE, LABEL, DISPLAY_ORDER, IS_ACTIVE) VALUES ('MySQL',      'MySQL',      5, 1);
+INSERT INTO REF_ENGINES (CODE, LABEL, DISPLAY_ORDER, IS_ACTIVE) VALUES ('Workflow',   'Workflow',   6, 1);
+
+-- ---------------------------------------------------------------------------
+-- REF_CATEGORIES (V059)
+-- 6 lignes : provisioning, patching, administration, monitoring, backup, autres
+-- ---------------------------------------------------------------------------
+INSERT INTO REF_CATEGORIES (CODE, LABEL, DISPLAY_ORDER, IS_ACTIVE) VALUES ('provisioning',  'Approvisionnement', 10, 1);
+INSERT INTO REF_CATEGORIES (CODE, LABEL, DISPLAY_ORDER, IS_ACTIVE) VALUES ('patching',      'Correctifs',        20, 1);
+INSERT INTO REF_CATEGORIES (CODE, LABEL, DISPLAY_ORDER, IS_ACTIVE) VALUES ('administration','Administration',    30, 1);
+INSERT INTO REF_CATEGORIES (CODE, LABEL, DISPLAY_ORDER, IS_ACTIVE) VALUES ('monitoring',    'Surveillance',      40, 1);
+INSERT INTO REF_CATEGORIES (CODE, LABEL, DISPLAY_ORDER, IS_ACTIVE) VALUES ('backup',        'Sauvegarde',        50, 1);
+INSERT INTO REF_CATEGORIES (CODE, LABEL, DISPLAY_ORDER, IS_ACTIVE) VALUES ('autres',        'Autres',            99, 1);
+
+-- ---------------------------------------------------------------------------
+-- INTEGRATION_TYPE_CATALOGUE / INTEGRATION_ACTIONS
+-- Les migrations V061, V072, V075 ne contiennent pas d'INSERTs SQL.
+-- Les données sont gérées par l'application (fixtures Django ou seed au démarrage).
+-- ---------------------------------------------------------------------------
+
+COMMIT;
+
+-- ===========================================================================
+-- FIN DU SCRIPT BASELINE V088
+-- ===========================================================================
+-- Après application de ce script :
+--   flyway baseline -baselineVersion=88 -baselineDescription=baseline_schema_v088
+--
+-- Aucune migration incrémentale requise — état identique à V000→V088.
+--
+-- Validation rapide :
+--   SELECT COUNT(*) FROM user_tables;             -- doit retourner 25
+--   SELECT table_name FROM user_part_tables;      -- EXECUTIONS, EXECUTION_STEPS, AUDIT_LOG
+--   SELECT status FROM user_triggers WHERE trigger_name = 'TRG_AUDIT_LOG_IMMUTABLE'; -- ENABLED
+--   SELECT status FROM user_objects WHERE object_name = 'PKG_IDP_MAINTENANCE';       -- VALID
+--   SELECT COUNT(*) FROM REF_ENGINES;             -- doit retourner 6
+--   SELECT COUNT(*) FROM REF_CATEGORIES;          -- doit retourner 6
+-- ===========================================================================

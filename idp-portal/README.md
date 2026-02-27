@@ -31,7 +31,7 @@ Attendre 1 à 2 minutes que la base soit pret. Au premier demarrage, le script `
 |-------------------|--------------------------------|------------------------------------|
 | `ORACLE_DSN`      | DSN Oracle (hote:port/service) | `localhost:1521/FREEPDB1`           |
 | `ORACLE_USER`     | Utilisateur Oracle             | `idp_app`                          |
-| `ORACLE_PASSWORD` | Mot de passe (utilisateur idp_app) | `changeme`                     |
+| `ORACLE_PASSWORD` | Mot de passe (utilisateur idp_app) | `Oracle123!`                   |
 | `ORACLE_PWD`      | Mot de passe sys (conteneur, optionnel) | `Oracle123!` (defaut)        |
 
 Le fichier `.env` ne doit pas etre commit (deja dans `.gitignore`). Copier les cles ci-dessus dans un `.env` local ; les valeurs peuvent rester celles indiquees pour le dev.
@@ -51,14 +51,14 @@ Les migrations sont gerees par **Flyway** (Community). Format des fichiers : `V0
 ```bash
 export ORACLE_DSN=localhost:1521/FREEPDB1
 export ORACLE_USER=idp_app
-export ORACLE_PASSWORD=changeme
+export ORACLE_PASSWORD=Oracle123!
 ./scripts/run_migrations.sh
 ```
 
 Ou en une ligne :
 
 ```bash
-ORACLE_DSN=localhost:1521/FREEPDB1 ORACLE_USER=idp_app ORACLE_PASSWORD=changeme ./scripts/run_migrations.sh
+ORACLE_DSN=localhost:1521/FREEPDB1 ORACLE_USER=idp_app ORACLE_PASSWORD=Oracle123! ./scripts/run_migrations.sh
 ```
 
 Le script appelle `flyway migrate` (CLI ou Docker). Configuration : `flyway.conf` (emplacement `database/migrations/`, validation activée).
@@ -81,7 +81,7 @@ export ORACLE_HOST=localhost
 export ORACLE_PORT=1521
 export ORACLE_SERVICE_NAME=FREEPDB1
 export ORACLE_USER=idp_app
-export ORACLE_PASSWORD=changeme
+export ORACLE_PASSWORD=Oracle123!
 
 # Démarrer le serveur de développement
 python manage.py runserver
@@ -106,7 +106,7 @@ Pour lancer les tests d'integration contre le container Oracle (depuis la racine
 ```bash
 docker compose up -d oracle
 # Attendre ~1-2 min
-cd django_backend && ORACLE_DSN=localhost:1521/FREEPDB1 ORACLE_USER=idp_app ORACLE_PASSWORD=changeme python3 -m pytest tests/ -v
+cd django_backend && ORACLE_DSN=localhost:1521/FREEPDB1 ORACLE_USER=idp_app ORACLE_PASSWORD=Oracle123! python3 -m pytest tests/ -v
 ```
 
 Sans Oracle configure (ORACLE_DSN non defini), les tests d'integration sont ignores (skip).

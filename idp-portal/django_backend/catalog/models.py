@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+import structlog
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Count, Subquery
@@ -8,7 +8,7 @@ from idp_auth.models import User
 from integrations.models import Integration
 from core.fields import OracleJSONField
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class ActionCategory(models.TextChoices):

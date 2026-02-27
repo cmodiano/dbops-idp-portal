@@ -470,3 +470,77 @@ class TestCatalogService(TestCase):
                 action.id, {'integration_id': 99999}, self.user
             )
         self.assertIn("Integration 99999 not found", str(cm.exception))
+
+    # ─── Story 48.2: Tests de non-régression deactivate_action cascade ───────
+
+    def test_deactivate_action_3_workflows_all_disabled(self):
+        """Story 48.2 — NEW-BE-9 : deactivate_action() avec 3 workflows référençant l'action les désactive tous via bulk_update."""
+        action = Action.objects.create(
+            name='Action Cascade 3wf 48.2',
+            engine='Oracle',
+            platform='AAP',
+            status=ActionStatus.PUBLISHED,
+            created_by=self.user,
+            item_type=ActionItemType.ACTION,
+        )
+        workflows = [
+            Action.objects.create(
+                name=f'Workflow Cascade {i} 48.2',
+                engine='Oracle',
+                platform='AAP',
+                status=ActionStatus.PUBLISHED,
+                created_by=self.user,
+                item_type=ActionItemType.WORKFLOW,
+                execution_steps=[
+                    {'order': 1, 'name': 'Step', 'referenced_action_id': action.id},
+                ],
+            )
+            for i in range(1, 4)
+        ]
+
+        result = self.service.deactivate_action(action.id, self.user, deletion_reason='Test 48.2')
+
+        self.assertIsNotNone(result)
+        self.assertEqual(len(result['deactivated_workflows']), 3)
+        for wf in workflows:
+            wf.refresh_from_db()
+            self.assertEqual(wf.status, ActionStatus.DISABLED)
+            self.assertIsNotNone(wf.deleted_at)
+
+    def test_deactivate_action_3_workflows_audit_per_workflow(self):
+        """Story 48.2 — NEW-BE-9 : deactivate_action() crée un audit ACTION_DEACTIVATED par workflow en cascade."""
+        action = Action.objects.create(
+            name='Action Cascade Audit 3wf 48.2',
+            engine='Oracle',
+            platform='AAP',
+            status=ActionStatus.PUBLISHED,
+            created_by=self.user,
+            item_type=ActionItemType.ACTION,
+        )
+        workflows = [
+            Action.objects.create(
+                name=f'Workflow Audit {i} 48.2',
+                engine='Oracle',
+                platform='AAP',
+                status=ActionStatus.PUBLISHED,
+                created_by=self.user,
+                item_type=ActionItemType.WORKFLOW,
+                execution_steps=[
+                    {'order': 1, 'name': 'Step', 'referenced_action_id': action.id},
+                ],
+            )
+            for i in range(1, 4)
+        ]
+
+        self.service.deactivate_action(action.id, self.user, deletion_reason='Test 48.2')
+
+        from core.models import AuditLog
+        for wf in workflows:
+            audit = AuditLog.objects.filter(
+                entity_type='action',
+                entity_id=wf.id,
+                action_type='ACTION_DEACTIVATED',
+            ).first()
+            self.assertIsNotNone(audit, f"Audit manquant pour workflow {wf.name}")
+            details = audit.get_details()
+            self.assertEqual(details['cascade_from_action_id'], action.id)

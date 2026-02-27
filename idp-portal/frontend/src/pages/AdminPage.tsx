@@ -6,6 +6,16 @@
  */
 
 import { Typography, Tabs, App } from 'antd';
+import {
+  AppstoreOutlined,
+  TeamOutlined,
+  ApiOutlined,
+  AuditOutlined,
+  TagsOutlined,
+  ToolOutlined,
+  BarChartOutlined,
+  ExperimentOutlined,
+} from '@ant-design/icons';
 import { useTheme } from '../contexts/ThemeContext';
 import {
   ActionsAdminPanel,
@@ -32,52 +42,62 @@ export default function AdminPage() {
           Administration du Catalogue
         </Title>
         <Typography.Text type="secondary">
-          Gérez vos actions et profils
+          Gérez les actions, profils, intégrations, règles métier et configurations du portail
         </Typography.Text>
       </div>
 
       <Tabs
         defaultActiveKey="actions"
         destroyOnHidden
+        size="large"
+        tabBarStyle={{ marginBottom: 24 }}
         items={[
           {
             key: 'actions',
             label: 'Actions',
+            icon: <AppstoreOutlined />,
             children: <ActionsAdminPanel notification={notification} modal={modal} isDark={effectiveMode === 'dark'} />,
           },
           {
             key: 'profiles',
             label: 'Profils',
+            icon: <TeamOutlined />,
             children: <ProfilesAdminPanel notification={notification} />,
           },
           {
             key: 'integrations',
             label: 'Intégrations',
+            icon: <ApiOutlined />,
             children: <IntegrationsAdminPanel notification={notification} />,
           },
           {
             key: 'business-rules',
             label: 'Règles métier',
+            icon: <AuditOutlined />,
             children: <BusinessRulesAdminPanel />,
           },
           {
             key: 'categories',
             label: 'Catégories',
+            icon: <TagsOutlined />,
             children: <CategoriesAdminPanel />,
           },
           {
             key: 'engines',
             label: 'Moteurs',
+            icon: <ToolOutlined />,
             children: <EnginesAdminPanel />,
           },
           {
             key: 'analytics',
             label: 'Métriques',
+            icon: <BarChartOutlined />,
             children: <MetricsAdminPanel />,
           },
           {
             key: 'feature-flags',
             label: 'Feature Flags',
+            icon: <ExperimentOutlined />,
             children: <FeatureFlagsAdminPanel />,
           },
         ]}

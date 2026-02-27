@@ -422,3 +422,90 @@ class TestProfileServiceCumulativePermissions(TestCase):
         """Test cumulative permissions raises ValueError for None user_id."""
         with self.assertRaises(ValueError):
             self.service.get_cumulative_permissions(user_id=None, ad_groups=['GRP-A'])
+
+    def test_cumulative_dba_multi_technologies(self):
+        """AC2 — DBA appartenant à GRP-DBA-SQL et GRP-DBA-ORACLE obtient l'union des permissions.
+
+        Vérifie que la règle produit spec-rbac-cumul-permissions-multi-groupes.md est respectée :
+        un DBA multi-technologies voit les actions taguées sql-server ET oracle.
+        """
+        # Profil SQL : actions taguées sql-server
+        profile_sql = Profile.objects.create(name='DBA-SQL', ad_group='GRP-DBA-SQL')
+        perm_sql = ProfileActionPermission.objects.create(
+            profile=profile_sql, permission_type='PATTERN'
+        )
+        perm_sql.set_tag_patterns(['sql-server'])
+        perm_sql.set_environments(['dev', 'staging'])
+        perm_sql.save()
+
+        # Profil Oracle : actions taguées oracle
+        profile_oracle = Profile.objects.create(name='DBA-ORACLE', ad_group='GRP-DBA-ORACLE')
+        perm_oracle = ProfileActionPermission.objects.create(
+            profile=profile_oracle, permission_type='PATTERN'
+        )
+        perm_oracle.set_tag_patterns(['oracle'])
+        perm_oracle.set_environments(['prod'])
+        perm_oracle.save()
+
+        result = self.service.get_cumulative_permissions(
+            user_id=42,
+            ad_groups=['GRP-DBA-SQL', 'GRP-DBA-ORACLE']
+        )
+
+        # Les deux profils sont présents dans action_permissions
+        self.assertEqual(len(result['action_permissions']), 2)
+
+        # Vérification que tag_patterns des deux profils sont disponibles
+        all_tags = set()
+        for perm in result['action_permissions']:
+            all_tags.update(perm.get('tag_patterns', []))
+        self.assertIn('sql-server', all_tags)
+        self.assertIn('oracle', all_tags)
+
+        # Vérification des environnements des deux profils
+        all_envs = set()
+        for perm in result['action_permissions']:
+            all_envs.update(perm.get('environments', []))
+        self.assertIn('dev', all_envs)
+        self.assertIn('staging', all_envs)
+        self.assertIn('prod', all_envs)
+
+    def test_cumulative_conflict_resolved_by_union(self):
+        """AC3 — Si Profil 1 autorise l'action X et Profil 2 ne l'autorise pas, X est autorisé.
+
+        La règle d'union (most permissive wins) : si au moins un profil autorise → oui.
+        """
+        # Profil 1 : autorise action_id=10
+        profile1 = Profile.objects.create(name='Profil-Allow', ad_group='GRP-ALLOW')
+        perm1 = ProfileActionPermission.objects.create(
+            profile=profile1, permission_type='LIST'
+        )
+        perm1.set_action_ids([10])
+        perm1.set_environments(['dev'])
+        perm1.save()
+
+        # Profil 2 : autorise uniquement action_id=20 (n'autorise pas 10)
+        profile2 = Profile.objects.create(name='Profil-Deny', ad_group='GRP-DENY')
+        perm2 = ProfileActionPermission.objects.create(
+            profile=profile2, permission_type='LIST'
+        )
+        perm2.set_action_ids([20])
+        perm2.set_environments(['staging'])
+        perm2.save()
+
+        result = self.service.get_cumulative_permissions(
+            user_id=99,
+            ad_groups=['GRP-ALLOW', 'GRP-DENY']
+        )
+
+        # Les deux profils sont présents (union brute de ProfileService)
+        self.assertEqual(len(result['action_permissions']), 2)
+
+        # Les action_ids des deux profils sont présents (union)
+        all_action_ids = set()
+        for perm in result['action_permissions']:
+            all_action_ids.update(perm.get('action_ids', []))
+        # Action 10 (autorisée par profil 1) est présente dans l'union
+        self.assertIn(10, all_action_ids)
+        # Action 20 (autorisée par profil 2) est aussi présente
+        self.assertIn(20, all_action_ids)

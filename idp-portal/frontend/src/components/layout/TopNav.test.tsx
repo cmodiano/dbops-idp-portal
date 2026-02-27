@@ -205,6 +205,7 @@ describe('TopNav', () => {
       await waitFor(() => {
         // Full name appears in dropdown
         expect(screen.getByText('Test User')).toBeInTheDocument();
+        expect(screen.getByText('Mes clés API')).toBeInTheDocument();
         // Logout button with accent
         expect(screen.getByText('Déconnexion')).toBeInTheDocument();
       });

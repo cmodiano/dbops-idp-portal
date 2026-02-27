@@ -94,4 +94,21 @@ describe('HorizontalFilters', () => {
     const selects = container.querySelectorAll('.ant-select');
     expect(selects).toHaveLength(2);
   });
+
+  describe('Taille des champs (size middle pour UI compacte)', () => {
+    it('les Select ont size="middle" (classe ant-select, pas ant-select-lg)', () => {
+      const { container } = render(<HorizontalFilters {...defaultProps} />);
+
+      const selects = container.querySelectorAll('.ant-select');
+      expect(selects.length).toBe(2);
+      // size="middle" = pas de ant-select-lg (pas de classe large)
+      expect(container.querySelectorAll('.ant-select-lg')).toHaveLength(0);
+    });
+
+    it('aucun Select n\'a size="small"', () => {
+      const { container } = render(<HorizontalFilters {...defaultProps} />);
+
+      expect(container.querySelectorAll('.ant-select-sm')).toHaveLength(0);
+    });
+  });
 });

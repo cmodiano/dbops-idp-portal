@@ -28,7 +28,7 @@ describe('EnvironmentBarChart', () => {
   it('renders chart title with data', () => {
     render(<EnvironmentBarChart data={mockData} loading={false} />);
 
-    expect(screen.getByText('Repartition par environnement')).toBeInTheDocument();
+    expect(screen.getByText('Répartition par environnement')).toBeInTheDocument();
     // Chart card should be present (chart content depends on recharts rendering)
     expect(document.querySelector('.ant-card-body')).toBeInTheDocument();
   });
@@ -36,14 +36,14 @@ describe('EnvironmentBarChart', () => {
   it('renders empty state when no data', () => {
     render(<EnvironmentBarChart data={[]} loading={false} />);
 
-    expect(screen.getByText('Repartition par environnement')).toBeInTheDocument();
+    expect(screen.getByText('Répartition par environnement')).toBeInTheDocument();
     expect(screen.getByText('Aucune execution sur la periode')).toBeInTheDocument();
   });
 
   it('renders skeleton when loading', () => {
     render(<EnvironmentBarChart data={[]} loading={true} />);
 
-    expect(screen.getByText('Repartition par environnement')).toBeInTheDocument();
+    expect(screen.getByText('Répartition par environnement')).toBeInTheDocument();
     expect(document.querySelector('.ant-skeleton')).toBeInTheDocument();
   });
 
@@ -54,7 +54,7 @@ describe('EnvironmentBarChart', () => {
 
     render(<EnvironmentBarChart data={singleData} loading={false} />);
 
-    expect(screen.getByText('Repartition par environnement')).toBeInTheDocument();
+    expect(screen.getByText('Répartition par environnement')).toBeInTheDocument();
     expect(document.querySelector('.ant-card-body')).toBeInTheDocument();
   });
 });

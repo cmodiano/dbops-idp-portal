@@ -100,7 +100,7 @@ python manage.py runserver
 # Base de données Oracle
 ORACLE_DSN=localhost:1521/FREEPDB1
 ORACLE_USER=idp_app
-ORACLE_PASSWORD=changeme
+ORACLE_PASSWORD=Oracle123!
 
 # Sécurité
 SECRET_KEY=your-secret-key

@@ -55,14 +55,19 @@ urlpatterns = [
     ),
 ]
 
-# Serve uploaded integration icons in development (and in Docker with DEBUG=True)
-# Uses STATIC_ROOT when set (Docker: /opt/.../staticfiles/icons) to match the upload endpoint.
-# Falls back to BASE_DIR/static/icons for local dev (no STATIC_ROOT configured).
+# Serve static files in development (admin, jazzmin, icons)
+# Required when using Daphne/ASGI — runserver serves them automatically, ASGI does not.
 if settings.DEBUG:
+    from django.conf.urls.static import static
     from django.views.static import serve
     from pathlib import Path
+
     _static_root = getattr(settings, 'STATIC_ROOT', None) or (Path(settings.BASE_DIR) / 'static')
     _icons_root = Path(_static_root) / 'icons'
+
+    # Admin + Jazzmin CSS/JS (from STATIC_ROOT after collectstatic)
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+    # Fallback: icons if not in STATIC_ROOT yet
     urlpatterns += [
         path('static/icons/<path:path>', serve, {'document_root': _icons_root}),
     ]

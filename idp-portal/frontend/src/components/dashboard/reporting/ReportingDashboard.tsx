@@ -160,8 +160,10 @@ export function ReportingDashboard() {
   useEffect(() => {
     fetchFilterOptions()
       .then(setFilterOptions)
-      .catch(() => {
-        // Silently fail - panel will use fallback options
+      .catch((err: unknown) => {
+        // Fallback silencieux pour l'utilisateur — filtres ignorés en cas d'échec
+        // eslint-disable-next-line no-console
+        console.warn('[ReportingDashboard] fetchFilterOptions failed, using fallback options', err);
       });
   }, []);
 

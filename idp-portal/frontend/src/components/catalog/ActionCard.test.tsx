@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { ThemeProvider } from '../../contexts/ThemeContext';
 import { ActionCard } from './ActionCard';
 import type { ActionPreviewData } from '../../types/api';
@@ -199,6 +200,105 @@ describe('ActionCard', () => {
 
       const card = screen.getByRole('article');
       expect(card).toHaveAttribute('aria-label', 'Action: Creer PDB Oracle, impact Moyen');
+    });
+  });
+
+  // Story 46.1: affordance — CTA, badge "Incomplet"
+  describe('Story 46.1 — affordance', () => {
+    it('affiche le CTA "Voir les détails" quand onClick fourni, variant default', () => {
+      const handleClick = vi.fn();
+      renderWithTheme(<ActionCard action={mockAction} onClick={handleClick} variant="default" />);
+
+      expect(screen.getByRole('button', { name: /Voir les détails de Creer PDB Oracle/ })).toBeInTheDocument();
+      expect(screen.getByText('Voir les détails')).toBeInTheDocument();
+    });
+
+    it('affiche le CTA "Exécuter" quand onClick fourni, variant business', () => {
+      const handleClick = vi.fn();
+      renderWithTheme(<ActionCard action={mockAction} onClick={handleClick} variant="business" />);
+
+      expect(screen.getByRole('button', { name: /Exécuter Creer PDB Oracle/ })).toBeInTheDocument();
+      expect(screen.getByText('Exécuter')).toBeInTheDocument();
+    });
+
+    it('n\'affiche pas le CTA en variant preview', () => {
+      const handleClick = vi.fn();
+      renderWithTheme(<ActionCard action={mockAction} onClick={handleClick} variant="preview" />);
+
+      expect(screen.queryByText('Voir les détails')).not.toBeInTheDocument();
+      expect(screen.queryByText('Exécuter')).not.toBeInTheDocument();
+    });
+
+    it('affiche le badge "Incomplet" quand description null ET tags vide', () => {
+      const incompleteAction = { ...mockAction, description: null, tags: [] };
+      renderWithTheme(<ActionCard action={incompleteAction} onClick={vi.fn()} />);
+
+      expect(screen.getByText('Incomplet')).toBeInTheDocument();
+    });
+
+    it('n\'affiche pas le badge "Incomplet" quand description présente', () => {
+      renderWithTheme(<ActionCard action={mockAction} onClick={vi.fn()} />);
+
+      expect(screen.queryByText('Incomplet')).not.toBeInTheDocument();
+    });
+
+    it('n\'affiche pas le badge "Incomplet" quand tags présents (même sans description)', () => {
+      const actionWithTagsNoDesc = { ...mockAction, description: null, tags: ['oracle'] };
+      renderWithTheme(<ActionCard action={actionWithTagsNoDesc} onClick={vi.fn()} />);
+
+      expect(screen.queryByText('Incomplet')).not.toBeInTheDocument();
+    });
+
+    it('n\'affiche pas le badge "Incomplet" en variant preview', () => {
+      const incompleteAction = { ...mockAction, description: null, tags: [] };
+      renderWithTheme(<ActionCard action={incompleteAction} variant="preview" />);
+
+      expect(screen.queryByText('Incomplet')).not.toBeInTheDocument();
+    });
+
+    it('le CTA a un aria-label explicite', () => {
+      const handleClick = vi.fn();
+      renderWithTheme(<ActionCard action={mockAction} onClick={handleClick} variant="default" />);
+
+      const ctaButton = screen.getByRole('button', { name: /Voir les détails de Creer PDB Oracle/ });
+      expect(ctaButton).toHaveAttribute('aria-label', 'Voir les détails de Creer PDB Oracle');
+    });
+
+    it('cliquer le CTA appelle onClick exactement 1 fois (stopPropagation empêche double-déclenchement)', () => {
+      const handleClick = vi.fn();
+      renderWithTheme(<ActionCard action={mockAction} onClick={handleClick} variant="default" />);
+
+      const ctaButton = screen.getByRole('button', { name: /Voir les détails de Creer PDB Oracle/ });
+      fireEvent.click(ctaButton);
+
+      expect(handleClick).toHaveBeenCalledTimes(1);
+    });
+
+    it('keyDown Enter sur le CTA appelle onClick exactement 1 fois (stopPropagation empêche double-déclenchement)', async () => {
+      const handleClick = vi.fn();
+      const user = userEvent.setup();
+      renderWithTheme(<ActionCard action={mockAction} onClick={handleClick} variant="default" />);
+
+      const ctaButton = screen.getByRole('button', { name: /Voir les détails de Creer PDB Oracle/ });
+      ctaButton.focus();
+      await user.keyboard('{Enter}');
+
+      expect(handleClick).toHaveBeenCalledTimes(1);
+    });
+
+    it('affiche le CTA désactivé quand aucun onClick fourni (AC 2: désactivé, pas absent)', () => {
+      renderWithTheme(<ActionCard action={mockAction} variant="default" />);
+
+      const ctaButton = screen.getByRole('button', { name: /Voir les détails/ });
+      expect(ctaButton).toBeDisabled();
+    });
+
+    it('affiche le badge "Incomplet" quand tags est null (pas de tags du tout)', () => {
+      // Double cast: simule une API retournant null au lieu de [] ; bypass TypeScript pour ce test edge-case
+      const incompleteAction = { ...mockAction, description: null, tags: null as unknown as string[] };
+      renderWithTheme(<ActionCard action={incompleteAction} onClick={vi.fn()} />);
+
+      expect(screen.getByText('Incomplet')).toBeInTheDocument();
     });
   });
 

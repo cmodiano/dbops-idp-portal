@@ -45,7 +45,7 @@ def get_connection() -> oracledb.Connection:
     """
     dsn = os.environ.get("ORACLE_DSN", "localhost:1521/FREEPDB1")
     user = os.environ.get("ORACLE_USER", "idp_app")
-    password = os.environ.get("ORACLE_PASSWORD", "changeme")
+    password = os.environ.get("ORACLE_PASSWORD", "Oracle123!")
     return oracledb.connect(user=user, password=password, dsn=dsn)
 
 
@@ -113,10 +113,12 @@ INTEGRATIONS = [
 ]
 
 # Actions with various connectors and configurations
+# CATEGORY must match REF_CATEGORIES (provisioning, patching, administration, monitoring, backup, autres)
 ACTIONS = [
     {
         "name": "Backup Oracle Database",
         "description": "Execute a full RMAN backup of an Oracle database",
+        "category": "backup",
         "engine": "Oracle",
         "platform": "AAP",
         "parameters_schema": json.dumps({
@@ -151,6 +153,7 @@ ACTIONS = [
     {
         "name": "Apply Oracle Patch",
         "description": "Apply quarterly security patch to Oracle database",
+        "category": "patching",
         "engine": "Oracle",
         "platform": "AAP",
         "parameters_schema": json.dumps({
@@ -187,6 +190,7 @@ ACTIONS = [
     {
         "name": "Create Oracle Schema",
         "description": "Provision a new Oracle schema with standard grants",
+        "category": "provisioning",
         "engine": "Oracle",
         "platform": "AAP",
         "parameters_schema": json.dumps({
@@ -221,6 +225,7 @@ ACTIONS = [
     {
         "name": "SQL Server Backup",
         "description": "Execute SQL Server database backup",
+        "category": "backup",
         "engine": "SQL Server",
         "platform": "AAP",
         "parameters_schema": json.dumps({
@@ -248,6 +253,7 @@ ACTIONS = [
     {
         "name": "Database Health Check",
         "description": "Run comprehensive health checks on database",
+        "category": "monitoring",
         "engine": "Oracle",
         "platform": "AAP",
         "parameters_schema": json.dumps({
@@ -277,6 +283,7 @@ ACTIONS = [
     {
         "name": "Refresh Dev Database",
         "description": "Clone production data to development environment",
+        "category": "provisioning",
         "engine": "Oracle",
         "platform": "AAP",
         "parameters_schema": json.dumps({
@@ -306,6 +313,7 @@ ACTIONS = [
     {
         "name": "Emergency Stop Database",
         "description": "Immediate shutdown of database instance",
+        "category": "administration",
         "engine": "Oracle",
         "platform": "AAP",
         "parameters_schema": json.dumps({
@@ -338,6 +346,7 @@ ACTIONS = [
     {
         "name": "Archive Log Cleanup",
         "description": "Clean up old archive logs to free disk space",
+        "category": "administration",
         "engine": "Oracle",
         "platform": "AAP",
         "parameters_schema": json.dumps({
@@ -554,11 +563,11 @@ def seed_actions(conn: oracledb.Connection, user_ids: dict[str, int], tag_ids: d
         cursor.execute(
             """
             INSERT INTO ACTIONS_CATALOG
-            (NAME, DESCRIPTION, ENGINE, PLATFORM, PARAMETERS_SCHEMA, IMPACT_RULES,
+            (NAME, DESCRIPTION, CATEGORY, ENGINE, PLATFORM, PARAMETERS_SCHEMA, IMPACT_RULES,
              DEFAULT_IMPACT_LEVEL, STATUS, EXECUTION_STEPS, CHANGE_TYPE_CONFIG,
              DOCUMENTATION_MD, CREATED_BY)
             VALUES
-            (:name, :description, :engine, :platform, :parameters_schema, :impact_rules,
+            (:name, :description, :category, :engine, :platform, :parameters_schema, :impact_rules,
              :default_impact_level, :status, :execution_steps, :change_type_config,
              :documentation_md, :created_by)
             RETURNING ID INTO :out_id
@@ -566,6 +575,7 @@ def seed_actions(conn: oracledb.Connection, user_ids: dict[str, int], tag_ids: d
             {
                 "name": action["name"],
                 "description": action["description"],
+                "category": action["category"],
                 "engine": action["engine"],
                 "platform": action["platform"],
                 "parameters_schema": action["parameters_schema"],
@@ -906,7 +916,17 @@ def main() -> None:
         conn = get_connection()
         print(f"Connected: {conn.dsn}")
     except oracledb.DatabaseError as e:
+        err_msg = str(e).lower()
         print(f"ERROR: Failed to connect to database: {e}")
+        if "ora-01017" in err_msg or "invalid credential" in err_msg or "logon denied" in err_msg:
+            print(
+                "\nHint: ORA-01017 usually means wrong password. "
+                "Ensure ORACLE_PASSWORD matches idp_app in the database.\n"
+                "  - Init script (database/init/01-create-idp-app-user.sql) uses Oracle123!\n"
+                "  - If you ran an older init with 'changeme', try: ORACLE_PASSWORD=changeme python3 seed_dev_data.py --env=dev\n"
+                "  - To change password: sqlplus sys/Oracle123!@//localhost:1521/FREEPDB1 as sysdba\n"
+                "    Then: ALTER USER idp_app IDENTIFIED BY \"Oracle123!\";"
+            )
         sys.exit(1)
 
     try:

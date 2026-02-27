@@ -196,7 +196,7 @@ class TestThreadSafety:
             try:
                 for i in range(100):
                     handler.emit(_make_log_record(f"thread_event_{i}"))
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — test: collect errors for assertion
                 errors.append(e)
 
         # Prevent auto-flush during test

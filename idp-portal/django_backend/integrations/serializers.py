@@ -2,7 +2,9 @@
 Serializers for integrations endpoints.
 """
 
+import ipaddress
 import json
+from urllib.parse import urlparse
 
 from rest_framework import serializers
 import structlog
@@ -13,13 +15,68 @@ from integrations.models import (
 
 logger = structlog.get_logger(__name__)
 
+# RFC 1918 private networks + loopback + link-local ranges to block (SSRF prevention)
+_PRIVATE_NETWORKS = [
+    ipaddress.ip_network('10.0.0.0/8'),
+    ipaddress.ip_network('172.16.0.0/12'),
+    ipaddress.ip_network('192.168.0.0/16'),
+    ipaddress.ip_network('127.0.0.0/8'),
+    ipaddress.ip_network('169.254.0.0/16'),  # Link-local (AWS/GCP/Azure metadata: 169.254.169.254)
+    ipaddress.ip_network('0.0.0.0/8'),       # "This" network — 0.x.x.x equivalent to loopback on some OS
+    ipaddress.ip_network('::1/128'),
+    ipaddress.ip_network('fc00::/7'),        # IPv6 ULA
+    ipaddress.ip_network('fe80::/10'),       # IPv6 link-local
+]
+
+_BLOCKED_HOSTS = {'localhost', '127.0.0.1', '::1', '0.0.0.0'}
+
 
 def validate_url(value):
-    """Validate URL format (must start with http:// or https://)."""
-    if value and not value.startswith(('http://', 'https://')):
+    """
+    Validate URL format and reject private/internal addresses (SSRF prevention).
+
+    Rejects:
+    - Non http/https schemes
+    - URLs with credentials (userinfo component)
+    - Localhost and loopback addresses
+    - RFC 1918 private IP ranges
+    - Link-local addresses (169.254.0.0/16, fe80::/10) — includes cloud metadata services
+    - "This" network (0.0.0.0/8)
+    - IPv6 ULA (fc00::/7) and link-local (fe80::/10)
+    """
+    if not value:
+        return value
+
+    parsed = urlparse(value)
+
+    if parsed.scheme not in ('http', 'https'):
         raise serializers.ValidationError(
             "URL must start with http:// or https://"
         )
+
+    if parsed.username or parsed.password:
+        raise serializers.ValidationError(
+            "URL must not contain credentials (user:pass@host is not allowed)"
+        )
+
+    hostname = parsed.hostname or ''
+
+    if hostname.lower() in _BLOCKED_HOSTS:
+        raise serializers.ValidationError(
+            f"URL points to a forbidden host: {hostname}"
+        )
+
+    try:
+        ip = ipaddress.ip_address(hostname)
+        for network in _PRIVATE_NETWORKS:
+            if ip in network:
+                raise serializers.ValidationError(
+                    f"URL points to a private/reserved IP address: {hostname}"
+                )
+    except ValueError:
+        # hostname is not an IP address (it's a FQDN) — allowed
+        pass
+
     return value
 
 

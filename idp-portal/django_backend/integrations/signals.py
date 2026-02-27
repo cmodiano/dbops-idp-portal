@@ -4,7 +4,7 @@ Code Review Fix: Added correlation_id extraction and proper entity_id tracking.
 """
 
 import hashlib
-import logging
+import structlog
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
@@ -13,7 +13,7 @@ from core.services import AuditService
 from core.middleware import get_correlation_id
 from integrations.models import IntegrationTypeCatalogue, IntegrationAction
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def _get_user_id_from_context() -> str:
@@ -68,11 +68,9 @@ def audit_integration_type_catalogue(sender, instance, created, **kwargs):
         # SOC1 compliance requires immutable audit trail.
         logger.critical(
             "audit_entry_creation_failed",
-            extra={
-                'entity_type': 'IntegrationTypeCatalogue',
-                'entity_code': instance.code,
-                'error': str(exc),
-            },
+            entity_type='IntegrationTypeCatalogue',
+            entity_code=instance.code,
+            error=str(exc),
         )
         raise
 
@@ -102,10 +100,8 @@ def audit_integration_action(sender, instance, created, **kwargs):
         # Story 30.8 ERR-4 (Option A — strict): Re-raise to prevent save without audit.
         logger.critical(
             "audit_entry_creation_failed",
-            extra={
-                'entity_type': 'IntegrationAction',
-                'action_code': instance.action_code,
-                'error': str(exc),
-            },
+            entity_type='IntegrationAction',
+            action_code=instance.action_code,
+            error=str(exc),
         )
         raise

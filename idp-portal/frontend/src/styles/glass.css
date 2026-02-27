@@ -71,7 +71,7 @@ html.dark .ant-card {
 
 html.light .ant-card:hover:not(.card-preview) {
   background: rgba(255, 255, 255, 0.68) !important;
-  border-color: rgba(255, 255, 255, 0.75);
+  border-color: rgba(0, 135, 78, 0.35);  /* Story 46.1: vert primaire translucide */
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.03),
     0 0 56px rgba(0, 0, 0, 0.06),
@@ -80,7 +80,7 @@ html.light .ant-card:hover:not(.card-preview) {
 }
 
 html.dark .ant-card:hover:not(.card-preview) {
-  border-color: rgba(255, 255, 255, 0.18);
+  border-color: rgba(0, 184, 94, 0.45);  /* Story 46.1: vert primaire lumineux dark mode */
   background: rgba(38, 38, 52, 0.95) !important;
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.3),
@@ -599,6 +599,39 @@ html.dark .ant-tabs-tab-active .ant-tabs-tab-btn {
   border-radius: 3px 3px 0 0;
 }
 
+/* === Story 46.2 — Zones cliquables min 44px (WCAG 2.5.5 Target Size) === */
+.ant-select-lg .ant-select-selector {
+  min-height: 44px !important;
+  align-items: center !important;
+}
+
+.ant-picker-large {
+  min-height: 44px !important;
+}
+
+.ant-picker-large .ant-picker-input {
+  min-height: 44px !important;
+}
+
+/* Utility classes for touch targets (opt-in) */
+.touch-target {
+  min-height: 44px !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+.touch-target-sm {
+  min-height: 36px !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+/* S'assurer que les dropdowns et popovers ne sont pas affectés */
+.ant-select-dropdown,
+.ant-picker-dropdown {
+  min-height: auto !important;
+}
+
 /* === Reduced motion: disable animations for users who prefer it (WCAG) === */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -618,4 +651,13 @@ html.dark .ant-tabs-tab-active .ant-tabs-tab-btn {
   .ant-btn-primary:hover {
     transform: none !important;
   }
+}
+
+/* Story 46.6 — Admin sous-navigation : onglet actif distinct */
+.ant-tabs-tab-active .ant-tabs-tab-btn {
+  font-weight: 600;
+}
+
+.ant-tabs-ink-bar {
+  height: 3px !important;
 }

@@ -97,7 +97,7 @@ describe('workflowStepsToReactFlow', () => {
 
     const successEdge = edges.find((e) => e.source === 'a' && e.sourceHandle === 'success' && e.target === 'b');
     expect(successEdge).toBeDefined();
-    expect(successEdge!.style?.stroke).toBe('#52c41a');
+    expect(successEdge!.style?.stroke).toBe('#16a34a'); // STYLE_TOKENS.iconSuccess — ~3.15:1 ≥ 3:1 WCAG AA non-texte (Story 46.4)
     expect(successEdge!.label).toBe('succès');
     expect(successEdge!.type).toBe('customEdge');
   });

@@ -27,6 +27,34 @@ repos:
             .*\.md$
           )$
 
+  # Ruff (Django backend): lint + auto-fix
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.2
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^idp-portal/django_backend/.*\.py$
+
+  # ESLint (frontend): runs on staged .ts/.tsx/.js/.jsx files
+  - repo: local
+    hooks:
+      - id: eslint-frontend
+        name: eslint (frontend)
+        entry: "bash -c 'if [ ! -d idp-portal/frontend/node_modules ]; then echo \"Skip eslint (no node_modules). Install: cd idp-portal/frontend && npm install\"; exit 0; fi; cd idp-portal/frontend && npm run lint'"
+        language: system
+        files: ^idp-portal/frontend/.*\.(ts|tsx|js|jsx)$
+        pass_filenames: false
+
+  # TypeScript type check (frontend)
+  - repo: local
+    hooks:
+      - id: typecheck-frontend
+        name: typecheck (frontend)
+        entry: "bash -c 'if [ ! -d idp-portal/frontend/node_modules ]; then echo \"Skip typecheck (no node_modules). Install: cd idp-portal/frontend && npm install\"; exit 0; fi; cd idp-portal/frontend && npm run typecheck'"
+        language: system
+        files: ^idp-portal/frontend/.*\.(ts|tsx|js|jsx)$
+        pass_filenames: false
+
   # Mypy (Django backend): runs at commit using project venv (Django plugin needs project settings).
   - repo: local
     hooks:

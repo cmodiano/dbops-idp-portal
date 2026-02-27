@@ -47,7 +47,7 @@ const BAR_HEIGHT_PER_ITEM = 50;
 export function EngineBarChart({ data, loading = false }: EngineBarChartProps) {
   if (loading) {
     return (
-      <Card title="Executions par moteur" size="small">
+      <Card title={<span style={{ fontSize: 15, fontWeight: 600 }}>Exécutions par moteur</span>} size="small">
         <Skeleton active paragraph={{ rows: 4 }} />
       </Card>
     );
@@ -55,25 +55,25 @@ export function EngineBarChart({ data, loading = false }: EngineBarChartProps) {
 
   if (!data.length) {
     return (
-      <Card title="Executions par moteur" size="small">
-        <Empty description="Aucune execution" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+      <Card title={<span style={{ fontSize: 15, fontWeight: 600 }}>Exécutions par moteur</span>} size="small">
+        <Empty description="Aucune exécution" image={Empty.PRESENTED_IMAGE_SIMPLE} />
       </Card>
     );
   }
 
   return (
-    <Card title="Executions par moteur" size="small">
+    <Card title={<span style={{ fontSize: 15, fontWeight: 600 }}>Exécutions par moteur</span>} size="small">
       <ResponsiveContainer width="100%" height={Math.max(MIN_CHART_HEIGHT, data.length * BAR_HEIGHT_PER_ITEM)}>
         <BarChart
           data={data}
           layout="vertical"
           margin={{ top: 8, right: 24, left: 0, bottom: 8 }}
-          aria-label="Graphique des executions par moteur de base de donnees"
+          aria-label="Graphique des exécutions par moteur de base de données"
         >
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" horizontal={false} />
           <XAxis
             type="number"
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: 13 }}
             tickLine={false}
             axisLine={{ stroke: 'rgba(0,0,0,0.06)' }}
             allowDecimals={false}
@@ -81,14 +81,14 @@ export function EngineBarChart({ data, loading = false }: EngineBarChartProps) {
           <YAxis
             type="category"
             dataKey="engine"
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: 13 }}
             tickLine={false}
             axisLine={false}
             width={100}
           />
           <Tooltip
-            formatter={(value: number | undefined) => [value ?? 0, 'Executions']}
-            contentStyle={{ fontSize: 12 }}
+            formatter={(value: number | undefined) => [value ?? 0, 'Exécutions']}
+            contentStyle={{ fontSize: 13 }}
             labelStyle={{ fontWeight: 600 }}
           />
           <Bar dataKey="count" name="Executions" radius={[0, 4, 4, 0]}>

@@ -86,7 +86,7 @@ describe('ReportingDashboard', () => {
 
       await waitFor(() => {
         // Charts should still be visible
-        expect(screen.getByText('Repartition par technologie')).toBeInTheDocument();
+        expect(screen.getByText('Répartition par technologie')).toBeInTheDocument();
       });
 
       // StatCard labels should NOT be present
@@ -102,8 +102,8 @@ describe('ReportingDashboard', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText('Repartition par technologie')).toBeInTheDocument();
-        expect(screen.getByText('Repartition par environnement')).toBeInTheDocument();
+        expect(screen.getByText('Répartition par technologie')).toBeInTheDocument();
+        expect(screen.getByText('Répartition par environnement')).toBeInTheDocument();
         expect(screen.getByText('Tendances temporelles')).toBeInTheDocument();
       });
     });
@@ -164,8 +164,8 @@ describe('ReportingDashboard', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Repartition par technologie')).toBeInTheDocument();
-      expect(screen.getByText('Repartition par environnement')).toBeInTheDocument();
+      expect(screen.getByText('Répartition par technologie')).toBeInTheDocument();
+      expect(screen.getByText('Répartition par environnement')).toBeInTheDocument();
     });
   });
 
@@ -190,6 +190,25 @@ describe('ReportingDashboard', () => {
     await waitFor(() => {
       expect(screen.getByText('Erreur de chargement')).toBeInTheDocument();
     });
+  });
+
+  // Story 48.3 AC2: fetchFilterOptions failure is traced via console.warn (not silent)
+  it('logs console.warn when fetchFilterOptions fails (Story 48.3, AC2)', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.mocked(dashboardService.fetchFilterOptions).mockRejectedValue(new Error('Filter fetch failed'));
+
+    await act(async () => {
+      renderWithRouter(<ReportingDashboard />);
+    });
+
+    await waitFor(() => {
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[ReportingDashboard] fetchFilterOptions failed, using fallback options',
+        expect.any(Error),
+      );
+    });
+
+    warnSpy.mockRestore();
   });
 
   // Story 8.5: Export button integration test

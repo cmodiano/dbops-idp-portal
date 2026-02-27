@@ -116,6 +116,17 @@ export function ExecutionsFiltersPanel({
           )}
         </Space>
       }
+      extra={
+        <Button
+          size="middle"
+          icon={<ClearOutlined />}
+          onClick={handleReset}
+          disabled={activeFilterCount === 0 || loading}
+          data-testid="filter-reset"
+        >
+          Réinitialiser
+        </Button>
+      }
       style={{ marginBottom: 16 }}
       data-testid="executions-filters-panel"
     >
@@ -125,6 +136,7 @@ export function ExecutionsFiltersPanel({
           <Col xs={24} md={8}>
             <Form.Item label="Période" style={{ marginBottom: 12 }}>
               <RangePicker
+                size="middle"
                 style={{ width: '100%' }}
                 format="DD/MM/YYYY"
                 placeholder={['Date début', 'Date fin']}
@@ -139,6 +151,8 @@ export function ExecutionsFiltersPanel({
           <Col xs={24} md={8}>
             <Form.Item label="Action" style={{ marginBottom: 12 }}>
               <Select
+                size="middle"
+                style={{ width: '100%' }}
                 placeholder="Toutes les actions"
                 allowClear
                 showSearch
@@ -155,6 +169,8 @@ export function ExecutionsFiltersPanel({
           <Col xs={24} md={8}>
             <Form.Item label="Technologie" style={{ marginBottom: 12 }}>
               <Select
+                size="middle"
+                style={{ width: '100%' }}
                 placeholder="Toutes les technologies"
                 allowClear
                 value={filters.engine}
@@ -168,11 +184,13 @@ export function ExecutionsFiltersPanel({
           </Col>
         </Row>
 
-        {/* Row 2: Tags, Status, Environment, Buttons */}
-        <Row gutter={16} align="bottom">
-          <Col xs={24} md={6}>
+        {/* Row 2: Tags, Status, Environment */}
+        <Row gutter={16}>
+          <Col xs={24} md={8}>
             <Form.Item label="Tags" style={{ marginBottom: 12 }}>
               <Select
+                size="middle"
+                style={{ width: '100%' }}
                 mode="multiple"
                 placeholder="Tous les tags"
                 allowClear
@@ -188,9 +206,11 @@ export function ExecutionsFiltersPanel({
               />
             </Form.Item>
           </Col>
-          <Col xs={24} md={5}>
+          <Col xs={24} md={8}>
             <Form.Item label="Statut" style={{ marginBottom: 12 }}>
               <Select
+                size="middle"
+                style={{ width: '100%' }}
                 placeholder="Tous les statuts"
                 allowClear
                 value={filters.status}
@@ -201,9 +221,11 @@ export function ExecutionsFiltersPanel({
               />
             </Form.Item>
           </Col>
-          <Col xs={24} md={5}>
+          <Col xs={24} md={8}>
             <Form.Item label="Environnement" style={{ marginBottom: 12 }}>
               <Select
+                size="middle"
+                style={{ width: '100%' }}
                 placeholder="Tous les env."
                 allowClear
                 value={filters.environment}
@@ -215,18 +237,6 @@ export function ExecutionsFiltersPanel({
                 loading={environmentsLoading}
                 data-testid="filter-environment"
               />
-            </Form.Item>
-          </Col>
-          <Col xs={24} md={8}>
-            <Form.Item label=" " style={{ marginBottom: 12 }}>
-              <Button
-                icon={<ClearOutlined />}
-                onClick={handleReset}
-                disabled={activeFilterCount === 0 || loading}
-                data-testid="filter-reset"
-              >
-                Réinitialiser
-              </Button>
             </Form.Item>
           </Col>
         </Row>

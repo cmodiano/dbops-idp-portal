@@ -23,8 +23,6 @@ import { useAuth } from '../../contexts/AuthContext';
 
 const { RangePicker } = DatePicker;
 
-// Story 13.7: ENVIRONMENT_OPTIONS removed - use useEnvironments hook instead
-
 // Story 13.7: ENGINE_OPTIONS removed - use useEngines hook instead
 // Story 13.7: ENVIRONMENT_OPTIONS removed - use useEnvironments hook instead
 
@@ -110,6 +108,17 @@ export function CalendarFiltersPanel({
           )}
         </Space>
       }
+      extra={
+        <Button
+          size="middle"
+          icon={<ClearOutlined />}
+          onClick={handleReset}
+          disabled={activeFilterCount === 0 || loading}
+          data-testid="filter-reset"
+        >
+          Réinitialiser
+        </Button>
+      }
       style={{ marginBottom: 16 }}
       data-testid="calendar-filters-panel"
     >
@@ -119,6 +128,8 @@ export function CalendarFiltersPanel({
           <Col xs={24} md={8}>
             <Form.Item label="Action" style={{ marginBottom: 12 }}>
               <Select
+                size="middle"
+                style={{ width: '100%' }}
                 placeholder="Toutes les actions"
                 allowClear
                 showSearch
@@ -134,6 +145,8 @@ export function CalendarFiltersPanel({
           <Col xs={24} md={8}>
             <Form.Item label="Environnement" style={{ marginBottom: 12 }}>
               <Select
+                size="middle"
+                style={{ width: '100%' }}
                 placeholder="Tous les env."
                 allowClear
                 value={filters.environment}
@@ -148,6 +161,8 @@ export function CalendarFiltersPanel({
           <Col xs={24} md={8}>
             <Form.Item label="Technologie" style={{ marginBottom: 12 }}>
               <Select
+                size="middle"
+                style={{ width: '100%' }}
                 placeholder="Toutes les technologies"
                 allowClear
                 value={filters.engine}
@@ -161,11 +176,13 @@ export function CalendarFiltersPanel({
           </Col>
         </Row>
 
-        {/* Row 2: Platform, Date range, Reset */}
-        <Row gutter={16} align="bottom">
-          <Col xs={24} md={6}>
+        {/* Row 2: Platform, Date range */}
+        <Row gutter={16}>
+          <Col xs={24} md={12}>
             <Form.Item label="Plateforme" style={{ marginBottom: 12 }}>
               <Select
+                size="middle"
+                style={{ width: '100%' }}
                 placeholder="Toutes les plateformes"
                 allowClear
                 loading={integrationsLoading}
@@ -177,9 +194,10 @@ export function CalendarFiltersPanel({
               />
             </Form.Item>
           </Col>
-          <Col xs={24} md={10}>
+          <Col xs={24} md={12}>
             <Form.Item label="Période" style={{ marginBottom: 12 }}>
               <RangePicker
+                size="middle"
                 style={{ width: '100%' }}
                 format="DD/MM/YYYY"
                 placeholder={['Date début', 'Date fin']}
@@ -189,18 +207,6 @@ export function CalendarFiltersPanel({
                 allowClear
                 data-testid="filter-date-range"
               />
-            </Form.Item>
-          </Col>
-          <Col xs={24} md={8}>
-            <Form.Item label=" " style={{ marginBottom: 12 }}>
-              <Button
-                icon={<ClearOutlined />}
-                onClick={handleReset}
-                disabled={activeFilterCount === 0 || loading}
-                data-testid="filter-reset"
-              >
-                Réinitialiser
-              </Button>
             </Form.Item>
           </Col>
         </Row>

@@ -54,6 +54,7 @@ export function HorizontalFilters({
         </Text>
         <Select
           mode="multiple"
+          size="middle"
           style={{ width: '100%' }}
           placeholder={enginesLoading ? "Chargement..." : "Tous les moteurs"}
           value={selectedEngines}
@@ -71,6 +72,7 @@ export function HorizontalFilters({
         </Text>
         <Select
           mode="multiple"
+          size="middle"
           style={{ width: '100%' }}
           placeholder="Tous les impacts"
           value={selectedImpacts}

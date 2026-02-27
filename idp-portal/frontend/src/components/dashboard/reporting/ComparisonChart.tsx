@@ -17,6 +17,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import type { ComparisonResult } from '../../../types/api';
+import { STYLE_TOKENS } from '../../../theme/styleTokens';
 
 export interface ComparisonChartProps {
   /** Comparison result data. */
@@ -27,7 +28,7 @@ export interface ComparisonChartProps {
 
 /** Colors for the two comparison values. */
 const VALUE1_COLOR = '#4096ff'; // Ant Design primary blue
-const VALUE2_COLOR = '#52c41a'; // Ant Design success green
+const VALUE2_COLOR = STYLE_TOKENS.iconSuccess; // #16a34a, ratio ~3.15:1 ✅ WCAG AA non-texte
 
 /** Metric labels in French. */
 const METRIC_LABELS: Record<string, string> = {
@@ -60,7 +61,7 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
       padding: '8px 12px',
       border: '1px solid var(--color-border-secondary, #d9d9d9)',
       borderRadius: 4,
-      fontSize: 12,
+      fontSize: 13,
     }}>
       <div style={{ fontWeight: 600, marginBottom: 4 }}>{label}</div>
       {payload.map((entry, index) => (
@@ -75,7 +76,7 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
 export function ComparisonChart({ data, loading = false }: ComparisonChartProps) {
   if (loading) {
     return (
-      <Card title="Comparaison" size="small">
+      <Card title={<span style={{ fontSize: 15, fontWeight: 600 }}>Comparaison</span>} size="small">
         <Skeleton active paragraph={{ rows: 6 }} />
       </Card>
     );
@@ -83,7 +84,7 @@ export function ComparisonChart({ data, loading = false }: ComparisonChartProps)
 
   if (!data) {
     return (
-      <Card title="Comparaison" size="small">
+      <Card title={<span style={{ fontSize: 15, fontWeight: 600 }}>Comparaison</span>} size="small">
         <Empty description="Sélectionnez deux valeurs à comparer" image={Empty.PRESENTED_IMAGE_SIMPLE} />
       </Card>
     );
@@ -114,7 +115,7 @@ export function ComparisonChart({ data, loading = false }: ComparisonChartProps)
   ];
 
   return (
-    <Card title="Comparaison graphique" size="small">
+    <Card title={<span style={{ fontSize: 15, fontWeight: 600 }}>Comparaison graphique</span>} size="small">
       <ResponsiveContainer width="100%" height={300}>
         <BarChart
           data={chartData}
@@ -125,20 +126,20 @@ export function ComparisonChart({ data, loading = false }: ComparisonChartProps)
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" horizontal={false} />
           <XAxis
             type="number"
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: 13 }}
             tickLine={false}
             axisLine={{ stroke: 'rgba(0,0,0,0.06)' }}
           />
           <YAxis
             type="category"
             dataKey="name"
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: 13 }}
             tickLine={false}
             axisLine={false}
             width={110}
           />
           <Tooltip content={<CustomTooltip />} />
-          <Legend />
+          <Legend wrapperStyle={{ fontSize: 13 }} />
           <Bar
             dataKey="value1"
             name={data.value1}

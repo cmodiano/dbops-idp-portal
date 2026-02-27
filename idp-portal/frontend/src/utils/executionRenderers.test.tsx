@@ -16,10 +16,12 @@ import {
   renderEngineIcon,
   renderPlatformIcon,
   renderPlateformeIcon,
+  getEnvironmentBadgeColor,
   STATUS_CONFIG,
   ENGINE_ICONS_CONFIG,
   PLATFORM_ICONS_CONFIG,
 } from './executionRenderers';
+import { STYLE_TOKENS } from '../theme/styleTokens';
 import type { ExecutionStatusType, ActionEngine, ActionPlatform } from '../types/api';
 
 const renderWithTheme = (ui: React.ReactElement) =>
@@ -275,6 +277,55 @@ describe('executionRenderers', () => {
         expect(PLATFORM_ICONS_CONFIG[platform]).toHaveProperty('Icon');
         expect(PLATFORM_ICONS_CONFIG[platform]).toHaveProperty('color');
       });
+    });
+  });
+
+  describe('Story 46.3 — getEnvironmentBadgeColor (AC5)', () => {
+    it.each<
+      [string | null | undefined, string]
+    >([
+      ['production', STYLE_TOKENS.environmentBadgeColor.production],
+      ['PRODUCTION', STYLE_TOKENS.environmentBadgeColor.production],
+      ['prod', STYLE_TOKENS.environmentBadgeColor.prod],
+      ['staging', STYLE_TOKENS.environmentBadgeColor.staging],
+      ['preprod', STYLE_TOKENS.environmentBadgeColor.preprod],
+      ['pre-prod', STYLE_TOKENS.environmentBadgeColor.preprod],
+      ['dev', STYLE_TOKENS.environmentBadgeColor.dev],
+      ['development', STYLE_TOKENS.environmentBadgeColor.development],
+      ['test', STYLE_TOKENS.environmentBadgeColor.test],
+      ['recette', STYLE_TOKENS.environmentBadgeColor.default],
+      ['', STYLE_TOKENS.environmentBadgeColor.default],
+      [null, STYLE_TOKENS.environmentBadgeColor.default],
+      [undefined, STYLE_TOKENS.environmentBadgeColor.default],
+    ])('retourne la couleur attendue pour %s', (input, expected) => {
+      expect(getEnvironmentBadgeColor(input)).toBe(expected);
+    });
+  });
+
+  describe('Story 46.4 — Tirets de valeur vide (AC: 6, 7)', () => {
+    it('renderPlatformIcon retourne un tiret avec textMuted (pas #d9d9d9) pour platform null', () => {
+      const { container } = render(<>{renderPlatformIcon(null)}</>);
+      const span = container.querySelector('span');
+      expect(span).toBeInTheDocument();
+      // JSDOM serializes hex → rgb(): #595959 → rgb(89, 89, 89); #d9d9d9 → rgb(217, 217, 217)
+      const computedColor = window.getComputedStyle(span!).color;
+      expect(computedColor).toBe('rgb(89, 89, 89)');       // STYLE_TOKENS.textMuted
+      expect(computedColor).not.toBe('rgb(217, 217, 217)'); // old inaccessible #d9d9d9
+      expect(span?.textContent).toBe('—');
+    });
+
+    it('renderEngineIcon retourne un tiret avec textMuted pour engine null', () => {
+      const { container } = renderWithTheme(<>{renderEngineIcon(null, 'action')}</>);
+      const span = container.querySelector('span');
+      expect(span).toBeInTheDocument();
+      const computedColor = window.getComputedStyle(span!).color;
+      expect(computedColor).toBe('rgb(89, 89, 89)');       // STYLE_TOKENS.textMuted
+      expect(computedColor).not.toBe('rgb(217, 217, 217)'); // old inaccessible #d9d9d9
+      expect(span?.textContent).toBe('—');
+    });
+
+    it('STYLE_TOKENS.textMuted est #595959 (ratio ~7:1 ≥ 4.5:1 WCAG AA)', () => {
+      expect(STYLE_TOKENS.textMuted).toBe('#595959');
     });
   });
 });

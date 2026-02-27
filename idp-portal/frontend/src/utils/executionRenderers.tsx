@@ -36,6 +36,19 @@ import { useTheme } from '../contexts/ThemeContext';
 import { getIconUrl } from './iconUrl';
 import { getEngineIconUrl } from './engineIconCache';
 
+/**
+ * Returns the fixed badge color for a given environment name (Story 46.3, AC5).
+ * Uses STYLE_TOKENS.environmentBadgeColor for consistency — fallback on gray for unknowns.
+ *
+ * @param env - Environment name (e.g. "production", "staging", "dev")
+ */
+export function getEnvironmentBadgeColor(env: string | undefined | null): string {
+  if (!env) return STYLE_TOKENS.environmentBadgeColor.default;
+  const key = env.toLowerCase().replace(/[^a-z]/g, '');
+  return (STYLE_TOKENS.environmentBadgeColor as Record<string, string>)[key]
+    ?? STYLE_TOKENS.environmentBadgeColor.default;
+}
+
 /** Engine icon size in execution tables (px) - clearly visible vendor logos.
  * Increased from 44px to 56px for better visibility and proportion with platform icons.
  */
@@ -75,7 +88,7 @@ const PLATFORM_ICONS: Record<ActionPlatform, { Icon: React.ComponentType<{ style
  */
 export function renderPlatformIcon(platform: ActionPlatform | string | null | undefined): React.ReactNode {
   if (!platform) {
-    return <span style={{ color: '#d9d9d9' }}>—</span>;
+    return <span style={{ color: STYLE_TOKENS.textMuted }}>—</span>;
   }
 
   const config = PLATFORM_ICONS[platform as ActionPlatform];
@@ -214,7 +227,7 @@ export function renderEngineIcon(
 
   // No engine - fallback
   if (!engine) {
-    return <span style={{ color: '#d9d9d9' }}>—</span>;
+    return <span style={{ color: STYLE_TOKENS.textMuted }}>—</span>;
   }
 
   // Known engine
@@ -290,7 +303,7 @@ export function renderIntegrationIcon(
 ): React.ReactNode {
   const label = integrationName || platform;
   if (!label) {
-    return <span style={{ color: '#d9d9d9' }}>—</span>;
+    return <span style={{ color: STYLE_TOKENS.textMuted }}>—</span>;
   }
 
   const iconSrc = getIconUrl(integrationIcon);
@@ -310,9 +323,18 @@ export function renderIntegrationIcon(
   );
 }
 
-/** Status badge configuration for status indicator (AC2, AC3).
+/**
+ * Status badge configuration for StatusIndicator component (AC2, AC3).
  * - processing: Pulsing animation for running states
  * - success/error/default/warning: Fixed color for terminal states
+ *
+ * SOLID-FE-10 — config locale justifiée : NE PAS remplacer par EXECUTION_STATUS_BADGE_CONFIG.
+ * Différences intentionnelles avec execution-status.ts :
+ *   1. Labels FÉMININS ("Soumise", "Terminée", "Annulée") pour renderers de colonnes inline
+ *      (vs. masculins "Soumis", "Terminé", "Annulé" dans EXECUTION_STATUS_BADGE_CONFIG pour ExecutionView standalone)
+ *   2. Champ `color` (hex) pour la bordure du Tag — absent de EXECUTION_STATUS_BADGE_CONFIG (BadgeStatusType uniquement)
+ *   3. PENDING_APPROVAL = "En attente" (court) vs "En attente approbation" (précis) — usage différent
+ * Privé : consommé uniquement par StatusIndicator dans ce fichier.
  */
 const STATUS_BADGE_CONFIG: Record<
   ExecutionStatusType,
@@ -349,9 +371,9 @@ function StatusIndicator({ status }: { status: ExecutionStatusType }): React.Rea
   const isRunning = config.status === 'processing';
 
   const borderColor = config.color;
-  const textColor = config.status === 'error' ? '#EF4444' :
-                    config.status === 'success' ? '#10B981' :
-                    config.status === 'warning' ? '#F59E0B' :
+  const textColor = config.status === 'error' ? STYLE_TOKENS.textError :
+                    config.status === 'success' ? STYLE_TOKENS.textSuccess :
+                    config.status === 'warning' ? STYLE_TOKENS.textWarning :
                     config.status === 'processing' ? config.color : token.colorText;
 
   return (
@@ -393,8 +415,11 @@ export function renderStatusIndicator(status: ExecutionStatusType): React.ReactN
   return <StatusIndicator status={status} />;
 }
 
-/** Status config with icons for RecentExecutions component (legacy compatibility).
- * Includes Icon component for full status display with text. */
+// Status config avec icons — config locale justifiée (SOLID-FE-10).
+// Usage Icon (RecentExecutions) + couleur hex ≠ Badge Ant Design (BadgeStatusType).
+// EXECUTION_STATUS_BADGE_CONFIG (utils/execution-status.ts) = badges sans icônes.
+// Ce config inclut Icon component (ClockCircleOutlined, SyncOutlined…) absent de la source partagée.
+// Consommateurs : RecentExecutions.tsx — ne pas supprimer ni migrer vers execution-status.ts.
 export const STATUS_CONFIG: Record<
   ExecutionStatusType,
   { label: string; Icon: React.ComponentType<{ spin?: boolean; style?: React.CSSProperties }>; color: string }

@@ -6,7 +6,7 @@
  * Default variant uses theme tokens so "Exécutions aujourd'hui" is readable in dark mode.
  */
 
-import { Card, Skeleton, Typography, theme } from 'antd';
+import { Card, Skeleton, Typography, Tooltip, theme } from 'antd';
 import type { ReactNode } from 'react';
 
 const { Text, Title } = Typography;
@@ -33,6 +33,10 @@ export interface StatCardProps {
   loading?: boolean;
   /** Suffix to append after the value (e.g., '%'). */
   suffix?: string;
+  /** Tooltip text displayed on hover for additional context. */
+  tooltip?: string;
+  /** Secondary text displayed below the value when value is 0 (e.g., 'Aucune pour l\'instant'). */
+  zeroText?: string;
 }
 
 export function StatCard({
@@ -42,6 +46,8 @@ export function StatCard({
   variant = 'default',
   loading = false,
   suffix,
+  tooltip,
+  zeroText,
 }: StatCardProps) {
   const { token } = theme.useToken();
   const resolved =
@@ -66,30 +72,37 @@ export function StatCard({
   }
 
   return (
-    <Card
-      style={{
-        borderLeft: `4px solid ${styles.borderColor}`,
-        height: '100%',
-      }}
-      styles={{ body: { padding: 16 } }}
-    >
-      <Text type="secondary" style={{ fontSize: 13, marginBottom: 4, display: 'block' }}>
-        {label}
-      </Text>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        {icon && <span style={{ color: styles.valueColor, fontSize: 24 }}>{icon}</span>}
-        <Title
-          level={3}
-          style={{
-            margin: 0,
-            color: styles.valueColor,
-            fontWeight: 600,
-          }}
-        >
-          {value}{suffix}
-        </Title>
-      </div>
-    </Card>
+    <Tooltip title={tooltip} placement="top">
+      <Card
+        style={{
+          borderLeft: `4px solid ${styles.borderColor}`,
+          height: '100%',
+        }}
+        styles={{ body: { padding: 16 } }}
+      >
+        <Text type="secondary" style={{ fontSize: 13, marginBottom: 4, display: 'block' }}>
+          {label}
+        </Text>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {icon && <span style={{ color: styles.valueColor, fontSize: 24 }}>{icon}</span>}
+          <Title
+            level={3}
+            style={{
+              margin: 0,
+              color: styles.valueColor,
+              fontWeight: 600,
+            }}
+          >
+            {value}{suffix}
+          </Title>
+          {Number(value) === 0 && zeroText && (
+            <Text type="secondary" style={{ fontSize: 11, marginTop: 2, display: 'block' }}>
+              {zeroText}
+            </Text>
+          )}
+        </div>
+      </Card>
+    </Tooltip>
   );
 }
 

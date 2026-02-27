@@ -1,9 +1,9 @@
 import json
-import logging
+import structlog
 from django.db import models
 from django.core.exceptions import ValidationError
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def _validate_json_schema(value: dict) -> None:

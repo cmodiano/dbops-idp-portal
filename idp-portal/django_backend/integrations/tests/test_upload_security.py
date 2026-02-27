@@ -6,6 +6,7 @@ SEC-10: Magic bytes validation
 """
 
 import pytest
+from unittest.mock import patch
 from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.test import APIClient
 from rest_framework import status
@@ -249,3 +250,24 @@ class TestSVGSanitization:
         with pytest.raises(InvalidStateError) as exc_info:
             sanitize_svg(malformed)
         assert exc_info.value.code == 'INVALID_SVG'
+
+
+# ========================================================================
+# SEC-14: Path traversal prevention tests
+# ========================================================================
+
+
+class TestPathTraversal:
+    """SEC-14: Path traversal prevention on icon write (Story 48.4)."""
+
+    @pytest.mark.django_db
+    def test_path_traversal_rejected(self, api_client):
+        """SEC-14: Malicious UUID-like filename causing path traversal → rejected."""
+        # uuid.uuid4() patché pour retourner une valeur traversal
+        # unique_filename = f"../../../etc/passwd.png" → sort de icons_dir
+        with patch("integrations.upload_views.uuid.uuid4", return_value="../../../etc/passwd"):
+            file = SimpleUploadedFile("icon.png", PNG_MAGIC, content_type='image/png')
+            response = api_client.post(UPLOAD_URL, {'file': file}, format='multipart')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        error = response.json().get('error', {})
+        assert error.get('code') == 'PATH_TRAVERSAL_DETECTED'

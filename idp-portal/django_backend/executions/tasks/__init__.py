@@ -5,6 +5,7 @@ Ce package regroupe les tâches Celery par responsabilité :
 - retry    : retry asynchrone des étapes de workflow
 - gates    : évaluation périodique des conditions WAITING
 - polling  : surveillance des jobs sur les plateformes externes
+- trigger  : déclenchement asynchrone des jobs sur les plateformes externes (Story 47.2)
 
 Les helpers internes et dépendances sont ré-exportés ici pour que les patches
 de tests utilisant @patch("executions.tasks.X") continuent de fonctionner.
@@ -40,6 +41,7 @@ from executions.tasks.polling import (  # noqa: E402
     _broadcast_execution_update,
     _update_execution_from_poll,
 )
+from executions.tasks.trigger import trigger_platform_job  # noqa: E402
 
 __all__ = [
     # Public tasks
@@ -51,6 +53,7 @@ __all__ = [
     "poll_azure_devops_run_status",
     "poll_github_actions_run_status",
     "poll_terraform_cloud_run_status",
+    "trigger_platform_job",
     # Constants
     "MAX_POLLING_RETRIES",
     # Story 42.1: Celery Beat task for scheduled executions

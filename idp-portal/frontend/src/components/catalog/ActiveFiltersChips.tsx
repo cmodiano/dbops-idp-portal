@@ -86,7 +86,22 @@ export function ActiveFiltersChips({
     backgroundColor: '#ECFDF5',
     color: STYLE_TOKENS.colorPrimary,
     borderColor: STYLE_TOKENS.colorPrimary,
+    minHeight: 44,
+    display: 'inline-flex' as const,
+    alignItems: 'center',
+    padding: '10px 12px',
   };
+
+  // Story 46.2 — zone tactile 44px pour tous les chips closables
+  const chipStyle = {
+    minHeight: 44,
+    display: 'inline-flex' as const,
+    alignItems: 'center',
+    padding: '10px 12px',
+  };
+
+  // Story 46.2 — zone touchable élargie pour l'icône de suppression (≥ 44px : icône 16px + padding 14px × 2 = 44px)
+  const closeIconStyle = { padding: 14, margin: -14 };
 
   return (
     <Space wrap style={{ marginBottom: 16 }} role="group" aria-label="Filtres actifs">
@@ -95,7 +110,7 @@ export function ActiveFiltersChips({
         <Tag
           closable
           onClose={onRemoveCategory}
-          closeIcon={<CloseOutlined />}
+          closeIcon={<span style={closeIconStyle} aria-label="Supprimer le filtre catégorie"><CloseOutlined aria-hidden="true" /></span>}
           style={categoryChipStyle}
         >
           Catégorie: {capitalize(activeCategory)}
@@ -104,27 +119,46 @@ export function ActiveFiltersChips({
 
       {/* Tag chips */}
       {selectedTags.map((tag) => (
-        <Tag key={`tag-${tag}`} closable onClose={() => onRemoveTag(tag)} color="blue">
+        <Tag
+          key={`tag-${tag}`}
+          closable
+          onClose={() => onRemoveTag(tag)}
+          color="blue"
+          closeIcon={<span style={closeIconStyle} aria-label={`Supprimer le filtre tag ${tag}`}><CloseOutlined aria-hidden="true" /></span>}
+          style={chipStyle}
+        >
           Tag: {tag}
         </Tag>
       ))}
 
       {/* Engine chips */}
       {selectedEngines.map((engine) => (
-        <Tag key={`engine-${engine}`} closable onClose={() => onRemoveEngine(engine)}>
+        <Tag
+          key={`engine-${engine}`}
+          closable
+          onClose={() => onRemoveEngine(engine)}
+          closeIcon={<span style={closeIconStyle} aria-label={`Supprimer le filtre moteur ${engine}`}><CloseOutlined aria-hidden="true" /></span>}
+          style={chipStyle}
+        >
           Moteur: {getEngineLabel(engine, engineOptions)}
         </Tag>
       ))}
 
       {/* Impact chips */}
       {selectedImpacts.map((impact) => (
-        <Tag key={`impact-${impact}`} closable onClose={() => onRemoveImpact(impact)}>
+        <Tag
+          key={`impact-${impact}`}
+          closable
+          onClose={() => onRemoveImpact(impact)}
+          closeIcon={<span style={closeIconStyle} aria-label={`Supprimer le filtre impact ${impact}`}><CloseOutlined aria-hidden="true" /></span>}
+          style={chipStyle}
+        >
           Impact: {getImpactLabel(impact)}
         </Tag>
       ))}
 
       {/* Reset all button */}
-      <Button type="link" size="small" onClick={onClearAll}>
+      <Button type="link" size="middle" onClick={onClearAll}>
         Réinitialiser tous les filtres
       </Button>
     </Space>

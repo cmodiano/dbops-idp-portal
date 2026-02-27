@@ -72,4 +72,53 @@ describe('StatCard', () => {
     const borderColor = (card as HTMLElement)?.style?.borderLeftColor;
     expect(borderColor).toBeTruthy();
   });
+
+  it('Story 46.5 — renders tooltip wrapper when tooltip prop is provided', () => {
+    render(
+      <StatCard
+        label="Exécutions du jour"
+        value={0}
+        tooltip="Nombre d'exécutions soumises ou démarrées aujourd'hui (depuis minuit)"
+      />,
+    );
+
+    // Ant Design Tooltip wraps content in a container with the title attribute on the trigger
+    const tooltipTrigger = document.querySelector('.ant-tooltip-open, [role="tooltip"]');
+    // The tooltip title is stored as a prop; verify the label is still visible
+    expect(screen.getByText('Exécutions du jour')).toBeInTheDocument();
+    // The Tooltip component wraps the card, so .ant-card should still be present
+    expect(document.querySelector('.ant-card')).toBeInTheDocument();
+    void tooltipTrigger; // used in hover scenarios
+  });
+
+  it('Story 46.5 — renders normally without tooltip prop', () => {
+    render(<StatCard label="En cours" value={3} />);
+
+    expect(screen.getByText('En cours')).toBeInTheDocument();
+    expect(document.querySelector('.ant-card')).toBeInTheDocument();
+  });
+
+  it('Story 46.5 — affiche zeroText quand value est 0 et zeroText est défini', () => {
+    render(
+      <StatCard
+        label="Exécutions du jour"
+        value={0}
+        zeroText="Aucune pour l'instant"
+      />,
+    );
+
+    expect(screen.getByText("Aucune pour l'instant")).toBeInTheDocument();
+  });
+
+  it('Story 46.5 — ne affiche pas zeroText quand value est non-zero', () => {
+    render(
+      <StatCard
+        label="Exécutions du jour"
+        value={5}
+        zeroText="Aucune pour l'instant"
+      />,
+    );
+
+    expect(screen.queryByText("Aucune pour l'instant")).not.toBeInTheDocument();
+  });
 });

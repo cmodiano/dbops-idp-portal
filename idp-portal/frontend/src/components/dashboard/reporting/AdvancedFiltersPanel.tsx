@@ -148,62 +148,68 @@ export function AdvancedFiltersPanel({
       <FilterOutlined style={{ color: '#8c8c8c' }} />
 
       <Select
+        size="middle"
         placeholder="Moteur"
         allowClear
         value={filters.engine}
         onChange={handleEngineChange}
         options={engineOptions}
-        style={{ width: 140 }}
+        style={{ width: 160 }}
         disabled={loading}
         data-testid="filter-engine"
       />
 
       <Select
+        size="middle"
         placeholder="Environnement"
         allowClear
         value={filters.environment}
         onChange={handleEnvironmentChange}
         options={environmentOptions}
-        style={{ width: 150 }}
+        style={{ width: 170 }}
         disabled={loading}
         data-testid="filter-environment"
       />
 
       <Select
+        size="middle"
         mode="multiple"
         placeholder="Tags"
         allowClear
         value={filters.tags || []}
         onChange={handleTagsChange}
         options={tagOptions}
-        style={{ minWidth: 150, maxWidth: 300 }}
+        style={{ minWidth: 170, maxWidth: 300 }}
         disabled={loading || tagOptions.length === 0}
         maxTagCount="responsive"
         data-testid="filter-tags"
       />
 
       <Select
+        size="middle"
         placeholder="Statut"
         allowClear
         value={filters.status}
         onChange={handleStatusChange}
         options={STATUS_OPTIONS}
-        style={{ width: 130 }}
+        style={{ width: 150 }}
         disabled={loading}
         data-testid="filter-status"
       />
 
       <RangePicker
+        size="middle"
         value={dateRangeValue}
         onChange={handleDateRangeChange}
         format="DD/MM/YYYY"
         placeholder={['Date début', 'Date fin']}
         disabled={loading}
         data-testid="filter-date-range"
-        style={{ width: 240 }}
+        style={{ width: 260 }}
       />
 
       <Button
+        size="middle"
         icon={<ClearOutlined />}
         onClick={handleReset}
         disabled={activeFiltersCount === 0 || loading}

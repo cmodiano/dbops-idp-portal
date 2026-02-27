@@ -181,15 +181,21 @@ class CatalogService:
                 )
                 raise ValueError(f"Integration {integration_id} not found")
 
+        # Workflows: default category to 'autres' when null (DB may have CATEGORY NOT NULL)
+        item_type = action_data.get('item_type', ActionItemType.ACTION)
+        category = action_data.get('category')
+        if item_type == ActionItemType.WORKFLOW and not category:
+            category = 'autres'
+
         # Create the action
         action = Action.objects.create(
             name=action_data['name'],
             description=action_data.get('description'),
-            category=action_data.get('category'),
+            category=category,
             engine=action_data.get('engine'),
             platform=action_data.get('platform'),
             status=status,
-            item_type=action_data.get('item_type', ActionItemType.ACTION),
+            item_type=item_type,
             created_by=created_by_user,
             documentation_md=action_data.get('documentation_md'),
             default_impact_level=action_data.get('default_impact_level'),
@@ -420,13 +426,15 @@ class CatalogService:
         if 'tags' in action_update_data:
             self._sync_tags(action, action_update_data['tags'])
         
-        # Audit
+        # Audit (Story 2.31 L1: add correlation_id for consistency)
+        correlation_id = get_correlation_id()
         AuditService.create_entry(
             user_id=str(user.id),
             action_type=AuditActionType.ACTION_UPDATED,
             entity_type=AuditEntityType.ACTION,
             entity_id=action.id,
-            details={'name': action.name}
+            details={'name': action.name},
+            correlation_id=correlation_id,
         )
 
         return action  # type: ignore[no-any-return]
@@ -560,9 +568,10 @@ class CatalogService:
         # Find workflows referencing this action (AC3)
         affected_workflows = self._find_workflows_referencing_action(action_id)
 
-        # Perform deactivation
+        # Perform deactivation — timestamp fixe pour cohérence avec la cascade (SOC1)
+        now = timezone.now()
         action.status = ActionStatus.DISABLED
-        action.deleted_at = timezone.now()
+        action.deleted_at = now
         action.deleted_by = user
         action.deletion_reason = deletion_reason
         action.save()
@@ -581,14 +590,24 @@ class CatalogService:
         )
 
         # Cascade deactivation to workflows (AC3)
+        # NEW-BE-9: Préparer + bulk_update (N+1 → 1) + audits individuels (SOC1)
+        # now est déjà défini ci-dessus (timestamp partagé action + cascade)
         deactivated_workflows = []
         for wf in affected_workflows:
             wf.status = ActionStatus.DISABLED
-            wf.deleted_at = timezone.now()
+            wf.deleted_at = now
             wf.deleted_by = user
             wf.deletion_reason = f"Cascade: action '{action.name}' désactivée"
-            wf.save()
+            wf.updated_at = now
             deactivated_workflows.append({'id': wf.id, 'name': wf.name})
+
+        if affected_workflows:
+            Action.objects.bulk_update(
+                affected_workflows,
+                ['status', 'deleted_at', 'deleted_by', 'deletion_reason', 'updated_at']
+            )
+
+        for wf in affected_workflows:
             AuditService.create_entry(
                 user_id=str(user.id),
                 action_type=AuditActionType.ACTION_DEACTIVATED,
