@@ -66,6 +66,31 @@ class ExecutionEnvironmentValidationTests(TestCase):
         # Should succeed (environment validation not enforced for regular executions)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
+    # Story 53.2 AC3: Valeurs brutes inventaire acceptées par l'API
+    def test_create_execution_with_certification_environment(self):
+        """Story 53.2 AC3 : Création d'exécution avec environment='certification' → HTTP 201
+        et valeur enregistrée telle quelle en base (pas d'alias vers 'staging')."""
+        response = self.client.post('/api/v1/executions/', {
+            'action_id': self.action.id,
+            'environment': 'certification',
+            'parameters': {}
+        }, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data.get('environment'), 'certification')
+
+    def test_create_execution_with_developpement_environment(self):
+        """Story 53.2 AC4 : Création d'exécution avec environment='developpement' → HTTP 201
+        et valeur enregistrée telle quelle en base (pas d'alias vers 'dev')."""
+        response = self.client.post('/api/v1/executions/', {
+            'action_id': self.action.id,
+            'environment': 'developpement',
+            'parameters': {}
+        }, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data.get('environment'), 'developpement')
+
     @patch('executions.views.scheduled_views.validate_environment_against_inventory')
     @patch('executions.views.scheduled_views.SchedulingService')
     def test_create_scheduled_execution_with_valid_environment(self, mock_sched_service, mock_validate):
@@ -117,7 +142,7 @@ class EnvironmentConfigLookupTests(TestCase):
     Story 21.2, AC3 / Task 5.3: Tests for case-insensitive environment config lookup.
     """
 
-    def testget_env_config_case_insensitive(self):
+    def test_get_env_config_case_insensitive(self):
         """Helper should match environment keys case-insensitively."""
         from executions.utils import get_env_config_case_insensitive
 
@@ -282,6 +307,61 @@ class ValidateEnvironmentAgainstInventoryTests(TestCase):
         validate_environment_against_inventory('qa')
         validate_environment_against_inventory('uat')
         validate_environment_against_inventory('certif')
+
+    # -- Story 53.2: Valeurs brutes inventaire (developpement, certification, production) --
+
+    @patch('inventory.services.InventoryService.list_environments')
+    def test_validate_certification_raw_value(self, mock_list_envs):
+        """Story 53.2 AC8 : 'certification' (valeur brute inventaire) est acceptée sans alias."""
+        from executions.utils import validate_environment_against_inventory
+
+        mock_list_envs.return_value = ['developpement', 'certification', 'production']
+
+        # Should not raise — certification est valide dans l'inventaire
+        validate_environment_against_inventory('certification')
+
+    @patch('inventory.services.InventoryService.list_environments')
+    def test_validate_developpement_raw_value(self, mock_list_envs):
+        """Story 53.2 AC8 : 'developpement' (valeur brute inventaire) est acceptée sans alias."""
+        from executions.utils import validate_environment_against_inventory
+
+        mock_list_envs.return_value = ['developpement', 'certification', 'production']
+
+        # Should not raise — developpement est valide dans l'inventaire
+        validate_environment_against_inventory('developpement')
+
+    @patch('inventory.services.InventoryService.list_environments')
+    def test_validate_dev_rejected_when_not_in_inventory(self, mock_list_envs):
+        """Story 53.2 Task 5.4 : 'dev' est rejeté par validate_environment_against_inventory()
+        si l'inventaire ne contient que les valeurs brutes.
+
+        Note : cette fonction est appelée pour les EXÉCUTIONS PLANIFIÉES uniquement
+        (Story 26.10). Pour les exécutions régulières, aucune validation d'environnement
+        n'est effectuée à ce niveau — le rejet éventuel passe par le RBAC/permission_aggregator.
+        """
+        from executions.utils import validate_environment_against_inventory
+        from core.exceptions import BadRequestError
+
+        mock_list_envs.return_value = ['developpement', 'certification', 'production']
+
+        with self.assertRaises(BadRequestError) as cm:
+            validate_environment_against_inventory('dev')
+
+        self.assertEqual(cm.exception.code, 'INVALID_ENVIRONMENT')
+
+    def test_regular_execution_accepts_any_env_no_inventory_validation(self):
+        """Story 53.2 / Story 26.10 : Les exécutions régulières n'effectuent pas de validation
+        d'environnement contre l'inventaire — tout env string est accepté (HTTP 201).
+        Le RBAC/permission_aggregator contrôle l'accès, pas cette couche.
+        """
+        response = self.client.post('/api/v1/executions/', {
+            'action_id': self.action.id,
+            'environment': 'dev',
+            'parameters': {}
+        }, format='json')
+
+        # 'dev' n'est plus dans l'inventaire brut mais aucune validation n'est faite ici
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
 
 # =============================================================================

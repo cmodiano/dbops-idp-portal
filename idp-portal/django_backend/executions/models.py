@@ -9,13 +9,6 @@ from catalog.models import Action
 logger = structlog.get_logger(__name__)
 
 
-class ExecutionEnvironment(models.TextChoices):
-    """Execution environment enum matching Oracle CHECK constraint."""
-    DEV = 'dev', 'Development'
-    STAGING = 'staging', 'Staging'
-    PROD = 'prod', 'Production'
-
-
 class ExecutionStatus(models.TextChoices):
     """
     Execution status enum matching Oracle CHECK constraint (V023, V030, V057).
@@ -116,7 +109,6 @@ class Execution(models.Model):
     )
     environment = models.CharField(
         max_length=50,
-        choices=ExecutionEnvironment.choices,
         db_column='ENVIRONMENT'
     )
     # CLOB field - using TextField with JSON serialization helper
@@ -391,7 +383,6 @@ class ScheduledExecution(models.Model):
     )
     environment = models.CharField(
         max_length=50,
-        choices=ExecutionEnvironment.choices,
         db_column='ENVIRONMENT'
     )
     # CLOB field - using TextField with JSON serialization helper
