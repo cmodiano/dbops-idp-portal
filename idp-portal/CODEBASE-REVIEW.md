@@ -417,21 +417,25 @@
 
 ---
 
-### SOLID-FE-4 [HIGH] — ⚠️ AMÉLIORÉ, OUVERT — Couplage services directs
+### SOLID-FE-4 [HIGH] — 🔄 PILOTE COMPLÉTÉ, OUVERT — Couplage services directs
 
 **Avant :** 29 composants importent directement les services.
 
-**État actuel :** ~25 composants non-test importent encore directement `admin_service`, `catalog_service`, ou `execution_service`. Le pattern a été amélioré dans certains composants clés (hooks extraits, DI via context), mais le couplage structurel reste largement présent.
+**État actuel :** ~25 composants non-test importaient encore directement `admin_service`, `catalog_service`, ou `execution_service`. Le pattern a été amélioré dans certains composants clés (hooks extraits, DI via context), mais le couplage structurel reste largement présent.
 
-**Fichiers concernés (exemples non-test) :**
+**SOLID-FE-4 🔄 Pilote complété — 5/~25 composants migrés (ActionPalette, AdminAnalyticsDashboard, WizardStep1General, RemediationRulesEditor, ActionsAdminPanel) — Story 48.8 (2026-02-26)**
+
+Hooks créés : `useAdminAnalytics`, `useActionNameAvailability`, `useRemediationCatalogActions`, `useActionsAdminPanel` (+ `useEligibleActions` déjà existant pour ActionPalette).
+
+**Fichiers encore concernés (exemples non-test, ~20 restants) :**
 - `ExecutionWizard.tsx` → `catalog_service` + `execution_service`
 - `ActionWizard.tsx` → 7 fonctions de `admin_service`
 - `WorkflowStepsEditor.tsx` → `admin_service.getEligibleActionsForWorkflow()`
 - `ProfileForm.tsx`, `ProfileWizard.tsx` → `admin_service`
 - `IntegrationForm.tsx` → `admin_service`
-- Et ~19 autres composants
+- Et ~15 autres composants
 
-**Fix recommandé :** Migration progressive vers hooks et injection via props/context. Pattern existant dans `useExecutionWizardState`, `useCatalogState`, `useAuditFilters` peut servir de modèle.
+**Fix recommandé :** Continuer la migration progressive vers hooks (pattern établi par Story 48.8). Pattern de référence : `useActionsAdminPanel.ts`, `useAdminAnalytics.ts`.
 
 ---
 
