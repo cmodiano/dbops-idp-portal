@@ -35,6 +35,7 @@ class Migration(migrations.Migration):
                     ("INTEGRATION_DELETED", "Integration Deleted"),
                     ("EXECUTION_SUBMITTED", "Execution Submitted"),
                     ("EXECUTION_INTEGRATION_ERROR", "Execution Integration Error"),
+                    ("EXECUTION_STARTED", "Execution Started"),  # Legacy: in Oracle constraint
                     ("EXECUTION_RUNNING", "Execution Running"),
                     ("EXECUTION_COMPLETED", "Execution Completed"),
                     ("EXECUTION_FAILED", "Execution Failed"),

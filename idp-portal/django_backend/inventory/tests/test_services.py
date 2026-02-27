@@ -161,12 +161,8 @@ class InventoryServiceDBSchemaTests(TestCase):
                 'columns': {'name': 'HOSTNAME', 'environment': 'ENV', 'type': 'TARGET_TYPE'},
             },
         }
-        Integration.objects.create(
-            type=IntegrationType.INVENTORY_DB,
-            name='Flat Table Inventory',
-            base_url='oracle://localhost',
-            config=json.dumps(flat_config),
-        )
+        self.integration.config = json.dumps(flat_config)
+        self.integration.save()
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = (1,)
         mock_cursor.fetchall.return_value = [('srv-01', 'PROD', 'server')]

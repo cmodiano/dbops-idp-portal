@@ -89,7 +89,7 @@ export function IntegrationForm({
 
   // Story 51.4: Reset local health when modal closes or integration changes
   useEffect(() => {
-    if (!open) setLocalHealth(null);
+    setLocalHealth(null);
   }, [open, editIntegration]);
 
   const healthStatus: HealthStatus = localHealth?.status ?? editIntegration?.health_status ?? 'unknown';

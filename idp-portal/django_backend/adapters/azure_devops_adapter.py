@@ -80,10 +80,12 @@ class AzureDevOpsAdapter(BaseAdapter, IHealthCheckable):
         base_url: str,
         auth_headers: dict[str, str],
         timeout: float = AZURE_DEVOPS_DEFAULT_TIMEOUT,
+        verify_ssl: bool = False,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.auth_headers = auth_headers
         self.timeout = timeout
+        self.verify_ssl = verify_ssl
 
     # ------------------------------------------------------------------
     # Trigger (launch) — pipeline run
@@ -149,7 +151,7 @@ class AzureDevOpsAdapter(BaseAdapter, IHealthCheckable):
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=self.timeout,
-                verify=False,  # nosec B501  # noqa: S501 — corporate CAs handled externally
+                verify=self.verify_ssl,
             ) as client:
                 response = await client.post(url, json=payload)
                 response.raise_for_status()
@@ -651,12 +653,13 @@ class AzureDevOpsAdapter(BaseAdapter, IHealthCheckable):
     # ------------------------------------------------------------------
 
     async def health_check(self) -> HealthCheckResult:
-        """Ping Azure DevOps via GET /_apis/?api-version=7.0 et valide l'authentification PAT."""
+        """Ping Azure DevOps via GET /_apis/?api-version=7.1 et valide l'authentification PAT."""
         url = f"{self.base_url}/_apis/?api-version={API_VERSION}"
         try:
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=self.timeout,
+                verify=self.verify_ssl,
             ) as client:
                 response = await client.get(url)
                 response.raise_for_status()

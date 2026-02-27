@@ -456,9 +456,13 @@ class TestSplunkServiceHealthCheck:
 # =============================================================================
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 class TestIntegrationPostSaveSignal:
-    """Tests du signal post_save → run_integration_health_check.delay — sous-task 6.1-6.3."""
+    """Tests du signal post_save → run_integration_health_check.delay — sous-task 6.1-6.3.
+
+    Uses transaction=True so transaction.on_commit callbacks run (default TestCase rolls
+    back and never commits, so on_commit would not execute).
+    """
 
     def test_signal_fires_on_create(self, db):
         """Signal déclenche .delay() lors de Integration.save() (create)."""

@@ -68,3 +68,16 @@ class UserModelTest(TestCase):
             profile='DBA'
         )
         self.assertIsNone(user.email)
+
+    def test_user_manager_create_or_update_updates_email(self):
+        """Story 50.1: UserManager.create_or_update updates email when provided on existing user."""
+        User.objects.create_or_update(
+            username='mgrupdateemail',
+            profile='DBA',
+        )
+        updated_user = User.objects.create_or_update(
+            username='mgrupdateemail',
+            profile='DBA',
+            email='updated@example.com',
+        )
+        self.assertEqual(updated_user.email, 'updated@example.com')

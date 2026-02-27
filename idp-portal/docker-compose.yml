@@ -163,17 +163,21 @@ services:
       context: ./django_backend
       dockerfile: Dockerfile
     container_name: idp-celery-beat
-    command: celery -A idp_backend beat --loglevel=info --schedule-filename=/tmp/celerybeat-schedule
+    command: celery -A idp_backend beat --loglevel=info --schedule-filename=/var/lib/celery/celerybeat-schedule
+    volumes:
+      - celery-beat-data:/var/lib/celery
+    env_file:
+      - .env
     environment:
       - DJANGO_SETTINGS_MODULE=idp_backend.settings
       - DEBUG=true
       - AUTH_DEV_BYPASS=true
-      - SECRET_KEY=dev-secret-key-change-in-production
-      - JWT_SECRET_KEY=dev-jwt-secret-key-change-in-production
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-jwt-secret-key-change-in-production}
       - ALLOWED_HOSTS=*
       - ORACLE_DSN=oracle-db:1521/FREEPDB1
       - ORACLE_USER=IDP_APP
-      - ORACLE_PASSWORD=Oracle123!
+      - ORACLE_PASSWORD=${ORACLE_PASSWORD:-Oracle123!}
       - DJANGO_LOG_LEVEL=INFO
       - LOG_FORMAT=json
       - CELERY_BROKER_URL=redis://redis:6379/0
@@ -192,6 +196,13 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'celery.*beat' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
     networks:
       - idp-network
@@ -232,6 +243,7 @@ services:
 volumes:
   oracle-data:
     name: dbops-oracle-data
+  celery-beat-data:
 
 # ============================================================================
 # Réseau

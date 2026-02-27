@@ -293,6 +293,7 @@ class SplunkService(IHealthCheckable):
             async with httpx.AsyncClient(
                 headers=self.auth_headers,
                 timeout=self.timeout,
+                verify=False,  # nosec B501  # noqa: S501 — match send_event path, corporate CAs handled externally
             ) as client:
                 response = await client.get(url)
                 response.raise_for_status()

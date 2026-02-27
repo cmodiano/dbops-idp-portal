@@ -126,5 +126,6 @@ def trigger_health_check_on_save(sender, instance, created, raw, **kwargs):
     if raw:
         # Ignore les fixtures de test et les opérations loaddata/migrate
         return
+    from django.db import transaction
     from integrations.tasks import run_integration_health_check  # noqa: PLC0415 — import local anti-circulaire
-    run_integration_health_check.delay(instance.id)
+    transaction.on_commit(lambda: run_integration_health_check.delay(instance.id))

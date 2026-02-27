@@ -41,14 +41,16 @@ class AuthService:
         Returns:
             User instance
         """
+        defaults: dict = {
+            'display_name': display_name,
+            'profile': profile or '',
+            'saml_subject': saml_subject,
+        }
+        if email is not None:
+            defaults['email'] = email
         user, created = User.objects.update_or_create(
             username=username,
-            defaults={
-                'display_name': display_name,
-                'profile': profile or '',
-                'saml_subject': saml_subject,
-                'email': email,
-            }
+            defaults=defaults,
         )
         
         # Audit

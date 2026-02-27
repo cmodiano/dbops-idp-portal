@@ -43,10 +43,10 @@ if _gate_crontab:
             day_of_week=parts[4],
         )
     else:
-        logger.warning(  # type: ignore[call-arg]
-            "celery_beat_invalid_crontab_fallback_interval",
-            crontab=_gate_crontab,
-            fallback_interval=60.0,
+        logger.warning(
+            "celery_beat_invalid_crontab_fallback_interval: crontab=%r fallback_interval=%s",
+            _gate_crontab,
+            60.0,
         )
         _gate_schedule = 60.0
 else:
@@ -75,10 +75,10 @@ if _sched_crontab:
             day_of_week=parts[4],
         )
     else:
-        logger.warning(  # type: ignore[call-arg]
-            "celery_beat_invalid_sched_crontab_fallback_interval",
-            crontab=_sched_crontab,
-            fallback_interval=60.0,
+        logger.warning(
+            "celery_beat_invalid_sched_crontab_fallback_interval: crontab=%r fallback_interval=%s",
+            _sched_crontab,
+            60.0,
         )
         _sched_schedule = 60.0
 else:
@@ -105,14 +105,20 @@ if _health_check_crontab:
             day_of_week=parts[4],
         )
     else:
-        logger.warning(  # type: ignore[call-arg]
-            "celery_beat_invalid_health_check_crontab_fallback_interval",
-            crontab=_health_check_crontab,
-            fallback_interval=3600.0,
+        logger.warning(
+            "celery_beat_invalid_health_check_crontab_fallback_interval: crontab=%r fallback_interval=%s",
+            _health_check_crontab,
+            3600.0,
         )
         _health_check_schedule = 3600.0
 else:
-    _health_check_schedule = float(os.getenv('CELERY_BEAT_HEALTH_CHECK_INTERVAL', '3600.0'))
+    try:
+        _health_check_schedule = float(os.getenv('CELERY_BEAT_HEALTH_CHECK_INTERVAL', '3600.0'))
+    except ValueError:
+        logger.warning(
+            "celery_beat_invalid_health_check_interval: invalid value, falling back to 3600.0",
+        )
+        _health_check_schedule = 3600.0
 
 app.conf.beat_schedule['health-check-all-integrations'] = {
     'task': 'integrations.tasks.health_check_all_integrations',

@@ -290,10 +290,19 @@ def health_check_all_integrations() -> None:
         )
         return
 
+    dispatched_count = 0
     for integration_id in integration_ids:
-        run_integration_health_check.delay(integration_id)
+        try:
+            run_integration_health_check.delay(integration_id)
+            dispatched_count += 1
+        except Exception as exc:  # noqa: BLE001
+            logger.exception(
+                "health_check_all_dispatch_error",
+                integration_id=integration_id,
+                error=str(exc),
+            )
 
     logger.info(
         "health_check_all_dispatched",
-        count=len(integration_ids),
+        count=dispatched_count,
     )

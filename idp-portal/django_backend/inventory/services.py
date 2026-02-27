@@ -208,7 +208,9 @@ class InventoryService:
             }
         else:
             table_name = config.get('table') or config.get('table_view') or 'INVENTORY_TABLE'
-            table_or_synonym = f"{schema_name}.{table_name}"
+            table_or_synonym = (
+                f"{schema_name}.{table_name}" if '.' not in table_name else table_name
+            )
             column_mapping = None
 
         logger.info(

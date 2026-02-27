@@ -186,10 +186,12 @@ class InventoryQueryExecutor:
         env_col = column_mapping.get('environment', 'ENVIRONMENT')
         type_col = column_mapping.get('type', 'TYPE')
         for col in (name_col, env_col, type_col):
-            if not SAFE_COLUMN_NAME_PATTERN.match(col):
+            try:
+                _validate_column_name(col)
+            except MapperValidationError as e:
                 raise InventoryServiceError(
                     f"Invalid column name in mapping: '{col}'. Must be alphanumeric with underscore."
-                )
+                ) from e
 
         if environment:
             conditions.append(f"UPPER({env_col}) = UPPER(:env)")  # nosec B608 - env_col validated above

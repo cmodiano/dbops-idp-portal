@@ -197,13 +197,14 @@ class SAMLCallbackView(APIView):
         display_name = attributes.get("displayName", [None])[0] if attributes.get("displayName") else None
         raw_profile = attributes.get("profile", [_DEFAULT_PROFILE])[0] if attributes.get("profile") else _DEFAULT_PROFILE
         saml_subject = name_id
-        email = (
+        raw_email = (
             (attributes.get("mail") or [None])[0]
             or (attributes.get("email") or [None])[0]
             or (attributes.get("emailAddress") or [None])[0]
             or (attributes.get("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress") or [None])[0]
             or None
         )
+        email = raw_email or None  # normalize empty string to None
 
         # Extract AD groups
         ad_groups = _extract_ad_groups(attributes, raw_profile)

@@ -383,11 +383,11 @@ class IntegrationListSerializer(serializers.ModelSerializer):
             'id', 'type', 'name', 'base_url', 'credential_ref', 'icon',
             'auth_flow', 'token_url', 'status', 'secret_service_id',
             'created_at', 'updated_at',
-            # Story 51.4: health check fields
-            'health_status', 'health_checked_at', 'health_error_message',
+            # Story 51.4: health check fields (exclude health_error_message for lean list responses)
+            'health_status', 'health_checked_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at',
-                            'health_status', 'health_checked_at', 'health_error_message']
+                            'health_status', 'health_checked_at']
 
 
 # ============================================================================
