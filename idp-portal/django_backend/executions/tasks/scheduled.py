@@ -52,13 +52,14 @@ def process_pending_scheduled_executions(self: Any) -> dict:
     # Oracle does not support LIMIT/OFFSET with select_for_update; use two-step: fetch IDs with
     # limit first, then select_for_update on those IDs (no limit in the locking query).
     with transaction.atomic():
-        pending_ids = list(
-            ScheduledExecution.objects.list_pending(now).values_list('id', flat=True)[:max_batch]
-        )
+        pending_qs = ScheduledExecution.objects.list_pending(now)
+        pending_ids = list(pending_qs.values_list('id', flat=True)[:max_batch])
         if not pending_ids:
             return {'processed': 0, 'triggered': 0, 'errors': 0}
+        # Re-apply pending constraints when locking so we only process rows still pending
+        # (status/flag/recurrence may have changed after prefetch).
         se_list = list(
-            ScheduledExecution.objects.filter(id__in=pending_ids)
+            pending_qs.filter(id__in=pending_ids)
             .select_for_update(skip_locked=True)
             .select_related('action', 'user', 'recurringpattern')
             .order_by('id')
@@ -155,7 +156,7 @@ def process_pending_scheduled_executions(self: Any) -> dict:
                         )
                         continue
                     # AC7: Audit written atomically with the status update
-                    AuditService.create_entry(**audit_kwargs)  # type: ignore[arg-type]
+                    AuditService.create_entry(**audit_kwargs)
 
             logger.info(
                 "process_pending_scheduled_executions_triggered",

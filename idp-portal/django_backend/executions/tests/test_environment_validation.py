@@ -333,24 +333,15 @@ class ValidateEnvironmentAgainstInventoryTests(TestCase):
     # -- Story 53.2: Valeurs brutes inventaire (developpement, certification, production) --
 
     @patch('inventory.services.InventoryService.list_environments')
-    def test_validate_certification_raw_value(self, mock_list_envs):
-        """Story 53.2 AC8 : 'certification' (valeur brute inventaire) est acceptée sans alias."""
+    def test_validate_raw_environment_values(self, mock_list_envs):
+        """Story 53.2 AC8 : Raw inventory values (certification, developpement) are accepted without alias."""
         from executions.utils import validate_environment_against_inventory
 
         mock_list_envs.return_value = ['developpement', 'certification', 'production']
 
-        # Should not raise — certification est valide dans l'inventaire
-        validate_environment_against_inventory('certification')
-
-    @patch('inventory.services.InventoryService.list_environments')
-    def test_validate_developpement_raw_value(self, mock_list_envs):
-        """Story 53.2 AC8 : 'developpement' (valeur brute inventaire) est acceptée sans alias."""
-        from executions.utils import validate_environment_against_inventory
-
-        mock_list_envs.return_value = ['developpement', 'certification', 'production']
-
-        # Should not raise — developpement est valide dans l'inventaire
-        validate_environment_against_inventory('developpement')
+        for env in ('certification', 'developpement'):
+            with self.subTest(env=env):
+                validate_environment_against_inventory(env)  # Should not raise
 
     @patch('inventory.services.InventoryService.list_environments')
     def test_validate_dev_rejected_when_not_in_inventory(self, mock_list_envs):
@@ -368,6 +359,19 @@ class ValidateEnvironmentAgainstInventoryTests(TestCase):
 
         with self.assertRaises(BadRequestError) as cm:
             validate_environment_against_inventory('dev')
+
+        self.assertEqual(cm.exception.code, 'INVALID_ENVIRONMENT')
+
+    @patch('inventory.services.InventoryService.list_environments')
+    def test_validate_prod_rejected_when_not_in_inventory(self, mock_list_envs):
+        """'prod' alias is rejected when inventory contains only raw names (production)."""
+        from executions.utils import validate_environment_against_inventory
+        from core.exceptions import BadRequestError
+
+        mock_list_envs.return_value = ['developpement', 'certification', 'production']
+
+        with self.assertRaises(BadRequestError) as cm:
+            validate_environment_against_inventory('prod')
 
         self.assertEqual(cm.exception.code, 'INVALID_ENVIRONMENT')
 

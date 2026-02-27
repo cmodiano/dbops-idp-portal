@@ -585,10 +585,10 @@ class TestStory255MutexValidation(TestCase):
             mock_inst.list_environments.return_value = ['developpement', 'certification', 'production']
             MockInventory.return_value = mock_inst
 
-            # Submit global action without targets
+            # Submit global action without targets (use canonical name matching inventory)
             response = self.client.post('/api/v1/executions/', {
                 'action_id': global_report.id,
-                'environment': 'prod',
+                'environment': 'production',
                 'parameters': {},
             }, format='json')
         

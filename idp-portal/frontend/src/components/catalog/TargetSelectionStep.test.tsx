@@ -162,9 +162,9 @@ describe('TargetSelectionStep - Story 21.5', () => {
       expect(screen.getByText('Avertissement - Environnement Production')).toBeInTheDocument();
     });
 
-    it('shows production warning for production alias', () => {
+    it('shows production warning for prod alias', () => {
       render(
-        <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'production', environmentsCache: [] }}>
+        <TestWrapper contextValue={{ ...defaultWizardContext, derivedEnvironment: 'prod', environmentsCache: [] }}>
           <TargetSelectionStep {...defaultProps} />
         </TestWrapper>
       );

@@ -32,8 +32,8 @@ vi.mock('../../services/execution_service', () => ({
   fetchInventoryItems: vi.fn().mockImplementation(async (type: string) => {
     if (type === 'environments') {
       return [
-        { id: 'developpement', name: 'Developpement', environment: null },
-        { id: 'certification', name: 'Staging', environment: null },
+        { id: 'developpement', name: 'Développement', environment: null },
+        { id: 'certification', name: 'Certification', environment: null },
         { id: 'production', name: 'Production', environment: null },
       ];
     }
@@ -92,7 +92,7 @@ const mockAction: CatalogActionDetail = {
 async function navigateToStep3(user: ReturnType<typeof userEvent.setup>) {
   const select = screen.getByRole('combobox');
   await user.click(select);
-  await user.click(screen.getByText('Developpement'));
+  await user.click(screen.getByText('Développement'));
   await user.click(screen.getByRole('button', { name: /suivant/i }));
 
   await waitFor(() => expect(screen.getByLabelText('PDB Name')).toBeInTheDocument());

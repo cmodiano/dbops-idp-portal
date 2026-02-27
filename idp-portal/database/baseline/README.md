@@ -1,8 +1,8 @@
-# Baseline Schema V088 — IDP Portal
+# Baseline Schema V098 — IDP Portal
 
 ## Contexte (Epic 41 — Consolidation des migrations BD)
 
-Ce dossier contient le script de **baseline** du schéma Oracle de l'IDP Portal. Il consolide les 89 migrations Flyway V000–V088 en un seul script d'initialisation pour les **nouveaux environnements**.
+Ce dossier contient le script de **baseline** du schéma Oracle de l'IDP Portal. Il consolide les 99 migrations Flyway V000–V098 en un seul script d'initialisation pour les **nouveaux environnements**.
 
 | Fichier | Description |
 |---------|-------------|
@@ -10,7 +10,7 @@ Ce dossier contient le script de **baseline** du schéma Oracle de l'IDP Portal.
 | `README.md` | Ce fichier — procédure de déploiement et validation |
 
 > **⚠️ IMPORTANT** : Ce script s'applique **UNIQUEMENT** sur une base Oracle vierge.
-> Les environnements existants (dev, staging, prod) sont **inchangés** — ils continuent d'utiliser la chaîne V000–V088 via Flyway normalement.
+> Les environnements existants (dev, staging, prod) sont **inchangés** — ils continuent d'utiliser la chaîne V000–V098 via Flyway normalement.
 
 ---
 
@@ -150,7 +150,7 @@ diff <(normalize.sh /tmp/schema-a.sql) <(normalize.sh /tmp/schema-b.sql)
 | Contraintes exclues | `SELECT constraint_name FROM user_constraints WHERE table_name = 'ACTIONS_CATALOG'` | Absence de CK_ACTIONS_CATALOG_CATEGORY, CK_ACTIONS_CATALOG_ENGINE (post-V050), CK_ACTIONS_CATALOG_PLATFORM (post-V052) |
 | Partitionnement (post-V084–V086) | `SELECT table_name FROM user_part_tables WHERE table_name IN ('EXECUTIONS','EXECUTION_STEPS','AUDIT_LOG')` | 3 tables partitionnées |
 | Package purge (post-V087) | `SELECT status FROM user_objects WHERE object_name = 'PKG_IDP_MAINTENANCE'` | VALID |
-| Historique Flyway | `SELECT version, state FROM flyway_schema_history ORDER BY installed_rank` | baseline V88 uniquement |
+| Historique Flyway | `SELECT version, state FROM flyway_schema_history ORDER BY installed_rank` | baseline V98 uniquement |
 
 ---
 

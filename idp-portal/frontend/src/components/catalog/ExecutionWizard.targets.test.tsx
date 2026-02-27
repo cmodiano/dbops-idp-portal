@@ -20,7 +20,7 @@ const mockTargetsResponse = {
   items: [
     { name: 'srv-dev-01', environment: 'developpement', target_type: 'server', metadata: null },
     { name: 'srv-dev-02', environment: 'developpement', target_type: 'server', metadata: null },
-    { name: 'srv-staging-01', environment: 'certification', target_type: 'server', metadata: null },
+    { name: 'srv-cert-01', environment: 'certification', target_type: 'server', metadata: null },
     { name: 'db-prod-01', environment: 'production', target_type: 'database', metadata: null },
   ],
   total: 4,
@@ -31,7 +31,7 @@ const mockTargetsResponse = {
 
 // Mock environments response
 const mockEnvironmentsResponse = [
-  { id: 'developpement', name: 'Developpement', environment: null },
+  { id: 'developpement', name: 'Développement', environment: null },
   { id: 'certification', name: 'Certification', environment: null },
   { id: 'production', name: 'Production', environment: null },
 ];
@@ -62,7 +62,7 @@ vi.mock('../../services/execution_service', () => ({
   fetchInventoryTargets: vi.fn().mockResolvedValue([
     { name: 'srv-dev-01', environment: 'developpement', target_type: 'server', metadata: null },
     { name: 'srv-dev-02', environment: 'developpement', target_type: 'server', metadata: null },
-    { name: 'srv-staging-01', environment: 'certification', target_type: 'server', metadata: null },
+    { name: 'srv-cert-01', environment: 'certification', target_type: 'server', metadata: null },
     { name: 'db-prod-01', environment: 'production', target_type: 'database', metadata: null },
   ]),
 }));
@@ -213,7 +213,7 @@ describe('ExecutionWizard - Target Selection (Story 13.2)', () => {
         { timeout: 3000 }
       );
 
-      // Should show environment group headers (Developpement, Staging, Production)
+      // Should show environment group headers (Développement, Certification, Production)
       expect(screen.getByText('Développement')).toBeInTheDocument();
       expect(screen.getByText('Certification')).toBeInTheDocument();
       expect(screen.getByText('Production')).toBeInTheDocument();

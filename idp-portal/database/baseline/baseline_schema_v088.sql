@@ -1210,7 +1210,7 @@ COMMIT;
 -- Après application de ce script :
 --   flyway baseline -baselineVersion=98 -baselineDescription=baseline_schema_v088
 --
--- Aucune migration incrémentale requise — état identique à V000→V088.
+-- Aucune migration incrémentale requise — état identique à V000→V098.
 --
 -- Validation rapide :
 --   SELECT COUNT(*) FROM user_tables;             -- doit retourner 25
