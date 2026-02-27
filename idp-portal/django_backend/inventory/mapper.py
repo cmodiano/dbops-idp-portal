@@ -7,23 +7,27 @@ Config format (stored in Integration.config JSON):
     {
       "entities": {
         "servers": {
-          "table": "DBOPS_SERVERS",
-          "id_column": "SERVER_ID",
-          "columns": {"name": "HOSTNAME", "environment": "ENV", "engine_type": "ENGINE"}
+          "table": "SERVER",
+          "id_column": "ID",
+          "columns": {"name": "NAME", "environment": "ENVIRONMENT", "engine_type": "ENGINE_TYPE"}
         },
         "instances": {
-          "table": "DBOPS_INSTANCES",
-          "id_column": "INSTANCE_ID",
-          "columns": {"name": "INSTANCE_NAME", "environment": "ENV",
-                      "server_ref": "SERVER_NAME", "db_ref": "DB_NAME"}
+          "table": "INSTANCE",
+          "id_column": "ID",
+          "columns": {"name": "NAME", "server_ref": "SERVER_ID", "db_ref": "DB_ID"},
+          "ref_join": "id"
         },
         "databases": {
-          "table": "DBOPS_DATABASES",
-          "id_column": "DB_ID",
-          "columns": {"name": "DB_NAME", "environment": "ENV"}
+          "table": "DB",
+          "id_column": "ID",
+          "columns": {"name": "NAME"}
         }
       }
     }
+
+  ref_join: When "id", server_ref/db_ref are FK columns (e.g. SERVER_ID, DB_ID).
+    Joins use inst.server_ref = srv.id_column instead of inst.server_ref = srv.name.
+    Omit or use "name" for legacy name-based refs.
 
   Note on environment filtering (Story 37.1):
     When the 'servers' entity is configured, the environment filter for instances and
@@ -187,6 +191,22 @@ class InventoryMapper:
             )
         _validate_column_name(id_col)
         return cast(str, id_col)
+
+    def refs_join_on_id(self, entity_name: str) -> bool:
+        """
+        True if server_ref/db_ref columns are FK IDs (join on target id_column).
+        When False, refs hold names (join on target name column).
+
+        Args:
+            entity_name: Entity name (e.g. 'instances')
+
+        Returns:
+            True if ref_join is 'id', else False
+        """
+        entity = self.get_entity_config(entity_name)
+        if not entity:
+            return False
+        return (entity.get('ref_join') or '').lower() == 'id'
 
     def build_select_clause(self, entity_name: str) -> str:
         """

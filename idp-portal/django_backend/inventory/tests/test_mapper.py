@@ -130,6 +130,31 @@ class InventoryMapperMultiTableTests(TestCase):
 
     def test_get_id_column(self):
         self.assertEqual(self.mapper.get_id_column('servers'), 'SERVER_ID')
+
+    def test_refs_join_on_id_default_false(self):
+        """When ref_join is absent, refs_join_on_id returns False (name-based refs)."""
+        self.assertFalse(self.mapper.refs_join_on_id('instances'))
+
+    def test_refs_join_on_id_true(self):
+        """When ref_join is 'id', refs_join_on_id returns True (FK-based refs)."""
+        config_with_ref_join = {
+            "entities": {
+                "instances": {
+                    "table": "INSTANCE",
+                    "id_column": "ID",
+                    "columns": {"name": "NAME", "server_ref": "SERVER_ID", "db_ref": "DB_ID"},
+                    "ref_join": "id",
+                },
+            }
+        }
+        mapper = InventoryMapper(config_with_ref_join)
+        self.assertTrue(mapper.refs_join_on_id('instances'))
+
+    def test_refs_join_on_id_case_insensitive(self):
+        """ref_join 'ID' (uppercase) is treated as id-based."""
+        config = {"entities": {"instances": {"table": "I", "id_column": "ID", "columns": {"name": "N", "server_ref": "SID"}, "ref_join": "ID"}}}
+        mapper = InventoryMapper(config)
+        self.assertTrue(mapper.refs_join_on_id('instances'))
         self.assertEqual(self.mapper.get_id_column('instances'), 'INSTANCE_ID')
         self.assertEqual(self.mapper.get_id_column('databases'), 'DB_ID')
 

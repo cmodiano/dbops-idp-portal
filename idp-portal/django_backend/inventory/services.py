@@ -191,12 +191,18 @@ class InventoryService:
         correlation_id = get_correlation_id()
         config = integration.get_config() or {}
 
-        # Resolve table: flat_table.table, or schema + table
+        # Multi-table (entities): use list_servers instead of flat table — avoids INVENTORY_TABLE default
+        mapper = InventoryMapper(config)
+        if mapper.is_multi_table:
+            return self._list_targets_from_multi_table(
+                mapper, environment, search, target_type, page, page_size, correlation_id
+            )
+
+        # Flat table path
         schema_name = config.get('schema') or config.get('db_schema') or 'DBOPS_INVENTORY'
         flat_table = config.get('flat_table')
         if isinstance(flat_table, dict) and flat_table.get('table'):
             raw_table = flat_table['table']
-            # Prepend schema if table has no schema prefix (no dot)
             table_or_synonym = (
                 f"{schema_name}.{raw_table}" if '.' not in raw_table else raw_table
             )
@@ -225,6 +231,56 @@ class InventoryService:
             environment, search, target_type, page, page_size,
             column_mapping=column_mapping,
         )
+
+    def _list_targets_from_multi_table(
+        self,
+        mapper: InventoryMapper,
+        environment: str | None,
+        search: str | None,
+        target_type: str | None,
+        page: int,
+        page_size: int,
+        correlation_id: str | None,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Build targets from multi-table entities (servers). Used when config has entities.servers."""
+        try:
+            servers = self.query_executor.read_servers(environment=environment)
+        except InventoryServiceError as e:
+            logger.warning(
+                "list_targets_from_multi_table_read_servers_failed",
+                error=str(e),
+                correlation_id=correlation_id,
+            )
+            return [], 0
+
+        all_targets: list[dict[str, Any]] = []
+        for s in servers:
+            all_targets.append({
+                'name': s.get('name', ''),
+                'environment': s.get('environment', ''),
+                'target_type': 'server',
+                'metadata': None,
+            })
+
+        if search:
+            search_upper = search.upper()
+            all_targets = [t for t in all_targets if search_upper in (t.get('name') or '').upper()]
+
+        if target_type:
+            type_lower = target_type.lower()
+            all_targets = [t for t in all_targets if (t.get('target_type') or '').lower() == type_lower]
+
+        total = len(all_targets)
+        start = (page - 1) * page_size
+        page_results = all_targets[start : start + page_size]
+
+        logger.info(
+            "list_targets_from_multi_table",
+            total=total,
+            returned=len(page_results),
+            correlation_id=correlation_id,
+        )
+        return page_results, total
 
     def _list_targets_from_fallback(self, environment: str | None = None,
                                      search: str | None = None, target_type: str | None = None,
