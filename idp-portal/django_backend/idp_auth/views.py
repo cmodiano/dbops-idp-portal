@@ -539,7 +539,7 @@ class APIKeyTokenView(APIView):
             200: OpenApiResponse(description='Token JWT retourné dans data.access_token'),
             401: OpenApiResponse(description='MISSING_API_KEY ou INVALID_API_KEY'),
         },
-        auth=['apiKeyAuth'],
+        auth=[{'apiKeyAuth': []}],  # type: ignore[list-item]
     )
     def post(self, request: Request) -> Response:
         raw_key = request.META.get('HTTP_X_API_KEY', '').strip()
