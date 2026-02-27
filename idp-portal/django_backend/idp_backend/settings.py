@@ -487,6 +487,18 @@ CORS_ALLOW_HEADERS = [
 ]
 
 # ============================================================================
+# LDAP Configuration (Story 49.1 — service account authentication)
+# ============================================================================
+# Used by LDAPService (idp_auth/ldap_service.py) for Active Directory bind.
+# Leave empty in non-LDAP environments; LDAPService raises LDAPUnavailableError if LDAP_URI is empty.
+LDAP_URI = os.getenv("LDAP_URI", "")           # ex: ldap://dc.example.com:389
+LDAP_BASE_DN = os.getenv("LDAP_BASE_DN", "")   # ex: DC=example,DC=com
+# Template for user DN used in LDAP bind. Supports two formats:
+#   UPN:     "{username}@example.com"
+#   Full DN: "CN={username},OU=ServiceAccounts,DC=example,DC=com"
+LDAP_USER_DN_TEMPLATE = os.getenv("LDAP_USER_DN_TEMPLATE", "{username}")
+
+# ============================================================================
 # SAML Configuration (Story M.7)
 # ============================================================================
 
