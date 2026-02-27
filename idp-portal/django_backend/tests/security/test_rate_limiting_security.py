@@ -26,6 +26,7 @@ LOW_RATES = {
     'execution': '3/minute',
     'general_api': '5/minute',
     'public': '3/minute',
+    'service_login': '2/minute',  # Story 49.3
 }
 
 
@@ -202,6 +203,46 @@ class TestExecutionBruteForce(RateLimitSecurityTestBase):
             format='json',
         )
         assert response.status_code == 429
+
+
+@override_settings(RATELIMIT_ENABLED=True)
+class TestServiceLoginBruteForce(RateLimitSecurityTestBase):
+    """Story 49.3: Service account LDAP brute-force protection tests."""
+
+    def test_service_login_blocked_after_threshold(self):
+        """After threshold, service login returns 429."""
+        endpoint = '/api/v1/auth/service-login/'
+        payload = {'username': 'svc-test', 'password': 'test'}
+        # First 2 requests allowed (will fail LDAP/validation but not rate limited)
+        for _ in range(2):
+            self.client.post(endpoint, payload, format='json')
+        # Third request blocked
+        response = self.client.post(endpoint, payload, format='json')
+        self.assertEqual(response.status_code, 429)
+
+    def test_service_login_429_has_retry_after_header(self):
+        """429 response includes Retry-After header."""
+        endpoint = '/api/v1/auth/service-login/'
+        payload = {'username': 'svc-test', 'password': 'test'}
+        # Exhaust the 2/minute limit (2 allowed, 3rd blocked)
+        for _ in range(2):
+            self.client.post(endpoint, payload, format='json')
+        response = self.client.post(endpoint, payload, format='json')
+        self.assertEqual(response.status_code, 429)
+        self.assertIn('Retry-After', response)
+
+    def test_different_ips_have_independent_counters(self):
+        """Service login counters are per-IP (different IPs don't share counters)."""
+        endpoint = '/api/v1/auth/service-login/'
+        payload = {'username': 'svc-test', 'password': 'test'}
+        # Exhaust limit for IP1
+        ip1_client = APIClient()
+        for _ in range(3):
+            ip1_client.post(endpoint, payload, format='json', HTTP_X_FORWARDED_FOR='1.2.3.4')
+        # IP2 should still be allowed (not exhausted)
+        ip2_client = APIClient()
+        response = ip2_client.post(endpoint, payload, format='json', HTTP_X_FORWARDED_FOR='5.6.7.8')
+        self.assertNotEqual(response.status_code, 429)
 
 
 @override_settings(RATELIMIT_ENABLED=True)

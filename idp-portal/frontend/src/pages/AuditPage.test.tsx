@@ -59,6 +59,33 @@ let mockUserData: { id: number; username: string; display_name: string; profile:
   is_auditor: true,
 };
 
+// Mock catalog_service (used by useAuditFilters for action filter dropdown)
+vi.mock('../services/catalog_service', () => ({
+  fetchCatalogActions: vi.fn().mockResolvedValue([]),
+}));
+
+// Mock useEngines (used by useAuditFilters for engine filter dropdown)
+vi.mock('../hooks/useEngines', () => ({
+  useEngines: () => ({
+    engineOptions: [],
+    loading: false,
+    engines: [],
+    error: null,
+  }),
+}));
+
+// Mock useEnvironments (used by AuditFiltersPanel for environment filter)
+vi.mock('../hooks/useEnvironments', () => ({
+  useEnvironments: () => ({
+    environmentOptions: [
+      { value: 'dev', label: 'DEV' },
+      { value: 'prod', label: 'PROD' },
+      { value: 'staging', label: 'STAGING' },
+    ],
+    loading: false,
+  }),
+}));
+
 vi.mock('../contexts/AuthContext', () => ({
   useAuth: () => ({
     user: mockUserData,
@@ -264,7 +291,7 @@ describe('AuditPage', () => {
     await user.click(screen.getByText('Action #5'));
 
     await waitFor(() => {
-      expect(screen.getByText("Détail d'audit")).toBeInTheDocument();
+      expect(screen.getByText(/Détail — Exécution/i)).toBeInTheDocument();
     });
   });
 
@@ -390,7 +417,7 @@ describe('AuditPage', () => {
       await user.click(screen.getByText('Action #5'));
 
       await waitFor(() => {
-        expect(screen.getByText("Détail d'audit")).toBeInTheDocument();
+        expect(screen.getByText(/Détail — Exécution/i)).toBeInTheDocument();
       });
 
       // Drawer should show Correlation ID label and value
@@ -486,23 +513,23 @@ describe('AuditPage', () => {
     });
 
     it('test_user_search_filters_data: saisir "john" dans champ utilisateur → API appelée avec user=john après debounce', async () => {
-      vi.useFakeTimers();
       renderWithProviders(<AuditPage />);
 
       await waitFor(() => {
         expect(screen.getByPlaceholderText('Rechercher un utilisateur')).toBeInTheDocument();
       });
 
+      vi.useFakeTimers();
       const input = screen.getByPlaceholderText('Rechercher un utilisateur');
       fireEvent.change(input, { target: { value: 'john' } });
-      vi.advanceTimersByTime(300);
+      await vi.advanceTimersByTimeAsync(300);
+      vi.useRealTimers();
 
       await waitFor(() => {
         expect(mockListExecutionAudit).toHaveBeenCalledWith(
           expect.objectContaining({ user: 'john' }),
         );
       });
-      vi.useRealTimers();
     });
 
     it("test_page_title_updated: le titre affiche \"Journal d'audit\"", async () => {
@@ -515,7 +542,6 @@ describe('AuditPage', () => {
 
     it('test_export_includes_new_filters: export CSV transmet entity_type, action_type, user', async () => {
       mockExportAuditReport.mockResolvedValue(undefined);
-      vi.useFakeTimers();
       const user = userEvent.setup();
       renderWithProviders(<AuditPage />);
 
@@ -541,9 +567,11 @@ describe('AuditPage', () => {
       await user.click(screen.getByText('Action publiée'));
 
       // Saisir une recherche utilisateur → user=alice (après debounce 300ms)
+      vi.useFakeTimers();
       const userInput = screen.getByPlaceholderText('Rechercher un utilisateur');
       fireEvent.change(userInput, { target: { value: 'alice' } });
-      vi.advanceTimersByTime(300);
+      await vi.advanceTimersByTimeAsync(300);
+      vi.useRealTimers();
 
       await waitFor(() => {
         expect(mockListExecutionAudit).toHaveBeenCalledWith(
@@ -571,7 +599,6 @@ describe('AuditPage', () => {
           }),
         );
       });
-      vi.useRealTimers();
     });
 
     it('test_pagination_resets_on_filter_change: changement d\'onglet envoie offset=0 (AC6)', async () => {
@@ -626,7 +653,7 @@ describe('AuditPage', () => {
       await user.click(screen.getByText('Mon action publiée'));
 
       await waitFor(() => {
-        expect(screen.getByText("Détail d'audit")).toBeInTheDocument();
+        expect(screen.getByText(/Détail — Action/i)).toBeInTheDocument();
       });
 
       expect(mockGetExecution).not.toHaveBeenCalled();

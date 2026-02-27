@@ -32,6 +32,7 @@ class AuditActionType(models.TextChoices):
     INTEGRATION_DELETED = 'INTEGRATION_DELETED', 'Integration Deleted'
     # Execution types (added for ExecutionService)
     EXECUTION_SUBMITTED = 'EXECUTION_SUBMITTED', 'Execution Submitted'
+    EXECUTION_STARTED = 'EXECUTION_STARTED', 'Execution Started'  # Legacy: in Oracle constraint, use EXECUTION_RUNNING for new writes
     EXECUTION_INTEGRATION_ERROR = 'EXECUTION_INTEGRATION_ERROR', 'Execution Integration Error'  # Story 18.6
     EXECUTION_RUNNING = 'EXECUTION_RUNNING', 'Execution Running'
     EXECUTION_COMPLETED = 'EXECUTION_COMPLETED', 'Execution Completed'
@@ -57,6 +58,8 @@ class AuditActionType(models.TextChoices):
     USER_LOGOUT = 'USER_LOGOUT', 'User Logout'
     USER_REFRESH = 'USER_REFRESH', 'User Refresh Token'
     API_KEY_TOKEN_EXCHANGE = 'API_KEY_TOKEN_EXCHANGE', 'API Key Token Exchange'  # pragma: allowlist secret
+    # Story 49.3: Service account LDAP login
+    SERVICE_LOGIN = 'SERVICE_LOGIN', 'Service Account Login'
     FAVORITE_ADDED = 'FAVORITE_ADDED', 'Favorite Added'
     FAVORITE_REMOVED = 'FAVORITE_REMOVED', 'Favorite Removed'
     # Story 16.4: Retry audit types

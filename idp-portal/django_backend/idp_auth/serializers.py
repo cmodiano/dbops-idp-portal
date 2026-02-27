@@ -54,6 +54,12 @@ class APIKeyCreateSerializer(serializers.Serializer):
     )
 
 
+class ServiceLoginRequestSerializer(serializers.Serializer):
+    """Sérializer pour POST /auth/service-login — validation username/password."""
+    username = serializers.CharField(max_length=150)
+    password = serializers.CharField(write_only=True)  # write_only garantit absence dans repr/logs DRF
+
+
 class APIKeyListSerializer(serializers.ModelSerializer):
     status = serializers.SerializerMethodField()
 

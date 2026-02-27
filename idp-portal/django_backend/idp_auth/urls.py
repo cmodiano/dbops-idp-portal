@@ -12,6 +12,7 @@ from idp_auth.views import (
     CurrentUserProfileView,
     RefreshTokenView,
     LogoutView,
+    ServiceLoginView,
     UserFavoritesView,
     UserFavoriteItemView,
     APIKeyTokenView,
@@ -23,6 +24,9 @@ urlpatterns = [
     # SAML endpoints (Story M.7)
     path('auth/saml/login/', SAMLLoginView.as_view(), name='saml-login'),
     path('auth/saml/callback/', SAMLCallbackView.as_view(), name='saml-callback'),
+
+    # Service account login via LDAP (Story 49.2)
+    path('auth/service-login/', ServiceLoginView.as_view(), name='service-login'),
 
     # API key token exchange (Story 44.2)
     path('auth/token/', APIKeyTokenView.as_view(), name='api-key-token'),

@@ -325,6 +325,7 @@ REST_FRAMEWORK = {
         'general_api': os.getenv('THROTTLE_API_RATE', '100/minute'),
         'public': os.getenv('THROTTLE_PUBLIC_RATE', '50/minute'),
         'api_key_token': os.getenv('THROTTLE_API_KEY_TOKEN_RATE', '10/minute'),
+        'service_login': os.getenv('THROTTLE_SERVICE_LOGIN_RATE', '5/minute'),
     },
     'DEFAULT_PAGINATION_CLASS': 'core.pagination.CustomPageNumberPagination',
     'PAGE_SIZE': 25,
@@ -485,6 +486,35 @@ CORS_ALLOW_HEADERS = [
     'x-correlation-id',  # SEC-9: Unified with frontend (was x-idp-request-id)
     'x-api-key',  # Story 44.2 - API key token exchange endpoint
 ]
+
+# ============================================================================
+# LDAP Configuration (Story 49.1 — service account authentication)
+# ============================================================================
+# Used by LDAPService (idp_auth/ldap_service.py) for Active Directory bind.
+# Leave empty in non-LDAP environments; LDAPService raises LDAPUnavailableError if LDAP_URI is empty.
+LDAP_URI = os.getenv("LDAP_URI", "")           # ex: ldap://dc.example.com:389
+LDAP_BASE_DN = os.getenv("LDAP_BASE_DN", "")   # ex: DC=example,DC=com
+# Template for user DN used in LDAP bind. Supports two formats:
+#   UPN:     "{username}@example.com"
+#   Full DN: "CN={username},OU=ServiceAccounts,DC=example,DC=com"
+LDAP_USER_DN_TEMPLATE = os.getenv("LDAP_USER_DN_TEMPLATE", "{username}")
+# Timeouts (seconds) to avoid hanging threads on connect/receive
+def _parse_ldap_timeout(name: str, default: str) -> int:
+    raw = os.getenv(name, default)
+    try:
+        val = int(raw)
+        if val < 0:
+            raise ValueError("must be non-negative")
+        return val
+    except (ValueError, TypeError):
+        raise ImproperlyConfigured(
+            f"{name} must be a valid non-negative integer (seconds). "
+            f"Current value: {raw!r}"
+        )
+
+
+LDAP_CONNECT_TIMEOUT = _parse_ldap_timeout("LDAP_CONNECT_TIMEOUT", "10")
+LDAP_RECEIVE_TIMEOUT = _parse_ldap_timeout("LDAP_RECEIVE_TIMEOUT", "10")
 
 # ============================================================================
 # SAML Configuration (Story M.7)

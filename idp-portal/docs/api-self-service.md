@@ -34,6 +34,7 @@ curl -s -I http://localhost:8000/api/v1/auth/saml/login
 
 #### 3. Via API key (programmatique)
 
+
 Pour l'automatisation en production (scripts, CI/CD), utilisez une API key pour obtenir un token JWT sans interaction navigateur :
 
 **Prérequis :** Une API key doit avoir été créée et communiquée par l'équipe DBOPS.
@@ -72,6 +73,186 @@ Authorization: Bearer <access_token>
 | `MISSING_API_KEY` | Le header `X-API-Key` est absent ou vide |
 | `INVALID_API_KEY` | La clé est invalide, révoquée ou expirée |
 | 429 Too Many Requests | Rate limit atteint (10 req/min par IP) |
+
+#### 4. Via LDAP (comptes de service — authentification programmatique)
+
+Pour les pipelines CI/CD et scripts d'automatisation utilisant un compte Active Directory dédié, sans nécessiter de clé API.
+
+**Cas d'usage :** Le compte de service `svc-ci-cd` doit déclencher des actions automatisées sans interaction humaine et sans clé API gérée manuellement.
+
+**Prérequis :**
+1. Un compte Active Directory valide (username + password connus)
+2. Le compte appartient à au moins un groupe AD mappé à un profil dans le portail IDP (ex. `CN=GRP-IDP-DBOPS,OU=Groups,DC=example,DC=com`)
+3. Le profil associé dispose des permissions nécessaires sur les actions et targets à utiliser
+4. Le serveur LDAP est configuré et accessible depuis le portail IDP (cf. [`docs/backend/ldap-configuration.md`](backend/ldap-configuration.md))
+
+**Flow :** Le portail IDP effectue un bind LDAP avec vos credentials, récupère vos groupes AD, résout votre profil, et émet un JWT — exactement comme un login SAML, mais de façon programmatique.
+
+**Étape 1 — Obtenir un token JWT :**
+
+```bash
+curl -s -X POST https://portail.example.com/api/v1/auth/service-login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "svc-ci-cd", "password": "..."}'
+```
+
+**Réponse :**
+```json
+{
+  "data": {
+    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "token_type": "Bearer",
+    "expires_in": 1800
+  }
+}
+```
+
+> **Note :** Le mot de passe n'est jamais enregistré ni retourné. Chaque tentative (succès ou échec) est tracée dans l'audit avec le type `SERVICE_LOGIN`. Le rate limiting est de 5 requêtes/minute par IP (vs 10/min pour `/auth/token` via API key).
+
+**Étape 2 — Utiliser le token :**
+
+Incluez le token dans le header `Authorization` pour les appels suivants :
+
+```http
+Authorization: Bearer <access_token>
+```
+
+**Erreurs possibles :**
+
+| Code | Signification |
+|------|--------------|
+| 401 `INVALID_CREDENTIALS` | Username ou password incorrect, ou compte AD inexistant |
+| 503 `LDAP_UNAVAILABLE` | Le serveur LDAP est inaccessible ou non configuré |
+| 403 `NO_PROFILE` | Le compte n'appartient à aucun groupe AD mappé à un profil IDP |
+| 429 Too Many Requests | Rate limit atteint (5 req/min par IP) |
+
+**Bash — Obtention de token LDAP + exécution complète :**
+
+```bash
+#!/bin/bash
+set -euo pipefail
+
+# Configuration
+API_URL="https://portail.example.com/api/v1"
+LDAP_USER="svc-ci-cd"
+LDAP_PASSWORD="${IDP_LDAP_PASSWORD:?La variable IDP_LDAP_PASSWORD doit être définie}"
+CORRELATION_ID=$(uuidgen)
+
+# Étape 1 : Obtenir un token JWT via LDAP
+echo "🔑 Authentification LDAP..."
+TOKEN_RESPONSE=$(curl -s -f -X POST "${API_URL}/auth/service-login" \
+  -H "Content-Type: application/json" \
+  -d "{\"username\": \"${LDAP_USER}\", \"password\": \"${LDAP_PASSWORD}\"}")
+
+ACCESS_TOKEN=$(echo "${TOKEN_RESPONSE}" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['access_token'])")
+echo "✅ Token obtenu (valide 30 min)"
+
+# Étape 2 : Déclencher une exécution
+echo "🚀 Déclenchement de l'exécution..."
+EXEC_RESPONSE=$(curl -s -f -X POST "${API_URL}/executions" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -H "X-Idp-Request-Id: ${CORRELATION_ID}" \
+  -d '{
+    "action_id": 42,
+    "target_names": ["srv-dev-oracle-01"],
+    "parameters": {"database_name": "TESTDB"}
+  }')
+
+EXECUTION_ID=$(echo "${EXEC_RESPONSE}" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['execution_id'])")
+echo "✅ Exécution créée : ID=${EXECUTION_ID}"
+
+# Étape 3 : Attendre la fin (polling)
+echo "⏳ Attente de la fin..."
+TERMINAL_STATUSES=("COMPLETED" "FAILED" "CANCELLED" "REJECTED")
+for i in $(seq 1 60); do
+  STATUS_RESPONSE=$(curl -s -H "Authorization: Bearer ${ACCESS_TOKEN}" "${API_URL}/executions/${EXECUTION_ID}")
+  STATUS=$(echo "${STATUS_RESPONSE}" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['status'])")
+  echo "  [${i}/60] Status: ${STATUS}"
+
+  for ts in "${TERMINAL_STATUSES[@]}"; do
+    if [ "${STATUS}" = "${ts}" ]; then
+      echo "✅ Terminé : ${STATUS}"
+      exit $([ "${STATUS}" = "COMPLETED" ] && echo 0 || echo 1)
+    fi
+  done
+
+  sleep 5
+done
+
+echo "❌ Timeout : l'exécution n'est pas terminée après 5 minutes"
+exit 1
+```
+
+**Python avec requests :**
+
+```python
+#!/usr/bin/env python3
+"""
+Exemple d'utilisation de l'API IDP Portal avec authentification LDAP
+pour un compte de service.
+"""
+
+import os
+import uuid
+import requests
+
+# Configuration
+API_URL = "https://portail.example.com/api/v1"
+LDAP_USER = "svc-ci-cd"
+LDAP_PASSWORD = os.environ["IDP_LDAP_PASSWORD"]
+
+
+def get_token_via_ldap(username: str, password: str) -> str:
+    """Obtient un JWT via authentification LDAP."""
+    response = requests.post(
+        f"{API_URL}/auth/service-login",
+        json={"username": username, "password": password},
+    )
+
+    if response.status_code == 200:
+        data = response.json()["data"]
+        print(f"✅ Token obtenu (expire dans {data['expires_in']}s)")
+        return data["access_token"]
+    else:
+        error = response.json().get("error", {})
+        raise Exception(f"Authentification LDAP échouée [{response.status_code}]: {error.get('code')} — {error.get('message')}")
+
+
+def create_execution(access_token: str, action_id: int, target_names: list[str], parameters: dict = None) -> int:
+    """Déclenche une exécution via l'API."""
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+        "X-Idp-Request-Id": str(uuid.uuid4()),
+    }
+
+    payload = {"action_id": action_id, "target_names": target_names}
+    if parameters:
+        payload["parameters"] = parameters
+
+    response = requests.post(f"{API_URL}/executions", headers=headers, json=payload)
+
+    if response.status_code == 201:
+        data = response.json()["data"]
+        print(f"✅ Exécution créée: ID={data['execution_id']}, Status={data['status']}")
+        return data["execution_id"]
+    else:
+        error = response.json().get("error", {})
+        raise Exception(f"Erreur {response.status_code}: {error.get('message')}")
+
+
+if __name__ == "__main__":
+    token = get_token_via_ldap(LDAP_USER, LDAP_PASSWORD)
+
+    execution_id = create_execution(
+        access_token=token,
+        action_id=42,
+        target_names=["srv-dev-oracle-01"],
+        parameters={"database_name": "TESTDB"},
+    )
+    print(f"✅ Exécution {execution_id} soumise avec succès")
+```
 
 ## Endpoint POST /api/v1/executions
 
@@ -395,20 +576,24 @@ Chaque exécution créée via l'API est tracée dans l'audit avec :
 
 ## Erreurs courantes et résolution
 
-| Erreur | Cause | Solution |
-|--------|-------|----------|
-| 401 `MISSING_API_KEY` | Le header `X-API-Key` est absent | Ajouter le header `X-API-Key` à la requête `/auth/token` |
-| 401 `INVALID_API_KEY` | Clé invalide, révoquée ou expirée | Contacter l'équipe DBOPS pour obtenir une nouvelle clé |
-| 429 Too Many Requests | Rate limit sur `/auth/token` atteint (10/min) | Attendre 1 minute avant de réessayer |
-| 401 "Token invalide ou expire" | Token JWT expiré | Rafraîchir le token via `/auth/refresh` ou répéter l'étape 1 (API key) |
-| 403 "Cible non autorisée" | Target non permis par le profil | Vérifier les permissions du profil ou utiliser un autre target |
-| 400 "target_names requis" | Action nécessite des targets | Ajouter `target_names` avec au moins un target valide |
-| 400 "environnements différents" | Targets de plusieurs environnements | Utiliser des targets du même environnement |
-| 404 "Action non trouvée" | Action inexistante ou non publiée | Vérifier l'action_id et son statut dans le catalogue |
+| Erreur | Endpoint | Cause | Solution |
+|--------|----------|-------|----------|
+| 401 `MISSING_API_KEY` | `/auth/token` | Le header `X-API-Key` est absent | Ajouter le header `X-API-Key` à la requête `/auth/token` |
+| 401 `INVALID_API_KEY` | `/auth/token` | Clé invalide, révoquée ou expirée | Contacter l'équipe DBOPS pour obtenir une nouvelle clé |
+| 429 Too Many Requests | `/auth/token` | Rate limit atteint (10/min par IP) | Attendre 1 minute avant de réessayer |
+| 401 `INVALID_CREDENTIALS` | `/auth/service-login` | Username/password incorrect ou compte AD inexistant | Vérifier les credentials du compte de service |
+| 503 `LDAP_UNAVAILABLE` | `/auth/service-login` | Serveur LDAP inaccessible ou non configuré | Contacter l'équipe DBOPS — vérifier la configuration LDAP |
+| 403 `NO_PROFILE` | `/auth/service-login` | Le compte n'appartient à aucun groupe AD mappé à un profil | Contacter l'équipe DBOPS pour associer le compte à un profil |
+| 429 Too Many Requests | `/auth/service-login` | Rate limit atteint (5/min par IP) | Attendre 1 minute avant de réessayer |
+| 401 "Token invalide ou expire" | `/executions` | Token JWT expiré | Rafraîchir le token via `/auth/refresh` ou répéter l'étape 1 |
+| 403 "Cible non autorisée" | `/executions` | Target non permis par le profil | Vérifier les permissions du profil ou utiliser un autre target |
+| 400 "target_names requis" | `/executions` | Action nécessite des targets | Ajouter `target_names` avec au moins un target valide |
+| 400 "environnements différents" | `/executions` | Targets de plusieurs environnements | Utiliser des targets du même environnement |
+| 404 "Action non trouvée" | `/executions` | Action inexistante ou non publiée | Vérifier l'action_id et son statut dans le catalogue |
 
 ## Limites et bonnes pratiques
 
-1. **Rate limiting** : L'endpoint `/auth/token` est limité à 10 requêtes/minute par IP (protection brute-force). Pour les appels à `/executions`, prévoir un délai entre les appels en batch
+1. **Rate limiting** : L'endpoint `/auth/token` est limité à 10 requêtes/minute par IP (protection brute-force) ; `/auth/service-login` est limité à 5 requêtes/minute par IP. Pour les appels à `/executions`, prévoir un délai entre les appels en batch
 2. **Timeout** : Les requêtes timeout après 120 secondes — pour les exécutions longues, utilisez le polling
 3. **Idempotence** : Chaque appel crée une nouvelle exécution — utilisez le correlation ID pour éviter les doublons
 4. **Taille payload** : Limiter les paramètres à quelques KB
@@ -419,5 +604,6 @@ Liens relatifs à la base URL du portail (ex. `https://portail.example.com`) :
 
 - Documentation API complète (OpenAPI/Swagger) : `/api/docs`
 - Référence complète des endpoints : [`docs/backend/api-reference.md`](backend/api-reference.md)
+- Configuration LDAP pour comptes de service : [`docs/backend/ldap-configuration.md`](backend/ldap-configuration.md)
 - Guide d'administration des actions : `/docs/admin-actions.md`
 - Architecture RBAC et permissions : `/docs/rbac.md`
