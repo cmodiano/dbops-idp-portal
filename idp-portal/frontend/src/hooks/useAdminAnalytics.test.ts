@@ -80,4 +80,24 @@ describe('useAdminAnalytics', () => {
 
     expect(result.current.error).toBe('Erreur de chargement des métriques');
   });
+
+  it('cancelled flag — ignore les mises à jour si le composant est démonté', async () => {
+    let resolvePromise!: (v: AdminAnalytics) => void;
+    vi.mocked(fetchAdminAnalytics).mockReturnValue(
+      new Promise((res) => {
+        resolvePromise = res;
+      }) as never
+    );
+
+    const { result, unmount } = renderHook(() => useAdminAnalytics(30));
+    expect(result.current.loading).toBe(true);
+
+    unmount();
+
+    await Promise.resolve().then(() => {
+      resolvePromise(MOCK_DATA);
+    });
+
+    expect(result.current.data).toBeNull();
+  });
 });

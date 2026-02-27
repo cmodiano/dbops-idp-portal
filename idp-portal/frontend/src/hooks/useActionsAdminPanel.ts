@@ -1,9 +1,10 @@
 /**
  * useActionsAdminPanel — Encapsulation DIP du state et des handlers CRUD de ActionsAdminPanel.
  * Story 48.8 (SOLID-FE-4, AC5): Supprime les imports directs de fonctions runtime admin_service dans ActionsAdminPanel.tsx.
+ * Code review: cancelled flag pour éviter setState sur composant démonté lors de fetchActions.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { App } from 'antd';
 import {
   createAction,
@@ -81,20 +82,27 @@ export function useActionsAdminPanel({ notification, modal }: UseActionsAdminPan
   const [cascadeWorkflows, setCascadeWorkflows] = useState<{ id: number; name: string; status: string }[]>([]);
   const [cascadeReason, setCascadeReason] = useState<string>('');
 
+  const cancelledRef = useRef(false);
+  useEffect(() => () => {
+    cancelledRef.current = true;
+  }, []);
+
   const fetchActions = useCallback(async (filters?: AdminActionsFilters) => {
     setLoading(true);
     try {
       const mergedFilters: AdminActionsFilters = { ...filters };
       if (includeDisabled) mergedFilters.include_disabled = true;
       const response = await getAdminActions(mergedFilters);
-      setActions(response.data ?? []);
+      if (!cancelledRef.current) setActions(response.data ?? []);
     } catch (err) {
-      notification.error({
-        title: 'Erreur',
-        description: err instanceof Error ? err.message : 'Erreur de chargement',
-      });
+      if (!cancelledRef.current) {
+        notification.error({
+          title: 'Erreur',
+          description: err instanceof Error ? err.message : 'Erreur de chargement',
+        });
+      }
     } finally {
-      setLoading(false);
+      if (!cancelledRef.current) setLoading(false);
     }
   }, [notification, includeDisabled]);
 
