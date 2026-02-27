@@ -83,37 +83,29 @@ class InventoryServiceEnvironmentsTests(TestCase):
         from inventory.services import _environments_cache
         _environments_cache.clear()
 
-    @patch('inventory.services.InventoryService.list_targets')
-    def test_list_environments_from_targets(self, mock_list_targets):
-        """Test extracting distinct environments from targets."""
-        mock_list_targets.return_value = (
-            [
-                {'name': 'target1', 'environment': 'developpement', 'target_type': 'server'},
-                {'name': 'target2', 'environment': 'certification', 'target_type': 'database'},
-                {'name': 'target3', 'environment': 'developpement', 'target_type': 'server'},
-                {'name': 'target4', 'environment': 'production', 'target_type': 'database'},
-            ],
-            4
-        )
+    def test_list_environments_from_targets(self):
+        """Test extracting distinct environments via SELECT DISTINCT."""
+        mock_executor = MagicMock()
+        mock_executor.read_distinct_environments.return_value = [
+            'certification', 'developpement', 'production',
+        ]
 
         service = InventoryService()
+        service.query_executor = mock_executor
         environments = service.list_environments()
 
         self.assertEqual(sorted(environments), ['certification', 'developpement', 'production'])
+        mock_executor.read_distinct_environments.assert_called_once()
 
-    @patch('inventory.services.InventoryService.list_targets')
-    def test_list_environments_normalized(self, mock_list_targets):
+    def test_list_environments_normalized(self):
         """Test environments are returned as-is without normalization."""
-        mock_list_targets.return_value = (
-            [
-                {'name': 'target1', 'environment': 'dev', 'target_type': 'server'},
-                {'name': 'target2', 'environment': 'certif', 'target_type': 'database'},
-                {'name': 'target3', 'environment': 'staging', 'target_type': 'server'},
-            ],
-            3
-        )
+        mock_executor = MagicMock()
+        mock_executor.read_distinct_environments.return_value = [
+            'certif', 'dev', 'staging',
+        ]
 
         service = InventoryService()
+        service.query_executor = mock_executor
         environments = service.list_environments()
 
         # No normalization - raw values returned

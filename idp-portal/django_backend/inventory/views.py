@@ -297,30 +297,29 @@ def list_environments(request: Request) -> Response:
 # --- Story 23.3: Multi-table inventory API ---
 
 
-def _validate_server_access(
+def _get_rbac_allowed_servers(
+    inventory_service: InventoryService,
     user: object,
     environment: str,
-    server_name: str | None = None,
-    server_names: list[str] | None = None,
-) -> list[str]:
+) -> set[str]:
     """
-    Validate that user has RBAC access to specified server(s).
-    Story 23.3 AC5 - RBAC validation for instances/databases endpoints.
+    Get the set of server names the user is allowed to access (RBAC).
+
+    Single RBAC query shared by list_servers, list_instances, list_databases
+    to avoid duplicate inventory queries and ensure consistent RBAC enforcement.
 
     Args:
+        inventory_service: Shared InventoryService instance (avoids creating multiples per request)
         user: Authenticated user object
         environment: Target environment (required)
-        server_name: Single server name to validate (mutually exclusive with server_names)
-        server_names: Multiple server names to validate (mutually exclusive with server_name)
 
     Returns:
-        List of allowed server names for the user in this environment.
+        Set of allowed server names for the user in this environment.
 
     Raises:
-        PermissionDenied: If any specified server is not in user's allowed servers.
+        PermissionDenied: If RBAC query fails.
     """
     correlation_id = get_correlation_id()
-    inventory_service = _inventory_service_factory()
 
     ad_groups = get_user_ad_groups(user)
     try:
@@ -331,9 +330,10 @@ def _validate_server_access(
             page=1,
             page_size=10000,
         )
-        # Safely extract server names, handling missing 'name' key
-        allowed_server_names = {t.get('name') for t in allowed_targets if t.get('name')}
-    except (KeyError, TypeError, InventoryServiceError) as e:
+        return {name for t in allowed_targets if (name := t.get('name'))}
+    except InventoryServiceError:
+        raise  # Let the view-level handler return 503/500
+    except (KeyError, TypeError) as e:
         logger.error(
             "rbac_validation_failed",
             user_id=user.id,  # type: ignore[attr-defined]
@@ -343,16 +343,38 @@ def _validate_server_access(
         )
         raise PermissionDenied("Failed to validate server access")
 
-    if server_name:
-        if server_name not in allowed_server_names:
-            logger.warning(
-                "rbac_server_access_denied",
-                user_id=user.id,  # type: ignore[attr-defined]
-                environment=environment,
-                requested_server=server_name,
-                correlation_id=correlation_id,
-            )
-            raise PermissionDenied(f"Access denied to server: {server_name}")
+
+def _validate_explicit_server_filter(
+    allowed_server_names: set[str],
+    user: object,
+    environment: str,
+    server_name: str | None = None,
+    server_names: list[str] | None = None,
+) -> None:
+    """
+    Validate that explicitly requested servers are within the user's allowed set.
+
+    Args:
+        allowed_server_names: Set from _get_rbac_allowed_servers
+        user: Authenticated user object
+        environment: Target environment
+        server_name: Single server name to validate
+        server_names: Multiple server names to validate
+
+    Raises:
+        PermissionDenied: If any specified server is not in user's allowed servers.
+    """
+    correlation_id = get_correlation_id()
+
+    if server_name and server_name not in allowed_server_names:
+        logger.warning(
+            "rbac_server_access_denied",
+            user_id=user.id,  # type: ignore[attr-defined]
+            environment=environment,
+            requested_server=server_name,
+            correlation_id=correlation_id,
+        )
+        raise PermissionDenied(f"Access denied to server: {server_name}")
 
     if server_names:
         unauthorized = [s for s in server_names if s not in allowed_server_names]
@@ -365,8 +387,6 @@ def _validate_server_access(
                 correlation_id=correlation_id,
             )
             raise PermissionDenied(f"Access denied to server: {unauthorized[0]}")
-
-    return list(s for s in allowed_server_names if s is not None)
 
 
 @extend_schema(
@@ -410,17 +430,10 @@ def list_servers(request: Request) -> Response:
 
     inventory_service = _inventory_service_factory()
     try:
-        # RBAC: get allowed servers for this user
-        ad_groups = get_user_ad_groups(user)
-        allowed_targets, _, _ = inventory_service.list_targets_for_user(
-            user_id=user.id,  # type: ignore[arg-type]
-            ad_groups=ad_groups,
-            environment=environment,
-            page=1,
-            page_size=10000,  # Increased from 5000 to handle large deployments
-        )
-        allowed_server_names = {t.get('name') for t in allowed_targets if t.get('name')}
+        # RBAC: single query to get allowed servers
+        allowed_server_names = _get_rbac_allowed_servers(inventory_service, user, environment)
 
+        # Fetch servers from inventory (single query, no duplicate)
         servers = inventory_service.list_servers(
             environment=environment,
             engine_type=engine_type,
@@ -500,21 +513,34 @@ def list_instances(request: Request) -> Response:
     server_name = params.get('server_name')
     server_names = params.get('server_names')
 
-    # RBAC validation for server filter (logging handled in helper)
-    if server_name or server_names:
-        try:
-            _validate_server_access(user, environment, server_name, server_names)
-        except PermissionDenied:
-            raise
-
     inventory_service = _inventory_service_factory()
     try:
-        instances = inventory_service.list_instances(
-            environment=environment,
-            engine_type=engine_type,
-            server_name=server_name,
-            server_names=server_names,
-        )
+        # RBAC: always get allowed servers (single query)
+        allowed_server_names = _get_rbac_allowed_servers(inventory_service, user, environment)
+
+        # Validate explicit server filter if provided
+        if server_name or server_names:
+            _validate_explicit_server_filter(
+                allowed_server_names, user, environment, server_name, server_names
+            )
+
+        # When no explicit server filter, restrict to user's allowed servers
+        # This ensures instances are only returned for servers the user can access
+        effective_server_names = server_names
+        effective_server_name = server_name
+        if not server_name and not server_names:
+            effective_server_names = sorted(allowed_server_names) if allowed_server_names else None
+
+        if effective_server_names is not None and not effective_server_names:
+            # User has no allowed servers → empty result
+            instances: list[dict] = []
+        else:
+            instances = inventory_service.list_instances(
+                environment=environment,
+                engine_type=engine_type,
+                server_name=effective_server_name,
+                server_names=effective_server_names,
+            )
     except InventoryServiceError as e:
         logger.error(
             "inventory_api_list_instances_failed",
@@ -537,6 +563,7 @@ def list_instances(request: Request) -> Response:
         engine_type=engine_type,
         server_filter={'server_name': server_name, 'server_names': server_names},
         nb_results=len(instances),
+        rbac_server_count=len(allowed_server_names),
         correlation_id=correlation_id,
     )
 
@@ -587,21 +614,35 @@ def list_databases(request: Request) -> Response:
     server_name = params.get('server_name')
     server_names = params.get('server_names')
 
-    # RBAC validation for server filter (logging handled in helper)
-    if server_name or server_names:
-        try:
-            _validate_server_access(user, environment, server_name, server_names)
-        except PermissionDenied:
-            raise
-
     inventory_service = _inventory_service_factory()
     try:
-        databases = inventory_service.list_databases(
-            environment=environment,
-            engine_type=engine_type,
-            server_name=server_name,
-            server_names=server_names,
-        )
+        # RBAC: always get allowed servers (single query)
+        allowed_server_names = _get_rbac_allowed_servers(inventory_service, user, environment)
+
+        # Validate explicit server filter if provided
+        if server_name or server_names:
+            _validate_explicit_server_filter(
+                allowed_server_names, user, environment, server_name, server_names
+            )
+
+        # When no explicit server filter, restrict to user's allowed servers
+        # Databases are found via instances → servers, so filtering by allowed servers
+        # ensures only databases linked to authorized servers are returned
+        effective_server_names = server_names
+        effective_server_name = server_name
+        if not server_name and not server_names:
+            effective_server_names = sorted(allowed_server_names) if allowed_server_names else None
+
+        if effective_server_names is not None and not effective_server_names:
+            # User has no allowed servers → empty result
+            databases: list[dict] = []
+        else:
+            databases = inventory_service.list_databases(
+                environment=environment,
+                engine_type=engine_type,
+                server_name=effective_server_name,
+                server_names=effective_server_names,
+            )
     except InventoryServiceError as e:
         logger.error(
             "inventory_api_list_databases_failed",
@@ -624,6 +665,7 @@ def list_databases(request: Request) -> Response:
         engine_type=engine_type,
         server_filter={'server_name': server_name, 'server_names': server_names},
         nb_results=len(databases),
+        rbac_server_count=len(allowed_server_names),
         correlation_id=correlation_id,
     )
 

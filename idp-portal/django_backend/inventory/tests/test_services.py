@@ -459,15 +459,15 @@ class InventoryServiceEnvironmentNormalizationTests(TestCase):
     def test_list_environments_returns_raw_values(self, mock_connection):
         """
         Story 21.1, AC3: Test that list_environments() returns distinct raw values.
+        Uses SELECT DISTINCT on the environment column (not full target rows).
         Includes non-standard environments like 'lab'.
         """
         mock_cursor = MagicMock()
-        mock_cursor.fetchone.return_value = (4,)
+        # read_distinct_environments does SELECT DISTINCT ENVIRONMENT — returns single-column rows
         mock_cursor.fetchall.return_value = [
-            ('srv-dev-01', 'developpement', 'SERVER'),
-            ('srv-lab-01', 'lab', 'SERVER'),
-            ('srv-lab-02', 'lab', 'DATABASE'),
-            ('srv-prod-01', 'production', 'SERVER'),
+            ('developpement',),
+            ('lab',),
+            ('production',),
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -1282,13 +1282,12 @@ class InventoryRawEnvironmentTests(TestCase):
     def test_list_environments_with_non_standard(self, mock_connection):
         """list_environments() returns distinct raw values including non-standard."""
         mock_cursor = MagicMock()
-        mock_cursor.fetchone.return_value = (5,)
+        # read_distinct_environments does SELECT DISTINCT ENVIRONMENT — returns single-column rows
         mock_cursor.fetchall.return_value = [
-            ('srv-1', 'developpement', 'SERVER'),
-            ('srv-2', 'lab', 'SERVER'),
-            ('srv-3', 'lab', 'DATABASE'),
-            ('srv-4', 'certification', 'SERVER'),
-            ('srv-5', 'production', 'SERVER'),
+            ('certification',),
+            ('developpement',),
+            ('lab',),
+            ('production',),
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -1306,10 +1305,10 @@ class InventoryRawEnvironmentTests(TestCase):
     def test_environments_cache_with_raw_values(self, mock_connection):
         """Cache stores and returns raw environment values correctly."""
         mock_cursor = MagicMock()
-        mock_cursor.fetchone.return_value = (2,)
+        # read_distinct_environments does SELECT DISTINCT ENVIRONMENT — returns single-column rows
         mock_cursor.fetchall.return_value = [
-            ('srv-lab-01', 'lab', 'SERVER'),
-            ('srv-dev-01', 'developpement', 'SERVER'),
+            ('developpement',),
+            ('lab',),
         ]
         mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
 

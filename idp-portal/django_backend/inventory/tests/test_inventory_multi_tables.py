@@ -236,7 +236,8 @@ class ReadInstancesFromConfigTests(InventoryTestMixin, TestCase):
         self.service._read_instances_from_config(server_name='srv-01')
 
         sql = mock_cursor.execute.call_args[0][0]
-        self.assertIn('UPPER(SERVER_NAME)', sql)
+        # With default env='dev', JOIN to servers table is used
+        self.assertIn('UPPER(inst.SERVER_NAME)', sql)
         params = mock_cursor.execute.call_args[0][1]
         self.assertEqual(params['p_server_ref'], 'srv-01')
 

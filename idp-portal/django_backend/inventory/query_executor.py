@@ -337,6 +337,17 @@ class InventoryQueryExecutor:
         """
         correlation_id = get_correlation_id()
         entity_plural = f"{entity_type}s" if entity_type != 'database' else 'databases'
+
+        # Default environment to 'dev' for instances/databases when not provided.
+        # Prevents unfiltered cross-environment data leakage.
+        if entity_type in ('instance', 'database') and not environment:
+            environment = 'dev'
+            logger.info(
+                "environment_defaulted_to_dev",
+                entity=entity_plural,
+                correlation_id=correlation_id,
+            )
+
         mapper = self._get_inventory_mapper()
 
         if mapper is None or not mapper.is_multi_table:
@@ -654,7 +665,7 @@ class InventoryQueryExecutor:
         server_filter_alias = "srv" if ref_join_id else "inst"
 
         in_params = {f'p_server_{i}': sn for i, sn in enumerate(server_names)}
-        in_placeholders = ', '.join(f":{key}" for key in in_params.keys())
+        in_placeholders = ', '.join(f"UPPER(:{key})" for key in in_params.keys())
 
         params: dict[str, Any] = {**in_params}
 
@@ -758,7 +769,7 @@ class InventoryQueryExecutor:
         aliased_select = self._build_aliased_select(entity_config, 'd')
 
         in_params = {f'p_server_{i}': sn for i, sn in enumerate(server_names)}
-        in_placeholders = ', '.join(f":{key}" for key in in_params.keys())
+        in_placeholders = ', '.join(f"UPPER(:{key})" for key in in_params.keys())
 
         params: dict[str, Any] = {**in_params}
 
@@ -897,14 +908,27 @@ class InventoryQueryExecutor:
                     reason="servers entity not configured",
                     correlation_id=correlation_id,
                 )
-                db_env_col = mapper.get_column('databases', 'environment')
-                inner_sql = (
-                    inner_sql_base +
-                    f"INNER JOIN {srv_table} srv ON {inst_srv_join} "
-                    f"WHERE {server_filter}"
-                    f" AND UPPER(d.{db_env_col}) = UPPER(:p_environment)"
-                )
-                params['p_environment'] = environment
+                try:
+                    db_env_col = mapper.get_column('databases', 'environment')
+                    inner_sql = (
+                        inner_sql_base +
+                        f"INNER JOIN {srv_table} srv ON {inst_srv_join} "
+                        f"WHERE {server_filter}"
+                        f" AND UPPER(d.{db_env_col}) = UPPER(:p_environment)"
+                    )
+                    params['p_environment'] = environment
+                except MapperValidationError:
+                    # databases entity has no environment column mapped — skip env filter
+                    logger.warning(
+                        "databases_environment_column_not_mapped",
+                        entity="databases_via_instances",
+                        reason="environment column not mapped on databases entity, skipping filter",
+                        correlation_id=correlation_id,
+                    )
+                    if ref_join_id:
+                        inner_sql = inner_sql_base + f"INNER JOIN {srv_table} srv ON {inst_srv_join} WHERE {server_filter}"
+                    else:
+                        inner_sql = inner_sql_base + f"WHERE {server_filter}"
         elif engine_type and has_servers_config:
             try:
                 srv_engine_col = mapper.get_column('servers', 'engine_type')
@@ -980,6 +1004,100 @@ class InventoryQueryExecutor:
         ]
 
     # --- Public convenience methods ---
+
+    def read_distinct_environments(self) -> list[str]:
+        """
+        Read distinct environment values directly from inventory.
+
+        Uses SELECT DISTINCT instead of loading all targets — much more efficient
+        for large inventories where we only need the environment list.
+
+        Returns:
+            Sorted list of distinct environment strings.
+
+        Raises:
+            InventoryServiceError: If query fails.
+        """
+        correlation_id = get_correlation_id()
+        mapper = self._get_inventory_mapper()
+
+        try:
+            if mapper and mapper.is_multi_table:
+                # Multi-table: environments come from servers table
+                srv_config = mapper.get_entity_config('servers')
+                if srv_config:
+                    table = mapper.get_table_name('servers')
+                    env_col = mapper.get_column('servers', 'environment')
+                    sql = (
+                        f"SELECT DISTINCT {env_col} FROM {table} "  # nosec B608 - table/column validated by mapper
+                        f"WHERE {env_col} IS NOT NULL "
+                        f"ORDER BY {env_col}"
+                    )
+                    with _get_connection().cursor() as cursor:
+                        cursor.execute(sql)
+                        rows = cursor.fetchall()
+                    envs = [EnvironmentHelper.normalize(row[0]) for row in rows if row[0]]
+                    logger.info(
+                        "read_distinct_environments_multi_table",
+                        count=len(envs),
+                        correlation_id=correlation_id,
+                    )
+                    return sorted(set(e for e in envs if e))
+
+            if mapper and mapper.is_flat_table:
+                flat_cfg = mapper._flat_table or {}
+                columns = flat_cfg.get('columns', {})
+                env_col = columns.get('environment', 'ENVIRONMENT')
+                _validate_column_name(env_col)
+                raw_table = flat_cfg.get('table', 'DBOPS_INVENTORY')
+                schema = mapper._config.get('schema') or mapper._config.get('db_schema')
+                flat_table = f"{schema}.{raw_table}" if schema and '.' not in raw_table else raw_table
+                if not SAFE_TABLE_NAME_PATTERN.match(flat_table):
+                    raise InventoryServiceError(f"Invalid table name: {flat_table}")
+                sql = (
+                    f"SELECT DISTINCT {env_col} FROM {flat_table} "  # nosec B608 - table/column validated above
+                    f"WHERE {env_col} IS NOT NULL "
+                    f"ORDER BY {env_col}"
+                )
+                with _get_connection().cursor() as cursor:
+                    cursor.execute(sql)
+                    rows = cursor.fetchall()
+                envs = [EnvironmentHelper.normalize(row[0]) for row in rows if row[0]]
+                logger.info(
+                    "read_distinct_environments_flat_table",
+                    count=len(envs),
+                    correlation_id=correlation_id,
+                )
+                return sorted(set(e for e in envs if e))
+
+            # Fallback: DBOPS_INVENTORY synonym
+            sql = (
+                "SELECT DISTINCT ENVIRONMENT FROM DBOPS_INVENTORY "
+                "WHERE ENVIRONMENT IS NOT NULL "
+                "ORDER BY ENVIRONMENT"
+            )
+            with _get_connection().cursor() as cursor:
+                cursor.execute(sql)
+                rows = cursor.fetchall()
+            envs = [EnvironmentHelper.normalize(row[0]) for row in rows if row[0]]
+            logger.info(
+                "read_distinct_environments_fallback",
+                count=len(envs),
+                correlation_id=correlation_id,
+            )
+            return sorted(set(e for e in envs if e))
+
+        except InventoryServiceError:
+            raise
+        except Exception as e:  # noqa: BLE001 — logged-and-wrapped: environments query error wrapped in InventoryServiceError
+            logger.error(
+                "read_distinct_environments_error",
+                error=str(e),
+                error_type=type(e).__name__,
+                correlation_id=correlation_id,
+                exc_info=True,
+            )
+            raise InventoryServiceError(f"Failed to read distinct environments: {e}")
 
     def read_servers(
         self,

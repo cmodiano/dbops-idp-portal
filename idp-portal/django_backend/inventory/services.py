@@ -741,8 +741,10 @@ class InventoryService:
         """
         List distinct environments from inventory.
 
+        Uses SELECT DISTINCT for efficiency instead of loading all targets.
+
         Returns:
-            List of distinct environment values
+            Sorted list of distinct environment values
         """
         correlation_id = get_correlation_id()
 
@@ -757,23 +759,7 @@ class InventoryService:
             )
             return cached_result
 
-        self.source_resolver.get_active_inventory_integration()
-
-        targets, _ = self.list_targets(
-            environment=None,
-            search=None,
-            target_type=None,
-            page=1,
-            page_size=MAX_FLAT_TABLE_RESULTS
-        )
-
-        environments = set()
-        for target in targets:
-            env = target.get('environment')
-            if env:
-                environments.add(env)
-
-        result = sorted(environments)
+        result = self.query_executor.read_distinct_environments()
         _environments_cache[cache_key] = result
 
         logger.info(
