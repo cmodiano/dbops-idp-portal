@@ -2,14 +2,20 @@ import type { BadgeProps } from 'antd';
 
 const STANDARD_ENVIRONMENT_LABELS: Record<string, string> = {
   dev: 'Développement',
+  developpement: 'Développement',
   staging: 'Staging',
+  certification: 'Certification',
   prod: 'Production',
+  production: 'Production',
 };
 
 const ENVIRONMENT_COLORS: Record<string, BadgeProps['status']> = {
   dev: 'success',
+  developpement: 'success',
   staging: 'warning',
+  certification: 'warning',
   prod: 'error',
+  production: 'error',
 };
 
 /**
@@ -34,10 +40,11 @@ export function getEnvironmentColor(env: string): BadgeProps['status'] {
 }
 
 /**
- * Sorts environments: dev, staging, prod first (in that order), then alphabetical.
+ * Sorts environments by canonical order: dev/developpement, staging/certification, prod/production first,
+ * then alphabetical for unknown environments.
  */
 export function sortEnvironments(environments: string[]): string[] {
-  const priorityOrder = ['dev', 'staging', 'prod'];
+  const priorityOrder = ['dev', 'developpement', 'staging', 'certification', 'prod', 'production'];
 
   return [...environments].sort((a, b) => {
     const indexA = priorityOrder.indexOf(a.toLowerCase());

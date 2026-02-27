@@ -2,7 +2,7 @@
 -- Baseline Schema V088 — IDP Portal
 -- ===========================================================================
 -- Date            : 2026-02-25
--- Version couverte: V000–V096 (97 migrations Flyway consolidées, V096 entity types backported)
+-- Version couverte: V000–V097 (98 migrations Flyway consolidées)
 -- Auteur          : Agent de développement (Story 41-2)
 --
 -- Usage           : NOUVEAUX ENVIRONNEMENTS UNIQUEMENT (base Oracle vierge)
@@ -12,8 +12,8 @@
 --   1. sqlplus idp_user/password@HOST:1521/XEPDB1 @database/baseline/baseline_schema_v088.sql
 --   2. flyway -baselineVersion=88 -baselineDescription=baseline_schema_v088 baseline
 --
--- Ce script couvre TOUTES les migrations V000–V093. Aucune migration incrémentale
--- n'est nécessaire après application. État identique à V000→V093 sans phases intermédiaires.
+-- Ce script couvre TOUTES les migrations V000–V097. Aucune migration incrémentale
+-- n'est nécessaire après application. État identique à V000→V097 sans phases intermédiaires.
 -- ===========================================================================
 --
 -- Objets créés :
@@ -36,7 +36,7 @@
 -- ===========================================================================
 
 -- ---------------------------------------------------------------------------
--- USERS (V001)
+-- USERS (V001 + V095 EMAIL)
 -- ---------------------------------------------------------------------------
 CREATE TABLE USERS (
     ID              NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -44,6 +44,7 @@ CREATE TABLE USERS (
     DISPLAY_NAME    VARCHAR2(255),
     PROFILE         VARCHAR2(50) NOT NULL,
     SAML_SUBJECT    VARCHAR2(512),
+    EMAIL           VARCHAR2(254),
     CREATED_AT      TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
     UPDATED_AT      TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL
 );
@@ -677,9 +678,9 @@ ALTER TABLE AUDIT_LOG ADD CONSTRAINT CK_AUDIT_LOG_ACTION_TYPE CHECK (
             'SCHEDULED_EXECUTION_EXECUTED', 'SCHEDULED_EXECUTION_CANCELLED',
             'SCHEDULED_EXECUTION_RECURRING_DISABLED',
 
-            -- User / Auth / Favorites
+            -- User / Auth / Favorites (V094: API_KEY_TOKEN_EXCHANGE, SERVICE_LOGIN)
             'USER_CREATED', 'USER_UPDATED', 'USER_LOGIN', 'USER_LOGOUT', 'USER_REFRESH',
-            'FAVORITE_ADDED', 'FAVORITE_REMOVED',
+            'API_KEY_TOKEN_EXCHANGE', 'FAVORITE_ADDED', 'FAVORITE_REMOVED', 'SERVICE_LOGIN',
 
             -- Execution step retry
             'EXECUTION_STEP_RETRY_ATTEMPT', 'EXECUTION_STEP_RETRY_SUCCESS',

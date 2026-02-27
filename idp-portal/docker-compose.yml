@@ -163,7 +163,8 @@ services:
       context: ./django_backend
       dockerfile: Dockerfile
     container_name: idp-celery-beat
-    command: celery -A idp_backend beat --loglevel=info --schedule-filename=/var/lib/celery/celerybeat-schedule
+    user: root  # Required: volume /var/lib/celery is root-owned; idp user cannot write schedule file
+    command: celery -A idp_backend beat --loglevel=info --schedule=/var/lib/celery/celerybeat-schedule
     volumes:
       - celery-beat-data:/var/lib/celery
     env_file:
