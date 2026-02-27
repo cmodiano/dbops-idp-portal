@@ -42,13 +42,15 @@ L'API REST est construite avec Django REST Framework (DRF). Tous les endpoints s
 
 ## Authentification
 
-Tous les endpoints (sauf `/health` et `POST /api/v1/auth/token`) requièrent un token JWT dans le header:
+Tous les endpoints (sauf `/health`, `POST /api/v1/auth/token` et `POST /api/v1/auth/service-login`) requièrent un token JWT dans le header:
 
 ```
 Authorization: Bearer <jwt_token>
 ```
 
-> **Exception :** `POST /api/v1/auth/token` est `AllowAny` — il accepte une `X-API-Key` et retourne un JWT sans authentification préalable.
+> **Exceptions AllowAny :**
+> - `POST /api/v1/auth/token` — accepte une `X-API-Key` et retourne un JWT sans authentification préalable
+> - `POST /api/v1/auth/service-login` — accepte des credentials LDAP (username/password) et retourne un JWT pour les comptes de service
 
 ## Endpoints par domaine
 
@@ -81,6 +83,7 @@ Authorization: Bearer <jwt_token>
 | POST | `/api/v1/auth/refresh` | Rafraîchit le token JWT |
 | GET | `/api/v1/auth/me` | Retourne le profil utilisateur courant |
 | POST | `/api/v1/auth/token` | Échange une API key contre un JWT (usage programmatique) |
+| POST | `/api/v1/auth/service-login` | Authentification LDAP pour comptes de service (usage programmatique) |
 
 #### POST /auth/token — Échange API key → JWT
 
@@ -116,6 +119,78 @@ Permet d'obtenir un token JWT de façon programmatique, sans flux SAML interacti
 **Audit :** chaque tentative (succès/échec) est tracée avec type `API_KEY_TOKEN_EXCHANGE`.
 
 > **Voir aussi :** [`docs/api-self-service.md`](../api-self-service.md) pour des exemples curl et bash complets.
+
+#### POST /auth/service-login — Authentification LDAP comptes de service
+
+Permet aux comptes de service Active Directory d'obtenir un token JWT via leurs credentials LDAP, sans flux SAML interactif. Destiné aux pipelines CI/CD et à l'automatisation.
+
+**Permission :** `AllowAny` (aucune authentification préalable)
+**Rate limit :** 5 requêtes/minute par IP (scope `service_login` — plus restrictif que `/auth/token` : 10/min)
+**Content-Type :** `application/json`
+
+**Body :**
+```json
+{
+  "username": "svc-ci-cd",
+  "password": "..."
+}
+```
+
+> **Note :** Le champ `password` est `write_only=True` dans le sérializer — il n'est jamais retourné ni enregistré dans les logs.
+
+**Réponse 200 :**
+```json
+{
+  "data": {
+    "access_token": "<jwt>",
+    "token_type": "Bearer",
+    "expires_in": 1800
+  }
+}
+```
+
+Un cookie `refresh_token` (httpOnly, `path=/api/v1/auth`) est également positionné — il peut être utilisé avec `POST /auth/refresh` pour renouveler le token sans re-authentification LDAP.
+
+**Réponse 401 — Credentials invalides :**
+```json
+{
+  "error": {
+    "code": "INVALID_CREDENTIALS",
+    "message": "Credentials invalides",
+    "details": {}
+  }
+}
+```
+
+**Réponse 503 — LDAP indisponible :**
+```json
+{
+  "error": {
+    "code": "LDAP_UNAVAILABLE",
+    "message": "Service d'authentification LDAP indisponible",
+    "details": {}
+  }
+}
+```
+
+**Réponse 403 — Aucun profil :**
+```json
+{
+  "error": {
+    "code": "NO_PROFILE",
+    "message": "Aucun profil associé à votre compte. Contactez un administrateur.",
+    "details": {"ad_groups": ["CN=GRP-IDP-DBOPS,OU=Groups,DC=example,DC=com"]}
+  }
+}
+```
+
+**Réponse 429 — Rate limit :**
+Header `Retry-After` présent. Attendre 1 minute.
+
+**JWT émis :** même format que SAML — champs `sub`, `username`, `profile`, `ad_groups`. Les droits RBAC sont ceux résolus depuis les groupes AD du compte.
+**Audit :** chaque tentative (succès/échec) est tracée avec type `SERVICE_LOGIN` (distinct de `USER_LOGIN` pour les logins SSO).
+
+> **Voir aussi :** [`docs/api-self-service.md`](../api-self-service.md) pour des exemples complets, [`docs/backend/ldap-configuration.md`](ldap-configuration.md) pour la configuration LDAP.
 
 ### Catalogue (Admin)
 
@@ -347,7 +422,10 @@ GET /api/v1/catalog/actions?page=2&page_size=50
 | 401 | `UNAUTHORIZED` | Token manquant ou invalide |
 | 401 | `MISSING_API_KEY` | Header `X-API-Key` absent (`POST /auth/token`) |
 | 401 | `INVALID_API_KEY` | API key invalide, révoquée ou expirée (`POST /auth/token`) |
+| 401 | `INVALID_CREDENTIALS` | Credentials LDAP invalides (`POST /auth/service-login`) |
+| 503 | `LDAP_UNAVAILABLE` | Serveur LDAP inaccessible ou non configuré (`POST /auth/service-login`) |
 | 403 | `FORBIDDEN` | Permission refusée |
+| 403 | `NO_PROFILE` | Aucun groupe AD du compte mappé à un profil IDP (`POST /auth/service-login`) |
 | 404 | `NOT_FOUND` | Ressource non trouvée |
 | 429 | — | Rate limit atteint (ex: `POST /auth/token` → 10 req/min par IP) |
 | 500 | `INTERNAL_ERROR` | Erreur serveur |
@@ -390,7 +468,7 @@ GET /api/v1/catalog/actions?page=2&page_size=50
 
 | Header | Description | Obligatoire |
 |--------|-------------|-------------|
-| `Authorization` | Bearer token JWT | Oui (sauf `/health` et `POST /auth/token`) |
+| `Authorization` | Bearer token JWT | Oui (sauf `/health`, `POST /auth/token` et `POST /auth/service-login`) |
 | `X-API-Key` | API key brute pour `POST /auth/token` uniquement | Oui pour `POST /auth/token` |
 | `Content-Type` | `application/json` | Oui pour POST/PUT |
 | `X-Idp-Request-Id` | Correlation ID (propagé si fourni) | Non |
@@ -421,5 +499,6 @@ Le catalogue utilise un cache in-memory TTL 5 minutes pour améliorer les perfor
 | Endpoint | Limite | Scope |
 |----------|--------|-------|
 | `POST /api/v1/auth/token` | 10 requêtes/minute | Par IP (protection brute-force sur l'échange API key) |
+| `POST /api/v1/auth/service-login` | 5 requêtes/minute | Par IP (protection brute-force sur l'authentification LDAP, scope `service_login`) |
 
 Les autres endpoints n'ont pas de rate limiting configuré pour le moment.
