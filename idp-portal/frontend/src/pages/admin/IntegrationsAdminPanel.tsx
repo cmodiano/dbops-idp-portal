@@ -5,7 +5,7 @@ type NotificationInstance = ReturnType<typeof App.useApp>['notification'];
 import { IntegrationsTable } from '../../components/admin/IntegrationsTable';
 import { IntegrationForm } from '../../components/admin/IntegrationForm';
 import { getIntegrations, getIntegration, createIntegration, updateIntegration, deleteIntegration } from '../../services/integrations_service';
-import type { IntegrationResponse, IntegrationListItem, IntegrationCreate, IntegrationUpdate } from '../../types/api';
+import type { IntegrationResponse, IntegrationListItem, IntegrationCreate, IntegrationUpdate, TestConnectionResponse } from '../../types/api';
 
 export interface IntegrationsAdminPanelProps {
   notification: NotificationInstance;
@@ -96,6 +96,22 @@ export function IntegrationsAdminPanel({ notification }: IntegrationsAdminPanelP
     setIntegrationSubmitError(null);
   };
 
+  /** Story 51.4: Met à jour les champs health d'une intégration dans la liste locale sans rechargement global. */
+  const handleHealthChecked = (id: number, result: TestConnectionResponse) => {
+    setIntegrations(prev =>
+      prev.map(integ =>
+        integ.id === id
+          ? {
+              ...integ,
+              health_status: result.status,
+              health_checked_at: result.checked_at,
+              health_error_message: result.message,
+            }
+          : integ,
+      ),
+    );
+  };
+
   const handleIntegrationSubmit = async (payload: IntegrationCreate | IntegrationUpdate) => {
     setIntegrationSubmitting(true);
     setIntegrationSubmitError(null);
@@ -136,6 +152,7 @@ export function IntegrationsAdminPanel({ notification }: IntegrationsAdminPanelP
         error={integrationSubmitError}
         editIntegration={editIntegration}
         onSuccess={handleIntegrationSuccess}
+        onHealthChecked={handleHealthChecked}
       />
     </>
   );

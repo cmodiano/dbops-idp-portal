@@ -113,6 +113,12 @@ vi.mock('../../hooks/useVaultIntegrations', () => ({
   useVaultIntegrations: () => mockUseVaultIntegrations(),
 }));
 
+// Story 51.4: Mock testConnection from integrations_service
+const mockTestConnection = vi.fn();
+vi.mock('../../services/integrations_service', () => ({
+  testConnection: (...args: unknown[]) => mockTestConnection(...args),
+}));
+
 // Wrapper to provide App context for useApp() hook
 function renderWithApp(ui: React.ReactElement) {
   return render(<App>{ui}</App>);
@@ -1014,4 +1020,116 @@ describe('IntegrationForm', () => {
       })
     );
   }, 15000);
+
+  // Story 51.4: Health badge & test connection button tests
+  describe('51.4 — Health badge & test connection', () => {
+    const editIntegration: IntegrationResponse = {
+      id: 10,
+      type: 'aap',
+      name: 'AAP Prod',
+      base_url: 'https://aap.example.com',
+      credential_ref: null,
+      icon: null,
+      auth_flow: null,
+      token_url: null,
+      health_status: 'unknown',
+      health_checked_at: null,
+      health_error_message: null,
+      created_at: '2026-01-28T10:00:00Z',
+      updated_at: '2026-01-28T10:00:00Z',
+    };
+
+    beforeEach(() => {
+      mockTestConnection.mockReset();
+    });
+
+    it('bouton "Tester la connexion" absent en mode création', () => {
+      renderWithApp(<IntegrationForm {...defaultProps} editIntegration={null} />);
+      expect(screen.queryByRole('button', { name: /Tester la connexion/i })).not.toBeInTheDocument();
+    });
+
+    it('bouton "Tester la connexion" visible en mode édition', () => {
+      renderWithApp(<IntegrationForm {...defaultProps} editIntegration={editIntegration} />);
+      expect(screen.getByRole('button', { name: /Tester la connexion/i })).toBeInTheDocument();
+    });
+
+    it('affiche badge "Inconnu" pour health_status=unknown', () => {
+      renderWithApp(<IntegrationForm {...defaultProps} editIntegration={editIntegration} />);
+      expect(screen.getByLabelText('Santé : Inconnu')).toBeInTheDocument();
+    });
+
+    it('affiche badge "OK" pour health_status=ok', () => {
+      const okIntegration = { ...editIntegration, health_status: 'ok' as const, health_checked_at: '2026-02-27T10:00:00Z' };
+      renderWithApp(<IntegrationForm {...defaultProps} editIntegration={okIntegration} />);
+      expect(screen.getByLabelText('Santé : OK')).toBeInTheDocument();
+    });
+
+    it('affiche badge "Erreur" pour health_status=error', () => {
+      const errorIntegration = {
+        ...editIntegration,
+        health_status: 'error' as const,
+        health_checked_at: '2026-02-27T10:00:00Z',
+        health_error_message: 'Connection refused',
+      };
+      renderWithApp(<IntegrationForm {...defaultProps} editIntegration={errorIntegration} />);
+      expect(screen.getByLabelText('Santé : Erreur')).toBeInTheDocument();
+    });
+
+    it('appelle testConnection, met à jour le badge et appelle onHealthChecked en cas de succès', async () => {
+      const user = userEvent.setup();
+      const onHealthChecked = vi.fn();
+      mockTestConnection.mockResolvedValue({ status: 'ok', message: null, checked_at: '2026-02-27T10:00:00Z' });
+
+      renderWithApp(<IntegrationForm {...defaultProps} editIntegration={editIntegration} onHealthChecked={onHealthChecked} />);
+
+      await user.click(screen.getByRole('button', { name: /Tester la connexion/i }));
+
+      await waitFor(() => {
+        expect(mockTestConnection).toHaveBeenCalledWith(10);
+        expect(screen.getByLabelText('Santé : OK')).toBeInTheDocument();
+        expect(onHealthChecked).toHaveBeenCalledWith(10, { status: 'ok', message: null, checked_at: '2026-02-27T10:00:00Z' });
+      });
+    });
+
+    it('bouton en état loading (aria-busy) pendant l\'appel testConnection', async () => {
+      const user = userEvent.setup();
+      let resolveTest!: (value: { status: string; message: string | null; checked_at: string }) => void;
+      mockTestConnection.mockReturnValue(
+        new Promise<{ status: string; message: string | null; checked_at: string }>((resolve) => {
+          resolveTest = resolve;
+        }),
+      );
+
+      renderWithApp(<IntegrationForm {...defaultProps} editIntegration={editIntegration} />);
+
+      expect(screen.getByRole('button', { name: /Tester la connexion/i })).not.toHaveAttribute('aria-busy', 'true');
+
+      await user.click(screen.getByRole('button', { name: /Tester la connexion/i }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Tester la connexion/i })).toHaveAttribute('aria-busy', 'true');
+      });
+
+      resolveTest({ status: 'ok', message: null, checked_at: '2026-02-27T10:00:00Z' });
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Tester la connexion/i })).not.toHaveAttribute('aria-busy', 'true');
+      });
+    });
+
+    it('met à jour le badge "Erreur" et appelle onHealthChecked en cas d\'échec', async () => {
+      const user = userEvent.setup();
+      const onHealthChecked = vi.fn();
+      mockTestConnection.mockResolvedValue({ status: 'error', message: 'Timeout', checked_at: '2026-02-27T10:00:00Z' });
+
+      renderWithApp(<IntegrationForm {...defaultProps} editIntegration={editIntegration} onHealthChecked={onHealthChecked} />);
+
+      await user.click(screen.getByRole('button', { name: /Tester la connexion/i }));
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('Santé : Erreur')).toBeInTheDocument();
+        expect(onHealthChecked).toHaveBeenCalledWith(10, { status: 'error', message: 'Timeout', checked_at: '2026-02-27T10:00:00Z' });
+      });
+    });
+  });
 });

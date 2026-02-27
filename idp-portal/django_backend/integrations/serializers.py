@@ -93,8 +93,11 @@ class IntegrationSerializer(serializers.ModelSerializer):
             'id', 'type', 'name', 'base_url', 'credential_ref', 'icon',
             'auth_flow', 'token_url', 'config', 'status',
             'secret_service_id', 'created_at', 'updated_at',
+            # Story 51.4: health check fields
+            'health_status', 'health_checked_at', 'health_error_message',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'status']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'status',
+                            'health_status', 'health_checked_at', 'health_error_message']
 
     secret_service_id = serializers.PrimaryKeyRelatedField(
         source='secret_service',
@@ -380,8 +383,11 @@ class IntegrationListSerializer(serializers.ModelSerializer):
             'id', 'type', 'name', 'base_url', 'credential_ref', 'icon',
             'auth_flow', 'token_url', 'status', 'secret_service_id',
             'created_at', 'updated_at',
+            # Story 51.4: health check fields
+            'health_status', 'health_checked_at', 'health_error_message',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at',
+                            'health_status', 'health_checked_at', 'health_error_message']
 
 
 # ============================================================================
