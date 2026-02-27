@@ -612,7 +612,7 @@ COMMENT ON TABLE INTEGRATION_ACTIONS IS 'Actions supported by each integration t
 
 -- ---------------------------------------------------------------------------
 -- AUDIT_LOG (V004 + V028 + V029 + V032 + V034 + V035 + V039 + V040
---            + V044 + V045 + V047 + V058 + V065 + V068 + V069 + V079 + V086)
+--            + V044 + V045 + V047 + V058 + V065 + V068 + V069 + V079 + V086 + V096)
 -- Partitionnée par TIMESTAMP (Range INTERVAL mensuel) — Story 40.4
 -- ---------------------------------------------------------------------------
 CREATE TABLE AUDIT_LOG (
@@ -696,7 +696,7 @@ ALTER TABLE AUDIT_LOG ADD CONSTRAINT CK_AUDIT_LOG_ACTION_TYPE CHECK (
 );
 
 ALTER TABLE AUDIT_LOG ADD CONSTRAINT CK_AUDIT_LOG_ENTITY_TYPE CHECK (
-    ENTITY_TYPE IN ('action', 'user', 'permission', 'execution', 'scheduled_execution', 'integration', 'profile')
+    ENTITY_TYPE IN ('action', 'user', 'permission', 'execution', 'scheduled_execution', 'integration', 'profile', 'feature_flag', 'integration_type_catalogue', 'integration_action', 'business_rule_policy')
 );
 
 -- Indexes locaux prefixed (V086)

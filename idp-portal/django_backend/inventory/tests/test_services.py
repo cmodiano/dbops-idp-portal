@@ -151,6 +151,42 @@ class InventoryServiceDBSchemaTests(TestCase):
         call_args = str(mock_cursor.execute.call_args)
         self.assertIn('CMDB.SERVERS', call_args)
 
+    @patch('inventory.services.connection')
+    def test_list_from_db_schema_uses_flat_table_column_mapping(self, mock_connection):
+        """Test that flat_table config column mapping is used instead of hardcoded NAME, ENVIRONMENT, TYPE."""
+        import json
+        flat_config = {
+            'flat_table': {
+                'table': 'DBOPS_INVENTORY.INVENTORY_TARGETS',
+                'columns': {'name': 'HOSTNAME', 'environment': 'ENV', 'type': 'TARGET_TYPE'},
+            },
+        }
+        Integration.objects.create(
+            type=IntegrationType.INVENTORY_DB,
+            name='Flat Table Inventory',
+            base_url='oracle://localhost',
+            config=json.dumps(flat_config),
+        )
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (1,)
+        mock_cursor.fetchall.return_value = [('srv-01', 'PROD', 'server')]
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
+
+        targets, total = self.service.list_targets()
+
+        self.assertEqual(total, 1)
+        self.assertEqual(targets[0]['name'], 'srv-01')
+        # Environment is normalized (Story 21.1, 26.7) - PROD becomes 'prod'
+        self.assertEqual(targets[0]['environment'], 'prod')
+        # Verify SQL uses mapped columns (HOSTNAME, ENV, TARGET_TYPE) not hardcoded NAME, ENVIRONMENT, TYPE
+        call_args = str(mock_cursor.execute.call_args_list)
+        self.assertIn('HOSTNAME', call_args)
+        self.assertIn('ENV', call_args)
+        self.assertIn('TARGET_TYPE', call_args)
+        # Ensure we use mapped columns, not hardcoded defaults
+        self.assertNotIn(', NAME,', call_args)
+        self.assertNotIn(', ENVIRONMENT,', call_args)
+
 
 class InventoryServiceRBACTests(TestCase):
     """Tests for RBAC filtering in InventoryService."""

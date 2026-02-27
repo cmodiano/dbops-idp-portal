@@ -188,22 +188,37 @@ class InventoryService:
     def _list_targets_from_db_schema(self, integration: Any, environment: str | None = None,
                                       search: str | None = None, target_type: str | None = None,
                                       page: int = 1, page_size: int = 25) -> tuple[list[dict[str, Any]], int]:
-        """List targets from DB schema inventory."""
+        """List targets from DB schema inventory. Uses config column mapping when available."""
         correlation_id = get_correlation_id()
         config = integration.get_config() or {}
-        schema_name = config.get('schema') or config.get('db_schema') or 'DBOPS_INVENTORY'
-        table_name = config.get('table') or config.get('table_view') or 'INVENTORY_TABLE'
+
+        # Resolve table: flat_table.table, or schema + table
+        flat_table = config.get('flat_table')
+        if isinstance(flat_table, dict) and flat_table.get('table'):
+            table_or_synonym = flat_table['table']
+            columns = flat_table.get('columns') or {}
+            column_mapping = {
+                'name': columns.get('name', 'NAME'),
+                'environment': columns.get('environment', 'ENVIRONMENT'),
+                'type': columns.get('type', 'TYPE'),
+            }
+        else:
+            schema_name = config.get('schema') or config.get('db_schema') or 'DBOPS_INVENTORY'
+            table_name = config.get('table') or config.get('table_view') or 'INVENTORY_TABLE'
+            table_or_synonym = f"{schema_name}.{table_name}"
+            column_mapping = None
 
         logger.info(
             "reading_db_schema_inventory",
-            schema=schema_name,
-            table=table_name,
+            table=table_or_synonym,
+            has_mapping=column_mapping is not None,
             correlation_id=correlation_id
         )
 
         return self.query_executor.read_oracle_inventory(
-            f"{schema_name}.{table_name}",
-            environment, search, target_type, page, page_size
+            table_or_synonym,
+            environment, search, target_type, page, page_size,
+            column_mapping=column_mapping,
         )
 
     def _list_targets_from_fallback(self, environment: str | None = None,

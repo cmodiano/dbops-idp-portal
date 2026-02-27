@@ -137,10 +137,11 @@ class InventoryQueryExecutor:
         target_type: str | None = None,
         page: int = 1,
         page_size: int = 25,
+        *,
+        column_mapping: dict[str, str] | None = None,
     ) -> tuple[list[dict], int]:
         """
         Read inventory from Oracle table or synonym.
-        Expected columns: NAME, ENVIRONMENT, TYPE.
 
         Args:
             table_or_synonym: Table name or synonym (e.g., 'DBOPS_INVENTORY')
@@ -149,6 +150,9 @@ class InventoryQueryExecutor:
             target_type: Optional target type filter
             page: Page number
             page_size: Items per page
+            column_mapping: Optional mapping of concept -> real column name.
+                E.g. {'name': 'HOSTNAME', 'environment': 'ENV', 'type': 'TYPE'}.
+                If omitted, defaults to NAME, ENVIRONMENT, TYPE.
 
         Returns:
             Tuple of (list of target dicts, total count)
@@ -176,14 +180,25 @@ class InventoryQueryExecutor:
         conditions = []
         params = {}
 
+        # Use config mapping or fallback to hardcoded defaults (NAME, ENVIRONMENT, TYPE)
+        column_mapping = column_mapping or {}
+        name_col = column_mapping.get('name', 'NAME')
+        env_col = column_mapping.get('environment', 'ENVIRONMENT')
+        type_col = column_mapping.get('type', 'TYPE')
+        for col in (name_col, env_col, type_col):
+            if not SAFE_COLUMN_NAME_PATTERN.match(col):
+                raise InventoryServiceError(
+                    f"Invalid column name in mapping: '{col}'. Must be alphanumeric with underscore."
+                )
+
         if environment:
-            conditions.append("UPPER(ENVIRONMENT) = UPPER(:env)")
+            conditions.append(f"UPPER({env_col}) = UPPER(:env)")  # nosec B608 - env_col validated above
             params['env'] = environment
         if search:
-            conditions.append("UPPER(NAME) LIKE UPPER(:search)")
+            conditions.append(f"UPPER({name_col}) LIKE UPPER(:search)")  # nosec B608 - name_col validated above
             params['search'] = f'%{search}%'
         if target_type:
-            conditions.append("UPPER(TYPE) = UPPER(:ttype)")
+            conditions.append(f"UPPER({type_col}) = UPPER(:ttype)")  # nosec B608 - type_col validated above
             params['ttype'] = target_type
 
         where_clause = ""
@@ -191,18 +206,17 @@ class InventoryQueryExecutor:
             where_clause = "WHERE " + " AND ".join(conditions)
 
         # Count query
-        count_sql = f"SELECT COUNT(*) FROM {table_or_synonym} {where_clause}"  # nosec B608 - table_or_synonym validated by SAFE_TABLE_NAME_PATTERN above
+        count_sql = f"SELECT COUNT(*) FROM {table_or_synonym} {where_clause}"  # nosec B608 - table validated above
 
-        # Data query with pagination
+        # Data query with pagination (use mapped column names)
         offset = (page - 1) * page_size
         params['offset'] = offset  # type: ignore[assignment]
         params['limit'] = page_size  # type: ignore[assignment]
 
-        # table_or_synonym validated by SAFE_TABLE_NAME_PATTERN above
         data_sql = (
-            f"SELECT NAME, ENVIRONMENT, TYPE FROM {table_or_synonym} "  # nosec B608
+            f"SELECT {name_col}, {env_col}, {type_col} FROM {table_or_synonym} "  # nosec B608
             f"{where_clause} "
-            "ORDER BY NAME "
+            f"ORDER BY {name_col} "
             "OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY"
         )
 
