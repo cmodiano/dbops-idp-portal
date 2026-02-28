@@ -736,7 +736,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 
 | # | Sévérité | Description | Fichier | Lignes |
 |---|----------|-------------|---------|--------|
-| **MAINT-FE-1** | HIGH | **`IntegrationForm.tsx` — 730 LOC, composant god** — mélange UI formulaire, health check logic, icon upload state, type discovery, conditional rendering par flow type. Pas de hook dédié pour extraire la logique. Fix : créer `useIntegrationFormState()` | `components/admin/IntegrationForm.tsx` | 1–730 |
+| ~~**MAINT-FE-1**~~ | ~~HIGH~~ | ~~**`IntegrationForm.tsx` — 730 LOC, composant god**~~ ✅ RÉSOLU Story 54.8 — `useIntegrationFormState()` créé (304 LOC), `IntegrationForm.tsx` réduit à 229 LOC | `hooks/useIntegrationFormState.ts` | — |
 | **MAINT-FE-2** | MEDIUM | **`WorkflowBuilderCanvas.tsx` — 489 LOC** — composant React Flow (graph editor) avec logique de layout, gestion des noeuds/edges, event handlers. Candidat à extraction : `useWorkflowGraph()` hook | `components/admin/WorkflowBuilderCanvas.tsx` | 1–489 |
 | **MAINT-FE-3** | MEDIUM | **`executionRenderers.tsx` — 444 LOC** — module utilitaire contenant des renderers de colonnes + STATUS_CONFIG + formatters. Mélange responsabilités rendering et configuration | `utils/executionRenderers.tsx` | 1–444 |
 | **MAINT-FE-4** | LOW | **Debounce pattern dupliqué** — `useDebounce` hook existe mais certains composants implémentent manuellement le debounce avec `setTimeout` (ex: `AAPTemplateSection.tsx`). Devrait utiliser le hook commun | `components/admin/StepsEditor.tsx` | ~108–113 |
@@ -792,7 +792,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | SOLID-FE-4 | ~25 composants importent directement les services (couplage DIP) | Frontend | Élevé |
 | ~~MAINT-BE-2~~ | ~~`idp_auth/views.py` module monolithique (851 LOC, 9 classes hétérogènes)~~ ✅ Résolu Story 54.7 | Backend | — |
 | MAINT-BE-3 | `InventoryQueryExecutor` God class (1167 LOC) | Backend | Élevé |
-| MAINT-FE-1 | `IntegrationForm.tsx` — 730 LOC, composant god sans hook dédié | Frontend | Moyen |
+| ~~MAINT-FE-1~~ | ~~`IntegrationForm.tsx` — 730 LOC, composant god sans hook dédié~~ ✅ RÉSOLU Story 54.8 | Frontend | — |
 
 #### MEDIUM
 
@@ -874,7 +874,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 **Refactoring structurel (effort moyen — par story) :**
 1. ~~MAINT-BE-1~~ — ✅ RÉSOLU (Story 54.6) — `update_status()` décomposé en `_validate_transition()`, `_apply_status_change()`, `_create_status_audit_entry()`, `_schedule_notification()`
 2. MAINT-BE-2 — Éclater `idp_auth/views.py` en 4-5 modules par domaine auth
-3. MAINT-FE-1 — Créer `useIntegrationFormState()` pour `IntegrationForm.tsx`
+3. ~~MAINT-FE-1~~ — ✅ RÉSOLU (Story 54.8) — `useIntegrationFormState()` créé (304 LOC), `IntegrationForm.tsx` réduit de 730 → 229 LOC, 33 tests unitaires
 4. MAINT-BE-4 — Introduire `ExecutionRequest` DTO pour `create_execution()`
 
 **Backlog technique (effort élevé) :**
