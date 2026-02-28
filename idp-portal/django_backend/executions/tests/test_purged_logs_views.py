@@ -195,13 +195,13 @@ class TestExecutionStepLogsViewSplunkFallback:
 class TestExecutionLogsViewSplunkFallback:
     """Test that ExecutionLogsView steps fallback calls Splunk when logs_purged=True."""
 
-    @patch("executions.views.execution_views._retrieve_purged_logs_from_splunk")
+    @patch("executions.views.execution_views._fetch_splunk_logs_for_execution")
     @patch("executions.views.execution_views.get_correlation_id", return_value="test-corr")
     @patch("executions.views.execution_views._dba_permission")
     @patch("executions.models.ExecutionStep.objects")
     @patch("executions.models.Execution.objects")
-    def test_calls_splunk_for_purged_steps(
-        self, mock_exec_objects, mock_step_objects, mock_perm, mock_corr, mock_retrieve
+    def test_calls_splunk_once_for_purged_steps(
+        self, mock_exec_objects, mock_step_objects, mock_perm, mock_corr, mock_fetch
     ):
         from executions.views.execution_views import ExecutionLogsView
         from rest_framework.test import APIRequestFactory
@@ -233,12 +233,7 @@ class TestExecutionLogsViewSplunkFallback:
 
         mock_step_objects.filter.return_value.order_by.return_value = [step_purged, step_normal]
 
-        mock_retrieve.return_value = {
-            "logs_purged": True,
-            "logs_purged_at": "2025-01-01",
-            "platform_logs": "from splunk",
-            "logs_source": "splunk",
-        }
+        mock_fetch.return_value = "from splunk"
 
         factory = APIRequestFactory()
         request = factory.get("/executions/1/logs")
@@ -247,11 +242,9 @@ class TestExecutionLogsViewSplunkFallback:
         view = ExecutionLogsView()
         response = view.get(request, execution_id=1)
 
-        # Splunk called only for the purged step
-        mock_retrieve.assert_called_once_with(
-            {"logs_purged": True, "logs_purged_at": "2025-01-01"},
-            1,
-        )
+        # Splunk called exactly once for the whole execution (not per-step)
+        mock_fetch.assert_called_once_with(1)
         assert response.data["data"]["source"] == "steps"
         assert response.data["data"]["logs"][0]["output"]["logs_source"] == "splunk"
+        assert response.data["data"]["logs"][0]["output"]["platform_logs"] == "from splunk"
         assert response.data["data"]["logs"][1]["output"]["platform_logs"] == "still here"

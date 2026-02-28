@@ -45,12 +45,10 @@ exec_logger = structlog.get_logger(__name__)
 _dba_permission = IsDBAOrDBOPS()
 
 
-def _retrieve_purged_logs_from_splunk(output: dict, execution_id: int) -> dict:
-    """Best-effort retrieval of purged platform logs from Splunk.
+def _fetch_splunk_logs_for_execution(execution_id: int) -> str | None:
+    """Best-effort retrieval of platform logs from Splunk for a given execution.
 
-    If successful, injects ``platform_logs`` and ``logs_source`` into *output*.
-    On failure, returns *output* unchanged (``logs_purged=True`` stays visible
-    to the frontend so it can inform the user).
+    Returns the log content string, or ``None`` on any error.
     """
     try:
         from services.splunk_utils import get_splunk_service  # noqa: PLC0415
@@ -58,17 +56,28 @@ def _retrieve_purged_logs_from_splunk(output: dict, execution_id: int) -> dict:
 
         splunk = get_splunk_service()
         if splunk is None:
-            return output
+            return None
 
-        content = async_to_sync(splunk.search_platform_logs)(execution_id=execution_id)
-        if content:
-            output["platform_logs"] = content
-            output["logs_source"] = "splunk"
+        return async_to_sync(splunk.search_platform_logs)(execution_id=execution_id)
     except Exception:  # noqa: BLE001 — best-effort
         exec_logger.exception(
             "splunk_logs_retrieval_error",
             execution_id=execution_id,
         )
+        return None
+
+
+def _retrieve_purged_logs_from_splunk(output: dict, execution_id: int) -> dict:
+    """Best-effort retrieval of purged platform logs from Splunk.
+
+    If successful, injects ``platform_logs`` and ``logs_source`` into *output*.
+    On failure, returns *output* unchanged (``logs_purged=True`` stays visible
+    to the frontend so it can inform the user).
+    """
+    content = _fetch_splunk_logs_for_execution(execution_id)
+    if content:
+        output["platform_logs"] = content
+        output["logs_source"] = "splunk"
     return output
 
 
@@ -566,12 +575,22 @@ class ExecutionLogsView(APIView):
                 correlation_id=correlation_id,
             )
             steps = ExecutionStep.objects.filter(execution_id=execution_id).order_by("step_order")
+            step_outputs = [
+                (step, step.get_output() if hasattr(step, "get_output") else None)
+                for step in steps
+            ]
+
+            # Single Splunk retrieval for the whole execution (avoids N calls)
+            any_purged = any(o and o.get("logs_purged") for _, o in step_outputs)
+            splunk_logs: str | None = None
+            if any_purged:
+                splunk_logs = _fetch_splunk_logs_for_execution(execution_id)
+
             step_logs = []
-            for step in steps:
-                output = step.get_output() if hasattr(step, "get_output") else None
-                # If logs were purged, attempt retrieval from Splunk
-                if output and output.get("logs_purged"):
-                    output = _retrieve_purged_logs_from_splunk(output, execution_id)
+            for step, output in step_outputs:
+                if output and output.get("logs_purged") and splunk_logs:
+                    output["platform_logs"] = splunk_logs
+                    output["logs_source"] = "splunk"
                 step_logs.append({
                     "step_id": step.id,
                     "step_name": step.step_name,

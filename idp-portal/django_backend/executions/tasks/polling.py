@@ -263,13 +263,11 @@ def _forward_platform_logs_to_splunk(
         return
 
     try:
-        from integrations.models import Integration  # noqa: PLC0415
-        from adapters.utils import build_auth_headers  # noqa: PLC0415
-        from services import get_service_client  # noqa: PLC0415
+        from services.splunk_utils import get_splunk_service  # noqa: PLC0415
         from asgiref.sync import async_to_sync  # noqa: PLC0415
 
-        integration = Integration.objects.filter(type="splunk", status="valid").first()
-        if integration is None:
+        splunk_client = get_splunk_service(correlation_id=correlation_id)
+        if splunk_client is None:
             logger.debug(
                 "splunk_integration_not_configured",
                 execution_id=execution_id,
@@ -277,17 +275,6 @@ def _forward_platform_logs_to_splunk(
             )
             return
 
-        auth_headers = build_auth_headers(integration, correlation_id=correlation_id)
-        # Splunk HEC expects "Authorization: Splunk {token}", not "Bearer {token}"
-        auth_value = auth_headers.get("Authorization", "")
-        if auth_value.startswith("Bearer "):
-            auth_headers["Authorization"] = "Splunk " + auth_value[len("Bearer "):]
-
-        splunk_client = get_service_client(
-            "splunk",
-            base_url=integration.base_url,
-            auth_headers=auth_headers,
-        )
         async_to_sync(splunk_client.send_event)(
             event={
                 "event": "platform_log",

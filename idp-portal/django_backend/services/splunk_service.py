@@ -321,15 +321,18 @@ class SplunkService(IHealthCheckable):
                     logger.warning("splunk_search_no_sid", execution_id=execution_id)
                     return None
 
-                # 2. Poll until done (max 30 s)
+                # 2. Poll until done (max 30 s, 5 s per poll to avoid
+                #    a single slow request consuming the entire deadline)
                 job_url = f"{search_url}/{sid}"
                 import time  # noqa: PLC0415
+                poll_timeout = min(self.timeout, 5.0)
                 deadline = time.monotonic() + 30.0
                 while time.monotonic() < deadline:
                     status_resp = await client.get(
                         job_url,
                         params={"output_mode": "json"},
                         headers=self.auth_headers,
+                        timeout=poll_timeout,
                     )
                     status_resp.raise_for_status()
                     dispatch_state = (

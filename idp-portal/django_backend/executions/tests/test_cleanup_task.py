@@ -28,41 +28,6 @@ def _make_step(output_dict: dict | None, step_id: int = 1):
     return step
 
 
-def _build_queryset_mock(step_ids_batches, steps_by_batch):
-    """Build a mock ExecutionStep.objects that simulates batched queryset.
-
-    Args:
-        step_ids_batches: list of lists of IDs returned by successive values_list calls
-        steps_by_batch: list of lists of step objects returned by successive filter(id__in=) calls
-    """
-    qs = MagicMock()
-
-    # Chain: filter().exclude().exclude().only() → qs itself
-    qs.filter.return_value = qs
-    qs.exclude.return_value = qs
-    qs.only.return_value = qs
-
-    # values_list()[:BATCH] returns batches then empty
-    batch_iter = iter(step_ids_batches)
-    vl = MagicMock()
-    vl.__getitem__ = MagicMock(side_effect=lambda _: next(batch_iter))
-    qs.values_list.return_value = vl
-
-    # filter(id__in=...).only() returns step objects
-    steps_iter = iter(steps_by_batch)
-
-    def filter_side_effect(**kwargs):
-        if "id__in" in kwargs:
-            id_qs = MagicMock()
-            id_qs.only.return_value = next(steps_iter)
-            return id_qs
-        return qs
-
-    qs.filter.side_effect = filter_side_effect
-
-    return qs
-
-
 class TestPurgeOldPlatformLogs:
 
     @patch("executions.models.ExecutionStep.objects")

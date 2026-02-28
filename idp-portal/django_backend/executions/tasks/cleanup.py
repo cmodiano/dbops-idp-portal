@@ -41,6 +41,8 @@ def purge_old_platform_logs() -> dict:
 
     # Filter steps belonging to old terminal executions, with non-null output,
     # that have NOT already been purged (output does not contain 'logs_purged').
+    # Note: output is a TextField (Oracle CLOB), not a JSONField, so we use
+    # __contains with a raw string match instead of JSON path lookups.
     qs = (
         ExecutionStep.objects
         .filter(

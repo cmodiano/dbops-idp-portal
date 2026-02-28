@@ -173,20 +173,10 @@ app.conf.beat_schedule['health-check-all-integrations'] = {
 # Purge old platform logs from ExecutionStep output (DB log retention)
 # Environment variables:
 #   CELERY_BEAT_PURGE_LOGS_CRONTAB: crontab expression (default: "0 3 * * *" = daily at 03:00)
-#   CELERY_BEAT_PURGE_LOGS_INTERVAL: seconds, overrides crontab if set
+#   CELERY_BEAT_PURGE_LOGS_INTERVAL: seconds, fallback if no crontab set
 _purge_logs_crontab = os.getenv('CELERY_BEAT_PURGE_LOGS_CRONTAB')
 _purge_logs_interval = os.getenv('CELERY_BEAT_PURGE_LOGS_INTERVAL')
-if _purge_logs_interval:
-    try:
-        _purge_logs_schedule = float(_purge_logs_interval)
-    except ValueError as exc:
-        logger.warning(
-            "celery_beat_invalid_purge_logs_interval: value=%r error=%s fallback=crontab(hour=3)",
-            _purge_logs_interval,
-            exc,
-        )
-        _purge_logs_schedule = crontab(hour=3, minute=0)
-elif _purge_logs_crontab:
+if _purge_logs_crontab:
     parts = _purge_logs_crontab.split()
     if len(parts) == 5:
         try:
@@ -208,6 +198,16 @@ elif _purge_logs_crontab:
         logger.warning(
             "celery_beat_invalid_purge_logs_crontab: crontab=%r fallback=crontab(hour=3)",
             _purge_logs_crontab,
+        )
+        _purge_logs_schedule = crontab(hour=3, minute=0)
+elif _purge_logs_interval:
+    try:
+        _purge_logs_schedule = float(_purge_logs_interval)
+    except ValueError as exc:
+        logger.warning(
+            "celery_beat_invalid_purge_logs_interval: value=%r error=%s fallback=crontab(hour=3)",
+            _purge_logs_interval,
+            exc,
         )
         _purge_logs_schedule = crontab(hour=3, minute=0)
 else:
