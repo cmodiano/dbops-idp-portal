@@ -241,24 +241,32 @@ class IntegrationService:
                 integration_update_data.get('type', integration.type)
             )
         
-        # Update fields
+        # Update fields — track changed fields for update_fields optimization
+        update_fields = []
         if 'type' in integration_update_data:
             integration.type = integration_update_data['type']
+            update_fields.append('type')
         if 'name' in integration_update_data:
             integration.name = integration_update_data['name']
+            update_fields.append('name')
         if 'base_url' in integration_update_data:
             integration.base_url = integration_update_data['base_url']
+            update_fields.append('base_url')
         if 'credential_ref' in integration_update_data:
             integration.credential_ref = integration_update_data.get('credential_ref')
+            update_fields.append('credential_ref')
         if 'icon' in integration_update_data:
             new_icon = integration_update_data.get('icon')
             if new_icon != integration.icon:
                 _delete_uploaded_icon(integration.icon)
             integration.icon = new_icon
+            update_fields.append('icon')
         if 'auth_flow' in integration_update_data:
             integration.auth_flow = integration_update_data.get('auth_flow')
+            update_fields.append('auth_flow')
         if 'token_url' in integration_update_data:
             integration.token_url = integration_update_data.get('token_url')
+            update_fields.append('token_url')
         if 'secret_service_id' in integration_update_data:
             # MED-3 fix: Validate secret_service_id FK exists
             secret_service_id = integration_update_data.get('secret_service_id')
@@ -266,9 +274,11 @@ class IntegrationService:
                 if not Integration.objects.filter(id=secret_service_id).exists():
                     raise ValueError(f"secret_service with ID {secret_service_id} not found")
             integration.secret_service_id = secret_service_id
+            update_fields.append('secret_service_id')
         if 'config' in integration_update_data:
             integration.set_config(integration_update_data['config'])
-        
+            update_fields.append('config')
+
         old_status = integration.status
 
         # NEW-BE-8: Calculer le status AVANT le save pour éviter le double save
@@ -276,9 +286,13 @@ class IntegrationService:
         warnings = []
         if integration.status != computed_status:
             integration.status = computed_status
+            update_fields.append('status')
+
+        # Toujours inclure updated_at (auto_now=True ne se déclenche pas avec update_fields)
+        update_fields.append('updated_at')
 
         try:
-            integration.save()
+            integration.save(update_fields=update_fields)
         except IntegrityError:
             raise ValueError(f"Une intégration avec le nom '{integration_update_data.get('name', integration.name)}' existe déjà")
 

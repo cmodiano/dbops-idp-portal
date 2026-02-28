@@ -638,10 +638,10 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 
 | # | Sévérité | Description | Fichier | Lignes |
 |---|----------|-------------|---------|--------|
-| **NEW-BE-6** | HIGH | N+1 dans `delete_integration()` — `.save()` individuel + `AuditService.create_entry()` en boucle sur `linked_actions`. Pour N actions, génère 2N requêtes au lieu d'un `bulk_update()` + batch | `integrations/services.py` | 335-353 |
-| **NEW-BE-7** | MEDIUM | Double `.save()` dans `create_integration()` — premier save après `set_config()`, second après validation de status | `integrations/services.py` | 140, 146 |
-| **NEW-BE-8** | MEDIUM | Double `.save()` dans `update_integration()` — save principal puis save status si changé | `integrations/services.py` | 263, 272 |
-| **NEW-BE-9** | MEDIUM | N+1 dans `deactivate_action()` — `.save()` individuel + audit en boucle sur `affected_workflows` | `catalog/services.py` | 585-603 |
+| ~~**NEW-BE-6**~~ ✅ Résolu | HIGH | N+1 dans `delete_integration()` — `.save()` individuel + `AuditService.create_entry()` en boucle sur `linked_actions`. Pour N actions, génère 2N requêtes au lieu d'un `bulk_update()` + batch | `integrations/services.py` | 335-353 |
+| ~~**NEW-BE-7**~~ ✅ Résolu | MEDIUM | Double `.save()` dans `create_integration()` — premier save après `set_config()`, second après validation de status | `integrations/services.py` | 140, 146 |
+| ~~**NEW-BE-8**~~ ✅ Résolu | MEDIUM | Double `.save()` dans `update_integration()` — save principal puis save status si changé | `integrations/services.py` | 263, 272 |
+| ~~**NEW-BE-9**~~ ✅ Résolu | MEDIUM | N+1 dans `deactivate_action()` — `.save()` individuel + audit en boucle sur `affected_workflows` | `catalog/services.py` | 585-603 |
 | ~~**NEW-BE-10**~~ ✅ Résolu | LOW | `import logging` (stdlib) au lieu de `structlog` dans 25 fichiers non-test. Le reste du projet utilise structlog. Incohérence qui prive ces modules du contexte structuré (correlation_id, user_id) | Voir liste ci-dessous | — | **Résolu — Story 48.6 (2026-02-26)** |
 
 **Fichiers `import logging` (non-test, à migrer vers structlog) :**
@@ -649,9 +649,9 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 
 **Corrections recommandées :**
 
-- **NEW-BE-6** : Remplacer la boucle `.save()` par `Action.objects.filter(integration_id=id).update(status=DISABLED, updated_at=now)`, puis batch audit entries (ou accepter N inserts audit pour la traçabilité SOC1)
-- **NEW-BE-7/8** : Fusionner config + status en un seul `.save()` — définir status avant le premier save
-- **NEW-BE-9** : Remplacer par `Action.objects.filter(id__in=wf_ids).update(status=DISABLED, deleted_at=now, ...)` + batch audit
+- ~~**NEW-BE-6**~~ ✅ Résolu — `Action.objects.filter().update()` bulk en 1 requête SQL + audit individuel SOC1 préservé (Story 54.2)
+- ~~**NEW-BE-7/8**~~ ✅ Résolu — Config + status fusionnés en un seul `.save(update_fields=[...])` (Story 54.2)
+- ~~**NEW-BE-9**~~ ✅ Résolu — Boucle préparation + `bulk_update()` + audit individuel SOC1 (Story 54.2)
 - **NEW-BE-10** : Migrer progressivement vers `structlog.get_logger(__name__)`
 
 ### Code quality — Frontend
@@ -748,10 +748,10 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 
 | # | Issue audit #4 | Ancien statut | Nouveau statut | Détails |
 |---|----------------|---------------|----------------|---------|
-| NEW-BE-6 | N+1 `.save()` `delete_integration()` | HIGH OUVERT | ⚠️ **OUVERT** | Toujours présent |
-| NEW-BE-7 | Double `.save()` `create_integration()` | MEDIUM OUVERT | ⚠️ **OUVERT** | Toujours présent |
-| NEW-BE-8 | Double `.save()` `update_integration()` | MEDIUM OUVERT | ⚠️ **OUVERT** | Toujours présent |
-| NEW-BE-9 | N+1 `.save()` `deactivate_action()` | MEDIUM OUVERT | ⚠️ **OUVERT** | Toujours présent |
+| ~~NEW-BE-6~~ | N+1 `.save()` `delete_integration()` | HIGH OUVERT | ✅ **RÉSOLU** | Story 54.2 (2026-02-27) |
+| ~~NEW-BE-7~~ | Double `.save()` `create_integration()` | MEDIUM OUVERT | ✅ **RÉSOLU** | Story 54.2 (2026-02-27) |
+| ~~NEW-BE-8~~ | Double `.save()` `update_integration()` | MEDIUM OUVERT | ✅ **RÉSOLU** | Story 54.2 (2026-02-27) |
+| ~~NEW-BE-9~~ | N+1 `.save()` `deactivate_action()` | MEDIUM OUVERT | ✅ **RÉSOLU** | Story 54.2 (2026-02-27) |
 | SEC-12 | Validation URL minimale | ✅ RÉSOLU | ✅ **RÉSOLU** | Story 54.1 (2026-02-27) |
 | SEC-13 | `SERVICENOW_VERIFY_TLS` | LOW OUVERT | ⚠️ **OUVERT** | Toujours présent |
 | SEC-14 | Path traversal icône | LOW OUVERT | ⚠️ **OUVERT** | Toujours présent |
@@ -790,7 +790,6 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | # | Issue | Type | Effort |
 |---|-------|------|--------|
 | SOLID-FE-4 | ~25 composants importent directement les services (couplage DIP) | Frontend | Élevé |
-| NEW-BE-6 | N+1 `.save()` en boucle dans `IntegrationService.delete_integration()` | Backend | Faible |
 | MAINT-BE-1 | `update_status()` God method (168 LOC) — state machine + audit + notifs | Backend | Moyen |
 | MAINT-BE-2 | `idp_auth/views.py` module monolithique (851 LOC, 9 classes hétérogènes) | Backend | Moyen |
 | MAINT-BE-3 | `InventoryQueryExecutor` God class (1167 LOC) | Backend | Élevé |
@@ -801,9 +800,9 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | # | Issue | Type | Effort |
 |---|-------|------|--------|
 | ~~SEC-12~~ | ~~Validation URL minimale~~ ✅ RÉSOLU (Story 54.1) | Sécurité | — |
-| NEW-BE-7 | Double `.save()` dans `IntegrationService.create_integration()` | Backend | Trivial |
-| NEW-BE-8 | Double `.save()` dans `IntegrationService.update_integration()` | Backend | Trivial |
-| NEW-BE-9 | N+1 `.save()` en boucle dans `CatalogService.deactivate_action()` | Backend | Faible |
+| ~~NEW-BE-7~~ | ~~Double `.save()` dans `IntegrationService.create_integration()`~~ ✅ RÉSOLU (Story 54.2) | Backend | — |
+| ~~NEW-BE-8~~ | ~~Double `.save()` dans `IntegrationService.update_integration()`~~ ✅ RÉSOLU (Story 54.2) | Backend | — |
+| ~~NEW-BE-9~~ | ~~N+1 `.save()` en boucle dans `CatalogService.deactivate_action()`~~ ✅ RÉSOLU (Story 54.2) | Backend | — |
 | MAINT-BE-4 | `create_execution()` — 11 paramètres, candidat DTO | Backend | Faible |
 | MAINT-BE-5 | `_find_workflows_referencing_action()` — faux positifs JSON | Backend | Faible |
 | MAINT-BE-6 | Profils hardcodés `_ALLOWED_PROFILES` dans views | Backend | Trivial |
@@ -857,9 +856,9 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | **SOLID Frontend (§15)** | **10/11** | **1** |
 | **Observations post-refactoring (§16)** | 3 (16.1 DOCUMENTED, 16.2 RESOLVED, 16.3 RESOLVED) | **1 INFO** |
 | **Audit #3 (§17)** | **5/6** | **1** (NEW-FE-1) |
-| **Audit #4 (§18)** | **1/12** | **11** |
+| **Audit #4 (§18)** | **5/12** | **7** |
 | **Audit #5 — Maintenabilité (§20)** | **0/14** | **14** |
-| **Total** | **106/133** | **27 (6 HIGH, 9 MEDIUM, 11 LOW, 1 INFO)** |
+| **Total** | **110/133** | **23 (5 HIGH, 6 MEDIUM, 11 LOW, 1 INFO)** |
 
 ---
 
@@ -867,9 +866,9 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 
 **Sprint immédiat (quick wins) :**
 1. ~~SEC-12~~ — ✅ RÉSOLU (Story 54.1) — `validate_url()` renforcé avec validation SSRF complète
-2. NEW-BE-6 — Remplacer `.save()` en boucle par `bulk_update()` dans `IntegrationService.delete_integration()`
-3. NEW-BE-7/8 — Fusionner double `.save()` dans `IntegrationService.create/update_integration()`
-4. NEW-BE-9 — Remplacer `.save()` en boucle par `bulk_update()` dans `CatalogService.deactivate_action()`
+2. ~~NEW-BE-6~~ — ✅ RÉSOLU (Story 54.2) — `Action.objects.filter().update()` bulk en 1 requête SQL
+3. ~~NEW-BE-7/8~~ — ✅ RÉSOLU (Story 54.2) — Config + status fusionnés en un seul `.save(update_fields=[...])`
+4. ~~NEW-BE-9~~ — ✅ RÉSOLU (Story 54.2) — Boucle préparation + `bulk_update()` + audit SOC1
 5. NEW-FE-4 — Supprimer prop `allowedEnvironments` morte dans `ActionDrawerPreview.tsx`
 6. MAINT-BE-6 — Rendre `_ALLOWED_PROFILES` config-driven
 
