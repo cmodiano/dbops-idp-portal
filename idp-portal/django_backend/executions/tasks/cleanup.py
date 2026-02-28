@@ -51,7 +51,9 @@ def purge_old_platform_logs() -> dict:
     ]
 
     # Filter steps belonging to old terminal executions, with non-null output,
-    # that have NOT already been purged (output does not contain 'logs_purged').
+    # that have NOT already been purged (output does not contain 'logs_purged'),
+    # and that actually have platform_logs to purge (avoids retrying steps that
+    # lack platform_logs indefinitely).
     # Note: output is a TextField (Oracle CLOB), not a JSONField, so we use
     # __contains with a raw string match instead of JSON path lookups.
     qs = (
@@ -62,6 +64,7 @@ def purge_old_platform_logs() -> dict:
         )
         .exclude(output__isnull=True)
         .exclude(output__contains='"logs_purged"')
+        .filter(output__contains='"platform_logs"')
         .only("id", "output")
     )
 
@@ -76,6 +79,7 @@ def purge_old_platform_logs() -> dict:
 
         steps = ExecutionStep.objects.filter(id__in=batch_ids).only("id", "output")
         for step in steps:
+            output = None
             try:
                 output = step.get_output()
                 if not output or "platform_logs" not in output:
@@ -93,6 +97,14 @@ def purge_old_platform_logs() -> dict:
                     step_id=step.id,
                 )
                 total_errors += 1
+                # Mark step with logs_purged so it won't be retried indefinitely
+                if output is not None:
+                    try:
+                        output["logs_purged"] = True
+                        step.set_output(output)
+                        step.save(update_fields=["output"])
+                    except Exception:  # noqa: BLE001 — best-effort
+                        pass
 
     logger.info(
         "purge_old_platform_logs_complete",

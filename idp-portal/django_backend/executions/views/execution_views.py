@@ -101,7 +101,7 @@ def _retrieve_purged_logs_from_splunk(
     to the frontend so it can inform the user).
     """
     content = _fetch_splunk_logs_for_execution(execution_id, platform_job_id=platform_job_id)
-    if content:
+    if content is not None:
         output["platform_logs"] = content
         output["logs_source"] = "splunk"
     return output
@@ -536,10 +536,13 @@ class ExecutionStepLogsView(APIView):
 
         output = step.get_output() if hasattr(step, "get_output") else None
 
-        # If logs were purged, attempt retrieval from Splunk
+        # If logs were purged, attempt retrieval from Splunk (only when we have
+        # a platform_job_id for platform-specific logs; otherwise skip to avoid
+        # execution-wide Splunk search)
         if output and output.get("logs_purged"):
             pid = step.platform_job_id or output.get("platform_job_id")
-            output = _retrieve_purged_logs_from_splunk(output, execution_id, platform_job_id=pid)
+            if pid:
+                output = _retrieve_purged_logs_from_splunk(output, execution_id, platform_job_id=pid)
 
         return Response(
             {
@@ -618,7 +621,7 @@ class ExecutionLogsView(APIView):
                 if output and output.get("logs_purged"):
                     pid = step.platform_job_id or output.get("platform_job_id")
                     splunk_logs = splunk_map.get(pid) if pid else None
-                    if splunk_logs:
+                    if splunk_logs is not None:
                         output["platform_logs"] = splunk_logs
                         output["logs_source"] = "splunk"
                 step_logs.append({
