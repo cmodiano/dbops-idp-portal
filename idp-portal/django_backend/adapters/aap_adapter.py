@@ -12,21 +12,11 @@ import httpx
 import structlog
 
 from adapters.base_adapter import BaseAdapter
+from adapters.status_mappers import AAP_STATUS_MAP, AAP_TOWER_TERMINAL_STATUSES  # noqa: F401 — re-exported for backward compat
 from core.exceptions import ServiceUnavailableError
 from integrations.health_check import HealthCheckResult, HealthCheckStatus, IHealthCheckable
 
 logger = structlog.get_logger(__name__)
-
-# AAP job status → IDP portal execution status mapping
-AAP_STATUS_MAP: dict[str, str] = {
-    "pending": "SUBMITTED",
-    "waiting": "SUBMITTED",
-    "running": "RUNNING",
-    "successful": "COMPLETED",
-    "failed": "FAILED",
-    "error": "FAILED",
-    "canceled": "CANCELLED",
-}
 
 # Timeout for AAP API calls (seconds)
 AAP_DEFAULT_TIMEOUT = 30.0
@@ -362,8 +352,7 @@ class AAPAdapter(BaseAdapter, IHealthCheckable):
             ) from exc
 
         aap_status = status_data.get("status", "unknown")
-        terminal_statuses = {"successful", "failed", "error", "canceled"}
-        is_complete = aap_status in terminal_statuses
+        is_complete = aap_status in AAP_TOWER_TERMINAL_STATUSES
 
         logger.info(
             "aap_get_job_logs_success",

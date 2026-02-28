@@ -728,7 +728,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | ~~**MAINT-BE-4**~~ | ~~MEDIUM~~ | ~~**`create_execution()` signature — 11 paramètres** — `user, action, environment, parameters, parent_execution_id, correlation_id, source, ip_address, targets, delegated_referenced_action_ids, validated_targets`. Candidat pour un objet `ExecutionRequest` DTO~~ **✅ RESOLVED Story 54.9 (2026-02-28)** | `executions/dtos.py`, `executions/services.py` | — |
 | ~~**MAINT-BE-5**~~ | ~~MEDIUM~~ | ~~**`_find_workflows_referencing_action()` — faux positifs JSON** — `execution_steps__contains=str(action_id)` retourne des faux positifs (action_id=42 matche "421"). Validation Python en boucle. Pour Oracle 19c+, `JSON_EXISTS` serait plus fiable et performant~~ **✅ RESOLVED Story 54.10 (2026-02-28)** | `catalog/services.py` | 674–711 |
 | ~~**MAINT-BE-6**~~ | ~~MEDIUM~~ | ~~**Profils hardcodés** — `_ALLOWED_PROFILES = {"dba_applicatif", "dba_infrastructure", "dbops"}` en constante module. Ajout d'un profil = modification du code. Devrait être config-driven ou DB-backed~~ **Résolu — Story 54.5 (2026-02-27)** | `idp_auth/views.py` | 48–49 |
-| **MAINT-BE-7** | MEDIUM | **Status mapping dupliqué dans les adapters** — chaque adapter définit son propre `STATUS_MAP` dict (AAP, GitHub Actions, TFC, Azure DevOps). Pattern identique, pas de base commune. Extraction vers `adapters/status_mappers.py` possible | `adapters/*.py` | — |
+| ~~**MAINT-BE-7**~~ | ~~MEDIUM~~ | ~~**Status mapping dupliqué dans les adapters** — chaque adapter définit son propre `STATUS_MAP` dict (AAP, GitHub Actions, TFC, Azure DevOps). Pattern identique, pas de base commune. Extraction vers `adapters/status_mappers.py` possible~~ **✅ RESOLVED Story 54.11 (2026-02-28)** | `adapters/*.py` | — |
 | **MAINT-BE-8** | LOW | **Late imports `PLC0415`** — 3+ imports tardifs dans `executions/services.py` (lignes 451, 592, 893) pour éviter des dépendances circulaires. Indicateur de couplage entre modules | `executions/services.py` | 451, 592, 893 |
 | **MAINT-BE-9** | LOW | **Validation en 4 couches dans les vues d'exécution** — `ExecutionPayloadValidator` → `TargetValidator` → `EnvironmentConfigResolver` → serializer DRF implicite. Debug difficile quand une erreur survient. Pipeline unifié recommandé | `executions/views/execution_views.py` | — |
 
@@ -805,7 +805,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | ~~MAINT-BE-4~~ | ~~`create_execution()` — 11 paramètres, candidat DTO~~ ✅ RÉSOLU (Story 54.9) | Backend | — |
 | ~~MAINT-BE-5~~ | ~~`_find_workflows_referencing_action()` — faux positifs JSON~~ ✅ RÉSOLU (Story 54.10) | Backend | Faible |
 | ~~MAINT-BE-6~~ | ~~Profils hardcodés `_ALLOWED_PROFILES` dans views~~ ✅ RÉSOLU (Story 54.5) | Backend | — |
-| MAINT-BE-7 | Status mapping dupliqué dans les adapters | Backend | Faible |
+| ~~MAINT-BE-7~~ | ~~Status mapping dupliqué dans les adapters~~ ✅ RÉSOLU (Story 54.11) | Backend | Faible |
 | MAINT-FE-2 | `WorkflowBuilderCanvas.tsx` — 489 LOC, candidat extraction hook | Frontend | Moyen |
 | MAINT-FE-3 | `executionRenderers.tsx` — 444 LOC, responsabilités mélangées | Frontend | Faible |
 
@@ -880,7 +880,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 **Backlog technique (effort élevé) :**
 1. MAINT-BE-3 — Décomposer `InventoryQueryExecutor` en `QueryBuilder` + `MappingValidator` + `ResultPaginator`
 2. SOLID-FE-4 — Migration progressive des ~25 composants vers hooks
-3. MAINT-BE-7 — Centraliser status mapping des adapters
+3. ~~MAINT-BE-7 — Centraliser status mapping des adapters~~ ✅ RÉSOLU Story 54.11
 4. ~~SEC-13/14~~ — ✅ Corrections sécurité mineures (TLS, path traversal) — Story 54.4 (2026-02-27)
 
 ---
