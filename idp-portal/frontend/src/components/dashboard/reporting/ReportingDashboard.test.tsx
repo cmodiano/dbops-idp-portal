@@ -8,7 +8,14 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { ReportingDashboard } from './ReportingDashboard';
+import logger from '../../../services/logger';
 import * as dashboardService from '../../../services/dashboard_service';
+
+// Mock logger to prevent side effects in tests (Story 54.3 review fix L2)
+vi.mock('../../../services/logger', async () => {
+  const actual = await vi.importActual('../../../services/logger');
+  return { ...actual };
+});
 
 // Mock recharts to avoid ResponsiveContainer dimension issues in tests
 vi.mock('recharts', async () => {
@@ -192,9 +199,9 @@ describe('ReportingDashboard', () => {
     });
   });
 
-  // Story 48.3 AC2: fetchFilterOptions failure is traced via console.warn (not silent)
-  it('logs console.warn when fetchFilterOptions fails (Story 48.3, AC2)', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  // Story 54.3 AC2: fetchFilterOptions failure is traced via logger.warn (structured logging)
+  it('logs logger.warn when fetchFilterOptions fails (Story 54.3, AC2)', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
     vi.mocked(dashboardService.fetchFilterOptions).mockRejectedValue(new Error('Filter fetch failed'));
 
     await act(async () => {
@@ -203,8 +210,8 @@ describe('ReportingDashboard', () => {
 
     await waitFor(() => {
       expect(warnSpy).toHaveBeenCalledWith(
-        '[ReportingDashboard] fetchFilterOptions failed, using fallback options',
-        expect.any(Error),
+        'reporting_filter_options_error',
+        { error: 'Filter fetch failed', fallback: 'default_options' },
       );
     });
 

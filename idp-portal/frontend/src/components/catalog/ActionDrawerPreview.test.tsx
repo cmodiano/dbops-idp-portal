@@ -166,7 +166,7 @@ describe('ActionDrawerPreview', () => {
   });
 
   it('renders enabled Execute button when canExecute is true (Story 3.2, AC3)', () => {
-    renderWithTheme(<ActionDrawerPreview action={mockAction} canExecute={true} allowedEnvironments={['DEV', 'PROD']} />);
+    renderWithTheme(<ActionDrawerPreview action={mockAction} canExecute={true} />);
 
     const button = screen.getByRole('button', { name: /Executer/i });
     expect(button).toBeInTheDocument();

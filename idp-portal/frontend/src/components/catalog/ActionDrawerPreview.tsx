@@ -46,15 +46,11 @@ import { ActionMetrics } from './ActionMetrics';
 
 const { Title, Paragraph, Text } = Typography;
 
-const EMPTY_ENVIRONMENTS: string[] = [];
-
 export interface ActionDrawerPreviewProps {
   action: ActionPreviewData;
   visible?: boolean;
   /** Story 3.2 AC3: whether user can execute this action. */
   canExecute?: boolean;
-  /** Story 3.2 AC3: environments where user can execute. */
-  allowedEnvironments?: string[];
   /** Story 4.1 Task 7: callback when Execute button is clicked. Opens ExecutionWizard. */
   onExecute?: () => void;
   /** Story 8.1: Loading state for stats (separate from action data). */
@@ -90,12 +86,9 @@ export function ActionDrawerPreview({
   action,
   visible = true,
   canExecute,
-  allowedEnvironments: _allowedEnvironments = EMPTY_ENVIRONMENTS,  // Intentionnellement non utilisé — préfixe _ = conservé pour compatibilité des appelants
   onExecute,
   statsLoading = false,
 }: ActionDrawerPreviewProps) {
-  // Note: _allowedEnvironments est conservé dans l'interface pour la compatibilité des appelants
-  // (CatalogPage le passe pour future logique d'execute par env) — préfixe _ = intentionnellement non utilisé
   const { effectiveMode } = useTheme();
   const isDark = effectiveMode === 'dark';
   const { token } = theme.useToken();

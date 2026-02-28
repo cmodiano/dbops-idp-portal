@@ -263,7 +263,6 @@ export default function CatalogPage() {
           <ActionDrawerPreview
             action={toPreviewData(selectedActionDetail, selectedActionStats)}
             canExecute={selectedActionCanExecute}
-            allowedEnvironments={selectedActionEnvs}
             onExecute={handleExecuteClick}
             statsLoading={statsLoading}
           />

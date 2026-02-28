@@ -599,7 +599,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 
 | # | Sévérité | Description | Fichier | Lignes |
 |---|----------|-------------|---------|--------|
-| **NEW-FE-1** | LOW | Nested key props redondants (key sur button + wrapper) | `components/layout/TopNav.tsx` | 155-203 |
+| ~~**NEW-FE-1**~~ ✅ Résolu | ~~LOW~~ | ~~Nested key props redondants (key sur button + wrapper)~~ — **Résolu Story 54.3 (2026-02-27)** | `components/layout/TopNav.tsx` | 155-203 |
 
 **Points positifs confirmés :**
 - Aucun `dangerouslySetInnerHTML` dans le code
@@ -659,8 +659,8 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | # | Sévérité | Description | Fichier | Lignes |
 |---|----------|-------------|---------|--------|
 | ~~**NEW-FE-2**~~ ✅ Résolu | ~~LOW — Cache module-level sans mécanisme d'invalidation — sessions longues afficheront des catégories obsolètes~~ | `hooks/useCategories.ts` | 18-44 | **Résolu — Story 48.7 (2026-02-26)** |
-| **NEW-FE-3** | LOW | `.catch()` silencieux sans logging — `fetchFilterOptions()` échoue sans trace | `components/dashboard/reporting/ReportingDashboard.tsx` | 160-165 |
-| **NEW-FE-4** | LOW | Prop `allowedEnvironments` passée puis explicitement ignorée (`void allowedEnvironments`) — code mort | `components/catalog/ActionDrawerPreview.tsx` | 99 |
+| ~~**NEW-FE-3**~~ ✅ Résolu | ~~LOW~~ | ~~`.catch()` silencieux sans logging — `fetchFilterOptions()` échoue sans trace~~ — **Résolu Story 54.3 (2026-02-27)** | `components/dashboard/reporting/ReportingDashboard.tsx` | 160-165 |
+| ~~**NEW-FE-4**~~ ✅ Résolu | ~~LOW~~ | ~~Prop `allowedEnvironments` passée puis explicitement ignorée — code mort~~ — **Résolu Story 54.3 (2026-02-27)** | `components/catalog/ActionDrawerPreview.tsx` | 99 |
 
 **Points positifs confirmés (audit #4) :**
 - Aucun `dangerouslySetInnerHTML` dans le code
@@ -681,7 +681,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | NEW-BE-3 | TODO obsolète | LOW OUVERT | ✅ **RESOLVED** | Commentaire remplacé par docstring |
 | NEW-BE-4 | `asyncio.run()` dans Celery | LOW OUVERT | ✅ **RESOLVED** | Plus aucun `asyncio.run()` dans les tâches |
 | NEW-BE-5 | Log sans `execution_id` | LOW OUVERT | ✅ **RESOLVED** | `execution_id=execution.id` ajouté (ligne 567) |
-| NEW-FE-1 | Nested key props TopNav | LOW OUVERT | ⚠️ **OUVERT** | Toujours présent |
+| ~~NEW-FE-1~~ | Nested key props TopNav | ~~LOW OUVERT~~ | ✅ **RÉSOLU** | Story 54.3 (2026-02-27) |
 
 ## 20. Audit #5 — Analyse structurelle (2026-02-27)
 
@@ -755,9 +755,9 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | SEC-12 | Validation URL minimale | ✅ RÉSOLU | ✅ **RÉSOLU** | Story 54.1 (2026-02-27) |
 | SEC-13 | `SERVICENOW_VERIFY_TLS` | LOW OUVERT | ⚠️ **OUVERT** | Toujours présent |
 | SEC-14 | Path traversal icône | LOW OUVERT | ⚠️ **OUVERT** | Toujours présent |
-| NEW-FE-1 | Nested key props TopNav | LOW OUVERT | ⚠️ **OUVERT** | Toujours présent |
-| NEW-FE-3 | `.catch()` silencieux ReportingDashboard | LOW OUVERT | ⚠️ **OUVERT** | Toujours présent |
-| NEW-FE-4 | Prop `allowedEnvironments` morte | LOW OUVERT | ⚠️ **OUVERT** | Toujours présent |
+| ~~NEW-FE-1~~ | Nested key props TopNav | ~~LOW OUVERT~~ | ✅ **RÉSOLU** | Story 54.3 (2026-02-27) |
+| ~~NEW-FE-3~~ | `.catch()` silencieux ReportingDashboard | ~~LOW OUVERT~~ | ✅ **RÉSOLU** | Story 54.3 (2026-02-27) |
+| ~~NEW-FE-4~~ | Prop `allowedEnvironments` morte | ~~LOW OUVERT~~ | ✅ **RÉSOLU** | Story 54.3 (2026-02-27) |
 | SOLID-FE-4 | ~25 composants importent services directement | HIGH OUVERT | ⚠️ **OUVERT** | Toujours présent |
 
 ### Points positifs confirmés (audit #5)
@@ -855,10 +855,10 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | **SOLID Backend (§14)** | **11/11** | **0** |
 | **SOLID Frontend (§15)** | **10/11** | **1** |
 | **Observations post-refactoring (§16)** | 3 (16.1 DOCUMENTED, 16.2 RESOLVED, 16.3 RESOLVED) | **1 INFO** |
-| **Audit #3 (§17)** | **5/6** | **1** (NEW-FE-1) |
-| **Audit #4 (§18)** | **5/12** | **7** |
+| **Audit #3 (§17)** | **6/6** | **0** |
+| **Audit #4 (§18)** | **7/12** | **5** |
 | **Audit #5 — Maintenabilité (§20)** | **0/14** | **14** |
-| **Total** | **110/133** | **23 (5 HIGH, 6 MEDIUM, 11 LOW, 1 INFO)** |
+| **Total** | **113/133** | **20 (5 HIGH, 6 MEDIUM, 8 LOW, 1 INFO)** |
 
 ---
 
@@ -869,7 +869,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 2. ~~NEW-BE-6~~ — ✅ RÉSOLU (Story 54.2) — `Action.objects.filter().update()` bulk en 1 requête SQL
 3. ~~NEW-BE-7/8~~ — ✅ RÉSOLU (Story 54.2) — Config + status fusionnés en un seul `.save(update_fields=[...])`
 4. ~~NEW-BE-9~~ — ✅ RÉSOLU (Story 54.2) — Boucle préparation + `bulk_update()` + audit SOC1
-5. NEW-FE-4 — Supprimer prop `allowedEnvironments` morte dans `ActionDrawerPreview.tsx`
+5. ~~NEW-FE-4~~ — ✅ RÉSOLU (Story 54.3) — Prop morte supprimée de l'interface, signature et appelants
 6. MAINT-BE-6 — Rendre `_ALLOWED_PROFILES` config-driven
 
 **Refactoring structurel (effort moyen — par story) :**
