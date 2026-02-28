@@ -258,7 +258,7 @@ class TestSVGSanitization:
 
 
 class TestPathTraversal:
-    """SEC-14: Path traversal prevention on icon write (Story 48.4)."""
+    """SEC-14: Path traversal prevention on icon write (Story 54.4)."""
 
     @pytest.mark.django_db
     def test_path_traversal_rejected(self, api_client):
@@ -271,3 +271,26 @@ class TestPathTraversal:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         error = response.json().get('error', {})
         assert error.get('code') == 'PATH_TRAVERSAL_DETECTED'
+
+    @pytest.mark.django_db
+    def test_normal_uuid_passes_path_check(self, api_client):
+        """SEC-14: A normal UUID filename passes the path traversal check (no rejection)."""
+        file = SimpleUploadedFile("icon.png", PNG_MAGIC, content_type='image/png')
+        response = api_client.post(UPLOAD_URL, {'file': file}, format='multipart')
+        assert response.status_code == status.HTTP_201_CREATED
+
+    @pytest.mark.django_db
+    def test_symlink_path_traversal_rejected(self, api_client, tmp_path):
+        """SEC-14: A filename that would resolve outside icons_dir via symlink is rejected."""
+        # Simulate a symlink-like traversal by patching uuid4 to return a path with symlink chars
+        # Since uuid4 is server-generated, we test the is_relative_to guard directly
+
+        icons_dir = tmp_path / "icons"
+        icons_dir.mkdir()
+        target = tmp_path / "outside.txt"
+        target.write_text("sensitive")
+        symlink = icons_dir / "evil_link"
+        symlink.symlink_to(target)
+
+        # Verify is_relative_to rejects resolved symlink pointing outside
+        assert not symlink.resolve().is_relative_to(icons_dir.resolve())

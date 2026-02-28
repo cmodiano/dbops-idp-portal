@@ -625,14 +625,14 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | # | Sévérité | Description | Fichier | Lignes |
 |---|----------|-------------|---------|--------|
 | **SEC-12** | ✅ RÉSOLU | ~~Validation URL minimale~~ — Corrigé story 54.1 (2026-02-27) : validation SSRF complète avec rejet IPv4-mapped IPv6, port 0, hostname vide. 74 tests passent. | `integrations/serializers.py` | 19-90 |
-| **SEC-13** | LOW | `SERVICENOW_VERIFY_TLS` configurable — un opérateur peut désactiver la vérification TLS en production. Défaut `True` atténue le risque | `services/servicenow_service.py` | 76 |
-| **SEC-14** | LOW | Pas de vérification `Path.resolve().is_relative_to()` sur le chemin d'écriture icônes. Atténué par UUID filename et `STATIC_ROOT` configuré par déploiement | `integrations/upload_views.py` | 248-263 |
+| ~~**SEC-13**~~ | ✅ RÉSOLU | ~~`SERVICENOW_VERIFY_TLS` configurable~~ — Corrigé story 54.4 (2026-02-27) : commentaire settings.py clarifié (dev-only), `logger.warning` ajouté quand l'override est ignoré en production. 2 tests ajoutés. | `services/servicenow_service.py` | 46-56 |
+| ~~**SEC-14**~~ | ✅ RÉSOLU | ~~Pas de vérification path traversal sur écriture icônes~~ — Corrigé story 54.4 (2026-02-27) : protection `is_relative_to()` déjà en place, test positif UUID ajouté. 29 tests passent. | `integrations/upload_views.py` | 265-276 |
 
 **Détails et corrections recommandées :**
 
 - **SEC-12** : ✅ **RÉSOLU** (Story 54.1, 2026-02-27) — Validation SSRF complète dans `validate_url()` : schéma http(s), rejet credentials, localhost, IP privées RFC 1918, link-local, metadata cloud, IPv6 ULA/link-local, IPv4-mapped IPv6 bypass, port 0, hostname vide. 74 tests unitaires couvrent tous les cas.
-- **SEC-13** : Supprimer l'option `SERVICENOW_VERIFY_TLS` ou la forcer à `True` pour les URL non-localhost. Risque MITM si désactivé en production.
-- **SEC-14** : Ajouter `icon_path.resolve().is_relative_to(icons_dir.resolve())` avant l'écriture.
+- **SEC-13** : ✅ **RÉSOLU** (Story 54.4, 2026-02-27) — Commentaire settings.py clarifié « Dev only — ignoré en production (DEBUG=False) ». `logger.warning("servicenow_tls_override_ignored")` ajouté dans `_get_verify_tls()` quand l'override est ignoré. 2 tests de couverture ajoutés (warning émis / non émis).
+- **SEC-14** : ✅ **RÉSOLU** (Story 54.4, 2026-02-27) — Protection `is_relative_to()` déjà implémentée (defense-in-depth). Test positif ajouté confirmant qu'un UUID normal passe la vérification. 29 tests upload security passent.
 
 ### Code quality — Backend
 
@@ -753,8 +753,8 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | ~~NEW-BE-8~~ | Double `.save()` `update_integration()` | MEDIUM OUVERT | ✅ **RÉSOLU** | Story 54.2 (2026-02-27) |
 | ~~NEW-BE-9~~ | N+1 `.save()` `deactivate_action()` | MEDIUM OUVERT | ✅ **RÉSOLU** | Story 54.2 (2026-02-27) |
 | SEC-12 | Validation URL minimale | ✅ RÉSOLU | ✅ **RÉSOLU** | Story 54.1 (2026-02-27) |
-| SEC-13 | `SERVICENOW_VERIFY_TLS` | LOW OUVERT | ⚠️ **OUVERT** | Toujours présent |
-| SEC-14 | Path traversal icône | LOW OUVERT | ⚠️ **OUVERT** | Toujours présent |
+| ~~SEC-13~~ | ~~`SERVICENOW_VERIFY_TLS`~~ | ~~LOW OUVERT~~ | ✅ **RÉSOLU** | Story 54.4 (2026-02-27) |
+| ~~SEC-14~~ | ~~Path traversal icône~~ | ~~LOW OUVERT~~ | ✅ **RÉSOLU** | Story 54.4 (2026-02-27) |
 | ~~NEW-FE-1~~ | Nested key props TopNav | ~~LOW OUVERT~~ | ✅ **RÉSOLU** | Story 54.3 (2026-02-27) |
 | ~~NEW-FE-3~~ | `.catch()` silencieux ReportingDashboard | ~~LOW OUVERT~~ | ✅ **RÉSOLU** | Story 54.3 (2026-02-27) |
 | ~~NEW-FE-4~~ | Prop `allowedEnvironments` morte | ~~LOW OUVERT~~ | ✅ **RÉSOLU** | Story 54.3 (2026-02-27) |
@@ -814,8 +814,8 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 
 | # | Issue | Type | Effort |
 |---|-------|------|--------|
-| SEC-13 | `SERVICENOW_VERIFY_TLS` désactivable en production | Sécurité | Trivial |
-| SEC-14 | Pas de vérification path traversal sur écriture icône | Sécurité | Trivial |
+| ~~SEC-13~~ | ~~`SERVICENOW_VERIFY_TLS` désactivable en production~~ | ~~Sécurité~~ | ~~Trivial~~ ✅ Story 54.4 |
+| ~~SEC-14~~ | ~~Pas de vérification path traversal sur écriture icône~~ | ~~Sécurité~~ | ~~Trivial~~ ✅ Story 54.4 |
 | NEW-FE-1 | Nested key props redondants (TopNav) | Frontend | Trivial |
 | NEW-FE-3 | `.catch()` silencieux (ReportingDashboard) | Frontend | Trivial |
 | NEW-FE-4 | Prop `allowedEnvironments` ignorée (code mort) | Frontend | Trivial |
@@ -856,9 +856,9 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | **SOLID Frontend (§15)** | **10/11** | **1** |
 | **Observations post-refactoring (§16)** | 3 (16.1 DOCUMENTED, 16.2 RESOLVED, 16.3 RESOLVED) | **1 INFO** |
 | **Audit #3 (§17)** | **6/6** | **0** |
-| **Audit #4 (§18)** | **7/12** | **5** |
+| **Audit #4 (§18)** | **9/12** | **3** |
 | **Audit #5 — Maintenabilité (§20)** | **0/14** | **14** |
-| **Total** | **113/133** | **20 (5 HIGH, 6 MEDIUM, 8 LOW, 1 INFO)** |
+| **Total** | **115/133** | **18 (5 HIGH, 6 MEDIUM, 6 LOW, 1 INFO)** |
 
 ---
 
@@ -882,7 +882,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 1. MAINT-BE-3 — Décomposer `InventoryQueryExecutor` en `QueryBuilder` + `MappingValidator` + `ResultPaginator`
 2. SOLID-FE-4 — Migration progressive des ~25 composants vers hooks
 3. MAINT-BE-7 — Centraliser status mapping des adapters
-4. SEC-13/14 — Corrections sécurité mineures (TLS, path traversal)
+4. ~~SEC-13/14~~ — ✅ Corrections sécurité mineures (TLS, path traversal) — Story 54.4 (2026-02-27)
 
 ---
 
@@ -895,9 +895,9 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | Issues HIGH | 8 | 1 | 1 | 2 | 6 | +4 (god class/method/module/component) |
 | Issues MEDIUM | 13 | 1 | 3 | 5 | 10 | +5 (DTO, JSON, profiles, adapters, FE) |
 | Issues LOW | 4 | 4 | 7 | 7 | 11 | +4 (late imports, validation, debounce, dates) |
-| Sécurité | 11 issues | 0 ouvertes | **0 ouvertes** | **3 ouvertes** | **3 ouvertes** | = |
+| Sécurité | 11 issues | 0 ouvertes | **0 ouvertes** | **3 ouvertes** | **0 ouvertes** | -3 (SEC-12 story 54.1, SEC-13/14 story 54.4) |
 | Fichiers BE > 800 LOC | — | — | — | — | **5** (query_executor, services x2, views, serializers) | Nouveau |
 | Fichiers FE > 500 LOC | — | — | — | — | **4** (IntegrationForm, ActionWizard, execution_service, ProfileForm) | Nouveau |
 | God classes/methods | — | — | — | — | **4** (QueryExecutor, update_status, idp_auth/views, IntegrationForm) | Nouveau |
 
-**Bilan global (audit #5) :** Sur 133 findings cumulés, **106 sont résolus** (80%). Les 14 nouvelles issues de l'audit #5 se concentrent sur la **maintenabilité structurelle** : god classes/methods/modules qui, bien que fonctionnellement corrects, posent des risques de maintenabilité à terme. Aucune issue CRITICAL. La posture sécurité reste stable (2 LOW ouvertes — SEC-13, SEC-14). L'architecture SOLID est globalement excellente (registries, ISP, DI, hooks) — les findings restants sont du polissage structurel et des extractions de responsabilités dans les fichiers les plus volumineux.
+**Bilan global (audit #5) :** Sur 133 findings cumulés, **115 sont résolus** (86%). Les 14 nouvelles issues de l'audit #5 se concentrent sur la **maintenabilité structurelle** : god classes/methods/modules qui, bien que fonctionnellement corrects, posent des risques de maintenabilité à terme. Aucune issue CRITICAL. La posture sécurité est **entièrement résolue** (0 ouvertes — SEC-13, SEC-14 corrigés story 54.4). L'architecture SOLID est globalement excellente (registries, ISP, DI, hooks) — les findings restants sont du polissage structurel et des extractions de responsabilités dans les fichiers les plus volumineux.
