@@ -21,6 +21,7 @@ from core.utils import ensure_utc_isoformat
 from executions.builders.response_builder import ExecutionResponseBuilder
 from executions.models import Execution, ExecutionStep, ExecutionStatus
 from executions.serializers import ExecutionSerializer, ExecutionStepSerializer
+from executions.dtos import ExecutionRequest
 from executions.services import ExecutionService
 from core.permissions import IsDBAOrDBOPS
 from executions.utils import (
@@ -231,7 +232,7 @@ class ExecutionsCreateView(APIView):
         )
 
         # Step 7: Create execution
-        execution = self.get_execution_service().create_execution(
+        exec_req = ExecutionRequest(
             user=request.user,  # type: ignore[arg-type]
             action=action,
             environment=env_config['env_str'],
@@ -244,9 +245,9 @@ class ExecutionsCreateView(APIView):
             delegated_referenced_action_ids=delegated_referenced_action_ids,
             validated_targets=validated_targets if target_names else None,
         )
+        execution = self.get_execution_service().create_execution(exec_req)
 
         # Step 8: Launch execution (skip when requires_approval → PENDING_APPROVAL; DBA will launch via /approve)
-        from executions.models import ExecutionStatus
         if execution.status != ExecutionStatus.PENDING_APPROVAL:
             self._launch_execution(execution, action, correlation_id, request)
 

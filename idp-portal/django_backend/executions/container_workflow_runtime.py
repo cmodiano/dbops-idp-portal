@@ -31,6 +31,7 @@ from executions.models import (
     Execution, ExecutionStep, ExecutionStatus, ExecutionStepStatus,
     ExecutionStepType,
 )
+from executions.dtos import ExecutionRequest
 from executions.services import ExecutionService
 from executions.simulation_service import SimulationService
 from executions.cancellation_cache import is_cancelled
@@ -252,7 +253,7 @@ class ContainerWorkflowRuntime:
         child_params = self._get_step_parameters(step)
 
         # Create child execution
-        child_execution = self.execution_service.create_execution(
+        exec_req = ExecutionRequest(
             user=self.execution.user,
             action=referenced_action,
             environment=self.execution.environment,
@@ -260,6 +261,7 @@ class ContainerWorkflowRuntime:
             parent_execution_id=self.execution.id,
             correlation_id=self.correlation_id,
         )
+        child_execution = self.execution_service.create_execution(exec_req)
         self.child_executions.append(child_execution)
 
         # Link parent step to child execution

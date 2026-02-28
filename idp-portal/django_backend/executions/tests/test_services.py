@@ -12,6 +12,7 @@ from catalog.models import Action
 from executions.models import (
     Execution, ExecutionStep, ExecutionStatus, ExecutionTarget, TargetType,
 )
+from executions.dtos import ExecutionRequest
 from executions.services import ExecutionService
 from core.models import AuditLog
 from tests.factories import (
@@ -37,12 +38,13 @@ class TestExecutionService(TestCase):
 
     def test_create_execution(self):
         """Test create_execution() creates execution with audit."""
-        execution = self.service.create_execution(
+        req = ExecutionRequest(
             user=self.user,
             action=self.action,
             environment='dev',
-            parameters={'db_name': 'testdb'}
+            parameters={'db_name': 'testdb'},
         )
+        execution = self.service.create_execution(req)
 
         self.assertIsNotNone(execution.id)
         self.assertEqual(execution.environment, 'dev')
@@ -75,6 +77,35 @@ class TestExecutionService(TestCase):
         # Verify steps created
         steps = ExecutionStep.objects.filter(execution=execution)
         self.assertEqual(steps.count(), 2)
+
+    def test_create_execution_with_steps_invalid_integration_audit_survives(self):
+        """Story 24.4 AC4 via create_execution_with_steps: INVALID integration → audit entry persists.
+
+        Validates that the fix for M-1 (removing @transaction.atomic from
+        create_execution_with_steps) ensures the blocked-integration audit
+        entry is NOT rolled back when BadRequestError is raised.
+        """
+        from core.exceptions import BadRequestError
+        integration = IntegrationFactory(status=IntegrationStatus.INVALID)
+        action = ActionFactory(integration=integration, status='published')
+
+        with self.assertRaises(BadRequestError):
+            self.service.create_execution_with_steps(
+                user=self.user,
+                action=action,
+                environment='dev',
+            )
+
+        # Audit entry must survive the exception (not rolled back)
+        audit = AuditLog.objects.filter(
+            action_type='EXECUTION_BLOCKED_INVALID_INTEGRATION',
+            entity_id=integration.id,
+        ).first()
+        self.assertIsNotNone(audit, "AC4 audit entry must persist outside of transaction")
+
+        # No execution must have been created
+        from executions.models import Execution
+        self.assertEqual(Execution.objects.filter(action=action).count(), 0)
 
     def test_update_status(self):
         """Test update_status() updates status with validation."""
@@ -153,12 +184,13 @@ class TestExecutionService(TestCase):
     # ----------------------------------------------------------------
     def test_create_execution_requires_approval_creates_pending_approval(self):
         """1.4: requires_approval=True via _env_config → PENDING_APPROVAL + audit."""
-        execution = self.service.create_execution(
+        req = ExecutionRequest(
             user=self.user,
             action=self.action,
             environment='prod',
             parameters={'_env_config': {'requires_approval': True}},
         )
+        execution = self.service.create_execution(req)
         self.assertEqual(execution.status, ExecutionStatus.PENDING_APPROVAL)
 
         audit = AuditLog.objects.filter(
@@ -177,12 +209,13 @@ class TestExecutionService(TestCase):
             {'name': 'server2', 'target_type': 'server', 'environment': 'prod'},
             {'name': 'server3'},  # no target_type
         ]
-        execution = self.service.create_execution(
+        req = ExecutionRequest(
             user=self.user,
             action=self.action,
             environment='dev',
             validated_targets=validated_targets,
         )
+        execution = self.service.create_execution(req)
         targets = ExecutionTarget.objects.filter(execution=execution)
         self.assertEqual(targets.count(), 3)
 
@@ -204,12 +237,13 @@ class TestExecutionService(TestCase):
     def test_create_execution_with_delegated_action_ids_audit(self):
         """1.6: delegated_referenced_action_ids → audit with delegated=True."""
         import json
-        execution = self.service.create_execution(
+        req = ExecutionRequest(
             user=self.user,
             action=self.action,
             environment='dev',
             delegated_referenced_action_ids=[10, 20, 30],
         )
+        execution = self.service.create_execution(req)
         audit = AuditLog.objects.filter(
             action_type='EXECUTION_SUBMITTED',
             entity_id=execution.id,
@@ -226,12 +260,13 @@ class TestExecutionService(TestCase):
         """1.7: workflow_step_parameters in parameters → key present in audit details."""
         import json
         wsp = {'1': {'parameters': {'db_name': 'testdb'}}}
-        execution = self.service.create_execution(
+        req = ExecutionRequest(
             user=self.user,
             action=self.action,
             environment='dev',
             parameters={'workflow_step_parameters': wsp},
         )
+        execution = self.service.create_execution(req)
         audit = AuditLog.objects.filter(
             action_type='EXECUTION_SUBMITTED',
             entity_id=execution.id,
@@ -500,7 +535,7 @@ class TestExecutionServiceCoverage(TestCase):
     def test_create_execution_with_audit_fields(self):
         """create_execution with source, ip_address, targets → audit includes them."""
         import json
-        execution = self.service.create_execution(
+        req = ExecutionRequest(
             user=self.user,
             action=self.action,
             environment='dev',
@@ -508,6 +543,7 @@ class TestExecutionServiceCoverage(TestCase):
             ip_address='10.0.0.1',
             targets=['db-server-01', 'db-server-02'],
         )
+        execution = self.service.create_execution(req)
         self.assertIsNotNone(execution.id)
         audit = AuditLog.objects.filter(
             action_type='EXECUTION_SUBMITTED',
@@ -529,12 +565,13 @@ class TestExecutionServiceCoverage(TestCase):
                 'engine_type': 'oracle',
             }
         ]
-        execution = self.service.create_execution(
+        req = ExecutionRequest(
             user=self.user,
             action=self.action,
             environment='prod',
             validated_targets=validated_targets,
         )
+        execution = self.service.create_execution(req)
         targets = ExecutionTarget.objects.filter(execution=execution)
         self.assertEqual(targets.count(), 1)
 

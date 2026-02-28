@@ -261,7 +261,7 @@ class TestProcessPendingScheduledExecutions:
 
         call_count = 0
 
-        def side_effect_create(**kwargs):
+        def side_effect_create(*args, **kwargs):
             nonlocal call_count
             call_count += 1
             if call_count == 1:

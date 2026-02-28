@@ -725,7 +725,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | ~~**MAINT-BE-1**~~ | ~~HIGH~~ | ~~**`update_status()` God method (168 LOC)** — mélange machine à états, timestamps, audit, notifications. State machine hardcodée comme `dict` imbriqué. Notification callback défini inline (30 LOC). Devrait être 3 méthodes : `_validate_transition()`, `_apply_status_change()`, `_schedule_notification()`~~ **Résolu — Story 54.6 (2026-02-27)** | `executions/services.py` | 466–633 |
 | ~~**MAINT-BE-2**~~ | ~~HIGH~~ | ~~**`idp_auth/views.py` module monolithique (851 LOC)** — 9 classes de vues hétérogènes (SAML login/callback, JWT refresh, API keys CRUD, service login, favorites). Devrait être 4-5 modules : `saml_views.py`, `jwt_views.py`, `apikey_views.py`, `service_login_views.py`, `favorites_views.py`~~ **Résolu — Story 54.7 (2026-02-27)** | `idp_auth/views/` | — |
 | **MAINT-BE-3** | HIGH | **`InventoryQueryExecutor` God class (1167 LOC)** — SQL generation, schema mapping, column validation, result pagination, error handling dans 1 classe. Devrait être découpé : `QueryBuilder`, `MappingValidator`, `ResultPaginator` | `inventory/query_executor.py` | 1–1167 |
-| **MAINT-BE-4** | MEDIUM | **`create_execution()` signature — 11 paramètres** — `user, action, environment, parameters, parent_execution_id, correlation_id, source, ip_address, targets, delegated_referenced_action_ids, validated_targets`. Candidat pour un objet `ExecutionRequest` DTO | `executions/services.py` | 171–218 |
+| ~~**MAINT-BE-4**~~ | ~~MEDIUM~~ | ~~**`create_execution()` signature — 11 paramètres** — `user, action, environment, parameters, parent_execution_id, correlation_id, source, ip_address, targets, delegated_referenced_action_ids, validated_targets`. Candidat pour un objet `ExecutionRequest` DTO~~ **✅ RESOLVED Story 54.9 (2026-02-28)** | `executions/dtos.py`, `executions/services.py` | — |
 | **MAINT-BE-5** | MEDIUM | **`_find_workflows_referencing_action()` — faux positifs JSON** — `execution_steps__contains=str(action_id)` retourne des faux positifs (action_id=42 matche "421"). Validation Python en boucle. Pour Oracle 19c+, `JSON_EXISTS` serait plus fiable et performant | `catalog/services.py` | 674–702 |
 | ~~**MAINT-BE-6**~~ | ~~MEDIUM~~ | ~~**Profils hardcodés** — `_ALLOWED_PROFILES = {"dba_applicatif", "dba_infrastructure", "dbops"}` en constante module. Ajout d'un profil = modification du code. Devrait être config-driven ou DB-backed~~ **Résolu — Story 54.5 (2026-02-27)** | `idp_auth/views.py` | 48–49 |
 | **MAINT-BE-7** | MEDIUM | **Status mapping dupliqué dans les adapters** — chaque adapter définit son propre `STATUS_MAP` dict (AAP, GitHub Actions, TFC, Azure DevOps). Pattern identique, pas de base commune. Extraction vers `adapters/status_mappers.py` possible | `adapters/*.py` | — |
@@ -802,7 +802,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | ~~NEW-BE-7~~ | ~~Double `.save()` dans `IntegrationService.create_integration()`~~ ✅ RÉSOLU (Story 54.2) | Backend | — |
 | ~~NEW-BE-8~~ | ~~Double `.save()` dans `IntegrationService.update_integration()`~~ ✅ RÉSOLU (Story 54.2) | Backend | — |
 | ~~NEW-BE-9~~ | ~~N+1 `.save()` en boucle dans `CatalogService.deactivate_action()`~~ ✅ RÉSOLU (Story 54.2) | Backend | — |
-| MAINT-BE-4 | `create_execution()` — 11 paramètres, candidat DTO | Backend | Faible |
+| ~~MAINT-BE-4~~ | ~~`create_execution()` — 11 paramètres, candidat DTO~~ ✅ RÉSOLU (Story 54.9) | Backend | — |
 | MAINT-BE-5 | `_find_workflows_referencing_action()` — faux positifs JSON | Backend | Faible |
 | ~~MAINT-BE-6~~ | ~~Profils hardcodés `_ALLOWED_PROFILES` dans views~~ ✅ RÉSOLU (Story 54.5) | Backend | — |
 | MAINT-BE-7 | Status mapping dupliqué dans les adapters | Backend | Faible |
@@ -875,7 +875,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 1. ~~MAINT-BE-1~~ — ✅ RÉSOLU (Story 54.6) — `update_status()` décomposé en `_validate_transition()`, `_apply_status_change()`, `_create_status_audit_entry()`, `_schedule_notification()`
 2. MAINT-BE-2 — Éclater `idp_auth/views.py` en 4-5 modules par domaine auth
 3. ~~MAINT-FE-1~~ — ✅ RÉSOLU (Story 54.8) — `useIntegrationFormState()` créé (304 LOC), `IntegrationForm.tsx` réduit de 730 → 229 LOC, 33 tests unitaires
-4. MAINT-BE-4 — Introduire `ExecutionRequest` DTO pour `create_execution()`
+4. ~~MAINT-BE-4~~ — ✅ RÉSOLU (Story 54.9) — `ExecutionRequest` DTO introduit dans `executions/dtos.py`, signature de `create_execution()` simplifiée
 
 **Backlog technique (effort élevé) :**
 1. MAINT-BE-3 — Décomposer `InventoryQueryExecutor` en `QueryBuilder` + `MappingValidator` + `ResultPaginator`
