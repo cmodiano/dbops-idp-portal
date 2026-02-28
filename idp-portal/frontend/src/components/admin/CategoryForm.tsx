@@ -3,10 +3,10 @@
  * Pattern: IntegrationForm (Modal + Form).
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Modal, Form, Input, InputNumber, Switch, App } from 'antd';
 import type { RefCategory } from '../../types/api';
-import { createCategory, updateCategory } from '../../services/categories_service';
+import { useCategoryForm } from '../../hooks/useCategoryForm';
 
 export interface CategoryFormProps {
   open: boolean;
@@ -18,7 +18,7 @@ export interface CategoryFormProps {
 export function CategoryForm({ open, onCancel, onSuccess, editCategory }: CategoryFormProps) {
   const { notification } = App.useApp();
   const [form] = Form.useForm();
-  const [saving, setSaving] = useState(false);
+  const { submit, submitting } = useCategoryForm();
   const isEditMode = !!editCategory;
 
   useEffect(() => {
@@ -42,37 +42,27 @@ export function CategoryForm({ open, onCancel, onSuccess, editCategory }: Catego
       return;
     }
 
-    setSaving(true);
-    try {
-      const payload = {
-        code: values.code,
-        label: values.label,
-        display_order: values.display_order,
-        is_active: values.is_active ? 1 : 0,
-      };
+    const payload = {
+      code: values.code,
+      label: values.label,
+      display_order: values.display_order,
+      is_active: values.is_active ? 1 : 0,
+    };
 
-      let result: RefCategory;
-      if (isEditMode) {
-        result = await updateCategory(editCategory!.id, payload);
-        notification.success({
-          message: 'Succès',
-          description: `Catégorie « ${result.label} » mise à jour`,
-        });
-      } else {
-        result = await createCategory(payload);
-        notification.success({
-          message: 'Succès',
-          description: `Catégorie « ${result.label} » créée`,
-        });
-      }
+    try {
+      const result = await submit(payload, isEditMode ? editCategory!.id : undefined);
+      notification.success({
+        message: 'Succès',
+        description: isEditMode
+          ? `Catégorie « ${result.label} » mise à jour`
+          : `Catégorie « ${result.label} » créée`,
+      });
       onSuccess(result);
     } catch (err) {
       notification.error({
         message: 'Erreur',
         description: err instanceof Error ? err.message : "Erreur lors de l'enregistrement",
       });
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -82,7 +72,7 @@ export function CategoryForm({ open, onCancel, onSuccess, editCategory }: Catego
       open={open}
       onCancel={onCancel}
       onOk={handleSave}
-      confirmLoading={saving}
+      confirmLoading={submitting}
       okText="Enregistrer"
       cancelText="Annuler"
       destroyOnHidden

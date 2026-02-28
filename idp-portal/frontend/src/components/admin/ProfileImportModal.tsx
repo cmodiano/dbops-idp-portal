@@ -11,7 +11,7 @@ import { useRef, useCallback } from 'react';
 import { Modal, Space, Button, Collapse, App } from 'antd';
 import { DownloadOutlined } from '@ant-design/icons';
 import { PROFILE_YAML_TEMPLATE, PROFILE_YAML_TEMPLATE_FILENAME } from '../../utils/profileYamlTemplate';
-import { importProfilesYaml } from '../../services/profiles_service';
+import { useProfileImport } from '../../hooks/useProfileImport';
 
 export interface ProfileImportModalProps {
   open: boolean;
@@ -21,6 +21,7 @@ export interface ProfileImportModalProps {
 
 export function ProfileImportModal({ open, onCancel, onSuccess }: ProfileImportModalProps) {
   const { notification } = App.useApp();
+  const { importFile } = useProfileImport();
   const fileRef = useRef<File | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -37,21 +38,21 @@ export function ProfileImportModal({ open, onCancel, onSuccess }: ProfileImportM
   const handleSubmit = useCallback(async () => {
     const file = fileRef.current;
     if (!file) {
-      notification.warning({ title: 'Fichier requis', description: 'Veuillez selectionner un fichier .yaml ou .yml' });
+      notification.warning({ message: 'Fichier requis', description: 'Veuillez selectionner un fichier .yaml ou .yml' });
       return;
     }
     try {
-      const { created, updated } = await importProfilesYaml(file);
+      const { created, updated } = await importFile(file);
       fileRef.current = null;
       if (inputRef.current) inputRef.current.value = '';
       onSuccess(created, updated);
     } catch (err) {
       notification.error({
-        title: 'Erreur d\'import',
+        message: 'Erreur d\'import',
         description: err instanceof Error ? err.message : 'Erreur lors de l\'import YAML',
       });
     }
-  }, [onSuccess, notification]);
+  }, [onSuccess, notification, importFile]);
 
   const handleCancel = useCallback(() => {
     fileRef.current = null;

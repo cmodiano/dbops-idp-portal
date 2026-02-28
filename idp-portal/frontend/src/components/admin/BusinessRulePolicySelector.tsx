@@ -3,11 +3,11 @@
  * Uniquement règles prédéfinies (catalogue), filtrées par plateforme d'exécution (step_type).
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Radio, Select, Space, Button, Modal, Typography, Tag } from 'antd';
 import { EyeOutlined } from '@ant-design/icons';
 import type { BusinessRulePolicyListItem, BusinessRulePoliciesData } from '../../types/api';
-import { getBusinessRulePolicies } from '../../services/business_rules_service';
+import { useBusinessRulePolicies } from '../../hooks/useBusinessRulePolicies';
 
 const { Text } = Typography;
 
@@ -29,8 +29,7 @@ export function BusinessRulePolicySelector({
   stepType,
   disabled,
 }: BusinessRulePolicySelectorProps) {
-  const [policies, setPolicies] = useState<BusinessRulePolicyListItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  const { policies, loading } = useBusinessRulePolicies(stepType);
   const [previewJson, setPreviewJson] = useState<BusinessRulePoliciesData | null>(null);
   const [previewName, setPreviewName] = useState('');
 
@@ -38,29 +37,6 @@ export function BusinessRulePolicySelector({
   useEffect(() => {
     setMode(policyId ? 'predefined' : 'none');
   }, [policyId]);
-
-  const fetchPolicies = useCallback(async () => {
-    if (!stepType?.trim()) {
-      setPolicies([]);
-      return;
-    }
-    setLoading(true);
-    try {
-      const response = await getBusinessRulePolicies({
-        is_active: true,
-        step_type: stepType.trim(),
-      });
-      setPolicies(response.data ?? []);
-    } catch {
-      setPolicies([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [stepType]);
-
-  useEffect(() => {
-    fetchPolicies();
-  }, [fetchPolicies]);
 
   const handleModeChange = (newMode: PolicyMode) => {
     setMode(newMode);

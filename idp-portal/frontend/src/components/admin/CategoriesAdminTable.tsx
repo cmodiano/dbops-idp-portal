@@ -3,40 +3,29 @@
  * Pattern: IntegrationsTable.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Table, Button, Space, Tag, App } from 'antd';
 import type { TableProps } from 'antd';
 import { PlusOutlined, ReloadOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import type { RefCategory } from '../../types/api';
-import { getCategories, deleteCategory } from '../../services/categories_service';
 import { invalidateCategoriesCache } from '../../hooks/useCategories';
+import { useCategoriesAdmin } from '../../hooks/useCategoriesAdmin';
 import { CategoryForm } from './CategoryForm';
 
 export function CategoriesAdminTable() {
   const { notification, modal } = App.useApp();
-  const [categories, setCategories] = useState<RefCategory[]>([]);
-  const [loading, setLoading] = useState(false);
+  const { categories, loading, error, handleDelete: hookDelete, refresh } = useCategoriesAdmin();
   const [formOpen, setFormOpen] = useState(false);
   const [editCategory, setEditCategory] = useState<RefCategory | null>(null);
 
-  const fetchCategories = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await getCategories(false); // Include inactive
-      setCategories(data);
-    } catch (err) {
+  useEffect(() => {
+    if (error) {
       notification.error({
         message: 'Erreur',
-        description: err instanceof Error ? err.message : 'Erreur de chargement des catégories',
+        description: error,
       });
-    } finally {
-      setLoading(false);
     }
-  }, [notification]);
-
-  useEffect(() => {
-    fetchCategories();
-  }, [fetchCategories]);
+  }, [error, notification]);
 
   const handleEdit = (record: RefCategory) => {
     setEditCategory(record);
@@ -52,13 +41,11 @@ export function CategoriesAdminTable() {
       cancelText: 'Annuler',
       onOk: async () => {
         try {
-          await deleteCategory(record.id);
-          invalidateCategoriesCache();
+          await hookDelete(record.id);
           notification.success({
             message: 'Succès',
             description: `Catégorie « ${record.label} » désactivée`,
           });
-          fetchCategories();
         } catch (err) {
           notification.error({
             message: 'Erreur',
@@ -73,7 +60,7 @@ export function CategoriesAdminTable() {
     setFormOpen(false);
     setEditCategory(null);
     invalidateCategoriesCache();
-    fetchCategories();
+    refresh();
   };
 
   const handleFormCancel = () => {
@@ -145,7 +132,7 @@ export function CategoriesAdminTable() {
           <Space style={{ width: '100%', justifyContent: 'space-between' }}>
             <span>Catégories ({categories.length})</span>
             <Space>
-              <Button icon={<ReloadOutlined />} onClick={fetchCategories} loading={loading}>
+              <Button icon={<ReloadOutlined />} onClick={refresh} loading={loading}>
                 Actualiser
               </Button>
               <Button

@@ -4,41 +4,30 @@
  * Differences: no creation, no deletion (use deactivate), icon preview column.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Table, Button, Space, Tag, App, Avatar } from 'antd';
 import type { TableProps } from 'antd';
 import { ReloadOutlined, EditOutlined, StopOutlined, DatabaseOutlined } from '@ant-design/icons';
 import type { RefEngine } from '../../services/reference_service';
-import { fetchEnginesForAdmin, updateEngine } from '../../services/engines_service';
 import { invalidateEngineIconCache } from '../../utils/engineIconCache';
 import { invalidateEnginesCache } from '../../hooks/useEngines';
+import { useEnginesAdmin } from '../../hooks/useEnginesAdmin';
 import { EngineForm } from './EngineForm';
 
 export function EnginesAdminTable() {
   const { notification, modal } = App.useApp();
-  const [engines, setEngines] = useState<RefEngine[]>([]);
-  const [loading, setLoading] = useState(false);
+  const { engines, loading, error, handleUpdate, refresh } = useEnginesAdmin();
   const [formOpen, setFormOpen] = useState(false);
   const [editEngine, setEditEngine] = useState<RefEngine | null>(null);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await fetchEnginesForAdmin(false);
-      setEngines(data);
-    } catch (err) {
+  useEffect(() => {
+    if (error) {
       notification.error({
         message: 'Erreur',
-        description: err instanceof Error ? err.message : 'Erreur de chargement des moteurs',
+        description: error,
       });
-    } finally {
-      setLoading(false);
     }
-  }, [notification]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  }, [error, notification]);
 
   const handleEdit = (record: RefEngine) => {
     setEditEngine(record);
@@ -54,14 +43,14 @@ export function EnginesAdminTable() {
       cancelText: 'Annuler',
       onOk: async () => {
         try {
-          await updateEngine(record.id, { is_active: 0 });
+          await handleUpdate(record.id, { is_active: 0 });
           notification.success({
             message: 'Succès',
             description: `Moteur « ${record.label} » désactivé`,
           });
           invalidateEngineIconCache();
           invalidateEnginesCache();
-          fetchData();
+          refresh();
         } catch (err) {
           notification.error({
             message: 'Erreur',
@@ -77,7 +66,7 @@ export function EnginesAdminTable() {
     setEditEngine(null);
     invalidateEngineIconCache();
     invalidateEnginesCache();
-    fetchData();
+    refresh();
   };
 
   const handleFormCancel = () => {
@@ -163,7 +152,7 @@ export function EnginesAdminTable() {
         title={() => (
           <Space style={{ width: '100%', justifyContent: 'space-between' }}>
             <span>Moteurs ({engines.length})</span>
-            <Button icon={<ReloadOutlined />} onClick={fetchData} loading={loading}>
+            <Button icon={<ReloadOutlined />} onClick={refresh} loading={loading}>
               Actualiser
             </Button>
           </Space>

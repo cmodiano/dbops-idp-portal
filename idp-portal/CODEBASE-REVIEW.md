@@ -417,23 +417,31 @@
 
 ---
 
-### SOLID-FE-4 [HIGH] — 🔄 PILOTE COMPLÉTÉ, OUVERT — Couplage services directs
+### SOLID-FE-4 [HIGH] — 🔄 EN COURS — Couplage services directs
 
 **Avant :** 29 composants importent directement les services.
 
-**État actuel :** ~25 composants non-test importaient encore directement `admin_service`, `catalog_service`, ou `execution_service`. Le pattern a été amélioré dans certains composants clés (hooks extraits, DI via context), mais le couplage structurel reste largement présent.
+**État actuel :** ~17 composants migrés sur ~25. Violations restantes dans les composants wizard/form complexes (`ExecutionWizard`, `ActionWizard`, etc.).
 
-**SOLID-FE-4 🔄 Pilote complété — 5/~25 composants migrés (ActionPalette, AdminAnalyticsDashboard, WizardStep1General, RemediationRulesEditor, ActionsAdminPanel) — Story 48.8 (2026-02-26)**
+**Historique des migrations :**
 
-Hooks créés : `useAdminAnalytics`, `useActionNameAvailability`, `useRemediationCatalogActions`, `useActionsAdminPanel` (+ `useEligibleActions` déjà existant pour ActionPalette).
+| Story | Composants migrés | Hooks créés |
+|-------|-------------------|-------------|
+| 35.3 | WorkflowStepsEditor, ActionWizard, ProfileForm | useEligibleActions, useActionWizardState, useProfileFormState |
+| 34.13 | ExecutionWizard | useExecutionWizardState |
+| 48.8 | ActionPalette, AdminAnalyticsDashboard, WizardStep1General, RemediationRulesEditor, ActionsAdminPanel | useAdminAnalytics, useActionNameAvailability, useRemediationCatalogActions, useActionsAdminPanel |
+| 54.8 | IntegrationForm | useIntegrationFormState |
+| 54.12 | WorkflowBuilderCanvas | useWorkflowGraph |
+| 54.15 | CategoriesAdminTable, CategoryForm, EnginesAdminTable, EngineForm, IntegrationsTable, BusinessRulePolicySelector, ProfileImportModal | useCategoriesAdmin, useCategoryForm, useEnginesAdmin, useEngineForm, useIntegrationValidation, useBusinessRulePolicies, useProfileImport |
 
-**Fichiers encore concernés (exemples non-test, ~20 restants) :**
+**SOLID-FE-4 🔄 ~17/~25 composants migrés (2026-02-28, Story 54.15)**
+
+**Fichiers encore concernés (exemples non-test) :**
 - `ExecutionWizard.tsx` → `catalog_service` + `execution_service`
 - `ActionWizard.tsx` → 7 fonctions de `admin_service`
 - `WorkflowStepsEditor.tsx` → `admin_service.getEligibleActionsForWorkflow()`
 - `ProfileForm.tsx`, `ProfileWizard.tsx` → `admin_service`
-- `IntegrationForm.tsx` → `admin_service`
-- Et ~15 autres composants
+- Et ~8 autres composants
 
 **Fix recommandé :** Continuer la migration progressive vers hooks (pattern établi par Story 48.8). Pattern de référence : `useActionsAdminPanel.ts`, `useAdminAnalytics.ts`.
 
@@ -758,7 +766,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | ~~NEW-FE-1~~ | Nested key props TopNav | ~~LOW OUVERT~~ | ✅ **RÉSOLU** | Story 54.3 (2026-02-27) |
 | ~~NEW-FE-3~~ | `.catch()` silencieux ReportingDashboard | ~~LOW OUVERT~~ | ✅ **RÉSOLU** | Story 54.3 (2026-02-27) |
 | ~~NEW-FE-4~~ | Prop `allowedEnvironments` morte | ~~LOW OUVERT~~ | ✅ **RÉSOLU** | Story 54.3 (2026-02-27) |
-| SOLID-FE-4 | ~25 composants importent services directement | HIGH OUVERT | ⚠️ **OUVERT** | Toujours présent |
+| SOLID-FE-4 | ~25 composants importent services directement | HIGH OUVERT | ⚠️ **OUVERT** | ~17/~25 migrés (Stories 35.3, 34.13, 48.8, 54.8, 54.12, 54.15) |
 
 ### Points positifs confirmés (audit #5)
 
@@ -789,7 +797,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 
 | # | Issue | Type | Effort |
 |---|-------|------|--------|
-| SOLID-FE-4 | ~25 composants importent directement les services (couplage DIP) | Frontend | Élevé |
+| SOLID-FE-4 | ~8 composants restants importent directement les services (couplage DIP) — ~17/~25 migrés (Story 54.15) | Frontend | Élevé |
 | ~~MAINT-BE-2~~ | ~~`idp_auth/views.py` module monolithique (851 LOC, 9 classes hétérogènes)~~ ✅ Résolu Story 54.7 | Backend | — |
 | ~~MAINT-BE-3~~ | ~~`InventoryQueryExecutor` God class (1167 LOC)~~ ✅ RESOLVED Story 54.14 | Backend | — |
 | ~~MAINT-FE-1~~ | ~~`IntegrationForm.tsx` — 730 LOC, composant god sans hook dédié~~ ✅ RÉSOLU Story 54.8 | Frontend | — |
