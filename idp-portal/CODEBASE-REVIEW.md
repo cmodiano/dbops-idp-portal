@@ -738,7 +738,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 |---|----------|-------------|---------|--------|
 | ~~**MAINT-FE-1**~~ | ~~HIGH~~ | ~~**`IntegrationForm.tsx` — 730 LOC, composant god**~~ ✅ RÉSOLU Story 54.8 — `useIntegrationFormState()` créé (304 LOC), `IntegrationForm.tsx` réduit à 229 LOC | `hooks/useIntegrationFormState.ts` | — |
 | ~~**MAINT-FE-2**~~ | ~~MEDIUM~~ | ~~**`WorkflowBuilderCanvas.tsx` — 489 LOC**~~ ✅ RESOLVED Story 54.12 — `useWorkflowGraph()` créé, `WorkflowBuilderCanvas.tsx` réduit à 185 LOC | `hooks/useWorkflowGraph.ts` | — |
-| **MAINT-FE-3** | MEDIUM | **`executionRenderers.tsx` — 444 LOC** — module utilitaire contenant des renderers de colonnes + STATUS_CONFIG + formatters. Mélange responsabilités rendering et configuration | `utils/executionRenderers.tsx` | 1–444 |
+| ~~**MAINT-FE-3**~~ | ~~MEDIUM~~ | ~~**`executionRenderers.tsx` — 444 LOC**~~ ✅ RESOLVED Story 54.13 — `executionStatusRenderer.tsx` créé, `executionRenderers.tsx` réduit à ~320 LOC | `utils/executionStatusRenderer.tsx` | — |
 | **MAINT-FE-4** | LOW | **Debounce pattern dupliqué** — `useDebounce` hook existe mais certains composants implémentent manuellement le debounce avec `setTimeout` (ex: `AAPTemplateSection.tsx`). Devrait utiliser le hook commun | `components/admin/StepsEditor.tsx` | ~108–113 |
 | **MAINT-FE-5** | LOW | **Date formatting éparpillé** — `new Date(d).toLocaleDateString('fr-CA')` et variantes copiées dans ProfilesTable, AuditTable et d'autres composants. Extraire `formatLocalDate()` utility | Multiples fichiers | — |
 
@@ -807,7 +807,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | ~~MAINT-BE-6~~ | ~~Profils hardcodés `_ALLOWED_PROFILES` dans views~~ ✅ RÉSOLU (Story 54.5) | Backend | — |
 | ~~MAINT-BE-7~~ | ~~Status mapping dupliqué dans les adapters~~ ✅ RÉSOLU (Story 54.11) | Backend | Faible |
 | ~~MAINT-FE-2~~ | ~~`WorkflowBuilderCanvas.tsx` — 489 LOC, candidat extraction hook~~ ✅ RÉSOLU (Story 54.12) | Frontend | Moyen |
-| MAINT-FE-3 | `executionRenderers.tsx` — 444 LOC, responsabilités mélangées | Frontend | Faible |
+| ~~MAINT-FE-3~~ | ~~`executionRenderers.tsx` — 444 LOC, responsabilités mélangées~~ ✅ RESOLVED (Story 54.13) | Frontend | Faible |
 
 #### LOW (backlog)
 
