@@ -11,6 +11,7 @@ import { AUTH_FLOW_LABELS } from '../../types/api';
 import { getIconUrl } from '../../utils/iconUrl';
 import { HEALTH_CONFIG } from '../../utils/healthConfig';
 import { useIntegrationValidation } from '../../hooks/useIntegrationValidation';
+import { formatLocalDate, formatLocalDateTime } from '../../utils/dateFormat';
 
 // Statut intégration (admin) — domaine distinct, config locale justifiée (SOLID-FE-10, Story 48.5 2026-02-26).
 // Clés = IntegrationStatusType (valid/invalid/deprecated) ≠ statuts d'exécution (SUBMITTED/RUNNING/COMPLETED…).
@@ -25,7 +26,7 @@ const STATUS_CONFIG: Record<string, { color: string; text: string }> = {
 
 function buildHealthTooltip(record: IntegrationListItem): string {
   if (!record.health_checked_at) return 'Jamais vérifié';
-  const date = new Date(record.health_checked_at).toLocaleString('fr-CA');
+  const date = formatLocalDateTime(record.health_checked_at);
   const base = `Dernière vérification : ${date}`;
   return record.health_error_message ? `${base}\nErreur : ${record.health_error_message}` : base;
 }
@@ -188,7 +189,7 @@ export function IntegrationsTable({
       title: 'Date de création',
       dataIndex: 'created_at',
       key: 'created_at',
-      render: (d: string) => new Date(d).toLocaleDateString('fr-CA'),
+      render: (d: string) => formatLocalDate(d),
       sorter: (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
       defaultSortOrder: 'descend',
     },

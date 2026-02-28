@@ -3,7 +3,7 @@
  * Contient : WorkflowStepsEditor ou (WizardAAPTemplateSection + ParametersEditor) selon le type.
  * Note : WizardAAPTemplateSection est co-localisé ici car utilisé exclusivement dans cette étape.
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Form, Input, Select, Alert, Space, Radio } from 'antd';
 import type {
   ParameterDefinition,
@@ -13,6 +13,7 @@ import { ParametersEditor } from './ParametersEditor';
 import { WorkflowStepsEditor } from './WorkflowStepsEditor';
 import { WorkflowBuilderCanvas } from './WorkflowBuilderCanvas';
 import { useAAPTemplates } from '../../hooks/useAAPTemplates';
+import { useDebounce } from '../../hooks/useDebounce';
 
 // ─── WizardAAPTemplateSection (composant local, non exporté) ─────────────────
 
@@ -34,11 +35,7 @@ function WizardAAPTemplateSection({
   isReadOnly,
 }: WizardAAPTemplateSectionProps) {
   const [searchInput, setSearchInput] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(searchInput), 300);
-    return () => clearTimeout(timer);
-  }, [searchInput]);
+  const debouncedSearch = useDebounce(searchInput, 300);
 
   const { templates, loading, fallback, error } = useAAPTemplates(integrationId, aapResourceType, debouncedSearch || undefined);
 

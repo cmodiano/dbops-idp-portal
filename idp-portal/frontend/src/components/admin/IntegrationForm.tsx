@@ -11,6 +11,7 @@ import { getIconUrl } from '../../utils/iconUrl';
 import { HEALTH_CONFIG } from '../../utils/healthConfig';
 import { useIntegrationTypes } from '../../hooks/useIntegrationTypes';
 import { useVaultIntegrations } from '../../hooks/useVaultIntegrations';
+import { formatLocalDateTime } from '../../utils/dateFormat';
 import { AvailableActionsPanel } from './AvailableActionsPanel';
 import { useIntegrationFormState } from '../../hooks/useIntegrationFormState';
 import type { IntegrationFormValues } from '../../hooks/useIntegrationFormState';
@@ -141,10 +142,10 @@ export function IntegrationForm({
         <Space style={{ marginBottom: 16, width: '100%', justifyContent: 'space-between' }} align="center">
           <Space align="center">
             <span>État de santé :</span>
-            <Tooltip title={healthCheckedAt ? `Dernière vérification : ${new Date(healthCheckedAt).toLocaleString('fr-CA')}${healthErrorMessage ? `\nErreur : ${healthErrorMessage}` : ''}` : 'Jamais vérifié'}>
+            <Tooltip title={healthCheckedAt ? `Dernière vérification : ${formatLocalDateTime(healthCheckedAt)}${healthErrorMessage ? `\nErreur : ${healthErrorMessage}` : ''}` : 'Jamais vérifié'}>
               <Tag color={HEALTH_CONFIG[healthStatus].color} aria-label={HEALTH_CONFIG[healthStatus].ariaLabel}>{HEALTH_CONFIG[healthStatus].text}</Tag>
             </Tooltip>
-            {healthCheckedAt && <span style={{ fontSize: 12, color: '#888' }}>{new Date(healthCheckedAt).toLocaleString('fr-CA')}</span>}
+            {healthCheckedAt && <span style={{ fontSize: 12, color: '#888' }}>{formatLocalDateTime(healthCheckedAt)}</span>}
           </Space>
           <Button icon={<ThunderboltOutlined />} loading={testLoading} aria-busy={testLoading} onClick={handleTestConnection} size="small">Tester la connexion</Button>
         </Space>

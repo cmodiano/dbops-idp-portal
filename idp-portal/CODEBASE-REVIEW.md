@@ -737,7 +737,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | ~~**MAINT-BE-5**~~ | ~~MEDIUM~~ | ~~**`_find_workflows_referencing_action()` — faux positifs JSON** — `execution_steps__contains=str(action_id)` retourne des faux positifs (action_id=42 matche "421"). Validation Python en boucle. Pour Oracle 19c+, `JSON_EXISTS` serait plus fiable et performant~~ **✅ RESOLVED Story 54.10 (2026-02-28)** | `catalog/services.py` | 674–711 |
 | ~~**MAINT-BE-6**~~ | ~~MEDIUM~~ | ~~**Profils hardcodés** — `_ALLOWED_PROFILES = {"dba_applicatif", "dba_infrastructure", "dbops"}` en constante module. Ajout d'un profil = modification du code. Devrait être config-driven ou DB-backed~~ **Résolu — Story 54.5 (2026-02-27)** | `idp_auth/views.py` | 48–49 |
 | ~~**MAINT-BE-7**~~ | ~~MEDIUM~~ | ~~**Status mapping dupliqué dans les adapters** — chaque adapter définit son propre `STATUS_MAP` dict (AAP, GitHub Actions, TFC, Azure DevOps). Pattern identique, pas de base commune. Extraction vers `adapters/status_mappers.py` possible~~ **✅ RESOLVED Story 54.11 (2026-02-28)** | `adapters/*.py` | — |
-| **MAINT-BE-8** | LOW | **Late imports `PLC0415`** — 3+ imports tardifs dans `executions/services.py` (lignes 451, 592, 893) pour éviter des dépendances circulaires. Indicateur de couplage entre modules | `executions/services.py` | 451, 592, 893 |
+| ~~**MAINT-BE-8**~~ | ~~LOW~~ | ~~**Late imports `PLC0415`** — 3+ imports tardifs dans `executions/services.py` pour éviter des dépendances circulaires. Indicateur de couplage entre modules~~ **✅ RESOLVED Story 54.16 (2026-02-28) — commentaires explicatifs ajoutés sur les late imports** | `executions/services.py` | 438, 924 |
 | **MAINT-BE-9** | LOW | **Validation en 4 couches dans les vues d'exécution** — `ExecutionPayloadValidator` → `TargetValidator` → `EnvironmentConfigResolver` → serializer DRF implicite. Debug difficile quand une erreur survient. Pipeline unifié recommandé | `executions/views/execution_views.py` | — |
 
 #### Frontend
@@ -747,8 +747,8 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | ~~**MAINT-FE-1**~~ | ~~HIGH~~ | ~~**`IntegrationForm.tsx` — 730 LOC, composant god**~~ ✅ RÉSOLU Story 54.8 — `useIntegrationFormState()` créé (304 LOC), `IntegrationForm.tsx` réduit à 229 LOC | `hooks/useIntegrationFormState.ts` | — |
 | ~~**MAINT-FE-2**~~ | ~~MEDIUM~~ | ~~**`WorkflowBuilderCanvas.tsx` — 489 LOC**~~ ✅ RESOLVED Story 54.12 — `useWorkflowGraph()` créé, `WorkflowBuilderCanvas.tsx` réduit à 185 LOC | `hooks/useWorkflowGraph.ts` | — |
 | ~~**MAINT-FE-3**~~ | ~~MEDIUM~~ | ~~**`executionRenderers.tsx` — 444 LOC**~~ ✅ RESOLVED Story 54.13 — `executionStatusRenderer.tsx` créé, `executionRenderers.tsx` réduit à ~320 LOC | `utils/executionStatusRenderer.tsx` | — |
-| **MAINT-FE-4** | LOW | **Debounce pattern dupliqué** — `useDebounce` hook existe mais certains composants implémentent manuellement le debounce avec `setTimeout` (ex: `AAPTemplateSection.tsx`). Devrait utiliser le hook commun | `components/admin/StepsEditor.tsx` | ~108–113 |
-| **MAINT-FE-5** | LOW | **Date formatting éparpillé** — `new Date(d).toLocaleDateString('fr-CA')` et variantes copiées dans ProfilesTable, AuditTable et d'autres composants. Extraire `formatLocalDate()` utility | Multiples fichiers | — |
+| ~~**MAINT-FE-4**~~ | ~~LOW~~ | ~~**Debounce pattern dupliqué** — `useDebounce` hook existe mais certains composants implémentent manuellement le debounce avec `setTimeout`~~ **✅ RESOLVED Story 54.16 (2026-02-28) — `StepsEditor.tsx` et `WizardStep2Automatisme.tsx` migrent vers `useDebounce`** | `components/admin/StepsEditor.tsx`, `WizardStep2Automatisme.tsx` | — |
+| ~~**MAINT-FE-5**~~ | ~~LOW~~ | ~~**Date formatting éparpillé** — `new Date(d).toLocaleDateString('fr-CA')` et variantes copiées dans ProfilesTable et d'autres composants~~ **✅ RESOLVED Story 54.16 (2026-02-28) — `formatLocalDate` et `formatLocalDateTime` ajoutés dans `utils/dateFormat.ts` ; `ProfilesTable.tsx`, `IntegrationsTable.tsx`, `IntegrationForm.tsx` migrés** | `utils/dateFormat.ts` | — |
 
 ---
 
@@ -826,10 +826,10 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | NEW-FE-1 | Nested key props redondants (TopNav) | Frontend | Trivial |
 | NEW-FE-3 | `.catch()` silencieux (ReportingDashboard) | Frontend | Trivial |
 | NEW-FE-4 | Prop `allowedEnvironments` ignorée (code mort) | Frontend | Trivial |
-| MAINT-BE-8 | Late imports `PLC0415` (couplage inter-modules) | Backend | Faible |
+| ~~MAINT-BE-8~~ | ~~Late imports `PLC0415` (couplage inter-modules)~~ | ~~Backend~~ | ~~Faible~~ ✅ Story 54.16 |
 | MAINT-BE-9 | Validation en 4 couches dans vues d'exécution | Backend | Moyen |
-| MAINT-FE-4 | Debounce pattern dupliqué (hook vs setTimeout) | Frontend | Trivial |
-| MAINT-FE-5 | Date formatting copié dans plusieurs composants | Frontend | Trivial |
+| ~~MAINT-FE-4~~ | ~~Debounce pattern dupliqué (hook vs setTimeout)~~ | ~~Frontend~~ | ~~Trivial~~ ✅ Story 54.16 |
+| ~~MAINT-FE-5~~ | ~~Date formatting copié dans plusieurs composants~~ | ~~Frontend~~ | ~~Trivial~~ ✅ Story 54.16 |
 | INCON-2 | MD5 hash collision (documenté, acceptable pour N<1000) | Backend | — |
 | PERF-4 | `<style>` inline dans 3 composants (impact négligeable) | Frontend | — |
 

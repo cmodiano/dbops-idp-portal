@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { formatUtcToLocal } from './dateFormat';
+import { formatUtcToLocal, formatLocalDate, formatLocalDateTime } from './dateFormat';
 
 describe('formatUtcToLocal', () => {
   // ── Z timezone suffix ──────────────────────────────────────────
@@ -93,5 +93,65 @@ describe('formatUtcToLocal', () => {
     // This test just confirms they are valid dates
     expect(Number.isNaN(withZ.getTime())).toBe(false);
     expect(Number.isNaN(withoutZ.getTime())).toBe(false);
+  });
+});
+
+// ── formatLocalDate (MAINT-FE-5, Story 54.16) ────────────────────────────────
+
+describe('formatLocalDate', () => {
+  it('formats a valid ISO date string in fr-CA (YYYY-MM-DD)', () => {
+    // Use noon UTC to avoid date boundary shift in any UTC-12..UTC+12 timezone
+    const result = formatLocalDate('2026-02-28T12:00:00Z');
+    expect(result).toBe('2026-02-28');
+  });
+
+  it('returns — for null', () => {
+    expect(formatLocalDate(null)).toBe('—');
+  });
+
+  it('returns — for undefined', () => {
+    expect(formatLocalDate(undefined)).toBe('—');
+  });
+
+  it('returns — for empty string', () => {
+    expect(formatLocalDate('')).toBe('—');
+  });
+
+  it('returns — for an invalid date string', () => {
+    expect(formatLocalDate('not-a-date')).toBe('—');
+  });
+
+  it('does not contain time component', () => {
+    const result = formatLocalDate('2026-02-28T12:00:00Z');
+    expect(result).not.toMatch(/\d{2}:\d{2}/);
+  });
+});
+
+// ── formatLocalDateTime (MAINT-FE-5, Story 54.16) ────────────────────────────
+
+describe('formatLocalDateTime', () => {
+  it('formats a valid ISO datetime string as YYYY-MM-DD HH:mm', () => {
+    // formatLocalDateTime uses manual formatting to ensure consistent "HH:mm" output
+    // across all environments (fr-CA toLocaleString produces "HH h mm" on macOS/Safari).
+    // Use noon UTC to avoid date boundary shift in any UTC-12..UTC+12 timezone.
+    const result = formatLocalDateTime('2026-02-28T12:30:00Z');
+    expect(result).not.toBe('—');
+    expect(result).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+  });
+
+  it('returns — for null', () => {
+    expect(formatLocalDateTime(null)).toBe('—');
+  });
+
+  it('returns — for undefined', () => {
+    expect(formatLocalDateTime(undefined)).toBe('—');
+  });
+
+  it('returns — for empty string', () => {
+    expect(formatLocalDateTime('')).toBe('—');
+  });
+
+  it('returns — for an invalid date string', () => {
+    expect(formatLocalDateTime('not-a-date')).toBe('—');
   });
 });

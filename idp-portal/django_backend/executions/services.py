@@ -435,6 +435,9 @@ class ExecutionService:
         Runtime dispatch via RuntimeRegistry (Story 34.4 — SOLID-BE-7).
         Used after creation (when not PENDING_APPROVAL) and after DBA approval.
         """
+        # Late import to avoid circular dependency:
+        # runtime_registry → adapter modules → executions.models → executions.services
+        # Moving to top-level would create an import cycle at module load time.
         from executions.runtime_registry import runtime_registry  # noqa: PLC0415
         action = execution.action
         if not action:

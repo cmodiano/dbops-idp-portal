@@ -8,7 +8,7 @@
  * - Accessibility support
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Alert,
   Button,
@@ -41,6 +41,7 @@ import { CSS } from '@dnd-kit/utilities';
 import type { ExecutionStep, ExecutionStepType, ConnectorType } from '../../types/api';
 import { useEnvironments } from '../../hooks/useEnvironments';
 import { useAAPTemplates } from '../../hooks/useAAPTemplates';
+import { useDebounce } from '../../hooks/useDebounce';
 
 const { Text } = Typography;
 
@@ -106,11 +107,7 @@ const AAPTemplateSection: React.FC<AAPTemplateSectionProps> = ({
 
   // H3 fix: debounced search for server-side filtering (AC3)
   const [searchInput, setSearchInput] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(searchInput), 300);
-    return () => clearTimeout(timer);
-  }, [searchInput]);
+  const debouncedSearch = useDebounce(searchInput, 300);
 
   const { templates, loading, fallback, error } = useAAPTemplates(integrationId, resourceType, debouncedSearch || undefined);
 
