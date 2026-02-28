@@ -532,6 +532,9 @@ SAML_IDP_SSO_URL = os.getenv('SAML_IDP_SSO_URL', 'https://idp.example.com/sso')
 SAML_IDP_SLO_URL = os.getenv('SAML_IDP_SLO_URL', 'https://idp.example.com/slo')
 SAML_IDP_CERT_PATH = os.getenv('SAML_IDP_CERT_PATH', '')
 
+# Default SAML profile fallback when 'profile' attribute is absent (Story 54.5)
+DEFAULT_SAML_PROFILE = os.getenv('DEFAULT_SAML_PROFILE', 'dba_applicatif')
+
 # ============================================================================
 # JWT Configuration (Story M.7)
 # ============================================================================

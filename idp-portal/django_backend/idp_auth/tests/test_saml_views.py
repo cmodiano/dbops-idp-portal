@@ -90,6 +90,7 @@ class TestSAMLLoginView(TestCase):
     SAML_IDP_CERT_PATH='',
     SAML_SP_CERT_PATH='',
     SAML_SP_KEY_PATH='',
+    DEFAULT_SAML_PROFILE='dba_applicatif',
 )
 class TestSAMLCallbackView(TestCase):
     """Tests for POST /auth/saml/callback endpoint."""
@@ -432,6 +433,119 @@ class TestSAMLCallbackView(TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.data['error']['code'], 'NO_PROFILE')
+
+
+@override_settings(
+    AUTH_DEV_BYPASS=False,
+    JWT_SECRET_KEY='test-secret-key',
+    JWT_ALGORITHM='HS256',
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30,
+    JWT_REFRESH_TOKEN_EXPIRE_HOURS=8,
+    APP_ENV='development',
+    CORS_ALLOWED_ORIGINS=['http://localhost:5173'],
+    SAML_SP_ENTITY_ID='https://sp.example.com',
+    SAML_SP_ACS_URL='http://localhost:8000/api/v1/auth/saml/callback',
+    SAML_IDP_ENTITY_ID='https://idp.example.com',
+    SAML_IDP_SSO_URL='https://idp.example.com/sso',
+    SAML_IDP_SLO_URL='https://idp.example.com/slo',
+    SAML_IDP_CERT_PATH='',
+    SAML_SP_CERT_PATH='',
+    SAML_SP_KEY_PATH='',
+    DEFAULT_SAML_PROFILE='dba_applicatif',
+)
+class TestDefaultSAMLProfileSetting(TestCase):
+    """Story 54.5: Tests for DEFAULT_SAML_PROFILE config-driven fallback."""
+
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    @patch('idp_auth.views.AuditService')
+    @patch('idp_auth.views.AuthService')
+    @patch('idp_auth.views.Profile')
+    @patch('idp_auth.views.create_saml_auth')
+    def test_default_saml_profile_used_when_profile_attribute_absent(
+        self, mock_create_auth, mock_profile_model, mock_auth_service, mock_audit
+    ):
+        """When SAML 'profile' attribute is absent, DEFAULT_SAML_PROFILE is used as raw_profile."""
+        from idp_auth.views import SAMLCallbackView
+
+        mock_auth = MagicMock()
+        mock_auth.get_errors.return_value = []
+        mock_auth.is_authenticated.return_value = True
+        mock_auth.get_nameid.return_value = 'user@example.com'
+        mock_auth.get_attributes.return_value = {
+            'username': ['defaultuser'],
+            'groups': ['CN=DBA,OU=Groups,DC=example,DC=com'],
+            # No 'profile' attribute — should use DEFAULT_SAML_PROFILE
+        }
+        mock_create_auth.return_value = mock_auth
+
+        mock_profile = MagicMock()
+        mock_profile.name = 'dba'
+        mock_profile_model.objects.find_by_ad_groups.return_value = [mock_profile]
+
+        mock_user = MagicMock()
+        mock_user.id = 100
+        mock_user.username = 'defaultuser'
+        mock_user.profile = 'dba'
+        mock_auth_service.return_value.create_or_update_user.return_value = mock_user
+
+        request = self.factory.post(
+            '/api/v1/auth/saml/callback',
+            data={'SAMLResponse': 'base64data'}
+        )
+        view = SAMLCallbackView.as_view()
+        view(request)
+
+        # _extract_ad_groups receives raw_profile='dba_applicatif' (the default)
+        # But groups attribute is present, so groups are used instead
+        mock_profile_model.objects.find_by_ad_groups.assert_called_once_with(
+            ['CN=DBA,OU=Groups,DC=example,DC=com']
+        )
+
+    @override_settings(DEFAULT_SAML_PROFILE='custom_profile')
+    @patch('idp_auth.views.AuditService')
+    @patch('idp_auth.views.AuthService')
+    @patch('idp_auth.views.Profile')
+    @patch('idp_auth.views.create_saml_auth')
+    def test_override_default_saml_profile_changes_fallback(
+        self, mock_create_auth, mock_profile_model, mock_auth_service, mock_audit
+    ):
+        """Overriding DEFAULT_SAML_PROFILE changes the raw_profile fallback value."""
+        from idp_auth.views import SAMLCallbackView
+
+        mock_auth = MagicMock()
+        mock_auth.get_errors.return_value = []
+        mock_auth.is_authenticated.return_value = True
+        mock_auth.get_nameid.return_value = 'user@example.com'
+        mock_auth.get_attributes.return_value = {
+            'username': ['customuser'],
+            # No 'profile' and no 'groups' → raw_profile used as AD group fallback
+        }
+        mock_create_auth.return_value = mock_auth
+
+        mock_profile = MagicMock()
+        mock_profile.name = 'custom_profile'
+        mock_profile_model.objects.find_by_ad_groups.return_value = [mock_profile]
+
+        mock_user = MagicMock()
+        mock_user.id = 101
+        mock_user.username = 'customuser'
+        mock_user.profile = 'custom_profile'
+        mock_auth_service.return_value.create_or_update_user.return_value = mock_user
+
+        request = self.factory.post(
+            '/api/v1/auth/saml/callback',
+            data={'SAMLResponse': 'base64data'}
+        )
+        view = SAMLCallbackView.as_view()
+        view(request)
+
+        # With no groups and no profile attribute, raw_profile='custom_profile'
+        # is used as fallback AD group in _extract_ad_groups
+        mock_profile_model.objects.find_by_ad_groups.assert_called_once_with(
+            ['custom_profile']
+        )
 
 
 class TestExtractAdGroups(TestCase):

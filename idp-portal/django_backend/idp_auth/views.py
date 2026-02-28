@@ -44,10 +44,6 @@ from catalog.models import Action
 
 logger = structlog.get_logger(__name__)
 
-# Default profile mapping for SAML attributes
-_DEFAULT_PROFILE = "dba_applicatif"
-_ALLOWED_PROFILES = {"dba_applicatif", "dba_infrastructure", "dbops"}
-
 
 def _extract_ad_groups(attributes: dict, raw_profile: str | None) -> list[str]:
     """Extract AD groups from SAML attributes.
@@ -195,7 +191,7 @@ class SAMLCallbackView(APIView):
 
         username = attributes.get("username", [name_id])[0] if attributes.get("username") else name_id
         display_name = attributes.get("displayName", [None])[0] if attributes.get("displayName") else None
-        raw_profile = attributes.get("profile", [_DEFAULT_PROFILE])[0] if attributes.get("profile") else _DEFAULT_PROFILE
+        raw_profile = attributes.get("profile", [settings.DEFAULT_SAML_PROFILE])[0] if attributes.get("profile") else settings.DEFAULT_SAML_PROFILE
         saml_subject = name_id
         raw_email = (
             (attributes.get("mail") or [None])[0]

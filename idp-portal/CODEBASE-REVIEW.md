@@ -727,7 +727,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | **MAINT-BE-3** | HIGH | **`InventoryQueryExecutor` God class (1167 LOC)** — SQL generation, schema mapping, column validation, result pagination, error handling dans 1 classe. Devrait être découpé : `QueryBuilder`, `MappingValidator`, `ResultPaginator` | `inventory/query_executor.py` | 1–1167 |
 | **MAINT-BE-4** | MEDIUM | **`create_execution()` signature — 11 paramètres** — `user, action, environment, parameters, parent_execution_id, correlation_id, source, ip_address, targets, delegated_referenced_action_ids, validated_targets`. Candidat pour un objet `ExecutionRequest` DTO | `executions/services.py` | 171–218 |
 | **MAINT-BE-5** | MEDIUM | **`_find_workflows_referencing_action()` — faux positifs JSON** — `execution_steps__contains=str(action_id)` retourne des faux positifs (action_id=42 matche "421"). Validation Python en boucle. Pour Oracle 19c+, `JSON_EXISTS` serait plus fiable et performant | `catalog/services.py` | 674–702 |
-| **MAINT-BE-6** | MEDIUM | **Profils hardcodés** — `_ALLOWED_PROFILES = {"dba_applicatif", "dba_infrastructure", "dbops"}` en constante module. Ajout d'un profil = modification du code. Devrait être config-driven ou DB-backed | `idp_auth/views.py` | 48–49 |
+| ~~**MAINT-BE-6**~~ | ~~MEDIUM~~ | ~~**Profils hardcodés** — `_ALLOWED_PROFILES = {"dba_applicatif", "dba_infrastructure", "dbops"}` en constante module. Ajout d'un profil = modification du code. Devrait être config-driven ou DB-backed~~ **Résolu — Story 54.5 (2026-02-27)** | `idp_auth/views.py` | 48–49 |
 | **MAINT-BE-7** | MEDIUM | **Status mapping dupliqué dans les adapters** — chaque adapter définit son propre `STATUS_MAP` dict (AAP, GitHub Actions, TFC, Azure DevOps). Pattern identique, pas de base commune. Extraction vers `adapters/status_mappers.py` possible | `adapters/*.py` | — |
 | **MAINT-BE-8** | LOW | **Late imports `PLC0415`** — 3+ imports tardifs dans `executions/services.py` (lignes 451, 592, 893) pour éviter des dépendances circulaires. Indicateur de couplage entre modules | `executions/services.py` | 451, 592, 893 |
 | **MAINT-BE-9** | LOW | **Validation en 4 couches dans les vues d'exécution** — `ExecutionPayloadValidator` → `TargetValidator` → `EnvironmentConfigResolver` → serializer DRF implicite. Debug difficile quand une erreur survient. Pipeline unifié recommandé | `executions/views/execution_views.py` | — |
@@ -805,7 +805,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | ~~NEW-BE-9~~ | ~~N+1 `.save()` en boucle dans `CatalogService.deactivate_action()`~~ ✅ RÉSOLU (Story 54.2) | Backend | — |
 | MAINT-BE-4 | `create_execution()` — 11 paramètres, candidat DTO | Backend | Faible |
 | MAINT-BE-5 | `_find_workflows_referencing_action()` — faux positifs JSON | Backend | Faible |
-| MAINT-BE-6 | Profils hardcodés `_ALLOWED_PROFILES` dans views | Backend | Trivial |
+| ~~MAINT-BE-6~~ | ~~Profils hardcodés `_ALLOWED_PROFILES` dans views~~ ✅ RÉSOLU (Story 54.5) | Backend | — |
 | MAINT-BE-7 | Status mapping dupliqué dans les adapters | Backend | Faible |
 | MAINT-FE-2 | `WorkflowBuilderCanvas.tsx` — 489 LOC, candidat extraction hook | Frontend | Moyen |
 | MAINT-FE-3 | `executionRenderers.tsx` — 444 LOC, responsabilités mélangées | Frontend | Faible |
@@ -858,7 +858,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | **Audit #3 (§17)** | **6/6** | **0** |
 | **Audit #4 (§18)** | **9/12** | **3** |
 | **Audit #5 — Maintenabilité (§20)** | **0/14** | **14** |
-| **Total** | **115/133** | **18 (5 HIGH, 6 MEDIUM, 6 LOW, 1 INFO)** |
+| **Total** | **116/133** | **17 (5 HIGH, 5 MEDIUM, 6 LOW, 1 INFO)** |
 
 ---
 
@@ -870,7 +870,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 3. ~~NEW-BE-7/8~~ — ✅ RÉSOLU (Story 54.2) — Config + status fusionnés en un seul `.save(update_fields=[...])`
 4. ~~NEW-BE-9~~ — ✅ RÉSOLU (Story 54.2) — Boucle préparation + `bulk_update()` + audit SOC1
 5. ~~NEW-FE-4~~ — ✅ RÉSOLU (Story 54.3) — Prop morte supprimée de l'interface, signature et appelants
-6. MAINT-BE-6 — Rendre `_ALLOWED_PROFILES` config-driven
+6. ~~MAINT-BE-6~~ — ✅ RÉSOLU (Story 54.5) — `_ALLOWED_PROFILES` supprimé (code mort), `_DEFAULT_PROFILE` migré vers `settings.DEFAULT_SAML_PROFILE`
 
 **Refactoring structurel (effort moyen — par story) :**
 1. MAINT-BE-1 — Extraire `_validate_transition()`, `_apply_status_change()`, `_schedule_notification()` de `update_status()`
