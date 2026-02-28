@@ -723,7 +723,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | # | Sévérité | Description | Fichier | Lignes |
 |---|----------|-------------|---------|--------|
 | ~~**MAINT-BE-1**~~ | ~~HIGH~~ | ~~**`update_status()` God method (168 LOC)** — mélange machine à états, timestamps, audit, notifications. State machine hardcodée comme `dict` imbriqué. Notification callback défini inline (30 LOC). Devrait être 3 méthodes : `_validate_transition()`, `_apply_status_change()`, `_schedule_notification()`~~ **Résolu — Story 54.6 (2026-02-27)** | `executions/services.py` | 466–633 |
-| **MAINT-BE-2** | HIGH | **`idp_auth/views.py` module monolithique (851 LOC)** — 9 classes de vues hétérogènes (SAML login/callback, JWT refresh, API keys CRUD, service login, favorites). Devrait être 4-5 modules : `saml_views.py`, `jwt_views.py`, `apikey_views.py`, `service_login_views.py`, `favorites_views.py` | `idp_auth/views.py` | 1–851 |
+| ~~**MAINT-BE-2**~~ | ~~HIGH~~ | ~~**`idp_auth/views.py` module monolithique (851 LOC)** — 9 classes de vues hétérogènes (SAML login/callback, JWT refresh, API keys CRUD, service login, favorites). Devrait être 4-5 modules : `saml_views.py`, `jwt_views.py`, `apikey_views.py`, `service_login_views.py`, `favorites_views.py`~~ **Résolu — Story 54.7 (2026-02-27)** | `idp_auth/views/` | — |
 | **MAINT-BE-3** | HIGH | **`InventoryQueryExecutor` God class (1167 LOC)** — SQL generation, schema mapping, column validation, result pagination, error handling dans 1 classe. Devrait être découpé : `QueryBuilder`, `MappingValidator`, `ResultPaginator` | `inventory/query_executor.py` | 1–1167 |
 | **MAINT-BE-4** | MEDIUM | **`create_execution()` signature — 11 paramètres** — `user, action, environment, parameters, parent_execution_id, correlation_id, source, ip_address, targets, delegated_referenced_action_ids, validated_targets`. Candidat pour un objet `ExecutionRequest` DTO | `executions/services.py` | 171–218 |
 | **MAINT-BE-5** | MEDIUM | **`_find_workflows_referencing_action()` — faux positifs JSON** — `execution_steps__contains=str(action_id)` retourne des faux positifs (action_id=42 matche "421"). Validation Python en boucle. Pour Oracle 19c+, `JSON_EXISTS` serait plus fiable et performant | `catalog/services.py` | 674–702 |
@@ -790,7 +790,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | # | Issue | Type | Effort |
 |---|-------|------|--------|
 | SOLID-FE-4 | ~25 composants importent directement les services (couplage DIP) | Frontend | Élevé |
-| MAINT-BE-2 | `idp_auth/views.py` module monolithique (851 LOC, 9 classes hétérogènes) | Backend | Moyen |
+| ~~MAINT-BE-2~~ | ~~`idp_auth/views.py` module monolithique (851 LOC, 9 classes hétérogènes)~~ ✅ Résolu Story 54.7 | Backend | — |
 | MAINT-BE-3 | `InventoryQueryExecutor` God class (1167 LOC) | Backend | Élevé |
 | MAINT-FE-1 | `IntegrationForm.tsx` — 730 LOC, composant god sans hook dédié | Frontend | Moyen |
 
@@ -856,8 +856,8 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | **Observations post-refactoring (§16)** | 3 (16.1 DOCUMENTED, 16.2 RESOLVED, 16.3 RESOLVED) | **1 INFO** |
 | **Audit #3 (§17)** | **6/6** | **0** |
 | **Audit #4 (§18)** | **9/12** | **3** |
-| **Audit #5 — Maintenabilité (§20)** | **1/14** | **13** |
-| **Total** | **117/133** | **16 (4 HIGH, 5 MEDIUM, 6 LOW, 1 INFO)** |
+| **Audit #5 — Maintenabilité (§20)** | **2/14** | **12** |
+| **Total** | **118/133** | **15 (3 HIGH, 5 MEDIUM, 6 LOW, 1 INFO)** |
 
 ---
 

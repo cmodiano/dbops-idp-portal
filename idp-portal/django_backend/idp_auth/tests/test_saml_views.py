@@ -37,7 +37,7 @@ class TestSAMLLoginView(TestCase):
     def setUp(self):
         self.factory = RequestFactory()
 
-    @patch('idp_auth.views.create_saml_auth')
+    @patch('idp_auth.views.saml.create_saml_auth')
     def test_saml_login_redirects_to_idp(self, mock_create_auth):
         """GET /auth/saml/login redirects to IdP SSO URL."""
         from idp_auth.views import SAMLLoginView
@@ -98,10 +98,10 @@ class TestSAMLCallbackView(TestCase):
     def setUp(self):
         self.factory = RequestFactory()
 
-    @patch('idp_auth.views.AuditService')
-    @patch('idp_auth.views.AuthService')
-    @patch('idp_auth.views.Profile')
-    @patch('idp_auth.views.create_saml_auth')
+    @patch('idp_auth.views.saml.AuditService')
+    @patch('idp_auth.views.saml.AuthService')
+    @patch('idp_auth.views.saml.Profile')
+    @patch('idp_auth.views.saml.create_saml_auth')
     def test_saml_callback_valid_assertion_creates_user(
         self, mock_create_auth, mock_profile_model, mock_auth_service, mock_audit
     ):
@@ -148,7 +148,7 @@ class TestSAMLCallbackView(TestCase):
         # User should be created/updated
         mock_auth_service.return_value.create_or_update_user.assert_called_once()
 
-    @patch('idp_auth.views.create_saml_auth')
+    @patch('idp_auth.views.saml.create_saml_auth')
     def test_saml_callback_invalid_assertion_returns_403(self, mock_create_auth):
         """Invalid SAML assertion returns 403 SAML_VALIDATION_FAILED."""
         from idp_auth.views import SAMLCallbackView
@@ -168,7 +168,7 @@ class TestSAMLCallbackView(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.data['error']['code'], 'SAML_VALIDATION_FAILED')
 
-    @patch('idp_auth.views.create_saml_auth')
+    @patch('idp_auth.views.saml.create_saml_auth')
     def test_saml_callback_not_authenticated_returns_403(self, mock_create_auth):
         """Not authenticated returns 403 SAML_NOT_AUTHENTICATED."""
         from idp_auth.views import SAMLCallbackView
@@ -188,10 +188,10 @@ class TestSAMLCallbackView(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.data['error']['code'], 'SAML_NOT_AUTHENTICATED')
 
-    @patch('idp_auth.views.AuditService')
-    @patch('idp_auth.views.AuthService')
-    @patch('idp_auth.views.Profile')
-    @patch('idp_auth.views.create_saml_auth')
+    @patch('idp_auth.views.saml.AuditService')
+    @patch('idp_auth.views.saml.AuthService')
+    @patch('idp_auth.views.saml.Profile')
+    @patch('idp_auth.views.saml.create_saml_auth')
     def test_saml_callback_extracts_email_from_mail_attribute(
         self, mock_create_auth, mock_profile_model, mock_auth_service, mock_audit
     ):
@@ -235,10 +235,10 @@ class TestSAMLCallbackView(TestCase):
             email='testuser@example.com',
         )
 
-    @patch('idp_auth.views.AuditService')
-    @patch('idp_auth.views.AuthService')
-    @patch('idp_auth.views.Profile')
-    @patch('idp_auth.views.create_saml_auth')
+    @patch('idp_auth.views.saml.AuditService')
+    @patch('idp_auth.views.saml.AuthService')
+    @patch('idp_auth.views.saml.Profile')
+    @patch('idp_auth.views.saml.create_saml_auth')
     def test_saml_callback_extracts_email_from_email_attribute(
         self, mock_create_auth, mock_profile_model, mock_auth_service, mock_audit
     ):
@@ -276,10 +276,10 @@ class TestSAMLCallbackView(TestCase):
         call_kwargs = mock_auth_service.return_value.create_or_update_user.call_args
         self.assertEqual(call_kwargs.kwargs.get('email'), 'altuser@example.com')
 
-    @patch('idp_auth.views.AuditService')
-    @patch('idp_auth.views.AuthService')
-    @patch('idp_auth.views.Profile')
-    @patch('idp_auth.views.create_saml_auth')
+    @patch('idp_auth.views.saml.AuditService')
+    @patch('idp_auth.views.saml.AuthService')
+    @patch('idp_auth.views.saml.Profile')
+    @patch('idp_auth.views.saml.create_saml_auth')
     def test_saml_callback_no_email_attribute_passes_none(
         self, mock_create_auth, mock_profile_model, mock_auth_service, mock_audit
     ):
@@ -319,10 +319,10 @@ class TestSAMLCallbackView(TestCase):
         call_kwargs = mock_auth_service.return_value.create_or_update_user.call_args
         self.assertIsNone(call_kwargs.kwargs.get('email'))
 
-    @patch('idp_auth.views.AuditService')
-    @patch('idp_auth.views.AuthService')
-    @patch('idp_auth.views.Profile')
-    @patch('idp_auth.views.create_saml_auth')
+    @patch('idp_auth.views.saml.AuditService')
+    @patch('idp_auth.views.saml.AuthService')
+    @patch('idp_auth.views.saml.Profile')
+    @patch('idp_auth.views.saml.create_saml_auth')
     def test_saml_callback_extracts_email_from_emailAddress_attribute(
         self, mock_create_auth, mock_profile_model, mock_auth_service, mock_audit
     ):
@@ -360,10 +360,10 @@ class TestSAMLCallbackView(TestCase):
         call_kwargs = mock_auth_service.return_value.create_or_update_user.call_args
         self.assertEqual(call_kwargs.kwargs.get('email'), 'addruser@example.com')
 
-    @patch('idp_auth.views.AuditService')
-    @patch('idp_auth.views.AuthService')
-    @patch('idp_auth.views.Profile')
-    @patch('idp_auth.views.create_saml_auth')
+    @patch('idp_auth.views.saml.AuditService')
+    @patch('idp_auth.views.saml.AuthService')
+    @patch('idp_auth.views.saml.Profile')
+    @patch('idp_auth.views.saml.create_saml_auth')
     def test_saml_callback_extracts_email_from_wsfed_claim(
         self, mock_create_auth, mock_profile_model, mock_auth_service, mock_audit
     ):
@@ -405,8 +405,8 @@ class TestSAMLCallbackView(TestCase):
             call_kwargs.kwargs.get('email'), 'wsfeduser@example.com'
         )
 
-    @patch('idp_auth.views.Profile')
-    @patch('idp_auth.views.create_saml_auth')
+    @patch('idp_auth.views.saml.Profile')
+    @patch('idp_auth.views.saml.create_saml_auth')
     def test_saml_callback_no_profile_returns_403(self, mock_create_auth, mock_profile_model):
         """User with no matching profile returns 403 NO_PROFILE."""
         from idp_auth.views import SAMLCallbackView
@@ -459,10 +459,10 @@ class TestDefaultSAMLProfileSetting(TestCase):
     def setUp(self):
         self.factory = RequestFactory()
 
-    @patch('idp_auth.views.AuditService')
-    @patch('idp_auth.views.AuthService')
-    @patch('idp_auth.views.Profile')
-    @patch('idp_auth.views.create_saml_auth')
+    @patch('idp_auth.views.saml.AuditService')
+    @patch('idp_auth.views.saml.AuthService')
+    @patch('idp_auth.views.saml.Profile')
+    @patch('idp_auth.views.saml.create_saml_auth')
     def test_default_saml_profile_used_when_profile_attribute_absent(
         self, mock_create_auth, mock_profile_model, mock_auth_service, mock_audit
     ):
@@ -504,10 +504,10 @@ class TestDefaultSAMLProfileSetting(TestCase):
         )
 
     @override_settings(DEFAULT_SAML_PROFILE='custom_profile')
-    @patch('idp_auth.views.AuditService')
-    @patch('idp_auth.views.AuthService')
-    @patch('idp_auth.views.Profile')
-    @patch('idp_auth.views.create_saml_auth')
+    @patch('idp_auth.views.saml.AuditService')
+    @patch('idp_auth.views.saml.AuthService')
+    @patch('idp_auth.views.saml.Profile')
+    @patch('idp_auth.views.saml.create_saml_auth')
     def test_override_default_saml_profile_changes_fallback(
         self, mock_create_auth, mock_profile_model, mock_auth_service, mock_audit
     ):

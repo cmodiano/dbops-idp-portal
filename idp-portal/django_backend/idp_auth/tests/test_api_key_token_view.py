@@ -109,7 +109,7 @@ class TestAPIKeyTokenView(TestCase):
         self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
 
     def test_audit_logged_on_success(self):
-        with patch('idp_auth.views.AuditService.create_entry') as mock_audit:
+        with patch('idp_auth.views.api_keys.AuditService.create_entry') as mock_audit:
             response = self.client.post(
                 '/api/v1/auth/token/',
                 HTTP_X_API_KEY=self.raw_key,
@@ -121,7 +121,7 @@ class TestAPIKeyTokenView(TestCase):
         self.assertEqual(call_kwargs['details']['key_name'], self.api_key_instance.name)
 
     def test_audit_logged_on_failure(self):
-        with patch('idp_auth.views.AuditService.create_entry') as mock_audit:
+        with patch('idp_auth.views.api_keys.AuditService.create_entry') as mock_audit:
             response = self.client.post(
                 '/api/v1/auth/token/',
                 HTTP_X_API_KEY='invalid-key-xyz',
@@ -133,14 +133,14 @@ class TestAPIKeyTokenView(TestCase):
 
     def test_raw_key_never_logged(self):
         """AC9: raw_key must never appear in structlog output on success or failure."""
-        with patch('idp_auth.views.logger') as mock_logger:
+        with patch('idp_auth.views.api_keys.logger') as mock_logger:
             self.client.post('/api/v1/auth/token/', HTTP_X_API_KEY=self.raw_key)
             for call in mock_logger.info.call_args_list + mock_logger.warning.call_args_list:
                 args, kwargs = call
                 all_values = str(args) + str(kwargs)
                 self.assertNotIn(self.raw_key, all_values, 'raw_key found in success log')
 
-        with patch('idp_auth.views.logger') as mock_logger:
+        with patch('idp_auth.views.api_keys.logger') as mock_logger:
             self.client.post('/api/v1/auth/token/', HTTP_X_API_KEY='bad-key-should-not-log')
             for call in mock_logger.warning.call_args_list:
                 args, kwargs = call

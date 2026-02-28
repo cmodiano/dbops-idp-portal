@@ -24,12 +24,12 @@ class TestServiceLoginView(TestCase):
 
     # ---------- AC1, AC5, AC6, AC7 : Succès 200 ----------
 
-    @patch('idp_auth.views.AuditService')
-    @patch('idp_auth.views.create_refresh_token', return_value='mock-refresh-token')
-    @patch('idp_auth.views.create_access_token', return_value='mock-access-token')
-    @patch('idp_auth.views.AuthService')
-    @patch('idp_auth.views.Profile')
-    @patch('idp_auth.views.LDAPService')
+    @patch('idp_auth.views.service_login.AuditService')
+    @patch('idp_auth.views.service_login.create_refresh_token', return_value='mock-refresh-token')
+    @patch('idp_auth.views.service_login.create_access_token', return_value='mock-access-token')
+    @patch('idp_auth.views.service_login.AuthService')
+    @patch('idp_auth.views.service_login.Profile')
+    @patch('idp_auth.views.service_login.LDAPService')
     def test_success_returns_200_with_access_token(
         self, mock_ldap_class, mock_profile, mock_auth_service_class,
         mock_create_access, mock_create_refresh, mock_audit
@@ -98,8 +98,8 @@ class TestServiceLoginView(TestCase):
 
     # ---------- AC2 : Credentials invalides → 401 ----------
 
-    @patch('idp_auth.views.AuditService')
-    @patch('idp_auth.views.LDAPService')
+    @patch('idp_auth.views.service_login.AuditService')
+    @patch('idp_auth.views.service_login.LDAPService')
     def test_invalid_credentials_returns_401(self, mock_ldap_class, mock_audit):
         """AC2 : LDAP bind échoue → 401 INVALID_CREDENTIALS."""
         mock_ldap = mock_ldap_class.return_value
@@ -122,9 +122,9 @@ class TestServiceLoginView(TestCase):
 
     # ---------- AC3 : Aucun profil AD → 403 ----------
 
-    @patch('idp_auth.views.AuditService')
-    @patch('idp_auth.views.Profile')
-    @patch('idp_auth.views.LDAPService')
+    @patch('idp_auth.views.service_login.AuditService')
+    @patch('idp_auth.views.service_login.Profile')
+    @patch('idp_auth.views.service_login.LDAPService')
     def test_no_profile_returns_403(self, mock_ldap_class, mock_profile, mock_audit):
         """AC3 : Aucun profil associé aux groupes AD → 403 NO_PROFILE."""
         mock_ldap = mock_ldap_class.return_value
@@ -142,8 +142,8 @@ class TestServiceLoginView(TestCase):
 
     # ---------- AC4 : LDAP indisponible → 503 ----------
 
-    @patch('idp_auth.views.AuditService')
-    @patch('idp_auth.views.LDAPService')
+    @patch('idp_auth.views.service_login.AuditService')
+    @patch('idp_auth.views.service_login.LDAPService')
     def test_ldap_unavailable_returns_503(self, mock_ldap_class, mock_audit):
         """AC4 : LDAPUnavailableError levée → 503 LDAP_UNAVAILABLE."""
         from idp_auth.ldap_service import LDAPUnavailableError
@@ -190,8 +190,8 @@ class TestServiceLoginView(TestCase):
         self.assertIn(ServiceLoginThrottle, ServiceLoginView.throttle_classes)
         self.assertNotIn(AuthEndpointThrottle, ServiceLoginView.throttle_classes)
 
-    @patch('idp_auth.views.AuditService')
-    @patch('idp_auth.views.LDAPService')
+    @patch('idp_auth.views.service_login.AuditService')
+    @patch('idp_auth.views.service_login.LDAPService')
     def test_throttle_applied_on_request(self, mock_ldap_class, mock_audit):
         """AC9 : Le throttle est évalué pour chaque requête (mock throttle → 429)."""
         from core.throttling import ServiceLoginThrottle
@@ -211,10 +211,10 @@ class TestServiceLoginView(TestCase):
 
     # ---------- AC10 : Audit utilise SERVICE_LOGIN — Story 49.3 ----------
 
-    @patch('idp_auth.views.AuditService')
-    @patch('idp_auth.views.Profile')
-    @patch('idp_auth.views.LDAPService')
-    @patch('idp_auth.views.AuthService')
+    @patch('idp_auth.views.service_login.AuditService')
+    @patch('idp_auth.views.service_login.Profile')
+    @patch('idp_auth.views.service_login.LDAPService')
+    @patch('idp_auth.views.service_login.AuthService')
     def test_audit_uses_service_login_action_type(
         self, mock_auth_service, mock_ldap_class, mock_profile, mock_audit
     ):
@@ -242,8 +242,8 @@ class TestServiceLoginView(TestCase):
         action_type = audit_call.kwargs.get('action_type') or audit_call[1].get('action_type')
         self.assertEqual(action_type, AuditActionType.SERVICE_LOGIN)
 
-    @patch('idp_auth.views.AuditService')
-    @patch('idp_auth.views.LDAPService')
+    @patch('idp_auth.views.service_login.AuditService')
+    @patch('idp_auth.views.service_login.LDAPService')
     def test_audit_failure_uses_service_login_action_type(self, mock_ldap_class, mock_audit):
         """AC10 : Audit entrée d'échec utilise SERVICE_LOGIN (pas USER_LOGIN) — Story 49.3."""
         mock_ldap = mock_ldap_class.return_value
@@ -261,8 +261,8 @@ class TestServiceLoginView(TestCase):
 # On utilise des fonctions pytest standalone avec mock du logger.
 
 @pytest.mark.django_db
-@patch('idp_auth.views.AuditService')
-@patch('idp_auth.views.LDAPService')
+@patch('idp_auth.views.service_login.AuditService')
+@patch('idp_auth.views.service_login.LDAPService')
 def test_password_not_in_structlog_on_invalid_credentials(mock_ldap_class, mock_audit):
     """AC8 : Le password n'apparaît dans aucun appel structlog lors d'un échec."""
     from rest_framework.test import APIClient
@@ -275,7 +275,7 @@ def test_password_not_in_structlog_on_invalid_credentials(mock_ldap_class, mock_
     def capture_log(*args, **kwargs):
         log_calls.append({'args': args, 'kwargs': kwargs})
 
-    with patch('idp_auth.views.logger') as mock_logger:
+    with patch('idp_auth.views.service_login.logger') as mock_logger:
         bound_logger = MagicMock()
         mock_logger.bind.return_value = bound_logger
         bound_logger.warning.side_effect = capture_log
@@ -296,8 +296,8 @@ def test_password_not_in_structlog_on_invalid_credentials(mock_ldap_class, mock_
 
 
 @pytest.mark.django_db
-@patch('idp_auth.views.AuditService')
-@patch('idp_auth.views.LDAPService')
+@patch('idp_auth.views.service_login.AuditService')
+@patch('idp_auth.views.service_login.LDAPService')
 def test_password_not_in_structlog_on_ldap_unavailable(mock_ldap_class, mock_audit):
     """AC8 : Le password n'apparaît pas dans les logs lors d'un LDAPUnavailableError."""
     from idp_auth.ldap_service import LDAPUnavailableError
@@ -311,7 +311,7 @@ def test_password_not_in_structlog_on_ldap_unavailable(mock_ldap_class, mock_aud
     def capture_error(*args, **kwargs):
         error_calls.append({'args': args, 'kwargs': kwargs})
 
-    with patch('idp_auth.views.logger') as mock_logger:
+    with patch('idp_auth.views.service_login.logger') as mock_logger:
         bound_logger = MagicMock()
         mock_logger.bind.return_value = bound_logger
         bound_logger.error.side_effect = capture_error
