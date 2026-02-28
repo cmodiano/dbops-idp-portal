@@ -97,6 +97,7 @@ class TestExecutionStepLogsViewSplunkFallback:
         mock_step.id = 10
         mock_step.execution = mock_execution
         mock_step.execution_id = 1
+        mock_step.platform_job_id = "job-123"
         mock_step.error_message = None
         mock_step.started_at = None
         mock_step.completed_at = None
@@ -121,6 +122,7 @@ class TestExecutionStepLogsViewSplunkFallback:
         mock_retrieve.assert_called_once_with(
             {"logs_purged": True, "logs_purged_at": "2025-01-01T00:00:00"},
             1,
+            platform_job_id="job-123",
         )
         assert response.data["data"]["output"]["logs_source"] == "splunk"
 
@@ -195,7 +197,7 @@ class TestExecutionStepLogsViewSplunkFallback:
 class TestExecutionLogsViewSplunkFallback:
     """Test that ExecutionLogsView steps fallback calls Splunk when logs_purged=True."""
 
-    @patch("executions.views.execution_views._fetch_splunk_logs_for_execution")
+    @patch("executions.views.execution_views._fetch_splunk_logs_mapping_for_execution")
     @patch("executions.views.execution_views.get_correlation_id", return_value="test-corr")
     @patch("executions.views.execution_views._dba_permission")
     @patch("executions.models.ExecutionStep.objects")
@@ -214,11 +216,12 @@ class TestExecutionLogsViewSplunkFallback:
         mock_exec_objects.select_related.return_value.get.return_value = mock_execution
         mock_perm.has_object_permission.return_value = True
 
-        # Setup steps — one purged, one not
+        # Setup steps — one purged (with platform_job_id), one not
         step_purged = MagicMock()
         step_purged.id = 10
         step_purged.step_name = "platform_step"
         step_purged.step_order = 1
+        step_purged.platform_job_id = "job-42"
         step_purged.status = "COMPLETED"
         step_purged.error_message = None
         step_purged.get_output.return_value = {"logs_purged": True, "logs_purged_at": "2025-01-01"}
@@ -227,13 +230,15 @@ class TestExecutionLogsViewSplunkFallback:
         step_normal.id = 11
         step_normal.step_name = "another_step"
         step_normal.step_order = 2
+        step_normal.platform_job_id = None
         step_normal.status = "COMPLETED"
         step_normal.error_message = None
         step_normal.get_output.return_value = {"platform_logs": "still here"}
 
         mock_step_objects.filter.return_value.order_by.return_value = [step_purged, step_normal]
 
-        mock_fetch.return_value = "from splunk"
+        # Mapping keyed by platform_job_id — only step_purged gets logs
+        mock_fetch.return_value = {"job-42": "from splunk"}
 
         factory = APIRequestFactory()
         request = factory.get("/executions/1/logs")

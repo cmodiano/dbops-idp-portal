@@ -15,7 +15,18 @@ from django.utils import timezone
 
 logger = structlog.get_logger(__name__)
 
-LOG_RETENTION_DAYS = int(os.getenv("PLATFORM_LOG_RETENTION_DAYS", "7"))
+
+def _parse_log_retention_days() -> int:
+    """Parse PLATFORM_LOG_RETENTION_DAYS defensively; default 7 on invalid value."""
+    raw = os.getenv("PLATFORM_LOG_RETENTION_DAYS", "7")
+    try:
+        val = int(raw)
+        return val if val > 0 else 7
+    except (ValueError, TypeError):
+        return 7
+
+
+LOG_RETENTION_DAYS = _parse_log_retention_days()
 PURGE_BATCH_SIZE = 100
 
 

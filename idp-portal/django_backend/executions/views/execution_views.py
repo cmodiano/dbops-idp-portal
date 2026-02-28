@@ -45,9 +45,12 @@ exec_logger = structlog.get_logger(__name__)
 _dba_permission = IsDBAOrDBOPS()
 
 
-def _fetch_splunk_logs_for_execution(execution_id: int) -> str | None:
+def _fetch_splunk_logs_for_execution(
+    execution_id: int, platform_job_id: str | None = None
+) -> str | None:
     """Best-effort retrieval of platform logs from Splunk for a given execution.
 
+    When platform_job_id is provided, returns logs for that platform job only.
     Returns the log content string, or ``None`` on any error.
     """
     try:
@@ -58,7 +61,9 @@ def _fetch_splunk_logs_for_execution(execution_id: int) -> str | None:
         if splunk is None:
             return None
 
-        return async_to_sync(splunk.search_platform_logs)(execution_id=execution_id)
+        return async_to_sync(splunk.search_platform_logs)(
+            execution_id=execution_id, platform_job_id=platform_job_id
+        )
     except Exception:  # noqa: BLE001 — best-effort
         exec_logger.exception(
             "splunk_logs_retrieval_error",
@@ -67,14 +72,35 @@ def _fetch_splunk_logs_for_execution(execution_id: int) -> str | None:
         return None
 
 
-def _retrieve_purged_logs_from_splunk(output: dict, execution_id: int) -> dict:
+def _fetch_splunk_logs_mapping_for_execution(execution_id: int) -> dict[str, str]:
+    """Best-effort retrieval of all platform logs from Splunk, keyed by platform_job_id."""
+    try:
+        from services.splunk_utils import get_splunk_service  # noqa: PLC0415
+        from asgiref.sync import async_to_sync  # noqa: PLC0415
+
+        splunk = get_splunk_service()
+        if splunk is None:
+            return {}
+
+        return async_to_sync(splunk.search_platform_logs_mapping)(execution_id=execution_id)
+    except Exception:  # noqa: BLE001 — best-effort
+        exec_logger.exception(
+            "splunk_logs_mapping_retrieval_error",
+            execution_id=execution_id,
+        )
+        return {}
+
+
+def _retrieve_purged_logs_from_splunk(
+    output: dict, execution_id: int, platform_job_id: str | None = None
+) -> dict:
     """Best-effort retrieval of purged platform logs from Splunk.
 
     If successful, injects ``platform_logs`` and ``logs_source`` into *output*.
     On failure, returns *output* unchanged (``logs_purged=True`` stays visible
     to the frontend so it can inform the user).
     """
-    content = _fetch_splunk_logs_for_execution(execution_id)
+    content = _fetch_splunk_logs_for_execution(execution_id, platform_job_id=platform_job_id)
     if content:
         output["platform_logs"] = content
         output["logs_source"] = "splunk"
@@ -512,7 +538,8 @@ class ExecutionStepLogsView(APIView):
 
         # If logs were purged, attempt retrieval from Splunk
         if output and output.get("logs_purged"):
-            output = _retrieve_purged_logs_from_splunk(output, execution_id)
+            pid = step.platform_job_id or output.get("platform_job_id")
+            output = _retrieve_purged_logs_from_splunk(output, execution_id, platform_job_id=pid)
 
         return Response(
             {
@@ -580,17 +607,20 @@ class ExecutionLogsView(APIView):
                 for step in steps
             ]
 
-            # Single Splunk retrieval for the whole execution (avoids N calls)
+            # Fetch all Splunk logs once, keyed by platform_job_id
             any_purged = any(o and o.get("logs_purged") for _, o in step_outputs)
-            splunk_logs: str | None = None
+            splunk_map: dict[str, str] = {}
             if any_purged:
-                splunk_logs = _fetch_splunk_logs_for_execution(execution_id)
+                splunk_map = _fetch_splunk_logs_mapping_for_execution(execution_id)
 
             step_logs = []
             for step, output in step_outputs:
-                if output and output.get("logs_purged") and splunk_logs:
-                    output["platform_logs"] = splunk_logs
-                    output["logs_source"] = "splunk"
+                if output and output.get("logs_purged"):
+                    pid = step.platform_job_id or output.get("platform_job_id")
+                    splunk_logs = splunk_map.get(pid) if pid else None
+                    if splunk_logs:
+                        output["platform_logs"] = splunk_logs
+                        output["logs_source"] = "splunk"
                 step_logs.append({
                     "step_id": step.id,
                     "step_name": step.step_name,

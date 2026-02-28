@@ -285,7 +285,9 @@ class SplunkService(IHealthCheckable):
     # Search — retrieve platform logs on demand
     # ------------------------------------------------------------------
 
-    async def search_platform_logs(self, execution_id: int) -> str | None:
+    async def search_platform_logs(
+        self, execution_id: int, platform_job_id: str | None = None
+    ) -> str | None:
         """Search Splunk for platform logs of a given execution.
 
         Uses the Splunk REST search API (not HEC) to retrieve previously
@@ -294,6 +296,7 @@ class SplunkService(IHealthCheckable):
 
         Args:
             execution_id: The IDP execution ID (indexed field in Splunk events).
+            platform_job_id: Optional. When provided, filters by this platform job ID.
 
         Returns:
             The log content string, or ``None`` if not found / error.
@@ -302,6 +305,8 @@ class SplunkService(IHealthCheckable):
 
         search_url = f"{self.base_url}/services/search/jobs"
         spl = f'search sourcetype="idp:platform_log" execution_id={execution_id}'
+        if platform_job_id:
+            spl += f' platform_job_id="{platform_job_id}"'
         headers = {**self.auth_headers, "Content-Type": "application/x-www-form-urlencoded"}
 
         try:
@@ -371,6 +376,85 @@ class SplunkService(IHealthCheckable):
         except Exception:  # noqa: BLE001 — best-effort retrieval
             logger.exception("splunk_search_error", execution_id=execution_id)
             return None
+
+    async def search_platform_logs_mapping(
+        self, execution_id: int
+    ) -> dict[str, str]:
+        """Search Splunk for all platform logs of an execution, keyed by platform_job_id.
+
+        Returns a mapping platform_job_id -> log content. Steps without a
+        platform_job_id in Splunk are skipped. Best-effort: returns empty dict
+        on any error or timeout.
+        """
+        import json  # noqa: PLC0415
+
+        search_url = f"{self.base_url}/services/search/jobs"
+        spl = f'search sourcetype="idp:platform_log" execution_id={execution_id}'
+        headers = {**self.auth_headers, "Content-Type": "application/x-www-form-urlencoded"}
+
+        try:
+            async with httpx.AsyncClient(
+                timeout=self.timeout,
+                verify=False,  # nosec B501  # noqa: S501
+            ) as client:
+                resp = await client.post(
+                    search_url,
+                    data={"search": spl, "output_mode": "json"},
+                    headers=headers,
+                )
+                resp.raise_for_status()
+                sid = resp.json().get("sid")
+                if not sid:
+                    logger.warning("splunk_search_no_sid", execution_id=execution_id)
+                    return {}
+
+                job_url = f"{search_url}/{sid}"
+                import time  # noqa: PLC0415
+                poll_timeout = min(self.timeout, 5.0)
+                deadline = time.monotonic() + 30.0
+                while time.monotonic() < deadline:
+                    status_resp = await client.get(
+                        job_url,
+                        params={"output_mode": "json"},
+                        headers=self.auth_headers,
+                        timeout=poll_timeout,
+                    )
+                    status_resp.raise_for_status()
+                    dispatch_state = (
+                        status_resp.json()
+                        .get("entry", [{}])[0]
+                        .get("content", {})
+                        .get("dispatchState", "")
+                    )
+                    if dispatch_state == "DONE":
+                        break
+                    await asyncio.sleep(1)
+                else:
+                    logger.warning("splunk_search_timeout", execution_id=execution_id, sid=sid)
+                    return {}
+
+                results_resp = await client.get(
+                    f"{job_url}/results",
+                    params={"output_mode": "json"},
+                    headers=self.auth_headers,
+                )
+                results_resp.raise_for_status()
+                results = results_resp.json().get("results", [])
+                mapping: dict[str, str] = {}
+                for r in results:
+                    raw = r.get("_raw", "")
+                    try:
+                        event_data = json.loads(raw) if isinstance(raw, str) else raw
+                        pid = event_data.get("platform_job_id")
+                        content = event_data.get("content")
+                        if pid is not None and content is not None:
+                            mapping[str(pid)] = content
+                    except (json.JSONDecodeError, AttributeError, TypeError):
+                        continue
+                return mapping
+        except Exception:  # noqa: BLE001 — best-effort retrieval
+            logger.exception("splunk_search_error", execution_id=execution_id)
+            return {}
 
     # ------------------------------------------------------------------
     # Health check — Story 51.1
