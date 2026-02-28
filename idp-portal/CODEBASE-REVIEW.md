@@ -722,7 +722,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 
 | # | Sévérité | Description | Fichier | Lignes |
 |---|----------|-------------|---------|--------|
-| **MAINT-BE-1** | HIGH | **`update_status()` God method (168 LOC)** — mélange machine à états, timestamps, audit, notifications. State machine hardcodée comme `dict` imbriqué. Notification callback défini inline (30 LOC). Devrait être 3 méthodes : `_validate_transition()`, `_apply_status_change()`, `_schedule_notification()` | `executions/services.py` | 466–633 |
+| ~~**MAINT-BE-1**~~ | ~~HIGH~~ | ~~**`update_status()` God method (168 LOC)** — mélange machine à états, timestamps, audit, notifications. State machine hardcodée comme `dict` imbriqué. Notification callback défini inline (30 LOC). Devrait être 3 méthodes : `_validate_transition()`, `_apply_status_change()`, `_schedule_notification()`~~ **Résolu — Story 54.6 (2026-02-27)** | `executions/services.py` | 466–633 |
 | **MAINT-BE-2** | HIGH | **`idp_auth/views.py` module monolithique (851 LOC)** — 9 classes de vues hétérogènes (SAML login/callback, JWT refresh, API keys CRUD, service login, favorites). Devrait être 4-5 modules : `saml_views.py`, `jwt_views.py`, `apikey_views.py`, `service_login_views.py`, `favorites_views.py` | `idp_auth/views.py` | 1–851 |
 | **MAINT-BE-3** | HIGH | **`InventoryQueryExecutor` God class (1167 LOC)** — SQL generation, schema mapping, column validation, result pagination, error handling dans 1 classe. Devrait être découpé : `QueryBuilder`, `MappingValidator`, `ResultPaginator` | `inventory/query_executor.py` | 1–1167 |
 | **MAINT-BE-4** | MEDIUM | **`create_execution()` signature — 11 paramètres** — `user, action, environment, parameters, parent_execution_id, correlation_id, source, ip_address, targets, delegated_referenced_action_ids, validated_targets`. Candidat pour un objet `ExecutionRequest` DTO | `executions/services.py` | 171–218 |
@@ -790,7 +790,6 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | # | Issue | Type | Effort |
 |---|-------|------|--------|
 | SOLID-FE-4 | ~25 composants importent directement les services (couplage DIP) | Frontend | Élevé |
-| MAINT-BE-1 | `update_status()` God method (168 LOC) — state machine + audit + notifs | Backend | Moyen |
 | MAINT-BE-2 | `idp_auth/views.py` module monolithique (851 LOC, 9 classes hétérogènes) | Backend | Moyen |
 | MAINT-BE-3 | `InventoryQueryExecutor` God class (1167 LOC) | Backend | Élevé |
 | MAINT-FE-1 | `IntegrationForm.tsx` — 730 LOC, composant god sans hook dédié | Frontend | Moyen |
@@ -857,8 +856,8 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | **Observations post-refactoring (§16)** | 3 (16.1 DOCUMENTED, 16.2 RESOLVED, 16.3 RESOLVED) | **1 INFO** |
 | **Audit #3 (§17)** | **6/6** | **0** |
 | **Audit #4 (§18)** | **9/12** | **3** |
-| **Audit #5 — Maintenabilité (§20)** | **0/14** | **14** |
-| **Total** | **116/133** | **17 (5 HIGH, 5 MEDIUM, 6 LOW, 1 INFO)** |
+| **Audit #5 — Maintenabilité (§20)** | **1/14** | **13** |
+| **Total** | **117/133** | **16 (4 HIGH, 5 MEDIUM, 6 LOW, 1 INFO)** |
 
 ---
 
@@ -873,7 +872,7 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 6. ~~MAINT-BE-6~~ — ✅ RÉSOLU (Story 54.5) — `_ALLOWED_PROFILES` supprimé (code mort), `_DEFAULT_PROFILE` migré vers `settings.DEFAULT_SAML_PROFILE`
 
 **Refactoring structurel (effort moyen — par story) :**
-1. MAINT-BE-1 — Extraire `_validate_transition()`, `_apply_status_change()`, `_schedule_notification()` de `update_status()`
+1. ~~MAINT-BE-1~~ — ✅ RÉSOLU (Story 54.6) — `update_status()` décomposé en `_validate_transition()`, `_apply_status_change()`, `_create_status_audit_entry()`, `_schedule_notification()`
 2. MAINT-BE-2 — Éclater `idp_auth/views.py` en 4-5 modules par domaine auth
 3. MAINT-FE-1 — Créer `useIntegrationFormState()` pour `IntegrationForm.tsx`
 4. MAINT-BE-4 — Introduire `ExecutionRequest` DTO pour `create_execution()`
@@ -898,6 +897,6 @@ Audit complet couvrant : SQL injection (query_executor.py vérifié — paramét
 | Sécurité | 11 issues | 0 ouvertes | **0 ouvertes** | **3 ouvertes** | **0 ouvertes** | -3 (SEC-12 story 54.1, SEC-13/14 story 54.4) |
 | Fichiers BE > 800 LOC | — | — | — | — | **5** (query_executor, services x2, views, serializers) | Nouveau |
 | Fichiers FE > 500 LOC | — | — | — | — | **4** (IntegrationForm, ActionWizard, execution_service, ProfileForm) | Nouveau |
-| God classes/methods | — | — | — | — | **4** (QueryExecutor, update_status, idp_auth/views, IntegrationForm) | Nouveau |
+| God classes/methods | — | — | — | — | **3** (QueryExecutor, idp_auth/views, IntegrationForm) | -1 (update_status story 54.6) |
 
-**Bilan global (audit #5) :** Sur 133 findings cumulés, **115 sont résolus** (86%). Les 14 nouvelles issues de l'audit #5 se concentrent sur la **maintenabilité structurelle** : god classes/methods/modules qui, bien que fonctionnellement corrects, posent des risques de maintenabilité à terme. Aucune issue CRITICAL. La posture sécurité est **entièrement résolue** (0 ouvertes — SEC-13, SEC-14 corrigés story 54.4). L'architecture SOLID est globalement excellente (registries, ISP, DI, hooks) — les findings restants sont du polissage structurel et des extractions de responsabilités dans les fichiers les plus volumineux.
+**Bilan global (audit #5) :** Sur 133 findings cumulés, **117 sont résolus** (88%). Les 13 issues restantes de l'audit #5 se concentrent sur la **maintenabilité structurelle** : god classes/modules qui, bien que fonctionnellement corrects, posent des risques de maintenabilité à terme. Aucune issue CRITICAL. La posture sécurité est **entièrement résolue** (0 ouvertes — SEC-13, SEC-14 corrigés story 54.4). L'architecture SOLID est globalement excellente (registries, ISP, DI, hooks) — les findings restants sont du polissage structurel et des extractions de responsabilités dans les fichiers les plus volumineux.
