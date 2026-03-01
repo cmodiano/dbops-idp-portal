@@ -124,8 +124,115 @@ class TestJSONHelpers:
         # This should work
         result = safe_serialize_json({'key': 'value'})
         assert result is not None
-        
+
         # This might fail but should return None instead of raising
         # Note: Most Python objects can be serialized, so this test is limited
         result = safe_serialize_json({'key': 'value'})
         assert result is not None
+
+
+# ---------------------------------------------------------------------------
+# Story 55.3 — Branches non couvertes (sous-tâches 3.1 à 3.9)
+# ---------------------------------------------------------------------------
+
+class TestValidateJsonSchemaTypeBranches:
+    """Tests des branches type manquantes dans validate_json_schema."""
+
+    # 3.1 — type "array"
+    def test_array_schema_valid_list(self):
+        is_valid, error = validate_json_schema([1, 2, 3], {'type': 'array'})
+        assert is_valid is True
+        assert error is None
+
+    def test_array_schema_invalid_not_list(self):
+        is_valid, error = validate_json_schema("not a list", {'type': 'array'})
+        assert is_valid is False
+        assert error is not None
+
+    # 3.2 — type "string"
+    def test_string_schema_valid_str(self):
+        is_valid, error = validate_json_schema("hello", {'type': 'string'})
+        assert is_valid is True
+        assert error is None
+
+    def test_string_schema_invalid_not_str(self):
+        is_valid, error = validate_json_schema(42, {'type': 'string'})
+        assert is_valid is False
+        assert error is not None
+
+    # 3.3 — type "number"
+    def test_number_schema_valid_int(self):
+        is_valid, error = validate_json_schema(42, {'type': 'number'})
+        assert is_valid is True
+        assert error is None
+
+    def test_number_schema_valid_float(self):
+        is_valid, error = validate_json_schema(3.14, {'type': 'number'})
+        assert is_valid is True
+        assert error is None
+
+    def test_number_schema_invalid_str(self):
+        is_valid, error = validate_json_schema("42", {'type': 'number'})
+        assert is_valid is False
+        assert error is not None
+
+    # 3.4 — type "boolean"
+    def test_boolean_schema_valid_bool(self):
+        is_valid, error = validate_json_schema(True, {'type': 'boolean'})
+        assert is_valid is True
+        assert error is None
+
+    def test_boolean_schema_invalid_int(self):
+        """int n'est pas bool (même si Python considère bool comme sous-classe de int)."""
+        # Note: bool est une sous-classe de int en Python, donc isinstance(True, int) == True
+        # mais isinstance(1, bool) == False
+        is_valid, error = validate_json_schema(1, {'type': 'boolean'})
+        assert is_valid is False
+        assert error is not None
+
+    # 3.5 — sans type mais avec properties : data non-dict → False
+    def test_no_type_with_properties_non_dict_returns_invalid(self):
+        schema = {'properties': {'name': {'type': 'string'}}}
+        is_valid, error = validate_json_schema("not a dict", schema)
+        assert is_valid is False
+        assert "JSON object" in error
+
+    # 3.6 — data non-dict avec schema sans type objet/properties → True (early return)
+    def test_non_dict_data_with_schema_no_object_type_returns_true(self):
+        schema = {'type': 'array'}  # type array, data est liste
+        is_valid, error = validate_json_schema([1, 2], schema)
+        assert is_valid is True
+        assert error is None
+
+    # 3.7 — propriété invalide nested
+    def test_nested_property_invalid_type_returns_property_error(self):
+        schema = {
+            'type': 'object',
+            'properties': {
+                'count': {'type': 'number'},
+            }
+        }
+        data = {'count': 'not-a-number'}
+        is_valid, error = validate_json_schema(data, schema)
+        assert is_valid is False
+        assert "Property 'count'" in error
+
+    # 3.8 — safe_serialize_json chemin erreur
+    def test_safe_serialize_json_returns_none_on_error(self):
+        """Quand serialize_json lève TypeError, safe_serialize_json retourne None."""
+        from unittest.mock import patch
+        with patch('utils.json_helpers.serialize_json', side_effect=TypeError("boom")):
+            result = safe_serialize_json({'key': 'value'})
+        assert result is None
+
+    # 3.9 — serialize_json avec entity_id fourni
+    def test_serialize_json_error_log_includes_entity_id(self):
+        """serialize_json avec entity_id → le log inclut entity_id dans le message de log."""
+        import pytest
+        from structlog.testing import capture_logs
+        with capture_logs() as cap_logs:
+            with pytest.raises(TypeError, match="Cannot serialize"):
+                serialize_json(object(), field_name="test_field", entity_id=42)
+        assert len(cap_logs) >= 1
+        log_event = cap_logs[0].get("event", "")
+        assert "42" in log_event, f"entity_id '42' absent du log: {log_event}"

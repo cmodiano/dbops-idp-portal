@@ -251,11 +251,9 @@ class TestEvaluatePolicyIfNeeded(TransactionTestCase):
 
         with patch("executions.policy_evaluator.PolicyEvaluator") as MockEval:
             MockEval.return_value.evaluate_policy.return_value = FakeDecision(require_approval=True)
-            with patch("dataclasses.asdict",
-                       return_value={'require_approval': True, 'decision_reason': 'Approval needed'}):
-                result = self.executor._evaluate_policy_if_needed(
-                    self.execution_step, action, {}
-                )
+            result = self.executor._evaluate_policy_if_needed(
+                self.execution_step, action, {}
+            )
 
         assert result is not None
         assert result.is_waiting
@@ -344,3 +342,419 @@ class TestStepExecutorAsyncDispatch(TransactionTestCase):
         call_kwargs = mock_audit.call_args
         from core.models import AuditActionType
         assert call_kwargs.kwargs.get('action_type') == AuditActionType.EXECUTION_INTEGRATION_ERROR
+
+
+# ---------------------------------------------------------------------------
+# Story 55.3 — Branches non couvertes (sous-tâches 6.1 à 6.10)
+# ---------------------------------------------------------------------------
+
+class TestStepExecutorActionDoesNotExist(TransactionTestCase):
+    """Action.DoesNotExist → ValueError → StepResult ERROR (lines 154-155)."""
+
+    def setUp(self):
+        self.user = UserFactory()
+        self.action = ActionFactory(item_type="workflow")
+        from executions.models import Execution, ExecutionStatus
+        self.execution = Execution.objects.create(
+            action=self.action, user=self.user,
+            environment="dev", status=ExecutionStatus.RUNNING,
+        )
+        self.executor = StepExecutor(self.execution, "test-corr")
+
+    def test_action_does_not_exist_returns_validation_error(self):
+        from catalog.models import Action
+        step = {
+            'step_id': 'step-notfound', 'name': 'Missing Action', 'order': 1,
+            'referenced_action_id': 9999,
+        }
+        with patch("catalog.models.Action.objects") as mock_qs:
+            mock_qs.select_related.return_value.get.side_effect = Action.DoesNotExist
+            result = self.executor.execute(step, step_order=1, step_parameters={})
+
+        from executions.workflow_runtime import StepOutcome
+        assert result.outcome == StepOutcome.ERROR
+        assert result.error_details.get('error_type') == 'validation'
+        assert '9999' in result.error_message
+
+        from executions.models import ExecutionStep, ExecutionStepStatus
+        step_record = ExecutionStep.objects.filter(execution=self.execution).first()
+        assert step_record.status == ExecutionStepStatus.FAILED
+
+
+class TestStepExecutorInvalidIntegration(TransactionTestCase):
+    """IntegrationStatus.INVALID → ValueError + audit BLOCKED_INVALID (lines 164-193)."""
+
+    def setUp(self):
+        self.user = UserFactory()
+        self.action = ActionFactory(item_type="workflow")
+        from executions.models import Execution, ExecutionStatus
+        self.execution = Execution.objects.create(
+            action=self.action, user=self.user,
+            environment="dev", status=ExecutionStatus.RUNNING,
+        )
+        self.executor = StepExecutor(self.execution, "test-corr")
+
+    @patch("executions.workflow_step_executor.AuditService.create_entry")
+    def test_invalid_integration_returns_error_with_audit(self, mock_audit):
+        from integrations.models import IntegrationStatus
+
+        ref_action = MagicMock()
+        ref_action.id = 42
+        ref_action.name = "Test Action"
+        ref_action.platform = "AAP"
+
+        mock_integration = MagicMock()
+        mock_integration.status = IntegrationStatus.INVALID
+        mock_integration.name = "Broken Integration"
+        mock_integration.type = "aap"
+        mock_integration.id = 10
+        ref_action.integration = mock_integration
+
+        step = {
+            'step_id': 'step-inv', 'name': 'Invalid Step', 'order': 1,
+            'referenced_action_id': 42,
+        }
+
+        with patch("catalog.models.Action.objects") as mock_qs:
+            mock_qs.select_related.return_value.get.return_value = ref_action
+            result = self.executor.execute(step, step_order=1, step_parameters={})
+
+        from executions.workflow_runtime import StepOutcome
+        assert result.outcome == StepOutcome.ERROR
+        assert 'invalid' in result.error_message.lower()
+        mock_audit.assert_called_once()
+        from core.models import AuditActionType
+        assert mock_audit.call_args.kwargs['action_type'] == AuditActionType.WORKFLOW_STEP_BLOCKED_INVALID_INTEGRATION
+
+        from executions.models import ExecutionStep, ExecutionStepStatus
+        step_record = ExecutionStep.objects.filter(execution=self.execution).first()
+        assert step_record.status == ExecutionStepStatus.FAILED
+
+
+class TestStepExecutorDeprecatedIntegration(TransactionTestCase):
+    """IntegrationStatus.DEPRECATED → warning + audit, execution continues (lines 196-205)."""
+
+    def setUp(self):
+        self.user = UserFactory()
+        self.action = ActionFactory(item_type="workflow")
+        from executions.models import Execution, ExecutionStatus
+        self.execution = Execution.objects.create(
+            action=self.action, user=self.user,
+            environment="dev", status=ExecutionStatus.RUNNING,
+        )
+        self.executor = StepExecutor(self.execution, "test-corr")
+
+    @patch("executions.workflow_step_executor.AuditService.create_entry")
+    def test_deprecated_integration_audited_then_continues_to_success(self, mock_audit):
+        from integrations.models import IntegrationStatus
+
+        ref_action = MagicMock()
+        ref_action.id = 43
+        ref_action.name = "Deprecated Action"
+        ref_action.platform = "AAP"
+
+        mock_integration = MagicMock()
+        mock_integration.status = IntegrationStatus.DEPRECATED
+        mock_integration.name = "Old Integration"
+        mock_integration.type = "aap"
+        mock_integration.id = 11
+        ref_action.integration = mock_integration
+
+        step = {
+            'step_id': 'step-dep', 'name': 'Deprecated Step', 'order': 1,
+            'referenced_action_id': 43,
+        }
+
+        with patch("catalog.models.Action.objects") as mock_qs, \
+             patch("executions.tasks.trigger.trigger_platform_job.apply_async"):
+            mock_qs.select_related.return_value.get.return_value = ref_action
+            result = self.executor.execute(step, step_order=1, step_parameters={})
+
+        from executions.workflow_runtime import StepOutcome
+        assert result.outcome == StepOutcome.SUCCESS
+        mock_audit.assert_called_once()
+        from core.models import AuditActionType
+        assert mock_audit.call_args.kwargs['action_type'] == AuditActionType.EXECUTION_DEPRECATED_INTEGRATION_WARNING
+
+
+class TestStepExecutorTriggerKwargsExtras(TransactionTestCase):
+    """resource_type et extra_vars dans trigger_kwargs (lines 255, 257)."""
+
+    def setUp(self):
+        from tests.factories import IntegrationFactory
+        self.user = UserFactory()
+        self.action = ActionFactory(item_type="workflow")
+        from executions.models import Execution, ExecutionStatus
+        self.execution = Execution.objects.create(
+            action=self.action, user=self.user,
+            environment="dev", status=ExecutionStatus.RUNNING,
+        )
+        self.integration = IntegrationFactory.create(type="aap")
+        self.executor = StepExecutor(self.execution, "test-corr-extras")
+
+    @patch("executions.workflow_step_executor.AuditService.create_entry")
+    def test_resource_type_added_to_trigger_kwargs(self, mock_audit):
+        ref_action = MagicMock()
+        ref_action.id = 50
+        ref_action.name = "RT Action"
+        ref_action.platform = "AAP"
+        ref_action.integration = self.integration
+
+        step = {'step_id': 'step-rt', 'name': 'RT Step', 'order': 1, 'referenced_action_id': 50}
+
+        with patch("catalog.models.Action.objects") as mock_qs, \
+             patch("executions.tasks.trigger.trigger_platform_job.apply_async") as mock_async:
+            mock_qs.select_related.return_value.get.return_value = ref_action
+            self.executor.execute(step, step_order=1, step_parameters={'resource_type': 'host'})
+
+        trigger_kwargs = mock_async.call_args.kwargs['kwargs']['trigger_kwargs']
+        assert trigger_kwargs.get('resource_type') == 'host'
+
+    @patch("executions.workflow_step_executor.AuditService.create_entry")
+    def test_extra_vars_added_to_trigger_kwargs(self, mock_audit):
+        ref_action = MagicMock()
+        ref_action.id = 51
+        ref_action.name = "EV Action"
+        ref_action.platform = "AAP"
+        ref_action.integration = self.integration
+
+        step = {'step_id': 'step-ev', 'name': 'EV Step', 'order': 1, 'referenced_action_id': 51}
+
+        with patch("catalog.models.Action.objects") as mock_qs, \
+             patch("executions.tasks.trigger.trigger_platform_job.apply_async") as mock_async:
+            mock_qs.select_related.return_value.get.return_value = ref_action
+            self.executor.execute(step, step_order=1, step_parameters={'extra_vars': {'env': 'prod'}})
+
+        trigger_kwargs = mock_async.call_args.kwargs['kwargs']['trigger_kwargs']
+        assert trigger_kwargs.get('extra_vars') == {'env': 'prod'}
+
+
+class TestStepExecutorGenericException(TransactionTestCase):
+    """Generic except Exception handler — non-ValueError exceptions (lines 373-391)."""
+
+    def setUp(self):
+        self.user = UserFactory()
+        self.action = ActionFactory(item_type="workflow")
+        from executions.models import Execution, ExecutionStatus
+        self.execution = Execution.objects.create(
+            action=self.action, user=self.user,
+            environment="dev", status=ExecutionStatus.RUNNING,
+        )
+        self.executor = StepExecutor(self.execution, "test-corr-exc")
+
+    def test_runtime_exception_caught_marks_step_failed_returns_error(self):
+        step = {
+            'step_id': 'step-boom', 'name': 'Boom Step', 'order': 1,
+            'referenced_action_id': 99,
+        }
+        with patch("catalog.models.Action.objects") as mock_qs:
+            mock_qs.select_related.return_value.get.side_effect = RuntimeError("unexpected boom!")
+            result = self.executor.execute(step, step_order=1, step_parameters={})
+
+        from executions.workflow_runtime import StepOutcome
+        assert result.outcome == StepOutcome.ERROR
+        assert result.error_details.get('error_type') == 'RuntimeError'
+        assert 'unexpected boom!' in result.error_message
+
+        from executions.models import ExecutionStep, ExecutionStepStatus
+        step_record = ExecutionStep.objects.filter(execution=self.execution).first()
+        assert step_record.status == ExecutionStepStatus.FAILED
+        assert 'RuntimeError' in step_record.error_message
+
+
+class TestCallPlatformAdapterSuccess(TransactionTestCase):
+    """call_platform_adapter config branches and success path (lines 431-476)."""
+
+    def setUp(self):
+        self.user = UserFactory()
+        self.action = ActionFactory(item_type="workflow")
+        from executions.models import Execution, ExecutionStatus
+        self.execution = Execution.objects.create(
+            action=self.action, user=self.user,
+            environment="dev", status=ExecutionStatus.RUNNING,
+        )
+        from executions.models import ExecutionStep, ExecutionStepStatus
+        self.execution_step = ExecutionStep.objects.create(
+            execution=self.execution,
+            step_order=2,
+            step_name="Config Test Step",
+            step_type='platform',
+            status=ExecutionStepStatus.RUNNING,
+            started_at=timezone.now(),
+        )
+        self.executor = StepExecutor(self.execution, "test-corr-cfg")
+
+    def _make_integration(self, config=None):
+        integration = MagicMock()
+        integration.type = "aap"
+        integration.base_url = "https://aap.example.com"
+        integration.get_config.return_value = config or {}
+        return integration
+
+    def test_ssl_verify_and_ca_bundle_added_to_platform_kwargs(self):
+        referenced_action = MagicMock()
+        referenced_action.id = 60
+        referenced_action.platform = "AAP"
+
+        integration = self._make_integration({'ssl_verify': False, 'ca_bundle_path': '/etc/ssl/cert.pem'})
+        mock_result = {'platform_job_id': 'job-456'}
+
+        with patch("adapters.get_platform_adapter") as mock_get_adapter, \
+             patch("adapters.utils.build_auth_headers", return_value={}), \
+             patch("asgiref.sync.async_to_sync") as mock_a2s:
+            mock_get_adapter.return_value = MagicMock()
+            mock_a2s.return_value = lambda **kwargs: mock_result
+
+            result = self.executor.call_platform_adapter(
+                referenced_action, integration, {'parameters': {}}, self.execution_step
+            )
+
+        assert result == mock_result
+        call_kwargs = mock_get_adapter.call_args.kwargs
+        assert call_kwargs.get('ssl_verify') is False
+        assert call_kwargs.get('ca_bundle_path') == '/etc/ssl/cert.pem'
+        assert self.execution_step.platform_job_id == 'job-456'
+
+    def test_adapter_result_without_platform_job_id_no_attribute_set(self):
+        referenced_action = MagicMock()
+        referenced_action.id = 61
+        referenced_action.platform = "AAP"
+
+        integration = self._make_integration()
+        mock_result = {'status': 'running'}  # pas de platform_job_id
+
+        with patch("adapters.get_platform_adapter") as mock_get_adapter, \
+             patch("adapters.utils.build_auth_headers", return_value={}), \
+             patch("asgiref.sync.async_to_sync") as mock_a2s:
+            mock_get_adapter.return_value = MagicMock()
+            mock_a2s.return_value = lambda **kwargs: mock_result
+
+            result = self.executor.call_platform_adapter(
+                referenced_action, integration,
+                {'parameters': {'template_id': '5', 'resource_type': 'host', 'extra_vars': {'k': 'v'}}},
+                self.execution_step,
+            )
+
+        assert result == mock_result
+
+    def test_trigger_kwargs_resource_type_and_extra_vars_passed_to_adapter(self):
+        referenced_action = MagicMock()
+        referenced_action.id = 62
+        referenced_action.platform = "AAP"
+
+        integration = self._make_integration()
+        captured = {}
+        mock_result = {'platform_job_id': 'job-789'}
+
+        def fake_sync(coro_fn):
+            def wrapper(**kwargs):
+                captured.update(kwargs)
+                return mock_result
+            return wrapper
+
+        with patch("adapters.get_platform_adapter") as mock_get_adapter, \
+             patch("adapters.utils.build_auth_headers", return_value={}), \
+             patch("asgiref.sync.async_to_sync", side_effect=fake_sync):
+            mock_get_adapter.return_value = MagicMock()
+
+            self.executor.call_platform_adapter(
+                referenced_action, integration,
+                {'parameters': {'resource_type': 'inventory', 'extra_vars': {'x': 1}}},
+                self.execution_step,
+            )
+
+        assert captured.get('resource_type') == 'inventory'
+        assert captured.get('extra_vars') == {'x': 1}
+
+
+class TestEvaluatePolicyRemainingBranches(TransactionTestCase):
+    """_evaluate_policy_if_needed: empty rules, PolicyEvaluationError, auto-approved."""
+
+    def setUp(self):
+        self.user = UserFactory()
+        self.action = ActionFactory(item_type="workflow")
+        from executions.models import Execution, ExecutionStatus
+        self.execution = Execution.objects.create(
+            action=self.action, user=self.user,
+            environment="dev", status=ExecutionStatus.RUNNING,
+        )
+        from executions.models import ExecutionStep, ExecutionStepStatus
+        self.execution_step = ExecutionStep.objects.create(
+            execution=self.execution,
+            step_order=3,
+            step_name="Policy Step",
+            step_type='platform',
+            status=ExecutionStepStatus.RUNNING,
+            started_at=timezone.now(),
+        )
+        self.executor = StepExecutor(self.execution, "test-corr-policy")
+
+    def test_empty_on_step_output_rules_returns_none(self):
+        """policies dict sans on_step_output → rules=[] → return None (line 513)."""
+        action = MagicMock()
+        action.business_rule_policies = {'other_key': 'value'}
+
+        result = self.executor._evaluate_policy_if_needed(self.execution_step, action, {})
+        assert result is None
+
+    def test_on_step_output_empty_list_returns_none(self):
+        """policies dict avec on_step_output=[] → rules=[] → return None (line 513)."""
+        action = MagicMock()
+        action.business_rule_policies = {'on_step_output': []}
+
+        result = self.executor._evaluate_policy_if_needed(self.execution_step, action, {})
+        assert result is None
+
+    @patch("executions.workflow_step_executor.AuditService.create_entry")
+    def test_policy_evaluation_error_marks_step_failed_returns_error(self, mock_audit):
+        """PolicyEvaluationError → step FAILED, StepResult ERROR (lines 529-557)."""
+        from executions.policy_evaluator import PolicyEvaluationError
+
+        action = MagicMock()
+        action.business_rule_policies = {
+            'on_step_output': [{'when': {'step_type': 'platform'}}]
+        }
+
+        exc = PolicyEvaluationError("schema invalid")
+        exc.message = "schema invalid"
+
+        with patch("executions.policy_evaluator.PolicyEvaluator") as MockEval:
+            MockEval.return_value.evaluate_policy.side_effect = exc
+            result = self.executor._evaluate_policy_if_needed(self.execution_step, action, {})
+
+        from executions.workflow_runtime import StepOutcome
+        assert result.outcome == StepOutcome.ERROR
+        assert result.error_details.get('policy_evaluation_failed') is True
+        mock_audit.assert_called_once()
+        from core.models import AuditActionType
+        assert mock_audit.call_args.kwargs['action_type'] == AuditActionType.EXECUTION_STEP_POLICY_EVALUATION_FAILED
+
+        from executions.models import ExecutionStepStatus
+        self.execution_step.refresh_from_db()
+        assert self.execution_step.status == ExecutionStepStatus.FAILED
+
+    @patch("executions.workflow_step_executor.AuditService.create_entry")
+    def test_auto_approved_policy_returns_success_with_audit(self, mock_audit):
+        """require_approval=False → StepResult SUCCESS, audit AUTO_APPROVED (lines 607-626)."""
+        from dataclasses import dataclass
+
+        @dataclass
+        class FakeDecision:
+            require_approval: bool = False
+            decision_reason: str = "Auto-approved"
+
+        action = MagicMock()
+        action.business_rule_policies = {
+            'on_step_output': [{'when': {'step_type': 'platform'}}]
+        }
+
+        with patch("executions.policy_evaluator.PolicyEvaluator") as MockEval:
+            MockEval.return_value.evaluate_policy.return_value = FakeDecision(require_approval=False)
+            result = self.executor._evaluate_policy_if_needed(self.execution_step, action, {})
+
+        from executions.workflow_runtime import StepOutcome
+        assert result.outcome == StepOutcome.SUCCESS
+        assert result.output.get('auto_approved') is True
+        mock_audit.assert_called_once()
+        from core.models import AuditActionType
+        assert mock_audit.call_args.kwargs['action_type'] == AuditActionType.EXECUTION_STEP_POLICY_AUTO_APPROVED
