@@ -23,6 +23,7 @@ import structlog
 
 from adapters.base_adapter import BaseAdapter
 from adapters.status_mappers import (
+    TERRAFORM_CLOUD_STATUS_MAP as TERRAFORM_CLOUD_STATUS_MAP,
     TERRAFORM_CLOUD_TERMINAL_STATUSES as TERRAFORM_CLOUD_TERMINAL_STATUSES,
     map_terraform_cloud_status as map_terraform_cloud_status,
 )

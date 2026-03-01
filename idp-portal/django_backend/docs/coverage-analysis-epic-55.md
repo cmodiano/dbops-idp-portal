@@ -3,7 +3,7 @@
 **Date :** 2026-02-28
 **Auteur :** Agent de développement (story 55.1)
 **Statut :** Document de référence pour les stories 55.2 – 55.7
-**Baseline :** Voir `docs/coverage-analysis-epic-39.md` (dans `_bmad-output/` → `docs/coverage-analysis-epic-39.md`)
+**Baseline :** Voir `idp-portal/django_backend/docs/coverage-analysis-epic-39.md`
 
 ---
 
@@ -316,9 +316,9 @@ La story 39.7 a ajouté des tests pour 11 fichiers hooks (réduisant significati
 
 ## 11. Recommandations pour les stories 55.2 – 55.7
 
-### Story 55.2 — Backend fichiers 0–60 % (priorité critique)
+### Story 55.2 — Backend fichiers 0–80 % (priorité critique)
 
-**Fichiers cibles (6) :**
+**Fichiers cibles (5) :**
 1. `dashboard/views.py` (39,7 %, 129/226 stmts manquantes) — ViewSet dashboard
 2. `inventory/mapping_validator.py` (41,9 %, 10/21 stmts) — Epic 54-14
 3. `admin_analytics/views.py` (44,4 %, 18/34 stmts) — Analytics admin
