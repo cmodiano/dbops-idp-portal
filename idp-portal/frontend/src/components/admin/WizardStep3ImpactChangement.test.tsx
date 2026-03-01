@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { Form } from 'antd';
 import { WizardStep3ImpactChangement, type WizardStep3ImpactChangementProps } from './WizardStep3ImpactChangement';
 
@@ -92,5 +92,60 @@ describe('WizardStep3ImpactChangement', () => {
     };
     renderWithForm(props);
     expect(screen.getByText('Regle 1')).toBeInTheDocument();
+  });
+
+  it('passe stepType depuis editAction.integration_id via getIntegrationById', () => {
+    const mockGetIntegrationById = vi.fn(() => ({ id: 5, type: 'aap', name: 'My AAP' }));
+    renderWithForm({
+      ...defaultProps,
+      selectedIntegration: undefined,
+      editAction: {
+        id: 10,
+        name: 'Test Action',
+        integration_id: 5,
+        status: 'published',
+        engine: 'aap',
+      } as any,
+      getIntegrationById: mockGetIntegrationById,
+    });
+    expect(mockGetIntegrationById).toHaveBeenCalledWith(5);
+    expect(screen.getByText('Règles métier')).toBeInTheDocument();
+  });
+
+  it('passe stepType depuis editAction.platform via platformCodeToStepType quand integration_id est null', () => {
+    renderWithForm({
+      ...defaultProps,
+      selectedIntegration: undefined,
+      editAction: {
+        id: 10,
+        name: 'Test Action',
+        integration_id: null,
+        platform: 'aap',
+        status: 'published',
+        engine: 'aap',
+      } as any,
+      getIntegrationById: vi.fn(() => undefined),
+    });
+    expect(screen.getByText('Règles métier')).toBeInTheDocument();
+  });
+
+  it('appelle setDefaultImpactLevel via onChange du Select impact', () => {
+    const setDefaultImpactLevel = vi.fn();
+    renderWithForm({ ...defaultProps, setDefaultImpactLevel });
+
+    // Ouvrir le Select "Niveau d'impact par défaut"
+    const impactSelect = screen.getByLabelText('Niveau d\'impact par défaut').closest('.ant-select');
+    fireEvent.mouseDown(impactSelect!);
+    const opts = document.querySelectorAll('.ant-select-item-option');
+    const lowOpt = Array.from(opts).find(o => o.textContent?.includes('Faible'));
+    if (lowOpt) fireEvent.click(lowOpt as HTMLElement);
+
+    expect(setDefaultImpactLevel).toHaveBeenCalled();
+  });
+
+  it('utilise les fonctions () => {} quand isReadOnly=true', () => {
+    // Couvre les branches isReadOnly des onChange dans ImpactRulesEditor et ChangeTypeConfig
+    expect(() => renderWithForm({ ...defaultProps, isReadOnly: true })).not.toThrow();
+    expect(screen.getByText(/Niveau d'impact par défaut/i)).toBeInTheDocument();
   });
 });
