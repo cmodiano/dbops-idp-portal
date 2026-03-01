@@ -258,3 +258,188 @@ class TestMaxBufferSize:
             assert h._buffer.qsize() == 5
         finally:
             h.close()
+
+
+class TestGetConfig:
+    """Test _get_config() fallback to Django settings."""
+
+    def test_get_config_django_settings_fallback(self) -> None:
+        """Lines 49-50: Django settings fallback used when env var not set."""
+        from core.splunk_logging_handler import _get_config
+        import os
+
+        # Clear relevant env vars and simulate Django settings fallback exception
+        with patch.dict(os.environ, {}, clear=True):
+            # Patch django.conf.settings to raise an exception to cover lines 49-50
+            with patch("core.splunk_logging_handler.os.getenv", side_effect=lambda key, default="": default):
+                # Patch the import inside _get_config to raise
+                import builtins
+                real_import = builtins.__import__
+
+                def mock_import(name, *args, **kwargs):
+                    if name == "django.conf":
+                        raise ImportError("Django not available")
+                    return real_import(name, *args, **kwargs)
+
+                with patch.object(builtins, "__import__", mock_import):
+                    config = _get_config()
+                    assert "hec_url" in config
+
+    def test_get_config_django_settings_exception_covered(self) -> None:
+        """Lines 49-50: Exception in Django settings import is silently caught."""
+        from core.splunk_logging_handler import _get_config
+
+        # Patch to ensure hec_url is empty so Django settings branch is entered,
+        # then raise inside the try block to cover the except pass (lines 49-50)
+        original_getenv = __import__('os').getenv
+
+        def patched_getenv(key, default=""):
+            if key == "SPLUNK_HEC_URL":
+                return ""  # Force Django settings fallback
+            return original_getenv(key, default)
+
+        with patch("core.splunk_logging_handler.os.getenv", side_effect=patched_getenv):
+            with patch("django.conf.settings") as mock_settings:
+                mock_settings.SPLUNK_CONFIG = None  # getattr will return {}
+                type(mock_settings).__getattr__ = lambda self, name: (_ for _ in ()).throw(Exception("settings error"))
+                # Should not raise — exception is silently caught
+                config = _get_config()
+                assert isinstance(config, dict)
+
+
+class TestStartTimer:
+    """Test _start_timer() closed-handler guard."""
+
+    def test_start_timer_does_nothing_when_closed(self, handler: SplunkLoggingHandler) -> None:
+        """Line 122: _start_timer() returns immediately when handler is closed."""
+        handler._closed = True
+        handler._timer = None
+        handler._start_timer()
+        # Timer should NOT have been created since handler is closed
+        assert handler._timer is None
+
+
+class TestTimerFlush:
+    """Test _timer_flush() behavior."""
+
+    def test_timer_flush_does_nothing_when_closed(self, handler: SplunkLoggingHandler) -> None:
+        """Lines 129-130: _timer_flush() returns immediately when handler is closed."""
+        handler._closed = True
+        with patch.object(handler, "flush") as mock_flush:
+            handler._timer_flush()
+            mock_flush.assert_not_called()
+
+    def test_timer_flush_calls_flush_and_restarts_timer(self, handler: SplunkLoggingHandler) -> None:
+        """Lines 131-132: _timer_flush() calls flush() then _start_timer()."""
+        with patch.object(handler, "flush") as mock_flush, \
+             patch.object(handler, "_start_timer") as mock_start_timer:
+            handler._timer_flush()
+            mock_flush.assert_called_once()
+            mock_start_timer.assert_called_once()
+
+
+class TestEmitBufferFull:
+    """Test emit() when buffer is full."""
+
+    def test_emit_buffer_full_queue_empty_exception(self) -> None:
+        """Lines 150-151: queue.Empty exception when get_nowait on full buffer — covered."""
+        import queue
+        h = SplunkLoggingHandler(
+            hec_url="https://splunk.example.com:8088",
+            hec_token="token",
+            max_buffer_size=3,
+            batch_size=1000,
+        )
+        if h._timer:
+            h._timer.cancel()
+
+        try:
+            # Fill the buffer to capacity
+            for i in range(3):
+                h._buffer.put_nowait({"event": f"pre_{i}"})
+
+            # Now mock get_nowait to raise queue.Empty to cover lines 150-151
+            original_get_nowait = h._buffer.get_nowait
+            call_count = [0]
+
+            def mock_get_nowait():
+                call_count[0] += 1
+                if call_count[0] == 1:
+                    raise queue.Empty()
+                return original_get_nowait()
+
+            h._buffer.get_nowait = mock_get_nowait  # type: ignore[method-assign]
+
+            record = _make_log_record("new event")
+            # Should not raise — queue.Empty is silently caught
+            h.emit(record)
+        finally:
+            h.close()
+
+    def test_emit_exception_calls_handle_error(self, handler: SplunkLoggingHandler) -> None:
+        """Lines 159-161: exception in emit() calls handleError()."""
+        record = _make_log_record("test")
+
+        with patch.object(handler, "_extract_event", side_effect=RuntimeError("extract failed")):
+            with patch.object(handler, "handleError") as mock_handle_error:
+                handler.emit(record)
+                mock_handle_error.assert_called_once_with(record)
+
+
+class TestExtractEventFallback:
+    """Test _extract_event() fallback for non-JSON and non-dict JSON."""
+
+    def test_extract_event_non_json_string(self, handler: SplunkLoggingHandler) -> None:
+        """Lines 167->175, 169->175: non-JSON msg falls back to LogRecord attributes."""
+        record = _make_log_record("plain text message, not JSON")
+        event = handler._extract_event(record)
+        assert event["event"] == "plain text message, not JSON"
+        assert event["level"] == "INFO"
+        assert "logger" in event
+        assert "timestamp" in event
+
+    def test_extract_event_json_list_falls_back(self, handler: SplunkLoggingHandler) -> None:
+        """Lines 169->175: JSON that is not a dict (e.g. list) falls back to LogRecord."""
+        record = _make_log_record(json.dumps(["a", "b", "c"]))
+        event = handler._extract_event(record)
+        # JSON parsed but not a dict — fallback path taken
+        assert "event" in event
+        assert "level" in event
+
+
+class TestFlushQueueEmpty:
+    """Test flush() queue.Empty exception path."""
+
+    def test_flush_queue_empty_during_drain(self, handler: SplunkLoggingHandler) -> None:
+        """Lines 199-200: queue.Empty raised during flush drain is silently caught."""
+        import queue
+
+        # Add one event then mock get_nowait to raise Empty on second call
+        handler._buffer.put_nowait({"event": "test"})
+
+        _original_empty = handler._buffer.empty
+        call_count = [0]
+
+        def mock_empty():
+            # Always return False for first few calls so the while loop enters
+            call_count[0] += 1
+            if call_count[0] <= 2:
+                return False
+            return True
+
+        original_get_nowait = handler._buffer.get_nowait
+        get_count = [0]
+
+        def mock_get_nowait():
+            get_count[0] += 1
+            if get_count[0] == 2:
+                raise queue.Empty()
+            return original_get_nowait()
+
+        handler._buffer.empty = mock_empty  # type: ignore[method-assign]
+        handler._buffer.get_nowait = mock_get_nowait  # type: ignore[method-assign]
+
+        with patch.object(handler, "_send_to_splunk") as mock_send:
+            handler.flush()
+            # Should have called send with whatever was collected before Empty
+            mock_send.assert_called_once()

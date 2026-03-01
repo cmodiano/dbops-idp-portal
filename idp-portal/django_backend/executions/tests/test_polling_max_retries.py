@@ -454,3 +454,376 @@ class TestCacheTTL:
     def test_environments_cache_ttl(self) -> None:
         from inventory.services import _environments_cache
         assert _environments_cache.ttl == 300  # 5 minutes (aligned with catalog cache)
+
+
+# ---------------------------------------------------------------------------
+# _mark_execution_polling_exhausted — exception branch (line 106-107)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestMarkExecutionPollingExhaustedExceptionBranch:
+    """Test the generic exception handler in _mark_execution_polling_exhausted."""
+
+    def test_generic_exception_is_swallowed(self) -> None:
+        """Generic exceptions inside the try block must not propagate (resilience)."""
+        from tests.factories import ExecutionFactory
+
+        execution = ExecutionFactory(status="RUNNING")
+
+        # AuditService.create_entry raising should be swallowed
+        with patch("executions.tasks.AuditService.create_entry", side_effect=RuntimeError("db down")):
+            # Must not raise
+            _mark_execution_polling_exhausted(
+                execution_id=execution.id,
+                platform_job_id="job-exc-1",
+                retry_count=20,
+                error="timeout",
+            )
+
+
+# ---------------------------------------------------------------------------
+# _broadcast_execution_update (lines 124-181)
+# ---------------------------------------------------------------------------
+
+
+class TestBroadcastExecutionUpdate:
+    """Test _broadcast_execution_update broadcast helper."""
+
+    def test_broadcasts_status_log_and_terminal_complete(self) -> None:
+        """Sends status_update, log_update, and execution_complete when terminal COMPLETED."""
+        from executions.tasks import _broadcast_execution_update
+
+        mock_channel_layer = MagicMock()
+        mock_group_send = MagicMock()
+
+        with patch("channels.layers.get_channel_layer", return_value=mock_channel_layer):
+            with patch("asgiref.sync.async_to_sync", return_value=mock_group_send):
+                _broadcast_execution_update(
+                    execution_id=1,
+                    status_data={"status": "COMPLETED", "aap_status": "successful"},
+                    logs_data={"content": "done", "complete": True},
+                    is_terminal=True,
+                    correlation_id="corr-1",
+                )
+
+        # Three group_send calls: status_update, log_update, execution_complete
+        assert mock_group_send.call_count == 3
+
+    def test_broadcasts_status_and_log_only_when_not_terminal(self) -> None:
+        """Sends only status_update and log_update when not terminal."""
+        from executions.tasks import _broadcast_execution_update
+
+        mock_channel_layer = MagicMock()
+        mock_group_send = MagicMock()
+
+        with patch("channels.layers.get_channel_layer", return_value=mock_channel_layer):
+            with patch("asgiref.sync.async_to_sync", return_value=mock_group_send):
+                _broadcast_execution_update(
+                    execution_id=2,
+                    status_data={"status": "RUNNING"},
+                    logs_data={"content": "running...", "complete": False},
+                    is_terminal=False,
+                )
+
+        assert mock_group_send.call_count == 2
+
+    def test_broadcasts_execution_failed_event_on_failure(self) -> None:
+        """When terminal and status is FAILED, sends execution_failed event type."""
+        from executions.tasks import _broadcast_execution_update
+
+        sent_messages = []
+
+        def fake_async_to_sync(fn):
+            def caller(group, msg):
+                sent_messages.append(msg)
+            return caller
+
+        mock_channel_layer = MagicMock()
+
+        with patch("channels.layers.get_channel_layer", return_value=mock_channel_layer):
+            with patch("asgiref.sync.async_to_sync", side_effect=fake_async_to_sync):
+                _broadcast_execution_update(
+                    execution_id=3,
+                    status_data={"status": "FAILED"},
+                    logs_data={"content": "", "complete": True},
+                    is_terminal=True,
+                )
+
+        types_sent = [m["type"] for m in sent_messages]
+        assert "execution_failed" in types_sent
+
+    def test_channel_layer_none_returns_early(self) -> None:
+        """When channel_layer is None, function returns without sending."""
+        from executions.tasks import _broadcast_execution_update
+
+        with patch("channels.layers.get_channel_layer", return_value=None):
+            # Should not raise and should do nothing
+            _broadcast_execution_update(
+                execution_id=4,
+                status_data={"status": "RUNNING"},
+                logs_data={"content": "", "complete": False},
+                is_terminal=False,
+            )
+
+    def test_import_error_is_swallowed(self) -> None:
+        """ImportError (no channels installed) must not propagate."""
+        from executions.tasks import _broadcast_execution_update
+
+        with patch("builtins.__import__", side_effect=ImportError("no module")):
+            # Must not raise
+            _broadcast_execution_update(
+                execution_id=5,
+                status_data={"status": "RUNNING"},
+                logs_data={"content": "", "complete": False},
+                is_terminal=False,
+            )
+
+    def test_generic_exception_is_swallowed(self) -> None:
+        """Generic exception from channel layer must not propagate (non-critical path)."""
+        from executions.tasks import _broadcast_execution_update
+
+        mock_channel_layer = MagicMock()
+
+        with patch("channels.layers.get_channel_layer", return_value=mock_channel_layer):
+            with patch("asgiref.sync.async_to_sync", side_effect=RuntimeError("channel error")):
+                # Must not raise
+                _broadcast_execution_update(
+                    execution_id=6,
+                    status_data={"status": "RUNNING"},
+                    logs_data={"content": "", "complete": False},
+                    is_terminal=False,
+                )
+
+
+# ---------------------------------------------------------------------------
+# _update_execution_from_poll (lines 199-241)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestUpdateExecutionFromPoll:
+    """Test _update_execution_from_poll DB update helper."""
+
+    def test_updates_status_when_changed(self) -> None:
+        """Status is updated when execution status differs from polled idp_status."""
+        from executions.tasks import _update_execution_from_poll
+        from executions.services import ExecutionService
+        from tests.factories import ExecutionFactory, ExecutionStepFactory
+
+        execution = ExecutionFactory(status="SUBMITTED")
+        _step = ExecutionStepFactory(
+            execution=execution,
+            platform_job_id="job-upd-1",
+            status="SUBMITTED",
+        )
+
+        with patch.object(ExecutionService, "update_status") as mock_update:
+            _update_execution_from_poll(
+                execution_id=execution.id,
+                platform_job_id="job-upd-1",
+                idp_status="RUNNING",
+                logs_content="some logs",
+            )
+
+        mock_update.assert_called_once_with(execution.id, "RUNNING", str(execution.user_id))
+
+    def test_skips_status_update_when_terminal(self) -> None:
+        """No status update when execution is already in a terminal state."""
+        from executions.tasks import _update_execution_from_poll
+        from executions.services import ExecutionService
+        from tests.factories import ExecutionFactory
+
+        execution = ExecutionFactory(status="COMPLETED")
+
+        with patch.object(ExecutionService, "update_status") as mock_update:
+            _update_execution_from_poll(
+                execution_id=execution.id,
+                platform_job_id="job-upd-2",
+                idp_status="RUNNING",
+                logs_content="",
+            )
+
+        mock_update.assert_not_called()
+
+    def test_handles_nonexistent_execution(self) -> None:
+        """Should not raise on missing execution."""
+        from executions.tasks import _update_execution_from_poll
+
+        _update_execution_from_poll(
+            execution_id=999999,
+            platform_job_id="job-missing",
+            idp_status="RUNNING",
+            logs_content="",
+        )
+
+    def test_invalid_transition_is_logged_not_raised(self) -> None:
+        """ValueError from update_status must be caught and logged, not re-raised."""
+        from executions.tasks import _update_execution_from_poll
+        from executions.services import ExecutionService
+        from tests.factories import ExecutionFactory
+
+        execution = ExecutionFactory(status="SUBMITTED")
+
+        with patch.object(ExecutionService, "update_status", side_effect=ValueError("bad transition")):
+            # Must not raise
+            _update_execution_from_poll(
+                execution_id=execution.id,
+                platform_job_id="job-upd-3",
+                idp_status="FAILED",
+                logs_content="",
+            )
+
+    def test_generic_exception_is_swallowed(self) -> None:
+        """Generic exceptions inside the try block are swallowed (resilience)."""
+        from executions.tasks import _update_execution_from_poll
+        from tests.factories import ExecutionFactory
+
+        execution = ExecutionFactory(status="SUBMITTED")
+
+        with patch("executions.models.Execution.objects") as mock_mgr:
+            mock_mgr.get.side_effect = RuntimeError("unexpected db error")
+            # Must not raise
+            _update_execution_from_poll(
+                execution_id=execution.id,
+                platform_job_id="job-upd-4",
+                idp_status="RUNNING",
+                logs_content="",
+            )
+
+
+# ---------------------------------------------------------------------------
+# _forward_platform_logs_to_splunk (lines 262-297)
+# ---------------------------------------------------------------------------
+
+
+class TestForwardPlatformLogsToSplunk:
+    """Test _forward_platform_logs_to_splunk best-effort helper."""
+
+    def test_skips_when_no_logs_content(self) -> None:
+        """Returns immediately when logs_content is empty."""
+        from executions.tasks import _forward_platform_logs_to_splunk
+
+        with patch("services.splunk_utils.get_splunk_service") as mock_get:
+            _forward_platform_logs_to_splunk(
+                execution_id=1,
+                platform_job_id="job-1",
+                platform_type="aap",
+                logs_content="",
+            )
+        mock_get.assert_not_called()
+
+    def test_skips_when_splunk_not_configured(self) -> None:
+        """Returns without sending when get_splunk_service returns None."""
+        from executions.tasks import _forward_platform_logs_to_splunk
+
+        with patch("services.splunk_utils.get_splunk_service", return_value=None):
+            # Must not raise
+            _forward_platform_logs_to_splunk(
+                execution_id=1,
+                platform_job_id="job-1",
+                platform_type="aap",
+                logs_content="some logs",
+            )
+
+    def test_sends_event_when_configured(self) -> None:
+        """Calls send_event via async_to_sync when Splunk is configured."""
+        from executions.tasks import _forward_platform_logs_to_splunk
+
+        mock_splunk = MagicMock()
+        mock_send = MagicMock()
+
+        with patch("services.splunk_utils.get_splunk_service", return_value=mock_splunk):
+            with patch("asgiref.sync.async_to_sync", return_value=mock_send):
+                _forward_platform_logs_to_splunk(
+                    execution_id=1,
+                    platform_job_id="job-1",
+                    platform_type="aap",
+                    logs_content="step 1 complete",
+                    correlation_id="corr-splunk",
+                )
+
+        mock_send.assert_called_once()
+
+    def test_exception_is_swallowed(self) -> None:
+        """Any exception during Splunk forwarding must not propagate."""
+        from executions.tasks import _forward_platform_logs_to_splunk
+
+        with patch("services.splunk_utils.get_splunk_service", side_effect=RuntimeError("splunk down")):
+            # Must not raise
+            _forward_platform_logs_to_splunk(
+                execution_id=1,
+                platform_job_id="job-1",
+                platform_type="aap",
+                logs_content="some logs",
+            )
+
+
+# ---------------------------------------------------------------------------
+# poll_platform_job_status — terminal complete path (lines 452-467)
+# ---------------------------------------------------------------------------
+
+
+class TestPollPlatformJobStatusTerminal:
+    """Test the terminal completion path of poll_platform_job_status."""
+
+    @patch("executions.tasks._forward_platform_logs_to_splunk")
+    @patch("executions.tasks._update_execution_from_poll")
+    @patch("executions.tasks._broadcast_execution_update")
+    @patch("executions.tasks.get_correlation_id", return_value="test-corr")
+    def test_returns_complete_outcome_when_terminal(
+        self,
+        mock_corr: MagicMock,
+        mock_broadcast: MagicMock,
+        mock_update: MagicMock,
+        mock_splunk: MagicMock,
+    ) -> None:
+        """When logs_data.complete is True, returns outcome='complete' and calls Splunk forwarder."""
+        from executions.tasks.polling import poll_platform_job_status
+
+        mock_adapter = MagicMock()
+        mock_adapter.get_status = AsyncMock(return_value={"status": "COMPLETED"})
+        mock_adapter.get_job_logs = AsyncMock(
+            return_value={"content": "build done", "complete": True}
+        )
+
+        with patch("adapters.aap_adapter.AAPAdapter", return_value=mock_adapter):
+            result = poll_platform_job_status(
+                execution_id=10,
+                platform_job_id="job-term-1",
+                platform_type="aap",
+            )
+
+        assert result["outcome"] == "complete"
+        assert result["status"] == "COMPLETED"
+        mock_splunk.assert_called_once()
+
+    @patch("executions.tasks._update_execution_from_poll")
+    @patch("executions.tasks._broadcast_execution_update")
+    @patch("executions.tasks.poll_platform_job_status.apply_async")
+    @patch("executions.tasks.get_correlation_id", return_value="test-corr")
+    def test_returns_polling_outcome_when_not_terminal(
+        self,
+        mock_corr: MagicMock,
+        mock_apply: MagicMock,
+        mock_broadcast: MagicMock,
+        mock_update: MagicMock,
+    ) -> None:
+        """When logs_data.complete is False, re-schedules and returns outcome='polling'."""
+        from executions.tasks.polling import poll_platform_job_status
+
+        mock_adapter = MagicMock()
+        mock_adapter.get_status = AsyncMock(return_value={"status": "RUNNING"})
+        mock_adapter.get_job_logs = AsyncMock(
+            return_value={"content": "building...", "complete": False}
+        )
+
+        with patch("adapters.aap_adapter.AAPAdapter", return_value=mock_adapter):
+            result = poll_platform_job_status(
+                execution_id=10,
+                platform_job_id="job-poll-1",
+                platform_type="aap",
+            )
+
+        assert result["outcome"] == "polling"
+        mock_apply.assert_called_once()

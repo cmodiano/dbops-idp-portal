@@ -124,7 +124,7 @@ class TestResolveAndCheckAdapter:
                 mock_a2s.return_value = lambda: mock_result
                 try:
                     _resolve_and_check_adapter(integration)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
 
         # Vérifier que get_platform_adapter a été appelé avec owner et repo
@@ -145,7 +145,7 @@ class TestResolveAndCheckAdapter:
             mock_get_adapter.return_value = MagicMock()
             try:
                 _resolve_and_check_adapter(integration)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
 
         mock_get_adapter.assert_called_once()
