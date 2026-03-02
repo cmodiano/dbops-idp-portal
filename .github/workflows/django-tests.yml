@@ -53,7 +53,7 @@ jobs:
             --cov=catalog --cov=profiles --cov=integrations \
             --cov=executions --cov=idp_auth --cov=core \
             --cov-report=xml --cov-report=term-missing \
-            --cov-fail-under=80 \
+            --cov-fail-under=90 \
             -v
 
       - name: Run integration tests
