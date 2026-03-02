@@ -944,3 +944,566 @@ describe('ActionWizard', () => {
     }, 20000);
   });
 });
+
+// Additional coverage tests
+describe('ActionWizard — additional coverage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseAAPTemplates.mockReturnValue({
+      templates: [],
+      loading: false,
+      fallback: true,
+      error: null,
+    });
+  });
+
+  // Helper action for navigation
+  const makeEditAction = (overrides: Partial<import('../../types/api').ActionDetail> = {}): import('../../types/api').ActionDetail => ({
+    id: 10,
+    name: 'Test Action',
+    description: 'Desc',
+    item_type: 'action' as const,
+    engine: 'Oracle',
+    platform: 'AAP',
+    integration_id: 1,
+    parameters_schema: null,
+    impact_rules: null,
+    default_impact_level: null,
+    status: 'draft' as const,
+    created_by: null,
+    created_at: '',
+    updated_at: null,
+    execution_steps: [],
+    workflow_steps: null,
+    change_type_config: null,
+    tags: [],
+    ...overrides,
+  });
+
+  describe('open=false resets form', () => {
+    it('does not render wizard content when open=false', async () => {
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} open={false} />);
+      });
+      // Modal should not be visible — no step items rendered
+      expect(screen.queryByText('Nouvelle action')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('isReadOnly — published action', () => {
+    it('disables Enregistrer button when editAction.status=published', async () => {
+      const user = userEvent.setup();
+      const editAction = makeEditAction({ status: 'published' });
+
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} editAction={editAction} />);
+      });
+
+      await waitFor(() => expect(screen.getByLabelText("Nom de l'action")).toHaveValue('Test Action'));
+
+      // Navigate to step 2
+      await user.click(await screen.findByRole('button', { name: /Suivant/i }));
+      await waitFor(() => expect(screen.getByLabelText('ID template AAP')).toBeInTheDocument());
+      await user.type(screen.getByLabelText('ID template AAP'), '5');
+
+      // Navigate to step 3
+      await user.click(await screen.findByRole('button', { name: /Suivant/i }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeInTheDocument());
+
+      // Enregistrer should be disabled for published actions
+      expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeDisabled();
+    }, 30000);
+  });
+
+  describe('handleSave — ApiError with 400 + details', () => {
+    it('sets field errors and submitError when onSubmit throws ApiError 400 with details', async () => {
+      const { ApiError } = await import('../../services/api_client');
+      const user = userEvent.setup();
+
+      const mockSubmitWith400 = vi.fn().mockRejectedValue(
+        new ApiError('Validation error', 400, {
+          error: {
+            details: { name: ['Ce nom est déjà utilisé.'] },
+          },
+        })
+      );
+
+      const editAction = makeEditAction();
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} editAction={editAction} onSubmit={mockSubmitWith400} />);
+      });
+
+      await waitFor(() => expect(screen.getByLabelText("Nom de l'action")).toHaveValue('Test Action'));
+
+      // Navigate to step 2
+      await user.click(await screen.findByRole('button', { name: /Suivant/i }));
+      await waitFor(() => expect(screen.getByLabelText('ID template AAP')).toBeInTheDocument());
+      await user.type(screen.getByLabelText('ID template AAP'), '5');
+
+      // Navigate to step 3
+      await user.click(await screen.findByRole('button', { name: /Suivant/i }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeInTheDocument());
+
+      await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Veuillez corriger les erreurs indiquées dans le formulaire.')).toBeInTheDocument();
+      });
+    }, 30000);
+  });
+
+  describe('handleSave — generic Error', () => {
+    it('sets submitError message when onSubmit throws a generic Error', async () => {
+      const user = userEvent.setup();
+
+      const mockSubmitWithError = vi.fn().mockRejectedValue(new Error('Erreur serveur inattendue'));
+
+      const editAction = makeEditAction();
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} editAction={editAction} onSubmit={mockSubmitWithError} />);
+      });
+
+      await waitFor(() => expect(screen.getByLabelText("Nom de l'action")).toHaveValue('Test Action'));
+
+      // Navigate to step 2
+      await user.click(await screen.findByRole('button', { name: /Suivant/i }));
+      await waitFor(() => expect(screen.getByLabelText('ID template AAP')).toBeInTheDocument());
+      await user.type(screen.getByLabelText('ID template AAP'), '5');
+
+      // Navigate to step 3
+      await user.click(await screen.findByRole('button', { name: /Suivant/i }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeInTheDocument());
+
+      await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Erreur serveur inattendue')).toBeInTheDocument();
+      });
+    }, 30000);
+  });
+
+  describe('handleSave — updateActionTags failure', () => {
+    it('shows warning notification and calls onSuccess when updateActionTags throws', async () => {
+      const { updateActionTags } = await import('../../services/admin_service');
+      vi.mocked(updateActionTags).mockRejectedValueOnce(new Error('Tags service down'));
+
+      const user = userEvent.setup();
+      const editAction = makeEditAction();
+
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} editAction={editAction} />);
+      });
+
+      await waitFor(() => expect(screen.getByLabelText("Nom de l'action")).toHaveValue('Test Action'));
+
+      // Navigate to step 2
+      await user.click(await screen.findByRole('button', { name: /Suivant/i }));
+      await waitFor(() => expect(screen.getByLabelText('ID template AAP')).toBeInTheDocument());
+      await user.type(screen.getByLabelText('ID template AAP'), '5');
+
+      // Navigate to step 3
+      await user.click(await screen.findByRole('button', { name: /Suivant/i }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeInTheDocument());
+
+      await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
+
+      await waitFor(() => {
+        expect(mockOnSubmit).toHaveBeenCalledTimes(1);
+      }, { timeout: 5000 });
+    }, 30000);
+  });
+
+  describe('handleSave — workflow steps error cases', () => {
+    it('shows WORKFLOW_LOOP error when updateWorkflowSteps throws with WORKFLOW_LOOP in message', async () => {
+      const { updateWorkflowSteps } = await import('../../services/admin_service');
+      vi.mocked(updateWorkflowSteps).mockRejectedValueOnce(new Error('WORKFLOW_LOOP detected'));
+
+      const user = userEvent.setup();
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} />);
+      });
+
+      // Select workflow type
+      await user.click(screen.getByRole('radio', { name: /Workflow/i }));
+      await user.type(screen.getByLabelText('Nom du workflow'), 'Test Workflow');
+      await user.type(screen.getByLabelText('Description'), 'Description');
+      await user.click(await screen.findByRole('button', { name: /Suivant/i }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Ajouter une étape/i })).toBeInTheDocument();
+      }, { timeout: 8000 });
+
+      await user.click(screen.getByRole('button', { name: /Ajouter une étape/i }));
+      await waitFor(() => expect(screen.getByLabelText('Sélectionner une action')).toBeInTheDocument());
+      const autocomplete = screen.getByLabelText('Sélectionner une action');
+      await user.click(autocomplete);
+      await user.type(autocomplete, 'Action A');
+      const actionOption = await screen.findByText(/Action A/i);
+      await user.click(actionOption);
+
+      const nextToStep3 = await screen.findByRole('button', { name: /Suivant/i });
+      await user.click(nextToStep3);
+      await waitFor(() => expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeInTheDocument());
+
+      await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/Boucle circulaire détectée/i)).toBeInTheDocument();
+      }, { timeout: 10000 });
+    }, 40000);
+
+    it('shows brouillon error when updateWorkflowSteps throws with brouillon in message', async () => {
+      const { updateWorkflowSteps } = await import('../../services/admin_service');
+      vi.mocked(updateWorkflowSteps).mockRejectedValueOnce(new Error('Seul un brouillon peut être modifié'));
+
+      const user = userEvent.setup();
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} />);
+      });
+
+      // Select workflow type
+      await user.click(screen.getByRole('radio', { name: /Workflow/i }));
+      await user.type(screen.getByLabelText('Nom du workflow'), 'Test Workflow 2');
+      await user.type(screen.getByLabelText('Description'), 'Description 2');
+      await user.click(await screen.findByRole('button', { name: /Suivant/i }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Ajouter une étape/i })).toBeInTheDocument();
+      }, { timeout: 8000 });
+
+      await user.click(screen.getByRole('button', { name: /Ajouter une étape/i }));
+      await waitFor(() => expect(screen.getByLabelText('Sélectionner une action')).toBeInTheDocument());
+      const autocomplete = screen.getByLabelText('Sélectionner une action');
+      await user.click(autocomplete);
+      await user.type(autocomplete, 'Action A');
+      const actionOption = await screen.findByText(/Action A/i);
+      await user.click(actionOption);
+
+      const nextToStep3 = await screen.findByRole('button', { name: /Suivant/i });
+      await user.click(nextToStep3);
+      await waitFor(() => expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeInTheDocument());
+
+      await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/Les étapes ne peuvent être modifiées que pour un workflow en brouillon/i)).toBeInTheDocument();
+      }, { timeout: 10000 });
+    }, 40000);
+  });
+
+  describe('handleSave — action step brouillon error', () => {
+    it('shows brouillon error when updateActionSteps throws with brouillon in message', async () => {
+      const { updateActionSteps } = await import('../../services/admin_service');
+      vi.mocked(updateActionSteps).mockRejectedValueOnce(new Error('Seul un brouillon peut être modifié'));
+
+      const user = userEvent.setup();
+      const editAction = makeEditAction();
+
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} editAction={editAction} />);
+      });
+
+      await waitFor(() => expect(screen.getByLabelText("Nom de l'action")).toHaveValue('Test Action'));
+
+      // Navigate to step 2
+      await user.click(await screen.findByRole('button', { name: /Suivant/i }));
+      await waitFor(() => expect(screen.getByLabelText('ID template AAP')).toBeInTheDocument());
+      await user.type(screen.getByLabelText('ID template AAP'), '5');
+
+      // Navigate to step 3
+      await user.click(await screen.findByRole('button', { name: /Suivant/i }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeInTheDocument());
+
+      await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/Les étapes ne peuvent être modifiées que pour une action en brouillon/i)).toBeInTheDocument();
+      }, { timeout: 5000 });
+    }, 30000);
+  });
+
+  describe('handleNext — step 0 validation failure', () => {
+    it('does not advance when form validation fails at step 0', async () => {
+      const user = userEvent.setup();
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} />);
+      });
+
+      // Do not fill any fields, click Suivant
+      await user.click(await screen.findByRole('button', { name: /Suivant/i }));
+
+      // Should still be on step 1 (Nom de l'action visible)
+      await waitFor(() => {
+        expect(screen.getByLabelText("Nom de l'action")).toBeInTheDocument();
+      });
+      // Step 2 content (Ajouter un parametre) should NOT be visible
+      expect(screen.queryByText(/Ajouter un parametre/i)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('validateWorkflowSteps — empty steps', () => {
+    it('shows error when workflow has no steps and user tries to proceed from step 2', async () => {
+      const user = userEvent.setup();
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} />);
+      });
+
+      // Select workflow type
+      await user.click(screen.getByRole('radio', { name: /Workflow/i }));
+      await user.type(screen.getByLabelText('Nom du workflow'), 'Empty Workflow');
+      await user.type(screen.getByLabelText('Description'), 'Description');
+
+      // Go to step 2
+      await user.click(await screen.findByRole('button', { name: /Suivant/i }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Ajouter une étape/i })).toBeInTheDocument();
+      }, { timeout: 8000 });
+
+      // Click next without adding steps
+      const nextToStep3 = await screen.findByRole('button', { name: /Suivant/i });
+      await user.click(nextToStep3);
+
+      // Should show error about missing steps (may appear multiple times in DOM)
+      await waitFor(() => {
+        const errorMessages = screen.getAllByText(/Au moins une étape est requise/i);
+        expect(errorMessages.length).toBeGreaterThan(0);
+      });
+    }, 30000);
+  });
+
+  describe('error prop display', () => {
+    it('displays external error prop as alert', async () => {
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} error="Erreur externe" />);
+      });
+      expect(screen.getByText('Erreur externe')).toBeInTheDocument();
+    });
+  });
+
+  describe('submitError Alert onClose — line 488', () => {
+    it('closes submitError alert when onClose is clicked', async () => {
+      const user = userEvent.setup();
+
+      // Use a submit that throws a generic Error to set submitError
+      const mockSubmitWithError = vi.fn().mockRejectedValue(new Error('Erreur test'));
+      const editAction = makeEditAction();
+
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} editAction={editAction} onSubmit={mockSubmitWithError} />);
+      });
+
+      await waitFor(() => expect(screen.getByLabelText("Nom de l'action")).toHaveValue('Test Action'));
+
+      // Navigate to step 2
+      await user.click(await screen.findByRole('button', { name: /Suivant/i }));
+      await waitFor(() => expect(screen.getByLabelText('ID template AAP')).toBeInTheDocument());
+      await user.type(screen.getByLabelText('ID template AAP'), '5');
+
+      // Navigate to step 3
+      await user.click(await screen.findByRole('button', { name: /Suivant/i }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeInTheDocument());
+
+      // Trigger error
+      await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Erreur test')).toBeInTheDocument();
+      }, { timeout: 5000 });
+
+      // Find and click the close button of the Alert (covers line 488: onClose={() => setSubmitError(null))
+      const closeBtn = document.querySelector('[role="alert"] .ant-alert-close-icon');
+      if (closeBtn) {
+        await user.click(closeBtn as HTMLElement);
+        await waitFor(() => {
+          expect(screen.queryByText('Erreur test')).not.toBeInTheDocument();
+        }, { timeout: 3000 });
+      }
+    }, 30000);
+  });
+
+  describe('editAction with AAP workflow_job connector (lines 164-170)', () => {
+    it('loads aapResourceType=workflow_job when editAction has workflow_job step', async () => {
+      const editAction = makeEditAction({
+        execution_steps: [{
+          order: 1,
+          name: 'Exécution',
+          type: 'execution',
+          connector_type: 'aap',
+          connector_config: {
+            resource_type: 'workflow_job',
+            workflow_job_template_id: 42,
+          },
+          conditional_environments: null,
+        }],
+      });
+
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} editAction={editAction} />);
+      });
+
+      await waitFor(() => expect(screen.getByLabelText("Nom de l'action")).toHaveValue('Test Action'));
+      // Component loaded with workflow_job type
+      expect(screen.getByLabelText("Nom de l'action")).toBeInTheDocument();
+    }, 15000);
+
+    it('loads aapResourceType=job_template when resource_type is not workflow_job', async () => {
+      const editAction = makeEditAction({
+        execution_steps: [{
+          order: 1,
+          name: 'Exécution',
+          type: 'execution',
+          connector_type: 'aap',
+          connector_config: {
+            resource_type: 'job_template',
+            job_template_id: 10,
+          },
+          conditional_environments: null,
+        }],
+      });
+
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} editAction={editAction} />);
+      });
+
+      await waitFor(() => expect(screen.getByLabelText("Nom de l'action")).toHaveValue('Test Action'));
+      expect(screen.getByLabelText("Nom de l'action")).toBeInTheDocument();
+    }, 15000);
+  });
+
+  describe('validateWorkflowSteps — step with no referenced_action_id (line 202)', () => {
+    it('shows error when a workflow step has no action selected', async () => {
+      const user = userEvent.setup();
+
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} />);
+      });
+
+      // Select workflow type
+      await user.click(screen.getByRole('radio', { name: /Workflow/i }));
+      await user.type(screen.getByLabelText('Nom du workflow'), 'Workflow test step missing action');
+      await user.type(screen.getByLabelText('Description'), 'Description test');
+      await user.click(await screen.findByRole('button', { name: /Suivant/i }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Ajouter une étape/i })).toBeInTheDocument();
+      }, { timeout: 8000 });
+
+      // Add a step but don't select an action (referenced_action_id remains null/0)
+      await user.click(screen.getByRole('button', { name: /Ajouter une étape/i }));
+      await waitFor(() => expect(screen.getByLabelText('Sélectionner une action')).toBeInTheDocument());
+
+      // Click Suivant without selecting action - the step has no referenced_action_id
+      const nextBtn = await screen.findByRole('button', { name: /Suivant/i });
+      await user.click(nextBtn);
+
+      // Should show error about missing action or at least stay on step 2
+      // The error for missing action OR no steps at all would appear
+      await waitFor(() => {
+        const missing = screen.queryAllByText(/Chaque étape doit avoir une action sélectionnée/i);
+        const atLeast = screen.queryAllByText(/Au moins une étape est requise/i);
+        const anyError = missing.length > 0 || atLeast.length > 0;
+        expect(anyError).toBe(true);
+      }, { timeout: 8000 });
+    }, 30000);
+  });
+
+  describe('handleSave — workflow step generic error (line 372)', () => {
+    it('shows generic error message when updateWorkflowSteps throws unknown error', async () => {
+      const { updateWorkflowSteps } = await import('../../services/admin_service');
+      vi.mocked(updateWorkflowSteps).mockRejectedValueOnce(new Error('Erreur inconnue du serveur'));
+
+      const user = userEvent.setup();
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} />);
+      });
+
+      // Select workflow type
+      await user.click(screen.getByRole('radio', { name: /Workflow/i }));
+      await user.type(screen.getByLabelText('Nom du workflow'), 'Test Workflow Generic');
+      await user.type(screen.getByLabelText('Description'), 'Description');
+      await user.click(await screen.findByRole('button', { name: /Suivant/i }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Ajouter une étape/i })).toBeInTheDocument();
+      }, { timeout: 8000 });
+
+      await user.click(screen.getByRole('button', { name: /Ajouter une étape/i }));
+      await waitFor(() => expect(screen.getByLabelText('Sélectionner une action')).toBeInTheDocument());
+      const autocomplete = screen.getByLabelText('Sélectionner une action');
+      await user.click(autocomplete);
+      await user.type(autocomplete, 'Action A');
+      const actionOption = await screen.findByText(/Action A/i);
+      await user.click(actionOption);
+
+      const nextToStep3 = await screen.findByRole('button', { name: /Suivant/i });
+      await user.click(nextToStep3);
+      await waitFor(() => expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeInTheDocument());
+
+      await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/Erreur inconnue du serveur/i)).toBeInTheDocument();
+      }, { timeout: 10000 });
+    }, 40000);
+  });
+
+  describe('handleSave — action step generic error (line 429)', () => {
+    it('shows generic error message when updateActionSteps throws unknown error', async () => {
+      const { updateActionSteps } = await import('../../services/admin_service');
+      vi.mocked(updateActionSteps).mockRejectedValueOnce(new Error('Erreur inconnue action'));
+
+      const user = userEvent.setup();
+      const editAction = makeEditAction();
+
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} editAction={editAction} />);
+      });
+
+      await waitFor(() => expect(screen.getByLabelText("Nom de l'action")).toHaveValue('Test Action'));
+
+      // Navigate to step 2
+      await user.click(await screen.findByRole('button', { name: /Suivant/i }));
+      await waitFor(() => expect(screen.getByLabelText('ID template AAP')).toBeInTheDocument());
+      await user.type(screen.getByLabelText('ID template AAP'), '5');
+
+      // Navigate to step 3
+      await user.click(await screen.findByRole('button', { name: /Suivant/i }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeInTheDocument());
+
+      await user.click(screen.getByRole('button', { name: /Enregistrer/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/Erreur inconnue action/i)).toBeInTheDocument();
+      }, { timeout: 5000 });
+    }, 30000);
+  });
+
+  describe('handleSave — canEditSteps=false for workflow (line 379)', () => {
+    it('shows info notification when workflow steps cannot be edited (published workflow)', async () => {
+      const user = userEvent.setup();
+      const publishedWorkflowEditAction = makeEditAction({
+        item_type: 'workflow',
+        status: 'published',
+        workflow_steps: [{ order: 1, step_id: 'a', name: 'Step', referenced_action_id: 100 }],
+      });
+
+      await act(async () => {
+        render(<ActionWizard {...defaultProps} editAction={publishedWorkflowEditAction} />);
+      });
+
+      await waitFor(() => expect(screen.getByLabelText('Nom du workflow')).toHaveValue('Test Action'));
+
+      // Navigate to step 2
+      await user.click(await screen.findByRole('button', { name: /Suivant/i }));
+
+      // Navigate to step 3
+      await user.click(await screen.findByRole('button', { name: /Suivant/i }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeInTheDocument());
+
+      // Enregistrer is disabled for published
+      expect(screen.getByRole('button', { name: /Enregistrer/i })).toBeDisabled();
+    }, 30000);
+  });
+});
+

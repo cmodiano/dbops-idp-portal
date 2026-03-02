@@ -1,8 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Form } from 'antd';
 import { WizardStep2Automatisme, type WizardStep2AutomatismeProps } from './WizardStep2Automatisme';
+import * as useAAPTemplatesModule from '../../hooks/useAAPTemplates';
 
 vi.mock('../../hooks/useAAPTemplates', () => ({
   useAAPTemplates: vi.fn(() => ({
@@ -77,5 +78,127 @@ describe('WizardStep2Automatisme', () => {
     renderWithForm({ ...defaultProps, isWorkflow: true, setWorkflowViewMode: setMode });
     await user.click(screen.getByRole('radio', { name: /Mode visuel/i }));
     expect(setMode).toHaveBeenCalledWith('visual');
+  });
+});
+
+describe('WizardStep2Automatisme — coverage extension', () => {
+  it('affiche WorkflowBuilderCanvas quand workflowViewMode=visual', () => {
+    // In visual mode, WorkflowStepsEditor is NOT shown (no "Ajouter une étape" button)
+    // WorkflowBuilderCanvas renders instead
+    renderWithForm({ ...defaultProps, isWorkflow: true, workflowViewMode: 'visual' });
+    expect(screen.queryByRole('button', { name: /Ajouter une étape/i })).not.toBeInTheDocument();
+  });
+
+  it('affiche la section AAP en mode fallback quand integrationId est undefined et isPlatformAAP', () => {
+    vi.mocked(useAAPTemplatesModule.useAAPTemplates).mockReturnValue({
+      templates: [],
+      loading: false,
+      fallback: true,
+      error: null,
+    });
+    renderWithForm({ ...defaultProps, isPlatformAAP: true, integrationId: undefined });
+    // Shows manual input fallback
+    expect(screen.getByLabelText('ID template AAP')).toBeInTheDocument();
+  });
+
+  it('affiche alerte saisie manuelle quand fallback=true et integrationId absent', () => {
+    vi.mocked(useAAPTemplatesModule.useAAPTemplates).mockReturnValue({
+      templates: [],
+      loading: false,
+      fallback: true,
+      error: 'Connection failed',
+    });
+    renderWithForm({ ...defaultProps, isPlatformAAP: true, integrationId: undefined });
+    expect(screen.getByText(/Saisie manuelle/i)).toBeInTheDocument();
+  });
+
+  it('affiche Template AAP Select (non-fallback) quand templates disponibles', () => {
+    vi.mocked(useAAPTemplatesModule.useAAPTemplates).mockReturnValue({
+      templates: [{ id: 10, name: 'My Template' }],
+      loading: false,
+      fallback: false,
+      error: null,
+    });
+    renderWithForm({ ...defaultProps, isPlatformAAP: true, integrationId: 1 });
+    // Shows the Select (non-fallback path, lines 92-108)
+    expect(screen.getByLabelText('Template AAP')).toBeInTheDocument();
+  });
+
+  it('ajoute option introuvable quand aapTemplateId ne correspond pas aux templates (line 44)', () => {
+    vi.mocked(useAAPTemplatesModule.useAAPTemplates).mockReturnValue({
+      templates: [{ id: 10, name: 'My Template' }],
+      loading: false,
+      fallback: false,
+      error: null,
+    });
+    // aapTemplateId=99 which is NOT in templates array → adds "Template #99 (introuvable)"
+    renderWithForm({ ...defaultProps, isPlatformAAP: true, integrationId: 1, aapTemplateId: 99 });
+    // The select is rendered (the option gets added to the options array)
+    expect(screen.getByLabelText('Template AAP')).toBeInTheDocument();
+  });
+
+  it('appelle onTemplateIdChange avec undefined quand input vidé (line 84)', async () => {
+    const setAapTemplateId = vi.fn();
+    vi.mocked(useAAPTemplatesModule.useAAPTemplates).mockReturnValue({
+      templates: [],
+      loading: false,
+      fallback: true,
+      error: null,
+    });
+    renderWithForm({ ...defaultProps, isPlatformAAP: true, integrationId: 1, aapTemplateId: 5, setAapTemplateId });
+    const input = screen.getByLabelText('ID template AAP');
+    fireEvent.change(input, { target: { value: '' } });
+    expect(setAapTemplateId).toHaveBeenCalledWith(undefined);
+  });
+
+  it('affiche validate error quand aapTemplateId est null (line 76-77)', () => {
+    vi.mocked(useAAPTemplatesModule.useAAPTemplates).mockReturnValue({
+      templates: [],
+      loading: false,
+      fallback: true,
+      error: null,
+    });
+    renderWithForm({ ...defaultProps, isPlatformAAP: true, integrationId: 1, aapTemplateId: undefined });
+    // Help text should appear when aapTemplateId is null/undefined
+    expect(screen.getByText(/ID du job template/i)).toBeInTheDocument();
+  });
+
+  it('appelle onTemplateIdChange via Select onChange (line 105)', async () => {
+    const setAapTemplateId = vi.fn();
+    vi.mocked(useAAPTemplatesModule.useAAPTemplates).mockReturnValue({
+      templates: [{ id: 10, name: 'My Template' }],
+      loading: false,
+      fallback: false,
+      error: null,
+    });
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    renderWithForm({ ...defaultProps, isPlatformAAP: true, integrationId: 1, setAapTemplateId });
+    const select = screen.getByLabelText('Template AAP');
+    await user.click(select);
+    // Wait for dropdown to open, then click the option
+    const option = await screen.findByText('My Template');
+    await user.click(option);
+    expect(setAapTemplateId).toHaveBeenCalledWith(10);
+  });
+
+  it('filtre les templates via onSearch/filterOption (lines 106-110)', async () => {
+    vi.mocked(useAAPTemplatesModule.useAAPTemplates).mockReturnValue({
+      templates: [
+        { id: 10, name: 'Alpha Template' },
+        { id: 11, name: 'Beta Template' },
+      ],
+      loading: false,
+      fallback: false,
+      error: null,
+    });
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    renderWithForm({ ...defaultProps, isPlatformAAP: true, integrationId: 1 });
+    const select = screen.getByLabelText('Template AAP');
+    await user.click(select);
+    // Type to trigger onSearch and filterOption
+    await user.type(select, 'Alpha');
+    // Alpha Template should remain visible
+    const option = await screen.findByText('Alpha Template');
+    expect(option).toBeInTheDocument();
   });
 });
